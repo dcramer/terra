@@ -1,0 +1,57 @@
+# Decisions
+
+The source of truth for what is settled. Other docs must agree with this one.
+
+**Who decides:** design decisions (gameplay, art, scope, what the game is) belong to the developers. Technical decisions (engine, architecture, tooling, workflow) are made by the agent, recorded here with the reason, and can be overruled. The Owner column says which is which.
+
+**Decided**: don't reopen without a reason. **Leaning**: working assumption, untested or unconfirmed. **Open**: not chosen. **Rejected**: considered and dropped.
+
+| # | Topic | Owner | Status | Decision | Why, or what closes it |
+|---|---|---|---|---|---|
+| D1 | Team and assets | Design | Decided | Two developers. Every asset is free, bought, or LLM-generated. Code is LLM-written. | Sets scope. Favours procedural content and agent-friendly tooling. |
+| D2 | Multiplayer | Design | Decided | Co-op, up to 4 players. No PvP. | Too expensive to retrofit, so it is in the architecture from the first build. |
+| D3 | Tone | Design | Decided | Slightly harder than Planet Crafter, far gentler than Vintage Story. Factorio-style: threats are answered with automation. | |
+| D4 | World paradigm | Design | Decided | Real round planets in a real solar system. Seamless surface to space, no loading screens. Closest references: Space Engineers, No Man's Sky. | |
+| D5 | Genre | Design | Decided | Sandbox plus simulation, with more depth than Planet Crafter. | |
+| D6 | Terraforming model | Design | Decided | The planet is divided into cells. Some values are local, some global, and local changes feed the global ones. See [planet-sim.md](planet-sim.md). | Details of each field are still Leaning. |
+| D7 | Platforms | Design | Decided | Cross-platform, and above all cross-platform to develop: Windows (via WSL) and macOS. | |
+| D8 | Procedural content | Design | Decided | Procedural generation is the default for terrain, flora, sky and anything else it can cover. | Follows from D1. |
+| D9 | Terrain representation | Tech | Decided | Smooth voxels (a density field) on level-of-detail terrain, fully diggable. Structures are separate modular pieces, not terrain. | Blocky voxels don't tile a sphere. The spike rendered it from orbit to ground and dug it without a hitch. |
+| D10 | Browser | Design | Decided | Nice to have, not a requirement. It does not constrain the engine choice. | |
+| D11 | Engine selection criteria | Design | Decided | Everything in Rust. Within that, the simplest stack that works well with coding agents and lets us reuse existing tech. | Decided by the developers on 2026-10-06, for performance, one language, and compiler-checked agent code. Replaces the earlier criteria, which only preferred Rust. |
+| D12 | Engine | Tech | Decided | Bevy 0.19 as the framework, with our own voxel terrain ported from the parts of Voxel Tools we need. Godot is retired once the Rust build passes the same checks. | Follows from D11. Bevy supplies renderer, entity system, windowing, assets, audio and UI, so we do not write those. Toolchain proven in [research/rust-stack-spike.md](../research/rust-stack-spike.md). Reopen if the terrain port cannot match the Godot numbers. |
+| D13 | Planet scale | Design | Open | Recommendation: about 2 km radius. Prototypes take radius as a parameter and default to 2 km. | Rendering cost was the same at 2 km and 20 km, so this is a feel and content choice. Physics at the larger size is unverified and may need a double-precision build. |
+| D14 | Art direction | Design | Open | No Man's Sky is the benchmark. The beauty corner builds two treatments and we pick from screenshots. | See [art.md](art.md). |
+| D15 | Astroneer | Design | Decided | Not a model for gameplay, and not the art target. It is only evidence that this tech is achievable by a small team. | Its gameplay isn't fun; its art is fine but not the bar. |
+| D16 | Order of hostile life | Design | Leaning | Plants, then insect swarms, then animals. | Matches the fiction and the cost order. Not yet confirmed. |
+| D17 | Second planet | Design | Leaning | Architect for it, don't build it until one planet is a complete game. | Scope. |
+| D18 | Fail state | Design | Leaning | None. Setbacks only. | Follows from D3. |
+| D20 | Does terraforming reshape solid ground? | Design | Decided | No. The solid ground only changes when players dig. | Decided by the developers. It also avoids replaying every edit when terrain changes. |
+| D21 | How terrain edits are stored and synced | Tech | Decided | As operations (shape, position, size) applied in host order by every peer, never as voxel data. | Passed the co-op spike test. Add snapshots of edited blocks for late joins once worlds have very many edits. |
+| D22 | Languages | Tech | Decided | Rust for everything. No scripting language. | Follows from D11. The simulation was already Rust and measured about 90 times faster than GDScript. |
+| D23 | Development workflow | Tech | Decided | One Cargo workspace. `cargo test` runs everything with no GPU. Screenshots come from the Linux build under WSL's software renderer; performance is measured on the Windows build, cross-compiled from WSL, and natively on macOS. Toolchain, Bevy and all dependencies are pinned. Debug builds keep line numbers only. | Each step was exercised in the toolchain check except macOS. Full debug information made a Windows build too large to load. |
+| D24 | Water in the first version | Design | Decided | Sea level as a global value that rises as ice melts. Nothing more complicated: no flowing voxel water. | Decided by the developers. The engine offers no fluid simulation for smooth terrain. |
+| D25 | Performance target | Tech | Decided | 60 fps at 1080p on a mid-range discrete GPU and a 4-core CPU, while hosting three other players. Every prototype reports frame times on the integrated GPU as a low-end check, measured in the real play loop and not only in scripted runs. Nothing ships on an untested performance assumption. | Performance is a requirement. The developers can change the hardware target; it is a default until they do. |
+| D26 | Where the simulation runs | Tech | Decided | On its own thread, at a requested rate, never inside the render frame. The game takes a short lock to read or change it. | Running it inside the frame dropped the demo to 7 fps at x100. On a thread, x100 (6,000 ticks a second) costs the frame nothing. |
+| D27 | Build in Rust instead of Godot | Design | Decided | Yes. | Decided by the developers on 2026-10-06, accepting that it costs weeks before the game is back to where the Godot demo is. |
+| D28 | How the code is split | Tech | Decided | Anything that must be the same for every player lives in plain Rust crates that do not depend on Bevy (`terra_sim`, `terra_voxel`, `terra_core`, `terra_net`). One crate, `terra_game`, is the Bevy application. | Fast tests with no GPU, a headless host, and Bevy's frequent releases touching one crate. The simulation crate already moved engines unchanged. |
+| D29 | How co-op shares state | Tech | Decided | World changes are operations applied in the host's order (D21). The simulation runs only on the host and is sent as snapshots. Moving things are sent as positions and smoothed. | The simulation is small enough to send, which removes any need for players to compute identical floating-point results. |
+| D30 | Maths in shared state | Tech | Decided | The `libm` crate for sine and similar functions, never the system maths library. | Measured: the system library made Windows meshing six times slower; `libm` matched Linux. It also gives the same answer on every platform. |
+| D31 | Bevy version policy | Tech | Decided | Pinned. Upgrade once the crates we depend on support the new release, not before. | Bevy changes its API every few months; 0.20 is in release candidate while most of the ecosystem is on 0.19. |
+| D32 | Terrain meshing library | Tech | Leaning | The `transvoxel` crate to start; port Voxel Tools' mesher if re-meshing on detail changes proves costly. | The crate bakes seam stitching into each mesh. Closed by the terrain milestone. |
+| D33 | Physics | Tech | Leaning | Avian for rigid bodies. The player and creatures query voxel data directly instead of using collision meshes. | Avian supports Bevy 0.19 and is active, but is untested here. The voxel-query approach worked in the Godot demo. |
+| D34 | Networking library | Tech | Leaning | Our own messages over `renet`, with a Steam transport added later. No replication framework. | Our model needs only a reliable ordered channel and an unreliable one. Untested here. |
+| D35 | UI | Tech | Leaning | Bevy's own UI for the game; `bevy_egui` for developer tools. | Untested here. Bevy's UI is younger than Godot's; reassess when the game needs real menus. |
+| D36 | Solar-system coordinates | Tech | Leaning | One coordinate frame per planet. Adopt `big_space` when a second planet exists. | A 2 km planet needs nothing special. `big_space` currently trails Bevy by one release. |
+| D19 | Three.js as primary stack | Tech | Rejected | | It is a renderer, not an engine; the CPU-heavy core would need WASM anyway; the browser is a poor co-op host; no precedent at this scope. |
+
+## Log
+
+- **2026-10-04**: Initial set. D1 to D8 confirmed in conversation. Three.js rejected after a second look at scaling.
+- **2026-10-04**: Browser demoted to nice-to-have (D10). Engine criteria set (D11). With the browser no longer a constraint, the engine lean moved from Bevy to Godot with Voxel Tools (D12). Planet scale deferred to the spike (D13). No Man's Sky named the art benchmark, two treatments to be tried (D14). Astroneer dropped as a model (D15).
+- **2026-10-04**: Spike tests for co-op digging and terrain change run. Co-op digging by operations passed (D21). Reshaping ground under edits is costly, which opened D20.
+- **2026-10-04**: The developers delegated technical decisions to the agent and kept design decisions. On the spike's evidence, D9, D12 and D21 were closed and D22 and D23 added. D13, D20 and D24 remain open design decisions with recommendations.
+- **2026-10-04**: Performance made a requirement (D25). Measured rendering on the integrated GPU and the simulation tick in both languages; D22 reversed from GDScript to Rust on the result.
+- **2026-10-04**: The developers decided D20 (terraforming does not reshape the ground) and D24 (water is sea level plus melting, nothing complicated).
+- **2026-10-04**: A developer played the demo and found it laggy. Cause: the simulation ran inside the frame and my instructions said to run it at x100. Moved it to its own thread (D26). The developers asked whether to build a custom Rust engine; recorded as D27.
+- **2026-10-06**: The developers decided to build everything in Rust (D11, D27). Engine changed from Godot to Bevy with our own terrain (D12). D22 and D23 rewritten to match. Architecture decisions D28 to D31 made; library picks D32 to D36 recorded as Leaning until exercised. Research moved to `research/`.
