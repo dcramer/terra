@@ -44,6 +44,7 @@ The source of truth for what is settled. Other docs must agree with this one.
 | D35 | UI | Tech | Leaning | Bevy's own UI for the game; `bevy_egui` for developer tools. | Untested here. Bevy's UI is younger than Godot's; reassess when the game needs real menus. |
 | D36 | Solar-system coordinates | Tech | Leaning | One coordinate frame per planet. Adopt `big_space` when a second planet exists. | A 2 km planet needs nothing special. `big_space` currently trails Bevy by one release. |
 | D37 | Repository tooling | Tech | Decided | One Cargo workspace at the root with a pinned compiler. `cargo xtask check` is the gate for every change, and CI runs it on Linux and macOS plus a compile check for Windows. `cargo xtask doctor` checks a machine. `AGENTS.md` holds the instructions for every coding agent; `CLAUDE.md` only points to it. | Two developers on different platforms, and agents writing the code, need one command that says whether a change is acceptable. Tasks are written in Rust so they run the same everywhere. |
+| D38 | Licence | Design | Decided | MIT, for everything in this repository. | Decided by the developers on 2026-10-10. The repository is public, and without a licence nobody else could legally use it. It also matches Voxel Tools, which we port from. |
 | D19 | Three.js as primary stack | Tech | Rejected | | It is a renderer, not an engine; the CPU-heavy core would need WASM anyway; the browser is a poor co-op host; no precedent at this scope. |
 
 ## Log
@@ -57,3 +58,4 @@ The source of truth for what is settled. Other docs must agree with this one.
 - **2026-10-04**: A developer played the demo and found it laggy. Cause: the simulation ran inside the frame and my instructions said to run it at x100. Moved it to its own thread (D26). The developers asked whether to build a custom Rust engine; recorded as D27.
 - **2026-10-06**: The developers decided to build everything in Rust (D11, D27). Engine changed from Godot to Bevy with our own terrain (D12). D22 and D23 rewritten to match. Architecture decisions D28 to D31 made; library picks D32 to D36 recorded as Leaning until exercised. Research moved to `research/`.
 - **2026-10-10**: Repository scaffolding added (D37): root workspace, pinned compiler, `cargo xtask check` and `doctor`, CI, `AGENTS.md`. `terra_sim` moved to `crates/` and switched to `libm` (D30).
+- **2026-10-10**: The developers chose the MIT licence (D38).

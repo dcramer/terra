@@ -16,3 +16,7 @@ This repository is where the project is thought through: design docs, research n
 The plan is to build everything in Rust on Bevy, with our own voxel terrain. See [docs/tech.md](docs/tech.md).
 
 To set up a machine, see [docs/development.md](docs/development.md). Coding agents should read [AGENTS.md](AGENTS.md).
+
+## Licence
+
+[MIT](LICENSE). Code adapted from other projects is listed in [THIRD_PARTY.md](THIRD_PARTY.md).

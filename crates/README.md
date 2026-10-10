@@ -15,7 +15,7 @@ Crates are created when their milestone starts, not before.
 ## Adding a crate
 
 1. `cargo new --lib crates/<name>`. The workspace picks it up automatically.
-2. In its `Cargo.toml`, inherit `version`, `edition` and `publish` from the workspace and add `[lints] workspace = true`, as `terra_sim` does.
+2. In its `Cargo.toml`, inherit `version`, `edition`, `license` and `publish` from the workspace and add `[lints] workspace = true`, as `terra_sim` does.
 3. Put shared dependency versions in the root `Cargo.toml` under `[workspace.dependencies]`.
 4. Add a row to the table above.
 5. Run `cargo xtask check`.
