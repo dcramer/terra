@@ -68,6 +68,8 @@ A working plan, still to be determined. The engine would be built as a foundatio
 
 **Status, 2026-10-10:** F1 is done, apart from the simulation snapshot contract, which waits for the simulation's rules. The toolkit's pinned outputs pass on Linux, on macOS, natively on Windows, and on the Windows build we cross-compile from WSL.
 
+The sandbox (D46) covers most of B1: a scripted run prints frame times and saves a screenshot on Linux under the software renderer and on the Windows build on the RTX 5090. macOS and the integrated GPU are not yet measured.
+
 The beauty corner follows M, since the art should be built on the engine we ship on.
 
 Every checkpoint reports frame times from the real play loop, not only from scripted runs (D25).

@@ -1,6 +1,6 @@
 # Crates
 
-The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28).
+The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28). Only the applications, `terra_sandbox` and `terra_game`, may depend on it.
 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|
@@ -9,6 +9,7 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits | No | Track A. Brief: [docs/terrain.md](../docs/terrain.md) |
 | `terra_core` | The shared contracts (ground, water, chunk mesh, operations) and a stand-in planet | No | Exists |
 | `terra_net` | Network messages and transport | No | Track D |
+| `terra_sandbox` | A test environment: window, stand-in planet, free camera, live tweaks, experiments | Yes | Exists. [README](terra_sandbox/README.md) |
 | `terra_game` | The Bevy application: drawing, input, player, UI, audio | Yes | Track B |
 
 Crates are created when their track starts, not before. The tracks are in [docs/engine.md](../docs/engine.md).

@@ -1,0 +1,16 @@
+[package]
+name = "terra_sandbox"
+description = "A test environment: a window, a stand-in planet, a free camera, live tweaks, and experiments to switch on."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bevy.workspace = true
+bevy-inspector-egui.workspace = true
+terra_core.workspace = true
+terra_gen.workspace = true
+
+[lints]
+workspace = true

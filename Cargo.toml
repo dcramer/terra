@@ -17,6 +17,9 @@ terra_sim = { path = "crates/terra_sim" }
 # The same version Bevy 0.19 uses, so vectors pass between our crates and Bevy unchanged.
 # `libm` routes its trigonometry through the portable maths library (D30).
 glam = { version = "0.32", features = ["libm"] }
+# Pinned by policy (D31): upgrade once the crates we depend on support the new release.
+bevy = { version = "0.19", features = ["free_camera", "bevy_dev_tools", "file_watcher"] }
+bevy-inspector-egui = "0.37"
 libm = "0.2"
 
 [workspace.lints.rust]
@@ -37,3 +40,11 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 opt-level = 3
 debug = false
+
+# The generation and contract crates are small and arithmetic-heavy; unoptimised they make
+# anything built on them slow to start.
+[profile.dev.package.terra_gen]
+opt-level = 3
+
+[profile.dev.package.terra_core]
+opt-level = 3

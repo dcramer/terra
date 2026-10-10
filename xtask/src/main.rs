@@ -9,8 +9,8 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
-/// The only crate allowed to depend on Bevy (D28).
-const BEVY_CRATE: &str = "terra_game";
+/// The only crates allowed to depend on Bevy (D28): the applications.
+const BEVY_CRATES: [&str; 2] = ["terra_game", "terra_sandbox"];
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1).unwrap_or_default();
@@ -85,7 +85,7 @@ fn shared_crates_avoid_bevy() -> bool {
     };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if name == BEVY_CRATE || !entry.path().join("Cargo.toml").exists() {
+        if BEVY_CRATES.contains(&name.as_str()) || !entry.path().join("Cargo.toml").exists() {
             continue;
         }
         let tree = output(

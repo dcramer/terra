@@ -27,6 +27,7 @@ macOS has been checked only by CI, which builds and tests there. Nobody has run 
 | `cargo xtask check` | Formatting, lints, tests and the dependency rule. Must pass before a commit. |
 | `cargo test -p terra_sim` | One crate's tests |
 | `cargo fmt --all` | Format everything |
+| `cargo run -p terra_sandbox` | Open the sandbox, the test environment for graphics and utilities. See its [README](../crates/terra_sandbox/README.md). |
 | `cargo xtask doctor` | Check this machine |
 | `cargo xtask win -p <package>` | Under WSL, build for Windows and run on the real GPU |
 
