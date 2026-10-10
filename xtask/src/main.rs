@@ -60,19 +60,22 @@ fn output(program: &str, args: &[&str]) -> Option<String> {
 }
 
 fn check() -> bool {
+    // CI only needs to know that everything compiles and the tests pass, so it skips
+    // optimising dependencies, which is most of the time spent building Bevy.
+    let quick: &[&str] = if std::env::var_os("CI").is_some() {
+        &["--config", "profile.dev.package.\"*\".opt-level=0"]
+    } else {
+        &[]
+    };
+    let cargo = |command: &'static str, rest: &[&'static str]| {
+        run("cargo", &[&[command], quick, rest].concat())
+    };
     run("cargo", &["fmt", "--all", "--check"])
-        && run(
-            "cargo",
-            &[
-                "clippy",
-                "--workspace",
-                "--all-targets",
-                "--",
-                "-D",
-                "warnings",
-            ],
+        && cargo(
+            "clippy",
+            &["--workspace", "--all-targets", "--", "-D", "warnings"],
         )
-        && run("cargo", &["test", "--workspace"])
+        && cargo("test", &["--workspace"])
         && shared_crates_avoid_bevy()
 }
 
