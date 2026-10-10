@@ -39,5 +39,5 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - **Tests live next to the code** and need no GPU. A behaviour you rely on gets a test.
 - **Check the real API, don't recall it.** Bevy changes every release. Read the examples and source that ship with the pinned version under `~/.cargo/registry/src/` before writing against it.
 - **Look at what you made.** The Linux build renders on the CPU under WSL, so you can save a screenshot and read it without a GPU.
-- **Measure performance on a real GPU, in the loop a player runs**, and report the integrated GPU as well as the fast one. Software rendering numbers mean nothing.
+- **Measure performance on a real GPU, in the loop a player runs**, and report the integrated GPU as well as the fast one. Software rendering numbers mean nothing. Under WSL, `cargo xtask win -p <package>` builds for Windows and runs there.
 - **Don't add a dependency casually.** Check it supports the pinned Bevy version and is maintained, and say why in the commit.

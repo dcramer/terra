@@ -3,6 +3,8 @@
 //!   check    Everything a change must pass: formatting, lints, tests, and the rule
 //!            that shared-state crates do not depend on Bevy. CI runs exactly this.
 //!   doctor   Checks this machine has what it needs to build and run the project.
+//!   win      Under WSL: builds a program for Windows and runs it there, on the real
+//!            GPU. `cargo xtask win -p <package> [--release] [-- program args]`
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
@@ -15,8 +17,9 @@ fn main() -> ExitCode {
     let ok = match task.as_str() {
         "check" => check(),
         "doctor" => doctor(),
+        "win" => win(&std::env::args().skip(2).collect::<Vec<_>>()),
         _ => {
-            eprintln!("usage: cargo xtask <check|doctor>");
+            eprintln!("usage: cargo xtask <check|doctor|win>");
             false
         }
     };
@@ -99,6 +102,120 @@ fn shared_crates_avoid_bevy() -> bool {
     ok
 }
 
+fn on_wsl() -> bool {
+    std::fs::read_to_string("/proc/version").is_ok_and(|v| v.to_lowercase().contains("microsoft"))
+}
+
+const WINDOWS_TARGET: &str = "x86_64-pc-windows-gnu";
+
+/// WSL has no hardware Vulkan, so performance is measured on a Windows build launched
+/// from WSL. Windows cannot use a WSL folder as a working directory, so the program is
+/// copied to the Windows temp folder and run from there.
+fn win(args: &[String]) -> bool {
+    if !on_wsl() {
+        eprintln!(
+            "`cargo xtask win` is only for WSL. Elsewhere, `cargo run` already uses the GPU."
+        );
+        return false;
+    }
+    let (ours, program_args) = match args.iter().position(|a| a == "--") {
+        Some(i) => (&args[..i], &args[i + 1..]),
+        None => (args, &[][..]),
+    };
+    let release = ours.iter().any(|a| a == "--release");
+    let Some(package) = ours
+        .iter()
+        .position(|a| a == "-p")
+        .and_then(|i| ours.get(i + 1))
+    else {
+        eprintln!("usage: cargo xtask win -p <package> [--release] [-- program args]");
+        return false;
+    };
+
+    let mut build = vec!["build", "--target", WINDOWS_TARGET, "-p", package.as_str()];
+    if release {
+        build.push("--release");
+    }
+    if !run("cargo", &build) {
+        return false;
+    }
+
+    let profile = if release { "release" } else { "debug" };
+    let exe_name = format!("{package}.exe");
+    let built = root()
+        .join("target")
+        .join(WINDOWS_TARGET)
+        .join(profile)
+        .join(&exe_name);
+    let Some(run_dir) = windows_temp().map(|temp| temp.join("terra").join(package)) else {
+        eprintln!("Could not find the Windows temp folder. Is Windows interop enabled?");
+        return false;
+    };
+    let staged = std::fs::create_dir_all(&run_dir)
+        .and_then(|()| std::fs::copy(&built, run_dir.join(&exe_name)).map(|_| ()))
+        // A Bevy program looks for its assets next to itself.
+        .and_then(|()| {
+            copy_dir(
+                &root().join("crates").join(package).join("assets"),
+                &run_dir.join("assets"),
+            )
+        });
+    if let Err(error) = staged {
+        eprintln!(
+            "Could not copy the program to {}: {error}",
+            run_dir.display()
+        );
+        return false;
+    }
+
+    println!(
+        "\n> {exe_name} {}   (in {})",
+        program_args.join(" "),
+        run_dir.display()
+    );
+    Command::new(run_dir.join(&exe_name))
+        .args(program_args)
+        .current_dir(&run_dir)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+/// The Windows temp folder, as a path WSL can use.
+fn windows_temp() -> Option<PathBuf> {
+    let run_from = |program: &str, args: &[&str]| {
+        let out = Command::new(program)
+            .args(args)
+            // Windows programs complain when started from a WSL folder.
+            .current_dir("/mnt/c")
+            .stderr(Stdio::null())
+            .output()
+            .ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+    let windows_path = run_from("cmd.exe", &["/c", "echo %TEMP%"])?;
+    run_from("wslpath", &["-u", &windows_path]).map(PathBuf::from)
+}
+
+fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    if !from.is_dir() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
 struct Report {
     missing_required: bool,
 }
@@ -122,8 +239,7 @@ fn doctor() -> bool {
     let mut report = Report {
         missing_required: false,
     };
-    let on_wsl = std::fs::read_to_string("/proc/version")
-        .is_ok_and(|v| v.to_lowercase().contains("microsoft"));
+    let on_wsl = on_wsl();
     let os = std::env::consts::OS;
     println!("Platform: {os}{}", if on_wsl { " under WSL" } else { "" });
 
@@ -137,7 +253,7 @@ fn doctor() -> bool {
     let rustc = output("rustc", &["--version"]).unwrap_or_default();
     report.item(
         &format!("compiler {pinned} (found: {rustc})"),
-        rustc.contains(&pinned),
+        !pinned.is_empty() && rustc.contains(&pinned),
         true,
         "rustup toolchain install   (run in the repo; it reads rust-toolchain.toml)",
     );
@@ -186,7 +302,7 @@ fn doctor() -> bool {
         let targets = output("rustup", &["target", "list", "--installed"]).unwrap_or_default();
         report.item(
             "Rust target x86_64-pc-windows-gnu",
-            targets.contains("x86_64-pc-windows-gnu"),
+            targets.contains(WINDOWS_TARGET),
             true,
             "rustup target add x86_64-pc-windows-gnu",
         );

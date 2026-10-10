@@ -28,6 +28,7 @@ macOS has been checked only by CI, which builds and tests there. Nobody has run 
 | `cargo test -p terra_sim` | One crate's tests |
 | `cargo fmt --all` | Format everything |
 | `cargo xtask doctor` | Check this machine |
+| `cargo xtask win -p <package>` | Under WSL, build for Windows and run on the real GPU |
 
 A clean build of a Bevy application takes about two and a half minutes; a rebuild after a small change takes a few seconds.
 
@@ -36,13 +37,15 @@ A clean build of a Bevy application takes about two and a half minutes; a rebuil
 WSL has no hardware Vulkan, which splits the work in two:
 
 - **To see output**, run the Linux build. It renders on the CPU, slowly but correctly, and can save screenshots. This works anywhere, including for agents.
-- **To measure performance**, cross-compile for Windows and run that build on the real GPU:
+- **To measure performance**, build for Windows and run that build on the real GPU, in one step:
 
 ```bash
-cargo build --target x86_64-pc-windows-gnu
+cargo xtask win -p <package> -- <program arguments>
 ```
 
-Two things to know when launching a Windows build from WSL. Start it from a folder on a Windows drive, because a Windows program started from a WSL folder gets an unusable working directory. And keep debug builds on the workspace's default profile, because full debug information produces a file Windows refuses to load.
+It cross-compiles the package, copies the program and its assets to the Windows temp folder, runs it there and passes the output back. It runs from the temp folder because a Windows program started from a WSL folder gets an unusable working directory, so anything the program writes, such as screenshots, lands there; the command prints the path. Add `--release` for an optimised build.
+
+Keep debug builds on the workspace's default profile: full debug information produces a file Windows refuses to load.
 
 Every application we build gets scripted modes that fly a fixed camera path, print frame times and save screenshots, so results can be compared between machines and over time.
 
