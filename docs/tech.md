@@ -54,6 +54,8 @@ The plain crates share one maths library with Bevy (`glam`), so positions pass b
 
 ## State, and how co-op shares it
 
+Written for up to four players with one of them hosting. A much larger, persistent world is being considered; what that would add is in [multiplayer.md](multiplayer.md).
+
 Three kinds of state, each shared differently:
 
 | Kind | Examples | How it is shared |

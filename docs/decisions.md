@@ -11,7 +11,7 @@ The source of truth for what is settled. Other docs must agree with this one.
 | # | Topic | Owner | Status | Decision | Why, or what closes it |
 |---|---|---|---|---|---|
 | D1 | Team and assets | Design | Decided | Two developers. Every asset is free, bought, or LLM-generated. Code is LLM-written. | Sets scope. Favours procedural content and agent-friendly tooling. |
-| D2 | Multiplayer | Design | Decided | Co-op, up to 4 players. No PvP. | Too expensive to retrofit, so it is in the architecture from the first build. |
+| D2 | Multiplayer | Design | Decided | Co-op, up to 4 players. No PvP. | Too expensive to retrofit, so it is in the architecture from the first build. The player count is under review: see D51. |
 | D3 | Tone | Design | Decided | Slightly harder than Planet Crafter, far gentler than Vintage Story. Factorio-style: threats are answered with automation. | |
 | D4 | World paradigm | Design | Decided | Real round planets in a real solar system. Seamless surface to space, no loading screens. Closest references: Space Engineers, No Man's Sky. | |
 | D5 | Genre | Design | Decided | Sandbox plus simulation, with more depth than Planet Crafter. | |
@@ -59,6 +59,7 @@ The source of truth for what is settled. Other docs must agree with this one.
 | D48 | Construction | Design | Leaning | Subnautica 2's base building is the inspiration: rooms you shape and resize, with freedom over windows, instead of fixed modules snapped together. | Named by the developers on 2026-10-10. A first experiment exists; it is boxy, which they have said they do not want. See [research/subnautica-2-building.md](../research/subnautica-2-building.md). |
 | D49 | How we work from here | Design | Leaning | Larger design docs come before implementation. Experiments stay small and are not a substitute for a design. | The developers said on 2026-10-10 that it would probably be better to work on larger design docs than to implement things one after another. |
 | D50 | Style of play | Design | Leaning | Like No Man's Sky or Subnautica, broadly: a player model, walking around with tools to do tasks, collecting resources, taking actions such as building. | Stated by the developers on 2026-10-10 as the rough style. The choices this leaves open are listed in [player.md](player.md). |
+| D51 | Scale of multiplayer | Design | Open | The developers would ideally like a world to support 100 concurrent players on a persistent server. Recommendation: always build around a server, let small co-op be a server running on a player's machine, make four work first, and measure a hundred before promising it. | Raised by the developers on 2026-10-10. It would replace the four-player limit in D2 and the player-as-host assumption in D29. What it adds and the questions it raises are in [multiplayer.md](multiplayer.md). |
 | D19 | Three.js as primary stack | Tech | Rejected | | It is a renderer, not an engine; the CPU-heavy core would need WASM anyway; the browser is a poor co-op host; no precedent at this scope. |
 
 ## Log
@@ -82,3 +83,4 @@ The source of truth for what is settled. Other docs must agree with this one.
 - **2026-10-10**: The developers asked that performance with very many interactive objects be a baseline concern, and that we look for ways to make things cheap everywhere (D25). A forest test in the sandbox tried one such pattern (D47).
 - **2026-10-10**: Construction experiment built after the developers named Subnautica 2 as the inspiration (D48). They then asked that larger design docs come before more implementation (D49), and noted that nothing can really be tested until a player can walk around the world.
 - **2026-10-10**: The developers described the rough style of play (D50). Drafted [player.md](player.md) around it, as the first of the larger design docs, with sixteen open questions and no code.
+- **2026-10-10**: The developers raised supporting 100 concurrent players on a persistent server (D51). Drafted [multiplayer.md](multiplayer.md) on what that changes. D2's player count is under review until they decide.

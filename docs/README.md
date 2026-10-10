@@ -8,6 +8,7 @@ Working title: **Terra**. A co-op survival sandbox about terraforming a dead pla
 | [vision.md](vision.md) | Pitch, pillars, what we take from each inspiration, non-goals. |
 | [gameplay.md](gameplay.md) | Core loops, survival needs, terraforming phases, hostile life, automation. |
 | [player.md](player.md) | Draft: the player's body, tools, acting on the world, carrying, building. Open questions for the developers. |
+| [multiplayer.md](multiplayer.md) | Draft: what four-player co-op and a hundred players on a persistent server each mean, and a path that keeps both open. |
 | [planet-sim.md](planet-sim.md) | The planetary simulation: cells, fields, biomes, how local feeds global. |
 | [tech.md](tech.md) | The stack, how the code is split, how co-op shares state, terrain, workflow, risks. |
 | [engine.md](engine.md) | The engine's parts, what each needs, and the parallel tracks they are built in. |
