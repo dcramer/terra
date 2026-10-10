@@ -1,0 +1,4 @@
+# Everyone, and CI, builds with exactly this compiler.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]

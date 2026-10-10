@@ -1,0 +1,4 @@
+# Keep line endings as LF everywhere, including checkouts on Windows. Shell scripts and
+# Godot files break otherwise.
+* text=auto eol=lf
+*.png binary

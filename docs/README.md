@@ -9,6 +9,8 @@ Working title: **Terra**. A co-op survival sandbox about terraforming a dead pla
 | [gameplay.md](gameplay.md) | Core loops, survival needs, terraforming phases, hostile life, automation. |
 | [planet-sim.md](planet-sim.md) | The planetary simulation: cells, fields, biomes, how local feeds global. |
 | [tech.md](tech.md) | The stack, how the code is split, how co-op shares state, terrain, workflow, risks. |
+| [development.md](development.md) | Setting up a machine, everyday commands, seeing and measuring output. |
+| [terrain.md](terrain.md) | Brief for the first component, the voxel terrain crate. |
 | [art.md](art.md) | Art direction, constraints, the beauty-corner test. |
 | [prototypes.md](prototypes.md) | The builds so far and the milestones ahead, with their pass criteria. |
 

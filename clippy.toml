@@ -1,0 +1,26 @@
+# D30: the system maths library gives different answers, at different speeds, on different
+# platforms. Code that every player must agree on uses the pure-Rust `libm` crate instead.
+disallowed-methods = [
+    { path = "f32::sin", reason = "use libm::sinf (D30)" },
+    { path = "f32::cos", reason = "use libm::cosf (D30)" },
+    { path = "f32::tan", reason = "use libm::tanf (D30)" },
+    { path = "f32::asin", reason = "use libm::asinf (D30)" },
+    { path = "f32::acos", reason = "use libm::acosf (D30)" },
+    { path = "f32::atan", reason = "use libm::atanf (D30)" },
+    { path = "f32::atan2", reason = "use libm::atan2f (D30)" },
+    { path = "f32::sin_cos", reason = "use libm::sincosf (D30)" },
+    { path = "f32::exp", reason = "use libm::expf (D30)" },
+    { path = "f32::ln", reason = "use libm::logf (D30)" },
+    { path = "f32::log2", reason = "use libm::log2f (D30)" },
+    { path = "f32::powf", reason = "use libm::powf (D30)" },
+    { path = "f64::sin", reason = "use libm::sin (D30)" },
+    { path = "f64::cos", reason = "use libm::cos (D30)" },
+    { path = "f64::tan", reason = "use libm::tan (D30)" },
+    { path = "f64::asin", reason = "use libm::asin (D30)" },
+    { path = "f64::acos", reason = "use libm::acos (D30)" },
+    { path = "f64::atan", reason = "use libm::atan (D30)" },
+    { path = "f64::atan2", reason = "use libm::atan2 (D30)" },
+    { path = "f64::exp", reason = "use libm::exp (D30)" },
+    { path = "f64::ln", reason = "use libm::log (D30)" },
+    { path = "f64::powf", reason = "use libm::pow (D30)" },
+]

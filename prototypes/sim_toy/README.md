@@ -4,7 +4,7 @@ Prototype 2 in [docs/prototypes.md](../../docs/prototypes.md): the planet simula
 
 Every rule and number in it is a first draft, meant to be changed after playing.
 
-- `sim/` is the simulation: pure Rust, no engine. `cargo test -p terra_sim` runs its tests.
+- The simulation is `crates/terra_sim` in the main workspace: pure Rust, no engine. `cargo test -p terra_sim` from the repo root runs its tests.
 - `ext/` exposes it to Godot.
 - `godot/` draws the globe and takes input.
 

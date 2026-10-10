@@ -8,4 +8,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 godot = "0.5.5"
-terra_sim = { path = "../sim" }
+terra_sim = { path = "../../../crates/terra_sim" }

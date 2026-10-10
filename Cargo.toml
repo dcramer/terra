@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+# The Godot-era prototypes and throwaway spikes keep their own manifests.
+exclude = ["prototypes", "spike"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+terra_sim = { path = "crates/terra_sim" }
+libm = "0.2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+# Shared state must compute the same on every platform; see clippy.toml and D30.
+disallowed_methods = "deny"
+
+# Dependencies are optimised even in debug builds, so the engine is fast while our own
+# code still compiles quickly.
+[profile.dev]
+opt-level = 1
+# Full debug information makes a Windows build over 2 GB, which Windows refuses to load.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = false

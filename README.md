@@ -8,8 +8,11 @@ This repository is where the project is thought through: design docs, research n
 |---|---|
 | [docs](docs) | Decisions and plans. Start with [docs/decisions.md](docs/decisions.md). |
 | [research](research) | What we looked into and found, one dated note per question. |
+| [crates](crates) | The Rust workspace: the game's code. |
 | [demo](demo) | A playable tech demo: walk a voxel planet, dig, terraform, fly to orbit. Built on Godot as a reference. |
 | [prototypes](prototypes) | The planet simulation and a globe to watch it on. |
 | [spike](spike) | Throwaway experiments. |
 
 The plan is to build everything in Rust on Bevy, with our own voxel terrain. See [docs/tech.md](docs/tech.md).
+
+To set up a machine, see [docs/development.md](docs/development.md). Coding agents should read [AGENTS.md](AGENTS.md).

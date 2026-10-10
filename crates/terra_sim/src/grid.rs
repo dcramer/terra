@@ -16,18 +16,43 @@ impl Grid {
     pub fn icosphere(subdivisions: u32) -> Self {
         let t = (1.0 + 5.0f32.sqrt()) / 2.0;
         let mut positions: Vec<[f32; 3]> = [
-            [-1.0, t, 0.0], [1.0, t, 0.0], [-1.0, -t, 0.0], [1.0, -t, 0.0],
-            [0.0, -1.0, t], [0.0, 1.0, t], [0.0, -1.0, -t], [0.0, 1.0, -t],
-            [t, 0.0, -1.0], [t, 0.0, 1.0], [-t, 0.0, -1.0], [-t, 0.0, 1.0],
+            [-1.0, t, 0.0],
+            [1.0, t, 0.0],
+            [-1.0, -t, 0.0],
+            [1.0, -t, 0.0],
+            [0.0, -1.0, t],
+            [0.0, 1.0, t],
+            [0.0, -1.0, -t],
+            [0.0, 1.0, -t],
+            [t, 0.0, -1.0],
+            [t, 0.0, 1.0],
+            [-t, 0.0, -1.0],
+            [-t, 0.0, 1.0],
         ]
         .iter()
         .map(|&p| normalise(p))
         .collect();
         let mut triangles: Vec<[u32; 3]> = vec![
-            [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
-            [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
-            [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
-            [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
+            [0, 11, 5],
+            [0, 5, 1],
+            [0, 1, 7],
+            [0, 7, 10],
+            [0, 10, 11],
+            [1, 5, 9],
+            [5, 11, 4],
+            [11, 10, 2],
+            [10, 7, 6],
+            [7, 1, 8],
+            [3, 9, 4],
+            [3, 4, 2],
+            [3, 2, 6],
+            [3, 6, 8],
+            [3, 8, 9],
+            [4, 9, 5],
+            [2, 4, 11],
+            [6, 2, 10],
+            [8, 6, 7],
+            [9, 8, 1],
         ];
 
         for _ in 0..subdivisions {
@@ -66,7 +91,10 @@ impl Grid {
         neighbour_start.push(neighbours.len() as u32);
 
         Grid {
-            latitudes: positions.iter().map(|p| p[1].clamp(-1.0, 1.0).asin()).collect(),
+            latitudes: positions
+                .iter()
+                .map(|p| libm::asinf(p[1].clamp(-1.0, 1.0)))
+                .collect(),
             positions,
             neighbours,
             neighbour_start,
@@ -93,7 +121,8 @@ impl Grid {
     }
 
     pub fn neighbours(&self, cell: usize) -> &[u32] {
-        &self.neighbours[self.neighbour_start[cell] as usize..self.neighbour_start[cell + 1] as usize]
+        &self.neighbours
+            [self.neighbour_start[cell] as usize..self.neighbour_start[cell + 1] as usize]
     }
 
     pub fn neighbour_mean(&self, cell: usize, values: &[f32]) -> f32 {

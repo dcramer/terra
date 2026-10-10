@@ -102,7 +102,7 @@ One known gap: the `transvoxel` crate bakes seam stitching into each mesh, so a 
 
 A throwaway app proved the toolchain end to end on 2026-10-06: Bevy 0.19 and `transvoxel` build from WSL for Linux and Windows, render under WSL with no GPU, and run on the RTX 5090 at a median 1.8 ms a frame. Details and numbers are in [research/rust-stack-spike.md](../research/rust-stack-spike.md).
 
-Nothing else in this plan has been built yet. The terrain port is the first thing that will be.
+The workspace, the pinned compiler and the checks exist (see [development.md](development.md)). Of the crates, only `terra_sim` exists. The terrain port is next; its brief is [terrain.md](terrain.md).
 
 ## Risks
 

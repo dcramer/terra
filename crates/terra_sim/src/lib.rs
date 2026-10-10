@@ -5,6 +5,7 @@
 //! Every rule and number here is a first draft meant to be tuned by playing with it.
 //!
 //! Pure logic: no engine, no I/O, deterministic for a given seed and sequence of calls.
+//! Trigonometry goes through `libm` so every platform computes the same planet (D30).
 
 mod grid;
 
@@ -121,7 +122,9 @@ impl Sim {
             moisture: vec![0.0; n],
             biomass: vec![0.0; n],
             heat_source: vec![0.0; n],
-            sunlight: (0..n).map(|i| -62.0 + 47.0 * grid.latitude(i).cos()).collect(),
+            sunlight: (0..n)
+                .map(|i| -62.0 + 47.0 * libm::cosf(grid.latitude(i)))
+                .collect(),
             seeded: vec![false; n],
             gas_generators: 0,
             pressure: START_PRESSURE,
@@ -148,7 +151,7 @@ impl Sim {
             Machine::Heater => {
                 let centre = self.grid.position(cell);
                 for i in 0..self.grid.len() {
-                    let angle = dot(centre, self.grid.position(i)).clamp(-1.0, 1.0).acos();
+                    let angle = libm::acosf(dot(centre, self.grid.position(i)).clamp(-1.0, 1.0));
                     if angle < HEATER_RADIUS_RAD {
                         let falloff = 1.0 - angle / HEATER_RADIUS_RAD;
                         self.heat_source[i] += HEATER_PEAK_C * falloff;
@@ -171,8 +174,8 @@ impl Sim {
 
     pub fn step(&mut self) {
         let n = self.grid.len();
-        self.pressure += GAS_PER_TICK * self.gas_generators as f32
-            - GAS_LOSS * (self.pressure - START_PRESSURE);
+        self.pressure +=
+            GAS_PER_TICK * self.gas_generators as f32 - GAS_LOSS * (self.pressure - START_PRESSURE);
         self.pressure = self.pressure.min(MAX_PRESSURE);
 
         // Temperature: drift toward equilibrium and even out with neighbours.
@@ -329,15 +332,27 @@ impl Sim {
     fn surface_colour(&self, cell: usize) -> [f32; 3] {
         let t = self.temperature[cell];
         if self.is_ocean(cell) {
-            return if t > -2.0 { [0.05, 0.2, 0.5] } else { [0.7, 0.82, 0.9] };
+            return if t > -2.0 {
+                [0.05, 0.2, 0.5]
+            } else {
+                [0.7, 0.82, 0.9]
+            };
         }
         if self.ice[cell] > 30.0 {
             return [0.93, 0.95, 0.98];
         }
         let m = self.moisture[cell];
         let frost = smoothstep(1.0, 20.0, self.ice[cell]);
-        let dry = if t > 30.0 { [0.8, 0.68, 0.42] } else { [0.5, 0.4, 0.33] };
-        let bare = mix(mix(dry, [0.3, 0.24, 0.2], m), [0.75, 0.76, 0.8], frost * 0.6);
+        let dry = if t > 30.0 {
+            [0.8, 0.68, 0.42]
+        } else {
+            [0.5, 0.4, 0.33]
+        };
+        let bare = mix(
+            mix(dry, [0.3, 0.24, 0.2], m),
+            [0.75, 0.76, 0.8],
+            frost * 0.6,
+        );
         let plants = if t > 26.0 && m > 0.6 {
             [0.05, 0.35, 0.1]
         } else if t < 8.0 {
@@ -357,17 +372,29 @@ fn terrain(grid: &Grid, seed: u64) -> (Vec<Wave>, Vec<f32>) {
             let direction = normalise([rng.signed(), rng.signed(), rng.signed()]);
             let frequency = 1.5 + rng.unit() * 6.0;
             let phase = rng.unit() * std::f32::consts::TAU;
-            Wave { direction, frequency, phase, amplitude_m: 1.0 / frequency }
+            Wave {
+                direction,
+                frequency,
+                phase,
+                amplitude_m: 1.0 / frequency,
+            }
         })
         .collect();
     let height = |waves: &[Wave], p: [f32; 3]| -> f32 {
-        waves.iter().map(|w| w.amplitude_m * (w.frequency * dot(p, w.direction) + w.phase).sin()).sum()
+        waves
+            .iter()
+            .map(|w| w.amplitude_m * libm::sinf(w.frequency * dot(p, w.direction) + w.phase))
+            .sum()
     };
-    let peak = (0..grid.len()).map(|i| height(&waves, grid.position(i)).abs()).fold(0.0f32, f32::max);
+    let peak = (0..grid.len())
+        .map(|i| height(&waves, grid.position(i)).abs())
+        .fold(0.0f32, f32::max);
     for wave in &mut waves {
         wave.amplitude_m *= RELIEF_M / peak;
     }
-    let heights = (0..grid.len()).map(|i| height(&waves, grid.position(i))).collect();
+    let heights = (0..grid.len())
+        .map(|i| height(&waves, grid.position(i)))
+        .collect();
     (waves, heights)
 }
 
@@ -404,12 +431,20 @@ fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
 
 fn mix(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
     let t = t.clamp(0.0, 1.0);
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
 }
 
 fn ramp(t: f32, low: [f32; 3], mid: [f32; 3], high: [f32; 3]) -> [f32; 3] {
     let t = t.clamp(0.0, 1.0);
-    if t < 0.5 { mix(low, mid, t * 2.0) } else { mix(mid, high, t * 2.0 - 1.0) }
+    if t < 0.5 {
+        mix(low, mid, t * 2.0)
+    } else {
+        mix(mid, high, t * 2.0 - 1.0)
+    }
 }
 
 #[cfg(test)]
@@ -425,7 +460,12 @@ mod tests {
     fn equator_cell(sim: &Sim) -> usize {
         (0..sim.grid.len())
             .filter(|&i| !sim.is_ocean(i))
-            .min_by(|&a, &b| sim.grid.latitude(a).abs().total_cmp(&sim.grid.latitude(b).abs()))
+            .min_by(|&a, &b| {
+                sim.grid
+                    .latitude(a)
+                    .abs()
+                    .total_cmp(&sim.grid.latitude(b).abs())
+            })
             .unwrap()
     }
 
@@ -433,8 +473,12 @@ mod tests {
     fn grid_has_the_expected_shape() {
         let grid = Grid::icosphere(3);
         assert_eq!(grid.len(), 642);
-        let fives = (0..grid.len()).filter(|&i| grid.neighbours(i).len() == 5).count();
-        let sixes = (0..grid.len()).filter(|&i| grid.neighbours(i).len() == 6).count();
+        let fives = (0..grid.len())
+            .filter(|&i| grid.neighbours(i).len() == 5)
+            .count();
+        let sixes = (0..grid.len())
+            .filter(|&i| grid.neighbours(i).len() == 6)
+            .count();
         assert_eq!((fives, sixes), (12, 630));
     }
 
@@ -474,7 +518,11 @@ mod tests {
         run(&mut sim, 3000);
         let after = sim.summary();
         assert!(after.mean_temperature > before.mean_temperature + 20.0);
-        assert!(after.ocean_fraction > 0.05, "ocean {}", after.ocean_fraction);
+        assert!(
+            after.ocean_fraction > 0.05,
+            "ocean {}",
+            after.ocean_fraction
+        );
         assert!(after.ice_fraction < before.ice_fraction);
     }
 
@@ -482,7 +530,9 @@ mod tests {
     fn a_heater_only_warms_its_surroundings() {
         let by_latitude = |sim: &Sim, sign: f32| {
             (0..sim.grid.len())
-                .max_by(|&a, &b| (sign * sim.grid.latitude(a)).total_cmp(&(sign * sim.grid.latitude(b))))
+                .max_by(|&a, &b| {
+                    (sign * sim.grid.latitude(a)).total_cmp(&(sign * sim.grid.latitude(b)))
+                })
                 .unwrap()
         };
         let mut control = Sim::new(3, 1);
@@ -513,12 +563,18 @@ mod tests {
         run(&mut alive, 3000);
         // Well above the shoreline, so the still-rising sea does not drown it.
         let wet = (0..alive.grid.len())
-            .filter(|&i| alive.elevation[i] > alive.sea_level_m + 30.0 && alive.suitability(i) > 0.0)
+            .filter(|&i| {
+                alive.elevation[i] > alive.sea_level_m + 30.0 && alive.suitability(i) > 0.0
+            })
             .max_by(|&a, &b| alive.suitability(a).total_cmp(&alive.suitability(b)))
             .expect("some land should be habitable once there is air and sea");
         alive.place(Machine::Seeder, wet);
         run(&mut alive, 3000);
-        let spread = alive.grid.neighbours(wet).iter().any(|&nb| alive.biomass[nb as usize] > 0.1);
+        let spread = alive
+            .grid
+            .neighbours(wet)
+            .iter()
+            .any(|&nb| alive.biomass[nb as usize] > 0.1);
         assert!(alive.biomass[wet] > 0.5);
         assert!(spread, "life should creep into neighbouring cells");
     }
