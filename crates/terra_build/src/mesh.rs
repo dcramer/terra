@@ -1,7 +1,7 @@
 //! Turning a base's shape into triangles.
 
-use crate::{Base, Face, Panel, STOREY_M, Side, TILE_M};
-use glam::Vec3;
+use crate::{Base, DOOR_HEIGHT_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, TILE_M};
+use glam::{IVec3, Vec3};
 
 const HULL: [f32; 3] = [0.84, 0.85, 0.88];
 const ROOF: [f32; 3] = [0.74, 0.76, 0.8];
@@ -9,8 +9,6 @@ const UNDERSIDE: [f32; 3] = [0.42, 0.43, 0.47];
 const INNER_WALL: [f32; 3] = [0.82, 0.78, 0.7];
 const FLOOR: [f32; 3] = [0.34, 0.33, 0.36];
 const CEILING: [f32; 3] = [0.9, 0.89, 0.86];
-const DOOR_WIDTH_M: f32 = 1.3;
-const DOOR_HEIGHT_M: f32 = 2.2;
 
 /// Triangles with flat faces: three entries per triangle, no shared corners.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -134,6 +132,23 @@ pub(crate) fn build(base: &Base) -> BaseMesh {
                         .quad(frame.corners(hole, false), frame.normal, [0.55, 0.8, 0.9]);
                 }
             }
+        }
+    }
+    // Where one tile sits on another there is a floor between them: the ceiling of the
+    // lower storey and the floor of the upper one.
+    for (tile, _) in base.tiles() {
+        if base.contains(tile + IVec3::Y) {
+            let frame = Frame::of(Face::new(tile, Side::Up));
+            let whole = Rect {
+                left: 0.0,
+                right: frame.width,
+                bottom: 0.0,
+                top: frame.height,
+            };
+            mesh.structure
+                .quad(frame.corners(whole, false), frame.normal, FLOOR);
+            mesh.structure
+                .quad(frame.corners(whole, true), -frame.normal, CEILING);
         }
     }
     mesh

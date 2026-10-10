@@ -23,7 +23,8 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--radius <metres>` | Planet radius, 2000 by default |
 | `--shot <file.png>` | Save a screenshot once the scene has settled, then exit |
 | `--bench` | Measure frame times with vsync off, print them, then exit |
-| `--press <key>@<frame>` | Press a letter key on a given frame, for scripted runs |
+| `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
+| `--press <key>@<frame>` | Press a letter key on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. |
 
 ## Controls
 
@@ -50,6 +51,31 @@ cargo run -p terra_sandbox -- --shot shots/ground.png
 ```
 
 Shader reloading works when run through `cargo run`. The Windows build launched by `cargo xtask win` runs from a copy, so edits to the original are not picked up there.
+
+## The play experiment
+
+```bash
+cargo xtask win -p terra_sandbox -- --experiment look --experiment play
+```
+
+A simple tech demo: a player on the ground with a builder tool. You steer a figure in third person. It walks on the planet, climbs the ramp to the base's door, is held up by floors, stopped by walls and windows, and let through doors.
+
+| Input | Action |
+|---|---|
+| Click | Capture the mouse; Esc releases it |
+| Mouse | Look |
+| W A S D, Shift, Space | Walk, run, jump |
+| 1, 2, 3 | Builder mode: shape, openings, room |
+| Left click, or E | Main action: push the wall out, change the tile, or add a room |
+| Right click, or R | Second action: pull the wall in, or make the tile solid |
+
+What is placeholder: the figure is a few simple shapes with no animation; the planet is the stand-in one, so it cannot be dug and the base stands on legs clear of it; and collision is arithmetic on the base's grid, not a physics engine. There are no stairs, so upper storeys cannot be reached, and interiors have no lights.
+
+In a scripted run the game clock advances a sixtieth of a second per frame and real keyboard and mouse input is ignored, so the same script does the same thing on any machine:
+
+```bash
+cargo run -p terra_sandbox -- --experiment look --experiment play --settle 300 --press w@20-230 --press e@260 --shot shots/indoors.png
+```
 
 ## The look experiment
 
@@ -88,4 +114,4 @@ It can use the `Planet` resource to ask where the ground is, and anything in `te
 
 - The planet's mesh is coarse, about 12 m between vertices, while objects are placed on the exact ground. Small objects can sit a little above or below what is drawn.
 - No atmosphere or sky by default; the background is flat. The `look` experiment adds a sky.
-- No player, gravity or collision. The camera flies freely.
+- Outside the `play` experiment there is no player, gravity or collision, and the camera flies freely.

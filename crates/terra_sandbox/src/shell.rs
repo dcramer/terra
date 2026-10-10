@@ -4,16 +4,20 @@
 use bevy::{
     camera_controller::free_camera::FreeCameraPlugin,
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
-    input::{InputSystems, common_conditions::input_toggle_active},
+    input::{InputSystems, common_conditions::input_toggle_active, mouse::AccumulatedMouseMotion},
     prelude::*,
     render::{
         renderer::RenderAdapterInfo,
         view::screenshot::{Screenshot, save_to_disk},
     },
+    time::TimeUpdateStrategy,
     window::PresentMode,
 };
 use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 pub const USAGE: &str = "\
 usage: terra_sandbox [options]
@@ -23,10 +27,12 @@ usage: terra_sandbox [options]
   --radius <metres>     planet radius (default 2000)
   --shot <file.png>     save a screenshot once the scene has settled, then exit
   --bench               measure frame times with vsync off, print them, then exit
-  --press <key>@<frame> press a letter key on a given frame, for scripted runs";
+  --settle <frames>     frames to run before capturing or measuring (default 120)
+  --press <key>@<frame> press a letter key on a given frame, for scripted runs;
+                        <key>@<from>-<to> holds it over a range of frames";
 
-/// Frames to wait before measuring or capturing, so shaders have compiled and the scene
-/// has finished loading.
+/// Frames to wait before measuring or capturing by default, so shaders have compiled and
+/// the scene has finished loading.
 const SETTLE_FRAMES: u32 = 120;
 const BENCH_FRAMES: usize = 600;
 
@@ -36,8 +42,10 @@ pub struct Options {
     pub list: bool,
     pub radius_m: f32,
     pub shot: Option<PathBuf>,
+    pub settle_frames: u32,
     pub bench: bool,
-    pub presses: Vec<(KeyCode, u32)>,
+    /// A key, the frame it goes down, and the frame it comes back up.
+    pub presses: Vec<(KeyCode, u32, u32)>,
 }
 
 impl Options {
@@ -47,6 +55,7 @@ impl Options {
             list: false,
             radius_m: 2000.0,
             shot: None,
+            settle_frames: SETTLE_FRAMES,
             bench: false,
             presses: Vec::new(),
         };
@@ -63,6 +72,11 @@ impl Options {
                         .parse()
                         .map_err(|_| "--radius needs a number of metres".to_string())?;
                 }
+                "--settle" => {
+                    options.settle_frames = value("--settle")?
+                        .parse()
+                        .map_err(|_| "--settle needs a number of frames".to_string())?;
+                }
                 "--press" => options.presses.push(parse_press(&value("--press")?)?),
                 other => return Err(format!("Unknown option `{other}`")),
             }
@@ -76,7 +90,7 @@ impl Options {
     }
 }
 
-fn parse_press(text: &str) -> Result<(KeyCode, u32), String> {
+fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
     const LETTERS: [KeyCode; 26] = [
         KeyCode::KeyA,
         KeyCode::KeyB,
@@ -105,15 +119,23 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32), String> {
         KeyCode::KeyY,
         KeyCode::KeyZ,
     ];
-    let problem = || format!("--press wants a letter and a frame, like f@60, not `{text}`");
-    let (key, frame) = text.split_once('@').ok_or_else(problem)?;
+    let problem =
+        || format!("--press wants a letter and a frame, like f@60 or w@40-90, not `{text}`");
+    let (key, frames) = text.split_once('@').ok_or_else(problem)?;
     let letter = key
         .chars()
         .next()
         .filter(|c| key.len() == 1 && c.is_ascii_alphabetic());
     let letter = letter.ok_or_else(problem)?.to_ascii_lowercase();
-    let frame = frame.parse().map_err(|_| problem())?;
-    Ok((LETTERS[(letter as u8 - b'a') as usize], frame))
+    let frame = |text: &str| text.parse::<u32>().map_err(|_| problem());
+    let (down, up) = match frames.split_once('-') {
+        Some((from, to)) => (frame(from)?, frame(to)?),
+        None => (frame(frames)?, frame(frames)? + 1),
+    };
+    if up <= down {
+        return Err(problem());
+    }
+    Ok((LETTERS[(letter as u8 - b'a') as usize], down, up))
 }
 
 pub struct ShellPlugin(pub Options);
@@ -133,6 +155,14 @@ impl Plugin for ShellPlugin {
             },
             ..default()
         };
+        if options.scripted() {
+            // A scripted run advances the game by a sixtieth of a second every frame,
+            // however fast the machine draws, so the same script does the same thing on
+            // a software renderer and on a fast GPU.
+            app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f64(
+                1.0 / 60.0,
+            )));
+        }
         app.insert_resource(options)
             .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.02)))
             .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -163,18 +193,30 @@ impl Plugin for ShellPlugin {
     }
 }
 
-/// Presses keys on the frames asked for, through the same input path a keyboard uses.
+/// In a scripted run, the keyboard and mouse are whatever the script says and nothing
+/// else. The window is a real one, so without this, anything typed while it has focus
+/// would steer the run.
 fn scripted_presses(
     options: Res<Options>,
     mut frame: Local<u32>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut mouse: ResMut<ButtonInput<MouseButton>>,
+    mut motion: ResMut<AccumulatedMouseMotion>,
 ) {
+    if !options.scripted() {
+        return;
+    }
     *frame += 1;
-    for &(key, on_frame) in &options.presses {
-        if *frame == on_frame {
+    keys.reset_all();
+    mouse.reset_all();
+    motion.delta = Vec2::ZERO;
+    for &(key, down, up) in &options.presses {
+        if (down..up).contains(&*frame) {
             keys.press(key);
-        } else if *frame == on_frame + 1 {
-            keys.release(key);
+            // Held since an earlier frame, so not newly pressed on this one.
+            if *frame != down {
+                keys.clear_just_pressed(key);
+            }
         }
     }
 }
@@ -182,21 +224,27 @@ fn scripted_presses(
 fn scripted_run(
     mut commands: Commands,
     options: Res<Options>,
-    time: Res<Time<Real>>,
     adapter: Res<RenderAdapterInfo>,
     mut frame: Local<u32>,
     mut frame_ms: Local<Vec<f32>>,
+    mut last_frame: Local<Option<Instant>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if !options.scripted() {
         return;
     }
+    // Scripted runs use a made-up game clock, so frames are timed against the real one.
+    let now = Instant::now();
+    let real_ms = last_frame
+        .replace(now)
+        .map(|last| (now - last).as_secs_f32() * 1000.0);
     *frame += 1;
-    if *frame <= SETTLE_FRAMES {
+    let settle = options.settle_frames;
+    if *frame <= settle {
         return;
     }
     if let Some(path) = &options.shot {
-        if *frame == SETTLE_FRAMES + 1 {
+        if *frame == settle + 1 {
             if let Some(folder) = path.parent() {
                 std::fs::create_dir_all(folder).ok();
             }
@@ -205,13 +253,13 @@ fn scripted_run(
                 .observe(save_to_disk(path.clone()));
         }
         // Saving happens in the background; give it a moment before leaving.
-        if *frame == SETTLE_FRAMES + 30 && !options.bench {
+        if *frame == settle + 30 && !options.bench {
             println!("SANDBOX saved {}", path.display());
             exit.write(AppExit::Success);
         }
     }
     if options.bench {
-        frame_ms.push(time.delta_secs() * 1000.0);
+        frame_ms.extend(real_ms);
         if frame_ms.len() == BENCH_FRAMES {
             frame_ms.sort_by(|a, b| a.total_cmp(b));
             println!(
@@ -250,7 +298,9 @@ mod tests {
         assert_eq!(options.experiments, ["scatter"]);
         assert_eq!(options.radius_m, 500.0);
         assert_eq!(options.shot, Some(PathBuf::from("out/a.png")));
-        assert_eq!(options.presses, [(KeyCode::KeyF, 60)]);
+        assert_eq!(options.presses, [(KeyCode::KeyF, 60, 61)]);
+        let held = parse(&["--press", "w@40-90"]).unwrap();
+        assert_eq!(held.presses, [(KeyCode::KeyW, 40, 90)]);
         assert!(options.scripted());
         assert!(!parse(&[]).unwrap().scripted());
     }

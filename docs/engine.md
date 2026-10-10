@@ -38,7 +38,7 @@ Our current expectation, however the gameplay turns out (D39):
 | 9 | Networking | A server and the clients that join it, ordered operations, snapshots, late join | Nothing |
 | 10 | Simulation runtime | Running the simulation on its thread, snapshots, fields into textures | The existing crate |
 
-Saving, physics for loose objects, audio and UI are engine work too, but nothing needs them yet.
+Saving, physics for loose objects, audio and UI are engine work too, but nothing needs them yet. Collision is needed now and is described below.
 
 ## What makes them separable
 
@@ -83,6 +83,28 @@ Three kinds of thing can be harvested, and each needs a different mechanism. Whi
 | Cover | Grass | Too many to track one by one. Density comes from a rule; cutting clears an area, and the yield is the amount in it. | 7 |
 
 All three go through one contract: a harvest is an operation, and applying it returns a yield.
+
+## Collision
+
+Required by the developers (D53): things in the world need collision shapes that work with the voxel terrain and everything else. A player has to be stopped by a cliff, a tree, a wall and another player alike.
+
+What has to collide with what:
+
+| Thing | Collides with |
+|---|---|
+| Players and creatures | The ground, including holes and tunnels that were dug; bases; trees, rocks and other objects; each other |
+| Loose objects, if we have them | The same |
+| Rays, for aiming tools | All of the above, through one question: what is under the crosshair? |
+
+Where each shape would come from:
+
+- **Voxel terrain**: generated with each chunk's mesh, for the finest chunks near anything that can move, and rebuilt when the ground is dug.
+- **Bases**: generated from the base's shape, the same way its hull is.
+- **Objects**: computed per area, like the objects themselves, so a million trees do not mean a million shapes.
+
+What exists today is a stand-in. The sandbox's player walks using arithmetic: the ground's formula for height, and the base's grid for floors, walls and doors. There are no collision shapes, nothing stops the player at a tree or a rock, and none of it would survive real voxel terrain.
+
+The plan on record is a physics engine (Avian, D33) for shapes and loose objects, with the player and creatures asking the voxel data directly so they never wait for a shape to be built. That plan predates this requirement and has not been tested. It needs its own design doc before anything is built.
 
 ## Many things, all interactive
 

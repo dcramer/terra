@@ -6,40 +6,176 @@
 //! room there.
 //!
 //! The base starts as a small example, built through the same operations the keys use.
+//!
+//! With the `play` experiment on, a player's builder tool drives this instead.
 
 use crate::planet::Planet;
 use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, prelude::*,
     render::render_resource::PrimitiveTopology,
 };
-use terra_build::{Base, BuildOp, Face, Panel, STOREY_M, Side, Surface, TILE_M};
+use terra_build::{
+    Base, BuildOp, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, Surface, TILE_M, Walker,
+};
 use terra_core::Ground;
 
 const REACH_M: f32 = 300.0;
-/// The base's floor sits this far above the ground at its anchor, on legs.
-const FLOOR_ABOVE_GROUND_M: f32 = 0.8;
+/// The base's floor clears the highest ground under it by this much.
+const FLOOR_CLEARANCE_M: f32 = 0.5;
+/// A ramp runs this far out for every metre it has to climb.
+const RAMP_RUN_PER_RISE: f32 = 2.4;
+const RAMP_WIDTH_M: f32 = DOOR_WIDTH_M + 0.7;
+
+/// Present when something else is driving construction, such as a player holding a
+/// builder tool. The keys and camera here then stand aside.
+#[derive(Resource)]
+pub(super) struct DrivenByPlayer;
 
 /// The one base under construction, and where it stands.
 #[derive(Resource)]
-struct Site {
-    base: Base,
+pub(super) struct Site {
+    pub base: Base,
     /// Places the base's own space on the planet.
-    frame: Transform,
-    operations: Vec<BuildOp>,
+    pub frame: Transform,
+    pub operations: Vec<BuildOp>,
+    /// A ramp from each ground-floor door down to the ground.
+    ramps: Vec<Ramp>,
+    ramp_holder: Entity,
     structure: Entity,
     glass: Entity,
     legs: Entity,
     leg_mesh: Handle<Mesh>,
     leg_material: Handle<StandardMaterial>,
+    ramp_material: Handle<StandardMaterial>,
     camera_placed: bool,
 }
 
 #[derive(Component)]
 struct Readout;
 
+/// Marks that the construction systems are in place, so asking for them twice is safe.
+#[derive(Resource)]
+struct Added;
+
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup)
-        .add_systems(Update, (place_camera, edit, update_readout).chain());
+    if app.world().contains_resource::<Added>() {
+        return;
+    }
+    let free = not(resource_exists::<DrivenByPlayer>);
+    app.insert_resource(Added)
+        .add_systems(Startup, setup)
+        .add_systems(
+            Update,
+            (
+                place_camera.run_if(free.clone()),
+                edit.run_if(free.clone()),
+                update_readout.run_if(free),
+            )
+                .chain(),
+        );
+}
+
+/// A point just outside the example base's door, in the base's own space.
+pub(super) const OUTSIDE_DOOR: Vec3 = Vec3::new(7.5, 0.0, 9.0);
+
+/// A sloping walkway from a door's sill down to the ground, in the base's own space.
+struct Ramp {
+    /// The middle of the door's sill.
+    top: Vec3,
+    /// Level, pointing away from the door.
+    outward: Vec3,
+    length: f32,
+    /// How far the far end is below the sill.
+    drop: f32,
+}
+
+impl Ramp {
+    /// The ramp as a wedge: its sloping top and a wall down each side.
+    fn mesh(&self) -> Mesh {
+        let half = self.outward.cross(Vec3::Y) * (RAMP_WIDTH_M * 0.5);
+        let fall = self.outward * self.length - Vec3::Y * self.drop;
+        let (near_left, near_right) = (self.top - half, self.top + half);
+        let (far_left, far_right) = (near_left + fall, near_right + fall);
+        let under = Vec3::Y * self.drop;
+        let triangles = [
+            [near_left, far_left, far_right],
+            [near_left, far_right, near_right],
+            [near_left, near_left - under, far_left],
+            [near_right, far_right, near_right - under],
+        ];
+        let mut positions = Vec::new();
+        let mut normals = Vec::new();
+        for [a, b, c] in triangles {
+            let mut normal = (b - a).cross(c - a).normalize_or_zero();
+            // The top should face up; the material is double sided, so the rest is free.
+            if normal.y < 0.0 {
+                normal = -normal;
+            }
+            positions.extend([a, b, c]);
+            normals.extend([normal; 3]);
+        }
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    }
+
+    /// The height of the ramp's surface under a point, if the point is over the ramp.
+    fn height_at(&self, point: Vec3) -> Option<f32> {
+        let offset = point - self.top;
+        let along = offset.dot(self.outward);
+        let across = offset.dot(self.outward.cross(Vec3::Y));
+        let on_ramp = (0.0..=self.length).contains(&along) && across.abs() <= RAMP_WIDTH_M * 0.5;
+        on_ramp.then(|| self.top.y - self.drop * along / self.length)
+    }
+}
+
+impl Site {
+    /// A point on the ground a little beyond the foot of the first door's ramp, facing
+    /// which a walker would climb the ramp into the base. Returns the point and the
+    /// direction to face, both in the base's own space.
+    pub(super) fn approach(&self) -> (Vec3, Vec3) {
+        match self.ramps.first() {
+            Some(ramp) => (ramp.top + ramp.outward * (ramp.length + 2.5), -ramp.outward),
+            None => (OUTSIDE_DOOR, Vec3::NEG_Z),
+        }
+    }
+
+    /// The height of whatever the base offers to stand on at a point in its own space: a
+    /// floor, a roof or a ramp, whichever is highest within a step of the feet.
+    pub(super) fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
+        let ramp = self
+            .ramps
+            .iter()
+            .filter_map(|ramp| ramp.height_at(point))
+            .filter(|&height| height <= point.y + walker.step_up)
+            .max_by(|a, b| a.total_cmp(b));
+        match (self.base.support(point, walker), ramp) {
+            (Some(floor), Some(ramp)) => Some(floor.max(ramp)),
+            (floor, ramp) => floor.or(ramp),
+        }
+    }
+
+    /// Applies an operation and redraws the base. Returns whether anything changed.
+    pub(super) fn apply(
+        &mut self,
+        op: BuildOp,
+        commands: &mut Commands,
+        planet: &Planet,
+        meshes: &mut Assets<Mesh>,
+    ) -> bool {
+        let changed = self.base.apply(op);
+        if changed {
+            self.operations.push(op);
+            info!("Applied {op:?}");
+            redraw(commands, self, planet, meshes);
+        } else {
+            info!("{op:?} changed nothing.");
+        }
+        changed
+    }
 }
 
 /// The example base: two rooms joined by a corridor, a small upper storey, a run of
@@ -89,15 +225,32 @@ fn setup(
     let ahead = up.cross(Vec3::X).normalize();
     let anchor = planet.surface((start + ahead * 60.0).normalize());
     let anchor_up = anchor.normalize();
-    let mut frame = Transform::from_translation(anchor + anchor_up * FLOOR_ABOVE_GROUND_M)
-        .looking_to(ahead.reject_from(anchor_up), anchor_up);
+    let mut frame =
+        Transform::from_translation(anchor).looking_to(ahead.reject_from(anchor_up), anchor_up);
     frame.rotate_local_y(0.5);
-
     let mut base = Base::default();
     let operations = example();
     for &op in &operations {
         base.apply(op);
     }
+    // Lift the base until its floor clears the highest ground under it. The stand-in
+    // planet cannot be dug, so the base has to stay out of the ground's way; legs and
+    // ramps make up the difference.
+    let highest_ground = base
+        .tiles()
+        .filter(|(tile, _)| tile.y == 0)
+        .flat_map(|(tile, _)| {
+            [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)].map(|(dx, dz)| {
+                let on_floor = Vec3::new(
+                    (tile.x as f32 + dx) * TILE_M,
+                    0.0,
+                    (tile.z as f32 + dz) * TILE_M,
+                );
+                -planet.ground.distance(frame.transform_point(on_floor))
+            })
+        })
+        .fold(f32::MIN, f32::max);
+    frame.translation += anchor_up * (highest_ground + FLOOR_CLEARANCE_M);
 
     // Colour comes from each triangle, so one material serves the whole structure.
     let structure_material = materials.add(StandardMaterial {
@@ -130,6 +283,9 @@ fn setup(
             Visibility::default(),
         ))
         .id();
+    let ramp_holder = commands
+        .spawn((Name::new("Base ramps"), frame, Visibility::default()))
+        .id();
 
     let mut site = Site {
         base,
@@ -142,6 +298,15 @@ fn setup(
         leg_material: materials.add(StandardMaterial {
             base_color: Color::srgb(0.4, 0.41, 0.45),
             perceptual_roughness: 0.9,
+            ..default()
+        }),
+        ramps: Vec::new(),
+        ramp_holder,
+        ramp_material: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.62, 0.63, 0.67),
+            perceptual_roughness: 0.9,
+            cull_mode: None,
+            double_sided: true,
             ..default()
         }),
         camera_placed: false,
@@ -230,6 +395,42 @@ fn redraw(commands: &mut Commands, site: &mut Site, planet: &Planet, meshes: &mu
             ));
         }
     }
+
+    // A ramp from every ground-floor door down to the ground.
+    commands
+        .entity(site.ramp_holder)
+        .despawn_related::<Children>();
+    site.ramps.clear();
+    let doors: Vec<Face> = site
+        .base
+        .hull()
+        .filter(|&face| face.tile[1] == 0 && site.base.panel(face) == Panel::Door)
+        .collect();
+    for door in doors {
+        let corners = Base::corners(door);
+        let top = (corners[0] + corners[1]) * 0.5;
+        let outward = door.side.offset().as_vec3();
+        // Long enough for the climb, measured where the ramp starts and where it ends.
+        let rise_here = planet
+            .ground
+            .distance(site.frame.transform_point(top))
+            .max(0.0);
+        let length = (rise_here * RAMP_RUN_PER_RISE).clamp(1.5, 16.0);
+        let far_end = site.frame.transform_point(top + outward * length);
+        let drop = planet.ground.distance(far_end).max(0.0) + 0.1;
+        let ramp = Ramp {
+            top,
+            outward,
+            length,
+            drop,
+        };
+        commands.spawn((
+            Mesh3d(meshes.add(ramp.mesh())),
+            MeshMaterial3d(site.ramp_material.clone()),
+            ChildOf(site.ramp_holder),
+        ));
+        site.ramps.push(ramp);
+    }
 }
 
 /// Moves the camera to a good view of the base, once.
@@ -309,13 +510,7 @@ fn edit(
     };
 
     if let Some(op) = op {
-        if site.base.apply(op) {
-            site.operations.push(op);
-            info!("Applied {op:?}");
-            redraw(&mut commands, site, &planet, &mut meshes);
-        } else {
-            info!("{op:?} changed nothing.");
-        }
+        site.apply(op, &mut commands, &planet, &mut meshes);
     }
 }
 

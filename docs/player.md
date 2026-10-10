@@ -128,7 +128,15 @@ Survival needs, terraforming, progression, creatures and combat. The developers 
 
 ## A first walk-around
 
-Proposed, as the first thing to build once this doc is agreed, because nothing else can be judged without it:
+A first version exists, built on 2026-10-10 at the developers' request as a really simple tech demo: the sandbox's `play` experiment. To get started it made two choices this doc leaves open, neither of which is a decision: third person, so the figure can be seen, and one builder tool with three modes.
+
+![The placeholder figure at the foot of the ramp to the base](images/play-test-2026-10-10.png)
+
+![Indoors, with the builder aimed at a wall](images/play-indoors-2026-10-10.png)
+
+It has a placeholder figure with no animation, walking, running and jumping on the stand-in planet, a ramp and door into the base, and the builder reshaping the base from outside and inside. It has no harvesting, inventory or real collision. How to run it is in the [sandbox README](../crates/terra_sandbox/README.md).
+
+What was proposed, for comparison:
 
 - A character that walks, runs and jumps on the stand-in planet, in whichever view question 1 settles on.
 - One tool in hand that harvests the rocks and trees the sandbox already scatters.

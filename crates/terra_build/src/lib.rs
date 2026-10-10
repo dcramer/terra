@@ -19,8 +19,10 @@
 //! and Y up. [`TILE_M`] and [`STOREY_M`] turn tiles into metres.
 
 mod mesh;
+mod walk;
 
 pub use mesh::{BaseMesh, Surface};
+pub use walk::Walker;
 
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
@@ -29,6 +31,10 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const TILE_M: f32 = 3.0;
 /// Height of one storey, in metres.
 pub const STOREY_M: f32 = 3.0;
+/// Width of a door's opening, in metres.
+pub const DOOR_WIDTH_M: f32 = 1.3;
+/// Height of a door's opening, in metres.
+pub const DOOR_HEIGHT_M: f32 = 2.2;
 
 /// One of the six directions a tile faces.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -192,6 +198,13 @@ impl Base {
 
     pub fn contains(&self, tile: IVec3) -> bool {
         self.tiles.contains_key(&tile.to_array())
+    }
+
+    /// Every tile inside the base and the room it belongs to, in a fixed order.
+    pub fn tiles(&self) -> impl Iterator<Item = (IVec3, u32)> + '_ {
+        self.tiles
+            .iter()
+            .map(|(&tile, &room)| (IVec3::from_array(tile), room))
     }
 
     /// Which room a tile belongs to, if it is inside the base.

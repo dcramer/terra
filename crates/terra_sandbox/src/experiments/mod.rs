@@ -8,6 +8,7 @@ use bevy::prelude::*;
 mod build;
 mod forest;
 mod look;
+mod play;
 mod scatter;
 
 pub struct Experiment {
@@ -27,9 +28,7 @@ pub const ALL: &[Experiment] = &[
     Experiment {
         name: "build",
         about: "Construction: a base you shape. G and H push and pull a wall, V cycles windows and doors, B adds a room.",
-        add: |app| {
-            app.add_plugins(build::plugin);
-        },
+        add: build::plugin,
     },
     Experiment {
         name: "forest",
@@ -37,6 +36,11 @@ pub const ALL: &[Experiment] = &[
         add: |app| {
             app.add_plugins(forest::plugin);
         },
+    },
+    Experiment {
+        name: "play",
+        about: "A player on the ground with a builder tool: walk, jump, go indoors, and reshape the base.",
+        add: play::plugin,
     },
     Experiment {
         name: "look",
