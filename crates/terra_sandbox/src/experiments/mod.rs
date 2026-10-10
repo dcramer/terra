@@ -5,6 +5,7 @@
 
 use bevy::prelude::*;
 
+mod build;
 mod forest;
 mod look;
 mod scatter;
@@ -21,6 +22,13 @@ pub const ALL: &[Experiment] = &[
         about: "Rocks placed from a seed around the start. Left click, or F, harvests one.",
         add: |app| {
             app.add_plugins(scatter::plugin);
+        },
+    },
+    Experiment {
+        name: "build",
+        about: "Construction: a base you shape. G and H push and pull a wall, V cycles windows and doors, B adds a room.",
+        add: |app| {
+            app.add_plugins(build::plugin);
         },
     },
     Experiment {

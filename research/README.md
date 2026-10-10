@@ -10,6 +10,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [rust-voxel-ecosystem.md](rust-voxel-ecosystem.md) | What exists in Rust to build a voxel planet game on? |
 | [voxel-tools-port.md](voxel-tools-port.md) | How much of Voxel Tools would we need to port, and what makes that tractable? |
 | [forest-scale-test.md](forest-scale-test.md) | Can the world hold a very large number of objects that are each interactive? |
+| [subnautica-2-building.md](subnautica-2-building.md) | How does Subnautica 2's construction work, and what would the same idea look like here? |
 | [godot-spike.md](godot-spike.md) | What did the Godot build prove, and what are the numbers to beat? |
 
 ## Adding a note

@@ -25,6 +25,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - Don't record a proposal as Decided. Unconfirmed ideas are Leaning or Open. When a developer thinks out loud about what the game might be, that is input, not a decision, unless they say it is settled.
 - The whole project is provisional while in pre-production. Write plans as current thinking, not commitments.
 - Keep docs short: intent, constraints and reasons, not implementation detail.
+- Design before building. A feature gets a design doc the developers have read before it gets code. Don't start an experiment because an idea came up in conversation; write it down and ask.
 - Don't overbuild. Nothing is built on a Leaning or Open decision except a spike, and a spike answers one stated question with the least code that can answer it, then stops. No game systems until the decisions they rest on are Decided.
 - Technical decisions are yours to make: decide, record the reason in `docs/decisions.md`, and keep going. Design decisions belong to the developers: give a recommendation, mark it Open, and don't build on it.
 - When you investigate something, write it up as a dated note in `research/` and link it from `research/README.md`. Research informs decisions; it does not make them.

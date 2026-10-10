@@ -11,6 +11,7 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+terra_build = { path = "crates/terra_build" }
 terra_core = { path = "crates/terra_core" }
 terra_gen = { path = "crates/terra_gen" }
 terra_sim = { path = "crates/terra_sim" }

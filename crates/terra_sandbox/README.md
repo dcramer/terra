@@ -67,6 +67,14 @@ cargo run -p terra_sandbox -- --experiment look --experiment forest
 
 About a million generated pines over the whole planet. Left click or F chops the one you are pointing at; K chops every tree in view. None of the trees is stored: each cell's trees are computed from the seed when the camera comes near, and a chopped tree is one bit. Measurements are in [research/forest-scale-test.md](../../research/forest-scale-test.md).
 
+## The build experiment
+
+```bash
+cargo run -p terra_sandbox -- --experiment look --experiment build
+```
+
+A base you shape, inspired by Subnautica 2. Aim with the mark in the middle of the view: G pushes the wall you are looking at out by a tile, H pulls it in, V cycles the tile through solid, three sizes of window and a door, and B adds a room on open ground. The rules live in `terra_build`; what it does and does not do is in [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
+
 ## Adding an experiment
 
 An experiment is a small plugin that nothing else depends on.

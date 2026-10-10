@@ -1,0 +1,13 @@
+[package]
+name = "terra_build"
+description = "Construction: bases shaped room by room, with the hull, windows and doors generated from the shape."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+
+[lints]
+workspace = true

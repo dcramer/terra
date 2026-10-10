@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 bevy.workspace = true
 bevy-inspector-egui.workspace = true
+terra_build.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true
 

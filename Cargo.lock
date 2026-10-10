@@ -5347,6 +5347,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_build"
+version = "0.1.0"
+dependencies = [
+ "glam",
+]
+
+[[package]]
 name = "terra_core"
 version = "0.1.0"
 dependencies = [
@@ -5367,6 +5374,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy-inspector-egui",
+ "terra_build",
  "terra_core",
  "terra_gen",
 ]
