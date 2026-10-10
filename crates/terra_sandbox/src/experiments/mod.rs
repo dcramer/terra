@@ -5,6 +5,7 @@
 
 use bevy::prelude::*;
 
+mod look;
 mod scatter;
 
 pub struct Experiment {
@@ -13,10 +14,19 @@ pub struct Experiment {
     pub add: fn(&mut App),
 }
 
-pub const ALL: &[Experiment] = &[Experiment {
-    name: "scatter",
-    about: "Rocks placed from a seed around the start. Left click, or F, harvests one.",
-    add: |app| {
-        app.add_plugins(scatter::plugin);
+pub const ALL: &[Experiment] = &[
+    Experiment {
+        name: "scatter",
+        about: "Rocks placed from a seed around the start. Left click, or F, harvests one.",
+        add: |app| {
+            app.add_plugins(scatter::plugin);
+        },
     },
-}];
+    Experiment {
+        name: "look",
+        about: "An art-direction test: faceted shapes, warm light, cool shadows, haze and sky.",
+        add: |app| {
+            app.add_plugins(look::plugin);
+        },
+    },
+];

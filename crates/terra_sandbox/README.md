@@ -51,6 +51,14 @@ cargo run -p terra_sandbox -- --shot shots/ground.png
 
 Shader reloading works when run through `cargo run`. The Windows build launched by `cargo xtask win` runs from a copy, so edits to the original are not picked up there.
 
+## The look experiment
+
+```bash
+cargo run -p terra_sandbox -- --experiment look
+```
+
+A test of the art direction in [docs/art.md](../../docs/art.md): faceted ground, generated boulders and shrubs, a warm sun with cool shadows, haze, a gradient sky with clouds, and bloom. The sky is `assets/shaders/sky.wgsl` and reloads when saved, like the ground.
+
 ## Adding an experiment
 
 An experiment is a small plugin that nothing else depends on.
@@ -62,6 +70,6 @@ It can use the `Planet` resource to ask where the ground is, and anything in `te
 
 ## Known limits
 
-- The planet's mesh is coarse, about 16 m between vertices, while objects are placed on the exact ground. Small objects can sit a little above or below what is drawn.
-- No atmosphere or sky yet; the background is flat.
+- The planet's mesh is coarse, about 12 m between vertices, while objects are placed on the exact ground. Small objects can sit a little above or below what is drawn.
+- No atmosphere or sky by default; the background is flat. The `look` experiment adds a sky.
 - No player, gravity or collision. The camera flies freely.

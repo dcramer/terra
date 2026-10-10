@@ -21,7 +21,7 @@ use terra_core::{Ground, PlanetSpec, Seed, StandInPlanet, Water};
 /// Height of the tallest hills, in metres.
 const RELIEF_M: f32 = 150.0;
 /// Grid squares along each edge of the six faces the planet's mesh is built from.
-const CELLS_PER_FACE: usize = 160;
+const CELLS_PER_FACE: usize = 256;
 /// The camera starts here. The free camera treats +Y as up, so the pole is the one place
 /// on the planet where that matches the ground.
 const START: Vec3 = Vec3::Y;
@@ -50,6 +50,7 @@ impl Planet {
 pub struct Tweaks {
     /// Direction from the planet toward the sun.
     pub sun_direction: Vec3,
+    pub sun_color: Color,
     #[inspector(min = 0.0, max = 100_000.0)]
     pub sun_illuminance: f32,
     pub sea: bool,
@@ -59,6 +60,8 @@ pub struct Tweaks {
     pub ground_low: Color,
     pub ground_high: Color,
     pub ground_steep: Color,
+    /// Light each triangle as a flat facet instead of smoothing across them.
+    pub ground_faceted: bool,
 }
 
 #[derive(Component)]
@@ -82,6 +85,8 @@ pub struct GroundExtension {
     high: LinearRgba,
     #[uniform(100)]
     steep: LinearRgba,
+    #[uniform(100)]
+    faceted: u32,
 }
 
 impl MaterialExtension for GroundExtension {
@@ -99,12 +104,14 @@ pub fn plugin(app: &mut App) {
     let ground = Arc::new(StandInPlanet::new(spec, RELIEF_M, Some(-20.0)));
     let tweaks = Tweaks {
         sun_direction: Vec3::new(0.5, 0.75, 0.45),
+        sun_color: Color::WHITE,
         sun_illuminance: 12_000.0,
         sea: true,
         sea_level_m: ground.level(START).map_or(0.0, |level| level - radius_m),
         ground_low: Color::srgb(0.42, 0.33, 0.26),
         ground_high: Color::srgb(0.72, 0.66, 0.58),
         ground_steep: Color::srgb(0.3, 0.27, 0.25),
+        ground_faceted: false,
     };
     app.insert_resource(Planet { ground })
         .insert_resource(tweaks)
@@ -145,6 +152,7 @@ fn setup(
                 low: tweaks.ground_low.into(),
                 high: tweaks.ground_high.into(),
                 steep: tweaks.ground_steep.into(),
+                faceted: tweaks.ground_faceted as u32,
             },
         })),
     ));
@@ -198,6 +206,7 @@ fn apply_tweaks(
     mut ground_materials: ResMut<Assets<GroundMaterial>>,
 ) {
     let toward_sun = tweaks.sun_direction.normalize_or(Vec3::Y);
+    sun.0.color = tweaks.sun_color;
     sun.0.illuminance = tweaks.sun_illuminance;
     *sun.1 = Transform::from_translation(toward_sun).looking_at(Vec3::ZERO, Vec3::Y);
 
@@ -212,6 +221,7 @@ fn apply_tweaks(
         material.extension.low = tweaks.ground_low.into();
         material.extension.high = tweaks.ground_high.into();
         material.extension.steep = tweaks.ground_steep.into();
+        material.extension.faceted = tweaks.ground_faceted as u32;
     }
 }
 

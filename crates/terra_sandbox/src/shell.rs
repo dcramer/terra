@@ -3,7 +3,7 @@
 
 use bevy::{
     camera_controller::free_camera::FreeCameraPlugin,
-    dev_tools::fps_overlay::FpsOverlayPlugin,
+    dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
     input::{InputSystems, common_conditions::input_toggle_active},
     prelude::*,
     render::{
@@ -121,6 +121,7 @@ pub struct ShellPlugin(pub Options);
 impl Plugin for ShellPlugin {
     fn build(&self, app: &mut App) {
         let options = self.0.clone();
+        let takes_shot = options.shot.is_some();
         let window = Window {
             title: "Terra sandbox".into(),
             resolution: (1600u32, 900u32).into(),
@@ -140,7 +141,17 @@ impl Plugin for ShellPlugin {
             }))
             .add_plugins((
                 FreeCameraPlugin,
-                FpsOverlayPlugin::default(),
+                // A screenshot should show the scene, not the frame counter.
+                FpsOverlayPlugin {
+                    config: FpsOverlayConfig {
+                        enabled: !takes_shot,
+                        frame_time_graph_config: FrameTimeGraphConfig {
+                            enabled: !takes_shot,
+                            ..default()
+                        },
+                        ..default()
+                    },
+                },
                 EguiPlugin::default(),
             ))
             // F1: every entity, resource and asset in the world, editable live.

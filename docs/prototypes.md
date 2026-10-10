@@ -41,7 +41,9 @@ Pass when:
 
 **Question:** what does the game look like? This closes D14.
 
-Build: one fixed scene with terrain, a rock, a plant, a machine, a player and the sky, at three phases (dead, thawing, alive), in both treatments from [art.md](art.md).
+The direction is now set by [art.md](art.md): Forever Ago is the inspiration. The beauty corner is one fixed scene with terrain, a rock, a plant, a machine, a player and the sky, at three phases (dead, thawing, alive), in that style.
+
+A first look test exists as the sandbox's `look` experiment. It has the light, haze and faceted shapes, and none of the foliage or designed models.
 
 Pass when both developers would buy the game in one of the screenshots.
 

@@ -17,6 +17,8 @@ const REACH_M: f32 = 400.0;
 /// How close a rock must be to the point looked at to count as the one meant.
 const GRAB_M: f32 = 10.0;
 const ROCK: KindId = KindId(0);
+/// How far things sink into the ground, as a share of their height.
+const BEDDING: f32 = 0.35;
 
 #[derive(Component)]
 struct Rock(ObjectId);
@@ -37,20 +39,21 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (harvest, update_readout).chain());
 }
 
-struct Placement {
-    id: ObjectId,
-    position: Vec3,
-    rotation: Quat,
-    scale: Vec3,
+pub(super) struct Placement {
+    pub id: ObjectId,
+    pub position: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
 }
 
-/// Where every rock goes. The same seed always gives the same rocks.
-fn placements(planet: &Planet, seed: Seed) -> Vec<Placement> {
+/// Where `count` things go, on the ground around the start. The same seed always gives
+/// the same places.
+pub(super) fn placements(planet: &Planet, seed: Seed, count: u64) -> Vec<Placement> {
     let start_up = planet.start().normalize();
     let east = start_up.cross(Vec3::X).normalize();
     let north = east.cross(start_up);
     let radius_m = planet.ground.spec().radius_m;
-    (0..ROCKS)
+    (0..count)
         .map(|index| {
             let mut rng = seed.index(index).rng();
             // A point in a disc, by trying points in a square until one lands inside.
@@ -60,18 +63,20 @@ fn placements(planet: &Planet, seed: Seed) -> Vec<Placement> {
                     break (east * x + north * y) * SPREAD_M;
                 }
             };
-            let position = planet.surface((start_up * radius_m + offset).normalize());
-            let up = planet.ground.normal(position);
+            let on_ground = planet.surface((start_up * radius_m + offset).normalize());
+            let up = planet.ground.normal(on_ground);
             let turn = Quat::from_axis_angle(Vec3::Y, rng.range(0.0, std::f32::consts::TAU));
+            let scale = Vec3::new(
+                rng.range(0.4, 1.6),
+                rng.range(0.3, 0.9),
+                rng.range(0.4, 1.6),
+            );
             Placement {
                 id: ObjectId(index),
-                position,
+                // Bedded a little into the ground rather than balanced on top of it.
+                position: on_ground - up * scale.y * BEDDING,
                 rotation: Quat::from_rotation_arc(Vec3::Y, up) * turn,
-                scale: Vec3::new(
-                    rng.range(0.4, 1.6),
-                    rng.range(0.3, 0.9),
-                    rng.range(0.4, 1.6),
-                ),
+                scale,
             }
         })
         .collect()
@@ -91,7 +96,7 @@ fn spawn(
         ..default()
     });
     let seed = planet.ground.spec().seed.derive("scatter rocks");
-    for rock in placements(&planet, seed) {
+    for rock in placements(&planet, seed, ROCKS) {
         commands.spawn((
             Rock(rock.id),
             Mesh3d(mesh.clone()),
@@ -207,21 +212,23 @@ mod tests {
     fn rocks_sit_on_the_ground_near_the_start_and_repeat() {
         let planet = planet();
         let seed = Seed(1).derive("scatter rocks");
-        let rocks = placements(&planet, seed);
+        let rocks = placements(&planet, seed, ROCKS);
         assert_eq!(rocks.len(), ROCKS as usize);
         for rock in &rocks {
-            assert!(planet.ground.distance(rock.position).abs() < 0.01);
+            // On the ground, bedded in by no more than their own height.
+            let depth = -planet.ground.distance(rock.position);
+            assert!((0.0..=rock.scale.y).contains(&depth), "depth {depth}");
             assert!(rock.position.distance(planet.start()) < SPREAD_M * 1.2);
             assert!((rock.rotation.length() - 1.0).abs() < 1e-4);
         }
-        let again = placements(&planet, seed);
+        let again = placements(&planet, seed, ROCKS);
         assert!(
             rocks
                 .iter()
                 .zip(&again)
                 .all(|(a, b)| a.position == b.position && a.id == b.id)
         );
-        let other = placements(&planet, Seed(2).derive("scatter rocks"));
+        let other = placements(&planet, Seed(2).derive("scatter rocks"), ROCKS);
         assert!(
             rocks
                 .iter()

@@ -28,6 +28,7 @@ struct Ground {
     low: vec4<f32>,
     high: vec4<f32>,
     steep: vec4<f32>,
+    faceted: u32,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100)
@@ -50,6 +51,17 @@ fn fragment(
     var colour = mix(ground.low.rgb, ground.high.rgb, smoothstep(0.25, 0.75, height));
     colour = mix(ground.steep.rgb, colour, smoothstep(0.93, 0.99, flatness));
     pbr_input.material.base_color = vec4<f32>(colour, 1.0);
+
+    // Faceted: light each triangle as one flat plane. The plane's direction comes from
+    // how the surface position changes between neighbouring pixels.
+    if ground.faceted != 0u {
+        var facet = normalize(cross(dpdy(in.world_position.xyz), dpdx(in.world_position.xyz)));
+        if dot(facet, in.world_normal) < 0.0 {
+            facet = -facet;
+        }
+        pbr_input.world_normal = facet;
+        pbr_input.N = facet;
+    }
 
     pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
 
