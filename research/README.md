@@ -9,6 +9,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [rust-stack-spike.md](rust-stack-spike.md) | Do Bevy and the transvoxel crate build and run from our machines, and at what cost? |
 | [rust-voxel-ecosystem.md](rust-voxel-ecosystem.md) | What exists in Rust to build a voxel planet game on? |
 | [voxel-tools-port.md](voxel-tools-port.md) | How much of Voxel Tools would we need to port, and what makes that tractable? |
+| [forest-scale-test.md](forest-scale-test.md) | Can the world hold a very large number of objects that are each interactive? |
 | [godot-spike.md](godot-spike.md) | What did the Godot build prove, and what are the numbers to beat? |
 
 ## Adding a note

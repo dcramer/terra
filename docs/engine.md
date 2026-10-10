@@ -84,6 +84,19 @@ Three kinds of thing can be harvested, and each needs a different mechanism. Whi
 
 All three go through one contract: a harvest is an operation, and applying it returns a yield.
 
+## Many things, all interactive
+
+Performance is a baseline concern (D25): the world should be able to show very many objects and let the player interact with any of them. The pattern that makes this cheap, tried in the sandbox's forest experiment (D47):
+
+- **Compute, don't keep.** Objects are a function of the seed and a place, so they can be produced when needed and discarded.
+- **Remember only changes.** A removed object is a bit, and an operation.
+- **Draw only what is near**, baked together by area so thousands of objects are a handful of draws.
+- **Interact by lookup.** The object being pointed at is found by searching the area around that point, with no per-object entity.
+
+A million trees over a 2 km planet came to seven thousand on screen, 216 KB of state if every one were chopped, and a median 3.4 ms a frame on the RTX 5090. Details and limits are in [research/forest-scale-test.md](../research/forest-scale-test.md).
+
+We expect to need tactics like these everywhere, given large worlds and procedural generation. The habit is to ask of anything numerous: can it be computed instead of stored, and does it need to exist when nobody is near?
+
 ## Water and melting
 
 The ground is never reshaped (D20). Two consequences if things are to melt into pools (D44):

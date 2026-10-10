@@ -26,6 +26,18 @@ const CELLS_PER_FACE: usize = 256;
 /// on the planet where that matches the ground.
 const START: Vec3 = Vec3::Y;
 
+/// The six faces of the cube the planet is divided along, each as (outward, across, up),
+/// ordered so that triangles built across-then-up face outward. Anything that divides the
+/// planet's surface into a grid uses these.
+pub const FACES: [(Vec3, Vec3, Vec3); 6] = [
+    (Vec3::X, Vec3::Y, Vec3::Z),
+    (Vec3::NEG_X, Vec3::Z, Vec3::Y),
+    (Vec3::Y, Vec3::Z, Vec3::X),
+    (Vec3::NEG_Y, Vec3::X, Vec3::Z),
+    (Vec3::Z, Vec3::X, Vec3::Y),
+    (Vec3::NEG_Z, Vec3::Y, Vec3::X),
+];
+
 /// The planet every experiment shares. Ask it where the ground is.
 #[derive(Resource, Clone)]
 pub struct Planet {
@@ -228,15 +240,6 @@ fn apply_tweaks(
 /// The planet as one mesh: a cube with each face divided into a grid, pushed out into a
 /// sphere, with every vertex moved to the ground's height.
 fn ground_mesh(planet: &StandInPlanet, cells: usize) -> Mesh {
-    // Each face is (outward, across, up), ordered so triangles face outward.
-    const FACES: [(Vec3, Vec3, Vec3); 6] = [
-        (Vec3::X, Vec3::Y, Vec3::Z),
-        (Vec3::NEG_X, Vec3::Z, Vec3::Y),
-        (Vec3::Y, Vec3::Z, Vec3::X),
-        (Vec3::NEG_Y, Vec3::X, Vec3::Z),
-        (Vec3::Z, Vec3::X, Vec3::Y),
-        (Vec3::NEG_Z, Vec3::Y, Vec3::X),
-    ];
     let side = cells + 1;
     let radius_m = planet.spec().radius_m;
     let face = |(outward, across, up): (Vec3, Vec3, Vec3)| {

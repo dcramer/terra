@@ -50,16 +50,20 @@ Games with a related look, and the one thing worth taking from each:
 
 ## Where we are
 
-A first test of the look, made in the sandbox on 2026-10-10. Run it with `cargo run -p terra_sandbox -- --experiment look`.
+First tests of the look, made in the sandbox on 2026-10-10. Run them with `cargo run -p terra_sandbox -- --experiment look --experiment forest`.
 
 ![Look test: a faceted desert with boulders, shrubs, haze and a soft sky](images/look-test-2026-10-10.png)
 
-What it shows: flat-coloured faceted ground, generated boulders and shrubs with flat faces, a warm sun with cool shadows, haze toward the horizon, a gradient sky with a soft cloud, and bloom.
+![Forest test: low-polygon pines over the same desert](images/forest-test-2026-10-10.png)
+
+The second image adds the `forest` experiment: generated pines, each built from a few flat-faced cones.
+
+What they show: flat-coloured faceted ground, generated boulders and shrubs with flat faces, a warm sun with cool shadows, haze toward the horizon, a gradient sky with a soft cloud, and bloom.
 
 What it does not have, and the reference does:
 
 - **Authored shapes.** Every model in the reference was designed by an artist. Ours are lumpy spheres.
-- **Foliage.** No grass, ferns, flowers or trees. This is the biggest gap wherever the planet is alive.
+- **Foliage.** One kind of tree, and no grass, ferns or flowers. This is the biggest gap wherever the planet is alive.
 - **Composition.** The reference frames each scene. We have a free camera on a generated world.
 - **Layered distance.** Our planet is small, so the horizon is a few hundred metres away and there are no far mountains to turn into bands.
 - **Water, interiors, people.**
@@ -74,7 +78,7 @@ What it does not have, and the reference does:
 | Sky | A gradient shader with soft clouds | Working; no day and night |
 | Bloom and grading | Camera effects built into Bevy | Working |
 | Blur in the distance | A camera effect built into Bevy | Not tried; needs care in first person |
-| Elegant shapes | Bought low-polygon packs, and generators for rocks and plants | Not started |
+| Elegant shapes | Bought low-polygon packs, and generators for rocks and plants | Started: generated boulders, shrubs and one pine |
 | Dense foliage | Instancing many small pieces | Not started; the load test says a discrete GPU can draw hundreds of thousands |
 | A palette per place | Generated from the simulation's values | Not started |
 

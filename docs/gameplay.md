@@ -46,7 +46,7 @@ Every threat has a built answer: oxygen lines, heaters, perimeter walls, turrets
 
 ## Harvesting
 
-Leaning, not decided (D43): resources are taken from the world itself. Rock and ore by mining the ground, trees by chopping, grass by cutting. What each yields and what it is for is open.
+Leaning, not decided (D43): resources are taken from the world itself. Rock and ore by mining the ground, trees by chopping, grass by cutting. What each yields and what it is for is open, as is whether things regrow and whether a player can strip a planet bare. The engine can afford any answer: see [engine.md](engine.md).
 
 ## Open questions
 

@@ -59,6 +59,14 @@ cargo run -p terra_sandbox -- --experiment look
 
 A test of the art direction in [docs/art.md](../../docs/art.md): faceted ground, generated boulders and shrubs, a warm sun with cool shadows, haze, a gradient sky with clouds, and bloom. The sky is `assets/shaders/sky.wgsl` and reloads when saved, like the ground.
 
+## The forest experiment
+
+```bash
+cargo run -p terra_sandbox -- --experiment look --experiment forest
+```
+
+About a million generated pines over the whole planet. Left click or F chops the one you are pointing at; K chops every tree in view. None of the trees is stored: each cell's trees are computed from the seed when the camera comes near, and a chopped tree is one bit. Measurements are in [research/forest-scale-test.md](../../research/forest-scale-test.md).
+
 ## Adding an experiment
 
 An experiment is a small plugin that nothing else depends on.
