@@ -2,7 +2,7 @@
 
 A co-op survival sandbox about terraforming a dead planet. Pre-production.
 
-Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in `docs/tech.md` and the milestones are in `docs/prototypes.md`.
+Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in `docs/tech.md`, the parts and build order are in `docs/engine.md`, and the checkpoints are in `docs/prototypes.md`.
 
 | Folder | What it is |
 |---|---|

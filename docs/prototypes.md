@@ -53,15 +53,19 @@ It is not a prototype of the game's design: there is no survival, no co-op and n
 
 ## Rust milestones
 
-The path back to the Godot demo, in Rust, then past it. Each milestone is measured against the Godot numbers in [research/godot-spike.md](../research/godot-spike.md), on the RTX 5090 and on the integrated GPU.
+The engine is built as a foundation and four parallel tracks, described in [engine.md](engine.md). These are the checkpoints. Each is measured against the Godot numbers in [research/godot-spike.md](../research/godot-spike.md), on the RTX 5090 and on the integrated GPU.
 
-| # | Milestone | Done when |
-|---|---|---|
-| R1 | Terrain core: `terra_voxel` meshes a planet at several levels of detail, with sphere edits, and no window | Tests pass without a GPU. Output matches Voxel Tools on the same density function within a stated tolerance. No cracks between detail levels. |
-| R2 | Terrain on screen: `terra_game` draws it from orbit to ground and streams it as the camera moves | The flight tests from the Godot spike pass: worst frame no higher than Godot's at 100 and 400 m/s, and terrain keeps up. A dig causes no visible hitch. |
-| R3 | Playable: first-person player, digging, the simulation driving ground, sea and sky, the three machines | Everything the Godot demo does. The scripted checks pass (land, walk, dig, refill). Frame rates on the ground at least match Godot's on both GPUs. |
-| R4 | Co-op: two players in one world | Both see each other move, dig and place machines. A player who joins late catches up. |
+| # | Track | Checkpoint | Done when |
+|---|---|---|---|
+| F1 | Foundation | The shared contracts and the generation toolkit | The contracts compile and are used by a trivial stand-in. The toolkit gives identical output on Linux, macOS and the Windows build, checked in CI. |
+| A1 | Terrain | Terrain core, no window: shape and material, detail levels, sphere edits with harvest yields | The criteria in [terrain.md](terrain.md). |
+| A2 | Terrain | Terrain on screen, streaming as the camera moves | The flight tests from the Godot spike pass: worst frame no higher than Godot's at 100 and 400 m/s, and terrain keeps up. A dig causes no visible hitch and shows the material underneath. |
+| B1 | Stand-in world | The app shell: window, scripted camera paths, frame-time capture, screenshots | A scripted run prints frame times and saves a screenshot on Linux, on the Windows build and on macOS. |
+| B2 | Stand-in world | The transition on a stand-in planet: walk, fly to orbit and back, with sky and sea | A scripted descent from orbit to the ground has no frame over 16 ms on the RTX 5090. The scripted checks pass (land, walk). |
+| C1 | Things on the ground | Scattering on the stand-in planet, with procedural rocks | 100 thousand instances within 150 m cost no more than they did in the Godot load test. Removing one is an operation. |
+| D1 | Networking | Two peers in one process share ordered operations and snapshots | Both end in the same state. A peer that joins late catches up. No window needed. |
+| M | All | Real terrain replaces the stand-in | Everything the Godot demo does, at frame rates at least as good on both GPUs. The Godot build is retired here. |
 
-The Godot build is retired when R3 passes. The beauty corner follows R3, since the art should be built on the engine we ship on.
+The beauty corner follows M, since the art should be built on the engine we ship on.
 
-Every milestone reports frame times from the real play loop, not only from scripted runs (D25).
+Every checkpoint reports frame times from the real play loop, not only from scripted runs (D25).

@@ -4,13 +4,14 @@ The game's code. One rule shapes the split: anything that must be the same for e
 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|
+| `terra_gen` | Generation toolkit: seeds, noise, repeatable random streams | No | Foundation, F1 |
 | `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists |
-| `terra_voxel` | Terrain: density field, chunks at several detail levels, meshing, edits | No | Milestone R1. Brief: [docs/terrain.md](../docs/terrain.md) |
-| `terra_core` | The shared game state and the operations that change it | No | Planned, with R3 |
-| `terra_net` | Network messages and transport | No | Planned, with R4 |
-| `terra_game` | The Bevy application: drawing, input, player, UI, audio | Yes | Planned, with R2 |
+| `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits | No | Track A. Brief: [docs/terrain.md](../docs/terrain.md) |
+| `terra_core` | The shared contracts, game state and the operations that change it | No | Foundation, F1 |
+| `terra_net` | Network messages and transport | No | Track D |
+| `terra_game` | The Bevy application: drawing, input, player, UI, audio | Yes | Track B |
 
-Crates are created when their milestone starts, not before.
+Crates are created when their track starts, not before. The tracks are in [docs/engine.md](../docs/engine.md).
 
 ## Adding a crate
 
