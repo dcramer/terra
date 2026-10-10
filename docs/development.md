@@ -58,4 +58,6 @@ Every application we build gets scripted modes that fly a fixed camera path, pri
 
 ## Continuous integration
 
-Every push and pull request runs `cargo xtask check` on Linux and macOS, and a compile check for the Windows target. Nothing in CI uses a GPU.
+Every push and pull request runs `cargo xtask check` on Linux, macOS and Windows, and a compile check for the Windows target we cross-compile from WSL. Nothing in CI uses a GPU.
+
+To run the tests on that cross-compiled Windows build yourself, from WSL: `cargo test --workspace --target x86_64-pc-windows-gnu`.

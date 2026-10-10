@@ -11,7 +11,12 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+terra_core = { path = "crates/terra_core" }
+terra_gen = { path = "crates/terra_gen" }
 terra_sim = { path = "crates/terra_sim" }
+# The same version Bevy 0.19 uses, so vectors pass between our crates and Bevy unchanged.
+# `libm` routes its trigonometry through the portable maths library (D30).
+glam = { version = "0.32", features = ["libm"] }
 libm = "0.2"
 
 [workspace.lints.rust]

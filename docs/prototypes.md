@@ -66,6 +66,8 @@ The engine is built as a foundation and four parallel tracks, described in [engi
 | D1 | Networking | Two peers in one process share ordered operations and snapshots | Both end in the same state. A peer that joins late catches up. No window needed. |
 | M | All | Real terrain replaces the stand-in | Everything the Godot demo does, at frame rates at least as good on both GPUs. The Godot build is retired here. |
 
+**Status, 2026-10-10:** F1 is done, apart from the simulation snapshot contract, which waits for the simulation's rules. The toolkit's pinned outputs pass on Linux, on macOS, natively on Windows, and on the Windows build we cross-compile from WSL.
+
 The beauty corner follows M, since the art should be built on the engine we ship on.
 
 Every checkpoint reports frame times from the real play loop, not only from scripted runs (D25).

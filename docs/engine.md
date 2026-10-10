@@ -31,7 +31,7 @@ Certain regardless of how the gameplay turns out (D39):
 | 4 | World frame | Planet-centred coordinates, gravity toward the centre, the ground-to-orbit path | Nothing |
 | 5 | Player and camera | Walking and flying on a round world, colliding with the ground, a dig tool | A ground query |
 | 6 | App shell | Window, settings, input, debug overlay, scripted camera paths, frame-time capture, screenshots | Nothing |
-| 7 | Scattering | Very many instanced things placed by rule on the terrain, each removable, with culling | Parts 0 and a ground query |
+| 7 | Scattering | Things placed by rule on the terrain, with culling: objects that are tracked one by one, and cover that is too dense to track | Parts 0 and a ground query |
 | 8 | Procedural objects | Meshes grown from parameters: rocks first, then plants | Part 0 |
 | 9 | Networking | Host and join, ordered operations, snapshots, late join | Nothing |
 | 10 | Simulation runtime | Running the simulation on its thread, snapshots, fields into textures | The existing crate |
@@ -42,12 +42,13 @@ Saving, physics for loose objects, audio and UI are engine work too, but nothing
 
 Nearly everything outside the terrain only needs to know where the ground is, and we already have that as a formula: the terrain waves give the ground height anywhere with no voxels involved. A **stand-in planet**, a sphere displaced by that formula, lets parts 3 to 10 be built and measured before the voxel terrain exists. When part 1 is ready it replaces the stand-in behind the same interface.
 
-Five small contracts are agreed in code before the tracks start:
+A few small contracts are agreed in code before the tracks start. They live in `terra_core`, with the stand-in planet that implements them:
 
 - **Ground query**: how far is this point from the ground, and where does this ray hit it.
 - **Chunk mesh**: what the terrain core hands the renderer, including material weights.
 - **Operations**: the format of a change to the world, and what it yielded. Shared by terrain, scattering, networking and saving.
-- **Simulation snapshot**: the fields and globals the host sends and the renderer reads.
+- **Water**: the water level at a position.
+- **Simulation snapshot**: the fields and globals the host sends and the renderer reads. Not written yet: the simulation's rules are still open, so this waits until the stand-in world needs it.
 - **Planet description**: radius, seed, sun direction.
 
 ## Tracks
@@ -69,7 +70,28 @@ Each track lives in its own crates, so people and agents working in parallel do 
 - Machines, survival, building and creatures.
 - Art style. Shaders and generators can be built now and tuned later.
 
+## Harvesting
+
+Three kinds of thing can be harvested, and each needs a different mechanism. Which of them the game has, and what they yield, is design (D43).
+
+| Kind | Examples | Mechanism | Part |
+|---|---|---|---|
+| The ground | Rock, ore | Dig voxels; the yield is the volume of each material removed | 1 |
+| Objects | Trees, boulders | Individually placed by rule from the seed. Each has an identity, so removing one is an operation. | 7 |
+| Cover | Grass | Too many to track one by one. Density comes from a rule; cutting clears an area, and the yield is the amount in it. | 7 |
+
+All three go through one contract: a harvest is an operation, and applying it returns a yield.
+
+## Water and melting
+
+The ground is never reshaped (D20). Two consequences if things are to melt into pools (D44):
+
+- **What melts is a layer on the ground, not the ground.** Ice and snow are a thickness lying over the terrain. Melting or mining it lowers the thickness; the voxels underneath never change.
+- **Water is a level that can differ from place to place.** A pool is a basin filled to its own level, and the sea is the largest basin. Anywhere the ground is below the local level, including a hole a player dug, there is water. Nothing flows.
+
+The engine asks "what is the water level here?" rather than reading one global number. With a single sea that question has a constant answer, so the simple version costs nothing extra and pools remain possible.
+
 ## Open questions
 
-- **Is surface ice a voxel material?** If it is, players can mine it, but melting it would reshape the ground, which D20 rules out. The simpler reading keeps ice as something the simulation draws on the surface.
+- **How fine are pools?** The simulation's regions are tens of metres across, so pools follow those. A puddle from one melted block would need something finer.
 - **How many materials meet at one point?** Voxel Tools blends up to four per voxel. More is costlier to store and draw.

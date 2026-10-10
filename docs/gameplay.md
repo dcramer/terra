@@ -44,6 +44,10 @@ Draft names and order. Phases are gated by global values; what a region looks li
 
 Every threat has a built answer: oxygen lines, heaters, perimeter walls, turrets, flora suppressors. A well-built base survives without attention. There is no fail state; neglect costs you progress and equipment.
 
+## Harvesting
+
+Leaning, not decided (D43): resources are taken from the world itself. Rock and ore by mining the ground, trees by chopping, grass by cutting. What each yields and what it is for is open.
+
 ## Open questions
 
 - Can terraforming regress, either locally (a region dries out) or globally (runaway greenhouse)?

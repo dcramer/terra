@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       # Installs the compiler pinned in rust-toolchain.toml.
@@ -25,7 +25,9 @@ jobs:
       - run: cargo xtask check
 
   windows:
-    name: compiles for Windows
+    # The check job runs natively on Windows; this covers the toolchain we cross-compile
+    # with from WSL.
+    name: cross-compiles for Windows from Linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -4,10 +4,10 @@ The game's code. One rule shapes the split: anything that must be the same for e
 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|
-| `terra_gen` | Generation toolkit: seeds, noise, repeatable random streams | No | Foundation, F1 |
+| `terra_gen` | Generation toolkit: seeds, noise, repeatable random streams | No | Exists |
 | `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists |
 | `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits | No | Track A. Brief: [docs/terrain.md](../docs/terrain.md) |
-| `terra_core` | The shared contracts, game state and the operations that change it | No | Foundation, F1 |
+| `terra_core` | The shared contracts (ground, water, chunk mesh, operations) and a stand-in planet | No | Exists |
 | `terra_net` | Network messages and transport | No | Track D |
 | `terra_game` | The Bevy application: drawing, input, player, UI, audio | Yes | Track B |
 
