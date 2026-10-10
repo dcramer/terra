@@ -1,6 +1,6 @@
 # Terrain: brief for `terra_voxel`
 
-Status: not started. This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
+Status: not started, and provisional like the rest of the engine plan ([engine.md](engine.md)). This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
 
 ## What it is
 

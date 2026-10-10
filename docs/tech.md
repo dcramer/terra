@@ -1,6 +1,6 @@
 # Tech
 
-Status: the direction is Decided. Everything is written in Rust (D11), on Bevy, with our own voxel terrain (D12). Library choices that have not been exercised yet are marked Leaning in [decisions.md](decisions.md).
+Status: provisional, like everything in pre-production. The direction below is our current answer. Everything is written in Rust (D11), on Bevy, with our own voxel terrain (D12). Library choices that have not been exercised yet are marked Leaning in [decisions.md](decisions.md).
 
 The earlier Godot build and its measurements are in [research/godot-spike.md](../research/godot-spike.md). Those numbers are the bar this build has to meet.
 

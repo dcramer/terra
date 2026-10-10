@@ -2,7 +2,7 @@
 
 A co-op survival sandbox about terraforming a dead planet, for up to four players. You land on a world that kills you by being dead, make it live, and then have to live with what you grew.
 
-This repository is where the project is thought through: design docs, research notes and tech demos. It is in pre-production and there is no game to play yet.
+This repository is where the project is thought through: design docs, research notes and tech demos. It is in pre-production and there is no game to play yet. Everything here is provisional: it records current thinking, and any of it may change.
 
 | Folder | What it is |
 |---|---|

@@ -1,10 +1,12 @@
 # Engine: the parts and the order
 
-What we build before, and separately from, core gameplay. The stack and the reasons behind it are in [tech.md](tech.md); this says what the pieces are and how the work divides.
+**Status: a working plan, all still to be determined.** This is how we currently think the engine divides, written down so there is something to react to. Nothing here is a commitment.
 
-## What we know we want
+What we would build before, and separately from, core gameplay. The stack and the reasons behind it are in [tech.md](tech.md); this says what the pieces are and how the work divides.
 
-Certain regardless of how the gameplay turns out (D39):
+## What we expect to want
+
+Our current expectation, however the gameplay turns out (D39):
 
 - **Voxel planets**: round, smooth, fully diggable.
 - **The transition**: from standing on the ground to orbit and back, with no seam and no loading.

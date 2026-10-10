@@ -1,6 +1,6 @@
 # Crates
 
-The game's code. One rule shapes the split: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28).
+The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28).
 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|

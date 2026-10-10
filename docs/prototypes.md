@@ -53,7 +53,7 @@ It is not a prototype of the game's design: there is no survival, no co-op and n
 
 ## Rust milestones
 
-The engine is built as a foundation and four parallel tracks, described in [engine.md](engine.md). These are the checkpoints. Each is measured against the Godot numbers in [research/godot-spike.md](../research/godot-spike.md), on the RTX 5090 and on the integrated GPU.
+A working plan, still to be determined. The engine would be built as a foundation and four parallel tracks, described in [engine.md](engine.md). These are the checkpoints. Each is measured against the Godot numbers in [research/godot-spike.md](../research/godot-spike.md), on the RTX 5090 and on the integrated GPU.
 
 | # | Track | Checkpoint | Done when |
 |---|---|---|---|

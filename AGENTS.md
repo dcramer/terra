@@ -22,7 +22,8 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 
 - `docs/decisions.md` is the source of truth. Don't contradict a Decided item; raise it instead.
 - When a decision is made or changes, update `docs/decisions.md` and any doc it affects in the same change, and add a line to its log.
-- Don't record a proposal as Decided. Unconfirmed ideas are Leaning or Open.
+- Don't record a proposal as Decided. Unconfirmed ideas are Leaning or Open. When a developer thinks out loud about what the game might be, that is input, not a decision, unless they say it is settled.
+- The whole project is provisional while in pre-production. Write plans as current thinking, not commitments.
 - Keep docs short: intent, constraints and reasons, not implementation detail.
 - Don't overbuild. Nothing is built on a Leaning or Open decision except a spike, and a spike answers one stated question with the least code that can answer it, then stops. No game systems until the decisions they rest on are Decided.
 - Technical decisions are yours to make: decide, record the reason in `docs/decisions.md`, and keep going. Design decisions belong to the developers: give a recommendation, mark it Open, and don't build on it.
