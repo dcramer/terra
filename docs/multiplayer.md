@@ -1,6 +1,6 @@
 # Multiplayer and persistence
 
-Status: a draft for the developers to react to. It responds to a new idea that would change an earlier decision, so it mostly lays out what that idea means. Nothing here is built.
+Status: the approach is decided, the scale is not. The developers agreed on 2026-10-10 that the game is server-first (D51). How many players a world should hold, and the other questions at the end, are still open. Nothing here is built.
 
 ## What changed
 
@@ -55,15 +55,15 @@ These are design questions the larger number raises, whatever the technology.
 - **What happens when nobody is online?** Does the planet keep changing?
 - **More planets.** A second planet was to wait (D17). A crowded server makes it more pressing.
 
-## A middle path
+## Server-first
 
-Proposed. The costly mistake would be to build for four in a way that cannot grow. The affordable hedge is to build as if there were always a server, and let the small case be a server that happens to run on a player's machine.
+Decided (D51). The costly mistake would be to build for four in a way that cannot grow. The affordable hedge is to build as if there were always a server, and let the small case be a server that happens to run on a player's machine.
 
 - **The game always talks to a server.** In solo or friends play, that server starts inside the game. On a persistent world, it runs somewhere else. One code path.
 - **The server always decides and always sends by area**, even when there are four players and it could send everything.
 - **Start by making four work well.** Then measure what a hundred costs, with simulated players, before promising it.
 
-That keeps the door open without paying for the whole house now. What it does not avoid is the design work above.
+That keeps a large persistent world possible without paying for all of it now. What it does not avoid is the design work above.
 
 ## Open questions
 

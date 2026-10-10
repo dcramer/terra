@@ -8,8 +8,8 @@ The earlier Godot build and its measurements are in [research/godot-spike.md](..
 
 - Round planets in a real solar system, seamless from surface to space (D4).
 - Fully diggable smooth terrain (D9). Terraforming never reshapes the ground (D20).
-- Co-op for up to 4, host-authoritative (D2).
-- Performant: 60 fps at 1080p on a mid-range discrete GPU and a 4-core CPU while hosting three other players (D25).
+- Multiplayer built around a server that decides everything (D51), for a handful of friends at first (D2) and without ruling out many more.
+- Performant: 60 fps at 1080p on a mid-range discrete GPU and a 4-core CPU, including while that machine also runs the server for three other players (D25).
 - Developed on Windows via WSL and on macOS (D7), with all code written by agents (D1).
 
 ## Stack
@@ -46,26 +46,26 @@ One Cargo workspace. The rule that shapes it: **anything that must be the same f
 Why this split:
 
 - **Tests are fast and need no GPU.** The plain crates run under `cargo test` in seconds.
-- **The host can run without a window.** The same crates serve a headless host.
+- **The server can run without a window.** The same crates are the server, whether it runs inside a player's game or alone on another machine.
 - **Bevy's releases only touch one crate.** Its API changes every few months; the game's rules do not live there.
 - **It was already working.** `terra_sim` moved from Godot to this plan without changing.
 
 The plain crates share one maths library with Bevy (`glam`), so positions pass between them without conversion.
 
-## State, and how co-op shares it
+## State, and how it is shared
 
-Written for up to four players with one of them hosting. A much larger, persistent world is being considered; what that would add is in [multiplayer.md](multiplayer.md).
+The game is server-first (D51): it always talks to a server, which decides everything. When friends play together, that server runs inside one player's game. On a persistent world it runs alone on another machine. Both are the same code. What a large persistent world would add on top is in [multiplayer.md](multiplayer.md).
 
 Three kinds of state, each shared differently:
 
 | Kind | Examples | How it is shared |
 |---|---|---|
-| World changes | Digging, placing a machine | As operations, applied in the host's order by every player (D21) |
-| Simulation | Temperature, sea level, life | The host runs it and sends snapshots. It is about 10 thousand cells, so a snapshot is small. |
-| Moving things | Players, creatures | The host sends positions; other players smooth between them |
+| World changes | Digging, placing a machine | As operations, applied in the server's order by every player (D21) |
+| Simulation | Temperature, sea level, life | The server runs it and sends snapshots. It is about 10 thousand cells, so a snapshot is small. |
+| Moving things | Players, creatures | The server sends positions; players smooth between them |
 | Local only | Rendering, UI, sound, particles | Not shared |
 
-Only the host runs the simulation, so players never have to compute identical floating-point results for it. Terrain is generated on each machine from the same seed; small differences between machines would shift a mesh by a hair and are harmless. Using `libm` keeps even that from happening.
+Only the server runs the simulation, so players never have to compute identical floating-point results for it. Terrain is generated on each machine from the same seed; small differences between machines would shift a mesh by a hair and are harmless. Using `libm` keeps even that from happening.
 
 A save is the seed, the operations, the simulation state and periodic snapshots of edited terrain.
 
@@ -75,7 +75,7 @@ The design follows Voxel Tools, which we measured and know works. Our port needs
 
 - **Density field.** A Rust function gives the distance to the ground at any point: the planet's large shape from the simulation's terrain waves, plus fine noise.
 - **Edits.** Stored as small blocks of changed voxels over the generated terrain, and changed only by operations.
-- **Chunk tree.** Each planet has a tree of chunks; chunks near a viewer are fine, distant ones coarse. A host tracks up to four viewers.
+- **Chunk tree.** Each planet has a tree of chunks; chunks near a viewer are fine, distant ones coarse. The server tracks one viewer per player.
 - **Meshing.** Runs on worker threads, nearest chunks first. Finished meshes are handed to Bevy a few per frame.
 - **Seams.** Neighbouring chunks at different detail levels are stitched with the Transvoxel method.
 - **Collision.** The player and creatures query voxel data directly, so they never wait for a collision mesh. Rigid bodies get collision meshes for the finest chunks near them.

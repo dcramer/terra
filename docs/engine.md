@@ -35,7 +35,7 @@ Our current expectation, however the gameplay turns out (D39):
 | 6 | App shell | Window, settings, input, debug overlay, scripted camera paths, frame-time capture, screenshots | Nothing |
 | 7 | Scattering | Things placed by rule on the terrain, with culling: objects that are tracked one by one, and cover that is too dense to track | Parts 0 and a ground query |
 | 8 | Procedural objects | Meshes grown from parameters: rocks first, then plants | Part 0 |
-| 9 | Networking | Host and join, ordered operations, snapshots, late join | Nothing |
+| 9 | Networking | A server and the clients that join it, ordered operations, snapshots, late join | Nothing |
 | 10 | Simulation runtime | Running the simulation on its thread, snapshots, fields into textures | The existing crate |
 
 Saving, physics for loose objects, audio and UI are engine work too, but nothing needs them yet.
@@ -50,7 +50,7 @@ A few small contracts are agreed in code before the tracks start. They live in `
 - **Chunk mesh**: what the terrain core hands the renderer, including material weights.
 - **Operations**: the format of a change to the world, and what it yielded. Shared by terrain, scattering, networking and saving.
 - **Water**: the water level at a position.
-- **Simulation snapshot**: the fields and globals the host sends and the renderer reads. Not written yet: the simulation's rules are still open, so this waits until the stand-in world needs it.
+- **Simulation snapshot**: the fields and globals the server sends and the renderer reads. Not written yet: the simulation's rules are still open, so this waits until the stand-in world needs it.
 - **Planet description**: radius, seed, sun direction.
 
 ## Tracks

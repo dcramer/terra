@@ -2,7 +2,7 @@
 
 ## Pitch
 
-Up to four players land on a dead planet and terraform it into a living one, then have to live with what they grew.
+Players land on a dead planet and terraform it into a living one, then have to live with what they grew.
 
 Early on the planet kills you by being dead: no air, no water, cold, radiation. Later it kills you by being alive, and the life that hunts you is a consequence of how you terraformed.
 
@@ -14,7 +14,7 @@ Draft. A feature that serves none of these is cut.
 2. **Dead to alive.** Hostility hands off from the environment to the ecosystem. What you grow decides what hunts you.
 3. **Automate survival.** Every chore starts manual and ends as infrastructure.
 4. **Local action, global consequence.** You change a place; places add up to a planet.
-5. **Seamless co-op.** One to four players, no loading screens, surface to space.
+5. **Seamless, and together.** No loading screens, surface to space. Played through a server, with friends first (D51); how many players a world holds is open (D52).
 
 ## What we take from each inspiration
 
@@ -38,7 +38,7 @@ Slightly harder than Planet Crafter, well short of Vintage Story. Threats are re
 
 ## Non-goals
 
-- PvP or more than four players.
+- PvP.
 - Photorealism.
 - Handcrafted maps.
 - A creature editor.

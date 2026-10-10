@@ -102,11 +102,11 @@ Proposed. Building is something you do with a tool in hand, standing in the worl
 
 ## Co-op
 
-Proposed, following from what is already recorded (D2, D29). How many players, and whether the world is a persistent server, is being reconsidered: see [multiplayer.md](multiplayer.md).
+Proposed, following from what is already recorded (D2, D29). The game is server-first (D51); how many players a world should hold is still open. See [multiplayer.md](multiplayer.md).
 
 - Each player is a body in the same world, with their own tools and what they carry.
 - Anyone can dig, harvest and build. A base belongs to everyone.
-- The host decides the order of changes; everyone sees the same result.
+- The server decides the order of changes; everyone sees the same result.
 
 Open:
 
