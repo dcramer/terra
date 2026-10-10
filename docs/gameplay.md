@@ -2,6 +2,8 @@
 
 Status: draft. The tone and the dead-to-alive arc are Decided; the specifics below are Leaning until a prototype tests them.
 
+The style of play, and the player's body, tools and actions, are in [player.md](player.md).
+
 ## Core loops
 
 | Loop | What the player does |
