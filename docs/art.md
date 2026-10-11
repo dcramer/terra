@@ -14,6 +14,10 @@ Simple shapes, flat colour, and light doing nearly all the work. The world looks
 6. **Small, dense life.** Where things grow, they grow as many small flat-coloured pieces: ferns, grass, flowers. Lushness comes from quantity, not detail.
 7. **A lens.** A little bloom, gentle colour grading, and sometimes blur in the distance. It should feel photographed, not rendered.
 
+## Life-sized
+
+The world is at real-world scale (D110, Decided). A broadleaf tree stands 15 to 25 metres, a pine taller; boulders range from knee-high to bigger than a house; hills rise tens of metres and mountains hundreds. The player should feel small against the land, which is also what makes haze and layered distance work. Stylised shapes do not mean small things: a model is simplified, never shrunk.
+
 ## What it is not
 
 - **Not chunky.** No cubes, no visible grid, no oversized facets on small things. If a shape reads as "blocks", it is wrong.
