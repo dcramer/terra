@@ -93,6 +93,8 @@ dialog p { font-family: var(--mono); font-size: 12px; color: #e9e3d8; padding-to
       <div class="fit"><span class="chip good">Two cities, two landscapes</span><span class="chip ask">Concept art, not yet our renders</span></div>
     </div>
     <div class="row" id="moodboard"></div>
+    <div class="board-head"><span class="key">C</span><h3>Our first renders of the same four worlds</h3><p>Built in Blender from the pipeline's models (12 props, 10 characters and creatures) and buildings made from parts in code, at life size, in the painted look: colour from palette roles, painted detail and soft warm light shared by every material. A first pass by one agent in an afternoon: it shows the assets, scale and recolouring work, not how good the game can look. The gap to the concepts is set dressing, ground cover, denser detail and lighting work.</p></div>
+    <div class="row" id="renders"></div>
   </section>
 
   <section class="board" id="d-tested" aria-labelledby="d-tested-title">
@@ -222,6 +224,9 @@ const MOOD = [
 const moodRow = document.getElementById("moodboard");
 moodRow.style.gridTemplateColumns = "repeat(auto-fit, minmax(min(100%, 420px), 1fr))";
 for (const [key, label] of MOOD) moodRow.append(plain(`web/mood-${key}.jpg`, label, false));
+const rendersRow = document.getElementById("renders");
+rendersRow.style.gridTemplateColumns = "repeat(auto-fit, minmax(min(100%, 420px), 1fr))";
+for (const [key, label] of MOOD) rendersRow.append(plain(`web/render-${key}.jpg`, `Our render · ${label}`, true));
 const SCENES = [
   ["graphic-starter", "D · starter realm, golden hour"],
   ["facets-starter", "A · the same scene, for comparison"],

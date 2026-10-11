@@ -502,7 +502,7 @@ def gothic_graveyard():
         place("Gravestone", (x, y), math.radians(rng.uniform(-25, 25)) + math.pi, rng.uniform(0.9, 1.2), ground=ground)
     for (a, b) in (((-24, 6), (20, 6)), ((-24, 6), (-24, 42)), ((20, 6), (20, 42))):
         kit.iron_fence(f"Rail{a}{b}", (a[0], a[1], ground(*a)), (b[0], b[1], ground(*b)))
-    for x, y, s in ((-30, 20, 2.4), (26, 30, 2.8), (-12, 60, 3.2), (34, 70, 3.0), (-40, 50, 3.6)):
+    for x, y, s in ((-30, 20, 1.3), (26, 30, 1.5), (-12, 60, 1.8), (34, 70, 1.6), (-40, 50, 2.0)):
         place("Deadtree", (x, y), rng.uniform(0, 6.3), s, ground=ground)
     for x, y in ((-3.0, 7.0), (4.0, 7.0), (-1.0, 30.0)):
         place("Lantern", (x, y), 0.0, 1.0, ground=ground)
