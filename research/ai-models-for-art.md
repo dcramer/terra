@@ -178,6 +178,17 @@ Run on 2026-10-11 in [spike/model_bakeoff](../spike/model_bakeoff/README.md). Si
 
 **What it does not yet do:** split a model into parts, rig or animate, or make sets of pieces that fit together. Faces come out rough (eyes as dark marks).
 
+## The bake-off, second round: style
+
+Run on 2026-10-11, the same day. Pages: [Terra Style Directions](https://claude.ai/artifact/AWgMLGJmS5GR7hvjJMbKq4).
+
+- **Mood boards of four directions** (A facets, B soft, C painted, D graphic), each with the same five subjects. The developers were first drawn to D, then said C's lighting and look were better, provided it can work with many realms.
+- **D can be a shader.** Our existing models, rendered with light cut into three crisp bands, a cool shadow band and distance haze, read like the D concepts. The same files recoloured by palette role made convincing starter, cold, gothic, ashen and crystal realms.
+- **C can be made to work with realms** by splitting it: colour stays a palette role per part, and the painted look moves into shared material detail (brush-stroke variation, painted top light, rims) and the lighting (soft sun, bounce, occlusion, haze, bloom). Only detail painted uniquely onto one model is lost.
+- **Life size (D110)** changes how models must be made: detail scales with the world, not the object. A tree designed at 5.5 m and scaled to 20 m keeps clumps the size of cars and looks like a toy.
+- **The mood board** is four C-style concepts: a medieval town and a techno-punk street, fantasy wilds and a gothic graveyard. Built for real in Blender from the pipeline's models and buildings made from parts in code, the same four worlds came out structurally right and far plainer than the concepts. The gap is set dressing, ground cover, density and lighting work, not the models.
+- **Costs.** A model made straight from one image costs 50 credits, not the 30 the price list suggests, so a prop is 60 credits ($0.60) with its concept. The whole day spent 1,770 credits ($17.70) for about 30 models and 50 images. Tripo runs one task at a time on this account, and its image queue took 5 to 10 minutes an image in the afternoon.
+
 ## Limits
 
 - **Nothing was tried.** Every quality claim here is a paper's, a vendor's or a commenter's.
