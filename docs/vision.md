@@ -2,16 +2,16 @@
 
 ## Pitch
 
-Players land on a dead planet and terraform it into a living one, then have to live with what they grew.
+Players survive and build across a dozen or so very different planets, starting on one that is easy to live on. Some of the others are dead, and can be terraformed into living ones; there you have to live with what you grew.
 
-Early on the planet kills you by being dead: no air, no water, cold, radiation. Later it kills you by being alive, and the life that hunts you is a consequence of how you terraformed.
+On a dead planet, early on, it kills you by being dead: no air, no water, cold, radiation. Later it kills you by being alive, and the life that hunts you is a consequence of how you terraformed. Worlds are in [worlds.md](worlds.md); surviving them is in [survival.md](survival.md).
 
 ## Pillars
 
 Draft. A feature that serves none of these is cut.
 
-1. **The planet is the main character.** One real, round, persistent world that visibly changes because of you, from orbit down to the ground.
-2. **Dead to alive.** Hostility hands off from the environment to the ecosystem. What you grow decides what hunts you.
+1. **The planet is the main character.** Real, round, persistent worlds, each unlike the others, that visibly change because of you, from orbit down to the ground.
+2. **Dead to alive, where it can be done.** On the planets that can be terraformed (D60), hostility hands off from the environment to the ecosystem. What you grow decides what hunts you.
 3. **Automate survival.** Every chore starts manual and ends as infrastructure.
 4. **Local action, global consequence.** You change a place; places add up to a planet.
 5. **Seamless, and together.** No loading screens, surface to space. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
@@ -42,7 +42,7 @@ Slightly harder than Planet Crafter, well short of Vintage Story. Threats are re
 - Photorealism.
 - Handcrafted maps.
 - A creature editor.
-- A second planet before one planet is a complete game.
+- Thousands of planets. About a dozen, each worth knowing (D17).
 
 ## Constraints
 

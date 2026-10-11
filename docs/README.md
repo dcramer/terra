@@ -1,15 +1,17 @@
 # Terra design docs
 
-Working title: **Terra**. A co-op survival sandbox about terraforming a dead planet.
+Working title: **Terra**. A multiplayer survival sandbox across a dozen or so procedural planets, some of which can be terraformed from dead to living.
 
 | Doc | What it covers |
 |---|---|
 | [decisions.md](decisions.md) | What is settled, what is a working assumption, what is open. Source of truth. |
 | [vision.md](vision.md) | Pitch, pillars, what we take from each inspiration, non-goals. |
+| [worlds.md](worlds.md) | The planets: themes, terrain, caverns, water, foliage, gravity, the starter planet, which can be terraformed. |
+| [survival.md](survival.md) | Draft: the survival attributes (health, stamina, oxygen, hunger, thirst) and how they vary by world. |
 | [gameplay.md](gameplay.md) | Core loops, survival needs, terraforming phases, hostile life, automation. |
 | [player.md](player.md) | Draft: the player's body, tools, acting on the world, carrying, building. Open questions for the developers. |
 | [construction.md](construction.md) | Draft: what the developers want from building, a proposed shape for it, and open questions. |
-| [multiplayer.md](multiplayer.md) | Draft: what four-player co-op and a hundred players on a persistent server each mean, and a path that keeps both open. |
+| [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
 | [planet-sim.md](planet-sim.md) | The planetary simulation: cells, fields, biomes, how local feeds global. |
 | [tech.md](tech.md) | The stack, how the code is split, how co-op shares state, terrain, workflow, risks. |
 | [engine.md](engine.md) | The engine's parts, what each needs, and the parallel tracks they are built in. |

@@ -67,7 +67,7 @@ These are design questions the larger number raises, whatever the technology.
 - **Do resources run out?** If trees and ore do not come back, a hundred players strip a world. Regrowth and scarcity stop being optional questions.
 - **Whose planet is it?** Terraforming one shared world is a fine fantasy for four. For a hundred it is either a grand communal project or a fight over the thermostat.
 - **What happens when nobody is online?** Does the planet keep changing?
-- **More planets.** A second planet was to wait (D17). A crowded server makes it more pressing.
+- **More planets.** There will be about a dozen (D17), which spreads a crowd out, and raises whether one server holds them all.
 
 ## Server-first
 

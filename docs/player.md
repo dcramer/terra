@@ -33,7 +33,7 @@ Where they differ, and we have to choose:
 Proposed.
 
 - **A modelled, animated character**, because other players need to see you in co-op whatever view you play in.
-- **Gravity pulls toward the planet's centre.** "Down" changes as you walk around the world.
+- **Gravity pulls toward the planet's centre** (D63). "Down" changes as you walk around the world, and its strength may differ between planets.
 - **Walk, run, jump.** Slopes slow you and steep ones stop you.
 - **The ground is whatever is there now.** Movement has to work in holes and tunnels players dug, on a base's floors, and on stairs or ramps between storeys.
 
@@ -124,7 +124,7 @@ Technical, for reference. None of it is started except where noted.
 
 ## Not covered here
 
-Survival needs, terraforming, progression, creatures and combat. The developers have said that gameplay is not right away.
+Terraforming, progression, creatures and combat. The worlds are in [worlds.md](worlds.md) and the survival attributes in [survival.md](survival.md). The developers have said that gameplay is not right away.
 
 ## A first walk-around
 

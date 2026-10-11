@@ -64,7 +64,7 @@ What it has that the earlier tests did not: designed shapes, from free model pac
 
 What it still lacks against the reference:
 
-- **A dead planet.** This is the living end of the game. The barren start has not been attempted.
+- **Other planets.** This is close to the starter planet (D62). The dead and strange planets have not been attempted.
 - **Our own shapes.** The trees and furniture are a stock pack's. They carry our colours, not our design.
 - **Layered distance.** The planet is small, so there are no far mountains to fade into bands.
 - **Blur and framing.** No depth of field, and the camera is simply behind the player.
@@ -123,7 +123,7 @@ What it does not have, and the reference does:
 
 ## Open questions
 
-- **What does a dead planet look like in this style?** The references are lush or warm. Ours starts airless and lifeless, and has to be beautiful then too.
+- **What does a dead planet look like in this style?** The references are lush or warm. Some of our planets are airless and lifeless, and have to be beautiful too. With a dozen planets, each needs a palette of its own (D59).
 - **How does the look change through the phases?** A palette per biome and phase is the idea; nobody has drawn one.
 - **Night, and the view from orbit.**
 - **First person or third?** Blur and framing matter much more to this look in third person. First person removes a large animation cost.

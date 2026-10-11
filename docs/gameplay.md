@@ -1,6 +1,6 @@
 # Gameplay
 
-Status: draft. The tone and the dead-to-alive arc are Decided; the specifics below are Leaning until a prototype tests them.
+Status: draft. The tone is Decided; the dead-to-alive arc is for the planets that can be terraformed (D60). The specifics below are Leaning until a prototype tests them. The worlds are in [worlds.md](worlds.md).
 
 The style of play, and the player's body, tools and actions, are in [player.md](player.md).
 
@@ -16,15 +16,15 @@ If the 30-second loop isn't fun in a grey-box build, content won't fix it.
 
 ## Survival needs
 
-Oxygen, water, food, temperature, radiation. Each one follows the same arc:
+The survival attributes are health, stamina, oxygen, hunger and thirst (D61); see [survival.md](survival.md). Temperature and radiation are things about a place that wear them down. Each need follows the same arc:
 
 1. **Manual**: carry it, ration it, run back to base.
 2. **Local infrastructure**: a machine or a pipe covers your base.
-3. **Solved by the planet**: terraforming removes the need (breathable air, drinkable water).
+3. **Solved by the planet**: on a planet that can be terraformed, terraforming removes the need (breathable air, drinkable water). On the starter planet some needs are solved from the start (D62).
 
 ## Terraforming phases
 
-Draft names and order. Phases are gated by global values; what a region looks like is set by its local values. See [planet-sim.md](planet-sim.md).
+Only on the planets that can be terraformed (D60). Draft names and order. Phases are gated by global values; what a region looks like is set by its local values. See [planet-sim.md](planet-sim.md).
 
 | Phase | The planet | What threatens you |
 |---|---|---|
@@ -55,4 +55,4 @@ Leaning, not decided (D43): resources are taken from the world itself. Rock and 
 - Can terraforming regress, either locally (a region dries out) or globally (runaway greenhouse)?
 - How do four players split work? Is there any role specialisation?
 - What do players build with: fixed modular pieces, or something freer?
-- What is the end of the game on one planet?
+- What is the end of the game on one planet, and across several?

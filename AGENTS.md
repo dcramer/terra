@@ -1,6 +1,6 @@
 # Terra
 
-A co-op survival sandbox about terraforming a dead planet. Pre-production.
+A multiplayer survival sandbox across a dozen or so procedural planets, some of which can be terraformed from dead to living, built toward a thousand players on one persistent server. Pre-production. The worlds are in `docs/worlds.md` and the survival attributes in `docs/survival.md`.
 
 Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in `docs/tech.md`, the parts and build order are in `docs/engine.md`, and the checkpoints are in `docs/prototypes.md`.
 
@@ -37,6 +37,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 
 - **`cargo xtask check` must pass before you commit.** It runs formatting, lints, tests and the dependency rule below. CI runs the same command on Linux and macOS.
 - **`cargo xtask doctor`** tells you what a machine is missing.
+- **Model the game in ECS** (D58). Everything in a world is an entity, its state is components, and behaviour is systems. Use a resource only for what is truly one of a kind. Things that differ by planet (gravity, air, what grows) are data read by systems, not code written per planet.
 - **Shared state stays out of Bevy.** Anything every player must agree on lives in a crate that does not depend on Bevy. Only `terra_game` may. The check enforces this.
 - **Use `libm` for trigonometry and exponentials**, never `f32::sin` and friends. The system maths library differs between platforms in both results and speed. The lints enforce this.
 - **No `unsafe`.** It is forbidden workspace-wide.
