@@ -92,6 +92,8 @@ Server-first (D51) makes this a client like any other, without a window:
 
 It overlaps with QA for agents (D69), which drives a game from outside for testing. Playing is the same idea inside the rules: one gives an agent a tester's powers, the other a player's.
 
+What others have tried, and what it suggests for us, is in [research/agents-playing-games.md](../research/agents-playing-games.md).
+
 Open: whether agent players are for us (testing, tuning, filling a server) or a feature for players too, and how a server tells them apart.
 
 ## Open questions
