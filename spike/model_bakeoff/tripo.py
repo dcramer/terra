@@ -12,6 +12,9 @@ The image first, then the model: a concept in the house style, checked by eye, t
 views of it, then a model from those. Writes out/tripo/NAME.* with NAME.json recording the
 request, the task and the credits spent, so every model says where it came from. The key is
 TRIPO_API_KEY, from the environment or a .env in this checkout or the main one.
+
+--studio spends the Studio subscription's credits instead, through the web app's own backend
+(studio.py; balance, image and text only). It needs TRIPO_STUDIO_COOKIE the same way.
 Standard library only.
 """
 
@@ -39,9 +42,9 @@ CONCEPT = (
 NEGATIVE = "realistic, photoreal, noisy, fine detail, sculpted texture, base, pedestal, ground plane"
 
 
-def key():
-    if os.environ.get("TRIPO_API_KEY"):
-        return os.environ["TRIPO_API_KEY"]
+def env(name):
+    if os.environ.get(name):
+        return os.environ[name]
     root = os.path.abspath(os.path.join(HERE, "..", ".."))
     candidates = [os.path.join(root, ".env")]
     # A worktree's main checkout is three levels up from .claude/worktrees/<name>.
@@ -50,9 +53,13 @@ def key():
     for path in candidates:
         if os.path.exists(path):
             for line in open(path):
-                if line.startswith("TRIPO_API_KEY="):
-                    return line.split("=", 1)[1].strip().strip('"')
-    sys.exit("TRIPO_API_KEY is not set")
+                if line.startswith(name + "="):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+    sys.exit(f"{name} is not set")
+
+
+def key():
+    return env("TRIPO_API_KEY")
 
 
 def call(method, path, body=None, raw=None, content_type="application/json"):
@@ -136,6 +143,47 @@ def save(name, result):
     return files
 
 
+def studio(a, subject):
+    """The same models from the Studio subscription's credits (studio.py). Image and text only so far."""
+    if a.kind not in ("balance", "image", "text"):
+        sys.exit(f"{a.kind} is not captured from the Studio app yet; use the API, without --studio")
+    sys.path.insert(0, HERE)  # python3 -I leaves this folder off the path
+    from studio import Studio
+
+    client = Studio(env("TRIPO_STUDIO_COOKIE"))
+    if a.kind == "balance":
+        print(client.call("GET", "/v2/studio/user/profile/payment").get("wallet"))
+        return
+    request = {
+        "model_version": a.model or "v3.1-20260211",
+        "geometry_quality": "standard",
+        "texture": a.texture,
+        "pbr": False,
+        "generate_parts": a.parts,
+        "smart_poly": a.smart_poly,
+        "quad": False,
+        "face_limit": a.faces or 10000,
+        "visibility": "private",
+    }
+    if a.kind == "text":
+        request.update(prompt=f"{subject} {STYLE}", t_pose=False, sketch_to_render=False)
+        endpoint = "/v2/studio/operation/text_to_model"
+    else:
+        request.update(image=client.upload(a.subject[0]), texture_alignment="original_image", delight=False, enable_image_autofix=False)
+        endpoint = "/v2/studio/operation/image_to_model"
+    os.makedirs(OUT, exist_ok=True)
+    started, project, credits = client.generate(endpoint, request)
+    files = {}
+    if project.get("model_url"):
+        path = os.path.join(OUT, f"{a.name}.glb")
+        fetch(project["model_url"], path)
+        files["model_url"] = os.path.relpath(path, HERE)
+    record = {"name": a.name, "backend": "studio", "endpoint": endpoint, "request": request, "started": started, "credits": credits, "project": project, "files": files}
+    with open(os.path.join(OUT, f"{a.name}.json"), "w") as f:
+        json.dump(record, f, indent=2)
+    print(json.dumps({"name": a.name, "credits": credits, "files": files}))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("kind", choices=["balance", "concept", "views", "multiview", "image", "text"])
@@ -145,12 +193,18 @@ def main():
     ap.add_argument("--quality", default="medium")
     ap.add_argument("--ref", action="append", default=[], help="a reference image for the concept")
     ap.add_argument("--raw", action="store_true", help="use the subject as the whole prompt, without the house brief")
-    ap.add_argument("--model", default="P1-20260311")
+    ap.add_argument("--model", help="P1-20260311 on the API; a dated version such as v3.1-20260211 on Studio")
     ap.add_argument("--faces", type=int)
     ap.add_argument("--parts", action="store_true", help="split into parts (H series only)")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--texture", action="store_true", help="a base-colour texture, to read each face's colour from")
+    ap.add_argument("--studio", action="store_true", help="spend the Studio subscription's credits, not the API's")
+    ap.add_argument("--smart-poly", action="store_true", help="Studio's low-poly mesh (thought to be the P series)")
     a = ap.parse_args()
+    if a.studio:
+        studio(a, " ".join(a.subject))
+        return
+    a.model = a.model or "P1-20260311"
     if a.kind == "balance":
         print(call("GET", "/account/balance"))
         return
