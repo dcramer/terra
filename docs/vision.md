@@ -18,7 +18,8 @@ Draft. A feature that serves none of these is cut.
 2. **Always getting better.** Many skills, gained by doing and improved by doing more, so there is always a sense of progression (D88). (Replaces "dead to alive", parked with terraforming, D60.)
 3. **Hold your ground.** Survival means establishing bases and outposts and keeping them, with recruited people to help defend them (D90).
 4. **Local action, global consequence.** You change a place; places add up to a planet.
-5. **Seamless, and together.** No loading screens within a world. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
+5. **Find your own way.** The game does not hold your hand. There may be quests, but no tracked quest log pointing you where to go: you are told, you look, you find (D92).
+6. **Seamless, and together.** No loading screens within a world. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
 
 ## What we take from each inspiration
 

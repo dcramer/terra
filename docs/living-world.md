@@ -70,6 +70,18 @@ Proposed loops, replacing those in [gameplay.md](gameplay.md):
 
 **Recruiting.** From the developers, 2026-10-11: by a variety of means, but mostly by rescuing people, or as something close to a quest reward for helping their settlement. Recruits then live at your bases and help defend them (D90).
 
+## No hand-holding
+
+From the developers, 2026-10-11 (D92): a principle of the game is that it does not hold your hand. There might be quests, but not a tracked quest log that points you where to go.
+
+Proposed, for how quests and finding things then work:
+
+- **Quests are what people say.** Someone tells you their village lost its smith to something in the hills to the east, past the split rock. You remember it, or write it down, and go.
+- **Directions are given by the world.** Landmarks, rivers, ridges, the sun, roads, other settlements. Technical: procedural worlds need to know their own landmarks to name them in directions; that is generation work, mine to plan.
+- **The map is yours.** It shows what you have seen and what you mark on it, not where a quest wants you (D76).
+- **What the world is doing is noticed, not announced.** Smoke on the horizon, animals fleeing, a glow where magic pools, a settlement's bell.
+- **Help is in the world, if anywhere.** A recruit who knows the region, a guide, a sign by a road.
+
 ## Why explore, and why settle in more than one place
 
 From the developers, 2026-10-11 (D91): the player must have reasons to explore, and to need to settle in more locations. Resources and fast travel were floated; the mechanism is open.
@@ -127,8 +139,10 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 6. **Ranks.** For players only, or for monsters, places and portals too?
 7. **Settlements.** Can they be overrun and lost? Can players found them? Bases and outposts are part of survival (D90); is an outpost with recruits living in it a settlement?
 8. **Who are you?** A newcomer to the frontier, or someone born there? (Not someone from another world: C is ruled out.)
-9. **Death.** Still no fail state (D18), with what you carry dropped where you fell (D84)?
+9. Answered in part: **death.** No fail state (D18, confirmed): it is a persistent sandbox. What you carry drops where you fell (D84); whether it is lost if you never go back is open.
 10. **A thousand players.** In a living world, what do many players do together that a few cannot: defend a city, hold a frontier, answer a surge?
 11. **Fast travel with materials?** Freely, not at all, or with a limit (see above)?
 12. **Held ground.** Is building and crafting allowed only on ground you hold, as in Enshrouded?
 13. **Can held ground be lost** when an outpost falls, and does the wild, or the spread, take it back?
+14. **Writing things down.** Does the game keep a journal of what you were told, in its words, without markers? Or nothing at all?
+15. **The map.** May players mark it freely? Does it show anything you have not seen?
