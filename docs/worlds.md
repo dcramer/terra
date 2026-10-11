@@ -97,7 +97,8 @@ From the developers, 2026-10-10: no space (D4); probably no terraforming, with t
 
 - **What stays**: procedural worlds, each with its own theme, setting and cultures (D59, D86); voxel ground you dig; survival; building; items; skills.
 - **What went**: a solar system, flying to orbit and between planets, and the engine work for them: the ground-to-orbit transition, the sky seen from space, a frame spanning a solar system (D39, D36).
-- **What it asks**: what a portal is (found, built, opened by a skill?), whether crossing has a loading screen, how the server hands a player between worlds (D52), and whether a world is still a round planet you can walk around.
+- **Portals**: likely something you find in the world, with more ways of crossing added over time (D72). Which other ways, and whether found portals are fixed places in a world's generation, are open.
+- **What it asks**: whether crossing has a loading screen, how the server hands a player between worlds (D52), and whether a world is still a round planet you can walk around.
 
 ## Terraforming, on some planets
 
@@ -126,7 +127,7 @@ Open: which kinds of weather there are, whether they hurt, help or only look, wh
 2. Answered: planets mostly differ in the obvious ways (gravity, air, temperature, terrain, water, life). Whether any differ in less obvious ways (day length, weather, resources found nowhere else) can be settled planet by planet.
 8. Answered: **nothing flies to orbit.** There is no space (D4).
 3. Parked: **which planets can be terraformed** (D60).
-4. **How is the next world reached and unlocked?** Probably by portal (D72); what opens one is open.
+4. Answered in part: **how is the next world reached?** Likely by a portal you find, with other ways over time (D72).
 5. **Caverns**: a feature of some planets or all? Do they hold anything the surface does not?
 6. **Water**: does it flow, or only sit at a level (D24, D44)? The sea sits at its level (D75); whether it pours into a hole dug below that level is the open part.
 7. Answered in part: planets differ in size, set by their theme. The numbers above are a proposal to walk and judge.
