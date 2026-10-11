@@ -12,6 +12,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [forest-scale-test.md](forest-scale-test.md) | Can the world hold a very large number of objects that are each interactive? |
 | [subnautica-2-building.md](subnautica-2-building.md) | How does Subnautica 2's construction work, and what would the same idea look like here? |
 | [subnautica-inventory.md](subnautica-inventory.md) | How do items and containers work in Subnautica? |
+| [enshrouded.md](enshrouded.md) | What do Enshrouded's voxel terrain and building do, and where do they meet our decisions? |
 | [outpost-scene.md](outpost-scene.md) | With no artist, how far do free models, our own colours and the engine's built-in effects get? |
 | [godot-spike.md](godot-spike.md) | What did the Godot build prove, and what are the numbers to beat? |
 

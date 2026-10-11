@@ -29,7 +29,7 @@ Draft. A feature that serves none of these is cut.
 | SimEarth | A coupled planetary simulation | Abstract god-game view |
 | Spore | Life arriving in stages, simple to complex | Creature editor |
 | Factorio | Automation as the answer to threats; your own output provokes the enemy | 2D factory focus |
-| Enshrouded | A role model for building and other mechanics, named by the developers on 2026-10-10. Which mechanics, beyond building, is still to be said. | Not yet said |
+| Enshrouded | A role model for voxels and building, named by the developers on 2026-10-10: ground you dig and reshape, and buildings made of small voxel pieces and blueprints that join and blend seamlessly. Other mechanics too, not yet named. See [research/enshrouded.md](../research/enshrouded.md). | Not yet said |
 
 Astroneer is deliberately not on this list (D15). It shows the tech is achievable by a small team; its gameplay and art are not models for us.
 

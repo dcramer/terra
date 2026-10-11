@@ -7,7 +7,7 @@ Status: a draft for the developers to correct. It collects what they said on 202
 In their words, shortened.
 
 - **The inspiration is Subnautica 2**, blended with Rust, Ark and other advanced building games (D48).
-- **Enshrouded is a role model** for building, and for other mechanics (named 2026-10-10).
+- **Enshrouded is a role model** for building and voxels, and for other mechanics (named 2026-10-10): "a ton of stuff we really might like to model off of". Its buildings are made of voxels, which D9 rules out for us today; see [research/enshrouded.md](../research/enshrouded.md) and the open question below.
 - **You pick the part you want to build, and can cycle its variants**, from "the little dial building menus we see in things like Rust and Subnautica".
 - **Rooms are plain boxes.** No lights or fittings come with one.
 - **A room placed across another extends it** to the combined shape.
@@ -90,6 +90,7 @@ What the sandbox does today, measured against the above.
 6. **Do bases have needs**, as in Subnautica: power, air, hull strength? Rooms being plain boxes suggests lights at least need power from somewhere.
 7. **Upper storeys.** Stairs or ladders as buildables, and whether rooms can be stacked from the dial.
 8. **Who may change what** in co-op (also question 16 in [player.md](player.md)).
+9. **Are buildings made of voxels, as in Enshrouded?** That would mean pieces join and blend seamlessly with each other and the ground, and it would reverse the second half of D9 ("structures are separate modular pieces, not terrain"). It also bears on D48's shaped rooms.
 
 ## The grid
 
