@@ -23,7 +23,7 @@ Subnautica's rules, with our backpack added:
 | Action bar | A few slots that point at items in the backpack. The item stays in the backpack; if it leaves, the slot empties. |
 | Storage | More grids, built in a base. Anyone may use them. |
 | Limits | Room in the grid only. No weight. |
-| Going down | What you carry drops where you fell, as something you can go back for. Equipment stays on you. |
+| Going down | What you carry drops where you fell, as something you can go back for, until it decays and disappears after a while (D84). Equipment stays on you. |
 
 Picking something up puts it in the first place it fits, scanning from the top left. Items are not turned.
 
