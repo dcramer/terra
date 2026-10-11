@@ -8,7 +8,7 @@ Players survive and build across a dozen or so very different worlds, realms rea
 
 The earlier pitch, of dead planets terraformed into living ones, is parked with terraforming (D60).
 
-**Under review (D89):** the developers are considering a shift toward a living world closer to Enshrouded, with *He Who Fights With Monsters* as a core basis; see [living-world.md](living-world.md).
+**Under review (D89):** the developers are considering a shift toward a living world closer to Enshrouded, with *He Who Fights With Monsters* as a core basis; see [the living-world proposal](directions/living-world.md).
 
 ## Pillars
 

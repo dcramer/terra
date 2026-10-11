@@ -1,5 +1,7 @@
 # A living world
 
+One proposal for the direction of the game as a whole, among any the developers come up with ([directions](README.md)). "A living world" is a working name; the developers will name it. It says what kind of game this would be, what is going on in its worlds, and what the player does there. The other design docs each cover one part of the game; where they disagree with this proposal, the proposal is newer, and they are brought in line only as its decisions settle.
+
 Status: a direction the developers are considering (D89, Leaning), written up on 2026-10-11 for them to react to. The first section is theirs; everything after it is my proposal, with questions at the end. Nothing here is built, and nothing should be until they have read it.
 
 ## What the developers said
@@ -50,7 +52,7 @@ Why this suits us:
 
 ## Where the player fits
 
-Proposed loops, replacing those in [gameplay.md](gameplay.md):
+Proposed loops, replacing those in [gameplay.md](../gameplay.md):
 
 | Loop | What the player does |
 |---|---|
@@ -88,7 +90,7 @@ Proposed, for how quests and finding things then work:
 - **On screen**: what your body would feel or you would see at a glance: health, stamina, hunger and thirst as you would sense them; what is in your hands; the action bar.
 - **Learned by looking**: what a plant or animal is, how strong a monster is, what a material is good for. Skills could sharpen this: a skilled hunter reads tracks, a skilled smith judges ore.
 - **Felt rather than counted**: a skill improving shows in how the action goes (a cleaner cut, a faster climb), perhaps with a quiet sign when it steps up, rather than a number climbing.
-- **The open question**: the books' ranks and abilities are read from an on-screen status. How a player knows their rank, or a monster's, without one is for the developers.
+- **Character stats are on screen**: the developers said on 2026-10-11 that there will still be some on-screen display and character stats. So your skills, ranks and abilities can be read on a character screen, as in the books; what stays off screen is the world's information you have not learned, such as a monster's rank or what an unknown plant does.
 
 ## Why explore, and why settle in more than one place
 
@@ -110,7 +112,7 @@ Answered on 2026-10-11: **you can fast travel carrying materials**, and portals 
 
 The biggest single choice: **can you fast travel carrying materials?** If you can, as in Enshrouded, outposts are convenience and exploring is about finding things. If you cannot carry raw materials through, as in Valheim with ore, outposts near resources become necessary and moving goods between them becomes a game of its own: roads, carts, recruits who haul. My recommendation is a middle path: you travel with what you carry, but the backpack is small enough that working a resource where it is beats hauling it.
 
-What it asks of the engine, technical and mine: held ground is a few numbers per outpost, cheap to store and send; resources by region are a function of the seed and the place, like everything else (D47). With a thousand players (D52), who may hold what, and whether held ground is shared, are the ownership questions in [multiplayer.md](multiplayer.md).
+What it asks of the engine, technical and mine: held ground is a few numbers per outpost, cheap to store and send; resources by region are a function of the seed and the place, like everything else (D47). With a thousand players (D52), who may hold what, and whether held ground is shared, are the ownership questions in [multiplayer.md](../multiplayer.md).
 
 ## Atmosphere: three starting points
 
@@ -131,8 +133,8 @@ If adopted, these need revisiting:
 - **Tone (D3).** Done: the automation half is replaced by D90, bases and outposts defended by recruits.
 - **Survival (D61).** Lighter: health, stamina, hunger, thirst; oxygen only as breath under water (D74).
 - **Equipment (D64).** Armour, clothing and packs, not a space suit. The sandbox's placeholder suit, helmet and tank would change.
-- **Hostile life ([gameplay.md](gameplay.md)).** Was driven by terraforming; would be driven by magic.
-- **The pitch and pillars** ([vision.md](vision.md)).
+- **Hostile life ([gameplay.md](../gameplay.md)).** Was driven by terraforming; would be driven by magic.
+- **The pitch and pillars** ([vision.md](../vision.md)).
 - **Subnautica** (D85) stays a model for building and the inventory, not for the setting.
 
 ## What it costs
@@ -156,4 +158,4 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 13. **Can held ground be lost** when an outpost falls, and does the wild, or the spread, take it back?
 14. Answered: **no journal.** What to remember is up to the player (D92).
 15. **The map.** May players mark it freely? Does it show anything you have not seen?
-16. **Knowing your progress** (D93). How does a player learn that a skill improved, or what rank they or a monster are, without an on-screen status?
+16. Answered in part: **knowing your progress.** There will be some on-screen display and character stats (D93). Open: whether other things' ranks, a monster's for one, are shown or must be judged.
