@@ -21,6 +21,8 @@ Status: the developers set out on 2026-10-10 what the planets are to be. What th
 | **Size** | Fully procedural and somewhat large: big enough that walking all the way round is a ridiculous task, but not infinite, and efficient. Always round, so you wrap around. | Decided; the numbers are Leaning (D13) |
 | **Getting between planets** | By flight, for sure; maybe other ways later. Leaving a planet, being in space and arriving at another has to perform well. | Decided (D72) |
 | **How planets differ** | Mostly in the obvious ways. | Answers the old open question 2 |
+| **More than one breathable planet** | Some planets besides the starter one might be breathable. | Leaning (D86) |
+| **A setting per planet** | Planets might differ in kind of theme, not only in climate: one fantasy, one primitive, one futuristic. | Leaning (D86) |
 
 ## What a planet is
 
@@ -64,6 +66,21 @@ What makes a planet that size affordable:
 ## The starter planet
 
 Breathable, temperate, ordinary gravity, water and plants. The survival attributes all work, but nothing about the place is trying to kill you. It is where the player learns the game, and it is the planet the sandbox's stand-in is closest to.
+
+## Breathable planets, and a setting per planet
+
+From the developers, 2026-10-10, with "might" (D86, Leaning): more than one planet may be breathable, and planets may have different kinds of theme, "like fantasy or primitive or futuristic".
+
+Breathable beyond the starter planet fits what is here already: whether the air can be breathed is one number in a planet's theme, and the survival attributes read it (D61).
+
+A setting is a bigger thing than a climate. Proposed, to react to: a planet's theme gains a **setting** that chooses its palette, the shapes its plants, rocks and ruins are drawn from, and what can be found there. It stays data (D59): a fantasy planet is a different list of models and colours, not different code. It also fits the two inspirations, Enshrouded's fantasy and Subnautica's science fiction (D85).
+
+Open:
+
+9. **What does a setting change?** Only the look and what lies about (ruins, plants, creatures), or also what you can build, make and research there, or who you meet (D70)?
+10. **How do settings sit together in one solar system?** A story that explains a fantasy world a short flight from a futuristic one, or no explanation needed?
+11. **One art direction or several?** D14 is one look. A setting per planet could be palettes and shapes within that look, or distinct looks per planet, which costs far more art.
+12. **Is your own kit the same everywhere?** A futuristic suit on a primitive world, or does what you carry change with the planet?
 
 ## Terraforming, on some planets
 
