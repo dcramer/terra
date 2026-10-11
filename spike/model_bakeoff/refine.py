@@ -20,7 +20,10 @@ import bpy
 import numpy as np
 from mathutils import Matrix
 
+import kit
 import look
+
+look.PALETTE.update(kit.ROLES)
 
 src, name, height, budgets, *allowed = look.args()
 height = float(height)

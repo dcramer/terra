@@ -59,6 +59,8 @@ PALETTE = {
     "Alien": (0.45, 0.30, 0.62),
     "AlienLight": (0.72, 0.56, 0.86),
     "AlienStem": (0.25, 0.36, 0.50),
+    "Olive": (0.55, 0.58, 0.42),
+    "Peach": (0.95, 0.70, 0.55),
 }
 
 # The game's light (experiments/look.rs): a warm sun, shadows lit by a cool sky.

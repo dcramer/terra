@@ -75,18 +75,27 @@ R = REALMS[realm]
 
 
 def height(x, y):
-    return (1.6 * math.sin(x * 0.045 + 0.7) * math.cos(y * 0.038)
-            + 0.7 * math.sin((x + y) * 0.11) + 0.012 * max(0.0, y - 20) ** 1.5)
+    """Real-world scale (D110): rolling hills tens of metres high, flattening out where the
+    camp is, and a mountain range about a kilometre away."""
+    d = math.hypot(x, y)
+    flat = min(1.0, max(0.0, (d - 25.0) / 90.0)) ** 2
+    hills = (16 * math.sin(x * 0.0045 + 0.7) * math.cos(y * 0.0038)
+             + 6 * math.sin((x + y) * 0.013) + 1.5 * math.sin(x * 0.05) * math.cos(y * 0.045))
+    far = min(1.0, max(0.0, (y - 950) / 450))
+    far = far * far * (3 - 2 * far)
+    ridge = (0.55 + 0.30 * math.sin(x * 0.0042 + 1.3) + 0.15 * math.cos(x * 0.0105 + 0.4))
+    mountains = far * 300 * ridge
+    return hills * flat + 0.4 * math.sin(x * 0.11) * math.cos(y * 0.09) + mountains
 
 
 def ground():
     bm = bmesh.new()
-    n, size = 140, 260.0
+    n, size = 360, 2400.0
     verts = {}
     for i in range(n + 1):
         for j in range(n + 1):
             x = -size / 2 + size * i / n
-            y = -40 + size * j / n
+            y = -200 + (size * 0.75) * j / n
             verts[i, j] = bm.verts.new((x, y, height(x, y)))
     for i in range(n):
         for j in range(n):
@@ -138,7 +147,7 @@ def dress(ob):
             # The same distance fade as the game's fog, mixed in as emission.
             cam = nt.nodes.new("ShaderNodeCameraData")
             far = nt.nodes.new("ShaderNodeMapRange")
-            far.inputs["From Min"].default_value, far.inputs["From Max"].default_value = 25.0, 220.0
+            far.inputs["From Min"].default_value, far.inputs["From Max"].default_value = 40.0, 1400.0
             far.inputs["To Max"].default_value = 0.85
             fog = nt.nodes.new("ShaderNodeEmission")
             fog.inputs[0].default_value = look.linear(R["haze"]) + (1,)
@@ -161,8 +170,8 @@ def graphic_post(scene):
     vl.use_pass_mist = True
     vl.use_pass_environment = True
     scene.render.film_transparent = True
-    scene.world.mist_settings.start = 25.0
-    scene.world.mist_settings.depth = 200.0
+    scene.world.mist_settings.start = 40.0
+    scene.world.mist_settings.depth = 1400.0
     scene.world.mist_settings.falloff = "LINEAR"
     g = bpy.data.node_groups.new("Graphic", "CompositorNodeTree")
     g.interface.new_socket("Image", in_out="OUTPUT", socket_type="NodeSocketColor")
@@ -244,21 +253,25 @@ for ob in models.values():
     ob.hide_viewport = True
 
 rng = random.Random(7)
-# A grove behind the camp and scattered trees on the hills.
-for _ in range(70):
-    x, y = rng.uniform(-90, 90), rng.uniform(14, 150)
-    if abs(x) < 6 and y < 22:
-        continue
-    place(models["tree"], (x, y), rng.uniform(0, math.tau), rng.uniform(0.8, 1.35)).hide_render = False
-for _ in range(40):
-    x, y = rng.uniform(-60, 60), rng.uniform(-6, 90)
-    place(models["rock"], (x, y), rng.uniform(0, math.tau), rng.uniform(0.4, 1.6)).hide_render = False
-# A fence running along the camp, a workbench and the villager, the wolf at the trees.
+# Trees at real size, 14 to 22 m (the model is 5.5 m), in groves over the hills.
+groves = [(rng.uniform(-600, 600), rng.uniform(40, 900)) for _ in range(26)] + [(-30, 45), (40, 60), (-70, 30)]
+for gx, gy in groves:
+    for _ in range(rng.randint(6, 16)):
+        x, y = gx + rng.gauss(0, 22), gy + rng.gauss(0, 22)
+        if math.hypot(x, y) < 22:
+            continue
+        place(models["tree"], (x, y), rng.uniform(0, math.tau), rng.uniform(2.5, 4.0)).hide_render = False
+# Rocks from knee-high stones to boulders bigger than a house (the model is 1.4 m).
+for _ in range(90):
+    x, y = rng.uniform(-400, 400), rng.uniform(-10, 700)
+    big = rng.random() < 0.18
+    place(models["rock"], (x, y), rng.uniform(0, math.tau), rng.uniform(2.5, 6.0) if big else rng.uniform(0.3, 1.4)).hide_render = False
+# The camp, all at true size: fence posts 1.3 m, a workbench, the villager at 1.78 m, a wolf.
 for k in range(5):
-    place(models["fence"], (-11 + k * 4.4, 5.5), math.radians(90) + 0.04 * k, 1.0).hide_render = False
-place(models["bench"], (2.5, 1.5), math.radians(200)).hide_render = False
-place(models["villager"], (0.6, 0.6), math.radians(160)).hide_render = False
-place(models["wolf"], (-6.0, 6.5), math.radians(135), 1.1).hide_render = False
+    place(models["fence"], (-12 + k * 4.4, 9.0), math.radians(90) + 0.04 * k, 1.0).hide_render = False
+place(models["bench"], (2.8, 3.5), math.radians(200)).hide_render = False
+place(models["villager"], (0.0, 0.0), math.radians(170)).hide_render = False
+place(models["wolf"], (-7.0, 12.0), math.radians(135), 1.0).hide_render = False
 
 # Low warm sun from behind the camera's left shoulder, raking across the hills.
 sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
@@ -297,11 +310,12 @@ nt.links.new(bg.outputs[0], pick.inputs[2])
 nt.links.new(pick.outputs[0], nt.nodes["World Output"].inputs["Surface"])
 
 cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam"))
-cam.data.lens = 32
+cam.data.lens = 22
+cam.data.clip_end = 5000
 scene.collection.objects.link(cam)
 scene.camera = cam
-cam.location = (5.5, -11.0, height(5.5, -11.0) + 2.4)
-target = Vector((-1.5, 14.0, height(-1.5, 14.0) + 2.0))
+cam.location = (2.2, -5.0, height(2.2, -5.0) + 2.3)
+target = Vector((-6.0, 40.0, height(-6.0, 40.0) + 4.0))
 cam.rotation_euler = (target - cam.location).to_track_quat("-Z", "Y").to_euler()
 
 if shading == "graphic":
