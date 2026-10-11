@@ -51,7 +51,7 @@ By hand, from the repository:
 
 ## Deploying the worker
 
-It is deployed on David's Cloudflare account, and deploys itself: Cloudflare's Workers Builds is connected to this repository, and runs the tests and `npx wrangler deploy` when anything under `tools/token-stats/` changes on `main`. Its settings live on the worker in Cloudflare's dashboard, under Settings, Builds: root directory `tools/token-stats/worker`, build command `npm test`, deploy command `npx wrangler deploy`, watch path `tools/token-stats/*`. Deploying leaves the `API_KEY` secret as it is.
+It is deployed on David's Cloudflare account, and deploys itself: Cloudflare's Workers Builds is connected to this repository, and runs `npm run build` (the tests, then a dry-run deploy that bundles and checks the worker) and `npx wrangler deploy` when anything under `tools/token-stats/` changes on `main`. Its settings live on the worker in Cloudflare's dashboard, under Settings, Builds: root directory `tools/token-stats/worker`, build command `npm run build`, deploy command `npx wrangler deploy`, watch path `tools/token-stats/*`. Deploying leaves the `API_KEY` secret as it is.
 
 To deploy by hand, or to set it up again elsewhere:
 
