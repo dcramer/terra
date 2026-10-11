@@ -56,7 +56,7 @@ None of this exists, and none of it was planned for four players.
 - **Per-area records of change.** A new arrival cannot replay a year of digging. Each area needs a compact record of its current state, which the engine plan noted as "needed eventually" and now becomes central.
 - **A database and backups**, and a way to carry a world forward when the game's rules change.
 - **Not trusting clients.** Every action is checked by the server: is that in reach, do you have it, are you allowed.
-- **Ownership.** Who may take apart whose base. Among friends this needs no rules; among strangers it needs some.
+- **Ownership.** Who may take apart whose base. Among friends this needs no rules; among strangers it needs some. Proposed: claims (D94, [construction.md](construction.md#claims)), with building only inside them and the world healing outside.
 - **Running costs and upkeep**, if we host anything ourselves.
 
 ## What it does to the design

@@ -52,6 +52,21 @@ The table's fourth and fifth rows are two things the developers asked for above:
 
 **Technically** (mine; D9): structures stay separate from the terrain's smooth ground, but a base can be a voxel volume of its own: blocks on the base's grid, meshed and drawn by their own rules, blended with the ground where they meet. A held area the size of Enshrouded's (160 metres on a side) is 320 blocks across, about 33 million cells if it were all stored, so only the chunks that have something built in them are kept. That keeps the terrain's levels of detail and its edits untouched, and every block placed or carved is still an operation (D21). The sandbox's room tiles in `terra_build` would become one way of writing blocks, or be replaced. With the basis settled, this is the next technical step; it gets its own technical design before it is built.
 
+## Claims
+
+From the developers, 2026-10-11 (D94, Leaning): building will likely need a claim system, because we do not want the world randomly destroyed everywhere, nor to manage it.
+
+Proposed, to react to:
+
+- **You build only inside a claim.** A claim is an area you set up by placing something, as an altar does in Enshrouded (160 metres on a side once upgraded). It is the held ground of [game design 001](proposals/game-design-001.md#why-explore-and-why-settle-in-more-than-one-place): building, crafting stations and a safe rest happen there.
+- **Outside claims, the world heals.** You can still dig and gather anywhere, since that is how resources are found (D43), but what you change outside a claim grows back after a while. Enshrouded reportedly rolls back changes outside its build zones after about half an hour (unchecked). Trees regrowing and holes refilling also answers whether a thousand players strip a world bare ([multiplayer.md](multiplayer.md)).
+- **Claims belong to someone.** A player or a group; others build there only if allowed. There is no player against player (D2), so nobody can take apart what is in someone else's claim.
+- **Claims are limited**: how many a player holds and how big they grow, perhaps by rank or by what is built at the centre.
+- **Claims need keeping up.** An abandoned claim, its owner long gone, fades and its ground heals, so a persistent world does not fill with dead bases. Soulmask's lit bonfire, which stops structures decaying, is one model.
+- **Claims are what the world attacks** (D90): what pools and forms around a claim is what its defenders hold back.
+
+**Technically** (mine): claims keep the world's stored state in proportion to what players hold, not to everything they ever touched. The world is computed from the seed, and only changes are kept (D47); with edits outside claims expiring, those changes live almost entirely inside claims. That is what makes a persistent world for a thousand players affordable to keep, send and save (D52). A claim is a handful of numbers, and a change outside one carries the time it heals.
+
 ## The shape proposed
 
 Four ideas. Each is a proposal until the developers say otherwise.
@@ -117,7 +132,8 @@ What the sandbox does today, measured against the above.
 5. **What does taking something apart give back?** Everything, as in Subnautica, or less?
 6. **Do bases have needs**, as in Subnautica: power, air, hull strength? Rooms being plain boxes suggests lights at least need power from somewhere.
 7. **Upper storeys.** Stairs or ladders as buildables, and whether rooms can be stacked from the dial.
-8. **Who may change what** in co-op (also question 16 in [player.md](player.md)).
+8. **Who may change what** in co-op (also question 16 in [player.md](player.md)). Proposed: the owner of a claim, and whom they allow (D94).
+12. **Claims.** What makes one, how big, how many per player, and what keeps one alive? Does what you dig outside a claim heal, and how fast?
 9. Answered: **buildings may be made of voxels.** The developers said on 2026-10-11 they are fine with building in voxels, as long as the terrain stays smooth voxels (D9). Whether Enshrouded's system is the base is still open (D48).
 10. Answered: **shaped rooms on top.** Draw a room and it is filled in as blocks, then carve it (D48).
 11. **Must structures hold themselves up?** On the agreed list as "perhaps".
