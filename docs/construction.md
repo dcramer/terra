@@ -165,7 +165,26 @@ Fixed buildables, ports and connectors are not built.
 
 ## The build menu
 
-The developers want it like Subnautica's: you equip the building tool, and it brings up a build menu of what you have unlocked (D67, D68). The sandbox is already shaped that way: the builder is a tool on the action bar, and holding the right mouse button with it in hand brings up a dial of parts. What is open is the menu itself. Subnautica's is a tabbed grid (standard elements, interior, exterior, utility, furniture), which holds far more than the dial's fifteen parts. A likely answer is both: the full tabbed menu, and the dial as a quick pick of what you used last.
+The developers want it like Subnautica's: you equip the building tool, and it brings up a build menu of what you have unlocked (D67, D68). On 2026-10-11 they added: the dial is not the build menu, since there are too many things for a wheel, though a wheel is useful for choosing among the variants of one thing.
+
+Proposed, to react to:
+
+**Two steps: choose a thing, then its variant.**
+
+| Step | What you see | How |
+|---|---|---|
+| The menu: what to build | A panel of tabs, each a grid of tiles: a picture, a name, what it costs. Greyed if you cannot pay; absent if you have not learned it (D68, D92). | With the hammer in hand, tap the build menu key (right mouse or B). The pointer is freed; click a tile, or use the arrow keys and Enter. The menu closes and the thing is in hand. |
+| The wheel: which variant | A small dial of that thing's variants only: room sizes, window shapes, chair styles. | Hold R. Let go on one, or tap R to step to the next, as now. |
+
+**Tabs**, first pass, after Subnautica's and Enshrouded's: Claim; Structure (rooms, walls, floors, stairs); Openings (windows, doors); Crafting (stations); Furniture; Storage; Light and fire. With the voxel grid (D48), a Blocks tab and brush sizes join them.
+
+**Not in the menu**: taking apart and moving are things the hammer does to what is already built, on their own keys (Q and G), not entries in a list.
+
+**Quick picks**: the last few things built sit along the top of the menu, so building ten of the same wall does not mean finding it ten times.
+
+**Pictures**: each tile's picture is drawn once, from the thing's own model, when the game starts. Until then, names and costs.
+
+Open: whether opening the menu should pause the world in single play, as some games do; the keys.
 
 ## What is built
 
