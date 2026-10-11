@@ -36,6 +36,10 @@ These are linked, not copied into the repository, because they are someone else'
 
 What to take from it is the **environments and props**. The developers said on 2026-10-10 that its characters are a particular taste: they fit, more or less, but ours may well look different.
 
+## Mood boards, 2026-10-11
+
+Four directions drawn by an image model, each with the same wolf, villager, workbench, tree and outpost: [Terra Style Directions](https://claude.ai/artifact/AWgMLGJmS5GR7hvjJMbKq4) (private to the developers). A is papercraft facets (this page's direction), B soft rounded shapes, C painted textures, D graphic layers: bold simplified shapes, big flat areas of colour, crisp shadow shapes. The developers' first reaction: D is "pretty dang attractive" and "feels more ambitious"; B is cartoony; A is nice and may sit better with voxels. Not a decision; D14 stands until they choose. For many themed realms (D17, D59), A, B and D suit colours made by rule, and C does not. Whether D can be rendered by a shader on our models is being tested.
+
 ## Other references
 
 Games with a related look, and the one thing worth taking from each:
