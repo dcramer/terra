@@ -15,7 +15,6 @@ import { createInterface } from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CONFIG_FILE = join(homedir(), ".config", "terra", "token-stats.json");
 
 // Adds one Claude Code transcript line to `totals`, a map from "day\tmodel" to counts.
 // Counts only assistant messages whose working directory is inside `root`. A message
@@ -56,13 +55,17 @@ function inside(cwd, root) {
   return typeof cwd === "string" && (cwd === root || cwd.startsWith(root + sep));
 }
 
+function git(...args) {
+  return execFileSync("git", args, { cwd: HERE, encoding: "utf8" }).trim();
+}
+
 // The main checkout's root, so sessions in its worktrees count too.
 function repoRoot() {
-  const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
-    cwd: HERE,
-    encoding: "utf8",
-  }).trim();
-  return dirname(resolve(common));
+  return dirname(resolve(git("rev-parse", "--path-format=absolute", "--git-common-dir")));
+}
+
+function checkoutRoot() {
+  return resolve(git("rev-parse", "--show-toplevel"));
 }
 
 // Claude Code names each project's folder after its path with every other character
@@ -95,17 +98,31 @@ export async function collect(root) {
   return [...totals.values()].sort((a, b) => a.day.localeCompare(b.day) || a.model.localeCompare(b.model));
 }
 
+// Reads KEY=value lines, ignoring blanks and # comments; a value may be quoted.
+export function parseEnv(text) {
+  const vars = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const m = raw.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!m) continue;
+    let value = m[2];
+    const quoted = value.match(/^(["'])(.*)\1$/);
+    if (quoted) value = quoted[2];
+    else value = value.replace(/\s+#.*$/, "");
+    vars[m[1]] = value;
+  }
+  return vars;
+}
+
+// Settings come from the environment, then `.env` at the root of this checkout,
+// then `.env` in the main checkout, so one file serves every worktree.
 function config() {
-  let file = {};
-  if (existsSync(CONFIG_FILE)) file = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));
-  const cfg = {
-    url: process.env.TERRA_STATS_URL ?? file.url,
-    key: process.env.TERRA_STATS_KEY ?? file.key,
-    user: process.env.TERRA_STATS_USER ?? file.user,
-  };
+  const files = [...new Set([checkoutRoot(), repoRoot()])].map((root) => join(root, ".env"));
+  const sources = [process.env, ...files.filter(existsSync).map((f) => parseEnv(readFileSync(f, "utf8")))];
+  const get = (name) => sources.map((s) => s[name]).find(Boolean);
+  const cfg = { url: get("TERRA_STATS_URL"), key: get("TERRA_STATS_KEY"), user: get("TERRA_STATS_USER") };
   const missing = Object.keys(cfg).filter((k) => !cfg[k]);
   if (missing.length > 0) {
-    throw new Error(`missing ${missing.join(", ")}: set them in ${CONFIG_FILE} or as TERRA_STATS_URL, _KEY, _USER`);
+    throw new Error(`missing ${missing.join(", ")}: copy .env.example to .env at the repository root and fill it in`);
   }
   cfg.url = cfg.url.replace(/\/+$/, "");
   return cfg;

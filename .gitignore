@@ -5,3 +5,5 @@ target/
 shots/
 # Local checkouts made by coding agents.
 .claude/worktrees/
+# Local secrets, such as the token stats key. Copy .env.example.
+.env

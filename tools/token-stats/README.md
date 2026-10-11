@@ -11,13 +11,15 @@ Both calls need the shared key in `Authorization: Bearer <key>`. The key is a se
 
 ## Reporting your usage
 
-Ask for the worker's address and the key, then put them in `~/.config/terra/token-stats.json`, outside the repository:
+Ask for the worker's address and the key, then copy `.env.example` at the repository root to `.env` and fill it in. Git ignores `.env`. Worktrees read the main checkout's `.env`, so one file is enough.
 
-```json
-{ "url": "https://terra-token-stats.<account>.workers.dev", "key": "<shared key>", "user": "<your name>" }
+```bash
+TERRA_STATS_URL=https://terra-token-stats.<account>.workers.dev
+TERRA_STATS_KEY=<shared key>
+TERRA_STATS_USER=<your name>
 ```
 
-`TERRA_STATS_URL`, `TERRA_STATS_KEY` and `TERRA_STATS_USER` override the file. Then, from the repository:
+Variables of the same names in the environment override the file. Then, from the repository:
 
 | Command | What it does |
 |---|---|

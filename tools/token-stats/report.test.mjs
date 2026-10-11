@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { sep } from "node:path";
 import { test } from "node:test";
-import { addLine } from "./report.mjs";
+import { addLine, parseEnv } from "./report.mjs";
 
 const ROOT = `${sep}src${sep}terra`;
 
@@ -49,4 +49,13 @@ test("counts worktrees and skips other folders", () => {
 
 test("skips user lines, synthetic messages and junk", () => {
   assert.deepEqual(run([line({ type: "user" }), line({ id: "s", model: "<synthetic>" }), '{"usage": nope']), []);
+});
+
+test("reads a .env file", () => {
+  const text = '# comment\nTERRA_STATS_URL=https://x.dev/ # trailing\n\nexport TERRA_STATS_KEY="a b#c"\nTERRA_STATS_USER = dcramer\r\nnot a line\n';
+  assert.deepEqual(parseEnv(text), {
+    TERRA_STATS_URL: "https://x.dev/",
+    TERRA_STATS_KEY: "a b#c",
+    TERRA_STATS_USER: "dcramer",
+  });
 });
