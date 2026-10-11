@@ -56,14 +56,14 @@ Why this suits us:
 
 ## Factions and settlements, after Kenshi
 
-From the developers, 2026-10-11 (D95): Kenshi has many of the concepts we like for how the world exists: villages with things going on, and factions. We will need systems like these. Kenshi also lets you capture people; that may not be the atmosphere we want for getting NPCs, so recruiting stays rescue and helping settlements (D90).
+From the developers, 2026-10-11 (D95): Kenshi has many of the concepts we like for how the world exists: villages with things going on, and factions. We will need systems like these. Kenshi also lets you capture people; the developers ruled that out, along with prisoners: it sets the wrong tone. Recruiting is rescue and helping settlements (D90).
 
 What Kenshi does, from memory and unchecked: the world is shared among factions, each with its towns, people and attitudes to the others and to you. Towns have shops, bars, guards and residents. Caravans, patrols, raiders and wanderers travel between them on their own errands. Raids come to towns and to the player's outposts, more as an outpost grows. What happens sticks: a town can be overrun, abandoned or taken over, and stays that way.
 
 Proposed for us:
 
-- **Factions are data**, like everything that varies by world (D59): a culture's peoples (D86), raiders, orders, monster-worshippers, merchants. Each has places, aims and attitudes to the others and to you, and those attitudes move with what you do.
-- **Settlements are places with needs**: food, safety, trade, people. Magic pooling nearby (see above), raids and failed harvests press on them; help, trade and defence relieve them. A settlement can grow, shrink, fall or be rebuilt, and stays as it is left.
+- **Factions are data**, like everything that varies by world (D59): a culture's peoples (D86), raiders, orders, monster-worshippers, merchants. Each has places, aims and attitudes to the others and to you, and those attitudes move with what you do. From the developers: **no fixed set or number**; more are added as we go, and, as in the great procedural games, **players discover them**, learning about each only as they meet it.
+- **Settlements are places with needs**: food, safety, trade, people. Magic pooling nearby (see above), raids and failed harvests press on them; help, trade and defence relieve them. A settlement can grow, shrink, fall or be rebuilt, and stays as it is left. From the developers: **settlements can be lost for good**, which is fine with many worlds and realms to go to, and systems can repopulate land if needed.
 - **People travel**: traders between settlements, patrols, raiders, refugees from a fallen village. Roads are worn by them, and they are what you meet on the way.
 - **What happens sticks**, as in Kenshi: the world remembers. A settlement you saved is there next time; one you did not may be ruins.
 - **Your standing** with each faction is earned and lost by what you do. How much of it is on screen follows D93.
@@ -181,6 +181,7 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 15. **The map.** May players mark it freely? Does it show anything you have not seen?
 16. Answered in part: **knowing your progress.** There will be some on-screen display and character stats (D93). Open: whether other things' ranks, a monster's for one, are shown or must be judged.
 17. **The base game.** Enshrouded and Soulmask together, or another? Worth a few hours of Soulmask and some Kenshi to judge.
-18. **Factions.** Which kinds, and how many on a world? Can the player found or lead one, or only stand with or against them?
-19. **Settlements that fall.** Can a settlement be lost for good, and can players rebuild or take one over?
-20. **Capture.** Ruled out for recruiting, or kept for something else, such as prisoners to ransom?
+18. Answered in part: **factions.** No fixed set or number; added as we go and discovered by players (D95). Open: can a player found or lead one?
+19. Answered in part: **settlements that fall** can be lost for good, with repopulation if needed (D95). Open, to decide later: can players take one over, for instance by wiping it out and claiming the land?
+20. Answered: **no capture and no prisoners**; it sets the wrong tone (D95).
+21. **How many worlds?** The developers said worlds "can be infinite (more realms)", where D17 says about a dozen, not thousands. Has that changed?
