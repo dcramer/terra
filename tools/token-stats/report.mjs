@@ -6,17 +6,22 @@
 //   node tools/token-stats/report.mjs --full      send every message again
 //   node tools/token-stats/report.mjs --dry-run   print this person's totals, sending nothing
 //   node tools/token-stats/report.mjs --stats     print everyone's totals
+//   node tools/token-stats/report.mjs --hook      send in the background, at most every 15 minutes;
+//                                                 run by Claude Code after each turn (.claude/settings.json)
 //   node tools/token-stats/report.mjs --cron      print a crontab line that runs it hourly
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BATCH = 200;
+const HOOK_INTERVAL_MS = 15 * 60 * 1000;
+const CACHE = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "terra-token-stats");
+const LOG = join(CACHE, "report.log");
 
 // Adds the messages of one Claude Code transcript to `messages`, a map from message id.
 //
@@ -141,8 +146,7 @@ export function totals(messages) {
 // longer run, never a wrong count: the server ignores what it already has.
 function sentFile(cfg) {
   const name = createHash("sha256").update(`${cfg.url}\n${cfg.user}`).digest("hex").slice(0, 16);
-  const cache = process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache");
-  return join(cache, "terra-token-stats", `sent-${name}.json`);
+  return join(CACHE, `sent-${name}.json`);
 }
 
 function signature(m) {
@@ -176,6 +180,7 @@ function config() {
     throw new Error(`missing ${missing.join(", ")}: copy .env.example to .env at the repository root and fill it in`);
   }
   cfg.url = cfg.url.replace(/\/+$/, "");
+  if (!/^https?:\/\//.test(cfg.url)) cfg.url = `https://${cfg.url}`;
   return cfg;
 }
 
@@ -198,9 +203,9 @@ function table(rows, cols) {
 
 async function main(args) {
   const counts = ["input", "output", "cache_read", "cache_write", "messages"];
+  if (args.includes("--hook")) return hook();
   if (args.includes("--cron")) {
-    const log = join(homedir(), ".cache", "terra-token-stats.log");
-    console.log(`0 * * * * ${process.execPath} ${join(repoRoot(), "tools", "token-stats", "report.mjs")} >> ${log} 2>&1`);
+    console.log(`0 * * * * ${process.execPath} ${join(repoRoot(), "tools", "token-stats", "report.mjs")} >> ${LOG} 2>&1`);
     return;
   }
   if (args.includes("--stats")) {
@@ -242,9 +247,31 @@ async function main(args) {
   console.log(`${new Date().toISOString()} sent ${pending.length} of ${messages.length} messages as ${cfg.user}`);
 }
 
+// Called by Claude Code after every turn, so it must be quick and must never fail:
+// it does nothing for anyone not set up, runs at most every HOOK_INTERVAL_MS, and
+// leaves the real work to a detached copy of itself that logs to LOG.
+function hook() {
+  try {
+    config();
+  } catch {
+    return;
+  }
+  const stamp = join(CACHE, "last-run");
+  try {
+    if (Date.now() - statSync(stamp).mtimeMs < HOOK_INTERVAL_MS) return;
+  } catch {
+    // Never run before.
+  }
+  mkdirSync(CACHE, { recursive: true });
+  writeFileSync(stamp, new Date().toISOString());
+  const log = openSync(LOG, "a");
+  spawn(process.execPath, [fileURLToPath(import.meta.url)], { detached: true, stdio: ["ignore", log, log] }).unref();
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  main(process.argv.slice(2)).catch((err) => {
+  const args = process.argv.slice(2);
+  main(args).catch((err) => {
     console.error(`token-stats: ${err.message}`);
-    process.exit(1);
+    process.exit(args.includes("--hook") ? 0 : 1);
   });
 }

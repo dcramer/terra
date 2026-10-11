@@ -1,10 +1,14 @@
 // Records Claude token usage per message, and totals per person, day and model.
 // See ../README.md.
 //
-// POST /report  {user, messages: [{id, session, day, model, input, output, cache_read, cache_write}]}
-// GET  /stats?group=user,day,model&since=YYYY-MM-DD
+// GET  /       the page: tokens per person, public
+// GET  /json   the same as JSON, public
+// POST /report {user, messages: [{id, session, day, model, input, output, cache_read, cache_write}]}
+// GET  /stats  ?group=user,day,model&since=YYYY-MM-DD
 //
-// Both need `Authorization: Bearer <API_KEY>`.
+// /report and /stats need `Authorization: Bearer <API_KEY>`.
+
+import { page } from "./page.js";
 
 const USER = /^[A-Za-z0-9_.-]{1,40}$/;
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
@@ -14,6 +18,7 @@ const MODEL = /^[A-Za-z0-9_.:@/-]{1,100}$/;
 const COUNTS = ["input", "output", "cache_read", "cache_write"];
 const GROUPS = ["user", "day", "model"];
 const MAX_MESSAGES = 500;
+const CHART_DAYS = 30;
 
 // Every message is stored once, keyed by the id the API gave it, so it cannot be
 // counted twice however often it is sent or from how many transcripts. `usage`
@@ -89,6 +94,12 @@ const UPSERT = `INSERT INTO messages (id, user, session, day, model, input_token
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/") {
+      return new Response(page(await summary(env)), { headers: { "Content-Type": "text/html; charset=utf-8", ...PUBLIC } });
+    }
+    if (request.method === "GET" && url.pathname === "/json") {
+      return json(await summary(env), 200, PUBLIC);
+    }
     if (!(await authorized(request, env))) return json({ error: "unauthorized" }, 401);
     try {
       if (request.method === "POST" && url.pathname === "/report") return await report(request, env);
@@ -168,6 +179,48 @@ async function stats(url, env) {
   return json({ since, group, rows: results });
 }
 
+const PUBLIC = { "Cache-Control": "public, max-age=300" };
+const SUMS = `sum(input_tokens) AS input, sum(output_tokens) AS output,
+  sum(cache_read_tokens) AS cache_read, sum(cache_write_tokens) AS cache_write, sum(messages) AS messages`;
+
+// Everyone's totals, their models, and tokens a day for the last CHART_DAYS days.
+async function summary(env) {
+  const today = new Date();
+  const since = new Date(today.getTime() - (CHART_DAYS - 1) * 86400000).toISOString().slice(0, 10);
+  const [people, models, daily] = await withTables(env, () =>
+    env.DB.batch([
+      env.DB.prepare(`SELECT user, ${SUMS}, min(day) AS first_day, max(day) AS last_day
+        FROM usage WHERE messages > 0 GROUP BY user`),
+      env.DB.prepare(`SELECT user, model, ${SUMS} FROM usage WHERE messages > 0 GROUP BY user, model`),
+      env.DB.prepare(`SELECT user, day, ${SUMS} FROM usage WHERE day >= ?1 GROUP BY user, day`).bind(since),
+    ]),
+  );
+  const withTotal = (r) => ({ ...r, total: r.input + r.output + r.cache_read + r.cache_write });
+  const days = Array.from({ length: CHART_DAYS }, (_, i) =>
+    new Date(Date.parse(since) + i * 86400000).toISOString().slice(0, 10),
+  );
+  const users = people.results.map(withTotal).map((p) => {
+    const byDay = new Map(daily.results.filter((d) => d.user === p.user).map((d) => [d.day, withTotal(d)]));
+    const zero = { input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0, total: 0 };
+    return {
+      ...p,
+      models: models.results
+        .filter((m) => m.user === p.user)
+        .map(withTotal)
+        .map(({ user, ...m }) => m)
+        .sort((a, b) => b.total - a.total),
+      daily: days.map((day) => {
+        const { user, ...d } = byDay.get(day) ?? { day, ...zero };
+        return { ...d, day };
+      }),
+    };
+  });
+  users.sort((a, b) => b.total - a.total);
+  const totals = { input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0, total: 0 };
+  for (const u of users) for (const k of Object.keys(totals)) totals[k] += u[k];
+  return { generated_at: today.toISOString(), days: CHART_DAYS, totals, users };
+}
+
 // Create the tables the first time they are missing, so a deploy needs no migration step.
 async function withTables(env, query) {
   try {
@@ -179,9 +232,9 @@ async function withTables(env, query) {
   }
 }
 
-function json(value, status = 200) {
+function json(value, status = 200, headers = {}) {
   return new Response(JSON.stringify(value), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
   });
 }
