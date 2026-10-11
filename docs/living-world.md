@@ -68,6 +68,28 @@ Proposed loops, replacing those in [gameplay.md](gameplay.md):
 
 **Ranks as the spine.** The books' ranks (iron, bronze, silver, gold, diamond) could rank monsters, places, portals and players alike: a bronze-rank portal leads somewhere bronze-rank things live. That gives worlds an order without a story to justify it.
 
+**Recruiting.** From the developers, 2026-10-11: by a variety of means, but mostly by rescuing people, or as something close to a quest reward for helping their settlement. Recruits then live at your bases and help defend them (D90).
+
+## Why explore, and why settle in more than one place
+
+From the developers, 2026-10-11 (D91): the player must have reasons to explore, and to need to settle in more locations. Resources and fast travel were floated; the mechanism is open.
+
+Proposed, as levers that work together. The first three are the core; the rest add to them.
+
+| Lever | How it works | Why it makes you go |
+|---|---|---|
+| **Resources by region** | Materials belong to places: a kind of rock to one terrain, a wood to one forest, the best to deep caverns, far regions and higher ranks. Each world has its own (D59). | What you need next is somewhere you have not been. |
+| **Held ground** | You can build, craft at stations and rest safely only on ground you hold, around a base or outpost, as within the build radius of Enshrouded's altars. Held ground is where the magic is kept down. | To work somewhere, you have to settle there. |
+| **Outposts as the travel network** | Fast travel runs between places you hold, and portals and waystones you have found. Every outpost extends the network. | Settling is how the world gets smaller. |
+| **Carrying is limited** | The backpack is small and nothing stacks (D84), so hauling far is slow. An outpost by a resource lets you work it where it is. | A reason to settle near what you need, not haul it home. |
+| **People live in places** | Those you can rescue or help are in settlements spread through the wild, and cultures differ by region and world (D86). | The recruits you want are far away. |
+| **Magic sites** | Places where magic pools are dangerous, because monsters form there, and valuable, for what can be made or opened there. Holding one keeps it from surging and lets you use it. | Risk and reward drawn on the map. |
+| **The spread** (premise B) | Land nobody holds slowly falls to whatever is spreading. An outpost pushes it back around it. | Holding ground matters, and is visible on the map. |
+
+The biggest single choice: **can you fast travel carrying materials?** If you can, as in Enshrouded, outposts are convenience and exploring is about finding things. If you cannot carry raw materials through, as in Valheim with ore, outposts near resources become necessary and moving goods between them becomes a game of its own: roads, carts, recruits who haul. My recommendation is a middle path: you travel with what you carry, but the backpack is small enough that working a resource where it is beats hauling it.
+
+What it asks of the engine, technical and mine: held ground is a few numbers per outpost, cheap to store and send; resources by region are a function of the seed and the place, like everything else (D47). With a thousand players (D52), who may hold what, and whether held ground is shared, are the ownership questions in [multiplayer.md](multiplayer.md).
+
 ## Atmosphere: three starting points
 
 What the world is like and what is going on. These can combine; the choice is the developers'.
@@ -104,6 +126,9 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 5. **Essences.** Take the books' system closely (a few essences, a confluence, abilities that rank up), or loosely?
 6. **Ranks.** For players only, or for monsters, places and portals too?
 7. **Settlements.** Can they be overrun and lost? Can players found them? Bases and outposts are part of survival (D90); is an outpost with recruits living in it a settlement?
-8. **Who are you?** A newcomer, a native, someone from another world?
+8. **Who are you?** A newcomer to the frontier, or someone born there? (Not someone from another world: C is ruled out.)
 9. **Death.** Still no fail state (D18), with what you carry dropped where you fell (D84)?
 10. **A thousand players.** In a living world, what do many players do together that a few cannot: defend a city, hold a frontier, answer a surge?
+11. **Fast travel with materials?** Freely, not at all, or with a limit (see above)?
+12. **Held ground.** Is building and crafting allowed only on ground you hold, as in Enshrouded?
+13. **Can held ground be lost** when an outpost falls, and does the wild, or the spread, take it back?
