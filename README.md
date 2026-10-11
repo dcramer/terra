@@ -91,7 +91,13 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 | [prototypes](prototypes) | A globe for watching the planet simulation, on Godot. |
 | [spike](spike) | Throwaway experiments. |
 
-To set up a machine, see [docs/development.md](docs/development.md). Coding agents should read [AGENTS.md](AGENTS.md).
+To play the tech demo, on the real GPU whatever the machine:
+
+```bash
+cargo xtask play
+```
+
+`cargo xtask play --fresh` starts a new game; `cargo xtask` on its own lists the other tasks. To set up a machine, see [docs/development.md](docs/development.md). Coding agents should read [AGENTS.md](AGENTS.md).
 
 ## Licence
 

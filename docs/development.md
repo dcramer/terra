@@ -24,6 +24,8 @@ macOS has been checked only by CI, which builds and tests there. Nobody has run 
 
 | Command | What it does |
 |---|---|
+| `cargo xtask play` | Play the tech demo on the real GPU, wherever you are; your game is kept between runs. `cargo xtask play --fresh` starts a new one. |
+| `cargo xtask loop` | Play the demo's loop by script and check every step happened |
 | `cargo xtask check` | Formatting, lints, tests and the dependency rule. Must pass before a commit. |
 | `cargo test -p terra_sim` | One crate's tests |
 | `cargo fmt --all` | Format everything |

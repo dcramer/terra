@@ -68,6 +68,6 @@ Not covered: crafting, research, what the raw items are, item sizes, and how the
 ## Still open
 
 - **Weight, volume or other limits**: none for now; the developers may revisit (D84).
-- **Arrows and other ammunition**: nothing stacks (D84), so each arrow fills a cell, which a quiver of twenty would make costly. Options: let ammunition stack, as most games do; a quiver worn on the character sheet that holds them; or arrows that are kept, not used up, and only need making again when lost. The sandbox makes four arrows at a time, one to a cell, until this is decided.
+- Settled for ammunition (D118): **a quiver is a container, holding a stack of arrows.** Arrows stack inside a quiver, which is one item in the backpack or worn. How many it holds, whether it is worn in a slot of its own, and whether other ammunition works the same way are open. It fits a pack that holds things (D106).
 - **Is what you carry lost for good if you never go back for it?** And does it drop all of it, or only what you gathered since you were last at a base, as in the first Subnautica?
 - **How big is the first backpack**, and how many slots does the bar have? Subnautica 2 starts with about 20 cells; the first game's bar has five.

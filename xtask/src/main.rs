@@ -3,11 +3,25 @@
 //!   check    Everything a change must pass: formatting, lints, tests, and the rule
 //!            that shared-state crates do not depend on Bevy. CI runs exactly this.
 //!   doctor   Checks this machine has what it needs to build and run the project.
+//!   play     Plays the tech demo, on the real GPU wherever you are: under WSL it runs the
+//!            Windows build. Your game is saved between runs; `--fresh` starts over.
+//!            Anything else after it goes to the game, such as `--at 10,20`.
+//!   loop     Plays the demo's loop by script and checks every step happened (D69).
 //!   win      Under WSL: builds a program for Windows and runs it there, on the real
 //!            GPU. `cargo xtask win -p <package> [--release] [--copy <name>] [-- program args]`
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+
+const USAGE: &str = "\
+usage: cargo xtask <task>
+
+  play [--fresh]   play the tech demo, on the real GPU; --fresh starts a new game
+  loop             play the demo's loop by script and check every step
+  check            what every change must pass: formatting, lints, tests, rules
+  doctor           what this machine is missing
+  win -p <package> [--release] [--copy <name>] [-- args]
+                   under WSL, build for Windows and run it there";
 
 /// The only crates allowed to depend on Bevy (D28): the applications.
 const BEVY_CRATES: [&str; 2] = ["terra_game", "terra_sandbox"];
@@ -18,8 +32,10 @@ fn main() -> ExitCode {
         "check" => check(),
         "doctor" => doctor(),
         "win" => win(&std::env::args().skip(2).collect::<Vec<_>>()),
+        "play" => play(&std::env::args().skip(2).collect::<Vec<_>>()),
+        "loop" => run("bash", &["crates/terra_sandbox/loop.sh"]),
         _ => {
-            eprintln!("usage: cargo xtask <check|doctor|win>");
+            eprintln!("{USAGE}");
             false
         }
     };
@@ -194,6 +210,24 @@ fn win(args: &[String]) -> bool {
         .status()
         .map(|status| status.success())
         .unwrap_or(false)
+}
+
+/// Plays the tech demo as a person would: the sandbox's play experiment, with its save
+/// kept between runs. Under WSL the Windows build runs, in a copy of its own, so a
+/// scripted test running at the same time does not get in the way.
+fn play(args: &[String]) -> bool {
+    let mut game: Vec<String> = vec!["--experiment".into(), "play".into()];
+    game.extend(args.iter().cloned());
+    if on_wsl() {
+        let mut ours: Vec<String> = ["-p", "terra_sandbox", "--copy", "play", "--"]
+            .map(String::from)
+            .to_vec();
+        ours.extend(game);
+        return win(&ours);
+    }
+    let mut cargo = vec!["run", "-p", "terra_sandbox", "--"];
+    cargo.extend(game.iter().map(String::as_str));
+    run("cargo", &cargo)
 }
 
 /// The Windows temp folder, as a path WSL can use.
