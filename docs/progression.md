@@ -19,7 +19,7 @@ Proposed, to react to:
 Open:
 
 6. Answered in part: **how is a skill gained?** Probably by a variety of means, not yet chosen. One is settled: **doing a thing gives you its skill automatically.** Swim and you can swim; cut down a tree and you have the skill for it. Others might be finding, being taught, or a culture (D86).
-7. **How is a skill raised?** By use, by points, by milestones, or a mix?
+7. Answered: **how is a skill raised?** By doing the thing more (D88). Whether anything else raises it too, such as milestones or teachers, is open.
 8. **What do skills cover?** Fighting (D85 names Enshrouded's combat), movement, gathering, building, survival, crafting, or all of them?
 9. **One rank for the player as well as for each skill?** The books rank the person as well as their abilities.
 10. **Are skills chosen?** A limited set, so players differ, or eventually everything?
