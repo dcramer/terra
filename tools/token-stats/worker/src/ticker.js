@@ -55,18 +55,18 @@ const CSS = `
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: transparent; }
-body { padding: 2px; font: 14px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-.ticker { display: inline-flex; align-items: center; gap: 9px; padding: 7px 12px 7px 9px;
-  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px;
+body { padding: 6px; font: 42px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+.ticker { display: inline-flex; align-items: center; gap: 27px; padding: 21px 36px 21px 27px;
+  background: var(--surface); color: var(--ink); border: 2px solid var(--line); border-radius: 36px;
   text-decoration: none; }
 .ticker:hover { border-color: var(--muted); }
-.ticker svg { width: 26px; height: 26px; flex: none; }
+.ticker svg { width: 78px; height: 78px; flex: none; }
 .text { display: flex; flex-direction: column; }
-.cost { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.label { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cost { font-size: 54px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.label { font-size: 33px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .counting { color: var(--count); }
 .landed { animation: land 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
-@keyframes land { 30% { text-shadow: 0 0 12px var(--glow); } }
+@keyframes land { 30% { text-shadow: 0 0 36px var(--glow); } }
 @media (prefers-reduced-motion: reduce) {
   .landed { animation: none; }
 }

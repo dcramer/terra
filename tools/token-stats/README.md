@@ -22,7 +22,7 @@ The page and `/json` are public. Sending and `/stats` need the shared key in `Au
 [`/ticker`](https://terra-token-stats.dcramer.workers.dev/ticker) is the running cost alone, with the tokens behind it (cache reads left out, as on the page), small enough to embed. It checks for new numbers every 5 seconds while the page it sits on is visible, and a click opens the full page. The colours follow the embedding page's light or dark scheme; add `?theme=light` or `?theme=dark` to fix them.
 
 ```html
-<iframe src="https://terra-token-stats.dcramer.workers.dev/ticker" width="200" height="56" style="border:0" title="What building Terra has cost"></iframe>
+<iframe src="https://terra-token-stats.dcramer.workers.dev/ticker" width="460" height="160" style="border:0" title="What building Terra has cost"></iframe>
 ```
 
 ## Reporting your usage
@@ -51,7 +51,7 @@ By hand, from the repository:
 
 ## Deploying the worker
 
-It is deployed on David's Cloudflare account, and deploys itself: [a GitHub Actions workflow](../../.github/workflows/token-stats.yml) runs the tests and `wrangler deploy` whenever anything under `tools/token-stats/` changes on `main`, and can be run by hand from the Actions tab. It needs a Cloudflare API token as the repository secret `CLOUDFLARE_API_TOKEN`, made from the "Edit Cloudflare Workers" template with D1 Edit added, and the account id as the repository variable `CLOUDFLARE_ACCOUNT_ID`. Deploying leaves the `API_KEY` secret as it is.
+It is deployed on David's Cloudflare account, and deploys itself: Cloudflare's Workers Builds is connected to this repository, and runs the tests and `npx wrangler deploy` when anything under `tools/token-stats/` changes on `main`. Its settings live on the worker in Cloudflare's dashboard, under Settings, Builds: root directory `tools/token-stats/worker`, build command `node --test ../report.test.mjs src/prices.test.mjs`, deploy command `npx wrangler deploy`, watch path `tools/token-stats/*`. Deploying leaves the `API_KEY` secret as it is.
 
 To deploy by hand, or to set it up again elsewhere:
 
