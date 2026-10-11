@@ -3,3 +3,5 @@ target/
 .godot/
 *.log
 shots/
+# Local checkouts made by coding agents.
+.claude/worktrees/
