@@ -100,7 +100,7 @@ What follows from those, proposed:
 | Backpack | Raw items and things you have made | A bigger backpack in the backpack slot |
 | Action bar | Tools and things you use, a few slots | Fixed, or grows with gear |
 
-Each is a set of slots holding items, so in the game's model (D58) they are components on the player that hold item entities or item kinds, and the same rules serve all three. The sandbox has a stand-in: raw items as counts, two tools, and a six-slot bar. It has no equipment grid and no backpack.
+A fuller proposal, and how it would be built, is in [items.md](items.md). Each is a set of slots holding items, so in the game's model (D58) they are components on the player that hold item entities or item kinds, and the same rules serve all three. The sandbox has a stand-in: raw items as counts, two tools, and a six-slot bar. It has no equipment grid and no backpack.
 
 Still open:
 
