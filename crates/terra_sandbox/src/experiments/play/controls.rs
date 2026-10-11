@@ -47,10 +47,12 @@ pub enum Action {
     LookRight,
     LookUp,
     LookDown,
+    /// Eat the most filling food carried.
+    Eat,
 }
 
 impl Action {
-    pub const ALL: [Action; 22] = [
+    pub const ALL: [Action; 23] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -73,6 +75,7 @@ impl Action {
         Action::LookRight,
         Action::LookUp,
         Action::LookDown,
+        Action::Eat,
     ];
 
     /// What the options menu calls it.
@@ -100,6 +103,7 @@ impl Action {
             Action::LookRight => "Look right",
             Action::LookUp => "Look up",
             Action::LookDown => "Look down",
+            Action::Eat => "Eat",
         }
     }
 
@@ -128,6 +132,7 @@ impl Action {
             Action::LookRight => "look_right",
             Action::LookUp => "look_up",
             Action::LookDown => "look_down",
+            Action::Eat => "eat",
         }
     }
 
@@ -157,6 +162,7 @@ impl Action {
             Action::LookRight => (Key(KeyCode::ArrowRight), None),
             Action::LookUp => (Key(KeyCode::ArrowUp), None),
             Action::LookDown => (Key(KeyCode::ArrowDown), None),
+            Action::Eat => (Key(KeyCode::KeyH), None),
         };
         [Some(first), second]
     }

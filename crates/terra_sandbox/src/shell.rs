@@ -40,7 +40,8 @@ usage: terra_sandbox [options]
                         down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --give <item>:<count> start the play experiment carrying something extra, for
-                        testing: a raw item such as stone:10 (repeatable)
+                        testing: a raw item such as stone:10, or health, fed or
+                        stamina out of 100 (repeatable)
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the base's corner, for experiments

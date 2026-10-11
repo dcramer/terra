@@ -8,11 +8,13 @@
 //!   In the inventory, point at a tool and press 1 to 6 to put it in that slot; click
 //!   gear in the backpack to wear it, and click a slot of the sheet to take it off.
 
+use super::Player;
 use super::controls::{Action, Settings};
 use super::dial::Dial;
 use super::grab_mouse;
 use super::inventory::{self, BAR_SLOTS, Backpack, Belongings, InventoryScreen, Items, Raw, SLOTS};
 use super::options::OptionsMenu;
+use super::vitals::{Vitals, nourishment};
 use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
@@ -153,7 +155,7 @@ fn setup(mut commands: Commands) {
             Hud,
             Node {
                 position_type: PositionType::Absolute,
-                bottom: px(92),
+                top: percent(26),
                 width: percent(100),
                 justify_content: JustifyContent::Center,
                 ..default()
@@ -347,6 +349,7 @@ fn click(
     shown: Query<(&Interaction, &Shown), Changed<Interaction>>,
     boxes: Query<(&Interaction, &GearBox), Changed<Interaction>>,
     mut belongings: Belongings,
+    mut vitals: Single<&mut Vitals, With<Player>>,
     mut notice: ResMut<Notice>,
 ) {
     if !screen.open {
@@ -354,6 +357,19 @@ fn click(
     }
     let mut result = None;
     for (interaction, shown) in &shown {
+        // Food is eaten.
+        let food = belongings
+            .items()
+            .raw(shown.1)
+            .filter(|&raw| nourishment(raw) > 0.0);
+        if *interaction == Interaction::Pressed
+            && let Some(food) = food
+            && belongings.eat(food)
+        {
+            vitals.eat(food);
+            notice.say(format!("Ate {}", food.name().to_lowercase()));
+            continue;
+        }
         let is_gear = belongings
             .items()
             .catalogue
@@ -383,6 +399,8 @@ fn colour(items: &Items, kind: ItemKind) -> Color {
         Some(Raw::Ore) => Color::srgb(0.56, 0.34, 0.26),
         Some(Raw::Iron) => Color::srgb(0.42, 0.45, 0.5),
         Some(Raw::Meat) => Color::srgb(0.7, 0.3, 0.3),
+        Some(Raw::Berries) => Color::srgb(0.7, 0.2, 0.35),
+        Some(Raw::CookedMeat) => Color::srgb(0.6, 0.36, 0.2),
         None => Color::srgb(0.2, 0.48, 0.45),
     }
 }

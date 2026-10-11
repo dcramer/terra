@@ -327,7 +327,8 @@ fn plant(
     );
     let mossy_rocks = load(Kind::Rock, &["Rock_Moss_1", "Rock_Moss_2", "Rock_Moss_3"]);
     let ore_rocks = load(Kind::OreRock, &["Rock_1", "Rock_3", "Rock_5", "Rock_7"]);
-    let bushes = load(Kind::Bush, &["Bush_1", "Bush_2", "BushBerries_1"]);
+    let bushes = load(Kind::Bush, &["Bush_1", "Bush_2"]);
+    let berry_bushes = load(Kind::Bush, &["BushBerries_1"]);
     let plants = load(Kind::Plant, &["Plant_1", "Plant_3", "Plant_4"]);
     let flowers = load(Kind::Flower, &["Flowers", "Plant_5"]);
     let props = load(Kind::Prop, &["TreeStump", "WoodLog_Moss"]);
@@ -338,6 +339,7 @@ fn plant(
         &rocks,
         &mossy_rocks,
         &ore_rocks,
+        &berry_bushes,
         &bushes,
         &plants,
         &flowers,
@@ -491,11 +493,17 @@ fn plant(
         if rng.unit() > 0.3 * cover.grass {
             return;
         }
-        let model = pick(rng, &bushes);
+        // A third of the bushes bear berries, the first food to be found.
+        let berries = rng.unit() < 0.33;
+        let model = pick(rng, if berries { &berry_bushes } else { &bushes });
         let scale = rng.range(0.7, 1.5) / model.height;
         let fibre = Some(Cuttable {
             what: Cut::Plant,
-            gives: (Raw::Fibre, 1),
+            gives: if berries {
+                (Raw::Berries, 3)
+            } else {
+                (Raw::Fibre, 1)
+            },
             seconds: 0.7,
         });
         put(

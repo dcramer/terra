@@ -19,6 +19,7 @@ use bevy::{prelude::*, window::CursorOptions};
 pub enum Station {
     Workbench,
     Smithy,
+    Campfire,
 }
 
 impl Station {
@@ -26,6 +27,7 @@ impl Station {
         match self {
             Station::Workbench => "Workbench",
             Station::Smithy => "Smithy",
+            Station::Campfire => "Campfire",
         }
     }
 }
@@ -77,6 +79,11 @@ pub const RECIPES: &[Recipe] = &[
         Station::Workbench,
         &[(Raw::Hide, 4), (Raw::Fibre, 4)],
         Made::Apparel(Apparel::LargePack),
+    ),
+    recipe(
+        Station::Campfire,
+        &[(Raw::Meat, 1)],
+        Made::Raw(Raw::CookedMeat, 1),
     ),
     recipe(
         Station::Smithy,

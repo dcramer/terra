@@ -27,10 +27,12 @@ pub enum Raw {
     Ore,
     Iron,
     Meat,
+    Berries,
+    CookedMeat,
 }
 
 impl Raw {
-    pub const ALL: [Raw; 7] = [
+    pub const ALL: [Raw; 9] = [
         Raw::Wood,
         Raw::Stone,
         Raw::Fibre,
@@ -38,7 +40,12 @@ impl Raw {
         Raw::Ore,
         Raw::Iron,
         Raw::Meat,
+        Raw::Berries,
+        Raw::CookedMeat,
     ];
+
+    /// What can be eaten, least filling first.
+    pub const FOOD: [Raw; 3] = [Raw::Berries, Raw::Meat, Raw::CookedMeat];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -49,6 +56,8 @@ impl Raw {
             Raw::Ore => "Ore",
             Raw::Iron => "Iron",
             Raw::Meat => "Meat",
+            Raw::Berries => "Berries",
+            Raw::CookedMeat => "Cooked meat",
         }
     }
 }
@@ -533,6 +542,50 @@ impl Belongings<'_, '_> {
 
     pub fn room_for(&self, cost: Cost, times: u32) -> bool {
         room_for(&self.items, self.backpack(), cost, times)
+    }
+
+    /// Takes one of the most filling food carried, if there is any, and says which.
+    pub fn eat_best(&mut self) -> Option<Raw> {
+        let food = Raw::FOOD
+            .into_iter()
+            .rev()
+            .find(|&food| self.count(food) > 0)?;
+        self.eat(food).then_some(food)
+    }
+
+    /// Takes one of a food, if it is carried. Returns whether it was.
+    pub fn eat(&mut self, food: Raw) -> bool {
+        let (backpack, bar, _) = &mut *self.player;
+        let taken = backpack.0.take(&[(self.items.kind(food), 1)]).is_ok();
+        bar.0.tidy(&backpack.0);
+        taken
+    }
+
+    /// Empties the backpack into a bag of the same size, as when you go down (D84). The
+    /// bar keeps pointing at what was on it, so taking the bag back puts the tools back
+    /// in reach.
+    pub fn empty_into_bag(&mut self) -> Grid {
+        let backpack = &mut self.player.0;
+        let size = backpack.0.size();
+        let mut bag = Grid::new(size.w, size.h);
+        let ids: Vec<ItemId> = backpack.0.iter().map(|placed| placed.item.id).collect();
+        for id in ids {
+            let _ =
+                terra_items::transfer(&self.items.catalogue, &mut backpack.0, &mut bag, id, None);
+        }
+        bar.0.tidy(&backpack.0);
+        bag
+    }
+
+    /// Takes back what fits from a bag. Returns how many things came back.
+    pub fn take_from(&mut self, bag: &mut Grid) -> usize {
+        let backpack = &mut self.player.0;
+        let ids: Vec<ItemId> = bag.iter().map(|placed| placed.item.id).collect();
+        ids.into_iter()
+            .filter(|&id| {
+                terra_items::transfer(&self.items.catalogue, bag, &mut backpack.0, id, None).is_ok()
+            })
+            .count()
     }
 
     /// Makes something from what is carried; see [`craft`].

@@ -22,6 +22,7 @@ enum Doing {
     Sprint,
     Fall,
     Use,
+    Down,
 }
 
 /// The animations, as places in the figure's animation graph.
@@ -33,6 +34,7 @@ struct Moves {
     sprint: AnimationNodeIndex,
     fall: AnimationNodeIndex,
     using: AnimationNodeIndex,
+    down: AnimationNodeIndex,
 }
 
 /// What the figure is animated as doing.
@@ -72,6 +74,7 @@ fn spawn(
         clip("Sprint_Loop"),
         clip("Jump_Loop"),
         clip("Interact"),
+        clip("Death01"),
     ]);
     commands.insert_resource(Moves {
         graph: graphs.add(graph),
@@ -80,6 +83,7 @@ fn spawn(
         sprint: nodes[2],
         fall: nodes[3],
         using: nodes[4],
+        down: nodes[5],
     });
     let Some(scene) = gltf.default_scene.clone() else {
         return;
@@ -219,7 +223,9 @@ fn animate(
 ) {
     let Some(moves) = moves else { return };
     let speed = player.velocity.length();
-    let doing = if player.airborne > 0.12 {
+    let doing = if player.down.is_some() {
+        Doing::Down
+    } else if player.airborne > 0.12 {
         Doing::Fall
     } else if speed > 5.6 {
         Doing::Sprint
@@ -241,9 +247,10 @@ fn animate(
             Doing::Sprint => moves.sprint,
             Doing::Fall => moves.fall,
             Doing::Use => moves.using,
+            Doing::Down => moves.down,
         };
         let playing = transitions.play(&mut animator, node, BLEND);
-        if doing != Doing::Use {
+        if !matches!(doing, Doing::Use | Doing::Down) {
             playing.repeat();
         }
     }

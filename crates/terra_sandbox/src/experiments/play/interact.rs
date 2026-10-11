@@ -19,6 +19,8 @@ const REACH_M: f32 = 4.0;
 pub enum Interactable {
     Station(Station),
     ClaimStone,
+    /// What you carried, where you went down.
+    Bag,
 }
 
 impl Interactable {
@@ -27,6 +29,7 @@ impl Interactable {
         match self {
             Interactable::Station(station) => format!("use the {}", station.name().to_lowercase()),
             Interactable::ClaimStone => "the claim stone".to_string(),
+            Interactable::Bag => "take back your things".to_string(),
         }
     }
 }

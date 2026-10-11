@@ -300,13 +300,16 @@ pub static PARTS: [Part; 14] = [
     Part {
         name: "Fire",
         kind: Kind::Items(&[
-            lit(
-                Light::Fire,
-                item(
-                    "Campfire",
-                    "Bonfire_Fire",
-                    1.3,
-                    &[(Raw::Wood, 3), (Raw::Stone, 2)],
+            station(
+                Station::Campfire,
+                lit(
+                    Light::Fire,
+                    item(
+                        "Campfire",
+                        "Bonfire_Fire",
+                        1.3,
+                        &[(Raw::Wood, 3), (Raw::Stone, 2)],
+                    ),
                 ),
             ),
             item("Log", "WoodLog", 1.7, &[(Raw::Wood, 2)]),

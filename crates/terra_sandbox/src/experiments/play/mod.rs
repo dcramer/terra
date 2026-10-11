@@ -20,6 +20,7 @@ mod catalogue;
 mod claim;
 mod controls;
 mod crafting;
+mod death;
 mod dial;
 mod figure;
 mod flora;
@@ -31,6 +32,7 @@ mod options;
 mod props;
 mod scene;
 mod tool;
+mod vitals;
 mod work;
 
 use super::build::{self, DrivenByPlayer, Site};
@@ -50,6 +52,8 @@ const JOG_SPEED: f32 = 4.3;
 const SPRINT_SPEED: f32 = 7.4;
 const JUMP_SPEED: f32 = 6.0;
 const GRAVITY: f32 = 16.0;
+/// What a jump costs in stamina, out of 100.
+const JUMP_STAMINA: f32 = 8.0;
 const LOOK_SPEED: f32 = 0.0025;
 /// How fast the arrow keys turn the view, in radians a second.
 const KEY_LOOK_SPEED: f32 = 1.6;
@@ -72,6 +76,8 @@ struct Player {
     facing: Vec3,
     /// Seconds since the tool was last used.
     since_acting: f32,
+    /// How long the player has lain where they fell, while they are down.
+    down: Option<f32>,
 }
 
 /// Where the player is looking.
@@ -96,6 +102,8 @@ pub fn plugin(app: &mut App) {
     crafting::plugin(app);
     interact::plugin(app);
     claim::plugin(app);
+    vitals::plugin(app);
+    death::plugin(app);
     harvest::plugin(app);
     options::plugin(app);
     app.insert_resource(DrivenByPlayer)
@@ -135,6 +143,10 @@ fn spawn(
         forward: toward_door,
         pitch: -0.08,
     });
+    commands.insert_resource(death::Arrival {
+        at: feet,
+        facing: toward_door,
+    });
     commands.spawn((
         Name::new("Player"),
         Player {
@@ -145,6 +157,20 @@ fn spawn(
             indoors: false,
             facing: toward_door,
             since_acting: f32::MAX,
+            down: None,
+        },
+        {
+            // For testing, --give can also set how the body starts.
+            let mut body = vitals::Vitals::default();
+            for (name, value) in &options.gives {
+                match name.as_str() {
+                    "health" => body.health = *value as f32,
+                    "fed" => body.fed = *value as f32,
+                    "stamina" => body.stamina = *value as f32,
+                    _ => {}
+                }
+            }
+            body
         },
         {
             let mut kit = inventory::starting_kit(&mut items);
@@ -156,6 +182,7 @@ fn spawn(
                     Some(raw) => {
                         inventory::give(&mut items, &mut kit.0.0, raw, *count);
                     }
+                    None if ["health", "fed", "stamina"].contains(&name.as_str()) => {}
                     None => warn!("--give: there is no raw item called {name}"),
                 }
             }
@@ -255,9 +282,14 @@ fn walk(
     view: Res<View>,
     obstacles: Res<flora::Obstacles>,
     items: Query<(&props::Prop, &Transform, &Visibility), Without<Player>>,
-    player: Single<(&mut Transform, &mut Player)>,
+    player: Single<(&mut Transform, &mut Player, &mut vitals::Vitals)>,
 ) {
-    let (mut transform, mut player) = player.into_inner();
+    let (mut transform, mut player, mut vitals) = player.into_inner();
+    // Lying where you fell, you do not move.
+    if player.down.is_some() {
+        player.velocity = Vec3::ZERO;
+        return;
+    }
     let walker = Walker::default();
     let dt = time.delta_secs().min(0.05);
     let feet = transform.translation;
@@ -268,7 +300,7 @@ fn walk(
     let wish = (view.forward * (held(Action::Forward) - held(Action::Back))
         + right * (held(Action::Right) - held(Action::Left)))
     .normalize_or_zero();
-    let top_speed = if controls.held(Action::Sprint) {
+    let top_speed = if controls.held(Action::Sprint) && vitals.can_sprint() {
         SPRINT_SPEED
     } else {
         JOG_SPEED
@@ -306,7 +338,7 @@ fn walk(
     }
 
     player.rising -= GRAVITY * dt;
-    if player.on_ground && controls.went_down(Action::Jump) {
+    if player.on_ground && controls.went_down(Action::Jump) && vitals.spend(JUMP_STAMINA) {
         player.rising = JUMP_SPEED;
     }
     target += up * player.rising * dt;
