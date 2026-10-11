@@ -45,6 +45,8 @@ usage: terra_sandbox [options]
   --save <file>         where the play experiment keeps its saved game; scripted runs
                         save and load only when given this
   --fresh               start the play experiment over, throwing away its saved game
+  --at <east,south>     start the play experiment's player so many metres east and south
+                        of the outpost, for testing
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the base's corner, for experiments
@@ -81,6 +83,8 @@ pub struct Options {
     pub save: Option<PathBuf>,
     /// Start over, throwing away any saved game.
     pub fresh: bool,
+    /// Where the play experiment's player starts, east and south of the outpost in metres.
+    pub start_at: Option<(f32, f32)>,
 }
 
 impl Options {
@@ -98,6 +102,7 @@ impl Options {
             gives: Vec::new(),
             save: None,
             fresh: false,
+            start_at: None,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -108,6 +113,18 @@ impl Options {
                 "--bench" => options.bench = true,
                 "--clean" => options.clean = true,
                 "--fresh" => options.fresh = true,
+                "--at" => {
+                    let text = value("--at")?;
+                    let (east, south) = text
+                        .split_once(',')
+                        .and_then(|(east, south)| {
+                            Some((east.trim().parse().ok()?, south.trim().parse().ok()?))
+                        })
+                        .ok_or(format!(
+                            "--at wants metres east and south, like 70,-55, not `{text}`"
+                        ))?;
+                    options.start_at = Some((east, south));
+                }
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--radius" => {

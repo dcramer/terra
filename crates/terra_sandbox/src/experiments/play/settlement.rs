@@ -7,7 +7,7 @@
 
 use super::bag::Notice;
 use super::creatures::Lair;
-use super::flora::Obstacles;
+use super::flora::{ClearAround, Obstacles};
 use super::interact::{Focus, Focusing, Interactable};
 use super::people::{Arrive, Doing, Person};
 use super::scene::SUN_DIRECTION;
@@ -84,6 +84,7 @@ fn found(
     assets: Res<AssetServer>,
     mut obstacles: ResMut<Obstacles>,
     mut arrive: MessageWriter<Arrive>,
+    mut clear: MessageWriter<ClearAround>,
 ) {
     let on_ground = |east: f32, south: f32| {
         planet.drawn(
@@ -103,6 +104,7 @@ fn found(
         return;
     };
     commands.insert_resource(Village(middle));
+    clear.write(ClearAround(middle, 20.0));
     let up = middle.normalize();
     let east = up.cross(Vec3::Y).normalize_or(up.any_orthonormal_vector());
     let south = east.cross(up);
@@ -170,7 +172,15 @@ fn found(
             says,
         });
     }
-    info!("The village stands at {middle}.");
+    let local = site
+        .frame
+        .compute_affine()
+        .inverse()
+        .transform_point3(middle);
+    info!(
+        "The village stands {:.0} m east and {:.0} m south of the outpost.",
+        local.x, local.z
+    );
 }
 
 /// Which way a place lies from another, as someone there would say it: by the sun.
@@ -206,6 +216,7 @@ fn talk(
         return;
     };
     if let Some(line) = person.says {
+        info!("{line}");
         notice.say(line);
         return;
     }
@@ -229,5 +240,6 @@ fn talk(
             person.name
         ),
     };
+    info!("{line}");
     notice.say(line);
 }

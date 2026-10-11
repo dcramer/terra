@@ -102,11 +102,17 @@ impl Patch {
     }
 }
 
+/// Asks for the plants within so many metres of a place to be cleared, for a village or
+/// a hollow set down after the plants grew.
+#[derive(Message, Clone, Copy)]
+pub struct ClearAround(pub Vec3, pub f32);
+
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<WindMaterial>::default())
         .init_resource::<Obstacles>()
         .add_systems(PostStartup, plant)
-        .add_systems(Update, make_way);
+        .add_message::<ClearAround>()
+        .add_systems(Update, (make_way, clear_around));
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -733,5 +739,25 @@ fn make_way(
             Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
             None => commands.entity(entity).remove::<Mesh3d>(),
         };
+    }
+}
+
+/// Clears plants where something has been set down since they grew.
+fn clear_around(
+    mut asked: MessageReader<ClearAround>,
+    mut obstacles: ResMut<Obstacles>,
+    mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
+) {
+    for &ClearAround(at, radius) in asked.read() {
+        let up = at.normalize();
+        for (growth, transform, mut visibility) in &mut growth {
+            if (transform.translation - at).reject_from(up).length() < radius {
+                *visibility = Visibility::Hidden;
+                // Only the plant's own obstacle goes; whatever was set down stays solid.
+                if let Some(stood) = growth.obstacle {
+                    obstacles.0.retain(|(point, _)| *point != stood);
+                }
+            }
+        }
     }
 }

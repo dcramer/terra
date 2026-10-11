@@ -1,6 +1,7 @@
-//! What the player is close enough to use with the interact key: a station, the claim
-//! stone, and later people. One system decides what that is each frame, and each feature
-//! acts only on its own kind of thing, so two never answer the same key.
+//! What the interact key would act on: the thing under the aiming mark, if it is within
+//! reach. You use what you look at, not whatever happens to be nearest. One system
+//! decides what that is each frame, and each feature acts only on its own kind of thing,
+//! so two never answer the same key.
 
 use super::Player;
 use super::controls::{Action, Settings};
@@ -11,8 +12,8 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions},
 };
 
-/// How close you have to stand to use something.
-const REACH_M: f32 = 4.0;
+/// How far from you something can be and still be used.
+const REACH_M: f32 = 3.5;
 
 /// Something the interact key does something to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -30,6 +31,20 @@ pub enum Interactable {
 }
 
 impl Interactable {
+    /// Where to aim at it, as a height above its foot, and how near the aiming mark has
+    /// to pass to count as on it, both in metres.
+    fn target(self) -> (f32, f32) {
+        match self {
+            Interactable::Station(Station::Smithy) => (2.0, 3.0),
+            Interactable::Station(_) => (0.8, 0.9),
+            Interactable::ClaimStone => (0.6, 0.8),
+            Interactable::Bag => (0.2, 0.6),
+            Interactable::Carcass => (0.4, 0.9),
+            Interactable::Prisoner => (0.6, 0.7),
+            Interactable::Talk => (1.0, 0.6),
+        }
+    }
+
     /// What pressing the key does, for the prompt.
     pub fn verb(self) -> String {
         match self {
@@ -78,18 +93,28 @@ fn focus(
     settings: Res<Settings>,
     menu: Res<OptionsMenu>,
     cursor: Single<&CursorOptions>,
+    camera: Single<&GlobalTransform, With<Camera3d>>,
     player: Single<&Transform, With<Player>>,
     things: Query<(Entity, &CanInteract, &GlobalTransform)>,
     mut focus: ResMut<Focus>,
 ) {
     let feet = player.translation;
-    let nearest = things
+    let eye = camera.translation();
+    let looking = *camera.forward();
+    // The nearest thing along the line of the aiming mark that is within reach.
+    let aimed = things
         .iter()
-        .map(|(entity, can, at)| (entity, can.0, at.translation().distance(feet)))
-        .filter(|(.., distance)| *distance < REACH_M)
+        .filter_map(|(entity, can, at)| {
+            let (height, radius) = can.0.target();
+            let middle = at.translation() + at.translation().normalize() * height;
+            let along = (middle - eye).dot(looking);
+            let off = (eye + looking * along).distance(middle);
+            let near = middle.distance(feet) - radius < REACH_M;
+            (along > 0.0 && off < radius && near).then_some((entity, can.0, along))
+        })
         .min_by(|a, b| a.2.total_cmp(&b.2));
-    focus.entity = nearest.map(|(entity, ..)| entity);
-    focus.what = nearest.map(|(_, what, _)| what);
+    focus.entity = aimed.map(|(entity, ..)| entity);
+    focus.what = aimed.map(|(_, what, _)| what);
     let captured = cursor.grab_mode != CursorGrabMode::None;
     focus.pressed = !menu.open && settings.went_down(Action::Interact, &keys, &mouse, captured);
 }

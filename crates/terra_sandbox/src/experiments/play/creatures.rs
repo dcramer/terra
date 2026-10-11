@@ -23,6 +23,8 @@ use std::time::Duration;
 use terra_gen::{Rng, Seed};
 
 const BLEND: Duration = Duration::from_millis(200);
+/// How hard a spider bites, out of 100 health.
+const BITE: f32 = 9.0;
 /// How long a butchered or fallen creature's body lies before it is gone.
 const BODY_LASTS_S: f32 = 300.0;
 
@@ -66,7 +68,7 @@ fn kind(species: Species) -> Kind {
         },
         Species::Spider => Kind {
             model: "models/creatures/Spider.glb",
-            scale: 0.32,
+            scale: 0.42,
             idle: "SpiderArmature|Spider_Idle",
             walk: "SpiderArmature|Spider_Walk",
             run: "SpiderArmature|Spider_Walk",
@@ -252,6 +254,11 @@ fn prepare(
         .map(|(east, south)| on_ground(east, south))
         .find(|&point| dry(point));
     if let Some(home) = herd {
+        let local = site.frame.compute_affine().inverse().transform_point3(home);
+        info!(
+            "Deer graze {:.0} m east and {:.0} m south of the outpost.",
+            local.x, local.z
+        );
         for _ in 0..5 {
             let up = home.normalize();
             let side = up.any_orthonormal_vector();
@@ -266,6 +273,11 @@ fn prepare(
         .map(|(east, south)| on_ground(east, south))
         .find(|&point| dry(point));
     if let Some(lair) = lair {
+        let local = site.frame.compute_affine().inverse().transform_point3(lair);
+        info!(
+            "Spiders nest {:.0} m east and {:.0} m south of the outpost.",
+            local.x, local.z
+        );
         commands.insert_resource(Lair(lair));
         for offset in [Vec3::ZERO, Vec3::X * 3.0, Vec3::Z * 3.0] {
             let up = lair.normalize();
@@ -377,7 +389,7 @@ fn think(
                 let through = through + dt;
                 // The bite lands partway through, if the player is still there.
                 if through - dt < 0.45 && through >= 0.45 && apart < 2.8 && player_up {
-                    bitten.write(Bitten(12.0));
+                    bitten.write(Bitten(BITE));
                 }
                 if through > 1.3 {
                     State::Chase

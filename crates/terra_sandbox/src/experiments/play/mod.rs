@@ -158,7 +158,11 @@ fn spawn(
 
     // Stand a little way out from the door, facing it.
     let (approach, facing) = site.approach();
-    let outside = site.frame.transform_point(approach - facing * 5.0);
+    // For testing, a run can start somewhere else (--at).
+    let outside = match options.start_at {
+        Some((east, south)) => site.frame.transform_point(Vec3::new(east, 0.0, south)),
+        None => site.frame.transform_point(approach - facing * 5.0),
+    };
     let feet = planet.drawn(outside.normalize());
     let up = feet.normalize();
     let toward_door = site

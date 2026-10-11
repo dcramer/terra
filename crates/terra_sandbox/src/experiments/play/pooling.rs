@@ -7,6 +7,7 @@
 //! to look (D92).
 
 use super::creatures::{Creature, Form, Lair, Species};
+use super::flora::ClearAround;
 use super::interact::Interactable;
 use super::people::{Arrive, Doing};
 use bevy::{light::NotShadowCaster, prelude::*};
@@ -14,9 +15,9 @@ use bevy::{light::NotShadowCaster, prelude::*};
 /// How many spiders the place keeps, and how often it forms another below that.
 const KEEPS: usize = 3;
 const FORMS_EVERY_S: f32 = 90.0;
-const MOTES: usize = 28;
+const MOTES: usize = 60;
 const GLOW: Color = Color::srgb(0.66, 0.36, 1.0);
-const GLOW_LUMENS: f32 = 900_000.0;
+const GLOW_LUMENS: f32 = 4_000_000.0;
 
 #[derive(Component)]
 struct Mote {
@@ -49,10 +50,12 @@ fn mark(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut arrive: MessageWriter<Arrive>,
+    mut clear: MessageWriter<ClearAround>,
 ) {
     let middle = lair.0;
     let up = middle.normalize();
     let east = up.any_orthonormal_vector();
+    clear.write(ClearAround(middle, 14.0));
     commands.insert_resource(Pool {
         middle,
         until_next: FORMS_EVERY_S,
@@ -62,13 +65,25 @@ fn mark(
         PointLight {
             color: GLOW,
             intensity: GLOW_LUMENS,
-            range: 40.0,
+            range: 60.0,
             shadow_maps_enabled: false,
             ..default()
         },
         Transform::from_translation(middle + up * 2.0),
     ));
-    let mote = meshes.add(Sphere::new(0.07).mesh().ico(1).expect("a small sphere"));
+    // The pooled magic itself: a low, glowing pool on the ground.
+    commands.spawn((
+        Name::new("Pool"),
+        Mesh3d(meshes.add(Cylinder::new(3.2, 0.08).mesh().resolution(24))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: GLOW,
+            emissive: LinearRgba::rgb(4.0, 1.8, 9.0),
+            ..default()
+        })),
+        NotShadowCaster,
+        Transform::from_translation(middle + up * 0.05).looking_to(east, up),
+    ));
+    let mote = meshes.add(Sphere::new(0.13).mesh().ico(1).expect("a small sphere"));
     let glowing = materials.add(StandardMaterial {
         base_color: GLOW,
         emissive: LinearRgba::rgb(6.0, 3.0, 12.0),
@@ -77,7 +92,7 @@ fn mark(
     });
     for index in 0..MOTES {
         let turn = index as f32 / MOTES as f32 * std::f32::consts::TAU * 3.7;
-        let out = Quat::from_axis_angle(up, turn) * east * (0.6 + (index % 7) as f32 * 0.9);
+        let out = Quat::from_axis_angle(up, turn) * east * (0.4 + (index % 9) as f32 * 0.5);
         commands.spawn((
             Name::new("Mote"),
             Mote {
@@ -111,7 +126,7 @@ fn rise(time: Res<Time>, pool: Res<Pool>, mut motes: Query<(&mut Mote, &mut Tran
     for (mut mote, mut at) in &mut motes {
         mote.through = (mote.through + mote.rate * time.delta_secs()).fract();
         let sway = libm::sinf((time.elapsed_secs() + mote.through * 9.0) * 1.3) * 0.25;
-        at.translation = mote.from + up * (mote.through * 4.5) + up.any_orthonormal_vector() * sway;
+        at.translation = mote.from + up * (mote.through * 7.0) + up.any_orthonormal_vector() * sway;
         at.scale = Vec3::splat(1.0 - mote.through);
     }
 }

@@ -28,6 +28,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
 | `--save <file>` | In the play experiment: keep the saved game in this file. Scripted runs save and load only when given one. |
 | `--fresh` | In the play experiment: start over, throwing away the saved game |
+| `--at <east,south>` | In the play experiment: start the player so many metres east and south of the outpost, for testing. The log says where the deer, the spiders and the village are. |
 | `--give <item>:<count>` | In the play experiment: start carrying something extra, such as `stone:10`, or start with `health`, `fed` or `stamina` at a value out of 100, for testing. Repeatable. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
 
@@ -75,7 +76,7 @@ The tech demo of the MVP's loop (docs/prototypes.md), being built on the earlier
 | W A S D, Shift, Space | Move, sprint, jump |
 | 1 to 6 | Pick a slot of the action bar. What is in it is the tool in hand. |
 | Tab | Open and close the inventory. I does the same. |
-| F | Use what you stand beside: a workbench, smithy or campfire opens its recipes, the claim stone grows your claim, a dropped bag gives back what fits |
+| F | Use what you aim at, within reach: a workbench, smithy or campfire opens its recipes, the claim stone grows your claim, a dropped bag gives back what fits |
 | H | Eat the most filling food you carry. Clicking food in the backpack eats it too. |
 | Left click | With anything but the hammer in hand: swing at a creature in front of you |
 | Hold right mouse | With anything but the hammer in hand: guard, taking a quarter of a blow on stamina |
