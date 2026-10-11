@@ -21,7 +21,21 @@ Draft. A feature that serves none of these is cut.
 5. **Find your own way.** The game does not hold your hand. There may be quests, but no tracked quest log pointing you where to go and no journal: you are told, you look, you find (D92). The world is rich with systems, but you learn them by looking and doing, not from a display of every number (D93).
 6. **Seamless, and together.** No loading screens within a world. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
 
-## What we take from each inspiration
+## Our inspirations
+
+Named by the developers on 2026-10-11 as the games and books we draw on (D85). Each design should be based on games we know we enjoy; how these combine for [game design 001](proposals/game-design-001.md) is in [research/reference-games.md](../research/reference-games.md).
+
+| Inspiration | We take | We leave |
+|---|---|---|
+| [Kenshi](https://store.steampowered.com/app/233860/Kenshi/) | A world that goes on without you: factions, caravans, raids. Recruiting people and founding outposts that get attacked. Skills that rise by doing. Nothing holds your hand; no fail state. | Not yet said. Its combat and building have little feel. |
+| [Enshrouded](https://store.steampowered.com/app/1203620/Enshrouded/) | Voxels done really well: ground you dig and reshape, and buildings of small voxel pieces that join and blend seamlessly. Its look and art. Its building, "top notch". Its combat and its movement. Rescued survivors who live at your base. See [research/enshrouded.md](../research/enshrouded.md). | Not yet said. Its world does not go on without you. |
+| [Subnautica 2](https://store.steampowered.com/app/1962700/Subnautica_2/) | Base building you shape (D48), the build menu on a tool (D67), the inventory (D84), its controls for building. See [research/subnautica-2-building.md](../research/subnautica-2-building.md). | The science-fiction setting, for now (D89). |
+| *He Who Fights With Monsters* (books) | How the world works: magic, monsters, essences and abilities that rank up (D88), realms (D87), cultures (D86). | Not yet said. Its on-screen status, beyond some stats (D93). |
+| [Soulmask](https://store.steampowered.com/app/2646460/Soulmask/) | Recruits who work and defend, outposts at resources, and attacks provoked by your activity (D90). | Not yet said. Recruiting by force rather than rescue. |
+
+### Earlier references
+
+Named before the developers' list, mostly for the earlier direction of terraformed planets in space. Kept for what they show; none is a main inspiration now.
 
 | Game | We take | We leave |
 |---|---|---|
@@ -34,9 +48,6 @@ Draft. A feature that serves none of these is cut.
 | SimEarth | A coupled planetary simulation | Abstract god-game view |
 | Spore | Life arriving in stages, simple to complex | Creature editor |
 | Factorio | Your own output provokes the enemy; perhaps built defences later (D90) | 2D factory focus; automation as the main answer to threats |
-| Enshrouded | Probably one of our two biggest inspirations, with Subnautica (D85). Voxels done really well: ground you dig and reshape, and buildings of small voxel pieces that join and blend seamlessly. Its look and art. Its building, "top notch". Its combat and its movement. See [research/enshrouded.md](../research/enshrouded.md). | Not yet said. Its combat is fought by reflexes, where our threats are answered by building (D3) |
-| *He Who Fights With Monsters* (books) | Realms rather than a solar system (D87); many skills that grow with use (D88); cultures to find (D86) | Not yet said |
-| Subnautica | Probably one of our two biggest inspirations, with Enshrouded (D85). Base building (D48), the build menu (D67), the inventory (D84), tools you carry | Not yet said |
 
 Astroneer is deliberately not on this list (D15). It shows the tech is achievable by a small team; its gameplay and art are not models for us.
 
