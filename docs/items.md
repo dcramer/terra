@@ -46,11 +46,9 @@ Technical, recorded as D83.
 
 ## What is built
 
-The rules, in [`terra_items`](../crates/terra_items/src/lib.rs): the catalogue of kinds, the grid, equipment that resizes the backpack, and the action bar, with a test that random moves never make or lose an item. Nothing on screen uses it yet.
+The rules, in [`terra_items`](../crates/terra_items/src/lib.rs): the catalogue of kinds, the grid, equipment that resizes the backpack, and the action bar, with a test that random moves never make or lose an item.
 
-## What it replaces
-
-The sandbox's `play` experiment has a stand-in ([inventory.rs](../crates/terra_sandbox/src/experiments/play/inventory.rs)): five raw items as counts, two tools, and a six-slot bar holding the tools. It would move onto the crate: raw items and tools become items in a backpack grid, the bar points into it, and an equipment grid gains a backpack slot.
+The sandbox's `play` experiment carries on it ([README](../crates/terra_sandbox/README.md)): the backpack, the worn pack and the bar are components on the player, building spends from the backpack, taking apart is refused when what it gives back would not fit, and cutting into a full backpack leaves the rest behind. Placeholder numbers: a bare backpack of 6 by 4, a starting large pack of 10 by 8, six bar slots, and tools two cells wide.
 
 Not covered: crafting, research, what the raw items are, item sizes, and how the inventory looks on screen beyond the stand-in.
 

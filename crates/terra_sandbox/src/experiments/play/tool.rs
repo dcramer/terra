@@ -27,11 +27,12 @@
 //! would move, the outline of a window, the footprint of a room, or a ghost of the item
 //! where it would stand.
 
+use super::bag::Notice;
 use super::catalogue::{self, Item, Kind, PARTS, Part};
 use super::controls::{Action, Controls, Settings, capitalised};
 use super::dial::Dial;
 use super::flora::Obstacles;
-use super::inventory::{self, Cost, Inventory, Raw, Tool};
+use super::inventory::{self, Belongings, Cost, InventoryScreen, Raw, Tool};
 use super::props::{self, Blocked, Models, Prop, Standing};
 use super::work::Hold;
 use super::{Player, View};
@@ -362,11 +363,12 @@ fn choose(
     controls: Controls,
     scroll: Res<AccumulatedMouseScroll>,
     dial: Res<Dial>,
-    inventory: Res<Inventory>,
+    screen: Res<InventoryScreen>,
+    belongings: Belongings,
     mut builder: ResMut<Builder>,
 ) {
     builder.wheel = 0;
-    if inventory.open || inventory.holding() != Some(Tool::Builder) {
+    if screen.open || belongings.holding() != Some(Tool::Builder) {
         // Put back anything being carried, and put the part away.
         builder.cancel = builder.is_carrying();
         builder.stowed = true;
@@ -756,7 +758,7 @@ fn aim(
 }
 
 /// Works out what the thing aimed at would cost to build, and whether it can be paid.
-fn afford(site: Res<Site>, inventory: Res<Inventory>, mut builder: ResMut<Builder>) {
+fn afford(site: Res<Site>, belongings: Belongings, mut builder: ResMut<Builder>) {
     if builder.work.is_some() {
         return;
     }
@@ -804,7 +806,7 @@ fn afford(site: Res<Site>, inventory: Res<Inventory>, mut builder: ResMut<Builde
         }
         _ => None,
     };
-    builder.short = price.and_then(|(cost, times)| inventory.missing(cost, times));
+    builder.short = price.and_then(|(cost, times)| belongings.missing(cost, times));
     builder.price = price;
 }
 
@@ -819,7 +821,8 @@ fn act(
     models: Res<Models>,
     props: Query<&Prop>,
     mut builder: ResMut<Builder>,
-    mut inventory: ResMut<Inventory>,
+    mut belongings: Belongings,
+    mut notice: ResMut<Notice>,
     mut site: ResMut<Site>,
     player: Single<(&Transform, &mut Player)>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -859,7 +862,7 @@ fn act(
     // Carry on with what is under way, or drop it.
     if let Some(mut work) = builder.work.take() {
         let stayed = work.began_at.distance(player_at) < WANDER_M;
-        let in_hand = !dial.open && inventory.holding() == Some(Tool::Builder);
+        let in_hand = !dial.open && belongings.holding() == Some(Tool::Builder);
         if !held || !stayed || !in_hand {
             return;
         }
@@ -871,12 +874,20 @@ fn act(
         builder.must_release = true;
         match work.job {
             Job::Structure { ops, pay, refund } => {
+                // As in Subnautica, nothing is taken apart if what it gives back would
+                // not fit in the backpack.
+                if let Some((cost, times)) = refund
+                    && !belongings.room_for(cost, times)
+                {
+                    notice.say("No room in your backpack for what that gives back");
+                    return;
+                }
                 if site.apply_all(&ops, &mut commands, &planet, &mut meshes) {
                     if let Some((cost, times)) = refund {
-                        inventory.refund(cost, times);
+                        belongings.refund(cost, times);
                     }
                     if let Some((cost, times)) = pay {
-                        inventory.pay(cost, times);
+                        belongings.pay(cost, times);
                     }
                 }
             }
@@ -889,7 +900,7 @@ fn act(
             } => {
                 // Paid for on finishing. If what it costs has gone since the button
                 // went down, nothing is built.
-                if inventory.pay(item.cost, 1) {
+                if belongings.pay(item.cost, 1) {
                     props::place(
                         &mut commands,
                         &models,
@@ -906,9 +917,12 @@ fn act(
             }
             Job::TakeAway(entity) => {
                 if let Ok(prop) = props.get(entity) {
-                    info!("Removed a {}.", prop.item.name);
-                    inventory.refund(prop.item.cost, 1);
-                    commands.entity(entity).despawn();
+                    if belongings.refund(prop.item.cost, 1) {
+                        info!("Removed a {}.", prop.item.name);
+                        commands.entity(entity).despawn();
+                    } else {
+                        notice.say("No room in your backpack for what that gives back");
+                    }
                 }
             }
         }
@@ -918,7 +932,7 @@ fn act(
     // The middle button: another of whatever the view is on.
     if controls.went_down(Action::Copy)
         && !builder.is_carrying()
-        && inventory.holding() == Some(Tool::Builder)
+        && belongings.holding() == Some(Tool::Builder)
         && let Some(prop) = builder.viewed.and_then(|entity| props.get(entity).ok())
         && let Some((part, variant)) = catalogue::place_of(prop.item)
     {

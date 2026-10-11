@@ -7,10 +7,11 @@
 //! would need nothing new here.
 
 use super::Player;
+use super::bag::Notice;
 use super::controls::{Action, Controls, Settings};
 use super::dial::Dial;
 use super::flora::{Growth, Obstacles};
-use super::inventory::{Cuttable, Inventory};
+use super::inventory::{Belongings, Cuttable, InventoryScreen};
 use super::work::Hold;
 use bevy::prelude::*;
 
@@ -71,16 +72,16 @@ fn cut(
     >,
     player: Single<(&Transform, &mut Player), Without<Growth>>,
     mut cutting: ResMut<Cutting>,
-    mut inventory: ResMut<Inventory>,
+    screen: Res<InventoryScreen>,
+    mut belongings: Belongings,
+    mut notice: ResMut<Notice>,
     mut obstacles: ResMut<Obstacles>,
     mut gizmos: Gizmos,
 ) {
     let (player_at, mut player) = player.into_inner();
     let feet = player_at.translation;
     cutting.target = None;
-    let tool = inventory
-        .holding()
-        .filter(|_| !inventory.open && !dial.open);
+    let tool = belongings.holding().filter(|_| !screen.open && !dial.open);
     let speed_on = |cut: &Cuttable| tool.and_then(|tool| tool.cuts(cut.what));
 
     // The nearest thing this tool can cut that the view passes close to; failing that,
@@ -189,11 +190,27 @@ fn cut(
     }
 
     let (raw, count) = cut.gives;
-    inventory.add(raw, count);
+    // As in Subnautica, nothing is gathered into a full backpack. What does not fit is
+    // left behind.
+    if !belongings.room_for_one(raw) {
+        notice.say("Your backpack is full");
+        cutting.held = None;
+        transform.rotation = rest;
+        commands.entity(entity).remove::<Shaken>();
+        return;
+    }
+    let given = belongings.give(raw, count);
+    if given < count {
+        notice.say(format!(
+            "Your backpack is full: {} {} left behind",
+            count - given,
+            raw.name()
+        ));
+    }
     if let Some(stood) = obstacle {
         obstacles.0.retain(|(at, _)| *at != stood);
     }
-    info!("Cut something for {count} {}.", raw.name());
+    info!("Cut something for {given} {}.", raw.name());
     cutting.held = None;
     cutting.target = None;
     transform.rotation = rest;

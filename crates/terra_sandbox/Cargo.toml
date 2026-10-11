@@ -15,6 +15,7 @@ gltf = { version = "1.4", default-features = false, features = ["utils"] }
 terra_build.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true
+terra_items.workspace = true
 
 [lints]
 workspace = true

@@ -1,16 +1,21 @@
-//! What the player carries: raw items, and tools.
+//! What the player carries, on the rules in `terra_items` (docs/items.md, D84): a
+//! backpack that is a grid where each item fills its cells and nothing stacks, a worn
+//! pack that sets the backpack's size, and an action bar that points at items in the
+//! backpack. Whatever the picked slot points at is in hand.
 //!
-//! Raw items are what things are built from. The builder draws on them: with enough of
-//! the right ones you can build anything you are able to build, and taking a thing apart
-//! gives them back. Tools are used from the action bar, a row of slots along the bottom
-//! of the screen; whichever slot is picked is the tool in hand.
+//! The containers are components on the player (D83). Raw items are what things are
+//! built from: the builder spends them, and taking a thing apart gives them back, if
+//! there is room for them.
 //!
-//! All of it is a stand-in for a design nobody has made (docs/construction.md, D55): the
-//! list of raw items, how many you start with, what things cost, and that everything is
-//! refunded in full. The rules are kept free of the engine so they can move to a shared
-//! crate once they are worth keeping.
+//! The content is a stand-in for a design nobody has made (docs/construction.md, D55):
+//! the list of raw items, what you start with, what things cost, the sizes, and that
+//! everything is refunded in full.
 
-use bevy::prelude::Resource;
+use bevy::{ecs::system::SystemParam, prelude::*};
+use terra_items::{
+    ActionBar, Catalogue, Equipment, GearSlot, Grid, IdSource, Item, ItemId, ItemKind, KindDef,
+    Size,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Raw {
@@ -99,96 +104,270 @@ impl Tool {
 
 pub const BAR_SLOTS: usize = 6;
 
-#[derive(Resource, Clone, Debug, PartialEq)]
-pub struct Inventory {
-    raw: [u32; Raw::ALL.len()],
-    /// Every tool carried, on the bar or not.
-    pub tools: Vec<Tool>,
-    pub bar: [Option<Tool>; BAR_SLOTS],
-    /// Which slot of the bar is picked.
-    pub held: usize,
-    /// Whether the inventory is open on screen.
-    pub open: bool,
+/// The equipment slot a pack is worn in.
+const PACK: GearSlot = GearSlot(0);
+
+/// The backpack with no pack worn. How big the first backpack is is open (docs/items.md);
+/// Subnautica 2 starts with about twenty cells.
+const BARE: Size = Size { w: 6, h: 4 };
+
+/// What a player starts the demo with, besides the tools and the pack: enough to build a
+/// room or two, leaving room in the backpack to gather more.
+const STARTING: [(Raw, u32); 5] = [
+    (Raw::Metal, 24),
+    (Raw::Glass, 6),
+    (Raw::Wood, 12),
+    (Raw::Cloth, 6),
+    (Raw::Parts, 4),
+];
+
+/// Every kind of item in the demo, and which is which.
+#[derive(Resource)]
+pub struct Items {
+    pub catalogue: Catalogue,
+    raw: [ItemKind; Raw::ALL.len()],
+    tools: [(Tool, ItemKind); 2],
+    pack: ItemKind,
+    ids: IdSource,
 }
 
-impl Default for Inventory {
-    /// What a player starts the demo with: both tools on the bar, and enough to build a
-    /// room or two.
+impl Default for Items {
     fn default() -> Self {
-        let mut inventory = Inventory {
-            raw: [0; Raw::ALL.len()],
-            tools: vec![Tool::Builder, Tool::Cutter],
-            bar: [None; BAR_SLOTS],
-            held: 0,
-            open: false,
-        };
-        inventory.bar[0] = Some(Tool::Builder);
-        inventory.bar[1] = Some(Tool::Cutter);
-        for (raw, count) in [
-            (Raw::Metal, 40),
-            (Raw::Glass, 12),
-            (Raw::Wood, 30),
-            (Raw::Cloth, 12),
-            (Raw::Parts, 8),
-        ] {
-            inventory.add(raw, count);
+        let mut catalogue = Catalogue::default();
+        let raw = Raw::ALL.map(|raw| catalogue.add(KindDef::new(raw.name())));
+        let tools = [Tool::Builder, Tool::Cutter]
+            .map(|tool| (tool, catalogue.add(KindDef::new(tool.name()).size(2, 1))));
+        let pack = catalogue.add(
+            KindDef::new("Large pack")
+                .size(2, 2)
+                .gear(PACK)
+                .backpack(10, 8),
+        );
+        Self {
+            catalogue,
+            raw,
+            tools,
+            pack,
+            ids: IdSource::default(),
         }
-        inventory
     }
 }
 
-impl Inventory {
-    pub fn count(&self, raw: Raw) -> u32 {
+impl Items {
+    pub fn kind(&self, raw: Raw) -> ItemKind {
         self.raw[raw as usize]
     }
 
-    pub fn add(&mut self, raw: Raw, count: u32) {
-        self.raw[raw as usize] += count;
+    pub fn raw(&self, kind: ItemKind) -> Option<Raw> {
+        Raw::ALL.into_iter().find(|&raw| self.kind(raw) == kind)
     }
 
-    /// The first raw item there is not enough of to pay a cost so many times over, and
-    /// how many more are needed.
-    pub fn missing(&self, cost: Cost, times: u32) -> Option<(Raw, u32)> {
-        cost.iter().find_map(|&(raw, each)| {
-            let wanted = each * times;
-            (self.count(raw) < wanted).then(|| (raw, wanted - self.count(raw)))
+    pub fn tool(&self, kind: ItemKind) -> Option<Tool> {
+        self.tools
+            .iter()
+            .find(|(_, each)| *each == kind)
+            .map(|(tool, _)| *tool)
+    }
+
+    pub fn name(&self, kind: ItemKind) -> &str {
+        self.catalogue
+            .get(kind)
+            .map_or("?", |def| def.name.as_str())
+    }
+
+    fn make(&mut self, kind: ItemKind) -> Item {
+        self.ids.make(kind)
+    }
+
+    fn wanted(&self, cost: Cost, times: u32) -> Vec<(ItemKind, u32)> {
+        cost.iter()
+            .map(|&(raw, each)| (self.kind(raw), each * times))
+            .collect()
+    }
+}
+
+/// The backpack: a grid of cells.
+#[derive(Component, Clone, Debug)]
+pub struct Backpack(pub Grid);
+
+/// What is worn.
+#[derive(Component, Clone, Debug)]
+pub struct Gear(pub Equipment);
+
+/// The action bar.
+#[derive(Component, Clone, Debug)]
+pub struct Bar(pub ActionBar);
+
+/// What a player starts with: a large pack worn, both tools on the bar, and some raw
+/// items.
+pub fn starting_kit(items: &mut Items) -> (Backpack, Gear, Bar) {
+    let mut gear = Equipment::new(&[PACK]);
+    let mut grid = Grid::new(BARE.w, BARE.h);
+    let pack = items.make(items.pack);
+    grid.insert(&items.catalogue, pack, None)
+        .expect("a pack fits an empty backpack");
+    terra_items::equip(&items.catalogue, &mut grid, &mut gear, BARE, pack.id)
+        .expect("a pack can be worn");
+    let mut bar = ActionBar::new(BAR_SLOTS);
+    for (slot, (_, kind)) in items.tools.into_iter().enumerate() {
+        let tool = items.make(kind);
+        grid.insert(&items.catalogue, tool, None)
+            .expect("the tools fit the backpack");
+        bar.set(slot, Some(tool.id));
+    }
+    for (raw, count) in STARTING {
+        give(items, &mut grid, raw, count);
+    }
+    (Backpack(grid), Gear(gear), Bar(bar))
+}
+
+/// The tool in hand: whatever the picked slot of the bar points at.
+pub fn holding(items: &Items, grid: &Grid, bar: &ActionBar) -> Option<Tool> {
+    items.tool(bar.in_hand(grid)?.kind)
+}
+
+/// The first raw item there is not enough of to pay a cost so many times over, and how
+/// many more are needed.
+pub fn missing(items: &Items, grid: &Grid, cost: Cost, times: u32) -> Option<(Raw, u32)> {
+    cost.iter().find_map(|&(raw, each)| {
+        let (wanted, have) = (each * times, grid.count(items.kind(raw)));
+        (have < wanted).then(|| (raw, wanted - have))
+    })
+}
+
+/// Pays a cost so many times over, if it can be paid in full. Returns whether it was.
+pub fn pay(items: &Items, grid: &mut Grid, bar: &mut ActionBar, cost: Cost, times: u32) -> bool {
+    let paid = grid.take(&items.wanted(cost, times)).is_ok();
+    bar.tidy(grid);
+    paid
+}
+
+/// Whether what a cost so many times over is made of would all fit in the backpack.
+pub fn room_for(items: &Items, grid: &Grid, cost: Cost, times: u32) -> bool {
+    let mut trial = grid.clone();
+    let mut id = u64::MAX;
+    items.wanted(cost, times).into_iter().all(|(kind, count)| {
+        (0..count).all(|_| {
+            id -= 1;
+            let item = Item {
+                id: ItemId(id),
+                kind,
+            };
+            trial.insert(&items.catalogue, item, None).is_ok()
         })
+    })
+}
+
+/// Puts so many of a raw item in the backpack, as many as fit. Returns how many did.
+pub fn give(items: &mut Items, grid: &mut Grid, raw: Raw, count: u32) -> u32 {
+    let kind = items.kind(raw);
+    let size = items.catalogue.get(kind).map_or(Size::ONE, |def| def.size);
+    let mut given = 0;
+    while given < count && grid.space_for(size).is_some() {
+        let item = items.make(kind);
+        if grid.insert(&items.catalogue, item, None).is_err() {
+            break;
+        }
+        given += 1;
+    }
+    given
+}
+
+/// Whether the inventory is open on screen.
+#[derive(Resource, Default)]
+pub struct InventoryScreen {
+    pub open: bool,
+}
+
+/// What the player carries, for a system to read or change.
+#[derive(SystemParam)]
+pub struct Belongings<'w, 's> {
+    items: ResMut<'w, Items>,
+    player: Single<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static Gear)>,
+}
+
+impl Belongings<'_, '_> {
+    pub fn items(&self) -> &Items {
+        &self.items
     }
 
-    /// Pays a cost so many times over, if it can be paid in full. Returns whether it was.
+    pub fn backpack(&self) -> &Grid {
+        &self.player.0.0
+    }
+
+    pub fn bar(&self) -> &ActionBar {
+        &self.player.1.0
+    }
+
+    pub fn gear(&self) -> &Equipment {
+        &self.player.2.0
+    }
+
+    pub fn holding(&self) -> Option<Tool> {
+        holding(&self.items, self.backpack(), self.bar())
+    }
+
+    pub fn count(&self, raw: Raw) -> u32 {
+        self.backpack().count(self.items.kind(raw))
+    }
+
+    pub fn missing(&self, cost: Cost, times: u32) -> Option<(Raw, u32)> {
+        missing(&self.items, self.backpack(), cost, times)
+    }
+
+    pub fn room_for(&self, cost: Cost, times: u32) -> bool {
+        room_for(&self.items, self.backpack(), cost, times)
+    }
+
+    /// Whether one more of a raw item would fit in the backpack.
+    pub fn room_for_one(&self, raw: Raw) -> bool {
+        let kind = self.items.kind(raw);
+        let size = self
+            .items
+            .catalogue
+            .get(kind)
+            .map_or(Size::ONE, |def| def.size);
+        self.backpack().space_for(size).is_some()
+    }
+
     pub fn pay(&mut self, cost: Cost, times: u32) -> bool {
-        if self.missing(cost, times).is_some() {
+        let (backpack, bar, _) = &mut *self.player;
+        pay(&self.items, &mut backpack.0, &mut bar.0, cost, times)
+    }
+
+    /// Gives back what a cost so many times over is made of, if all of it fits. Returns
+    /// whether it did.
+    pub fn refund(&mut self, cost: Cost, times: u32) -> bool {
+        if !self.room_for(cost, times) {
             return false;
         }
         for &(raw, each) in cost {
-            self.raw[raw as usize] -= each * times;
+            self.give(raw, each * times);
         }
         true
     }
 
-    pub fn refund(&mut self, cost: Cost, times: u32) {
-        for &(raw, each) in cost {
-            self.add(raw, each * times);
+    /// Puts so many of a raw item in the backpack, as many as fit. Returns how many did.
+    pub fn give(&mut self, raw: Raw, count: u32) -> u32 {
+        let backpack = &mut self.player.0;
+        give(&mut self.items, &mut backpack.0, raw, count)
+    }
+
+    pub fn pick(&mut self, slot: usize) {
+        if self.bar().picked() != slot {
+            self.player.1.0.pick(slot);
         }
     }
 
-    /// The tool in hand: whatever is in the picked slot of the bar.
-    pub fn holding(&self) -> Option<Tool> {
-        self.bar[self.held]
-    }
-
-    /// Puts a carried tool in a slot of the bar. A tool is on the bar once, so it leaves
-    /// any slot it was in.
-    pub fn put_on_bar(&mut self, tool: Tool, slot: usize) {
-        if slot >= BAR_SLOTS || !self.tools.contains(&tool) {
-            return;
+    /// Points a slot of the bar at a tool in the backpack. Only tools go on the bar.
+    pub fn put_on_bar(&mut self, slot: usize, id: ItemId) {
+        let is_tool = self
+            .backpack()
+            .get(id)
+            .is_some_and(|placed| self.items.tool(placed.item.kind).is_some());
+        if is_tool {
+            self.player.1.0.set(slot, Some(id));
         }
-        for other in &mut self.bar {
-            if *other == Some(tool) {
-                *other = None;
-            }
-        }
-        self.bar[slot] = Some(tool);
     }
 }
 
@@ -199,21 +378,65 @@ mod tests {
     const COUCH: Cost = &[(Raw::Wood, 2), (Raw::Cloth, 3)];
 
     #[test]
+    fn the_starting_kit_has_both_tools_on_the_bar_and_room_to_spare() {
+        let mut items = Items::default();
+        let (Backpack(grid), Gear(gear), Bar(mut bar)) = starting_kit(&mut items);
+        assert_eq!(gear.worn(PACK).map(|item| item.kind), Some(items.pack));
+        assert_eq!(grid.size(), Size { w: 10, h: 8 });
+        assert_eq!(holding(&items, &grid, &bar), Some(Tool::Builder));
+        bar.pick(1);
+        assert_eq!(holding(&items, &grid, &bar), Some(Tool::Cutter));
+        for (raw, count) in STARTING {
+            assert_eq!(grid.count(items.kind(raw)), count);
+        }
+        assert!(grid.space_for(Size::ONE).is_some());
+    }
+
+    #[test]
     fn a_cost_is_paid_in_full_or_not_at_all() {
-        let mut inventory = Inventory::default();
-        let (wood, cloth) = (inventory.count(Raw::Wood), inventory.count(Raw::Cloth));
-        assert!(inventory.pay(COUCH, 2));
-        assert_eq!(inventory.count(Raw::Wood), wood - 4);
-        assert_eq!(inventory.count(Raw::Cloth), cloth - 6);
-        // Four more couches' worth of cloth is more than is left; nothing is taken.
-        assert_eq!(inventory.missing(COUCH, 4), Some((Raw::Cloth, 6)));
-        let before = inventory.clone();
-        assert!(!inventory.pay(COUCH, 4));
-        assert_eq!(inventory, before);
-        // Taking them apart gives it all back.
-        inventory.refund(COUCH, 2);
-        assert_eq!(inventory.count(Raw::Cloth), cloth);
+        let mut items = Items::default();
+        let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
+        let count = |grid: &Grid, raw| grid.count(items.kind(raw));
+        let (wood, cloth) = (count(&grid, Raw::Wood), count(&grid, Raw::Cloth));
+        assert!(pay(&items, &mut grid, &mut bar, COUCH, 2));
+        assert_eq!(count(&grid, Raw::Wood), wood - 4);
+        assert_eq!(count(&grid, Raw::Cloth), cloth - 6);
+        assert_eq!(
+            missing(&items, &grid, COUCH, 1),
+            Some((Raw::Cloth, 3)),
+            "all the cloth is spent"
+        );
+        let before = grid.clone();
+        assert!(!pay(&items, &mut grid, &mut bar, COUCH, 1));
+        assert_eq!(grid, before);
         assert_eq!(describe(COUCH, 2), "4 Wood, 6 Cloth");
+    }
+
+    #[test]
+    fn a_full_backpack_takes_what_fits_and_refuses_the_rest() {
+        let mut items = Items::default();
+        let (Backpack(mut grid), ..) = starting_kit(&mut items);
+        let free = (grid.size().w as u32 * grid.size().h as u32)
+            - grid
+                .iter()
+                .map(|placed| placed.size.w as u32 * placed.size.h as u32)
+                .sum::<u32>();
+        assert!(room_for(&items, &grid, COUCH, 1));
+        assert_eq!(give(&mut items, &mut grid, Raw::Wood, free + 5), free);
+        assert!(grid.space_for(Size::ONE).is_none());
+        assert!(!room_for(&items, &grid, COUCH, 1));
+        assert_eq!(give(&mut items, &mut grid, Raw::Wood, 1), 0);
+    }
+
+    #[test]
+    fn spending_what_the_bar_points_at_empties_its_slot() {
+        let mut items = Items::default();
+        let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
+        let builder = bar.get(0).unwrap();
+        grid.remove(builder).unwrap();
+        bar.tidy(&grid);
+        assert_eq!(bar.get(0), None);
+        assert_eq!(holding(&items, &grid, &bar), None);
     }
 
     #[test]
@@ -222,22 +445,5 @@ mod tests {
             assert_eq!(Tool::Cutter.cuts(what), Some(1.0));
             assert_eq!(Tool::Builder.cuts(what), None);
         }
-    }
-
-    #[test]
-    fn the_bar_holds_each_tool_once_and_the_picked_slot_is_in_hand() {
-        let mut inventory = Inventory::default();
-        assert_eq!(inventory.holding(), Some(Tool::Builder));
-        inventory.put_on_bar(Tool::Builder, 4);
-        assert_eq!(inventory.bar[0], None);
-        assert_eq!(inventory.holding(), None);
-        inventory.held = 4;
-        assert_eq!(inventory.holding(), Some(Tool::Builder));
-        // Out of range, or a tool not carried: nothing happens.
-        inventory.tools.retain(|tool| *tool != Tool::Cutter);
-        let before = inventory.clone();
-        inventory.put_on_bar(Tool::Cutter, 2);
-        inventory.put_on_bar(Tool::Builder, BAR_SLOTS);
-        assert_eq!(inventory, before);
     }
 }

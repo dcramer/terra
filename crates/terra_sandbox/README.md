@@ -89,13 +89,13 @@ Those are the defaults. In the options menu (Esc) any of them can be set to anot
 
 The buttons follow Subnautica 2 where we could confirm what it does: right mouse is the build menu, left mouse builds, and taking apart and moving are modes on Q and F. The rest is the usual habit of building games. See [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
 
-You carry raw items and tools. The tools sit on the action bar along the bottom; the raw items are counted at the top right.
+You carry a backpack, on the rules in `terra_items` and the Subnautica baseline (docs/items.md, D84): a grid in which each item fills its cells and nothing stacks. You start wearing a large pack, which makes the backpack 10 by 8 cells, with both tools and some raw items in it. The action bar along the bottom points at tools in the backpack; the raw items are counted at the top right.
 
-![The inventory, the action bar and the raw items carried](../../docs/images/outpost-inventory-2026-10-10.png)
+![The backpack after building a couch: two wood and three cloth spent](../../docs/images/outpost-backpack-2026-10-11.png)
 
-- **The builder** spends raw items. Everything it builds has a cost, shown in the prompt before you commit: so much metal a tile for a room, glass for a window, wood and cloth for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost.
-- **The cutter** gathers more: wood from trees, metal from rocks, cloth from bushes and plants. Aim at one, or just stand in front of it, and hold left click until it is cut through.
-- **The inventory** lists the tools carried. Point at one and press 1 to 6 to put it in that slot of the bar.
+- **The builder** spends raw items. Everything it builds has a cost, shown in the prompt before you commit: so much metal a tile for a room, glass for a window, wood and cloth for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost, if there is room in the backpack for it; if not, it stays, and a notice above the bar says why.
+- **The cutter** gathers more: wood from trees, metal from rocks, cloth from bushes and plants. Aim at one, or just stand in front of it, and hold left click until it is cut through. A full backpack takes nothing more, and what does not fit is left behind.
+- **The inventory** shows the backpack's grid and what is worn. Point at a tool and press 1 to 6 to put it in that slot of the bar. Opening it puts away the part in the builder's hand.
 
 The raw items, the costs, what you start with and what the cutter gives are all stand-ins. See [docs/construction.md](../../docs/construction.md) for what the developers have said about carrying and cost.
 
@@ -148,8 +148,8 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `scene` | The sun, the sky's colours, haze, shadows, and the camera's effects |
 | `flora` | Trees, rocks, bushes and flowers placed from the seed, and the grass |
 | `catalogue` | The parts the builder can build, their variants and what they cost |
-| `inventory` | What is carried: raw items, tools and the action bar |
-| `bag` | The action bar, the raw-item count and the inventory panel |
+| `inventory` | What is carried, on `terra_items`: the backpack, the worn pack and the action bar as components on the player, and the demo's kinds of item |
+| `bag` | The action bar, the raw-item count, notices, and the backpack's grid on screen |
 | `harvest` | Cutting things for the raw items in them, with any tool that can |
 | `work` | Holding a button until a job is done |
 | `tool` | The builder: what it is aimed at, the preview, and building |
@@ -160,12 +160,12 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 
 The models are free ones, recoloured in code; see [THIRD_PARTY.md](../../THIRD_PARTY.md). How it was put together and what it costs to draw is in [research/outpost-scene.md](../../research/outpost-scene.md).
 
-What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; you cannot stand on an item, and an item stood on another stays in the air if the one under it goes; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; placed items and the inventory are not saved or part of the base's list of operations; and a cut tree never grows back; and none of the work has sound.
+What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; you cannot stand on an item, and an item stood on another stays in the air if the one under it goes; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; placed items and what you carry are not saved or part of the base's list of operations; and a cut tree never grows back; and none of the work has sound.
 
 In a scripted run the game clock advances a sixtieth of a second per frame and real keyboard and mouse input is ignored, so the same script does the same thing on any machine:
 
 ```bash
-cargo run -p terra_sandbox -- --experiment play --settle 300 --press w@20-215 --press 0@240 --press e@260 --shot shots/a-shelf-indoors.png
+cargo run -p terra_sandbox -- --experiment play --settle 480 --press w@20-215 --press b@232-246 --press 8@240 --press e@270-450 --press i@460 --shot shots/a-couch-and-the-backpack.png
 cargo run -p terra_sandbox -- --experiment play --vantage 0,2.4,24,9,1.6,0 --shot shots/outpost.png
 ```
 

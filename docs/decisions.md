@@ -165,3 +165,4 @@ The source of truth for what is settled. Other docs must agree with this one.
 - **2026-10-10**: The developers said a portal is likely something you find, and that there will be several ways of crossing between worlds over time (D72).
 - **2026-10-10**: The developers said crossing between worlds should have no traditional loading screen, but the portal's own transition can cover loading if needed (D72).
 - **2026-10-10**: The developers confirmed each world is still a round planet (D4, D87).
+- **2026-10-11**: The sandbox's `play` experiment now carries on `terra_items` (D83, D84): a backpack grid shown on screen, a worn pack, and a bar that points into the backpack, with building, taking apart and cutting going through it. Starting sizes are placeholders.

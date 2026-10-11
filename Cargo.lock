@@ -5386,6 +5386,7 @@ dependencies = [
  "terra_build",
  "terra_core",
  "terra_gen",
+ "terra_items",
 ]
 
 [[package]]

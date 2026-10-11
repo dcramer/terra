@@ -7,7 +7,7 @@ use super::catalogue::PARTS;
 use super::controls::{Action, Controls, Settings};
 use super::flora::Growth;
 use super::harvest::{self, Cutting};
-use super::inventory::{Inventory, Tool};
+use super::inventory::{Belongings, InventoryScreen, Tool};
 use super::options::OptionsMenu;
 use super::tool::{self, Builder};
 use crate::shell::Options;
@@ -247,13 +247,14 @@ pub fn steer(
     keys: Res<ButtonInput<KeyCode>>,
     controls: Controls,
     motion: Res<AccumulatedMouseMotion>,
-    inventory: Res<Inventory>,
+    inventory: Res<InventoryScreen>,
+    belongings: Belongings,
     menu: Res<OptionsMenu>,
     mut dial: ResMut<Dial>,
     mut builder: ResMut<Builder>,
 ) {
     // The dial belongs to the builder, and is put away with it.
-    if inventory.open || menu.open || inventory.holding() != Some(Tool::Builder) {
+    if inventory.open || menu.open || belongings.holding() != Some(Tool::Builder) {
         dial.open = false;
         return;
     }
@@ -316,7 +317,8 @@ fn draw(
     dial: Res<Dial>,
     settings: Res<Settings>,
     builder: Res<Builder>,
-    inventory: Res<Inventory>,
+    inventory: Res<InventoryScreen>,
+    belongings: Belongings,
     cutting: Res<Cutting>,
     growth: Query<&Growth>,
     options: Res<Options>,
@@ -382,7 +384,7 @@ fn draw(
         },
     );
 
-    let holding = inventory.holding();
+    let holding = belongings.holding();
     let part = builder.picked();
     set(
         &mut texts.p1(),

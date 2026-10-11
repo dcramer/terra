@@ -9,7 +9,7 @@
 //! it is made.
 
 use super::controls::{Action, Binding, FIELD_OF_VIEW, LOOK_SPEED, Settings, capitalised};
-use super::inventory::Inventory;
+use super::inventory::InventoryScreen;
 use super::{grab_mouse, tool};
 use crate::shell::Options;
 use bevy::{
@@ -372,7 +372,7 @@ fn setup(mut commands: Commands) {
 pub fn toggle(
     keys: Res<ButtonInput<KeyCode>>,
     mut menu: ResMut<OptionsMenu>,
-    mut inventory: ResMut<Inventory>,
+    mut inventory: ResMut<InventoryScreen>,
     window: Single<(&Window, &mut CursorOptions)>,
 ) {
     if !keys.just_pressed(KeyCode::Escape) {

@@ -103,6 +103,7 @@ pub fn plugin(app: &mut App) {
 
 fn spawn(
     mut commands: Commands,
+    mut items: ResMut<inventory::Items>,
     site: Res<Site>,
     planet: Res<Planet>,
     camera: Single<Entity, With<Camera3d>>,
@@ -136,6 +137,7 @@ fn spawn(
             facing: toward_door,
             since_acting: f32::MAX,
         },
+        inventory::starting_kit(&mut items),
         Transform::from_translation(feet).looking_to(toward_door, up),
         Visibility::default(),
     ));
@@ -166,12 +168,12 @@ fn grab_mouse(cursor: &mut CursorOptions, take: bool) {
 /// it is left where it is.
 fn capture_mouse(
     mouse: Res<ButtonInput<MouseButton>>,
-    inventory: Res<inventory::Inventory>,
+    screen: Res<inventory::InventoryScreen>,
     menu: Res<options::OptionsMenu>,
     window: Single<(&mut Window, &mut CursorOptions)>,
 ) {
     // While the inventory or the options are open, the pointer is for pointing at them.
-    if inventory.open || menu.open {
+    if screen.open || menu.open {
         return;
     }
     let (mut window, mut cursor) = window.into_inner();
