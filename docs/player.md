@@ -47,11 +47,11 @@ Open:
 4. **A jetpack or similar.** No Man's Sky's jetpack makes rough terrain forgiving. Without one, a player who digs a deep hole needs another way out.
 5. **Falling.** Does a long fall hurt?
 
-## Getting off the ground
+## Getting between worlds
 
-Open, and the largest unknown here. The world is a real round planet you can leave (D4), so something has to carry you.
+There is no space (D4). Worlds are reached probably by portals or something similar (D72, [worlds.md](worlds.md#realms-and-portals)).
 
-6. **How does a player reach orbit?** By flight (D72), and that is how planets are reached; other ways may come later. What flies is open: a ship you board, as in No Man's Sky, is a second control scheme, a second camera, and a vehicle to model. A jetpack that simply keeps going is far less work and far less grand.
+6. Answered: **how does a player reach orbit?** They do not.
 
 ## Tools
 

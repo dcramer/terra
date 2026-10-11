@@ -9,11 +9,10 @@ What we would build before, and separately from, core gameplay. The stack and th
 Our current expectation, however the gameplay turns out (D39):
 
 - **Voxel planets**: round, smooth, fully diggable.
-- **The transition**: from standing on the ground to orbit and back, with no seam and no loading.
 - **Organic harvesting**: resources are in the world and you get them by taking the world apart, not by clicking a node.
 - **Procedural generation almost everywhere**: the world is computed from a seed, not authored or stored.
 
-**Under review (D87):** the developers might drop flight to space and terraforming, with worlds as alternate dimensions instead. If so, the transition below, planet rendering from space and the solar-system frame leave the plan.
+A fourth want, a seamless transition from the ground to orbit, was dropped with space on 2026-10-10 (D4). Worlds are reached probably by portals (D72), which is a new part, not yet designed. Terraforming is parked (D60), and with it the simulation runtime.
 
 Since then the developers have set out the worlds: several planets, each themed, with caverns, water features, varied plants, gravity and a breathable starter planet. What that asks of the engine is in [worlds.md](worlds.md#what-it-asks-of-the-engine).
 
@@ -22,7 +21,6 @@ Since then the developers have set out the worlds: several planets, each themed,
 | Want | Consequence |
 |---|---|
 | Voxel planets | The terrain core. Already the plan. |
-| The transition | Not one part but a path through several: terrain detail, atmosphere, coordinates and gravity all have to change smoothly together. It gets its own test, a scripted descent from orbit to the ground. |
 | Organic harvesting | **Voxels carry a material, not just a shape.** Digging reports what was removed and how much. This has to be in the terrain's data model from the start; it is expensive to add later. Scattered objects such as rocks and plants must be removable one by one. |
 | Procedural everywhere | **A shared generation toolkit comes first**, because terrain, materials, scattering, plants and sky all draw on it. Everything is a function of the seed and a position, so only changes are ever stored or sent. |
 
@@ -33,14 +31,14 @@ Since then the developers have set out the worlds: several planets, each themed,
 | 0 | Generation toolkit | Seeds, noise, repeatable random streams keyed by place and purpose, sampling on a sphere. The same result on every machine. | Nothing |
 | 1 | Terrain core | Shape and material at every point, edits, chunks at several detail levels, meshing, ground queries, harvest yields | Part 0 |
 | 2 | Terrain on screen | Streaming chunks as the camera moves, uploading meshes, a ground material that blends voxel materials | Part 1's mesh output |
-| 3 | Planet rendering | Sky and atmosphere from inside and from space, sea, sun and lighting | A radius and a few numbers |
-| 4 | World frame | Planet-centred coordinates, gravity toward the centre, the ground-to-orbit path | Nothing |
+| 3 | World rendering | Sky and atmosphere from the ground, sea, sun and lighting | A radius and a few numbers |
+| 4 | World frame | Planet-centred coordinates relative to a moving origin, gravity toward the centre | Nothing |
 | 5 | Player and camera | Walking and flying on a round world, colliding with the ground, a dig tool | A ground query |
 | 6 | App shell | Window, settings and the options menu (D80), input with remapping, frame-time readout (D77), debug menu (D81), scripted camera paths, frame-time capture, screenshots | Nothing |
 | 7 | Scattering | Things placed by rule on the terrain, with culling: objects that are tracked one by one, and cover that is too dense to track | Parts 0 and a ground query |
 | 8 | Procedural objects | Meshes grown from parameters: rocks first, then plants | Part 0 |
 | 9 | Networking | A server and the clients that join it, ordered operations, snapshots, late join | Nothing |
-| 10 | Simulation runtime | Running the simulation on its thread, snapshots, fields into textures | The existing crate |
+| 10 | Simulation runtime | Running the simulation on its thread, snapshots, fields into textures. Parked with terraforming (D60) | The existing crate |
 
 Saving, physics for loose objects, audio and UI are engine work too, but nothing needs them yet. Collision is needed now and is described below.
 
@@ -63,7 +61,7 @@ A few small contracts are agreed in code before the tracks start. They live in `
 |---|---|---|
 | Foundation | Contracts, then part 0 | Small, and everything else leans on it. Done first, by one person. |
 | A: terrain | 1, then 2 | The hardest work and the critical path. One crate, one owner, tested against Voxel Tools. |
-| B: a walkable stand-in world | 6, 4, 3, 5 | The shell is the harness everything is measured with. The rest gives the transition, on the stand-in. |
+| B: a walkable stand-in world | 6, 4, 3, 5 | The shell is the harness everything is measured with. The rest gives a world to walk, on the stand-in. |
 | C: things on the ground | 7, 8 | Needs only the toolkit and a ground query, so it also starts on the stand-in. |
 | D: networking | 9 | A plain crate tested with two peers in one process. Touches nothing else. |
 

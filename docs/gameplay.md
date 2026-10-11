@@ -1,6 +1,6 @@
 # Gameplay
 
-Status: draft. The tone is Decided; the dead-to-alive arc is for the planets that can be terraformed (D60). The specifics below are Leaning until a prototype tests them. The worlds are in [worlds.md](worlds.md).
+Status: draft. The tone is Decided. Terraforming, and the dead-to-alive arc with it, is parked (D60). The specifics below are Leaning until a prototype tests them. The worlds are in [worlds.md](worlds.md).
 
 The style of play, and the player's body, tools and actions, are in [player.md](player.md).
 
@@ -20,11 +20,11 @@ The survival attributes are health, stamina, oxygen, hunger and thirst (D61); se
 
 1. **Manual**: carry it, ration it, run back to base.
 2. **Local infrastructure**: a machine or a pipe covers your base.
-3. **Solved by the planet**: on a planet that can be terraformed, terraforming removes the need (breathable air, drinkable water). On the starter planet some needs are solved from the start (D62).
+3. **Solved by the place**: on the starter planet some needs are solved from the start (D62). Solving them by terraforming is parked (D60).
 
 ## Terraforming phases
 
-Only on the planets that can be terraformed (D60). Draft names and order. Phases are gated by global values; what a region looks like is set by its local values. See [planet-sim.md](planet-sim.md).
+Parked (D60): probably no terraforming. Kept for reference. Draft names and order. Phases are gated by global values; what a region looks like is set by its local values. See [planet-sim.md](planet-sim.md).
 
 The developers floated a **terraform rating** for each such planet (D79, Leaning): one measure of how far along it is, whose top might mean the air is breathable. It could be what those global values add up to, and what the phases and the weather (D78) follow.
 

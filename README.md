@@ -8,11 +8,11 @@ This repository is where the project is thought through: design docs, research n
 
 | Goal | More |
 |---|---|
-| **Explore a dozen or so very different planets**, each with its own terrain, caverns, water, plants, air and gravity, and fly between them with no loading screens. | [docs/worlds.md](docs/worlds.md) |
-| **Turn dead planets into living ones** where that can be done, and then contend with the life you made. | [docs/vision.md](docs/vision.md) |
+| **Explore a dozen or so very different worlds**, each with its own terrain, caverns, water, plants, air, gravity and cultures, reached through portals or something like them. | [docs/worlds.md](docs/worlds.md) |
+| **Always get better**: many skills, gained by doing and improved by doing more. | [docs/progression.md](docs/progression.md) |
 | **Survive each world**: health, stamina, oxygen, hunger and thirst, which each planet treats differently. | [docs/survival.md](docs/survival.md) |
 | **Play as a person in the world**, walking around with tools, gathering and building, in the manner of No Man's Sky or Subnautica. | [docs/player.md](docs/player.md) |
-| **Real round planets you can dig into**, procedurally generated, with no seam between standing on the ground and flying in space. | [docs/engine.md](docs/engine.md) |
+| **Round planets you can dig into**, procedurally generated, with no loading screens within a world. | [docs/engine.md](docs/engine.md) |
 | **Take resources from the world itself**: mine the rock, chop the tree, cut the grass. | [docs/engine.md](docs/engine.md#harvesting) |
 | **Gear up and carry**: an equipment grid, a backpack that grows, and an action bar of things to use. | [docs/player.md](docs/player.md) |
 | **Research new technology** to unlock more to build and craft. | [docs/progression.md](docs/progression.md) |
@@ -42,9 +42,9 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 - Gravity, toward each planet's centre.
 - A sea level on each planet with water, behaving as physics says: level all round, filling what the sea can reach, as deep as the ground makes it.
 - Digging into the ground, as in No Man's Sky.
-- Flying between planets: leave one, cross space, land on another, without loading screens and without the frame rate falling. Other ways to travel may come later.
-- Terraforming, making a planet livable and breathable, on some planets ([vision.md](docs/vision.md), [planet-sim.md](docs/planet-sim.md)), perhaps measured by a terraform rating whose top means breathable air.
-- Weather, different on each planet and changing as a planet is terraformed.
+- Travelling between worlds, probably through portals. No space.
+- Weather, different on each world.
+- Probably no terraforming: the notes are kept ([planet-sim.md](docs/planet-sim.md)) but it is not a concern for now.
 
 **Surviving** ([survival.md](docs/survival.md))
 - Survival attributes: health, stamina, oxygen, hunger, thirst, and perhaps more. Each world can treat them differently.

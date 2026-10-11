@@ -6,8 +6,8 @@ The earlier Godot build and its measurements are in [research/godot-spike.md](..
 
 ## Requirements
 
-- Round planets in a real solar system, seamless from surface to space (D4).
-- Fully diggable smooth terrain (D9). Terraforming never reshapes the ground (D20).
+- Several round worlds with no space between them, reached probably by portals (D4, D72).
+- Fully diggable smooth terrain (D9). Only players reshape the ground (D20).
 - Multiplayer built around a server that decides everything (D51), for a handful of friends at first (D2) and without ruling out many more.
 - Performant: 60 fps at 1080p on a mid-range discrete GPU and a 4-core CPU, including while that machine also runs the server for three other players (D25).
 - Developed on Windows via WSL and on macOS (D7), with all code written by agents (D1).
@@ -27,7 +27,7 @@ The earlier Godot build and its measurements are in [research/godot-spike.md](..
 | UI | Bevy's UI for the game; `bevy_egui` for developer tools | Leaning |
 | Maths in shared state | The `libm` crate for sine and friends, not the system maths library | Decided |
 | Saves and messages | `serde` with `postcard` | Leaning |
-| Solar-system coordinates | One coordinate frame per planet; `big_space` when a second planet exists | Leaning |
+| Coordinates | One frame per world, relative to a moving origin; no `big_space` | Leaning (D36) |
 
 We write the terrain, the simulation, the networking model and the game. We do not write a renderer, an animation system, an asset pipeline or a windowing layer; Bevy supplies those.
 
@@ -88,7 +88,7 @@ One known gap: the `transvoxel` crate bakes seam stitching into each mesh, so a 
 
 - **Ground:** one material. Colour comes from the simulation as a map of the whole planet, refreshed a few times a second, with fine detail added in the shader.
 - **Sea:** one sphere per planet at the simulation's sea level.
-- **Sky:** driven by air pressure. Bevy has built-in atmospheric scattering; whether it works on a 2 km planet seen from orbit is untested, and our own sky shader from the Godot demo is the fallback.
+- **Sky:** driven by air pressure. Bevy has built-in atmospheric scattering; whether it suits our planets is untested, and our own sky shader from the Godot demo is the fallback.
 - **Plants and objects:** instanced. The Godot load test showed instancing is limited by the GPU, not the engine.
 
 ## Development workflow

@@ -69,7 +69,7 @@ A working plan, still to be determined. The engine would be built as a foundatio
 | A1 | Terrain | Terrain core, no window: shape and material, detail levels, sphere edits with harvest yields | The criteria in [terrain.md](terrain.md). |
 | A2 | Terrain | Terrain on screen, streaming as the camera moves | The flight tests from the Godot spike pass: worst frame no higher than Godot's at 100 and 400 m/s, and terrain keeps up. A dig causes no visible hitch and shows the material underneath. |
 | B1 | Stand-in world | The app shell: window, scripted camera paths, frame-time capture, screenshots | A scripted run prints frame times and saves a screenshot on Linux, on the Windows build and on macOS. |
-| B2 | Stand-in world | The transition on a stand-in planet: walk, fly to orbit and back, with sky and sea | A scripted descent from orbit to the ground has no frame over 16 ms on the RTX 5090. The scripted checks pass (land, walk). |
+| B2 | Stand-in world | A walkable stand-in planet, with sky and sea | A scripted walk and a fast camera pass over the planet have no frame over 16 ms on the RTX 5090. The scripted checks pass. (Was the transition to orbit and back, dropped with space, D4.) |
 | C1 | Things on the ground | Scattering on the stand-in planet, with procedural rocks | 100 thousand instances within 150 m cost no more than they did in the Godot load test. Removing one is an operation. |
 | D1 | Networking | Two peers in one process share ordered operations and snapshots | Both end in the same state. A peer that joins late catches up. No window needed. |
 | M | All | Real terrain replaces the stand-in | Everything the Godot demo does, at frame rates at least as good on both GPUs. The Godot build is retired here. |

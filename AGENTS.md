@@ -1,6 +1,6 @@
 # Terra
 
-A multiplayer survival sandbox across a dozen or so procedural planets, some of which can be terraformed from dead to living, built toward a thousand players on one persistent server. Pre-production. The worlds are in `docs/worlds.md` and the survival attributes in `docs/survival.md`.
+A multiplayer survival sandbox across a dozen or so procedural worlds, reached through portals, built toward a thousand players on one persistent server. Pre-production. The worlds are in `docs/worlds.md` and the survival attributes in `docs/survival.md`.
 
 Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in `docs/tech.md`, the parts and build order are in `docs/engine.md`, and the checkpoints are in `docs/prototypes.md`.
 

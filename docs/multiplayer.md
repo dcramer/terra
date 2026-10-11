@@ -65,7 +65,7 @@ These are design questions the larger number raises, whatever the technology.
 
 - **Is the planet big enough?** A hundred people on a 2 km planet is one person per half a square kilometre. That may be lively or cramped.
 - **Do resources run out?** If trees and ore do not come back, a hundred players strip a world. Regrowth and scarcity stop being optional questions.
-- **Whose planet is it?** Terraforming one shared world is a fine fantasy for four. For a hundred it is either a grand communal project or a fight over the thermostat.
+- **Whose planet is it?** (Parked with terraforming, D60.) Terraforming one shared world is a fine fantasy for four. For a hundred it is either a grand communal project or a fight over the thermostat.
 - **What happens when nobody is online?** Does the planet keep changing?
 - **More planets.** There will be about a dozen (D17), which spreads a crowd out, and raises whether one server holds them all.
 

@@ -1,6 +1,6 @@
 # Planet simulation
 
-Status: the local-plus-global model is Decided (D6). Field details are Leaning until the simulation toy tests them. It runs only on planets that can be terraformed (D60); elsewhere a planet's climate is fixed by its theme ([worlds.md](worlds.md)).
+Status: parked. The developers probably will not have terraforming and are not concerned with it now (D60); this is kept for reference. The local-plus-global model is Decided (D6). Field details are Leaning until the simulation toy tests them. It runs only on planets that can be terraformed (D60); elsewhere a planet's climate is fixed by its theme ([worlds.md](worlds.md)).
 
 ## Two tiers
 

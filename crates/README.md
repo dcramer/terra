@@ -5,7 +5,7 @@ The game's code so far. The split below is the working plan and may change. One 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|
 | `terra_gen` | Generation toolkit: seeds, noise, repeatable random streams | No | Exists |
-| `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists |
+| `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists; parked with terraforming (D60) |
 | `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits | No | Track A. Brief: [docs/terrain.md](../docs/terrain.md) |
 | `terra_core` | The shared contracts (ground, water, chunk mesh, operations) and a stand-in planet | No | Exists |
 | `terra_build` | Construction: bases shaped room by room, with the hull, windows and doors generated | No | Exists, as an experiment |

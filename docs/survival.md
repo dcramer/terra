@@ -26,7 +26,7 @@ An attribute is one rule plus numbers, and a planet's theme sets the numbers ([w
 
 ## How it fits what was already written
 
-[gameplay.md](gameplay.md) has every survival need follow one arc: carried by hand, then solved by a machine at your base, then, on a planet you terraform, solved by the planet itself. That still holds, with the last step only on planets that can be terraformed. The older list of needs there (oxygen, water, food, temperature, radiation) maps onto the attributes: water is thirst, food is hunger, and temperature and radiation are things about a place that wear down health.
+[gameplay.md](gameplay.md) has every survival need follow one arc: carried by hand, then solved by a machine at your base, then, on a planet you terraform, solved by the planet itself. The first two steps still hold; the last is parked with terraforming (D60). The older list of needs there (oxygen, water, food, temperature, radiation) maps onto the attributes: water is thirst, food is hunger, and temperature and radiation are things about a place that wear down health.
 
 ## In the game's model
 
