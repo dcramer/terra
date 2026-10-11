@@ -19,40 +19,6 @@ from mathutils import Matrix, Vector
 import look
 
 
-def graphic(name):
-    """A palette colour lit in three crisp bands, its shadow band tinted cool."""
-    mat = bpy.data.materials.new(f"{name}-graphic")
-    mat.use_nodes = True
-    nt = mat.node_tree
-    nt.nodes.clear()
-    base = look.linear(look.PALETTE[name])
-    diffuse = nt.nodes.new("ShaderNodeBsdfDiffuse")
-    to_rgb = nt.nodes.new("ShaderNodeShaderToRGB")
-    bw = nt.nodes.new("ShaderNodeRGBToBW")
-    # Light runs from about 0.3 (sky only) to 3 (full sun); scale it into the ramp's 0..1.
-    scale = nt.nodes.new("ShaderNodeMath")
-    scale.operation = "MULTIPLY"
-    scale.inputs[1].default_value = 0.3
-    ramp = nt.nodes.new("ShaderNodeValToRGB")
-    ramp.color_ramp.interpolation = "CONSTANT"
-    stops = ramp.color_ramp.elements
-    shadow = tuple(c * t for c, t in zip(base, (0.42, 0.42, 0.62)))
-    mid = tuple(c * t for c, t in zip(base, (0.78, 0.76, 0.86)))
-    lit = tuple(min(1.0, c * t) for c, t in zip(base, (1.08, 1.02, 0.92)))
-    stops[0].position, stops[0].color = 0.0, shadow + (1,)
-    stops[1].position, stops[1].color = 0.28, mid + (1,)
-    stops.new(0.62).color = lit + (1,)
-    emit = nt.nodes.new("ShaderNodeEmission")
-    out = nt.nodes.new("ShaderNodeOutputMaterial")
-    nt.links.new(diffuse.outputs[0], to_rgb.inputs[0])
-    nt.links.new(to_rgb.outputs[0], bw.inputs[0])
-    nt.links.new(bw.outputs[0], scale.inputs[0])
-    nt.links.new(scale.outputs[0], ramp.inputs[0])
-    nt.links.new(ramp.outputs[0], emit.inputs[0])
-    nt.links.new(emit.outputs[0], out.inputs[0])
-    return mat
-
-
 def load(path, label):
     before = set(bpy.context.scene.objects)
     bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, path))
@@ -78,7 +44,7 @@ def shade(ob, style):
         bpy.ops.object.shade_flat()
     for slot in ob.material_slots:
         palette = slot.material.name.split("-")[0].split(".")[0]
-        slot.material = graphic(palette) if style == "graphic" else look.material(palette)
+        slot.material = look.graphic(palette) if style == "graphic" else look.material(palette)
 
 
 look.reset()

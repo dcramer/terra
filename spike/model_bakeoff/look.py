@@ -387,3 +387,56 @@ def stack(rows, path):
     out.file_format = "PNG"
     out.save()
     bpy.data.images.remove(out)
+
+
+# Graphic shading (direction D) -------------------------------------------------------
+
+
+def graphic(name, colours=None, haze=None):
+    """A palette colour lit in three crisp bands, its shadow band tinted cool. `colours`
+    overrides the palette, as a realm does. `haze` is (colour, start, end, strength): the
+    colour fades toward it with distance from the camera, as the game's fog does."""
+    mat = bpy.data.materials.new(f"{name}-graphic")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    base = linear((colours or {}).get(name, PALETTE[name]))
+    diffuse = nt.nodes.new("ShaderNodeBsdfDiffuse")
+    to_rgb = nt.nodes.new("ShaderNodeShaderToRGB")
+    bw = nt.nodes.new("ShaderNodeRGBToBW")
+    # Light runs from about 0.3 (sky only) to 3 (full sun); scale it into the ramp's 0..1.
+    scale = nt.nodes.new("ShaderNodeMath")
+    scale.operation = "MULTIPLY"
+    scale.inputs[1].default_value = 0.3
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.interpolation = "CONSTANT"
+    stops = ramp.color_ramp.elements
+    shadow = tuple(c * t for c, t in zip(base, (0.42, 0.42, 0.62)))
+    mid = tuple(c * t for c, t in zip(base, (0.78, 0.76, 0.86)))
+    lit = tuple(min(1.0, c * t) for c, t in zip(base, (1.08, 1.02, 0.92)))
+    stops[0].position, stops[0].color = 0.0, shadow + (1,)
+    stops[1].position, stops[1].color = 0.28, mid + (1,)
+    stops.new(0.62).color = lit + (1,)
+    emit = nt.nodes.new("ShaderNodeEmission")
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(diffuse.outputs[0], to_rgb.inputs[0])
+    nt.links.new(to_rgb.outputs[0], bw.inputs[0])
+    nt.links.new(bw.outputs[0], scale.inputs[0])
+    nt.links.new(scale.outputs[0], ramp.inputs[0])
+    if haze:
+        colour, start, end, strength = haze
+        cam = nt.nodes.new("ShaderNodeCameraData")
+        far = nt.nodes.new("ShaderNodeMapRange")
+        far.inputs["From Min"].default_value, far.inputs["From Max"].default_value = start, end
+        far.inputs["To Max"].default_value = strength
+        mix = nt.nodes.new("ShaderNodeMix")
+        mix.data_type = "RGBA"
+        mix.inputs["B"].default_value = linear(colour) + (1,)
+        nt.links.new(cam.outputs["View Z Depth"], far.inputs["Value"])
+        nt.links.new(far.outputs["Result"], mix.inputs["Factor"])
+        nt.links.new(ramp.outputs[0], mix.inputs["A"])
+        nt.links.new(mix.outputs["Result"], emit.inputs[0])
+    else:
+        nt.links.new(ramp.outputs[0], emit.inputs[0])
+    nt.links.new(emit.outputs[0], out.inputs[0])
+    return mat
