@@ -1,0 +1,9 @@
+name = "terra-token-stats"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+# Wrangler creates the database on the first deploy. The worker creates its own table.
+[[d1_databases]]
+binding = "DB"
+database_name = "terra-token-stats"

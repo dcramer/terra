@@ -10,6 +10,7 @@ Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in 
 | `research/` | Findings, surveys and measurements, one dated note per question. |
 | `crates/` | The Rust workspace: the game's code. See `crates/README.md`. |
 | `xtask/` | Project tasks, run as `cargo xtask <task>`. |
+| `tools/` | Team tooling outside the game, such as [token stats](tools/token-stats/README.md). |
 | `demo/` | The playable tech demo on Godot. A working reference until the Rust build replaces it. |
 | `prototypes/sim_toy/` | A globe for watching the planet simulation, on Godot. |
 | `spike/` | Throwaway experiments. |
