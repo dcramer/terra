@@ -25,7 +25,7 @@ pub enum Sound {
     Wind,
     /// Small birds calling now and then, left and right. Never ends.
     Birds,
-    /// Water lapping at a shore. Never ends.
+    /// A lake's edge lapping. Never ends.
     Water,
     /// A fire: crackles over a low roar. Never ends.
     Fire,
@@ -277,7 +277,7 @@ fn wind(mut dice: Dice) -> impl Iterator<Item = f32> + Send {
             cutoff = 120.0 + 700.0 * level * level;
         }
         let air = pink[channel].next(dice.noise());
-        let out = tone[channel].low(air, cutoff) * level * 1.6;
+        let out = tone[channel].low(air, cutoff) * level * 0.5;
         channel = 1 - channel;
         Some(soft(out))
     })
@@ -358,34 +358,61 @@ fn call(dice: &mut Dice, notes: &mut Vec<(f32, f32, f32, f32)>) {
     }
 }
 
+/// A lake's edge, not the sea's: a small wavelet laps now and then, a soft slosh with a
+/// drop or two after it, over near silence. No swell and no roar.
 fn water(mut dice: Dice) -> impl Iterator<Item = f32> + Send {
-    let mut swell = Drift::new((0.2, 1.0), (1.2, 3.5));
-    let mut body = [Smooth::default(); 2];
-    let mut pink = [Pink::default(); 2];
-    let mut blip = Band::default();
-    let mut blip_left = 0.0;
-    let mut blip_at = 1000.0;
-    let mut blip_for = 0.0;
+    // The wavelet: how far into it, how long it lasts, its pitch, how loud, and where.
+    let (mut into, mut lasts, mut pitch, mut loud, mut pan) = (f32::MAX, 0.3, 500.0, 0.0, 0.0);
+    let mut next = dice.range(0.3, 1.5);
+    // Drops after it: how far into each (below 0 is still to come), pitch, loudness, phase.
+    let mut drops = [(f32::MAX, 0.0f32, 0.0f32, 0.0f32); 3];
+    let mut slosh = Band::default();
+    let mut hush = Band::default();
+    let mut frame = [0.0f32; 2];
     let mut channel = 0;
-    let mut level = 0.0;
     std::iter::from_fn(move || {
         if channel == 0 {
-            level = swell.next(&mut dice, 0.8);
-            blip_left -= DT;
-            if blip_left <= 0.0 {
-                blip_left = dice.range(0.15, 1.2);
-                blip_at = dice.range(700.0, 1700.0);
-                blip_for = 0.05;
+            next -= DT;
+            if next <= 0.0 {
+                (into, lasts, pitch) = (0.0, dice.range(0.25, 0.55), dice.range(380.0, 750.0));
+                (loud, pan) = (dice.range(0.4, 1.0), dice.range(-0.7, 0.7));
+                next = dice.range(0.8, 2.8);
+                let count = 1 + (dice.next() % 3) as usize;
+                for (i, drop) in drops.iter_mut().enumerate() {
+                    *drop = if i < count {
+                        (
+                            -dice.range(0.08, 0.4),
+                            dice.range(700.0, 1400.0),
+                            dice.range(0.2, 0.5),
+                            0.0,
+                        )
+                    } else {
+                        (f32::MAX, 0.0, 0.0, 0.0)
+                    };
+                }
             }
-            blip_for -= DT;
+            into += DT;
+            let mut out = 0.0;
+            if into < lasts {
+                let t = into / lasts;
+                let shape = (t * 8.0).min(1.0) * (1.0 - t) * (1.0 - t);
+                out += slosh.pass(dice.noise(), pitch * (1.0 - 0.3 * t), 0.5) * shape * loud;
+            }
+            for (into, hz, loud, phase) in &mut drops {
+                *into += DT;
+                if (0.0..0.03).contains(into) {
+                    let t = *into / 0.03;
+                    *phase = (*phase + *hz * (1.0 + 0.8 * t) * DT) % 1.0;
+                    out += libm::sinf(TAU * *phase) * hump(t) * *loud * 0.25;
+                }
+            }
+            // Water is never quite silent.
+            out += hush.pass(dice.noise(), 450.0, 0.2) * 0.02;
+            frame = [out * (1.0 - pan) * 0.8, out * (1.0 + pan) * 0.8];
         }
-        let rush = body[channel].low(pink[channel].next(dice.noise()), 280.0 + 500.0 * level);
-        let mut out = rush * level * 1.4;
-        if blip_for > 0.0 {
-            out += blip.pass(dice.noise(), blip_at, 0.15) * 0.12 * (blip_for / 0.05);
-        }
+        let sample = frame[channel];
         channel = 1 - channel;
-        Some(soft(out))
+        Some(soft(sample))
     })
 }
 
@@ -415,8 +442,8 @@ fn hum(mut dice: Dice) -> impl Iterator<Item = f32> + Send {
         t += DT;
         let tone = |hz: f32| libm::sinf(TAU * ((hz * t) % 1.0));
         let swell = 0.7 + 0.3 * libm::sinf(TAU * 0.13 * t);
-        let low = (tone(55.0) + 0.7 * tone(57.3) + 0.35 * tone(110.4)) * 0.22 * swell;
-        let air = whisper.pass(dice.noise(), 620.0, 0.3) * 0.08 * breath.next(&mut dice, 0.5);
+        let low = (tone(55.0) + 0.7 * tone(57.3) + 0.35 * tone(110.4)) * 0.11 * swell;
+        let air = whisper.pass(dice.noise(), 620.0, 0.3) * 0.04 * breath.next(&mut dice, 0.5);
         Some(soft(low + air))
     })
 }
@@ -476,6 +503,37 @@ pub(crate) mod tests {
         let channels = decoder.channels().get();
         let count = (seconds * RATE as f32) as usize * channels as usize;
         (decoder.take(count).collect(), channels)
+    }
+
+    /// How loud a sound is while it sounds, in decibels below full scale: the root mean
+    /// square of the samples within 40 dB of its peak, so silences between calls or
+    /// strokes do not count.
+    pub fn active_db(samples: &[f32]) -> f32 {
+        let peak = samples.iter().fold(0.0f32, |most, s| most.max(s.abs()));
+        let active: Vec<f32> = samples
+            .iter()
+            .copied()
+            .filter(|s| s.abs() > peak * 0.01)
+            .collect();
+        20.0 * libm::log10f(loudness(&active).max(1e-6))
+    }
+
+    /// How loud a sound measured at `sound_db` is heard at the ear, at a level within its
+    /// part of the mix, with the options menu's volumes as they start.
+    pub fn at_ear(sound_db: f32, level: f32, bus: crate::audio::Bus) -> f32 {
+        sound_db + 20.0 * libm::log10f(level * crate::audio::Mix::default().level(bus))
+    }
+
+    /// Fails unless a sound is heard within its band of the mix (docs/audio.md).
+    /// `TERRA_LOUDNESS=1 cargo test loudness -- --nocapture` prints every level.
+    pub fn within(name: &str, heard: f32, (low, high): (f32, f32)) {
+        if std::env::var_os("TERRA_LOUDNESS").is_some() {
+            println!("{name:16} {heard:6.1} dBFS   band {low} to {high}");
+        }
+        assert!(
+            (low..=high).contains(&heard),
+            "{name} is heard at {heard:.1} dBFS, outside its band of {low} to {high}"
+        );
     }
 
     pub fn loudness(samples: &[f32]) -> f32 {

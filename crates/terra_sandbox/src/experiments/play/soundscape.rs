@@ -23,6 +23,11 @@ use terra_gen::{Rng, Seed};
 
 /// How often the place is looked at again.
 const LOOK_EVERY_S: f32 = 0.25;
+/// How loud a campfire is, a forge or smelter while it works, and the hum where magic
+/// pools.
+const CAMPFIRE: f32 = 0.55;
+const LIT: f32 = 0.55;
+const HUM: f32 = 0.4;
 /// Rings of the ground looked at for water, and their distance in metres.
 const SHORE_RINGS_M: [f32; 4] = [6.0, 15.0, 30.0, 55.0];
 
@@ -130,11 +135,11 @@ fn follow_place(
 fn place_level(sound: Sound, outdoors: bool, lair_m: f32, shore_m: Option<f32>) -> f32 {
     let inside = if outdoors { 1.0 } else { 0.2 };
     match sound {
-        Sound::Wind => 0.5 * inside,
-        Sound::Birds => 0.55 * inside * ((lair_m - 40.0) / 80.0).clamp(0.0, 1.0),
+        Sound::Wind => 0.25 * inside,
+        Sound::Birds => 0.3 * inside * ((lair_m - 40.0) / 80.0).clamp(0.0, 1.0),
         Sound::Water => {
             shore_m.map_or(0.0, |metres| (1.0 - (metres - 6.0) / 55.0).clamp(0.0, 1.0))
-                * 0.7
+                * 0.5
                 * inside
         }
         _ => 0.0,
@@ -169,7 +174,7 @@ fn mark_sources(
 ) {
     for (entity, prop) in &stations {
         let level = match prop.item.station {
-            Some(Station::Campfire) => 0.7,
+            Some(Station::Campfire) => CAMPFIRE,
             // Lit only while they work (`stoke`).
             Some(Station::Forge | Station::Smelter) => 0.0,
             _ => continue,
@@ -183,7 +188,7 @@ fn mark_sources(
         commands.spawn((
             Name::new("Where magic pools, heard"),
             Transform::from_translation(lair.0),
-            Ambient::new(Sound::Hum, 0.8, 8.0),
+            Ambient::new(Sound::Hum, HUM, 8.0),
         ));
     }
     if let Some(village) = village.filter(|_| !marked.1) {
@@ -201,7 +206,7 @@ fn mark_sources(
 fn stoke(mut fires: Query<(&Prop, &Works, &mut Ambient)>) {
     for (prop, works, mut ambient) in &mut fires {
         if matches!(prop.item.station, Some(Station::Forge | Station::Smelter)) {
-            let level = if works.queue.is_empty() { 0.0 } else { 0.8 };
+            let level = if works.queue.is_empty() { 0.0 } else { LIT };
             if ambient.level != level {
                 ambient.level = level;
             }
@@ -300,15 +305,43 @@ mod tests {
     #[test]
     fn birds_fall_quiet_near_pooled_magic_and_indoors() {
         let open = place_level(Sound::Birds, true, 500.0, None);
-        assert!(open > 0.5);
+        assert!(open > 0.25);
         assert_eq!(place_level(Sound::Birds, true, 30.0, None), 0.0);
         assert!(place_level(Sound::Birds, false, 500.0, None) < open / 4.0);
     }
 
     #[test]
     fn water_is_loudest_at_the_shore_and_gone_far_from_it() {
-        assert!(place_level(Sound::Water, true, 500.0, Some(0.0)) > 0.6);
+        assert!(place_level(Sound::Water, true, 500.0, Some(0.0)) > 0.4);
         assert!(place_level(Sound::Water, true, 500.0, Some(30.0)) > 0.0);
         assert_eq!(place_level(Sound::Water, true, 500.0, None), 0.0);
+    }
+
+    #[test]
+    fn the_world_sits_under_everything_else() {
+        use crate::audio::synth::tests::{active_db, at_ear, render, within};
+        // Around the listener, at the loudest the place makes them.
+        for (sound, level) in [
+            (Sound::Wind, place_level(Sound::Wind, true, 500.0, None)),
+            (Sound::Birds, place_level(Sound::Birds, true, 500.0, None)),
+            (
+                Sound::Water,
+                place_level(Sound::Water, true, 500.0, Some(0.0)),
+            ),
+        ] {
+            let (samples, _) = render(sound, 5, 20.0);
+            let heard = at_ear(active_db(&samples), level, Bus::Ambience);
+            within(&format!("{sound:?}"), heard, (-46.0, -34.0));
+        }
+        // Things that sound of their own, close up.
+        for (sound, level) in [
+            (Sound::Fire, CAMPFIRE),
+            (Sound::Fire, LIT),
+            (Sound::Hum, HUM),
+        ] {
+            let (samples, _) = render(sound, 5, 20.0);
+            let heard = at_ear(active_db(&samples), level, Bus::Ambience);
+            within(&format!("{sound:?}"), heard, (-42.0, -30.0));
+        }
     }
 }

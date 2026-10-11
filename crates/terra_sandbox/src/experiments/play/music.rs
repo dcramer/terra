@@ -211,4 +211,15 @@ mod tests {
         assert!(Mood::Danger.silence_s(&mut dice) < 5.0);
         assert!(Mood::Calm.silence_s(&mut dice) > 30.0);
     }
+
+    #[test]
+    fn music_sits_under_the_world_s_sounds() {
+        use crate::audio::synth::tests::{active_db, at_ear, render, within};
+        for mood in [Mood::Calm, Mood::Village, Mood::Danger] {
+            let phrase = mood.phrase();
+            let (samples, _) = render(Sound::Music(phrase), 2, phrase.length_s());
+            let heard = at_ear(active_db(&samples), 1.0, Bus::Music);
+            within(&format!("{mood:?} music"), heard, (-40.0, -28.0));
+        }
+    }
 }

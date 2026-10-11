@@ -44,7 +44,7 @@ fn sounds_like(cue: Cue) -> Like {
         Cue::Step(Feet::Water) => Made("step.water", Sound::Splash, 0.35, 3.0),
         Cue::Step(Feet::Hoof) => Clips("step.hoof"),
         Cue::Step(Feet::Skitter) => Clips("step.skitter"),
-        Cue::Swing => Made("swing", Sound::Whoosh, 0.45, 3.0),
+        Cue::Swing => Made("swing", Sound::Whoosh, 0.38, 3.0),
         Cue::Hit => Clips("hit"),
         Cue::Kill => Clips("kill"),
         Cue::Hurt => Clips("hurt"),
@@ -63,8 +63,8 @@ fn sounds_like(cue: Cue) -> Like {
         // Fires are heard as they burn (soundscape.rs), not in strokes.
         Cue::Working(Station::Smelter | Station::Campfire) => Nothing,
         Cue::Made => Clips("made"),
-        Cue::Snort => Made("snort", Sound::Snort, 0.5, 5.0),
-        Cue::Hiss => Made("hiss", Sound::Hiss, 0.55, 5.0),
+        Cue::Snort => Made("snort", Sound::Snort, 0.38, 5.0),
+        Cue::Hiss => Made("hiss", Sound::Hiss, 0.44, 5.0),
         Cue::Bell => Clips("bell"),
         Cue::Click => Clips("click"),
         Cue::Open => Clips("open"),
@@ -84,7 +84,7 @@ const CLIPS: &[Clips] = &[
             "footstep_grass_004",
         ],
         Bus::Effects,
-        0.45,
+        0.24,
         (0.9, 1.08),
         2.0,
     ),
@@ -98,7 +98,7 @@ const CLIPS: &[Clips] = &[
             "footstep_wood_004",
         ],
         Bus::Effects,
-        0.5,
+        0.14,
         (0.9, 1.08),
         2.0,
     ),
@@ -110,7 +110,7 @@ const CLIPS: &[Clips] = &[
             "footstep_grass_004",
         ],
         Bus::Effects,
-        0.3,
+        0.12,
         (1.25, 1.45),
         2.0,
     ),
@@ -124,7 +124,7 @@ const CLIPS: &[Clips] = &[
             "impactGeneric_light_004",
         ],
         Bus::Effects,
-        0.18,
+        0.12,
         (1.7, 2.3),
         1.5,
     ),
@@ -138,7 +138,7 @@ const CLIPS: &[Clips] = &[
             "impactPunch_medium_004",
         ],
         Bus::Effects,
-        0.7,
+        0.4,
         (0.9, 1.1),
         3.0,
     ),
@@ -152,7 +152,7 @@ const CLIPS: &[Clips] = &[
             "impactSoft_heavy_004",
         ],
         Bus::Effects,
-        0.8,
+        0.46,
         (0.8, 0.95),
         3.0,
     ),
@@ -166,7 +166,7 @@ const CLIPS: &[Clips] = &[
             "impactPunch_heavy_004",
         ],
         Bus::Effects,
-        0.75,
+        0.54,
         (0.85, 1.0),
         3.0,
     ),
@@ -178,7 +178,7 @@ const CLIPS: &[Clips] = &[
             "impactSoft_heavy_004",
         ],
         Bus::Effects,
-        0.9,
+        0.58,
         (0.65, 0.75),
         3.0,
     ),
@@ -191,7 +191,7 @@ const CLIPS: &[Clips] = &[
             "impactWood_medium_002",
         ],
         Bus::Effects,
-        0.65,
+        0.45,
         (0.9, 1.1),
         3.0,
     ),
@@ -205,7 +205,7 @@ const CLIPS: &[Clips] = &[
             "impactMining_004",
         ],
         Bus::Effects,
-        0.6,
+        0.5,
         (0.9, 1.1),
         3.0,
     ),
@@ -213,7 +213,7 @@ const CLIPS: &[Clips] = &[
         "strike.plant",
         &["knifeSlice", "knifeSlice2"],
         Bus::Effects,
-        0.5,
+        0.36,
         (0.9, 1.15),
         2.5,
     ),
@@ -227,7 +227,7 @@ const CLIPS: &[Clips] = &[
             "impactWood_heavy_004",
         ],
         Bus::Effects,
-        0.9,
+        0.64,
         (0.6, 0.75),
         6.0,
     ),
@@ -241,7 +241,7 @@ const CLIPS: &[Clips] = &[
             "impactSoft_medium_004",
         ],
         Bus::Effects,
-        0.6,
+        0.31,
         (0.9, 1.1),
         3.0,
     ),
@@ -255,7 +255,7 @@ const CLIPS: &[Clips] = &[
             "impactPlank_medium_004",
         ],
         Bus::Effects,
-        0.55,
+        0.27,
         (0.9, 1.1),
         3.0,
     ),
@@ -267,7 +267,7 @@ const CLIPS: &[Clips] = &[
             "impactWood_heavy_004",
         ],
         Bus::Effects,
-        0.7,
+        0.45,
         (1.0, 1.15),
         4.0,
     ),
@@ -281,7 +281,7 @@ const CLIPS: &[Clips] = &[
             "impactWood_light_004",
         ],
         Bus::Effects,
-        0.6,
+        0.37,
         (0.9, 1.1),
         3.0,
     ),
@@ -289,7 +289,7 @@ const CLIPS: &[Clips] = &[
         "taken_apart",
         &["creak1", "creak2", "creak3"],
         Bus::Effects,
-        0.6,
+        0.58,
         (0.9, 1.1),
         3.0,
     ),
@@ -303,7 +303,7 @@ const CLIPS: &[Clips] = &[
             "impactMetal_medium_004",
         ],
         Bus::Effects,
-        0.5,
+        0.36,
         (0.95, 1.05),
         4.0,
     ),
@@ -316,7 +316,7 @@ const CLIPS: &[Clips] = &[
             "impactPlank_medium_001",
         ],
         Bus::Effects,
-        0.4,
+        0.19,
         (1.0, 1.2),
         3.0,
     ),
@@ -324,7 +324,7 @@ const CLIPS: &[Clips] = &[
         "made",
         &["metalClick", "metalLatch"],
         Bus::Effects,
-        0.6,
+        0.31,
         (0.95, 1.05),
         3.0,
     ),
@@ -338,7 +338,7 @@ const CLIPS: &[Clips] = &[
             "impactBell_heavy_004",
         ],
         Bus::Ambience,
-        0.9,
+        0.3,
         (0.55, 0.6),
         25.0,
     ),
@@ -346,23 +346,23 @@ const CLIPS: &[Clips] = &[
         "click",
         &["bookPlace1", "bookPlace2", "bookPlace3"],
         Bus::Interface,
-        0.3,
+        0.16,
         (1.4, 1.6),
         1.0,
     ),
     clips(
         "open",
-        &["handleSmallLeather", "clothBelt", "bookOpen"],
+        &["handleSmallLeather", "clothBelt"],
         Bus::Interface,
-        0.45,
+        0.8,
         (0.95, 1.05),
         1.0,
     ),
     clips(
         "close",
-        &["handleSmallLeather2", "clothBelt2", "bookClose"],
+        &["handleSmallLeather2", "clothBelt2"],
         Bus::Interface,
-        0.4,
+        0.8,
         (0.95, 1.05),
         1.0,
     ),
@@ -561,5 +561,60 @@ mod tests {
         heard.count("hit");
         heard.count("bell");
         assert_eq!(heard.0, [("hit", 2), ("bell", 1)]);
+    }
+}
+
+/// Every sound in its place in the mix (docs/audio.md), measured from the clips and the
+/// sounds made in code, at the volumes the options menu starts with.
+#[cfg(test)]
+mod loudness {
+    use super::*;
+    use crate::audio::synth::tests::{active_db, at_ear, render, within};
+    use bevy::audio::{AudioSource, Decodable};
+
+    /// The band each kind of sound is heard in, in dBFS while it sounds.
+    fn band(name: &str, bus: Bus) -> (f32, f32) {
+        match bus {
+            _ if name.starts_with("step.") => (-42.0, -28.0),
+            Bus::Interface => (-38.0, -28.0),
+            // A bell is meant to carry.
+            Bus::Ambience => (-36.0, -26.0),
+            _ => (-30.0, -18.0),
+        }
+    }
+
+    fn clip_db(file: &str) -> f32 {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("assets/sounds/{file}.ogg"));
+        let source = AudioSource {
+            bytes: std::fs::read(path).unwrap().into(),
+        };
+        active_db(&source.decoder().collect::<Vec<f32>>())
+    }
+
+    #[test]
+    fn every_recorded_sound_sits_in_its_place_in_the_mix() {
+        for clips in CLIPS {
+            // The loudest take, since that is the one that stands out.
+            let loudest = clips
+                .files
+                .iter()
+                .map(|file| clip_db(file))
+                .fold(f32::MIN, f32::max);
+            let heard = at_ear(loudest, clips.level, clips.bus);
+            within(clips.name, heard, band(clips.name, clips.bus));
+        }
+    }
+
+    #[test]
+    fn every_sound_made_in_code_sits_in_its_place_in_the_mix() {
+        for cue in [Cue::Step(Feet::Water), Cue::Swing, Cue::Snort, Cue::Hiss] {
+            let Like::Made(name, sound, level, _) = sounds_like(cue) else {
+                panic!("{cue:?} should be made in code");
+            };
+            let (samples, _) = render(sound, 3, 2.0);
+            let heard = at_ear(active_db(&samples), level, Bus::Effects);
+            within(name, heard, band(name, Bus::Effects));
+        }
     }
 }
