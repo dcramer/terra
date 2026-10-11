@@ -2,7 +2,8 @@
 //! control on the right, each of which can be set to another key or mouse button.
 //!
 //!   Esc           open and close the menu; while a control waits for a key, give up
-//!   Click a control, then press the key or mouse button it should be. Backspace clears it.
+//!   Click a control, then press the key or mouse button it should be. Any key can be
+//!   one, Backspace included. Right-click a control to clear it.
 //!
 //! What can be set, and how it is saved, is in `controls.rs`. Every change is saved as
 //! it is made.
@@ -416,14 +417,11 @@ fn listen(
         return;
     };
     menu.taken = true;
-    if matches!(binding, Binding::Key(KeyCode::Backspace | KeyCode::Delete)) {
-        settings.bind(action, slot, None);
-    } else if binding.reserved() {
+    if binding.reserved() {
         menu.refused = true;
         return;
-    } else {
-        settings.bind(action, slot, Some(binding));
     }
+    settings.bind(action, slot, Some(binding));
     menu.listening = None;
     menu.refused = false;
     if saving.0 {
@@ -431,15 +429,27 @@ fn listen(
     }
 }
 
-/// Clicks on the menu.
+/// Clicks on the menu. A right-click on a control clears it.
 fn press(
+    mouse: Res<ButtonInput<MouseButton>>,
     clicked: Query<(&Interaction, &Control), Changed<Interaction>>,
+    pointed: Query<(&Interaction, &Control)>,
     saving: Res<Saving>,
     mut menu: ResMut<OptionsMenu>,
     mut settings: ResMut<Settings>,
 ) {
     if std::mem::take(&mut menu.taken) || !menu.open {
         return;
+    }
+    if mouse.just_pressed(MouseButton::Right) {
+        for (interaction, &control) in &pointed {
+            if let (Interaction::Hovered, Control::Bind(action, slot)) = (interaction, control) {
+                settings.bind(action, slot, None);
+                if saving.0 {
+                    settings.save();
+                }
+            }
+        }
     }
     for (interaction, &control) in &clicked {
         if *interaction != Interaction::Pressed {
@@ -512,10 +522,11 @@ fn draw(
                         .to_string()
                 }
                 Some((action, _)) => format!(
-                    "Press a key or mouse button for {}.      Backspace  clear it      Esc  give up",
+                    "Press a key or mouse button for {}.      Esc  give up",
                     action.name().to_lowercase()
                 ),
-                None => "Click a control to change it.      Esc  back to the game".to_string(),
+                None => "Click a control to change it, right-click to clear it.      Esc  back to the game"
+                    .to_string(),
             },
         };
         if text.0 != wanted {

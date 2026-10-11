@@ -515,6 +515,8 @@ mod tests {
         settings.bind(Action::Jump, 1, Some(Binding::Mouse(MouseButton::Other(7))));
         settings.bind(Action::Use, 1, None);
         settings.bind(Action::Sprint, 0, Some(Binding::Key(KeyCode::ControlLeft)));
+        // Any key that is not kept for something else, Backspace included.
+        settings.bind(Action::Back, 1, Some(Binding::Key(KeyCode::Backspace)));
         assert_eq!(Settings::read(&settings.write()), settings);
         assert_eq!(
             Settings::read(&Settings::default().write()),
@@ -587,6 +589,7 @@ mod tests {
         assert!(Binding::Key(KeyCode::Digit0).reserved());
         assert!(Binding::Key(KeyCode::F3).reserved());
         assert!(!Binding::Key(KeyCode::KeyF).reserved());
+        assert!(!Binding::Key(KeyCode::Backspace).reserved());
         assert!(!Binding::Mouse(MouseButton::Left).reserved());
     }
 
