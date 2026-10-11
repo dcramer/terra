@@ -34,12 +34,12 @@ From the developers, 2026-10-11 (D98): use the books' system as the baseline and
 
 ## Mana
 
-The books' fighters spend mana on abilities. Proposed: a third pool beside health and stamina (D61), shown with them, filled by rest and food ([survival.md](survival.md)).
+The books' fighters spend mana on abilities. From the developers (D102): **there is mana as well as stamina**, a pool of its own beside health and stamina (D61). Proposed: shown with them, filled by rest and food ([survival.md](survival.md)).
 
 ## Questions
 
 1. Answered: **the books' system is the baseline**, as a guide we may tweak (D98).
-2. **Can an essence be removed** or replaced, or is it for life?
-3. **Mana**: a pool of its own, or abilities drawing on stamina?
+2. **Can an essence be removed** or replaced? Maybe; the developers expect it to be complex and are not sure yet.
+3. Answered: **mana and stamina** are both pools (D102).
 4. **What rank does a player start at**, and how long is a rank?
 5. **Skills and essences together**: does a high skill change what an ability does (a skilled archer's fire arrow)?

@@ -22,7 +22,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 | Warmth | Fire, shelter, clothing | Cold at night, in high places and in some worlds wears health down |
 | Rest | A bed in a claim | Proposed: rested, you recover faster for a while |
 
-**Food is essential** (D101): it is what keeps you from dying. **It is also a reward**, proposed after Valheim: good, cooked, varied food raises how much health and stamina you have for a while. Living well makes you stronger; going without makes you weaker, and then kills you.
+**Food is essential** (D101): it is what keeps you from dying; going without makes you weaker, and then kills you. **Good food may also give buffs**, as in Valheim and Enshrouded; whether, and what they are, the developers will decide later.
 
 ## Rhythms
 
@@ -40,7 +40,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 ## Questions
 
 1. Answered: **starving can kill**; food is essential (D101).
-2. **Food as strength**: food raising your limits, as in Valheim and Enshrouded?
+2. Later: **food buffs** may exist; whether and what is for later (D101).
 3. **Seasons**: yes or no?
 4. Answered in part: **death's cost** is the pack and a little skill or experience (D101). How much, and from which skills, is open.
 5. **Temperature**: a need of its own, or something that wears health down?

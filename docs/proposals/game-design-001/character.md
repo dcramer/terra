@@ -19,7 +19,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 Worlds are round planets large enough that walking round is ridiculous (D4, D13), so how you cross them matters.
 
 - **On foot**: walk, sprint, jump, climb, swim, all on stamina. Climbing is a skill by doing (D88).
-- **Further**: proposed after Enshrouded, a glider for descending and a grappling hook for climbing, as things you make, not gifts.
+- **No glider or grappling hook** for now; they can be added later if wanted.
 - **Faster**: fast travel between your claims, and portals and waystones you have found or built (D72); you may carry materials (D72).
 - **Roads** worn by travellers between settlements ([people.md](people.md)).
 - **Mounts**: probably, by taming (D100, [creatures.md](creatures.md)). Boats: open.
@@ -33,14 +33,14 @@ Within D93: what your body would feel, and a few compromises for play.
 | Health, stamina, mana ([essences.md](essences.md)), breath under water | A minimap, quest markers, objective arrows |
 | The action bar, what is in hand | Names and levels floating over people and monsters |
 | A character screen: essences, abilities, ranks, skills, equipment, backpack | A journal (D92) |
-| The map, as far as you have seen and marked it (D76) | Your position on the map, perhaps, as in Outward (question below) |
+| The map, as far as you have seen and marked it (D76) | Your position on the map, as in Outward, as a first pass (question below) |
 
 **Sound carries information**: a monster's call, a settlement's bell, rain coming, a predator behind you. Music sparse, and from the world where it can be.
 
 ## Questions
 
 1. Answered: **third person**, first person perhaps optional later (D97).
-2. **Glider and grappling hook**: as proposed?
-3. **The map**: does it show where you are, or must you work it out?
+2. Answered: **no glider or grappling hook** for now.
+3. Answered in part: **the map** is like Outward's as a first pass (D76): it does not show where you are. The developers' worry is that this may not work on a large map. Ways to soften it, without hand-holding: you see your position only when you stand at a place you know (a claim, a settlement, a named landmark); a compass to carry; a map that fills in only where you have been. Which, if any, is open.
 4. **A compass**: on screen, as an item, or none?
 5. **Names over heads**: none at all, or other players' names only?
