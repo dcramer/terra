@@ -158,6 +158,9 @@ fn spawn(
 /// drops that fence whenever another window takes over. So while the game has the mouse
 /// it also puts the pointer back in the middle of the window every frame, and it lets go
 /// properly the moment the window loses focus instead of believing a fence that is gone.
+///
+/// macOS does lock the pointer, and moving the pointer there undoes the lock, so on a Mac
+/// it is left where it is.
 fn capture_mouse(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -180,7 +183,7 @@ fn capture_mouse(
             CursorGrabMode::Locked
         };
         cursor.visible = false;
-    } else if captured {
+    } else if captured && !cfg!(target_os = "macos") {
         let middle = window.size() * 0.5;
         window.set_cursor_position(Some(middle));
     }
