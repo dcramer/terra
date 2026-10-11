@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test ../report.test.mjs src/prices.test.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },

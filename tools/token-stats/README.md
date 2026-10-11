@@ -51,7 +51,7 @@ By hand, from the repository:
 
 ## Deploying the worker
 
-It is deployed on David's Cloudflare account, and deploys itself: Cloudflare's Workers Builds is connected to this repository, and runs the tests and `npx wrangler deploy` when anything under `tools/token-stats/` changes on `main`. Its settings live on the worker in Cloudflare's dashboard, under Settings, Builds: root directory `tools/token-stats/worker`, build command `node --test ../report.test.mjs src/prices.test.mjs`, deploy command `npx wrangler deploy`, watch path `tools/token-stats/*`. Deploying leaves the `API_KEY` secret as it is.
+It is deployed on David's Cloudflare account, and deploys itself: Cloudflare's Workers Builds is connected to this repository, and runs the tests and `npx wrangler deploy` when anything under `tools/token-stats/` changes on `main`. Its settings live on the worker in Cloudflare's dashboard, under Settings, Builds: root directory `tools/token-stats/worker`, build command `npm test`, deploy command `npx wrangler deploy`, watch path `tools/token-stats/*`. Deploying leaves the `API_KEY` secret as it is.
 
 To deploy by hand, or to set it up again elsewhere:
 
@@ -77,4 +77,4 @@ To try it locally, put `API_KEY=devkey` in `worker/.dev.vars` and run `npx wrang
 | `POST /report` | `{"user": "dcramer", "messages": [{"id": "msg_…", "session": "…", "day": "2026-10-10", "model": "claude-opus-5-5", "input": 1, "output": 2, "cache_read": 3, "cache_write": 4}]}`, at most 500 messages |
 | `GET /stats` | `group`: any of `user`, `day`, `model`, comma-separated (default `user`); `since`: a day |
 
-Tests: `node --test tools/token-stats/report.test.mjs tools/token-stats/worker/src/prices.test.mjs`.
+Tests: `npm test` in `worker/`.
