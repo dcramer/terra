@@ -14,6 +14,7 @@ publish = false
 terra_build = { path = "crates/terra_build" }
 terra_core = { path = "crates/terra_core" }
 terra_gen = { path = "crates/terra_gen" }
+terra_items = { path = "crates/terra_items" }
 terra_sim = { path = "crates/terra_sim" }
 # The same version Bevy 0.19 uses, so vectors pass between our crates and Bevy unchanged.
 # `libm` routes its trigonometry through the portable maths library (D30).

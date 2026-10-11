@@ -9,6 +9,7 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits | No | Track A. Brief: [docs/terrain.md](../docs/terrain.md) |
 | `terra_core` | The shared contracts (ground, water, chunk mesh, operations) and a stand-in planet | No | Exists |
 | `terra_build` | Construction: bases shaped room by room, with the hull, windows and doors generated | No | Exists, as an experiment |
+| `terra_items` | Items and containers: kinds, the backpack grid, equipment, the action bar. Brief: [docs/items.md](../docs/items.md) | No | Exists |
 | `terra_net` | Network messages and transport | No | Track D |
 | `terra_sandbox` | A test environment: window, stand-in planet, free camera, live tweaks, experiments | Yes | Exists. [README](terra_sandbox/README.md) |
 | `terra_game` | The Bevy application: drawing, input, player, UI, audio | Yes | Track B |

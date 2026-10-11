@@ -5369,6 +5369,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_items"
+version = "0.1.0"
+dependencies = [
+ "terra_gen",
+]
+
+[[package]]
 name = "terra_sandbox"
 version = "0.1.0"
 dependencies = [
