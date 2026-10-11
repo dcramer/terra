@@ -30,6 +30,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - Technical decisions are yours to make: decide, record the reason in `docs/decisions.md`, and keep going. Design decisions belong to the developers: give a recommendation, mark it Open, and don't build on it.
 - When you investigate something, write it up as a dated note in `research/` and link it from `research/README.md`. Research informs decisions; it does not make them.
 - This is a public repository. Don't commit engine binaries, build output, logs, or anything personal.
+- Work on `main`. There are no branches or pull requests: commit to `main` and push it.
 - Commit and push after every incremental change. Others work on this project too, and the goal is that everyone is up to date between changes. Before pushing, pull with rebase (`git pull --rebase`), resolve any conflicts, and run the checks again if anything came in. Never force-push `main`.
 
 ## Working in the Rust workspace
