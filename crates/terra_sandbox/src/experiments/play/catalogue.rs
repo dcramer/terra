@@ -64,6 +64,8 @@ pub enum Kind {
     Items(&'static [Item]),
     /// Take away an item, or close up a window or door.
     Remove,
+    /// Pick an item up and put it down somewhere else.
+    Move,
 }
 
 pub struct Part {
@@ -77,7 +79,7 @@ impl Part {
             Kind::Room(shapes) => shapes.len(),
             Kind::Window(shapes) => shapes.len(),
             Kind::Items(items) => items.len(),
-            Kind::Reshape | Kind::Door | Kind::Remove => 1,
+            Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => 1,
         }
     }
 
@@ -87,14 +89,14 @@ impl Part {
             Kind::Room(shapes) => Some(shapes[variant].name),
             Kind::Window(shapes) => Some(shapes[variant].0),
             Kind::Items(items) => Some(items[variant].name),
-            Kind::Reshape | Kind::Door | Kind::Remove => None,
+            Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => None,
         }
     }
 }
 
 /// The parts, in the order they go round the dial, clockwise from the top. The first
 /// ten are also on the number keys.
-pub static PARTS: [Part; 13] = [
+pub static PARTS: [Part; 14] = [
     Part {
         name: "Room",
         kind: Kind::Room(&[
@@ -113,10 +115,6 @@ pub static PARTS: [Part; 13] = [
             RoomShape {
                 name: "Corridor",
                 tiles: [1, 3],
-            },
-            RoomShape {
-                name: "Corridor, turned",
-                tiles: [3, 1],
             },
         ]),
     },
@@ -139,6 +137,10 @@ pub static PARTS: [Part; 13] = [
     Part {
         name: "Remove",
         kind: Kind::Remove,
+    },
+    Part {
+        name: "Move",
+        kind: Kind::Move,
     },
     Part {
         name: "Seat",
@@ -218,6 +220,14 @@ pub fn items() -> impl Iterator<Item = &'static Item> {
 /// The item whose model is a given file.
 pub fn item_from(file: &str) -> Option<&'static Item> {
     items().find(|item| item.file == file)
+}
+
+/// Where a part is in the list, for the parts that have their own key.
+pub fn part_of(wanted: fn(&Kind) -> bool) -> usize {
+    PARTS
+        .iter()
+        .position(|part| wanted(&part.kind))
+        .expect("the catalogue has this part")
 }
 
 #[cfg(test)]

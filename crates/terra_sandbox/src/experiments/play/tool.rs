@@ -1,20 +1,28 @@
 //! The builder tool: what it is aimed at, what it would do there, and doing it.
 //!
-//! You pick a part from the dial (`dial.rs`), cycle through its variants, and aim.
+//! The controls follow the habit of Subnautica and games like it, as far as we could
+//! confirm it (research/subnautica-2-building.md): the right mouse button is the menu,
+//! the left one builds, the wheel turns what you are holding, and taking apart and moving
+//! are modes with their own keys.
+//!
+//!   Hold right mouse   the dial of parts; move the mouse to one and let go (or hold B)
+//!   Tap right mouse    put the part away, or put back what you picked up
+//!   Left click         build, place, or pick up                          (or E)
+//!   Scroll wheel       turn an item or a room; push and pull a wall      (or Z and X)
+//!   R                  the next variant of the part
+//!   Q                  take-apart mode, and back
+//!   F                  move mode, and back
+//!   G                  the grid on and off: items snap to it and turn in eighths
+//!   1 to 9, 0          the first ten parts directly
+//!
 //! Whatever the tool would do is shown in the world before you commit: the wall a push
 //! would move, the outline of a window, the footprint of a room, or a ghost of the item
 //! where it would stand.
-//!
-//!   Hold Q        the dial of parts; move the mouse to one and let go
-//!   1 to 9, 0     the first ten parts directly
-//!   Scroll, or C  the next variant of the part
-//!   R             turn an item an eighth of a circle
-//!   Left click    build      (E does the same)
-//!   Right click   take away  (F does the same)
 
-use super::catalogue::{Item, Kind, PARTS, Part};
+use super::catalogue::{self, Item, Kind, PARTS, Part};
 use super::dial::Dial;
-use super::props::{self, Models, Prop};
+use super::flora::Obstacles;
+use super::props::{self, Models, Prop, Standing};
 use super::{Player, View};
 use crate::experiments::build::Site;
 use crate::planet::Planet;
@@ -35,6 +43,13 @@ use terra_core::Ground;
 /// How far from the player walls and rooms can be worked on, and items placed.
 const STRUCTURE_REACH_M: f32 = 18.0;
 const ITEM_REACH_M: f32 = 9.0;
+/// Where an item is offered when the view is not on anything within reach.
+const ITEM_NEAR_M: f32 = 3.0;
+/// The grid items snap to, in metres. It divides a tile evenly, so it lines up with walls.
+const GRID_M: f32 = 0.5;
+/// How far one notch of the wheel turns an item, on the grid and off it, in degrees.
+const GRID_TURN: f32 = 45.0;
+const FREE_TURN: f32 = 15.0;
 const BUILD_COLOUR: Color = Color::srgb(0.35, 0.9, 1.0);
 const OPENING_COLOUR: Color = Color::srgb(1.0, 0.78, 0.25);
 const REFUSED_COLOUR: Color = Color::srgb(1.0, 0.35, 0.3);
@@ -65,14 +80,36 @@ pub enum Target {
     Prop(Entity),
 }
 
+/// An item picked up in move mode, and where it came from in case it is put back.
+struct Carried {
+    item: &'static Item,
+    at: Vec3,
+    lift: f32,
+    turn: f32,
+    indoors: bool,
+}
+
 #[derive(Resource)]
 pub struct Builder {
     /// Which part is picked, as its place in the catalogue.
     pub part: usize,
+    /// Nothing is in hand: the tool does nothing until a part is picked.
+    pub stowed: bool,
     /// The variant last used of each part.
     variants: Vec<usize>,
     /// How far the next item is turned, in degrees.
     turn: f32,
+    /// Whether the next room is turned a quarter circle.
+    room_turned: bool,
+    /// Whether items snap to the grid and turn in eighths.
+    pub snap: bool,
+    /// How many notches the wheel has turned this frame, away from the player counting up.
+    wheel: i32,
+    /// The part to go back to on leaving take-apart or move mode.
+    before_mode: Option<usize>,
+    carrying: Option<Carried>,
+    /// Set by a tap of the right mouse button: put away, or put back.
+    pub cancel: bool,
     pub target: Target,
     /// The rectangles the highlight was last drawn for, and in which look.
     shown: (Vec<[Vec3; 4]>, usize),
@@ -93,12 +130,48 @@ impl Builder {
 
     pub fn pick(&mut self, part: usize) {
         self.part = part.min(PARTS.len() - 1);
+        self.stowed = false;
+        self.before_mode = None;
     }
 
-    /// The item that would be placed, if the picked part is an item.
+    pub fn is_carrying(&self) -> bool {
+        self.carrying.is_some()
+    }
+
+    /// Switches to a mode, or back from it to whatever was picked before.
+    fn toggle(&mut self, mode: usize) {
+        if self.part == mode && !self.stowed {
+            match self.before_mode.take() {
+                Some(part) => self.part = part,
+                None => self.stowed = true,
+            }
+        } else {
+            self.before_mode = (!self.stowed && self.before_mode.is_none()).then_some(self.part);
+            self.part = mode;
+            self.stowed = false;
+        }
+    }
+
+    /// The item that would be placed: the one being carried, or the picked part's.
     fn item(&self) -> Option<&'static Item> {
+        match (&self.carrying, &self.picked().kind) {
+            (Some(carried), _) => Some(carried.item),
+            (None, Kind::Items(items)) => Some(&items[self.variant()]),
+            _ => None,
+        }
+    }
+
+    /// The footprint of the room that would be built, in tiles.
+    fn room(&self) -> Option<IVec2> {
         match self.picked().kind {
-            Kind::Items(items) => Some(&items[self.variant()]),
+            Kind::Room(shapes) => {
+                let [east, south] = shapes[self.variant()].tiles;
+                Some(if self.room_turned {
+                    IVec2::new(south, east)
+                } else {
+                    IVec2::new(east, south)
+                })
+            }
             _ => None,
         }
     }
@@ -152,8 +225,15 @@ fn setup(
     let ghost = commands.spawn((Name::new("Builder ghost"), unseen())).id();
     commands.insert_resource(Builder {
         part: 0,
+        stowed: true,
         variants: vec![0; PARTS.len()],
         turn: 0.0,
+        room_turned: false,
+        snap: true,
+        wheel: 0,
+        before_mode: None,
+        carrying: None,
+        cancel: false,
         target: Target::Nothing,
         shown: (Vec::new(), 0),
         highlight,
@@ -163,7 +243,8 @@ fn setup(
     });
 }
 
-/// Picks parts by number, cycles variants and turns items.
+/// Reads the keys and the wheel: picking parts by number, switching modes, cycling
+/// variants, and turning what is in hand.
 fn choose(
     keys: Res<ButtonInput<KeyCode>>,
     scroll: Res<AccumulatedMouseScroll>,
@@ -182,28 +263,49 @@ fn choose(
         KeyCode::Digit9,
         KeyCode::Digit0,
     ];
+    builder.wheel = 0;
+    if dial.open || builder.is_carrying() && keys.any_just_pressed(NUMBERS) {
+        return;
+    }
     for (part, key) in NUMBERS.into_iter().enumerate() {
         if keys.just_pressed(key) {
             builder.pick(part);
         }
     }
-    if dial.open {
+    if !builder.is_carrying() {
+        if keys.just_pressed(KeyCode::KeyQ) {
+            builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Remove)));
+        }
+        if keys.just_pressed(KeyCode::KeyF) {
+            builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Move)));
+        }
+    }
+    if keys.just_pressed(KeyCode::KeyG) {
+        builder.snap = !builder.snap;
+        if builder.snap {
+            builder.turn = (builder.turn / GRID_TURN).round() * GRID_TURN % 360.0;
+        }
+    }
+    if builder.stowed {
         return;
     }
-    let count = builder.picked().variants();
-    let step = if keys.just_pressed(KeyCode::KeyC) || scroll.delta.y < 0.0 {
-        1
-    } else if scroll.delta.y > 0.0 {
-        count - 1
-    } else {
-        0
-    };
-    if step != 0 {
-        let part = builder.part;
-        builder.variants[part] = (builder.variants[part] + step) % count;
+    if keys.just_pressed(KeyCode::KeyR) && !builder.is_carrying() {
+        let (part, count) = (builder.part, builder.picked().variants());
+        let back = keys.pressed(KeyCode::ShiftLeft);
+        builder.variants[part] =
+            (builder.variants[part] + if back { count - 1 } else { 1 }) % count;
     }
-    if keys.just_pressed(KeyCode::KeyR) {
-        builder.turn = (builder.turn + 45.0) % 360.0;
+    // One notch at a time, however the wheel reports it. Z and X stand in for the wheel.
+    let notch = |amount: f32| (amount > 0.0) as i32 - (amount < 0.0) as i32;
+    builder.wheel = notch(scroll.delta.y) + keys.just_pressed(KeyCode::KeyX) as i32
+        - keys.just_pressed(KeyCode::KeyZ) as i32;
+    if builder.wheel != 0 {
+        if builder.item().is_some() {
+            let step = if builder.snap { GRID_TURN } else { FREE_TURN };
+            builder.turn = (builder.turn + step * builder.wheel as f32).rem_euclid(360.0);
+        } else if builder.room().is_some() {
+            builder.room_turned = !builder.room_turned;
+        }
     }
 }
 
@@ -213,13 +315,16 @@ fn aim(
     site: Res<Site>,
     options: Res<Options>,
     dial: Res<Dial>,
+    view: Res<View>,
+    models: Res<Models>,
+    obstacles: Res<Obstacles>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
     player: Single<&Transform, With<Player>>,
     props: Query<(Entity, &Prop, &Transform, &Visibility)>,
     mut builder: ResMut<Builder>,
 ) {
     // A fixed camera is for taking pictures, and an open dial is for choosing.
-    if options.vantage.is_some() || dial.open {
+    if options.vantage.is_some() || dial.open || builder.stowed {
         builder.target = Target::Nothing;
         return;
     }
@@ -234,16 +339,116 @@ fn aim(
     let wall = hull
         .filter(|hit| hit.face.side.is_wall())
         .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M));
+    // The nearest item the view passes through, short of any wall.
+    let item_aimed_at = || {
+        let limit = hull.map_or(f32::MAX, |hit| hit.distance + 0.3);
+        props
+            .iter()
+            .filter(|(_, _, _, visibility)| **visibility != Visibility::Hidden)
+            .filter_map(|(entity, prop, transform, _)| {
+                let middle = transform.translation + *transform.up() * prop.half.y;
+                let along = (middle - origin).dot(direction);
+                let off = (origin + direction * along).distance(middle);
+                let size = prop.half.max_element();
+                (along > 0.0
+                    && along < limit
+                    && off < size.max(0.3)
+                    && within(middle, ITEM_REACH_M))
+                .then_some((entity, along))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(entity, _)| entity)
+    };
+    // Where an item would stand: the floor if the view meets one, against a wall if it
+    // meets that, the ground outside otherwise. If that is out of reach, a few steps in
+    // front of the player instead, so there is always something to see.
+    let spot = || {
+        let half = builder
+            .item()
+            .and_then(|item| models.of(item))
+            .map_or(Vec3::splat(0.3), |model| model.half);
+        let boxed = |at: Vec3, indoors: bool| Standing {
+            at,
+            lift: 0.0,
+            turn: builder.turn,
+            half,
+            indoors,
+        };
+        let on_grid = |at: Vec3| {
+            if builder.snap {
+                ((at / GRID_M).round() * GRID_M).with_y(at.y)
+            } else {
+                at
+            }
+        };
+        let on_ground = ground
+            .filter(|ground| hull.is_none_or(|hit| ground.distance < hit.distance))
+            .map(|ground| (on_grid(to_base.transform_point3(ground.point)), false));
+        let in_base = hull.and_then(|hit| {
+            let floor = hit.face.tile[1] as f32 * STOREY_M;
+            let met = local_origin + local_direction * hit.distance;
+            match hit.face.side {
+                Side::Down => Some((on_grid(met), true)),
+                Side::Up => None,
+                side => {
+                    // Flush against the wall, on whichever side of it the view is, and
+                    // on the grid along it.
+                    let out = side.offset().as_vec3();
+                    let toward_viewer = -out * local_direction.dot(out).signum();
+                    let tile = ((met + toward_viewer * 0.2) / TILE_M)
+                        .floor()
+                        .as_ivec3()
+                        .with_y(hit.face.tile[1]);
+                    let indoors = site.base.contains(tile);
+                    let along = on_grid(met);
+                    let against = boxed(met, indoors).reach_toward(out) + 0.02;
+                    let at = along + out * (met - along).dot(out) + toward_viewer * against;
+                    Some((at.with_y(if indoors { floor } else { 0.0 }), indoors))
+                }
+            }
+        });
+        let ahead = || {
+            let feet = to_base.transform_point3(player.translation);
+            let forward = to_base
+                .transform_vector3(view.forward)
+                .with_y(0.0)
+                .normalize_or_zero();
+            let at = on_grid(feet + forward * ITEM_NEAR_M);
+            let tile = (at / TILE_M).floor().as_ivec3().with_y(0);
+            let indoors = site.base.contains(tile) && feet.y < STOREY_M * 0.5;
+            (at.with_y(0.0), indoors)
+        };
+        let (at, indoors) = on_ground
+            .or(in_base)
+            .filter(|(at, _)| within(site.frame.transform_point(*at), ITEM_REACH_M))
+            .unwrap_or_else(ahead);
+        let world = site.frame.transform_point(at);
+        let dry = planet.surface(world.normalize()).length() > planet.sea_radius_m();
+        let clear = props::can_stand(
+            &site,
+            &boxed(at, indoors),
+            props
+                .iter()
+                .filter(|(_, _, _, visibility)| **visibility != Visibility::Hidden)
+                .map(|(_, prop, _, _)| prop),
+            &obstacles.0,
+        );
+        Target::Spot {
+            at,
+            indoors,
+            fits: clear && (indoors || dry),
+        }
+    };
 
     builder.target = match builder.picked().kind {
         Kind::Reshape | Kind::Window(_) | Kind::Door => {
             wall.map_or(Target::Nothing, |hit| Target::Wall(hit.face))
         }
-        Kind::Room(shapes) if hull.is_none() => ground
+        Kind::Room(_) if hull.is_none() => ground
             .filter(|ground| within(ground.point, STRUCTURE_REACH_M))
-            .map_or(Target::Nothing, |ground| {
+            .zip(builder.room())
+            .map_or(Target::Nothing, |(ground, tiles)| {
                 // Centred on the ground aimed at.
-                let tiles = IVec2::from_array(shapes[builder.variant()].tiles);
                 let local = to_base.transform_point3(ground.point);
                 let corner = IVec3::new(
                     (local.x / TILE_M - tiles.x as f32 * 0.5).round() as i32,
@@ -264,64 +469,16 @@ fn aim(
                 }
             }),
         Kind::Room(_) => Target::Nothing,
-        Kind::Items(_) => {
-            // The floor if the view meets one, the foot of a wall if it meets that, and
-            // otherwise the ground outside.
-            let on_ground = ground
-                .filter(|ground| hull.is_none_or(|hit| ground.distance < hit.distance))
-                .map(|ground| (to_base.transform_point3(ground.point), false));
-            let in_base = hull.and_then(|hit| {
-                let floor = hit.face.tile[1] as f32 * STOREY_M;
-                match hit.face.side {
-                    Side::Down => Some((local_origin + local_direction * hit.distance, true)),
-                    Side::Up => None,
-                    _ => {
-                        let short = local_origin + local_direction * (hit.distance - 0.45);
-                        let tile = (short / TILE_M).floor().as_ivec3().with_y(hit.face.tile[1]);
-                        let indoors = site.base.contains(tile);
-                        Some((short.with_y(if indoors { floor } else { 0.0 }), indoors))
-                    }
-                }
-            });
-            on_ground
-                .or(in_base)
-                .filter(|(at, _)| within(site.frame.transform_point(*at), ITEM_REACH_M))
-                .map_or(Target::Nothing, |(at, indoors)| {
-                    let world = site.frame.transform_point(at);
-                    let dry = planet.surface(world.normalize()).length() > planet.sea_radius_m();
-                    Target::Spot {
-                        at,
-                        indoors,
-                        fits: props::fits(&site, at, indoors) && (indoors || dry),
-                    }
-                })
-        }
-        Kind::Remove => {
-            // The nearest item the view passes through, short of any wall.
-            let limit = hull.map_or(f32::MAX, |hit| hit.distance + 0.3);
-            let nearest = props
-                .iter()
-                .filter(|(_, _, _, visibility)| **visibility != Visibility::Hidden)
-                .filter_map(|(entity, prop, transform, _)| {
-                    let middle = transform.translation + *transform.up() * prop.half.y;
-                    let along = (middle - origin).dot(direction);
-                    let off = (origin + direction * along).distance(middle);
-                    let size = prop.half.max_element();
-                    (along > 0.0
-                        && along < limit
-                        && off < size.max(0.3)
-                        && within(middle, ITEM_REACH_M))
-                    .then_some((entity, along))
-                })
-                .min_by(|a, b| a.1.total_cmp(&b.1));
-            match (nearest, wall) {
-                (Some((entity, _)), _) => Target::Prop(entity),
-                (None, Some(hit)) if site.base.panel(hit.face) != Panel::Solid => {
-                    Target::Wall(hit.face)
-                }
-                _ => Target::Nothing,
+        Kind::Items(_) => spot(),
+        Kind::Move if builder.is_carrying() => spot(),
+        Kind::Move => item_aimed_at().map_or(Target::Nothing, Target::Prop),
+        Kind::Remove => match (item_aimed_at(), wall) {
+            (Some(entity), _) => Target::Prop(entity),
+            (None, Some(hit)) if site.base.panel(hit.face) != Panel::Solid => {
+                Target::Wall(hit.face)
             }
-        }
+            _ => Target::Nothing,
+        },
     };
 }
 
@@ -332,31 +489,47 @@ fn act(
     cursor: Single<&CursorOptions>,
     planet: Res<Planet>,
     models: Res<Models>,
-    builder: Res<Builder>,
     props: Query<&Prop>,
+    mut builder: ResMut<Builder>,
     mut site: ResMut<Site>,
     mut player: Single<&mut Player>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    // A click that only captured the mouse should not also build something.
-    let captured = cursor.grab_mode != CursorGrabMode::None;
-    let build =
-        keys.just_pressed(KeyCode::KeyE) || (captured && mouse.just_pressed(MouseButton::Left));
-    let take =
-        keys.just_pressed(KeyCode::KeyF) || (captured && mouse.just_pressed(MouseButton::Right));
-    if !build && !take {
+    // A tap of the right button: put back what was picked up, or put the part away.
+    if std::mem::take(&mut builder.cancel) {
+        match builder.carrying.take() {
+            Some(carried) => {
+                props::place(
+                    &mut commands,
+                    &models,
+                    &site,
+                    &planet,
+                    carried.item,
+                    carried.at,
+                    carried.lift,
+                    carried.turn,
+                    carried.indoors,
+                );
+            }
+            None => builder.stowed = true,
+        }
         return;
     }
+    // A click that only captured the mouse should not also build something.
+    let captured = cursor.grab_mode != CursorGrabMode::None;
+    let click =
+        keys.just_pressed(KeyCode::KeyE) || (captured && mouse.just_pressed(MouseButton::Left));
     let op = match (&builder.picked().kind, builder.target) {
-        (Kind::Reshape, Target::Wall(face)) if build => Some(BuildOp::Grow(face)),
-        (Kind::Reshape, Target::Wall(face)) => Some(BuildOp::Shrink(face)),
-        (Kind::Window(shapes), Target::Wall(face)) if build => {
+        // A wall goes out a tile for a click or a notch away, and in for a notch back.
+        (Kind::Reshape, Target::Wall(face)) if click || builder.wheel > 0 => {
+            Some(BuildOp::Grow(face))
+        }
+        (Kind::Reshape, Target::Wall(face)) if builder.wheel < 0 => Some(BuildOp::Shrink(face)),
+        (Kind::Window(shapes), Target::Wall(face)) if click => {
             Some(BuildOp::SetPanel(face, shapes[builder.variant()].1))
         }
-        (Kind::Door, Target::Wall(face)) if build => Some(BuildOp::SetPanel(face, Panel::Door)),
-        (Kind::Window(_) | Kind::Door | Kind::Remove, Target::Wall(face)) => {
-            Some(BuildOp::SetPanel(face, Panel::Solid))
-        }
+        (Kind::Door, Target::Wall(face)) if click => Some(BuildOp::SetPanel(face, Panel::Door)),
+        (Kind::Remove, Target::Wall(face)) if click => Some(BuildOp::SetPanel(face, Panel::Solid)),
         (
             Kind::Room(_),
             Target::Ground {
@@ -364,18 +537,18 @@ fn act(
                 tiles,
                 fits: true,
             },
-        ) if build => Some(BuildOp::AddRoom {
+        ) if click => Some(BuildOp::AddRoom {
             min: corner.to_array(),
             max: (corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1)).to_array(),
         }),
         (
-            Kind::Items(_),
+            Kind::Items(_) | Kind::Move,
             Target::Spot {
                 at,
                 indoors,
                 fits: true,
             },
-        ) if build => {
+        ) if click => {
             if let Some(item) = builder.item() {
                 props::place(
                     &mut commands,
@@ -389,15 +562,32 @@ fn act(
                     indoors,
                 );
                 info!("Placed a {} at {at}.", item.name);
+                builder.carrying = None;
                 player.since_acting = 0.0;
             }
             None
         }
-        (Kind::Remove, Target::Prop(entity)) => {
-            commands.entity(entity).despawn();
+        (Kind::Move, Target::Prop(entity)) if click => {
+            if let Ok(prop) = props.get(entity) {
+                info!("Picked up a {}.", prop.item.name);
+                builder.turn = prop.turn;
+                builder.carrying = Some(Carried {
+                    item: prop.item,
+                    at: prop.at,
+                    lift: prop.lift,
+                    turn: prop.turn,
+                    indoors: prop.indoors,
+                });
+                commands.entity(entity).despawn();
+                player.since_acting = 0.0;
+            }
+            None
+        }
+        (Kind::Remove, Target::Prop(entity)) if click => {
             if let Ok(prop) = props.get(entity) {
                 info!("Removed a {}.", prop.item.name);
             }
+            commands.entity(entity).despawn();
             player.since_acting = 0.0;
             None
         }
@@ -449,12 +639,10 @@ fn highlight(
 ) {
     let kind = &builder.picked().kind;
     let look = match (kind, builder.target) {
-        (
-            _,
-            Target::Ground { fits: false, .. } | Target::Spot { fits: false, .. } | Target::Prop(_),
-        ) => 2,
+        (Kind::Move, Target::Prop(_)) => 1,
+        (_, Target::Ground { fits: false, .. } | Target::Spot { fits: false, .. }) => 2,
         (Kind::Remove, _) => 2,
-        (Kind::Window(_) | Kind::Door, _) => 1,
+        (Kind::Window(_) | Kind::Door | Kind::Move, _) => 1,
         _ => 0,
     };
     let colour = [BUILD_COLOUR, OPENING_COLOUR, REFUSED_COLOUR][look];
@@ -547,6 +735,28 @@ fn highlight(
         }
     }
 
+    // The grid an item is snapping to, drawn on the floor or ground round it.
+    if let (true, Target::Spot { at, indoors, .. }) = (builder.snap, builder.target) {
+        let faint = colour.with_alpha(0.35);
+        let lines = 4;
+        let reach = lines as f32 * GRID_M;
+        let on_surface = |east: f32, south: f32| {
+            let point = site
+                .frame
+                .transform_point(at + Vec3::new(east, 0.02, south));
+            if indoors {
+                point
+            } else {
+                planet.drawn(point.normalize()) + point.normalize() * 0.04
+            }
+        };
+        for line in -lines..=lines {
+            let across = line as f32 * GRID_M;
+            gizmos.line(on_surface(across, -reach), on_surface(across, reach), faint);
+            gizmos.line(on_surface(-reach, across), on_surface(reach, across), faint);
+        }
+    }
+
     // A ghost of the item where it would stand.
     let ghost = builder.ghost;
     match (builder.item(), builder.target) {
@@ -602,32 +812,38 @@ fn highlight(
 
 /// What each button would do right now, for the prompt under the aiming mark.
 pub fn prompt(builder: &Builder) -> &'static str {
+    if builder.stowed {
+        return "Hold right mouse  build menu";
+    }
     match (&builder.picked().kind, builder.target) {
         (Kind::Reshape, Target::Wall(_)) => {
-            "Left click  push the wall out      Right click  pull it in"
+            "Left click  push the wall out      Scroll  push and pull"
         }
-        (Kind::Window(_), Target::Wall(_)) => {
-            "Left click  cut this window      Right click  solid wall      Scroll  shape"
-        }
-        (Kind::Door, Target::Wall(_)) => "Left click  cut a door      Right click  solid wall",
+        (Kind::Window(_), Target::Wall(_)) => "Left click  cut this window      R  shape",
+        (Kind::Door, Target::Wall(_)) => "Left click  cut a door",
         (Kind::Reshape | Kind::Window(_) | Kind::Door, _) => "Aim at a wall",
         (Kind::Room(_), Target::Ground { fits: true, .. }) => {
-            "Left click  build this room      Scroll  size"
+            "Left click  build this room      Scroll  turn      R  size"
         }
         (Kind::Room(_), Target::Ground { fits: false, .. }) => "The ground is too high here",
         (Kind::Room(_), _) => "Aim at open ground nearby",
         (Kind::Items(_), Target::Spot { fits: true, .. }) => {
-            "Left click  place      R  turn      Scroll  kind"
+            "Left click  place      Scroll  turn      R  next kind"
         }
-        (Kind::Items(_), Target::Spot { fits: false, .. }) => "It cannot stand there",
+        (Kind::Move, Target::Spot { fits: true, .. }) => {
+            "Left click  put it down      Scroll  turn      Right click  put it back"
+        }
+        (Kind::Items(_) | Kind::Move, Target::Spot { fits: false, .. }) => "It cannot stand there",
         (Kind::Items(_), _) => "Aim at a floor or at the ground nearby",
+        (Kind::Move, Target::Prop(_)) => "Left click  pick this up",
+        (Kind::Move, _) => "Aim at an item to move it      F  done",
         (Kind::Remove, Target::Prop(_)) => "Left click  take this away",
         (Kind::Remove, Target::Wall(_)) => "Left click  close this opening",
-        (Kind::Remove, _) => "Aim at an item, a window or a door",
+        (Kind::Remove, _) => "Aim at an item, a window or a door      Q  done",
     }
 }
 
 /// Whether the tool is waiting for the player to take the mouse.
-pub fn waiting(cursor: &CursorOptions, options: &Options, _view: &View) -> bool {
+pub fn waiting(cursor: &CursorOptions, options: &Options) -> bool {
     cursor.grab_mode == CursorGrabMode::None && !options.scripted()
 }

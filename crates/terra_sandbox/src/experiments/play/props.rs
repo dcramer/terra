@@ -75,6 +75,9 @@ pub struct Prop {
     /// Where it was put, in the base's own space.
     pub at: Vec3,
     pub indoors: bool,
+    /// How far it was raised above the floor or ground, and how many degrees turned.
+    pub lift: f32,
+    pub turn: f32,
     /// Half its width, height and depth, in metres: the box a walker cannot enter.
     pub half: Vec3,
 }
@@ -244,6 +247,8 @@ pub fn place(
             item,
             at,
             indoors,
+            lift,
+            turn: turn_degrees,
             half: model.half,
         },
         standing(site, planet, at, lift + item.lift, turn_degrees, indoors),
@@ -340,15 +345,140 @@ fn flicker(time: Res<Time>, mut fires: Query<&mut PointLight, With<Firelight>>) 
     }
 }
 
-/// Whether an item put at a place in the base's own space would be where it claims to
-/// be: under a roof if indoors, clear of the base if not.
-pub fn fits(site: &Site, at: Vec3, indoors: bool) -> bool {
+/// Whether an item put at a place in the base's own space would still be where it claims
+/// to be: under a roof if indoors, clear of the base if not.
+fn still_fits(site: &Site, at: Vec3, indoors: bool) -> bool {
     let tile = (at / TILE_M).floor().as_ivec3();
     if indoors {
         site.base.contains(tile.with_y(0))
     } else {
         !site.covers(site.frame.transform_point(at), 0.3)
     }
+}
+
+/// An item's box as it would stand: where, how big, and how turned, in the base's own
+/// space.
+#[derive(Clone, Copy)]
+pub struct Standing {
+    pub at: Vec3,
+    pub lift: f32,
+    pub turn: f32,
+    pub half: Vec3,
+    pub indoors: bool,
+}
+
+impl Standing {
+    pub fn of(prop: &Prop) -> Self {
+        Standing {
+            at: prop.at,
+            lift: prop.lift,
+            turn: prop.turn,
+            half: prop.half,
+            indoors: prop.indoors,
+        }
+    }
+
+    /// The four corners of its foot, east and south.
+    fn corners(&self) -> [Vec2; 4] {
+        let turned = Quat::from_rotation_y(self.turn.to_radians());
+        [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)].map(|(x, z)| {
+            let corner = self.at + turned * Vec3::new(x * self.half.x, 0.0, z * self.half.z);
+            corner.xz()
+        })
+    }
+
+    /// How far its box reaches from its middle in a level direction.
+    pub fn reach_toward(&self, direction: Vec3) -> f32 {
+        let turned = Quat::from_rotation_y(self.turn.to_radians());
+        self.half.x * (turned * Vec3::X).dot(direction).abs()
+            + self.half.z * (turned * Vec3::Z).dot(direction).abs()
+    }
+
+    fn is_solid(&self) -> bool {
+        self.half.y * 2.0 > STEP_OVER_M
+    }
+
+    /// Whether two boxes share space. Boxes that only touch do not.
+    fn overlaps(&self, other: &Standing) -> bool {
+        const TOUCHING: f32 = 0.03;
+        let (low, high) = (self.lift, self.lift + self.half.y * 2.0);
+        let (other_low, other_high) = (other.lift, other.lift + other.half.y * 2.0);
+        if self.indoors != other.indoors
+            || high < other_low + TOUCHING
+            || other_high < low + TOUCHING
+        {
+            return false;
+        }
+        // Two rectangles are apart if some edge of either has the other wholly beyond it.
+        let (ours, theirs) = (self.corners(), other.corners());
+        let apart_along = |corners: &[Vec2; 4]| {
+            (0..2).any(|edge| {
+                let axis = (corners[edge + 1] - corners[edge])
+                    .perp()
+                    .normalize_or_zero();
+                let span = |shape: &[Vec2; 4]| {
+                    shape
+                        .iter()
+                        .map(|corner| corner.dot(axis))
+                        .fold((f32::MAX, f32::MIN), |(low, high), at| {
+                            (low.min(at), high.max(at))
+                        })
+                };
+                let (a, b) = (span(&ours), span(&theirs));
+                a.1 < b.0 + TOUCHING || b.1 < a.0 + TOUCHING
+            })
+        };
+        !apart_along(&ours) && !apart_along(&theirs)
+    }
+
+    /// Whether a circle on the ground, given in the base's own space, reaches into the
+    /// box's foot.
+    fn meets_circle(&self, middle: Vec3, radius: f32) -> bool {
+        let turned_back = Quat::from_rotation_y(-self.turn.to_radians());
+        let local = turned_back * (middle - self.at);
+        let outside = (Vec2::new(local.x.abs(), local.z.abs())
+            - Vec2::new(self.half.x, self.half.z))
+        .max(Vec2::ZERO);
+        outside.length() < radius
+    }
+}
+
+/// Whether an item could stand somewhere: wholly indoors or wholly clear of the base,
+/// and not in the same space as another item, a tree or a boulder. Rugs and other flat
+/// things share space with anything.
+pub fn can_stand<'a>(
+    site: &Site,
+    standing: &Standing,
+    others: impl Iterator<Item = &'a Prop>,
+    obstacles: &[(Vec3, f32)],
+) -> bool {
+    let corners = standing.corners();
+    let placed = corners.iter().all(|corner| {
+        let at = Vec3::new(corner.x, 0.0, corner.y);
+        if standing.indoors {
+            site.base
+                .contains((at / TILE_M).floor().as_ivec3().with_y(0))
+        } else {
+            !site.covers(site.frame.transform_point(at), 0.05)
+        }
+    });
+    if !placed {
+        return false;
+    }
+    if !standing.is_solid() {
+        return true;
+    }
+    if others
+        .filter(|other| other.is_solid())
+        .any(|other| standing.overlaps(&Standing::of(other)))
+    {
+        return false;
+    }
+    let to_base = site.frame.compute_affine().inverse();
+    standing.indoors
+        || !obstacles.iter().any(|&(at, radius)| {
+            standing.meets_circle(to_base.transform_point3(at).with_y(0.0), radius)
+        })
 }
 
 /// Hides whatever the base's current shape leaves out in the open or shut in a wall.
@@ -363,7 +493,7 @@ fn keep_clear(
     }
     checked.0 = site.revision;
     for (prop, mut visibility) in &mut props {
-        *visibility = if fits(&site, prop.at, prop.indoors) {
+        *visibility = if still_fits(&site, prop.at, prop.indoors) {
             Visibility::Inherited
         } else {
             Visibility::Hidden
@@ -413,6 +543,8 @@ mod tests {
             item: catalogue::item_from("Props_Crate").unwrap(),
             at: Vec3::ZERO,
             indoors: false,
+            lift: 0.0,
+            turn: 0.0,
             half: Vec3::new(0.4, 0.4, 0.4),
         };
         (prop, Transform::IDENTITY, Visibility::Inherited)
@@ -450,6 +582,46 @@ mod tests {
             push_out(inside, 0.3, [(&prop, &transform, &visibility)].into_iter()),
             inside
         );
+    }
+
+    fn standing(east: f32, turn: f32) -> Standing {
+        Standing {
+            at: Vec3::new(east, 0.0, 0.0),
+            lift: 0.0,
+            turn,
+            half: Vec3::new(1.0, 0.4, 0.3),
+            indoors: true,
+        }
+    }
+
+    #[test]
+    fn boxes_overlap_only_when_they_share_space() {
+        let here = standing(0.0, 0.0);
+        assert!(here.overlaps(&standing(1.5, 0.0)));
+        // Side by side and touching is not overlapping.
+        assert!(!here.overlaps(&standing(2.0, 0.0)));
+        // Turned a quarter circle it is narrow, and fits closer.
+        assert!(!here.overlaps(&standing(1.4, 90.0)));
+        assert!(here.overlaps(&standing(1.2, 90.0)));
+        // Stood on top of it, or in a different place altogether.
+        let above = Standing { lift: 0.8, ..here };
+        assert!(!here.overlaps(&above));
+        let outside = Standing {
+            indoors: false,
+            ..here
+        };
+        assert!(!here.overlaps(&outside));
+    }
+
+    #[test]
+    fn a_box_knows_how_far_it_reaches_and_what_circles_touch_it() {
+        let here = standing(0.0, 0.0);
+        assert!((here.reach_toward(Vec3::X) - 1.0).abs() < 1e-5);
+        assert!((here.reach_toward(Vec3::Z) - 0.3).abs() < 1e-5);
+        assert!((standing(0.0, 90.0).reach_toward(Vec3::X) - 0.3).abs() < 1e-5);
+        assert!(here.meets_circle(Vec3::new(1.2, 0.0, 0.0), 0.3));
+        assert!(!here.meets_circle(Vec3::new(1.4, 0.0, 0.0), 0.3));
+        assert!(!here.meets_circle(Vec3::new(0.0, 0.0, 0.7), 0.3));
     }
 
     #[test]

@@ -1,12 +1,15 @@
-//! The dial: a ring of the parts the builder can build, opened by holding a key. Move
-//! the mouse toward a part and let go to pick it. Under the aiming mark, a line says
+//! The dial: a ring of the parts the builder can build, opened by holding the right mouse
+//! button. Move the mouse toward a part and let go to pick it. Under the aiming mark, a line says
 //! what is picked and what each button would do.
 
-use super::View;
 use super::catalogue::PARTS;
 use super::tool::{self, Builder};
 use crate::shell::Options;
-use bevy::{input::mouse::AccumulatedMouseMotion, prelude::*, window::CursorOptions};
+use bevy::{
+    input::mouse::AccumulatedMouseMotion,
+    prelude::*,
+    window::{CursorGrabMode, CursorOptions},
+};
 
 const DIAL_SIZE: f32 = 600.0;
 /// How far from the middle the parts' names sit.
@@ -14,6 +17,8 @@ const RING: f32 = 236.0;
 const LABEL: Vec2 = Vec2::new(98.0, 36.0);
 /// The mouse has to move this far from the middle before it points at anything.
 const DEAD_ZONE: f32 = 28.0;
+/// A press shorter than this that points at nothing is a tap, not a look at the dial.
+const TAP_SECONDS: f32 = 0.22;
 const PLAIN: Color = Color::srgba(0.07, 0.08, 0.1, 0.6);
 const PICKED: Color = Color::srgba(0.9, 0.46, 0.17, 0.95);
 const POINTED: Color = Color::srgba(0.35, 0.75, 0.85, 0.95);
@@ -25,6 +30,8 @@ pub struct Dial {
     pointer: Vec2,
     /// The part the mouse points at.
     pointed: Option<usize>,
+    /// How long the dial has been open, in seconds.
+    held_for: f32,
 }
 
 #[derive(Component)]
@@ -174,24 +181,36 @@ fn setup(mut commands: Commands) {
         });
 }
 
-/// Opens the dial while its key is held, follows the mouse round it, and picks the part
-/// pointed at when the key is let go. Runs before the player's view turns, which it
-/// holds still while the dial is open.
+/// Opens the dial while the right mouse button is held, follows the mouse round it, and
+/// picks the part pointed at when the button is let go. A tap that points at nothing is
+/// a cancel instead. Runs before the player's view turns, which it holds still while the
+/// dial is open.
 pub fn steer(
+    time: Res<Time<Real>>,
     keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     motion: Res<AccumulatedMouseMotion>,
+    cursor: Single<&CursorOptions>,
     mut dial: ResMut<Dial>,
     mut builder: ResMut<Builder>,
 ) {
-    if keys.just_pressed(KeyCode::KeyQ) {
-        *dial = Dial {
-            open: true,
-            ..default()
-        };
-    }
+    // The mouse belongs to the game only once it has been captured. B is the same menu
+    // from the keyboard.
+    let captured = cursor.grab_mode != CursorGrabMode::None;
+    let held = keys.pressed(KeyCode::KeyB) || (captured && mouse.pressed(MouseButton::Right));
     if !dial.open {
+        if held && !builder.is_carrying() {
+            *dial = Dial {
+                open: true,
+                ..default()
+            };
+        } else if captured && mouse.just_pressed(MouseButton::Right) {
+            // Nothing to choose while carrying something: the button only puts it back.
+            builder.cancel = true;
+        }
         return;
     }
+    dial.held_for += time.delta_secs();
     dial.pointer = (dial.pointer + motion.delta).clamp_length_max(RING);
     dial.pointed = (dial.pointer.length() > DEAD_ZONE).then(|| {
         // Clockwise from the top, as the names are laid out. Down the screen is +y.
@@ -199,9 +218,11 @@ pub fn steer(
         let turn = angle.rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU;
         (turn * PARTS.len() as f32).round() as usize % PARTS.len()
     });
-    if !keys.pressed(KeyCode::KeyQ) {
-        if let Some(part) = dial.pointed {
-            builder.pick(part);
+    if !held {
+        match dial.pointed {
+            Some(part) => builder.pick(part),
+            None if dial.held_for < TAP_SECONDS => builder.cancel = true,
+            None => {}
         }
         dial.open = false;
     }
@@ -211,7 +232,6 @@ fn draw(
     dial: Res<Dial>,
     builder: Res<Builder>,
     options: Res<Options>,
-    view: Res<View>,
     cursor: Single<&CursorOptions>,
     mut root: Single<&mut Visibility, (With<DialRoot>, Without<Hud>)>,
     mut hud: Query<&mut Visibility, With<Hud>>,
@@ -225,7 +245,8 @@ fn draw(
             text.0 = to;
         }
     };
-    let wanted = if dial.open {
+    // A tap should not flash the dial up.
+    let wanted = if dial.open && (dial.held_for > TAP_SECONDS * 0.5 || dial.pointed.is_some()) {
         Visibility::Visible
     } else {
         Visibility::Hidden
@@ -247,7 +268,7 @@ fn draw(
     for (label, mut background) in &mut labels {
         let colour = if dial.pointed == Some(label.0) {
             POINTED
-        } else if builder.part == label.0 {
+        } else if builder.part == label.0 && !builder.stowed {
             PICKED
         } else {
             PLAIN
@@ -269,6 +290,7 @@ fn draw(
     set(
         &mut picked,
         match part.variant_name(builder.variant()) {
+            _ if builder.stowed => "Nothing in hand".to_string(),
             Some(variant) if part.variants() > 1 => format!(
                 "{}:  {}  ({} of {})",
                 part.name,
@@ -278,16 +300,16 @@ fn draw(
             ),
             Some(variant) => format!("{}:  {}", part.name, variant),
             None => part.name.to_string(),
-        },
+        } + if builder.snap { "" } else { "     grid off" },
     );
     set(
         &mut prompt,
-        if tool::waiting(&cursor, &options, &view) {
+        if tool::waiting(&cursor, &options) {
             "Click to take control".to_string()
         } else if dial.open {
             "Move the mouse to a part and let go".to_string()
         } else {
-            format!("{}      Hold Q  parts", tool::prompt(&builder))
+            tool::prompt(&builder).to_string()
         },
     );
 }

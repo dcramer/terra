@@ -68,28 +68,38 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 | Click | Capture the mouse; Esc releases it |
 | Mouse | Look |
 | W A S D, Shift, Space | Move, sprint, jump |
-| Hold Q | The dial of parts. Move the mouse toward one and let go. |
+| Hold right mouse | The dial of parts. Move the mouse toward one and let go. B does the same. |
+| Tap right mouse | Put the part away, or put back what you picked up |
+| Left click | Build, place, or pick up. E does the same. |
+| Scroll wheel | Turn an item or a room; push and pull a wall. Z and X do the same. |
+| R | The next variant of the part; with Shift, the one before |
+| Q | Take-apart mode, and back |
+| F | Move mode, and back |
+| G | The grid on and off |
 | 1 to 9, 0 | The first ten parts directly |
-| Scroll wheel, or C | The next variant of the part |
-| R | Turn an item an eighth of a circle |
-| Left click, or E | Build |
-| Right click, or F | Take away |
 | F3 | Show the frame rate |
 
-Building starts from a part. Pick one from the dial, cycle through its variants, and aim. What would be built is shown before you commit: the outline of a room, the cut of a window, the wall a push would move, or a ghost of the item where it would stand.
+The buttons follow Subnautica 2 where we could confirm what it does: right mouse is the build menu, left mouse builds, and taking apart and moving are modes on Q and F. The rest is the usual habit of building games. See [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
+
+Building starts from a part. Pick one from the dial, cycle through its variants, and aim. What would be built is shown before you commit: the outline of a room, the cut of a window, the wall a push would move, or a ghost of the item where it would stand. It is red where it cannot go.
 
 ![The dial of parts](../../docs/images/outpost-dial-2026-10-10.png)
 
-| Part | Variants | Build | Take away |
-|---|---|---|---|
-| Room | Five sizes | A room on the ground you aim at | |
-| Reshape | | Push the wall you aim at out | Pull it in |
-| Window | Framed, wide, tall | Cut that window in the wall tile | Make it solid |
-| Door | | Cut a door | Make it solid |
-| Remove | | Take away the item, or close the window or door | |
-| Seat, Table, Bed, Storage, Kitchen, Decor, Kit, Fire | Twenty-seven items between them | Stand the item on the floor or ground you aim at | |
+| Part | Variants | What a left click does |
+|---|---|---|
+| Room | Four sizes; the wheel turns it | Builds a room on the ground you aim at |
+| Reshape | | Pushes the wall you aim at out. The wheel pushes and pulls. |
+| Window | Framed, wide, tall | Cuts that window in the wall tile |
+| Door | | Cuts a door |
+| Remove (Q) | | Takes away the item, or closes the window or door |
+| Move (F) | | Picks an item up, then puts it down |
+| Seat, Table, Bed, Storage, Kitchen, Decor, Kit, Fire | Twenty-seven items between them | Stands the item on the floor or ground you aim at |
 
-Everything in and around the example base was placed through the same call the builder makes, and can be taken away. Items are solid: you walk round them. The list of parts is in `catalogue.rs` and is a stand-in; nothing costs anything.
+Everything has a box. An item cannot be placed where its box would share space with another item, a wall, a tree or a boulder, and a walker cannot enter one. Rugs are the exception: they lie under anything.
+
+With the grid on, items land on half-metre steps and turn in eighths of a circle, and the grid is drawn round the item. Aim at a wall and the item stands flush against it. With the grid off, items go exactly where you aim and turn in finer steps. Rooms are always on the base's three-metre tiles, so a new room lines up with the rooms already there and joins them where they touch.
+
+Everything in and around the example base was placed through the same call the builder makes, and can be moved or taken away. The list of parts is in `catalogue.rs` and is a stand-in; nothing costs anything.
 
 It is made of these pieces, each a module in `src/experiments/play/`:
 
@@ -106,12 +116,12 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 
 The models are free ones, recoloured in code; see [THIRD_PARTY.md](../../THIRD_PARTY.md). How it was put together and what it costs to draw is in [research/outpost-scene.md](../../research/outpost-scene.md).
 
-What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees, boxes round items, a grid for walls), not a physics engine; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; and placed items are not saved or part of the base's list of operations.
+What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; and placed items are not saved or part of the base's list of operations.
 
 In a scripted run the game clock advances a sixtieth of a second per frame and real keyboard and mouse input is ignored, so the same script does the same thing on any machine:
 
 ```bash
-cargo run -p terra_sandbox -- --experiment play --settle 300 --press w@20-215 --press 9@240 --press e@260 --shot shots/a-shelf-indoors.png
+cargo run -p terra_sandbox -- --experiment play --settle 300 --press w@20-215 --press 0@240 --press e@260 --shot shots/a-shelf-indoors.png
 cargo run -p terra_sandbox -- --experiment play --vantage 0,2.4,24,9,1.6,0 --shot shots/outpost.png
 ```
 

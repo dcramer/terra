@@ -48,12 +48,36 @@ They then asked for that to be built into the tech demo directly, as "the little
 
 ![The dial of parts](../docs/images/outpost-dial-2026-10-10.png)
 
-- **A dial of thirteen parts**, opened by holding a key: room, reshape, window, door, remove, and eight kinds of item.
-- **Variants** of the picked part, cycled with the scroll wheel: five room sizes, three windows, twenty-seven items.
-- **A preview** of what would be built before committing, and one button to build and one to take away.
-- **Items** stand on a floor or the ground, can be turned, are solid to walk into, and can be removed.
+- **A dial of fourteen parts**, opened by holding the right mouse button: room, reshape, window, door, remove, move, and eight kinds of item.
+- **Variants** of the picked part, cycled with R: four room sizes, three windows, twenty-seven items.
+- **A preview** of what would be built before committing.
+- **Items** stand on a floor or the ground, can be turned, moved and removed, and are solid to walk into.
 
-What that still is not: parts are text labels with no pictures; nothing costs anything or has to be unlocked; items do not snap to walls or to each other; and an item is not yet one of the base's operations, so it would not be saved or sent to another player. The list of parts was chosen by what models were to hand, not designed.
+They then asked for three more things, which are also in:
+
+- **Controls that feel like Subnautica 2's.** See the next section for what could be confirmed.
+- **Collision boxes on everything, used for placement too.** An item cannot be put where its box would share space with another item, a wall, a tree or a boulder.
+- **A grid things snap to, which can be switched off.** Items land on half-metre steps, turn in eighths, and stand flush against a wall you aim at. Rooms are always on the base's three-metre tiles, so new rooms line up with and join the ones already there.
+
+One thing they raised and left open: whether parts of a room may clip into the terrain, or only its foundation. For now only the foundation does, and a room is refused where the ground is higher than its floor.
+
+What all this still is not: parts are text labels with no pictures; nothing costs anything or has to be unlocked; items snap to the grid and to walls but not to each other; a second building cannot be started at an angle to the first; and an item is not yet one of the base's operations, so it would not be saved or sent to another player. The list of parts was chosen by what models were to hand, not designed.
+
+## Subnautica 2's controls, and ours
+
+Checked on 2026-10-10 against keybinding lists and guides. They disagree with each other in places and none covers the builder fully, so only what two or more agree on is treated as known.
+
+| | Subnautica 2 | Here |
+|---|---|---|
+| Open the build menu | Right mouse, with the builder in hand. A tabbed menu: standard elements, interior, exterior, utility, furniture and decor. | Hold right mouse for a dial; let go on a part |
+| Place | Left mouse | Left mouse |
+| Take apart | Q, then left mouse on the piece | Q, then left mouse on the item or opening |
+| Move a piece | F for move mode, then click the piece | F, then left mouse to pick up and again to put down |
+| Turn a piece | Not found in any source. The first game used the wheel. | The wheel |
+| Variants and resizing | Not found in any source | R for the next variant; the wheel pushes and pulls a wall |
+| Snapping | Not found in any source | G switches a grid on and off |
+
+So the menu, placing, taking apart and moving follow the game. Turning, variants, resizing and the grid are our guesses from the first game and from other building games, and should be corrected by someone who has played it.
 
 ## What it does not do
 
@@ -75,3 +99,7 @@ Since this note was first written the base has gained trim, lamps, furniture pla
 - [Massively Overpowered on the system](https://massivelyop.com/2026/03/15/subnautica-2-shows-off-its-highly-modular-and-customizable-base-building-system/)
 - [Subnautica 2 wiki: Window](https://wiki.subnautica.com/sn2/Window)
 - [Mobalytics building recipes](https://mobalytics.gg/news/guides/subnautica-2-building-recipes)
+- [Shacknews keybindings and controls](https://www.shacknews.com/article/149177/subnautica-2-keybindings-controls)
+- [Prima Games complete controls](https://primagames.com/tips/subnautica-2-complete-controls)
+- [PC Gamer on the Habitat Builder](https://www.pcgamer.com/games/survival-crafting/subnautica-2-base-habitat-builder/)
+- [Subnautica wiki: key bindings of the first game](https://subnautica.fandom.com/wiki/Key_Bindings)
