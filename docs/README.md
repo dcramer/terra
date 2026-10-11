@@ -11,7 +11,7 @@ Working title: **Terra**. A multiplayer survival sandbox across a dozen or so pr
 | [progression.md](progression.md) | Draft: the research system and how things are unlocked. Mostly open questions. |
 | [gameplay.md](gameplay.md) | Core loops, survival needs, terraforming phases, hostile life, automation. |
 | [player.md](player.md) | Draft: the player's body, tools, equipment, backpack and action bar, acting on the world, building. Open questions for the developers. |
-| [items.md](items.md) | Draft: items and containers: equipment, backpack, action bar and storage, and how they work in code. Open questions for the developers. |
+| [items.md](items.md) | Items and containers: equipment, backpack, action bar and storage, on a Subnautica baseline, and how they work in code. |
 | [construction.md](construction.md) | Draft: what the developers want from building, a proposed shape for it, and open questions. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
 | [planet-sim.md](planet-sim.md) | The planetary simulation: cells, fields, biomes, how local feeds global. |

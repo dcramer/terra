@@ -100,14 +100,14 @@ What follows from those, proposed:
 | Backpack | Raw items and things you have made | A bigger backpack in the backpack slot |
 | Action bar | Tools and things you use, a few slots | Fixed, or grows with gear |
 
-A fuller proposal, and how it would be built, is in [items.md](items.md). Each is a set of slots holding items, so in the game's model (D58) they are components on the player that hold item entities or item kinds, and the same rules serve all three. The sandbox has a stand-in: raw items as counts, two tools, and a six-slot bar. It has no equipment grid and no backpack.
+How they work, on a Subnautica baseline (D84), and how they are built, is in [items.md](items.md).
 
-Still open:
+Answered on 2026-10-10 by D84:
 
-12. **Slots with stacks, or a grid where items take up shape?** "Grid" was said of equipment; it is open for the backpack.
-13. **Weight or volume limits** besides the number of slots?
-14. **Is anything shared between players**, or does each carry their own, with shared storage only in a base?
-15. **What happens to it when you are down** (D18, [survival.md](survival.md))?
+12. **Slots with stacks, or a grid where items take up shape?** A grid with shapes, nothing stacking, as in Subnautica.
+13. **Weight or volume limits** besides the number of slots? None for now; may be revisited.
+14. **Is anything shared between players?** Each carries their own; storage built in a base is shared.
+15. **What happens to it when you are down?** What you carry drops where you fell; equipment stays on you. Details are open in items.md.
 
 ## The map
 

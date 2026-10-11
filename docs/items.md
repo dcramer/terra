@@ -1,6 +1,6 @@
 # Items and containers
 
-Status: a draft for the developers to react to. Nothing here is built, and nothing should be until the questions at the end are answered. Each section says whether it comes from the developers, is a proposal, or is open.
+Status: the developers set Subnautica as the baseline on 2026-10-10 (D84), "for now", and may revisit limits such as weight later. How it works in code is mine to decide (D83). What Subnautica does is in [research/subnautica-inventory.md](../research/subnautica-inventory.md).
 
 ## What the developers have said
 
@@ -10,54 +10,48 @@ From 2026-10-10:
 - **The inventory is the backpack** (D65, Leaning): probably very small at the start, made bigger by a better backpack in the backpack slot.
 - **An action bar** (D66): you put items on it to use them; whatever is in the picked slot is in your hand.
 - **You carry raw items, and they let you build what you are able to build** (D55, Leaning).
-- **The build menu comes from a building tool** (D67), and **research unlocks what can be made** (D68).
+- **Subnautica is the baseline** (D84), and the game must stay modelled in ECS (D58).
 
-## The idea
+## How it works
 
-Proposed. One rule for everything that holds items: **a container is a row of slots, and each slot holds one stack of one kind of item.** The backpack, the equipment grid, the action bar, a storage locker in a base and a dropped bag on the ground are all containers. They differ only in how many slots they have and what each slot accepts.
+Subnautica's rules, with our backpack added:
 
-| Container | Slots | What a slot accepts |
-|---|---|---|
-| Equipment | One per kind of gear: backpack, suit, helmet, oxygen tank, and so on | Only gear of that kind, one at a time |
-| Backpack | Set by the backpack worn in the equipment slot | Anything |
-| Action bar | A few | Anything usable; it holds the item, not a link to one in the backpack |
-| Storage in a base | Set by what was built | Anything |
+| | What it is |
+|---|---|
+| Backpack | A grid. Each item fills a rectangle of cells, most of them one. Nothing stacks. Its size is set by the backpack worn. |
+| Equipment | One slot per kind of gear: backpack, suit, helmet, oxygen tank, and so on. A slot takes only gear of its kind. |
+| Action bar | A few slots that point at items in the backpack. The item stays in the backpack; if it leaves, the slot empties. |
+| Storage | More grids, built in a base. Anyone may use them. |
+| Limits | Room in the grid only. No weight. |
+| Going down | What you carry drops where you fell, as something you can go back for. Equipment stays on you. |
 
-Putting something in a slot that does not accept it is refused. Taking off a backpack that is not empty is refused, or spills, which is a question below.
+Picking something up puts it in the first place it fits, scanning from the top left. Items are not turned.
 
 ## Items
 
-Proposed.
-
-- **A kind of item is an entry in a list**, as buildables are (D56): its name, how many fit in one stack, which equipment slot it goes in if any, and what it does when used. Adding an item is adding an entry. Planets do not get their own items in code; a theme names which kinds are found there (D59).
-- **Most items are just a kind and a count.** Twenty of a metal is one stack.
-- **Some items are one of a kind, with state of their own**: a tool that wears down, an oxygen tank that is half full. These stack to one and carry a few numbers. Whether tools wear at all is still open ([player.md](player.md#tools), question 9); the model allows it either way.
-- **Where raw items come from**: harvesting returns a yield in cubic metres, objects or square metres (D45). A table in data turns a yield into items: a cubic metre of a rock is so many stones. What the raw items are is design and is open (D43, D55).
+- **A kind of item is an entry in a list**, as buildables are (D56): its name, its size in cells, and which equipment slot it goes in, if any. Adding an item is adding an entry. A planet's theme names which kinds are found there (D59); planets get no item code of their own.
+- **Every item has an identity**, so the action bar can point at it and the server can say which one moved.
+- **Where raw items come from**: harvesting returns a yield in cubic metres, objects or square metres (D45). A table in data turns a yield into items. What the raw items are is design and still open (D43, D55).
 
 ## In the game's model
 
-Technical; mine to decide, and recorded as D83.
+Technical, recorded as D83.
 
-- **The rules live in an engine-free crate, `terra_items`** (D28): kinds, stacks, containers, and every way an item can move. Tests run with no window.
-- **An item in a container is a value, not an entity.** A backpack's contents are state of the player, as health is. Each container is a component on whoever holds it (D58): the player, a locker, a dropped bag. An item lying loose in the world is an entity of its own.
-- **Every change is an action the server checks** (D51): move, split, swap, equip, use, drop, pick up, take from a harvest, spend on a build. The client asks; the server applies it with the same function and says what happened. One function, used by both, means the client can show the result at once and is rarely wrong.
-- **Nothing is made or lost by moving it.** Only harvesting creates items and only using, building or crafting destroys them. That is a property the tests check over random sequences of actions.
-- **Each player is sent only their own containers**, and what others can see of their equipment. Inventories are small: a thousand players carrying a hundred stacks each is a few megabytes on the server (D52).
-- **Agents can drive it** (D69, D73): every action is a plain call, so the sandbox's scripted runs and later an agent client can do anything a player can.
+- **The rules live in an engine-free crate, `terra_items`** (D28): kinds, grids, equipment, the bar, and every way an item can move. Tests run with no window.
+- **In ECS, a container is a component** on the entity that has it: the player, a locker, a bag dropped where someone went down. The items inside are data in that component, not entities, in the same way health is a number and not an entity. An item lying loose in the world is an entity of its own.
+- **Every change is an action the server checks** (D51): move, equip, use, drop, pick up, take from a harvest, spend on a build. The client asks; the server applies it with the same function and says what happened, so the client can show the result at once and is rarely wrong.
+- **Nothing is made or lost by moving it.** Only harvesting creates items and only using, building or crafting destroys them. Tests check this over random sequences of moves.
+- **Each player is sent only their own containers**, and what others can see of their equipment. Inventories are small: a thousand players with fifty items each is well under ten megabytes on the server (D52).
+- **Agents can drive it** (D69, D73): every action is a plain call.
 
 ## What it replaces
 
-The sandbox's `play` experiment has a stand-in ([inventory.rs](../crates/terra_sandbox/src/experiments/play/inventory.rs)): five raw items as counts, two tools, a six-slot bar, and no equipment or backpack. The first build would replace it with the crate and change no behaviour a player would notice, apart from adding an equipment grid with a backpack slot.
+The sandbox's `play` experiment has a stand-in ([inventory.rs](../crates/terra_sandbox/src/experiments/play/inventory.rs)): five raw items as counts, two tools, and a six-slot bar holding the tools. It would move onto the crate: raw items and tools become items in a backpack grid, the bar points into it, and an equipment grid gains a backpack slot.
 
-Not covered: crafting, research, what the raw items are, and how the inventory looks on screen beyond the stand-in.
+Not covered: crafting, research, what the raw items are, item sizes, and how the inventory looks on screen beyond the stand-in.
 
-## Open questions
+## Still open
 
-Numbered to follow [player.md](player.md). My recommendation is given for each; none is decided.
-
-12. **Stacks in slots, or a grid where items take up shape, as in Subnautica?** Recommended: stacks in slots. A shape grid adds a packing puzzle, a harder interface, and harder rules for agent players, for a feeling of weight that a small backpack already gives.
-13. **Weight or volume limits besides the number of slots?** Recommended: none for now. Slots and stack sizes are limit enough, and the tone is gentle (D3).
-14. **Is anything shared between players?** Recommended: each carries their own; sharing is storage built in a base, which anyone may use (a base belongs to everyone, [player.md](player.md#co-op)). Handing things over is putting them in a locker or dropping them.
-15. **What happens to what you carry when you are down?** Depends on D18 (no fail state, Leaning). Recommended: the backpack's contents drop where you fell as a bag you can go back for; equipment and the action bar stay with you.
-21. **How big are stacks?** Recommended: large for raw items (fifty or more), one for tools and gear.
-22. **Does the action bar hold items or point at them?** Recommended: it holds them, so the bar is part of what you carry. The other way, a bar of shortcuts into the backpack, is common too and costs no carrying space.
+- **Weight, volume or other limits**: none for now; the developers may revisit (D84).
+- **Is what you carry lost for good if you never go back for it?** And does it drop all of it, or only what you gathered since you were last at a base, as in the first Subnautica?
+- **How big is the first backpack**, and how many slots does the bar have? Subnautica 2 starts with about 20 cells; the first game's bar has five.
