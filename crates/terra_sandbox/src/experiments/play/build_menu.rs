@@ -12,6 +12,7 @@ use super::controls::{Action, Settings};
 use super::grab_mouse;
 use super::inventory::{Belongings, InventoryScreen, Tool, describe};
 use super::options::OptionsMenu;
+use super::tiles::{self, PICKED, PLAIN, TILE};
 use super::tool::{self, Builder};
 use bevy::{
     prelude::*,
@@ -20,10 +21,6 @@ use bevy::{
 
 const COLUMNS: usize = 4;
 const RECENT: usize = 6;
-const TILE: Vec2 = Vec2::new(170.0, 66.0);
-const PLAIN: Color = Color::srgba(0.12, 0.13, 0.16, 0.95);
-const CURSOR: Color = Color::srgba(0.35, 0.75, 0.85, 0.95);
-const PICKED: Color = Color::srgba(0.9, 0.46, 0.17, 0.95);
 
 #[derive(Resource, Default)]
 pub struct BuildMenu {
@@ -95,80 +92,45 @@ fn setup(mut commands: Commands) {
             Visibility::Hidden,
         ))
         .with_children(|screen| {
-            screen
-                .spawn((
+            screen.spawn(tiles::panel()).with_children(|panel| {
+                panel.spawn((Text::new("Build"), TextFont::from_font_size(20.0), white));
+                panel
+                    .spawn(Node {
+                        column_gap: px(6),
+                        ..default()
+                    })
+                    .with_children(|tabs| {
+                        for (index, tab) in Tab::SHOWN.iter().enumerate() {
+                            tiles::tab(tabs, TabButton(index), index, tab.name());
+                        }
+                    });
+                panel.spawn((
+                    Text::new("Recent"),
+                    TextFont::from_font_size(12.0),
+                    TextColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
+                ));
+                panel.spawn((
+                    Recent,
                     Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: px(10),
-                        padding: UiRect::all(px(20)),
-                        border_radius: BorderRadius::all(px(12)),
+                        column_gap: px(8),
+                        min_height: px(TILE.y),
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(0.05, 0.06, 0.08, 0.92)),
-                ))
-                .with_children(|panel| {
-                    panel.spawn((Text::new("Build"), TextFont::from_font_size(20.0), white));
-                    panel
-                        .spawn(Node {
-                            column_gap: px(6),
-                            ..default()
-                        })
-                        .with_children(|tabs| {
-                            for (index, tab) in Tab::SHOWN.iter().enumerate() {
-                                tabs.spawn((
-                                    TabButton(index),
-                                    Button,
-                                    Node {
-                                        padding: UiRect::axes(px(12), px(6)),
-                                        border_radius: BorderRadius::all(px(6)),
-                                        ..default()
-                                    },
-                                    BackgroundColor(PLAIN),
-                                ))
-                                .with_child((
-                                    Text::new(format!("{}  {}", index + 1, tab.name())),
-                                    TextFont::from_font_size(13.0),
-                                    white,
-                                ));
-                            }
-                        });
-                    panel.spawn((
-                        Text::new("Recent"),
-                        TextFont::from_font_size(12.0),
-                        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
-                    ));
-                    panel.spawn((
-                        Recent,
-                        Node {
-                            column_gap: px(8),
-                            min_height: px(TILE.y),
-                            ..default()
-                        },
-                    ));
-                    panel.spawn((
-                        Grid,
-                        Node {
-                            display: Display::Grid,
-                            grid_template_columns: RepeatedGridTrack::px(COLUMNS as u16, TILE.x),
-                            column_gap: px(8),
-                            row_gap: px(8),
-                            min_height: px(TILE.y * 2.0 + 8.0),
-                            ..default()
-                        },
-                    ));
-                    panel.spawn((
-                        Text::new(
-                            "Click a tile, or 1 to 7 for a tab, the arrows and Enter. Hold R in the \
+                ));
+                panel.spawn((Grid, tiles::grid(COLUMNS, 2)));
+                panel.spawn((
+                    Text::new(
+                        "Click a tile, or 1 to 7 for a tab, the arrows and Enter. Hold R in the \
                              world for a thing's kinds. Backspace puts the part away.",
-                        ),
-                        TextFont::from_font_size(12.0),
-                        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
-                        Node {
-                            max_width: px(COLUMNS as f32 * (TILE.x + 8.0)),
-                            ..default()
-                        },
-                    ));
-                });
+                    ),
+                    TextFont::from_font_size(12.0),
+                    tiles::FAINT,
+                    Node {
+                        max_width: px(COLUMNS as f32 * (TILE.x + tiles::GAP)),
+                        ..default()
+                    },
+                ));
+            });
         });
 }
 
@@ -249,14 +211,7 @@ fn navigate(
         menu.stale = true;
     }
     let count = menu.parts().len();
-    let step = |key, by: isize| if keys.just_pressed(key) { by } else { 0 };
-    let moved = step(KeyCode::ArrowRight, 1)
-        + step(KeyCode::ArrowLeft, -1)
-        + step(KeyCode::ArrowDown, COLUMNS as isize)
-        + step(KeyCode::ArrowUp, -(COLUMNS as isize));
-    if moved != 0 && count > 0 {
-        menu.cursor = (menu.cursor as isize + moved).clamp(0, count as isize - 1) as usize;
-    }
+    menu.cursor = tiles::step(&keys, menu.cursor, count, COLUMNS);
     let (window, mut cursor) = window.into_inner();
     if keys.just_pressed(KeyCode::Enter)
         && let Some(&part) = menu.parts().get(menu.cursor)
@@ -335,67 +290,36 @@ fn lay_out(
         return;
     }
     menu.stale = false;
-    let tile = |part: usize, recent: bool| {
+    let line = |part: usize| {
         let variants = PARTS[part].variants();
         let kinds = if variants > 1 {
             format!("{variants} kinds   ")
         } else {
             String::new()
         };
-        (
-            (
-                Tile { part, recent },
-                Button,
-                Node {
-                    width: px(TILE.x),
-                    height: px(TILE.y),
-                    flex_direction: FlexDirection::Column,
-                    justify_content: JustifyContent::SpaceBetween,
-                    padding: UiRect::all(px(8)),
-                    border: UiRect::all(px(2)),
-                    border_radius: BorderRadius::all(px(8)),
-                    ..default()
-                },
-                BackgroundColor(PLAIN),
-                BorderColor::all(Color::NONE),
-            ),
-            (
-                Text::new(PARTS[part].name),
-                TextFont::from_font_size(15.0),
-                TextColor(Color::WHITE),
-            ),
-            (
-                Text::new(format!(
-                    "{kinds}{}",
-                    cost_of(part, builder.variant_of(part))
-                )),
-                TextFont::from_font_size(11.0),
-                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
-            ),
-        )
+        format!("{kinds}{}", cost_of(part, builder.variant_of(part)))
     };
-    let mut grid = commands.entity(*grid);
-    grid.despawn_children();
-    for part in menu.parts() {
-        let (button, name, cost) = tile(part, false);
-        grid.with_children(|grid| {
-            grid.spawn(button).with_children(|tile| {
-                tile.spawn(name);
-                tile.spawn(cost);
-            });
+    commands
+        .entity(*grid)
+        .despawn_children()
+        .with_children(|grid| {
+            for part in menu.parts() {
+                let tile = Tile {
+                    part,
+                    recent: false,
+                };
+                tiles::tile(grid, tile, PARTS[part].name, Text::new(line(part)));
+            }
         });
-    }
-    let mut row = commands.entity(*recent);
-    row.despawn_children();
-    for &part in &menu.recent {
-        let (button, name, cost) = tile(part, true);
-        row.with_children(|row| {
-            row.spawn(button).with_children(|tile| {
-                tile.spawn(name);
-                tile.spawn(cost);
-            });
+    commands
+        .entity(*recent)
+        .despawn_children()
+        .with_children(|row| {
+            for &part in &menu.recent {
+                let tile = Tile { part, recent: true };
+                tiles::tile(row, tile, PARTS[part].name, Text::new(line(part)));
+            }
         });
-    }
 }
 
 /// Shows the menu, the tab chosen, the tile the keys are on, and what cannot be paid for.
@@ -411,31 +335,21 @@ fn draw(
         Without<TabButton>,
     >,
 ) {
-    let wanted = if menu.open {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
-    if **panel != wanted {
-        **panel = wanted;
-    }
+    tiles::show(&mut panel, menu.open);
     if !menu.open {
         return;
     }
     for (tab, mut background) in &mut tabs {
-        let colour = if tab.0 == menu.tab { PICKED } else { PLAIN };
-        if background.0 != colour {
-            background.0 = colour;
-        }
+        tiles::fill(
+            &mut background,
+            if tab.0 == menu.tab { PICKED } else { PLAIN },
+        );
     }
     let cursor_part = menu.parts().get(menu.cursor).copied();
     for (tile, interaction, mut border, mut background) in &mut tiles {
         let pointed =
             *interaction != Interaction::None || (!tile.recent && Some(tile.part) == cursor_part);
-        let wanted = BorderColor::all(if pointed { CURSOR } else { Color::NONE });
-        if *border != wanted {
-            *border = wanted;
-        }
+        tiles::outline(&mut border, pointed);
         // Greyed when its current kind cannot be paid for.
         let short = match PARTS[tile.part].kind {
             Kind::Items(items) => {
@@ -451,8 +365,6 @@ fn draw(
         } else {
             PLAIN
         };
-        if background.0 != colour {
-            background.0 = colour;
-        }
+        tiles::fill(&mut background, colour);
     }
 }

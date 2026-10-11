@@ -1608,7 +1608,7 @@ pub fn prompt(builder: &Builder, settings: &Settings) -> String {
         return format!(
             "Not enough to build this: {more} more {} needed ({})",
             raw.name(),
-            where_found(raw)
+            raw.where_found()
         );
     }
     let hold = settings.hold(Action::Use);
@@ -1727,19 +1727,5 @@ fn target_point(target: &Target, props: &Query<&Prop>) -> Option<Vec3> {
         )),
         Target::Spot { at, .. } => Some(at.with_y(0.0)),
         Target::Prop(entity) => props.get(entity).ok().map(|prop| prop.at.with_y(0.0)),
-    }
-}
-
-/// Where a material comes from, for a prompt that says what is missing.
-fn where_found(raw: Raw) -> &'static str {
-    match raw {
-        Raw::Wood => "fell trees with an axe",
-        Raw::Stone => "break rocks with a pickaxe",
-        Raw::Fibre => "cut plants with a knife",
-        Raw::Hide | Raw::Meat => "butcher a deer",
-        Raw::Ore => "break the rusty rocks with a pickaxe",
-        Raw::Iron => "smelt ore at a forge",
-        Raw::Berries => "pick them from berry bushes",
-        Raw::CookedMeat => "cook meat at a campfire",
     }
 }

@@ -11,7 +11,7 @@ use super::bag::Notice;
 use super::catalogue;
 use super::claim::Claim;
 use super::controls::Settings;
-use super::crafting::SmithAtHand;
+use super::crafting::{self, RECIPES, SmithAtHand, Works};
 use super::inventory::{self, Backpack, Bar, Gear, Items, SLOTS};
 use super::people::{Doing, Person};
 use super::props::{self, Models, Prop};
@@ -71,6 +71,14 @@ struct SavedProp {
     lift: f32,
     turn: f32,
     indoors: bool,
+    /// A station's queue and what it has made, by what each makes, and how far into the
+    /// first it is.
+    #[serde(default)]
+    queue: Vec<String>,
+    #[serde(default)]
+    progress: f32,
+    #[serde(default)]
+    done: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -174,8 +182,8 @@ fn load(
         commands.entity(entity).despawn();
     }
     for prop in &save.props {
-        if let Some(item) = catalogue::item_from(&prop.file) {
-            props::place(
+        if let Some(item) = catalogue::item_from(&prop.file)
+            && let Some(entity) = props::place(
                 &mut commands,
                 &models,
                 &site,
@@ -185,7 +193,21 @@ fn load(
                 prop.lift,
                 prop.turn,
                 prop.indoors,
-            );
+            )
+            && let Some(station) = item.station
+        {
+            // A station takes up its queue where it left off.
+            let named = |names: &[String]| -> Vec<usize> {
+                names
+                    .iter()
+                    .filter_map(|name| crafting::recipe_named(station, name))
+                    .collect()
+            };
+            commands.entity(entity).insert(Works::resumed(
+                named(&prop.queue),
+                prop.progress,
+                named(&prop.done),
+            ));
         }
     }
 
@@ -309,7 +331,7 @@ fn autosave(
     claim: Res<Claim>,
     items: Res<Items>,
     view: Res<View>,
-    props: Query<&Prop>,
+    props: Query<(&Prop, Option<&Works>)>,
     people: Query<(&Person, &Transform), Without<Player>>,
     player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), With<Player>>,
     mut since: Local<f32>,
@@ -344,7 +366,7 @@ fn save_on_exit(
     claim: Res<Claim>,
     items: Res<Items>,
     view: Res<View>,
-    props: Query<&Prop>,
+    props: Query<(&Prop, Option<&Works>)>,
     people: Query<(&Person, &Transform), Without<Player>>,
     player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), With<Player>>,
 ) {
@@ -376,7 +398,7 @@ fn gather(
     claim: &Claim,
     items: &Items,
     view: &View,
-    props: &Query<&Prop>,
+    props: &Query<(&Prop, Option<&Works>)>,
     people: &Query<(&Person, &Transform), Without<Player>>,
     player: &PlayerParts,
 ) -> SaveFile {
@@ -421,12 +443,20 @@ fn gather(
         base: site.operations.clone(),
         props: props
             .iter()
-            .map(|prop| SavedProp {
-                file: prop.item.file.to_string(),
-                at: prop.at.into(),
-                lift: prop.lift,
-                turn: prop.turn,
-                indoors: prop.indoors,
+            .map(|(prop, works)| {
+                let names = |indices: &mut dyn Iterator<Item = &usize>| {
+                    indices.map(|&index| RECIPES[index].makes.name()).collect()
+                };
+                SavedProp {
+                    file: prop.item.file.to_string(),
+                    at: prop.at.into(),
+                    lift: prop.lift,
+                    turn: prop.turn,
+                    indoors: prop.indoors,
+                    queue: works.map_or(Vec::new(), |works| names(&mut works.queue.iter())),
+                    progress: works.map_or(0.0, |works| works.progress),
+                    done: works.map_or(Vec::new(), |works| names(&mut works.done.iter())),
+                }
             })
             .collect(),
         claim_step: claim.step(),
@@ -505,6 +535,9 @@ mod tests {
                 lift: 0.0,
                 turn: 20.0,
                 indoors: false,
+                queue: vec!["Iron".to_string()],
+                progress: 2.5,
+                done: vec!["Iron".to_string()],
             }],
             claim_step: 1,
             people: vec![SavedPerson {

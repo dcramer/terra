@@ -13,7 +13,7 @@ use bevy::{
 };
 
 /// How far from you something can be and still be used.
-const REACH_M: f32 = 3.5;
+pub const REACH_M: f32 = 3.5;
 
 /// Something the interact key does something to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -36,6 +36,7 @@ impl Interactable {
     fn target(self) -> (f32, f32) {
         match self {
             Interactable::Station(Station::Forge) => (1.0, 1.3),
+            Interactable::Station(Station::Smelter) => (1.0, 1.1),
             Interactable::Station(_) => (0.8, 0.9),
             Interactable::ClaimStone => (0.6, 0.8),
             Interactable::Bag => (0.2, 0.6),

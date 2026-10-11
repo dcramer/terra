@@ -200,7 +200,7 @@ impl Part {
 }
 
 /// The parts, in the order the build menu lists them within each tab.
-pub static PARTS: [Part; 16] = [
+pub static PARTS: [Part; 17] = [
     Part {
         name: "Claim stone",
         tab: Tab::Claim,
@@ -224,6 +224,19 @@ pub static PARTS: [Part; 16] = [
                 "Table_Small",
                 1.7,
                 &[(Raw::Wood, 4), (Raw::Stone, 2)],
+            ),
+        )]),
+    },
+    Part {
+        name: "Smelter",
+        tab: Tab::Crafting,
+        kind: Kind::Items(&[station(
+            Station::Smelter,
+            item(
+                "Smelter",
+                "shaped:smelter",
+                2.0,
+                &[(Raw::Stone, 10), (Raw::Wood, 2)],
             ),
         )]),
     },

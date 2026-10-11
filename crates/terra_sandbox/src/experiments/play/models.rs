@@ -95,6 +95,7 @@ pub fn piece(mesh: Mesh, at: Transform, material: &str, colour: Color) -> Part {
 pub fn shaped(name: &str) -> Option<Vec<Part>> {
     match name {
         "forge" => Some(forge()),
+        "smelter" => Some(smelter()),
         _ => None,
     }
 }
@@ -182,6 +183,48 @@ fn forge() -> Vec<Part> {
             at(1.11, 0.68, 0.0).with_rotation(Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2)),
             "",
             iron,
+        ),
+    ]
+}
+
+/// A smelter: a squat stone furnace, wider at the foot, with a glowing mouth and a short
+/// chimney. A stand-in until there is a model of one.
+fn smelter() -> Vec<Part> {
+    let stone = Color::srgb(0.52, 0.5, 0.47);
+    let dark = Color::srgb(0.32, 0.3, 0.3);
+    let at = Transform::from_xyz;
+    let square = Quat::from_rotation_y(std::f32::consts::FRAC_PI_4);
+    vec![
+        piece(
+            Cylinder::new(0.8, 0.5).mesh().resolution(4).into(),
+            at(0.0, 0.25, 0.0).with_rotation(square),
+            "",
+            stone,
+        ),
+        piece(
+            ConicalFrustum {
+                radius_top: 0.42,
+                radius_bottom: 0.68,
+                height: 1.1,
+            }
+            .mesh()
+            .resolution(4)
+            .into(),
+            at(0.0, 1.05, 0.0).with_rotation(square),
+            "",
+            stone,
+        ),
+        piece(
+            Cuboid::new(0.36, 0.7, 0.36).into(),
+            at(0.0, 1.95, 0.0),
+            "",
+            dark,
+        ),
+        piece(
+            Cuboid::new(0.4, 0.3, 0.06).into(),
+            at(0.0, 0.75, 0.47),
+            "Fire",
+            stone,
         ),
     ]
 }

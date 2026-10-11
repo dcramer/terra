@@ -42,6 +42,8 @@ mod save;
 mod scene;
 mod settlement;
 mod skills;
+mod station_screen;
+mod tiles;
 mod tool;
 mod vitals;
 mod work;
@@ -124,6 +126,7 @@ pub fn plugin(app: &mut App) {
     bag::plugin(app);
     build_menu::plugin(app);
     crafting::plugin(app);
+    station_screen::plugin(app);
     interact::plugin(app);
     claim::plugin(app);
     vitals::plugin(app);

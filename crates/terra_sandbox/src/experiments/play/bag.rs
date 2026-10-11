@@ -71,9 +71,10 @@ struct Panel;
 #[derive(Component)]
 struct GridArea;
 
-/// An item drawn in the backpack's grid.
+/// An item drawn in the backpack's grid. Other screens read it to know when the pointer
+/// is on the backpack.
 #[derive(Component)]
-struct Shown(ItemId, ItemKind);
+pub struct Shown(ItemId, ItemKind);
 
 #[derive(Component)]
 struct About;

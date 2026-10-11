@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Drives the play experiment's loop end to end and checks each step happened (D69):
 # talk to the elder, eat, kill the spiders, free the smith and bring them home, claim
-# land, build a forge, have the smith take it up, and smelt iron there. Each run reads
+# land, build a smelter and a forge, have the smith take up the forge, smelt iron, and
+# have the smith make an iron axe. Each run reads
 # what happened from the log, where every on-screen notice is written.
 #
 # Runs on the Windows GPU from WSL by default, in its own copy of the game so it does not
@@ -50,21 +51,49 @@ step rescue 'Killed a Spider' 'Freed Bren.' -- \
     --warp 63.8,-61.9:66,-64.4@1950 --press down@1955-1975 --press left@1976-1981 \
     --press f@1990 --warp 8,6:0,0@2020 --settle 3500
 
-# Bren followed home. A claim stone, then a forge in the claim.
-step build 'Placed a Claim stone' 'Placed a Forge' 'Bren took up the forge.' -- \
-    --save loop.ron --give stone:10 --give wood:4 \
+# Where the last step placed something, as "east south" of the outpost, from its log.
+placed() {
+    grep -o "Placed a $1 at \[[^]]*\]" <<<"$log" | tail -1 | tr -d '[],' | awk '{print $5, $7}'
+}
+
+# Up to a station, a little short of it, looking at it: "--warp ... --press ...".
+toward() {
+    local east south
+    read -r east south <<<"${1:-0 0}"
+    local before
+    before=$(awk "BEGIN {print $south - 2.8}")
+    echo "--warp $east,$before:$east,$south@30 --press down@40-65"
+}
+
+# Bren followed home. A claim stone, and a smelter in the claim.
+step build 'Placed a Claim stone' 'Placed a Smelter' -- \
+    --save loop.ron --give stone:12 --give wood:2 \
     --warp 14,14:22,22@30 --press 1@50 \
     --press b@70 --press 1@80 --press enter@90 --press e@120-200 \
     --press b@230 --press 4@240 --press right@250 --press enter@260 \
-    --press right@280-320 --press e@340-540 --settle 1100
+    --press right@280-320 --press e@340-540 --settle 600
+smelter=$(placed Smelter)
 
-# Up to the forge, wherever it went: the log says, east, up and south of the outpost.
-forge=$(grep -o 'Placed a Forge at \[[^]]*\]' <<<"$log" | tr -d '[],' | awk '{print $5, $7}')
-read -r east south <<<"${forge:-0 0}"
-before=$(awk "BEGIN {print $south - 2.8}")
-step iron 'Made Iron.' -- \
-    --save loop.ron --give ore:4 --give wood:2 \
-    --warp "$east,$before:$east,$south@30" --press down@40-55 --press f@70 --press 1@90 \
-    --settle 140
+# A forge beside it, which Bren takes up.
+step forge 'Placed a Forge' 'Bren took up the forge.' -- \
+    --save loop.ron --give stone:8 --give wood:4 \
+    --warp 12,12:6,18@30 --press 1@50 \
+    --press b@130 --press 4@140 --press right@150 --press right@155 --press enter@165 \
+    --press e@200-400 --settle 1000
+forge=$(placed Forge)
+
+# Three iron queued at the smelter, which works on its own; it hands them over when
+# opened again after they are done.
+# shellcheck disable=SC2046
+step smelt 'Queued Iron at the Smelter.' 'Made Iron.' -- \
+    --save loop.ron --give ore:6 --give wood:3 \
+    $(toward "$smelter") --press f@70 --press enter@90 --press enter@95 --press enter@100 \
+    --press f@120 --press f@2100 --settle 2160
+
+# An iron axe at the forge, made while you stay: the better tool the loop is for.
+# shellcheck disable=SC2046
+step axe 'Queued Iron axe at the Forge.' 'Made Iron axe.' -- \
+    --save loop.ron --give wood:2 \
+    $(toward "$forge") --press f@70 --press enter@90 --settle 600
 
 exit $failed

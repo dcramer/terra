@@ -32,6 +32,20 @@ pub enum Raw {
 }
 
 impl Raw {
+    /// Where it comes from, for a prompt that says what is missing.
+    pub fn where_found(self) -> &'static str {
+        match self {
+            Raw::Wood => "fell trees with an axe",
+            Raw::Stone => "break rocks with a pickaxe",
+            Raw::Fibre => "cut plants with a knife",
+            Raw::Hide | Raw::Meat => "butcher a deer",
+            Raw::Ore => "break the rusty rocks with a pickaxe",
+            Raw::Iron => "smelt ore at a smelter",
+            Raw::Berries => "pick them from berry bushes",
+            Raw::CookedMeat => "cook meat at a campfire",
+        }
+    }
+
     pub const ALL: [Raw; 9] = [
         Raw::Wood,
         Raw::Stone,
@@ -210,6 +224,16 @@ impl Apparel {
         }
     }
 
+    /// What it does, for a station's screen.
+    pub fn about(self) -> &'static str {
+        match self {
+            Apparel::SmallPack => "Worn, makes the backpack 6 by 5",
+            Apparel::LargePack => "Worn, makes the backpack 7 by 6",
+            Apparel::LeatherCap => "Worn, takes a tenth of every blow",
+            Apparel::LeatherCoat => "Worn, takes a quarter of every blow",
+        }
+    }
+
     /// How much of a blow it takes when worn, out of one.
     pub fn protection(self) -> f32 {
         match self {
@@ -252,15 +276,6 @@ impl Made {
             Made::Apparel(apparel) => apparel.name().to_string(),
         }
     }
-}
-
-/// Why something could not be made.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CantMake {
-    /// Not enough of this.
-    Short(Raw, u32),
-    /// No room in the backpack for what it makes.
-    NoRoom,
 }
 
 /// The backpack with no pack worn: about Subnautica 2's twenty cells. How big the first
@@ -524,41 +539,26 @@ pub fn pay(items: &Items, grid: &mut Grid, bar: &mut ActionBar, cost: Cost, time
     paid
 }
 
-/// Makes something: pays its cost and puts what it makes in the backpack, all or
-/// nothing. What is paid frees room, so a recipe that uses up its materials can always
-/// put its result where they were.
-pub fn craft(
-    items: &mut Items,
-    grid: &mut Grid,
-    bar: &mut ActionBar,
-    cost: Cost,
-    made: Made,
-) -> Result<(), CantMake> {
-    if let Some((raw, more)) = missing(items, grid, cost, 1) {
-        return Err(CantMake::Short(raw, more));
-    }
-    let mut trial = grid.clone();
-    trial
-        .take(&items.wanted(cost, 1))
-        .map_err(|_| CantMake::NoRoom)?;
+/// Puts what a station made in the backpack, all or nothing. Returns whether it did.
+pub fn receive(items: &mut Items, grid: &mut Grid, bar: &mut ActionBar, made: Made) -> bool {
     let (kind, count) = items.made(made);
+    let mut trial = grid.clone();
     let mut made_ids = Vec::new();
     for _ in 0..count {
         let item = items.make(kind);
-        trial
-            .insert(&items.catalogue, item, None)
-            .map_err(|_| CantMake::NoRoom)?;
+        if trial.insert(&items.catalogue, item, None).is_err() {
+            return false;
+        }
         made_ids.push(item.id);
     }
     *grid = trial;
-    bar.tidy(grid);
     // A new tool goes on the bar's first free slot, so it is ready to pick up.
     if let (Made::Tool(_), Some(&id)) = (made, made_ids.first())
         && let Some(free) = (0..bar.len()).find(|&slot| bar.get(slot).is_none())
     {
         bar.set(free, Some(id));
     }
-    Ok(())
+    true
 }
 
 /// Whether what a cost so many times over is made of would all fit in the backpack.
@@ -597,7 +597,7 @@ pub fn give(items: &mut Items, grid: &mut Grid, raw: Raw, count: u32) -> u32 {
 pub struct InventoryScreen {
     pub open: bool,
     /// The station being used, if the screen was opened at one.
-    pub at: Option<super::crafting::Station>,
+    pub at: Option<(Entity, super::crafting::Station)>,
 }
 
 /// What the player carries, for a system to read or change.
@@ -689,9 +689,10 @@ impl Belongings<'_, '_> {
     }
 
     /// Makes something from what is carried; see [`craft`].
-    pub fn craft(&mut self, cost: Cost, made: Made) -> Result<(), CantMake> {
+    /// Puts what a station made in the backpack, all or nothing.
+    pub fn receive(&mut self, made: Made) -> bool {
         let (backpack, bar, _) = &mut *self.player;
-        craft(&mut self.items, &mut backpack.0, &mut bar.0, cost, made)
+        receive(&mut self.items, &mut backpack.0, &mut bar.0, made)
     }
 
     /// Whether one more of a raw item would fit in the backpack.
@@ -859,33 +860,15 @@ mod tests {
     }
 
     #[test]
-    fn crafting_pays_and_makes_all_or_nothing() {
-        const AXE: Cost = &[(Raw::Wood, 2), (Raw::Iron, 3)];
+    fn what_is_made_goes_in_the_backpack_and_a_tool_on_the_bar() {
         let mut items = Items::default();
         let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
-        give(&mut items, &mut grid, Raw::Wood, 2);
-        give(&mut items, &mut grid, Raw::Iron, 2);
-        let before = grid.clone();
-        assert_eq!(
-            craft(
-                &mut items,
-                &mut grid,
-                &mut bar,
-                AXE,
-                Made::Tool(Tool::IronAxe)
-            ),
-            Err(CantMake::Short(Raw::Iron, 1))
-        );
-        assert_eq!(grid, before);
-        give(&mut items, &mut grid, Raw::Iron, 1);
-        craft(
+        assert!(receive(
             &mut items,
             &mut grid,
             &mut bar,
-            AXE,
-            Made::Tool(Tool::IronAxe),
-        )
-        .unwrap();
+            Made::Tool(Tool::IronAxe)
+        ));
         assert_eq!(grid.count(items.tool_kind(Tool::IronAxe)), 1);
         assert_eq!(
             bar.get(4)
@@ -894,37 +877,37 @@ mod tests {
             Some(items.tool_kind(Tool::IronAxe)),
             "a new tool goes on the first free slot of the bar"
         );
-        assert_eq!(grid.count(items.kind(Raw::Iron)), 0);
     }
 
     #[test]
-    fn crafting_into_a_full_backpack_uses_the_room_it_frees() {
-        const SMELT: Cost = &[(Raw::Ore, 2)];
+    fn what_is_made_is_all_or_nothing_in_a_full_backpack() {
         let mut items = Items::default();
         let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
         give(&mut items, &mut grid, Raw::Ore, 100);
-        assert!(grid.space_for(Size::ONE).is_none());
-        craft(
-            &mut items,
-            &mut grid,
-            &mut bar,
-            SMELT,
-            Made::Raw(Raw::Iron, 1),
-        )
-        .unwrap();
-        assert_eq!(grid.count(items.kind(Raw::Iron)), 1);
-        // A coat needs two by two, which two freed cells in a row may not give.
-        const COAT: Cost = &[(Raw::Ore, 1)];
         let before = grid.clone();
-        let made = craft(
+        assert!(!receive(
             &mut items,
             &mut grid,
             &mut bar,
-            COAT,
-            Made::Apparel(Apparel::LeatherCoat),
-        );
-        assert_eq!(made, Err(CantMake::NoRoom));
+            Made::Raw(Raw::Iron, 1)
+        ));
         assert_eq!(grid, before);
+    }
+
+    #[test]
+    fn paying_takes_all_or_nothing() {
+        const AXE: Cost = &[(Raw::Wood, 2), (Raw::Iron, 3)];
+        let mut items = Items::default();
+        let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
+        give(&mut items, &mut grid, Raw::Wood, 2);
+        give(&mut items, &mut grid, Raw::Iron, 2);
+        let before = grid.clone();
+        assert_eq!(missing(&items, &grid, AXE, 1), Some((Raw::Iron, 1)));
+        assert!(!pay(&items, &mut grid, &mut bar, AXE, 1));
+        assert_eq!(grid, before);
+        give(&mut items, &mut grid, Raw::Iron, 1);
+        assert!(pay(&items, &mut grid, &mut bar, AXE, 1));
+        assert_eq!(grid.count(items.kind(Raw::Iron)), 0);
     }
 
     #[test]
