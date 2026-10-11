@@ -16,4 +16,4 @@ spike/model_bakeoff/run.sh ../character_gear/fit.py
 
 ## Rigging a base body, 2026-10-11
 
-`make_character.sh NAME SHEET.png HEIGHT` runs the whole pipeline on Studio credits: crop the front of a T-pose design sheet, make a textured model, rig it with Tripo (`studio_rig.py`), convert the rig onto our skeleton (`convert_rig.py`), check it (`rig_check.py`) and render it moving (`rig_render.py`). `rig_base.py` is the fallback that rigs with Blender's own weights. The checker's baseline is the mannequin's own scores, written to `out/rig-baseline.json` by checking `figure.gltf` first.
+`make_character.sh NAME SHEET.png HEIGHT` runs the whole pipeline on Studio credits: crop the front of a T-pose design sheet, make a textured model, rig it with Tripo's older 41-joint rig ([tools/tripo](../../tools/tripo)), convert the rig onto our skeleton (`convert_rig.py`), check it (`rig_check.py`) and render it moving (`rig_render.py`). `rig_base.py` is the fallback that rigs with Blender's own weights. The checker's baseline is the mannequin's own scores, written to `out/rig-baseline.json` by checking `figure.gltf` first.

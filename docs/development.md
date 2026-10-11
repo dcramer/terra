@@ -87,6 +87,22 @@ For making and cleaning up models ([research/ai-models-for-art.md](../research/a
   3. Add a launcher, `%USERPROFILE%\.blender-mcp\run.py`, that puts `lib`, `lib\win32` and `lib\win32\lib` on `sys.path`, calls `os.add_dll_directory` on `lib\pywin32_system32` (a `--target` install skips pywin32's own set-up), and runs `blmcp.main()`.
   4. Register it: `claude mcp add blender -s user -- "<Blender's python.exe>" '<path to run.py>'`. Claude Code picks it up in its next session.
 
+### Tripo
+
+For making models, textures, rigs and animations with AI (D115, D120). Everything goes through one command-line tool, [tools/tripo](../tools/tripo/README.md), which does what Tripo's Studio web app does and spends our subscription's credits:
+
+```bash
+node tools/tripo/tripo.ts image "a weathered supply crate, plain grey background" -o crate.png
+node tools/tripo/tripo.ts model crate.png -o crate.glb      # prints the project id
+node tools/tripo/tripo.ts rig <project>                     # a figure in a T- or A-pose
+node tools/tripo/tripo.ts animate <project> walk run idle -o crate-anim.glb
+```
+
+- **Set up** once: put the `ory_kratos_session` cookie of a browser signed in to Studio in `.env` as `TRIPO_STUDIO_COOKIE` (the README says where to find it). It lasts about 30 days; when a command says the login failed, copy it again.
+- **Every command prints one line of JSON** with the project, the credits spent and the files written, so commands chain. A project keeps every step done to it, and each command works on its latest.
+- **It costs credits**: about 25 for a model, 20 for a rig, 10 for a texture; images and preset animations are free. `balance` says what is left. Credits count in the token stats beside Claude's tokens ([tools/token-stats](../tools/token-stats/README.md)), read from Tripo's own history, so work done by hand in the web app counts too.
+- **Use the CLI, not the web app's API by hand, and not the bake-off's `tripo.py`**, which spends API credits. When Tripo changes its requests and a command breaks, fix the CLI; [research/tripo-studio-api.md](../research/tripo-studio-api.md) says how to capture what the web app sends now.
+
 ## Checking the game without a person (QA for agents)
 
 The developers want the game's QA reachable by our coding agents (D69): an agent should be able to run the game, drive it, look at it and ask it what is true, the way a tester would.

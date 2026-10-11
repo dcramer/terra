@@ -21,7 +21,7 @@ All by [Quaternius](https://quaternius.com), who releases everything under [CC0 
 |---|---|---|
 | `crates/terra_sandbox/assets/models/nature/` | Ultimate Nature Pack: trees, rocks, bushes, plants, flowers | None to the files. The sandbox reads their shapes and applies its own colours. |
 | `crates/terra_sandbox/assets/models/props/` | House Interior, Modular Sci-Fi and Survival packs: furniture, crates, tanks, a fire. Modular Dungeon pack: `Table_Small.glb`, a workbench | None to the files. Recoloured the same way. |
-| `crates/terra_sandbox/assets/models/character/` | Universal Animation Library, standard edition: a rigged figure and its animations | Cut down to 26 of its 46 animations, and the figure's two colours changed, by `cut_figure.py` in the same folder. |
+| `crates/terra_sandbox/assets/models/character/` | Universal Animation Library, standard edition: a rigged figure and its animations | Cut down to 26 of its 46 animations, and the figure's two colours changed, by a script since retired (D121), which copied the kept nodes, skin, mesh and keyframes unchanged. |
 | `crates/terra_sandbox/assets/models/creatures/` | Ultimate Animated Animals pack: `Deer.glb`. Easy Enemies pack: `Spider.glb`. Both rigged and animated | None to the files. |
 | `crates/terra_sandbox/assets/models/village/` | Medieval Village pack: a fence, a well, a market stall | None to the files. Its houses and blacksmith's, and a palisade from the Fantasy RTS pack, were removed: buildings are built from parts (D108). |
 | `crates/terra_sandbox/assets/models/tools/` | Survival pack: `Axe.glb`, `Knife.glb`. Medieval Weapons pack: hammer, sword, spear, bow, arrow | None to the files. |

@@ -18,6 +18,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [character-creators.md](character-creators.md) | How do the best character creators and equipment systems work, with Enshrouded as the model, and what fits Terra? |
 | [ai-models-for-art.md](ai-models-for-art.md) | With no artists, can an agent make our models, and which AI tools, free or paid, make good 3D art? |
 | [tripo-studio-credits.md](tripo-studio-credits.md) | Can scripts spend our Tripo subscription's credits instead of API credits? |
+| [tripo-studio-api.md](tripo-studio-api.md) | What does each Studio operation take and return, so a script can do everything the web app does? |
 | [agents-playing-games.md](agents-playing-games.md) | How do AI agents play games, from the screen or through the game's state, and what would make them efficient at Terra? |
 | [godot-spike.md](godot-spike.md) | What did the Godot build prove, and what are the numbers to beat? |
 

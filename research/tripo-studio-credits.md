@@ -1,8 +1,8 @@
 # Using our Tripo subscription from scripts
 
-2026-10-11. Question: the bake-off's [tripo.py](../spike/model_bakeoff/tripo.py) spends API credits, which we find expensive, while we already pay for a Studio subscription. Has anyone found a way to drive generation from the subscription instead?
+2026-10-11. Question: the bake-off's `tripo.py` (since retired) spends API credits, which we find expensive, while we already pay for a Studio subscription. Has anyone found a way to drive generation from the subscription instead?
 
-What follows comes from other people's code and READMEs on the day. We built a client from it, `tripo.py --studio` ([studio.py](../spike/model_bakeoff/studio.py)), and made one model with it (end of note).
+What follows comes from other people's code and READMEs on the day. We built a client from it and made one model with it (end of note); it has since grown into the team's Tripo CLI, [tools/tripo](../tools/tripo) ([tripo-studio-api.md](tripo-studio-api.md)).
 
 ## Answer
 
