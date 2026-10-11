@@ -24,6 +24,7 @@
 use super::catalogue::{self, Item, Kind, PARTS, Part};
 use super::dial::Dial;
 use super::flora::Obstacles;
+use super::inventory::{self, Cost, Inventory, Raw, Tool};
 use super::props::{self, Blocked, Models, Prop, Standing};
 use super::{Player, View};
 use crate::experiments::build::Site;
@@ -127,6 +128,10 @@ pub struct Builder {
     carrying: Option<Carried>,
     /// Set by a tap of the right mouse button: put away, or put back.
     pub cancel: bool,
+    /// What building the thing aimed at would cost, and how many times over.
+    price: Option<(Cost, u32)>,
+    /// What there is not enough of to pay that, and how many more are needed.
+    short: Option<(Raw, u32)>,
     pub target: Target,
     /// The rectangles the highlight was last drawn for, and in which look.
     shown: (Vec<[Vec3; 4]>, usize),
@@ -195,8 +200,10 @@ impl Builder {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup)
-        .add_systems(Update, (choose, aim, act, highlight).chain().in_set(Acting));
+    app.add_systems(Startup, setup).add_systems(
+        Update,
+        (choose, aim, afford, act, highlight).chain().in_set(Acting),
+    );
 }
 
 fn setup(
@@ -256,6 +263,8 @@ fn setup(
         before_mode: None,
         carrying: None,
         cancel: false,
+        price: None,
+        short: None,
         target: Target::Nothing,
         shown: (Vec::new(), 0),
         highlight,
@@ -265,34 +274,25 @@ fn setup(
     });
 }
 
-/// Reads the keys and the wheel: picking parts by number, switching modes, cycling
-/// variants, and turning what is in hand.
+/// Reads the keys and the wheel: switching modes, cycling variants, and turning what is
+/// in hand. The builder only answers while it is the tool in hand.
 fn choose(
     keys: Res<ButtonInput<KeyCode>>,
     scroll: Res<AccumulatedMouseScroll>,
     dial: Res<Dial>,
+    inventory: Res<Inventory>,
     mut builder: ResMut<Builder>,
 ) {
-    const NUMBERS: [KeyCode; 10] = [
-        KeyCode::Digit1,
-        KeyCode::Digit2,
-        KeyCode::Digit3,
-        KeyCode::Digit4,
-        KeyCode::Digit5,
-        KeyCode::Digit6,
-        KeyCode::Digit7,
-        KeyCode::Digit8,
-        KeyCode::Digit9,
-        KeyCode::Digit0,
-    ];
     builder.wheel = 0;
-    if dial.open || builder.is_carrying() && keys.any_just_pressed(NUMBERS) {
+    if inventory.open || inventory.holding() != Some(Tool::Builder) {
+        // Put back anything being carried, and put the part away.
+        builder.cancel = builder.is_carrying();
+        builder.stowed = true;
+        builder.before_mode = None;
         return;
     }
-    for (part, key) in NUMBERS.into_iter().enumerate() {
-        if keys.just_pressed(key) {
-            builder.pick(part);
-        }
+    if dial.open {
+        return;
     }
     if !builder.is_carrying() {
         if keys.just_pressed(KeyCode::KeyQ) {
@@ -613,6 +613,58 @@ fn aim(
     };
 }
 
+/// Works out what the thing aimed at would cost to build, and whether it can be paid.
+fn afford(site: Res<Site>, inventory: Res<Inventory>, mut builder: ResMut<Builder>) {
+    let opened = |face: Face, interior: bool| {
+        // Cutting an opening is paid for once; changing its shape afterwards is free.
+        if interior {
+            site.base.partition(face) == Some(Panel::Solid)
+        } else {
+            site.base.panel(face) == Panel::Solid
+        }
+    };
+    let price: Option<(Cost, u32)> = match (&builder.picked().kind, builder.target) {
+        (
+            Kind::Room(_),
+            Target::Ground {
+                corner,
+                tiles,
+                fits: true,
+                adds: true,
+            },
+        ) => {
+            let new_tiles = (0..tiles.x)
+                .flat_map(|i| (0..tiles.y).map(move |j| IVec3::new(i, 0, j)))
+                .filter(|&step| !site.base.contains(corner + step))
+                .count();
+            Some((catalogue::ROOM_TILE, new_tiles as u32))
+        }
+        (Kind::Reshape, Target::Wall(face)) => {
+            Some((catalogue::ROOM_TILE, site.base.wall(face).len() as u32))
+        }
+        (
+            Kind::Wall,
+            Target::Edge {
+                face, fits: true, ..
+            },
+        ) if site.base.partition(face).is_none() => Some((catalogue::WALL, 1)),
+        (Kind::Window(_), Target::Wall(face)) if opened(face, false) => {
+            Some((catalogue::WINDOW, 1))
+        }
+        (Kind::Window(_), Target::Edge { face, .. }) if opened(face, true) => {
+            Some((catalogue::WINDOW, 1))
+        }
+        (Kind::Door, Target::Wall(face)) if opened(face, false) => Some((catalogue::DOOR, 1)),
+        (Kind::Door, Target::Edge { face, .. }) if opened(face, true) => Some((catalogue::DOOR, 1)),
+        (Kind::Items(_), Target::Spot { blocked: None, .. }) => {
+            builder.item().map(|item| (item.cost, 1))
+        }
+        _ => None,
+    };
+    builder.short = price.and_then(|(cost, times)| inventory.missing(cost, times));
+    builder.price = price;
+}
+
 fn act(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
@@ -622,6 +674,7 @@ fn act(
     models: Res<Models>,
     props: Query<&Prop>,
     mut builder: ResMut<Builder>,
+    mut inventory: ResMut<Inventory>,
     mut site: ResMut<Site>,
     mut player: Single<&mut Player>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -655,6 +708,7 @@ fn act(
         keys.just_pressed(KeyCode::KeyV) || (captured && mouse.just_pressed(MouseButton::Middle));
     if copy
         && !builder.is_carrying()
+        && inventory.holding() == Some(Tool::Builder)
         && let Some(prop) = builder.viewed.and_then(|entity| props.get(entity).ok())
         && let Some((part, variant)) = catalogue::place_of(prop.item)
     {
@@ -663,32 +717,53 @@ fn act(
         builder.turn = prop.turn;
         return;
     }
+    // Building is paid for from what is carried, and refused when that is not enough.
+    // Taking apart gives everything back.
+    let can_pay = builder.short.is_none();
+    let build = click && can_pay;
+    let mut refund: Option<(Cost, u32)> = None;
+    let opening_cost = |panel: Panel| match panel {
+        Panel::Solid => None,
+        Panel::Window { .. } => Some((catalogue::WINDOW, 1)),
+        Panel::Door => Some((catalogue::DOOR, 1)),
+    };
     let op = match (&builder.picked().kind, builder.target) {
         // A wall goes out a tile for a click or a notch away, and in for a notch back.
-        (Kind::Reshape, Target::Wall(face)) if click || builder.wheel > 0 => {
+        (Kind::Reshape, Target::Wall(face)) if (click || builder.wheel > 0) && can_pay => {
             Some(BuildOp::Grow(face))
         }
-        (Kind::Reshape, Target::Wall(face)) if builder.wheel < 0 => Some(BuildOp::Shrink(face)),
-        (Kind::Window(shapes), Target::Wall(face)) if click => {
+        (Kind::Reshape, Target::Wall(face)) if builder.wheel < 0 => {
+            refund = Some((catalogue::ROOM_TILE, site.base.wall(face).len() as u32));
+            Some(BuildOp::Shrink(face))
+        }
+        (Kind::Window(shapes), Target::Wall(face)) if build => {
             Some(BuildOp::SetPanel(face, shapes[builder.variant()].1))
         }
-        (Kind::Door, Target::Wall(face)) if click => Some(BuildOp::SetPanel(face, Panel::Door)),
+        (Kind::Door, Target::Wall(face)) if build => Some(BuildOp::SetPanel(face, Panel::Door)),
         (
             Kind::Wall,
             Target::Edge {
                 face, fits: true, ..
             },
-        ) if click => Some(BuildOp::SetPartition(face, Some(Panel::Solid))),
-        (Kind::Window(shapes), Target::Edge { face, .. }) if click => Some(BuildOp::SetPartition(
+        ) if build => Some(BuildOp::SetPartition(face, Some(Panel::Solid))),
+        (Kind::Window(shapes), Target::Edge { face, .. }) if build => Some(BuildOp::SetPartition(
             face,
             Some(shapes[builder.variant()].1),
         )),
-        (Kind::Door, Target::Edge { face, .. }) if click => {
+        (Kind::Door, Target::Edge { face, .. }) if build => {
             Some(BuildOp::SetPartition(face, Some(Panel::Door)))
         }
-        (Kind::Remove, Target::Wall(face)) if click => Some(BuildOp::SetPanel(face, Panel::Solid)),
+        (Kind::Remove, Target::Wall(face)) if click => {
+            refund = opening_cost(site.base.panel(face));
+            Some(BuildOp::SetPanel(face, Panel::Solid))
+        }
         // An opening in an interior wall is closed first; a plain wall is taken away.
         (Kind::Remove, Target::Edge { face, open, .. }) if click => {
+            refund = if open {
+                site.base.partition(face).and_then(opening_cost)
+            } else {
+                Some((catalogue::WALL, 1))
+            };
             Some(BuildOp::SetPartition(face, open.then_some(Panel::Solid)))
         }
         (
@@ -699,7 +774,7 @@ fn act(
                 fits: true,
                 adds: true,
             },
-        ) if click => Some(BuildOp::AddRoom {
+        ) if build => Some(BuildOp::AddRoom {
             min: corner.to_array(),
             max: (corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1)).to_array(),
         }),
@@ -711,7 +786,7 @@ fn act(
                 indoors,
                 blocked: None,
             },
-        ) if click => {
+        ) if build => {
             if let Some(item) = builder.item() {
                 props::place(
                     &mut commands,
@@ -725,7 +800,10 @@ fn act(
                     indoors,
                 );
                 info!("Placed a {} at {at}, {lift} up.", item.name);
-                builder.carrying = None;
+                // Something carried was paid for when it was first built.
+                if builder.carrying.take().is_none() {
+                    inventory.pay(item.cost, 1);
+                }
                 player.since_acting = 0.0;
             }
             None
@@ -749,6 +827,7 @@ fn act(
         (Kind::Remove, Target::Prop(entity)) if click => {
             if let Ok(prop) = props.get(entity) {
                 info!("Removed a {}.", prop.item.name);
+                inventory.refund(prop.item.cost, 1);
             }
             commands.entity(entity).despawn();
             player.since_acting = 0.0;
@@ -758,7 +837,15 @@ fn act(
     };
     if let Some(op) = op {
         player.since_acting = 0.0;
-        site.apply(op, &mut commands, &planet, &mut meshes);
+        if site.apply(op, &mut commands, &planet, &mut meshes) {
+            match (refund, builder.price) {
+                (Some((cost, times)), _) => inventory.refund(cost, times),
+                (None, Some((cost, times))) => {
+                    inventory.pay(cost, times);
+                }
+                (None, None) => {}
+            }
+        }
     }
 }
 
@@ -810,7 +897,7 @@ fn highlight(
                 blocked: Some(_),
                 ..
             }
-    );
+    ) || builder.short.is_some();
     let look = match (kind, builder.target) {
         (Kind::Move, Target::Prop(_)) => 1,
         _ if refused => 2,
@@ -1051,11 +1138,17 @@ fn highlight(
 }
 
 /// What each button would do right now, for the prompt under the aiming mark.
-pub fn prompt(builder: &Builder) -> &'static str {
+pub fn prompt(builder: &Builder) -> String {
     if builder.stowed {
-        return "Hold right mouse  build menu";
+        return "Hold right mouse  build menu".to_string();
     }
-    match (&builder.picked().kind, builder.target) {
+    if let Some((raw, more)) = builder.short {
+        return format!(
+            "Not enough to build this: {more} more {} needed",
+            raw.name()
+        );
+    }
+    let action = match (&builder.picked().kind, builder.target) {
         (Kind::Reshape, Target::Wall(_)) => {
             "Left click  push the wall out      Scroll  push and pull"
         }
@@ -1094,6 +1187,12 @@ pub fn prompt(builder: &Builder) -> &'static str {
         (Kind::Remove, Target::Edge { .. }) => "Left click  take this wall away",
         (Kind::Remove, Target::Wall(_)) => "Left click  close this opening",
         (Kind::Remove, _) => "Aim at an item, an interior wall, a window or a door      Q  done",
+    };
+    match builder.price {
+        Some((cost, times)) if times > 0 => {
+            format!("{action}      Costs {}", inventory::describe(cost, times))
+        }
+        _ => action.to_string(),
     }
 }
 

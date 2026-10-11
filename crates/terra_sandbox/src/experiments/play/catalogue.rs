@@ -5,7 +5,15 @@
 //! list is a stand-in. What can be built, what it costs and how it is unlocked are design
 //! questions nobody has answered (docs/player.md).
 
+use super::inventory::{Cost, Raw};
 use terra_build::Panel;
+
+/// What the pieces of a base cost. A room costs so much a tile, however it comes to have
+/// the tile: built, extended, or by pushing a wall out.
+pub const ROOM_TILE: Cost = &[(Raw::Metal, 3)];
+pub const WALL: Cost = &[(Raw::Metal, 2)];
+pub const WINDOW: Cost = &[(Raw::Glass, 2), (Raw::Metal, 1)];
+pub const DOOR: Cost = &[(Raw::Metal, 2)];
 
 /// Something stood on a floor or on the ground. Its model is a file in
 /// `assets/models/props`.
@@ -15,6 +23,8 @@ pub struct Item {
     pub file: &'static str,
     /// Its longest dimension, in metres.
     pub size: f32,
+    /// The raw items it is built from, and gives back when taken apart.
+    pub cost: Cost,
     /// Flat things lie this far above the floor, so the two do not flicker.
     pub lift: f32,
     /// Whether it gives off light, and how.
@@ -28,20 +38,21 @@ pub enum Light {
     Fire,
 }
 
-const fn item(name: &'static str, file: &'static str, size: f32) -> Item {
+const fn item(name: &'static str, file: &'static str, size: f32, cost: Cost) -> Item {
     Item {
         name,
         file,
         size,
+        cost,
         lift: 0.0,
         light: Light::None,
     }
 }
 
-const fn rug(name: &'static str, file: &'static str, size: f32) -> Item {
+const fn rug(name: &'static str, file: &'static str, size: f32, cost: Cost) -> Item {
     Item {
         lift: 0.015,
-        ..item(name, file, size)
+        ..item(name, file, size, cost)
     }
 }
 
@@ -152,66 +163,97 @@ pub static PARTS: [Part; 15] = [
     Part {
         name: "Seat",
         kind: Kind::Items(&[
-            item("Couch", "Couch_Medium1", 2.2),
-            item("Chair", "Chair_1", 0.95),
-            item("Stool", "Stool", 0.5),
+            item(
+                "Couch",
+                "Couch_Medium1",
+                2.2,
+                &[(Raw::Wood, 2), (Raw::Cloth, 3)],
+            ),
+            item("Chair", "Chair_1", 0.95, &[(Raw::Wood, 2)]),
+            item("Stool", "Stool", 0.5, &[(Raw::Wood, 1)]),
         ]),
     },
     Part {
         name: "Table",
         kind: Kind::Items(&[
-            item("Round table", "Table_RoundSmall", 1.1),
-            item("Night stand", "NightStand_1", 0.55),
+            item("Round table", "Table_RoundSmall", 1.1, &[(Raw::Wood, 3)]),
+            item("Night stand", "NightStand_1", 0.55, &[(Raw::Wood, 2)]),
         ]),
     },
     Part {
         name: "Bed",
-        kind: Kind::Items(&[item("Single bed", "Bed_Single", 2.15)]),
+        kind: Kind::Items(&[item(
+            "Single bed",
+            "Bed_Single",
+            2.15,
+            &[(Raw::Wood, 3), (Raw::Cloth, 3)],
+        )]),
     },
     Part {
         name: "Storage",
         kind: Kind::Items(&[
-            item("Bookshelf", "Bookshelf", 2.0),
-            item("Tall shelf", "Props_Shelf_Tall", 2.0),
-            item("Crate", "Props_Crate", 0.8),
-            item("Long crate", "Props_CrateLong", 1.2),
-            item("Container", "Props_ContainerFull", 1.3),
+            item("Bookshelf", "Bookshelf", 2.0, &[(Raw::Wood, 4)]),
+            item("Tall shelf", "Props_Shelf_Tall", 2.0, &[(Raw::Metal, 3)]),
+            item("Crate", "Props_Crate", 0.8, &[(Raw::Metal, 2)]),
+            item("Long crate", "Props_CrateLong", 1.2, &[(Raw::Metal, 3)]),
+            item("Container", "Props_ContainerFull", 1.3, &[(Raw::Metal, 4)]),
         ]),
     },
     Part {
         name: "Kitchen",
         kind: Kind::Items(&[
-            item("Fridge", "Kitchen_Fridge", 1.85),
-            item("Sink", "Kitchen_Sink", 1.08),
-            item("Drawers", "Kitchen_2Drawers", 0.92),
+            item(
+                "Fridge",
+                "Kitchen_Fridge",
+                1.85,
+                &[(Raw::Metal, 4), (Raw::Parts, 2)],
+            ),
+            item("Sink", "Kitchen_Sink", 1.08, &[(Raw::Metal, 3)]),
+            item("Drawers", "Kitchen_2Drawers", 0.92, &[(Raw::Wood, 3)]),
         ]),
     },
     Part {
         name: "Decor",
         kind: Kind::Items(&[
-            lit(Light::Lamp, item("Floor lamp", "Light_Floor1", 1.6)),
-            item("Leafy plant", "Houseplant_7", 1.1),
-            item("Cactus", "Houseplant_3", 0.9),
-            item("Small plant", "Houseplant_1", 0.45),
-            rug("Round rug", "Carpet_Round", 3.2),
-            rug("Long rug", "Carpet_1", 3.0),
+            lit(
+                Light::Lamp,
+                item(
+                    "Floor lamp",
+                    "Light_Floor1",
+                    1.6,
+                    &[(Raw::Metal, 1), (Raw::Parts, 1)],
+                ),
+            ),
+            item("Leafy plant", "Houseplant_7", 1.1, &[(Raw::Wood, 1)]),
+            item("Cactus", "Houseplant_3", 0.9, &[(Raw::Wood, 1)]),
+            item("Small plant", "Houseplant_1", 0.45, &[(Raw::Wood, 1)]),
+            rug("Round rug", "Carpet_Round", 3.2, &[(Raw::Cloth, 3)]),
+            rug("Long rug", "Carpet_1", 3.0, &[(Raw::Cloth, 3)]),
         ]),
     },
     Part {
         name: "Kit",
         kind: Kind::Items(&[
-            item("Computer", "Props_Computer", 1.8),
-            item("Radio", "Radio", 0.4),
-            item("Gas tank", "PropaneTank", 1.3),
-            item("Fuel can", "GasCan", 0.45),
-            item("Shovel", "Shovel", 1.3),
+            item(
+                "Computer",
+                "Props_Computer",
+                1.8,
+                &[(Raw::Metal, 2), (Raw::Parts, 4)],
+            ),
+            item("Radio", "Radio", 0.4, &[(Raw::Parts, 2)]),
+            item("Gas tank", "PropaneTank", 1.3, &[(Raw::Metal, 3)]),
+            item("Fuel can", "GasCan", 0.45, &[(Raw::Metal, 1)]),
+            item("Shovel", "Shovel", 1.3, &[(Raw::Metal, 1), (Raw::Wood, 1)]),
         ]),
     },
     Part {
         name: "Fire",
         kind: Kind::Items(&[
-            lit(Light::Fire, item("Campfire", "Bonfire_Fire", 1.3)),
-            item("Log", "WoodLog", 1.7),
+            lit(
+                Light::Fire,
+                item("Campfire", "Bonfire_Fire", 1.3, &[(Raw::Wood, 3)]),
+            ),
+            item("Log", "WoodLog", 1.7, &[(Raw::Wood, 2)]),
         ]),
     },
 ];

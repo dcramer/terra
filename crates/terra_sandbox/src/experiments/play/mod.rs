@@ -14,10 +14,13 @@
 //! `flora` what grows, `props` what has been placed, `figure` the player's body, `tool`
 //! the builder, `dial` its menu and prompts, and `catalogue` what it can build. See docs/player.md for the design this is a step toward.
 
+mod bag;
 mod catalogue;
 mod dial;
 mod figure;
 mod flora;
+mod harvest;
+mod inventory;
 mod models;
 mod props;
 mod scene;
@@ -80,6 +83,8 @@ pub fn plugin(app: &mut App) {
     figure::plugin(app);
     tool::plugin(app);
     dial::plugin(app);
+    bag::plugin(app);
+    harvest::plugin(app);
     app.insert_resource(DrivenByPlayer)
         .add_systems(Startup, hide_frame_rate)
         .add_systems(PostStartup, spawn)
@@ -155,8 +160,13 @@ fn spawn(
 fn capture_mouse(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
+    inventory: Res<inventory::Inventory>,
     window: Single<(&mut Window, &mut CursorOptions)>,
 ) {
+    // While the inventory is open the pointer is for pointing at things in it.
+    if inventory.open {
+        return;
+    }
     let (mut window, mut cursor) = window.into_inner();
     let captured = cursor.grab_mode != CursorGrabMode::None;
     if captured && (keys.just_pressed(KeyCode::Escape) || !window.focused) {

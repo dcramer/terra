@@ -6,6 +6,7 @@
 //! every run. Trees, rocks and plants are one entity each, sharing a mesh per model.
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
+use super::inventory::Raw;
 use super::models::{Part, read_model};
 use super::scene::SUN_DIRECTION;
 use crate::experiments::build::Site;
@@ -57,8 +58,14 @@ pub struct Obstacles(pub Vec<(Vec3, f32)>);
 
 /// A plant or rock, and how close a base may come before it is cleared away.
 #[derive(Component)]
-struct Growth {
+pub struct Growth {
     clearance_m: f32,
+    /// What cutting it gives.
+    pub gives: Option<(Raw, u32)>,
+    /// Where it stops a walker, if it does.
+    pub obstacle: Option<Vec3>,
+    /// How far up from its foot to aim for it, in metres.
+    pub middle_m: f32,
 }
 
 /// The squares of grass, and what is needed to regrow one.
@@ -354,16 +361,27 @@ fn plant(
         }
     };
     let mut planted = 0;
-    let mut put = |model: &Model, transform: Transform, clearance_m: f32| {
+    let mut solid_things: Vec<(Vec3, f32)> = Vec::new();
+    let mut put = |model: &Model,
+                   transform: Transform,
+                   clearance_m: f32,
+                   gives: Option<(Raw, u32)>,
+                   stops: Option<(Vec3, f32)>| {
         if site.covers(transform.translation, clearance_m) {
             return;
         }
         planted += 1;
+        solid_things.extend(stops);
         commands.spawn((
             Mesh3d(model.mesh.clone()),
             MeshMaterial3d(solid.clone()),
             transform,
-            Growth { clearance_m },
+            Growth {
+                clearance_m,
+                gives,
+                obstacle: stops.map(|(at, _)| at),
+                middle_m: (model.height * transform.scale.y * 0.4).min(1.4),
+            },
         ));
     };
 
@@ -395,10 +413,15 @@ fn plant(
         };
         let model = pick(rng, models);
         let scale = tall / model.height;
-        obstacles
-            .0
-            .push((point, (model.spread * scale).clamp(0.25, 0.6)));
-        put(&model, standing(rng, point, 0.06, scale, 0.1), 5.0);
+        let trunk = (point, (model.spread * scale).clamp(0.25, 0.6));
+        let wood = Some((Raw::Wood, (tall / 3.0).round() as u32));
+        put(
+            &model,
+            standing(rng, point, 0.06, scale, 0.1),
+            5.0,
+            wood,
+            Some(trunk),
+        );
     });
 
     // Rocks: anywhere, more of them on bare and steep ground, mossy in the grass.
@@ -416,13 +439,14 @@ fn plant(
         // Mostly small, now and then a boulder.
         let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
         let scale = size / model.height;
-        if size > 0.9 {
-            obstacles.0.push((point, model.spread * scale * 0.8));
-        }
+        let stops = (size > 0.9).then_some((point, model.spread * scale * 0.8));
+        let metal = Some((Raw::Metal, (size * 2.0).ceil() as u32));
         put(
             &model,
             standing(rng, point, 0.5, scale, size * 0.22),
             1.0 + size,
+            metal,
+            stops,
         );
     });
 
@@ -435,7 +459,14 @@ fn plant(
         }
         let model = pick(rng, &bushes);
         let scale = rng.range(0.7, 1.5) / model.height;
-        put(&model, standing(rng, point, 0.1, scale, 0.05), 1.2);
+        let fibre = Some((Raw::Cloth, 1));
+        put(
+            &model,
+            standing(rng, point, 0.1, scale, 0.05),
+            1.2,
+            fibre,
+            None,
+        );
     });
     scatter(seed.derive("plants"), 150.0, 3.2, |rng, x, z| {
         let point = ground.ground(&planet, x, z);
@@ -445,7 +476,14 @@ fn plant(
         }
         let model = pick(rng, &plants);
         let scale = rng.range(0.35, 0.75) / model.height;
-        put(&model, standing(rng, point, 0.15, scale, 0.02), 0.6);
+        let fibre = Some((Raw::Cloth, 1));
+        put(
+            &model,
+            standing(rng, point, 0.15, scale, 0.02),
+            0.6,
+            fibre,
+            None,
+        );
     });
     // Flowers, in drifts.
     scatter(seed.derive("flowers"), 130.0, 1.5, |rng, x, z| {
@@ -460,7 +498,13 @@ fn plant(
         }
         let model = pick(rng, &flowers);
         let scale = rng.range(0.4, 0.62) / model.height;
-        put(&model, standing(rng, point, 0.15, scale, 0.02), 0.5);
+        put(
+            &model,
+            standing(rng, point, 0.15, scale, 0.02),
+            0.5,
+            None,
+            None,
+        );
     });
 
     // A stump and a mossy log by the door, as if the clearing had been cut.
@@ -474,9 +518,11 @@ fn plant(
             model,
             standing(&mut rng, point, 0.0, size / model.height, 0.03),
             1.0,
+            Some((Raw::Wood, 2)),
+            Some((point, 0.5)),
         );
-        obstacles.0.push((point, 0.5));
     }
+    obstacles.0.extend(solid_things);
 
     let mut meadow = Meadow {
         ground,

@@ -70,7 +70,7 @@ What the sandbox does today, measured against the above.
 - **Items are already entries in a list.** Structural parts are not: rooms, walls and openings are written into `terra_build` and into the builder tool case by case.
 - **Looks already follow neighbours in three places**: a post where a wall turns and a seam where it continues; a parapet where the roof begins and a line where a storey continues; a foundation ledge only on outside edges. But it is written as special cases, and nothing is rounded.
 - **No materials.**
-- **No cost.** Nothing is carried.
+- **Cost is a stand-in.** The sandbox has five raw items, a cost for every buildable, a full refund on taking apart, and a cutter tool to gather more. None of the numbers or names were designed, and there is no notion yet of what a player is capable of building.
 - **Round rooms do not fit the model as it stands.** A base is square tiles. See the first open question.
 
 ## Open questions

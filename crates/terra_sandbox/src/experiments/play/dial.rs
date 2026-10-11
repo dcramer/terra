@@ -3,6 +3,9 @@
 //! what is picked and what each button would do.
 
 use super::catalogue::PARTS;
+use super::flora::Growth;
+use super::harvest::{self, Cutting};
+use super::inventory::{Inventory, Tool};
 use super::tool::{self, Builder};
 use crate::shell::Options;
 use bevy::{
@@ -32,6 +35,8 @@ pub struct Dial {
     pointed: Option<usize>,
     /// How long the dial has been open, in seconds.
     held_for: f32,
+    /// A number key picked a part while the dial's button was still down.
+    pub closed_by_key: bool,
 }
 
 #[derive(Component)]
@@ -150,7 +155,7 @@ fn setup(mut commands: Commands) {
             Hud,
             Node {
                 position_type: PositionType::Absolute,
-                bottom: px(28),
+                bottom: px(92),
                 width: percent(100),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
@@ -204,14 +209,25 @@ pub fn steer(
     mouse: Res<ButtonInput<MouseButton>>,
     motion: Res<AccumulatedMouseMotion>,
     cursor: Single<&CursorOptions>,
+    inventory: Res<Inventory>,
     mut dial: ResMut<Dial>,
     mut builder: ResMut<Builder>,
 ) {
+    // The dial belongs to the builder, and is put away with it.
+    if inventory.open || inventory.holding() != Some(Tool::Builder) {
+        dial.open = false;
+        return;
+    }
     // The mouse belongs to the game only once it has been captured. B is the same menu
     // from the keyboard.
     let captured = cursor.grab_mode != CursorGrabMode::None;
     let held = keys.pressed(KeyCode::KeyB) || (captured && mouse.pressed(MouseButton::Right));
+    // After a number has picked a part, the button has to be let go before it opens again.
+    dial.closed_by_key &= held;
     if !dial.open {
+        if dial.closed_by_key {
+            return;
+        }
         if held && !builder.is_carrying() {
             *dial = Dial {
                 open: true,
@@ -231,6 +247,25 @@ pub fn steer(
         let turn = angle.rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU;
         (turn * PARTS.len() as f32).round() as usize % PARTS.len()
     });
+    // A number picks a part outright: the first ten, clockwise from the top.
+    const NUMBERS: [KeyCode; 10] = [
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+        KeyCode::Digit8,
+        KeyCode::Digit9,
+        KeyCode::Digit0,
+    ];
+    if let Some(part) = NUMBERS.iter().position(|&key| keys.just_pressed(key)) {
+        builder.pick(part);
+        dial.open = false;
+        dial.closed_by_key = true;
+        return;
+    }
     if !held {
         match dial.pointed {
             Some(part) => builder.pick(part),
@@ -244,6 +279,9 @@ pub fn steer(
 fn draw(
     dial: Res<Dial>,
     builder: Res<Builder>,
+    inventory: Res<Inventory>,
+    cutting: Res<Cutting>,
+    growth: Query<&Growth>,
     options: Res<Options>,
     cursor: Single<&CursorOptions>,
     mut root: Single<&mut Visibility, (With<DialRoot>, Without<Hud>)>,
@@ -307,35 +345,48 @@ fn draw(
         },
     );
 
+    let holding = inventory.holding();
     let part = builder.picked();
     set(
         &mut texts.p1(),
-        match part.variant_name(builder.variant()) {
-            _ if builder.stowed => "Nothing in hand".to_string(),
-            Some(variant) if part.variants() > 1 => format!(
+        match (holding, part.variant_name(builder.variant())) {
+            (None, _) => "Empty hand".to_string(),
+            (Some(Tool::Cutter), _) => "Cutter".to_string(),
+            _ if builder.stowed => "Builder:  nothing picked".to_string(),
+            (_, Some(variant)) if part.variants() > 1 => format!(
                 "{}:  {}  ({} of {})",
                 part.name,
                 variant,
                 builder.variant() + 1,
                 part.variants()
             ),
-            Some(variant) => format!("{}:  {}", part.name, variant),
-            None => part.name.to_string(),
-        } + if builder.snap { "" } else { "     grid off" },
+            (_, Some(variant)) => format!("{}:  {}", part.name, variant),
+            (_, None) => part.name.to_string(),
+        } + if builder.snap || holding != Some(Tool::Builder) {
+            ""
+        } else {
+            "     grid off"
+        },
     );
     set(
         &mut texts.p2(),
-        if tool::waiting(&cursor, &options) {
+        if tool::waiting(&cursor, &options) && !inventory.open {
             "Click to take control".to_string()
+        } else if inventory.open {
+            "Tab  close the inventory".to_string()
         } else if dial.open {
-            "Move the mouse to a part and let go".to_string()
+            "Move the mouse to a part and let go, or press its number".to_string()
         } else {
-            tool::prompt(&builder).to_string()
+            match holding {
+                Some(Tool::Builder) => tool::prompt(&builder),
+                Some(Tool::Cutter) => harvest::prompt(&cutting, &growth),
+                None => "1 to 6  pick a tool      Tab  inventory".to_string(),
+            }
         },
     );
     set(
         &mut texts.p3(),
-        if dial.open {
+        if dial.open || inventory.open || holding != Some(Tool::Builder) {
             String::new()
         } else {
             tool::legend(&builder).to_string()

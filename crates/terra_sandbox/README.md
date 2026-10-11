@@ -68,7 +68,9 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 | Click | Capture the mouse; Esc releases it |
 | Mouse | Look |
 | W A S D, Shift, Space | Move, sprint, jump |
-| Hold right mouse | The dial of parts. Move the mouse toward one and let go. B does the same. |
+| 1 to 6 | Pick a slot of the action bar. What is in it is the tool in hand. |
+| Tab | Open and close the inventory. I does the same. |
+| Hold right mouse | With the builder in hand: the dial of parts. Move the mouse toward one and let go, or press its number. B does the same. |
 | Tap right mouse | Put the part away, or put back what you picked up |
 | Left click | Build, place, or pick up. E does the same. |
 | Scroll wheel | Turn an item or a room; push and pull a wall. Z and C do the same. |
@@ -78,10 +80,19 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 | X | The grid on and off |
 | Hold Alt | The opposite of the grid setting, while held |
 | Middle click | Pick another of the item you are looking at. V does the same. |
-| 1 to 9, 0 | The first ten parts directly |
 | F3 | Show the frame rate |
 
 The buttons follow Subnautica 2 where we could confirm what it does: right mouse is the build menu, left mouse builds, and taking apart and moving are modes on Q and F. The rest is the usual habit of building games. See [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
+
+You carry raw items and tools. The tools sit on the action bar along the bottom; the raw items are counted at the top right.
+
+![The inventory, the action bar and the raw items carried](../../docs/images/outpost-inventory-2026-10-10.png)
+
+- **The builder** spends raw items. Everything it builds has a cost, shown in the prompt before you commit: so much metal a tile for a room, glass for a window, wood and cloth for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost.
+- **The cutter** gathers more: wood from trees, metal from rocks, cloth from bushes and plants. Aim at one, or just stand in front of it, and left click.
+- **The inventory** lists the tools carried. Point at one and press 1 to 6 to put it in that slot of the bar.
+
+The raw items, the costs, what you start with and what the cutter gives are all stand-ins. See [docs/construction.md](../../docs/construction.md) for what the developers have said about carrying and cost.
 
 Building starts from a part. Pick one from the dial, cycle through its variants, and aim. What would be built is shown before you commit: the outline of a room, the cut of a window, the wall a push would move, or a ghost of the item where it would stand. It is red where it cannot go.
 
@@ -113,7 +124,7 @@ A room is a plain box: lamps and everything else in it are items you place. Room
 
 The game holds the mouse while you play and lets go when the window is no longer in front; click to take it back.
 
-Everything in and around the example base was placed through the same call the builder makes, and can be moved or taken away. The list of parts is in `catalogue.rs` and is a stand-in; nothing costs anything.
+Everything in and around the example base was placed through the same call the builder makes, and can be moved or taken away. The list of parts, with what each costs, is in `catalogue.rs` and is a stand-in.
 
 It is made of these pieces, each a module in `src/experiments/play/`:
 
@@ -121,7 +132,10 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 |---|---|
 | `scene` | The sun, the sky's colours, haze, shadows, and the camera's effects |
 | `flora` | Trees, rocks, bushes and flowers placed from the seed, and the grass |
-| `catalogue` | The parts the builder can build, and their variants |
+| `catalogue` | The parts the builder can build, their variants and what they cost |
+| `inventory` | What is carried: raw items, tools and the action bar |
+| `bag` | The action bar, the raw-item count and the inventory panel |
+| `harvest` | The cutter |
 | `tool` | The builder: what it is aimed at, the preview, and building |
 | `dial` | The dial of parts and the prompts |
 | `props` | Items that have been placed, and stopping a walker at them |
@@ -130,7 +144,7 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 
 The models are free ones, recoloured in code; see [THIRD_PARTY.md](../../THIRD_PARTY.md). How it was put together and what it costs to draw is in [research/outpost-scene.md](../../research/outpost-scene.md).
 
-What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; you cannot stand on an item, and an item stood on another stays in the air if the one under it goes; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; and placed items are not saved or part of the base's list of operations.
+What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; you cannot stand on an item, and an item stood on another stays in the air if the one under it goes; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; placed items and the inventory are not saved or part of the base's list of operations; and cutting a tree is instant and it never grows back.
 
 In a scripted run the game clock advances a sixtieth of a second per frame and real keyboard and mouse input is ignored, so the same script does the same thing on any machine:
 
