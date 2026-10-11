@@ -271,7 +271,7 @@ document.addEventListener("pointermove", (e) => {
 document.addEventListener("pointerleave", hide);
 
 // Counters count up from zero the first time they are seen, and the page checks
-// /json every minute, rolling any counter that grew to its new value.
+// /json every few seconds, rolling any counter that grew to its new value.
 ${compact}
 ${money}
 ${value}
@@ -336,13 +336,16 @@ function update(group, data) {
   });
 }
 
+let busy = false;
 async function refresh() {
+  if (busy) return;
+  busy = true;
   let s;
   try {
     const r = await fetch("/json", { cache: "no-store" });
     if (!r.ok) return;
     s = await r.json();
-  } catch { return; }
+  } catch { return; } finally { busy = false; }
   const cards = [...document.querySelectorAll(".person")];
   const names = cards.map((c) => c.dataset.user).sort().join();
   const firstDay = cards[0]?.querySelector(".day")?.dataset.day;
@@ -365,5 +368,6 @@ async function refresh() {
     });
   }
 }
-setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+setInterval(() => { if (!document.hidden) refresh(); }, 5000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 `;

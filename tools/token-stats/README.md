@@ -27,7 +27,7 @@ TERRA_STATS_KEY=<shared key>
 TERRA_STATS_USER=<your name>
 ```
 
-Variables of the same names in the environment override the file. That is all: the repository's `.claude/settings.json` runs `report.mjs --hook` after every tool call and turn here, so a long turn reports as it goes, and again when a session ends, so nothing waits for the next session. The hook does nothing without a `.env`, sends at most once a minute (except at a session's end), and sends from a detached process so Claude Code never waits; it logs to `~/.cache/terra-token-stats/report.log`. The page refreshes itself every minute.
+Variables of the same names in the environment override the file. That is all: the repository's `.claude/settings.json` runs `report.mjs --hook` after every tool call and turn here, so a long turn reports as it goes, and again when a session ends, so nothing waits for the next session. The hook does nothing without a `.env`, sends at most once a minute (except at a session's end), and sends from a detached process so Claude Code never waits; it logs to `~/.cache/terra-token-stats/report.log`. The page checks for new numbers every 5 seconds. The worker keeps the summary it last worked out and works it out again only when a report changes something, so each check reads one row however many pages are open.
 
 Each send reads every transcript again, which takes about half a second today. If months of transcripts make that slow, the script should remember how far into each file it has read.
 

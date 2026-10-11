@@ -48,6 +48,12 @@ const SCHEMA = [
     messages INTEGER NOT NULL,
     PRIMARY KEY (user, day, model)
   )`,
+  // The last summary, so the page can poll every few seconds for the price of one row.
+  `CREATE TABLE IF NOT EXISTS snapshot (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    day TEXT NOT NULL,
+    json TEXT NOT NULL
+  )`,
   `CREATE TRIGGER IF NOT EXISTS messages_insert AFTER INSERT ON messages BEGIN
     ${addToUsage("new", 1)}
   END`,
@@ -96,10 +102,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/") {
-      return new Response(page(await summary(env)), { headers: { "Content-Type": "text/html; charset=utf-8", ...PUBLIC } });
+      return new Response(page(await snapshot(env)), { headers: { "Content-Type": "text/html; charset=utf-8", ...PUBLIC } });
     }
     if (request.method === "GET" && url.pathname === "/json") {
-      return json(await summary(env), 200, PUBLIC);
+      return json(await snapshot(env), 200, PUBLIC);
     }
     if (!(await authorized(request, env))) return json({ error: "unauthorized" }, 401);
     try {
@@ -140,7 +146,25 @@ async function report(request, env) {
   const result = await withTables(env, () =>
     env.DB.prepare(UPSERT).bind(body.user, JSON.stringify(messages), new Date().toISOString()).run(),
   );
+  if (result.meta.changes > 0) await saveSnapshot(env);
   return json({ messages: messages.length, rows_written: result.meta.changes });
+}
+
+// The summary as of the last report that changed anything, worked out again when a
+// new day moves the chart. Reading it costs one row however often the page polls,
+// where working it out reads every row of `usage`.
+async function snapshot(env) {
+  const row = await withTables(env, () => env.DB.prepare("SELECT day, json FROM snapshot WHERE id = 1").first());
+  if (row && row.day === new Date().toISOString().slice(0, 10)) return JSON.parse(row.json);
+  return await saveSnapshot(env);
+}
+
+async function saveSnapshot(env) {
+  const s = await summary(env);
+  await env.DB.prepare("INSERT OR REPLACE INTO snapshot (id, day, json) VALUES (1, ?1, ?2)")
+    .bind(s.generated_at.slice(0, 10), JSON.stringify(s))
+    .run();
+  return s;
 }
 
 function cleanMessage(m) {
@@ -180,8 +204,8 @@ async function stats(url, env) {
   return json({ since, group, rows: results });
 }
 
-// Short, so the page's minute-by-minute refresh sees new numbers.
-const PUBLIC = { "Cache-Control": "public, max-age=30" };
+// The page polls every few seconds and must see new numbers.
+const PUBLIC = { "Cache-Control": "no-cache" };
 const SUMS = `sum(input_tokens) AS input, sum(output_tokens) AS output,
   sum(cache_read_tokens) AS cache_read, sum(cache_write_tokens) AS cache_write, sum(messages) AS messages`;
 
