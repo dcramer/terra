@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Sends this person's Claude Code token usage on this repository to the stats worker,
-// with the credits spend.py recorded. See README.md. No dependencies: Node 18 or later.
+// with the credits our Tripo tools recorded. See README.md. No dependencies: Node 18 or later.
 //
 //   node tools/token-stats/report.mjs             send messages not yet sent
 //   node tools/token-stats/report.mjs --full      send every message again
@@ -10,10 +10,12 @@
 //                                                 Claude Code after each tool call and turn (.claude/settings.json)
 //   node tools/token-stats/report.mjs --hook --now   the same without waiting; run when a session ends
 //   node tools/token-stats/report.mjs --cron      print a crontab line that runs it hourly
+//   node tools/token-stats/report.mjs --spend SERVICE TASK CREDITS
+//                                                 note credits a task spent, for the next send
 
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,8 +25,9 @@ const BATCH = 200;
 const HOOK_INTERVAL_MS = 60 * 1000;
 const CACHE = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "terra-token-stats");
 const LOG = join(CACHE, "report.log");
-// Written by spend.py. Unlike the cache, it is the only record of what it holds.
-const SPENDS = join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "terra-token-stats", "spends.jsonl");
+// Written by recordSpend, for the Tripo CLI and `--spend`. Unlike the cache, it is the only
+// record of what it holds.
+export const SPENDS = join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "terra-token-stats", "spends.jsonl");
 
 // Adds the messages of one Claude Code transcript to `messages`, a map from message id.
 //
@@ -145,7 +148,7 @@ export function totals(messages) {
   return [...rows.values()];
 }
 
-// The credits spend.py recorded, one per task id, keeping the largest count and the
+// The credits recorded, one per task id, keeping the largest count and the
 // earliest day if a task was recorded twice. Lines that are not a spend are skipped.
 export function readSpends(text) {
   const spends = new Map();
@@ -170,6 +173,29 @@ export function readSpends(text) {
 
 function spends() {
   return existsSync(SPENDS) ? readSpends(readFileSync(SPENDS, "utf8")) : [];
+}
+
+// A task's id in the ledger.
+export function spendId(service, task) {
+  return `${service}-${task}`.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 100);
+}
+
+// Notes that `task` on `service` took `credits` on `day` (UTC), for the next send. A task
+// is one id, so noting it again is harmless. Never fails the work it records.
+export function recordSpend(service, task, credits, day = new Date().toISOString().slice(0, 10)) {
+  if (!Number.isSafeInteger(credits) || credits <= 0 || !/^[a-z0-9-]{1,40}$/.test(service)) return;
+  const line = { id: spendId(service, task), day, service, credits };
+  try {
+    mkdirSync(dirname(SPENDS), { recursive: true });
+    appendFileSync(SPENDS, JSON.stringify(line) + "\n");
+  } catch (err) {
+    console.error(`could not record ${JSON.stringify(line)}: ${err.message}`);
+  }
+}
+
+// What the ledger holds: the largest credits noted for each task id.
+export function recordedSpends() {
+  return new Map(spends().map((s) => [s.id, s.credits]));
 }
 
 export function spendTotals(spends) {
@@ -246,6 +272,12 @@ function table(rows, cols) {
 async function main(args) {
   const counts = ["input", "output", "cache_read", "cache_write", "messages"];
   if (args.includes("--hook")) return hook(args.includes("--now"));
+  if (args[0] === "--spend") {
+    const [service, task, credits] = args.slice(1);
+    if (!service || !task || !/^\d+$/.test(credits ?? "")) throw new Error("usage: report.mjs --spend SERVICE TASK CREDITS");
+    recordSpend(service, task, Number(credits));
+    return;
+  }
   if (args.includes("--cron")) {
     console.log(`0 * * * * ${process.execPath} ${join(repoRoot(), "tools", "token-stats", "report.mjs")} >> ${LOG} 2>&1`);
     return;

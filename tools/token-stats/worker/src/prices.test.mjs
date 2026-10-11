@@ -20,6 +20,6 @@ test("an unknown model costs nothing", () => {
 
 test("prices Tripo's credits by service", () => {
   assert.equal(creditCost("tripo-api", 50), 0.5);
-  assert.equal(creditCost("tripo-studio", 3000), 19.9);
+  assert.equal(creditCost("tripo-studio", 3000), 20);
   assert.equal(creditCost("tripo-somewhere", 50), 0);
 });

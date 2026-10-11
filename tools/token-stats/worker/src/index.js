@@ -264,7 +264,8 @@ const SUMS = `sum(input_tokens) AS input, sum(output_tokens) AS output,
 // Everyone's totals, their models, and tokens a day for the last CHART_DAYS days, each
 // with `cost`: what the tokens would cost at API list prices, in dollars (prices.js).
 // Credits spent on other services count in `cost` too, and each service is listed with
-// the models, with its `credits` and no tokens.
+// the models, with its `credits` and no tokens. `claude_cost` and `tripo_cost` split
+// `cost` for the page, per person, per day and in the totals.
 async function summary(env) {
   const today = new Date();
   const since = new Date(today.getTime() - (CHART_DAYS - 1) * 86400000).toISOString().slice(0, 10);
@@ -281,13 +282,24 @@ async function summary(env) {
     ]),
   );
   const withTotal = (r) => ({ ...r, total: r.input + r.output + r.cache_read + r.cache_write });
-  const zero = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0, total: 0, cost: 0 });
+  const zero = () => ({
+    input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0, total: 0,
+    cost: 0, claude_cost: 0, tripo_cost: 0, tripo_credits: 0,
+  });
   const add = (into, r) => {
-    for (const k of Object.keys(into)) into[k] += r[k];
+    for (const k of Object.keys(into)) into[k] += r[k] ?? 0;
     return into;
   };
-  const priced = (r) => ({ ...withTotal(r), cost: cost(r.model, r) });
-  const spend = (r) => ({ model: r.service, ...zero(), credits: r.credits, cost: creditCost(r.service, r.credits) });
+  const priced = (r) => {
+    const c = cost(r.model, r);
+    return { ...withTotal(r), cost: c, claude_cost: c };
+  };
+  const spend = (r) => {
+    const c = creditCost(r.service, r.credits);
+    const tripo = r.service.startsWith("tripo");
+    return { model: r.service, ...zero(), credits: r.credits, cost: c, tripo_cost: tripo ? c : 0, tripo_credits: tripo ? r.credits : 0 };
+  };
+  const sum = (rows, key) => rows.reduce((total, r) => total + (r[key] ?? 0), 0);
   const days = Array.from({ length: CHART_DAYS }, (_, i) =>
     new Date(Date.parse(since) + i * 86400000).toISOString().slice(0, 10),
   );
@@ -313,7 +325,10 @@ async function summary(env) {
       ...(p ? withTotal(p) : { user, ...zero() }),
       first_day: spans.map((s) => s.first_day).sort()[0],
       last_day: spans.map((s) => s.last_day).sort().at(-1),
-      cost: mine.reduce((sum, m) => sum + m.cost, 0),
+      cost: sum(mine, "cost"),
+      claude_cost: sum(mine, "claude_cost"),
+      tripo_cost: sum(mine, "tripo_cost"),
+      tripo_credits: sum(mine, "tripo_credits"),
       models: mine,
       daily: days.map((day) => ({ day, ...(byDay.get(day) ?? zero()) })),
     };

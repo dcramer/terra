@@ -29,6 +29,7 @@ export function page(summary) {
   <section class="hero" aria-label="Everyone">
     <div class="big"${num(totals.cost, "cost", "usd")}>${money(totals.cost)}</div>
     <div class="label">at list prices, across ${users.length} ${users.length === 1 ? "person" : "people"}</div>
+    ${split(totals)}
     ${facts(totals)}
   </section>
   ${empty}
@@ -45,18 +46,14 @@ export function page(summary) {
 }
 
 function card(u, peak, days) {
-  const bars = u.daily
-    .map((d) => {
-      const h = d.cost === 0 ? 0 : Math.max(2, (d.cost / peak) * 100);
-      return `<div class="day" data-day="${d.day}" data-output="${full(d.output)}" data-messages="${d.messages}" data-cost="${money(d.cost)}"><i style="height:${h.toFixed(1)}%"></i></div>`;
-    })
-    .join("");
-  const models = u.models.map((m) => `<span title="${spent(m)}">${esc(m.model)}</span>`).join("");
+  const bars = u.daily.map((d) => `<div class="day"${tip(d)}>${stack(d, peak)}</div>`).join("");
+  const models = u.models.map((m) => `<span${m.credits === undefined ? "" : ` class="tripo"`} title="${spent(m)}">${esc(m.model)}</span>`).join("");
   return `<article class="person" data-user="${esc(u.user)}">
   <div class="head">
     <h2>${esc(u.user)}</h2>
     <div class="total"${num(u.cost, "cost", "usd")}>${money(u.cost)}</div>
   </div>
+  ${split(u)}
   ${facts(u)}
   <figure>
     <div class="chart" role="img" aria-label="Cost per day for ${esc(u.user)} over the last ${days} days">${bars}</div>
@@ -64,6 +61,24 @@ function card(u, peak, days) {
   </figure>
   <div class="models">${models}</div>
 </article>`;
+}
+
+// A day's bar: Claude's cost with Tripo's stacked on it, as a share of the busiest day.
+// The top segment gets the rounded corners.
+export function stack(d, peak) {
+  const h = (c) => (c <= 0 ? 0 : Math.max(2, (c / peak) * 100)).toFixed(1);
+  const top = d.tripo_cost > 0 ? "" : " top";
+  return `<i class="claude${top}" style="height:${h(d.claude_cost)}%"></i><i class="tripo top" style="height:${h(d.tripo_cost)}%"></i>`;
+}
+
+// What the tooltip over a day shows.
+function tip(d) {
+  return ` data-day="${d.day}" data-cost="${money(d.cost)}" data-claude="${money(d.claude_cost)}" data-tripo="${money(d.tripo_cost)}" data-credits="${full(d.tripo_credits)}" data-output="${full(d.output)}" data-messages="${d.messages}"`;
+}
+
+// Claude's share of the cost and Tripo's, each a counter that rolls on its own.
+export function split(t) {
+  return `<div class="split"><span class="claude"><b${num(t.claude_cost, "claude_cost", "usd")}>${money(t.claude_cost)}</b> Claude</span><span class="tripo"><b${num(t.tripo_cost, "tripo_cost", "usd")}>${money(t.tripo_cost)}</b> Tripo · <span${num(t.tripo_credits, "tripo_credits")}>${compact(t.tripo_credits)}</span> credits</span></div>`;
 }
 
 // What a model's tokens or a service's credits cost.
@@ -172,7 +187,7 @@ export const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"
 const CSS = `
 :root {
   --bg: #f6efe8; --surface: #fbf7f2; --ink: #2b2540; --muted: #6b6480; --line: #e6dcd3;
-  --bar: #1a8c63; --bar-hover: #11704e;
+  --bar: #1a8c63; --bar-hover: #11704e; --tripo: #6f5fc4; --tripo-hover: #574aa6;
   --sky-top: #f3d9c9; --sky-low: #efe3ea; --sun: #fff4e0; --glow: #ffd9b8;
   --l1: #d9cbe6; --l2: #bcb6de; --l3: #9fb0da; --l4: #e3a78f; --l5: #d98d74;
   --pine: #3f6f63; --pine-lit: #5e8f72; --count: #c0674c;
@@ -181,7 +196,7 @@ const CSS = `
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #1b1a2b; --surface: #24223a; --ink: #f1eaf5; --muted: #a9a2be; --line: #34314f;
-    --bar: #2fa577; --bar-hover: #4cc493;
+    --bar: #2fa577; --bar-hover: #4cc493; --tripo: #9a8ce6; --tripo-hover: #b6abf0;
     --sky-top: #1d1c33; --sky-low: #4a3a5e; --sun: #ffe3c4; --glow: #c47a6a;
     --l1: #3b3658; --l2: #332f52; --l3: #2b2a49; --l4: #4b3550; --l5: #3a2a42;
     --pine: #1e3b3a; --pine-lit: #2c5049; --count: #f0a98c;
@@ -220,8 +235,20 @@ h2 { margin: 0; font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
 figure { margin: 16px 0 0; }
 .chart { display: flex; align-items: flex-end; gap: 2px; height: 84px; border-bottom: 1px solid var(--line); }
 .day { flex: 1; height: 100%; display: flex; align-items: flex-end; cursor: default; }
-.day i { display: block; width: 100%; background: var(--bar); border-radius: 4px 4px 0 0; }
-.day:hover i, .day.on i { background: var(--bar-hover); }
+.day { flex-direction: column-reverse; align-items: stretch; justify-content: flex-start; }
+.day i { display: block; width: 100%; background: var(--bar); }
+.day i.top { border-radius: 4px 4px 0 0; }
+.day i.tripo { background: var(--tripo); }
+.day:hover i.claude, .day.on i.claude { background: var(--bar-hover); }
+.day:hover i.tripo, .day.on i.tripo { background: var(--tripo-hover); }
+.split { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 2px 0 10px; color: var(--muted); font-size: 14px; }
+.hero .split { justify-content: center; margin-top: 12px; font-size: 16px; }
+.split > span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.split .claude::before { background: var(--bar); }
+.split .tripo::before { background: var(--tripo); }
+.split b { color: var(--ink); font-weight: 600; }
+.models span.tripo { color: var(--tripo); border-color: var(--tripo); }
+.split b, .split span span { position: relative; display: inline-block; font-variant-numeric: tabular-nums; }
 figcaption { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 4px; }
 .models { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .models span { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
@@ -262,7 +289,7 @@ let on = null;
 function show(day, x, y) {
   if (on !== day) { on?.classList.remove("on"); on = day; day.classList.add("on"); }
   const d = day.dataset;
-  tip.innerHTML = "<b>" + d.day + "</b><br>" + d.cost + " at list prices<br>" + d.output + " output tokens · " + d.messages + " messages";
+  tip.innerHTML = "<b>" + d.day + "</b> · " + d.cost + " at list prices<br>Claude " + d.claude + " · " + d.output + " output tokens · " + d.messages + " messages<br>Tripo " + d.tripo + " · " + d.credits + " credits";
   tip.hidden = false;
   const w = tip.offsetWidth;
   tip.style.left = Math.min(window.innerWidth - w - 8, Math.max(8, x - w / 2)) + "px";
@@ -323,7 +350,7 @@ const seen = new IntersectionObserver((entries) => {
     if (!e.isIntersecting) continue;
     seen.unobserve(e.target);
     e.target.classList.add("grow");
-    e.target.querySelectorAll(".day i").forEach((b, i) => { b.style.animationDelay = (i * 18) + "ms"; });
+    e.target.querySelectorAll(".day").forEach((day, i) => day.querySelectorAll("i").forEach((b) => { b.style.animationDelay = (i * 18) + "ms"; }));
     e.target.querySelectorAll("[data-n]").forEach((el, i) => {
       const big = el.matches(".big, .total");
       roll(el, 0, +el.dataset.n, big ? 2000 : 1400, big ? 0 : 150 + i * 70);
@@ -369,10 +396,13 @@ async function refresh() {
     update(card, u);
     card.querySelectorAll(".day").forEach((day, i) => {
       const d = u.daily[i];
-      day.dataset.output = fmt(d.output);
-      day.dataset.messages = d.messages;
-      day.dataset.cost = money(d.cost);
-      day.querySelector("i").style.height = (d.cost === 0 ? 0 : Math.max(2, (d.cost / peak) * 100)).toFixed(1) + "%";
+      Object.assign(day.dataset, { output: fmt(d.output), messages: d.messages, cost: money(d.cost),
+        claude: money(d.claude_cost), tripo: money(d.tripo_cost), credits: fmt(d.tripo_credits) });
+      const h = (c) => (c <= 0 ? 0 : Math.max(2, (c / peak) * 100)).toFixed(1) + "%";
+      const claude = day.querySelector("i.claude");
+      claude.style.height = h(d.claude_cost);
+      claude.classList.toggle("top", d.tripo_cost <= 0);
+      day.querySelector("i.tripo").style.height = h(d.tripo_cost);
     });
   }
 }
