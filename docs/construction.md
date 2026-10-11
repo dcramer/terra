@@ -18,7 +18,7 @@ In their words, shortened.
 - **Details morph.** "Corners become rounded on the outside and inside, but when two segments are next to each other they're flat."
 - **It must be really easy to extend**: new buildables, and properties like that morphing applying to anything related. "We might let you build a round room, or connectors, or different materials for rooms, and they should be able to change their look based on what they're connected to."
 - **One square grid for everything**, though you might not see all of it all the time. Buildings join through connectors that can face any way, "more like Subnautica". The grid should be "a little flexible": in some games each cell is huge, "so you have no freedom to build".
-- **Some buildables are a fixed size.** A round building probably cannot be freely resized, and is reached through a connector, "which maybe auto-builds if you connect it to another room".
+- **Some buildables are a fixed size.** A round building probably cannot be freely resized, and is reached through a connector, "which maybe auto-builds if you connect it to another room". It is on the same grid as everything else: "it just wouldn't fill 100% of the cells".
 - **A build menu on B** that you pull up to see the buildables you have unlocked.
 - **Building costs things you carry.** "I think it's likely what we'll want is for you to have the raw items, which allow you to build anything that you might have the capabilities to build." With an inventory, and an action bar you put items on to use them (D55).
 
@@ -99,7 +99,7 @@ What the developers said settles the first open question's main fork: one square
 | Kind | Size | Joins others by |
 |---|---|---|
 | Free-form | Any number of steps, resized by pushing walls, extended by building across it | Sharing a wall, as rooms do now |
-| Fixed | One footprint, as designed: a round room, an observatory, a dock | Its ports only |
+| Fixed | One footprint, as designed: a round room, an observatory, a dock. It sits on the same grid and claims a block of cells, but its shape need not fill them: a round room leaves the corners of its block empty. | Its ports only |
 
 **Ports and connectors.** A fixed buildable has ports: places on its outside, each facing one way, including up and down. Two ports that face each other one step apart join directly. A port that faces a free-form room's wall cuts its own doorway there. A port that faces something further off is joined by a connector, a corridor one step wide, and the proposal is that the game builds the shortest straight one itself when you place the fixed buildable in line with something to join. Connectors are also a buildable in their own right.
 
