@@ -108,18 +108,32 @@ def generate(name, endpoint, request):
     task = call("POST", endpoint, request)["task_id"]
     print(f"{name}: task {task}", file=sys.stderr)
     result = wait(task)
-    output = result.get("output", {})
+    files = save(name, result)
+    record = {"name": name, "endpoint": endpoint, "request": request, "task": task, "result": result, "files": files}
+    with open(os.path.join(OUT, f"{name}.json"), "w") as f:
+        json.dump(record, f, indent=2)
+    print(json.dumps({"name": name, "credits": result.get("credits_consumed"), "files": files}))
+
+
+def flatten(output):
+    """Every URL in a task's output, however deeply it is nested."""
+    for field, value in output.items():
+        if isinstance(value, dict):
+            yield from flatten(value)
+        else:
+            yield field, value
+
+
+def save(name, result):
+    """Downloads every file in a task's result next to its record."""
     files = {}
-    for field, url in output.items():
+    for field, url in flatten(result.get("output", {})):
         if isinstance(url, str) and url.startswith("http"):
             ext = ".glb" if "model" in field else os.path.splitext(url.split("?")[0])[1] or ".bin"
             path = os.path.join(OUT, f"{name}{'' if field == 'model_url' else '-' + field}{ext}")
             fetch(url, path)
             files[field] = os.path.relpath(path, HERE)
-    record = {"name": name, "endpoint": endpoint, "request": request, "task": task, "result": result, "files": files}
-    with open(os.path.join(OUT, f"{name}.json"), "w") as f:
-        json.dump(record, f, indent=2)
-    print(json.dumps({"name": name, "credits": result.get("credits_consumed"), "files": files}))
+    return files
 
 
 def main():
@@ -134,6 +148,7 @@ def main():
     ap.add_argument("--faces", type=int)
     ap.add_argument("--parts", action="store_true", help="split into parts (H series only)")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--texture", action="store_true", help="a base-colour texture, to read each face's colour from")
     a = ap.parse_args()
     if a.kind == "balance":
         print(call("GET", "/account/balance"))
@@ -153,7 +168,7 @@ def main():
     if a.kind == "views":
         generate(a.name, "/generation/image-to-multiview", {"input": upload(a.subject[0])})
         return
-    request = {"model": a.model, "texture": False, "pbr": False, "model_seed": a.seed}
+    request = {"model": a.model, "texture": a.texture, "pbr": False, "model_seed": a.seed}
     if a.faces:
         request["face_limit"] = a.faces
     if a.parts:

@@ -37,6 +37,7 @@ PALETTE = {
     "Fur": (0.55, 0.52, 0.50),
     "FurDark": (0.30, 0.28, 0.29),
     "FurLight": (0.86, 0.82, 0.76),
+    "FurGrey": (0.68, 0.67, 0.66),
     "Cloth": (0.82, 0.74, 0.62),
     "ClothRed": (0.62, 0.20, 0.17),
     "ClothBlue": (0.20, 0.45, 0.56),
@@ -54,7 +55,7 @@ PALETTE = {
 # The game's light (experiments/look.rs): a warm sun, shadows lit by a cool sky.
 SUN_COLOUR = (1.0, 0.9, 0.76)
 SKY_COLOUR = (0.62, 0.68, 1.0)
-GROUND = (0.78, 0.66, 0.50)
+GROUND = (0.70, 0.66, 0.56)
 
 
 def linear(c):
@@ -204,7 +205,7 @@ def stage():
     world.use_nodes = True
     bg = world.node_tree.nodes["Background"]
     bg.inputs["Color"].default_value = linear(SKY_COLOUR) + (1.0,)
-    bg.inputs["Strength"].default_value = 0.55
+    bg.inputs["Strength"].default_value = 0.4
 
     sun_data = bpy.data.lights.new("Sun", "SUN")
     sun_data.color = linear(SUN_COLOUR)
@@ -287,6 +288,12 @@ def render_views(model, path, people=(), beside=None, size=400, views=None):
         offset = Vector((math.sin(y) * math.cos(p), -math.cos(y) * math.cos(p), math.sin(p))) * dist
         cam.location = centre + offset
         cam.rotation_euler = (centre - cam.location).to_track_quat("-Z", "Y").to_euler()
+        # Light each view from beside the camera, so no view of the sheet is all shadow.
+        sun = bpy.data.objects.get("Sun")
+        if sun:
+            ly, lp = y + math.radians(55), math.radians(42)
+            towards = Vector((math.sin(ly) * math.cos(lp), -math.cos(ly) * math.cos(lp), math.sin(lp)))
+            sun.rotation_euler = (-towards).to_track_quat("-Z", "Y").to_euler()
         tile = f"{path}.view{i}.png"
         scene.render.filepath = tile
         bpy.ops.render.render(write_still=True)
