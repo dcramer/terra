@@ -10,6 +10,7 @@ From reviews, press and community guides. Keen Games has published no account of
 - **The ground is material.** Players dig it, add to it and reshape it: flatten a slope, cut into a cliff, dig out below the surface. A rake levels dirt and grass for paths and pads.
 - **Buildings are made of voxels too.** You can build block by block, as in Minecraft, from small pieces rather than large prefabricated parts, and there are also blueprints for whole floors, walls and stairs. Because both are voxels, pieces join seamlessly, blocks of different materials blend where they meet, and cutting an opening in a wall gets contextual styling.
 - **Whether placement snaps to a grid** is contradicted between guides.
+- **Sizes**, added 2026-10-11 from notes the developers shared (source not given): each voxel is a half-metre cube, so eight make a Minecraft-sized metre block. The construction hammer, with Alt held, steps through shapes and sizes such as 1, 2 and 4 metre foundations and walls. An altar's build area, upgraded, is 160 metres on a side, 320 blocks from edge to edge. This corrects a community guide's figure of a metre for the smallest block.
 - **Water** was added later and is said to respond to terraforming.
 - **Persistence.** Built structures do not decay. One server guide mentions terrain "regeneration"; how it works was not found.
 

@@ -50,7 +50,7 @@ The table's fourth and fifth rows are two things the developers asked for above:
 4. **Building together.** Settlements many players build, if the world calls for them (D52).
 5. **Strength, perhaps.** Whether a structure must hold itself up is open; Enshrouded, as far as I know, does not ask it.
 
-**Technically** (mine; D9): structures stay separate from the terrain's smooth ground, but a base can be a voxel volume of its own: blocks on the base's grid, meshed and drawn by their own rules, blended with the ground where they meet. That keeps the terrain's levels of detail and its edits untouched, and every block placed or carved is still an operation (D21). The sandbox's room tiles in `terra_build` would become one way of writing blocks, or be replaced. With the basis settled, this is the next technical step; it gets its own technical design before it is built.
+**Technically** (mine; D9): structures stay separate from the terrain's smooth ground, but a base can be a voxel volume of its own: blocks on the base's grid, meshed and drawn by their own rules, blended with the ground where they meet. A held area the size of Enshrouded's (160 metres on a side) is 320 blocks across, about 33 million cells if it were all stored, so only the chunks that have something built in them are kept. That keeps the terrain's levels of detail and its edits untouched, and every block placed or carved is still an operation (D21). The sandbox's room tiles in `terra_build` would become one way of writing blocks, or be replaced. With the basis settled, this is the next technical step; it gets its own technical design before it is built.
 
 ## The shape proposed
 
@@ -130,8 +130,8 @@ What the developers said settles the first open question's main fork: one square
 
 **Three sizes, from the player's side** (2026-10-11, with the voxel grid as the basis, D48):
 
-1. **The block**: the smallest thing the grid holds, half a metre today. The developers recall Enshrouded's voxels as half-metre cubes too, with a built wall piece perhaps around 3 by 3 metres (unchecked; community guides said 1 metre, which the developers doubt). So ours matches. Halving it means eight times the blocks for the same building, in memory, meshing and what is sent, so it is cheap to change now and dear once saved bases and ready-made pieces are measured in it. Settle it after building with it in the voxel prototype, before content exists.
-2. **The brush**: how much one action places or carves. Several brush sizes over one fine grid keep big work fast and detail possible; Enshrouded's larger blocks and ready-made wall pieces over its half-metre voxels work this way.
+1. **The block**: the smallest thing the grid holds, half a metre today. Enshrouded's voxels are half-metre cubes too, from notes the developers shared ([research/enshrouded.md](../research/enshrouded.md)). So ours matches. Halving it means eight times the blocks for the same building, in memory, meshing and what is sent, so it is cheap to change now and dear once saved bases and ready-made pieces are measured in it. Settle it after building with it in the voxel prototype, before content exists.
+2. **The brush**: how much one action places or carves. Several brush sizes over one fine grid keep big work fast and detail possible; Enshrouded's hammer steps through 1, 2 and 4 metre foundations and walls over its half-metre voxels.
 3. **What is seen**: blending, bevels and rounded corners are what stop voxel building looking like a grid. That is meshing, separate from the block size.
 
 **Two kinds of structural buildable.**

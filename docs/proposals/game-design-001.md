@@ -105,7 +105,7 @@ Proposed, as levers that work together. The first three are the core; the rest a
 | Lever | How it works | Why it makes you go |
 |---|---|---|
 | **Resources by region** | Materials belong to places: a kind of rock to one terrain, a wood to one forest, the best to deep caverns, far regions and higher ranks. Each world has its own (D59). | What you need next is somewhere you have not been. |
-| **Held ground** | You can build, craft at stations and rest safely only on ground you hold, around a base or outpost, as within the build radius of Enshrouded's altars. Held ground is where the magic is kept down. | To work somewhere, you have to settle there. |
+| **Held ground** | You can build, craft at stations and rest safely only on ground you hold, around a base or outpost, as within the build area of Enshrouded's altars (160 metres on a side once upgraded). Held ground is where the magic is kept down. | To work somewhere, you have to settle there. |
 | **Outposts as the travel network** | Fast travel runs between places you hold, and portals and waystones you have found. Every outpost extends the network. | Settling is how the world gets smaller. |
 | **Carrying is limited** | The backpack is small and nothing stacks (D84), so hauling far is slow. An outpost by a resource lets you work it where it is. | A reason to settle near what you need, not haul it home. |
 | **People live in places** | Those you can rescue or help are in settlements spread through the wild, and cultures differ by region and world (D86). | The recruits you want are far away. |
