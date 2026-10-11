@@ -1,16 +1,22 @@
 // The embeddable ticker at `/ticker`: the running cost and the tokens behind it, for
 // an iframe or a stream overlay. It scales to fill whatever box it is given, keeping
 // its shape, over a transparent background. `?theme=light` or `?theme=dark` fixes the colours; without
-// it they follow the embedding page.
+// it they follow the embedding page. At `/ticker/<user>` it counts one person's alone.
 
 import { ICON, compact, money } from "./page.js";
 
-export function ticker(summary, theme) {
-  const { cost } = summary.totals;
-  const used = tokens(summary.totals);
+// `user` picks one person's totals; null when they have reported nothing.
+export function ticker(summary, theme, user) {
+  const totals = user ? summary.users.find((u) => u.user === user) : summary.totals;
+  if (!totals) return null;
+  const { cost } = totals;
+  const used = tokens(totals);
+  // USER in index.js allows only letters, digits and `_.-`, so the name is safe in HTML.
+  const who = user ? `${user} · ` : "";
+  const whose = user ? `What ${user}'s work on Terra has cost` : "What building Terra has cost";
   const fixed = theme === "light" || theme === "dark" ? ` data-theme="${theme}"` : "";
   return `<!doctype html>
-<html lang="en"${fixed}>
+<html lang="en"${fixed} data-user="${user ?? ""}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,11 +24,11 @@ export function ticker(summary, theme) {
 <style>${CSS}</style>
 </head>
 <body>
-<a class="ticker" href="/" target="_blank" rel="noopener" title="What building Terra has cost at API list prices">
+<a class="ticker" href="/" target="_blank" rel="noopener" title="${whose} at API list prices">
   ${ICON}
   <span class="text">
     <span class="cost" data-n="${cost}">${money(cost)}</span>
-    <span class="label"><span class="tokens" data-n="${used}">${compact(used)}</span> tokens</span>
+    <span class="label">${who}<span class="tokens" data-n="${used}">${compact(used)}</span> tokens</span>
   </span>
 </a>
 <script>${SCRIPT}</script>
@@ -80,6 +86,7 @@ const SCRIPT = `
 ${money}
 ${compact}
 ${tokens}
+const user = document.documentElement.dataset.user;
 const cost = document.querySelector(".cost"), used = document.querySelector(".tokens");
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const ease = (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
@@ -131,7 +138,9 @@ async function refresh() {
   try {
     const r = await fetch("/json", { cache: "no-store" });
     if (!r.ok) return;
-    const { totals } = await r.json();
+    const summary = await r.json();
+    const totals = user ? summary.users.find((u) => u.user === user) : summary.totals;
+    if (!totals) return;
     roll(cost, +cost.dataset.n, totals.cost, 1500);
     roll(used, +used.dataset.n, tokens(totals), 1500);
   } catch {} finally { busy = false; }

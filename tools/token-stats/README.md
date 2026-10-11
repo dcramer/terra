@@ -19,7 +19,7 @@ The page and `/json` are public. Sending and `/stats` need the shared key in `Au
 
 ## The ticker
 
-[`/ticker`](https://terra-token-stats.dcramer.workers.dev/ticker) is the running cost alone, with the tokens behind it (cache reads left out, as on the page), for an iframe or a stream overlay such as a Restream browser widget. It scales to fill the box it is given, keeping its shape, over a transparent background, so the box's size is the ticker's size. It checks for new numbers every 5 seconds while the page it sits on is visible, and a click opens the full page. The colours follow the embedding page's light or dark scheme; add `?theme=light` or `?theme=dark` to fix them.
+[`/ticker`](https://terra-token-stats.dcramer.workers.dev/ticker) is the running cost alone, with the tokens behind it (cache reads left out, as on the page), for an iframe or a stream overlay such as a Restream browser widget. It scales to fill the box it is given, keeping its shape, over a transparent background, so the box's size is the ticker's size. It checks for new numbers every 5 seconds while the page it sits on is visible, and a click opens the full page. The colours follow the embedding page's light or dark scheme; add `?theme=light` or `?theme=dark` to fix them. [`/ticker/<name>`](https://terra-token-stats.dcramer.workers.dev/ticker/dcramer) is the same for one person, by the name they report as, with the name beside the tokens; it is not found until that person has reported something.
 
 ```html
 <iframe src="https://terra-token-stats.dcramer.workers.dev/ticker" width="460" height="160" style="border:0" title="What building Terra has cost"></iframe>
@@ -74,6 +74,7 @@ To try it locally, put `API_KEY=devkey` in `worker/.dev.vars` and run `npx wrang
 | `GET /` | The page: everyone's cost and tokens, models, and cost a day for 30 days |
 | `GET /json` | The same as JSON |
 | `GET /ticker` | The cost and tokens alone, to embed; `theme`: `light` or `dark` |
+| `GET /ticker/<name>` | The same for one person |
 | `POST /report` | `{"user": "dcramer", "messages": [{"id": "msg_…", "session": "…", "day": "2026-10-10", "model": "claude-opus-5-5", "input": 1, "output": 2, "cache_read": 3, "cache_write": 4}]}`, at most 500 messages |
 | `GET /stats` | `group`: any of `user`, `day`, `model`, comma-separated (default `user`); `since`: a day |
 

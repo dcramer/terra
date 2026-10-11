@@ -4,6 +4,7 @@
 // GET  /       the page: tokens per person, public
 // GET  /json   the same as JSON, public
 // GET  /ticker the running cost alone, small enough to embed in an iframe, public
+// GET  /ticker/<user> the same for one person, public
 // POST /report {user, messages: [{id, session, day, model, input, output, cache_read, cache_write}]}
 // GET  /stats  ?group=user,day,model&since=YYYY-MM-DD
 //
@@ -106,8 +107,13 @@ export default {
     if (request.method === "GET" && url.pathname === "/") {
       return new Response(page(await snapshot(env)), { headers: { "Content-Type": "text/html; charset=utf-8", ...PUBLIC } });
     }
-    if (request.method === "GET" && url.pathname === "/ticker") {
-      const html = ticker(await snapshot(env), url.searchParams.get("theme"));
+    const tickerPath = url.pathname.match(/^\/ticker(?:\/([^/]+))?\/?$/);
+    if (request.method === "GET" && tickerPath) {
+      // Names need no escaping in a path, so one that does is not a name.
+      const user = tickerPath[1] ?? null;
+      if (user !== null && !USER.test(user)) return json({ error: "not found" }, 404);
+      const html = ticker(await snapshot(env), url.searchParams.get("theme"), user);
+      if (html === null) return json({ error: "no such user" }, 404);
       return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", ...PUBLIC } });
     }
     if (request.method === "GET" && url.pathname === "/json") {

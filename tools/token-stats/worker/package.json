@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "npm test && wrangler deploy --dry-run",
-    "test": "node --test ../report.test.mjs src/prices.test.mjs",
+    "test": "node --test ../report.test.mjs src/prices.test.mjs src/ticker.test.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
