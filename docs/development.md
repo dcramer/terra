@@ -50,6 +50,16 @@ Keep debug builds on the workspace's default profile: full debug information pro
 
 Every application we build gets scripted modes that fly a fixed camera path, print frame times and save screenshots, so results can be compared between machines and over time.
 
+## Logs and the frame-time readout
+
+Every build shows a line of frame times in the top-left corner, all the time (D77): how long a frame's work takes against the 16.7 ms budget (D25), coloured green, amber over three quarters, red over; then the game's CPU time, the render passes' CPU time, GPU time, and frames a second. F3 adds the spread over the last two seconds, the GPU, resolution and build type, entities, memory, and the costliest render passes. GPU times need timestamp queries (Vulkan and DirectX 12); on Metal they show as `-`. A debug build is several times slower on the CPU than a release build, so judge budgets on `--release`.
+
+The log is for what is worth reading: the engine's routine messages are filtered out (`RUST_LOG` overrides the filter), and once a minute it records frame times as median, 99th percentile and worst, with a warning whenever frames take over twice the budget. Software rendering skips the warning, since its times mean nothing.
+
+## Debug menu
+
+<a id="debug-menu"></a>Wanted (D81): an in-game menu, present only when the game is started with a flag, opened with the backtick key. It does what developers need while playing: warp to a place or planet, give items, change the time of day or the weather, show colliders and chunk borders, switch systems off to see what they cost. Each entry should be a command that QA for agents (D69) can send too, so the menu and the agents' tools are the same list. Not built.
+
 ## Developer tools
 
 The developers want tools that help refine each system (D71). The sandbox's experiments are where these live: each is a small plugin switched on from the command line ([sandbox README](../crates/terra_sandbox/README.md)). Wanted, first:

@@ -16,6 +16,7 @@ Status: the developers set out on 2026-10-10 what the planets are to be. What th
 | **The starter planet** | Normal atmosphere and the like: the easiest place to be, for now. | Leaning (D62) |
 | **Gravity** | Planets have gravity. | Decided (D63) |
 | **Sea level** | Every planet with water has one. The sea's surface is level, the same height all round the planet, and fills what lies below it wherever the sea can reach. | Decided (D75) |
+| **Weather** | Differs by planet, and on planets that can be terraformed, by how far along they are. | Decided (D78) |
 | **Water you can enter** | The character swims, using stamina for now. Under water you use up oxygen, as on a planet with thin or no air. No set limit on depth: water should be flexible. | Decided (D74) |
 | **Size** | Fully procedural and somewhat large: big enough that walking all the way round is a ridiculous task, but not infinite, and efficient. Always round, so you wrap around. | Decided; the numbers are Leaning (D13) |
 | **Getting between planets** | By flight, for sure; maybe other ways later. Leaving a planet, being in space and arriving at another has to perform well. | Decided (D72) |
@@ -67,6 +68,12 @@ Breathable, temperate, ordinary gravity, water and plants. The survival attribut
 ## Terraforming, on some planets
 
 The simulation of a planet becoming livable (D6, [planet-sim.md](planet-sim.md)) runs on the planets where terraforming is possible. Elsewhere a planet's climate is part of its theme and stays as it is, which costs nothing to compute. The dead-to-alive arc in [vision.md](vision.md) is the story of those planets, not of every planet.
+
+## Weather
+
+<a id="weather"></a>There are weather systems (D78), different on each planet and, where a planet can be terraformed, changing as it goes: the phases in [gameplay.md](gameplay.md#terraforming-phases) already have storms while thawing and rain once wet. A terraform rating (D79, Leaning) might be what weather and those phases follow.
+
+Open: which kinds of weather there are, whether they hurt, help or only look, whether they are the same for everyone on a planet at once (with a thousand players, D52, weather is shared state the server sends), and how far the planet simulation (D6) drives them.
 
 ## What it asks of the engine
 

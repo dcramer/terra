@@ -8,7 +8,7 @@
 //!   Mouse         look (click to capture the mouse, Esc to release it)
 //!   W A S D       move          Shift   sprint       Space   jump
 //!   Hold Q        the dial of parts to build; the rest of the builder is in `tool.rs`
-//!   F3            frame rate
+//!   F3            more frame timings
 //!
 //! The scene around the player is in the modules here: `scene` is the light and air,
 //! `flora` what grows, `props` what has been placed, `figure` the player's body, `tool`
@@ -32,7 +32,6 @@ use crate::planet::Planet;
 use crate::shell::Options;
 use bevy::{
     camera_controller::free_camera::FreeCamera,
-    dev_tools::fps_overlay::FpsOverlayConfig,
     input::mouse::AccumulatedMouseMotion,
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
@@ -87,28 +86,14 @@ pub fn plugin(app: &mut App) {
     bag::plugin(app);
     harvest::plugin(app);
     app.insert_resource(DrivenByPlayer)
-        .add_systems(Startup, hide_frame_rate)
         .add_systems(PostStartup, spawn)
         .add_systems(
             Update,
-            (capture_mouse, dial::steer, look, walk, toggle_frame_rate)
+            (capture_mouse, dial::steer, look, walk)
                 .chain()
                 .before(tool::Acting),
         )
         .add_systems(PostUpdate, follow.before(TransformSystems::Propagate));
-}
-
-/// The frame counter is a tool for us, not part of the scene; F3 brings it back.
-fn hide_frame_rate(mut overlay: ResMut<FpsOverlayConfig>) {
-    overlay.enabled = false;
-    overlay.frame_time_graph_config.enabled = false;
-}
-
-fn toggle_frame_rate(keys: Res<ButtonInput<KeyCode>>, mut overlay: ResMut<FpsOverlayConfig>) {
-    if keys.just_pressed(KeyCode::F3) {
-        overlay.enabled = !overlay.enabled;
-        overlay.frame_time_graph_config.enabled = overlay.enabled;
-    }
 }
 
 fn spawn(

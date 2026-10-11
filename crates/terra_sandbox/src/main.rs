@@ -11,6 +11,7 @@
 // types are normal here.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
+mod debug;
 mod experiments;
 mod planet;
 mod shell;

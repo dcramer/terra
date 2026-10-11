@@ -122,6 +122,18 @@ Open:
 
 For the engine, a map of a planet is cheap if it is drawn from the same rules that generate the planet (D59) rather than from what has been loaded: the whole of a 30 km planet can be sampled coarsely without generating any of it in detail.
 
+## Options
+
+There will be an options menu (D80) with what players expect of one. Proposed, beyond the two the developers named:
+
+- **Audio**: overall, music, effects, voices.
+- **Controls**: remap every key and button, mouse sensitivity, invert look.
+- **Display**: window or full screen, resolution, frame-rate cap and vsync, field of view.
+- **Graphics**: a few quality levels, and the settings under them (shadows, draw distance, grass).
+- **Interface**: text size, and hiding the frame-time readout (D77).
+
+Remapping means every control is looked up by action, not by key, from the start.
+
 ## Building as an action
 
 Proposed. Building is something you do with a tool in hand, standing in the world, not a separate mode viewed from above.

@@ -22,9 +22,10 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--list` | List the experiments |
 | `--radius <metres>` | Planet radius, 2000 by default |
 | `--shot <file.png>` | Save a screenshot once the scene has settled, then exit |
+| `--clean` | Leave the frame-time readout off the screen, for pictures |
 | `--bench` | Measure frame times with vsync off, print them, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
-| `--press <key>@<frame>` | Press a letter or digit key on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. |
+| `--press <key>@<frame>` | Press a letter, digit or F1 to F12 on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
 
 ## Controls
@@ -81,7 +82,7 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 | X | The grid on and off |
 | Hold Alt | The opposite of the grid setting, while held |
 | Middle click | Pick another of the item you are looking at. V does the same. |
-| F3 | Show the frame rate |
+| F3 | More frame timings: per render pass, entities, memory ([development.md](../../docs/development.md#logs-and-the-frame-time-readout)) |
 
 The buttons follow Subnautica 2 where we could confirm what it does: right mouse is the build menu, left mouse builds, and taking apart and moving are modes on Q and F. The rest is the usual habit of building games. See [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
 

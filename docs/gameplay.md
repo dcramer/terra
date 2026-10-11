@@ -26,6 +26,8 @@ The survival attributes are health, stamina, oxygen, hunger and thirst (D61); se
 
 Only on the planets that can be terraformed (D60). Draft names and order. Phases are gated by global values; what a region looks like is set by its local values. See [planet-sim.md](planet-sim.md).
 
+The developers floated a **terraform rating** for each such planet (D79, Leaning): one measure of how far along it is, whose top might mean the air is breathable. It could be what those global values add up to, and what the phases and the weather (D78) follow.
+
 | Phase | The planet | What threatens you |
 |---|---|---|
 | Dead | Airless, frozen or scorched, irradiated | Suffocation, cold, radiation |

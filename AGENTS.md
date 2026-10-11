@@ -38,6 +38,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - **`cargo xtask check` must pass before you commit.** It runs formatting, lints, tests and the dependency rule below. CI runs the same command on Linux and macOS.
 - **`cargo xtask doctor`** tells you what a machine is missing.
 - **Model the game in ECS** (D58). Everything in a world is an entity, its state is components, and behaviour is systems. Use a resource only for what is truly one of a kind. Things that differ by planet (gravity, air, what grows) are data read by systems, not code written per planet.
+- **Keep systems apart.** Each feature is its own plugin in its own module, owning its components, resources and systems, and talking to others through components, events and small shared types rather than reaching into their internals. Prefer small systems that do one thing over one system that does everything, and split a module before it grows into a monolith. Someone should be able to work on one system without reading the rest.
 - **Shared state stays out of Bevy.** Anything every player must agree on lives in a crate that does not depend on Bevy. Only `terra_game` may. The check enforces this.
 - **Use `libm` for trigonometry and exponentials**, never `f32::sin` and friends. The system maths library differs between platforms in both results and speed. The lints enforce this.
 - **No `unsafe`.** It is forbidden workspace-wide.

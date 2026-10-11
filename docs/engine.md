@@ -34,7 +34,7 @@ Since then the developers have set out the worlds: several planets, each themed,
 | 3 | Planet rendering | Sky and atmosphere from inside and from space, sea, sun and lighting | A radius and a few numbers |
 | 4 | World frame | Planet-centred coordinates, gravity toward the centre, the ground-to-orbit path | Nothing |
 | 5 | Player and camera | Walking and flying on a round world, colliding with the ground, a dig tool | A ground query |
-| 6 | App shell | Window, settings, input, debug overlay, scripted camera paths, frame-time capture, screenshots | Nothing |
+| 6 | App shell | Window, settings and the options menu (D80), input with remapping, frame-time readout (D77), debug menu (D81), scripted camera paths, frame-time capture, screenshots | Nothing |
 | 7 | Scattering | Things placed by rule on the terrain, with culling: objects that are tracked one by one, and cover that is too dense to track | Parts 0 and a ground query |
 | 8 | Procedural objects | Meshes grown from parameters: rocks first, then plants | Part 0 |
 | 9 | Networking | A server and the clients that join it, ordered operations, snapshots, late join | Nothing |

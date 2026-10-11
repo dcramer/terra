@@ -1,14 +1,16 @@
 //! The parts every experiment gets for free: the window, overlays, inspectors, and the
 //! scripted modes that let a run be checked without anyone watching.
 
+use crate::debug;
 use bevy::{
+    audio::AudioPlugin,
     camera_controller::free_camera::FreeCameraPlugin,
-    dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
     input::{
         InputSystems,
         common_conditions::input_toggle_active,
         mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
     },
+    log::{DEFAULT_FILTER, LogPlugin},
     prelude::*,
     render::{
         renderer::RenderAdapterInfo,
@@ -31,14 +33,21 @@ usage: terra_sandbox [options]
   --list                list the experiments and exit
   --radius <metres>     planet radius (default 2000)
   --shot <file.png>     save a screenshot once the scene has settled, then exit
+  --clean               leave the frame-time readout off the screen, for pictures
   --bench               measure frame times with vsync off, print them, then exit
   --settle <frames>     frames to run before capturing or measuring (default 120)
-  --press <key>@<frame> press a letter or digit key on a given frame, for scripted runs;
+  --press <key>@<frame> press a letter, digit or F1 to F12 on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the base's corner, for experiments
                         that have one";
+
+/// Engine messages that say what is normal, kept out of the log so what is left is worth
+/// reading. Warnings and errors still come through. `RUST_LOG` replaces all of this.
+const QUIET: &str = "\
+bevy_render=warn,bevy_pbr=warn,bevy_winit=warn,bevy_egui=warn,bevy_diagnostic=warn,\
+sctk_adwaita=off";
 
 /// Frames to wait before measuring or capturing by default, so shaders have compiled and
 /// the scene has finished loading.
@@ -53,6 +62,8 @@ pub struct Options {
     pub shot: Option<PathBuf>,
     pub settle_frames: u32,
     pub bench: bool,
+    /// No readout on screen.
+    pub clean: bool,
     /// A key, the frame it goes down, and the frame it comes back up.
     pub presses: Vec<(KeyCode, u32, u32)>,
     /// A fixed camera: where it stands and what it looks at, in an experiment's own space.
@@ -68,6 +79,7 @@ impl Options {
             shot: None,
             settle_frames: SETTLE_FRAMES,
             bench: false,
+            clean: false,
             presses: Vec::new(),
             vantage: None,
         };
@@ -78,6 +90,7 @@ impl Options {
                 "--experiment" => options.experiments.push(value("--experiment")?),
                 "--list" => options.list = true,
                 "--bench" => options.bench = true,
+                "--clean" => options.clean = true,
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--radius" => {
                     options.radius_m = value("--radius")?
@@ -142,7 +155,9 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
         KeyCode::KeyZ,
     ];
     let problem = || {
-        format!("--press wants a letter or digit and a frame, like f@60 or w@40-90, not `{text}`")
+        format!(
+            "--press wants a letter, digit or F1 to F12 and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
+        )
     };
     let (key, frames) = text.split_once('@').ok_or_else(problem)?;
     const DIGITS: [KeyCode; 10] = [
@@ -157,14 +172,37 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
         KeyCode::Digit8,
         KeyCode::Digit9,
     ];
-    let symbol = key
-        .chars()
-        .next()
-        .filter(|c| key.len() == 1 && c.is_ascii_alphanumeric());
-    let symbol = symbol.ok_or_else(problem)?.to_ascii_lowercase();
-    let code = match symbol.to_digit(10) {
-        Some(digit) => DIGITS[digit as usize],
-        None => LETTERS[(symbol as u8 - b'a') as usize],
+    const FUNCTIONS: [KeyCode; 12] = [
+        KeyCode::F1,
+        KeyCode::F2,
+        KeyCode::F3,
+        KeyCode::F4,
+        KeyCode::F5,
+        KeyCode::F6,
+        KeyCode::F7,
+        KeyCode::F8,
+        KeyCode::F9,
+        KeyCode::F10,
+        KeyCode::F11,
+        KeyCode::F12,
+    ];
+    let function = key
+        .strip_prefix(['F', 'f'])
+        .and_then(|number| number.parse::<usize>().ok())
+        .and_then(|number| FUNCTIONS.get(number.checked_sub(1)?));
+    let code = match function {
+        Some(&code) => code,
+        None => {
+            let symbol = key
+                .chars()
+                .next()
+                .filter(|c| key.len() == 1 && c.is_ascii_alphanumeric());
+            let symbol = symbol.ok_or_else(problem)?.to_ascii_lowercase();
+            match symbol.to_digit(10) {
+                Some(digit) => DIGITS[digit as usize],
+                None => LETTERS[(symbol as u8 - b'a') as usize],
+            }
+        }
     };
     let frame = |text: &str| text.parse::<u32>().map_err(|_| problem());
     let (down, up) = match frames.split_once('-') {
@@ -182,7 +220,7 @@ pub struct ShellPlugin(pub Options);
 impl Plugin for ShellPlugin {
     fn build(&self, app: &mut App) {
         let options = self.0.clone();
-        let takes_shot = options.shot.is_some();
+        let readout = !options.clean;
         let window = Window {
             title: "Terra sandbox".into(),
             // A scripted run needs nobody's attention, and should not take the keyboard
@@ -213,24 +251,25 @@ impl Plugin for ShellPlugin {
         }
         app.insert_resource(options)
             .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.02)))
-            .add_plugins(DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(window),
-                ..default()
-            }))
+            .add_plugins(
+                DefaultPlugins
+                    .set(WindowPlugin {
+                        primary_window: Some(window),
+                        ..default()
+                    })
+                    .set(LogPlugin {
+                        filter: format!("{DEFAULT_FILTER},{QUIET}"),
+                        ..default()
+                    })
+                    // Nothing makes a sound yet, and without a sound card (as under WSL)
+                    // the audio library fills the log with complaints.
+                    .disable::<AudioPlugin>(),
+            )
             .add_plugins((
                 FreeCameraPlugin,
-                // A screenshot should show the scene, not the frame counter.
-                FpsOverlayPlugin {
-                    config: FpsOverlayConfig {
-                        enabled: !takes_shot,
-                        frame_time_graph_config: FrameTimeGraphConfig {
-                            enabled: !takes_shot,
-                            ..default()
-                        },
-                        ..default()
-                    },
-                },
                 EguiPlugin::default(),
+                // On by default, screenshots included, so it is there when it is needed.
+                debug::plugin(readout),
             ))
             // F1: every entity, resource and asset in the world, editable live.
             .add_plugins(
@@ -359,6 +398,9 @@ mod tests {
         assert_eq!(digit.presses, [(KeyCode::Digit3, 10, 11)]);
         let held = parse(&["--press", "w@40-90"]).unwrap();
         assert_eq!(held.presses, [(KeyCode::KeyW, 40, 90)]);
+        let function = parse(&["--press", "F3@10"]).unwrap();
+        assert_eq!(function.presses, [(KeyCode::F3, 10, 11)]);
+        assert!(parse(&["--press", "F13@10"]).is_err());
         assert!(options.scripted());
         assert!(!parse(&[]).unwrap().scripted());
         let fixed = parse(&["--vantage", "4,3,20,6,2,0"]).unwrap();

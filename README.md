@@ -43,7 +43,8 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 - A sea level on each planet with water, behaving as physics says: level all round, filling what the sea can reach, as deep as the ground makes it.
 - Digging into the ground, as in No Man's Sky.
 - Flying between planets: leave one, cross space, land on another, without loading screens and without the frame rate falling. Other ways to travel may come later.
-- Terraforming, making a planet livable and breathable, on some planets ([vision.md](docs/vision.md), [planet-sim.md](docs/planet-sim.md)).
+- Terraforming, making a planet livable and breathable, on some planets ([vision.md](docs/vision.md), [planet-sim.md](docs/planet-sim.md)), perhaps measured by a terraform rating whose top means breathable air.
+- Weather, different on each planet and changing as a planet is terraformed.
 
 **Surviving** ([survival.md](docs/survival.md))
 - Survival attributes: health, stamina, oxygen, hunger, thirst, and perhaps more. Each world can treat them differently.
@@ -56,6 +57,7 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 - An action bar of things to use *(stand-in)*.
 - Tools for gathering, such as different kinds of cutter *(stand-in: one cutter)*.
 - A map. What it shows and its limits are not decided.
+- An options menu with the usual settings, including audio and key remapping.
 
 **Building** ([construction.md](docs/construction.md))
 - A build menu brought up by a building tool you equip, as in Subnautica *(stand-in: a dial)*.
@@ -75,6 +77,8 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 - The game modelled in ECS.
 - QA our coding agents can run: drive the game, look at it, ask it what is true *(stand-in: scripted runs)*.
 - Developer tools for refining each system, starting with a model workbench.
+- An in-game debug menu behind a launch flag, opened with the backtick key, for things like warping.
+- Frame times on screen at all times against the budget, and logs that record how each session ran *(built in the sandbox)*.
 
 ## What is here
 
