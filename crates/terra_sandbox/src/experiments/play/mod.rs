@@ -27,6 +27,7 @@ mod dial;
 mod figure;
 mod flora;
 mod harvest;
+mod held;
 mod interact;
 mod inventory;
 mod map;
@@ -131,6 +132,7 @@ pub fn plugin(app: &mut App) {
     pooling::plugin(app);
     settlement::plugin(app);
     map::plugin(app);
+    held::plugin(app);
     save::plugin(app);
     harvest::plugin(app);
     options::plugin(app);

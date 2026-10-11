@@ -185,6 +185,8 @@ pub struct Builder {
     price: Option<(Cost, u32)>,
     /// What there is not enough of to pay that, and how many more are needed.
     short: Option<(Raw, u32)>,
+    /// Why the claim forbids building here, if it does (D94).
+    unclaimed: Option<&'static str>,
     pub target: Target,
     /// The rectangles the highlight was last drawn for, and in which look.
     shown: (Vec<[Vec3; 4]>, usize),
@@ -348,6 +350,7 @@ fn setup(
         cancel: false,
         price: None,
         short: None,
+        unclaimed: None,
         target: Target::Nothing,
         shown: (Vec::new(), 0),
         highlight,
@@ -760,10 +763,35 @@ fn aim(
 }
 
 /// Works out what the thing aimed at would cost to build, and whether it can be paid.
-fn afford(site: Res<Site>, belongings: Belongings, mut builder: ResMut<Builder>) {
+fn afford(
+    site: Res<Site>,
+    claim: Res<Claim>,
+    props: Query<&Prop>,
+    belongings: Belongings,
+    mut builder: ResMut<Builder>,
+) {
     if builder.work.is_some() {
         return;
     }
+    // Nothing is built or taken apart outside your claim (D94), except the claim stone
+    // that makes one; and there is one claim each.
+    let placing_claim = matches!(builder.picked().kind, Kind::Items(_))
+        && builder.item().is_some_and(|item| item.claims)
+        && !builder.is_carrying();
+    let on_planet =
+        target_point(&builder.target, &props).map(|point| site.frame.transform_point(point));
+    builder.unclaimed = match on_planet {
+        Some(_) if placing_claim && claim.stone.is_some() => {
+            Some("You already have a claim; take its stone away to move it")
+        }
+        Some(_) if placing_claim => None,
+        Some(point) if !claim.covers(point) => Some(if claim.stone.is_none() {
+            "Place a claim stone to build here: Craft, then Claim stone"
+        } else {
+            "That is outside your claim"
+        }),
+        _ => None,
+    };
     // Cutting an opening is paid for where the wall was solid; changing the shape of
     // one already there is free.
     let cuts = builder
@@ -826,7 +854,6 @@ fn act(
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
     mut site: ResMut<Site>,
-    claim: Res<Claim>,
     mut did: MessageWriter<Did>,
     player: Single<(&Transform, &mut Player)>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -953,26 +980,9 @@ fn act(
         return;
     }
 
-    // Nothing is built or taken apart outside your claim (D94), except the claim stone
-    // that makes one.
-    let placing_claim = matches!(builder.picked().kind, Kind::Items(_))
-        && builder.item().is_some_and(|item| item.claims)
-        && !builder.is_carrying();
-    if let Some(point) = target_point(&builder.target, &props) {
-        let on_planet = site.frame.transform_point(point);
-        if placing_claim {
-            if claim.stone.is_some() {
-                notice.say("You already have a claim; take its stone away to move it");
-                return;
-            }
-        } else if !claim.covers(on_planet) {
-            notice.say(if claim.stone.is_none() {
-                "Place a claim stone to build here"
-            } else {
-                "That is outside your claim"
-            });
-            return;
-        }
+    if let Some(reason) = builder.unclaimed {
+        notice.say(reason);
+        return;
     }
 
     // Moving is neither building nor taking apart, and happens at once.
@@ -1290,6 +1300,7 @@ fn highlight(
                 ..
             }
     ) || builder.short.is_some()
+        || builder.unclaimed.is_some()
         || (matches!(kind, Kind::Window(_) | Kind::Door)
             && matches!(builder.target, Target::Wall(_) | Target::Edge { .. })
             && builder.run.is_empty());
@@ -1577,10 +1588,14 @@ pub fn prompt(builder: &Builder, settings: &Settings) -> String {
         Some((_, false)) => return "Building      Let go to stop".to_string(),
         None => {}
     }
+    if let Some(reason) = builder.unclaimed {
+        return reason.to_string();
+    }
     if let Some((raw, more)) = builder.short {
         return format!(
-            "Not enough to build this: {more} more {} needed",
-            raw.name()
+            "Not enough to build this: {more} more {} needed ({})",
+            raw.name(),
+            where_found(raw)
         );
     }
     let hold = settings.hold(Action::Use);
@@ -1699,5 +1714,19 @@ fn target_point(target: &Target, props: &Query<&Prop>) -> Option<Vec3> {
         )),
         Target::Spot { at, .. } => Some(at.with_y(0.0)),
         Target::Prop(entity) => props.get(entity).ok().map(|prop| prop.at.with_y(0.0)),
+    }
+}
+
+/// Where a material comes from, for a prompt that says what is missing.
+fn where_found(raw: Raw) -> &'static str {
+    match raw {
+        Raw::Wood => "fell trees with an axe",
+        Raw::Stone => "break rocks with a pickaxe",
+        Raw::Fibre => "cut plants with a knife",
+        Raw::Hide | Raw::Meat => "butcher a deer",
+        Raw::Ore => "break the rusty rocks with a pickaxe",
+        Raw::Iron => "smelt ore at a smithy",
+        Raw::Berries => "pick them from berry bushes",
+        Raw::CookedMeat => "cook meat at a campfire",
     }
 }

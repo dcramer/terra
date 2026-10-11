@@ -44,7 +44,7 @@ WSL has no hardware Vulkan, which splits the work in two:
 cargo xtask win -p <package> -- <program arguments>
 ```
 
-It cross-compiles the package, copies the program and its assets to the Windows temp folder, runs it there and passes the output back. It runs from the temp folder because a Windows program started from a WSL folder gets an unusable working directory, so anything the program writes, such as screenshots, lands there; the command prints the path. Add `--release` for an optimised build.
+It cross-compiles the package, copies the program and its assets to the Windows temp folder, runs it there and passes the output back. Windows will not replace a program that is running, so `--copy <name>` runs a separate copy from its own folder: an agent tests with `--copy test` while a person plays the default copy, and neither blocks the other. It runs from the temp folder because a Windows program started from a WSL folder gets an unusable working directory, so anything the program writes, such as screenshots, lands there; the command prints the path. Add `--release` for an optimised build.
 
 Keep debug builds on the workspace's default profile: full debug information produces a file Windows refuses to load.
 

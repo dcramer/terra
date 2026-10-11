@@ -5,12 +5,16 @@
 //! It is a stand-in. The game's own character is a design question (docs/player.md).
 
 use super::Player;
+use super::held::Grip;
 use bevy::{prelude::*, world_serialization::WorldInstanceReady};
 use std::time::Duration;
 
 const MODEL: &str = "models/character/figure.gltf";
 /// How long one animation takes to give way to the next.
 const BLEND: Duration = Duration::from_millis(180);
+/// Turns a held tool, which runs along +Y, to lie across the right palm with its head
+/// above the thumb. Found by looking at pictures of it.
+const GRIP_TURN: [f32; 3] = [std::f32::consts::FRAC_PI_2, 0.0, 0.0];
 
 #[derive(Resource)]
 struct FigureModel(Handle<Gltf>);
@@ -176,7 +180,7 @@ fn dress(
     };
     // Each piece: the bone it rides on, its shape, its look, and where it sits on the
     // bone. A bone's own +Y runs along it.
-    let kit: [(&str, Mesh, &Handle<StandardMaterial>, Transform); 8] = [
+    let kit: [(&str, Mesh, &Handle<StandardMaterial>, Transform); 5] = [
         (
             "DEF-head",
             Cuboid::new(0.2, 0.09, 0.06).into(),
@@ -207,25 +211,21 @@ fn dress(
             &dark,
             Transform::from_xyz(0.19, 0.06, -0.19),
         ),
-        (
-            "DEF-hand.R",
-            Cuboid::new(0.06, 0.24, 0.08).into(),
-            &dark,
-            Transform::from_xyz(0.0, 0.1, 0.05),
-        ),
-        (
-            "DEF-hand.R",
-            Cuboid::new(0.08, 0.05, 0.1).into(),
-            &orange,
-            Transform::from_xyz(0.0, 0.2, 0.05),
-        ),
-        (
-            "DEF-hand.R",
-            Cuboid::new(0.04, 0.04, 0.04).into(),
-            &glow,
-            Transform::from_xyz(0.0, 0.25, 0.05),
-        ),
     ];
+    // Whatever is in hand is held here: across the palm, head toward the thumb (`held`).
+    if let Some(hand) = bone("DEF-hand.R") {
+        commands.spawn((
+            Grip,
+            Transform::from_xyz(0.0, 0.08, 0.03).with_rotation(Quat::from_euler(
+                EulerRot::XYZ,
+                GRIP_TURN[0],
+                GRIP_TURN[1],
+                GRIP_TURN[2],
+            )),
+            Visibility::default(),
+            ChildOf(hand),
+        ));
+    }
     for (name, mesh, material, transform) in kit {
         let Some(bone) = bone(name) else {
             warn!("The figure has no bone called {name}.");

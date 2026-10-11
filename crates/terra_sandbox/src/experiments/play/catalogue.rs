@@ -169,7 +169,7 @@ pub static PARTS: [Part; 14] = [
                     "Claim stone",
                     "../nature/Rock_Moss_2",
                     1.3,
-                    &[(Raw::Stone, 3), (Raw::Wood, 1)],
+                    &[(Raw::Stone, 2)],
                 )
             },
             station(

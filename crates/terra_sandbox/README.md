@@ -104,8 +104,9 @@ You carry a backpack, on the rules in `terra_items` and the Subnautica baseline 
 
 ![The character sheet and the backpack at the start](../../docs/images/outpost-backpack-2026-10-11.png)
 
+- **In hand**: whatever is in the picked slot is in the figure's right hand, as its own model: a hammer, an axe, a knife, a spear, or a pickaxe made in code, since no free one exists. A tool you make goes on the bar's first free slot.
 - **Gathering**: one tool to a job. The axe fells trees for wood, the pickaxe breaks rock for stone and ore rocks (a rusty colour) for ore, the knife cuts bushes and plants for fibre. Aim at one, or just stand in front of it, and hold left click until it gives. A tool's material decides what it can work: the great pines are too tough for a stone axe, and a stone pickaxe is slow on ore. A full backpack takes nothing more, and what does not fit is left behind.
-- **Claiming**: you build only inside your claim (D94). With the hammer, pick Craft, then Claim stone, and place it; the claim is 40 metres across, drawn on the ground while the hammer is in hand, and F at the stone grows it to 80 and then 160 for a price (D104). Until you place one, the hammer builds nothing and takes nothing apart.
+- **Claiming**: you build only inside your claim (D94). Anything you aim to build outside one shows red, and the prompt says why. With the hammer, pick Craft, then Claim stone (two stone), and place it; the claim is 40 metres across, drawn on the ground while the hammer is in hand, and F at the stone grows it to 80 and then 160 for a price (D104). Until you place one, the hammer builds nothing and takes nothing apart.
 - **Building** spends materials. Everything has a cost, shown in the prompt before you commit: wood for floors and walls, fibre for windows, hide for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost, if there is room in the backpack for it; if not, it stays, and a notice above the bar says why.
 - **Crafting**: F at a workbench or a smithy opens its recipes beside the backpack; press a number or click one to make it. The workbench makes stone tools, leather gear and a larger pack; the smithy smelts ore into iron and makes iron tools, but only once a smith lives at your claim. The outpost has an old workbench by its door.
 - **Staying alive**: health, stamina and hunger, as bars at the bottom left. Sprinting, jumping and working spend stamina, which comes back when you stop. Hunger falls all the time; hungry, less comes back; starving drains health until you die (D101). Berry bushes give berries to the knife; meat cooks at a campfire into something far more filling.
@@ -185,6 +186,7 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `pooling` | The place where magic pools: its glow, its motes, and the monsters that form there |
 | `settlement` | The village, its people, and what they say |
 | `map` | The map: the land drawn from the planet's rules, revealed as you go |
+| `held` | The tool in hand, on the figure |
 | `save` | Saving and loading the game |
 | `harvest` | Gathering with the right tool for each thing, and refusing what its material cannot work |
 | `work` | Holding a button until a job is done |

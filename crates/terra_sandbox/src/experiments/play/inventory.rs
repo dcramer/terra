@@ -470,14 +470,22 @@ pub fn craft(
         .take(&items.wanted(cost, 1))
         .map_err(|_| CantMake::NoRoom)?;
     let (kind, count) = items.made(made);
+    let mut made_ids = Vec::new();
     for _ in 0..count {
         let item = items.make(kind);
         trial
             .insert(&items.catalogue, item, None)
             .map_err(|_| CantMake::NoRoom)?;
+        made_ids.push(item.id);
     }
     *grid = trial;
     bar.tidy(grid);
+    // A new tool goes on the bar's first free slot, so it is ready to pick up.
+    if let (Made::Tool(_), Some(&id)) = (made, made_ids.first())
+        && let Some(free) = (0..bar.len()).find(|&slot| bar.get(slot).is_none())
+    {
+        bar.set(free, Some(id));
+    }
     Ok(())
 }
 
@@ -802,6 +810,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(grid.count(items.tool_kind(Tool::IronAxe)), 1);
+        assert_eq!(
+            bar.get(4)
+                .and_then(|id| grid.get(id))
+                .map(|placed| placed.item.kind),
+            Some(items.tool_kind(Tool::IronAxe)),
+            "a new tool goes on the first free slot of the bar"
+        );
         assert_eq!(grid.count(items.kind(Raw::Iron)), 0);
     }
 

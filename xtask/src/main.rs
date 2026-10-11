@@ -4,7 +4,7 @@
 //!            that shared-state crates do not depend on Bevy. CI runs exactly this.
 //!   doctor   Checks this machine has what it needs to build and run the project.
 //!   win      Under WSL: builds a program for Windows and runs it there, on the real
-//!            GPU. `cargo xtask win -p <package> [--release] [-- program args]`
+//!            GPU. `cargo xtask win -p <package> [--release] [--copy <name>] [-- program args]`
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
@@ -126,12 +126,20 @@ fn win(args: &[String]) -> bool {
         None => (args, &[][..]),
     };
     let release = ours.iter().any(|a| a == "--release");
+    // A named copy runs from its own folder, so test runs never collide with a copy
+    // someone is playing: Windows will not replace a program that is running.
+    let copy = ours
+        .iter()
+        .position(|a| a == "--copy")
+        .and_then(|i| ours.get(i + 1));
     let Some(package) = ours
         .iter()
         .position(|a| a == "-p")
         .and_then(|i| ours.get(i + 1))
     else {
-        eprintln!("usage: cargo xtask win -p <package> [--release] [-- program args]");
+        eprintln!(
+            "usage: cargo xtask win -p <package> [--release] [--copy <name>] [-- program args]"
+        );
         return false;
     };
 
@@ -150,7 +158,11 @@ fn win(args: &[String]) -> bool {
         .join(WINDOWS_TARGET)
         .join(profile)
         .join(&exe_name);
-    let Some(run_dir) = windows_temp().map(|temp| temp.join("terra").join(package)) else {
+    let folder = match copy {
+        Some(name) => format!("{package}-{name}"),
+        None => package.clone(),
+    };
+    let Some(run_dir) = windows_temp().map(|temp| temp.join("terra").join(folder)) else {
         eprintln!("Could not find the Windows temp folder. Is Windows interop enabled?");
         return false;
     };
