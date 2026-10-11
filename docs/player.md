@@ -141,7 +141,8 @@ What it has:
 - An animated figure that jogs, sprints, jumps and turns to face the way it is going, on the stand-in planet.
 - Steps and a door into the base, floors that hold the figure up, walls and windows that stop it, and trees and boulders it has to walk round.
 - The builder. You pick a part from a dial (room, window, door, a seat, a table and so on), cycle through its variants, and build it where you aim. What would be built is shown before you commit, and a line of text says what each button would do. The buttons follow Subnautica 2 where that could be confirmed.
-- Furniture and kit as items you place, turn, move and take away. Each has a box: you walk round it, and nothing can be placed in the same space. An optional grid snaps them into line.
+- Furniture and kit as items you place, turn, move and take away. Each has a box: you walk round it, and nothing can be placed in the same space. An optional grid snaps them into line, and they stand flush against or on top of whatever you aim at.
+- Rooms that extend when placed across each other, and interior walls with doorways.
 - A place to do it in: a furnished base in a meadow by a lake.
 
 What it does not have: harvesting, anything to carry, costs, swimming, stairs between storeys, real collision (D53), or a character of our own. The figure is a recoloured mannequin from a free animation library. How to run it is in the [sandbox README](../crates/terra_sandbox/README.md).

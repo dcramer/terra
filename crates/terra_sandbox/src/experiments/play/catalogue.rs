@@ -59,6 +59,8 @@ pub enum Kind {
     Room(&'static [RoomShape]),
     /// Push and pull the walls of what is already built.
     Reshape,
+    /// An interior wall, on the edge between two tiles of the base.
+    Wall(&'static [(&'static str, Panel)]),
     Window(&'static [(&'static str, Panel)]),
     Door,
     Items(&'static [Item]),
@@ -77,7 +79,7 @@ impl Part {
     pub fn variants(&self) -> usize {
         match self.kind {
             Kind::Room(shapes) => shapes.len(),
-            Kind::Window(shapes) => shapes.len(),
+            Kind::Window(shapes) | Kind::Wall(shapes) => shapes.len(),
             Kind::Items(items) => items.len(),
             Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => 1,
         }
@@ -87,7 +89,7 @@ impl Part {
     pub fn variant_name(&self, variant: usize) -> Option<&'static str> {
         match self.kind {
             Kind::Room(shapes) => Some(shapes[variant].name),
-            Kind::Window(shapes) => Some(shapes[variant].0),
+            Kind::Window(shapes) | Kind::Wall(shapes) => Some(shapes[variant].0),
             Kind::Items(items) => Some(items[variant].name),
             Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => None,
         }
@@ -96,7 +98,7 @@ impl Part {
 
 /// The parts, in the order they go round the dial, clockwise from the top. The first
 /// ten are also on the number keys.
-pub static PARTS: [Part; 14] = [
+pub static PARTS: [Part; 15] = [
     Part {
         name: "Room",
         kind: Kind::Room(&[
@@ -121,6 +123,14 @@ pub static PARTS: [Part; 14] = [
     Part {
         name: "Reshape",
         kind: Kind::Reshape,
+    },
+    Part {
+        name: "Wall",
+        kind: Kind::Wall(&[
+            ("Solid", Panel::Solid),
+            ("Doorway", Panel::Door),
+            ("Window", Panel::WINDOW),
+        ]),
     },
     Part {
         name: "Window",
@@ -220,6 +230,20 @@ pub fn items() -> impl Iterator<Item = &'static Item> {
 /// The item whose model is a given file.
 pub fn item_from(file: &str) -> Option<&'static Item> {
     items().find(|item| item.file == file)
+}
+
+/// The part and variant that an item is, for picking "another of those".
+pub fn place_of(wanted: &Item) -> Option<(usize, usize)> {
+    PARTS
+        .iter()
+        .enumerate()
+        .find_map(|(part, entry)| match entry.kind {
+            Kind::Items(items) => items
+                .iter()
+                .position(|item| item == wanted)
+                .map(|variant| (part, variant)),
+            _ => None,
+        })
 }
 
 /// Where a part is in the list, for the parts that have their own key.

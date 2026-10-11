@@ -95,17 +95,31 @@ impl Base {
         at
     }
 
-    /// Whether stepping out of `tile` through `side` is stopped by the hull.
+    /// Whether stepping out of `tile` through `side` is stopped by the hull or by an
+    /// interior wall.
     fn blocks(&self, tile: IVec3, side: Side, at: Vec3, walker: &Walker) -> bool {
         let beyond = tile + side.offset();
         // The hull face between the two tiles belongs to whichever of them is inside.
-        let face = match (self.contains(tile), self.contains(beyond)) {
-            (true, false) => Face::new(tile, side),
-            (false, true) => Face::new(beyond, opposite(side)),
-            // Both inside, or both outside: nothing in the way.
-            _ => return false,
+        let (face, panel) = match (self.contains(tile), self.contains(beyond)) {
+            (true, false) => {
+                let face = Face::new(tile, side);
+                (face, self.panel(face))
+            }
+            (false, true) => {
+                let face = Face::new(beyond, opposite(side));
+                (face, self.panel(face))
+            }
+            // Both inside: only an interior wall can be in the way.
+            (true, true) => {
+                let face = Face::new(tile, side);
+                match self.partition(face) {
+                    Some(panel) => (face, panel),
+                    None => return false,
+                }
+            }
+            (false, false) => return false,
         };
-        if self.panel(face) != Panel::Door {
+        if panel != Panel::Door {
             return true;
         }
         // A door lets a walker through only where its opening is.
@@ -247,5 +261,18 @@ mod tests {
         // On the roof, walking off the east edge.
         let off_roof = stroll(&base, Vec3::new(4.5, 3.0, 4.5), Vec3::new(14.0, 3.0, 4.5));
         assert!((off_roof.x - 14.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn an_interior_wall_stops_you_and_its_doorway_lets_you_through() {
+        let mut base = room();
+        let wall = Face::new(IVec3::new(0, 0, 1), Side::East);
+        let (west, east) = (Vec3::new(1.5, 0.0, 4.5), Vec3::new(4.5, 0.0, 4.5));
+        assert!((stroll(&base, west, east).x - east.x).abs() < 0.01);
+        base.apply(BuildOp::SetPartition(wall, Some(Panel::Solid)));
+        assert!(stroll(&base, west, east).x < TILE_M);
+        assert!(stroll(&base, east, west).x > TILE_M);
+        base.apply(BuildOp::SetPartition(wall, Some(Panel::Door)));
+        assert!((stroll(&base, west, east).x - east.x).abs() < 0.01);
     }
 }

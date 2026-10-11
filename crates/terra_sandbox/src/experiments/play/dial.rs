@@ -11,9 +11,9 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions},
 };
 
-const DIAL_SIZE: f32 = 600.0;
+const DIAL_SIZE: f32 = 650.0;
 /// How far from the middle the parts' names sit.
-const RING: f32 = 236.0;
+const RING: f32 = 258.0;
 const LABEL: Vec2 = Vec2::new(98.0, 36.0);
 /// The mouse has to move this far from the middle before it points at anything.
 const DEAD_ZONE: f32 = 28.0;
@@ -48,6 +48,9 @@ struct Picked;
 
 #[derive(Component)]
 struct Prompt;
+
+#[derive(Component)]
+struct Legend;
 
 /// Everything on screen that is not the dial, hidden when taking pictures.
 #[derive(Component)]
@@ -166,6 +169,16 @@ fn setup(mut commands: Commands) {
                     BackgroundColor(colour),
                 )
             };
+            column.spawn((
+                Legend,
+                Text::new(""),
+                TextFont::from_font_size(12.5),
+                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.8)),
+                TextShadow {
+                    offset: Vec2::splat(1.0),
+                    color: Color::srgba(0.0, 0.0, 0.0, 0.7),
+                },
+            ));
             column.spawn(pill(PLAIN)).with_child((
                 Prompt,
                 Text::new(""),
@@ -236,9 +249,12 @@ fn draw(
     mut root: Single<&mut Visibility, (With<DialRoot>, Without<Hud>)>,
     mut hud: Query<&mut Visibility, With<Hud>>,
     mut labels: Query<(&DialLabel, &mut BackgroundColor)>,
-    mut middle: Single<&mut Text, (With<DialMiddle>, Without<Picked>, Without<Prompt>)>,
-    mut picked: Single<&mut Text, (With<Picked>, Without<DialMiddle>, Without<Prompt>)>,
-    mut prompt: Single<&mut Text, (With<Prompt>, Without<DialMiddle>, Without<Picked>)>,
+    mut texts: ParamSet<(
+        Single<&mut Text, With<DialMiddle>>,
+        Single<&mut Text, With<Picked>>,
+        Single<&mut Text, With<Prompt>>,
+        Single<&mut Text, With<Legend>>,
+    )>,
 ) {
     let set = |text: &mut Text, to: String| {
         if text.0 != to {
@@ -277,18 +293,23 @@ fn draw(
             background.0 = colour;
         }
     }
+    // In the middle: the part pointed at, and the kinds of it there are.
     let shown = &PARTS[dial.pointed.unwrap_or(builder.part)];
+    let kinds: Vec<&str> = (0..shown.variants())
+        .filter_map(|variant| shown.variant_name(variant))
+        .collect();
     set(
-        &mut middle,
-        match shown.variants() {
-            1 => shown.name.to_string(),
-            kinds => format!("{}\n{kinds} kinds", shown.name),
+        &mut texts.p0(),
+        if kinds.len() > 1 {
+            format!("{}\n\n{}", shown.name, kinds.join("\n"))
+        } else {
+            shown.name.to_string()
         },
     );
 
     let part = builder.picked();
     set(
-        &mut picked,
+        &mut texts.p1(),
         match part.variant_name(builder.variant()) {
             _ if builder.stowed => "Nothing in hand".to_string(),
             Some(variant) if part.variants() > 1 => format!(
@@ -303,13 +324,21 @@ fn draw(
         } + if builder.snap { "" } else { "     grid off" },
     );
     set(
-        &mut prompt,
+        &mut texts.p2(),
         if tool::waiting(&cursor, &options) {
             "Click to take control".to_string()
         } else if dial.open {
             "Move the mouse to a part and let go".to_string()
         } else {
             tool::prompt(&builder).to_string()
+        },
+    );
+    set(
+        &mut texts.p3(),
+        if dial.open {
+            String::new()
+        } else {
+            tool::legend(&builder).to_string()
         },
     );
 }

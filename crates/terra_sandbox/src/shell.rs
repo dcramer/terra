@@ -184,6 +184,9 @@ impl Plugin for ShellPlugin {
         let takes_shot = options.shot.is_some();
         let window = Window {
             title: "Terra sandbox".into(),
+            // A scripted run needs nobody's attention, and should not take the keyboard
+            // away from whatever is in front.
+            focused: !options.scripted(),
             resolution: (1600u32, 900u32).into(),
             // Vsync hides how long a frame really takes, so benchmarks turn it off.
             present_mode: if options.bench {

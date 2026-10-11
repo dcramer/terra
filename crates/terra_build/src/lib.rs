@@ -167,6 +167,9 @@ pub enum BuildOp {
     Shrink(Face),
     /// Change what fills a wall tile.
     SetPanel(Face, Panel),
+    /// Stand an interior wall on the edge between two tiles that are both inside, or
+    /// take it away again.
+    SetPartition(Face, Option<Panel>),
 }
 
 /// A base: the tiles inside it, which room each belongs to, and what fills each wall
@@ -176,6 +179,8 @@ pub struct Base {
     /// Each tile inside the base, and the room it was added as.
     tiles: BTreeMap<[i32; 3], u32>,
     panels: BTreeMap<Face, Panel>,
+    /// Interior walls, each on the east or south side of a tile.
+    partitions: BTreeMap<Face, Panel>,
     rooms_added: u32,
 }
 
@@ -185,6 +190,8 @@ pub struct BuildHit {
     pub face: Face,
     /// Distance along the ray, in metres.
     pub distance: f32,
+    /// Whether what was met is an interior wall, not the hull.
+    pub partition: bool,
 }
 
 impl Base {
@@ -221,6 +228,7 @@ impl Base {
             BuildOp::Grow(face) => self.grow(face),
             BuildOp::Shrink(face) => self.shrink(face),
             BuildOp::SetPanel(face, panel) => self.set_panel(face, panel),
+            BuildOp::SetPartition(face, panel) => self.set_partition(face, panel),
         };
         // A window on a wall that no longer exists means nothing.
         let stale: Vec<Face> = self
@@ -232,12 +240,30 @@ impl Base {
         for face in stale {
             self.panels.remove(&face);
         }
+        // An interior wall with outdoors on one side is the hull's job.
+        let stale: Vec<Face> = self
+            .partitions
+            .keys()
+            .copied()
+            .filter(|&face| !self.can_partition(face))
+            .collect();
+        for face in stale {
+            self.partitions.remove(&face);
+        }
         changed
     }
 
     fn add_room(&mut self, min: IVec3, max: IVec3) -> bool {
         let before = self.tiles.len();
-        let room = self.rooms_added;
+        // A block that overlaps a room is more of that room: the two become one shape,
+        // with walls that move together. A block that overlaps nothing is a new room.
+        let overlapped = self
+            .tiles
+            .iter()
+            .filter(|(tile, _)| (0..3).all(|axis| (min[axis]..=max[axis]).contains(&tile[axis])))
+            .map(|(_, &room)| room)
+            .min();
+        let room = overlapped.unwrap_or(self.rooms_added);
         for x in min.x..=max.x {
             for y in min.y..=max.y {
                 for z in min.z..=max.z {
@@ -247,10 +273,50 @@ impl Base {
             }
         }
         let changed = self.tiles.len() != before;
-        if changed {
+        if changed && overlapped.is_none() {
             self.rooms_added += 1;
         }
         changed
+    }
+
+    /// The same edge between two tiles, named from whichever tile has it on its east or
+    /// south side.
+    fn edge(face: Face) -> Face {
+        match face.side {
+            Side::West => Face::new(face.tile() + IVec3::NEG_X, Side::East),
+            Side::North => Face::new(face.tile() + IVec3::NEG_Z, Side::South),
+            _ => face,
+        }
+    }
+
+    /// Whether an interior wall could stand on a face: an upright one with a tile of the
+    /// base on both sides.
+    pub fn can_partition(&self, face: Face) -> bool {
+        face.side.is_wall()
+            && self.contains(face.tile())
+            && self.contains(face.tile() + face.side.offset())
+    }
+
+    /// The interior wall on a face, if there is one, seen from either side.
+    pub fn partition(&self, face: Face) -> Option<Panel> {
+        self.partitions.get(&Self::edge(face)).copied()
+    }
+
+    /// Every interior wall, each named from the tile on its west or north, in a fixed
+    /// order.
+    pub fn partitions(&self) -> impl Iterator<Item = (Face, Panel)> + '_ {
+        self.partitions.iter().map(|(&face, &panel)| (face, panel))
+    }
+
+    fn set_partition(&mut self, face: Face, panel: Option<Panel>) -> bool {
+        if !self.can_partition(face) || self.partition(face) == panel {
+            return false;
+        }
+        match panel {
+            Some(panel) => self.partitions.insert(Self::edge(face), panel),
+            None => self.partitions.remove(&Self::edge(face)),
+        };
+        true
     }
 
     /// Whether a face is part of the hull: inside on one side, outside on the other.
@@ -330,12 +396,14 @@ impl Base {
         true
     }
 
-    /// The first hull face a ray meets from outside or inside, if any. `origin` and
+    /// The first hull face or interior wall a ray meets, from either side, if any. `origin` and
     /// `direction` are in the base's own space, in metres; `direction` is unit length.
     pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f32) -> Option<BuildHit> {
         let size = Vec3::new(TILE_M, STOREY_M, TILE_M);
-        self.hull()
-            .filter_map(|face| {
+        let hull = self.hull().map(|face| (face, false));
+        let interior = self.partitions.keys().map(|&face| (face, true));
+        hull.chain(interior)
+            .filter_map(|(face, partition)| {
                 let normal = face.side.offset().as_vec3();
                 let low = face.tile().as_vec3() * size;
                 // A point on the face's plane: the tile's far corner on positive sides.
@@ -353,7 +421,11 @@ impl Base {
                     normal[axis] != 0.0
                         || (point[axis] >= low[axis] && point[axis] <= low[axis] + size[axis])
                 });
-                inside.then_some(BuildHit { face, distance })
+                inside.then_some(BuildHit {
+                    face,
+                    distance,
+                    partition,
+                })
             })
             .min_by(|a, b| a.distance.total_cmp(&b.distance))
     }
@@ -557,5 +629,66 @@ mod tests {
         };
         assert_eq!(build(), build());
         assert_eq!(build().mesh(), build().mesh());
+    }
+
+    #[test]
+    fn a_room_built_across_another_becomes_part_of_it() {
+        let mut base = room();
+        let before = base.room(IVec3::new(0, 0, 0));
+        // Half over the first room, half beyond its east wall.
+        assert!(base.apply(BuildOp::AddRoom {
+            min: [2, 0, 1],
+            max: [4, 0, 3],
+        }));
+        assert_eq!(base.room(IVec3::new(4, 0, 3)), before);
+        // One room, so its whole north wall moves together where it is in one line.
+        let north = base.wall(Face::new(IVec3::new(0, 0, 0), Side::North));
+        assert_eq!(north.len(), 3);
+        // A block wholly inside changes nothing, and a block apart is its own room.
+        assert!(!base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [1, 0, 1],
+        }));
+        assert!(base.apply(BuildOp::AddRoom {
+            min: [8, 0, 0],
+            max: [9, 0, 1],
+        }));
+        assert_ne!(base.room(IVec3::new(8, 0, 0)), before);
+    }
+
+    #[test]
+    fn interior_walls_stand_only_between_two_tiles_of_the_base() {
+        let mut base = room();
+        let inside = Face::new(IVec3::new(0, 0, 1), Side::East);
+        let same_from_the_other_side = Face::new(IVec3::new(1, 0, 1), Side::West);
+        let on_the_hull = Face::new(IVec3::new(2, 0, 1), Side::East);
+        assert!(!base.apply(BuildOp::SetPartition(on_the_hull, Some(Panel::Solid))));
+        assert!(base.apply(BuildOp::SetPartition(inside, Some(Panel::Solid))));
+        assert_eq!(base.partition(same_from_the_other_side), Some(Panel::Solid));
+        assert_eq!(base.partitions().count(), 1);
+        // The same wall again changes nothing; a doorway in it does.
+        assert!(!base.apply(BuildOp::SetPartition(
+            same_from_the_other_side,
+            Some(Panel::Solid)
+        )));
+        assert!(base.apply(BuildOp::SetPartition(
+            same_from_the_other_side,
+            Some(Panel::Door)
+        )));
+        assert_eq!(base.partitions().count(), 1);
+
+        // A ray across the room meets it, and says it is not the hull.
+        let hit = base
+            .raycast(Vec3::new(0.5, 1.0, 4.5), Vec3::X, 50.0)
+            .unwrap();
+        assert!(hit.partition && (hit.distance - 2.5).abs() < 1e-4);
+
+        // Pull the east wall in twice and the tiles beside it go, and the wall with them.
+        let east = Face::new(IVec3::new(2, 0, 1), Side::East);
+        assert!(base.apply(BuildOp::Shrink(east)));
+        assert_eq!(base.partitions().count(), 1);
+        assert!(base.apply(BuildOp::Shrink(Face::new(IVec3::new(1, 0, 1), Side::East))));
+        assert_eq!(base.partitions().count(), 0);
+        assert!(!base.apply(BuildOp::SetPartition(inside, None)));
     }
 }

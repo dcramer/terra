@@ -13,6 +13,8 @@
 //!   Q                  take-apart mode, and back
 //!   F                  move mode, and back
 //!   G                  the grid on and off: items snap to it and turn in eighths
+//!   Hold Alt           the opposite of the grid setting, while held
+//!   Middle click       pick another of the item the view is on                 (or V)
 //!   1 to 9, 0          the first ten parts directly
 //!
 //! Whatever the tool would do is shown in the world before you commit: the wall a push
@@ -22,7 +24,7 @@
 use super::catalogue::{self, Item, Kind, PARTS, Part};
 use super::dial::Dial;
 use super::flora::Obstacles;
-use super::props::{self, Models, Prop, Standing};
+use super::props::{self, Blocked, Models, Prop, Standing};
 use super::{Player, View};
 use crate::experiments::build::Site;
 use crate::planet::Planet;
@@ -62,19 +64,28 @@ pub struct Acting;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Target {
     Nothing,
+    /// A tile of the outside wall.
     Wall(Face),
-    /// Open ground, as the lowest tile of the room that would be built there, its size
-    /// in tiles, and whether the ground is low enough for the room's floor to clear it.
+    /// The edge between two tiles, where an interior wall stands or could.
+    Edge {
+        face: Face,
+        fits: bool,
+    },
+    /// Where a room would go: its lowest tile, its size in tiles, whether the ground is
+    /// low enough for its floor to clear it, and whether it would add anything.
     Ground {
         corner: IVec3,
         tiles: IVec2,
         fits: bool,
+        adds: bool,
     },
-    /// Somewhere an item could stand, in the base's own space.
+    /// Somewhere an item could stand, in the base's own space, how far above the floor
+    /// or ground, and what is in the way if anything.
     Spot {
         at: Vec3,
+        lift: f32,
         indoors: bool,
-        fits: bool,
+        blocked: Option<Blocked>,
     },
     /// An item already placed.
     Prop(Entity),
@@ -103,6 +114,10 @@ pub struct Builder {
     room_turned: bool,
     /// Whether items snap to the grid and turn in eighths.
     pub snap: bool,
+    /// The same, right now: holding Alt does the opposite of the setting.
+    snapping: bool,
+    /// The item the view is on, whatever is in hand.
+    viewed: Option<Entity>,
     /// How many notches the wheel has turned this frame, away from the player counting up.
     wheel: i32,
     /// The part to go back to on leaving take-apart or move mode.
@@ -187,7 +202,10 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut gizmos: ResMut<GizmoConfigStore>,
 ) {
-    gizmos.config_mut::<DefaultGizmoConfigGroup>().0.line.width = 2.5;
+    let (lines, _) = gizmos.config_mut::<DefaultGizmoConfigGroup>();
+    lines.line.width = 2.5;
+    // Drawn a little toward the eye, so a line lying on a floor is not lost in it.
+    lines.depth_bias = -0.002;
 
     // A glowing film, brighter than anything lit, so it reads in sun and in shade.
     let mut film = |colour: Color, strength: f32| {
@@ -230,6 +248,8 @@ fn setup(
         turn: 0.0,
         room_turned: false,
         snap: true,
+        snapping: true,
+        viewed: None,
         wheel: 0,
         before_mode: None,
         carrying: None,
@@ -280,6 +300,7 @@ fn choose(
             builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Move)));
         }
     }
+    builder.snapping = builder.snap != keys.pressed(KeyCode::AltLeft);
     if keys.just_pressed(KeyCode::KeyG) {
         builder.snap = !builder.snap;
         if builder.snap {
@@ -301,7 +322,11 @@ fn choose(
         - keys.just_pressed(KeyCode::KeyZ) as i32;
     if builder.wheel != 0 {
         if builder.item().is_some() {
-            let step = if builder.snap { GRID_TURN } else { FREE_TURN };
+            let step = if builder.snapping {
+                GRID_TURN
+            } else {
+                FREE_TURN
+            };
             builder.turn = (builder.turn + step * builder.wheel as f32).rem_euclid(360.0);
         } else if builder.room().is_some() {
             builder.room_turned = !builder.room_turned;
@@ -323,8 +348,9 @@ fn aim(
     props: Query<(Entity, &Prop, &Transform, &Visibility)>,
     mut builder: ResMut<Builder>,
 ) {
+    builder.viewed = None;
     // A fixed camera is for taking pictures, and an open dial is for choosing.
-    if options.vantage.is_some() || dial.open || builder.stowed {
+    if options.vantage.is_some() || dial.open {
         builder.target = Target::Nothing;
         return;
     }
@@ -334,76 +360,108 @@ fn aim(
     let local_origin = to_base.transform_point3(origin);
     let local_direction = to_base.transform_vector3(direction).normalize();
     let within = |point: Vec3, reach: f32| point.distance(player.translation) <= reach;
+    // The first of the base's walls, floors and roofs the view meets, interior walls
+    // included; the ground; and the first item.
     let hull = site.base.raycast(local_origin, local_direction, 200.0);
     let ground = planet.ground.raycast(origin, direction, 200.0);
-    let wall = hull
-        .filter(|hit| hit.face.side.is_wall())
+    let met = |distance: f32| local_origin + local_direction * distance;
+    let outside_wall = hull
+        .filter(|hit| !hit.partition && hit.face.side.is_wall())
         .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M));
-    // The nearest item the view passes through, short of any wall.
-    let item_aimed_at = || {
-        let limit = hull.map_or(f32::MAX, |hit| hit.distance + 0.3);
-        props
-            .iter()
-            .filter(|(_, _, _, visibility)| **visibility != Visibility::Hidden)
-            .filter_map(|(entity, prop, transform, _)| {
-                let middle = transform.translation + *transform.up() * prop.half.y;
-                let along = (middle - origin).dot(direction);
-                let off = (origin + direction * along).distance(middle);
-                let size = prop.half.max_element();
-                (along > 0.0
-                    && along < limit
-                    && off < size.max(0.3)
-                    && within(middle, ITEM_REACH_M))
-                .then_some((entity, along))
-            })
-            .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(entity, _)| entity)
-    };
-    // Where an item would stand: the floor if the view meets one, against a wall if it
-    // meets that, the ground outside otherwise. If that is out of reach, a few steps in
-    // front of the player instead, so there is always something to see.
+    let limit = hull.map_or(f32::MAX, |hit| hit.distance + 0.05);
+    let item = props
+        .iter()
+        .filter(|(_, _, _, visibility)| **visibility != Visibility::Hidden)
+        .filter_map(|(entity, prop, transform, _)| {
+            props::ray_box(transform, prop.half, origin, direction)
+                .map(|(distance, side)| (entity, prop, distance, side))
+        })
+        .filter(|&(_, _, distance, _)| {
+            distance < limit && within(origin + direction * distance, ITEM_REACH_M)
+        })
+        .min_by(|a, b| a.2.total_cmp(&b.2));
+    builder.viewed = item.map(|(entity, ..)| entity);
+    if builder.stowed {
+        builder.target = Target::Nothing;
+        return;
+    }
+
+    // Where an item would stand. On top of an item the view is on, or flush against its
+    // side; else the floor, or flush against a wall; else the ground outside. If none of
+    // that is within reach, a few steps in front of the player, so there is always
+    // something to see.
     let spot = || {
         let half = builder
             .item()
             .and_then(|item| models.of(item))
             .map_or(Vec3::splat(0.3), |model| model.half);
-        let boxed = |at: Vec3, indoors: bool| Standing {
+        let boxed = |at: Vec3, lift: f32, indoors: bool| Standing {
             at,
-            lift: 0.0,
+            lift,
             turn: builder.turn,
             half,
             indoors,
         };
         let on_grid = |at: Vec3| {
-            if builder.snap {
+            if builder.snapping {
                 ((at / GRID_M).round() * GRID_M).with_y(at.y)
             } else {
                 at
             }
         };
+        let on_item =
+            item.filter(|(_, prop, ..)| prop.is_solid())
+                .and_then(|(_, prop, distance, side)| {
+                    let touched = met(distance);
+                    let out = to_base.transform_vector3(side).normalize();
+                    if out.y > 0.7 {
+                        // Its top. On the grid that means the middle of it.
+                        let at = if builder.snapping {
+                            prop.at
+                        } else {
+                            touched.with_y(prop.at.y)
+                        };
+                        Some((at, prop.lift + prop.half.y * 2.0, prop.indoors))
+                    } else if out.y.abs() < 0.3 {
+                        // A side: stand flush beside it, lined up with it if nearly so.
+                        let out = out.with_y(0.0).normalize();
+                        let along_side = out.cross(Vec3::Y);
+                        let mut along = (touched - prop.at).dot(along_side);
+                        if builder.snapping && along.abs() < 0.35 {
+                            along = 0.0;
+                        }
+                        let its_reach = Standing::of(prop).reach_toward(out);
+                        let ours = boxed(prop.at, prop.lift, prop.indoors).reach_toward(out);
+                        let at = prop.at + along_side * along + out * (its_reach + ours + 0.02);
+                        Some((at, prop.lift, prop.indoors))
+                    } else {
+                        None
+                    }
+                });
         let on_ground = ground
             .filter(|ground| hull.is_none_or(|hit| ground.distance < hit.distance))
-            .map(|ground| (on_grid(to_base.transform_point3(ground.point)), false));
+            .map(|ground| (on_grid(to_base.transform_point3(ground.point)), 0.0, false));
         let in_base = hull.and_then(|hit| {
             let floor = hit.face.tile[1] as f32 * STOREY_M;
-            let met = local_origin + local_direction * hit.distance;
+            let touched = met(hit.distance);
             match hit.face.side {
-                Side::Down => Some((on_grid(met), true)),
+                Side::Down => Some((on_grid(touched), 0.0, true)),
                 Side::Up => None,
                 side => {
                     // Flush against the wall, on whichever side of it the view is, and
                     // on the grid along it.
                     let out = side.offset().as_vec3();
                     let toward_viewer = -out * local_direction.dot(out).signum();
-                    let tile = ((met + toward_viewer * 0.2) / TILE_M)
+                    let tile = ((touched + toward_viewer * 0.2) / TILE_M)
                         .floor()
                         .as_ivec3()
                         .with_y(hit.face.tile[1]);
                     let indoors = site.base.contains(tile);
-                    let along = on_grid(met);
-                    let against = boxed(met, indoors).reach_toward(out) + 0.02;
-                    let at = along + out * (met - along).dot(out) + toward_viewer * against;
-                    Some((at.with_y(if indoors { floor } else { 0.0 }), indoors))
+                    let along = on_grid(touched);
+                    let gap = if hit.partition { 0.08 } else { 0.02 };
+                    let against = boxed(touched, 0.0, indoors).reach_toward(out) + gap;
+                    let at = along + out * (touched - along).dot(out) + toward_viewer * against;
+                    Some((at.with_y(if indoors { floor } else { 0.0 }), 0.0, indoors))
                 }
             }
         });
@@ -416,65 +474,125 @@ fn aim(
             let at = on_grid(feet + forward * ITEM_NEAR_M);
             let tile = (at / TILE_M).floor().as_ivec3().with_y(0);
             let indoors = site.base.contains(tile) && feet.y < STOREY_M * 0.5;
-            (at.with_y(0.0), indoors)
+            (at.with_y(0.0), 0.0, indoors)
         };
-        let (at, indoors) = on_ground
+        let (at, lift, indoors) = on_item
+            .or(on_ground)
             .or(in_base)
-            .filter(|(at, _)| within(site.frame.transform_point(*at), ITEM_REACH_M))
+            .filter(|(at, ..)| within(site.frame.transform_point(*at), ITEM_REACH_M))
             .unwrap_or_else(ahead);
         let world = site.frame.transform_point(at);
-        let dry = planet.surface(world.normalize()).length() > planet.sea_radius_m();
-        let clear = props::can_stand(
+        let wet = !indoors && planet.surface(world.normalize()).length() < planet.sea_radius_m();
+        let blocked = props::blocked(
             &site,
-            &boxed(at, indoors),
+            &boxed(at, lift, indoors),
             props
                 .iter()
                 .filter(|(_, _, _, visibility)| **visibility != Visibility::Hidden)
-                .map(|(_, prop, _, _)| prop),
+                .map(|(entity, prop, _, _)| (entity, prop)),
             &obstacles.0,
-        );
+        )
+        .or(wet.then_some(Blocked::Water));
         Target::Spot {
             at,
+            lift,
             indoors,
-            fits: clear && (indoors || dry),
+            blocked,
         }
     };
 
     builder.target = match builder.picked().kind {
         Kind::Reshape | Kind::Window(_) | Kind::Door => {
-            wall.map_or(Target::Nothing, |hit| Target::Wall(hit.face))
+            outside_wall.map_or(Target::Nothing, |hit| Target::Wall(hit.face))
         }
-        Kind::Room(_) if hull.is_none() => ground
-            .filter(|ground| within(ground.point, STRUCTURE_REACH_M))
-            .zip(builder.room())
-            .map_or(Target::Nothing, |(ground, tiles)| {
-                // Centred on the ground aimed at.
-                let local = to_base.transform_point3(ground.point);
-                let corner = IVec3::new(
-                    (local.x / TILE_M - tiles.x as f32 * 0.5).round() as i32,
-                    0,
-                    (local.z / TILE_M - tiles.y as f32 * 0.5).round() as i32,
-                );
-                // The room's floor is the base's floor; it cannot be built into a hillside.
-                let fits = (0..=tiles.x).all(|i| {
-                    (0..=tiles.y).all(|j| {
-                        let on_floor = (corner + IVec3::new(i, 0, j)).as_vec3() * TILE_M;
-                        planet.ground.distance(site.frame.transform_point(on_floor)) > 0.02
-                    })
-                });
-                Target::Ground {
-                    corner,
-                    tiles,
-                    fits,
-                }
-            }),
-        Kind::Room(_) => Target::Nothing,
+        Kind::Wall(_) => {
+            // An interior wall already there; or the nearest edge of the floor tile the
+            // view is on; or, looking at neither, of the tile a couple of steps ahead.
+            let reachable =
+                hull.filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M));
+            let nearest_edge = |on_floor: Vec3| {
+                let tile = (on_floor / TILE_M).floor().as_ivec3();
+                let across = on_floor / TILE_M - tile.as_vec3();
+                let edges = [
+                    (across.x, Side::West),
+                    (1.0 - across.x, Side::East),
+                    (across.z, Side::North),
+                    (1.0 - across.z, Side::South),
+                ];
+                edges
+                    .into_iter()
+                    .min_by(|a, b| a.0.total_cmp(&b.0))
+                    .map(|(_, side)| Face::new(tile, side))
+            };
+            let ahead = || {
+                let feet = to_base.transform_point3(player.translation);
+                let forward = to_base
+                    .transform_vector3(view.forward)
+                    .with_y(0.0)
+                    .normalize_or_zero();
+                let storey = (feet.y / STOREY_M).round();
+                nearest_edge((feet + forward * 2.0).with_y(storey * STOREY_M + 0.01))
+            };
+            reachable
+                .and_then(|hit| match hit.face.side {
+                    _ if hit.partition => Some(hit.face),
+                    Side::Down => nearest_edge(
+                        met(hit.distance).with_y(hit.face.tile[1] as f32 * STOREY_M + 0.01),
+                    ),
+                    _ => None,
+                })
+                .or_else(ahead)
+                .map_or(Target::Nothing, |face| Target::Edge {
+                    face,
+                    fits: site.base.can_partition(face),
+                })
+        }
+        Kind::Room(_) => {
+            // On open ground, or across a room already there, which it then extends.
+            let on_base = hull
+                .filter(|hit| ground.is_none_or(|ground| hit.distance < ground.distance))
+                .map(|hit| site.frame.transform_point(met(hit.distance).with_y(0.0)));
+            on_base
+                .or(ground.map(|ground| ground.point))
+                .filter(|point| within(*point, STRUCTURE_REACH_M))
+                .zip(builder.room())
+                .map_or(Target::Nothing, |(point, tiles)| {
+                    // Centred on the place aimed at.
+                    let local = to_base.transform_point3(point);
+                    let corner = IVec3::new(
+                        (local.x / TILE_M - tiles.x as f32 * 0.5).round() as i32,
+                        0,
+                        (local.z / TILE_M - tiles.y as f32 * 0.5).round() as i32,
+                    );
+                    // The room's floor is the base's floor. Its foundation may go into
+                    // the ground; the room itself may not.
+                    let fits = (0..=tiles.x).all(|i| {
+                        (0..=tiles.y).all(|j| {
+                            let on_floor = (corner + IVec3::new(i, 0, j)).as_vec3() * TILE_M;
+                            planet.ground.distance(site.frame.transform_point(on_floor)) > 0.02
+                        })
+                    });
+                    let adds = (0..tiles.x).any(|i| {
+                        (0..tiles.y).any(|j| !site.base.contains(corner + IVec3::new(i, 0, j)))
+                    });
+                    Target::Ground {
+                        corner,
+                        tiles,
+                        fits,
+                        adds,
+                    }
+                })
+        }
         Kind::Items(_) => spot(),
         Kind::Move if builder.is_carrying() => spot(),
-        Kind::Move => item_aimed_at().map_or(Target::Nothing, Target::Prop),
-        Kind::Remove => match (item_aimed_at(), wall) {
-            (Some(entity), _) => Target::Prop(entity),
-            (None, Some(hit)) if site.base.panel(hit.face) != Panel::Solid => {
+        Kind::Move => item.map_or(Target::Nothing, |(entity, ..)| Target::Prop(entity)),
+        Kind::Remove => match (item, hull, outside_wall) {
+            (Some((entity, ..)), _, _) => Target::Prop(entity),
+            (None, Some(hit), _) if hit.partition => Target::Edge {
+                face: hit.face,
+                fits: true,
+            },
+            (None, _, Some(hit)) if site.base.panel(hit.face) != Panel::Solid => {
                 Target::Wall(hit.face)
             }
             _ => Target::Nothing,
@@ -519,6 +637,19 @@ fn act(
     let captured = cursor.grab_mode != CursorGrabMode::None;
     let click =
         keys.just_pressed(KeyCode::KeyE) || (captured && mouse.just_pressed(MouseButton::Left));
+    // The middle button: another of whatever the view is on.
+    let copy =
+        keys.just_pressed(KeyCode::KeyV) || (captured && mouse.just_pressed(MouseButton::Middle));
+    if copy
+        && !builder.is_carrying()
+        && let Some(prop) = builder.viewed.and_then(|entity| props.get(entity).ok())
+        && let Some((part, variant)) = catalogue::place_of(prop.item)
+    {
+        builder.pick(part);
+        builder.variants[part] = variant;
+        builder.turn = prop.turn;
+        return;
+    }
     let op = match (&builder.picked().kind, builder.target) {
         // A wall goes out a tile for a click or a notch away, and in for a notch back.
         (Kind::Reshape, Target::Wall(face)) if click || builder.wheel > 0 => {
@@ -529,13 +660,20 @@ fn act(
             Some(BuildOp::SetPanel(face, shapes[builder.variant()].1))
         }
         (Kind::Door, Target::Wall(face)) if click => Some(BuildOp::SetPanel(face, Panel::Door)),
+        (Kind::Wall(shapes), Target::Edge { face, fits: true }) if click => Some(
+            BuildOp::SetPartition(face, Some(shapes[builder.variant()].1)),
+        ),
         (Kind::Remove, Target::Wall(face)) if click => Some(BuildOp::SetPanel(face, Panel::Solid)),
+        (Kind::Remove, Target::Edge { face, .. }) if click => {
+            Some(BuildOp::SetPartition(face, None))
+        }
         (
             Kind::Room(_),
             Target::Ground {
                 corner,
                 tiles,
                 fits: true,
+                adds: true,
             },
         ) if click => Some(BuildOp::AddRoom {
             min: corner.to_array(),
@@ -545,8 +683,9 @@ fn act(
             Kind::Items(_) | Kind::Move,
             Target::Spot {
                 at,
+                lift,
                 indoors,
-                fits: true,
+                blocked: None,
             },
         ) if click => {
             if let Some(item) = builder.item() {
@@ -557,11 +696,11 @@ fn act(
                     &planet,
                     item,
                     at,
-                    0.0,
+                    lift,
                     builder.turn,
                     indoors,
                 );
-                info!("Placed a {} at {at}.", item.name);
+                info!("Placed a {} at {at}, {lift} up.", item.name);
                 builder.carrying = None;
                 player.since_acting = 0.0;
             }
@@ -638,17 +777,43 @@ fn highlight(
     mut gizmos: Gizmos,
 ) {
     let kind = &builder.picked().kind;
+    let refused = matches!(
+        builder.target,
+        Target::Ground { fits: false, .. }
+            | Target::Ground { adds: false, .. }
+            | Target::Edge { fits: false, .. }
+            | Target::Spot {
+                blocked: Some(_),
+                ..
+            }
+    );
     let look = match (kind, builder.target) {
         (Kind::Move, Target::Prop(_)) => 1,
-        (_, Target::Ground { fits: false, .. } | Target::Spot { fits: false, .. }) => 2,
+        _ if refused => 2,
         (Kind::Remove, _) => 2,
         (Kind::Window(_) | Kind::Door | Kind::Move, _) => 1,
         _ => 0,
     };
     let colour = [BUILD_COLOUR, OPENING_COLOUR, REFUSED_COLOUR][look];
     let in_world = |corners: [Vec3; 4]| corners.map(|corner| site.frame.transform_point(corner));
-    let outline = |gizmos: &mut Gizmos, [a, b, c, d]: [Vec3; 4]| {
+    let outline = |gizmos: &mut Gizmos, [a, b, c, d]: [Vec3; 4], colour: Color| {
         gizmos.linestrip([a, b, c, d, a], colour);
+    };
+    let boxed = |gizmos: &mut Gizmos, half: Vec3, stood: &Transform, colour: Color| {
+        for height in [0.02, half.y * 2.0] {
+            let corner =
+                |x: f32, z: f32| stood.transform_point(Vec3::new(x * half.x, height, z * half.z));
+            outline(
+                gizmos,
+                [
+                    corner(-1.0, -1.0),
+                    corner(1.0, -1.0),
+                    corner(1.0, 1.0),
+                    corner(-1.0, 1.0),
+                ],
+                colour,
+            );
+        }
     };
 
     // The rectangles to cover with film, in the base's own space.
@@ -666,6 +831,11 @@ fn highlight(
         (Kind::Remove, Target::Wall(face)) => {
             opening(face, site.base.panel(face)).into_iter().collect()
         }
+        // An interior wall: the whole edge, and the opening it would have.
+        (Kind::Wall(shapes), Target::Edge { face, .. }) => std::iter::once(Base::corners(face))
+            .chain(opening(face, shapes[builder.variant()].1))
+            .collect(),
+        (_, Target::Edge { face, .. }) => vec![Base::corners(face)],
         (_, Target::Ground { corner, tiles, .. }) => {
             let low = corner.as_vec3() * TILE_M;
             let high = low + Vec3::new(tiles.x as f32 * TILE_M, STOREY_M, tiles.y as f32 * TILE_M);
@@ -713,61 +883,93 @@ fn highlight(
     };
     // Outlines are drawn afresh every frame; the film only when something changes.
     for quad in &quads {
-        outline(&mut gizmos, in_world(*quad));
+        outline(&mut gizmos, in_world(*quad), colour);
     }
+    // A box round an item that would be picked up or taken away.
     if let Target::Prop(entity) = builder.target
         && let Ok((prop, transform)) = props.get(entity)
     {
-        // A box round the item that would go.
-        for height in [0.0, prop.half.y * 2.0] {
-            let corner = |x: f32, z: f32| {
-                transform.transform_point(Vec3::new(x * prop.half.x, height, z * prop.half.z))
-            };
-            outline(
-                &mut gizmos,
-                [
-                    corner(-1.0, -1.0),
-                    corner(1.0, -1.0),
-                    corner(1.0, 1.0),
-                    corner(-1.0, 1.0),
-                ],
-            );
-        }
+        boxed(&mut gizmos, prop.half, transform, colour);
     }
 
-    // The grid an item is snapping to, drawn on the floor or ground round it.
-    if let (true, Target::Spot { at, indoors, .. }) = (builder.snap, builder.target) {
-        let faint = colour.with_alpha(0.35);
-        let lines = 4;
-        let reach = lines as f32 * GRID_M;
-        let on_surface = |east: f32, south: f32| {
-            let point = site
-                .frame
-                .transform_point(at + Vec3::new(east, 0.02, south));
-            if indoors {
-                point
-            } else {
-                planet.drawn(point.normalize()) + point.normalize() * 0.04
-            }
-        };
-        for line in -lines..=lines {
-            let across = line as f32 * GRID_M;
-            gizmos.line(on_surface(across, -reach), on_surface(across, reach), faint);
-            gizmos.line(on_surface(-reach, across), on_surface(reach, across), faint);
-        }
-    }
-
-    // A ghost of the item where it would stand.
     let ghost = builder.ghost;
     match (builder.item(), builder.target) {
-        (Some(item), Target::Spot { at, indoors, .. }) => {
-            if let Some(mesh) = models.of(item).and_then(|model| model.solid.clone()) {
-                commands.entity(ghost).insert((
-                    Mesh3d(mesh),
-                    MeshMaterial3d(builder.ghost_looks[look].clone()),
-                    props::standing(&site, &planet, at, item.lift + 0.01, builder.turn, indoors),
-                    Visibility::Visible,
-                ));
+        (
+            Some(item),
+            Target::Spot {
+                at,
+                lift,
+                indoors,
+                blocked,
+            },
+        ) => {
+            let stood =
+                props::standing(&site, &planet, at, lift + item.lift, builder.turn, indoors);
+            // The grid the item is snapping to, drawn on the floor or ground round it:
+            // tile edges strongly, the steps between them faintly, fading with distance.
+            if builder.snapping {
+                let reach = 6;
+                let onto = |east: i32, south: i32| {
+                    let on_grid =
+                        ((at / GRID_M).round() + IVec3::new(east, 0, south).as_vec3()) * GRID_M;
+                    let point = site.frame.transform_point(on_grid.with_y(at.y + 0.03));
+                    if indoors {
+                        point
+                    } else {
+                        planet.drawn(point.normalize()) + point.normalize() * 0.05
+                    }
+                };
+                let points: Vec<Vec<Vec3>> = (-reach..=reach)
+                    .map(|east| (-reach..=reach).map(|south| onto(east, south)).collect())
+                    .collect();
+                // Fainter the further a stretch of line is from the item.
+                let strength = |line: i32, along: i32| {
+                    let far = ((line * line + along * along) as f32).sqrt() / reach as f32;
+                    (1.0 - far).max(0.0) * 0.9
+                };
+                let tiles_every = (TILE_M / GRID_M).round() as i32;
+                let centre = (at / GRID_M).round().as_ivec3();
+                for line in -reach..=reach {
+                    for along in -reach..reach {
+                        let (i, j) = ((line + reach) as usize, (along + reach) as usize);
+                        let fade = strength(line, along);
+                        let weight = |coordinate: i32| {
+                            if coordinate.rem_euclid(tiles_every) == 0 {
+                                1.0
+                            } else {
+                                0.4
+                            }
+                        };
+                        // A line running south, and one running east.
+                        gizmos.line(
+                            points[i][j],
+                            points[i][j + 1],
+                            Color::WHITE.with_alpha(fade * weight(centre.x + line)),
+                        );
+                        gizmos.line(
+                            points[j][i],
+                            points[j + 1][i],
+                            Color::WHITE.with_alpha(fade * weight(centre.z + line)),
+                        );
+                    }
+                }
+            }
+            // The item's own footprint, and whatever is in its way.
+            if let Some(model) = models.of(item) {
+                boxed(&mut gizmos, model.half, &stood, colour);
+                if let Some(mesh) = model.solid.clone() {
+                    commands.entity(ghost).insert((
+                        Mesh3d(mesh),
+                        MeshMaterial3d(builder.ghost_looks[look].clone()),
+                        stood.with_translation(stood.translation + *stood.up() * 0.01),
+                        Visibility::Visible,
+                    ));
+                }
+            }
+            if let Some(Blocked::Item(other)) = blocked
+                && let Ok((prop, transform)) = props.get(other)
+            {
+                boxed(&mut gizmos, prop.half, transform, REFUSED_COLOUR);
             }
         }
         _ => {
@@ -787,7 +989,7 @@ fn highlight(
     let mut positions = Vec::new();
     for [a, b, c, d] in quads {
         // A hair off the surface on both sides, so it shows from indoors and out.
-        let lift = (b - a).cross(c - a).normalize_or_zero() * 0.03;
+        let lift = (b - a).cross(c - a).normalize_or_zero() * 0.08;
         for offset in [lift, -lift] {
             positions.extend([a, b, c, a, c, d].map(|corner| corner + offset));
         }
@@ -821,25 +1023,50 @@ pub fn prompt(builder: &Builder) -> &'static str {
         }
         (Kind::Window(_), Target::Wall(_)) => "Left click  cut this window      R  shape",
         (Kind::Door, Target::Wall(_)) => "Left click  cut a door",
-        (Kind::Reshape | Kind::Window(_) | Kind::Door, _) => "Aim at a wall",
-        (Kind::Room(_), Target::Ground { fits: true, .. }) => {
+        (Kind::Reshape | Kind::Window(_) | Kind::Door, _) => "Aim at an outside wall",
+        (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
+            "Left click  build this wall      R  kind"
+        }
+        (Kind::Wall(_), Target::Edge { fits: false, .. }) => {
+            "Interior walls go between two tiles of a room"
+        }
+        (Kind::Wall(_), _) => "Aim at a floor indoors",
+        (Kind::Room(_), Target::Ground { fits: false, .. }) => {
+            "The ground is too high here: only a foundation may go into it"
+        }
+        (Kind::Room(_), Target::Ground { adds: false, .. }) => "That is all indoors already",
+        (Kind::Room(_), Target::Ground { .. }) => {
             "Left click  build this room      Scroll  turn      R  size"
         }
-        (Kind::Room(_), Target::Ground { fits: false, .. }) => "The ground is too high here",
-        (Kind::Room(_), _) => "Aim at open ground nearby",
-        (Kind::Items(_), Target::Spot { fits: true, .. }) => {
-            "Left click  place      Scroll  turn      R  next kind"
-        }
-        (Kind::Move, Target::Spot { fits: true, .. }) => {
-            "Left click  put it down      Scroll  turn      Right click  put it back"
-        }
-        (Kind::Items(_) | Kind::Move, Target::Spot { fits: false, .. }) => "It cannot stand there",
+        (Kind::Room(_), _) => "Aim at the ground, or across a room to extend it",
+        (Kind::Items(_) | Kind::Move, Target::Spot { blocked, .. }) => match blocked {
+            None if builder.is_carrying() => {
+                "Left click  put it down      Scroll  turn      Right click  put it back"
+            }
+            None => "Left click  place      Scroll  turn      R  next kind",
+            Some(Blocked::Structure) => "It would stick through a wall",
+            Some(Blocked::Item(_)) => "The outlined item is in the way",
+            Some(Blocked::Nature) => "A tree or a boulder is in the way",
+            Some(Blocked::Water) => "Not in the water",
+        },
         (Kind::Items(_), _) => "Aim at a floor or at the ground nearby",
         (Kind::Move, Target::Prop(_)) => "Left click  pick this up",
         (Kind::Move, _) => "Aim at an item to move it      F  done",
         (Kind::Remove, Target::Prop(_)) => "Left click  take this away",
+        (Kind::Remove, Target::Edge { .. }) => "Left click  take this wall away",
         (Kind::Remove, Target::Wall(_)) => "Left click  close this opening",
-        (Kind::Remove, _) => "Aim at an item, a window or a door      Q  done",
+        (Kind::Remove, _) => "Aim at an item, an interior wall, a window or a door      Q  done",
+    }
+}
+
+/// The keys worth knowing while a part is in hand.
+pub fn legend(builder: &Builder) -> &'static str {
+    if builder.stowed {
+        ""
+    } else if builder.snap {
+        "Q  take apart     F  move     G  grid off     Alt  off the grid     Middle click  copy"
+    } else {
+        "Q  take apart     F  move     G  grid on     Alt  on the grid     Middle click  copy"
     }
 }
 

@@ -92,6 +92,13 @@ impl Prop {
 #[derive(Component)]
 struct Firelight;
 
+/// An item just put down, and for how many seconds: it grows into place over a moment,
+/// so a placement is felt as well as seen.
+#[derive(Component)]
+struct Settling(f32);
+
+const SETTLE_SECONDS: f32 = 0.16;
+
 /// An item's shapes, ready to draw: what is lit and what glows, stood on its foot,
 /// centred, and at its real size.
 pub struct Model {
@@ -121,7 +128,7 @@ struct CheckedFor(u64);
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, load)
         .add_systems(PostStartup, furnish)
-        .add_systems(Update, (flicker, keep_clear));
+        .add_systems(Update, (flicker, keep_clear, settle));
 }
 
 /// Our colour for a part of a prop, as it should look on screen, and whether it glows.
@@ -253,6 +260,7 @@ pub fn place(
         },
         standing(site, planet, at, lift + item.lift, turn_degrees, indoors),
         Visibility::default(),
+        Settling(0.0),
     ));
     if let Some(mesh) = &model.solid {
         prop.with_child((Mesh3d(mesh.clone()), MeshMaterial3d(models.lit.clone())));
@@ -336,6 +344,23 @@ fn furnish(mut commands: Commands, models: Res<Models>, planet: Res<Planet>, sit
     commands.insert_resource(CheckedFor(u64::MAX));
 }
 
+fn settle(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut settling: Query<(Entity, &mut Settling, &mut Transform)>,
+) {
+    for (entity, mut settling, mut transform) in &mut settling {
+        settling.0 += time.delta_secs();
+        let done = (settling.0 / SETTLE_SECONDS).min(1.0);
+        // Quick at first, easing to rest.
+        let eased = 1.0 - (1.0 - done) * (1.0 - done);
+        transform.scale = Vec3::splat(0.8 + 0.2 * eased);
+        if done >= 1.0 {
+            commands.entity(entity).remove::<Settling>();
+        }
+    }
+}
+
 /// Firelight is never steady.
 fn flicker(time: Res<Time>, mut fires: Query<&mut PointLight, With<Firelight>>) {
     let t = time.elapsed_secs();
@@ -398,6 +423,27 @@ impl Standing {
         self.half.y * 2.0 > STEP_OVER_M
     }
 
+    /// Whether an interior wall runs through the box's foot.
+    fn crosses_a_wall(&self, site: &Site) -> bool {
+        let corners = self.corners();
+        let tile = |corner: Vec2| (corner / TILE_M).floor().as_ivec2();
+        (0..4).any(|index| {
+            let (from, to) = (tile(corners[index]), tile(corners[(index + 1) % 4]));
+            let storey = (self.at.y / terra_build::STOREY_M).round() as i32;
+            let step = to - from;
+            // Only neighbouring tiles; a box is far smaller than two tiles.
+            let side = match (step.x, step.y) {
+                (1, 0) => terra_build::Side::East,
+                (-1, 0) => terra_build::Side::West,
+                (0, 1) => terra_build::Side::South,
+                (0, -1) => terra_build::Side::North,
+                _ => return false,
+            };
+            let face = terra_build::Face::new(IVec3::new(from.x, storey, from.y), side);
+            site.base.partition(face).is_some()
+        })
+    }
+
     /// Whether two boxes share space. Boxes that only touch do not.
     fn overlaps(&self, other: &Standing) -> bool {
         const TOUCHING: f32 = 0.03;
@@ -443,17 +489,28 @@ impl Standing {
     }
 }
 
-/// Whether an item could stand somewhere: wholly indoors or wholly clear of the base,
-/// and not in the same space as another item, a tree or a boulder. Rugs and other flat
-/// things share space with anything.
-pub fn can_stand<'a>(
+/// Why an item cannot stand where it is offered.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Blocked {
+    /// It would stick through a wall, or stand half in the base and half out.
+    Structure,
+    /// Another item is there.
+    Item(Entity),
+    /// A tree or a boulder is there.
+    Nature,
+    Water,
+}
+
+/// What stops an item standing somewhere, if anything. It has to be wholly indoors or
+/// wholly clear of the base, and not in the same space as another item, a tree or a
+/// boulder. Rugs and other flat things share space with anything.
+pub fn blocked<'a>(
     site: &Site,
     standing: &Standing,
-    others: impl Iterator<Item = &'a Prop>,
+    others: impl Iterator<Item = (Entity, &'a Prop)>,
     obstacles: &[(Vec3, f32)],
-) -> bool {
-    let corners = standing.corners();
-    let placed = corners.iter().all(|corner| {
+) -> Option<Blocked> {
+    let placed = standing.corners().iter().all(|corner| {
         let at = Vec3::new(corner.x, 0.0, corner.y);
         if standing.indoors {
             site.base
@@ -462,23 +519,66 @@ pub fn can_stand<'a>(
             !site.covers(site.frame.transform_point(at), 0.05)
         }
     });
-    if !placed {
-        return false;
+    if !placed || standing.indoors && standing.crosses_a_wall(site) {
+        return Some(Blocked::Structure);
     }
     if !standing.is_solid() {
-        return true;
+        return None;
     }
-    if others
-        .filter(|other| other.is_solid())
-        .any(|other| standing.overlaps(&Standing::of(other)))
+    if let Some((entity, _)) = others
+        .filter(|(_, other)| other.is_solid())
+        .find(|(_, other)| standing.overlaps(&Standing::of(other)))
     {
-        return false;
+        return Some(Blocked::Item(entity));
     }
     let to_base = site.frame.compute_affine().inverse();
-    standing.indoors
-        || !obstacles.iter().any(|&(at, radius)| {
+    (!standing.indoors
+        && obstacles.iter().any(|&(at, radius)| {
             standing.meets_circle(to_base.transform_point3(at).with_y(0.0), radius)
-        })
+        }))
+    .then_some(Blocked::Nature)
+}
+
+/// Where a ray first meets an item's box, as the distance along the ray and which way
+/// the side it met faces. The ray and the answer are in the world's own space.
+pub fn ray_box(
+    transform: &Transform,
+    half: Vec3,
+    origin: Vec3,
+    direction: Vec3,
+) -> Option<(f32, Vec3)> {
+    let turned_back = transform.rotation.inverse();
+    let from = turned_back * (origin - transform.translation);
+    let along = turned_back * direction;
+    let low = Vec3::new(-half.x, 0.0, -half.z);
+    let high = Vec3::new(half.x, half.y * 2.0, half.z);
+    let (mut near, mut far, mut side) = (0.0_f32, f32::MAX, Vec3::ZERO);
+    for axis in 0..3 {
+        if along[axis].abs() < 1e-6 {
+            if from[axis] < low[axis] || from[axis] > high[axis] {
+                return None;
+            }
+            continue;
+        }
+        let enter = (low[axis] - from[axis]) / along[axis];
+        let leave = (high[axis] - from[axis]) / along[axis];
+        let (enter, leave, facing) = if enter <= leave {
+            (enter, leave, -1.0)
+        } else {
+            (leave, enter, 1.0)
+        };
+        if enter > near {
+            near = enter;
+            side = Vec3::ZERO;
+            side[axis] = facing;
+        }
+        far = far.min(leave);
+        if near > far {
+            return None;
+        }
+    }
+    // Starting inside the box meets no side of it.
+    (side != Vec3::ZERO).then(|| (near, transform.rotation * side))
 }
 
 /// Hides whatever the base's current shape leaves out in the open or shut in a wall.
@@ -622,6 +722,22 @@ mod tests {
         assert!(here.meets_circle(Vec3::new(1.2, 0.0, 0.0), 0.3));
         assert!(!here.meets_circle(Vec3::new(1.4, 0.0, 0.0), 0.3));
         assert!(!here.meets_circle(Vec3::new(0.0, 0.0, 0.7), 0.3));
+    }
+
+    #[test]
+    fn a_ray_meets_the_nearest_side_of_a_box() {
+        let stood = Transform::from_xyz(5.0, 0.0, 0.0);
+        let half = Vec3::new(0.5, 0.4, 0.5);
+        // Level, from the west: its west side, half a metre short of its middle.
+        let (distance, side) = ray_box(&stood, half, Vec3::new(0.0, 0.4, 0.0), Vec3::X).unwrap();
+        assert!((distance - 4.5).abs() < 1e-5 && side.distance(Vec3::NEG_X) < 1e-5);
+        // From above: its top.
+        let (distance, side) =
+            ray_box(&stood, half, Vec3::new(5.0, 3.0, 0.0), Vec3::NEG_Y).unwrap();
+        assert!((distance - 2.2).abs() < 1e-5 && side.distance(Vec3::Y) < 1e-5);
+        // Past it, or away from it.
+        assert!(ray_box(&stood, half, Vec3::new(0.0, 0.4, 2.0), Vec3::X).is_none());
+        assert!(ray_box(&stood, half, Vec3::new(0.0, 0.4, 0.0), Vec3::NEG_X).is_none());
     }
 
     #[test]

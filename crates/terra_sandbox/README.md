@@ -76,6 +76,8 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 | Q | Take-apart mode, and back |
 | F | Move mode, and back |
 | G | The grid on and off |
+| Hold Alt | The opposite of the grid setting, while held |
+| Middle click | Pick another of the item you are looking at. V does the same. |
 | 1 to 9, 0 | The first ten parts directly |
 | F3 | Show the frame rate |
 
@@ -87,17 +89,29 @@ Building starts from a part. Pick one from the dial, cycle through its variants,
 
 | Part | Variants | What a left click does |
 |---|---|---|
-| Room | Four sizes; the wheel turns it | Builds a room on the ground you aim at |
+| Room | Four sizes; the wheel turns it | Builds a room on the ground you aim at. Aimed across a room already there, it extends that room to the combined shape. |
 | Reshape | | Pushes the wall you aim at out. The wheel pushes and pulls. |
+| Wall | Solid, doorway, window | Builds an interior wall on the nearest edge between two floor tiles. Indoors only. |
 | Window | Framed, wide, tall | Cuts that window in the wall tile |
 | Door | | Cuts a door |
-| Remove (Q) | | Takes away the item, or closes the window or door |
+| Remove (Q) | | Takes away the item or interior wall, or closes the window or door |
 | Move (F) | | Picks an item up, then puts it down |
 | Seat, Table, Bed, Storage, Kitchen, Decor, Kit, Fire | Twenty-seven items between them | Stands the item on the floor or ground you aim at |
 
-Everything has a box. An item cannot be placed where its box would share space with another item, a wall, a tree or a boulder, and a walker cannot enter one. Rugs are the exception: they lie under anything.
+Everything has a box. An item cannot be placed where its box would share space with another item, a wall, a tree or a boulder, and a walker cannot enter one. Rugs are the exception: they lie under anything. When something is in the way, the prompt says what, and an item that is in the way is outlined.
 
-With the grid on, items land on half-metre steps and turn in eighths of a circle, and the grid is drawn round the item. Aim at a wall and the item stands flush against it. With the grid off, items go exactly where you aim and turn in finer steps. Rooms are always on the base's three-metre tiles, so a new room lines up with the rooms already there and joins them where they touch.
+With the grid on, items land on half-metre steps and turn in eighths of a circle. The grid is drawn on the floor or ground round the item, with tile edges stronger than the steps between. With the grid off, items go exactly where you aim and turn in finer steps. Either way:
+
+- Aim at a wall and the item stands flush against it.
+- Aim at the side of another item and it stands flush beside that, lined up with it if nearly so.
+- Aim at the top of another item and it stands on it.
+- Aim at nothing in reach and it is offered a few steps in front of you.
+
+Rooms are always on the base's three-metre tiles, so a new room lines up with the rooms already there. A room's foundation may go into the ground, but the room itself may not: where the ground is higher than its floor, the outline is red and it cannot be built.
+
+![An interior wall with a doorway](../../docs/images/outpost-wall-2026-10-10.png)
+
+The game holds the mouse while you play and lets go when the window is no longer in front; click to take it back.
 
 Everything in and around the example base was placed through the same call the builder makes, and can be moved or taken away. The list of parts is in `catalogue.rs` and is a stand-in; nothing costs anything.
 
@@ -116,7 +130,7 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 
 The models are free ones, recoloured in code; see [THIRD_PARTY.md](../../THIRD_PARTY.md). How it was put together and what it costs to draw is in [research/outpost-scene.md](../../research/outpost-scene.md).
 
-What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; and placed items are not saved or part of the base's list of operations.
+What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; you cannot stand on an item, and an item stood on another stays in the air if the one under it goes; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; and placed items are not saved or part of the base's list of operations.
 
 In a scripted run the game clock advances a sixtieth of a second per frame and real keyboard and mouse input is ignored, so the same script does the same thing on any machine:
 

@@ -48,7 +48,7 @@ They then asked for that to be built into the tech demo directly, as "the little
 
 ![The dial of parts](../docs/images/outpost-dial-2026-10-10.png)
 
-- **A dial of fourteen parts**, opened by holding the right mouse button: room, reshape, window, door, remove, move, and eight kinds of item.
+- **A dial of fifteen parts**, opened by holding the right mouse button: room, reshape, interior wall, window, door, remove, move, and eight kinds of item.
 - **Variants** of the picked part, cycled with R: four room sizes, three windows, twenty-seven items.
 - **A preview** of what would be built before committing.
 - **Items** stand on a floor or the ground, can be turned, moved and removed, and are solid to walk into.
@@ -59,9 +59,15 @@ They then asked for three more things, which are also in:
 - **Collision boxes on everything, used for placement too.** An item cannot be put where its box would share space with another item, a wall, a tree or a boulder.
 - **A grid things snap to, which can be switched off.** Items land on half-metre steps, turn in eighths, and stand flush against a wall you aim at. Rooms are always on the base's three-metre tiles, so new rooms line up with and join the ones already there.
 
-One thing they raised and left open: whether parts of a room may clip into the terrain, or only its foundation. For now only the foundation does, and a room is refused where the ground is higher than its floor.
+And, after trying those:
 
-What all this still is not: parts are text labels with no pictures; nothing costs anything or has to be unlocked; items snap to the grid and to walls but not to each other; a second building cannot be started at an angle to the first; and an item is not yet one of the base's operations, so it would not be saved or sent to another player. The list of parts was chosen by what models were to hand, not designed.
+- **Terrain.** A foundation may go into the ground. Anything else that would clip into it shows red and cannot be built. (They said "I think", so this is a leaning.)
+- **Rooms across rooms.** A room placed so that it overlaps one already there extends that room to the combined shape, instead of being refused or becoming a second room.
+- **Interior walls** as a simple part: solid, with a doorway, or with a window, on the edge between two tiles. Indoors only, which the builder enforces.
+- **The small comforts of good building games.** A grid you can actually see; being told what is in the way, with the item in the way outlined; items that stand flush against, or on top of, the item you aim at; holding Alt to go off the grid for one placement; the middle button to pick another of what you are looking at; and a line of the keys worth knowing.
+- **The mouse** was escaping the window. The game now lets go of it properly when its window is no longer in front, and holds the pointer in the middle while it has it.
+
+What all this still is not: parts are text labels with no pictures; nothing costs anything or has to be unlocked; there is no undo; you cannot stand on an item; a second building cannot be started at an angle to the first; and an item is not yet one of the base's operations, so it would not be saved or sent to another player. The list of parts was chosen by what models were to hand, not designed.
 
 ## Subnautica 2's controls, and ours
 

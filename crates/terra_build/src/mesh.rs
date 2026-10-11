@@ -26,6 +26,8 @@ const LIGHT: [f32; 3] = [1.0, 0.86, 0.62];
 
 /// Height of the coloured band at the foot of every outside wall.
 const BAND_HEIGHT_M: f32 = 0.5;
+/// Half the thickness of an interior wall.
+const PARTITION_HALF_M: f32 = 0.06;
 /// How far the parapet rises above the roof it surrounds.
 const PARAPET_RISE_M: f32 = 0.32;
 
@@ -158,6 +160,73 @@ pub(crate) fn build(base: &Base) -> BaseMesh {
         }
         if face.side == Side::Up {
             ceiling_light(&mut mesh, &frame);
+        }
+    }
+    // Interior walls: a slab with some thickness, so it reads as a wall from both sides,
+    // with the same openings an outside wall can have.
+    for (face, panel) in base.partitions() {
+        let frame = Frame::of(face);
+        let whole = frame.whole();
+        let opening = match panel {
+            Panel::Solid => None,
+            Panel::Window {
+                left,
+                right,
+                sill,
+                top,
+            } => Some(Rect {
+                left,
+                right: frame.width - right,
+                bottom: sill,
+                top: frame.height - top,
+            }),
+            Panel::Door => {
+                let side = (frame.width - DOOR_WIDTH_M) * 0.5;
+                Some(Rect {
+                    left: side,
+                    right: frame.width - side,
+                    bottom: 0.0,
+                    top: DOOR_HEIGHT_M,
+                })
+            }
+        };
+        let strips = match opening {
+            None => vec![whole],
+            Some(hole) => vec![
+                Rect {
+                    right: hole.left,
+                    ..whole
+                },
+                Rect {
+                    left: hole.right,
+                    ..whole
+                },
+                Rect {
+                    left: hole.left,
+                    right: hole.right,
+                    top: hole.bottom,
+                    ..whole
+                },
+                Rect {
+                    left: hole.left,
+                    right: hole.right,
+                    bottom: hole.top,
+                    ..whole
+                },
+            ],
+        };
+        for strip in strips.into_iter().filter(|strip| !strip.is_empty()) {
+            frame.block(
+                &mut mesh.structure,
+                strip,
+                -PARTITION_HALF_M,
+                PARTITION_HALF_M,
+                INNER_WALL,
+            );
+        }
+        if let (Some(hole), Panel::Window { .. }) = (opening, panel) {
+            mesh.glass
+                .quad(frame.corners(hole, false), frame.normal, GLASS);
         }
     }
     // Where one tile sits on another there is a floor between them: the ceiling of the
@@ -618,6 +687,21 @@ mod tests {
             assert!(p.y >= -1e-4 && p.y <= STOREY_M + 0.7);
             assert!(p.z >= -0.2 && p.z <= 3.0 * TILE_M + 0.2);
         }
+    }
+
+    #[test]
+    fn an_interior_wall_is_drawn_with_its_opening() {
+        let mut base = room();
+        let plain = base.mesh().structure.triangle_count();
+        let wall = Face::new(IVec3::new(0, 0, 1), Side::East);
+        base.apply(BuildOp::SetPartition(wall, Some(Panel::Solid)));
+        // One slab: six sides, two triangles each.
+        assert_eq!(base.mesh().structure.triangle_count(), plain + 12);
+        base.apply(BuildOp::SetPartition(wall, Some(Panel::Door)));
+        // A doorway leaves three slabs: one each side and one over it.
+        assert_eq!(base.mesh().structure.triangle_count(), plain + 36);
+        base.apply(BuildOp::SetPartition(wall, Some(Panel::WINDOW)));
+        assert_eq!(base.mesh().glass.triangle_count(), 2);
     }
 
     #[test]

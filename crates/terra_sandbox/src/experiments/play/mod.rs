@@ -145,17 +145,33 @@ fn spawn(
     ));
 }
 
+/// Takes the mouse on a click and gives it back on Esc, or when the window is no longer
+/// the one in front.
+///
+/// Windows has no way to lock the pointer in place, only to fence it into the window, and
+/// drops that fence whenever another window takes over. So while the game has the mouse
+/// it also puts the pointer back in the middle of the window every frame, and it lets go
+/// properly the moment the window loses focus instead of believing a fence that is gone.
 fn capture_mouse(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut cursor: Single<&mut CursorOptions>,
+    window: Single<(&mut Window, &mut CursorOptions)>,
 ) {
-    if keys.just_pressed(KeyCode::Escape) {
+    let (mut window, mut cursor) = window.into_inner();
+    let captured = cursor.grab_mode != CursorGrabMode::None;
+    if captured && (keys.just_pressed(KeyCode::Escape) || !window.focused) {
         cursor.grab_mode = CursorGrabMode::None;
         cursor.visible = true;
-    } else if mouse.just_pressed(MouseButton::Left) && cursor.grab_mode == CursorGrabMode::None {
-        cursor.grab_mode = CursorGrabMode::Locked;
+    } else if !captured && window.focused && mouse.just_pressed(MouseButton::Left) {
+        cursor.grab_mode = if cfg!(target_os = "windows") {
+            CursorGrabMode::Confined
+        } else {
+            CursorGrabMode::Locked
+        };
         cursor.visible = false;
+    } else if captured {
+        let middle = window.size() * 0.5;
+        window.set_cursor_position(Some(middle));
     }
 }
 
