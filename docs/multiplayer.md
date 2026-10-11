@@ -1,6 +1,6 @@
 # Multiplayer and persistence
 
-Status: the approach and the scale are decided; how to reach the scale is not. The game is server-first (D51), and on 2026-10-10 the developers set the requirement at **a thousand concurrent players on one persistent server**, in a fully procedural world that is very optimised (D52). Nothing here is built or measured.
+Status: the approach and the scale are decided; how to reach the scale is not. The game is server-first (D51), and on 2026-10-10 the developers set the number to build toward at **a thousand concurrent players on one persistent server**, in a fully procedural world that is very optimised (D52). It is a guide for decisions as we go, not a launch promise. Nothing here is built or measured.
 
 ## A thousand
 
@@ -81,7 +81,7 @@ That keeps a large persistent world possible without paying for all of it now. W
 
 ## Open questions
 
-1. **Answered: a thousand is a requirement** (D52). Still open: by when. "Must work at launch" and "must be what the architecture is built for" lead to different orders of work.
+1. **Answered: a thousand is what we build toward** (D52). It is there to make the right choice obvious as each thing is built, not as a promise for a date. So every design is asked "does this still work with a thousand players?", and nobody builds the thousand-player server before there is a game to put on it.
 2. **Who runs the servers?** Players running their own, as with Minecraft and Valheim, costs us a server program and documentation. Running official ones costs money and ongoing attention.
 3. **Friends or strangers?** A private server for a community is close to large co-op. A public one needs moderation, ownership rules and far more defence against cheating.
 4. **Does small co-op, hosted by a player, remain the main way to play?**
