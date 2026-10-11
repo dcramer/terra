@@ -52,12 +52,21 @@ PALETTE = {
     "Bone": (0.93, 0.88, 0.78),
     "Black": (0.14, 0.14, 0.17),
     "Accent": (0.90, 0.46, 0.17),
+    "Panel": (0.86, 0.85, 0.82),
+    "PanelDark": (0.36, 0.38, 0.44),
+    "Glow": (0.35, 0.85, 0.90),
+    "Visor": (0.20, 0.30, 0.42),
+    "Alien": (0.45, 0.30, 0.62),
+    "AlienLight": (0.72, 0.56, 0.86),
+    "AlienStem": (0.25, 0.36, 0.50),
 }
 
 # The game's light (experiments/look.rs): a warm sun, shadows lit by a cool sky.
 SUN_COLOUR = (1.0, 0.9, 0.76)
 SKY_COLOUR = (0.62, 0.68, 1.0)
 GROUND = (0.70, 0.66, 0.56)
+# Where the review light sits relative to each camera, in degrees round and up.
+SUN_YAW, SUN_PITCH = 55, 42
 
 
 def linear(c):
@@ -293,7 +302,7 @@ def render_views(model, path, people=(), beside=None, size=400, views=None):
         # Light each view from beside the camera, so no view of the sheet is all shadow.
         sun = bpy.data.objects.get("Sun")
         if sun:
-            ly, lp = y + math.radians(55), math.radians(42)
+            ly, lp = y + math.radians(SUN_YAW), math.radians(SUN_PITCH)
             towards = Vector((math.sin(ly) * math.cos(lp), -math.cos(ly) * math.cos(lp), math.sin(lp)))
             sun.rotation_euler = (-towards).to_track_quat("-Z", "Y").to_euler()
         tile = f"{path}.view{i}.png"
