@@ -34,15 +34,27 @@ The model:
 
 It has 13 tests and works through real key presses in the sandbox. One flaw found that way and fixed: at first a wall was "every hull face in the same plane", so pushing one room's wall dragged its neighbour's along. Tiles now belong to rooms.
 
+## The developers' verdict after playing it
+
+2026-10-10, once the experiment had a player and a builder tool (the sandbox's `play` experiment): a good start, but clearly not Subnautica 2's building system yet. What they named as missing:
+
+- **You select the part you want to build.** Ours has no parts to choose from. Its tool has three modes that act on whatever shape is already there.
+- **You can cycle through variants of a part.** Ours cycles one thing, a wall tile, through four window sizes and a door.
+- **"Similar and other things."** They did not list the rest. The account of the controls above is second-hand, so the list of what is missing should come from them or from playing the game, not from this note.
+
+So the model here, tiles and a generated hull, may survive, but the way a player builds with it has to be redesigned around choosing a part first. That is a design question and has no doc yet.
+
 ## What it does not do
 
+- **It is not built the way Subnautica 2 is built.** See the verdict above.
 - **It is boxy.** Flat walls on a square grid, which is the look the developers said they do not want. Rounding, chamfered edges and curved rooms are the obvious next question.
 - **Windows are rectangles**, cycled through four presets. No free shaping, portholes or rounded corners.
 - **Resizing loses windows.** A window lives on a wall tile, so when the wall moves the window is gone.
-- **No interiors**: no inner walls, furniture or machines.
+- **No interiors**: no inner walls, and no furniture or machines a player can place.
 - **No rules**: no cost, power, air, or hull strength.
-- **Nobody can walk through it.** The sandbox has a free camera and no player, so nothing about how a base feels from inside has been tested.
-- **One base, on a formula planet**, standing on legs, with no relationship to dug terrain.
+- **One base, on a formula planet**, standing on a foundation clear of the ground, with no relationship to dug terrain.
+
+Since this note was first written the base has gained trim, lamps, furniture placed by hand, and a player who can walk through it. None of that changes the list above.
 
 ## Sources
 
