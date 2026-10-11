@@ -7,14 +7,12 @@
 //! would need nothing new here.
 
 use super::Player;
+use super::controls::{Action, Controls, Settings};
 use super::dial::Dial;
 use super::flora::{Growth, Obstacles};
 use super::inventory::{Cuttable, Inventory};
 use super::work::Hold;
-use bevy::{
-    prelude::*,
-    window::{CursorGrabMode, CursorOptions},
-};
+use bevy::prelude::*;
 
 /// How far from the player a cutting tool reaches.
 const REACH_M: f32 = 5.0;
@@ -58,9 +56,7 @@ pub fn plugin(app: &mut App) {
 fn cut(
     mut commands: Commands,
     time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    cursor: Single<&CursorOptions>,
+    controls: Controls,
     dial: Res<Dial>,
     camera: Single<&GlobalTransform, With<Camera3d>>,
     mut growth: Query<
@@ -128,9 +124,7 @@ fn cut(
     };
     let aimed = on_view.or_else(in_front).map(|(found, _)| found);
 
-    let captured = cursor.grab_mode != CursorGrabMode::None;
-    let holding_button =
-        keys.pressed(KeyCode::KeyE) || (captured && mouse.pressed(MouseButton::Left));
+    let holding_button = controls.held(Action::Use);
     // Whatever was being cut and no longer is stops shaking and stands as it did.
     let still = match (aimed, holding_button) {
         (Some((entity, ..)), true) => Some(entity),
@@ -245,7 +239,7 @@ fn fall(
 }
 
 /// What the tool in hand would do right now, for the prompt.
-pub fn prompt(cutting: &Cutting, growth: &Query<&Growth>) -> String {
+pub fn prompt(cutting: &Cutting, growth: &Query<&Growth>, settings: &Settings) -> String {
     if cutting.progress().is_some() {
         return "Cutting      Let go to stop".to_string();
     }
@@ -255,7 +249,8 @@ pub fn prompt(cutting: &Cutting, growth: &Query<&Growth>) -> String {
         .and_then(|growth| growth.cut)
     {
         Some(cut) => format!(
-            "Hold left click  cut this      Gives {} {}",
+            "{}  cut this      Gives {} {}",
+            settings.hold(Action::Use),
             cut.gives.1,
             cut.gives.0.name()
         ),

@@ -20,11 +20,15 @@
 //!   Middle click       pick another of the item the view is on                 (or V)
 //!   1 to 9, 0          the first ten parts directly
 //!
+//! Those are the defaults. Every control but the wheel and the numbers can be set to
+//! another key or button in the options menu, and the prompts name whatever it is set to.
+//!
 //! Whatever the tool would do is shown in the world before you commit: the wall a push
 //! would move, the outline of a window, the footprint of a room, or a ghost of the item
 //! where it would stand.
 
 use super::catalogue::{self, Item, Kind, PARTS, Part};
+use super::controls::{Action, Controls, Settings, capitalised};
 use super::dial::Dial;
 use super::flora::Obstacles;
 use super::inventory::{self, Cost, Inventory, Raw, Tool};
@@ -355,7 +359,7 @@ fn setup(
 /// Reads the keys and the wheel: switching modes, cycling variants, and turning what is
 /// in hand. The builder only answers while it is the tool in hand.
 fn choose(
-    keys: Res<ButtonInput<KeyCode>>,
+    controls: Controls,
     scroll: Res<AccumulatedMouseScroll>,
     dial: Res<Dial>,
     inventory: Res<Inventory>,
@@ -375,15 +379,15 @@ fn choose(
         return;
     }
     if !builder.is_carrying() {
-        if keys.just_pressed(KeyCode::KeyQ) {
+        if controls.went_down(Action::TakeApart) {
             builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Remove)));
         }
-        if keys.just_pressed(KeyCode::KeyF) {
+        if controls.went_down(Action::MoveItems) {
             builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Move)));
         }
     }
-    builder.snapping = builder.snap != keys.pressed(KeyCode::AltLeft);
-    if keys.just_pressed(KeyCode::KeyX) {
+    builder.snapping = builder.snap != controls.held(Action::OffGrid);
+    if controls.went_down(Action::Grid) {
         builder.snap = !builder.snap;
         if builder.snap {
             builder.turn = (builder.turn / GRID_TURN).round() * GRID_TURN % 360.0;
@@ -392,16 +396,18 @@ fn choose(
     if builder.stowed {
         return;
     }
-    if keys.just_pressed(KeyCode::KeyR) && !builder.is_carrying() {
+    if controls.went_down(Action::NextKind) && !builder.is_carrying() {
         let (part, count) = (builder.part, builder.picked().variants());
-        let back = keys.pressed(KeyCode::ShiftLeft);
+        // With sprint held, the one before.
+        let back = controls.held(Action::Sprint);
         builder.variants[part] =
             (builder.variants[part] + if back { count - 1 } else { 1 }) % count;
     }
-    // One notch at a time, however the wheel reports it. Z and C stand in for the wheel.
+    // One notch at a time, however the wheel reports it. Turning left and right (Z and C)
+    // stand in for the wheel.
     let notch = |amount: f32| (amount > 0.0) as i32 - (amount < 0.0) as i32;
-    builder.wheel = notch(scroll.delta.y) + keys.just_pressed(KeyCode::KeyC) as i32
-        - keys.just_pressed(KeyCode::KeyZ) as i32;
+    builder.wheel = notch(scroll.delta.y) + controls.went_down(Action::TurnRight) as i32
+        - controls.went_down(Action::TurnLeft) as i32;
     if builder.wheel != 0 {
         if builder.item().is_some() {
             let step = if builder.snapping {
@@ -807,9 +813,7 @@ fn afford(site: Res<Site>, inventory: Res<Inventory>, mut builder: ResMut<Builde
 fn act(
     mut commands: Commands,
     time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    cursor: Single<&CursorOptions>,
+    controls: Controls,
     dial: Res<Dial>,
     planet: Res<Planet>,
     models: Res<Models>,
@@ -846,11 +850,8 @@ fn act(
         }
         return;
     }
-    // A click that only captured the mouse should not also build something.
-    let captured = cursor.grab_mode != CursorGrabMode::None;
-    let held = keys.pressed(KeyCode::KeyE) || (captured && mouse.pressed(MouseButton::Left));
-    let click =
-        keys.just_pressed(KeyCode::KeyE) || (captured && mouse.just_pressed(MouseButton::Left));
+    let held = controls.held(Action::Use);
+    let click = controls.went_down(Action::Use);
     if !held {
         builder.must_release = false;
     }
@@ -915,9 +916,7 @@ fn act(
     }
 
     // The middle button: another of whatever the view is on.
-    let copy =
-        keys.just_pressed(KeyCode::KeyV) || (captured && mouse.just_pressed(MouseButton::Middle));
-    if copy
+    if controls.went_down(Action::Copy)
         && !builder.is_carrying()
         && inventory.holding() == Some(Tool::Builder)
         && let Some(prop) = builder.viewed.and_then(|entity| props.get(entity).ok())
@@ -1525,9 +1524,9 @@ fn highlight(
 }
 
 /// What each button would do right now, for the prompt under the aiming mark.
-pub fn prompt(builder: &Builder) -> String {
+pub fn prompt(builder: &Builder, settings: &Settings) -> String {
     if builder.stowed {
-        return "Hold right mouse  build menu".to_string();
+        return format!("{}  build menu", settings.hold(Action::BuildMenu));
     }
     match builder.progress() {
         Some((_, true)) => return "Taking apart      Let go to stop".to_string(),
@@ -1540,73 +1539,95 @@ pub fn prompt(builder: &Builder) -> String {
             raw.name()
         );
     }
+    let hold = settings.hold(Action::Use);
+    let tap = capitalised(settings.key(Action::Use));
+    let next = settings.key(Action::NextKind);
     let action = match (&builder.picked().kind, builder.target) {
         (Kind::Reshape, Target::Wall(_)) if builder.pull => {
-            "Hold left click  pull the wall in      Scroll  push out instead"
+            format!("{hold}  pull the wall in      Scroll  push out instead")
         }
         (Kind::Reshape, Target::Wall(_)) => {
-            "Hold left click  push the wall out      Scroll  pull in instead"
+            format!("{hold}  push the wall out      Scroll  pull in instead")
         }
         (Kind::Window(_) | Kind::Door, Target::Wall(_) | Target::Edge { .. })
             if builder.run.is_empty() =>
         {
-            "The wall is not wide enough here"
+            "The wall is not wide enough here".to_string()
         }
         (Kind::Window(_), Target::Wall(_) | Target::Edge { .. }) => {
-            "Hold left click  cut this window      R  size"
+            format!("{hold}  cut this window      {next}  size")
         }
-        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) => "Hold left click  cut a door",
-        (Kind::Reshape, _) => "Aim at an outside wall",
-        (Kind::Window(_) | Kind::Door, _) => "Aim at a wall, outside or interior",
+        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) => format!("{hold}  cut a door"),
+        (Kind::Reshape, _) => "Aim at an outside wall".to_string(),
+        (Kind::Window(_) | Kind::Door, _) => "Aim at a wall, outside or interior".to_string(),
         (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
-            "Hold left click  build this wall      Scroll  turn      R  length"
+            format!("{hold}  build this wall      Scroll  turn      {next}  length")
         }
-        (Kind::Wall(_), Target::Edge { fits: false, .. }) => "Walls go indoors",
-        (Kind::Wall(_), _) => "Aim at a floor indoors",
+        (Kind::Wall(_), Target::Edge { fits: false, .. }) => "Walls go indoors".to_string(),
+        (Kind::Wall(_), _) => "Aim at a floor indoors".to_string(),
         (Kind::Room(_), Target::Ground { fits: false, .. }) => {
-            "The ground is too high here: only a foundation may go into it"
+            "The ground is too high here: only a foundation may go into it".to_string()
         }
-        (Kind::Room(_), Target::Ground { adds: false, .. }) => "That is all indoors already",
+        (Kind::Room(_), Target::Ground { adds: false, .. }) => {
+            "That is all indoors already".to_string()
+        }
         (Kind::Room(_), Target::Ground { .. }) => {
-            "Hold left click  build this room      Scroll  turn      R  size"
+            format!("{hold}  build this room      Scroll  turn      {next}  size")
         }
-        (Kind::Room(_), _) => "Aim at the ground, or across a room to extend it",
+        (Kind::Room(_), _) => "Aim at the ground, or across a room to extend it".to_string(),
         (Kind::Items(_) | Kind::Move, Target::Spot { blocked, .. }) => match blocked {
-            None if builder.is_carrying() => {
-                "Left click  put it down      Scroll  turn      Right click  put it back"
-            }
-            None => "Hold left click  build      Scroll  turn      R  next kind",
-            Some(Blocked::Structure) => "It would stick through a wall",
-            Some(Blocked::Item(_)) => "The outlined item is in the way",
-            Some(Blocked::Nature) => "A tree or a boulder is in the way",
-            Some(Blocked::Water) => "Not in the water",
+            None if builder.is_carrying() => format!(
+                "{tap}  put it down      Scroll  turn      {}  put it back",
+                capitalised(settings.key(Action::BuildMenu))
+            ),
+            None => format!("{hold}  build      Scroll  turn      {next}  next kind"),
+            Some(Blocked::Structure) => "It would stick through a wall".to_string(),
+            Some(Blocked::Item(_)) => "The outlined item is in the way".to_string(),
+            Some(Blocked::Nature) => "A tree or a boulder is in the way".to_string(),
+            Some(Blocked::Water) => "Not in the water".to_string(),
         },
-        (Kind::Items(_), _) => "Aim at a floor or at the ground nearby",
-        (Kind::Move, Target::Prop(_)) => "Left click  pick this up",
-        (Kind::Move, _) => "Aim at an item to move it      F  done",
-        (Kind::Remove, Target::Prop(_)) => "Hold left click  take this apart",
-        (Kind::Remove, Target::Edge { open: true, .. }) => "Hold left click  close this opening",
-        (Kind::Remove, Target::Edge { .. }) => "Hold left click  take this wall away",
-        (Kind::Remove, Target::Wall(_)) => "Hold left click  close this opening",
-        (Kind::Remove, _) => "Aim at an item, an interior wall, a window or a door      Q  done",
+        (Kind::Items(_), _) => "Aim at a floor or at the ground nearby".to_string(),
+        (Kind::Move, Target::Prop(_)) => format!("{tap}  pick this up"),
+        (Kind::Move, _) => format!(
+            "Aim at an item to move it      {}  done",
+            settings.key(Action::MoveItems)
+        ),
+        (Kind::Remove, Target::Prop(_)) => format!("{hold}  take this apart"),
+        (Kind::Remove, Target::Edge { open: true, .. }) => format!("{hold}  close this opening"),
+        (Kind::Remove, Target::Edge { .. }) => format!("{hold}  take this wall away"),
+        (Kind::Remove, Target::Wall(_)) => format!("{hold}  close this opening"),
+        (Kind::Remove, _) => format!(
+            "Aim at an item, an interior wall, a window or a door      {}  done",
+            settings.key(Action::TakeApart)
+        ),
     };
     match builder.price {
         Some((cost, times)) if times > 0 => {
             format!("{action}      Costs {}", inventory::describe(cost, times))
         }
-        _ => action.to_string(),
+        _ => action,
     }
 }
 
 /// The keys worth knowing while a part is in hand.
-pub fn legend(builder: &Builder) -> &'static str {
+pub fn legend(builder: &Builder, settings: &Settings) -> String {
     if builder.stowed {
-        ""
-    } else if builder.snap {
-        "Q  take apart     F  move     X  grid off     Alt  off the grid     Middle click  copy"
-    } else {
-        "Q  take apart     F  move     X  grid on     Alt  on the grid     Middle click  copy"
+        return String::new();
     }
+    let key = |action| capitalised(settings.key(action));
+    let (grid, held) = if builder.snap {
+        ("grid off", "off the grid")
+    } else {
+        ("grid on", "on the grid")
+    };
+    format!(
+        "{}  take apart     {}  move     {}  {grid}     {}  {held}     {}  copy",
+        key(Action::TakeApart),
+        key(Action::MoveItems),
+        key(Action::Grid),
+        key(Action::OffGrid),
+        key(Action::Copy),
+    )
 }
 
 /// Whether the tool is waiting for the player to take the mouse.

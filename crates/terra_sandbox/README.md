@@ -25,7 +25,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--clean` | Leave the frame-time readout off the screen, for pictures |
 | `--bench` | Measure frame times with vsync off, print them, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
-| `--press <key>@<frame>` | Press a letter, digit or F1 to F12 on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. |
+| `--press <key>@<frame>` | Press a letter, digit, F1 to F12 or `esc` on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
 
 ## Controls
@@ -66,7 +66,8 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 
 | Input | Action |
 |---|---|
-| Click | Capture the mouse; Esc releases it |
+| Click | Capture the mouse |
+| Esc | The options menu, which gives the mouse back. Esc again returns to the game. |
 | Mouse | Look |
 | W A S D, Shift, Space | Move, sprint, jump |
 | 1 to 6 | Pick a slot of the action bar. What is in it is the tool in hand. |
@@ -83,6 +84,8 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 | Hold Alt | The opposite of the grid setting, while held |
 | Middle click | Pick another of the item you are looking at. V does the same. |
 | F3 | More frame timings: per render pass, entities, memory ([development.md](../../docs/development.md#logs-and-the-frame-time-readout)) |
+
+Those are the defaults. In the options menu (Esc) any of them can be set to another key or mouse button, except Esc, the numbers, the wheel and F1 to F3; click a control, then press its new key, or Backspace to clear it. The menu also has mouse look speed, invert look, field of view, full screen and vsync. Every change is saved at once to `settings.txt` in the player's settings folder (`~/Library/Application Support/Terra` on macOS, `%APPDATA%\Terra` on Windows, `~/.config/terra` on Linux). Delete it to go back to the defaults. Scripted runs never read or write it, so a script does the same thing on every machine.
 
 The buttons follow Subnautica 2 where we could confirm what it does: right mouse is the build menu, left mouse builds, and taking apart and moving are modes on Q and F. The rest is the usual habit of building games. See [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
 

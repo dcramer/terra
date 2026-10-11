@@ -36,7 +36,7 @@ usage: terra_sandbox [options]
   --clean               leave the frame-time readout off the screen, for pictures
   --bench               measure frame times with vsync off, print them, then exit
   --settle <frames>     frames to run before capturing or measuring (default 120)
-  --press <key>@<frame> press a letter, digit or F1 to F12 on a given frame, for scripted runs;
+  --press <key>@<frame> press a letter, digit, F1 to F12 or esc on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
@@ -156,7 +156,7 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
     ];
     let problem = || {
         format!(
-            "--press wants a letter, digit or F1 to F12 and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
+            "--press wants a letter, digit, F1 to F12 or esc and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
         )
     };
     let (key, frames) = text.split_once('@').ok_or_else(problem)?;
@@ -192,6 +192,7 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
         .and_then(|number| FUNCTIONS.get(number.checked_sub(1)?));
     let code = match function {
         Some(&code) => code,
+        None if key.eq_ignore_ascii_case("esc") => KeyCode::Escape,
         None => {
             let symbol = key
                 .chars()
@@ -400,6 +401,8 @@ mod tests {
         assert_eq!(held.presses, [(KeyCode::KeyW, 40, 90)]);
         let function = parse(&["--press", "F3@10"]).unwrap();
         assert_eq!(function.presses, [(KeyCode::F3, 10, 11)]);
+        let escape = parse(&["--press", "esc@10"]).unwrap();
+        assert_eq!(escape.presses, [(KeyCode::Escape, 10, 11)]);
         assert!(parse(&["--press", "F13@10"]).is_err());
         assert!(options.scripted());
         assert!(!parse(&[]).unwrap().scripted());

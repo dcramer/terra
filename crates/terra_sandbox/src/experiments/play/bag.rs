@@ -2,11 +2,14 @@
 //! the panel that Tab opens.
 //!
 //!   1 to 6        pick a slot of the action bar; whatever is in it is in hand
-//!   Tab           open and close the inventory (I does the same)
+//!   Tab           open and close the inventory (I does the same; either can be changed)
 //!   In the inventory, point at a tool and press 1 to 6 to put it in that slot.
 
+use super::controls::{Action, Settings};
 use super::dial::Dial;
+use super::grab_mouse;
 use super::inventory::{BAR_SLOTS, Inventory, Raw, Tool};
+use super::options::OptionsMenu;
 use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
@@ -194,27 +197,24 @@ fn setup(mut commands: Commands, inventory: Res<Inventory>) {
 /// Opens and closes the inventory, picks slots of the bar, and puts tools on it.
 fn use_keys(
     keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    settings: Res<Settings>,
+    menu: Res<OptionsMenu>,
     dial: Res<Dial>,
     listed: Query<(&Interaction, &Listed)>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut inventory: ResMut<Inventory>,
 ) {
+    if menu.open {
+        return;
+    }
     let (window, mut cursor) = window.into_inner();
-    if keys.just_pressed(KeyCode::Tab) || keys.just_pressed(KeyCode::KeyI) {
+    let captured = cursor.grab_mode != CursorGrabMode::None;
+    if settings.went_down(Action::Inventory, &keys, &mouse, captured) {
         inventory.open = !inventory.open;
         // The pointer is needed to point at things in the inventory, and goes back to
         // steering the view when it closes.
-        if inventory.open {
-            cursor.grab_mode = CursorGrabMode::None;
-            cursor.visible = true;
-        } else if window.focused {
-            cursor.grab_mode = if cfg!(target_os = "windows") {
-                CursorGrabMode::Confined
-            } else {
-                CursorGrabMode::Locked
-            };
-            cursor.visible = false;
-        }
+        grab_mouse(&mut cursor, !inventory.open && window.focused);
     }
     // While the dial is open the numbers pick parts from it instead.
     if dial.open || dial.closed_by_key {

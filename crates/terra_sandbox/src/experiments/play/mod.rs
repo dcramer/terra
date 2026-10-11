@@ -5,9 +5,10 @@
 //! and let through its doors. The figure carries one tool, a builder: pick a part from
 //! its dial, and build it where you aim.
 //!
-//!   Mouse         look (click to capture the mouse, Esc to release it)
+//!   Mouse         look (click to capture the mouse)
 //!   W A S D       move          Shift   sprint       Space   jump
-//!   Hold Q        the dial of parts to build; the rest of the builder is in `tool.rs`
+//!   Hold right    the dial of parts to build; the rest of the builder is in `tool.rs`
+//!   Esc           options, where every control can be set to another key
 //!   F3            more frame timings
 //!
 //! The scene around the player is in the modules here: `scene` is the light and air,
@@ -16,12 +17,14 @@
 
 mod bag;
 mod catalogue;
+mod controls;
 mod dial;
 mod figure;
 mod flora;
 mod harvest;
 mod inventory;
 mod models;
+mod options;
 mod props;
 mod scene;
 mod tool;
@@ -36,6 +39,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
+use controls::{Action, Controls};
 use std::ops::Sub;
 use terra_build::Walker;
 
@@ -85,11 +89,12 @@ pub fn plugin(app: &mut App) {
     dial::plugin(app);
     bag::plugin(app);
     harvest::plugin(app);
+    options::plugin(app);
     app.insert_resource(DrivenByPlayer)
         .add_systems(PostStartup, spawn)
         .add_systems(
             Update,
-            (capture_mouse, dial::steer, look, walk)
+            (options::toggle, capture_mouse, dial::steer, look, walk)
                 .chain()
                 .before(tool::Acting),
         )
@@ -136,38 +141,45 @@ fn spawn(
     ));
 }
 
-/// Takes the mouse on a click and gives it back on Esc, or when the window is no longer
-/// the one in front.
+/// Takes the mouse for the game, or gives it back.
 ///
-/// Windows has no way to lock the pointer in place, only to fence it into the window, and
-/// drops that fence whenever another window takes over. So while the game has the mouse
-/// it also puts the pointer back in the middle of the window every frame, and it lets go
-/// properly the moment the window loses focus instead of believing a fence that is gone.
+/// Windows has no way to lock the pointer in place, only to fence it into the window; see
+/// `capture_mouse` for what that costs.
+fn grab_mouse(cursor: &mut CursorOptions, take: bool) {
+    cursor.grab_mode = match take {
+        false => CursorGrabMode::None,
+        true if cfg!(target_os = "windows") => CursorGrabMode::Confined,
+        true => CursorGrabMode::Locked,
+    };
+    cursor.visible = !take;
+}
+
+/// Takes the mouse on a click and gives it back when the window is no longer the one in
+/// front. Esc gives it back too, by opening the options menu (`options::toggle`).
+///
+/// Windows drops its fence round the pointer whenever another window takes over. So while
+/// the game has the mouse it also puts the pointer back in the middle of the window every
+/// frame, and it lets go properly the moment the window loses focus instead of believing
+/// a fence that is gone.
 ///
 /// macOS does lock the pointer, and moving the pointer there undoes the lock, so on a Mac
 /// it is left where it is.
 fn capture_mouse(
     mouse: Res<ButtonInput<MouseButton>>,
-    keys: Res<ButtonInput<KeyCode>>,
     inventory: Res<inventory::Inventory>,
+    menu: Res<options::OptionsMenu>,
     window: Single<(&mut Window, &mut CursorOptions)>,
 ) {
-    // While the inventory is open the pointer is for pointing at things in it.
-    if inventory.open {
+    // While the inventory or the options are open, the pointer is for pointing at them.
+    if inventory.open || menu.open {
         return;
     }
     let (mut window, mut cursor) = window.into_inner();
     let captured = cursor.grab_mode != CursorGrabMode::None;
-    if captured && (keys.just_pressed(KeyCode::Escape) || !window.focused) {
-        cursor.grab_mode = CursorGrabMode::None;
-        cursor.visible = true;
+    if captured && !window.focused {
+        grab_mouse(&mut cursor, false);
     } else if !captured && window.focused && mouse.just_pressed(MouseButton::Left) {
-        cursor.grab_mode = if cfg!(target_os = "windows") {
-            CursorGrabMode::Confined
-        } else {
-            CursorGrabMode::Locked
-        };
-        cursor.visible = false;
+        grab_mouse(&mut cursor, true);
     } else if captured && !cfg!(target_os = "macos") {
         let middle = window.size() * 0.5;
         window.set_cursor_position(Some(middle));
@@ -176,6 +188,7 @@ fn capture_mouse(
 
 fn look(
     motion: Res<AccumulatedMouseMotion>,
+    settings: Res<controls::Settings>,
     cursor: Single<&CursorOptions>,
     dial: Res<dial::Dial>,
     player: Single<&Transform, With<Player>>,
@@ -184,8 +197,10 @@ fn look(
     let up = player.translation.normalize();
     // While the dial is open the mouse steers it, not the view.
     if cursor.grab_mode != CursorGrabMode::None && !dial.open {
-        view.forward = Quat::from_axis_angle(up, -motion.delta.x * LOOK_SPEED) * view.forward;
-        view.pitch = (view.pitch - motion.delta.y * LOOK_SPEED).clamp(-1.2, 1.2);
+        let speed = LOOK_SPEED * settings.look_speed;
+        let rise = if settings.invert_look { -1.0 } else { 1.0 };
+        view.forward = Quat::from_axis_angle(up, -motion.delta.x * speed) * view.forward;
+        view.pitch = (view.pitch - rise * motion.delta.y * speed).clamp(-1.2, 1.2);
     }
     // "Level" changes as the player walks round the planet.
     view.forward = view
@@ -196,7 +211,7 @@ fn look(
 
 fn walk(
     time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
+    controls: Controls,
     planet: Res<Planet>,
     site: Res<Site>,
     view: Res<View>,
@@ -211,11 +226,11 @@ fn walk(
     let up = feet.normalize();
     let right = view.forward.cross(up);
 
-    let pressed = |key: KeyCode| f32::from(keys.pressed(key));
-    let wish = (view.forward * (pressed(KeyCode::KeyW) - pressed(KeyCode::KeyS))
-        + right * (pressed(KeyCode::KeyD) - pressed(KeyCode::KeyA)))
+    let held = |action| f32::from(controls.held(action));
+    let wish = (view.forward * (held(Action::Forward) - held(Action::Back))
+        + right * (held(Action::Right) - held(Action::Left)))
     .normalize_or_zero();
-    let top_speed = if keys.pressed(KeyCode::ShiftLeft) {
+    let top_speed = if controls.held(Action::Sprint) {
         SPRINT_SPEED
     } else {
         JOG_SPEED
@@ -253,7 +268,7 @@ fn walk(
     }
 
     player.rising -= GRAVITY * dt;
-    if player.on_ground && keys.just_pressed(KeyCode::Space) {
+    if player.on_ground && controls.went_down(Action::Jump) {
         player.rising = JUMP_SPEED;
     }
     target += up * player.rising * dt;

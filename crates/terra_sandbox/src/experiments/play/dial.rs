@@ -1,18 +1,17 @@
 //! The dial: a ring of the parts the builder can build, opened by holding the right mouse
-//! button. Move the mouse toward a part and let go to pick it. Under the aiming mark, a line says
-//! what is picked and what each button would do.
+//! button, or whatever the build menu is set to. Move the mouse toward a part and let go
+//! to pick it. Under the aiming mark, a line says what is picked and what each button
+//! would do.
 
 use super::catalogue::PARTS;
+use super::controls::{Action, Controls, Settings};
 use super::flora::Growth;
 use super::harvest::{self, Cutting};
 use super::inventory::{Inventory, Tool};
+use super::options::OptionsMenu;
 use super::tool::{self, Builder};
 use crate::shell::Options;
-use bevy::{
-    input::mouse::AccumulatedMouseMotion,
-    prelude::*,
-    window::{CursorGrabMode, CursorOptions},
-};
+use bevy::{input::mouse::AccumulatedMouseMotion, prelude::*, window::CursorOptions};
 
 const DIAL_SIZE: f32 = 650.0;
 /// How far from the middle the parts' names sit.
@@ -239,29 +238,26 @@ fn setup(mut commands: Commands) {
         });
 }
 
-/// Opens the dial while the right mouse button is held, follows the mouse round it, and
+/// Opens the dial while the build menu's button is held, follows the mouse round it, and
 /// picks the part pointed at when the button is let go. A tap that points at nothing is
 /// a cancel instead. Runs before the player's view turns, which it holds still while the
 /// dial is open.
 pub fn steer(
     time: Res<Time<Real>>,
     keys: Res<ButtonInput<KeyCode>>,
-    mouse: Res<ButtonInput<MouseButton>>,
+    controls: Controls,
     motion: Res<AccumulatedMouseMotion>,
-    cursor: Single<&CursorOptions>,
     inventory: Res<Inventory>,
+    menu: Res<OptionsMenu>,
     mut dial: ResMut<Dial>,
     mut builder: ResMut<Builder>,
 ) {
     // The dial belongs to the builder, and is put away with it.
-    if inventory.open || inventory.holding() != Some(Tool::Builder) {
+    if inventory.open || menu.open || inventory.holding() != Some(Tool::Builder) {
         dial.open = false;
         return;
     }
-    // The mouse belongs to the game only once it has been captured. B is the same menu
-    // from the keyboard.
-    let captured = cursor.grab_mode != CursorGrabMode::None;
-    let held = keys.pressed(KeyCode::KeyB) || (captured && mouse.pressed(MouseButton::Right));
+    let held = controls.held(Action::BuildMenu);
     // After a number has picked a part, the button has to be let go before it opens again.
     dial.closed_by_key &= held;
     if !dial.open {
@@ -273,7 +269,7 @@ pub fn steer(
                 open: true,
                 ..default()
             };
-        } else if captured && mouse.just_pressed(MouseButton::Right) {
+        } else if controls.went_down(Action::BuildMenu) {
             // Nothing to choose while carrying something: the button only puts it back.
             builder.cancel = true;
         }
@@ -318,6 +314,7 @@ pub fn steer(
 
 fn draw(
     dial: Res<Dial>,
+    settings: Res<Settings>,
     builder: Res<Builder>,
     inventory: Res<Inventory>,
     cutting: Res<Cutting>,
@@ -413,14 +410,17 @@ fn draw(
         if tool::waiting(&cursor, &options) && !inventory.open {
             "Click to take control".to_string()
         } else if inventory.open {
-            "Tab  close the inventory".to_string()
+            format!("{}  close the inventory", settings.key(Action::Inventory))
         } else if dial.open {
             "Move the mouse to a part and let go, or press its number".to_string()
         } else {
             match holding {
-                Some(Tool::Builder) => tool::prompt(&builder),
-                Some(Tool::Cutter) => harvest::prompt(&cutting, &growth),
-                None => "1 to 6  pick a tool      Tab  inventory".to_string(),
+                Some(Tool::Builder) => tool::prompt(&builder, &settings),
+                Some(Tool::Cutter) => harvest::prompt(&cutting, &growth, &settings),
+                None => format!(
+                    "1 to 6  pick a tool      {}  inventory",
+                    settings.key(Action::Inventory)
+                ),
             }
         },
     );
@@ -429,7 +429,7 @@ fn draw(
         if dial.open || inventory.open || holding != Some(Tool::Builder) {
             String::new()
         } else {
-            tool::legend(&builder).to_string()
+            tool::legend(&builder, &settings)
         },
     );
 }

@@ -72,12 +72,9 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
     );
 }
 
-fn style_camera(mut commands: Commands, camera: Single<(Entity, &mut Projection), With<Camera3d>>) {
-    let (camera, mut projection) = camera.into_inner();
-    // A little wider than the default, which suits a view from behind a figure.
-    if let Projection::Perspective(perspective) = &mut *projection {
-        perspective.fov = 55f32.to_radians();
-    }
+/// The field of view is a setting, put into effect by `options::apply`.
+fn style_camera(mut commands: Commands, camera: Single<Entity, With<Camera3d>>) {
+    let camera = *camera;
     commands.entity(camera).insert((
         // Ambient occlusion works on single samples, so edges are smoothed afterwards.
         Msaa::Off,
