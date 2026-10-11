@@ -160,10 +160,10 @@ function rows(users, ms) {
   });
 }
 
-// Count up from zero on load.
-roll(cost, 0, +cost.dataset.n, 1600);
-if (used) roll(used, 0, +used.dataset.n, 1600);
-if (people) for (const amount of people.querySelectorAll(".amount")) roll(amount, 0, +amount.dataset.n, 1600);
+// Show the numbers as they are on load; only later changes roll.
+hold(cost, +cost.dataset.n);
+if (used) hold(used, +used.dataset.n);
+if (people) for (const amount of people.querySelectorAll(".amount")) hold(amount, +amount.dataset.n);
 
 let busy = false;
 async function refresh() {
