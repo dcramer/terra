@@ -171,7 +171,7 @@ Technical, for reference. None of it is started except where noted.
 
 ## Not covered here
 
-Terraforming, progression, creatures and combat. On combat, the developers like Enshrouded's (D85); whether we have fighting by reflexes at all sits against D3, which answers threats with automation. The worlds are in [worlds.md](worlds.md) and the survival attributes in [survival.md](survival.md). The developers have said that gameplay is not right away.
+Terraforming, progression, creatures and combat. On combat, the developers like Enshrouded's (D85); threats are answered by holding bases and outposts with recruited defenders (D90). The worlds are in [worlds.md](worlds.md) and the survival attributes in [survival.md](survival.md). The developers have said that gameplay is not right away.
 
 ## A first walk-around
 

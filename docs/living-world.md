@@ -59,7 +59,7 @@ Proposed loops, replacing those in [gameplay.md](gameplay.md):
 | Session | Answer something the world is doing: clear a pooling place before it surges, defend a settlement, follow a migration, reach a new portal. Come back stronger. |
 | Long | Climb the ranks; hold a region; reach other worlds, each harder than the last. |
 
-**Why build?** In Enshrouded you build a home, and the people you rescue come to live and work in it. Proposed for us: a base is a **hold** on the world. It is where you make things, where recruited NPCs live and work, and a place the magic around you is kept down. Bigger holds take on bigger stretches of wild.
+**Why build?** From the developers, 2026-10-11 (D90, Leaning): part of survival is establishing bases and outposts; recruited NPCs might help defend them, and built defences might come later. In Enshrouded you build a home, and the people you rescue come to live and work in it. Proposed for us: a base is a **hold** on the world. It is where you make things, where recruited NPCs live and work, and a place the magic around you is kept down. Bigger holds take on bigger stretches of wild.
 
 **Progression in two layers**, which keeps both what the developers have said (D88) and the books:
 
@@ -78,13 +78,13 @@ What the world is like and what is going on. These can combine; the choice is th
 | **B. Something is wrong** | Something is spreading: a blight, an invasion from elsewhere, portals opening where they should not. | Enshrouded's Shroud, the books' larger threats | A long arc and a reason worlds get harder |
 | **C. You came from elsewhere** | You arrived from another world, as the books' hero did, and see this one fresh. | The books' start; most LitRPG | Explains the skills and ranks on screen as part of the world, and lets the game be funny |
 
-My recommendation: **A as the everyday, B as the long arc**, with C as an option for the opening. A living world needs a daily life worth joining, and a slow-building threat gives sessions a direction without fixing a story the procedural worlds cannot tell.
+The developers ruled out C on 2026-10-11 and find A and B interesting. My recommendation stands: **A as the everyday, B as the long arc**. A living world needs a daily life worth joining, and a slow-building threat gives sessions a direction without fixing a story the procedural worlds cannot tell.
 
 ## What it changes
 
 If adopted, these need revisiting:
 
-- **Tone (D3).** Threats "answered with automation" fits less well with real-time combat (D85). A likely rewording: answered by building and by fighting, with a base that holds without you.
+- **Tone (D3).** Done: the automation half is replaced by D90, bases and outposts defended by recruits.
 - **Survival (D61).** Lighter: health, stamina, hunger, thirst; oxygen only as breath under water (D74).
 - **Equipment (D64).** Armour, clothing and packs, not a space suit. The sandbox's placeholder suit, helmet and tank would change.
 - **Hostile life ([gameplay.md](gameplay.md)).** Was driven by terraforming; would be driven by magic.
@@ -97,13 +97,13 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 
 ## Questions for the developers
 
-1. **The premise.** A, B, C, or a mix?
+1. Answered in part: **the premise.** Not C; A and B are interesting. Both, or one?
 2. **Magic as the world's weather.** Is pooled magic making monsters the engine you want, or should monsters simply live in places?
 3. **How much story?** Hand-written quests and characters, or only what comes out of the world's systems?
-4. **Combat.** As central as Enshrouded's, or one way among several to deal with things? This settles D3.
+4. **Combat.** As central as Enshrouded's, or one way among several to deal with things?
 5. **Essences.** Take the books' system closely (a few essences, a confluence, abilities that rank up), or loosely?
 6. **Ranks.** For players only, or for monsters, places and portals too?
-7. **Settlements.** Can they be overrun and lost? Can players found them?
+7. **Settlements.** Can they be overrun and lost? Can players found them? Bases and outposts are part of survival (D90); is an outpost with recruits living in it a settlement?
 8. **Who are you?** A newcomer, a native, someone from another world?
 9. **Death.** Still no fail state (D18), with what you carry dropped where you fell (D84)?
 10. **A thousand players.** In a living world, what do many players do together that a few cannot: defend a city, hold a frontier, answer a surge?

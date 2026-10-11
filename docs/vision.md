@@ -16,7 +16,7 @@ Draft. A feature that serves none of these is cut.
 
 1. **The world is the main character.** Persistent worlds, each unlike the others, that visibly change because of you.
 2. **Always getting better.** Many skills, gained by doing and improved by doing more, so there is always a sense of progression (D88). (Replaces "dead to alive", parked with terraforming, D60.)
-3. **Automate survival.** Every chore starts manual and ends as infrastructure.
+3. **Hold your ground.** Survival means establishing bases and outposts and keeping them, with recruited people to help defend them (D90).
 4. **Local action, global consequence.** You change a place; places add up to a planet.
 5. **Seamless, and together.** No loading screens within a world. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
 
@@ -32,7 +32,7 @@ Draft. A feature that serves none of these is cut.
 | Green Hell | The environment as the enemy | The intensity |
 | SimEarth | A coupled planetary simulation | Abstract god-game view |
 | Spore | Life arriving in stages, simple to complex | Creature editor |
-| Factorio | Automation as the answer to threats; your own output provokes the enemy | 2D factory focus |
+| Factorio | Your own output provokes the enemy; perhaps built defences later (D90) | 2D factory focus; automation as the main answer to threats |
 | Enshrouded | Probably one of our two biggest inspirations, with Subnautica (D85). Voxels done really well: ground you dig and reshape, and buildings of small voxel pieces that join and blend seamlessly. Its look and art. Its building, "top notch". Its combat and its movement. See [research/enshrouded.md](../research/enshrouded.md). | Not yet said. Its combat is fought by reflexes, where our threats are answered by building (D3) |
 | *He Who Fights With Monsters* (books) | Realms rather than a solar system (D87); many skills that grow with use (D88); cultures to find (D86) | Not yet said |
 | Subnautica | Probably one of our two biggest inspirations, with Enshrouded (D85). Base building (D48), the build menu (D67), the inventory (D84), tools you carry | Not yet said |

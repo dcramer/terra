@@ -48,9 +48,9 @@ The developers floated a **terraform rating** for each such planet (D79, Leaning
 
 The developers want NPCs (D70); what they are is open. People who trade, give work or tell the story? Machines that help? Survivors on other planets? The developers have said, with "maybe", that you might recruit NPCs from the cultures found on other planets (D86, [worlds.md](worlds.md#breathable-planets-and-a-setting-per-planet)). Each kind asks something different of the engine: a figure that stands and talks is cheap, one that walks a planet and works is close to the cost of a creature (see Hostile life).
 
-## Automation and defence
+## Bases, outposts and defence
 
-Every threat has a built answer: oxygen lines, heaters, perimeter walls, turrets, flora suppressors. A well-built base survives without attention. There is no fail state; neglect costs you progress and equipment.
+From the developers (D90, Leaning): part of survival is establishing bases and outposts and holding them. Recruited NPCs help defend them; built defences, automation, may come later. There is no fail state (D18); neglect costs you progress and equipment. See [living-world.md](living-world.md).
 
 ## Harvesting
 

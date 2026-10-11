@@ -9,7 +9,7 @@ Working title: **Terra**. A multiplayer survival sandbox across a dozen or so pr
 | [worlds.md](worlds.md) | The worlds: themes, cultures, terrain, caverns, water, foliage, gravity, the starter planet, portals between them. |
 | [survival.md](survival.md) | Draft: the survival attributes (health, stamina, oxygen, hunger, thirst) and how they vary by world. |
 | [progression.md](progression.md) | Draft: player skills, the research system, and how things are unlocked. Mostly open questions. |
-| [gameplay.md](gameplay.md) | Core loops, survival needs, hostile life, automation; terraforming phases, parked. |
+| [gameplay.md](gameplay.md) | Core loops, survival needs, hostile life, bases and defence; terraforming phases, parked. |
 | [living-world.md](living-world.md) | Draft: the direction being considered, a living world in the spirit of Enshrouded and *He Who Fights With Monsters*. Proposals and questions for the developers. |
 | [player.md](player.md) | Draft: the player's body, tools, equipment, backpack and action bar, acting on the world, building. Open questions for the developers. |
 | [items.md](items.md) | Items and containers: equipment, backpack, action bar and storage, on a Subnautica baseline, and how they work in code. |
