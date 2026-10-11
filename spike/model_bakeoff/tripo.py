@@ -144,6 +144,7 @@ def main():
     ap.add_argument("--image-model", default="chat_image_2")
     ap.add_argument("--quality", default="medium")
     ap.add_argument("--ref", action="append", default=[], help="a reference image for the concept")
+    ap.add_argument("--raw", action="store_true", help="use the subject as the whole prompt, without the house brief")
     ap.add_argument("--model", default="P1-20260311")
     ap.add_argument("--faces", type=int)
     ap.add_argument("--parts", action="store_true", help="split into parts (H series only)")
@@ -155,7 +156,7 @@ def main():
         return
     subject = " ".join(a.subject)
     if a.kind == "concept":
-        request = {"model": a.image_model, "prompt": CONCEPT.format(subject=subject)}
+        request = {"model": a.image_model, "prompt": subject if a.raw else CONCEPT.format(subject=subject)}
         if a.image_model.startswith("chat_image_2"):
             request["quality"] = a.quality
         if a.ref:
