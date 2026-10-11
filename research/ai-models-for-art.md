@@ -197,6 +197,26 @@ Tried on 2026-10-11 at the developers' request ([spike/model_bakeoff/image](../s
 - **The wolf, after two rounds:** poor, as the benchmarks predicted. A stick skeleton skinned in code reads as a wolf-like animal, not the concept's wolf.
 - **So:** code with an image is a fair way to make props and kit pieces when clean parts or variants matter more than fidelity, and no way to make creatures or characters. Tripo stays the route for organic shapes and for any prop that must match its concept closely.
 
+## Characters made and rigged
+
+Worked out on 2026-10-11 ([spike/character_gear](../spike/character_gear/README.md)). The male base body, from an approved design sheet, now plays every sandbox animation.
+
+- **Generate in a T-pose.** Our skeleton and its animations are in a T-pose. A body generated with its arms down (an A-pose) and moved into the T-pose crushed its shoulders every time the arms came down, in every animation. The design sheet is redrawn in a T-pose (one image edit, keeping the design) before the model is made.
+- **Let Tripo rig it, then convert.** Studio's auto-rig (about 20 credits) puts a 78-bone humanoid skeleton in the body with good weights. A script moves our skeleton's joints to Tripo's joints without turning any bone, renames Tripo's weights onto our bones (folding its twist and helper bones into the bones they help), smooths them lightly, and keeps four bones a vertex.
+- **Judge with a checker, against a known-good rig.** `rig_check.py` compares a rig with our skeleton and with the hand-rigged mannequin on the same animations, measuring how many edges crush or over-stretch. Results, as the share of such edges in the worst frame:
+
+| Move | Mannequin, rigged by hand | Tripo's rig, converted | Blender's own weights |
+|---|---|---|---|
+| Idle | 0.16% | 0.16% | 0.32% |
+| Walk | 0.17% | 0.29% | 0.50% |
+| Jog | 0.45% | 1.1% | 1.5% |
+| Crouch | 0.55% | 1.8% | 1.6% |
+| Roll | 1.0% | 2.4% | 1.9% |
+
+Copying the mannequin's own weights onto the body did twice as badly as either.
+- **Mistakes this caught or would have:** the importer leaves the skeleton posed mid-animation, which silently became the rest pose; the skeleton's axes are turned by the importer, so "forward" in code was sideways; scaling the skeleton's data instead of its object broke the animations' hip movements; Blender's weighting fails on generated meshes unless given a watertight copy.
+- **Not yet done:** Bevy applies every joint position stored in the clips, which would undo the moved joints in the game; the clips need their unchanging joint positions stripped, keeping only the hips. The deepest bends stretch the texture's seams into thin light lines on the shorts. The female base, templates, hair and gear are next.
+
 ## Limits
 
 - **Nothing was tried.** Every quality claim here is a paper's, a vendor's or a commenter's.

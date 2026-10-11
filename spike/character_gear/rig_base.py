@@ -28,6 +28,8 @@ import look
 FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
 OUT = os.path.join(HERE, "out")
 body_path = os.path.join(look.HERE, look.args()[0])
+WEIGHT_SOURCE = (look.args() + ["heat"])[1]  # heat, or mannequin
+OUT_NAME = (look.args() + ["heat", "base-male-rigged"])[2]
 
 
 def select_only(*objs, active=None):
@@ -50,6 +52,24 @@ for o in list(bpy.context.scene.objects):
         bpy.data.objects.remove(o)
 for slot in body.material_slots:
     slot.material = look.material("Skin")
+# Optionally rebuild the body as an even quad mesh first: generated meshes have no edge
+# loops at the joints, so they crush and tear where they bend.
+REMESH_FACES = int((look.args() + ["", "", "", "0"])[3] or 0)
+if REMESH_FACES:
+    bpy.context.view_layer.objects.active = body
+    body.select_set(True)
+    # QuadriFlow needs one closed surface: make it watertight first.
+    vox = body.modifiers.new("Watertight", "REMESH")
+    vox.mode = "VOXEL"
+    # An even voxel grid, its size chosen for the face count asked for. (QuadriFlow, which
+    # gives flowing edge loops, cancels when Blender runs without a window.)
+    area = sum(p.area for p in body.data.polygons)
+    vox.voxel_size = math.sqrt(area / REMESH_FACES)
+    bpy.ops.object.modifier_apply(modifier=vox.name)
+    result = "voxel"
+    for slot in body.material_slots:
+        slot.material = look.material("Skin")
+    print("REMESHED", result, len(body.data.polygons), "faces")
 pts = np.array([tuple(v.co) for v in body.data.vertices])
 height = pts[:, 2].max()
 body.data.transform(Matrix.Translation((-pts[:, 0].mean() * 0, -np.median(pts[:, 1]), 0)))
@@ -61,6 +81,13 @@ for o in list(bpy.context.scene.objects):
     if o.type == "MESH" and o is not body:
         bpy.data.objects.remove(o)
 arm.animation_data_clear()
+# The importer leaves the skeleton posed in the first frame of one of its animations (a
+# crouch). Clear it, or that pose is baked into the rest pose and every animation plays on
+# top of it.
+for pb in arm.pose.bones:
+    pb.matrix_basis.identity()
+bpy.context.view_layer.update()
+REST = {b.name: (b.head_local.copy(), b.tail_local.copy()) for b in arm.data.bones}
 
 # 2. Scale the skeleton to the body's height (the head bone's tail is near the crown).
 bpy.context.view_layer.update()
@@ -69,6 +96,28 @@ s = height / head_top
 arm.scale = [c * s for c in arm.scale]
 bpy.context.view_layer.update()
 to_local = arm.matrix_world.inverted()
+
+
+def turn_arm(tag, angle):
+    """Turns an upper arm about the body's forward axis, in the skeleton's own space (the
+    importer turns the skeleton to make Z up, so its axes are not the world's). A positive
+    angle lowers the hand; the sign is chosen by measuring, not assumed."""
+    pb = arm.pose.bones[f"DEF-upper_arm.{tag}"]
+    pb.rotation_mode = "QUATERNION"
+    rest = pb.bone.matrix_local.to_3x3()
+    forward = (arm.matrix_world.inverted().to_3x3() @ Vector((0, 1, 0))).normalized()
+    best = None
+    for sign in (1, -1):
+        r = Matrix.Rotation(sign * angle, 3, forward)
+        pb.rotation_quaternion = (rest.inverted() @ r @ rest).to_quaternion()
+        bpy.context.view_layer.update()
+        z = (arm.matrix_world @ arm.pose.bones[f"DEF-hand.{tag}"].tail).z
+        if best is None or (z < best[0]) == (angle > 0):
+            best = (z, sign)
+    r = Matrix.Rotation(best[1] * angle, 3, forward)
+    pb.rotation_quaternion = (rest.inverted() @ r @ rest).to_quaternion()
+    bpy.context.view_layer.update()
+
 
 
 def limb_line(side):
@@ -94,22 +143,19 @@ for side, tag in ((1, "L"), (-1, "R")):
     chain = [f"DEF-upper_arm.{tag}", f"DEF-forearm.{tag}", f"DEF-hand.{tag}"]
     rig_len = abs(eb[chain[-1]].tail.x - shoulder.x)
     stretch = d.length / max(rig_len, 1e-6)
+    # Scale the whole arm chain about the shoulder by the same factor on every axis, so no
+    # bone changes direction (the animations depend on the directions).
     for name in [b.name for b in eb if b.name.endswith(f".{tag}") and any(k in b.name for k in ("arm", "hand", "f_", "thumb"))]:
         b = eb[name]
-        for attr in ("head", "tail"):
-            p = getattr(b, attr)
-            p.x = shoulder.x + (p.x - shoulder.x) * stretch
-            setattr(b, attr, p)
+        b.head = shoulder + (b.head - shoulder) * stretch
+        b.tail = shoulder + (b.tail - shoulder) * stretch
 bpy.ops.object.mode_set(mode="OBJECT")
 print("ARM ANGLES", {k: round(math.degrees(v), 1) for k, v in arm_angle.items()})
 
 # Pose the arms down to the body's A-pose.
 bpy.ops.object.mode_set(mode="POSE")
-for tag, sign in (("L", 1), ("R", -1)):
-    pb = arm.pose.bones[f"DEF-upper_arm.{tag}"]
-    pb.rotation_mode = "QUATERNION"
-    rest = pb.bone.matrix_local.to_3x3()
-    pb.rotation_quaternion = (rest.inverted() @ Matrix.Rotation(-sign * arm_angle[tag], 3, "Y") @ rest).to_quaternion()
+for tag in ("L", "R"):
+    turn_arm(tag, arm_angle[tag])
 bpy.ops.object.mode_set(mode="OBJECT")
 bpy.context.view_layer.update()
 
@@ -118,7 +164,7 @@ select_only(arm)
 bpy.ops.object.mode_set(mode="POSE")
 bpy.ops.pose.armature_apply(selected=False)
 bpy.ops.object.mode_set(mode="OBJECT")
-def weight_from_proxy(voxel=0.012):
+def weight_from_proxy(voxel=0.012, smooth_passes=0):
     """Heat weighting needs one closed surface, which generated meshes rarely are: weight a
     watertight remeshed copy, then copy its weights onto the real body."""
     for g in list(body.vertex_groups):
@@ -136,6 +182,14 @@ def weight_from_proxy(voxel=0.012):
     bpy.ops.object.modifier_apply(modifier=rm.name)
     select_only(proxy, arm, active=arm)
     bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    # Relax the weights a little and keep at most four bones per vertex, normalised, which
+    # softens the creases where joints bend hardest.
+    select_only(proxy)
+    bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
+    bpy.ops.object.vertex_group_smooth(group_select_mode="ALL", factor=0.5, repeat=smooth_passes)
+    bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
+    bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
     for g in proxy.vertex_groups:
         body.vertex_groups.new(name=g.name)
     dt = body.modifiers.new("Weights", "DATA_TRANSFER")
@@ -162,11 +216,8 @@ weight_from_proxy()
 # 4. Back to the T-pose: pose the arms up, bake the body in that pose, make it the rest pose.
 select_only(arm)
 bpy.ops.object.mode_set(mode="POSE")
-for tag, sign in (("L", 1), ("R", -1)):
-    pb = arm.pose.bones[f"DEF-upper_arm.{tag}"]
-    pb.rotation_mode = "QUATERNION"
-    rest = pb.bone.matrix_local.to_3x3()
-    pb.rotation_quaternion = (rest.inverted() @ Matrix.Rotation(sign * arm_angle[tag], 3, "Y") @ rest).to_quaternion()
+for tag in ("L", "R"):
+    turn_arm(tag, -arm_angle[tag])
 bpy.ops.object.mode_set(mode="OBJECT")
 bpy.context.view_layer.update()
 select_only(body)
@@ -176,8 +227,67 @@ bpy.ops.object.mode_set(mode="POSE")
 bpy.ops.pose.armature_apply(selected=False)
 bpy.ops.object.mode_set(mode="OBJECT")
 
-# The real weighting, in the T-pose, where the arms are clear of the torso.
-weight_from_proxy()
+# The real weighting, in the T-pose, where the arms are clear of the torso. Either
+# Blender's automatic weights, or the artist-made mannequin's weights copied across: the
+# mannequin is posed by the same skeleton, so after scaling it matches our body's T-pose.
+if WEIGHT_SOURCE == "mannequin":
+    for g in list(body.vertex_groups):
+        body.vertex_groups.remove(g)
+    for m in list(body.modifiers):
+        body.modifiers.remove(m)
+    before = set(bpy.context.scene.objects)
+    bpy.ops.import_scene.gltf(filepath=FIGURE)
+    new = [o for o in bpy.context.scene.objects if o not in before]
+    m_arm = next(o for o in new if o.type == "ARMATURE")
+    m_body = next(o for o in new if o.type == "MESH" and o.name.startswith("Mannequin"))
+    m_arm.animation_data_clear()
+    for pb in m_arm.pose.bones:
+        pb.matrix_basis.identity()
+    m_arm.scale = arm.scale
+    m_arm.location = arm.location
+    bpy.context.view_layer.update()
+    # Stretch the mannequin's arms as ours were, so its arms lie along our body's.
+    for tag in ("L", "R"):
+        pb = m_arm.pose.bones[f"DEF-upper_arm.{tag}"]
+        target = arm.data.bones[f"DEF-upper_arm.{tag}"]
+        src = m_arm.data.bones[f"DEF-upper_arm.{tag}"]
+        k = (arm.data.bones[f"DEF-hand.{tag}"].tail_local - target.head_local).length / max((m_arm.data.bones[f"DEF-hand.{tag}"].tail_local - src.head_local).length, 1e-6)
+        pb.scale = (k, k, k)
+    bpy.context.view_layer.update()
+    for g in m_body.vertex_groups:
+        body.vertex_groups.new(name=g.name)
+    dt = body.modifiers.new("Weights", "DATA_TRANSFER")
+    dt.object = m_body
+    dt.use_object_transform = True
+    dt.use_vert_data = True
+    dt.data_types_verts = {"VGROUP_WEIGHTS"}
+    dt.vert_mapping = "POLYINTERP_NEAREST"
+    dt.layers_vgroup_select_src = "ALL"
+    dt.layers_vgroup_select_dst = "NAME"
+    select_only(body)
+    bpy.ops.object.modifier_apply(modifier=dt.name)
+    for o in new:
+        if o.name in bpy.data.objects:
+            bpy.data.objects.remove(o)
+    select_only(body)
+    bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
+    bpy.ops.object.vertex_group_smooth(group_select_mode="ALL", factor=0.5, repeat=2)
+    bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
+    bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    body.parent = arm
+    body.matrix_parent_inverse = arm.matrix_world.inverted()
+    am = body.modifiers.new("Armature", "ARMATURE")
+    am.object = arm
+    weighted = sum(1 for v in body.data.vertices if any(g.weight > 0.01 for g in v.groups))
+    print("WEIGHTED", f"{weighted}/{len(body.data.vertices)} vertices (from the mannequin)")
+else:
+    weight_from_proxy(smooth_passes=int(os.environ.get("SMOOTH_PASSES", "4")))
+
+# The rest pose must still be the skeleton's own, or its animations will not fit.
+worst = max(max((b.head_local - REST[b.name][0]).length, (b.tail_local - REST[b.name][1]).length)
+            for b in arm.data.bones if not any(k in b.name for k in ("arm", "hand", "f_", "thumb")))
+print("REST DRIFT", f"{worst:.4f}")
 
 # Play the sandbox's animations and render a sheet.
 look.stage()
@@ -220,9 +330,9 @@ for action_name in ("Idle_Loop", "Walk_Loop", "Sword_Attack", "Crouch_Idle_Loop"
     for t in tiles:
         os.remove(t)
     rows.append(row)
-look.stack(rows, os.path.join(OUT, "rigged.png"))
+look.stack(rows, os.path.join(OUT, f"{OUT_NAME}.png"))
 for r in rows:
     os.remove(r)
 select_only(body, arm, active=arm)
-bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, "base-male-rigged.glb"), export_format="GLB", use_selection=True)
+bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, f"{OUT_NAME}.glb"), export_format="GLB", use_selection=True)
 print("SHEET", os.path.join(OUT, "rigged.png"))
