@@ -165,6 +165,8 @@ def studio(a, subject):
         "face_limit": a.faces or 10000,
         "visibility": "private",
     }
+    if a.texture:
+        request["texture_quality"] = "standard"  # the app sends it with every texture
     if a.kind == "text":
         request.update(prompt=f"{subject} {STYLE}", t_pose=False, sketch_to_render=False)
         endpoint = "/v2/studio/operation/text_to_model"
