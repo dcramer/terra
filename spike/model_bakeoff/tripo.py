@@ -148,16 +148,19 @@ def studio(a, subject):
     if a.kind not in ("balance", "image", "text"):
         sys.exit(f"{a.kind} is not captured from the Studio app yet; use the API, without --studio")
     sys.path.insert(0, HERE)  # python3 -I leaves this folder off the path
-    from studio import Studio
+    from studio import Studio, node_name
 
     client = Studio(env("TRIPO_STUDIO_COOKIE"))
     if a.kind == "balance":
         print(client.call("GET", "/v2/studio/user/profile/payment").get("wallet"))
         return
+    model = a.model or "v3.1-20260211"
+    # Smart Mesh (P1, run as Nexus) rejects texture settings: it textures in a second step.
+    smart_mesh = model.startswith(("P", "Nexus"))
     request = {
-        "model_version": a.model or "v3.1-20260211",
+        "model_version": model,
         "geometry_quality": "standard",
-        "texture": a.texture,
+        "texture": a.texture and not smart_mesh,
         "pbr": False,
         "generate_parts": a.parts,
         "smart_poly": a.smart_poly,
@@ -165,7 +168,7 @@ def studio(a, subject):
         "face_limit": a.faces or 10000,
         "visibility": "private",
     }
-    if a.texture:
+    if request["texture"]:
         request["texture_quality"] = "standard"  # the app sends it with every texture
     if a.kind == "text":
         request.update(prompt=f"{subject} {STYLE}", t_pose=False, sketch_to_render=False)
@@ -175,12 +178,16 @@ def studio(a, subject):
         endpoint = "/v2/studio/operation/image_to_model"
     os.makedirs(OUT, exist_ok=True)
     started, project, credits = client.generate(endpoint, request)
-    files = {}
-    if project.get("model_url"):
-        path = os.path.join(OUT, f"{a.name}.glb")
+    path = os.path.join(OUT, f"{a.name}.glb")
+    fetch(project["model_url"], path)
+    textured = None
+    if a.texture and smart_mesh and "image" in request:
+        print("Smart Mesh comes untextured; texturing it", file=sys.stderr)
+        textured, project, more = client.texture(started["project_id"], request["image"], node_name(path))
+        credits += more
         fetch(project["model_url"], path)
-        files["model_url"] = os.path.relpath(path, HERE)
-    record = {"name": a.name, "backend": "studio", "endpoint": endpoint, "request": request, "started": started, "credits": credits, "project": project, "files": files}
+    files = {"model_url": os.path.relpath(path, HERE)}
+    record = {"name": a.name, "backend": "studio", "endpoint": endpoint, "request": request, "started": started, "textured": textured, "credits": credits, "project": project, "files": files}
     with open(os.path.join(OUT, f"{a.name}.json"), "w") as f:
         json.dump(record, f, indent=2)
     print(json.dumps({"name": a.name, "credits": credits, "files": files}))

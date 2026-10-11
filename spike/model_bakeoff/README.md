@@ -33,5 +33,7 @@ Every Tripo result is saved with a `.json` saying what was asked for, which mode
 
 ```bash
 python3 spike/model_bakeoff/tripo.py balance --studio
-python3 spike/model_bakeoff/tripo.py image wolf-studio concept.png --studio --smart-poly --faces 2000
+python3 spike/model_bakeoff/tripo.py image wolf-studio concept.png --studio --model P1-20260311 --texture --faces 2000
 ```
+
+P1 runs as Studio's Smart Mesh, which comes untextured, so `--texture` adds the app's texture step after it: about 35 + 10 credits.

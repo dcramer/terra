@@ -106,10 +106,33 @@ class Studio:
         """Runs one operation and returns its finished project, with the credits it took."""
         before = self.credits()
         started = self.call("POST", endpoint, request)
-        print(f"project {started.get('project_id')}, operation {started.get('operator_id')}", file=sys.stderr)
+        project_id = started.get("project_id") or request["project_id"]
+        print(f"project {project_id}, operation {started.get('operator_id')}", file=sys.stderr)
         self.wait(started["operator_id"])
-        project = self.call("GET", f"/v2/studio/project/detail/v3/{started['project_id']}")
+        project = self.call("GET", f"/v2/studio/project/detail/v3/{project_id}")
         return started, project, before - self.credits()
+
+    def texture(self, project_id, image, part):
+        """Textures a finished model from its image, as the app's Texture tool does. Smart Mesh
+        models (P1) come back untextured; the API does this in the same call. The part is the
+        model's node name (node_name), or base_model_path for an HD model."""
+        request = {
+            "project_id": project_id,
+            "image": {"bucket": image["bucket"], "key": image["key"]},
+            "part_names": [part],
+            "texture_alignment": "original_image",
+            "texture_quality": "standard",
+            "delight": False,
+        }
+        return self.generate("/v2/studio/operation/texture_model", request)
+
+
+def node_name(glb_path):
+    """The first node's name in a .glb: tripo_node_<operation>, the part the texture step wants."""
+    with open(glb_path, "rb") as f:
+        head = f.read(20)
+        chunk = json.loads(f.read(int.from_bytes(head[12:16], "little")))
+    return chunk["nodes"][0]["name"]
 
 
 def presign_put(bucket, key, region, ak, sk, session_token, expires=900):
