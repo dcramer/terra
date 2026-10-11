@@ -6,6 +6,8 @@ Players survive and build across a dozen or so very different planets, starting 
 
 On a dead planet, early on, it kills you by being dead: no air, no water, cold, radiation. Later it kills you by being alive, and the life that hunts you is a consequence of how you terraformed. Worlds are in [worlds.md](worlds.md); surviving them is in [survival.md](survival.md).
 
+**Under review (D87):** the developers are considering worlds as alternate dimensions, in the spirit of *He Who Fights With Monsters*, instead of planets in a solar system, and might drop terraforming and flight to space. The pitch above stands until they decide.
+
 ## Pillars
 
 Draft. A feature that serves none of these is cut.

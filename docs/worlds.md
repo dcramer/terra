@@ -84,9 +84,19 @@ So a setting proposed as data would name its cultures, and a culture its models,
 Open:
 
 9. Answered in part: **what does a setting change?** The look of a culture's things within the one art style, what you can unlock by finding it, and perhaps who you can recruit. How unlocking from a culture works is open in [progression.md](progression.md), and recruiting in [gameplay.md](gameplay.md#npcs).
-10. **How do settings sit together in one solar system?** A story that explains a fantasy world a short flight from a futuristic one, or no explanation needed?
+10. Set aside: **how do settings sit together in one solar system?** The developers are considering worlds as alternate dimensions instead (D87), which needs no solar system to explain them.
 11. Answered: **one art style across the game** (D14). Cultures differ in their models and details, not in their style.
 12. Answered: **your gear is your gear.** What you carry works the same on every planet.
+
+## Planets or dimensions?
+
+From the developers, 2026-10-10, with "maybe" and "might" (D87, Open): the worlds may be more like alternate dimensions, in the spirit of *He Who Fights With Monsters*, than planets in one solar system. Terraforming might not happen, and nor might flying into space.
+
+Nothing here is changed yet. If it is adopted:
+
+- **What stays**: procedural worlds, each with its own theme, setting and cultures (D59, D86); voxel ground you dig; survival; building; items.
+- **What goes or changes**: a real solar system and seamless flight to space (D4, D72); terraforming and the planet simulation (D6, D60); and in the engine, the ground-to-orbit transition, the sky seen from space, and solar-system coordinates (D39, D36).
+- **What it asks**: how a player crosses between worlds (a portal, a ritual, a machine?), and whether a world is still a round planet you can walk around, or something else.
 
 ## Terraforming, on some planets
 

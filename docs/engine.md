@@ -13,6 +13,8 @@ Our current expectation, however the gameplay turns out (D39):
 - **Organic harvesting**: resources are in the world and you get them by taking the world apart, not by clicking a node.
 - **Procedural generation almost everywhere**: the world is computed from a seed, not authored or stored.
 
+**Under review (D87):** the developers might drop flight to space and terraforming, with worlds as alternate dimensions instead. If so, the transition below, planet rendering from space and the solar-system frame leave the plan.
+
 Since then the developers have set out the worlds: several planets, each themed, with caverns, water features, varied plants, gravity and a breathable starter planet. What that asks of the engine is in [worlds.md](worlds.md#what-it-asks-of-the-engine).
 
 ## What each of those asks of the engine
