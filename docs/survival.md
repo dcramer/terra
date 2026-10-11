@@ -10,11 +10,15 @@ From the developers: **health, stamina, oxygen, hunger, thirst**, and possibly m
 |---|---|---|---|
 | Health | You are hurt: falls, cold, heat, poison, creatures | Rest, food, medicine | You are down (see D18: no fail state) |
 | Stamina | You sprint, jump, swing a tool | Resting a moment | You cannot sprint or work hard |
-| Oxygen | Always, where the air cannot be breathed | Breathable air, a tank, a base with air | Health falls fast |
+| Oxygen | Always, where the air cannot be breathed: under water, and on planets with thin or no air | Breathable air, the space suit's tank, a base with air | Health falls fast |
 | Hunger | Slowly, all the time; faster when working | Food | Health falls slowly |
 | Thirst | A little faster than hunger | Water | Health falls |
 
 The rates and refills are placeholders, written to have something to react to.
+
+## Oxygen
+
+From the developers: being under water uses up oxygen, in the same way as being on a planet with little or no atmosphere (D74). So oxygen is one rule, "is the air here breathable, and how much", that water, thin air and vacuum all answer. A space suit, made of parts such as a suit and an oxygen tank (D64), is how you carry air with you; a bigger tank lasts longer.
 
 ## How they vary by world
 

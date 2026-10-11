@@ -15,6 +15,7 @@ Status: the developers set out on 2026-10-10 what the planets are to be. What th
 | **Survival** | Attributes coupled to survival: health, stamina, oxygen, hunger, thirst, possibly more later. They may work differently on each world. See [survival.md](survival.md). | Decided that they exist (D61); the list may grow |
 | **The starter planet** | Normal atmosphere and the like: the easiest place to be, for now. | Leaning (D62) |
 | **Gravity** | Planets have gravity. | Decided (D63) |
+| **Water you can enter** | The character swims. Under water you use up oxygen, as on a planet with thin or no air. | Decided (D74) |
 | **Getting between planets** | By flight, for sure; maybe other ways later. Leaving a planet, being in space and arriving at another has to perform well. | Decided (D72) |
 | **How planets differ** | Mostly in the obvious ways. | Answers the old open question 2 |
 

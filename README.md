@@ -45,9 +45,11 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 
 **Surviving** ([survival.md](docs/survival.md))
 - Survival attributes: health, stamina, oxygen, hunger, thirst, and perhaps more. Each world can treat them differently.
+- Swimming. Under water you use up oxygen, as on a planet with thin or no air.
 
 **The player and their gear** ([player.md](docs/player.md))
 - An equipment grid: a character sheet.
+- A space suit made of parts, such as a suit and an oxygen tank, for breathing where you otherwise could not.
 - An inventory that is your backpack: small at first, bigger with a bigger backpack in the backpack slot *(stand-in: raw items as counts)*.
 - An action bar of things to use *(stand-in)*.
 - Tools for gathering, such as different kinds of cutter *(stand-in: one cutter)*.

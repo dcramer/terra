@@ -40,7 +40,7 @@ Proposed.
 Open:
 
 1. **First person, third person, or both?** First person is cheapest: arms and a tool, and the full body is only ever seen by others. Third person shows off the character and the world, suits the art direction's framing, and needs every animation to look good from behind. Both is the most work.
-2. **Swimming.** Seas exist once ice melts. Do you swim, wade, or drown?
+2. Answered: **the character swims** (D74), and breathing under water uses up oxygen as on a planet with thin or no air (see [survival.md](survival.md)). Still open: how deep you can go, and whether there is a swim speed or stamina cost.
 3. **Climbing.** Can you climb a cliff or a base's wall, or only walk and jump?
 4. **A jetpack or similar.** No Man's Sky's jetpack makes rough terrain forgiving. Without one, a player who digs a deep hole needs another way out.
 5. **Falling.** Does a long fall hurt?
@@ -90,12 +90,13 @@ From the developers, 2026-10-10:
 - **An equipment grid, a character sheet** (D64): slots for what you wear and carry as gear.
 - **An inventory that is your backpack** (D65): probably very small at the start, and made bigger by putting a better backpack in the backpack slot of the equipment grid.
 - **An action bar** (D66): you put items on it to use them. Whatever is in the picked slot is in your hand.
+- **A space suit made of parts** (D64), at some point: equipment such as a suit and an oxygen tank, which together let you breathe where you otherwise could not, under water or on a planet with thin or no air.
 
 What follows from those, proposed:
 
 | | What it holds | How it grows |
 |---|---|---|
-| Equipment grid | One item per slot: backpack, suit, helmet, tank, and so on | New slots, perhaps, through research (D68) |
+| Equipment grid | One item per slot: backpack, and the parts of a space suit (suit, helmet, oxygen tank), and so on | New slots, perhaps, through research (D68) |
 | Backpack | Raw items and things you have made | A bigger backpack in the backpack slot |
 | Action bar | Tools and things you use, a few slots | Fixed, or grows with gear |
 
