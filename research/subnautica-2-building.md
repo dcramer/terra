@@ -63,7 +63,7 @@ And, after trying those:
 
 - **Terrain.** A foundation may go into the ground. Anything else that would clip into it shows red and cannot be built. (They said "I think", so this is a leaning.)
 - **Rooms across rooms.** A room placed so that it overlaps one already there extends that room to the combined shape, instead of being refused or becoming a second room.
-- **Interior walls** as a simple part: solid, with a doorway, or with a window, on the edge between two tiles. Indoors only, which the builder enforces.
+- **Interior walls** as a simple part: a plain wall on the edge between two tiles, indoors only, which the builder enforces. Not interior rooms: just walls. Windows and doors stay separate parts and are cut into an interior wall exactly as into an outside one.
 - **The small comforts of good building games.** A grid you can actually see; being told what is in the way, with the item in the way outlined; items that stand flush against, or on top of, the item you aim at; holding Alt to go off the grid for one placement; the middle button to pick another of what you are looking at; and a line of the keys worth knowing.
 - **The mouse** was escaping the window. The game now lets go of it properly when its window is no longer in front, and holds the pointer in the middle while it has it.
 
@@ -81,7 +81,7 @@ Checked on 2026-10-10 against keybinding lists and guides. They disagree with ea
 | Move a piece | F for move mode, then click the piece | F, then left mouse to pick up and again to put down |
 | Turn a piece | Not found in any source. The first game used the wheel. | The wheel |
 | Variants and resizing | Not found in any source | R for the next variant; the wheel pushes and pulls a wall |
-| Snapping | Not found in any source | G switches a grid on and off |
+| Snapping | Not found in any source | X switches a grid on and off, which the developers have seen elsewhere |
 
 So the menu, placing, taking apart and moving follow the game. Turning, variants, resizing and the grid are our guesses from the first game and from other building games, and should be corrected by someone who has played it.
 

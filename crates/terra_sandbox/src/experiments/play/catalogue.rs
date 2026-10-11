@@ -59,8 +59,9 @@ pub enum Kind {
     Room(&'static [RoomShape]),
     /// Push and pull the walls of what is already built.
     Reshape,
-    /// An interior wall, on the edge between two tiles of the base.
-    Wall(&'static [(&'static str, Panel)]),
+    /// A plain interior wall, on the edge between two tiles of the base. Windows and
+    /// doors are cut in it with their own parts, as they are in an outside wall.
+    Wall,
     Window(&'static [(&'static str, Panel)]),
     Door,
     Items(&'static [Item]),
@@ -79,9 +80,9 @@ impl Part {
     pub fn variants(&self) -> usize {
         match self.kind {
             Kind::Room(shapes) => shapes.len(),
-            Kind::Window(shapes) | Kind::Wall(shapes) => shapes.len(),
+            Kind::Window(shapes) => shapes.len(),
             Kind::Items(items) => items.len(),
-            Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => 1,
+            Kind::Reshape | Kind::Wall | Kind::Door | Kind::Remove | Kind::Move => 1,
         }
     }
 
@@ -89,9 +90,9 @@ impl Part {
     pub fn variant_name(&self, variant: usize) -> Option<&'static str> {
         match self.kind {
             Kind::Room(shapes) => Some(shapes[variant].name),
-            Kind::Window(shapes) | Kind::Wall(shapes) => Some(shapes[variant].0),
+            Kind::Window(shapes) => Some(shapes[variant].0),
             Kind::Items(items) => Some(items[variant].name),
-            Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => None,
+            Kind::Reshape | Kind::Wall | Kind::Door | Kind::Remove | Kind::Move => None,
         }
     }
 }
@@ -126,11 +127,7 @@ pub static PARTS: [Part; 15] = [
     },
     Part {
         name: "Wall",
-        kind: Kind::Wall(&[
-            ("Solid", Panel::Solid),
-            ("Doorway", Panel::Door),
-            ("Window", Panel::WINDOW),
-        ]),
+        kind: Kind::Wall,
     },
     Part {
         name: "Window",

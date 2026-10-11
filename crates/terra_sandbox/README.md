@@ -71,11 +71,11 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 | Hold right mouse | The dial of parts. Move the mouse toward one and let go. B does the same. |
 | Tap right mouse | Put the part away, or put back what you picked up |
 | Left click | Build, place, or pick up. E does the same. |
-| Scroll wheel | Turn an item or a room; push and pull a wall. Z and X do the same. |
+| Scroll wheel | Turn an item or a room; push and pull a wall. Z and C do the same. |
 | R | The next variant of the part; with Shift, the one before |
 | Q | Take-apart mode, and back |
 | F | Move mode, and back |
-| G | The grid on and off |
+| X | The grid on and off |
 | Hold Alt | The opposite of the grid setting, while held |
 | Middle click | Pick another of the item you are looking at. V does the same. |
 | 1 to 9, 0 | The first ten parts directly |
@@ -91,10 +91,10 @@ Building starts from a part. Pick one from the dial, cycle through its variants,
 |---|---|---|
 | Room | Four sizes; the wheel turns it | Builds a room on the ground you aim at. Aimed across a room already there, it extends that room to the combined shape. |
 | Reshape | | Pushes the wall you aim at out. The wheel pushes and pulls. |
-| Wall | Solid, doorway, window | Builds an interior wall on the nearest edge between two floor tiles. Indoors only. |
-| Window | Framed, wide, tall | Cuts that window in the wall tile |
-| Door | | Cuts a door |
-| Remove (Q) | | Takes away the item or interior wall, or closes the window or door |
+| Wall | | Builds a plain interior wall on the nearest edge between two floor tiles. Indoors only. |
+| Window | Framed, wide, tall | Cuts that window in the wall you aim at, outside or interior |
+| Door | | Cuts a door in the wall you aim at, outside or interior |
+| Remove (Q) | | Takes away the item, closes the window or door, or takes away an interior wall that has neither |
 | Move (F) | | Picks an item up, then puts it down |
 | Seat, Table, Bed, Storage, Kitchen, Decor, Kit, Fire | Twenty-seven items between them | Stands the item on the floor or ground you aim at |
 
@@ -109,7 +109,7 @@ With the grid on, items land on half-metre steps and turn in eighths of a circle
 
 Rooms are always on the base's three-metre tiles, so a new room lines up with the rooms already there. A room's foundation may go into the ground, but the room itself may not: where the ground is higher than its floor, the outline is red and it cannot be built.
 
-![An interior wall with a doorway](../../docs/images/outpost-wall-2026-10-10.png)
+![An interior wall, about to have a window cut in it](../../docs/images/outpost-wall-2026-10-10.png)
 
 The game holds the mouse while you play and lets go when the window is no longer in front; click to take it back.
 

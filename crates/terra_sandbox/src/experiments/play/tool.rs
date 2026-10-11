@@ -8,11 +8,11 @@
 //!   Hold right mouse   the dial of parts; move the mouse to one and let go (or hold B)
 //!   Tap right mouse    put the part away, or put back what you picked up
 //!   Left click         build, place, or pick up                          (or E)
-//!   Scroll wheel       turn an item or a room; push and pull a wall      (or Z and X)
+//!   Scroll wheel       turn an item or a room; push and pull a wall      (or Z and C)
 //!   R                  the next variant of the part
 //!   Q                  take-apart mode, and back
 //!   F                  move mode, and back
-//!   G                  the grid on and off: items snap to it and turn in eighths
+//!   X                  the grid on and off: items snap to it and turn in eighths
 //!   Hold Alt           the opposite of the grid setting, while held
 //!   Middle click       pick another of the item the view is on                 (or V)
 //!   1 to 9, 0          the first ten parts directly
@@ -66,10 +66,12 @@ pub enum Target {
     Nothing,
     /// A tile of the outside wall.
     Wall(Face),
-    /// The edge between two tiles, where an interior wall stands or could.
+    /// The edge between two tiles, where an interior wall stands or could; whether one
+    /// may stand there; and whether the wall there has a window or door in it.
     Edge {
         face: Face,
         fits: bool,
+        open: bool,
     },
     /// Where a room would go: its lowest tile, its size in tiles, whether the ground is
     /// low enough for its floor to clear it, and whether it would add anything.
@@ -301,7 +303,7 @@ fn choose(
         }
     }
     builder.snapping = builder.snap != keys.pressed(KeyCode::AltLeft);
-    if keys.just_pressed(KeyCode::KeyG) {
+    if keys.just_pressed(KeyCode::KeyX) {
         builder.snap = !builder.snap;
         if builder.snap {
             builder.turn = (builder.turn / GRID_TURN).round() * GRID_TURN % 360.0;
@@ -316,9 +318,9 @@ fn choose(
         builder.variants[part] =
             (builder.variants[part] + if back { count - 1 } else { 1 }) % count;
     }
-    // One notch at a time, however the wheel reports it. Z and X stand in for the wheel.
+    // One notch at a time, however the wheel reports it. Z and C stand in for the wheel.
     let notch = |amount: f32| (amount > 0.0) as i32 - (amount < 0.0) as i32;
-    builder.wheel = notch(scroll.delta.y) + keys.just_pressed(KeyCode::KeyX) as i32
+    builder.wheel = notch(scroll.delta.y) + keys.just_pressed(KeyCode::KeyC) as i32
         - keys.just_pressed(KeyCode::KeyZ) as i32;
     if builder.wheel != 0 {
         if builder.item().is_some() {
@@ -501,11 +503,28 @@ fn aim(
         }
     };
 
+    let edge = |face: Face| Target::Edge {
+        face,
+        fits: site.base.can_partition(face),
+        open: site
+            .base
+            .partition(face)
+            .is_some_and(|panel| panel != Panel::Solid),
+    };
     builder.target = match builder.picked().kind {
-        Kind::Reshape | Kind::Window(_) | Kind::Door => {
-            outside_wall.map_or(Target::Nothing, |hit| Target::Wall(hit.face))
-        }
-        Kind::Wall(_) => {
+        Kind::Reshape => outside_wall.map_or(Target::Nothing, |hit| Target::Wall(hit.face)),
+        // A window or a door goes in an outside wall or an interior one alike.
+        Kind::Window(_) | Kind::Door => hull
+            .filter(|hit| hit.face.side.is_wall())
+            .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M))
+            .map_or(Target::Nothing, |hit| {
+                if hit.partition {
+                    edge(hit.face)
+                } else {
+                    Target::Wall(hit.face)
+                }
+            }),
+        Kind::Wall => {
             // An interior wall already there; or the nearest edge of the floor tile the
             // view is on; or, looking at neither, of the tile a couple of steps ahead.
             let reachable =
@@ -542,10 +561,7 @@ fn aim(
                     _ => None,
                 })
                 .or_else(ahead)
-                .map_or(Target::Nothing, |face| Target::Edge {
-                    face,
-                    fits: site.base.can_partition(face),
-                })
+                .map_or(Target::Nothing, edge)
         }
         Kind::Room(_) => {
             // On open ground, or across a room already there, which it then extends.
@@ -588,10 +604,7 @@ fn aim(
         Kind::Move => item.map_or(Target::Nothing, |(entity, ..)| Target::Prop(entity)),
         Kind::Remove => match (item, hull, outside_wall) {
             (Some((entity, ..)), _, _) => Target::Prop(entity),
-            (None, Some(hit), _) if hit.partition => Target::Edge {
-                face: hit.face,
-                fits: true,
-            },
+            (None, Some(hit), _) if hit.partition => edge(hit.face),
             (None, _, Some(hit)) if site.base.panel(hit.face) != Panel::Solid => {
                 Target::Wall(hit.face)
             }
@@ -660,12 +673,23 @@ fn act(
             Some(BuildOp::SetPanel(face, shapes[builder.variant()].1))
         }
         (Kind::Door, Target::Wall(face)) if click => Some(BuildOp::SetPanel(face, Panel::Door)),
-        (Kind::Wall(shapes), Target::Edge { face, fits: true }) if click => Some(
-            BuildOp::SetPartition(face, Some(shapes[builder.variant()].1)),
-        ),
+        (
+            Kind::Wall,
+            Target::Edge {
+                face, fits: true, ..
+            },
+        ) if click => Some(BuildOp::SetPartition(face, Some(Panel::Solid))),
+        (Kind::Window(shapes), Target::Edge { face, .. }) if click => Some(BuildOp::SetPartition(
+            face,
+            Some(shapes[builder.variant()].1),
+        )),
+        (Kind::Door, Target::Edge { face, .. }) if click => {
+            Some(BuildOp::SetPartition(face, Some(Panel::Door)))
+        }
         (Kind::Remove, Target::Wall(face)) if click => Some(BuildOp::SetPanel(face, Panel::Solid)),
-        (Kind::Remove, Target::Edge { face, .. }) if click => {
-            Some(BuildOp::SetPartition(face, None))
+        // An opening in an interior wall is closed first; a plain wall is taken away.
+        (Kind::Remove, Target::Edge { face, open, .. }) if click => {
+            Some(BuildOp::SetPartition(face, open.then_some(Panel::Solid)))
         }
         (
             Kind::Room(_),
@@ -831,9 +855,23 @@ fn highlight(
         (Kind::Remove, Target::Wall(face)) => {
             opening(face, site.base.panel(face)).into_iter().collect()
         }
-        // An interior wall: the whole edge, and the opening it would have.
-        (Kind::Wall(shapes), Target::Edge { face, .. }) => std::iter::once(Base::corners(face))
-            .chain(opening(face, shapes[builder.variant()].1))
+        // The cut a window or door would make in an interior wall, or the one to close.
+        (Kind::Window(shapes), Target::Edge { face, .. }) => {
+            opening(face, shapes[builder.variant()].1)
+                .into_iter()
+                .collect()
+        }
+        (Kind::Door, Target::Edge { face, .. }) => opening(face, Panel::Door).into_iter().collect(),
+        (
+            Kind::Remove,
+            Target::Edge {
+                face, open: true, ..
+            },
+        ) => site
+            .base
+            .partition(face)
+            .and_then(|panel| opening(face, panel))
+            .into_iter()
             .collect(),
         (_, Target::Edge { face, .. }) => vec![Base::corners(face)],
         (_, Target::Ground { corner, tiles, .. }) => {
@@ -1021,16 +1059,15 @@ pub fn prompt(builder: &Builder) -> &'static str {
         (Kind::Reshape, Target::Wall(_)) => {
             "Left click  push the wall out      Scroll  push and pull"
         }
-        (Kind::Window(_), Target::Wall(_)) => "Left click  cut this window      R  shape",
-        (Kind::Door, Target::Wall(_)) => "Left click  cut a door",
-        (Kind::Reshape | Kind::Window(_) | Kind::Door, _) => "Aim at an outside wall",
-        (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
-            "Left click  build this wall      R  kind"
+        (Kind::Window(_), Target::Wall(_) | Target::Edge { .. }) => {
+            "Left click  cut this window      R  shape"
         }
-        (Kind::Wall(_), Target::Edge { fits: false, .. }) => {
-            "Interior walls go between two tiles of a room"
-        }
-        (Kind::Wall(_), _) => "Aim at a floor indoors",
+        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) => "Left click  cut a door",
+        (Kind::Reshape, _) => "Aim at an outside wall",
+        (Kind::Window(_) | Kind::Door, _) => "Aim at a wall, outside or interior",
+        (Kind::Wall, Target::Edge { fits: true, .. }) => "Left click  build a wall here",
+        (Kind::Wall, Target::Edge { fits: false, .. }) => "Walls go indoors, between two tiles",
+        (Kind::Wall, _) => "Aim at a floor indoors",
         (Kind::Room(_), Target::Ground { fits: false, .. }) => {
             "The ground is too high here: only a foundation may go into it"
         }
@@ -1053,6 +1090,7 @@ pub fn prompt(builder: &Builder) -> &'static str {
         (Kind::Move, Target::Prop(_)) => "Left click  pick this up",
         (Kind::Move, _) => "Aim at an item to move it      F  done",
         (Kind::Remove, Target::Prop(_)) => "Left click  take this away",
+        (Kind::Remove, Target::Edge { open: true, .. }) => "Left click  close this opening",
         (Kind::Remove, Target::Edge { .. }) => "Left click  take this wall away",
         (Kind::Remove, Target::Wall(_)) => "Left click  close this opening",
         (Kind::Remove, _) => "Aim at an item, an interior wall, a window or a door      Q  done",
@@ -1064,9 +1102,9 @@ pub fn legend(builder: &Builder) -> &'static str {
     if builder.stowed {
         ""
     } else if builder.snap {
-        "Q  take apart     F  move     G  grid off     Alt  off the grid     Middle click  copy"
+        "Q  take apart     F  move     X  grid off     Alt  off the grid     Middle click  copy"
     } else {
-        "Q  take apart     F  move     G  grid on     Alt  on the grid     Middle click  copy"
+        "Q  take apart     F  move     X  grid on     Alt  on the grid     Middle click  copy"
     }
 }
 
