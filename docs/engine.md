@@ -12,7 +12,7 @@ Our current expectation, however the gameplay turns out (D39):
 - **Organic harvesting**: resources are in the world and you get them by taking the world apart, not by clicking a node.
 - **Procedural generation almost everywhere**: the world is computed from a seed, not authored or stored.
 
-A fourth want, a seamless transition from the ground to orbit, was dropped with space on 2026-10-10 (D4). Worlds are reached probably by portals (D72), which is a new part, not yet designed. Terraforming is parked (D60), and with it the simulation runtime.
+A fourth want, a seamless transition from the ground to orbit, was dropped with space on 2026-10-10 (D4). Worlds are reached probably by portals (D72), which is a new part, not yet designed: loading the world beyond while a player approaches, with the crossing able to cover what is left, and no traditional loading screen. Terraforming is parked (D60), and with it the simulation runtime.
 
 Since then the developers have set out the worlds: several planets, each themed, with caverns, water features, varied plants, gravity and a breathable starter planet. What that asks of the engine is in [worlds.md](worlds.md#what-it-asks-of-the-engine).
 

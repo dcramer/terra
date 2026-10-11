@@ -98,7 +98,8 @@ From the developers, 2026-10-10: no space (D4); probably no terraforming, with t
 - **What stays**: procedural worlds, each with its own theme, setting and cultures (D59, D86); voxel ground you dig; survival; building; items; skills.
 - **What went**: a solar system, flying to orbit and between planets, and the engine work for them: the ground-to-orbit transition, the sky seen from space, a frame spanning a solar system (D39, D36).
 - **Portals**: likely something you find in the world, with more ways of crossing added over time (D72). Which other ways, and whether found portals are fixed places in a world's generation, are open.
-- **What it asks**: whether crossing has a loading screen, how the server hands a player between worlds (D52), and whether a world is still a round planet you can walk around.
+- **Loading**: no traditional loading screen. The crossing itself, the moment of stepping through, can cover loading and unloading textures and the like if it needs to (D72). Proposed, technical: a portal is known before you reach it, so the world beyond can start loading as you approach, and the crossing only covers what is left.
+- **What it asks**: how the server hands a player between worlds (D52), and whether a world is still a round planet you can walk around.
 
 ## Terraforming, on some planets
 
