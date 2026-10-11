@@ -94,7 +94,7 @@ If the loop is not fun with one monster and one settlement, more content will no
 
 - **One small world**, smooth voxel terrain (D9), one biome, day and night. Everything in reach within a few hundred metres; the developers want the MVP small in scale, not a large world.
 - **Gathering** with separate tools (D96): an axe for trees, a pickaxe for rock and ore, a knife for fibre and hide.
-- **Crafting** at a workbench and a forge, from a handful of materials: wood, stone, fibre, hide and one ore. Tools made of better material work more (crafting.md).
+- **Crafting** at a workbench, a smelter and a forge, taking time and queued (D109), from a handful of materials: wood, stone, fibre, hide and one ore. Tools made of better material work more (crafting.md).
 - **A claim** you place, 40 metres on a side, upgradable to 80 and 160 (D94); building on the voxel grid with shaped rooms (D48); the world heals outside it.
 - **The backpack, equipment and action bar** (D84), with wear and repair (D99).
 - **One kind of wildlife** that grazes, flees and can be hunted for meat and hide.

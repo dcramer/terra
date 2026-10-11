@@ -45,26 +45,29 @@ One tool to a job, carried on the action bar (D66):
 
 ## The station screen
 
-The developers said on 2026-10-11 that a station's screen should not be very different from the build menu: one uniform screen for the workbench, the forge and the rest, showing the recipes you have learned, with some information, probably as a grid. The sandbox's list of recipes is a placeholder.
+Settled with the developers on 2026-10-11 (D109), after Enshrouded.
 
-Proposed, to react to: **the build menu's screen, with recipes for tiles.**
+**Making takes time.** Click a recipe, without holding, and one joins the station's queue; click again to queue another. What it takes is paid when queued and given back if the job is cancelled.
+
+**Two kinds of station.**
+
+| Kind | Examples | How it works |
+|---|---|---|
+| Worked | Workbench, forge | Works through its queue only while you stay within reach. Leave and it waits, losing nothing. What it makes goes into your backpack. |
+| Working on its own | Smelter, campfire | Works through its queue whether you are there or not, like a furnace. What it makes waits in it until you come back. Whether it needs fuel is open. |
+
+**The screen is the build menu's**, with recipes for tiles:
 
 | Part | What it shows |
 |---|---|
-| Tiles | One per recipe you have learned (D68, D92), in a grid: a picture, the name, and what it takes, each counted as have/need. Greyed when you cannot make it; absent until learned. |
-| Tabs | Along the top, only where a station makes several families: the workbench's tools, weapons, clothing and packs. A forge with a handful of recipes has none. |
-| The picked tile | A strip below the grid saying what the thing is and does: a tool's work and speed, a weapon's damage and reach, clothing's protection, a pack's size; and, for anything missing, where it comes from, as the build menu's hints do ("break rocks with a pickaxe"). |
+| Tiles | One per recipe you have learned (D68, D92), in a grid: the name, and what it takes, each counted as have/need. Greyed when you cannot make it; absent until learned. Pictures later, as in the build menu. |
+| Tabs | Only where a station makes several families, such as the workbench's tools and clothing. |
+| The pointed tile | A strip saying what the thing does: a tool's work, a weapon's damage and reach, clothing's protection, a pack's size; and where anything missing comes from. |
+| The queue | What is waiting, the first with its progress. Click one to cancel it. |
 | The station | Its name, and who works it if anyone does ("Bren works this forge"), since a recruit is why some recipes are open (D90). |
-| The backpack | Open beside it, as now, so you see what you carry and where the made thing goes. |
+| The backpack | Open beside it. |
 
-Controls as the build menu's: F at the station opens it, click a tile or use the arrows and Enter to make one, F or Esc leaves. The world does not pause.
-
-The build menu and every station share one screen in the code, so what is learned in one, such as reading costs off a tile, holds in the other.
-
-Questions for the developers:
-
-1. **Does making take time?** Now it is instant. Building takes a hold (D67); making could too, or a station could work through a queue, which a recruit could keep doing while you are away.
-2. **How many at once?** One per press, or a count to make, such as five iron.
+F at the station opens it, F or Esc leaves; click a tile, or use the arrows and Enter. The world does not pause. The build menu and the station screens share one look and one set of controls in the code.
 
 ## Learning what to make
 
