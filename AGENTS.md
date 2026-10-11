@@ -30,6 +30,9 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - Keep docs short: intent, constraints and reasons, not implementation detail.
 - Design before building. A feature gets a design doc the developers have read before it gets code. Don't start an experiment because an idea came up in conversation; write it down and ask.
 - Don't overbuild. Nothing is built on a Leaning or Open decision except a spike, and a spike answers one stated question with the least code that can answer it, then stops. No game systems until the decisions they rest on are Decided.
+- Build tools for the work you keep doing. When testing, debugging or checking something takes several manual steps, or a restart, or squinting at a picture, and you will do it again, stop and build the tool that makes it one step, then use it. Developer tools are not overbuilding; they are how two people and their agents keep up (D71). Prefer general tools over ones for a single case.
+  - **Would build:** a way to set a joint, a grip or a camera in the running sandbox and see the result at once, instead of editing a constant and restarting for each try; a workbench sheet that puts two models side by side through the same animation; a checker that measures a rig against a known-good one.
+  - **Wouldn't build:** a tool for something done once (a one-off script, then delete it); a polished editor where a command-line flag does the job; a tool for a feature that is not decided yet.
 - Technical decisions are yours to make: decide, record the reason in `docs/decisions.md`, and keep going. Design decisions belong to the developers: give a recommendation, mark it Open, and don't build on it.
 - When you investigate something, write it up as a dated note in `research/` and link it from `research/README.md`. Research informs decisions; it does not make them.
 - This is a public repository. Don't commit engine binaries, build output, logs, or anything personal.
