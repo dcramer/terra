@@ -189,6 +189,14 @@ Run on 2026-10-11, the same day. Pages: [Terra Style Directions](https://claude.
 - **The mood board** is four C-style concepts: a medieval town and a techno-punk street, fantasy wilds and a gothic graveyard. Built for real in Blender from the pipeline's models and buildings made from parts in code, the same four worlds came out structurally right and far plainer than the concepts. The gap is set dressing, ground cover, density and lighting work, not the models.
 - **Costs.** A model made straight from one image costs 50 credits, not the 30 the price list suggests, so a prop is 60 credits ($0.60) with its concept. The whole day spent 1,770 credits ($17.70) for about 30 models and 50 images. Tripo runs one task at a time on this account, and its image queue took 5 to 10 minutes an image in the afternoon.
 
+## Image to Blender
+
+Tried on 2026-10-11 at the developers' request ([spike/model_bakeoff/image](../spike/model_bakeoff/image)): the agent modelled the workbench and the wolf in Blender against their concept images, rendering from the concept's camera beside it and correcting each round. No credits.
+
+- **The workbench, after four rounds:** recognisably the concept's bench, with every part (plank top and holes, leg vice with hanging handle, splayed legs, shelf, crate, hammer) as clean separate pieces in palette roles, about 1,500 triangles, and parametric. But less faithful than Tripo's from one image: the proportions and the legs' splay never quite matched, and judging by eye, fixing one thing broke another more than once.
+- **The wolf, after two rounds:** poor, as the benchmarks predicted. A stick skeleton skinned in code reads as a wolf-like animal, not the concept's wolf.
+- **So:** code with an image is a fair way to make props and kit pieces when clean parts or variants matter more than fidelity, and no way to make creatures or characters. Tripo stays the route for organic shapes and for any prop that must match its concept closely.
+
 ## Limits
 
 - **Nothing was tried.** Every quality claim here is a paper's, a vendor's or a commenter's.
