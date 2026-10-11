@@ -166,3 +166,4 @@ The source of truth for what is settled. Other docs must agree with this one.
 - **2026-10-10**: The developers said crossing between worlds should have no traditional loading screen, but the portal's own transition can cover loading if needed (D72).
 - **2026-10-10**: The developers confirmed each world is still a round planet (D4, D87).
 - **2026-10-11**: The sandbox's `play` experiment now carries on `terra_items` (D83, D84): a backpack grid shown on screen, a worn pack, and a bar that points into the backpack, with building, taking apart and cutting going through it. Starting sizes are placeholders.
+- **2026-10-11**: At the developers' request, the play experiment's starting backpack is smaller (5 by 4 bare, 6 by 5 with the small pack you start in, from 10 by 8) and it gained a character sheet (D64): slots for a pack, helmet, suit and oxygen tank, with gear worn and taken off by clicking. The slots and sizes are placeholders.

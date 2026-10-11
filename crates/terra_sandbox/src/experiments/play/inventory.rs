@@ -14,7 +14,7 @@
 use bevy::{ecs::system::SystemParam, prelude::*};
 use terra_items::{
     ActionBar, Catalogue, Equipment, GearSlot, Grid, IdSource, Item, ItemId, ItemKind, KindDef,
-    Size,
+    Refused, Size,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -104,21 +104,28 @@ impl Tool {
 
 pub const BAR_SLOTS: usize = 6;
 
-/// The equipment slot a pack is worn in.
-const PACK: GearSlot = GearSlot(0);
+/// The slots of the character sheet. Which slots there are is open (D64); these follow
+/// what the developers named: a pack, and the parts of a suit.
+pub const SLOTS: [(GearSlot, &str); 4] = [
+    (GearSlot(0), "Pack"),
+    (GearSlot(1), "Head"),
+    (GearSlot(2), "Body"),
+    (GearSlot(3), "Tank"),
+];
+const PACK: GearSlot = SLOTS[0].0;
 
-/// The backpack with no pack worn. How big the first backpack is is open (docs/items.md);
-/// Subnautica 2 starts with about twenty cells.
-const BARE: Size = Size { w: 6, h: 4 };
+/// The backpack with no pack worn: about Subnautica 2's twenty cells. How big the first
+/// backpack is is open (docs/items.md).
+const BARE: Size = Size { w: 5, h: 4 };
 
-/// What a player starts the demo with, besides the tools and the pack: enough to build a
-/// room or two, leaving room in the backpack to gather more.
+/// What a player starts the demo with, besides the tools and what is worn: enough to
+/// build a small room, leaving room in the backpack to gather more.
 const STARTING: [(Raw, u32); 5] = [
-    (Raw::Metal, 24),
-    (Raw::Glass, 6),
-    (Raw::Wood, 12),
-    (Raw::Cloth, 6),
-    (Raw::Parts, 4),
+    (Raw::Metal, 8),
+    (Raw::Glass, 2),
+    (Raw::Wood, 4),
+    (Raw::Cloth, 3),
+    (Raw::Parts, 1),
 ];
 
 /// Every kind of item in the demo, and which is which.
@@ -127,7 +134,8 @@ pub struct Items {
     pub catalogue: Catalogue,
     raw: [ItemKind; Raw::ALL.len()],
     tools: [(Tool, ItemKind); 2],
-    pack: ItemKind,
+    /// What a player starts out wearing.
+    worn: Vec<ItemKind>,
     ids: IdSource,
 }
 
@@ -137,17 +145,24 @@ impl Default for Items {
         let raw = Raw::ALL.map(|raw| catalogue.add(KindDef::new(raw.name())));
         let tools = [Tool::Builder, Tool::Cutter]
             .map(|tool| (tool, catalogue.add(KindDef::new(tool.name()).size(2, 1))));
-        let pack = catalogue.add(
-            KindDef::new("Large pack")
-                .size(2, 2)
-                .gear(PACK)
-                .backpack(10, 8),
-        );
+        // The pack first: what follows is put in the backpack it makes before being worn.
+        // The suit's parts do nothing yet; there is no survival to need them (D61).
+        let worn = vec![
+            catalogue.add(
+                KindDef::new("Small pack")
+                    .size(2, 2)
+                    .gear(PACK)
+                    .backpack(6, 5),
+            ),
+            catalogue.add(KindDef::new("Helmet").size(2, 2).gear(SLOTS[1].0)),
+            catalogue.add(KindDef::new("Suit").size(2, 2).gear(SLOTS[2].0)),
+            catalogue.add(KindDef::new("Oxygen tank").size(1, 2).gear(SLOTS[3].0)),
+        ];
         Self {
             catalogue,
             raw,
             tools,
-            pack,
+            worn,
             ids: IdSource::default(),
         }
     }
@@ -198,16 +213,17 @@ pub struct Gear(pub Equipment);
 #[derive(Component, Clone, Debug)]
 pub struct Bar(pub ActionBar);
 
-/// What a player starts with: a large pack worn, both tools on the bar, and some raw
-/// items.
+/// What a player starts with: a small pack and a suit worn, both tools on the bar, and
+/// some raw items.
 pub fn starting_kit(items: &mut Items) -> (Backpack, Gear, Bar) {
-    let mut gear = Equipment::new(&[PACK]);
+    let mut gear = Equipment::new(&SLOTS.map(|(slot, _)| slot));
     let mut grid = Grid::new(BARE.w, BARE.h);
-    let pack = items.make(items.pack);
-    grid.insert(&items.catalogue, pack, None)
-        .expect("a pack fits an empty backpack");
-    terra_items::equip(&items.catalogue, &mut grid, &mut gear, BARE, pack.id)
-        .expect("a pack can be worn");
+    for kind in items.worn.clone() {
+        let worn = items.make(kind);
+        grid.insert(&items.catalogue, worn, None)
+            .expect("gear fits an empty backpack");
+        wear(items, &mut grid, &mut gear, worn.id).expect("gear can be worn");
+    }
     let mut bar = ActionBar::new(BAR_SLOTS);
     for (slot, (_, kind)) in items.tools.into_iter().enumerate() {
         let tool = items.make(kind);
@@ -219,6 +235,37 @@ pub fn starting_kit(items: &mut Items) -> (Backpack, Gear, Bar) {
         give(items, &mut grid, raw, count);
     }
     (Backpack(grid), Gear(gear), Bar(bar))
+}
+
+/// Wears an item from the backpack, putting whatever was in its slot in the backpack.
+pub fn wear(
+    items: &Items,
+    grid: &mut Grid,
+    gear: &mut Equipment,
+    id: ItemId,
+) -> Result<(), Refused> {
+    terra_items::equip(&items.catalogue, grid, gear, BARE, id)
+}
+
+/// Takes off what is in a slot and puts it in the backpack.
+pub fn take_off(
+    items: &Items,
+    grid: &mut Grid,
+    gear: &mut Equipment,
+    slot: GearSlot,
+) -> Result<(), Refused> {
+    terra_items::unequip(&items.catalogue, grid, gear, BARE, slot, None).map(drop)
+}
+
+/// Why a change to what is carried was refused, as a player would read it.
+pub fn reason(refused: Refused) -> &'static str {
+    match refused {
+        Refused::NoRoom => "No room in your backpack",
+        Refused::WouldNotFit => "What you carry would not fit in a smaller backpack",
+        Refused::NotGear => "That is not something you wear",
+        Refused::NotEnough => "You do not have enough",
+        Refused::NotFound | Refused::UnknownKind | Refused::NoSuchSlot => "That cannot be done",
+    }
 }
 
 /// The tool in hand: whatever the picked slot of the bar points at.
@@ -283,7 +330,7 @@ pub struct InventoryScreen {
 #[derive(SystemParam)]
 pub struct Belongings<'w, 's> {
     items: ResMut<'w, Items>,
-    player: Single<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static Gear)>,
+    player: Single<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static mut Gear)>,
 }
 
 impl Belongings<'_, '_> {
@@ -359,6 +406,20 @@ impl Belongings<'_, '_> {
         }
     }
 
+    /// Wears an item from the backpack.
+    pub fn wear(&mut self, id: ItemId) -> Result<(), Refused> {
+        let (backpack, bar, gear) = &mut *self.player;
+        let worn = wear(&self.items, &mut backpack.0, &mut gear.0, id);
+        bar.0.tidy(&backpack.0);
+        worn
+    }
+
+    /// Takes off what is in a slot, into the backpack.
+    pub fn take_off(&mut self, slot: GearSlot) -> Result<(), Refused> {
+        let (backpack, _, gear) = &mut *self.player;
+        take_off(&self.items, &mut backpack.0, &mut gear.0, slot)
+    }
+
     /// Points a slot of the bar at a tool in the backpack. Only tools go on the bar.
     pub fn put_on_bar(&mut self, slot: usize, id: ItemId) {
         let is_tool = self
@@ -381,8 +442,10 @@ mod tests {
     fn the_starting_kit_has_both_tools_on_the_bar_and_room_to_spare() {
         let mut items = Items::default();
         let (Backpack(grid), Gear(gear), Bar(mut bar)) = starting_kit(&mut items);
-        assert_eq!(gear.worn(PACK).map(|item| item.kind), Some(items.pack));
-        assert_eq!(grid.size(), Size { w: 10, h: 8 });
+        for ((slot, _), kind) in SLOTS.iter().zip(&items.worn) {
+            assert_eq!(gear.worn(*slot).map(|item| item.kind), Some(*kind));
+        }
+        assert_eq!(grid.size(), Size { w: 6, h: 5 });
         assert_eq!(holding(&items, &grid, &bar), Some(Tool::Builder));
         bar.pick(1);
         assert_eq!(holding(&items, &grid, &bar), Some(Tool::Cutter));
@@ -398,9 +461,9 @@ mod tests {
         let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
         let count = |grid: &Grid, raw| grid.count(items.kind(raw));
         let (wood, cloth) = (count(&grid, Raw::Wood), count(&grid, Raw::Cloth));
-        assert!(pay(&items, &mut grid, &mut bar, COUCH, 2));
-        assert_eq!(count(&grid, Raw::Wood), wood - 4);
-        assert_eq!(count(&grid, Raw::Cloth), cloth - 6);
+        assert!(pay(&items, &mut grid, &mut bar, COUCH, 1));
+        assert_eq!(count(&grid, Raw::Wood), wood - 2);
+        assert_eq!(count(&grid, Raw::Cloth), cloth - 3);
         assert_eq!(
             missing(&items, &grid, COUCH, 1),
             Some((Raw::Cloth, 3)),
@@ -426,6 +489,29 @@ mod tests {
         assert!(grid.space_for(Size::ONE).is_none());
         assert!(!room_for(&items, &grid, COUCH, 1));
         assert_eq!(give(&mut items, &mut grid, Raw::Wood, 1), 0);
+    }
+
+    #[test]
+    fn gear_comes_off_into_the_backpack_and_goes_back_on() {
+        let mut items = Items::default();
+        let (Backpack(mut grid), Gear(mut gear), _) = starting_kit(&mut items);
+        let helmet = gear.worn(SLOTS[1].0).unwrap();
+        take_off(&items, &mut grid, &mut gear, SLOTS[1].0).unwrap();
+        assert_eq!(gear.worn(SLOTS[1].0), None);
+        assert!(grid.get(helmet.id).is_some());
+        wear(&items, &mut grid, &mut gear, helmet.id).unwrap();
+        assert_eq!(gear.worn(SLOTS[1].0), Some(helmet));
+        assert!(grid.get(helmet.id).is_none());
+    }
+
+    #[test]
+    fn the_pack_stays_on_while_what_is_carried_needs_it() {
+        let mut items = Items::default();
+        let (Backpack(mut grid), Gear(mut gear), _) = starting_kit(&mut items);
+        let before = (grid.clone(), gear.clone());
+        let refused = take_off(&items, &mut grid, &mut gear, PACK).unwrap_err();
+        assert!(matches!(refused, Refused::NoRoom | Refused::WouldNotFit));
+        assert_eq!((grid, gear), before);
     }
 
     #[test]

@@ -1,22 +1,23 @@
 //! The inventory on screen: the action bar along the bottom, a count of raw items, a
 //! notice above the bar when something could not be done, and the inventory itself,
-//! which Tab opens: the backpack's grid, with each item filling its cells, and what is
-//! worn.
+//! which Tab opens: the character sheet of what is worn (D64), and the backpack's grid,
+//! with each item filling its cells.
 //!
 //!   1 to 6        pick a slot of the action bar; whatever it points at is in hand
 //!   Tab           open and close the inventory (I does the same; either can be changed)
-//!   In the inventory, point at a tool and press 1 to 6 to put it in that slot.
+//!   In the inventory, point at a tool and press 1 to 6 to put it in that slot; click
+//!   gear in the backpack to wear it, and click a slot of the sheet to take it off.
 
 use super::controls::{Action, Settings};
 use super::dial::Dial;
 use super::grab_mouse;
-use super::inventory::{BAR_SLOTS, Backpack, Belongings, InventoryScreen, Items, Raw};
+use super::inventory::{self, BAR_SLOTS, Backpack, Belongings, InventoryScreen, Items, Raw, SLOTS};
 use super::options::OptionsMenu;
 use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
-use terra_items::{ItemId, ItemKind};
+use terra_items::{GearSlot, ItemId, ItemKind};
 
 const PLAIN: Color = Color::srgba(0.07, 0.08, 0.1, 0.6);
 const PICKED: Color = Color::srgba(0.9, 0.46, 0.17, 0.95);
@@ -31,7 +32,7 @@ const NUMBERS: [KeyCode; BAR_SLOTS] = [
     KeyCode::Digit6,
 ];
 /// The size of one cell of the backpack on screen.
-const CELL_PX: f32 = 40.0;
+const CELL_PX: f32 = 48.0;
 /// How long a notice stays up.
 const NOTICE_SECONDS: f32 = 3.0;
 
@@ -75,8 +76,17 @@ struct Shown(ItemId, ItemKind);
 #[derive(Component)]
 struct About;
 
+/// How big the backpack is and how much of it is free.
 #[derive(Component)]
-struct Worn;
+struct Capacity;
+
+/// A slot of the character sheet.
+#[derive(Component)]
+struct GearBox(GearSlot);
+
+/// The name of what is worn in a slot of the character sheet.
+#[derive(Component)]
+struct GearName(GearSlot);
 
 /// Everything here that is not the panel, hidden when taking pictures.
 #[derive(Component)]
@@ -87,7 +97,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<InventoryScreen>()
         .init_resource::<Notice>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (use_keys, lay_out, draw).chain());
+        .add_systems(Update, (use_keys, click, lay_out, draw).chain());
 }
 
 fn setup(mut commands: Commands) {
@@ -200,26 +210,84 @@ fn setup(mut commands: Commands) {
                     BackgroundColor(Color::srgba(0.05, 0.06, 0.08, 0.88)),
                 ))
                 .with_children(|panel| {
-                    panel.spawn((Text::new("Backpack"), TextFont::from_font_size(20.0), white));
-                    panel.spawn((Worn, Text::new(""), small.clone(), dim));
-                    panel.spawn((
-                        GridArea,
-                        Node {
-                            position_type: PositionType::Relative,
+                    panel
+                        .spawn(Node {
+                            column_gap: px(24),
                             ..default()
-                        },
-                    ));
+                        })
+                        .with_children(|row| {
+                            row.spawn(Node {
+                                flex_direction: FlexDirection::Column,
+                                row_gap: px(8),
+                                ..default()
+                            })
+                            .with_children(|sheet| {
+                                sheet.spawn((
+                                    Text::new("Equipment"),
+                                    TextFont::from_font_size(20.0),
+                                    white,
+                                ));
+                                for (slot, name) in SLOTS {
+                                    sheet
+                                        .spawn((
+                                            GearBox(slot),
+                                            Button,
+                                            Node {
+                                                width: px(150),
+                                                flex_direction: FlexDirection::Column,
+                                                row_gap: px(2),
+                                                padding: UiRect::axes(px(10), px(7)),
+                                                border: UiRect::all(px(2)),
+                                                border_radius: BorderRadius::all(px(7)),
+                                                ..default()
+                                            },
+                                            BackgroundColor(PLAIN),
+                                            BorderColor::all(Color::NONE),
+                                        ))
+                                        .with_children(|gear_box| {
+                                            gear_box.spawn((Text::new(name), small.clone(), dim));
+                                            gear_box.spawn((
+                                                GearName(slot),
+                                                Text::new(""),
+                                                normal.clone(),
+                                                white,
+                                            ));
+                                        });
+                                }
+                            });
+                            row.spawn(Node {
+                                flex_direction: FlexDirection::Column,
+                                row_gap: px(8),
+                                ..default()
+                            })
+                            .with_children(|pack| {
+                                pack.spawn((
+                                    Text::new("Backpack"),
+                                    TextFont::from_font_size(20.0),
+                                    white,
+                                ));
+                                pack.spawn((Capacity, Text::new(""), small.clone(), dim));
+                                pack.spawn((
+                                    GridArea,
+                                    Node {
+                                        position_type: PositionType::Relative,
+                                        ..default()
+                                    },
+                                ));
+                            });
+                        });
                     panel.spawn((About, Text::new(" "), small.clone(), dim));
                     panel.spawn((
                         Text::new(
-                            "Point at a tool and press 1 to 6 to put it on the bar. The builder \
-                             spends raw items and taking a thing apart gives them back, if \
-                             there is room; the cutter gathers more.",
+                            "Point at a tool and press 1 to 6 to put it on the bar. Click gear \
+                             to wear it, and a slot of the equipment to take it off. The \
+                             builder spends raw items and taking a thing apart gives them \
+                             back, if there is room; the cutter gathers more.",
                         ),
                         small.clone(),
                         dim,
                         Node {
-                            max_width: px(400),
+                            max_width: px(470),
                             ..default()
                         },
                     ));
@@ -268,6 +336,39 @@ fn use_keys(
             (true, None) => {}
             (false, _) => belongings.pick(slot),
         }
+    }
+}
+
+/// Wears gear clicked in the backpack, and takes off what is in a slot of the sheet
+/// when it is clicked. What cannot be done is said above the bar.
+fn click(
+    screen: Res<InventoryScreen>,
+    shown: Query<(&Interaction, &Shown), Changed<Interaction>>,
+    boxes: Query<(&Interaction, &GearBox), Changed<Interaction>>,
+    mut belongings: Belongings,
+    mut notice: ResMut<Notice>,
+) {
+    if !screen.open {
+        return;
+    }
+    let mut result = None;
+    for (interaction, shown) in &shown {
+        let is_gear = belongings
+            .items()
+            .catalogue
+            .get(shown.1)
+            .is_ok_and(|def| def.gear.is_some());
+        if *interaction == Interaction::Pressed && is_gear {
+            result = Some(belongings.wear(shown.0));
+        }
+    }
+    for (interaction, gear_box) in &boxes {
+        if *interaction == Interaction::Pressed && belongings.gear().worn(gear_box.0).is_some() {
+            result = Some(belongings.take_off(gear_box.0));
+        }
+    }
+    if let Some(Err(refused)) = result {
+        notice.say(inventory::reason(refused));
     }
 }
 
@@ -344,7 +445,7 @@ fn lay_out(
     });
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn draw(
     time: Res<Time>,
     screen: Res<InventoryScreen>,
@@ -353,14 +454,19 @@ fn draw(
     mut notice: ResMut<Notice>,
     mut panel: Single<&mut Visibility, (With<Panel>, Without<Hud>)>,
     mut hud: Query<&mut Visibility, With<Hud>>,
-    mut slots: Query<(&Slot, &mut BackgroundColor, &mut BorderColor), Without<Shown>>,
-    mut shown: Query<(&Interaction, &Shown, &mut BorderColor), Without<Slot>>,
+    mut slots: Query<
+        (&Slot, &mut BackgroundColor, &mut BorderColor),
+        (Without<Shown>, Without<GearBox>),
+    >,
+    mut shown: Query<(&Interaction, &Shown, &mut BorderColor), (Without<Slot>, Without<GearBox>)>,
+    mut boxes: Query<(&Interaction, &GearBox, &mut BorderColor), (Without<Slot>, Without<Shown>)>,
     mut texts: ParamSet<(
         Query<(&SlotLabel, &mut Text)>,
         Query<(&RawCount, &mut Text)>,
         Single<&mut Text, With<About>>,
-        Single<&mut Text, With<Worn>>,
+        Single<&mut Text, With<Capacity>>,
         Single<(&mut Text, &mut TextColor), With<NoticeText>>,
+        Query<(&GearName, &mut Text)>,
     )>,
 ) {
     let set = |text: &mut Text, to: String| {
@@ -378,8 +484,14 @@ fn draw(
             *visibility = wanted;
         }
     };
+    let outline = |border: &mut BorderColor, pointed: bool| {
+        let wanted = BorderColor::all(if pointed { POINTED } else { Color::NONE });
+        if *border != wanted {
+            *border = wanted;
+        }
+    };
     let items = belongings.items();
-    let (backpack, bar) = (belongings.backpack(), belongings.bar());
+    let (backpack, bar, gear) = (belongings.backpack(), belongings.bar(), belongings.gear());
     show(&mut panel, screen.open);
     for mut hud in &mut hud {
         show(&mut hud, options.vantage.is_none());
@@ -405,20 +517,30 @@ fn draw(
             format!("{:<6} {:>3}", count.0.name(), belongings.count(count.0)),
         );
     }
+    for (name, mut text) in &mut texts.p5() {
+        let worn = gear
+            .worn(name.0)
+            .map_or("empty", |item| items.name(item.kind));
+        set(&mut text, worn.to_string());
+    }
 
     let mut about = " ".to_string();
     for (interaction, shown, mut border) in &mut shown {
         let pointed = *interaction != Interaction::None;
-        let wanted = BorderColor::all(if pointed { POINTED } else { Color::NONE });
-        if *border != wanted {
-            *border = wanted;
-        }
+        outline(&mut border, pointed);
         if !pointed {
             continue;
         }
         let name = items.name(shown.1);
-        about = match items.tool(shown.1) {
-            Some(tool) => {
+        let worn_in = items
+            .catalogue
+            .get(shown.1)
+            .ok()
+            .and_then(|def| def.gear)
+            .and_then(|slot| SLOTS.iter().find(|(each, _)| *each == slot))
+            .map(|(_, slot_name)| *slot_name);
+        about = match (items.tool(shown.1), worn_in) {
+            (Some(tool), _) => {
                 let slot = (0..bar.len()).find(|&slot| bar.get(slot) == Some(shown.0));
                 format!(
                     "{name}.  {}.  {}",
@@ -429,35 +551,35 @@ fn draw(
                     ))
                 )
             }
-            None => format!("{name}.  A raw item, for building."),
+            (None, Some(slot_name)) => {
+                format!("{name}.  Worn in the {slot_name} slot.  Click to wear it.")
+            }
+            (None, None) => format!("{name}.  A raw item, for building."),
         };
+    }
+    for (interaction, gear_box, mut border) in &mut boxes {
+        let pointed = *interaction != Interaction::None;
+        outline(&mut border, pointed);
+        if pointed && let Some(item) = gear.worn(gear_box.0) {
+            about = format!("{}.  Click to take it off.", items.name(item.kind));
+        }
     }
     set(&mut texts.p2(), about);
 
     let size = backpack.size();
-    let worn = belongings
-        .gear()
+    let cells = size.w as usize * size.h as usize;
+    let used: usize = backpack
         .iter()
-        .filter_map(|(_, item)| item)
-        .map(|item| items.name(item.kind).to_string())
-        .collect::<Vec<_>>();
+        .map(|placed| placed.size.w as usize * placed.size.h as usize)
+        .sum();
     set(
         &mut texts.p3(),
         format!(
-            "Worn: {}.  The backpack is {} by {}, {} of {} cells free.",
-            if worn.is_empty() {
-                "nothing".to_string()
-            } else {
-                worn.join(", ")
-            },
+            "{} by {}, {} of {} cells free.",
             size.w,
             size.h,
-            size.w as usize * size.h as usize
-                - backpack
-                    .iter()
-                    .map(|placed| placed.size.w as usize * placed.size.h as usize)
-                    .sum::<usize>(),
-            size.w as usize * size.h as usize,
+            cells - used,
+            cells
         ),
     );
 

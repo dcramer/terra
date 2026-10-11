@@ -89,13 +89,13 @@ Those are the defaults. In the options menu (Esc) any of them can be set to anot
 
 The buttons follow Subnautica 2 where we could confirm what it does: right mouse is the build menu, left mouse builds, and taking apart and moving are modes on Q and F. The rest is the usual habit of building games. See [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
 
-You carry a backpack, on the rules in `terra_items` and the Subnautica baseline (docs/items.md, D84): a grid in which each item fills its cells and nothing stacks. You start wearing a large pack, which makes the backpack 10 by 8 cells, with both tools and some raw items in it. The action bar along the bottom points at tools in the backpack; the raw items are counted at the top right.
+You carry a backpack, on the rules in `terra_items` and the Subnautica baseline (docs/items.md, D84): a grid in which each item fills its cells and nothing stacks. Beside it is the character sheet (D64): a slot each for a pack, a helmet, a suit and an oxygen tank. You start wearing all four. The small pack makes the backpack 6 by 5 cells, up from 5 by 4 with none, and holds both tools and a few raw items. The suit's parts do nothing yet. The action bar along the bottom points at tools in the backpack; the raw items are counted at the top right.
 
-![The backpack after building a couch: two wood and three cloth spent](../../docs/images/outpost-backpack-2026-10-11.png)
+![The character sheet and the backpack at the start](../../docs/images/outpost-backpack-2026-10-11.png)
 
 - **The builder** spends raw items. Everything it builds has a cost, shown in the prompt before you commit: so much metal a tile for a room, glass for a window, wood and cloth for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost, if there is room in the backpack for it; if not, it stays, and a notice above the bar says why.
 - **The cutter** gathers more: wood from trees, metal from rocks, cloth from bushes and plants. Aim at one, or just stand in front of it, and hold left click until it is cut through. A full backpack takes nothing more, and what does not fit is left behind.
-- **The inventory** shows the backpack's grid and what is worn. Point at a tool and press 1 to 6 to put it in that slot of the bar. Opening it puts away the part in the builder's hand.
+- **The inventory** shows the character sheet and the backpack's grid. Point at a tool and press 1 to 6 to put it in that slot of the bar. Click a slot of the sheet to take off what is in it, and click gear in the backpack to wear it. The pack will not come off while what you carry would not fit without it. Opening it puts away the part in the builder's hand.
 
 The raw items, the costs, what you start with and what the cutter gives are all stand-ins. See [docs/construction.md](../../docs/construction.md) for what the developers have said about carrying and cost.
 
@@ -148,8 +148,8 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `scene` | The sun, the sky's colours, haze, shadows, and the camera's effects |
 | `flora` | Trees, rocks, bushes and flowers placed from the seed, and the grass |
 | `catalogue` | The parts the builder can build, their variants and what they cost |
-| `inventory` | What is carried, on `terra_items`: the backpack, the worn pack and the action bar as components on the player, and the demo's kinds of item |
-| `bag` | The action bar, the raw-item count, notices, and the backpack's grid on screen |
+| `inventory` | What is carried, on `terra_items`: the backpack, what is worn and the action bar as components on the player, and the demo's kinds of item |
+| `bag` | The action bar, the raw-item count, notices, and the character sheet and backpack's grid on screen |
 | `harvest` | Cutting things for the raw items in them, with any tool that can |
 | `work` | Holding a button until a job is done |
 | `tool` | The builder: what it is aimed at, the preview, and building |
