@@ -1,6 +1,29 @@
-# Research and unlocks
+# Progression: skills, research and unlocks
 
-Status: the developers said on 2026-10-10 that there is a research system that unlocks more technology and more things to craft, and that they are not yet sure how you actually research or unlock new nodes. Everything below the first section is a proposal. Nothing is built.
+Status: the developers said on 2026-10-10 that the player has skills that grow (D88), and that there is a research system that unlocks more technology and more things to craft, and that they are not yet sure how you actually research or unlock new nodes. Everything below the first section is a proposal. Nothing is built.
+
+## Player skills
+
+From the developers, 2026-10-10 (D88): there is a player progress system, and they really like games with **a lot of skills, so you always have a sense of progression**. You might pick up new skills as you go. Much of it could be inspired by *He Who Fights With Monsters*.
+
+What the books do, as I recall them, unchecked: a person absorbs a few essences, and each essence grants a set of abilities themed on it; a final essence emerges from how the others combine. Abilities, and the person, climb through named ranks (iron, bronze, silver, gold, diamond), and each step changes what an ability does, not only how strong it is. Progress comes from using abilities and from fighting, and the story treats them as a system the character can read, as in other LitRPG.
+
+Proposed, to react to:
+
+- **Skills are many and small**, so something is always about to improve. A skill is an entry in a list, like an item or a buildable (D56): its name, what it does at each rank, and what raises it.
+- **Two ways forward**, both visible: getting better at skills you have, by using them; and gaining new ones, by finding them in the world, from a culture (D86) or a teacher.
+- **Ranks change kind, not only size.** A skill at a higher rank does something new, as in the books, so progress is felt in play and not only in numbers.
+- **Skills are yours.** They go with you to every world, as your gear does (D86). Research (below) may be shared; skills are personal.
+- **In the game's model** (D58): a player's skills are a component; using one is an action the server checks and credits (D51), so a thousand players cannot grant themselves ranks.
+
+Open:
+
+6. **How is a skill gained?** Found, taught, bought with points from levelling, or emerging from what you do, as an essence does?
+7. **How is a skill raised?** By use, by points, by milestones, or a mix?
+8. **What do skills cover?** Fighting (D85 names Enshrouded's combat), movement, gathering, building, survival, crafting, or all of them?
+9. **One rank for the player as well as for each skill?** The books rank the person as well as their abilities.
+10. **Are skills chosen?** A limited set, so players differ, or eventually everything?
+11. **How do skills and research divide the work?** Skills make you better at things; research unlocks things to build. Where does a new ability come from: a skill, research, or both?
 
 ## What the developers want
 
