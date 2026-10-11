@@ -123,7 +123,7 @@ fn spawn(
     // Stand a little way out from the door, facing it.
     let (approach, facing) = site.approach();
     let outside = site.frame.transform_point(approach - facing * 5.0);
-    let feet = planet.surface(outside.normalize());
+    let feet = planet.drawn(outside.normalize());
     let up = feet.normalize();
     let toward_door = site
         .frame
@@ -260,9 +260,9 @@ fn walk(
         }
     }
     // The sea is for looking at: wade in a little way and no further.
-    let ground_ahead = planet.surface(target.normalize()).length();
+    let ground_ahead = planet.drawn(target.normalize()).length();
     if ground_ahead < planet.sea_radius_m() - WADE_DEPTH_M
-        && ground_ahead < planet.surface(up).length()
+        && ground_ahead < planet.drawn(up).length()
     {
         target = feet;
     }
@@ -283,7 +283,10 @@ fn walk(
             .transform_point3(Vec3::new(local.x, height, local.z))
             .length()
     });
-    let ground = planet.surface(target.normalize()).length();
+    // The ground as it is drawn, so the player stands on what they see. Near the start
+    // that is the true ground; further off the planet's mesh is coarser, and walking on
+    // the true ground there sinks the player into the drawn one or lifts them off it.
+    let ground = planet.drawn(target.normalize()).length();
     let held_at = match offered {
         Some(floor) if site.base.ceiling(before).is_some() => floor,
         Some(surface) => surface.max(ground),
@@ -390,7 +393,7 @@ fn follow(
         .map_or(CAMERA_BACK_M, |hit| (hit.distance - 0.25).max(0.3));
     let mut at = pivot + back * blocked;
     // Keep the camera out of the ground.
-    let ground = planet.surface(at.normalize()).length() + 0.35;
+    let ground = planet.drawn(at.normalize()).length() + 0.35;
     if at.length() < ground {
         at = at.normalize() * ground;
     }

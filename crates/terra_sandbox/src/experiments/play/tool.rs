@@ -572,7 +572,7 @@ fn aim(
             .filter(|(at, ..)| within(site.frame.transform_point(*at), ITEM_REACH_M))
             .unwrap_or_else(ahead);
         let world = site.frame.transform_point(at);
-        let wet = !indoors && planet.surface(world.normalize()).length() < planet.sea_radius_m();
+        let wet = !indoors && planet.drawn(world.normalize()).length() < planet.sea_radius_m();
         let blocked = props::blocked(
             &site,
             &boxed(at, lift, indoors),
