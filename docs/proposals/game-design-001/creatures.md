@@ -17,6 +17,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 - **A food chain**: grazers, the predators that eat them, scavengers. Monsters hunt animals too.
 - **Mostly not hostile.** Most flee; some defend themselves or their young; predators hunt what is weak, including a lone player.
 - **What they give**: meat, hide, bone, feathers. Hunting is a skill by doing (D88).
+- **Some can be tamed**, probably (D100): ridden as mounts, perhaps put to work or kept for what they give.
 - **Populations live in regions** and recover when left alone, as the ground heals outside claims (D94). Over-hunting empties a region for a while, not forever.
 
 ## Monsters
@@ -37,7 +38,7 @@ Technical, mine. Creatures are the most expensive thing in the design: they walk
 
 ## Questions
 
-1. **Taming and mounts.** Can animals be tamed, ridden or put to work, as in Kenshi or Soulmask?
+1. Answered in part: **taming and mounts**, probably yes (D100). How taming works, and which animals, is open.
 2. **Monsters among themselves.** Do they fight each other and the wildlife where they meet?
 3. **Bosses.** Are there great monsters at the heart of the worst pooling places?
 4. **Night.** Are monsters more active, or different, after dark ([survival.md](survival.md))?

@@ -8,7 +8,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 - You carry raw items, and they let you build what you are able to build (D55).
 - Resources are a reason to explore and settle (D91).
 - A backpack where nothing stacks (D84).
-- Whether items wear out and need repair is **open**.
+- **Items wear and need repair**, as recommended below, for now (D99).
 
 ## Based on
 
@@ -49,11 +49,11 @@ Proposed, replacing research as a tree of technology (D68): you learn a thing by
 
 ## Wear and repair
 
-Open. My recommendation, after Valheim: **tools, weapons and armour wear with use, a broken one stops working but is never lost, and repair is cheap at a station in a claim**, quicker with a recruit who knows the craft. It is a gentle reason to come home (D91), it makes smiths worth rescuing, and it stays clear of the chore of grinding repairs (D3). The other way, no wear at all, is simpler and loses those.
+Agreed by the developers for now, 2026-10-11 (D99), as recommended here, after Valheim: **tools, weapons and armour wear with use, a broken one stops working but is never lost, and repair is cheap at a station in a claim**, quicker with a recruit who knows the craft. It is a gentle reason to come home (D91), it makes smiths worth rescuing, and it stays clear of the chore of grinding repairs (D3). The other way, no wear at all, is simpler and loses those.
 
 ## Questions
 
-1. **Wear and repair**: as recommended, or none?
+1. Answered: **wear and repair** as recommended, for now (D99).
 2. **Quality**: does skill make better things (a master smith's sword is better than a novice's)?
 3. **Stations moving**: can a station be packed up and moved, or is it built in place?
 4. **Recipes**: can a player teach another, or must each learn for themselves?

@@ -22,7 +22,7 @@ Worlds are round planets large enough that walking round is ridiculous (D4, D13)
 - **Further**: proposed after Enshrouded, a glider for descending and a grappling hook for climbing, as things you make, not gifts.
 - **Faster**: fast travel between your claims, and portals and waystones you have found or built (D72); you may carry materials (D72).
 - **Roads** worn by travellers between settlements ([people.md](people.md)).
-- **Mounts and boats**: open ([creatures.md](creatures.md)).
+- **Mounts**: probably, by taming (D100, [creatures.md](creatures.md)). Boats: open.
 
 ## What is on screen
 
@@ -39,7 +39,7 @@ Within D93: what your body would feel, and a few compromises for play.
 
 ## Questions
 
-1. **First or third person?** (player.md question 1)
+1. Answered: **third person**, first person perhaps optional later (D97).
 2. **Glider and grappling hook**: as proposed?
 3. **The map**: does it show where you are, or must you work it out?
 4. **A compass**: on screen, as an item, or none?

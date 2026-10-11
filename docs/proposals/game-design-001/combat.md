@@ -6,7 +6,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 - They like Enshrouded's combat and movement (D85).
 - Threats are answered by holding bases and outposts, with recruits who defend (D90).
-- How central combat is has not been said.
+- **Combat is important** (D97), and the game is **third person**, with first person perhaps an option later (D97).
 
 ## Based on
 
@@ -31,8 +31,8 @@ Technical, mine. With a server that decides everything (D51), a swing must feel 
 
 ## Questions
 
-1. **How central is combat?** The main thing you do, as in Enshrouded, or one of several, as in Kenshi?
-2. **First or third person?** Third shows the fight and the character; first is cheaper to animate (player.md question 1).
+1. Answered: **combat is important** (D97).
+2. Answered: **third person**, perhaps with first person as an option later (D97).
 3. **Lock-on**, or always free aim?
 4. **Can players hurt each other** by accident? There is no player against player (D2).
 5. **How deadly is it?** How many hits a player takes from an enemy of their own rank.

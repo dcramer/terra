@@ -16,13 +16,13 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 | Need | Met by | When it is low |
 |---|---|---|
-| Hunger | Food: hunted, fished, gathered, farmed, cooked | Proposed: no starving to death; health and stamina recover slowly, and their limits shrink |
+| Hunger | Food: hunted, fished, gathered, farmed, cooked | Health and stamina recover slowly and their limits shrink; in the end, starving kills (D101) |
 | Thirst | Water: springs, rivers, wells, a waterskin | The same, faster |
 | Breath | Air: only under water (D74) | Health falls fast |
 | Warmth | Fire, shelter, clothing | Cold at night, in high places and in some worlds wears health down |
 | Rest | A bed in a claim | Proposed: rested, you recover faster for a while |
 
-**Food is a reward, not only a meter.** Proposed, after Valheim: good, cooked, varied food raises how much health and stamina you have for a while. Living well makes you stronger; going without makes you weaker, not dead.
+**Food is essential** (D101): it is what keeps you from dying. **It is also a reward**, proposed after Valheim: good, cooked, varied food raises how much health and stamina you have for a while. Living well makes you stronger; going without makes you weaker, and then kills you.
 
 ## Rhythms
 
@@ -35,12 +35,12 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 - **No fail state** (D18). You come back.
 - **Where**: proposed, at the bed you last slept in, in a claim; failing that, the nearest friendly settlement.
 - **What you lose**: your pack drops where you fell and decays after a while (D84); what you wear stays on you.
-- **Nothing else**, proposed: no lost skills or ranks. Valheim takes a little skill; that is the open question below.
+- **A little progress**, from the developers (D101): death should have some consequence, perhaps skill or experience lost. Proposed, after Valheim: some progress toward the next step of your skills is lost, never a step already reached, a rank, an essence or an ability. It stings without undoing what you built, and keeps "always getting better" true over time.
 
 ## Questions
 
-1. **Starving**: weakens you only, as proposed, or can it kill?
+1. Answered: **starving can kill**; food is essential (D101).
 2. **Food as strength**: food raising your limits, as in Valheim and Enshrouded?
 3. **Seasons**: yes or no?
-4. **Death's cost**: the pack only, or also a little skill?
+4. Answered in part: **death's cost** is the pack and a little skill or experience (D101). How much, and from which skills, is open.
 5. **Temperature**: a need of its own, or something that wears health down?

@@ -41,7 +41,7 @@ The developers like Enshrouded's movement (D85). From memory, not checked: sprin
 
 Open:
 
-1. **First person, third person, or both?** First person is cheapest: arms and a tool, and the full body is only ever seen by others. Third person shows off the character and the world, suits the art direction's framing, and needs every animation to look good from behind. Both is the most work.
+1. Answered on 2026-10-11: **third person**, with first person perhaps an option later (D97). Was: **first person, third person, or both?** First person is cheapest: arms and a tool, and the full body is only ever seen by others. Third person shows off the character and the world, suits the art direction's framing, and needs every animation to look good from behind. Both is the most work.
 2. Answered: **the character swims** (D74), using stamina for now, and breathing under water uses up oxygen as on a planet with thin or no air (see [survival.md](survival.md)). There is no set limit on depth: the water system should be flexible.
 3. **Climbing.** Can you climb a cliff or a base's wall, or only walk and jump?
 4. **A jetpack or similar.** No Man's Sky's jetpack makes rough terrain forgiving. Without one, a player who digs a deep hole needs another way out.

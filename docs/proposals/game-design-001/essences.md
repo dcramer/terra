@@ -12,6 +12,8 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 **He Who Fights With Monsters.** What I could confirm: a person absorbs essences, each giving abilities themed on it; three essences together produce a fourth, the confluence, from their combination. As I recall, unchecked: abilities and people climb ranks (iron, bronze, silver, gold, diamond), and each step changes what an ability does, not only its strength.
 
+From the developers, 2026-10-11 (D98): use the books' system as the baseline and a guide, and tweak it where the game needs.
+
 ## Two layers
 
 | | Skills | Essences |
@@ -36,7 +38,7 @@ The books' fighters spend mana on abilities. Proposed: a third pool beside healt
 
 ## Questions
 
-1. **How closely to follow the books?** Three essences and a confluence, or our own count?
+1. Answered: **the books' system is the baseline**, as a guide we may tweak (D98).
 2. **Can an essence be removed** or replaced, or is it for life?
 3. **Mana**: a pool of its own, or abilities drawing on stamina?
 4. **What rank does a player start at**, and how long is a rank?
