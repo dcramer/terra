@@ -1,0 +1,38 @@
+# Combat
+
+Part of [game design 001](README.md). A proposal for the developers to react to; nothing here is decided unless it cites a decision.
+
+## What the developers have said
+
+- They like Enshrouded's combat and movement (D85).
+- Threats are answered by holding bases and outposts, with recruits who defend (D90).
+- How central combat is has not been said.
+
+## Based on
+
+**Enshrouded** for how a fight feels: real time, close or at range, with stamina paid for attacks, dodges and blocks. **He Who Fights With Monsters** for what makes our fights different: powers from essences ([essences.md](essences.md)), and ranks so far apart that a stronger monster is a different kind of danger, not a bigger number.
+
+## How it would work
+
+- **Real time, in the world.** You aim, swing, shoot, dodge and block. No turns, no pause.
+- **Stamina is the limit.** Attacking, dodging, blocking, sprinting and climbing all draw on it (D61), so a fight is choices about when to spend it.
+- **Weapons are skills by doing** (D88). Fight with a spear and you get better with spears: faster, stronger, new moves at steps. No weapon class is locked behind a choice.
+- **Abilities come from essences** and sit on the action bar with your weapons (D66). They are what make one fighter unlike another.
+- **Rank decides more than skill.** A monster a rank above you is dangerous whatever your skill; two ranks above is death. That is how the world tells you where not to go, without a marker (D92).
+- **You judge an enemy by looking** (D93): its size, its look, how it moves, how others react to it. A skilled hunter or fighter reads more.
+- **Armour and clothing** are worn in the equipment slots (D64), and trade protection against freedom of movement and warmth ([survival.md](survival.md)).
+- **Recruits fight beside you** when they are guards, and defend your claims when you are away (D90).
+- **Fighting together**: several players and their recruits against a surge or a raid is the big set piece of the game ([arc.md](arc.md)).
+- **Going down** drops your pack where you fell (D84); there is no fail state (D18). See [survival.md](survival.md) for where you come back.
+
+## What it asks of the engine
+
+Technical, mine. With a server that decides everything (D51), a swing must feel instant on your screen and be confirmed by the server, so the client shows the hit at once and the server checks it against where things were when you swung. Hit shapes come from the collision design (D53, open). Many fighters in one place at once is a measured risk for a thousand players (D52).
+
+## Questions
+
+1. **How central is combat?** The main thing you do, as in Enshrouded, or one of several, as in Kenshi?
+2. **First or third person?** Third shows the fight and the character; first is cheaper to animate (player.md question 1).
+3. **Lock-on**, or always free aim?
+4. **Can players hurt each other** by accident? There is no player against player (D2).
+5. **How deadly is it?** How many hits a player takes from an enemy of their own rank.

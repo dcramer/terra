@@ -58,7 +58,7 @@ From the developers, 2026-10-11 (D94, Leaning): building will likely need a clai
 
 Proposed, to react to:
 
-- **You build only inside a claim.** A claim is an area you set up by placing something, as an altar does in Enshrouded (160 metres on a side once upgraded). It is the held ground of [game design 001](proposals/game-design-001.md#why-explore-and-why-settle-in-more-than-one-place): building, crafting stations and a safe rest happen there.
+- **You build only inside a claim.** A claim is an area you set up by placing something, as an altar does in Enshrouded (160 metres on a side once upgraded). It is the held ground of [game design 001](proposals/game-design-001/README.md#why-explore-and-why-settle-in-more-than-one-place): building, crafting stations and a safe rest happen there.
 - **Outside claims, the world heals.** You can still dig and gather anywhere, since that is how resources are found (D43), but what you change outside a claim grows back after a while. Enshrouded reportedly rolls back changes outside its build zones after about half an hour (unchecked). Trees regrowing and holes refilling also answers whether a thousand players strip a world bare ([multiplayer.md](multiplayer.md)).
 - **Claims belong to someone.** A player or a group; others build there only if allowed. There is no player against player (D2), so nobody can take apart what is in someone else's claim.
 - **Claims are limited**: how many a player holds and how big they grow, perhaps by rank or by what is built at the centre.

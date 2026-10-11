@@ -55,22 +55,12 @@ There is no space (D4). Worlds are reached probably by portals or something simi
 
 ## Tools
 
-Proposed. A tool is what you hold, and it decides what your main action does. A first set to react to:
+From the developers, 2026-10-11 (D96): no science-fiction toolset, and no single tool that harvests everything. Each job has its own tool: an axe, a pickaxe, a shovel, a knife, a hammer for building. The proposal under game design 001 is in [crafting.md](proposals/game-design-001/crafting.md#tools); the earlier set here (an excavator, a harvester, a scanner) is withdrawn. The sandbox's single cutter is a stand-in.
 
-| Tool | What it does | Engine piece it uses |
-|---|---|---|
-| Excavator | Digs and fills ground. What you dig, you collect. | Terrain edits and their yields |
-| Harvester | Chops trees, breaks rocks, cuts grass | Removing objects and clearing cover |
-| Scanner | Tells you what a thing is; perhaps unlocks things to build | Looking things up by what you point at |
-| Builder | Places and reshapes rooms, windows and doors; places machines | Construction |
-| Hands | Pick up, open, press | Interaction with objects |
-
-Open:
-
-7. **One multitool or separate tools?** One tool with modes is less to model and animate and fewer things to carry. Separate tools give each action its own feel and make "which tools do I own" a kind of progress.
-8. **Is digging the same tool as harvesting?** Rock in the ground and a boulder on it are different things to the engine but may not be to a player.
-9. **Do tools run down?** Charge, fuel or wear gives a reason to return to base. It is also a chore.
-10. **Do tools improve?** Upgrades are a natural spine for progress.
+7. Answered: **one multitool or separate tools?** Separate tools (D96).
+8. Answered: **is digging the same tool as harvesting?** No: a shovel digs, a pickaxe breaks rock, an axe fells trees (D96).
+9. **Do tools run down?** Open: whether items wear and need repair. Recommended in [crafting.md](proposals/game-design-001/crafting.md#wear-and-repair).
+10. **Do tools improve?** Proposed: a tool's material decides what it can work, so better tools open new resources.
 
 ## Acting on the world
 
@@ -113,7 +103,7 @@ Answered on 2026-10-10 by D84:
 
 ## The map
 
-There will be a map (D76). What it shows and how far it reaches are not yet decided. It must not hold your hand (D92): no quest markers pointing the way; proposed, it shows what you have seen and what you mark ([game design 001](proposals/game-design-001.md#no-hand-holding)).
+There will be a map (D76). What it shows and how far it reaches are not yet decided. It must not hold your hand (D92): no quest markers pointing the way; proposed, it shows what you have seen and what you mark ([game design 001](proposals/game-design-001/README.md#no-hand-holding)).
 
 Open:
 

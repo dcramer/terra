@@ -1,6 +1,6 @@
 # Terra
 
-A survival sandbox across many procedural worlds, realms reached through portals, played from the ground with tools in your hands. You start on a world that is easy to live on, then go to others that are not. The direction being considered, [game design 001](docs/proposals/game-design-001.md), is a living world in the spirit of Kenshi, Enshrouded and *He Who Fights With Monsters*.
+A survival sandbox across many procedural worlds, realms reached through portals, played from the ground with tools in your hands. You start on a world that is easy to live on, then go to others that are not. The direction being considered, [game design 001](docs/proposals/game-design-001/README.md), is a living world in the spirit of Kenshi, Enshrouded and *He Who Fights With Monsters*.
 
 This repository is where the project is thought through: design docs, research notes and experiments. It is in pre-production and there is no game to play yet. Everything here is provisional: it records current thinking, and any of it may change.
 

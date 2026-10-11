@@ -1,6 +1,6 @@
 # Game design 001: a living world
 
-One proposal for the design of the game as a whole, among any the developers come up with ([proposals](README.md)). "A living world" is a working name; the developers will name it. It says what kind of game this would be, what is going on in its worlds, and what the player does there. The other design docs each cover one part of the game; where they disagree with this proposal, the proposal is newer, and they are brought in line only as its decisions settle.
+One proposal for the design of the game as a whole, among any the developers come up with ([proposals](../README.md)). "A living world" is a working name; the developers will name it. It says what kind of game this would be, what is going on in its worlds, and what the player does there. The other design docs each cover one part of the game; where they disagree with this proposal, the proposal is newer, and they are brought in line only as its decisions settle.
 
 Status: a direction the developers are considering (D89, Leaning), written up on 2026-10-11 for them to react to. The first section is theirs; everything after it is my proposal, with questions at the end. Nothing here is built, and nothing should be until they have read it.
 
@@ -17,13 +17,30 @@ From 2026-10-11:
 
 ## Based on
 
-Open. The developers want each design based on a game they know they enjoy, so its core mechanics are known to be fun. A comparison of candidates is in [research/reference-games.md](../../research/reference-games.md); its suggestion is **Enshrouded for how it plays, Soulmask for what you are doing**: Enshrouded's movement, fighting, building and rescued survivors, with Soulmask's recruits who work and defend, outposts at resources, and attacks provoked by your activity. Kenshi is the reference for a world that goes on without you.
+Open. The developers want each design based on a game they know they enjoy, so its core mechanics are known to be fun. A comparison of candidates is in [research/reference-games.md](../../../research/reference-games.md); its suggestion is **Enshrouded for how it plays, Soulmask for what you are doing**: Enshrouded's movement, fighting, building and rescued survivors, with Soulmask's recruits who work and defend, outposts at resources, and attacks provoked by your activity. Kenshi is the reference for a world that goes on without you.
 
 ## The idea in one line
 
 Proposed: **the world goes on whether or not you are there, and you join in.** Monsters gather, animals roam and hunt, settlements trade, grow and get attacked. Nothing waits for the player to start it, and what players do changes where it goes next.
 
 That replaces the old pitch's engine, a planet you terraform, with a new one: a world that is busy without you.
+
+## How it all works
+
+This overview gives the idea, what drives the world, and the principles. Each system has its own proposal:
+
+| System | Proposal | In short |
+|---|---|---|
+| Combat | [combat.md](combat.md) | Real time, on stamina, after Enshrouded; weapons as skills by doing; abilities from essences; rank decides more than skill |
+| Creatures | [creatures.md](creatures.md) | Wildlife with routines and a food chain; monsters that form where magic pools, kinds made by rule |
+| Essences, abilities and ranks | [essences.md](essences.md) | After the books: a few essences and a confluence, abilities that improve by use, ranks as the spine |
+| Resources, tools and crafting | [crafting.md](crafting.md) | Materials by region and rank, one tool to a job, stations in claims run by recruits, wear and repair (open) |
+| People | [people.md](people.md) | Settlements with days, quests as what people say, recruits who live and work in your claims, trade |
+| Survival | [survival.md](survival.md) | Needs that reward more than punish, day and night, weather, death and coming back |
+| Your character | [character.md](character.md) | No class, getting around big round worlds, what is on screen and what is not |
+| The arc | [arc.md](arc.md) | The fiction, the first hour without a tutorial, the long game by rank and the spread, playing together |
+| Building and claims | [construction.md](../../construction.md) | A voxel grid with shaped rooms first (D48); claims, outside which the world heals (D94) |
+| Items | [items.md](../../items.md) | The backpack, equipment and action bar (D84) |
 
 ## What makes it go: magic as the world's weather
 
@@ -73,7 +90,7 @@ Technical (mine): Kenshi is single-player and runs mostly what is near you. With
 
 ## Where the player fits
 
-Proposed loops, replacing those in [gameplay.md](../gameplay.md):
+Proposed loops, replacing those in [gameplay.md](../../gameplay.md):
 
 | Loop | What the player does |
 |---|---|
@@ -133,7 +150,7 @@ Answered on 2026-10-11: **you can fast travel carrying materials**, and portals 
 
 The biggest single choice: **can you fast travel carrying materials?** If you can, as in Enshrouded, outposts are convenience and exploring is about finding things. If you cannot carry raw materials through, as in Valheim with ore, outposts near resources become necessary and moving goods between them becomes a game of its own: roads, carts, recruits who haul. My recommendation is a middle path: you travel with what you carry, but the backpack is small enough that working a resource where it is beats hauling it.
 
-What it asks of the engine, technical and mine: held ground is a few numbers per outpost, cheap to store and send; resources by region are a function of the seed and the place, like everything else (D47). With a thousand players (D52), who may hold what, and whether held ground is shared, are the ownership questions in [multiplayer.md](../multiplayer.md).
+What it asks of the engine, technical and mine: held ground is a few numbers per outpost, cheap to store and send; resources by region are a function of the seed and the place, like everything else (D47). With a thousand players (D52), who may hold what, and whether held ground is shared, are the ownership questions in [multiplayer.md](../../multiplayer.md).
 
 ## Atmosphere: three starting points
 
@@ -154,9 +171,11 @@ If adopted, these need revisiting:
 - **Tone (D3).** Done: the automation half is replaced by D90, bases and outposts defended by recruits.
 - **Survival (D61).** Lighter: health, stamina, hunger, thirst; oxygen only as breath under water (D74).
 - **Equipment (D64).** Armour, clothing and packs, not a space suit. The sandbox's placeholder suit, helmet and tank would change.
-- **Hostile life ([gameplay.md](../gameplay.md)).** Was driven by terraforming; would be driven by magic.
-- **The pitch and pillars** ([vision.md](../vision.md)).
+- **Hostile life ([gameplay.md](../../gameplay.md)).** Was driven by terraforming; would be driven by magic.
+- **The pitch and pillars** ([vision.md](../../vision.md)).
 - **Subnautica** (D85) stays a model for building and the inventory, not for the setting.
+- **Tools** (D96): no science-fiction toolset and no single harvesting tool; [player.md](../../player.md)'s tools give way to [crafting.md](crafting.md#tools).
+- **Stale under this proposal**, to bring in line once it is adopted: [survival.md](../../survival.md) (oxygen tanks, terraforming), [gameplay.md](../../gameplay.md) (loops, terraforming phases), [progression.md](../../progression.md) (research as a technology tree), pillar 4 of [vision.md](../../vision.md), and the sandbox's placeholder suit, helmet and tank.
 
 ## What it costs
 

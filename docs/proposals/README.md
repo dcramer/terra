@@ -6,6 +6,6 @@ Numbered proposals, each one candidate rather than the plan. The developers comp
 
 | Proposal | Status | In short |
 |---|---|---|
-| [Game design 001: a living world](game-design-001.md) (working name) | Being considered (D89) | A sandbox with RPG in it, closer to Enshrouded, with *He Who Fights With Monsters* as a core basis: magic pools and makes monsters, settlements live with it, you hold ground with bases, outposts and recruits, and find your own way. |
+| [Game design 001: a living world](game-design-001/README.md) (working name), with a proposal per system | Being considered (D89) | A sandbox with RPG in it, closer to Enshrouded, with *He Who Fights With Monsters* as a core basis: magic pools and makes monsters, settlements live with it, you hold ground with bases, outposts and recruits, and find your own way. |
 
 New proposals take the next number in their series, such as `game-design-002.md`.

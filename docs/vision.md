@@ -8,7 +8,7 @@ Players survive and build across many very different worlds, realms reached thro
 
 The earlier pitch, of dead planets terraformed into living ones, is parked with terraforming (D60).
 
-**Under review (D89):** the developers are considering a shift toward a living world closer to Enshrouded, with *He Who Fights With Monsters* as a core basis; see [game design 001](proposals/game-design-001.md).
+**Under review (D89):** the developers are considering a shift toward a living world closer to Enshrouded, with *He Who Fights With Monsters* as a core basis; see [game design 001](proposals/game-design-001/README.md).
 
 ## Pillars
 
@@ -23,7 +23,7 @@ Draft. A feature that serves none of these is cut.
 
 ## Our inspirations
 
-Named by the developers on 2026-10-11 as the games and books we draw on (D85). What we take is design and systems; a game's look is a separate question, answered by the art direction ([art.md](art.md), D14). Each design should be based on games we know we enjoy; how these combine for [game design 001](proposals/game-design-001.md) is in [research/reference-games.md](../research/reference-games.md).
+Named by the developers on 2026-10-11 as the games and books we draw on (D85). What we take is design and systems; a game's look is a separate question, answered by the art direction ([art.md](art.md), D14). Each design should be based on games we know we enjoy; how these combine for [game design 001](proposals/game-design-001/README.md) is in [research/reference-games.md](../research/reference-games.md).
 
 | Inspiration | We take | We leave |
 |---|---|---|

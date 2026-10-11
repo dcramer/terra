@@ -1,6 +1,6 @@
 # Games to base game design 001 on
 
-2026-10-11. Question: which existing games could [game design 001](../docs/proposals/game-design-001.md) be based on, so that its core mechanics are ones we already know are fun?
+2026-10-11. Question: which existing games could [game design 001](../docs/proposals/game-design-001/README.md) be based on, so that its core mechanics are ones we already know are fun?
 
 The developers want a base game: something to point at and say "that, but". No one game has everything in the proposal, so this compares the candidates against what the developers have asked for.
 

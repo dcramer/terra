@@ -1,6 +1,6 @@
 # Gameplay
 
-Status: draft, and older than the proposal for [a living world](proposals/game-design-001.md), one candidate direction for the whole game; if that is adopted, its loops replace the ones here. The tone is Decided. Terraforming, and the dead-to-alive arc with it, is parked (D60). The specifics below are Leaning until a prototype tests them. The worlds are in [worlds.md](worlds.md).
+Status: draft, and older than the proposal for [a living world](proposals/game-design-001/README.md), one candidate direction for the whole game; if that is adopted, its loops replace the ones here. The tone is Decided. Terraforming, and the dead-to-alive arc with it, is parked (D60). The specifics below are Leaning until a prototype tests them. The worlds are in [worlds.md](worlds.md).
 
 The style of play, and the player's body, tools and actions, are in [player.md](player.md).
 
@@ -50,7 +50,7 @@ The developers want NPCs (D70); what they are is open. People who trade, give wo
 
 ## Bases, outposts and defence
 
-From the developers (D90, Leaning): part of survival is establishing bases and outposts and holding them. Recruited NPCs help defend them; built defences, automation, may come later. There is no fail state (D18); neglect costs you progress and equipment. See [game design 001](proposals/game-design-001.md).
+From the developers (D90, Leaning): part of survival is establishing bases and outposts and holding them. Recruited NPCs help defend them; built defences, automation, may come later. There is no fail state (D18); neglect costs you progress and equipment. See [game design 001](proposals/game-design-001/README.md).
 
 ## Harvesting
 
