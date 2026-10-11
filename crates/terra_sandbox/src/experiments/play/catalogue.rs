@@ -6,14 +6,34 @@
 //! questions nobody has answered (docs/player.md).
 
 use super::inventory::{Cost, Raw};
-use terra_build::Panel;
+use terra_build::{CELL_M, Panel};
 
-/// What the pieces of a base cost. A room costs so much a tile, however it comes to have
-/// the tile: built, extended, or by pushing a wall out.
-pub const ROOM_TILE: Cost = &[(Raw::Metal, 3)];
-pub const WALL: Cost = &[(Raw::Metal, 2)];
-pub const WINDOW: Cost = &[(Raw::Glass, 2), (Raw::Metal, 1)];
+/// What the pieces of a base cost. Sizes are measured, not counted in cells, so the
+/// prices do not change if the grid does.
+///
+/// Floor is paid for by area, however a room comes to have it: built, extended, or by
+/// pushing a wall out.
+pub const FLOOR: Cost = &[(Raw::Metal, 1)];
+pub const WALL: Cost = &[(Raw::Metal, 1)];
+pub const WINDOW: Cost = &[(Raw::Glass, 1)];
 pub const DOOR: Cost = &[(Raw::Metal, 2)];
+
+/// How many times over `FLOOR` is paid for so many cells of floor: once for every three
+/// square metres, or part of that.
+pub fn floor_units(cells: usize) -> u32 {
+    libm::ceilf(cells as f32 * CELL_M * CELL_M / 3.0) as u32
+}
+
+/// How many times over `WALL` is paid for so many cells of interior wall: once for every
+/// metre and a half.
+pub fn wall_units(cells: usize) -> u32 {
+    libm::ceilf(cells as f32 * CELL_M / 1.5) as u32
+}
+
+/// How many times over `WINDOW` is paid for a window so many cells wide: once a metre.
+pub fn window_units(cells: usize) -> u32 {
+    libm::ceilf(cells as f32 * CELL_M) as u32
+}
 
 /// Something stood on a floor or on the ground. Its model is a file in
 /// `assets/models/props`.
@@ -60,20 +80,22 @@ const fn lit(light: Light, item: Item) -> Item {
     Item { light, ..item }
 }
 
-/// A room's footprint in tiles, east by south.
+/// A room's footprint in metres, east by south.
 pub struct RoomShape {
     pub name: &'static str,
-    pub tiles: [i32; 2],
+    pub metres: [f32; 2],
 }
 
 pub enum Kind {
     Room(&'static [RoomShape]),
     /// Push and pull the walls of what is already built.
     Reshape,
-    /// A plain interior wall, on the edge between two tiles of the base. Windows and
-    /// doors are cut in it with their own parts, as they are in an outside wall.
-    Wall,
-    Window(&'static [(&'static str, Panel)]),
+    /// A stretch of plain interior wall, so many metres long, on the grid between cells
+    /// of the base. Windows and doors are cut in it with their own parts, as they are in
+    /// an outside wall.
+    Wall(&'static [(&'static str, f32)]),
+    /// A window so many metres wide.
+    Window(&'static [(&'static str, f32, Panel)]),
     Door,
     Items(&'static [Item]),
     /// Take away an item, or close up a window or door.
@@ -92,8 +114,9 @@ impl Part {
         match self.kind {
             Kind::Room(shapes) => shapes.len(),
             Kind::Window(shapes) => shapes.len(),
+            Kind::Wall(lengths) => lengths.len(),
             Kind::Items(items) => items.len(),
-            Kind::Reshape | Kind::Wall | Kind::Door | Kind::Remove | Kind::Move => 1,
+            Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => 1,
         }
     }
 
@@ -102,8 +125,9 @@ impl Part {
         match self.kind {
             Kind::Room(shapes) => Some(shapes[variant].name),
             Kind::Window(shapes) => Some(shapes[variant].0),
+            Kind::Wall(lengths) => Some(lengths[variant].0),
             Kind::Items(items) => Some(items[variant].name),
-            Kind::Reshape | Kind::Wall | Kind::Door | Kind::Remove | Kind::Move => None,
+            Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => None,
         }
     }
 }
@@ -115,20 +139,20 @@ pub static PARTS: [Part; 15] = [
         name: "Room",
         kind: Kind::Room(&[
             RoomShape {
-                name: "Three by three",
-                tiles: [3, 3],
+                name: "4.5 by 4.5 m",
+                metres: [4.5, 4.5],
             },
             RoomShape {
-                name: "Two by two",
-                tiles: [2, 2],
+                name: "3 by 3 m",
+                metres: [3.0, 3.0],
             },
             RoomShape {
-                name: "Four by four",
-                tiles: [4, 4],
+                name: "6 by 6 m",
+                metres: [6.0, 6.0],
             },
             RoomShape {
-                name: "Corridor",
-                tiles: [1, 3],
+                name: "Corridor, 1.5 by 4.5 m",
+                metres: [1.5, 4.5],
             },
         ]),
     },
@@ -138,14 +162,15 @@ pub static PARTS: [Part; 15] = [
     },
     Part {
         name: "Wall",
-        kind: Kind::Wall,
+        kind: Kind::Wall(&[("3 m", 3.0), ("1.5 m", 1.5), ("0.5 m", 0.5)]),
     },
     Part {
         name: "Window",
         kind: Kind::Window(&[
-            ("Framed", Panel::WINDOW),
-            ("Wide", Panel::WIDE_WINDOW),
-            ("Tall", Panel::TALL_WINDOW),
+            ("1.5 m", 1.5, Panel::WINDOW),
+            ("3 m", 3.0, Panel::WINDOW),
+            ("0.5 m", 0.5, Panel::WINDOW),
+            ("Tall, 1.5 m", 1.5, Panel::TALL_WINDOW),
         ]),
     },
     Part {

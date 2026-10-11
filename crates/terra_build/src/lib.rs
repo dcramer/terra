@@ -1,22 +1,27 @@
 //! Construction: bases you shape instead of assemble.
 //!
-//! An experiment inspired by Subnautica 2's builder (research/subnautica-2-building.md).
-//! There are no room modules. A base is the set of tiles that are inside it, each
-//! remembering which room it was added as. The player grows and shrinks a room by pushing
-//! and pulling one of its walls, and everything else follows from the shape:
+//! Inspired by Subnautica 2's builder (research/subnautica-2-building.md); the design it
+//! is growing toward is docs/construction.md. There are no room modules. A base is the
+//! set of grid cells that are inside it, each remembering which room it was added as. The
+//! player grows and shrinks a room by pushing and pulling one of its walls, and
+//! everything else follows from the shape:
 //!
 //! - **The hull is generated.** Wherever inside meets outside there is a wall, floor or
 //!   roof. Nobody places one.
 //! - **Rooms that touch open into each other**, with no connector piece.
-//! - **Windows and doors are a property of a wall tile**, not separate parts. A window is
-//!   described by its edges, so it can be any size, and windows on neighbouring tiles
-//!   with no gap between them read as one long window.
+//! - **Windows and doors are a property of a wall cell.** A window or door is as wide as
+//!   the run of cells it was cut in, so it can be any width and stand anywhere along a
+//!   wall, a cell at a time.
+//!
+//! Everything is on one square grid of [`CELL_M`]. That is the smallest thing that can be
+//! placed, and the step a wall moves by. A cell is a column of that size and one storey,
+//! [`STOREY_M`], tall.
 //!
 //! Everything a player does is a [`BuildOp`], so a base can be sent to other players and
 //! saved as the list of operations that made it (D21).
 //!
-//! Coordinates are local to the base: tiles on an integer grid, X and Z along the floor
-//! and Y up. [`TILE_M`] and [`STOREY_M`] turn tiles into metres.
+//! Coordinates are local to the base: cells on an integer grid, X and Z along the floor
+//! and Y up, counted in storeys.
 
 mod mesh;
 mod walk;
@@ -27,16 +32,22 @@ pub use walk::Walker;
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Width and depth of one tile, in metres.
-pub const TILE_M: f32 = 3.0;
+/// The grid: the width and depth of one cell, in metres. Everything else here is given in
+/// metres and turned into cells with [`cells`], so this is the one number to change.
+pub const CELL_M: f32 = 0.5;
 /// Height of one storey, in metres.
 pub const STOREY_M: f32 = 3.0;
 /// Width of a door's opening, in metres.
-pub const DOOR_WIDTH_M: f32 = 1.3;
+pub const DOOR_WIDTH_M: f32 = 1.5;
 /// Height of a door's opening, in metres.
 pub const DOOR_HEIGHT_M: f32 = 2.2;
 
 /// One of the six directions a tile faces.
+/// How many cells a length in metres is: the nearest whole number, and at least one.
+pub fn cells(metres: f32) -> i32 {
+    ((metres / CELL_M).round() as i32).max(1)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Side {
     East,
@@ -74,6 +85,11 @@ impl Side {
         !matches!(self, Side::Up | Side::Down)
     }
 
+    /// The level direction a wall facing this way runs in.
+    pub fn along(self) -> IVec3 {
+        self.across()[0]
+    }
+
     /// The two directions that run along a surface facing this way.
     fn across(self) -> [IVec3; 2] {
         match self {
@@ -104,42 +120,29 @@ impl Face {
     }
 }
 
-/// What fills a wall tile.
+/// What fills a wall cell.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Panel {
     Solid,
-    /// An opening with glass. Each edge is a distance in metres from the matching edge of
-    /// the tile, so the window can be any size. A side inset of zero runs the glass to
-    /// the tile's edge, where it meets a neighbouring window.
+    /// Glass, from `sill` metres above the floor to `top` metres below the ceiling, the
+    /// full width of the cell. Neighbouring cells with the same glass are one window.
     Window {
-        left: f32,
-        right: f32,
         sill: f32,
         top: f32,
     },
-    /// An opening to walk through.
+    /// An opening to walk through, the full width of the cell. Neighbouring cells are
+    /// one doorway; a walker needs more than one.
     Door,
 }
 
 impl Panel {
-    /// A window with a frame all round.
+    /// A window at about eye level.
     pub const WINDOW: Panel = Panel::Window {
-        left: 0.45,
-        right: 0.45,
         sill: 0.9,
         top: 0.5,
     };
-    /// A window that runs the full width of its tile, to join its neighbours.
-    pub const WIDE_WINDOW: Panel = Panel::Window {
-        left: 0.0,
-        right: 0.0,
-        sill: 0.9,
-        top: 0.5,
-    };
-    /// Glass from just above the floor to just under the roof, full width.
+    /// Glass from just above the floor to just under the roof.
     pub const TALL_WINDOW: Panel = Panel::Window {
-        left: 0.0,
-        right: 0.0,
         sill: 0.2,
         top: 0.2,
     };
@@ -148,8 +151,7 @@ impl Panel {
     pub fn next(self) -> Panel {
         match self {
             Panel::Solid => Panel::WINDOW,
-            p if p == Panel::WINDOW => Panel::WIDE_WINDOW,
-            p if p == Panel::WIDE_WINDOW => Panel::TALL_WINDOW,
+            p if p == Panel::WINDOW => Panel::TALL_WINDOW,
             Panel::Window { .. } => Panel::Door,
             Panel::Door => Panel::Solid,
         }
@@ -279,6 +281,44 @@ impl Base {
         changed
     }
 
+    /// What fills a wall cell, whether it is part of the hull or an interior wall. `None`
+    /// where there is no wall.
+    pub fn filling(&self, face: Face) -> Option<Panel> {
+        if self.is_hull(face) {
+            Some(self.panel(face))
+        } else {
+            self.partition(face)
+        }
+    }
+
+    /// The window or doorway a wall cell is part of: every cell in a row with it, on the
+    /// same storey, that has the same filling. In order along the wall. Just the cell
+    /// itself if it is solid, and nothing if there is no wall there.
+    pub fn run(&self, face: Face) -> Vec<Face> {
+        let Some(panel) = self.filling(face) else {
+            return Vec::new();
+        };
+        if panel == Panel::Solid {
+            return vec![face];
+        }
+        let along = face.side.across()[0];
+        let same = |cell: IVec3| {
+            let next = Face::new(cell, face.side);
+            self.is_hull(next) == self.is_hull(face) && self.filling(next) == Some(panel)
+        };
+        let mut first = face.tile();
+        while same(first - along) {
+            first -= along;
+        }
+        let mut found = Vec::new();
+        let mut cell = first;
+        while same(cell) {
+            found.push(Face::new(cell, face.side));
+            cell += along;
+        }
+        found
+    }
+
     /// The same edge between two tiles, named from whichever tile has it on its east or
     /// south side.
     fn edge(face: Face) -> Face {
@@ -399,7 +439,7 @@ impl Base {
     /// The first hull face or interior wall a ray meets, from either side, if any. `origin` and
     /// `direction` are in the base's own space, in metres; `direction` is unit length.
     pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f32) -> Option<BuildHit> {
-        let size = Vec3::new(TILE_M, STOREY_M, TILE_M);
+        let size = Vec3::new(CELL_M, STOREY_M, CELL_M);
         let hull = self.hull().map(|face| (face, false));
         let interior = self.partitions.keys().map(|&face| (face, true));
         hull.chain(interior)
@@ -570,35 +610,36 @@ mod tests {
     fn cycling_a_panel_comes_back_round() {
         let mut panel = Panel::Solid;
         let mut seen = vec![panel];
-        for _ in 0..5 {
+        for _ in 0..4 {
             panel = panel.next();
             seen.push(panel);
         }
         assert_eq!(seen.first(), seen.last());
         assert_eq!(seen[1], Panel::WINDOW);
-        assert_eq!(seen[4], Panel::Door);
+        assert_eq!(seen[3], Panel::Door);
     }
 
     #[test]
     fn a_ray_finds_the_wall_it_points_at_from_either_side() {
         let base = room();
         // From outside, east of the room, looking west at the middle tile.
+        let t = CELL_M;
         let from_outside = base
-            .raycast(Vec3::new(20.0, 1.5, 4.5), Vec3::NEG_X, 100.0)
+            .raycast(Vec3::new(t * 10.0, 1.5, t * 1.5), Vec3::NEG_X, 100.0)
             .unwrap();
         assert_eq!(
             from_outside.face,
             Face::new(IVec3::new(2, 0, 1), Side::East)
         );
-        assert!((from_outside.distance - 11.0).abs() < 1e-4);
+        assert!((from_outside.distance - t * 7.0).abs() < 1e-4);
         // From inside the room, looking east at the same wall.
         let from_inside = base
-            .raycast(Vec3::new(4.5, 1.5, 4.5), Vec3::X, 100.0)
+            .raycast(Vec3::new(t * 1.5, 1.5, t * 1.5), Vec3::X, 100.0)
             .unwrap();
         assert_eq!(from_inside.face, from_outside.face);
         // Looking away from the base finds nothing.
         assert!(
-            base.raycast(Vec3::new(20.0, 1.5, 4.5), Vec3::X, 100.0)
+            base.raycast(Vec3::new(t * 10.0, 1.5, t * 1.5), Vec3::X, 100.0)
                 .is_none()
         );
     }
@@ -613,7 +654,7 @@ mod tests {
             BuildOp::Grow(Face::new(IVec3::new(2, 0, 1), Side::East)),
             BuildOp::SetPanel(
                 Face::new(IVec3::new(3, 0, 1), Side::East),
-                Panel::WIDE_WINDOW,
+                Panel::TALL_WINDOW,
             ),
             BuildOp::AddRoom {
                 min: [0, 1, 0],
@@ -679,9 +720,9 @@ mod tests {
 
         // A ray across the room meets it, and says it is not the hull.
         let hit = base
-            .raycast(Vec3::new(0.5, 1.0, 4.5), Vec3::X, 50.0)
+            .raycast(Vec3::new(CELL_M * 0.25, 1.0, CELL_M * 1.5), Vec3::X, 50.0)
             .unwrap();
-        assert!(hit.partition && (hit.distance - 2.5).abs() < 1e-4);
+        assert!(hit.partition && (hit.distance - CELL_M * 0.75).abs() < 1e-4);
 
         // Pull the east wall in twice and the tiles beside it go, and the wall with them.
         let east = Face::new(IVec3::new(2, 0, 1), Side::East);
@@ -690,5 +731,25 @@ mod tests {
         assert!(base.apply(BuildOp::Shrink(Face::new(IVec3::new(1, 0, 1), Side::East))));
         assert_eq!(base.partitions().count(), 0);
         assert!(!base.apply(BuildOp::SetPartition(inside, None)));
+    }
+
+    #[test]
+    fn neighbouring_cells_with_the_same_opening_are_one_run() {
+        let mut base = room();
+        let south = |x: i32| Face::new(IVec3::new(x, 0, 2), Side::South);
+        base.apply(BuildOp::SetPanel(south(0), Panel::Door));
+        base.apply(BuildOp::SetPanel(south(1), Panel::Door));
+        base.apply(BuildOp::SetPanel(south(2), Panel::WINDOW));
+        assert_eq!(base.run(south(1)), vec![south(0), south(1)]);
+        assert_eq!(base.run(south(2)), vec![south(2)]);
+        // A solid cell is a run of one, and where there is no wall there is no run.
+        let north = Face::new(IVec3::new(1, 0, 0), Side::North);
+        assert_eq!(base.run(north), vec![north]);
+        assert!(
+            base.run(Face::new(IVec3::new(1, 0, 1), Side::East))
+                .is_empty()
+        );
+        assert_eq!(cells(CELL_M * 3.0), 3);
+        assert_eq!(cells(0.0), 1);
     }
 }

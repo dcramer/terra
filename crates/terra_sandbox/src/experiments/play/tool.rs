@@ -39,7 +39,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions},
 };
 use terra_build::{
-    Base, BuildOp, DOOR_HEIGHT_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, TILE_M,
+    Base, BuildOp, CELL_M, DOOR_HEIGHT_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, cells,
 };
 use terra_core::Ground;
 
@@ -115,6 +115,10 @@ pub struct Builder {
     turn: f32,
     /// Whether the next room is turned a quarter circle.
     room_turned: bool,
+    /// Whether the next interior wall runs north and south instead of east and west.
+    wall_turned: bool,
+    /// The wall cells the thing aimed at would change. Empty when it would not fit.
+    run: Vec<Face>,
     /// Whether items snap to the grid and turn in eighths.
     pub snap: bool,
     /// The same, right now: holding Alt does the opposite of the setting.
@@ -183,11 +187,11 @@ impl Builder {
         }
     }
 
-    /// The footprint of the room that would be built, in tiles.
+    /// The footprint of the room that would be built, in cells.
     fn room(&self) -> Option<IVec2> {
         match self.picked().kind {
             Kind::Room(shapes) => {
-                let [east, south] = shapes[self.variant()].tiles;
+                let [east, south] = shapes[self.variant()].metres.map(cells);
                 Some(if self.room_turned {
                     IVec2::new(south, east)
                 } else {
@@ -256,6 +260,8 @@ fn setup(
         variants: vec![0; PARTS.len()],
         turn: 0.0,
         room_turned: false,
+        wall_turned: false,
+        run: Vec::new(),
         snap: true,
         snapping: true,
         viewed: None,
@@ -332,6 +338,8 @@ fn choose(
             builder.turn = (builder.turn + step * builder.wheel as f32).rem_euclid(360.0);
         } else if builder.room().is_some() {
             builder.room_turned = !builder.room_turned;
+        } else if matches!(builder.picked().kind, Kind::Wall(_)) {
+            builder.wall_turned = !builder.wall_turned;
         }
     }
 }
@@ -454,7 +462,7 @@ fn aim(
                     // on the grid along it.
                     let out = side.offset().as_vec3();
                     let toward_viewer = -out * local_direction.dot(out).signum();
-                    let tile = ((touched + toward_viewer * 0.2) / TILE_M)
+                    let tile = ((touched + toward_viewer * 0.2) / CELL_M)
                         .floor()
                         .as_ivec3()
                         .with_y(hit.face.tile[1]);
@@ -474,7 +482,7 @@ fn aim(
                 .with_y(0.0)
                 .normalize_or_zero();
             let at = on_grid(feet + forward * ITEM_NEAR_M);
-            let tile = (at / TILE_M).floor().as_ivec3().with_y(0);
+            let tile = (at / CELL_M).floor().as_ivec3().with_y(0);
             let indoors = site.base.contains(tile) && feet.y < STOREY_M * 0.5;
             (at.with_y(0.0), 0.0, indoors)
         };
@@ -511,57 +519,79 @@ fn aim(
             .partition(face)
             .is_some_and(|panel| panel != Panel::Solid),
     };
+    // So many cells of one wall, centred on one of them. Empty if the wall does not run
+    // that far, or changes from outside wall to interior on the way.
+    let stretch = |face: Face, count: i32| -> Vec<Face> {
+        let along = face.side.along();
+        let first = face.tile() - along * ((count - 1) / 2);
+        let covered: Vec<Face> = (0..count)
+            .map(|step| Face::new(first + along * step, face.side))
+            .collect();
+        let outside = site.base.is_hull(face);
+        if covered
+            .iter()
+            .all(|&cell| site.base.is_hull(cell) == outside && site.base.filling(cell).is_some())
+        {
+            covered
+        } else {
+            Vec::new()
+        }
+    };
+    // Any upright wall the view is on, outside or interior, within reach.
+    let any_wall = hull
+        .filter(|hit| hit.face.side.is_wall())
+        .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M));
+    let opening_on = |width_m: f32, run: &mut Vec<Face>| {
+        any_wall.map_or(Target::Nothing, |hit| {
+            *run = stretch(hit.face, cells(width_m));
+            if hit.partition {
+                edge(hit.face)
+            } else {
+                Target::Wall(hit.face)
+            }
+        })
+    };
+    let mut run = Vec::new();
     builder.target = match builder.picked().kind {
         Kind::Reshape => outside_wall.map_or(Target::Nothing, |hit| Target::Wall(hit.face)),
         // A window or a door goes in an outside wall or an interior one alike.
-        Kind::Window(_) | Kind::Door => hull
-            .filter(|hit| hit.face.side.is_wall())
-            .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M))
-            .map_or(Target::Nothing, |hit| {
-                if hit.partition {
-                    edge(hit.face)
-                } else {
-                    Target::Wall(hit.face)
-                }
-            }),
-        Kind::Wall => {
-            // An interior wall already there; or the nearest edge of the floor tile the
-            // view is on; or, looking at neither, of the tile a couple of steps ahead.
-            let reachable =
-                hull.filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M));
-            let nearest_edge = |on_floor: Vec3| {
-                let tile = (on_floor / TILE_M).floor().as_ivec3();
-                let across = on_floor / TILE_M - tile.as_vec3();
-                let edges = [
-                    (across.x, Side::West),
-                    (1.0 - across.x, Side::East),
-                    (across.z, Side::North),
-                    (1.0 - across.z, Side::South),
-                ];
-                edges
-                    .into_iter()
-                    .min_by(|a, b| a.0.total_cmp(&b.0))
-                    .map(|(_, side)| Face::new(tile, side))
+        Kind::Window(shapes) => opening_on(shapes[builder.variant()].1, &mut run),
+        Kind::Door => opening_on(DOOR_WIDTH_M, &mut run),
+        Kind::Wall(lengths) => {
+            // On the grid line nearest the floor the view is on; or, looking at no
+            // floor, a couple of steps ahead. The wheel turns it.
+            let on_floor = hull
+                .filter(|hit| !hit.partition && hit.face.side == Side::Down)
+                .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M))
+                .map(|hit| met(hit.distance).with_y(hit.face.tile[1] as f32 * STOREY_M + 0.01))
+                .unwrap_or_else(|| {
+                    let feet = to_base.transform_point3(player.translation);
+                    let forward = to_base
+                        .transform_vector3(view.forward)
+                        .with_y(0.0)
+                        .normalize_or_zero();
+                    let storey = (feet.y / STOREY_M).round();
+                    (feet + forward * 2.0).with_y(storey * STOREY_M + 0.01)
+                });
+            let cell = (on_floor / CELL_M).floor().as_ivec3();
+            let across = on_floor / CELL_M - cell.as_vec3();
+            // A wall stands on the east or south side of a cell.
+            let face = if builder.wall_turned {
+                Face::new(cell - IVec3::X * i32::from(across.x < 0.5), Side::East)
+            } else {
+                Face::new(cell - IVec3::Z * i32::from(across.z < 0.5), Side::South)
             };
-            let ahead = || {
-                let feet = to_base.transform_point3(player.translation);
-                let forward = to_base
-                    .transform_vector3(view.forward)
-                    .with_y(0.0)
-                    .normalize_or_zero();
-                let storey = (feet.y / STOREY_M).round();
-                nearest_edge((feet + forward * 2.0).with_y(storey * STOREY_M + 0.01))
-            };
-            reachable
-                .and_then(|hit| match hit.face.side {
-                    _ if hit.partition => Some(hit.face),
-                    Side::Down => nearest_edge(
-                        met(hit.distance).with_y(hit.face.tile[1] as f32 * STOREY_M + 0.01),
-                    ),
-                    _ => None,
-                })
-                .or_else(ahead)
-                .map_or(Target::Nothing, edge)
+            let count = cells(lengths[builder.variant()].1);
+            let along = face.side.along();
+            let first = face.tile() - along * ((count - 1) / 2);
+            run = (0..count)
+                .map(|step| Face::new(first + along * step, face.side))
+                .collect();
+            Target::Edge {
+                face,
+                fits: run.iter().all(|&cell| site.base.can_partition(cell)),
+                open: false,
+            }
         }
         Kind::Room(_) => {
             // On open ground, or across a room already there, which it then extends.
@@ -572,28 +602,29 @@ fn aim(
                 .or(ground.map(|ground| ground.point))
                 .filter(|point| within(*point, STRUCTURE_REACH_M))
                 .zip(builder.room())
-                .map_or(Target::Nothing, |(point, tiles)| {
+                .map_or(Target::Nothing, |(point, size)| {
                     // Centred on the place aimed at.
                     let local = to_base.transform_point3(point);
                     let corner = IVec3::new(
-                        (local.x / TILE_M - tiles.x as f32 * 0.5).round() as i32,
+                        (local.x / CELL_M - size.x as f32 * 0.5).round() as i32,
                         0,
-                        (local.z / TILE_M - tiles.y as f32 * 0.5).round() as i32,
+                        (local.z / CELL_M - size.y as f32 * 0.5).round() as i32,
                     );
                     // The room's floor is the base's floor. Its foundation may go into
-                    // the ground; the room itself may not.
-                    let fits = (0..=tiles.x).all(|i| {
-                        (0..=tiles.y).all(|j| {
-                            let on_floor = (corner + IVec3::new(i, 0, j)).as_vec3() * TILE_M;
+                    // the ground; the room itself may not. Checked every metre or so.
+                    let every = cells(1.0).max(1) as usize;
+                    let fits = (0..=size.x).step_by(every).chain([size.x]).all(|i| {
+                        (0..=size.y).step_by(every).chain([size.y]).all(|j| {
+                            let on_floor = (corner + IVec3::new(i, 0, j)).as_vec3() * CELL_M;
                             planet.ground.distance(site.frame.transform_point(on_floor)) > 0.02
                         })
                     });
-                    let adds = (0..tiles.x).any(|i| {
-                        (0..tiles.y).any(|j| !site.base.contains(corner + IVec3::new(i, 0, j)))
+                    let adds = (0..size.x).any(|i| {
+                        (0..size.y).any(|j| !site.base.contains(corner + IVec3::new(i, 0, j)))
                     });
                     Target::Ground {
                         corner,
-                        tiles,
+                        tiles: size,
                         fits,
                         adds,
                     }
@@ -604,25 +635,48 @@ fn aim(
         Kind::Move => item.map_or(Target::Nothing, |(entity, ..)| Target::Prop(entity)),
         Kind::Remove => match (item, hull, outside_wall) {
             (Some((entity, ..)), _, _) => Target::Prop(entity),
-            (None, Some(hit), _) if hit.partition => edge(hit.face),
+            (None, Some(hit), _) if hit.partition => {
+                let target = edge(hit.face);
+                run = if matches!(target, Target::Edge { open: true, .. }) {
+                    // The window or doorway in it.
+                    site.base.run(hit.face)
+                } else {
+                    // The whole straight stretch of plain wall.
+                    let along = hit.face.side.along();
+                    let plain = |cell: IVec3| {
+                        site.base.partition(Face::new(cell, hit.face.side)) == Some(Panel::Solid)
+                    };
+                    let mut first = hit.face.tile();
+                    while plain(first - along) {
+                        first -= along;
+                    }
+                    let mut found = Vec::new();
+                    while plain(first) {
+                        found.push(Face::new(first, hit.face.side));
+                        first += along;
+                    }
+                    found
+                };
+                target
+            }
             (None, _, Some(hit)) if site.base.panel(hit.face) != Panel::Solid => {
+                run = site.base.run(hit.face);
                 Target::Wall(hit.face)
             }
             _ => Target::Nothing,
         },
     };
+    builder.run = run;
 }
 
 /// Works out what the thing aimed at would cost to build, and whether it can be paid.
 fn afford(site: Res<Site>, inventory: Res<Inventory>, mut builder: ResMut<Builder>) {
-    let opened = |face: Face, interior: bool| {
-        // Cutting an opening is paid for once; changing its shape afterwards is free.
-        if interior {
-            site.base.partition(face) == Some(Panel::Solid)
-        } else {
-            site.base.panel(face) == Panel::Solid
-        }
-    };
+    // Cutting an opening is paid for where the wall was solid; changing the shape of
+    // one already there is free.
+    let cuts = builder
+        .run
+        .iter()
+        .any(|&cell| site.base.filling(cell) == Some(Panel::Solid));
     let price: Option<(Cost, u32)> = match (&builder.picked().kind, builder.target) {
         (
             Kind::Room(_),
@@ -633,29 +687,29 @@ fn afford(site: Res<Site>, inventory: Res<Inventory>, mut builder: ResMut<Builde
                 adds: true,
             },
         ) => {
-            let new_tiles = (0..tiles.x)
+            let new_cells = (0..tiles.x)
                 .flat_map(|i| (0..tiles.y).map(move |j| IVec3::new(i, 0, j)))
                 .filter(|&step| !site.base.contains(corner + step))
                 .count();
-            Some((catalogue::ROOM_TILE, new_tiles as u32))
+            Some((catalogue::FLOOR, catalogue::floor_units(new_cells)))
         }
-        (Kind::Reshape, Target::Wall(face)) => {
-            Some((catalogue::ROOM_TILE, site.base.wall(face).len() as u32))
+        (Kind::Reshape, Target::Wall(face)) => Some((
+            catalogue::FLOOR,
+            catalogue::floor_units(site.base.wall(face).len()),
+        )),
+        (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
+            let new_cells = builder
+                .run
+                .iter()
+                .filter(|&&cell| site.base.partition(cell).is_none())
+                .count();
+            (new_cells > 0).then(|| (catalogue::WALL, catalogue::wall_units(new_cells)))
         }
-        (
-            Kind::Wall,
-            Target::Edge {
-                face, fits: true, ..
-            },
-        ) if site.base.partition(face).is_none() => Some((catalogue::WALL, 1)),
-        (Kind::Window(_), Target::Wall(face)) if opened(face, false) => {
-            Some((catalogue::WINDOW, 1))
-        }
-        (Kind::Window(_), Target::Edge { face, .. }) if opened(face, true) => {
-            Some((catalogue::WINDOW, 1))
-        }
-        (Kind::Door, Target::Wall(face)) if opened(face, false) => Some((catalogue::DOOR, 1)),
-        (Kind::Door, Target::Edge { face, .. }) if opened(face, true) => Some((catalogue::DOOR, 1)),
+        (Kind::Window(_), Target::Wall(_) | Target::Edge { .. }) if cuts => Some((
+            catalogue::WINDOW,
+            catalogue::window_units(builder.run.len()),
+        )),
+        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) if cuts => Some((catalogue::DOOR, 1)),
         (Kind::Items(_), Target::Spot { blocked: None, .. }) => {
             builder.item().map(|item| (item.cost, 1))
         }
@@ -722,49 +776,65 @@ fn act(
     let can_pay = builder.short.is_none();
     let build = click && can_pay;
     let mut refund: Option<(Cost, u32)> = None;
-    let opening_cost = |panel: Panel| match panel {
-        Panel::Solid => None,
-        Panel::Window { .. } => Some((catalogue::WINDOW, 1)),
-        Panel::Door => Some((catalogue::DOOR, 1)),
+    // What closing a window or doorway gives back.
+    let opening_worth = |run: &[Face]| match run.first().and_then(|&cell| site.base.filling(cell)) {
+        Some(Panel::Window { .. }) => Some((catalogue::WINDOW, catalogue::window_units(run.len()))),
+        Some(Panel::Door) => Some((catalogue::DOOR, 1)),
+        _ => None,
     };
-    let op = match (&builder.picked().kind, builder.target) {
-        // A wall goes out a tile for a click or a notch away, and in for a notch back.
+    // Fills every cell of the run, in an outside wall or an interior one.
+    let fill = |run: &[Face], panel: Panel| -> Vec<BuildOp> {
+        run.iter()
+            .map(|&cell| {
+                if site.base.is_hull(cell) {
+                    BuildOp::SetPanel(cell, panel)
+                } else {
+                    BuildOp::SetPartition(cell, Some(panel))
+                }
+            })
+            .collect()
+    };
+    let ops: Vec<BuildOp> = match (&builder.picked().kind, builder.target) {
+        // A wall goes out a step for a click or a notch away, and in for a notch back.
         (Kind::Reshape, Target::Wall(face)) if (click || builder.wheel > 0) && can_pay => {
-            Some(BuildOp::Grow(face))
+            vec![BuildOp::Grow(face)]
         }
         (Kind::Reshape, Target::Wall(face)) if builder.wheel < 0 => {
-            refund = Some((catalogue::ROOM_TILE, site.base.wall(face).len() as u32));
-            Some(BuildOp::Shrink(face))
+            refund = Some((
+                catalogue::FLOOR,
+                catalogue::floor_units(site.base.wall(face).len()),
+            ));
+            vec![BuildOp::Shrink(face)]
         }
-        (Kind::Window(shapes), Target::Wall(face)) if build => {
-            Some(BuildOp::SetPanel(face, shapes[builder.variant()].1))
+        (Kind::Window(shapes), Target::Wall(_) | Target::Edge { .. }) if build => {
+            fill(&builder.run, shapes[builder.variant()].2)
         }
-        (Kind::Door, Target::Wall(face)) if build => Some(BuildOp::SetPanel(face, Panel::Door)),
-        (
-            Kind::Wall,
-            Target::Edge {
-                face, fits: true, ..
-            },
-        ) if build => Some(BuildOp::SetPartition(face, Some(Panel::Solid))),
-        (Kind::Window(shapes), Target::Edge { face, .. }) if build => Some(BuildOp::SetPartition(
-            face,
-            Some(shapes[builder.variant()].1),
-        )),
-        (Kind::Door, Target::Edge { face, .. }) if build => {
-            Some(BuildOp::SetPartition(face, Some(Panel::Door)))
+        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) if build => {
+            fill(&builder.run, Panel::Door)
         }
-        (Kind::Remove, Target::Wall(face)) if click => {
-            refund = opening_cost(site.base.panel(face));
-            Some(BuildOp::SetPanel(face, Panel::Solid))
+        // A wall is built where there is none, and leaves alone what is already there.
+        (Kind::Wall(_), Target::Edge { fits: true, .. }) if build => builder
+            .run
+            .iter()
+            .filter(|&&cell| site.base.partition(cell).is_none())
+            .map(|&cell| BuildOp::SetPartition(cell, Some(Panel::Solid)))
+            .collect(),
+        (Kind::Remove, Target::Wall(_)) if click => {
+            refund = opening_worth(&builder.run);
+            fill(&builder.run, Panel::Solid)
         }
         // An opening in an interior wall is closed first; a plain wall is taken away.
-        (Kind::Remove, Target::Edge { face, open, .. }) if click => {
-            refund = if open {
-                site.base.partition(face).and_then(opening_cost)
-            } else {
-                Some((catalogue::WALL, 1))
-            };
-            Some(BuildOp::SetPartition(face, open.then_some(Panel::Solid)))
+        (Kind::Remove, Target::Edge { open: true, .. }) if click => {
+            refund = opening_worth(&builder.run);
+            fill(&builder.run, Panel::Solid)
+        }
+        (Kind::Remove, Target::Edge { .. }) if click => {
+            refund = Some((catalogue::WALL, catalogue::wall_units(builder.run.len())));
+            builder
+                .run
+                .iter()
+                .map(|&cell| BuildOp::SetPartition(cell, None))
+                .collect()
         }
         (
             Kind::Room(_),
@@ -774,10 +844,10 @@ fn act(
                 fits: true,
                 adds: true,
             },
-        ) if build => Some(BuildOp::AddRoom {
+        ) if build => vec![BuildOp::AddRoom {
             min: corner.to_array(),
             max: (corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1)).to_array(),
-        }),
+        }],
         (
             Kind::Items(_) | Kind::Move,
             Target::Spot {
@@ -806,7 +876,7 @@ fn act(
                 }
                 player.since_acting = 0.0;
             }
-            None
+            Vec::new()
         }
         (Kind::Move, Target::Prop(entity)) if click => {
             if let Ok(prop) = props.get(entity) {
@@ -822,7 +892,7 @@ fn act(
                 commands.entity(entity).despawn();
                 player.since_acting = 0.0;
             }
-            None
+            Vec::new()
         }
         (Kind::Remove, Target::Prop(entity)) if click => {
             if let Ok(prop) = props.get(entity) {
@@ -831,13 +901,13 @@ fn act(
             }
             commands.entity(entity).despawn();
             player.since_acting = 0.0;
-            None
+            Vec::new()
         }
-        _ => None,
+        _ => Vec::new(),
     };
-    if let Some(op) = op {
+    if !ops.is_empty() {
         player.since_acting = 0.0;
-        if site.apply(op, &mut commands, &planet, &mut meshes) {
+        if site.apply_all(&ops, &mut commands, &planet, &mut meshes) {
             match (refund, builder.price) {
                 (Some((cost, times)), _) => inventory.refund(cost, times),
                 (None, Some((cost, times))) => {
@@ -849,30 +919,41 @@ fn act(
     }
 }
 
-/// The outline of an opening on a wall tile, as it would be cut.
-fn opening(face: Face, panel: Panel) -> Option<[Vec3; 4]> {
-    let [low_left, low_right, _, high_left] = Base::corners(face);
-    let across = (low_right - low_left).normalize();
-    let up = (high_left - low_left).normalize();
-    let (left, right, bottom, top) = match panel {
-        Panel::Solid => return None,
-        Panel::Window {
-            left,
-            right,
-            sill,
-            top,
-        } => (left, TILE_M - right, sill, STOREY_M - top),
-        Panel::Door => {
-            let side = (TILE_M - DOOR_WIDTH_M) * 0.5;
-            (side, TILE_M - side, 0.0, DOOR_HEIGHT_M)
-        }
-    };
-    let at = |x: f32, y: f32| low_left + across * x + up * y;
+/// The rectangle a stretch of wall cells covers, in the base's own space: low-left,
+/// low-right, high-right, high-left, as seen from the side the wall faces.
+fn bounds(run: &[Face]) -> Option<[Vec3; 4]> {
+    let [origin, right, _, above] = Base::corners(*run.first()?);
+    let across = (right - origin).normalize();
+    let up = (above - origin).normalize();
+    let (mut low, mut high) = (Vec2::MAX, Vec2::MIN);
+    for corner in run.iter().flat_map(|&cell| Base::corners(cell)) {
+        let at = Vec2::new((corner - origin).dot(across), (corner - origin).dot(up));
+        low = low.min(at);
+        high = high.max(at);
+    }
+    let at = |x: f32, y: f32| origin + across * x + up * y;
     Some([
-        at(left, bottom),
-        at(right, bottom),
-        at(right, top),
-        at(left, top),
+        at(low.x, low.y),
+        at(high.x, low.y),
+        at(high.x, high.y),
+        at(low.x, high.y),
+    ])
+}
+
+/// The outline of the window or doorway a stretch of wall cells would be cut as.
+fn opening(run: &[Face], panel: Panel) -> Option<[Vec3; 4]> {
+    let [low_left, low_right, _, high_left] = bounds(run)?;
+    let up = (high_left - low_left).normalize();
+    let (bottom, top) = match panel {
+        Panel::Solid => return None,
+        Panel::Window { sill, top } => (sill, STOREY_M - top),
+        Panel::Door => (0.0, DOOR_HEIGHT_M),
+    };
+    Some([
+        low_left + up * bottom,
+        low_right + up * bottom,
+        low_right + up * top,
+        low_left + up * top,
     ])
 }
 
@@ -897,7 +978,10 @@ fn highlight(
                 blocked: Some(_),
                 ..
             }
-    ) || builder.short.is_some();
+    ) || builder.short.is_some()
+        || (matches!(kind, Kind::Window(_) | Kind::Door)
+            && matches!(builder.target, Target::Wall(_) | Target::Edge { .. })
+            && builder.run.is_empty());
     let look = match (kind, builder.target) {
         (Kind::Move, Target::Prop(_)) => 1,
         _ if refused => 2,
@@ -929,41 +1013,33 @@ fn highlight(
 
     // The rectangles to cover with film, in the base's own space.
     let quads: Vec<[Vec3; 4]> = match (kind, builder.target) {
-        (Kind::Reshape, Target::Wall(face)) => site
-            .base
-            .wall(face)
-            .into_iter()
-            .map(Base::corners)
-            .collect(),
-        (Kind::Window(shapes), Target::Wall(face)) => opening(face, shapes[builder.variant()].1)
-            .into_iter()
-            .collect(),
-        (Kind::Door, Target::Wall(face)) => opening(face, Panel::Door).into_iter().collect(),
-        (Kind::Remove, Target::Wall(face)) => {
-            opening(face, site.base.panel(face)).into_iter().collect()
+        (Kind::Reshape, Target::Wall(face)) => bounds(&site.base.wall(face)).into_iter().collect(),
+        // A window or door that will not fit: the cell aimed at, in red.
+        (Kind::Window(_) | Kind::Door, Target::Wall(face) | Target::Edge { face, .. })
+            if builder.run.is_empty() =>
+        {
+            vec![Base::corners(face)]
         }
-        // The cut a window or door would make in an interior wall, or the one to close.
-        (Kind::Window(shapes), Target::Edge { face, .. }) => {
-            opening(face, shapes[builder.variant()].1)
+        (Kind::Window(shapes), Target::Wall(_) | Target::Edge { .. }) => {
+            opening(&builder.run, shapes[builder.variant()].2)
                 .into_iter()
                 .collect()
         }
-        (Kind::Door, Target::Edge { face, .. }) => opening(face, Panel::Door).into_iter().collect(),
-        (
-            Kind::Remove,
-            Target::Edge {
-                face, open: true, ..
-            },
-        ) => site
-            .base
-            .partition(face)
-            .and_then(|panel| opening(face, panel))
+        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) => {
+            opening(&builder.run, Panel::Door).into_iter().collect()
+        }
+        // An opening to close, or a stretch of interior wall to build or take away.
+        (Kind::Remove, Target::Wall(_) | Target::Edge { open: true, .. }) => builder
+            .run
+            .first()
+            .and_then(|&cell| site.base.filling(cell))
+            .and_then(|panel| opening(&builder.run, panel))
             .into_iter()
             .collect(),
-        (_, Target::Edge { face, .. }) => vec![Base::corners(face)],
+        (_, Target::Edge { .. }) => bounds(&builder.run).into_iter().collect(),
         (_, Target::Ground { corner, tiles, .. }) => {
-            let low = corner.as_vec3() * TILE_M;
-            let high = low + Vec3::new(tiles.x as f32 * TILE_M, STOREY_M, tiles.y as f32 * TILE_M);
+            let low = corner.as_vec3() * CELL_M;
+            let high = low + Vec3::new(tiles.x as f32 * CELL_M, STOREY_M, tiles.y as f32 * CELL_M);
             let at = |x: bool, y: bool, z: bool| {
                 Vec3::new(
                     if x { high.x } else { low.x },
@@ -1052,7 +1128,7 @@ fn highlight(
                     let far = ((line * line + along * along) as f32).sqrt() / reach as f32;
                     (1.0 - far).max(0.0) * 0.9
                 };
-                let tiles_every = (TILE_M / GRID_M).round() as i32;
+                let tiles_every = (CELL_M / GRID_M).round() as i32;
                 let centre = (at / GRID_M).round().as_ivec3();
                 for line in -reach..=reach {
                     for along in -reach..reach {
@@ -1152,15 +1228,22 @@ pub fn prompt(builder: &Builder) -> String {
         (Kind::Reshape, Target::Wall(_)) => {
             "Left click  push the wall out      Scroll  push and pull"
         }
+        (Kind::Window(_) | Kind::Door, Target::Wall(_) | Target::Edge { .. })
+            if builder.run.is_empty() =>
+        {
+            "The wall is not wide enough here"
+        }
         (Kind::Window(_), Target::Wall(_) | Target::Edge { .. }) => {
-            "Left click  cut this window      R  shape"
+            "Left click  cut this window      R  size"
         }
         (Kind::Door, Target::Wall(_) | Target::Edge { .. }) => "Left click  cut a door",
         (Kind::Reshape, _) => "Aim at an outside wall",
         (Kind::Window(_) | Kind::Door, _) => "Aim at a wall, outside or interior",
-        (Kind::Wall, Target::Edge { fits: true, .. }) => "Left click  build a wall here",
-        (Kind::Wall, Target::Edge { fits: false, .. }) => "Walls go indoors, between two tiles",
-        (Kind::Wall, _) => "Aim at a floor indoors",
+        (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
+            "Left click  build this wall      Scroll  turn      R  length"
+        }
+        (Kind::Wall(_), Target::Edge { fits: false, .. }) => "Walls go indoors",
+        (Kind::Wall(_), _) => "Aim at a floor indoors",
         (Kind::Room(_), Target::Ground { fits: false, .. }) => {
             "The ground is too high here: only a foundation may go into it"
         }

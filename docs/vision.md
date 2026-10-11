@@ -14,7 +14,7 @@ Draft. A feature that serves none of these is cut.
 2. **Dead to alive.** Hostility hands off from the environment to the ecosystem. What you grow decides what hunts you.
 3. **Automate survival.** Every chore starts manual and ends as infrastructure.
 4. **Local action, global consequence.** You change a place; places add up to a planet.
-5. **Seamless, and together.** No loading screens, surface to space. Played through a server, with friends first (D51); how many players a world holds is open (D52).
+5. **Seamless, and together.** No loading screens, surface to space. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
 
 ## What we take from each inspiration
 

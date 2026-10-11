@@ -1,6 +1,20 @@
 # Multiplayer and persistence
 
-Status: the approach is decided, the scale is not. The developers agreed on 2026-10-10 that the game is server-first (D51). How many players a world should hold, and the other questions at the end, are still open. Nothing here is built.
+Status: the approach and the scale are decided; how to reach the scale is not. The game is server-first (D51), and on 2026-10-10 the developers set the requirement at **a thousand concurrent players on one persistent server**, in a fully procedural world that is very optimised (D52). Nothing here is built or measured.
+
+## A thousand
+
+This section was added when the number went from "ideally a hundred" to a thousand. The rest of the doc was written for a hundred and still holds; this says what the larger number adds.
+
+- **One process cannot be the whole server.** A hundred players spread over a planet might be run by one program. A thousand will not be. The world has to be divided by area among several workers that hand players and changes across their borders, and that division has to be designed in, not added.
+- **Nothing may be sent to everyone.** Every message has to be about a place and go only to who is near it. With a thousand players there is no "small enough to broadcast", except the planet's simulation, which is already one small snapshot (D29).
+- **Computed, not stored, becomes the main lever** (D47). A fully procedural world means a server holds only what players changed. The cost of a player then depends on how much they have built and dug, not on how far they have walked.
+- **Crowds.** A thousand players will sometimes be in one place. Drawing a few hundred animated figures and their bases is a rendering problem of its own, separate from the server's.
+- **The planet is too small.** At a 2 km radius the planet is about 50 square kilometres, or twenty players to the square kilometre if they spread evenly. Planet size (D13) and more than one planet (D17) are now pressing questions.
+- **Building at this scale.** Bases are lists of operations on a half-metre grid (D57). A thousand builders make a great many of them; each area needs a compact record of its current state, and new arrivals need that, not the history.
+- **Strangers.** A thousand people are not friends. Ownership, permissions, griefing and cheating all need rules (open questions 3 and 6).
+
+What to measure first, before promising any of this: the memory and processor time one idle and one busy player cost a server; how much is sent per player per second; how long an arrival waits for an area to be correct; and all of it with a thousand simulated players, spread out and then crowded together.
 
 ## What changed
 
@@ -67,7 +81,7 @@ That keeps a large persistent world possible without paying for all of it now. W
 
 ## Open questions
 
-1. **Is a hundred the target, or the ceiling to leave room for?** "Must work at launch" and "should not be ruled out" lead to very different amounts of work.
+1. **Answered: a thousand is a requirement** (D52). Still open: by when. "Must work at launch" and "must be what the architecture is built for" lead to different orders of work.
 2. **Who runs the servers?** Players running their own, as with Minecraft and Valheim, costs us a server program and documentation. Running official ones costs money and ongoing attention.
 3. **Friends or strangers?** A private server for a community is close to large co-op. A public one needs moderation, ownership rules and far more defence against cheating.
 4. **Does small co-op, hosted by a player, remain the main way to play?**

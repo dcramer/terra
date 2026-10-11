@@ -14,7 +14,7 @@ use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, prelude::*,
     render::render_resource::PrimitiveTopology,
 };
-use terra_build::{Base, BuildOp, DOOR_WIDTH_M, Face, Panel, Side, Surface, TILE_M, Walker};
+use terra_build::{Base, BuildOp, CELL_M, Face, Panel, Side, Surface, Walker};
 use terra_core::Ground;
 
 const REACH_M: f32 = 300.0;
@@ -25,7 +25,8 @@ const FOUNDATION_LEDGE_M: f32 = 0.14;
 const FOUNDATION_DEPTH_M: f32 = 0.7;
 /// Steps run this far out for every metre they have to climb.
 const RAMP_RUN_PER_RISE: f32 = 2.4;
-const RAMP_WIDTH_M: f32 = DOOR_WIDTH_M + 0.7;
+/// Steps are this much wider than the doorway they lead to.
+const STEPS_WIDER_M: f32 = 0.5;
 const STEP_RISE_M: f32 = 0.17;
 const CONCRETE: Color = Color::srgb(0.5, 0.48, 0.47);
 
@@ -90,12 +91,13 @@ struct Ramp {
     length: f32,
     /// How far the far end is below the sill.
     drop: f32,
+    width: f32,
 }
 
 impl Ramp {
     /// The ramp drawn as a flight of steps, each a block reaching down into the ground.
     fn steps(&self, surface: &mut Blocks) {
-        let across = self.outward.cross(Vec3::Y) * (RAMP_WIDTH_M * 0.5);
+        let across = self.outward.cross(Vec3::Y) * (self.width * 0.5);
         let count = (self.drop / STEP_RISE_M).ceil().max(1.0);
         let tread = self.length / count;
         for step in 0..count as usize {
@@ -116,7 +118,7 @@ impl Ramp {
         let offset = point - self.top;
         let along = offset.dot(self.outward);
         let across = offset.dot(self.outward.cross(Vec3::Y));
-        let on_ramp = (0.0..=self.length).contains(&along) && across.abs() <= RAMP_WIDTH_M * 0.5;
+        let on_ramp = (0.0..=self.length).contains(&along) && across.abs() <= self.width * 0.5;
         on_ramp.then(|| self.top.y - self.drop * along / self.length)
     }
 }
@@ -157,7 +159,7 @@ impl Site {
         let reach = [-margin, 0.0, margin];
         reach.iter().any(|dx| {
             reach.iter().any(|dz| {
-                let tile = ((local + Vec3::new(*dx, 0.0, *dz)) / TILE_M)
+                let tile = ((local + Vec3::new(*dx, 0.0, *dz)) / CELL_M)
                     .floor()
                     .as_ivec3();
                 self.base.contains(tile.with_y(0))
@@ -167,8 +169,32 @@ impl Site {
             let along = offset.dot(ramp.outward);
             let across = offset.dot(ramp.outward.cross(Vec3::Y));
             (-margin..=ramp.length + margin).contains(&along)
-                && across.abs() <= RAMP_WIDTH_M * 0.5 + margin
+                && across.abs() <= ramp.width * 0.5 + margin
         })
+    }
+
+    /// Applies several operations as one act, and redraws the base once. Returns whether
+    /// anything changed.
+    pub(super) fn apply_all(
+        &mut self,
+        ops: &[BuildOp],
+        commands: &mut Commands,
+        planet: &Planet,
+        meshes: &mut Assets<Mesh>,
+    ) -> bool {
+        let mut changed = false;
+        for &op in ops {
+            if self.base.apply(op) {
+                self.operations.push(op);
+                changed = true;
+            }
+        }
+        if changed {
+            self.revision += 1;
+            info!("Applied {} operations, such as {:?}", ops.len(), ops[0]);
+            redraw(commands, self, planet, meshes);
+        }
+        changed
     }
 
     /// Applies an operation and redraws the base. Returns whether anything changed.
@@ -193,42 +219,53 @@ impl Site {
 }
 
 /// The example base: two rooms joined by a corridor, a small upper storey, windows on
-/// every side and a door.
+/// every side and a door. Written in metres, so it is the same base whatever the grid.
 fn example() -> Vec<BuildOp> {
-    let wall = |x: i32, y: i32, z: i32, side: Side| Face::new(IVec3::new(x, y, z), side);
-    vec![
-        BuildOp::AddRoom {
-            min: [-2, 0, -2],
-            max: [1, 0, 0],
-        },
-        BuildOp::Grow(wall(1, 0, -1, Side::East)),
-        BuildOp::AddRoom {
-            min: [3, 0, -1],
-            max: [4, 0, -1],
-        },
-        BuildOp::AddRoom {
-            min: [5, 0, -2],
-            max: [6, 0, 0],
-        },
-        BuildOp::AddRoom {
-            min: [-1, 1, -2],
-            max: [0, 1, -1],
-        },
-        BuildOp::SetPanel(wall(-1, 0, 0, Side::South), Panel::WIDE_WINDOW),
-        BuildOp::SetPanel(wall(0, 0, 0, Side::South), Panel::WIDE_WINDOW),
-        BuildOp::SetPanel(wall(1, 0, 0, Side::South), Panel::WIDE_WINDOW),
-        BuildOp::SetPanel(wall(2, 0, 0, Side::South), Panel::Door),
-        BuildOp::SetPanel(wall(-2, 0, -1, Side::West), Panel::WINDOW),
-        BuildOp::SetPanel(wall(-1, 1, -1, Side::South), Panel::TALL_WINDOW),
-        BuildOp::SetPanel(wall(0, 1, -1, Side::South), Panel::TALL_WINDOW),
-        BuildOp::SetPanel(wall(4, 0, -1, Side::South), Panel::WINDOW),
-        BuildOp::SetPanel(wall(6, 0, 0, Side::South), Panel::WINDOW),
-        BuildOp::SetPanel(wall(6, 0, -1, Side::East), Panel::TALL_WINDOW),
-        BuildOp::SetPanel(wall(-2, 0, -2, Side::North), Panel::WINDOW),
-        BuildOp::SetPanel(wall(2, 0, -2, Side::North), Panel::WINDOW),
-        BuildOp::SetPanel(wall(6, 0, -2, Side::North), Panel::WINDOW),
-        BuildOp::SetPanel(wall(-1, 1, -2, Side::North), Panel::WINDOW),
-    ]
+    // A block of cells from one corner in metres to the other, on a storey.
+    let room = |west: f32, east: f32, north: f32, south: f32, storey: i32| BuildOp::AddRoom {
+        min: [cells_from(west), storey, cells_from(north)],
+        max: [cells_from(east) - 1, storey, cells_from(south) - 1],
+    };
+    let mut ops = vec![
+        room(-6.0, 9.0, -6.0, 3.0, 0),
+        room(9.0, 15.0, -3.0, 0.0, 0),
+        room(15.0, 21.0, -6.0, 3.0, 0),
+        room(-3.0, 3.0, -6.0, 0.0, 1),
+    ];
+    // An opening in a wall: which way the wall faces, where the wall is, and the stretch
+    // of it to open, all in metres.
+    let mut cut = |side: Side, wall_at: f32, from: f32, to: f32, storey: i32, panel: Panel| {
+        // The cell just inside the wall.
+        let inside = match side {
+            Side::East | Side::South => cells_from(wall_at) - 1,
+            _ => cells_from(wall_at),
+        };
+        for along in cells_from(from)..cells_from(to) {
+            let cell = match side {
+                Side::East | Side::West => IVec3::new(inside, storey, along),
+                _ => IVec3::new(along, storey, inside),
+            };
+            ops.push(BuildOp::SetPanel(Face::new(cell, side), panel));
+        }
+    };
+    cut(Side::South, 3.0, -3.0, 6.0, 0, Panel::WINDOW);
+    cut(Side::South, 3.0, 7.0, 8.5, 0, Panel::Door);
+    cut(Side::West, -6.0, -2.5, -0.5, 0, Panel::WINDOW);
+    cut(Side::South, 0.0, -2.5, 2.5, 1, Panel::TALL_WINDOW);
+    cut(Side::South, 0.0, 12.5, 14.5, 0, Panel::WINDOW);
+    cut(Side::South, 3.0, 18.5, 20.5, 0, Panel::WINDOW);
+    cut(Side::East, 21.0, -2.5, -0.5, 0, Panel::TALL_WINDOW);
+    cut(Side::North, -6.0, -5.5, -3.5, 0, Panel::WINDOW);
+    cut(Side::North, -6.0, 6.5, 8.5, 0, Panel::WINDOW);
+    cut(Side::North, -6.0, 18.5, 20.5, 0, Panel::WINDOW);
+    cut(Side::North, -6.0, -2.5, -0.5, 1, Panel::WINDOW);
+    ops
+}
+
+/// The grid line a distance in metres falls on. Unlike [`cells`], which counts, this
+/// places, so it can be negative or zero.
+fn cells_from(metres: f32) -> i32 {
+    (metres / CELL_M).round() as i32
 }
 
 /// Axis-aligned boxes in the base's own space, as flat-faced triangles of one colour.
@@ -339,8 +376,8 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
     let low = ground_floor().fold(IVec3::MAX, |low, (tile, _)| low.min(tile));
     let high = ground_floor().fold(IVec3::MIN, |high, (tile, _)| high.max(tile));
     let (low, high) = (
-        low.as_vec3() * TILE_M - 3.0,
-        (high + 1).as_vec3() * TILE_M + 3.0,
+        low.as_vec3() * CELL_M - 3.0,
+        (high + 1).as_vec3() * CELL_M + 3.0,
     );
     let middle = (low + high) * 0.5;
 
@@ -436,9 +473,9 @@ fn setup(
         .flat_map(|(tile, _)| {
             [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)].map(|(dx, dz)| {
                 let on_floor = Vec3::new(
-                    (tile.x as f32 + dx) * TILE_M,
+                    (tile.x as f32 + dx) * CELL_M,
                     0.0,
-                    (tile.z as f32 + dz) * TILE_M,
+                    (tile.z as f32 + dz) * CELL_M,
                 );
                 -planet.ground.distance(frame.transform_point(on_floor))
             })
@@ -580,8 +617,8 @@ fn redraw(commands: &mut Commands, site: &mut Site, planet: &Planet, meshes: &mu
             }
         };
         let min =
-            tile.as_vec3() * TILE_M - Vec3::new(ledge(IVec3::NEG_X), 0.0, ledge(IVec3::NEG_Z));
-        let max = (tile + IVec3::new(1, 0, 1)).as_vec3() * TILE_M
+            tile.as_vec3() * CELL_M - Vec3::new(ledge(IVec3::NEG_X), 0.0, ledge(IVec3::NEG_Z));
+        let max = (tile + IVec3::new(1, 0, 1)).as_vec3() * CELL_M
             + Vec3::new(ledge(IVec3::X), 0.0, ledge(IVec3::Z));
         let gap = [
             (min.x, min.z),
@@ -603,15 +640,21 @@ fn redraw(commands: &mut Commands, site: &mut Site, planet: &Planet, meshes: &mu
     // Steps from every ground-floor door down to the ground.
     site.ramps.clear();
     let mut steps = Blocks::default();
-    let doors: Vec<Face> = site
+    // One flight for each doorway, however many cells wide it is.
+    let doorways: Vec<Vec<Face>> = site
         .base
         .hull()
         .filter(|&face| face.tile[1] == 0 && site.base.panel(face) == Panel::Door)
+        .map(|face| site.base.run(face))
+        .filter(|run| run.first().is_some_and(|first| first.tile[1] == 0))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
         .collect();
-    for door in &doors {
-        let corners = Base::corners(*door);
-        let top = (corners[0] + corners[1]) * 0.5;
-        let outward = door.side.offset().as_vec3();
+    for doorway in &doorways {
+        let (first, last) = (doorway[0], doorway[doorway.len() - 1]);
+        let (near, far) = (Base::corners(first)[0], Base::corners(last)[1]);
+        let top = (near + far) * 0.5;
+        let outward = first.side.offset().as_vec3();
         // Long enough for the climb, measured where the steps start and where they end.
         let rise_here = planet
             .ground
@@ -625,6 +668,7 @@ fn redraw(commands: &mut Commands, site: &mut Site, planet: &Planet, meshes: &mu
             outward,
             length,
             drop,
+            width: near.distance(far) + STEPS_WIDER_M,
         };
         ramp.steps(&mut steps);
         site.ramps.push(ramp);
@@ -696,8 +740,8 @@ fn edit(
             .map(|ground| {
                 let local = to_base.transform_point3(ground.point);
                 let (x, z) = (
-                    (local.x / TILE_M).floor() as i32,
-                    (local.z / TILE_M).floor() as i32,
+                    (local.x / CELL_M).floor() as i32,
+                    (local.z / CELL_M).floor() as i32,
                 );
                 BuildOp::AddRoom {
                     min: [x - 1, 0, z - 1],

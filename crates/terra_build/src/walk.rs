@@ -4,7 +4,7 @@
 //! floors on storey heights, and a walker can be handled with arithmetic instead of a
 //! physics engine. Coordinates are the base's own, in metres, with `y` at the feet.
 
-use crate::{Base, DOOR_HEIGHT_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, TILE_M};
+use crate::{Base, CELL_M, DOOR_HEIGHT_M, Face, Panel, STOREY_M, Side};
 use glam::{IVec3, Vec3};
 
 /// The size of something walking through a base.
@@ -29,9 +29,9 @@ impl Default for Walker {
 /// The tile a point is in. Feet exactly on a floor count as being in the tile above it.
 fn tile_at(point: Vec3) -> IVec3 {
     IVec3::new(
-        (point.x / TILE_M).floor() as i32,
+        (point.x / CELL_M).floor() as i32,
         ((point.y + 0.05) / STOREY_M).floor() as i32,
-        (point.z / TILE_M).floor() as i32,
+        (point.z / CELL_M).floor() as i32,
     )
 }
 
@@ -79,9 +79,17 @@ impl Base {
                     (-1.0, negative)
                 };
                 let tile = tile_at(at);
-                let edge = (tile[axis] + i32::from(direction > 0.0)) as f32 * TILE_M;
+                let edge = (tile[axis] + i32::from(direction > 0.0)) as f32 * CELL_M;
                 let reaches_edge = (wanted + direction * walker.radius - edge) * direction > 0.0;
-                if reaches_edge && self.blocks(tile, side, at, walker) {
+                // A walker is wider than a point: everything across their width has to
+                // be open, so a doorway one narrow cell wide does not let them through.
+                let sideways = 2 - axis;
+                let stopped = [-walker.radius, 0.0, walker.radius].iter().any(|&shift| {
+                    let mut beside = at;
+                    beside[sideways] += shift;
+                    self.blocks(tile_at(beside), side, at, walker)
+                });
+                if reaches_edge && stopped {
                     wanted = edge - direction * (walker.radius + 0.01);
                     // Never be pushed backward by a wall already too close.
                     if (wanted - at[axis]) * direction < 0.0 {
@@ -122,17 +130,10 @@ impl Base {
         if panel != Panel::Door {
             return true;
         }
-        // A door lets a walker through only where its opening is.
-        let along = if matches!(side, Side::East | Side::West) {
-            at.z
-        } else {
-            at.x
-        };
-        let from_centre = (along.rem_euclid(TILE_M) - TILE_M * 0.5).abs();
+        // A doorway lets a walker through if they fit under its lintel. Whether they fit
+        // between its sides is settled by asking about the cells either side of them.
         let floor = face.tile[1] as f32 * STOREY_M;
-        let fits_width = from_centre + walker.radius <= DOOR_WIDTH_M * 0.5 + 0.05;
-        let fits_height = at.y + walker.height <= floor + DOOR_HEIGHT_M + walker.step_up;
-        !(fits_width && fits_height)
+        at.y + walker.height > floor + DOOR_HEIGHT_M + walker.step_up
     }
 }
 
@@ -150,24 +151,30 @@ fn opposite(side: Side) -> Side {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::BuildOp;
+    use crate::{BuildOp, cells};
 
-    /// A 3 by 3 room on the ground with a door in the middle of its south wall and a
-    /// window in the middle of its east wall.
+    /// A room nine metres square on the ground, with a doorway a metre and a half wide
+    /// in the middle of its south wall and a window in the middle of its east wall.
+    /// These tests are written in metres and assume the grid divides half a metre.
     fn room() -> Base {
         let mut base = Base::default();
+        let far = cells(9.0) - 1;
         base.apply(BuildOp::AddRoom {
             min: [0, 0, 0],
-            max: [2, 0, 2],
+            max: [far, 0, far],
         });
-        base.apply(BuildOp::SetPanel(
-            Face::new(IVec3::new(1, 0, 2), Side::South),
-            Panel::Door,
-        ));
-        base.apply(BuildOp::SetPanel(
-            Face::new(IVec3::new(2, 0, 1), Side::East),
-            Panel::WIDE_WINDOW,
-        ));
+        for x in cells(4.0)..cells(5.5) {
+            base.apply(BuildOp::SetPanel(
+                Face::new(IVec3::new(x, 0, far), Side::South),
+                Panel::Door,
+            ));
+        }
+        for z in cells(3.0)..cells(6.0) {
+            base.apply(BuildOp::SetPanel(
+                Face::new(IVec3::new(far, 0, z), Side::East),
+                Panel::WINDOW,
+            ));
+        }
         base
     }
 
@@ -178,8 +185,8 @@ mod tests {
     /// Walks in small steps, as a game would frame by frame.
     fn stroll(base: &Base, from: Vec3, to: Vec3) -> Vec3 {
         let mut at = from;
-        for i in 1..=200 {
-            let target = from.lerp(to, i as f32 / 200.0);
+        for i in 1..=400 {
+            let target = from.lerp(to, i as f32 / 400.0);
             at = base.walk(at, Vec3::new(target.x, at.y, target.z), &walker());
         }
         at
@@ -189,10 +196,25 @@ mod tests {
     fn a_door_lets_you_in_and_out() {
         let base = room();
         // South of the room, lined up with the door, walking north into the room.
-        let inside = stroll(&base, Vec3::new(4.5, 0.0, 14.0), Vec3::new(4.5, 0.0, 4.5));
+        let inside = stroll(&base, Vec3::new(4.75, 0.0, 14.0), Vec3::new(4.75, 0.0, 4.5));
         assert!((inside.z - 4.5).abs() < 0.01, "stopped at z {}", inside.z);
-        let back_out = stroll(&base, inside, Vec3::new(4.5, 0.0, 14.0));
+        let back_out = stroll(&base, inside, Vec3::new(4.75, 0.0, 14.0));
         assert!((back_out.z - 14.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_doorway_narrower_than_a_walker_keeps_them_out() {
+        let mut base = room();
+        let far = cells(9.0) - 1;
+        // One cell of doorway in the north wall.
+        base.apply(BuildOp::SetPanel(
+            Face::new(IVec3::new(cells(4.5), 0, 0), Side::North),
+            Panel::Door,
+        ));
+        let at = Vec3::new(4.5 + CELL_M * 0.5, 0.0, 4.5);
+        let stopped = stroll(&base, at, Vec3::new(at.x, 0.0, -6.0));
+        assert!(stopped.z > 0.0, "squeezed through at z {}", stopped.z);
+        assert!(far > 0);
     }
 
     #[test]
@@ -212,8 +234,8 @@ mod tests {
             "stopped at x {}",
             at_glass.x
         );
-        // Missing the door's opening counts as hitting the wall beside it.
-        let beside_door = stroll(&base, Vec3::new(3.3, 0.0, 14.0), Vec3::new(3.3, 0.0, 4.5));
+        // Clipping the side of the doorway counts as hitting the wall beside it.
+        let beside_door = stroll(&base, Vec3::new(3.9, 0.0, 14.0), Vec3::new(3.9, 0.0, 4.5));
         assert!(beside_door.z > 9.0);
     }
 
@@ -240,8 +262,8 @@ mod tests {
         assert_eq!(base.support(Vec3::new(4.5, 3.2, 4.5), &w), Some(3.0));
         // With an upper storey, its floor rather than the roof below.
         base.apply(BuildOp::AddRoom {
-            min: [1, 1, 1],
-            max: [1, 1, 1],
+            min: [cells(3.0), 1, cells(3.0)],
+            max: [cells(6.0), 1, cells(6.0)],
         });
         assert_eq!(base.support(Vec3::new(4.5, 3.0, 4.5), &w), Some(3.0));
         assert_eq!(base.support(Vec3::new(4.5, 6.5, 4.5), &w), Some(6.0));
@@ -266,13 +288,18 @@ mod tests {
     #[test]
     fn an_interior_wall_stops_you_and_its_doorway_lets_you_through() {
         let mut base = room();
-        let wall = Face::new(IVec3::new(0, 0, 1), Side::East);
-        let (west, east) = (Vec3::new(1.5, 0.0, 4.5), Vec3::new(4.5, 0.0, 4.5));
+        // A wall right across the room, three metres from its west side.
+        let wall = |z: i32| Face::new(IVec3::new(cells(3.0) - 1, 0, z), Side::East);
+        let (west, east) = (Vec3::new(1.5, 0.0, 4.75), Vec3::new(4.5, 0.0, 4.75));
         assert!((stroll(&base, west, east).x - east.x).abs() < 0.01);
-        base.apply(BuildOp::SetPartition(wall, Some(Panel::Solid)));
-        assert!(stroll(&base, west, east).x < TILE_M);
-        assert!(stroll(&base, east, west).x > TILE_M);
-        base.apply(BuildOp::SetPartition(wall, Some(Panel::Door)));
+        for z in 0..cells(9.0) {
+            base.apply(BuildOp::SetPartition(wall(z), Some(Panel::Solid)));
+        }
+        assert!(stroll(&base, west, east).x < 3.0);
+        assert!(stroll(&base, east, west).x > 3.0);
+        for z in cells(4.0)..cells(5.5) {
+            base.apply(BuildOp::SetPartition(wall(z), Some(Panel::Door)));
+        }
         assert!((stroll(&base, west, east).x - east.x).abs() < 0.01);
     }
 }

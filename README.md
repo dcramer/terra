@@ -13,9 +13,9 @@ This repository is where the project is thought through: design docs, research n
 | **Real round planets you can dig into**, with no seam between standing on the ground and flying in space. | [docs/engine.md](docs/engine.md) |
 | **Take resources from the world itself**: mine the rock, chop the tree, cut the grass. | [docs/engine.md](docs/engine.md#harvesting) |
 | **Build bases you shape**, not assemble from fixed parts. | [research/subnautica-2-building.md](research/subnautica-2-building.md) |
-| **Generate almost everything from rules**, so the world is computed, not authored or stored. | [docs/engine.md](docs/engine.md) |
+| **A fully procedural world**, computed from rules and very cheap to compute, send and store. | [docs/engine.md](docs/engine.md) |
 | **Look like a carefully lit model**: simple shapes, flat colour, warm light and cool shadow, and never chunky. | [docs/art.md](docs/art.md) |
-| **Play together through a server**, with friends first and without ruling out a large persistent world. | [docs/multiplayer.md](docs/multiplayer.md) |
+| **A thousand players on one persistent server**, with a few friends playing together as the small case. | [docs/multiplayer.md](docs/multiplayer.md) |
 | **Stay fast with very many things on screen**, any of which the player can interact with. | [research/forest-scale-test.md](research/forest-scale-test.md) |
 | **Write everything in Rust**, on Bevy, with our own voxel terrain. | [docs/tech.md](docs/tech.md) |
 | **Be buildable by two people working with coding agents**, with every asset free, bought or generated. | [docs/decisions.md](docs/decisions.md) |

@@ -14,7 +14,7 @@ use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, mesh::Indices,
     platform::collections::HashMap, prelude::*, render::render_resource::PrimitiveTopology,
 };
-use terra_build::TILE_M;
+use terra_build::CELL_M;
 
 /// Bright enough to show beside daylight, which is what the camera is exposed for.
 const FIRELIGHT_LUMENS: f32 = 500_000.0;
@@ -378,7 +378,7 @@ fn flicker(time: Res<Time>, mut fires: Query<&mut PointLight, With<Firelight>>) 
 /// Whether an item put at a place in the base's own space would still be where it claims
 /// to be: under a roof if indoors, clear of the base if not.
 fn still_fits(site: &Site, at: Vec3, indoors: bool) -> bool {
-    let tile = (at / TILE_M).floor().as_ivec3();
+    let tile = (at / CELL_M).floor().as_ivec3();
     if indoors {
         site.base.contains(tile.with_y(0))
     } else {
@@ -428,24 +428,30 @@ impl Standing {
         self.half.y * 2.0 > STEP_OVER_M
     }
 
-    /// Whether an interior wall runs through the box's foot.
+    /// Whether an interior wall runs through the box's foot, near enough: whether one
+    /// stands between any two cells that the foot's outline covers.
     fn crosses_a_wall(&self, site: &Site) -> bool {
         let corners = self.corners();
-        let tile = |corner: Vec2| (corner / TILE_M).floor().as_ivec2();
-        (0..4).any(|index| {
-            let (from, to) = (tile(corners[index]), tile(corners[(index + 1) % 4]));
-            let storey = (self.at.y / terra_build::STOREY_M).round() as i32;
-            let step = to - from;
-            // Only neighbouring tiles; a box is far smaller than two tiles.
-            let side = match (step.x, step.y) {
-                (1, 0) => terra_build::Side::East,
-                (-1, 0) => terra_build::Side::West,
-                (0, 1) => terra_build::Side::South,
-                (0, -1) => terra_build::Side::North,
-                _ => return false,
-            };
-            let face = terra_build::Face::new(IVec3::new(from.x, storey, from.y), side);
-            site.base.partition(face).is_some()
+        let low = corners
+            .iter()
+            .fold(Vec2::MAX, |low, corner| low.min(*corner));
+        let high = corners
+            .iter()
+            .fold(Vec2::MIN, |high, corner| high.max(*corner));
+        let cell = |at: Vec2| (at / CELL_M).floor().as_ivec2();
+        let (low, high) = (cell(low + 0.02), cell(high - 0.02));
+        let storey = (self.at.y / terra_build::STOREY_M).round() as i32;
+        (low.x..=high.x).any(|x| {
+            (low.y..=high.y).any(|z| {
+                let here = IVec3::new(x, storey, z);
+                let wall = |side| {
+                    site.base
+                        .partition(terra_build::Face::new(here, side))
+                        .is_some()
+                };
+                (x < high.x && wall(terra_build::Side::East))
+                    || (z < high.y && wall(terra_build::Side::South))
+            })
         })
     }
 
@@ -519,7 +525,7 @@ pub fn blocked<'a>(
         let at = Vec3::new(corner.x, 0.0, corner.y);
         if standing.indoors {
             site.base
-                .contains((at / TILE_M).floor().as_ivec3().with_y(0))
+                .contains((at / CELL_M).floor().as_ivec3().with_y(0))
         } else {
             !site.covers(site.frame.transform_point(at), 0.05)
         }

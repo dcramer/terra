@@ -74,12 +74,12 @@ What the sandbox does today, measured against the above.
 - **Looks already follow neighbours in three places**: a post where a wall turns and a seam where it continues; a parapet where the roof begins and a line where a storey continues; a foundation ledge only on outside edges. But it is written as special cases, and nothing is rounded.
 - **No materials.**
 - **Cost is a stand-in.** The sandbox has five raw items, a cost for every buildable, a full refund on taking apart, and a cutter tool to gather more. None of the numbers or names were designed, and there is no notion yet of what a player is capable of building.
-- **The grid is too coarse**, and there are no fixed-size buildables, ports or connectors. See "The grid".
+- **No fixed-size buildables, ports or connectors**, and nothing is placed on a wall. See "The grid".
 - **No build menu**, only the dial.
 
 ## Open questions
 
-1. **How fine is the grid?** Answered in part: one square grid for everything, finer than the three-metre tiles the sandbox uses now. Not answered: how fine. See "The grid" below.
+1. **Answered: the grid is half a metre**, changeable later, and it is the smallest thing that can be placed. See "The grid" below.
 2. **What gets rounded?** The upright corners of walls only, or the roof's edge and the foot of the wall too? How round?
 3. **What is a material a property of**: a whole room, a wall, or a tile?
 4. **What does "capable of building" mean?** The build menu shows what you have "unlocked". By finding blueprints, scanning things, a research tree, tools carried?
@@ -92,7 +92,7 @@ What the sandbox does today, measured against the above.
 
 What the developers said settles the first open question's main fork: one square grid, not free shapes. What follows is a proposal for what that means.
 
-**Two sizes of step, on the same lines.** Today a room is made of three-metre tiles, and that is the "huge cell" problem: a room can only be 3, 6 or 9 m across. The proposal is a structural step of **1.5 m**, half of today's, so rooms come in 1.5 m increments and a doorway still fits in one step. Items keep the half-metre step they have now, which divides it evenly. Every wall still falls on a line of the finer grid, so everything still lines up with everything.
+**One step for everything: half a metre.** Decided by the developers, as "something we can change later", and built: it is one constant in `terra_build`. A wall moves by it, a room is sized in it, a window or door is a run of its cells of any width anywhere along a wall, and an item snaps to it. It is "the smallest placeable kind of thing". The developers also want the same grid to appear on a wall when something is placed there, which is not built: nothing hangs on a wall yet.
 
 **Two kinds of structural buildable.**
 
@@ -105,7 +105,7 @@ What the developers said settles the first open question's main fork: one square
 
 **You see the grid only near what you are placing**, as now.
 
-What this costs: the structural step is a constant in `terra_build`, but windows, doors, trim and the example base are all sized for three metres and would need redoing for 1.5. Fixed buildables and ports are new.
+Fixed buildables, ports and connectors are not built.
 
 ## The build menu
 

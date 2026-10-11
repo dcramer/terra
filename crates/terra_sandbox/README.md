@@ -100,10 +100,10 @@ Building starts from a part. Pick one from the dial, cycle through its variants,
 
 | Part | Variants | What a left click does |
 |---|---|---|
-| Room | Four sizes; the wheel turns it | Builds a room on the ground you aim at. Aimed across a room already there, it extends that room to the combined shape. |
-| Reshape | | Pushes the wall you aim at out. The wheel pushes and pulls. |
-| Wall | | Builds a plain interior wall on the nearest edge between two floor tiles. Indoors only. |
-| Window | Framed, wide, tall | Cuts that window in the wall you aim at, outside or interior |
+| Room | Four sizes, in metres; the wheel turns it | Builds a room on the ground you aim at. Aimed across a room already there, it extends that room to the combined shape. |
+| Reshape | | Pushes the wall you aim at out by one step of the grid. The wheel pushes and pulls. |
+| Wall | Three lengths; the wheel turns it | Builds a stretch of plain interior wall on the grid line nearest where you aim. Indoors only. |
+| Window | Four sizes | Cuts a window that wide in the wall you aim at, outside or interior, centred where you aim |
 | Door | | Cuts a door in the wall you aim at, outside or interior |
 | Remove (Q) | | Takes away the item, closes the window or door, or takes away an interior wall that has neither |
 | Move (F) | | Picks an item up, then puts it down |
@@ -118,7 +118,9 @@ With the grid on, items land on half-metre steps and turn in eighths of a circle
 - Aim at the top of another item and it stands on it.
 - Aim at nothing in reach and it is offered a few steps in front of you.
 
-A room is a plain box: lamps and everything else in it are items you place. Rooms are always on the base's three-metre tiles, so a new room lines up with the rooms already there. A room's foundation may go into the ground, but the room itself may not: where the ground is higher than its floor, the outline is red and it cannot be built.
+A room is a plain box: lamps and everything else in it are items you place.
+
+Everything is on one grid of half a metre, set by one constant in `terra_build`. A wall moves by it, a window or door can be any number of its cells wide and stand anywhere along a wall, and a new room lines up with the rooms already there because they share it. Prices are by measure (floor by area, walls and windows by length), so they do not change if the grid does. A room's foundation may go into the ground, but the room itself may not: where the ground is higher than its floor, the outline is red and it cannot be built.
 
 ![An interior wall, about to have a window cut in it](../../docs/images/outpost-wall-2026-10-10.png)
 
