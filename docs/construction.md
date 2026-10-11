@@ -24,6 +24,34 @@ In their words, shortened.
 - **Building, taking apart and cutting take time.** You click and hold to complete the task, as other games do. Building animates the thing in, destroying animates it out, and cutting has an animation or a progress bar. How long depends on the task, and there will likely be different cutting tools, such as an axe or a pickaxe.
 - **Building costs things you carry.** "I think it's likely what we'll want is for you to have the raw items, which allow you to build anything that you might have the capabilities to build." With an inventory, and an action bar you put items on to use them (D55).
 
+## Enshrouded as the base?
+
+From the developers, 2026-10-11: Enshrouded's building might be the better base concept than Subnautica 2's. It is a little more advanced, and maybe we can improve on it. Not decided (D48).
+
+What Enshrouded's does, from [research/enshrouded.md](../research/enshrouded.md) (second-hand, not checked in the game): buildings are made of small voxel blocks in a material, placed one at a time or as ready-made pieces (walls, floors, stairs, roofs); pieces join seamlessly and different materials blend where they meet; cutting an opening styles its edges to suit; the ground can be dug, filled and flattened; and you build only within the radius of an altar you have placed.
+
+Compared with the shaped rooms built so far (D48, the sandbox's `play` experiment):
+
+| | Shaped rooms (Subnautica 2) | Voxel blocks (Enshrouded) |
+|---|---|---|
+| What you place | A room, a wall, an opening | A block, or a ready-made piece of many blocks |
+| Freedom | Boxes on a grid, resized | Any shape, down to one block |
+| Speed for big things | Fast: a room in one go | Slower, unless ready-made pieces are used |
+| Details that suit their neighbours | Written per part, case by case | Natural: blocks join and blend by what is next to them |
+| A new material or shape | New code per kind of part | A new kind of block, or a new ready-made piece |
+
+The table's fourth and fifth rows are two things the developers asked for above: details that morph by what they touch, and a system that is really easy to extend. Voxel building gives both by its nature.
+
+**Where we could improve on it.** Proposed, to react to:
+
+1. **Shape rooms, then carve them.** Keep Subnautica 2's speed: draw a room and its walls, floor and roof are filled in as blocks. Then work any of it by hand, block by block. The fastest start and the most freedom.
+2. **Bases that matter.** As far as I know, Enshrouded's bases are never attacked. Ours are held, defended and lived in (D90): rooms can have a purpose, recruits work and sleep in them, and walls and gates are tested.
+3. **Built on a round world.** Each base keeps its own square grid, level to the ground where it stands (D57), so blocks are square to the base, not to the planet.
+4. **Building together.** Settlements many players build, if the world calls for them (D52).
+5. **Strength, perhaps.** Whether a structure must hold itself up is open; Enshrouded, as far as I know, does not ask it.
+
+**Technically** (mine; D9): structures stay separate from the terrain's smooth ground, but a base can be a voxel volume of its own: blocks on the base's grid, meshed and drawn by their own rules, blended with the ground where they meet. That keeps the terrain's levels of detail and its edits untouched, and every block placed or carved is still an operation (D21). The sandbox's room tiles in `terra_build` would become one way of writing blocks, or be replaced. Nothing is rebuilt until the developers choose.
+
 ## The shape proposed
 
 Four ideas. Each is a proposal until the developers say otherwise.
@@ -90,7 +118,9 @@ What the sandbox does today, measured against the above.
 6. **Do bases have needs**, as in Subnautica: power, air, hull strength? Rooms being plain boxes suggests lights at least need power from somewhere.
 7. **Upper storeys.** Stairs or ladders as buildables, and whether rooms can be stacked from the dial.
 8. **Who may change what** in co-op (also question 16 in [player.md](player.md)).
-9. **Are buildings made of voxels, as in Enshrouded?** That would mean pieces join and blend seamlessly with each other and the ground, and it would reverse the second half of D9 ("structures are separate modular pieces, not terrain"). It also bears on D48's shaped rooms.
+9. **Are buildings made of voxels, as in Enshrouded?** The developers now think Enshrouded's building may be the better base (see above). Technically it no longer conflicts with D9: a base can be a voxel volume of its own, separate from the terrain.
+10. **Shaped rooms on top?** Draw a room and have it filled in as blocks, then carve it, or blocks and ready-made pieces only?
+11. **Must structures hold themselves up?**
 
 ## The grid
 
