@@ -8,20 +8,11 @@
 //!   F             open or close the station you are standing at
 //!   1 to 9        make that recipe
 
-use super::Player;
 use super::bag::Notice;
-use super::controls::{Action, Settings};
 use super::grab_mouse;
+use super::interact::{Focus, Focusing, Interactable};
 use super::inventory::{Apparel, Belongings, CantMake, Cost, InventoryScreen, Made, Raw, Tool};
-use super::options::OptionsMenu;
-use super::props::Prop;
-use bevy::{
-    prelude::*,
-    window::{CursorGrabMode, CursorOptions},
-};
-
-/// How close you have to stand to use a station.
-const REACH_M: f32 = 3.5;
+use bevy::{prelude::*, window::CursorOptions};
 
 /// Where things are made.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -139,7 +130,7 @@ struct Footer;
 pub fn plugin(app: &mut App) {
     app.init_resource::<SmithAtHand>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (open, make, draw).chain());
+        .add_systems(Update, (open, make, draw).chain().after(Focusing));
 }
 
 fn setup(mut commands: Commands) {
@@ -188,38 +179,22 @@ fn setup(mut commands: Commands) {
 }
 
 /// The interact key at a station opens it; again, or Tab, closes it.
-#[allow(clippy::too_many_arguments)]
 fn open(
-    keys: Res<ButtonInput<KeyCode>>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    settings: Res<Settings>,
-    menu: Res<OptionsMenu>,
-    player: Single<&Transform, With<Player>>,
-    props: Query<(&Prop, &GlobalTransform)>,
+    focus: Res<Focus>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut screen: ResMut<InventoryScreen>,
 ) {
-    let (window, mut cursor) = window.into_inner();
-    let captured = cursor.grab_mode != CursorGrabMode::None;
-    if menu.open || !settings.went_down(Action::Interact, &keys, &mouse, captured) {
+    if !focus.pressed {
         return;
     }
+    let (window, mut cursor) = window.into_inner();
     if screen.at.is_some() {
         screen.open = false;
         screen.at = None;
         grab_mouse(&mut cursor, window.focused);
-        return;
-    }
-    if screen.open {
-        return;
-    }
-    let feet = player.translation;
-    let nearest = props
-        .iter()
-        .filter_map(|(prop, at)| Some((prop.item.station?, at.translation().distance(feet))))
-        .filter(|(_, distance)| *distance < REACH_M + 1.0)
-        .min_by(|a, b| a.1.total_cmp(&b.1));
-    if let Some((station, _)) = nearest {
+    } else if let Some(Interactable::Station(station)) = focus.what
+        && !screen.open
+    {
         screen.open = true;
         screen.at = Some(station);
         grab_mouse(&mut cursor, false);

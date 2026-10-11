@@ -43,10 +43,14 @@ pub enum Action {
     Inventory,
     /// Use a station, talk to someone, open something.
     Interact,
+    LookLeft,
+    LookRight,
+    LookUp,
+    LookDown,
 }
 
 impl Action {
-    pub const ALL: [Action; 18] = [
+    pub const ALL: [Action; 22] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -65,6 +69,10 @@ impl Action {
         Action::OffGrid,
         Action::Inventory,
         Action::Interact,
+        Action::LookLeft,
+        Action::LookRight,
+        Action::LookUp,
+        Action::LookDown,
     ];
 
     /// What the options menu calls it.
@@ -88,6 +96,10 @@ impl Action {
             Action::OffGrid => "Hold to leave the grid",
             Action::Inventory => "Inventory",
             Action::Interact => "Interact",
+            Action::LookLeft => "Look left",
+            Action::LookRight => "Look right",
+            Action::LookUp => "Look up",
+            Action::LookDown => "Look down",
         }
     }
 
@@ -112,6 +124,10 @@ impl Action {
             Action::OffGrid => "off_grid",
             Action::Inventory => "inventory",
             Action::Interact => "interact",
+            Action::LookLeft => "look_left",
+            Action::LookRight => "look_right",
+            Action::LookUp => "look_up",
+            Action::LookDown => "look_down",
         }
     }
 
@@ -137,6 +153,10 @@ impl Action {
             Action::OffGrid => (Key(KeyCode::AltLeft), None),
             Action::Inventory => (Key(KeyCode::Tab), Some(Key(KeyCode::KeyI))),
             Action::Interact => (Key(KeyCode::KeyF), None),
+            Action::LookLeft => (Key(KeyCode::ArrowLeft), None),
+            Action::LookRight => (Key(KeyCode::ArrowRight), None),
+            Action::LookUp => (Key(KeyCode::ArrowUp), None),
+            Action::LookDown => (Key(KeyCode::ArrowDown), None),
         };
         [Some(first), second]
     }

@@ -7,6 +7,7 @@ use super::catalogue::PARTS;
 use super::controls::{Action, Controls, Settings};
 use super::flora::Growth;
 use super::harvest::{self, Cutting};
+use super::interact::Focus;
 use super::inventory::{Belongings, InventoryScreen, Tool};
 use super::options::OptionsMenu;
 use super::tool::{self, Builder};
@@ -318,6 +319,7 @@ fn draw(
     settings: Res<Settings>,
     builder: Res<Builder>,
     inventory: Res<InventoryScreen>,
+    focus: Res<Focus>,
     belongings: Belongings,
     cutting: Res<Cutting>,
     growth: Query<&Growth>,
@@ -418,13 +420,21 @@ fn draw(
         } else if dial.open {
             "Move the mouse to a part and let go, or press its number".to_string()
         } else {
-            match holding {
+            let doing = match holding {
                 Some(Tool::Hammer) => tool::prompt(&builder, &settings),
                 Some(tool) => harvest::prompt(tool, &cutting, &growth, &settings),
                 None => format!(
                     "1 to 6  pick a tool      {}  inventory",
                     settings.key(Action::Inventory)
                 ),
+            };
+            match focus.what {
+                Some(what) => format!(
+                    "{}  {}      {doing}",
+                    settings.key(Action::Interact),
+                    what.verb()
+                ),
+                None => doing,
             }
         },
     );

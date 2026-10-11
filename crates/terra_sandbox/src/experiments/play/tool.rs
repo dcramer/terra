@@ -29,6 +29,7 @@
 
 use super::bag::Notice;
 use super::catalogue::{self, Item, Kind, PARTS, Part};
+use super::claim::Claim;
 use super::controls::{Action, Controls, Settings, capitalised};
 use super::dial::Dial;
 use super::flora::Obstacles;
@@ -824,6 +825,7 @@ fn act(
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
     mut site: ResMut<Site>,
+    claim: Res<Claim>,
     player: Single<(&Transform, &mut Player)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -943,6 +945,28 @@ fn act(
     }
     if !click || builder.must_release {
         return;
+    }
+
+    // Nothing is built or taken apart outside your claim (D94), except the claim stone
+    // that makes one.
+    let placing_claim = matches!(builder.picked().kind, Kind::Items(_))
+        && builder.item().is_some_and(|item| item.claims)
+        && !builder.is_carrying();
+    if let Some(point) = target_point(&builder.target, &props) {
+        let on_planet = site.frame.transform_point(point);
+        if placing_claim {
+            if claim.stone.is_some() {
+                notice.say("You already have a claim; take its stone away to move it");
+                return;
+            }
+        } else if !claim.covers(on_planet) {
+            notice.say(if claim.stone.is_none() {
+                "Place a claim stone to build here"
+            } else {
+                "That is outside your claim"
+            });
+            return;
+        }
     }
 
     // Moving is neither building nor taking apart, and happens at once.
@@ -1647,4 +1671,27 @@ pub fn legend(builder: &Builder, settings: &Settings) -> String {
 /// Whether the tool is waiting for the player to take the mouse.
 pub fn waiting(cursor: &CursorOptions, options: &Options) -> bool {
     cursor.grab_mode == CursorGrabMode::None && !options.scripted()
+}
+
+/// Where on the base's grid a target is, in the base's own space, for checking it against
+/// the claim.
+fn target_point(target: &Target, props: &Query<&Prop>) -> Option<Vec3> {
+    let tile = |tile: [i32; 3]| {
+        Vec3::new(
+            (tile[0] as f32 + 0.5) * CELL_M,
+            0.0,
+            (tile[2] as f32 + 0.5) * CELL_M,
+        )
+    };
+    match *target {
+        Target::Nothing => None,
+        Target::Wall(face) | Target::Edge { face, .. } => Some(tile(face.tile)),
+        Target::Ground { corner, tiles, .. } => Some(Vec3::new(
+            (corner.x as f32 + tiles.x as f32 * 0.5) * CELL_M,
+            0.0,
+            (corner.z as f32 + tiles.y as f32 * 0.5) * CELL_M,
+        )),
+        Target::Spot { at, .. } => Some(at.with_y(0.0)),
+        Target::Prop(entity) => props.get(entity).ok().map(|prop| prop.at.with_y(0.0)),
+    }
 }

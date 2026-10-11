@@ -17,12 +17,14 @@
 
 mod bag;
 mod catalogue;
+mod claim;
 mod controls;
 mod crafting;
 mod dial;
 mod figure;
 mod flora;
 mod harvest;
+mod interact;
 mod inventory;
 mod models;
 mod options;
@@ -49,6 +51,8 @@ const SPRINT_SPEED: f32 = 7.4;
 const JUMP_SPEED: f32 = 6.0;
 const GRAVITY: f32 = 16.0;
 const LOOK_SPEED: f32 = 0.0025;
+/// How fast the arrow keys turn the view, in radians a second.
+const KEY_LOOK_SPEED: f32 = 1.6;
 const CAMERA_BACK_M: f32 = 4.6;
 const HEAD_M: f32 = 1.62;
 /// The player can wade this deep and no deeper.
@@ -90,6 +94,8 @@ pub fn plugin(app: &mut App) {
     dial::plugin(app);
     bag::plugin(app);
     crafting::plugin(app);
+    interact::plugin(app);
+    claim::plugin(app);
     harvest::plugin(app);
     options::plugin(app);
     app.insert_resource(DrivenByPlayer)
@@ -106,6 +112,7 @@ pub fn plugin(app: &mut App) {
 fn spawn(
     mut commands: Commands,
     mut items: ResMut<inventory::Items>,
+    options: Res<Options>,
     site: Res<Site>,
     planet: Res<Planet>,
     camera: Single<Entity, With<Camera3d>>,
@@ -139,7 +146,21 @@ fn spawn(
             facing: toward_door,
             since_acting: f32::MAX,
         },
-        inventory::starting_kit(&mut items),
+        {
+            let mut kit = inventory::starting_kit(&mut items);
+            for (name, count) in &options.gives {
+                match inventory::Raw::ALL
+                    .into_iter()
+                    .find(|raw| raw.name().eq_ignore_ascii_case(name))
+                {
+                    Some(raw) => {
+                        inventory::give(&mut items, &mut kit.0.0, raw, *count);
+                    }
+                    None => warn!("--give: there is no raw item called {name}"),
+                }
+            }
+            kit
+        },
         Transform::from_translation(feet).looking_to(toward_door, up),
         Visibility::default(),
     ));
@@ -191,14 +212,27 @@ fn capture_mouse(
 }
 
 fn look(
+    time: Res<Time>,
     motion: Res<AccumulatedMouseMotion>,
     settings: Res<controls::Settings>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     cursor: Single<&CursorOptions>,
     dial: Res<dial::Dial>,
+    menu: Res<options::OptionsMenu>,
     player: Single<&Transform, With<Player>>,
     mut view: ResMut<View>,
 ) {
     let up = player.translation.normalize();
+    // The arrow keys look about too, for keyboards and for scripted runs.
+    if !menu.open {
+        let held = |action| f32::from(settings.held(action, &keys, &mouse, true));
+        let turn = KEY_LOOK_SPEED * time.delta_secs();
+        let across = held(Action::LookRight) - held(Action::LookLeft);
+        let rise = held(Action::LookUp) - held(Action::LookDown);
+        view.forward = Quat::from_axis_angle(up, -across * turn) * view.forward;
+        view.pitch = (view.pitch + rise * turn).clamp(-1.2, 1.2);
+    }
     // While the dial is open the mouse steers it, not the view.
     if cursor.grab_mode != CursorGrabMode::None && !dial.open {
         let speed = LOOK_SPEED * settings.look_speed;

@@ -7,6 +7,7 @@
 //! now stands in a wall, the item is hidden.
 
 use super::catalogue::{self, Item, Light};
+use super::interact::{CanInteract, Interactable};
 use super::models::{Part, read_model};
 use crate::experiments::build::Site;
 use crate::planet::Planet;
@@ -259,6 +260,11 @@ pub fn place(
         Visibility::default(),
         Settling(0.0),
     ));
+    if let Some(station) = item.station {
+        prop.insert(CanInteract(Interactable::Station(station)));
+    } else if item.claims {
+        prop.insert(CanInteract(Interactable::ClaimStone));
+    }
     if let Some(mesh) = &model.solid {
         prop.with_child((Mesh3d(mesh.clone()), MeshMaterial3d(models.lit.clone())));
     }

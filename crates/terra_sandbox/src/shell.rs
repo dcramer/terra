@@ -36,8 +36,11 @@ usage: terra_sandbox [options]
   --clean               leave the frame-time readout off the screen, for pictures
   --bench               measure frame times with vsync off, print them, then exit
   --settle <frames>     frames to run before capturing or measuring (default 120)
-  --press <key>@<frame> press a letter, digit, F1 to F12 or esc on a given frame, for scripted runs;
+  --press <key>@<frame> press a letter, digit, F1 to F12, esc or an arrow (left, right, up,
+                        down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
+  --give <item>:<count> start the play experiment carrying something extra, for
+                        testing: a raw item such as stone:10 (repeatable)
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the base's corner, for experiments
@@ -68,6 +71,8 @@ pub struct Options {
     pub presses: Vec<(KeyCode, u32, u32)>,
     /// A fixed camera: where it stands and what it looks at, in an experiment's own space.
     pub vantage: Option<(Vec3, Vec3)>,
+    /// Things to start carrying, by name, for testing.
+    pub gives: Vec<(String, u32)>,
 }
 
 impl Options {
@@ -82,6 +87,7 @@ impl Options {
             clean: false,
             presses: Vec::new(),
             vantage: None,
+            gives: Vec::new(),
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -103,6 +109,16 @@ impl Options {
                         .map_err(|_| "--settle needs a number of frames".to_string())?;
                 }
                 "--press" => options.presses.push(parse_press(&value("--press")?)?),
+                "--give" => {
+                    let text = value("--give")?;
+                    let (name, count) = text
+                        .split_once(':')
+                        .and_then(|(name, count)| Some((name.to_string(), count.parse().ok()?)))
+                        .ok_or(format!(
+                            "--give wants an item and a count, like stone:10, not `{text}`"
+                        ))?;
+                    options.gives.push((name, count));
+                }
                 "--vantage" => {
                     let numbers: Vec<f32> = value("--vantage")?
                         .split(',')
@@ -156,7 +172,7 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
     ];
     let problem = || {
         format!(
-            "--press wants a letter, digit, F1 to F12 or esc and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
+            "--press wants a letter, digit, F1 to F12, esc or an arrow (left, right, up, down) and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
         )
     };
     let (key, frames) = text.split_once('@').ok_or_else(problem)?;
@@ -193,6 +209,10 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
     let code = match function {
         Some(&code) => code,
         None if key.eq_ignore_ascii_case("esc") => KeyCode::Escape,
+        None if key.eq_ignore_ascii_case("left") => KeyCode::ArrowLeft,
+        None if key.eq_ignore_ascii_case("right") => KeyCode::ArrowRight,
+        None if key.eq_ignore_ascii_case("up") => KeyCode::ArrowUp,
+        None if key.eq_ignore_ascii_case("down") => KeyCode::ArrowDown,
         None => {
             let symbol = key
                 .chars()

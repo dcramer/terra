@@ -64,6 +64,8 @@ pub struct Item {
     pub light: Light,
     /// What can be made at it, if it is a station.
     pub station: Option<Station>,
+    /// Whether it is a claim stone, which claims the land around it (D94).
+    pub claims: bool,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -81,6 +83,7 @@ const fn item(name: &'static str, file: &'static str, size: f32, cost: Cost) -> 
         lift: 0.0,
         light: Light::None,
         station: None,
+        claims: false,
     }
 }
 
@@ -157,6 +160,38 @@ impl Part {
 /// The parts, in the order they go round the dial, clockwise from the top. The first
 /// ten are also on the number keys.
 pub static PARTS: [Part; 14] = [
+    Part {
+        name: "Craft",
+        kind: Kind::Items(&[
+            Item {
+                claims: true,
+                ..item(
+                    "Claim stone",
+                    "../nature/Rock_Moss_2",
+                    1.3,
+                    &[(Raw::Stone, 3), (Raw::Wood, 1)],
+                )
+            },
+            station(
+                Station::Workbench,
+                item(
+                    "Workbench",
+                    "Table_Small",
+                    1.7,
+                    &[(Raw::Wood, 4), (Raw::Stone, 2)],
+                ),
+            ),
+            station(
+                Station::Smithy,
+                item(
+                    "Smithy",
+                    "../village/Blacksmith",
+                    6.5,
+                    &[(Raw::Wood, 8), (Raw::Stone, 8)],
+                ),
+            ),
+        ]),
+    },
     Part {
         name: "Room",
         kind: Kind::Room(&[
@@ -260,29 +295,6 @@ pub static PARTS: [Part; 14] = [
             rug("Round rug", "Carpet_Round", 3.2, &[(Raw::Hide, 2)]),
             rug("Long rug", "Carpet_1", 3.0, &[(Raw::Hide, 2)]),
             item("Shovel", "Shovel", 1.3, &[(Raw::Wood, 1), (Raw::Iron, 1)]),
-        ]),
-    },
-    Part {
-        name: "Craft",
-        kind: Kind::Items(&[
-            station(
-                Station::Workbench,
-                item(
-                    "Workbench",
-                    "Table_Small",
-                    1.7,
-                    &[(Raw::Wood, 4), (Raw::Stone, 2)],
-                ),
-            ),
-            station(
-                Station::Smithy,
-                item(
-                    "Smithy",
-                    "../village/Blacksmith",
-                    6.5,
-                    &[(Raw::Wood, 8), (Raw::Stone, 8)],
-                ),
-            ),
         ]),
     },
     Part {

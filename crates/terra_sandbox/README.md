@@ -25,7 +25,8 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--clean` | Leave the frame-time readout off the screen, for pictures |
 | `--bench` | Measure frame times with vsync off, print them, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
-| `--press <key>@<frame>` | Press a letter, digit, F1 to F12 or `esc` on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. |
+| `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
+| `--give <item>:<count>` | In the play experiment: start carrying something extra, such as `stone:10`, for testing. Repeatable. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
 
 ## Controls
@@ -60,7 +61,7 @@ Shader reloading works when run through `cargo run`. The Windows build launched 
 cargo xtask win -p terra_sandbox -- --experiment play
 ```
 
-The proof of concept: an outpost in a meadow by a lake, a little before sunset, and a player with a builder tool. You steer an animated figure in third person. It walks on the planet, climbs the steps to the base's door, is held up by floors, stopped by walls, windows, trees and boulders, and let through doors.
+The tech demo of the MVP's loop (docs/prototypes.md), being built on the earlier proof of concept: an abandoned outpost in a meadow by a lake, a little before sunset, and a player who arrives with a few tools and nothing else. You steer an animated figure in third person. It walks on the planet, climbs the steps to the base's door, is held up by floors, stopped by walls, windows, trees and boulders, and let through doors.
 
 ![The outpost](../../docs/images/outpost-2026-10-10.png)
 
@@ -68,18 +69,19 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 |---|---|
 | Click | Capture the mouse |
 | Esc | The options menu, which gives the mouse back. Esc again returns to the game. |
-| Mouse | Look |
+| Mouse | Look. The arrow keys do the same. |
 | W A S D, Shift, Space | Move, sprint, jump |
 | 1 to 6 | Pick a slot of the action bar. What is in it is the tool in hand. |
 | Tab | Open and close the inventory. I does the same. |
-| Hold right mouse | With the builder in hand: the dial of parts. Move the mouse toward one and let go, or press its number. B does the same. |
+| F | Use what you stand beside: a workbench or smithy opens its recipes, the claim stone grows your claim |
+| Hold right mouse | With the hammer in hand: the dial of parts. Move the mouse toward one and let go, or press its number. B does the same. |
 | Tap right mouse | Put the part away, or put back what you picked up |
 | Hold left click | Build, take apart, or cut. It takes a moment; let go early and nothing is done. E does the same. |
 | Left click | In move mode, pick an item up and put it down |
 | Scroll wheel | Turn an item, a room or a wall; switch a wall between pushing out and pulling in. Z and C do the same. |
 | R | The next variant of the part; with Shift, the one before |
 | Q | Take-apart mode, and back |
-| F | Move mode, and back |
+| G | Move mode, and back |
 | X | The grid on and off |
 | Hold Alt | The opposite of the grid setting, while held |
 | Middle click | Pick another of the item you are looking at. V does the same. |
@@ -87,17 +89,19 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 
 Those are the defaults. In the options menu (Esc) any of them can be set to another key or mouse button, except Esc, the numbers, the wheel and F1 to F3; click a control, then press its new key or button, or right-click it to clear it. The menu also has mouse look speed, invert look, field of view, full screen and vsync. Every change is saved at once to `settings.txt` in the player's settings folder (`~/Library/Application Support/Terra` on macOS, `%APPDATA%\Terra` on Windows, `~/.config/terra` on Linux). Delete it to go back to the defaults. Scripted runs never read or write it, so a script does the same thing on every machine.
 
-The buttons follow Subnautica 2 where we could confirm what it does: right mouse is the build menu, left mouse builds, and taking apart and moving are modes on Q and F. The rest is the usual habit of building games. See [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
+The buttons follow Subnautica 2 where we could confirm what it does: right mouse is the build menu, left mouse builds, and taking apart and moving are modes on Q and G (moving was on F until F became the interact key). The rest is the usual habit of building games. See [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
 
-You carry a backpack, on the rules in `terra_items` and the Subnautica baseline (docs/items.md, D84): a grid in which each item fills its cells and nothing stacks. Beside it is the character sheet (D64): a slot each for a pack, a helmet, a suit and an oxygen tank. You start wearing all four. The small pack makes the backpack 6 by 5 cells, up from 5 by 4 with none, and holds both tools and a few raw items. The suit's parts do nothing yet. The action bar along the bottom points at tools in the backpack; the raw items are counted at the top right.
+You carry a backpack, on the rules in `terra_items` and the Subnautica baseline (docs/items.md, D84): a grid in which each item fills its cells and nothing stacks. Beside it is the character sheet (D64): a slot each for a pack, the head and the body. You start wearing a small pack, which makes the backpack 6 by 5 cells, up from 5 by 4 with none, and carrying a hammer, a stone axe, a stone pickaxe and a knife (D96). Nothing else: everything is taken from the world. The action bar along the bottom points at tools in the backpack; materials are counted at the top right.
 
 ![The character sheet and the backpack at the start](../../docs/images/outpost-backpack-2026-10-11.png)
 
-- **The builder** spends raw items. Everything it builds has a cost, shown in the prompt before you commit: so much metal a tile for a room, glass for a window, wood and cloth for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost, if there is room in the backpack for it; if not, it stays, and a notice above the bar says why.
-- **The cutter** gathers more: wood from trees, metal from rocks, cloth from bushes and plants. Aim at one, or just stand in front of it, and hold left click until it is cut through. A full backpack takes nothing more, and what does not fit is left behind.
-- **The inventory** shows the character sheet and the backpack's grid. Point at a tool and press 1 to 6 to put it in that slot of the bar. Click a slot of the sheet to take off what is in it, and click gear in the backpack to wear it. The pack will not come off while what you carry would not fit without it. Opening it puts away the part in the builder's hand.
+- **Gathering**: one tool to a job. The axe fells trees for wood, the pickaxe breaks rock for stone and ore rocks (a rusty colour) for ore, the knife cuts bushes and plants for fibre. Aim at one, or just stand in front of it, and hold left click until it gives. A tool's material decides what it can work: the great pines are too tough for a stone axe, and a stone pickaxe is slow on ore. A full backpack takes nothing more, and what does not fit is left behind.
+- **Claiming**: you build only inside your claim (D94). With the hammer, pick Craft, then Claim stone, and place it; the claim is 40 metres across, drawn on the ground while the hammer is in hand, and F at the stone grows it to 80 and then 160 for a price (D104). Until you place one, the hammer builds nothing and takes nothing apart.
+- **Building** spends materials. Everything has a cost, shown in the prompt before you commit: wood for floors and walls, fibre for windows, hide for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost, if there is room in the backpack for it; if not, it stays, and a notice above the bar says why.
+- **Crafting**: F at a workbench or a smithy opens its recipes beside the backpack; press a number or click one to make it. The workbench makes stone tools, leather gear and a larger pack; the smithy smelts ore into iron and makes iron tools, but only once a smith lives at your claim. The outpost has an old workbench by its door.
+- **The inventory** shows the character sheet and the backpack's grid. Point at a tool and press 1 to 6 to put it in that slot of the bar. Click a slot of the sheet to take off what is in it, and click gear in the backpack to wear it. The pack will not come off while what you carry would not fit without it. Opening it puts away the part in the hammer's hand.
 
-The raw items, the costs, what you start with and what the cutter gives are all stand-ins. See [docs/construction.md](../../docs/construction.md) for what the developers have said about carrying and cost.
+The materials, costs, recipes and what you start with are stand-ins, chosen so the MVP's loop can be walked.
 
 Building, taking apart and cutting all take time. You hold the button, a bar under the aiming mark fills, and it is done when the bar is full; let go early, or walk off, and nothing is done.
 
@@ -105,7 +109,7 @@ Building, taking apart and cutting all take time. You hold the button, a bar und
 - An item being built grows inside its ghost; one being taken apart shrinks.
 - A tree being cut shudders, then falls over away from you.
 
-How long each takes follows from the thing: what it costs to build, and how tough it is to cut. A tool can be quicker or slower at cutting each sort of thing, or unable to cut it at all, so an axe or a pickaxe is one more line in `inventory.rs`.
+How long each takes follows from the thing: what it costs to build, and how tough it is to cut. A tool can be quicker or slower at cutting each sort of thing, or unable to cut it at all, as `Tool::cuts` in `inventory.rs` says.
 
 Building starts from a part. Pick one from the dial, cycle through its variants, and aim. What would be built is shown before you commit: the outline of a room, the cut of a window, the wall a push would move, or a ghost of the item where it would stand. It is red where it cannot go.
 
@@ -150,7 +154,10 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `catalogue` | The parts the builder can build, their variants and what they cost |
 | `inventory` | What is carried, on `terra_items`: the backpack, what is worn and the action bar as components on the player, and the demo's kinds of item |
 | `bag` | The action bar, the raw-item count, notices, and the character sheet and backpack's grid on screen |
-| `harvest` | Cutting things for the raw items in them, with any tool that can |
+| `interact` | What the interact key would act on: the nearest station, claim stone or person within reach |
+| `crafting` | Stations, recipes, and making things from what you carry |
+| `claim` | Your claim: placing it, growing it, and drawing its edge |
+| `harvest` | Gathering with the right tool for each thing, and refusing what its material cannot work |
 | `work` | Holding a button until a job is done |
 | `tool` | The builder: what it is aimed at, the preview, and building |
 | `dial` | The dial of parts and the prompts |
