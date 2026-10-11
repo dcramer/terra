@@ -98,7 +98,7 @@ Proposed. Building is something you do with a tool in hand, standing in the worl
 
 - With the builder out, you see what you would place or change before committing.
 - Building costs what you are carrying. Taking something apart gives some or all of it back.
-- The construction system itself gets its own doc. The developers have said the first attempt is not it: building should start from choosing a part, with variants to cycle through (D48).
+- The construction system itself gets its own doc. The developers have said building should start from choosing a part, with variants to cycle through (D48); the tech demo now does that with a dial.
 
 ## Co-op
 
@@ -128,9 +128,11 @@ Survival needs, terraforming, progression, creatures and combat. The developers 
 
 ## A first walk-around
 
-A playable version exists: the sandbox's `play` experiment, built on 2026-10-10 at the developers' request and then rebuilt the same day as something worth showing. To get started it made two choices this doc leaves open, neither of which is a decision: third person, so the figure can be seen, and one builder tool with three modes.
+A playable version exists: the sandbox's `play` experiment, built on 2026-10-10 at the developers' request and then rebuilt the same day as something worth showing. To get started it made choices this doc leaves open, none of which is a decision: third person, so the figure can be seen; one builder tool for everything; and a list of parts chosen by what models were to hand.
 
-![The player outside the base, with the builder aimed at a wall](images/outpost-builder-2026-10-10.png)
+![The dial of parts the builder can build](images/outpost-dial-2026-10-10.png)
+
+![Indoors, about to place a couch](images/outpost-builder-2026-10-10.png)
 
 ![The outpost from the fire](images/outpost-2026-10-10.png)
 
@@ -138,10 +140,11 @@ What it has:
 
 - An animated figure that jogs, sprints, jumps and turns to face the way it is going, on the stand-in planet.
 - Steps and a door into the base, floors that hold the figure up, walls and windows that stop it, and trees and boulders it has to walk round.
-- The builder, reshaping the base from outside and inside. What it would act on lights up before you commit, and a line of text says what each button would do.
+- The builder. You pick a part from a dial (room, window, door, a seat, a table and so on), cycle through its variants, and build it where you aim. What would be built is shown before you commit, and a line of text says what each button would do.
+- Furniture and kit as items you place, turn and take away. They are solid.
 - A place to do it in: a furnished base in a meadow by a lake.
 
-What it does not have: harvesting, inventory, costs, swimming, stairs between storeys, real collision (D53), or a character of our own. The figure is a recoloured mannequin from a free animation library. How to run it is in the [sandbox README](../crates/terra_sandbox/README.md).
+What it does not have: harvesting, anything to carry, costs, swimming, stairs between storeys, real collision (D53), or a character of our own. The figure is a recoloured mannequin from a free animation library. How to run it is in the [sandbox README](../crates/terra_sandbox/README.md).
 
 What was proposed, for comparison:
 

@@ -42,11 +42,22 @@ It has 13 tests and works through real key presses in the sandbox. One flaw foun
 - **You can cycle through variants of a part.** Ours cycles one thing, a wall tile, through four window sizes and a door.
 - **"Similar and other things."** They did not list the rest. The account of the controls above is second-hand, so the list of what is missing should come from them or from playing the game, not from this note.
 
-So the model here, tiles and a generated hull, may survive, but the way a player builds with it has to be redesigned around choosing a part first. That is a design question and has no doc yet.
+So the model here, tiles and a generated hull, may survive, but the way a player builds with it has to start from choosing a part.
+
+They then asked for that to be built into the tech demo directly, as "the little dial building menus we see in things like Rust and Subnautica", with the furniture in the example base as buildable items. It now works that way:
+
+![The dial of parts](../docs/images/outpost-dial-2026-10-10.png)
+
+- **A dial of thirteen parts**, opened by holding a key: room, reshape, window, door, remove, and eight kinds of item.
+- **Variants** of the picked part, cycled with the scroll wheel: five room sizes, three windows, twenty-seven items.
+- **A preview** of what would be built before committing, and one button to build and one to take away.
+- **Items** stand on a floor or the ground, can be turned, are solid to walk into, and can be removed.
+
+What that still is not: parts are text labels with no pictures; nothing costs anything or has to be unlocked; items do not snap to walls or to each other; and an item is not yet one of the base's operations, so it would not be saved or sent to another player. The list of parts was chosen by what models were to hand, not designed.
 
 ## What it does not do
 
-- **It is not built the way Subnautica 2 is built.** See the verdict above.
+- **How close the building now is to Subnautica 2's is for the developers to judge.** See above.
 - **It is boxy.** Flat walls on a square grid, which is the look the developers said they do not want. Rounding, chamfered edges and curved rooms are the obvious next question.
 - **Windows are rectangles**, cycled through four presets. No free shaping, portholes or rounded corners.
 - **Resizing loses windows.** A window lives on a wall tile, so when the wall moves the window is gone.

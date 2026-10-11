@@ -16,6 +16,7 @@ Far enough to show. The `play` experiment is now a furnished base in a meadow by
 4. **Light.** A low warm sun, cool fill from the sky, four cascades of shadow, ambient occlusion, a little bloom, haze. All built into Bevy except the sky.
 5. **Movement.** One vertex shader sways every plant, and is used for the depth and shadow passes too, so nothing shimmers.
 6. **A building that looks built.** The base is still tiles, but each wall gets a band, posts, seams and a parapet, openings get frames, and it sits on a foundation with steps and lamps.
+7. **Building from a menu.** Added the same day at the developers' request: a dial of parts with variants, a preview of what would be built, and furniture as items you place. See [subnautica-2-building.md](subnautica-2-building.md).
 
 ## Where the models came from
 
@@ -48,5 +49,5 @@ One lesson cost a factor of eleven. The wind's clock was first sent by changing 
 - **Stock shapes.** They carry our colours, not our design, and there is nothing here for a dead planet.
 - **The scene is local.** Grass is planted once around the base; walk 100 m and it runs out.
 - **The stand-in planet.** No voxels, no digging. A base is lifted clear of the ground and given a foundation, where the real game would have to decide how buildings meet terrain.
-- **Collision is still arithmetic** (D53): circles round trunks, a grid for the base.
+- **Collision is still arithmetic** (D53): circles round trunks, boxes round placed items, a grid for the base.
 - **Nobody has played it yet.** Every check was a screenshot or a scripted run.

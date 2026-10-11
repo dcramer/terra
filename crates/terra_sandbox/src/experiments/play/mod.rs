@@ -2,26 +2,20 @@
 //!
 //! You are a body in the world: an animated figure you steer in third person, which
 //! walks on the planet, is held up by a base's floors, stopped by its walls and windows,
-//! and let through its doors. The figure carries one tool, a builder, whose two actions
-//! depend on its mode.
+//! and let through its doors. The figure carries one tool, a builder: pick a part from
+//! its dial, and build it where you aim.
 //!
 //!   Mouse         look (click to capture the mouse, Esc to release it)
 //!   W A S D       move          Shift   sprint       Space   jump
-//!   1 2 3         builder mode: shape, openings, room
-//!   Left click    main action   (E does the same)
-//!   Right click   second action (R does the same)
+//!   Hold Q        the dial of parts to build; the rest of the builder is in `tool.rs`
 //!   F3            frame rate
 //!
-//! | Mode     | Main action                         | Second action          |
-//! |----------|-------------------------------------|------------------------|
-//! | Shape    | Push the wall you aim at out        | Pull it in             |
-//! | Openings | Change the tile: window, door, ...  | Make it solid again    |
-//! | Room     | Add a room on the ground you aim at |                        |
-//!
 //! The scene around the player is in the modules here: `scene` is the light and air,
-//! `flora` what grows, `figure` the player's body, and `tool` the builder and its
-//! on-screen prompts. See docs/player.md for the design this is a step toward.
+//! `flora` what grows, `props` what has been placed, `figure` the player's body, `tool`
+//! the builder, `dial` its menu and prompts, and `catalogue` what it can build. See docs/player.md for the design this is a step toward.
 
+mod catalogue;
+mod dial;
 mod figure;
 mod flora;
 mod models;
@@ -85,12 +79,13 @@ pub fn plugin(app: &mut App) {
     props::plugin(app);
     figure::plugin(app);
     tool::plugin(app);
+    dial::plugin(app);
     app.insert_resource(DrivenByPlayer)
         .add_systems(Startup, hide_frame_rate)
         .add_systems(PostStartup, spawn)
         .add_systems(
             Update,
-            (capture_mouse, look, walk, toggle_frame_rate)
+            (capture_mouse, dial::steer, look, walk, toggle_frame_rate)
                 .chain()
                 .before(tool::Acting),
         )
@@ -167,11 +162,13 @@ fn capture_mouse(
 fn look(
     motion: Res<AccumulatedMouseMotion>,
     cursor: Single<&CursorOptions>,
+    dial: Res<dial::Dial>,
     player: Single<&Transform, With<Player>>,
     mut view: ResMut<View>,
 ) {
     let up = player.translation.normalize();
-    if cursor.grab_mode != CursorGrabMode::None {
+    // While the dial is open the mouse steers it, not the view.
+    if cursor.grab_mode != CursorGrabMode::None && !dial.open {
         view.forward = Quat::from_axis_angle(up, -motion.delta.x * LOOK_SPEED) * view.forward;
         view.pitch = (view.pitch - motion.delta.y * LOOK_SPEED).clamp(-1.2, 1.2);
     }
@@ -189,6 +186,7 @@ fn walk(
     site: Res<Site>,
     view: Res<View>,
     obstacles: Res<flora::Obstacles>,
+    items: Query<(&props::Prop, &Transform, &Visibility), Without<Player>>,
     player: Single<(&mut Transform, &mut Player)>,
 ) {
     let (mut transform, mut player) = player.into_inner();
@@ -211,6 +209,8 @@ fn walk(
     let ease = 1.0 - libm::expf(-dt * if player.on_ground { 11.0 } else { 2.5 });
     player.velocity = player.velocity.lerp(wish * top_speed, ease).reject_from(up);
     let mut target = feet + player.velocity * dt;
+    // Furniture and kit are solid. Walls come after, so they have the last word.
+    target = props::push_out(target, walker.radius, items.iter());
 
     // The base decides what blocks the way; it works in its own space.
     let to_base = site.frame.compute_affine().inverse();

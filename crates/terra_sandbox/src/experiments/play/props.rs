@@ -1,119 +1,123 @@
-//! The things people leave around a place they live: furniture indoors, and outdoors
-//! crates, fuel, and a fire with logs to sit on.
+//! The things people put in and around a place they live: furniture indoors, and
+//! outdoors crates, fuel, and a fire with logs to sit on.
 //!
-//! All of it is set dressing, placed by hand for the example base. Nothing here can be
-//! picked up or used. If the base is reshaped so that a piece is no longer indoors, or
-//! now stands in a wall, the piece is hidden.
+//! Every one is an item from the builder's catalogue, placed the way a player places
+//! one. The example base starts furnished through that same call. An item is solid: its
+//! box stops a walker. If the base is reshaped so that an item is no longer indoors, or
+//! now stands in a wall, the item is hidden.
 
+use super::catalogue::{self, Item, Light};
 use super::models::{Part, read_model};
 use crate::experiments::build::Site;
 use crate::planet::Planet;
 use bevy::{
-    asset::RenderAssetUsages, light::NotShadowCaster, mesh::Indices, prelude::*,
-    render::render_resource::PrimitiveTopology,
+    asset::RenderAssetUsages, light::NotShadowCaster, mesh::Indices,
+    platform::collections::HashMap, prelude::*, render::render_resource::PrimitiveTopology,
 };
 use terra_build::TILE_M;
 
-/// One piece and where it goes, in the base's own space, in metres.
-struct Placing {
-    file: &'static str,
-    /// Where the middle of its foot stands. Outdoors only east and south count; it is
-    /// stood on the ground there.
-    at: Vec3,
-    /// Raised this far above the floor or ground, for things stood on other things.
-    lift: f32,
-    /// Turned this many degrees, anticlockwise seen from above.
-    turn: f32,
-    /// Its longest dimension.
-    size: f32,
-    indoors: bool,
-}
+/// Bright enough to show beside daylight, which is what the camera is exposed for.
+const FIRELIGHT_LUMENS: f32 = 500_000.0;
+const LAMPLIGHT_LUMENS: f32 = 60_000.0;
+/// Anything lower than this is walked over, not round.
+const STEP_OVER_M: f32 = 0.25;
 
-const fn indoors(file: &'static str, x: f32, z: f32, turn: f32, size: f32) -> Placing {
-    Placing {
-        file,
-        at: Vec3::new(x, 0.0, z),
-        lift: 0.0,
-        turn,
-        size,
-        indoors: true,
-    }
-}
-
-const fn outdoors(file: &'static str, x: f32, z: f32, turn: f32, size: f32) -> Placing {
-    Placing {
-        file,
-        at: Vec3::new(x, 0.0, z),
-        lift: 0.0,
-        turn,
-        size,
-        indoors: false,
-    }
-}
-
-const fn raised(placing: Placing, lift: f32) -> Placing {
-    Placing { lift, ..placing }
-}
-
-/// Where the fire is, which the logs and the light are arranged around.
+/// Where the example base's fire is, which its logs are arranged around.
 const FIRE: Vec3 = Vec3::new(4.0, 0.0, 15.0);
 
-const LAYOUT: &[Placing] = &[
+/// The example base's furniture: an item's model, where the middle of its foot stands in
+/// the base's own space, how far it is raised above the floor or ground, how many degrees
+/// it is turned, and whether it is indoors.
+const EXAMPLE: &[(&str, f32, f32, f32, f32, bool)] = &[
     // The main room: somewhere to sit, looking out at the water.
-    raised(indoors("Carpet_Round", 1.5, -2.2, 0.0, 3.2), 0.015),
-    indoors("Couch_Medium1", 1.5, -4.9, 0.0, 2.2),
-    indoors("Table_RoundSmall", 1.5, -2.2, 0.0, 1.1),
-    indoors("Stool", 3.0, -1.6, 30.0, 0.5),
-    indoors("Light_Floor1", -0.4, -5.2, 0.0, 1.6),
-    indoors("Bookshelf", -5.55, -4.4, 90.0, 2.0),
-    indoors("Houseplant_7", -5.1, 2.2, 0.0, 1.1),
-    indoors("Houseplant_3", 5.2, -5.3, 0.0, 0.9),
-    indoors("Props_Computer", 8.45, -4.6, -90.0, 1.8),
-    indoors("Props_Shelf_Tall", 8.5, -1.8, -90.0, 2.0),
-    indoors("Chair_1", 7.4, -4.6, 90.0, 0.95),
+    ("Carpet_Round", 1.5, -2.2, 0.0, 0.0, true),
+    ("Couch_Medium1", 1.5, -4.9, 0.0, 0.0, true),
+    ("Table_RoundSmall", 1.5, -2.2, 0.0, 0.0, true),
+    ("Stool", 3.0, -1.6, 0.0, 30.0, true),
+    ("Light_Floor1", -0.4, -5.2, 0.0, 0.0, true),
+    ("Bookshelf", -5.55, -4.4, 0.0, 90.0, true),
+    ("Houseplant_7", -5.1, 2.2, 0.0, 0.0, true),
+    ("Houseplant_3", 5.2, -5.3, 0.0, 0.0, true),
+    ("Props_Computer", 8.45, -4.6, 0.0, -90.0, true),
+    ("Props_Shelf_Tall", 8.5, -1.8, 0.0, -90.0, true),
+    ("Chair_1", 7.4, -4.6, 0.0, 90.0, true),
     // The far room: a bunk and a kitchen.
-    raised(indoors("Carpet_1", 18.0, -1.0, 90.0, 3.0), 0.015),
-    indoors("Bed_Single", 17.2, -4.8, 90.0, 2.15),
-    indoors("NightStand_1", 19.0, -5.45, 0.0, 0.55),
-    raised(indoors("Houseplant_1", 19.0, -5.45, 0.0, 0.45), 0.55),
-    indoors("Kitchen_Fridge", 15.55, 2.35, 90.0, 1.85),
-    indoors("Kitchen_Sink", 15.5, 1.2, 90.0, 1.08),
-    indoors("Kitchen_2Drawers", 15.5, 0.3, 90.0, 0.92),
-    indoors("Houseplant_7", 20.2, 2.2, 0.0, 1.0),
+    ("Carpet_1", 18.0, -1.0, 0.0, 90.0, true),
+    ("Bed_Single", 17.2, -4.8, 0.0, 90.0, true),
+    ("NightStand_1", 19.0, -5.45, 0.0, 0.0, true),
+    ("Houseplant_1", 19.0, -5.45, 0.55, 0.0, true),
+    ("Kitchen_Fridge", 15.55, 2.35, 0.0, 90.0, true),
+    ("Kitchen_Sink", 15.5, 1.2, 0.0, 90.0, true),
+    ("Kitchen_2Drawers", 15.5, 0.3, 0.0, 90.0, true),
+    ("Houseplant_7", 20.2, 2.2, 0.0, 0.0, true),
     // By the door: what has not been carried in yet.
-    outdoors("Props_Crate", 10.6, 4.3, 12.0, 0.8),
-    outdoors("Props_Crate", 11.6, 4.6, -8.0, 0.8),
-    raised(outdoors("Props_Crate", 11.1, 4.45, 30.0, 0.8), 0.78),
-    outdoors("Props_CrateLong", 12.6, 5.6, 70.0, 1.2),
-    outdoors("Props_ContainerFull", 4.2, 4.4, 5.0, 1.3),
-    outdoors("PropaneTank", 13.0, 0.75, 0.0, 1.3),
-    outdoors("PropaneTank", 13.9, 0.8, 40.0, 1.3),
-    outdoors("GasCan", 9.9, 5.4, 60.0, 0.45),
-    raised(outdoors("Radio", 12.6, 5.6, 110.0, 0.4), 0.74),
-    outdoors("Shovel", 3.0, 3.25, 0.0, 1.3),
+    ("Props_Crate", 10.6, 4.3, 0.0, 12.0, false),
+    ("Props_Crate", 11.6, 4.6, 0.0, -8.0, false),
+    ("Props_Crate", 11.1, 4.45, 0.78, 30.0, false),
+    ("Props_CrateLong", 12.6, 5.6, 0.0, 70.0, false),
+    ("Props_ContainerFull", 4.2, 4.4, 0.0, 5.0, false),
+    ("PropaneTank", 13.0, 0.75, 0.0, 0.0, false),
+    ("PropaneTank", 13.9, 0.8, 0.0, 40.0, false),
+    ("GasCan", 9.9, 5.4, 0.0, 60.0, false),
+    ("Radio", 12.6, 5.6, 0.74, 110.0, false),
+    ("Shovel", 3.0, 3.25, 0.0, 0.0, false),
     // Out front: a fire, and logs to sit on.
-    outdoors("Bonfire_Fire", FIRE.x, FIRE.z, 0.0, 1.3),
-    outdoors("WoodLog", FIRE.x - 2.0, FIRE.z + 0.4, 80.0, 1.7),
-    outdoors("WoodLog", FIRE.x + 1.3, FIRE.z + 1.7, -40.0, 1.7),
-    outdoors("WoodLog", FIRE.x + 1.6, FIRE.z - 1.5, 35.0, 1.5),
+    ("Bonfire_Fire", FIRE.x, FIRE.z, 0.0, 0.0, false),
+    ("WoodLog", FIRE.x - 2.0, FIRE.z + 0.4, 0.0, 80.0, false),
+    ("WoodLog", FIRE.x + 1.3, FIRE.z + 1.7, 0.0, -40.0, false),
+    ("WoodLog", FIRE.x + 1.6, FIRE.z - 1.5, 0.0, 35.0, false),
 ];
 
-/// A piece of set dressing, and where it was put in the base's own space.
+/// An item that has been placed.
 #[derive(Component)]
-struct Prop {
-    at: Vec3,
-    indoors: bool,
+pub struct Prop {
+    pub item: &'static Item,
+    /// Where it was put, in the base's own space.
+    pub at: Vec3,
+    pub indoors: bool,
+    /// Half its width, height and depth, in metres: the box a walker cannot enter.
+    pub half: Vec3,
+}
+
+impl Prop {
+    /// Whether a walker has to go round this rather than over it.
+    pub fn is_solid(&self) -> bool {
+        self.half.y * 2.0 > STEP_OVER_M
+    }
 }
 
 #[derive(Component)]
 struct Firelight;
+
+/// An item's shapes, ready to draw: what is lit and what glows, stood on its foot,
+/// centred, and at its real size.
+pub struct Model {
+    pub solid: Option<Handle<Mesh>>,
+    pub glow: Option<Handle<Mesh>>,
+    pub half: Vec3,
+}
+
+/// The model for every item in the catalogue.
+#[derive(Resource)]
+pub struct Models {
+    models: HashMap<&'static str, Model>,
+    lit: Handle<StandardMaterial>,
+    glowing: Handle<StandardMaterial>,
+}
+
+impl Models {
+    pub fn of(&self, item: &Item) -> Option<&Model> {
+        self.models.get(item.file)
+    }
+}
 
 /// The base's shape the props were last checked against.
 #[derive(Resource)]
 struct CheckedFor(u64);
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(PostStartup, furnish)
+    app.add_systems(Startup, load)
+        .add_systems(PostStartup, furnish)
         .add_systems(Update, (flicker, keep_clear));
 }
 
@@ -145,15 +149,14 @@ fn colour_of(part: &Part) -> (Color, bool) {
     (colour, false)
 }
 
-/// A prop's two meshes: what is lit, and what glows. Stood on its foot, centred, and
-/// scaled so its longest dimension is `size`.
-fn build(parts: &[Part], size: f32) -> [Option<Mesh>; 2] {
+/// An item's meshes and its size, from the parts of its model file.
+fn build(parts: &[Part], size: f32, meshes: &mut Assets<Mesh>) -> Model {
     let all = || parts.iter().flat_map(|part| part.positions.iter().copied());
     let low = all().fold(Vec3::MAX, Vec3::min);
     let high = all().fold(Vec3::MIN, Vec3::max);
     let scale = size / (high - low).max_element().max(1e-3);
     let foot = Vec3::new((low.x + high.x) * 0.5, low.y, (low.z + high.z) * 0.5);
-    [false, true].map(|glowing| {
+    let mut mesh_of = |glowing: bool| {
         let mut positions = Vec::new();
         let mut normals = Vec::new();
         let mut colours = Vec::new();
@@ -173,92 +176,160 @@ fn build(parts: &[Part], size: f32) -> [Option<Mesh>; 2] {
             indices.extend(part.indices.iter().map(|index| first + index));
         }
         (!positions.is_empty()).then(|| {
-            Mesh::new(
-                PrimitiveTopology::TriangleList,
-                RenderAssetUsages::RENDER_WORLD,
+            meshes.add(
+                Mesh::new(
+                    PrimitiveTopology::TriangleList,
+                    RenderAssetUsages::RENDER_WORLD,
+                )
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
+                .with_inserted_indices(Indices::U32(indices)),
             )
-            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
-            .with_inserted_indices(Indices::U32(indices))
         })
-    })
+    };
+    Model {
+        solid: mesh_of(false),
+        glow: mesh_of(true),
+        half: (high - low) * scale * 0.5,
+    }
 }
 
-fn furnish(
+fn load(
     mut commands: Commands,
-    planet: Res<Planet>,
-    site: Res<Site>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let lit = materials.add(StandardMaterial {
-        perceptual_roughness: 0.8,
-        reflectance: 0.3,
-        ..default()
-    });
-    let glowing = materials.add(StandardMaterial {
-        emissive: LinearRgba::rgb(14.0, 6.0, 1.6),
-        ..default()
-    });
-    for placing in LAYOUT {
-        let parts = match read_model(&format!("props/{}.glb", placing.file)) {
-            Ok(parts) => parts,
-            Err(problem) => {
-                error!("Could not read a model. {problem}");
-                continue;
+    let mut models = HashMap::default();
+    for item in catalogue::items() {
+        match read_model(&format!("props/{}.glb", item.file)) {
+            Ok(parts) => {
+                models.insert(item.file, build(&parts, item.size, &mut meshes));
             }
-        };
-        let floor = site.frame.transform_point(placing.at);
-        let stood = if placing.indoors {
-            floor
-        } else {
-            planet.drawn(floor.normalize())
-        };
-        let [solid, glow] = build(&parts, placing.size);
-        let mut prop = commands.spawn((
-            Name::new(placing.file),
-            Prop {
-                at: placing.at,
-                indoors: placing.indoors,
-            },
-            Transform {
-                translation: stood + *site.frame.up() * placing.lift,
-                rotation: site.frame.rotation * Quat::from_rotation_y(placing.turn.to_radians()),
-                scale: Vec3::ONE,
-            },
-            Visibility::default(),
-        ));
-        if let Some(mesh) = solid {
-            prop.with_child((Mesh3d(meshes.add(mesh)), MeshMaterial3d(lit.clone())));
+            Err(problem) => error!("Could not read a model. {problem}"),
         }
-        if let Some(mesh) = glow {
+    }
+    commands.insert_resource(Models {
+        models,
+        lit: materials.add(StandardMaterial {
+            perceptual_roughness: 0.8,
+            reflectance: 0.3,
+            ..default()
+        }),
+        glowing: materials.add(StandardMaterial {
+            emissive: LinearRgba::rgb(14.0, 6.0, 1.6),
+            ..default()
+        }),
+    });
+}
+
+/// Stands an item in the world. `at` is in the base's own space; outdoors only its east
+/// and south count, and the item is stood on the ground there. Returns nothing if the
+/// item's model is missing.
+pub fn place(
+    commands: &mut Commands,
+    models: &Models,
+    site: &Site,
+    planet: &Planet,
+    item: &'static Item,
+    at: Vec3,
+    lift: f32,
+    turn_degrees: f32,
+    indoors: bool,
+) -> Option<Entity> {
+    let model = models.of(item)?;
+    let mut prop = commands.spawn((
+        Name::new(item.name),
+        Prop {
+            item,
+            at,
+            indoors,
+            half: model.half,
+        },
+        standing(site, planet, at, lift + item.lift, turn_degrees, indoors),
+        Visibility::default(),
+    ));
+    if let Some(mesh) = &model.solid {
+        prop.with_child((Mesh3d(mesh.clone()), MeshMaterial3d(models.lit.clone())));
+    }
+    if let Some(mesh) = &model.glow {
+        prop.with_child((
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(models.glowing.clone()),
+            NotShadowCaster,
+        ));
+    }
+    let glow = |colour: Color, lumens: f32, range: f32| PointLight {
+        color: colour,
+        intensity: lumens,
+        range,
+        radius: 0.25,
+        shadow_maps_enabled: false,
+        ..default()
+    };
+    match item.light {
+        Light::None => {}
+        Light::Lamp => {
             prop.with_child((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(glowing.clone()),
-                NotShadowCaster,
+                glow(Color::srgb(1.0, 0.8, 0.56), LAMPLIGHT_LUMENS, 7.0),
+                Transform::from_xyz(0.0, model.half.y * 2.0 - 0.15, 0.0),
             ));
         }
-        if placing.file == "Bonfire_Fire" {
+        Light::Fire => {
             prop.with_child((
                 Firelight,
-                PointLight {
-                    color: Color::srgb(1.0, 0.55, 0.22),
-                    intensity: FIRELIGHT_LUMENS,
-                    range: 16.0,
-                    radius: 0.25,
-                    shadow_maps_enabled: false,
-                    ..default()
-                },
+                glow(Color::srgb(1.0, 0.55, 0.22), FIRELIGHT_LUMENS, 16.0),
                 Transform::from_xyz(0.0, 0.7, 0.0),
             ));
         }
     }
-    commands.insert_resource(CheckedFor(u64::MAX));
+    Some(prop.id())
 }
 
-/// Bright enough to show beside daylight, which is what the camera is exposed for.
-const FIRELIGHT_LUMENS: f32 = 500_000.0;
+/// Where in the world something stands, given where it is in the base's own space.
+pub fn standing(
+    site: &Site,
+    planet: &Planet,
+    at: Vec3,
+    lift: f32,
+    turn_degrees: f32,
+    indoors: bool,
+) -> Transform {
+    let floor = site.frame.transform_point(at);
+    let stood = if indoors {
+        floor
+    } else {
+        planet.drawn(floor.normalize())
+    };
+    Transform {
+        translation: stood + *site.frame.up() * lift,
+        rotation: site.frame.rotation * Quat::from_rotation_y(turn_degrees.to_radians()),
+        scale: Vec3::ONE,
+    }
+}
+
+/// Furnishes the example base, through the same call a player's builder makes.
+fn furnish(mut commands: Commands, models: Res<Models>, planet: Res<Planet>, site: Res<Site>) {
+    for &(file, east, south, lift, turn, indoors) in EXAMPLE {
+        let Some(item) = catalogue::item_from(file) else {
+            error!("The example base wants {file}, which is not in the catalogue.");
+            continue;
+        };
+        let at = Vec3::new(east, 0.0, south);
+        place(
+            &mut commands,
+            &models,
+            &site,
+            &planet,
+            item,
+            at,
+            lift,
+            turn,
+            indoors,
+        );
+    }
+    commands.insert_resource(CheckedFor(u64::MAX));
+}
 
 /// Firelight is never steady.
 fn flicker(time: Res<Time>, mut fires: Query<&mut PointLight, With<Firelight>>) {
@@ -266,6 +337,17 @@ fn flicker(time: Res<Time>, mut fires: Query<&mut PointLight, With<Firelight>>) 
     let waver = 0.82 + 0.1 * libm::sinf(t * 11.0) + 0.08 * libm::sinf(t * 23.0 + 1.3);
     for mut fire in &mut fires {
         fire.intensity = FIRELIGHT_LUMENS * waver;
+    }
+}
+
+/// Whether an item put at a place in the base's own space would be where it claims to
+/// be: under a roof if indoors, clear of the base if not.
+pub fn fits(site: &Site, at: Vec3, indoors: bool) -> bool {
+    let tile = (at / TILE_M).floor().as_ivec3();
+    if indoors {
+        site.base.contains(tile.with_y(0))
+    } else {
+        !site.covers(site.frame.transform_point(at), 0.3)
     }
 }
 
@@ -281,17 +363,102 @@ fn keep_clear(
     }
     checked.0 = site.revision;
     for (prop, mut visibility) in &mut props {
-        let tile = (prop.at / TILE_M).floor().as_ivec3();
-        let under_a_roof = site.base.contains(tile.with_y(0));
-        let fits = if prop.indoors {
-            under_a_roof
-        } else {
-            !site.covers(site.frame.transform_point(prop.at), 0.3)
-        };
-        *visibility = if fits {
+        *visibility = if fits(&site, prop.at, prop.indoors) {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
+    }
+}
+
+/// Moves a walker's next position out of any item it would be standing inside. A
+/// walker is a circle on the ground; an item is its box.
+pub fn push_out<'a>(
+    mut target: Vec3,
+    walker_radius: f32,
+    props: impl Iterator<Item = (&'a Prop, &'a Transform, &'a Visibility)>,
+) -> Vec3 {
+    for (prop, transform, visibility) in props {
+        if !prop.is_solid() || *visibility == Visibility::Hidden {
+            continue;
+        }
+        let turned_back = transform.rotation.inverse();
+        let mut local = turned_back * (target - transform.translation);
+        // Only if the feet are between its foot and its top.
+        if local.y < -0.5 || local.y > prop.half.y * 2.0 - 0.05 {
+            continue;
+        }
+        let reach = Vec2::new(prop.half.x, prop.half.z) + walker_radius;
+        let inside = reach - Vec2::new(local.x.abs(), local.z.abs());
+        if inside.x <= 0.0 || inside.y <= 0.0 {
+            continue;
+        }
+        // Out by the nearest side.
+        if inside.x < inside.y {
+            local.x = reach.x.copysign(local.x);
+        } else {
+            local.z = reach.y.copysign(local.z);
+        }
+        target = transform.translation + transform.rotation * local;
+    }
+    target
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn crate_at_origin() -> (Prop, Transform, Visibility) {
+        let prop = Prop {
+            item: catalogue::item_from("Props_Crate").unwrap(),
+            at: Vec3::ZERO,
+            indoors: false,
+            half: Vec3::new(0.4, 0.4, 0.4),
+        };
+        (prop, Transform::IDENTITY, Visibility::Inherited)
+    }
+
+    #[test]
+    fn a_walker_is_pushed_out_of_an_item_by_its_nearest_side() {
+        let (prop, transform, visibility) = crate_at_origin();
+        let push =
+            |target: Vec3| push_out(target, 0.3, [(&prop, &transform, &visibility)].into_iter());
+        // Just inside the east side: out to the east, a radius clear of the box.
+        let out = push(Vec3::new(0.5, 0.0, 0.1));
+        assert!((out.x - 0.7).abs() < 1e-5 && (out.z - 0.1).abs() < 1e-5);
+        // Clear of it already, or standing on top of it: left alone.
+        for free in [Vec3::new(0.8, 0.0, 0.0), Vec3::new(0.0, 0.8, 0.0)] {
+            assert_eq!(push(free), free);
+        }
+    }
+
+    #[test]
+    fn a_rug_and_a_hidden_item_are_walked_over() {
+        let (mut prop, transform, visibility) = crate_at_origin();
+        let inside = Vec3::new(0.1, 0.0, 0.1);
+        assert_eq!(
+            push_out(
+                inside,
+                0.3,
+                [(&prop, &transform, &Visibility::Hidden)].into_iter()
+            ),
+            inside
+        );
+        prop.half.y = 0.01;
+        assert!(!prop.is_solid());
+        assert_eq!(
+            push_out(inside, 0.3, [(&prop, &transform, &visibility)].into_iter()),
+            inside
+        );
+    }
+
+    #[test]
+    fn the_example_base_is_furnished_from_the_catalogue() {
+        for (file, ..) in EXAMPLE {
+            assert!(
+                catalogue::item_from(file).is_some(),
+                "{file} is not an item"
+            );
+        }
     }
 }

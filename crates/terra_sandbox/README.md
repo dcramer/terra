@@ -24,7 +24,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--shot <file.png>` | Save a screenshot once the scene has settled, then exit |
 | `--bench` | Measure frame times with vsync off, print them, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
-| `--press <key>@<frame>` | Press a letter key on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. |
+| `--press <key>@<frame>` | Press a letter or digit key on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
 
 ## Controls
@@ -68,12 +68,28 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 | Click | Capture the mouse; Esc releases it |
 | Mouse | Look |
 | W A S D, Shift, Space | Move, sprint, jump |
-| 1, 2, 3 | Builder mode: shape, openings, room |
-| Left click, or E | Main action: push the wall out, change the tile, or add a room |
-| Right click, or R | Second action: pull the wall in, or make the tile solid |
+| Hold Q | The dial of parts. Move the mouse toward one and let go. |
+| 1 to 9, 0 | The first ten parts directly |
+| Scroll wheel, or C | The next variant of the part |
+| R | Turn an item an eighth of a circle |
+| Left click, or E | Build |
+| Right click, or F | Take away |
 | F3 | Show the frame rate |
 
-Whatever the builder would act on lights up before you commit, and the line over the mode chips says what each button would do.
+Building starts from a part. Pick one from the dial, cycle through its variants, and aim. What would be built is shown before you commit: the outline of a room, the cut of a window, the wall a push would move, or a ghost of the item where it would stand.
+
+![The dial of parts](../../docs/images/outpost-dial-2026-10-10.png)
+
+| Part | Variants | Build | Take away |
+|---|---|---|---|
+| Room | Five sizes | A room on the ground you aim at | |
+| Reshape | | Push the wall you aim at out | Pull it in |
+| Window | Framed, wide, tall | Cut that window in the wall tile | Make it solid |
+| Door | | Cut a door | Make it solid |
+| Remove | | Take away the item, or close the window or door | |
+| Seat, Table, Bed, Storage, Kitchen, Decor, Kit, Fire | Twenty-seven items between them | Stand the item on the floor or ground you aim at | |
+
+Everything in and around the example base was placed through the same call the builder makes, and can be taken away. Items are solid: you walk round them. The list of parts is in `catalogue.rs` and is a stand-in; nothing costs anything.
 
 It is made of these pieces, each a module in `src/experiments/play/`:
 
@@ -81,19 +97,21 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 |---|---|
 | `scene` | The sun, the sky's colours, haze, shadows, and the camera's effects |
 | `flora` | Trees, rocks, bushes and flowers placed from the seed, and the grass |
-| `props` | Furniture and outdoor kit, placed by hand for the example base |
+| `catalogue` | The parts the builder can build, and their variants |
+| `tool` | The builder: what it is aimed at, the preview, and building |
+| `dial` | The dial of parts and the prompts |
+| `props` | Items that have been placed, and stopping a walker at them |
 | `figure` | The player's body and which animation it plays |
-| `tool` | The builder, its highlight, and the prompts |
 | `models` | Reading shapes out of model files |
 
 The models are free ones, recoloured in code; see [THIRD_PARTY.md](../../THIRD_PARTY.md). How it was put together and what it costs to draw is in [research/outpost-scene.md](../../research/outpost-scene.md).
 
-What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic, not a physics engine; there are no stairs, so upper storeys cannot be reached; grass is planted once around the base and runs out about 100 m away; and nothing can be picked up.
+What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees, boxes round items, a grid for walls), not a physics engine; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; and placed items are not saved or part of the base's list of operations.
 
 In a scripted run the game clock advances a sixtieth of a second per frame and real keyboard and mouse input is ignored, so the same script does the same thing on any machine:
 
 ```bash
-cargo run -p terra_sandbox -- --experiment play --settle 200 --press w@20-70 --shot shots/at-the-door.png
+cargo run -p terra_sandbox -- --experiment play --settle 300 --press w@20-215 --press 9@240 --press e@260 --shot shots/a-shelf-indoors.png
 cargo run -p terra_sandbox -- --experiment play --vantage 0,2.4,24,9,1.6,0 --shot shots/outpost.png
 ```
 

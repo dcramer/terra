@@ -4,7 +4,11 @@
 use bevy::{
     camera_controller::free_camera::FreeCameraPlugin,
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
-    input::{InputSystems, common_conditions::input_toggle_active, mouse::AccumulatedMouseMotion},
+    input::{
+        InputSystems,
+        common_conditions::input_toggle_active,
+        mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
+    },
     prelude::*,
     render::{
         renderer::RenderAdapterInfo,
@@ -28,7 +32,7 @@ usage: terra_sandbox [options]
   --shot <file.png>     save a screenshot once the scene has settled, then exit
   --bench               measure frame times with vsync off, print them, then exit
   --settle <frames>     frames to run before capturing or measuring (default 120)
-  --press <key>@<frame> press a letter key on a given frame, for scripted runs;
+  --press <key>@<frame> press a letter or digit key on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
@@ -136,14 +140,31 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
         KeyCode::KeyY,
         KeyCode::KeyZ,
     ];
-    let problem =
-        || format!("--press wants a letter and a frame, like f@60 or w@40-90, not `{text}`");
+    let problem = || {
+        format!("--press wants a letter or digit and a frame, like f@60 or w@40-90, not `{text}`")
+    };
     let (key, frames) = text.split_once('@').ok_or_else(problem)?;
-    let letter = key
+    const DIGITS: [KeyCode; 10] = [
+        KeyCode::Digit0,
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+        KeyCode::Digit8,
+        KeyCode::Digit9,
+    ];
+    let symbol = key
         .chars()
         .next()
-        .filter(|c| key.len() == 1 && c.is_ascii_alphabetic());
-    let letter = letter.ok_or_else(problem)?.to_ascii_lowercase();
+        .filter(|c| key.len() == 1 && c.is_ascii_alphanumeric());
+    let symbol = symbol.ok_or_else(problem)?.to_ascii_lowercase();
+    let code = match symbol.to_digit(10) {
+        Some(digit) => DIGITS[digit as usize],
+        None => LETTERS[(symbol as u8 - b'a') as usize],
+    };
     let frame = |text: &str| text.parse::<u32>().map_err(|_| problem());
     let (down, up) = match frames.split_once('-') {
         Some((from, to)) => (frame(from)?, frame(to)?),
@@ -152,7 +173,7 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
     if up <= down {
         return Err(problem());
     }
-    Ok((LETTERS[(letter as u8 - b'a') as usize], down, up))
+    Ok((code, down, up))
 }
 
 pub struct ShellPlugin(pub Options);
@@ -219,6 +240,7 @@ fn scripted_presses(
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut motion: ResMut<AccumulatedMouseMotion>,
+    mut scroll: ResMut<AccumulatedMouseScroll>,
 ) {
     if !options.scripted() {
         return;
@@ -227,6 +249,7 @@ fn scripted_presses(
     keys.reset_all();
     mouse.reset_all();
     motion.delta = Vec2::ZERO;
+    scroll.delta = Vec2::ZERO;
     for &(key, down, up) in &options.presses {
         if (down..up).contains(&*frame) {
             keys.press(key);
@@ -269,10 +292,16 @@ fn scripted_run(
                 .spawn(Screenshot::primary_window())
                 .observe(save_to_disk(path.clone()));
         }
-        // Saving happens in the background; give it a moment before leaving.
-        if *frame == settle + 30 && !options.bench {
-            println!("SANDBOX saved {}", path.display());
-            exit.write(AppExit::Success);
+        // Saving happens in the background, and how many frames that takes depends on
+        // how fast frames are going by. Leave once the file is there, or give up.
+        if *frame > settle + 1 && !options.bench {
+            if path.exists() {
+                println!("SANDBOX saved {}", path.display());
+                exit.write(AppExit::Success);
+            } else if *frame > settle + 3000 {
+                println!("SANDBOX could not save {}", path.display());
+                exit.write(AppExit::error());
+            }
         }
     }
     if options.bench {
@@ -316,6 +345,8 @@ mod tests {
         assert_eq!(options.radius_m, 500.0);
         assert_eq!(options.shot, Some(PathBuf::from("out/a.png")));
         assert_eq!(options.presses, [(KeyCode::KeyF, 60, 61)]);
+        let digit = parse(&["--press", "3@10"]).unwrap();
+        assert_eq!(digit.presses, [(KeyCode::Digit3, 10, 11)]);
         let held = parse(&["--press", "w@40-90"]).unwrap();
         assert_eq!(held.presses, [(KeyCode::KeyW, 40, 90)]);
         assert!(options.scripted());
