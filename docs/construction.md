@@ -17,6 +17,9 @@ In their words, shortened.
 - **Only a foundation may go into the ground.** Anything else that would clip shows red and cannot be built. (Said with "I think".)
 - **Details morph.** "Corners become rounded on the outside and inside, but when two segments are next to each other they're flat."
 - **It must be really easy to extend**: new buildables, and properties like that morphing applying to anything related. "We might let you build a round room, or connectors, or different materials for rooms, and they should be able to change their look based on what they're connected to."
+- **One square grid for everything**, though you might not see all of it all the time. Buildings join through connectors that can face any way, "more like Subnautica". The grid should be "a little flexible": in some games each cell is huge, "so you have no freedom to build".
+- **Some buildables are a fixed size.** A round building probably cannot be freely resized, and is reached through a connector, "which maybe auto-builds if you connect it to another room".
+- **A build menu on B** that you pull up to see the buildables you have unlocked.
 - **Building costs things you carry.** "I think it's likely what we'll want is for you to have the raw items, which allow you to build anything that you might have the capabilities to build." With an inventory, and an action bar you put items on to use them (D55).
 
 ## The shape proposed
@@ -71,18 +74,44 @@ What the sandbox does today, measured against the above.
 - **Looks already follow neighbours in three places**: a post where a wall turns and a seam where it continues; a parapet where the roof begins and a line where a storey continues; a foundation ledge only on outside edges. But it is written as special cases, and nothing is rounded.
 - **No materials.**
 - **Cost is a stand-in.** The sandbox has five raw items, a cost for every buildable, a full refund on taking apart, and a cutter tool to gather more. None of the numbers or names were designed, and there is no notion yet of what a player is capable of building.
-- **Round rooms do not fit the model as it stands.** A base is square tiles. See the first open question.
+- **The grid is too coarse**, and there are no fixed-size buildables, ports or connectors. See "The grid".
+- **No build menu**, only the dial.
 
 ## Open questions
 
-1. **The grid.** Rooms are on three-metre square tiles. A round room, or a second building at an angle to the first, does not fit that. Is everything on one grid, with round rooms as a rounded look on square tiles? Or are buildings free shapes joined by connectors, as in Subnautica?
+1. **How fine is the grid?** Answered in part: one square grid for everything, finer than the three-metre tiles the sandbox uses now. Not answered: how fine. See "The grid" below.
 2. **What gets rounded?** The upright corners of walls only, or the roof's edge and the foot of the wall too? How round?
 3. **What is a material a property of**: a whole room, a wall, or a tile?
-4. **What does "capable of building" mean?** Found blueprints, scanned things, a research tree, tools carried?
+4. **What does "capable of building" mean?** The build menu shows what you have "unlocked". By finding blueprints, scanning things, a research tree, tools carried?
 5. **What does taking something apart give back?** Everything, as in Subnautica, or less?
 6. **Do bases have needs**, as in Subnautica: power, air, hull strength? Rooms being plain boxes suggests lights at least need power from somewhere.
 7. **Upper storeys.** Stairs or ladders as buildables, and whether rooms can be stacked from the dial.
 8. **Who may change what** in co-op (also question 16 in [player.md](player.md)).
+
+## The grid
+
+What the developers said settles the first open question's main fork: one square grid, not free shapes. What follows is a proposal for what that means.
+
+**Two sizes of step, on the same lines.** Today a room is made of three-metre tiles, and that is the "huge cell" problem: a room can only be 3, 6 or 9 m across. The proposal is a structural step of **1.5 m**, half of today's, so rooms come in 1.5 m increments and a doorway still fits in one step. Items keep the half-metre step they have now, which divides it evenly. Every wall still falls on a line of the finer grid, so everything still lines up with everything.
+
+**Two kinds of structural buildable.**
+
+| Kind | Size | Joins others by |
+|---|---|---|
+| Free-form | Any number of steps, resized by pushing walls, extended by building across it | Sharing a wall, as rooms do now |
+| Fixed | One footprint, as designed: a round room, an observatory, a dock | Its ports only |
+
+**Ports and connectors.** A fixed buildable has ports: places on its outside, each facing one way, including up and down. Two ports that face each other one step apart join directly. A port that faces a free-form room's wall cuts its own doorway there. A port that faces something further off is joined by a connector, a corridor one step wide, and the proposal is that the game builds the shortest straight one itself when you place the fixed buildable in line with something to join. Connectors are also a buildable in their own right.
+
+**You see the grid only near what you are placing**, as now.
+
+What this costs: the structural step is a constant in `terra_build`, but windows, doors, trim and the example base are all sized for three metres and would need redoing for 1.5. Fixed buildables and ports are new.
+
+## The build menu
+
+The developers want a menu on B showing the buildables you have unlocked. The sandbox has a dial on the right mouse button instead, which holds fifteen parts and is near its limit.
+
+Proposal: both, doing different jobs. **B opens the full list**: every buildable you have unlocked, grouped, with what each costs and whether you can afford it; pick one to put it in hand. **The dial stays as the quick pick**, holding the handful you used last or chose to keep there, the way Rust's wheel sits beside its crafting list. What "unlocked" means is open question 4.
 
 ## What is built
 
