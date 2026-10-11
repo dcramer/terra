@@ -40,6 +40,7 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 - Thematic variety on each: terrain, caverns, water features, foliage, palette.
 - A starter planet that is easy: normal, breathable air.
 - Gravity, toward each planet's centre.
+- A sea level on each planet with water, behaving as physics says: level all round, filling what the sea can reach, as deep as the ground makes it.
 - Digging into the ground, as in No Man's Sky.
 - Flying between planets: leave one, cross space, land on another, without loading screens and without the frame rate falling. Other ways to travel may come later.
 - Terraforming, making a planet livable and breathable, on some planets ([vision.md](docs/vision.md), [planet-sim.md](docs/planet-sim.md)).
@@ -54,6 +55,7 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 - An inventory that is your backpack: small at first, bigger with a bigger backpack in the backpack slot *(stand-in: raw items as counts)*.
 - An action bar of things to use *(stand-in)*.
 - Tools for gathering, such as different kinds of cutter *(stand-in: one cutter)*.
+- A map. What it shows and its limits are not decided.
 
 **Building** ([construction.md](docs/construction.md))
 - A build menu brought up by a building tool you equip, as in Subnautica *(stand-in: a dial)*.

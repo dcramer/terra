@@ -15,6 +15,7 @@ Status: the developers set out on 2026-10-10 what the planets are to be. What th
 | **Survival** | Attributes coupled to survival: health, stamina, oxygen, hunger, thirst, possibly more later. They may work differently on each world. See [survival.md](survival.md). | Decided that they exist (D61); the list may grow |
 | **The starter planet** | Normal atmosphere and the like: the easiest place to be, for now. | Leaning (D62) |
 | **Gravity** | Planets have gravity. | Decided (D63) |
+| **Sea level** | Every planet with water has one. The sea's surface is level, the same height all round the planet, and fills what lies below it wherever the sea can reach. | Decided (D75) |
 | **Water you can enter** | The character swims, using stamina for now. Under water you use up oxygen, as on a planet with thin or no air. No set limit on depth: water should be flexible. | Decided (D74) |
 | **Size** | Fully procedural and somewhat large: big enough that walking all the way round is a ridiculous task, but not infinite, and efficient. Always round, so you wrap around. | Decided; the numbers are Leaning (D13) |
 | **Getting between planets** | By flight, for sure; maybe other ways later. Leaving a planet, being in space and arriving at another has to perform well. | Decided (D72) |
@@ -70,6 +71,7 @@ The simulation of a planet becoming livable (D6, [planet-sim.md](planet-sim.md))
 ## What it asks of the engine
 
 - **Caverns** are no extra work for the shape of the ground: smooth voxels describe the inside of a planet as easily as its surface (D9). They are extra work for generation (shaping them so they are worth exploring), for light (it is dark underground), and for streaming (what is below you matters as much as what is beside you).
+- <a id="water"></a>**The sea** (D75) is a sphere round the planet's centre, which is what a level surface is on a round planet with gravity toward its centre. Water fills the ground below it that the sea can reach, so depth is whatever the ground makes it. A hollow below sea level that the sea cannot reach stays dry; working out what the sea reaches is a fill over the terrain, done once when a planet is generated and again only when digging opens a way in. The sandbox's stand-in is not yet this: it draws the sea everywhere below sea level, reached or not.
 - **Water features** go beyond one sea level (D24). Lakes at different heights and water underground need water to be asked for by place, which the engine's contract already allows (D45), and the decision on pools (D44) is the same decision.
 - **Gravity** pulls toward a planet's centre with a strength the planet sets. The player's movement already treats "down" as toward the centre. Between planets, and in orbit, it is open.
 - **Several planets, reached by flight** (D72). Leaving a planet, crossing space and arriving at another, without a loading screen (D4) and without the frame rate falling, is a system of its own:
@@ -88,5 +90,5 @@ The simulation of a planet becoming livable (D6, [planet-sim.md](planet-sim.md))
 3. **Which planets can be terraformed**, and is a terraformed planet a reward, a goal, or the endgame?
 4. **How is the next planet reached and unlocked?**
 5. **Caverns**: a feature of some planets or all? Do they hold anything the surface does not?
-6. **Water**: does it flow, or only sit at a level (D24, D44)?
+6. **Water**: does it flow, or only sit at a level (D24, D44)? The sea sits at its level (D75); whether it pours into a hole dug below that level is the open part.
 7. Answered in part: planets differ in size, set by their theme. The numbers above are a proposal to walk and judge.

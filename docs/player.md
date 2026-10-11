@@ -109,6 +109,19 @@ Still open:
 14. **Is anything shared between players**, or does each carry their own, with shared storage only in a base?
 15. **What happens to it when you are down** (D18, [survival.md](survival.md))?
 
+## The map
+
+There will be a map (D76). What it shows and how far it reaches are not yet decided.
+
+Open:
+
+17. **What does it show?** Only where you have been, what you have surveyed with a tool, or the whole planet from the start?
+18. **Is it a thing you carry**, a screen in a base, or always to hand?
+19. **Is it shared** between players, and does it mark bases, players and finds?
+20. **Does it cover other planets**, or only the one you are on?
+
+For the engine, a map of a planet is cheap if it is drawn from the same rules that generate the planet (D59) rather than from what has been loaded: the whole of a 30 km planet can be sampled coarsely without generating any of it in detail.
+
 ## Building as an action
 
 Proposed. Building is something you do with a tool in hand, standing in the world, not a separate mode viewed from above.
