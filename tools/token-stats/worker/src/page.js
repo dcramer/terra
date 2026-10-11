@@ -284,11 +284,14 @@ const put = (el, n) => { el.firstChild.nodeValue = el.dataset.fmt === "usd" ? mo
 function roll(el, from, to, ms, delay) {
   el.dataset.n = to;
   if (el.dataset.fmt !== "usd") el.title = fmt(to);
-  if (still || from === to) { put(el, to); return; }
+  // A hidden page draws no animation frames, so it shows the new value at once.
+  const me = (el.rolling = {});
+  if (still || from === to || document.hidden) { put(el, to); return; }
   const start = performance.now() + (delay || 0);
   el.classList.remove("landed");
   put(el, from);
   const step = (now) => {
+    if (el.rolling !== me) return;
     const t = Math.min(1, Math.max(0, (now - start) / ms));
     if (t > 0) el.classList.add("counting");
     put(el, from + (to - from) * ease(t));
@@ -368,6 +371,7 @@ async function refresh() {
     });
   }
 }
-setInterval(() => { if (!document.hidden) refresh(); }, 5000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+// Poll whether or not the page has focus or is in view: a page on a second screen
+// should still tick, and a check reads one row.
+setInterval(refresh, 5000);
 `;
