@@ -43,6 +43,29 @@ One tool to a job, carried on the action bar (D66):
 - **Processing chains**: ore to ingots at a forge, hide to leather on a rack, sand to glass in a kiln.
 - **Recruits run stations** (D90): a rescued smith makes the forge able to make more, as Enshrouded's survivors do.
 
+## The station screen
+
+The developers said on 2026-10-11 that a station's screen should not be very different from the build menu: one uniform screen for the workbench, the forge and the rest, showing the recipes you have learned, with some information, probably as a grid. The sandbox's list of recipes is a placeholder.
+
+Proposed, to react to: **the build menu's screen, with recipes for tiles.**
+
+| Part | What it shows |
+|---|---|
+| Tiles | One per recipe you have learned (D68, D92), in a grid: a picture, the name, and what it takes, each counted as have/need. Greyed when you cannot make it; absent until learned. |
+| Tabs | Along the top, only where a station makes several families: the workbench's tools, weapons, clothing and packs. A forge with a handful of recipes has none. |
+| The picked tile | A strip below the grid saying what the thing is and does: a tool's work and speed, a weapon's damage and reach, clothing's protection, a pack's size; and, for anything missing, where it comes from, as the build menu's hints do ("break rocks with a pickaxe"). |
+| The station | Its name, and who works it if anyone does ("Bren works this forge"), since a recruit is why some recipes are open (D90). |
+| The backpack | Open beside it, as now, so you see what you carry and where the made thing goes. |
+
+Controls as the build menu's: F at the station opens it, click a tile or use the arrows and Enter to make one, F or Esc leaves. The world does not pause.
+
+The build menu and every station share one screen in the code, so what is learned in one, such as reading costs off a tile, holds in the other.
+
+Questions for the developers:
+
+1. **Does making take time?** Now it is instant. Building takes a hold (D67); making could too, or a station could work through a queue, which a recruit could keep doing while you are away.
+2. **How many at once?** One per press, or a count to make, such as five iron.
+
 ## Learning what to make
 
 Proposed, replacing research as a tree of technology (D68): you learn a thing by finding what it is made of, as in Valheim; from people, recruits and cultures (D86); and by skill (D88), as a better smith knows more. Nothing is listed until you have learned it (D92).
