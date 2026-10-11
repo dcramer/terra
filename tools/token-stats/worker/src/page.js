@@ -27,7 +27,7 @@ export function page(summary) {
 </header>
 <main>
   <section class="hero" aria-label="Everyone">
-    <div class="big" title="${full(totals.total)} tokens">${compact(totals.total)}</div>
+    <div class="big"${num(totals.total, "total")}>${compact(totals.total)}</div>
     <div class="label">tokens across ${users.length} ${users.length === 1 ? "person" : "people"}</div>
     ${facts(totals)}
   </section>
@@ -36,7 +36,7 @@ export function page(summary) {
 </main>
 <footer>
   Counted from Claude Code transcripts of sessions in the repository, each message once.
-  Updated ${esc(summary.generated_at.slice(0, 16).replace("T", " "))} UTC. <a href="/json">JSON</a>
+  Updated <span id="updated">${esc(summary.generated_at.slice(0, 16).replace("T", " "))}</span> UTC. <a href="/json">JSON</a>
 </footer>
 <div id="tip" role="tooltip" hidden></div>
 <script>${SCRIPT}</script>
@@ -52,10 +52,10 @@ function card(u, peak, days) {
     })
     .join("");
   const models = u.models.map((m) => `<span title="${full(m.total)} tokens">${esc(m.model)}</span>`).join("");
-  return `<article class="person">
+  return `<article class="person" data-user="${esc(u.user)}">
   <div class="head">
     <h2>${esc(u.user)}</h2>
-    <div class="total" title="${full(u.total)} tokens">${compact(u.total)}</div>
+    <div class="total"${num(u.total, "total")}>${compact(u.total)}</div>
   </div>
   ${facts(u)}
   <figure>
@@ -67,8 +67,13 @@ function card(u, peak, days) {
 }
 
 function facts(t) {
-  const item = (label, n) => `<div><dt>${label}</dt><dd title="${full(n)}">${compact(n)}</dd></div>`;
-  return `<dl class="facts">${item("output", t.output)}${item("input", t.input)}${item("cache read", t.cache_read)}${item("cache write", t.cache_write)}${item("messages", t.messages)}</dl>`;
+  const item = (label, key) => `<div><dt>${label}</dt><dd${num(t[key], key)}>${compact(t[key])}</dd></div>`;
+  return `<dl class="facts">${item("output", "output")}${item("input", "input")}${item("cache read", "cache_read")}${item("cache write", "cache_write")}${item("messages", "messages")}</dl>`;
+}
+
+// A counter the script animates: its exact value and which field of /json it shows.
+function num(n, key) {
+  return ` data-n="${n}" data-key="${key}" title="${full(n)}"`;
 }
 
 function compact(n) {
@@ -152,7 +157,7 @@ const CSS = `
   --bar: #1a8c63; --bar-hover: #11704e;
   --sky-top: #f3d9c9; --sky-low: #efe3ea; --sun: #fff4e0; --glow: #ffd9b8;
   --l1: #d9cbe6; --l2: #bcb6de; --l3: #9fb0da; --l4: #e3a78f; --l5: #d98d74;
-  --pine: #3f6f63; --pine-lit: #5e8f72;
+  --pine: #3f6f63; --pine-lit: #5e8f72; --count: #c0674c;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -161,7 +166,7 @@ const CSS = `
     --bar: #2fa577; --bar-hover: #4cc493;
     --sky-top: #1d1c33; --sky-low: #4a3a5e; --sun: #ffe3c4; --glow: #c47a6a;
     --l1: #3b3658; --l2: #332f52; --l3: #2b2a49; --l4: #4b3550; --l5: #3a2a42;
-    --pine: #1e3b3a; --pine-lit: #2c5049;
+    --pine: #1e3b3a; --pine-lit: #2c5049; --count: #f0a98c;
     color-scheme: dark;
   }
 }
@@ -205,6 +210,30 @@ figcaption { display: flex; justify-content: space-between; color: var(--muted);
 .empty { text-align: center; color: var(--muted); }
 footer { max-width: 960px; margin: 0 auto; padding: 24px 16px 40px; color: var(--muted); font-size: 13px; text-align: center; }
 footer a { color: inherit; }
+.big, .total, .facts dd { position: relative; display: inline-block; }
+.counting { color: var(--count); }
+.landed { animation: land 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes land {
+  0% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+  30% { transform: scale(1.08); text-shadow: 0 0 18px var(--glow); }
+  100% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+}
+.gain { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); white-space: nowrap;
+  font-size: 13px; font-weight: 600; color: var(--bar); pointer-events: none;
+  animation: rise 1.8s ease-out forwards; }
+@keyframes rise {
+  0% { opacity: 0; transform: translate(-50%, 6px); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -22px); }
+}
+.day i { transform-origin: bottom; transition: height 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.grow .day i { animation: grow 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+@keyframes grow { from { transform: scaleY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .landed, .gain, .grow .day i { animation: none; }
+  .gain { display: none; }
+  .day i { transition: none; }
+}
 #tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px;
   padding: 6px 9px; border-radius: 8px; line-height: 1.35; white-space: nowrap; z-index: 10; }
 `;
@@ -227,4 +256,99 @@ document.addEventListener("pointermove", (e) => {
   if (day) show(day, e.clientX, e.clientY); else hide();
 });
 document.addEventListener("pointerleave", hide);
+
+// Counters count up from zero the first time they are seen, and the page checks
+// /json every minute, rolling any counter that grew to its new value.
+${compact}
+const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const fmt = (n) => n.toLocaleString("en-US");
+const ease = (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
+// Write only the text node, so a rising "+gain" beside it survives.
+const put = (el, n) => { el.firstChild.nodeValue = compact(n); };
+
+function roll(el, from, to, ms, delay) {
+  el.dataset.n = to;
+  el.title = fmt(to);
+  if (still || from === to) { put(el, to); return; }
+  const start = performance.now() + (delay || 0);
+  el.classList.remove("landed");
+  put(el, from);
+  const step = (now) => {
+    const t = Math.min(1, Math.max(0, (now - start) / ms));
+    if (t > 0) el.classList.add("counting");
+    put(el, Math.round(from + (to - from) * ease(t)));
+    if (t < 1) return requestAnimationFrame(step);
+    el.classList.remove("counting");
+    void el.offsetWidth;
+    el.classList.add("landed");
+  };
+  requestAnimationFrame(step);
+}
+
+function gain(el, by) {
+  if (still || by <= 0) return;
+  const g = document.createElement("span");
+  g.className = "gain";
+  g.textContent = "+" + compact(by);
+  el.append(g);
+  g.addEventListener("animationend", () => g.remove());
+}
+
+// Count up each group when it scrolls into view, largest counter slowest.
+const seen = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    seen.unobserve(e.target);
+    e.target.classList.add("grow");
+    e.target.querySelectorAll(".day i").forEach((b, i) => { b.style.animationDelay = (i * 18) + "ms"; });
+    e.target.querySelectorAll("[data-n]").forEach((el, i) => {
+      const big = el.matches(".big, .total");
+      roll(el, 0, +el.dataset.n, big ? 2000 : 1400, big ? 0 : 150 + i * 70);
+    });
+  }
+}, { threshold: 0.2 });
+document.querySelectorAll(".hero, .person").forEach((s) => {
+  if (!still) s.querySelectorAll("[data-n]").forEach((el) => put(el, 0));
+  seen.observe(s);
+});
+
+function update(group, data) {
+  group.querySelectorAll("[data-n]").forEach((el) => {
+    const was = +el.dataset.n, now = data[el.dataset.key];
+    if (typeof now !== "number" || now === was) return;
+    roll(el, was, now, 1500, 0);
+    if (el.matches(".big, .total")) gain(el, now - was);
+  });
+}
+
+async function refresh() {
+  let s;
+  try {
+    const r = await fetch("/json", { cache: "no-store" });
+    if (!r.ok) return;
+    s = await r.json();
+  } catch { return; }
+  const cards = [...document.querySelectorAll(".person")];
+  const names = cards.map((c) => c.dataset.user).sort().join();
+  const firstDay = cards[0]?.querySelector(".day")?.dataset.day;
+  // A new person or a new day changes the layout; draw the page again.
+  if (names !== s.users.map((u) => u.user).sort().join() || (s.users[0] && s.users[0].daily[0].day !== firstDay)) {
+    return location.reload();
+  }
+  document.getElementById("updated").textContent = s.generated_at.slice(0, 16).replace("T", " ");
+  update(document.querySelector(".hero"), s.totals);
+  const peak = Math.max(1, ...s.users.flatMap((u) => u.daily.map((d) => d.total)));
+  for (const u of s.users) {
+    const card = cards.find((c) => c.dataset.user === u.user);
+    update(card, u);
+    card.querySelectorAll(".day").forEach((day, i) => {
+      const d = u.daily[i];
+      day.dataset.total = fmt(d.total);
+      day.dataset.output = fmt(d.output);
+      day.dataset.messages = d.messages;
+      day.querySelector("i").style.height = (d.total === 0 ? 0 : Math.max(2, (d.total / peak) * 100)).toFixed(1) + "%";
+    });
+  }
+}
+setInterval(() => { if (!document.hidden) refresh(); }, 60000);
 `;
