@@ -10,7 +10,11 @@
 // GET  /stats  ?group=user,day,model&since=YYYY-MM-DD
 //
 // /report and /stats need `Authorization: Bearer <API_KEY>`.
+//
+// Errors and traces go to Sentry when `SENTRY_DSN` is set (wrangler.toml), tagged
+// with the deployed version.
 
+import * as Sentry from "@sentry/cloudflare";
 import { page } from "./page.js";
 import { cost, creditCost } from "./prices.js";
 import { ticker } from "./ticker.js";
@@ -123,7 +127,16 @@ const UPSERT_SPENDS = `INSERT INTO spends (id, user, day, service, credits, upda
     updated_at = excluded.updated_at
   WHERE excluded.day < spends.day OR excluded.credits > spends.credits`;
 
-export default {
+// The page and the ticker poll every 5 seconds while open, so their requests are
+// traced at a sample. Reports are traced whole. The key is filtered from headers by
+// default; bodies and addresses are left out, since they say nothing about a fault.
+const sentry = (env) => ({
+  dsn: env.SENTRY_DSN,
+  tracesSampler: ({ name }) => (name.startsWith("GET") ? 0.05 : 1),
+  dataCollection: { userInfo: false, httpBodies: [] },
+});
+
+export default Sentry.withSentry(sentry, {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/") {
@@ -151,7 +164,7 @@ export default {
       throw err;
     }
   },
-};
+});
 
 class BadRequest extends Error {}
 

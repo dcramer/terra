@@ -10,5 +10,8 @@
   },
   "devDependencies": {
     "wrangler": "4.140.0"
+  },
+  "dependencies": {
+    "@sentry/cloudflare": "11.6.0"
   }
 }

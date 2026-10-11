@@ -80,6 +80,10 @@ The worker creates its tables on first use, so there is no migration step. On a 
 
 To try it locally, put `API_KEY=devkey` in `worker/.dev.vars` and run `npx wrangler dev`.
 
+## Errors
+
+The worker sends its errors, and a sample of its traces, to the [`token-stats` project](https://terra-h9.sentry.io/projects/token-stats/) in Sentry's `terra-h9` organization, through [`@sentry/cloudflare`](https://docs.sentry.io/platforms/javascript/guides/cloudflare/). The DSN is `SENTRY_DSN` in `wrangler.toml`. A DSN only lets you send events, so it is not a secret. Each event's release is the deployed version's id, from the `CF_VERSION_METADATA` binding. Every report is traced, and one in twenty of the polled pages. Request bodies and addresses are left out, and the key is filtered from headers. Locally, `npx wrangler dev --var SENTRY_ENVIRONMENT:development` keeps your errors apart from the deployed worker's.
+
 ## API
 
 | Call | Body or query |

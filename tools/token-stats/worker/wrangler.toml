@@ -1,6 +1,8 @@
 name = "terra-token-stats"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
+# The Sentry SDK needs Node's AsyncLocalStorage.
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
 # The worker creates its own tables on first use.
@@ -8,3 +10,12 @@ workers_dev = true
 binding = "DB"
 database_name = "terra-token-stats"
 database_id = "6b37d140-5c19-4ec9-9179-32968ea8c09a"
+
+# Where errors and traces go: terra-h9/token-stats on sentry.io. A DSN only lets
+# you send events, so it is not a secret.
+[vars]
+SENTRY_DSN = "https://5bde5b063553a3750f9b695060f4a569@o4512240244555776.ingest.us.sentry.io/4512240246784000"
+
+# The deployed version's id, which Sentry uses as the release.
+[version_metadata]
+binding = "CF_VERSION_METADATA"
