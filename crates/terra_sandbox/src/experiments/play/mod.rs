@@ -25,6 +25,7 @@ mod models;
 mod props;
 mod scene;
 mod tool;
+mod work;
 
 use super::build::{self, DrivenByPlayer, Site};
 use crate::planet::Planet;
@@ -330,8 +331,14 @@ fn walk(
         wish
     };
     let turn = 1.0 - libm::expf(-dt * 12.0);
-    player.facing = player
-        .facing
+    // Turning right round has no shorter way to go, so it is given one.
+    let about_face = toward != Vec3::ZERO && player.facing.dot(toward) < -0.98;
+    let from = if about_face {
+        player.facing + player.facing.cross(up) * 0.3
+    } else {
+        player.facing
+    };
+    player.facing = from
         .lerp(toward, if toward == Vec3::ZERO { 0.0 } else { turn })
         .reject_from(up)
         .normalize_or(view.forward);

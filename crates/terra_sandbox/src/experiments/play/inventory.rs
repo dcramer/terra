@@ -46,6 +46,23 @@ pub fn describe(cost: Cost, times: u32) -> String {
         .join(", ")
 }
 
+/// The sorts of thing that can be cut. Tools differ in which they cut and how fast.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Cut {
+    Tree,
+    Rock,
+    Plant,
+}
+
+/// What cutting something takes and gives.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Cuttable {
+    pub what: Cut,
+    pub gives: (Raw, u32),
+    /// How long it takes with a tool of ordinary speed, in seconds.
+    pub seconds: f32,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tool {
     /// Builds and takes apart.
@@ -59,6 +76,16 @@ impl Tool {
         match self {
             Tool::Builder => "Builder",
             Tool::Cutter => "Cutter",
+        }
+    }
+
+    /// How fast this tool cuts a sort of thing: 1 takes the time the thing itself says,
+    /// 2 half of it. `None` if the tool cannot cut it at all. An axe that is quick on
+    /// trees and useless on rock would be one more line here.
+    pub fn cuts(self, what: Cut) -> Option<f32> {
+        match (self, what) {
+            (Tool::Cutter, _) => Some(1.0),
+            (Tool::Builder, _) => None,
         }
     }
 
@@ -187,6 +214,14 @@ mod tests {
         inventory.refund(COUCH, 2);
         assert_eq!(inventory.count(Raw::Cloth), cloth);
         assert_eq!(describe(COUCH, 2), "4 Wood, 6 Cloth");
+    }
+
+    #[test]
+    fn a_tool_says_what_it_can_cut() {
+        for what in [Cut::Tree, Cut::Rock, Cut::Plant] {
+            assert_eq!(Tool::Cutter.cuts(what), Some(1.0));
+            assert_eq!(Tool::Builder.cuts(what), None);
+        }
     }
 
     #[test]

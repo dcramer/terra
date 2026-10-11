@@ -6,7 +6,7 @@
 //! every run. Trees, rocks and plants are one entity each, sharing a mesh per model.
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
-use super::inventory::Raw;
+use super::inventory::{Cut, Cuttable, Raw};
 use super::models::{Part, read_model};
 use super::scene::SUN_DIRECTION;
 use crate::experiments::build::Site;
@@ -60,8 +60,8 @@ pub struct Obstacles(pub Vec<(Vec3, f32)>);
 #[derive(Component)]
 pub struct Growth {
     clearance_m: f32,
-    /// What cutting it gives.
-    pub gives: Option<(Raw, u32)>,
+    /// What cutting it takes and gives, if it can be cut.
+    pub cut: Option<Cuttable>,
     /// Where it stops a walker, if it does.
     pub obstacle: Option<Vec3>,
     /// How far up from its foot to aim for it, in metres.
@@ -365,7 +365,7 @@ fn plant(
     let mut put = |model: &Model,
                    transform: Transform,
                    clearance_m: f32,
-                   gives: Option<(Raw, u32)>,
+                   cut: Option<Cuttable>,
                    stops: Option<(Vec3, f32)>| {
         if site.covers(transform.translation, clearance_m) {
             return;
@@ -378,7 +378,7 @@ fn plant(
             transform,
             Growth {
                 clearance_m,
-                gives,
+                cut,
                 obstacle: stops.map(|(at, _)| at),
                 middle_m: (model.height * transform.scale.y * 0.4).min(1.4),
             },
@@ -414,7 +414,11 @@ fn plant(
         let model = pick(rng, models);
         let scale = tall / model.height;
         let trunk = (point, (model.spread * scale).clamp(0.25, 0.6));
-        let wood = Some((Raw::Wood, (tall / 3.0).round() as u32));
+        let wood = Some(Cuttable {
+            what: Cut::Tree,
+            gives: (Raw::Wood, (tall / 3.0).round() as u32),
+            seconds: 1.0 + tall * 0.12,
+        });
         put(
             &model,
             standing(rng, point, 0.06, scale, 0.1),
@@ -440,7 +444,11 @@ fn plant(
         let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
         let scale = size / model.height;
         let stops = (size > 0.9).then_some((point, model.spread * scale * 0.8));
-        let metal = Some((Raw::Metal, (size * 2.0).ceil() as u32));
+        let metal = Some(Cuttable {
+            what: Cut::Rock,
+            gives: (Raw::Metal, (size * 2.0).ceil() as u32),
+            seconds: 0.8 + size * 0.5,
+        });
         put(
             &model,
             standing(rng, point, 0.5, scale, size * 0.22),
@@ -459,7 +467,11 @@ fn plant(
         }
         let model = pick(rng, &bushes);
         let scale = rng.range(0.7, 1.5) / model.height;
-        let fibre = Some((Raw::Cloth, 1));
+        let fibre = Some(Cuttable {
+            what: Cut::Plant,
+            gives: (Raw::Cloth, 1),
+            seconds: 0.7,
+        });
         put(
             &model,
             standing(rng, point, 0.1, scale, 0.05),
@@ -476,7 +488,11 @@ fn plant(
         }
         let model = pick(rng, &plants);
         let scale = rng.range(0.35, 0.75) / model.height;
-        let fibre = Some((Raw::Cloth, 1));
+        let fibre = Some(Cuttable {
+            what: Cut::Plant,
+            gives: (Raw::Cloth, 1),
+            seconds: 0.4,
+        });
         put(
             &model,
             standing(rng, point, 0.15, scale, 0.02),
@@ -518,7 +534,11 @@ fn plant(
             model,
             standing(&mut rng, point, 0.0, size / model.height, 0.03),
             1.0,
-            Some((Raw::Wood, 2)),
+            Some(Cuttable {
+                what: Cut::Tree,
+                gives: (Raw::Wood, 2),
+                seconds: 1.0,
+            }),
             Some((point, 0.5)),
         );
     }

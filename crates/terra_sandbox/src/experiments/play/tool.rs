@@ -7,8 +7,11 @@
 //!
 //!   Hold right mouse   the dial of parts; move the mouse to one and let go (or hold B)
 //!   Tap right mouse    put the part away, or put back what you picked up
-//!   Left click         build, place, or pick up                          (or E)
-//!   Scroll wheel       turn an item or a room; push and pull a wall      (or Z and C)
+//!   Hold left click    build, or take apart: it takes a moment, and letting go
+//!                      early leaves nothing done                         (or E)
+//!   Left click         pick an item up and put it down, in move mode
+//!   Scroll wheel       turn an item, a room or a wall; switch a wall between
+//!                      pushing out and pulling in                        (or Z and C)
 //!   R                  the next variant of the part
 //!   Q                  take-apart mode, and back
 //!   F                  move mode, and back
@@ -26,6 +29,7 @@ use super::dial::Dial;
 use super::flora::Obstacles;
 use super::inventory::{self, Cost, Inventory, Raw, Tool};
 use super::props::{self, Blocked, Models, Prop, Standing};
+use super::work::Hold;
 use super::{Player, View};
 use crate::experiments::build::Site;
 use crate::planet::Planet;
@@ -46,6 +50,8 @@ use terra_core::Ground;
 /// How far from the player walls and rooms can be worked on, and items placed.
 const STRUCTURE_REACH_M: f32 = 18.0;
 const ITEM_REACH_M: f32 = 9.0;
+/// How far a player can step from where they began a job before it is abandoned.
+const WANDER_M: f32 = 2.5;
 /// Where an item is offered when the view is not on anything within reach.
 const ITEM_NEAR_M: f32 = 3.0;
 /// The grid items snap to, in metres. It divides a tile evenly, so it lines up with walls.
@@ -103,6 +109,34 @@ struct Carried {
     indoors: bool,
 }
 
+/// What is being built or taken apart while the button is held. Everything needed to
+/// finish it is taken when the button goes down, so looking away does not change it.
+enum Job {
+    /// Changes to the base, with what they cost or give back.
+    Structure {
+        ops: Vec<BuildOp>,
+        pay: Option<(Cost, u32)>,
+        refund: Option<(Cost, u32)>,
+    },
+    Place {
+        item: &'static Item,
+        at: Vec3,
+        lift: f32,
+        turn: f32,
+        indoors: bool,
+    },
+    TakeAway(Entity),
+}
+
+struct Work {
+    job: Job,
+    hold: Hold,
+    /// Whether it takes something away, which is shown differently.
+    removing: bool,
+    /// Where the player stood when it began. Wandering off abandons it.
+    began_at: Vec3,
+}
+
 #[derive(Resource)]
 pub struct Builder {
     /// Which part is picked, as its place in the catalogue.
@@ -130,6 +164,14 @@ pub struct Builder {
     /// The part to go back to on leaving take-apart or move mode.
     before_mode: Option<usize>,
     carrying: Option<Carried>,
+    /// What is being built or taken apart right now.
+    work: Option<Work>,
+    /// Set when something is finished: the button has to come up before the next.
+    must_release: bool,
+    /// Whether reshaping pulls a wall in instead of pushing it out.
+    pull: bool,
+    /// An item shrunk because it is being taken apart, to be put right if that stops.
+    shrinking: Option<Entity>,
     /// Set by a tap of the right mouse button: put away, or put back.
     pub cancel: bool,
     /// What building the thing aimed at would cost, and how many times over.
@@ -141,6 +183,10 @@ pub struct Builder {
     shown: (Vec<[Vec3; 4]>, usize),
     highlight: Entity,
     ghost: Entity,
+    /// The film that fills up over a wall or room as it is built.
+    filling: Entity,
+    /// The item itself, growing inside its ghost as it is built.
+    rising: Entity,
     looks: [Handle<StandardMaterial>; 3],
     ghost_looks: [Handle<StandardMaterial>; 3],
 }
@@ -162,6 +208,14 @@ impl Builder {
 
     pub fn is_carrying(&self) -> bool {
         self.carrying.is_some()
+    }
+
+    /// How far through building or taking apart the builder is, from 0 to 1, and whether
+    /// it is taking apart.
+    pub fn progress(&self) -> Option<(f32, bool)> {
+        self.work
+            .as_ref()
+            .map(|work| (work.hold.fraction(), work.removing))
     }
 
     /// Switches to a mode, or back from it to whatever was picked before.
@@ -206,7 +260,9 @@ impl Builder {
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, setup).add_systems(
         Update,
-        (choose, aim, afford, act, highlight).chain().in_set(Acting),
+        (choose, aim, afford, act, animate, highlight)
+            .chain()
+            .in_set(Acting),
     );
 }
 
@@ -254,6 +310,16 @@ fn setup(
         .spawn((Name::new("Builder highlight"), unseen()))
         .id();
     let ghost = commands.spawn((Name::new("Builder ghost"), unseen())).id();
+    let filling = commands
+        .spawn((Name::new("Builder progress"), unseen()))
+        .id();
+    let rising = commands
+        .spawn((
+            Name::new("Item being built"),
+            Transform::default(),
+            Visibility::Hidden,
+        ))
+        .id();
     commands.insert_resource(Builder {
         part: 0,
         stowed: true,
@@ -268,6 +334,10 @@ fn setup(
         wheel: 0,
         before_mode: None,
         carrying: None,
+        work: None,
+        must_release: false,
+        pull: false,
+        shrinking: None,
         cancel: false,
         price: None,
         short: None,
@@ -275,6 +345,8 @@ fn setup(
         shown: (Vec::new(), 0),
         highlight,
         ghost,
+        filling,
+        rising,
         looks,
         ghost_looks,
     });
@@ -295,9 +367,11 @@ fn choose(
         builder.cancel = builder.is_carrying();
         builder.stowed = true;
         builder.before_mode = None;
+        builder.work = None;
         return;
     }
-    if dial.open {
+    // Nothing about the job changes while it is being done.
+    if dial.open || builder.work.is_some() {
         return;
     }
     if !builder.is_carrying() {
@@ -340,6 +414,8 @@ fn choose(
             builder.room_turned = !builder.room_turned;
         } else if matches!(builder.picked().kind, Kind::Wall(_)) {
             builder.wall_turned = !builder.wall_turned;
+        } else if matches!(builder.picked().kind, Kind::Reshape) {
+            builder.pull = !builder.pull;
         }
     }
 }
@@ -358,6 +434,10 @@ fn aim(
     props: Query<(Entity, &Prop, &Transform, &Visibility)>,
     mut builder: ResMut<Builder>,
 ) {
+    // What is being worked on stays the target until the work is done or dropped.
+    if builder.work.is_some() {
+        return;
+    }
     builder.viewed = None;
     // A fixed camera is for taking pictures, and an open dial is for choosing.
     if options.vantage.is_some() || dial.open {
@@ -671,6 +751,9 @@ fn aim(
 
 /// Works out what the thing aimed at would cost to build, and whether it can be paid.
 fn afford(site: Res<Site>, inventory: Res<Inventory>, mut builder: ResMut<Builder>) {
+    if builder.work.is_some() {
+        return;
+    }
     // Cutting an opening is paid for where the wall was solid; changing the shape of
     // one already there is free.
     let cuts = builder
@@ -693,7 +776,7 @@ fn afford(site: Res<Site>, inventory: Res<Inventory>, mut builder: ResMut<Builde
                 .count();
             Some((catalogue::FLOOR, catalogue::floor_units(new_cells)))
         }
-        (Kind::Reshape, Target::Wall(face)) => Some((
+        (Kind::Reshape, Target::Wall(face)) if !builder.pull => Some((
             catalogue::FLOOR,
             catalogue::floor_units(site.base.wall(face).len()),
         )),
@@ -719,22 +802,32 @@ fn afford(site: Res<Site>, inventory: Res<Inventory>, mut builder: ResMut<Builde
     builder.price = price;
 }
 
+/// Starts, carries on and finishes building and taking apart. Both take a moment: the
+/// button is held until the job is done, and letting go early leaves nothing done.
 fn act(
     mut commands: Commands,
+    time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     cursor: Single<&CursorOptions>,
+    dial: Res<Dial>,
     planet: Res<Planet>,
     models: Res<Models>,
     props: Query<&Prop>,
     mut builder: ResMut<Builder>,
     mut inventory: ResMut<Inventory>,
     mut site: ResMut<Site>,
-    mut player: Single<&mut Player>,
+    player: Single<(&Transform, &mut Player)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    // A tap of the right button: put back what was picked up, or put the part away.
+    let (player_at, mut player) = player.into_inner();
+    let player_at = player_at.translation;
+    // A tap of the right button: stop what is being done; or put back what was picked
+    // up; or put the part away.
     if std::mem::take(&mut builder.cancel) {
+        if builder.work.take().is_some() {
+            return;
+        }
         match builder.carrying.take() {
             Some(carried) => {
                 props::place(
@@ -755,8 +848,72 @@ fn act(
     }
     // A click that only captured the mouse should not also build something.
     let captured = cursor.grab_mode != CursorGrabMode::None;
+    let held = keys.pressed(KeyCode::KeyE) || (captured && mouse.pressed(MouseButton::Left));
     let click =
         keys.just_pressed(KeyCode::KeyE) || (captured && mouse.just_pressed(MouseButton::Left));
+    if !held {
+        builder.must_release = false;
+    }
+
+    // Carry on with what is under way, or drop it.
+    if let Some(mut work) = builder.work.take() {
+        let stayed = work.began_at.distance(player_at) < WANDER_M;
+        let in_hand = !dial.open && inventory.holding() == Some(Tool::Builder);
+        if !held || !stayed || !in_hand {
+            return;
+        }
+        player.since_acting = 0.0;
+        if !work.hold.advance(time.delta_secs()) {
+            builder.work = Some(work);
+            return;
+        }
+        builder.must_release = true;
+        match work.job {
+            Job::Structure { ops, pay, refund } => {
+                if site.apply_all(&ops, &mut commands, &planet, &mut meshes) {
+                    if let Some((cost, times)) = refund {
+                        inventory.refund(cost, times);
+                    }
+                    if let Some((cost, times)) = pay {
+                        inventory.pay(cost, times);
+                    }
+                }
+            }
+            Job::Place {
+                item,
+                at,
+                lift,
+                turn,
+                indoors,
+            } => {
+                // Paid for on finishing. If what it costs has gone since the button
+                // went down, nothing is built.
+                if inventory.pay(item.cost, 1) {
+                    props::place(
+                        &mut commands,
+                        &models,
+                        &site,
+                        &planet,
+                        item,
+                        at,
+                        lift,
+                        turn,
+                        indoors,
+                    );
+                    info!("Placed a {} at {at}, {lift} up.", item.name);
+                }
+            }
+            Job::TakeAway(entity) => {
+                if let Ok(prop) = props.get(entity) {
+                    info!("Removed a {}.", prop.item.name);
+                    inventory.refund(prop.item.cost, 1);
+                    commands.entity(entity).despawn();
+                }
+            }
+        }
+        return;
+    }
+
     // The middle button: another of whatever the view is on.
     let copy =
         keys.just_pressed(KeyCode::KeyV) || (captured && mouse.just_pressed(MouseButton::Middle));
@@ -771,11 +928,61 @@ fn act(
         builder.turn = prop.turn;
         return;
     }
+    if !click || builder.must_release {
+        return;
+    }
+
+    // Moving is neither building nor taking apart, and happens at once.
+    match (&builder.picked().kind, builder.target) {
+        (Kind::Move, Target::Prop(entity)) => {
+            if let Ok(prop) = props.get(entity) {
+                info!("Picked up a {}.", prop.item.name);
+                builder.turn = prop.turn;
+                builder.carrying = Some(Carried {
+                    item: prop.item,
+                    at: prop.at,
+                    lift: prop.lift,
+                    turn: prop.turn,
+                    indoors: prop.indoors,
+                });
+                commands.entity(entity).despawn();
+                player.since_acting = 0.0;
+            }
+            return;
+        }
+        (
+            Kind::Move,
+            Target::Spot {
+                at,
+                lift,
+                indoors,
+                blocked: None,
+            },
+        ) => {
+            if let Some(carried) = builder.carrying.take() {
+                props::place(
+                    &mut commands,
+                    &models,
+                    &site,
+                    &planet,
+                    carried.item,
+                    at,
+                    lift,
+                    builder.turn,
+                    indoors,
+                );
+                info!("Placed a {} at {at}, {lift} up.", carried.item.name);
+                player.since_acting = 0.0;
+            }
+            return;
+        }
+        _ => {}
+    }
+
     // Building is paid for from what is carried, and refused when that is not enough.
     // Taking apart gives everything back.
     let can_pay = builder.short.is_none();
-    let build = click && can_pay;
-    let mut refund: Option<(Cost, u32)> = None;
+    let pay = builder.price;
     // What closing a window or doorway gives back.
     let opening_worth = |run: &[Face]| match run.first().and_then(|&cell| site.base.filling(cell)) {
         Some(Panel::Window { .. }) => Some((catalogue::WINDOW, catalogue::window_units(run.len()))),
@@ -794,48 +1001,63 @@ fn act(
             })
             .collect()
     };
-    let ops: Vec<BuildOp> = match (&builder.picked().kind, builder.target) {
-        // A wall goes out a step for a click or a notch away, and in for a notch back.
-        (Kind::Reshape, Target::Wall(face)) if (click || builder.wheel > 0) && can_pay => {
-            vec![BuildOp::Grow(face)]
+    let building = |ops: Vec<BuildOp>| Job::Structure {
+        ops,
+        pay,
+        refund: None,
+    };
+    let unbuilding = |ops: Vec<BuildOp>, refund: Option<(Cost, u32)>| Job::Structure {
+        ops,
+        pay: None,
+        refund,
+    };
+    let (job, removing) = match (&builder.picked().kind, builder.target) {
+        (Kind::Reshape, Target::Wall(face)) if !builder.pull && can_pay => {
+            (building(vec![BuildOp::Grow(face)]), false)
         }
-        (Kind::Reshape, Target::Wall(face)) if builder.wheel < 0 => {
-            refund = Some((
-                catalogue::FLOOR,
-                catalogue::floor_units(site.base.wall(face).len()),
-            ));
-            vec![BuildOp::Shrink(face)]
+        (Kind::Reshape, Target::Wall(face)) if builder.pull => {
+            let floor = catalogue::floor_units(site.base.wall(face).len());
+            let refund = Some((catalogue::FLOOR, floor));
+            (unbuilding(vec![BuildOp::Shrink(face)], refund), true)
         }
-        (Kind::Window(shapes), Target::Wall(_) | Target::Edge { .. }) if build => {
-            fill(&builder.run, shapes[builder.variant()].2)
-        }
-        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) if build => {
-            fill(&builder.run, Panel::Door)
+        (Kind::Window(shapes), Target::Wall(_) | Target::Edge { .. }) if can_pay => (
+            building(fill(&builder.run, shapes[builder.variant()].2)),
+            false,
+        ),
+        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) if can_pay => {
+            (building(fill(&builder.run, Panel::Door)), false)
         }
         // A wall is built where there is none, and leaves alone what is already there.
-        (Kind::Wall(_), Target::Edge { fits: true, .. }) if build => builder
-            .run
-            .iter()
-            .filter(|&&cell| site.base.partition(cell).is_none())
-            .map(|&cell| BuildOp::SetPartition(cell, Some(Panel::Solid)))
-            .collect(),
-        (Kind::Remove, Target::Wall(_)) if click => {
-            refund = opening_worth(&builder.run);
-            fill(&builder.run, Panel::Solid)
-        }
-        // An opening in an interior wall is closed first; a plain wall is taken away.
-        (Kind::Remove, Target::Edge { open: true, .. }) if click => {
-            refund = opening_worth(&builder.run);
-            fill(&builder.run, Panel::Solid)
-        }
-        (Kind::Remove, Target::Edge { .. }) if click => {
-            refund = Some((catalogue::WALL, catalogue::wall_units(builder.run.len())));
-            builder
-                .run
-                .iter()
-                .map(|&cell| BuildOp::SetPartition(cell, None))
-                .collect()
-        }
+        (Kind::Wall(_), Target::Edge { fits: true, .. }) if can_pay => (
+            building(
+                builder
+                    .run
+                    .iter()
+                    .filter(|&&cell| site.base.partition(cell).is_none())
+                    .map(|&cell| BuildOp::SetPartition(cell, Some(Panel::Solid)))
+                    .collect(),
+            ),
+            false,
+        ),
+        // An opening is closed first; a plain interior wall is taken away.
+        (Kind::Remove, Target::Wall(_) | Target::Edge { open: true, .. }) => (
+            unbuilding(
+                fill(&builder.run, Panel::Solid),
+                opening_worth(&builder.run),
+            ),
+            true,
+        ),
+        (Kind::Remove, Target::Edge { .. }) => (
+            unbuilding(
+                builder
+                    .run
+                    .iter()
+                    .map(|&cell| BuildOp::SetPartition(cell, None))
+                    .collect(),
+                Some((catalogue::WALL, catalogue::wall_units(builder.run.len()))),
+            ),
+            true,
+        ),
         (
             Kind::Room(_),
             Target::Ground {
@@ -844,78 +1066,124 @@ fn act(
                 fits: true,
                 adds: true,
             },
-        ) if build => vec![BuildOp::AddRoom {
-            min: corner.to_array(),
-            max: (corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1)).to_array(),
-        }],
+        ) if can_pay => (
+            building(vec![BuildOp::AddRoom {
+                min: corner.to_array(),
+                max: (corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1)).to_array(),
+            }]),
+            false,
+        ),
         (
-            Kind::Items(_) | Kind::Move,
+            Kind::Items(items),
             Target::Spot {
                 at,
                 lift,
                 indoors,
                 blocked: None,
             },
-        ) if build => {
-            if let Some(item) = builder.item() {
-                props::place(
-                    &mut commands,
-                    &models,
-                    &site,
-                    &planet,
+        ) if can_pay => (
+            Job::Place {
+                item: &items[builder.variant()],
+                at,
+                lift,
+                turn: builder.turn,
+                indoors,
+            },
+            false,
+        ),
+        (Kind::Remove, Target::Prop(entity)) => (Job::TakeAway(entity), true),
+        _ => return,
+    };
+    // How long it takes follows from what it costs.
+    let seconds = match &job {
+        Job::Structure { ops, .. } if ops.is_empty() => return,
+        Job::Structure {
+            pay: Some((cost, times)),
+            ..
+        } => catalogue::build_seconds(cost, *times),
+        Job::Structure {
+            refund: Some((cost, times)),
+            ..
+        } => catalogue::take_apart_seconds(cost, *times),
+        // Changing the shape of an opening already there costs nothing and is quick.
+        Job::Structure { .. } => catalogue::build_seconds(&[], 1),
+        Job::Place { item, .. } => catalogue::build_seconds(item.cost, 1),
+        Job::TakeAway(entity) => match props.get(*entity) {
+            Ok(prop) => catalogue::take_apart_seconds(prop.item.cost, 1),
+            Err(_) => return,
+        },
+    };
+    builder.work = Some(Work {
+        job,
+        hold: Hold::new(seconds),
+        removing,
+        began_at: player_at,
+    });
+}
+
+/// Shows work on the thing itself: an item being built grows inside its ghost, and one
+/// being taken apart shrinks. Either goes back to how it was if the work is dropped.
+fn animate(
+    mut commands: Commands,
+    site: Res<Site>,
+    planet: Res<Planet>,
+    models: Res<Models>,
+    mut builder: ResMut<Builder>,
+    mut props: Query<&mut Transform, With<Prop>>,
+) {
+    let (growing, taking) = match &builder.work {
+        Some(Work {
+            job:
+                Job::Place {
                     item,
                     at,
                     lift,
-                    builder.turn,
+                    turn,
                     indoors,
-                );
-                info!("Placed a {} at {at}, {lift} up.", item.name);
-                // Something carried was paid for when it was first built.
-                if builder.carrying.take().is_none() {
-                    inventory.pay(item.cost, 1);
-                }
-                player.since_acting = 0.0;
-            }
-            Vec::new()
-        }
-        (Kind::Move, Target::Prop(entity)) if click => {
-            if let Ok(prop) = props.get(entity) {
-                info!("Picked up a {}.", prop.item.name);
-                builder.turn = prop.turn;
-                builder.carrying = Some(Carried {
-                    item: prop.item,
-                    at: prop.at,
-                    lift: prop.lift,
-                    turn: prop.turn,
-                    indoors: prop.indoors,
-                });
-                commands.entity(entity).despawn();
-                player.since_acting = 0.0;
-            }
-            Vec::new()
-        }
-        (Kind::Remove, Target::Prop(entity)) if click => {
-            if let Ok(prop) = props.get(entity) {
-                info!("Removed a {}.", prop.item.name);
-                inventory.refund(prop.item.cost, 1);
-            }
-            commands.entity(entity).despawn();
-            player.since_acting = 0.0;
-            Vec::new()
-        }
-        _ => Vec::new(),
+                },
+            hold,
+            ..
+        }) => (
+            Some((*item, *at, *lift, *turn, *indoors, hold.fraction())),
+            None,
+        ),
+        Some(Work {
+            job: Job::TakeAway(entity),
+            hold,
+            ..
+        }) => (None, Some((*entity, hold.fraction()))),
+        _ => (None, None),
     };
-    if !ops.is_empty() {
-        player.since_acting = 0.0;
-        if site.apply_all(&ops, &mut commands, &planet, &mut meshes) {
-            match (refund, builder.price) {
-                (Some((cost, times)), _) => inventory.refund(cost, times),
-                (None, Some((cost, times))) => {
-                    inventory.pay(cost, times);
-                }
-                (None, None) => {}
-            }
+    let rising = builder.rising;
+    match growing.and_then(|growing| Some((growing, models.of(growing.0)?.solid.clone()?))) {
+        Some(((item, at, lift, turn, indoors, done), mesh)) => {
+            let stood = props::standing(&site, &planet, at, lift + item.lift, turn, indoors);
+            // Quick at first, easing to full size.
+            let eased = 1.0 - (1.0 - done) * (1.0 - done);
+            commands.entity(rising).insert((
+                Mesh3d(mesh),
+                MeshMaterial3d(models.lit()),
+                stood.with_scale(Vec3::splat(0.2 + 0.8 * eased)),
+                Visibility::Visible,
+            ));
         }
+        None => {
+            commands.entity(rising).insert(Visibility::Hidden);
+        }
+    }
+    if let Some(was) = builder.shrinking
+        && taking.map(|(entity, _)| entity) != Some(was)
+    {
+        if let Ok(mut transform) = props.get_mut(was) {
+            transform.scale = Vec3::ONE;
+        }
+        builder.shrinking = None;
+    }
+    if let Some((entity, done)) = taking
+        && let Ok(mut transform) = props.get_mut(entity)
+    {
+        transform.scale = Vec3::splat(1.0 - 0.7 * done * done);
+        builder.shrinking = Some(entity);
     }
 }
 
@@ -982,9 +1250,10 @@ fn highlight(
         || (matches!(kind, Kind::Window(_) | Kind::Door)
             && matches!(builder.target, Target::Wall(_) | Target::Edge { .. })
             && builder.run.is_empty());
+    let pulling = matches!(kind, Kind::Reshape) && builder.pull;
     let look = match (kind, builder.target) {
         (Kind::Move, Target::Prop(_)) => 1,
-        _ if refused => 2,
+        _ if refused || pulling => 2,
         (Kind::Remove, _) => 2,
         (Kind::Window(_) | Kind::Door | Kind::Move, _) => 1,
         _ => 0,
@@ -1082,6 +1351,48 @@ fn highlight(
         }
         _ => Vec::new(),
     };
+    // While a wall or room is being built, a stronger film climbs it; while one is being
+    // taken apart, the film drains away.
+    let filling = builder.filling;
+    match builder.work.as_ref() {
+        Some(Work {
+            job: Job::Structure { .. },
+            hold,
+            removing,
+            ..
+        }) if !quads.is_empty() => {
+            let done = hold.fraction();
+            let covered = if *removing { 1.0 - done } else { done };
+            let mut positions = Vec::new();
+            for [a, b, c, d] in &quads {
+                let (c, d) = (*b + (*c - *b) * covered, *a + (*d - *a) * covered);
+                let lift = (*b - *a).cross(c - *a).normalize_or_zero() * 0.1;
+                for offset in [lift, -lift] {
+                    positions.extend([*a, *b, c, *a, c, d].map(|corner| corner + offset));
+                }
+            }
+            let normals = vec![Vec3::Y; positions.len()];
+            commands.entity(filling).insert((
+                Mesh3d(
+                    meshes.add(
+                        Mesh::new(
+                            PrimitiveTopology::TriangleList,
+                            RenderAssetUsages::RENDER_WORLD,
+                        )
+                        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+                        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals),
+                    ),
+                ),
+                MeshMaterial3d(builder.ghost_looks[look].clone()),
+                site.frame,
+                Visibility::Visible,
+            ));
+        }
+        _ => {
+            commands.entity(filling).insert(Visibility::Hidden);
+        }
+    }
+
     // Outlines are drawn afresh every frame; the film only when something changes.
     for quad in &quads {
         outline(&mut gizmos, in_world(*quad), colour);
@@ -1218,6 +1529,11 @@ pub fn prompt(builder: &Builder) -> String {
     if builder.stowed {
         return "Hold right mouse  build menu".to_string();
     }
+    match builder.progress() {
+        Some((_, true)) => return "Taking apart      Let go to stop".to_string(),
+        Some((_, false)) => return "Building      Let go to stop".to_string(),
+        None => {}
+    }
     if let Some((raw, more)) = builder.short {
         return format!(
             "Not enough to build this: {more} more {} needed",
@@ -1225,8 +1541,11 @@ pub fn prompt(builder: &Builder) -> String {
         );
     }
     let action = match (&builder.picked().kind, builder.target) {
+        (Kind::Reshape, Target::Wall(_)) if builder.pull => {
+            "Hold left click  pull the wall in      Scroll  push out instead"
+        }
         (Kind::Reshape, Target::Wall(_)) => {
-            "Left click  push the wall out      Scroll  push and pull"
+            "Hold left click  push the wall out      Scroll  pull in instead"
         }
         (Kind::Window(_) | Kind::Door, Target::Wall(_) | Target::Edge { .. })
             if builder.run.is_empty() =>
@@ -1234,13 +1553,13 @@ pub fn prompt(builder: &Builder) -> String {
             "The wall is not wide enough here"
         }
         (Kind::Window(_), Target::Wall(_) | Target::Edge { .. }) => {
-            "Left click  cut this window      R  size"
+            "Hold left click  cut this window      R  size"
         }
-        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) => "Left click  cut a door",
+        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) => "Hold left click  cut a door",
         (Kind::Reshape, _) => "Aim at an outside wall",
         (Kind::Window(_) | Kind::Door, _) => "Aim at a wall, outside or interior",
         (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
-            "Left click  build this wall      Scroll  turn      R  length"
+            "Hold left click  build this wall      Scroll  turn      R  length"
         }
         (Kind::Wall(_), Target::Edge { fits: false, .. }) => "Walls go indoors",
         (Kind::Wall(_), _) => "Aim at a floor indoors",
@@ -1249,14 +1568,14 @@ pub fn prompt(builder: &Builder) -> String {
         }
         (Kind::Room(_), Target::Ground { adds: false, .. }) => "That is all indoors already",
         (Kind::Room(_), Target::Ground { .. }) => {
-            "Left click  build this room      Scroll  turn      R  size"
+            "Hold left click  build this room      Scroll  turn      R  size"
         }
         (Kind::Room(_), _) => "Aim at the ground, or across a room to extend it",
         (Kind::Items(_) | Kind::Move, Target::Spot { blocked, .. }) => match blocked {
             None if builder.is_carrying() => {
                 "Left click  put it down      Scroll  turn      Right click  put it back"
             }
-            None => "Left click  place      Scroll  turn      R  next kind",
+            None => "Hold left click  build      Scroll  turn      R  next kind",
             Some(Blocked::Structure) => "It would stick through a wall",
             Some(Blocked::Item(_)) => "The outlined item is in the way",
             Some(Blocked::Nature) => "A tree or a boulder is in the way",
@@ -1265,10 +1584,10 @@ pub fn prompt(builder: &Builder) -> String {
         (Kind::Items(_), _) => "Aim at a floor or at the ground nearby",
         (Kind::Move, Target::Prop(_)) => "Left click  pick this up",
         (Kind::Move, _) => "Aim at an item to move it      F  done",
-        (Kind::Remove, Target::Prop(_)) => "Left click  take this away",
-        (Kind::Remove, Target::Edge { open: true, .. }) => "Left click  close this opening",
-        (Kind::Remove, Target::Edge { .. }) => "Left click  take this wall away",
-        (Kind::Remove, Target::Wall(_)) => "Left click  close this opening",
+        (Kind::Remove, Target::Prop(_)) => "Hold left click  take this apart",
+        (Kind::Remove, Target::Edge { open: true, .. }) => "Hold left click  close this opening",
+        (Kind::Remove, Target::Edge { .. }) => "Hold left click  take this wall away",
+        (Kind::Remove, Target::Wall(_)) => "Hold left click  close this opening",
         (Kind::Remove, _) => "Aim at an item, an interior wall, a window or a door      Q  done",
     };
     match builder.price {

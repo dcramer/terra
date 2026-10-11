@@ -20,6 +20,7 @@ In their words, shortened.
 - **One square grid for everything**, though you might not see all of it all the time. Buildings join through connectors that can face any way, "more like Subnautica". The grid should be "a little flexible": in some games each cell is huge, "so you have no freedom to build".
 - **Some buildables are a fixed size.** A round building probably cannot be freely resized, and is reached through a connector, "which maybe auto-builds if you connect it to another room". It is on the same grid as everything else: "it just wouldn't fill 100% of the cells".
 - **A build menu on B** that you pull up to see the buildables you have unlocked.
+- **Building, taking apart and cutting take time.** You click and hold to complete the task, as other games do. Building animates the thing in, destroying animates it out, and cutting has an animation or a progress bar. How long depends on the task, and there will likely be different cutting tools, such as an axe or a pickaxe.
 - **Building costs things you carry.** "I think it's likely what we'll want is for you to have the raw items, which allow you to build anything that you might have the capabilities to build." With an inventory, and an action bar you put items on to use them (D55).
 
 ## The shape proposed
@@ -73,6 +74,7 @@ What the sandbox does today, measured against the above.
 - **Items are already entries in a list.** Structural parts are not: rooms, walls and openings are written into `terra_build` and into the builder tool case by case.
 - **Looks already follow neighbours in three places**: a post where a wall turns and a seam where it continues; a parapet where the roof begins and a line where a storey continues; a foundation ledge only on outside edges. But it is written as special cases, and nothing is rounded.
 - **No materials.**
+- **Timing is a stand-in.** Jobs are held down and animated, but how long each takes is derived from its cost by one rule, and there is one cutting tool.
 - **Cost is a stand-in.** The sandbox has five raw items, a cost for every buildable, a full refund on taking apart, and a cutter tool to gather more. None of the numbers or names were designed, and there is no notion yet of what a player is capable of building.
 - **No fixed-size buildables, ports or connectors**, and nothing is placed on a wall. See "The grid".
 - **No build menu**, only the dial.

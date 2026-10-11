@@ -72,8 +72,9 @@ The proof of concept: an outpost in a meadow by a lake, a little before sunset, 
 | Tab | Open and close the inventory. I does the same. |
 | Hold right mouse | With the builder in hand: the dial of parts. Move the mouse toward one and let go, or press its number. B does the same. |
 | Tap right mouse | Put the part away, or put back what you picked up |
-| Left click | Build, place, or pick up. E does the same. |
-| Scroll wheel | Turn an item or a room; push and pull a wall. Z and C do the same. |
+| Hold left click | Build, take apart, or cut. It takes a moment; let go early and nothing is done. E does the same. |
+| Left click | In move mode, pick an item up and put it down |
+| Scroll wheel | Turn an item, a room or a wall; switch a wall between pushing out and pulling in. Z and C do the same. |
 | R | The next variant of the part; with Shift, the one before |
 | Q | Take-apart mode, and back |
 | F | Move mode, and back |
@@ -89,24 +90,32 @@ You carry raw items and tools. The tools sit on the action bar along the bottom;
 ![The inventory, the action bar and the raw items carried](../../docs/images/outpost-inventory-2026-10-10.png)
 
 - **The builder** spends raw items. Everything it builds has a cost, shown in the prompt before you commit: so much metal a tile for a room, glass for a window, wood and cloth for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost.
-- **The cutter** gathers more: wood from trees, metal from rocks, cloth from bushes and plants. Aim at one, or just stand in front of it, and left click.
+- **The cutter** gathers more: wood from trees, metal from rocks, cloth from bushes and plants. Aim at one, or just stand in front of it, and hold left click until it is cut through.
 - **The inventory** lists the tools carried. Point at one and press 1 to 6 to put it in that slot of the bar.
 
 The raw items, the costs, what you start with and what the cutter gives are all stand-ins. See [docs/construction.md](../../docs/construction.md) for what the developers have said about carrying and cost.
+
+Building, taking apart and cutting all take time. You hold the button, a bar under the aiming mark fills, and it is done when the bar is full; let go early, or walk off, and nothing is done.
+
+- A room, wall or opening being built has a film that climbs it; one being taken apart has a film that drains away.
+- An item being built grows inside its ghost; one being taken apart shrinks.
+- A tree being cut shudders, then falls over away from you.
+
+How long each takes follows from the thing: what it costs to build, and how tough it is to cut. A tool can be quicker or slower at cutting each sort of thing, or unable to cut it at all, so an axe or a pickaxe is one more line in `inventory.rs`.
 
 Building starts from a part. Pick one from the dial, cycle through its variants, and aim. What would be built is shown before you commit: the outline of a room, the cut of a window, the wall a push would move, or a ghost of the item where it would stand. It is red where it cannot go.
 
 ![The dial of parts](../../docs/images/outpost-dial-2026-10-10.png)
 
-| Part | Variants | What a left click does |
+| Part | Variants | What holding left click does |
 |---|---|---|
 | Room | Four sizes, in metres; the wheel turns it | Builds a room on the ground you aim at. Aimed across a room already there, it extends that room to the combined shape. |
-| Reshape | | Pushes the wall you aim at out by one step of the grid. The wheel pushes and pulls. |
+| Reshape | | Pushes the wall you aim at out by one step of the grid, or pulls it in; the wheel switches between the two |
 | Wall | Three lengths; the wheel turns it | Builds a stretch of plain interior wall on the grid line nearest where you aim. Indoors only. |
 | Window | Four sizes | Cuts a window that wide in the wall you aim at, outside or interior, centred where you aim |
 | Door | | Cuts a door in the wall you aim at, outside or interior |
 | Remove (Q) | | Takes away the item, closes the window or door, or takes away an interior wall that has neither |
-| Move (F) | | Picks an item up, then puts it down |
+| Move (F) | | A click, not a hold: picks an item up, then puts it down |
 | Seat, Table, Bed, Storage, Kitchen, Decor, Kit, Fire | Twenty-seven items between them | Stands the item on the floor or ground you aim at |
 
 Everything has a box. An item cannot be placed where its box would share space with another item, a wall, a tree or a boulder, and a walker cannot enter one. Rugs are the exception: they lie under anything. When something is in the way, the prompt says what, and an item that is in the way is outlined.
@@ -137,7 +146,8 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `catalogue` | The parts the builder can build, their variants and what they cost |
 | `inventory` | What is carried: raw items, tools and the action bar |
 | `bag` | The action bar, the raw-item count and the inventory panel |
-| `harvest` | The cutter |
+| `harvest` | Cutting things for the raw items in them, with any tool that can |
+| `work` | Holding a button until a job is done |
 | `tool` | The builder: what it is aimed at, the preview, and building |
 | `dial` | The dial of parts and the prompts |
 | `props` | Items that have been placed, and stopping a walker at them |
@@ -146,7 +156,7 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 
 The models are free ones, recoloured in code; see [THIRD_PARTY.md](../../THIRD_PARTY.md). How it was put together and what it costs to draw is in [research/outpost-scene.md](../../research/outpost-scene.md).
 
-What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; you cannot stand on an item, and an item stood on another stays in the air if the one under it goes; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; placed items and the inventory are not saved or part of the base's list of operations; and cutting a tree is instant and it never grows back.
+What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; you cannot stand on an item, and an item stood on another stays in the air if the one under it goes; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; placed items and the inventory are not saved or part of the base's list of operations; and a cut tree never grows back; and none of the work has sound.
 
 In a scripted run the game clock advances a sixtieth of a second per frame and real keyboard and mouse input is ignored, so the same script does the same thing on any machine:
 

@@ -35,6 +35,18 @@ pub fn window_units(cells: usize) -> u32 {
     libm::ceilf(cells as f32 * CELL_M) as u32
 }
 
+/// How long something takes to build, from what it costs: half a second, and a little
+/// more for every raw item in it, up to three seconds. A stand-in, like the costs.
+pub fn build_seconds(cost: Cost, times: u32) -> f32 {
+    let raw_items: u32 = cost.iter().map(|&(_, each)| each * times).sum();
+    (0.5 + 0.12 * raw_items as f32).min(3.0)
+}
+
+/// Taking a thing apart is quicker than building it.
+pub fn take_apart_seconds(cost: Cost, times: u32) -> f32 {
+    build_seconds(cost, times) * 0.6
+}
+
 /// Something stood on a floor or on the ground. Its model is a file in
 /// `assets/models/props`.
 #[derive(Debug, PartialEq)]
@@ -321,6 +333,17 @@ pub fn part_of(wanted: fn(&Kind) -> bool) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bigger_things_take_longer_and_coming_apart_is_quicker() {
+        const STOOL: Cost = &[(Raw::Wood, 1)];
+        const FRIDGE: Cost = &[(Raw::Metal, 4), (Raw::Parts, 2)];
+        assert!(build_seconds(FRIDGE, 1) > build_seconds(STOOL, 1));
+        assert!(take_apart_seconds(FRIDGE, 1) < build_seconds(FRIDGE, 1));
+        // Never instant, never endless.
+        assert!(build_seconds(&[], 1) >= 0.5);
+        assert!(build_seconds(FRIDGE, 100) <= 3.0);
+    }
 
     #[test]
     fn every_part_has_a_variant_and_every_item_one_model() {

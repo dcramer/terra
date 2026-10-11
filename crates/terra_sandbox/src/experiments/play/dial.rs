@@ -57,6 +57,14 @@ struct Prompt;
 #[derive(Component)]
 struct Legend;
 
+/// The bar under the aiming mark that fills while something is being built, taken apart
+/// or cut.
+#[derive(Component)]
+struct ProgressBar;
+
+#[derive(Component)]
+struct ProgressFill;
+
 /// Everything on screen that is not the dial, hidden when taking pictures.
 #[derive(Component)]
 struct Hud;
@@ -64,7 +72,7 @@ struct Hud;
 pub fn plugin(app: &mut App) {
     app.init_resource::<Dial>()
         .add_systems(Startup, setup)
-        .add_systems(Update, draw.after(tool::Acting));
+        .add_systems(Update, (draw, draw_progress).after(tool::Acting));
 }
 
 fn setup(mut commands: Commands) {
@@ -84,6 +92,38 @@ fn setup(mut commands: Commands) {
         },
         BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.85)),
     ));
+
+    // Progress on whatever is being held down, just under the aiming mark.
+    commands
+        .spawn((
+            ProgressBar,
+            Node {
+                position_type: PositionType::Absolute,
+                left: percent(50),
+                top: percent(50),
+                width: px(132),
+                height: px(7),
+                margin: UiRect {
+                    left: px(-66),
+                    top: px(24),
+                    ..default()
+                },
+                border_radius: BorderRadius::all(px(4)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.05, 0.06, 0.08, 0.7)),
+            Visibility::Hidden,
+        ))
+        .with_child((
+            ProgressFill,
+            Node {
+                width: percent(0),
+                height: percent(100),
+                border_radius: BorderRadius::all(px(4)),
+                ..default()
+            },
+            BackgroundColor(Color::WHITE),
+        ));
 
     // The dial itself, hidden until its key is held.
     commands
@@ -392,4 +432,36 @@ fn draw(
             tool::legend(&builder).to_string()
         },
     );
+}
+
+/// Fills the bar under the aiming mark while a job is held down: building, taking apart
+/// or cutting.
+fn draw_progress(
+    builder: Res<Builder>,
+    cutting: Res<Cutting>,
+    mut bar: Single<&mut Visibility, With<ProgressBar>>,
+    mut fill: Single<(&mut Node, &mut BackgroundColor), With<ProgressFill>>,
+) {
+    let progress = builder
+        .progress()
+        .or(cutting.progress().map(|done| (done, false)));
+    let wanted = if progress.is_some() {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    if **bar != wanted {
+        **bar = wanted;
+    }
+    if let Some((done, removing)) = progress {
+        fill.0.width = percent(done * 100.0);
+        let colour = if removing {
+            Color::srgb(1.0, 0.45, 0.4)
+        } else {
+            Color::WHITE
+        };
+        if fill.1.0 != colour {
+            fill.1.0 = colour;
+        }
+    }
 }

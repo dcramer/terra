@@ -121,6 +121,11 @@ pub struct Models {
 }
 
 impl Models {
+    /// The look every item is drawn with.
+    pub fn lit(&self) -> Handle<StandardMaterial> {
+        self.lit.clone()
+    }
+
     pub fn of(&self, item: &Item) -> Option<&Model> {
         self.models.get(item.file)
     }
