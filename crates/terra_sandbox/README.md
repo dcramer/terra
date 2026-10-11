@@ -75,6 +75,9 @@ The tech demo of the MVP's loop (docs/prototypes.md), being built on the earlier
 | Tab | Open and close the inventory. I does the same. |
 | F | Use what you stand beside: a workbench, smithy or campfire opens its recipes, the claim stone grows your claim, a dropped bag gives back what fits |
 | H | Eat the most filling food you carry. Clicking food in the backpack eats it too. |
+| Left click | With anything but the hammer in hand: swing at a creature in front of you |
+| Hold right mouse | With anything but the hammer in hand: guard, taking a quarter of a blow on stamina |
+| Ctrl | Roll clear of blows |
 | Hold right mouse | With the hammer in hand: the dial of parts. Move the mouse toward one and let go, or press its number. B does the same. |
 | Tap right mouse | Put the part away, or put back what you picked up |
 | Hold left click | Build, take apart, or cut. It takes a moment; let go early and nothing is done. E does the same. |
@@ -103,6 +106,11 @@ You carry a backpack, on the rules in `terra_items` and the Subnautica baseline 
 - **Staying alive**: health, stamina and hunger, as bars at the bottom left. Sprinting, jumping and working spend stamina, which comes back when you stop. Hunger falls all the time; hungry, less comes back; starving drains health until you die (D101). Berry bushes give berries to the knife; meat cooks at a campfire into something far more filling.
 - **Dying**: you fall, everything in your backpack drops where you fell in a bag, and you wake at a bed in your claim, or where you first arrived. F at the bag takes back what fits; left alone, it is gone after ten minutes (D84). What you wear stays on you, and the action bar still points at your tools when they come back.
 - **Skills by doing** (D88): chopping, mining, foraging, building and crafting are learned the first time you do them and improve as you do them more; each step makes that work quicker. The list shows beside the backpack while the inventory is open. Dying costs half the way to each skill's next step, never a step already reached (D101).
+- **Creatures** (game design 001, creatures.md): a herd of deer grazes and wanders in the meadow and runs from anyone close or anyone who hurts it; spiders wait in a hollow further off, chase whoever comes near, bite within reach, and go home if led too far. A dead deer can be butchered with F, if you carry a knife, for meat and hide.
+- **Fighting** (D97): click to swing at a creature in front of you. The spear, made at the workbench, hits hardest and reaches furthest; tools hit less well. Swings and guards cost stamina; a roll takes you clear of a bite. Landing blows teaches fighting.
+- **A place where magic pools** (D103): a hollow further off, lit violet with motes drifting up, seen from a distance. Spiders guard it; while fewer than three remain, another forms there every minute and a half. Nothing marks it on a map (D92).
+- **A village** (D95): a few houses, a well and a stall, set down away from the hollow, with people going about their day. F talks to them. The elder, Maren, says the spiders took their smith and which way the glow lies, by the sun; the others say what they know.
+- **A rescue** (D90): the smith, Bren, kneels bound at the edge of the hollow. With the spiders near them dead, F frees them, and they follow you. Bring them into your claim and they ask for a smithy; once one stands there, they settle and work it, and the smithy's iron recipes open.
 - **The inventory** shows the character sheet and the backpack's grid. Point at a tool and press 1 to 6 to put it in that slot of the bar. Click a slot of the sheet to take off what is in it, and click gear in the backpack to wear it. The pack will not come off while what you carry would not fit without it. Opening it puts away the part in the hammer's hand.
 
 The materials, costs, recipes and what you start with are stand-ins, chosen so the MVP's loop can be walked.
@@ -164,6 +172,11 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `vitals` | Health, stamina and hunger: what wears them down, what brings them back, and the bars |
 | `death` | Going down, the dropped bag, and waking at a bed |
 | `skills` | Skills by doing: what was done becomes progress, steps make work quicker, dying costs some |
+| `creatures` | Deer and spiders: their models and animations, what each does next, and butchering |
+| `combat` | Swinging, guarding and the blows creatures land |
+| `people` | Figures who are not the player: their colours, animations, following, and settling to work |
+| `pooling` | The place where magic pools: its glow, its motes, and the monsters that form there |
+| `settlement` | The village, its people, and what they say |
 | `harvest` | Gathering with the right tool for each thing, and refusing what its material cannot work |
 | `work` | Holding a button until a job is done |
 | `tool` | The builder: what it is aimed at, the preview, and building |

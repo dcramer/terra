@@ -6,6 +6,7 @@
 
 use super::Player;
 use super::bag::Notice;
+use super::combat::Swing;
 use super::controls::{Action, Controls, Settings};
 use super::dial::Dial;
 use super::flora::{Growth, Obstacles};
@@ -76,6 +77,7 @@ fn cut(
     mut notice: ResMut<Notice>,
     mut obstacles: ResMut<Obstacles>,
     skills: Single<&Skills, With<Player>>,
+    swing: Res<Swing>,
     mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
 ) {
@@ -129,7 +131,8 @@ fn cut(
     };
     let aimed = on_view.or_else(in_front).map(|(found, _)| found);
 
-    let holding_button = controls.held(Action::Use);
+    // A click that swung at a creature is not a cut.
+    let holding_button = controls.held(Action::Use) && swing.since > 0.6;
     // Whatever was being cut and no longer is stops shaking and stands as it did.
     let still = match (aimed, holding_button) {
         (Some((entity, ..)), true) => Some(entity),
@@ -290,6 +293,10 @@ pub fn prompt(
             Tool::StonePickaxe | Tool::IronPickaxe => "Aim at a rock nearby".to_string(),
             Tool::Knife => "Aim at a bush or plant nearby".to_string(),
             Tool::Hammer => String::new(),
+            Tool::Spear => format!(
+                "{}  swing at a creature in front of you",
+                settings.key(Action::Use)
+            ),
         },
     }
 }

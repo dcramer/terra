@@ -605,7 +605,9 @@ fn draw(
     );
 
     notice.age += time.delta_secs();
-    let fade = (NOTICE_SECONDS - notice.age).clamp(0.0, 1.0);
+    // Longer things said stay up longer, so they can be read.
+    let lasts = NOTICE_SECONDS + notice.text.len() as f32 / 22.0;
+    let fade = (lasts - notice.age).clamp(0.0, 1.0);
     let (mut text, mut text_colour) = texts.p4().into_inner();
     let wanted = if fade > 0.0 {
         notice.text.clone()

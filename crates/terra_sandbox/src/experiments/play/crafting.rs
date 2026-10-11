@@ -68,6 +68,11 @@ pub const RECIPES: &[Recipe] = &[
     ),
     recipe(
         Station::Workbench,
+        &[(Raw::Wood, 3), (Raw::Stone, 2)],
+        Made::Tool(Tool::Spear),
+    ),
+    recipe(
+        Station::Workbench,
         &[(Raw::Hide, 2), (Raw::Fibre, 1)],
         Made::Apparel(Apparel::LeatherCap),
     ),

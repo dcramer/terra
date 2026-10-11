@@ -102,13 +102,6 @@ impl Vitals {
     }
 
     /// Takes a blow. Returns whether it killed.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "combat, the next stage of the demo, deals the blows"
-        )
-    )]
     pub fn hurt(&mut self, amount: f32) -> bool {
         self.health -= amount;
         self.health <= 0.0

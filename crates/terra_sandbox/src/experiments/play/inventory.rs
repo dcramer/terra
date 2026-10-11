@@ -106,16 +106,19 @@ pub enum Tool {
     Knife,
     IronAxe,
     IronPickaxe,
+    /// A weapon, for hunting and for fighting.
+    Spear,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 6] = [
+    pub const ALL: [Tool; 7] = [
         Tool::Hammer,
         Tool::StoneAxe,
         Tool::StonePickaxe,
         Tool::Knife,
         Tool::IronAxe,
         Tool::IronPickaxe,
+        Tool::Spear,
     ];
 
     pub fn name(self) -> &'static str {
@@ -126,6 +129,7 @@ impl Tool {
             Tool::Knife => "Knife",
             Tool::IronAxe => "Iron axe",
             Tool::IronPickaxe => "Iron pickaxe",
+            Tool::Spear => "Spear",
         }
     }
 
@@ -164,6 +168,7 @@ impl Tool {
             Tool::Knife => "Cuts plants for fibre",
             Tool::IronAxe => "Fells any tree, the great ones too",
             Tool::IronPickaxe => "Breaks rock and ore quickly",
+            Tool::Spear => "A hunting spear: hits hardest and reaches furthest",
         }
     }
 }

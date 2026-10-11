@@ -18,8 +18,10 @@
 mod bag;
 mod catalogue;
 mod claim;
+mod combat;
 mod controls;
 mod crafting;
+mod creatures;
 mod death;
 mod dial;
 mod figure;
@@ -29,8 +31,11 @@ mod interact;
 mod inventory;
 mod models;
 mod options;
+mod people;
+mod pooling;
 mod props;
 mod scene;
+mod settlement;
 mod skills;
 mod tool;
 mod vitals;
@@ -55,6 +60,10 @@ const JUMP_SPEED: f32 = 6.0;
 const GRAVITY: f32 = 16.0;
 /// What a jump costs in stamina, out of 100.
 const JUMP_STAMINA: f32 = 8.0;
+/// A roll: what it costs, how long it lasts and how fast it goes.
+const DODGE_STAMINA: f32 = 18.0;
+const DODGE_S: f32 = 0.45;
+const DODGE_SPEED: f32 = 8.5;
 const LOOK_SPEED: f32 = 0.0025;
 /// How fast the arrow keys turn the view, in radians a second.
 const KEY_LOOK_SPEED: f32 = 1.6;
@@ -79,6 +88,14 @@ struct Player {
     since_acting: f32,
     /// How long the player has lain where they fell, while they are down.
     down: Option<f32>,
+    /// Seconds left of a swing, a roll, and a flinch from a blow, for the figure.
+    attacking: f32,
+    dodging: f32,
+    flinch: f32,
+    /// Which way a roll goes.
+    dodge_direction: Vec3,
+    /// Holding a guard up.
+    guarding: bool,
 }
 
 /// Where the player is looking.
@@ -106,6 +123,11 @@ pub fn plugin(app: &mut App) {
     vitals::plugin(app);
     death::plugin(app);
     skills::plugin(app);
+    creatures::plugin(app);
+    combat::plugin(app);
+    people::plugin(app);
+    pooling::plugin(app);
+    settlement::plugin(app);
     harvest::plugin(app);
     options::plugin(app);
     app.insert_resource(DrivenByPlayer)
@@ -160,6 +182,11 @@ fn spawn(
             facing: toward_door,
             since_acting: f32::MAX,
             down: None,
+            attacking: 0.0,
+            dodging: 0.0,
+            flinch: 0.0,
+            dodge_direction: Vec3::ZERO,
+            guarding: false,
         },
         {
             // For testing, --give can also set how the body starts.
@@ -303,13 +330,38 @@ fn walk(
     let wish = (view.forward * (held(Action::Forward) - held(Action::Back))
         + right * (held(Action::Right) - held(Action::Left)))
     .normalize_or_zero();
-    let top_speed = if controls.held(Action::Sprint) && vitals.can_sprint() {
+    // A roll carries you a short way fast, clear of blows; a guard slows you.
+    player.attacking = (player.attacking - dt).max(0.0);
+    player.flinch = (player.flinch - dt).max(0.0);
+    player.dodging = (player.dodging - dt).max(0.0);
+    if player.dodging == 0.0
+        && player.on_ground
+        && controls.went_down(Action::Dodge)
+        && vitals.spend(DODGE_STAMINA)
+    {
+        player.dodging = DODGE_S;
+        player.dodge_direction = if wish == Vec3::ZERO {
+            -view.forward
+        } else {
+            wish
+        };
+    }
+    let top_speed = if player.dodging > 0.0 {
+        DODGE_SPEED
+    } else if player.guarding {
+        JOG_SPEED * 0.5
+    } else if controls.held(Action::Sprint) && vitals.can_sprint() {
         SPRINT_SPEED
     } else {
         JOG_SPEED
     };
     // Ease into and out of a run rather than starting and stopping dead.
     let ease = 1.0 - libm::expf(-dt * if player.on_ground { 11.0 } else { 2.5 });
+    let wish = if player.dodging > 0.0 {
+        player.dodge_direction
+    } else {
+        wish
+    };
     player.velocity = player.velocity.lerp(wish * top_speed, ease).reject_from(up);
     let mut target = feet + player.velocity * dt;
     // Furniture and kit are solid. Walls come after, so they have the last word.

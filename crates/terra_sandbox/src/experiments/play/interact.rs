@@ -21,6 +21,12 @@ pub enum Interactable {
     ClaimStone,
     /// What you carried, where you went down.
     Bag,
+    /// A dead animal, to butcher.
+    Carcass,
+    /// Someone held captive, to free.
+    Prisoner,
+    /// Someone to talk to.
+    Talk,
 }
 
 impl Interactable {
@@ -30,6 +36,9 @@ impl Interactable {
             Interactable::Station(station) => format!("use the {}", station.name().to_lowercase()),
             Interactable::ClaimStone => "the claim stone".to_string(),
             Interactable::Bag => "take back your things".to_string(),
+            Interactable::Carcass => "butcher it".to_string(),
+            Interactable::Prisoner => "free them".to_string(),
+            Interactable::Talk => "talk".to_string(),
         }
     }
 }

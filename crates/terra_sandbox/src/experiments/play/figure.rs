@@ -23,6 +23,10 @@ enum Doing {
     Fall,
     Use,
     Down,
+    Attack,
+    Flinch,
+    Roll,
+    Guard,
 }
 
 /// The animations, as places in the figure's animation graph.
@@ -35,6 +39,10 @@ struct Moves {
     fall: AnimationNodeIndex,
     using: AnimationNodeIndex,
     down: AnimationNodeIndex,
+    attack: AnimationNodeIndex,
+    flinch: AnimationNodeIndex,
+    roll: AnimationNodeIndex,
+    guard: AnimationNodeIndex,
 }
 
 /// What the figure is animated as doing.
@@ -75,6 +83,10 @@ fn spawn(
         clip("Jump_Loop"),
         clip("Interact"),
         clip("Death01"),
+        clip("Sword_Attack"),
+        clip("Hit_Chest"),
+        clip("Roll"),
+        clip("Sword_Idle"),
     ]);
     commands.insert_resource(Moves {
         graph: graphs.add(graph),
@@ -84,6 +96,10 @@ fn spawn(
         fall: nodes[3],
         using: nodes[4],
         down: nodes[5],
+        attack: nodes[6],
+        flinch: nodes[7],
+        roll: nodes[8],
+        guard: nodes[9],
     });
     let Some(scene) = gltf.default_scene.clone() else {
         return;
@@ -100,16 +116,28 @@ fn spawn(
 }
 
 /// When the figure's bones exist, starts it animating and fixes its kit to them.
+#[allow(clippy::too_many_arguments)]
 fn dress(
-    _ready: On<WorldInstanceReady>,
+    ready: On<WorldInstanceReady>,
     mut commands: Commands,
     moves: Res<Moves>,
-    animator: Single<(Entity, &mut AnimationPlayer)>,
+    children: Query<&Children>,
+    mut animators: Query<&mut AnimationPlayer>,
     bones: Query<(Entity, &Name)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let (entity, mut animator) = animator.into_inner();
+    // The figure's own animation player, among everything its model spawned; creatures
+    // have theirs.
+    let Some(entity) = children
+        .iter_descendants(ready.entity)
+        .find(|&child| animators.contains(child))
+    else {
+        return;
+    };
+    let Ok(mut animator) = animators.get_mut(entity) else {
+        return;
+    };
     let mut transitions = AnimationTransitions::new();
     transitions
         .play(&mut animator, moves.idle, Duration::ZERO)
@@ -140,8 +168,9 @@ fn dress(
         ..default()
     });
     let bone = |name: &str| {
-        bones
-            .iter()
+        children
+            .iter_descendants(ready.entity)
+            .filter_map(|child| bones.get(child).ok())
             .find(|(_, bone)| bone.as_str() == name)
             .map(|(entity, _)| entity)
     };
@@ -225,6 +254,14 @@ fn animate(
     let speed = player.velocity.length();
     let doing = if player.down.is_some() {
         Doing::Down
+    } else if player.dodging > 0.0 {
+        Doing::Roll
+    } else if player.flinch > 0.0 {
+        Doing::Flinch
+    } else if player.attacking > 0.0 {
+        Doing::Attack
+    } else if player.guarding {
+        Doing::Guard
     } else if player.airborne > 0.12 {
         Doing::Fall
     } else if speed > 5.6 {
@@ -248,9 +285,16 @@ fn animate(
             Doing::Fall => moves.fall,
             Doing::Use => moves.using,
             Doing::Down => moves.down,
+            Doing::Attack => moves.attack,
+            Doing::Flinch => moves.flinch,
+            Doing::Roll => moves.roll,
+            Doing::Guard => moves.guard,
         };
         let playing = transitions.play(&mut animator, node, BLEND);
-        if !matches!(doing, Doing::Use | Doing::Down) {
+        if !matches!(
+            doing,
+            Doing::Use | Doing::Down | Doing::Attack | Doing::Flinch | Doing::Roll
+        ) {
             playing.repeat();
         }
     }
