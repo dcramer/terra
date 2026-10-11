@@ -179,7 +179,8 @@ async function stats(url, env) {
   return json({ since, group, rows: results });
 }
 
-const PUBLIC = { "Cache-Control": "public, max-age=300" };
+// Short, so the page's minute-by-minute refresh sees new numbers.
+const PUBLIC = { "Cache-Control": "public, max-age=30" };
 const SUMS = `sum(input_tokens) AS input, sum(output_tokens) AS output,
   sum(cache_read_tokens) AS cache_read, sum(cache_write_tokens) AS cache_write, sum(messages) AS messages`;
 

@@ -3,7 +3,7 @@
 Records how many Claude tokens each of us spends on Terra (D82), shown at <https://terra-token-stats.dcramer.workers.dev>, and as JSON at [`/json`](https://terra-token-stats.dcramer.workers.dev/json). Two parts:
 
 - `worker/`: a Cloudflare Worker with a D1 database. It stores each message once, by the id the API gave it, with its person, conversation, day, model and input, output, cache-read and cache-write tokens, and keeps totals per person, day and model. It runs on Cloudflare's free plan, which costs nothing and stops rather than bills when a limit is reached. A year of five busy developers is a few hundred megabytes of the free 5 GB.
-- `report.mjs`: a script Claude Code runs after each turn (see below). It reads Claude Code's transcripts under `~/.claude/projects` and sends the messages it has not sent before. It needs Node 18 or later and nothing else.
+- `report.mjs`: a script Claude Code runs as you work (see below). It reads Claude Code's transcripts under `~/.claude/projects` and sends the messages it has not sent before. It needs Node 18 or later and nothing else.
 
 ## What counts, and counting once
 
@@ -23,7 +23,9 @@ TERRA_STATS_KEY=<shared key>
 TERRA_STATS_USER=<your name>
 ```
 
-Variables of the same names in the environment override the file. That is all: the repository's `.claude/settings.json` runs `report.mjs --hook` whenever Claude Code finishes a turn here. The hook does nothing without a `.env`, runs at most every 15 minutes, and sends from a detached process so a turn never waits; it logs to `~/.cache/terra-token-stats/report.log`. Usage outside Claude Code turns, such as the last turn before a long break, goes out with the next one.
+Variables of the same names in the environment override the file. That is all: the repository's `.claude/settings.json` runs `report.mjs --hook` after every tool call and turn here, so a long turn reports as it goes, and again when a session ends, so nothing waits for the next session. The hook does nothing without a `.env`, sends at most once a minute (except at a session's end), and sends from a detached process so Claude Code never waits; it logs to `~/.cache/terra-token-stats/report.log`. The page refreshes itself every minute.
+
+Each send reads every transcript again, which takes about half a second today. If months of transcripts make that slow, the script should remember how far into each file it has read.
 
 By hand, from the repository:
 

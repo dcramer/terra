@@ -6,8 +6,9 @@
 //   node tools/token-stats/report.mjs --full      send every message again
 //   node tools/token-stats/report.mjs --dry-run   print this person's totals, sending nothing
 //   node tools/token-stats/report.mjs --stats     print everyone's totals
-//   node tools/token-stats/report.mjs --hook      send in the background, at most every 15 minutes;
-//                                                 run by Claude Code after each turn (.claude/settings.json)
+//   node tools/token-stats/report.mjs --hook      send in the background, at most once a minute; run by
+//                                                 Claude Code after each tool call and turn (.claude/settings.json)
+//   node tools/token-stats/report.mjs --hook --now   the same without waiting; run when a session ends
 //   node tools/token-stats/report.mjs --cron      print a crontab line that runs it hourly
 
 import { execFileSync, spawn } from "node:child_process";
@@ -19,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BATCH = 200;
-const HOOK_INTERVAL_MS = 15 * 60 * 1000;
+const HOOK_INTERVAL_MS = 60 * 1000;
 const CACHE = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "terra-token-stats");
 const LOG = join(CACHE, "report.log");
 
@@ -203,7 +204,7 @@ function table(rows, cols) {
 
 async function main(args) {
   const counts = ["input", "output", "cache_read", "cache_write", "messages"];
-  if (args.includes("--hook")) return hook();
+  if (args.includes("--hook")) return hook(args.includes("--now"));
   if (args.includes("--cron")) {
     console.log(`0 * * * * ${process.execPath} ${join(repoRoot(), "tools", "token-stats", "report.mjs")} >> ${LOG} 2>&1`);
     return;
@@ -247,10 +248,11 @@ async function main(args) {
   console.log(`${new Date().toISOString()} sent ${pending.length} of ${messages.length} messages as ${cfg.user}`);
 }
 
-// Called by Claude Code after every turn, so it must be quick and must never fail:
-// it does nothing for anyone not set up, runs at most every HOOK_INTERVAL_MS, and
-// leaves the real work to a detached copy of itself that logs to LOG.
-function hook() {
+// Called by Claude Code after every tool call and turn, so it must be quick and must
+// never fail: it does nothing for anyone not set up, runs at most every
+// HOOK_INTERVAL_MS unless `now`, and leaves the real work to a detached copy of
+// itself that logs to LOG.
+function hook(now) {
   try {
     config();
   } catch {
@@ -258,7 +260,7 @@ function hook() {
   }
   const stamp = join(CACHE, "last-run");
   try {
-    if (Date.now() - statSync(stamp).mtimeMs < HOOK_INTERVAL_MS) return;
+    if (!now && Date.now() - statSync(stamp).mtimeMs < HOOK_INTERVAL_MS) return;
   } catch {
     // Never run before.
   }
