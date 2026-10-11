@@ -368,7 +368,7 @@ fn choose(
     mut builder: ResMut<Builder>,
 ) {
     builder.wheel = 0;
-    if screen.open || belongings.holding() != Some(Tool::Builder) {
+    if screen.open || belongings.holding() != Some(Tool::Hammer) {
         // Put back anything being carried, and put the part away.
         builder.cancel = builder.is_carrying();
         builder.stowed = true;
@@ -862,7 +862,7 @@ fn act(
     // Carry on with what is under way, or drop it.
     if let Some(mut work) = builder.work.take() {
         let stayed = work.began_at.distance(player_at) < WANDER_M;
-        let in_hand = !dial.open && belongings.holding() == Some(Tool::Builder);
+        let in_hand = !dial.open && belongings.holding() == Some(Tool::Hammer);
         if !held || !stayed || !in_hand {
             return;
         }
@@ -932,7 +932,7 @@ fn act(
     // The middle button: another of whatever the view is on.
     if controls.went_down(Action::Copy)
         && !builder.is_carrying()
-        && belongings.holding() == Some(Tool::Builder)
+        && belongings.holding() == Some(Tool::Hammer)
         && let Some(prop) = builder.viewed.and_then(|entity| props.get(entity).ok())
         && let Some((part, variant)) = catalogue::place_of(prop.item)
     {

@@ -13,10 +13,10 @@ use terra_build::{CELL_M, Panel};
 ///
 /// Floor is paid for by area, however a room comes to have it: built, extended, or by
 /// pushing a wall out.
-pub const FLOOR: Cost = &[(Raw::Metal, 1)];
-pub const WALL: Cost = &[(Raw::Metal, 1)];
-pub const WINDOW: Cost = &[(Raw::Glass, 1)];
-pub const DOOR: Cost = &[(Raw::Metal, 2)];
+pub const FLOOR: Cost = &[(Raw::Wood, 1)];
+pub const WALL: Cost = &[(Raw::Wood, 1)];
+pub const WINDOW: Cost = &[(Raw::Wood, 1), (Raw::Fibre, 1)];
+pub const DOOR: Cost = &[(Raw::Wood, 2)];
 
 /// How many times over `FLOOR` is paid for so many cells of floor: once for every three
 /// square metres, or part of that.
@@ -66,7 +66,6 @@ pub struct Item {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Light {
     None,
-    Lamp,
     Fire,
 }
 
@@ -146,7 +145,7 @@ impl Part {
 
 /// The parts, in the order they go round the dial, clockwise from the top. The first
 /// ten are also on the number keys.
-pub static PARTS: [Part; 15] = [
+pub static PARTS: [Part; 13] = [
     Part {
         name: "Room",
         kind: Kind::Room(&[
@@ -204,7 +203,7 @@ pub static PARTS: [Part; 15] = [
                 "Couch",
                 "Couch_Medium1",
                 2.2,
-                &[(Raw::Wood, 2), (Raw::Cloth, 3)],
+                &[(Raw::Wood, 2), (Raw::Hide, 3)],
             ),
             item("Chair", "Chair_1", 0.95, &[(Raw::Wood, 2)]),
             item("Stool", "Stool", 0.5, &[(Raw::Wood, 1)]),
@@ -223,64 +222,33 @@ pub static PARTS: [Part; 15] = [
             "Single bed",
             "Bed_Single",
             2.15,
-            &[(Raw::Wood, 3), (Raw::Cloth, 3)],
+            &[(Raw::Wood, 3), (Raw::Fibre, 3)],
         )]),
     },
     Part {
         name: "Storage",
         kind: Kind::Items(&[
+            item("Crate", "Props_Crate", 0.8, &[(Raw::Wood, 2)]),
+            item("Long crate", "Props_CrateLong", 1.2, &[(Raw::Wood, 3)]),
             item("Bookshelf", "Bookshelf", 2.0, &[(Raw::Wood, 4)]),
-            item("Tall shelf", "Props_Shelf_Tall", 2.0, &[(Raw::Metal, 3)]),
-            item("Crate", "Props_Crate", 0.8, &[(Raw::Metal, 2)]),
-            item("Long crate", "Props_CrateLong", 1.2, &[(Raw::Metal, 3)]),
-            item("Container", "Props_ContainerFull", 1.3, &[(Raw::Metal, 4)]),
-        ]),
-    },
-    Part {
-        name: "Kitchen",
-        kind: Kind::Items(&[
-            item(
-                "Fridge",
-                "Kitchen_Fridge",
-                1.85,
-                &[(Raw::Metal, 4), (Raw::Parts, 2)],
-            ),
-            item("Sink", "Kitchen_Sink", 1.08, &[(Raw::Metal, 3)]),
             item("Drawers", "Kitchen_2Drawers", 0.92, &[(Raw::Wood, 3)]),
+            item(
+                "Tall shelf",
+                "Props_Shelf_Tall",
+                2.0,
+                &[(Raw::Wood, 2), (Raw::Iron, 1)],
+            ),
         ]),
     },
     Part {
         name: "Decor",
         kind: Kind::Items(&[
-            lit(
-                Light::Lamp,
-                item(
-                    "Floor lamp",
-                    "Light_Floor1",
-                    1.6,
-                    &[(Raw::Metal, 1), (Raw::Parts, 1)],
-                ),
-            ),
-            item("Leafy plant", "Houseplant_7", 1.1, &[(Raw::Wood, 1)]),
-            item("Cactus", "Houseplant_3", 0.9, &[(Raw::Wood, 1)]),
-            item("Small plant", "Houseplant_1", 0.45, &[(Raw::Wood, 1)]),
-            rug("Round rug", "Carpet_Round", 3.2, &[(Raw::Cloth, 3)]),
-            rug("Long rug", "Carpet_1", 3.0, &[(Raw::Cloth, 3)]),
-        ]),
-    },
-    Part {
-        name: "Kit",
-        kind: Kind::Items(&[
-            item(
-                "Computer",
-                "Props_Computer",
-                1.8,
-                &[(Raw::Metal, 2), (Raw::Parts, 4)],
-            ),
-            item("Radio", "Radio", 0.4, &[(Raw::Parts, 2)]),
-            item("Gas tank", "PropaneTank", 1.3, &[(Raw::Metal, 3)]),
-            item("Fuel can", "GasCan", 0.45, &[(Raw::Metal, 1)]),
-            item("Shovel", "Shovel", 1.3, &[(Raw::Metal, 1), (Raw::Wood, 1)]),
+            item("Leafy plant", "Houseplant_7", 1.1, &[(Raw::Fibre, 1)]),
+            item("Cactus", "Houseplant_3", 0.9, &[(Raw::Fibre, 1)]),
+            item("Small plant", "Houseplant_1", 0.45, &[(Raw::Fibre, 1)]),
+            rug("Round rug", "Carpet_Round", 3.2, &[(Raw::Hide, 2)]),
+            rug("Long rug", "Carpet_1", 3.0, &[(Raw::Hide, 2)]),
+            item("Shovel", "Shovel", 1.3, &[(Raw::Wood, 1), (Raw::Iron, 1)]),
         ]),
     },
     Part {
@@ -288,7 +256,12 @@ pub static PARTS: [Part; 15] = [
         kind: Kind::Items(&[
             lit(
                 Light::Fire,
-                item("Campfire", "Bonfire_Fire", 1.3, &[(Raw::Wood, 3)]),
+                item(
+                    "Campfire",
+                    "Bonfire_Fire",
+                    1.3,
+                    &[(Raw::Wood, 3), (Raw::Stone, 2)],
+                ),
             ),
             item("Log", "WoodLog", 1.7, &[(Raw::Wood, 2)]),
         ]),
@@ -337,12 +310,12 @@ mod tests {
     #[test]
     fn bigger_things_take_longer_and_coming_apart_is_quicker() {
         const STOOL: Cost = &[(Raw::Wood, 1)];
-        const FRIDGE: Cost = &[(Raw::Metal, 4), (Raw::Parts, 2)];
-        assert!(build_seconds(FRIDGE, 1) > build_seconds(STOOL, 1));
-        assert!(take_apart_seconds(FRIDGE, 1) < build_seconds(FRIDGE, 1));
+        const BED: Cost = &[(Raw::Wood, 3), (Raw::Fibre, 3)];
+        assert!(build_seconds(BED, 1) > build_seconds(STOOL, 1));
+        assert!(take_apart_seconds(BED, 1) < build_seconds(BED, 1));
         // Never instant, never endless.
         assert!(build_seconds(&[], 1) >= 0.5);
-        assert!(build_seconds(FRIDGE, 100) <= 3.0);
+        assert!(build_seconds(BED, 100) <= 3.0);
     }
 
     #[test]

@@ -53,6 +53,11 @@ impl MaterialExtension for WindExtension {
 }
 
 /// Things solid enough to walk into: a place and a radius around it.
+/// Trees at least this tall are great trees, which only an iron axe fells.
+const GREAT_TREE_M: f32 = 13.0;
+/// How many of the bigger rocks hold ore.
+const ORE_SHARE: f32 = 0.18;
+
 #[derive(Resource, Default)]
 pub struct Obstacles(pub Vec<(Vec3, f32)>);
 
@@ -110,6 +115,8 @@ enum Kind {
     Leafy,
     Birch,
     Rock,
+    /// Rock with ore in it: the same shapes, in a colour that gives it away.
+    OreRock,
     Bush,
     Plant,
     Flower,
@@ -139,6 +146,7 @@ fn colour_of(kind: Kind, material: &str) -> (Color, bool) {
         (Kind::Leafy, "DarkGreen") => (Color::srgb(0.33, 0.5, 0.22), true),
         (Kind::Rock, "Rock") => (Color::srgb(0.66, 0.58, 0.54), false),
         (Kind::Rock, "Green") => (Color::srgb(0.5, 0.58, 0.26), false),
+        (Kind::OreRock, _) => (Color::srgb(0.52, 0.33, 0.27), false),
         (Kind::Bush, "Green") => (Color::srgb(0.36, 0.53, 0.24), true),
         (Kind::Bush, "Berry") => (Color::srgb(0.85, 0.22, 0.26), true),
         (Kind::Flower, "Cyan") => (Color::srgb(0.98, 0.95, 0.88), true),
@@ -189,7 +197,7 @@ fn build_model(kind: Kind, parts: &[Part], meshes: &mut Assets<Mesh>) -> Model {
                 }
                 Kind::Bush => (0.5 * up_plant, 0.5),
                 Kind::Plant | Kind::Flower => (0.9 * up_plant, 0.4 * up_plant),
-                Kind::Rock | Kind::Prop => (0.0, 0.0),
+                Kind::Rock | Kind::OreRock | Kind::Prop => (0.0, 0.0),
             };
             positions.push(*position);
             normals.push(*normal);
@@ -318,6 +326,7 @@ fn plant(
         ],
     );
     let mossy_rocks = load(Kind::Rock, &["Rock_Moss_1", "Rock_Moss_2", "Rock_Moss_3"]);
+    let ore_rocks = load(Kind::OreRock, &["Rock_1", "Rock_3", "Rock_5", "Rock_7"]);
     let bushes = load(Kind::Bush, &["Bush_1", "Bush_2", "BushBerries_1"]);
     let plants = load(Kind::Plant, &["Plant_1", "Plant_3", "Plant_4"]);
     let flowers = load(Kind::Flower, &["Flowers", "Plant_5"]);
@@ -328,6 +337,7 @@ fn plant(
         &birches,
         &rocks,
         &mossy_rocks,
+        &ore_rocks,
         &bushes,
         &plants,
         &flowers,
@@ -414,8 +424,13 @@ fn plant(
         let model = pick(rng, models);
         let scale = tall / model.height;
         let trunk = (point, (model.spread * scale).clamp(0.25, 0.6));
+        // The tallest are great trees, which only an iron axe will fell (D96).
         let wood = Some(Cuttable {
-            what: Cut::Tree,
+            what: if tall >= GREAT_TREE_M {
+                Cut::GreatTree
+            } else {
+                Cut::Tree
+            },
             gives: (Raw::Wood, (tall / 3.0).round() as u32),
             seconds: 1.0 + tall * 0.12,
         });
@@ -435,19 +450,30 @@ fn plant(
         if point.length() - sea < -0.4 || rng.unit() > 0.4 - 0.22 * cover.grass {
             return;
         }
-        let model = if cover.grass > 0.6 && rng.unit() < 0.6 {
+        // Mostly small, now and then a boulder; a few of the bigger ones hold ore.
+        let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
+        let ore = size > 0.7 && rng.unit() < ORE_SHARE;
+        let model = if ore {
+            pick(rng, &ore_rocks)
+        } else if cover.grass > 0.6 && rng.unit() < 0.6 {
             pick(rng, &mossy_rocks)
         } else {
             pick(rng, &rocks)
         };
-        // Mostly small, now and then a boulder.
-        let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
         let scale = size / model.height;
         let stops = (size > 0.9).then_some((point, model.spread * scale * 0.8));
-        let metal = Some(Cuttable {
-            what: Cut::Rock,
-            gives: (Raw::Metal, (size * 2.0).ceil() as u32),
-            seconds: 0.8 + size * 0.5,
+        let metal = Some(if ore {
+            Cuttable {
+                what: Cut::Ore,
+                gives: (Raw::Ore, size.ceil() as u32),
+                seconds: 1.2 + size * 0.6,
+            }
+        } else {
+            Cuttable {
+                what: Cut::Rock,
+                gives: (Raw::Stone, (size * 1.5).ceil() as u32),
+                seconds: 0.8 + size * 0.5,
+            }
         });
         put(
             &model,
@@ -469,7 +495,7 @@ fn plant(
         let scale = rng.range(0.7, 1.5) / model.height;
         let fibre = Some(Cuttable {
             what: Cut::Plant,
-            gives: (Raw::Cloth, 1),
+            gives: (Raw::Fibre, 1),
             seconds: 0.7,
         });
         put(
@@ -490,7 +516,7 @@ fn plant(
         let scale = rng.range(0.35, 0.75) / model.height;
         let fibre = Some(Cuttable {
             what: Cut::Plant,
-            gives: (Raw::Cloth, 1),
+            gives: (Raw::Fibre, 1),
             seconds: 0.4,
         });
         put(

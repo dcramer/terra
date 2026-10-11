@@ -106,6 +106,19 @@ impl Grid {
             .find(|&cell| self.fits(cell, size, None))
     }
 
+    /// The first place something of this size fits without reaching past `bounds`, as when
+    /// the grid is about to shrink to that size.
+    pub fn space_within(&self, size: Size, bounds: Size) -> Option<Cell> {
+        let (w, h) = (bounds.w.min(self.size.w), bounds.h.min(self.size.h));
+        (0..h)
+            .flat_map(|y| (0..w).map(move |x| Cell { x, y }))
+            .find(|&cell| {
+                cell.x as u16 + size.w as u16 <= w as u16
+                    && cell.y as u16 + size.h as u16 <= h as u16
+                    && self.fits(cell, size, None)
+            })
+    }
+
     /// Put an item in, at a cell or wherever it first fits.
     pub fn insert(
         &mut self,

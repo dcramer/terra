@@ -254,7 +254,7 @@ pub fn steer(
     mut builder: ResMut<Builder>,
 ) {
     // The dial belongs to the builder, and is put away with it.
-    if inventory.open || menu.open || belongings.holding() != Some(Tool::Builder) {
+    if inventory.open || menu.open || belongings.holding() != Some(Tool::Hammer) {
         dial.open = false;
         return;
     }
@@ -390,7 +390,7 @@ fn draw(
         &mut texts.p1(),
         match (holding, part.variant_name(builder.variant())) {
             (None, _) => "Empty hand".to_string(),
-            (Some(Tool::Cutter), _) => "Cutter".to_string(),
+            (Some(tool), _) if tool != Tool::Hammer => tool.name().to_string(),
             _ if builder.stowed => "Builder:  nothing picked".to_string(),
             (_, Some(variant)) if part.variants() > 1 => format!(
                 "{}:  {}  ({} of {})",
@@ -401,7 +401,7 @@ fn draw(
             ),
             (_, Some(variant)) => format!("{}:  {}", part.name, variant),
             (_, None) => part.name.to_string(),
-        } + if builder.snap || holding != Some(Tool::Builder) {
+        } + if builder.snap || holding != Some(Tool::Hammer) {
             ""
         } else {
             "     grid off"
@@ -417,8 +417,8 @@ fn draw(
             "Move the mouse to a part and let go, or press its number".to_string()
         } else {
             match holding {
-                Some(Tool::Builder) => tool::prompt(&builder, &settings),
-                Some(Tool::Cutter) => harvest::prompt(&cutting, &growth, &settings),
+                Some(Tool::Hammer) => tool::prompt(&builder, &settings),
+                Some(tool) => harvest::prompt(tool, &cutting, &growth, &settings),
                 None => format!(
                     "1 to 6  pick a tool      {}  inventory",
                     settings.key(Action::Inventory)
@@ -428,7 +428,7 @@ fn draw(
     );
     set(
         &mut texts.p3(),
-        if dial.open || inventory.open || holding != Some(Tool::Builder) {
+        if dial.open || inventory.open || holding != Some(Tool::Hammer) {
             String::new()
         } else {
             tool::legend(&builder, &settings)

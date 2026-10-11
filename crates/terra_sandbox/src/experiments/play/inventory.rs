@@ -17,25 +17,38 @@ use terra_items::{
     Refused, Size,
 };
 
+/// Materials and food: what things are built and made from, and what is eaten.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Raw {
-    Metal,
-    Glass,
     Wood,
-    Cloth,
-    Parts,
+    Stone,
+    Fibre,
+    Hide,
+    Ore,
+    Iron,
+    Meat,
 }
 
 impl Raw {
-    pub const ALL: [Raw; 5] = [Raw::Metal, Raw::Glass, Raw::Wood, Raw::Cloth, Raw::Parts];
+    pub const ALL: [Raw; 7] = [
+        Raw::Wood,
+        Raw::Stone,
+        Raw::Fibre,
+        Raw::Hide,
+        Raw::Ore,
+        Raw::Iron,
+        Raw::Meat,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
-            Raw::Metal => "Metal",
-            Raw::Glass => "Glass",
             Raw::Wood => "Wood",
-            Raw::Cloth => "Cloth",
-            Raw::Parts => "Parts",
+            Raw::Stone => "Stone",
+            Raw::Fibre => "Fibre",
+            Raw::Hide => "Hide",
+            Raw::Ore => "Ore",
+            Raw::Iron => "Iron",
+            Raw::Meat => "Meat",
         }
     }
 }
@@ -43,7 +56,7 @@ impl Raw {
 /// What one of something costs: so many of each raw item.
 pub type Cost = &'static [(Raw, u32)];
 
-/// A cost as a player would read it: "2 Wood, 3 Cloth".
+/// A cost as a player would read it: "2 Wood, 3 Fibre".
 pub fn describe(cost: Cost, times: u32) -> String {
     cost.iter()
         .map(|&(raw, each)| format!("{} {}", each * times, raw.name()))
@@ -51,11 +64,16 @@ pub fn describe(cost: Cost, times: u32) -> String {
         .join(", ")
 }
 
-/// The sorts of thing that can be cut. Tools differ in which they cut and how fast.
+/// The sorts of thing that can be cut. Each is worked by one family of tool, and some
+/// only by a tool of a better material (D96).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Cut {
     Tree,
+    /// A tree too great for a stone axe.
+    GreatTree,
     Rock,
+    /// Rock with ore in it.
+    Ore,
     Plant,
 }
 
@@ -68,49 +86,87 @@ pub struct Cuttable {
     pub seconds: f32,
 }
 
+/// What is held in the hand to do a job. One tool to a job, none that does everything
+/// (D96); a tool's material decides what it can work.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tool {
     /// Builds and takes apart.
-    Builder,
-    /// Cuts down trees and breaks up rocks, for the raw items in them.
-    Cutter,
+    Hammer,
+    StoneAxe,
+    StonePickaxe,
+    Knife,
+    IronAxe,
+    IronPickaxe,
 }
 
 impl Tool {
+    pub const ALL: [Tool; 6] = [
+        Tool::Hammer,
+        Tool::StoneAxe,
+        Tool::StonePickaxe,
+        Tool::Knife,
+        Tool::IronAxe,
+        Tool::IronPickaxe,
+    ];
+
     pub fn name(self) -> &'static str {
         match self {
-            Tool::Builder => "Builder",
-            Tool::Cutter => "Cutter",
+            Tool::Hammer => "Hammer",
+            Tool::StoneAxe => "Stone axe",
+            Tool::StonePickaxe => "Stone pickaxe",
+            Tool::Knife => "Knife",
+            Tool::IronAxe => "Iron axe",
+            Tool::IronPickaxe => "Iron pickaxe",
         }
     }
 
+    /// Whether this is the kind of tool for a sort of thing: an axe for trees, whatever
+    /// its material.
+    pub fn works(self, what: Cut) -> bool {
+        matches!(
+            (self, what),
+            (Tool::StoneAxe | Tool::IronAxe, Cut::Tree | Cut::GreatTree)
+                | (Tool::StonePickaxe | Tool::IronPickaxe, Cut::Rock | Cut::Ore)
+                | (Tool::Knife, Cut::Plant)
+        )
+    }
+
     /// How fast this tool cuts a sort of thing: 1 takes the time the thing itself says,
-    /// 2 half of it. `None` if the tool cannot cut it at all. An axe that is quick on
-    /// trees and useless on rock would be one more line here.
+    /// 2 half of it. `None` if it cannot: the wrong tool, or too poor a material.
     pub fn cuts(self, what: Cut) -> Option<f32> {
         match (self, what) {
-            (Tool::Cutter, _) => Some(1.0),
-            (Tool::Builder, _) => None,
+            (Tool::StoneAxe, Cut::Tree) => Some(1.0),
+            (Tool::IronAxe, Cut::Tree) => Some(1.8),
+            (Tool::IronAxe, Cut::GreatTree) => Some(1.0),
+            (Tool::StonePickaxe, Cut::Rock) => Some(1.0),
+            (Tool::StonePickaxe, Cut::Ore) => Some(0.6),
+            (Tool::IronPickaxe, Cut::Rock) => Some(1.8),
+            (Tool::IronPickaxe, Cut::Ore) => Some(1.5),
+            (Tool::Knife, Cut::Plant) => Some(1.0),
+            _ => None,
         }
     }
 
     pub fn about(self) -> &'static str {
         match self {
-            Tool::Builder => "Builds rooms, walls and items from what you carry",
-            Tool::Cutter => "Cuts trees, rocks and bushes into raw items",
+            Tool::Hammer => "Builds rooms, walls and items from what you carry",
+            Tool::StoneAxe => "Fells ordinary trees for wood",
+            Tool::StonePickaxe => "Breaks rock for stone, and ore slowly",
+            Tool::Knife => "Cuts plants for fibre",
+            Tool::IronAxe => "Fells any tree, the great ones too",
+            Tool::IronPickaxe => "Breaks rock and ore quickly",
         }
     }
 }
 
 pub const BAR_SLOTS: usize = 6;
 
-/// The slots of the character sheet. Which slots there are is open (D64); these follow
-/// what the developers named: a pack, and the parts of a suit.
-pub const SLOTS: [(GearSlot, &str); 4] = [
+/// The slots of the character sheet. Which slots there are is open (D64); a pack, and
+/// what is worn on the head and body.
+pub const SLOTS: [(GearSlot, &str); 3] = [
     (GearSlot(0), "Pack"),
     (GearSlot(1), "Head"),
     (GearSlot(2), "Body"),
-    (GearSlot(3), "Tank"),
 ];
 const PACK: GearSlot = SLOTS[0].0;
 
@@ -118,14 +174,16 @@ const PACK: GearSlot = SLOTS[0].0;
 /// backpack is is open (docs/items.md).
 const BARE: Size = Size { w: 5, h: 4 };
 
-/// What a player starts the demo with, besides the tools and what is worn: enough to
-/// build a small room, leaving room in the backpack to gather more.
-const STARTING: [(Raw, u32); 5] = [
-    (Raw::Metal, 8),
-    (Raw::Glass, 2),
-    (Raw::Wood, 4),
-    (Raw::Cloth, 3),
-    (Raw::Parts, 1),
+/// What a player starts with besides tools and a pack: nothing. Everything else is
+/// taken from the world (the MVP in docs/prototypes.md).
+const STARTING: [(Raw, u32); 0] = [];
+
+/// The tools a player starts with, in the order they go on the bar.
+const STARTING_TOOLS: [Tool; 4] = [
+    Tool::Hammer,
+    Tool::StoneAxe,
+    Tool::StonePickaxe,
+    Tool::Knife,
 ];
 
 /// Every kind of item in the demo, and which is which.
@@ -133,7 +191,7 @@ const STARTING: [(Raw, u32); 5] = [
 pub struct Items {
     pub catalogue: Catalogue,
     raw: [ItemKind; Raw::ALL.len()],
-    tools: [(Tool, ItemKind); 2],
+    tools: [(Tool, ItemKind); Tool::ALL.len()],
     /// What a player starts out wearing.
     worn: Vec<ItemKind>,
     ids: IdSource,
@@ -143,10 +201,8 @@ impl Default for Items {
     fn default() -> Self {
         let mut catalogue = Catalogue::default();
         let raw = Raw::ALL.map(|raw| catalogue.add(KindDef::new(raw.name())));
-        let tools = [Tool::Builder, Tool::Cutter]
-            .map(|tool| (tool, catalogue.add(KindDef::new(tool.name()).size(2, 1))));
-        // The pack first: what follows is put in the backpack it makes before being worn.
-        // The suit's parts do nothing yet; there is no survival to need them (D61).
+        let tools =
+            Tool::ALL.map(|tool| (tool, catalogue.add(KindDef::new(tool.name()).size(2, 1))));
         let worn = vec![
             catalogue.add(
                 KindDef::new("Small pack")
@@ -154,9 +210,6 @@ impl Default for Items {
                     .gear(PACK)
                     .backpack(6, 5),
             ),
-            catalogue.add(KindDef::new("Helmet").size(2, 2).gear(SLOTS[1].0)),
-            catalogue.add(KindDef::new("Suit").size(2, 2).gear(SLOTS[2].0)),
-            catalogue.add(KindDef::new("Oxygen tank").size(1, 2).gear(SLOTS[3].0)),
         ];
         Self {
             catalogue,
@@ -175,6 +228,14 @@ impl Items {
 
     pub fn raw(&self, kind: ItemKind) -> Option<Raw> {
         Raw::ALL.into_iter().find(|&raw| self.kind(raw) == kind)
+    }
+
+    pub fn tool_kind(&self, tool: Tool) -> ItemKind {
+        self.tools
+            .iter()
+            .find(|(each, _)| *each == tool)
+            .map(|(_, kind)| *kind)
+            .expect("every tool has a kind")
     }
 
     pub fn tool(&self, kind: ItemKind) -> Option<Tool> {
@@ -225,7 +286,8 @@ pub fn starting_kit(items: &mut Items) -> (Backpack, Gear, Bar) {
         wear(items, &mut grid, &mut gear, worn.id).expect("gear can be worn");
     }
     let mut bar = ActionBar::new(BAR_SLOTS);
-    for (slot, (_, kind)) in items.tools.into_iter().enumerate() {
+    for (slot, tool) in STARTING_TOOLS.into_iter().enumerate() {
+        let kind = items.tool_kind(tool);
         let tool = items.make(kind);
         grid.insert(&items.catalogue, tool, None)
             .expect("the tools fit the backpack");
@@ -436,7 +498,7 @@ impl Belongings<'_, '_> {
 mod tests {
     use super::*;
 
-    const COUCH: Cost = &[(Raw::Wood, 2), (Raw::Cloth, 3)];
+    const COUCH: Cost = &[(Raw::Wood, 2), (Raw::Hide, 3)];
 
     #[test]
     fn the_starting_kit_has_both_tools_on_the_bar_and_room_to_spare() {
@@ -446,11 +508,14 @@ mod tests {
             assert_eq!(gear.worn(*slot).map(|item| item.kind), Some(*kind));
         }
         assert_eq!(grid.size(), Size { w: 6, h: 5 });
-        assert_eq!(holding(&items, &grid, &bar), Some(Tool::Builder));
+        assert_eq!(holding(&items, &grid, &bar), Some(Tool::Hammer));
         bar.pick(1);
-        assert_eq!(holding(&items, &grid, &bar), Some(Tool::Cutter));
+        assert_eq!(holding(&items, &grid, &bar), Some(Tool::StoneAxe));
         for (raw, count) in STARTING {
             assert_eq!(grid.count(items.kind(raw)), count);
+        }
+        for tool in STARTING_TOOLS {
+            assert_eq!(grid.count(items.tool_kind(tool)), 1);
         }
         assert!(grid.space_for(Size::ONE).is_some());
     }
@@ -459,20 +524,21 @@ mod tests {
     fn a_cost_is_paid_in_full_or_not_at_all() {
         let mut items = Items::default();
         let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
+        give(&mut items, &mut grid, Raw::Wood, 4);
+        give(&mut items, &mut grid, Raw::Hide, 3);
         let count = |grid: &Grid, raw| grid.count(items.kind(raw));
-        let (wood, cloth) = (count(&grid, Raw::Wood), count(&grid, Raw::Cloth));
         assert!(pay(&items, &mut grid, &mut bar, COUCH, 1));
-        assert_eq!(count(&grid, Raw::Wood), wood - 2);
-        assert_eq!(count(&grid, Raw::Cloth), cloth - 3);
+        assert_eq!(count(&grid, Raw::Wood), 2);
+        assert_eq!(count(&grid, Raw::Hide), 0);
         assert_eq!(
             missing(&items, &grid, COUCH, 1),
-            Some((Raw::Cloth, 3)),
-            "all the cloth is spent"
+            Some((Raw::Hide, 3)),
+            "all the hide is spent"
         );
         let before = grid.clone();
         assert!(!pay(&items, &mut grid, &mut bar, COUCH, 1));
         assert_eq!(grid, before);
-        assert_eq!(describe(COUCH, 2), "4 Wood, 6 Cloth");
+        assert_eq!(describe(COUCH, 2), "4 Wood, 6 Hide");
     }
 
     #[test]
@@ -495,19 +561,30 @@ mod tests {
     fn gear_comes_off_into_the_backpack_and_goes_back_on() {
         let mut items = Items::default();
         let (Backpack(mut grid), Gear(mut gear), _) = starting_kit(&mut items);
-        let helmet = gear.worn(SLOTS[1].0).unwrap();
-        take_off(&items, &mut grid, &mut gear, SLOTS[1].0).unwrap();
-        assert_eq!(gear.worn(SLOTS[1].0), None);
-        assert!(grid.get(helmet.id).is_some());
-        wear(&items, &mut grid, &mut gear, helmet.id).unwrap();
-        assert_eq!(gear.worn(SLOTS[1].0), Some(helmet));
-        assert!(grid.get(helmet.id).is_none());
+        // The pack comes off once what is carried fits the bare backpack.
+        let pack = gear.worn(PACK).unwrap();
+        for tool in [Tool::StonePickaxe, Tool::Knife] {
+            let id = grid
+                .iter()
+                .find(|placed| placed.item.kind == items.tool_kind(tool))
+                .unwrap()
+                .item
+                .id;
+            grid.remove(id).unwrap();
+        }
+        take_off(&items, &mut grid, &mut gear, PACK).unwrap();
+        assert_eq!(gear.worn(PACK), None);
+        assert!(grid.get(pack.id).is_some());
+        wear(&items, &mut grid, &mut gear, pack.id).unwrap();
+        assert_eq!(gear.worn(PACK), Some(pack));
+        assert!(grid.get(pack.id).is_none());
     }
 
     #[test]
     fn the_pack_stays_on_while_what_is_carried_needs_it() {
         let mut items = Items::default();
         let (Backpack(mut grid), Gear(mut gear), _) = starting_kit(&mut items);
+        give(&mut items, &mut grid, Raw::Stone, 20);
         let before = (grid.clone(), gear.clone());
         let refused = take_off(&items, &mut grid, &mut gear, PACK).unwrap_err();
         assert!(matches!(refused, Refused::NoRoom | Refused::WouldNotFit));
@@ -526,10 +603,23 @@ mod tests {
     }
 
     #[test]
-    fn a_tool_says_what_it_can_cut() {
-        for what in [Cut::Tree, Cut::Rock, Cut::Plant] {
-            assert_eq!(Tool::Cutter.cuts(what), Some(1.0));
-            assert_eq!(Tool::Builder.cuts(what), None);
+    fn a_tool_works_one_kind_of_thing_and_its_material_decides_how_much() {
+        assert!(Tool::StoneAxe.works(Cut::GreatTree));
+        assert_eq!(
+            Tool::StoneAxe.cuts(Cut::GreatTree),
+            None,
+            "too great for stone"
+        );
+        assert!(Tool::IronAxe.cuts(Cut::GreatTree).is_some());
+        assert!(!Tool::StoneAxe.works(Cut::Rock));
+        assert!(Tool::StonePickaxe.cuts(Cut::Ore) < Tool::IronPickaxe.cuts(Cut::Ore));
+        for what in [Cut::Tree, Cut::GreatTree, Cut::Rock, Cut::Ore, Cut::Plant] {
+            assert!(!Tool::Hammer.works(what));
+            let workers = Tool::ALL.iter().filter(|tool| tool.works(what)).count();
+            assert!(workers >= 1, "something works {what:?}");
+            for tool in Tool::ALL {
+                assert!(tool.cuts(what).is_none() || tool.works(what));
+            }
         }
     }
 }

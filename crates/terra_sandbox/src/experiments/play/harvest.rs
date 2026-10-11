@@ -1,17 +1,15 @@
-//! Cutting: taking a tree, rock or bush out of the world for the raw items in it. You
-//! hold the button until it is done; how long depends on the thing and on the tool. It is
-//! the one way to get more of anything, and exists so that building has something to
-//! spend. How gathering should really work is a design question (docs/player.md, D43).
-//!
-//! Any tool that says it can cut something is used this way, so an axe or a pickaxe
-//! would need nothing new here.
+//! Gathering: taking a tree, rock or plant out of the world for what is in it. You hold
+//! the button until it is done; how long depends on the thing and on the tool. Each job
+//! has its own tool, an axe for trees, a pickaxe for rock, a knife for plants, and a
+//! tool's material decides what it can work (D96): a stone axe will not fell a great
+//! tree.
 
 use super::Player;
 use super::bag::Notice;
 use super::controls::{Action, Controls, Settings};
 use super::dial::Dial;
 use super::flora::{Growth, Obstacles};
-use super::inventory::{Belongings, Cuttable, InventoryScreen};
+use super::inventory::{Belongings, Cuttable, InventoryScreen, Tool};
 use super::work::Hold;
 use bevy::prelude::*;
 
@@ -82,6 +80,9 @@ fn cut(
     let feet = player_at.translation;
     cutting.target = None;
     let tool = belongings.holding().filter(|_| !screen.open && !dial.open);
+    // Aimed at: anything the tool in hand is the kind of tool for, whether or not its
+    // material is up to it, so the prompt can say why it will not cut.
+    let works = |cut: &Cuttable| tool.is_some_and(|tool| tool.works(cut.what));
     let speed_on = |cut: &Cuttable| tool.and_then(|tool| tool.cuts(cut.what));
 
     // The nearest thing this tool can cut that the view passes close to; failing that,
@@ -94,7 +95,7 @@ fn cut(
             .iter()
             .filter(|(_, _, _, visibility, _)| **visibility != Visibility::Hidden)
             .filter_map(|(entity, growth, transform, _, _)| {
-                let cut = growth.cut.filter(|cut| speed_on(cut).is_some())?;
+                let cut = growth.cut.filter(|cut| works(cut))?;
                 let up = transform.translation.normalize();
                 let middle = transform.translation + up * growth.middle_m;
                 (middle.distance_squared(feet) < REACH_M * REACH_M).then_some((
@@ -256,21 +257,34 @@ fn fall(
 }
 
 /// What the tool in hand would do right now, for the prompt.
-pub fn prompt(cutting: &Cutting, growth: &Query<&Growth>, settings: &Settings) -> String {
+pub fn prompt(
+    tool: Tool,
+    cutting: &Cutting,
+    growth: &Query<&Growth>,
+    settings: &Settings,
+) -> String {
     if cutting.progress().is_some() {
-        return "Cutting      Let go to stop".to_string();
+        return "Working      Let go to stop".to_string();
     }
-    match cutting
+    let aimed = cutting
         .target
         .and_then(|entity| growth.get(entity).ok())
-        .and_then(|growth| growth.cut)
-    {
+        .and_then(|growth| growth.cut);
+    match aimed {
+        Some(cut) if tool.cuts(cut.what).is_none() => {
+            format!("Too tough for a {}", tool.name().to_lowercase())
+        }
         Some(cut) => format!(
-            "{}  cut this      Gives {} {}",
+            "{}  work this      Gives {} {}",
             settings.hold(Action::Use),
             cut.gives.1,
             cut.gives.0.name()
         ),
-        None => "Aim at a tree, a rock or a bush nearby".to_string(),
+        None => match tool {
+            Tool::StoneAxe | Tool::IronAxe => "Aim at a tree nearby".to_string(),
+            Tool::StonePickaxe | Tool::IronPickaxe => "Aim at a rock nearby".to_string(),
+            Tool::Knife => "Aim at a bush or plant nearby".to_string(),
+            Tool::Hammer => String::new(),
+        },
     }
 }

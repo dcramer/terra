@@ -375,11 +375,13 @@ fn click(
 /// The colour an item is drawn in: one per raw item, and one for tools and gear.
 fn colour(items: &Items, kind: ItemKind) -> Color {
     match items.raw(kind) {
-        Some(Raw::Metal) => Color::srgb(0.42, 0.45, 0.5),
-        Some(Raw::Glass) => Color::srgb(0.38, 0.6, 0.7),
         Some(Raw::Wood) => Color::srgb(0.5, 0.36, 0.22),
-        Some(Raw::Cloth) => Color::srgb(0.62, 0.55, 0.42),
-        Some(Raw::Parts) => Color::srgb(0.72, 0.45, 0.2),
+        Some(Raw::Stone) => Color::srgb(0.5, 0.5, 0.52),
+        Some(Raw::Fibre) => Color::srgb(0.55, 0.6, 0.35),
+        Some(Raw::Hide) => Color::srgb(0.62, 0.48, 0.36),
+        Some(Raw::Ore) => Color::srgb(0.56, 0.34, 0.26),
+        Some(Raw::Iron) => Color::srgb(0.42, 0.45, 0.5),
+        Some(Raw::Meat) => Color::srgb(0.7, 0.3, 0.3),
         None => Color::srgb(0.2, 0.48, 0.45),
     }
 }
