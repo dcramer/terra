@@ -71,6 +71,8 @@ What it should grow into, decided technically and untested (Leaning): **Bevy's r
 
 Off in release builds, since it lets anything on the machine control the game.
 
+Playing the game as an agent, inside its rules rather than as a tester, is a separate want: see [multiplayer.md](multiplayer.md#agents-as-players) (D73).
+
 ## Conventions
 
 - The rules for working in the workspace are in [AGENTS.md](../AGENTS.md). They apply to people as well as agents.

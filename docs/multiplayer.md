@@ -79,6 +79,21 @@ Decided (D51). The costly mistake would be to build for four in a way that canno
 
 That keeps a large persistent world possible without paying for all of it now. What it does not avoid is the design work above.
 
+## Agents as players
+
+The developers want the game to be playable headless, by an agent alone, most likely through an MCP server (D73).
+
+Server-first (D51) makes this a client like any other, without a window:
+
+- **The agent's client** connects to a server as a player does, and is held to the same rules: the server decides what it may do (D51), so an agent cannot do more than a person could.
+- **What it can see**: not pixels, but a description of what is around it, what it carries, its attributes, and what it is aimed at. The server already decides what each player is sent by area, so this is a different view of the same data.
+- **What it can do**: the actions a player has, as calls: move toward a place, use the tool in hand on something, build a part here, put an item on the bar.
+- **The MCP server** is the agent's side of this: a set of tools over the headless client.
+
+It overlaps with QA for agents (D69), which drives a game from outside for testing. Playing is the same idea inside the rules: one gives an agent a tester's powers, the other a player's.
+
+Open: whether agent players are for us (testing, tuning, filling a server) or a feature for players too, and how a server tells them apart.
+
 ## Open questions
 
 1. **Answered: a thousand is what we build toward** (D52). It is there to make the right choice obvious as each thing is built, not as a promise for a date. So every design is asked "does this still work with a thousand players?", and nobody builds the thousand-player server before there is a game to put on it.
