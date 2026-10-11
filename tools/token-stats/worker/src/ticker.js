@@ -4,7 +4,7 @@
 // given, keeping its shape, over a transparent background. `?theme=light` or
 // `?theme=dark` fixes the colours; without it they follow the embedding page.
 
-import { ICON, compact, esc, money } from "./page.js";
+import { compact, esc, money } from "./page.js";
 
 // `user` picks one person's totals; null when they have reported nothing.
 export function ticker(summary, theme, user) {
@@ -32,13 +32,16 @@ export function ticker(summary, theme, user) {
 </head>
 <body>
 <a class="ticker" href="/" target="_blank" rel="noopener" title="${whose} at API list prices">
-  ${ICON}
+  ${SPARK}
   ${body}
 </a>
 <script>${SCRIPT}</script>
 </body>
 </html>`;
 }
+
+// Claude's spark, since Claude is what the ticker counts: tapered rays of uneven length.
+const SPARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" aria-hidden="true"><path d="M16.5 16L17.75 3.25A1.75 1.75 0 0 0 14.25 3.25L15.5 16ZM16.43 16.26L22.78 8.12A1.75 1.75 0 0 0 19.78 6.31L15.57 15.74ZM16.23 16.44L27.64 11.79A1.75 1.75 0 0 0 25.99 8.7L15.77 15.56ZM15.97 16.5L25.65 18.26A1.75 1.75 0 0 0 25.83 14.76L16.03 15.5ZM15.74 16.42L25.89 24.24A1.75 1.75 0 0 0 27.74 21.27L16.26 15.58ZM15.56 16.23L19.5 26.31A1.75 1.75 0 0 0 22.59 24.67L16.44 15.77ZM15.5 15.97L13.61 28.14A1.75 1.75 0 0 0 17.11 28.32L16.5 16.03ZM15.58 15.74L9.35 23.34A1.75 1.75 0 0 0 12.32 25.2L16.42 16.26ZM15.76 15.56L4 20.65A1.75 1.75 0 0 0 5.7 23.71L16.24 16.44ZM16 15.5L5.75 14.25A1.75 1.75 0 0 0 5.75 17.75L16 16.5ZM16.25 15.57L6.7 8.61A1.75 1.75 0 0 0 4.95 11.64L15.75 16.43ZM16.43 15.75L12.39 6.25A1.75 1.75 0 0 0 9.36 8L15.57 16.25Z"/></svg>`;
 
 function row(u) {
   return `<span class="person" data-user="${esc(u.user)}"><span class="name">${esc(u.user)}</span><span class="amount" data-n="${u.cost}">${money(u.cost)}</span></span>`;
@@ -67,7 +70,6 @@ body { display: flex; align-items: center; justify-content: center;
   column-gap: 27px; padding: 21px 36px 21px 27px;
   background: var(--surface); color: var(--ink); text-decoration: none; }
 .ticker svg { width: 78px; height: 78px; flex: none; }
-.ticker svg circle { fill: var(--muted); }
 .ticker svg path { fill: var(--ink); }
 .text { display: flex; flex-direction: column; }
 .cost, .tokens, .amount { display: inline-block; font-variant-numeric: tabular-nums; }
