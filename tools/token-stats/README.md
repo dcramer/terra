@@ -19,7 +19,7 @@ The page and `/json` are public. Sending and `/stats` need the shared key in `Au
 
 ## The ticker
 
-[`/ticker`](https://terra-token-stats.dcramer.workers.dev/ticker) is the running cost alone, with the tokens behind it (cache reads left out, as on the page), small enough to embed. It checks for new numbers every 5 seconds while the page it sits on is visible, and a click opens the full page. The colours follow the embedding page's light or dark scheme; add `?theme=light` or `?theme=dark` to fix them.
+[`/ticker`](https://terra-token-stats.dcramer.workers.dev/ticker) is the running cost alone, with the tokens behind it (cache reads left out, as on the page), for an iframe or a stream overlay such as a Restream browser widget. It scales to fill the box it is given, keeping its shape, over a transparent background, so the box's size is the ticker's size. It checks for new numbers every 5 seconds while the page it sits on is visible, and a click opens the full page. The colours follow the embedding page's light or dark scheme; add `?theme=light` or `?theme=dark` to fix them.
 
 ```html
 <iframe src="https://terra-token-stats.dcramer.workers.dev/ticker" width="460" height="160" style="border:0" title="What building Terra has cost"></iframe>
