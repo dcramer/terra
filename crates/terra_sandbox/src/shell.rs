@@ -16,6 +16,7 @@ use bevy::{
     },
     time::TimeUpdateStrategy,
     window::PresentMode,
+    winit::{UpdateMode, WinitSettings},
 };
 use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
 use std::{
@@ -197,6 +198,12 @@ impl Plugin for ShellPlugin {
             ..default()
         };
         if options.scripted() {
+            // Its window does not take focus, and a window out of focus is normally only
+            // drawn sixty times a second. A scripted run is drawn as fast as it will go.
+            app.insert_resource(WinitSettings {
+                focused_mode: UpdateMode::Continuous,
+                unfocused_mode: UpdateMode::Continuous,
+            });
             // A scripted run advances the game by a sixtieth of a second every frame,
             // however fast the machine draws, so the same script does the same thing on
             // a software renderer and on a fast GPU.
