@@ -14,8 +14,14 @@ const summary = {
 test("counts everyone without a user", () => {
   const html = ticker(summary, null);
   assert.match(html, /class="cost" data-n="30"/);
-  assert.match(html, /class="tokens" data-n="3000"/);
   assert.match(html, /data-user=""/);
+  assert.doesNotMatch(html, /class="tokens"/);
+});
+
+test("gives everyone a line with their cost", () => {
+  const html = ticker(summary, null);
+  assert.match(html, /data-user="ana"><span class="name">ana<\/span><span class="amount" data-n="10">\$10\.00</);
+  assert.match(html, /data-user="ben"><span class="name">ben<\/span><span class="amount" data-n="20">\$20\.00</);
 });
 
 test("counts one person's alone with a user", () => {
@@ -25,6 +31,7 @@ test("counts one person's alone with a user", () => {
   assert.match(html, /data-user="ben"/);
   assert.match(html, /ben · <span class="tokens"/);
   assert.match(html, /data-theme="dark"/);
+  assert.doesNotMatch(html, /class="person"/);
 });
 
 test("is null for someone who has reported nothing", () => {

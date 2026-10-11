@@ -106,7 +106,7 @@ function full(n) {
   return n.toLocaleString("en-US");
 }
 
-function esc(s) {
+export function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
