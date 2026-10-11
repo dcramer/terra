@@ -126,13 +126,19 @@ fn guard(controls: Controls, belongings: Belongings, mut player: Single<&mut Pla
         && controls.held(Action::BuildMenu);
 }
 
-/// Lands the blows creatures deal, less what a guard or a roll takes.
-fn take_blows(mut bitten: MessageReader<Bitten>, player: Single<(&mut Player, &mut Vitals)>) {
+/// Lands the blows creatures deal, less what leather, a guard or a roll takes.
+fn take_blows(
+    mut bitten: MessageReader<Bitten>,
+    belongings: Belongings,
+    player: Single<(&mut Player, &mut Vitals)>,
+) {
     let (mut player, mut vitals) = player.into_inner();
     for &Bitten(damage) in bitten.read() {
         if player.down.is_some() || player.dodging > 0.0 {
             continue;
         }
+        // Leather takes some of it.
+        let damage = damage * (1.0 - belongings.protection());
         let taken = if player.guarding && vitals.spend(GUARD_STAMINA) {
             damage * GUARDED
         } else {
@@ -140,6 +146,7 @@ fn take_blows(mut bitten: MessageReader<Bitten>, player: Single<(&mut Player, &m
         };
         vitals.hurt(taken);
         player.flinch = 0.35;
+        info!("Bitten for {taken:.0}; health {:.0}.", vitals.health);
     }
 }
 

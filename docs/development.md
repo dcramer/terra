@@ -87,7 +87,7 @@ For making and cleaning up models ([research/ai-models-for-art.md](../research/a
 
 The developers want the game's QA reachable by our coding agents (D69): an agent should be able to run the game, drive it, look at it and ask it what is true, the way a tester would.
 
-What exists: scripted runs of the sandbox. `--press` holds keys on given frames, `--shot` saves a screenshot, `--vantage` fixes the camera, `--bench` measures frame time. That is how every feature so far was checked.
+What exists: scripted runs of the sandbox. `--press` holds keys on given frames, `--shot` saves a screenshot, `--vantage` fixes the camera, `--bench` measures frame time. In the play experiment, `--at`, `--face`, `--warp` and `--give` set a scene up, and every on-screen notice is logged, so `crates/terra_sandbox/loop.sh` can drive the MVP's loop and check each step. That is how every feature so far was checked.
 
 What it should grow into, decided technically and untested (Leaning): **Bevy's remote protocol** (`bevy_remote`, part of the pinned Bevy). A game built with it answers requests over a local connection: list and read entities and components, change them, spawn things, send input, take screenshots. Bevy ships an example of exactly this, a test driving a running app. On top of it:
 

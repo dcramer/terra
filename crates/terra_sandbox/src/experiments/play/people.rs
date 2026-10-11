@@ -2,11 +2,12 @@
 //!
 //! They share the player's figure in their own colours. Each has a role and a few
 //! states: a prisoner kneels bound until freed, then follows you; a smith who follows you
-//! settles at a smithy in your claim and works it (D90); villagers go about their day
+//! settles at a forge in your claim and works it (D90); villagers go about their day
 //! and say what is going on when you speak to them (D92), from `settlement`.
 
 use super::Player;
 use super::bag::Notice;
+use super::bodies::Body;
 use super::claim::Claim;
 use super::crafting::{SmithAtHand, Station};
 use super::creatures::{Creature, Species};
@@ -34,7 +35,7 @@ pub enum Doing {
     Bound,
     /// Freed, and keeping up with the player.
     Following,
-    /// At work at a spot, such as a smithy.
+    /// At work at a spot, such as a forge.
     Working(Vec3),
     /// Standing about at a spot, facing a way.
     Standing,
@@ -48,10 +49,10 @@ pub struct Person {
     /// What they say when spoken to, if anything in particular.
     pub says: Option<&'static str>,
     pub doing: Doing,
-    /// Whether they can work a smithy.
+    /// Whether they can work a forge.
     pub smith: bool,
     facing: Vec3,
-    /// Whether they have asked for a smithy yet, so they ask once.
+    /// Whether they have asked for a forge yet, so they ask once.
     asked: bool,
 }
 
@@ -208,6 +209,11 @@ fn arrive(
         if let Some(what) = arrival.interact {
             person.insert(CanInteract(what));
         }
+        // Someone bound holds their place; others are shoved like anyone.
+        person.insert(match arrival.doing {
+            Doing::Bound | Doing::Sitting => Body::fixed(0.35),
+            _ => Body::new(0.35, 2.0),
+        });
         let person = person.id();
         let (graph, clips) = (graph.clone(), *clips);
         let clothes = materials.add(StandardMaterial {
@@ -333,7 +339,7 @@ fn follow(
     }
 }
 
-/// A smith who has followed you into your claim settles at its smithy and works it.
+/// A smith who has followed you into your claim settles at its forge and works it.
 fn settle(
     claim: Res<Claim>,
     props: Query<(&Prop, &Transform)>,
@@ -345,28 +351,28 @@ fn settle(
         if person.doing != Doing::Following || !person.smith || !claim.covers(at.translation) {
             continue;
         }
-        let smithy = props
+        let forge = props
             .iter()
             .find(|(prop, there)| {
-                prop.item.station == Some(Station::Smithy) && claim.covers(there.translation)
+                prop.item.station == Some(Station::Forge) && claim.covers(there.translation)
             })
             .map(|(_, there)| there.translation);
-        match smithy {
-            Some(smithy) => {
-                let up = smithy.normalize();
-                let spot = smithy + up.any_orthonormal_vector() * 3.5;
+        match forge {
+            Some(forge) => {
+                let up = forge.normalize();
+                let spot = forge + up.any_orthonormal_vector() * 1.8;
                 person.doing = Doing::Working(spot);
                 smith_at_hand.0 = true;
-                info!("{} took up the smithy.", person.name);
+                info!("{} took up the forge.", person.name);
                 notice.say(format!(
-                    "{} takes up the smithy: iron can be worked now",
+                    "{} takes up the forge: iron can be worked now",
                     person.name
                 ));
             }
             None if !person.asked => {
                 person.asked = true;
                 notice.say(format!(
-                    "{}: \"Build a smithy here and I'll work it.\"",
+                    "{}: \"Build a forge here and I'll work it.\"",
                     person.name
                 ));
             }

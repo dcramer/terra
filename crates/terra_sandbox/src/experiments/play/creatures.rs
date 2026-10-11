@@ -10,6 +10,7 @@
 
 use super::Player;
 use super::bag::Notice;
+use super::bodies::Body;
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::inventory::{Belongings, Raw, Tool};
 use super::skills::{Did, ONCE, Skill};
@@ -49,6 +50,8 @@ struct Kind {
     health: f32,
     walk_mps: f32,
     run_mps: f32,
+    /// The room it takes up on the ground, and how hard it is to shove.
+    body: Body,
 }
 
 fn kind(species: Species) -> Kind {
@@ -65,6 +68,7 @@ fn kind(species: Species) -> Kind {
             health: 30.0,
             walk_mps: 1.4,
             run_mps: 7.5,
+            body: Body::new(0.45, 2.0),
         },
         Species::Spider => Kind {
             model: "models/creatures/Spider.glb",
@@ -78,6 +82,7 @@ fn kind(species: Species) -> Kind {
             health: 45.0,
             walk_mps: 1.6,
             run_mps: 4.6,
+            body: Body::new(0.55, 1.0),
         },
     }
 }
@@ -325,6 +330,7 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
                 facing,
                 hurt: false,
             },
+            about.body,
             Transform::from_translation(feet).looking_to(facing, up),
             Visibility::default(),
         ))
@@ -513,6 +519,8 @@ fn animate(
 /// Marks the dead: a deer can be butchered; anything lies a while, then is gone.
 pub fn fallen(commands: &mut Commands, entity: Entity, creature: &mut Creature) {
     creature.state = State::Dead(0.0);
+    // The dead are walked over and round, not into.
+    commands.entity(entity).remove::<Body>();
     if creature.species == Species::Deer {
         commands
             .entity(entity)

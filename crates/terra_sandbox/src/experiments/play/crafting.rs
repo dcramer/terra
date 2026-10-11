@@ -1,8 +1,8 @@
-//! Crafting at stations (game design 001, crafting.md): stand at a workbench or a smithy
+//! Crafting at stations (game design 001, crafting.md): stand at a workbench or a forge
 //! and press the interact key to see what it makes; pick a recipe with its number or a
 //! click. Making pays from the backpack and puts the result in it, all or nothing.
 //!
-//! The smithy only works with a smith living at your claim, as Enshrouded's rescued
+//! The forge only works with a smith living at your claim, as Enshrouded's rescued
 //! survivors run its stations; until one is rescued it says so.
 //!
 //!   F             open or close the station you are standing at
@@ -19,7 +19,7 @@ use bevy::{prelude::*, window::CursorOptions};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Station {
     Workbench,
-    Smithy,
+    Forge,
     Campfire,
 }
 
@@ -27,7 +27,7 @@ impl Station {
     pub fn name(self) -> &'static str {
         match self {
             Station::Workbench => "Workbench",
-            Station::Smithy => "Smithy",
+            Station::Forge => "Forge",
             Station::Campfire => "Campfire",
         }
     }
@@ -49,7 +49,7 @@ const fn recipe(station: Station, cost: Cost, makes: Made) -> Recipe {
 }
 
 /// Every recipe. A stand-in list, chosen so the MVP's loop can be walked: stone tools and
-/// leather at the workbench, then iron at the smithy (docs/prototypes.md).
+/// leather at the workbench, then iron at the forge (docs/prototypes.md).
 pub const RECIPES: &[Recipe] = &[
     recipe(
         Station::Workbench,
@@ -92,17 +92,17 @@ pub const RECIPES: &[Recipe] = &[
         Made::Raw(Raw::CookedMeat, 1),
     ),
     recipe(
-        Station::Smithy,
+        Station::Forge,
         &[(Raw::Ore, 2), (Raw::Wood, 1)],
         Made::Raw(Raw::Iron, 1),
     ),
     recipe(
-        Station::Smithy,
+        Station::Forge,
         &[(Raw::Wood, 2), (Raw::Iron, 3)],
         Made::Tool(Tool::IronAxe),
     ),
     recipe(
-        Station::Smithy,
+        Station::Forge,
         &[(Raw::Wood, 2), (Raw::Iron, 3)],
         Made::Tool(Tool::IronPickaxe),
     ),
@@ -115,13 +115,13 @@ pub fn recipes(station: Station) -> impl Iterator<Item = &'static Recipe> {
         .filter(move |recipe| recipe.station == station)
 }
 
-/// Whether a smith lives at the claim, so the smithy works. Set when one is rescued.
+/// Whether a smith lives at the claim, so the forge works. Set when one is rescued.
 #[derive(Resource, Default)]
 pub struct SmithAtHand(pub bool);
 
 impl SmithAtHand {
     fn works(&self, station: Station) -> bool {
-        station != Station::Smithy || self.0
+        station != Station::Forge || self.0
     }
 }
 
@@ -248,7 +248,7 @@ fn make(
         return;
     };
     if !smith.works(station) {
-        notice.say("The smithy needs a smith to work it");
+        notice.say("The forge needs a smith to work it");
         return;
     }
     match belongings.craft(recipe.cost, recipe.makes) {

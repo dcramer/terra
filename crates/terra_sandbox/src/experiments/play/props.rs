@@ -8,7 +8,7 @@
 
 use super::catalogue::{self, Item, Light};
 use super::interact::{CanInteract, Interactable};
-use super::models::{Part, read_model};
+use super::models::{Part, read_model, shaped};
 use crate::experiments::build::Site;
 use crate::planet::Planet;
 use bevy::{
@@ -210,7 +210,11 @@ fn load(
 ) {
     let mut models = HashMap::default();
     for item in catalogue::items() {
-        match read_model(&format!("props/{}.glb", item.file)) {
+        let parts = match item.file.strip_prefix("shaped:") {
+            Some(name) => shaped(name).ok_or(format!("There is no shaped model called {name}.")),
+            None => read_model(&format!("props/{}.glb", item.file)),
+        };
+        match parts {
             Ok(parts) => {
                 models.insert(item.file, build(&parts, item.size, &mut meshes));
             }

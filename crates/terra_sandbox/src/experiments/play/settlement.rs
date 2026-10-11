@@ -235,7 +235,7 @@ fn talk(
             person.name
         ),
         Some(_) => format!(
-            "{}: \"Bren's working your smithy, I hear. You've done right by us.\"",
+            "{}: \"Bren's working your forge, I hear. You've done right by us.\"",
             person.name
         ),
     };

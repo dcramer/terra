@@ -16,6 +16,7 @@
 //! the builder, `dial` its menu and prompts, and `catalogue` what it can build. See docs/player.md for the design this is a step toward.
 
 mod bag;
+mod bodies;
 mod build_menu;
 mod catalogue;
 mod claim;
@@ -129,6 +130,7 @@ pub fn plugin(app: &mut App) {
     death::plugin(app);
     skills::plugin(app);
     creatures::plugin(app);
+    bodies::plugin(app);
     combat::plugin(app);
     people::plugin(app);
     pooling::plugin(app);
@@ -142,7 +144,14 @@ pub fn plugin(app: &mut App) {
         .add_systems(PostStartup, spawn)
         .add_systems(
             Update,
-            (options::toggle, capture_mouse, dial::steer, look, walk)
+            (
+                options::toggle,
+                capture_mouse,
+                dial::steer,
+                warp,
+                look,
+                walk,
+            )
                 .chain()
                 .before(tool::Acting),
         )
@@ -221,42 +230,47 @@ fn spawn(
         skills::Skills::default(),
         {
             let mut kit = inventory::starting_kit(&mut items);
-            for (name, count) in &options.gives {
-                match inventory::Raw::ALL
-                    .into_iter()
-                    .find(|raw| raw.name().eq_ignore_ascii_case(name))
-                {
-                    Some(raw) => {
-                        inventory::give(&mut items, &mut kit.0.0, raw, *count);
-                    }
-                    // A tool, such as spear or iron_axe, goes in the backpack and on the bar.
-                    None if let Some(tool) = inventory::Tool::ALL
-                        .into_iter()
-                        .find(|tool| tool.name().replace(' ', "_").eq_ignore_ascii_case(name)) =>
-                    {
-                        let kind = items.tool_kind(tool);
-                        for _ in 0..*count {
-                            let made = items.make(kind);
-                            if kit.0.0.insert(&items.catalogue, made, None).is_err() {
-                                warn!("--give: no room for a {}", tool.name());
-                                break;
-                            }
-                            if let Some(slot) =
-                                (0..kit.2.0.len()).find(|&slot| kit.2.0.get(slot).is_none())
-                            {
-                                kit.2.0.set(slot, Some(made.id));
-                            }
-                        }
-                    }
-                    None if ["health", "fed", "stamina"].contains(&name.as_str()) => {}
-                    None => warn!("--give: there is no raw item or tool called {name}"),
-                }
-            }
+            inventory::give_for_testing(
+                &mut items,
+                &mut kit.0.0,
+                &mut kit.1.0,
+                &mut kit.2.0,
+                &options.gives,
+            );
             kit
         },
         Transform::from_translation(feet).looking_to(toward_door, up),
         Visibility::default(),
     ));
+}
+
+/// For testing, moves the player where a scripted run says, on the frame it says (--warp).
+fn warp(
+    options: Res<Options>,
+    frame: Res<crate::shell::ScriptFrame>,
+    site: Res<Site>,
+    planet: Res<Planet>,
+    mut view: ResMut<View>,
+    player: Single<(&mut Transform, &mut Player)>,
+) {
+    let Some(warp) = options.warps.iter().find(|warp| warp.frame == frame.0) else {
+        return;
+    };
+    let (mut transform, mut player) = player.into_inner();
+    let place = |(east, south): (f32, f32)| site.frame.transform_point(Vec3::new(east, 0.0, south));
+    let feet = planet.drawn(place(warp.at).normalize());
+    let up = feet.normalize();
+    let facing = (place(warp.facing) - feet)
+        .reject_from(up)
+        .normalize_or(view.forward);
+    transform.translation = feet;
+    player.velocity = Vec3::ZERO;
+    player.facing = facing;
+    view.forward = facing;
+    info!(
+        "Warped to {:.1} m east and {:.1} m south.",
+        warp.at.0, warp.at.1
+    );
 }
 
 /// Takes the mouse for the game, or gives it back.
@@ -351,6 +365,7 @@ fn walk(
     view: Res<View>,
     obstacles: Res<flora::Obstacles>,
     items: Query<(&props::Prop, &Transform, &Visibility), Without<Player>>,
+    others: Query<(&bodies::Body, &Transform), Without<Player>>,
     player: Single<(&mut Transform, &mut Player, &mut vitals::Vitals)>,
 ) {
     let (mut transform, mut player, mut vitals) = player.into_inner();
@@ -405,6 +420,8 @@ fn walk(
     let mut target = feet + player.velocity * dt;
     // Furniture and kit are solid. Walls come after, so they have the last word.
     target = props::push_out(target, walker.radius, items.iter());
+    // Creatures and people take up room.
+    target = bodies::push_out(target, walker.radius, others.iter());
 
     // The base decides what blocks the way; it works in its own space.
     let to_base = site.frame.compute_affine().inverse();

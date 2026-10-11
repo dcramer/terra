@@ -35,7 +35,7 @@ impl Interactable {
     /// to pass to count as on it, both in metres.
     fn target(self) -> (f32, f32) {
         match self {
-            Interactable::Station(Station::Smithy) => (2.0, 3.0),
+            Interactable::Station(Station::Forge) => (1.0, 1.3),
             Interactable::Station(_) => (0.8, 0.9),
             Interactable::ClaimStone => (0.6, 0.8),
             Interactable::Bag => (0.2, 0.6),

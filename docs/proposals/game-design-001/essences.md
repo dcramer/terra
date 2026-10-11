@@ -34,7 +34,7 @@ From the developers, 2026-10-11 (D98): use the books' system as the baseline and
 
 ## Mana
 
-The books' fighters spend mana on abilities. From the developers (D102): **there is mana as well as stamina**, a pool of its own beside health and stamina (D61). Proposed: shown with them, filled by rest and food ([survival.md](survival.md)).
+The books' fighters spend mana on abilities. From the developers (D102): **there is mana as well as stamina**, a pool of its own beside health and stamina (D61). Shown with them, in blue, as the developers said on 2026-10-11. Proposed: filled by rest and food ([survival.md](survival.md)).
 
 ## Questions
 

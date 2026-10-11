@@ -148,10 +148,11 @@ fn setup(mut commands: Commands) {
             ..default()
         })
         .with_children(|bars| {
-            for (which, colour) in [
-                (Which::Health, Color::srgb(0.82, 0.25, 0.22)),
-                (Which::Stamina, Color::srgb(0.95, 0.78, 0.3)),
-                (Which::Fed, Color::srgb(0.55, 0.7, 0.3)),
+            // Each says what it is, so food is not taken for mana, which will be blue.
+            for (which, colour, name) in [
+                (Which::Health, Color::srgb(0.82, 0.25, 0.22), "Health"),
+                (Which::Stamina, Color::srgb(0.95, 0.78, 0.3), "Stamina"),
+                (Which::Fed, Color::srgb(0.55, 0.7, 0.3), "Food"),
             ] {
                 bars.spawn((
                     Node {
@@ -171,6 +172,17 @@ fn setup(mut commands: Commands) {
                         ..default()
                     },
                     BackgroundColor(colour),
+                ))
+                .with_child((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(208),
+                        top: px(-4),
+                        ..default()
+                    },
+                    Text::new(name),
+                    TextFont::from_font_size(12.0),
+                    TextColor(Color::srgba(1.0, 1.0, 1.0, 0.85)),
                 ));
             }
         });

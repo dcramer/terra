@@ -796,7 +796,7 @@ fn afford(
         }
         Some(_) if placing_claim => None,
         Some(point) if !claim.covers(point) => Some(if claim.stone.is_none() {
-            "Place a claim stone to build here: Craft, then Claim stone"
+            "Place a claim stone to build here: it is under Claim in the build menu"
         } else {
             "That is outside your claim"
         }),
@@ -1738,7 +1738,7 @@ fn where_found(raw: Raw) -> &'static str {
         Raw::Fibre => "cut plants with a knife",
         Raw::Hide | Raw::Meat => "butcher a deer",
         Raw::Ore => "break the rusty rocks with a pickaxe",
-        Raw::Iron => "smelt ore at a smithy",
+        Raw::Iron => "smelt ore at a forge",
         Raw::Berries => "pick them from berry bushes",
         Raw::CookedMeat => "cook meat at a campfire",
     }

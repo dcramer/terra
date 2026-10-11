@@ -6,7 +6,7 @@
 //! stone and iron tools differ by the colour of their heads.
 
 use super::inventory::{Belongings, Tool};
-use super::models::{Part, read_model};
+use super::models::{Part, piece, read_model};
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
@@ -145,53 +145,29 @@ fn pickaxe(iron: bool) -> Vec<Part> {
     } else {
         Color::srgb(0.6, 0.58, 0.55)
     };
-    let piece = |mesh: Mesh, at: Transform, colour: Color| {
-        let mesh = mesh.transformed_by(at);
-        let positions: Vec<Vec3> = match mesh.attribute(Mesh::ATTRIBUTE_POSITION) {
-            Some(values) => values
-                .as_float3()
-                .map(|all| all.iter().map(|&p| Vec3::from(p)).collect())
-                .unwrap_or_default(),
-            None => Vec::new(),
-        };
-        let normals: Vec<Vec3> = match mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
-            Some(values) => values
-                .as_float3()
-                .map(|all| all.iter().map(|&n| Vec3::from(n)).collect())
-                .unwrap_or_default(),
-            None => Vec::new(),
-        };
-        let indices = match mesh.indices() {
-            Some(indices) => indices.iter().map(|index| index as u32).collect(),
-            None => Vec::new(),
-        };
-        Part {
-            material: String::new(),
-            colour,
-            positions,
-            normals,
-            indices,
-        }
-    };
     vec![
         piece(
             Cylinder::new(0.025, 1.0).mesh().resolution(6).into(),
             Transform::from_xyz(0.0, 0.5, 0.0),
+            "",
             wood,
         ),
         piece(
             Cuboid::new(0.12, 0.08, 0.07).into(),
             Transform::from_xyz(0.0, 0.95, 0.0),
+            "",
             head,
         ),
         piece(
             Cone::new(0.04, 0.32).mesh().resolution(4).into(),
             Transform::from_xyz(0.2, 0.93, 0.0).with_rotation(Quat::from_rotation_z(-1.75)),
+            "",
             head,
         ),
         piece(
             Cone::new(0.04, 0.32).mesh().resolution(4).into(),
             Transform::from_xyz(-0.2, 0.93, 0.0).with_rotation(Quat::from_rotation_z(1.75)),
+            "",
             head,
         ),
     ]

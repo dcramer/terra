@@ -125,6 +125,7 @@ fn choose_path(mut commands: Commands, options: Res<Options>) {
 fn load(
     mut commands: Commands,
     path: Option<Res<SavePath>>,
+    options: Res<crate::shell::Options>,
     planet: Res<Planet>,
     models: Res<Models>,
     mut site: ResMut<Site>,
@@ -236,6 +237,14 @@ fn load(
         );
     }
     action_bar.pick(player.picked);
+    // For testing, --give adds to what was saved, so scripted runs can follow on.
+    inventory::give_for_testing(
+        &mut items,
+        &mut grid,
+        &mut equipment,
+        &mut action_bar,
+        &options.gives,
+    );
     backpack.0 = grid;
     gear.0 = equipment;
     bar.0 = action_bar;

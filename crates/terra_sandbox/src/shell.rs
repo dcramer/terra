@@ -41,14 +41,18 @@ usage: terra_sandbox [options]
                         <key>@<from>-<to> holds it over a range of frames
   --give <item>:<count> start the play experiment carrying something extra, for
                         testing: a raw item such as stone:10, a tool such as
-                        spear:1 or iron_axe:1, or health, fed or stamina out of
-                        100 (repeatable)
+                        spear:1 or iron_axe:1, clothing to wear such as
+                        leather_coat:1, or health, fed or stamina out of 100
+                        (repeatable)
   --save <file>         where the play experiment keeps its saved game; scripted runs
                         save and load only when given this
   --fresh               start the play experiment over, throwing away its saved game
   --at <east,south>     start the play experiment's player so many metres east and south
                         of the outpost, for testing
   --face <east,south>   start the play experiment's player facing that spot, for testing
+  --warp <east,south:east,south@frame>
+                        on that frame, move the play experiment's player to the first
+                        spot, facing the second, for testing (repeatable)
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the base's corner, for experiments
@@ -89,7 +93,22 @@ pub struct Options {
     pub start_at: Option<(f32, f32)>,
     /// What the play experiment's player starts facing, east and south of the outpost.
     pub start_facing: Option<(f32, f32)>,
+    /// On a frame, put the play experiment's player at a spot, facing another.
+    pub warps: Vec<Warp>,
 }
+
+/// A jump in a scripted run: on `frame`, stand `at` a spot facing `facing`, each in metres
+/// east and south of the outpost.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Warp {
+    pub frame: u32,
+    pub at: (f32, f32),
+    pub facing: (f32, f32),
+}
+
+/// Which frame of a scripted run this is, counted as `--press` counts them.
+#[derive(Resource, Default)]
+pub struct ScriptFrame(pub u32);
 
 impl Options {
     pub fn from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
@@ -108,6 +127,7 @@ impl Options {
             fresh: false,
             start_at: None,
             start_facing: None,
+            warps: Vec::new(),
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -120,6 +140,21 @@ impl Options {
                 "--fresh" => options.fresh = true,
                 "--at" => options.start_at = Some(east_south("--at", &value("--at")?)?),
                 "--face" => options.start_facing = Some(east_south("--face", &value("--face")?)?),
+                "--warp" => {
+                    let text = value("--warp")?;
+                    let problem = || {
+                        format!(
+                            "--warp wants where to stand and what to face, then a frame, like 66,-62:66,-64@900, not `{text}`"
+                        )
+                    };
+                    let (places, frame) = text.split_once('@').ok_or_else(problem)?;
+                    let (at, facing) = places.split_once(':').ok_or_else(problem)?;
+                    options.warps.push(Warp {
+                        frame: frame.trim().parse().map_err(|_| problem())?,
+                        at: east_south("--warp", at)?,
+                        facing: east_south("--warp", facing)?,
+                    });
+                }
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--radius" => {
@@ -306,6 +341,7 @@ impl Plugin for ShellPlugin {
             )));
         }
         app.insert_resource(options)
+            .init_resource::<ScriptFrame>()
             .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.02)))
             .add_plugins(
                 DefaultPlugins
@@ -341,7 +377,7 @@ impl Plugin for ShellPlugin {
 /// would steer the run.
 fn scripted_presses(
     options: Res<Options>,
-    mut frame: Local<u32>,
+    mut frame: ResMut<ScriptFrame>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut motion: ResMut<AccumulatedMouseMotion>,
@@ -350,16 +386,16 @@ fn scripted_presses(
     if !options.scripted() {
         return;
     }
-    *frame += 1;
+    frame.0 += 1;
     keys.reset_all();
     mouse.reset_all();
     motion.delta = Vec2::ZERO;
     scroll.delta = Vec2::ZERO;
     for &(key, down, up) in &options.presses {
-        if (down..up).contains(&*frame) {
+        if (down..up).contains(&frame.0) {
             keys.press(key);
             // Held since an earlier frame, so not newly pressed on this one.
-            if *frame != down {
+            if frame.0 != down {
                 keys.clear_just_pressed(key);
             }
         }
@@ -474,6 +510,20 @@ mod tests {
             parse(&["--face", "north"])
                 .unwrap_err()
                 .contains("east and south")
+        );
+        let warped = parse(&["--warp", "66,-62:66,-64.4@900"]).unwrap();
+        assert_eq!(
+            warped.warps,
+            [Warp {
+                frame: 900,
+                at: (66.0, -62.0),
+                facing: (66.0, -64.4)
+            }]
+        );
+        assert!(
+            parse(&["--warp", "66,-62@900"])
+                .unwrap_err()
+                .contains("like")
         );
     }
 

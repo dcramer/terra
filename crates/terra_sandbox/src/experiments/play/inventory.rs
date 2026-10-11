@@ -210,6 +210,15 @@ impl Apparel {
         }
     }
 
+    /// How much of a blow it takes when worn, out of one.
+    pub fn protection(self) -> f32 {
+        match self {
+            Apparel::SmallPack | Apparel::LargePack => 0.0,
+            Apparel::LeatherCap => 0.1,
+            Apparel::LeatherCoat => 0.25,
+        }
+    }
+
     fn def(self) -> KindDef {
         match self {
             Apparel::SmallPack => KindDef::new(self.name())
@@ -321,6 +330,13 @@ impl Items {
             .map(|(tool, _)| *tool)
     }
 
+    pub fn apparel(&self, kind: ItemKind) -> Option<Apparel> {
+        self.apparel
+            .iter()
+            .find(|(_, each)| *each == kind)
+            .map(|(apparel, _)| *apparel)
+    }
+
     pub fn apparel_kind(&self, apparel: Apparel) -> ItemKind {
         self.apparel
             .iter()
@@ -350,7 +366,7 @@ impl Items {
         Some(self.make(kind))
     }
 
-    pub fn make(&mut self, kind: ItemKind) -> Item {
+    fn make(&mut self, kind: ItemKind) -> Item {
         self.ids.make(kind)
     }
 
@@ -376,6 +392,62 @@ pub struct Bar(pub ActionBar);
 /// A backpack with no pack worn, to fill as a saved world is loaded.
 pub fn bare_backpack() -> Grid {
     Grid::new(BARE.w, BARE.h)
+}
+
+/// How much of a blow everything worn takes together, out of one, never all of it.
+pub fn protection(items: &Items, gear: &Equipment) -> f32 {
+    gear.iter()
+        .filter_map(|(_, worn)| items.apparel(worn?.kind))
+        .map(Apparel::protection)
+        .sum::<f32>()
+        .min(0.8)
+}
+
+/// For testing (--give): adds raw items, tools on the bar, and clothing put on, by name,
+/// such as `stone`, `iron_axe` or `leather_coat`. Names for the body are left alone.
+pub fn give_for_testing(
+    items: &mut Items,
+    grid: &mut Grid,
+    gear: &mut Equipment,
+    bar: &mut ActionBar,
+    gives: &[(String, u32)],
+) {
+    let named = |name: &str, wanted: &str| name.replace(' ', "_").eq_ignore_ascii_case(wanted);
+    for (name, count) in gives {
+        if let Some(raw) = Raw::ALL.into_iter().find(|raw| named(raw.name(), name)) {
+            let given = give(items, grid, raw, *count);
+            if given < *count {
+                warn!("--give: room for only {given} of {count} {}", raw.name());
+            }
+        } else if let Some(tool) = Tool::ALL.into_iter().find(|tool| named(tool.name(), name)) {
+            let kind = items.tool_kind(tool);
+            for _ in 0..*count {
+                let made = items.make(kind);
+                if grid.insert(&items.catalogue, made, None).is_err() {
+                    warn!("--give: no room for a {}", tool.name());
+                    break;
+                }
+                if let Some(slot) = (0..bar.len()).find(|&slot| bar.get(slot).is_none()) {
+                    bar.set(slot, Some(made.id));
+                }
+            }
+        } else if let Some(apparel) = Apparel::ALL
+            .into_iter()
+            .find(|each| named(each.name(), name))
+        {
+            let kind = items.apparel_kind(apparel);
+            let made = items.make(kind);
+            let worn = grid
+                .insert(&items.catalogue, made, None)
+                .ok()
+                .and_then(|_| wear(items, grid, gear, made.id).ok());
+            if worn.is_none() {
+                warn!("--give: could not put on a {}", apparel.name());
+            }
+        } else if !["health", "fed", "stamina"].contains(&name.as_str()) {
+            warn!("--give: there is no raw item, tool or clothing called {name}");
+        }
+    }
 }
 
 /// What a player starts with: a small pack worn, and their tools on the bar.
@@ -550,6 +622,11 @@ impl Belongings<'_, '_> {
 
     pub fn gear(&self) -> &Equipment {
         &self.player.2.0
+    }
+
+    /// How much of a blow what is worn takes, out of one.
+    pub fn protection(&self) -> f32 {
+        protection(&self.items, self.gear())
     }
 
     pub fn holding(&self) -> Option<Tool> {
@@ -848,6 +925,17 @@ mod tests {
         );
         assert_eq!(made, Err(CantMake::NoRoom));
         assert_eq!(grid, before);
+    }
+
+    #[test]
+    fn worn_leather_protects_and_a_pack_does_not() {
+        let mut items = Items::default();
+        let (Backpack(mut grid), Gear(mut gear), _) = starting_kit(&mut items);
+        assert_eq!(protection(&items, &gear), 0.0);
+        let coat = items.make(items.apparel_kind(Apparel::LeatherCoat));
+        grid.insert(&items.catalogue, coat, None).unwrap();
+        wear(&items, &mut grid, &mut gear, coat.id).unwrap();
+        assert!((protection(&items, &gear) - 0.25).abs() < 1e-6);
     }
 
     #[test]

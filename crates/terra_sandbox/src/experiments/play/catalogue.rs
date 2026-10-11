@@ -228,15 +228,15 @@ pub static PARTS: [Part; 16] = [
         )]),
     },
     Part {
-        name: "Smithy",
+        name: "Forge",
         tab: Tab::Crafting,
         kind: Kind::Items(&[station(
-            Station::Smithy,
+            Station::Forge,
             item(
-                "Smithy",
-                "../village/Blacksmith",
-                6.5,
-                &[(Raw::Wood, 8), (Raw::Stone, 8)],
+                "Forge",
+                "shaped:forge",
+                2.6,
+                &[(Raw::Wood, 4), (Raw::Stone, 8)],
             ),
         )]),
     },

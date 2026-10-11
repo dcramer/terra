@@ -62,9 +62,6 @@ struct Slot(usize);
 struct SlotLabel(usize);
 
 #[derive(Component)]
-struct RawCount(Raw);
-
-#[derive(Component)]
 struct NoticeText;
 
 #[derive(Component)]
@@ -165,28 +162,6 @@ fn setup(mut commands: Commands) {
             },
         ))
         .with_child((NoticeText, Text::new(""), normal.clone(), white));
-
-    // How many of each raw item are belongings, down the right-hand side.
-    commands
-        .spawn((
-            Hud,
-            Node {
-                position_type: PositionType::Absolute,
-                top: px(20),
-                right: px(20),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(3),
-                padding: UiRect::axes(px(14), px(10)),
-                border_radius: BorderRadius::all(px(8)),
-                ..default()
-            },
-            BackgroundColor(PLAIN),
-        ))
-        .with_children(|list| {
-            for raw in Raw::ALL {
-                list.spawn((RawCount(raw), Text::new(""), normal.clone(), white));
-            }
-        });
 
     // The inventory itself, hidden until opened.
     commands
@@ -488,7 +463,6 @@ fn draw(
     mut boxes: Query<(&Interaction, &GearBox, &mut BorderColor), (Without<Slot>, Without<Shown>)>,
     mut texts: ParamSet<(
         Query<(&SlotLabel, &mut Text)>,
-        Query<(&RawCount, &mut Text)>,
         Single<&mut Text, With<About>>,
         Single<&mut Text, With<Capacity>>,
         Single<(&mut Text, &mut TextColor), With<NoticeText>>,
@@ -537,13 +511,7 @@ fn draw(
             .map_or("", |placed| items.name(placed.item.kind));
         set(&mut text, name.to_string());
     }
-    for (count, mut text) in &mut texts.p1() {
-        set(
-            &mut text,
-            format!("{:<6} {:>3}", count.0.name(), belongings.count(count.0)),
-        );
-    }
-    for (name, mut text) in &mut texts.p5() {
+    for (name, mut text) in &mut texts.p4() {
         let worn = gear
             .worn(name.0)
             .map_or("empty", |item| items.name(item.kind));
@@ -590,7 +558,7 @@ fn draw(
             about = format!("{}.  Click to take it off.", items.name(item.kind));
         }
     }
-    set(&mut texts.p2(), about);
+    set(&mut texts.p1(), about);
 
     let size = backpack.size();
     let cells = size.w as usize * size.h as usize;
@@ -599,7 +567,7 @@ fn draw(
         .map(|placed| placed.size.w as usize * placed.size.h as usize)
         .sum();
     set(
-        &mut texts.p3(),
+        &mut texts.p2(),
         format!(
             "{} by {}, {} of {} cells free.",
             size.w,
@@ -613,7 +581,7 @@ fn draw(
     // Longer things said stay up longer, so they can be read.
     let lasts = NOTICE_SECONDS + notice.text.len() as f32 / 22.0;
     let fade = (lasts - notice.age).clamp(0.0, 1.0);
-    let (mut text, mut text_colour) = texts.p4().into_inner();
+    let (mut text, mut text_colour) = texts.p3().into_inner();
     let wanted = if fade > 0.0 {
         notice.text.clone()
     } else {
