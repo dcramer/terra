@@ -46,6 +46,7 @@ fn about(tool: Tool) -> (Option<&'static str>, f32, f32) {
         Tool::StoneAxe | Tool::IronAxe => (Some("tools/Axe.glb"), 0.68, 0.08),
         Tool::Knife => (Some("tools/Knife.glb"), 0.26, 0.05),
         Tool::Spear => (Some("tools/Spear.glb"), 1.8, 0.75),
+        Tool::Bow => (Some("tools/Bow_Wooden.glb"), 1.2, 0.6),
         Tool::StonePickaxe | Tool::IronPickaxe => (None, 0.72, 0.08),
     }
 }
@@ -99,7 +100,7 @@ fn head_colour(tool: Tool) -> Option<Color> {
 
 /// Bakes a tool's parts into one mesh along +Y, scaled to its length, with the place it
 /// is held at the origin. Grey parts, the metal, take the head's colour if it has one.
-fn bake(parts: &[Part], length: f32, held_from_end: f32, head: Option<Color>) -> Mesh {
+pub fn bake(parts: &[Part], length: f32, held_from_end: f32, head: Option<Color>) -> Mesh {
     let all = || parts.iter().flat_map(|part| part.positions.iter().copied());
     let low = all().fold(Vec3::MAX, Vec3::min);
     let high = all().fold(Vec3::MIN, Vec3::max);

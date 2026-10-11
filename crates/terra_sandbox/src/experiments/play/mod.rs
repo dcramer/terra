@@ -15,6 +15,7 @@
 //! `flora` what grows, `props` what has been placed, `figure` the player's body, `tool`
 //! the builder, `dial` its menu and prompts, and `catalogue` what it can build. See docs/player.md for the design this is a step toward.
 
+mod archery;
 mod bag;
 mod bodies;
 mod build_menu;
@@ -140,6 +141,7 @@ pub fn plugin(app: &mut App) {
     creatures::plugin(app);
     bodies::plugin(app);
     combat::plugin(app);
+    archery::plugin(app);
     people::plugin(app);
     pooling::plugin(app);
     settlement::plugin(app);

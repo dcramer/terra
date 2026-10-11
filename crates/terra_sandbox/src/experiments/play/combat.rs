@@ -33,7 +33,8 @@ pub fn weapon(tool: Tool) -> (f32, f32) {
         Tool::IronPickaxe => (11.0, 2.3),
         Tool::StonePickaxe => (7.0, 2.3),
         Tool::Knife => (6.0, 1.9),
-        Tool::Hammer => (0.0, 0.0),
+        // The bow shoots instead (`archery`); the hammer builds.
+        Tool::Hammer | Tool::Bow => (0.0, 0.0),
     }
 }
 
@@ -71,7 +72,10 @@ fn swing(
 ) {
     swung.since += time.delta_secs();
     let (player_at, mut player, mut vitals, skills) = player.into_inner();
-    let Some(tool) = belongings.holding().filter(|tool| *tool != Tool::Hammer) else {
+    let Some(tool) = belongings
+        .holding()
+        .filter(|tool| !matches!(tool, Tool::Hammer | Tool::Bow))
+    else {
         return;
     };
     if screen.open || player.down.is_some() || !controls.went_down(Action::Use) {
@@ -103,15 +107,37 @@ fn swing(
         0.4
     };
     let blow = damage * strength * skills.speed(Skill::Fighting);
-    creature.health -= blow;
-    creature.hurt = true;
     swung.since = 0.0;
     player.since_acting = 0.0;
     player.attacking = 0.6;
-    did.write(Did(Skill::Fighting, ONCE));
+    strike(
+        &mut commands,
+        entity,
+        &mut creature,
+        blow,
+        Skill::Fighting,
+        &mut did,
+        &mut notice,
+    );
+}
+
+/// Lands a blow on a creature, however it was dealt: a swing or an arrow, each growing its
+/// own skill. It learns it was hurt, and falls if that was enough.
+pub fn strike(
+    commands: &mut Commands,
+    entity: Entity,
+    creature: &mut Creature,
+    blow: f32,
+    skill: Skill,
+    did: &mut MessageWriter<Did>,
+    notice: &mut Notice,
+) {
+    creature.health -= blow;
+    creature.hurt = true;
+    did.write(Did(skill, ONCE));
     if creature.health <= 0.0 {
-        creatures::fallen(&mut commands, entity, &mut creature);
-        did.write(Did(Skill::Fighting, ONCE * 2.0));
+        creatures::fallen(commands, entity, creature);
+        did.write(Did(skill, ONCE * 2.0));
         info!("Killed a {:?}.", creature.species);
         let name = format!("{:?}", creature.species).to_lowercase();
         notice.say(format!("The {name} falls"));

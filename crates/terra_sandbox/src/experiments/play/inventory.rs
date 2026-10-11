@@ -29,6 +29,8 @@ pub enum Raw {
     Meat,
     Berries,
     CookedMeat,
+    /// Shot from a bow, and used up. One to a cell, like everything (D84).
+    Arrow,
 }
 
 impl Raw {
@@ -43,10 +45,11 @@ impl Raw {
             Raw::Iron => "smelt ore at a smelter",
             Raw::Berries => "pick them from berry bushes",
             Raw::CookedMeat => "cook meat at a campfire",
+            Raw::Arrow => "make them at a workbench",
         }
     }
 
-    pub const ALL: [Raw; 9] = [
+    pub const ALL: [Raw; 10] = [
         Raw::Wood,
         Raw::Stone,
         Raw::Fibre,
@@ -56,6 +59,7 @@ impl Raw {
         Raw::Meat,
         Raw::Berries,
         Raw::CookedMeat,
+        Raw::Arrow,
     ];
 
     /// What can be eaten, least filling first.
@@ -72,6 +76,7 @@ impl Raw {
             Raw::Meat => "Meat",
             Raw::Berries => "Berries",
             Raw::CookedMeat => "Cooked meat",
+            Raw::Arrow => "Arrow",
         }
     }
 }
@@ -122,10 +127,12 @@ pub enum Tool {
     IronPickaxe,
     /// A weapon, for hunting and for fighting.
     Spear,
+    /// A weapon at range, shooting arrows from the backpack.
+    Bow,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 7] = [
+    pub const ALL: [Tool; 8] = [
         Tool::Hammer,
         Tool::StoneAxe,
         Tool::StonePickaxe,
@@ -133,6 +140,7 @@ impl Tool {
         Tool::IronAxe,
         Tool::IronPickaxe,
         Tool::Spear,
+        Tool::Bow,
     ];
 
     pub fn name(self) -> &'static str {
@@ -144,6 +152,7 @@ impl Tool {
             Tool::IronAxe => "Iron axe",
             Tool::IronPickaxe => "Iron pickaxe",
             Tool::Spear => "Spear",
+            Tool::Bow => "Bow",
         }
     }
 
@@ -183,6 +192,7 @@ impl Tool {
             Tool::IronAxe => "Fells any tree, the great ones too",
             Tool::IronPickaxe => "Breaks rock and ore quickly",
             Tool::Spear => "A hunting spear: hits hardest and reaches furthest",
+            Tool::Bow => "Shoots arrows: hold to draw, let go to loose",
         }
     }
 }

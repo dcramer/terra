@@ -309,6 +309,10 @@ pub fn prompt(
                 "{}  swing at a creature in front of you",
                 settings.key(Action::Use)
             ),
+            Tool::Bow => format!(
+                "{}  draw, and let go to shoot where you aim",
+                settings.hold(Action::Use)
+            ),
         },
     }
 }

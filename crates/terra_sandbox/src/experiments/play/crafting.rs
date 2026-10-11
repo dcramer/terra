@@ -75,7 +75,7 @@ pub struct Recipe {
 impl Recipe {
     pub fn family(&self) -> Family {
         match self.makes {
-            Made::Tool(_) => Family::Tools,
+            Made::Tool(_) | Made::Raw(Raw::Arrow, _) => Family::Tools,
             Made::Apparel(_) => Family::Clothing,
             Made::Raw(..) => Family::Materials,
         }
@@ -118,6 +118,18 @@ pub const RECIPES: &[Recipe] = &[
         &[(Raw::Wood, 3), (Raw::Stone, 2)],
         Made::Tool(Tool::Spear),
         5.0,
+    ),
+    recipe(
+        Station::Workbench,
+        &[(Raw::Wood, 3), (Raw::Fibre, 2)],
+        Made::Tool(Tool::Bow),
+        6.0,
+    ),
+    recipe(
+        Station::Workbench,
+        &[(Raw::Wood, 1), (Raw::Stone, 1)],
+        Made::Raw(Raw::Arrow, 4),
+        4.0,
     ),
     recipe(
         Station::Workbench,

@@ -20,16 +20,19 @@ pub enum Skill {
     Building,
     Crafting,
     Fighting,
+    /// The bow, a skill of its own (D88).
+    Archery,
 }
 
 impl Skill {
-    pub const ALL: [Skill; 6] = [
+    pub const ALL: [Skill; 7] = [
         Skill::Chopping,
         Skill::Mining,
         Skill::Foraging,
         Skill::Building,
         Skill::Crafting,
         Skill::Fighting,
+        Skill::Archery,
     ];
 
     pub fn name(self) -> &'static str {
@@ -40,6 +43,7 @@ impl Skill {
             Skill::Building => "Building",
             Skill::Crafting => "Crafting",
             Skill::Fighting => "Fighting",
+            Skill::Archery => "Archery",
         }
     }
 }

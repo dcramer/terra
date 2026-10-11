@@ -42,7 +42,7 @@ From the developers: a theme's weapons differ the way a sword differs from a sta
 
 - **Every weapon kind has a way it plays**: close and quick, slow and heavy, at range, through abilities, defensive. A theme brings its own kinds, or its own take on one, such as a gothic scythe that reaps several at once or a machine realm's bolt-thrower that fires a few shots from its core and then must be recharged.
 - **Rank sets the budget, the kind spends it.** At a rank, every kind is worth about the same over a fight; one hits hard and slow, another light and often, another from afar with less. That is what keeps a theme from outclassing another.
-- **Skills follow the kind** (D88): you get better with what you use, so trying a new realm's weapons is starting a new skill, not trading up.
+- **Skills follow the kind** (D88): you get better with what you use, so trying a new realm's weapons is starting a new skill, not trading up. Archery is one such skill, and a style of bow probably another within it (D117, [combat.md](combat.md)).
 - **Gear goes with you** (D86), so a player can carry a staff from one realm and a sword from another, and fight their own way.
 
 ## Loot

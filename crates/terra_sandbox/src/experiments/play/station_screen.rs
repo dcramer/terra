@@ -326,6 +326,13 @@ fn lay_out(
 fn about(made: Made) -> String {
     match made {
         Made::Tool(Tool::Hammer) => Tool::Hammer.about().to_string(),
+        Made::Tool(Tool::Bow) => {
+            let (damage, speed) = super::archery::bow();
+            format!(
+                "{}. Hits for {damage:.0} at a full draw, at {speed:.0} m a second",
+                Tool::Bow.about()
+            )
+        }
         Made::Tool(tool) => {
             let (damage, reach) = weapon(tool);
             format!(

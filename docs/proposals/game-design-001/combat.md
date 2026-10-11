@@ -17,6 +17,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 - **Real time, in the world.** You aim, swing, shoot, dodge and block. No turns, no pause.
 - **Stamina is the limit.** Attacking, dodging, blocking, sprinting and climbing all draw on it (D61), so a fight is choices about when to spend it.
 - **Weapons are skills by doing** (D88). Fight with a spear and you get better with spears: faster, stronger, new moves at steps. No weapon class is locked behind a choice.
+- **Archery is a skill of its own**, from the developers on 2026-10-11 (D117), and **each style of bow probably is too**: a short bow, a long bow, a crossbow, or a realm's own ([settings.md](settings.md#weapons-different-ways-to-play)), each a different way to shoot. Proposed: a style of bow builds on archery, so a good archer is not a beginner with a new bow, but is better still with the one they know.
 - **Abilities come from essences** and sit on the action bar with your weapons (D66). They are what make one fighter unlike another.
 - **Rank decides more than skill.** A monster a rank above you is dangerous whatever your skill; two ranks above is death. That is how the world tells you where not to go, without a marker (D92).
 - **You judge an enemy by looking** (D93): its size, its look, how it moves, how others react to it. A skilled hunter or fighter reads more.

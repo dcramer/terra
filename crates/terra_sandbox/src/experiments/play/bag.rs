@@ -382,6 +382,7 @@ fn colour(items: &Items, kind: ItemKind) -> Color {
         Some(Raw::Meat) => Color::srgb(0.7, 0.3, 0.3),
         Some(Raw::Berries) => Color::srgb(0.7, 0.2, 0.35),
         Some(Raw::CookedMeat) => Color::srgb(0.6, 0.36, 0.2),
+        Some(Raw::Arrow) => Color::srgb(0.66, 0.6, 0.45),
         None => Color::srgb(0.2, 0.48, 0.45),
     }
 }

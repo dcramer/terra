@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Drives the play experiment's loop end to end and checks each step happened (D69):
-# talk to the elder, eat, kill the spiders, free the smith and bring them home, claim
+# talk to the elder, eat, hunt a deer with a bow and butcher it, kill the spiders, free the smith and bring them home, claim
 # land, build a smelter and a forge, have the smith take up the forge, smelt iron, and
 # have the smith make an iron axe. Each run reads
 # what happened from the log, where every on-screen notice is written.
@@ -42,6 +42,15 @@ for i in $(seq 0 60); do swings+=(--press "e@$((100 + i * 30))"); done
 step talk 'Notice: Maren: "Spiders took Bren' 'Notice: Ate berries' -- \
     --fresh --give berries:2 --give fed:50 \
     --at -68.1,50.6 --face -68.1,52.9 --press f@150 --press h@170 --settle 200
+
+# A deer from the meadow's edge with a bow, out of its hearing, then butchered with the
+# knife where it fell.
+step hunt 'An arrow hit a Deer' 'Killed a Deer.' 'Notice: Butchered it' -- \
+    --fresh --give bow:1 --give arrow:4 \
+    --at -30,33 --face -45,34 --press 5@60 --press left@62-63 \
+    --press e@100-160 --press e@190-250 \
+    --warp -44.8,34.2:-47.1,34.2@330 --press 4@335 --press down@340-360 --press left@361-366 \
+    --press f@380 --settle 420
 
 # In leather with a spear, facing the spiders as they come, then over to Bren.
 step rescue 'Killed a Spider' 'Freed Bren.' -- \

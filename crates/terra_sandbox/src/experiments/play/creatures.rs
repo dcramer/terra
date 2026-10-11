@@ -11,6 +11,7 @@
 use super::Player;
 use super::bag::Notice;
 use super::bodies::Body;
+use super::flora::ClearAround;
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::inventory::{Belongings, Raw, Tool};
 use super::skills::{Did, ONCE, Skill};
@@ -65,7 +66,7 @@ fn kind(species: Species) -> Kind {
             eat: Some("AnimalArmature|Eating"),
             attack: "AnimalArmature|Attack_Kick",
             death: "AnimalArmature|Death",
-            health: 30.0,
+            health: 16.0,
             walk_mps: 1.4,
             run_mps: 7.5,
             body: Body::new(0.45, 2.0),
@@ -195,6 +196,7 @@ fn prepare(
     gltfs: Res<Assets<Gltf>>,
     site: Res<Site>,
     planet: Res<Planet>,
+    mut clear: MessageWriter<ClearAround>,
     mut kinds: ResMut<Kinds>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     mut dice: ResMut<Dice>,
@@ -264,6 +266,8 @@ fn prepare(
             "Deer graze {:.0} m east and {:.0} m south of the start.",
             local.x, local.z
         );
+        // They graze in the open, as the village says.
+        clear.write(ClearAround(home, 16.0));
         for _ in 0..5 {
             let up = home.normalize();
             let side = up.any_orthonormal_vector();
