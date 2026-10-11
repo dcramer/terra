@@ -49,6 +49,7 @@ Games with a related look, and the one thing worth taking from each:
 | [Road 96](https://store.steampowered.com/app/1466640/) | Stylised people and vehicles in the same simple-shape language |
 | [Jusant](https://store.steampowered.com/app/1977170/) | Soft stylised rock and a climb through changing biomes |
 | [No Man's Sky](https://store.steampowered.com/app/275850/) | Not the look, but the method: a palette generated per planet, and variety from rules |
+| [Enshrouded](https://store.steampowered.com/app/1203620/) | Named by the developers on 2026-10-10 as looking beautiful, with good art (D85). It is painterly, textured and detailed, unlike Forever Ago's flat colour; which way the look leans between them is theirs to say (D14) |
 
 ## Where we are
 

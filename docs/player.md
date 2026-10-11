@@ -37,6 +37,8 @@ Proposed.
 - **Walk, run, jump.** Slopes slow you and steep ones stop you.
 - **The ground is whatever is there now.** Movement has to work in holes and tunnels players dug, on a base's floors, and on stairs or ramps between storeys.
 
+The developers like Enshrouded's movement (D85). From memory, not checked: sprinting and climbing on stamina, a dodge, a glider, and a grappling hook. Those bear on climbing and getting out of a dug hole, below.
+
 Open:
 
 1. **First person, third person, or both?** First person is cheapest: arms and a tool, and the full body is only ever seen by others. Third person shows off the character and the world, suits the art direction's framing, and needs every animation to look good from behind. Both is the most work.
@@ -169,7 +171,7 @@ Technical, for reference. None of it is started except where noted.
 
 ## Not covered here
 
-Terraforming, progression, creatures and combat. The worlds are in [worlds.md](worlds.md) and the survival attributes in [survival.md](survival.md). The developers have said that gameplay is not right away.
+Terraforming, progression, creatures and combat. On combat, the developers like Enshrouded's (D85); whether we have fighting by reflexes at all sits against D3, which answers threats with automation. The worlds are in [worlds.md](worlds.md) and the survival attributes in [survival.md](survival.md). The developers have said that gameplay is not right away.
 
 ## A first walk-around
 

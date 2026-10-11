@@ -29,7 +29,8 @@ Draft. A feature that serves none of these is cut.
 | SimEarth | A coupled planetary simulation | Abstract god-game view |
 | Spore | Life arriving in stages, simple to complex | Creature editor |
 | Factorio | Automation as the answer to threats; your own output provokes the enemy | 2D factory focus |
-| Enshrouded | A role model for voxels and building, named by the developers on 2026-10-10: ground you dig and reshape, and buildings made of small voxel pieces and blueprints that join and blend seamlessly. Other mechanics too, not yet named. See [research/enshrouded.md](../research/enshrouded.md). | Not yet said |
+| Enshrouded | Probably one of our two biggest inspirations, with Subnautica (D85). Voxels done really well: ground you dig and reshape, and buildings of small voxel pieces that join and blend seamlessly. Its look and art. Its building, "top notch". Its combat and its movement. See [research/enshrouded.md](../research/enshrouded.md). | Not yet said. Its combat is fought by reflexes, where our threats are answered by building (D3) |
+| Subnautica | Probably one of our two biggest inspirations, with Enshrouded (D85). Base building (D48), the build menu (D67), the inventory (D84), tools you carry | Not yet said |
 
 Astroneer is deliberately not on this list (D15). It shows the tech is achievable by a small team; its gameplay and art are not models for us.
 

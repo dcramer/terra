@@ -13,6 +13,12 @@ From reviews, press and community guides. Keen Games has published no account of
 - **Water** was added later and is said to respond to terraforming.
 - **Persistence.** Built structures do not decay. One server guide mentions terrain "regeneration"; how it works was not found.
 
+## What the developers like in it
+
+From the developers, 2026-10-10: the voxels are really well done; it looks beautiful and the art is good; the building is top notch; and its combat and movement are great. Probably it and Subnautica are our two biggest inspirations (D85).
+
+On movement and combat, from memory and not checked: you sprint and climb on stamina, dodge, glide with a glider, and swing with a grappling hook; combat is melee, bows and magic, with blocking, parrying and dodging, fought in real time.
+
 ## Where it meets our decisions
 
 Inferred, for the developers; nothing here changes a decision.
@@ -20,6 +26,8 @@ Inferred, for the developers; nothing here changes a decision.
 - **Digging and filling ground** is already what we have: smooth voxels, fully diggable (D9), and dig and fill operations in `terra_core`. A flattening tool would be another operation.
 - **Building from voxels conflicts with D9**, which says structures are separate modular pieces, not terrain. Enshrouded's seamless joins and blended materials come precisely from building in the same voxels as the ground.
 - **It pulls against D48**, whose inspiration is Subnautica 2's rooms that are shaped and resized. Enshrouded's is piece by piece and blueprint by blueprint. The two can coexist (rooms as blueprints), but which leads is design.
+- **Combat by reflexes pulls against D3**, which answers threats with automation rather than reflexes.
+- **Its look is not Forever Ago's** (D14): textured and painterly where ours is flat colour.
 - **Water that responds to digging** is what D24 and D44 leave open.
 - **Our terrain is smooth on a sphere** (D9: blocky voxels do not tile a sphere). Enshrouded's world is flat and its building blocks are cubes. Cube-shaped building voxels on a round planet need a local frame per base, which the base grid already has.
 
