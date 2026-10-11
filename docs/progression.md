@@ -1,5 +1,7 @@
 # Progression: skills, research and unlocks
 
+The tech demo is prototyping [game design 001](proposals/game-design-001/crafting.md#learning-what-to-make) (D89, Leaning), which proposes learning a thing by finding it rather than a research tree; until it is adopted, this page stands.
+
 Status: the developers said on 2026-10-10 that the player has skills that grow (D88), and that there is a research system that unlocks more technology and more things to craft, and that they are not yet sure how you actually research or unlock new nodes. Everything below the first section is a proposal. Nothing is built.
 
 ## Player skills

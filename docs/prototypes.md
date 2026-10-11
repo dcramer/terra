@@ -84,11 +84,34 @@ Every checkpoint reports frame times from the real play loop, not only from scri
 
 ## MVP: the first playable
 
-Proposed 2026-10-11, for the developers to edit. Not started.
+Proposed 2026-10-11, for the developers to edit. Being built as the tech demo, the sandbox's play experiment: `cargo xtask play` plays it, `cargo xtask loop` plays its loop by script and checks every step. Where it stands is below.
 
 **Question:** is the core loop of [game design 001](proposals/game-design-001/README.md) fun, with almost nothing else around it? It is a prototype of that proposal (D89), built to answer this question before the proposal is adopted or anything is spent on scale.
 
 If the loop is not fun with one monster and one settlement, more content will not fix it.
+
+### Where it stands
+
+As of 2026-10-11.
+
+| Part | State |
+|---|---|
+| One small world, day and night | On the stand-in planet, not voxels; no night yet |
+| Gathering with separate tools (D96) | Built |
+| Crafting at stations, timed and queued (D109) | Built: workbench, smelter, forge, campfire |
+| A claim, upgradable (D94, D104) | Built |
+| Building on the voxel grid (D48) | Missing: rooms and items on the build grid only, waiting on voxel terrain |
+| Backpack, equipment, action bar (D84); a belt quiver (D118) | Built; wear and repair (D99) missing |
+| One wildlife, hunted for meat and hide | Built: deer, with the bow |
+| One monster, forming where magic pools (D103), holding a prisoner | Built: spiders at a glowing hollow |
+| Combat: melee, a bow, block, dodge, stamina (D97) | Built; hit zones and critical hits (D119) missing |
+| One settlement, a request, the prisoner to rescue, who runs the forge (D90, D95) | Built, the village from building parts (D108) |
+| Skills by doing (D88) | Built, archery among them (D117) |
+| Hunger and food, death and the dropped pack (D101) | Built |
+| The map, only where you have been (D76) | Built |
+| A local server (D51) | Missing |
+| Saving and loading | Built |
+| Done when: a developer plays it, an agent drives it, save and reload, frame times | The agent's run passes; the developers' play-test, frame times on the integrated GPU, and a save-and-reload check in the script are to do |
 
 ### In it
 

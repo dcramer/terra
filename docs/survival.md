@@ -1,5 +1,7 @@
 # Survival
 
+The tech demo is prototyping [game design 001](proposals/game-design-001/survival.md) (D89, Leaning), whose survival has food and death but no oxygen tanks or terraforming; until it is adopted, this page stands.
+
 Status: the developers said on 2026-10-10 that there are survival-coupled attributes, that they may vary per world, and which ones to start with. How each works is a proposal below. Nothing is built.
 
 ## The attributes

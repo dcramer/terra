@@ -12,6 +12,8 @@ The earlier pitch, of dead planets terraformed into living ones, is parked with 
 
 ## Pillars
 
+The tech demo is prototyping [game design 001](proposals/game-design-001/README.md) (D89, Leaning), which would revise pillar 4; until it is adopted, these stand.
+
 Draft. A feature that serves none of these is cut.
 
 1. **The world is the main character.** Persistent worlds, each unlike the others, that visibly change because of you.
