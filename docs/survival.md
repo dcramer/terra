@@ -9,7 +9,7 @@ From the developers: **health, stamina, oxygen, hunger, thirst**, and possibly m
 | Attribute | Goes down when | Comes back with | When it runs out |
 |---|---|---|---|
 | Health | You are hurt: falls, cold, heat, poison, creatures | Rest, food, medicine | You are down (see D18: no fail state) |
-| Stamina | You sprint, jump, swing a tool | Resting a moment | You cannot sprint or work hard |
+| Stamina | You sprint, jump, swing a tool, swim | Resting a moment | You cannot sprint, swim hard or work hard |
 | Oxygen | Always, where the air cannot be breathed: under water, and on planets with thin or no air | Breathable air, the space suit's tank, a base with air | Health falls fast |
 | Hunger | Slowly, all the time; faster when working | Food | Health falls slowly |
 | Thirst | A little faster than hunger | Water | Health falls |

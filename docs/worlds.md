@@ -15,7 +15,8 @@ Status: the developers set out on 2026-10-10 what the planets are to be. What th
 | **Survival** | Attributes coupled to survival: health, stamina, oxygen, hunger, thirst, possibly more later. They may work differently on each world. See [survival.md](survival.md). | Decided that they exist (D61); the list may grow |
 | **The starter planet** | Normal atmosphere and the like: the easiest place to be, for now. | Leaning (D62) |
 | **Gravity** | Planets have gravity. | Decided (D63) |
-| **Water you can enter** | The character swims. Under water you use up oxygen, as on a planet with thin or no air. | Decided (D74) |
+| **Water you can enter** | The character swims, using stamina for now. Under water you use up oxygen, as on a planet with thin or no air. No set limit on depth: water should be flexible. | Decided (D74) |
+| **Size** | Fully procedural and somewhat large: big enough that walking all the way round is a ridiculous task, but not infinite, and efficient. Always round, so you wrap around. | Decided; the numbers are Leaning (D13) |
 | **Getting between planets** | By flight, for sure; maybe other ways later. Leaving a planet, being in space and arriving at another has to perform well. | Decided (D72) |
 | **How planets differ** | Mostly in the obvious ways. | Answers the old open question 2 |
 
@@ -34,6 +35,29 @@ What a theme sets, as a starting list:
 - **Whether it can be terraformed**, and if so where it starts on that path.
 
 A new planet should be a new theme, not new code. That is the same rule the construction system follows (D56): the things that vary are data.
+
+## Size
+
+Every planet is a sphere: walk far enough in a straight line and you come back to where you started. The developers want that walk to be ridiculous, and the planet still finite and cheap to run.
+
+How the candidates feel, for a player jogging at the sandbox's 4.3 m/s and a craft at 100 m/s:
+
+| Radius | Once round | On foot | By air | Horizon from eye height | Surface |
+|---|---|---|---|---|---|
+| 2 km (the sandbox today) | 13 km | under an hour | 2 minutes | 82 m | 50 km² |
+| 10 km | 63 km | 4 hours | 10 minutes | 184 m | 1,260 km² |
+| 20 km | 126 km | 8 hours | 21 minutes | 261 m | 5,030 km² |
+| **30 km** | **189 km** | **12 hours** | **31 minutes** | **319 m** | **11,300 km²** |
+| 60 km (Space Engineers' Earth-like planet, as commonly cited) | 377 km | 24 hours | an hour | 452 m | 45,200 km² |
+
+**Proposal: about 30 km for the starter planet, and 10 to 50 km for the rest, set by each planet's theme** (D13, Leaning until it is walked). At 30 km, walking round takes half a day; flying round takes half an hour; the horizon from the ground is a few hundred metres, so the planet feels like a world and not a ball, and from a hilltop or the air the curve shows. A dozen such planets are around a hundred thousand square kilometres, which a thousand players will not fill (D52).
+
+What makes a planet that size affordable:
+
+- **Nothing is stored that can be computed** (D47). The ground, the rocks, the trees are functions of the seed and the place. Only what players change is kept. A planet nobody has visited costs nothing.
+- **Only what is near a player is generated in full.** The terrain is level-of-detail voxels (D9): fine where you stand, coarse further off, a few numbers from orbit. Objects follow the same rule.
+- **Precision.** A 32-bit float at 30 km from a planet's centre has steps of about 2 mm, which is fine for drawing but not for physics far from where it was measured. So positions are kept relative to a nearby origin that moves with the player, and the server holds planet-scale positions in 64-bit (D36).
+- **The sandbox cannot test this yet.** Its stand-in planet scales its hills and its fine ground patch with the radius, so asking it for 30 km gives hills kilometres across and ground drawn every 15 m. The voxel terrain (D9, [terrain.md](terrain.md)) is what will make a large planet look right.
 
 ## The starter planet
 
@@ -65,4 +89,4 @@ The simulation of a planet becoming livable (D6, [planet-sim.md](planet-sim.md))
 4. **How is the next planet reached and unlocked?**
 5. **Caverns**: a feature of some planets or all? Do they hold anything the surface does not?
 6. **Water**: does it flow, or only sit at a level (D24, D44)?
-7. **Size**: does every planet share one radius, or do they differ (D13)?
+7. Answered in part: planets differ in size, set by their theme. The numbers above are a proposal to walk and judge.

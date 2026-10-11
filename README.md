@@ -36,6 +36,7 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 **Worlds** ([worlds.md](docs/worlds.md))
 - Procedurally generated terrain on real, round planets.
 - About a dozen planets, each different, mostly in the obvious ways; perhaps more over time.
+- Always round and finite, but large: walking all the way round should be ridiculous. About 30 km radius proposed for the starter planet.
 - Thematic variety on each: terrain, caverns, water features, foliage, palette.
 - A starter planet that is easy: normal, breathable air.
 - Gravity, toward each planet's centre.
@@ -45,7 +46,7 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 
 **Surviving** ([survival.md](docs/survival.md))
 - Survival attributes: health, stamina, oxygen, hunger, thirst, and perhaps more. Each world can treat them differently.
-- Swimming. Under water you use up oxygen, as on a planet with thin or no air.
+- Swimming, at any depth, using stamina. Under water you use up oxygen, as on a planet with thin or no air.
 
 **The player and their gear** ([player.md](docs/player.md))
 - An equipment grid: a character sheet.
