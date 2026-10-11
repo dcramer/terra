@@ -184,7 +184,7 @@ Proposed, to react to:
 
 **Pictures**: each tile's picture is drawn once, from the thing's own model, when the game starts. Until then, names and costs.
 
-Open: whether opening the menu should pause the world in single play, as some games do; the keys.
+Settled with the developers on 2026-10-11: the world never pauses, and the keys stand. Built in the sandbox's `play` experiment, with names and costs on the tiles; pictures are to come.
 
 ## What is built
 

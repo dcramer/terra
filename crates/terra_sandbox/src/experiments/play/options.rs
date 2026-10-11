@@ -373,6 +373,7 @@ pub fn toggle(
     keys: Res<ButtonInput<KeyCode>>,
     mut menu: ResMut<OptionsMenu>,
     mut inventory: ResMut<InventoryScreen>,
+    mut build_menu: ResMut<super::build_menu::BuildMenu>,
     window: Single<(&Window, &mut CursorOptions)>,
 ) {
     if !keys.just_pressed(KeyCode::Escape) {
@@ -382,7 +383,9 @@ pub fn toggle(
         menu.refused = false;
         return;
     }
-    if inventory.open {
+    if build_menu.open {
+        build_menu.open = false;
+    } else if inventory.open {
         inventory.open = false;
         inventory.at = None;
     } else {

@@ -209,6 +209,22 @@ impl Builder {
         self.variants[self.part]
     }
 
+    /// Which kind of a part is chosen.
+    pub fn variant_of(&self, part: usize) -> usize {
+        self.variants[part]
+    }
+
+    pub fn choose_variant(&mut self, part: usize, variant: usize) {
+        if variant < PARTS[part].variants() {
+            self.variants[part] = variant;
+        }
+    }
+
+    /// Whether something is being built or taken apart right now.
+    pub fn is_working(&self) -> bool {
+        self.work.is_some()
+    }
+
     pub fn pick(&mut self, part: usize) {
         self.part = part.min(PARTS.len() - 1);
         self.stowed = false;
@@ -403,13 +419,7 @@ fn choose(
     if builder.stowed {
         return;
     }
-    if controls.went_down(Action::NextKind) && !builder.is_carrying() {
-        let (part, count) = (builder.part, builder.picked().variants());
-        // With sprint held, the one before.
-        let back = controls.held(Action::Sprint);
-        builder.variants[part] =
-            (builder.variants[part] + if back { count - 1 } else { 1 }) % count;
-    }
+    // Kinds are chosen on the wheel, or stepped through with a tap of R (`dial`).
     // One notch at a time, however the wheel reports it. Turning left and right (Z and C)
     // stand in for the wheel.
     let notch = |amount: f32| (amount > 0.0) as i32 - (amount < 0.0) as i32;
@@ -1581,7 +1591,10 @@ fn highlight(
 /// What each button would do right now, for the prompt under the aiming mark.
 pub fn prompt(builder: &Builder, settings: &Settings) -> String {
     if builder.stowed {
-        return format!("{}  build menu", settings.hold(Action::BuildMenu));
+        return format!(
+            "{}  build menu",
+            capitalised(settings.key(Action::BuildMenu))
+        );
     }
     match builder.progress() {
         Some((_, true)) => return "Taking apart      Let go to stop".to_string(),

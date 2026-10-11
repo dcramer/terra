@@ -16,6 +16,7 @@
 //! the builder, `dial` its menu and prompts, and `catalogue` what it can build. See docs/player.md for the design this is a step toward.
 
 mod bag;
+mod build_menu;
 mod catalogue;
 mod claim;
 mod combat;
@@ -120,6 +121,7 @@ pub fn plugin(app: &mut App) {
     tool::plugin(app);
     dial::plugin(app);
     bag::plugin(app);
+    build_menu::plugin(app);
     crafting::plugin(app);
     interact::plugin(app);
     claim::plugin(app);
@@ -260,10 +262,11 @@ fn capture_mouse(
     mouse: Res<ButtonInput<MouseButton>>,
     screen: Res<inventory::InventoryScreen>,
     menu: Res<options::OptionsMenu>,
+    build_menu: Res<build_menu::BuildMenu>,
     window: Single<(&mut Window, &mut CursorOptions)>,
 ) {
-    // While the inventory or the options are open, the pointer is for pointing at them.
-    if screen.open || menu.open {
+    // While a menu or the inventory is open, the pointer is for pointing at it.
+    if screen.open || menu.open || build_menu.open {
         return;
     }
     let (mut window, mut cursor) = window.into_inner();
@@ -287,12 +290,14 @@ fn look(
     cursor: Single<&CursorOptions>,
     dial: Res<dial::Dial>,
     menu: Res<options::OptionsMenu>,
+    build_menu: Res<build_menu::BuildMenu>,
     player: Single<&Transform, With<Player>>,
     mut view: ResMut<View>,
 ) {
     let up = player.translation.normalize();
-    // The arrow keys look about too, for keyboards and for scripted runs.
-    if !menu.open {
+    // The arrow keys look about too, for keyboards and for scripted runs, except while
+    // the build menu uses them.
+    if !menu.open && !build_menu.open {
         let held = |action| f32::from(settings.held(action, &keys, &mouse, true));
         let turn = KEY_LOOK_SPEED * time.delta_secs();
         let across = held(Action::LookRight) - held(Action::LookLeft);

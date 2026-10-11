@@ -1,9 +1,10 @@
-//! The dial: a ring of the parts the builder can build, opened by holding the right mouse
-//! button, or whatever the build menu is set to. Move the mouse toward a part and let go
-//! to pick it. Under the aiming mark, a line says what is picked and what each button
-//! would do.
+//! The wheel of kinds: a ring of the variants of whatever the hammer has picked, such as
+//! room sizes or window shapes, opened by holding R. Move the mouse toward one and let
+//! go to pick it; a tap of R steps to the next instead. What to build is chosen in the
+//! build menu (`build_menu`). Under the aiming mark, a line says what is picked and what
+//! each button would do.
 
-use super::catalogue::PARTS;
+use super::build_menu::BuildMenu;
 use super::controls::{Action, Controls, Settings};
 use super::flora::Growth;
 use super::harvest::{self, Cutting};
@@ -15,7 +16,9 @@ use crate::shell::Options;
 use bevy::{input::mouse::AccumulatedMouseMotion, prelude::*, window::CursorOptions};
 
 const DIAL_SIZE: f32 = 650.0;
-/// How far from the middle the parts' names sit.
+/// The most kinds a part has.
+const MOST_KINDS: usize = 8;
+/// How far from the middle the kinds' names sit.
 const RING: f32 = 258.0;
 const LABEL: Vec2 = Vec2::new(98.0, 36.0);
 /// The mouse has to move this far from the middle before it points at anything.
@@ -35,8 +38,6 @@ pub struct Dial {
     pointed: Option<usize>,
     /// How long the dial has been open, in seconds.
     held_for: f32,
-    /// A number key picked a part while the dial's button was still down.
-    pub closed_by_key: bool,
 }
 
 #[derive(Component)]
@@ -44,6 +45,9 @@ struct DialRoot;
 
 #[derive(Component)]
 struct DialLabel(usize);
+
+#[derive(Component)]
+struct DialLabelText(usize);
 
 #[derive(Component)]
 struct DialMiddle;
@@ -153,17 +157,13 @@ fn setup(mut commands: Commands) {
                     BackgroundColor(Color::srgba(0.05, 0.06, 0.08, 0.5)),
                 ))
                 .with_children(|disc| {
-                    for (index, part) in PARTS.iter().enumerate() {
-                        // Clockwise from the top.
-                        let angle = index as f32 / PARTS.len() as f32 * std::f32::consts::TAU;
-                        let middle = Vec2::splat(DIAL_SIZE * 0.5)
-                            + Vec2::new(libm::sinf(angle), -libm::cosf(angle)) * RING;
+                    // As many places as the most kinds any part has; each is set round
+                    // the ring, and named, for the part picked when the wheel opens.
+                    for index in 0..MOST_KINDS {
                         disc.spawn((
                             DialLabel(index),
                             Node {
                                 position_type: PositionType::Absolute,
-                                left: px(middle.x - LABEL.x * 0.5),
-                                top: px(middle.y - LABEL.y * 0.5),
                                 width: px(LABEL.x),
                                 height: px(LABEL.y),
                                 justify_content: JustifyContent::Center,
@@ -174,9 +174,11 @@ fn setup(mut commands: Commands) {
                             BackgroundColor(PLAIN),
                         ))
                         .with_child((
-                            Text::new(part.name),
-                            TextFont::from_font_size(15.0),
+                            DialLabelText(index),
+                            Text::new(""),
+                            TextFont::from_font_size(14.0),
                             TextColor(Color::WHITE),
+                            TextLayout::justify(Justify::Center),
                         ));
                     }
                     disc.spawn((
@@ -239,79 +241,67 @@ fn setup(mut commands: Commands) {
         });
 }
 
-/// Opens the dial while the build menu's button is held, follows the mouse round it, and
-/// picks the part pointed at when the button is let go. A tap that points at nothing is
-/// a cancel instead. Runs before the player's view turns, which it holds still while the
-/// dial is open.
+/// Opens the wheel while R is held with a part picked, follows the mouse round it, and
+/// picks the kind pointed at when R is let go. A tap steps to the next kind instead, or,
+/// with sprint held, the one before. Runs before the player's view turns, which it holds
+/// still while the wheel is open.
+#[allow(clippy::too_many_arguments)]
 pub fn steer(
     time: Res<Time<Real>>,
-    keys: Res<ButtonInput<KeyCode>>,
     controls: Controls,
     motion: Res<AccumulatedMouseMotion>,
     inventory: Res<InventoryScreen>,
     belongings: Belongings,
     menu: Res<OptionsMenu>,
+    build_menu: Res<BuildMenu>,
     mut dial: ResMut<Dial>,
     mut builder: ResMut<Builder>,
 ) {
-    // The dial belongs to the builder, and is put away with it.
-    if inventory.open || menu.open || belongings.holding() != Some(Tool::Hammer) {
+    // The wheel belongs to the hammer, with a part in it.
+    let usable = !inventory.open
+        && !menu.open
+        && !build_menu.open
+        && belongings.holding() == Some(Tool::Hammer)
+        && !builder.stowed
+        && !builder.is_carrying()
+        && !builder.is_working();
+    if !usable {
         dial.open = false;
         return;
     }
-    let held = controls.held(Action::BuildMenu);
-    // After a number has picked a part, the button has to be let go before it opens again.
-    dial.closed_by_key &= held;
+    let held = controls.held(Action::NextKind);
     if !dial.open {
-        if dial.closed_by_key {
-            return;
-        }
-        if held && !builder.is_carrying() {
+        if controls.went_down(Action::NextKind) {
             *dial = Dial {
                 open: true,
                 ..default()
             };
-        } else if controls.went_down(Action::BuildMenu) {
-            // Nothing to choose while carrying something: the button only puts it back.
-            builder.cancel = true;
         }
         return;
     }
+    let count = builder.picked().variants().min(MOST_KINDS);
     dial.held_for += time.delta_secs();
     dial.pointer = (dial.pointer + motion.delta).clamp_length_max(RING);
-    dial.pointed = (dial.pointer.length() > DEAD_ZONE).then(|| {
+    dial.pointed = (count > 1 && dial.pointer.length() > DEAD_ZONE).then(|| {
         // Clockwise from the top, as the names are laid out. Down the screen is +y.
         let angle = libm::atan2f(dial.pointer.x, -dial.pointer.y);
         let turn = angle.rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU;
-        (turn * PARTS.len() as f32).round() as usize % PARTS.len()
+        (turn * count as f32).round() as usize % count
     });
-    // A number picks a part outright: the first ten, clockwise from the top.
-    const NUMBERS: [KeyCode; 10] = [
-        KeyCode::Digit1,
-        KeyCode::Digit2,
-        KeyCode::Digit3,
-        KeyCode::Digit4,
-        KeyCode::Digit5,
-        KeyCode::Digit6,
-        KeyCode::Digit7,
-        KeyCode::Digit8,
-        KeyCode::Digit9,
-        KeyCode::Digit0,
-    ];
-    if let Some(part) = NUMBERS.iter().position(|&key| keys.just_pressed(key)) {
-        builder.pick(part);
-        dial.open = false;
-        dial.closed_by_key = true;
+    if held {
         return;
     }
-    if !held {
-        match dial.pointed {
-            Some(part) => builder.pick(part),
-            None if dial.held_for < TAP_SECONDS => builder.cancel = true,
-            None => {}
+    let part = builder.part;
+    match dial.pointed {
+        Some(kind) => builder.choose_variant(part, kind),
+        None if dial.held_for < TAP_SECONDS && count > 1 => {
+            let back = controls.held(Action::Sprint);
+            let next = (builder.variant_of(part) + if back { count - 1 } else { 1 }) % count;
+            builder.choose_variant(part, next);
         }
-        dial.open = false;
+        None => {}
     }
+    dial.open = false;
 }
 
 fn draw(
@@ -327,12 +317,13 @@ fn draw(
     cursor: Single<&CursorOptions>,
     mut root: Single<&mut Visibility, (With<DialRoot>, Without<Hud>)>,
     mut hud: Query<&mut Visibility, With<Hud>>,
-    mut labels: Query<(&DialLabel, &mut BackgroundColor)>,
+    mut labels: Query<(&DialLabel, &mut Node, &mut BackgroundColor)>,
     mut texts: ParamSet<(
         Single<&mut Text, With<DialMiddle>>,
         Single<&mut Text, With<Picked>>,
         Single<&mut Text, With<Prompt>>,
         Single<&mut Text, With<Legend>>,
+        Query<(&DialLabelText, &mut Text)>,
     )>,
 ) {
     let set = |text: &mut Text, to: String| {
@@ -340,8 +331,12 @@ fn draw(
             text.0 = to;
         }
     };
-    // A tap should not flash the dial up.
-    let wanted = if dial.open && (dial.held_for > TAP_SECONDS * 0.5 || dial.pointed.is_some()) {
+    // A tap should not flash the wheel up, nor should a part with one kind.
+    let count = builder.picked().variants().min(MOST_KINDS);
+    let wanted = if dial.open
+        && count > 1
+        && (dial.held_for > TAP_SECONDS * 0.5 || dial.pointed.is_some())
+    {
         Visibility::Visible
     } else {
         Visibility::Hidden
@@ -360,10 +355,23 @@ fn draw(
             *hud = wanted;
         }
     }
-    for (label, mut background) in &mut labels {
+    // The picked part's kinds, round the ring clockwise from the top.
+    for (label, mut node, mut background) in &mut labels {
+        let shown = label.0 < count;
+        let display = if shown { Display::Flex } else { Display::None };
+        if node.display != display {
+            node.display = display;
+        }
+        if shown {
+            let angle = label.0 as f32 / count as f32 * std::f32::consts::TAU;
+            let middle = Vec2::splat(DIAL_SIZE * 0.5)
+                + Vec2::new(libm::sinf(angle), -libm::cosf(angle)) * RING;
+            node.left = px(middle.x - LABEL.x * 0.5);
+            node.top = px(middle.y - LABEL.y * 0.5);
+        }
         let colour = if dial.pointed == Some(label.0) {
             POINTED
-        } else if builder.part == label.0 && !builder.stowed {
+        } else if builder.variant() == label.0 {
             PICKED
         } else {
             PLAIN
@@ -372,17 +380,19 @@ fn draw(
             background.0 = colour;
         }
     }
-    // In the middle: the part pointed at, and the kinds of it there are.
-    let shown = &PARTS[dial.pointed.unwrap_or(builder.part)];
-    let kinds: Vec<&str> = (0..shown.variants())
-        .filter_map(|variant| shown.variant_name(variant))
-        .collect();
+    let part = builder.picked();
+    for (label, mut text) in &mut texts.p4() {
+        let name = part
+            .variant_name(label.0.min(count.saturating_sub(1)))
+            .unwrap_or("");
+        set(&mut text, name.to_string());
+    }
+    // In the middle: the part, and the kind pointed at.
     set(
         &mut texts.p0(),
-        if kinds.len() > 1 {
-            format!("{}\n\n{}", shown.name, kinds.join("\n"))
-        } else {
-            shown.name.to_string()
+        match dial.pointed.and_then(|kind| part.variant_name(kind)) {
+            Some(kind) => format!("{}\n\n{kind}", part.name),
+            None => part.name.to_string(),
         },
     );
 
@@ -417,8 +427,8 @@ fn draw(
             format!("{}  leave the station", settings.key(Action::Interact))
         } else if inventory.open {
             format!("{}  close the inventory", settings.key(Action::Inventory))
-        } else if dial.open {
-            "Move the mouse to a part and let go, or press its number".to_string()
+        } else if dial.open && builder.picked().variants() > 1 {
+            "Move the mouse to a kind and let go".to_string()
         } else {
             let doing = match holding {
                 Some(Tool::Hammer) => tool::prompt(&builder, &settings),

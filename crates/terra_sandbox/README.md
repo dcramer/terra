@@ -83,12 +83,11 @@ The tech demo of the MVP's loop (docs/prototypes.md), being built on the earlier
 | Ctrl | Roll clear of blows |
 | M | The map: the land around the outpost, only where you have been |
 | F5 | Save now. The game also saves every half minute and when it closes. |
-| Hold right mouse | With the hammer in hand: the dial of parts. Move the mouse toward one and let go, or press its number. B does the same. |
-| Tap right mouse | Put the part away, or put back what you picked up |
+| Right mouse | With the hammer in hand: the build menu, a panel of tabs with what you can build and what it costs. Click a tile, or 1 to 7 for a tab, the arrows and Enter. B does the same; Backspace puts the hammer's part away. While carrying an item, it puts the item back. |
+| Hold R | The wheel of kinds of what the hammer has: room sizes, window shapes, chair styles. Move the mouse to one and let go. A tap of R steps to the next kind; with Shift, the one before. |
 | Hold left click | Build, take apart, or cut. It takes a moment; let go early and nothing is done. E does the same. |
 | Left click | In move mode, pick an item up and put it down |
 | Scroll wheel | Turn an item, a room or a wall; switch a wall between pushing out and pulling in. Z and C do the same. |
-| R | The next variant of the part; with Shift, the one before |
 | Q | Take-apart mode, and back |
 | G | Move mode, and back |
 | X | The grid on and off |
@@ -106,7 +105,7 @@ You carry a backpack, on the rules in `terra_items` and the Subnautica baseline 
 
 - **In hand**: whatever is in the picked slot is in the figure's right hand, as its own model: a hammer, an axe, a knife, a spear, or a pickaxe made in code, since no free one exists. A tool you make goes on the bar's first free slot.
 - **Gathering**: one tool to a job. The axe fells trees for wood, the pickaxe breaks rock for stone and ore rocks (a rusty colour) for ore, the knife cuts bushes and plants for fibre. Aim at one, or just stand in front of it, and hold left click until it gives. A tool's material decides what it can work: the great pines are too tough for a stone axe, and a stone pickaxe is slow on ore. A full backpack takes nothing more, and what does not fit is left behind.
-- **Claiming**: you build only inside your claim (D94). Anything you aim to build outside one shows red, and the prompt says why. With the hammer, pick Craft, then Claim stone (two stone), and place it; the claim is 40 metres across, drawn on the ground while the hammer is in hand, and F at the stone grows it to 80 and then 160 for a price (D104). Until you place one, the hammer builds nothing and takes nothing apart.
+- **Claiming**: you build only inside your claim (D94). Anything you aim to build outside one shows red, and the prompt says why. With the hammer, open the build menu, pick Claim stone (two stone), and place it; the claim is 40 metres across, drawn on the ground while the hammer is in hand, and F at the stone grows it to 80 and then 160 for a price (D104). Until you place one, the hammer builds nothing and takes nothing apart.
 - **Building** spends materials. Everything has a cost, shown in the prompt before you commit: wood for floors and walls, fibre for windows, hide for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost, if there is room in the backpack for it; if not, it stays, and a notice above the bar says why.
 - **Crafting**: F at a workbench or a smithy opens its recipes beside the backpack; press a number or click one to make it. The workbench makes stone tools, leather gear and a larger pack; the smithy smelts ore into iron and makes iron tools, but only once a smith lives at your claim. The outpost has an old workbench by its door.
 - **Staying alive**: health, stamina and hunger, as bars at the bottom left. Sprinting, jumping and working spend stamina, which comes back when you stop. Hunger falls all the time; hungry, less comes back; starving drains health until you die (D101). Berry bushes give berries to the knife; meat cooks at a campfire into something far more filling.

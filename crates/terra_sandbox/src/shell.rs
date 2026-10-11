@@ -36,8 +36,8 @@ usage: terra_sandbox [options]
   --clean               leave the frame-time readout off the screen, for pictures
   --bench               measure frame times with vsync off, print them, then exit
   --settle <frames>     frames to run before capturing or measuring (default 120)
-  --press <key>@<frame> press a letter, digit, F1 to F12, esc or an arrow (left, right, up,
-                        down) on a given frame, for scripted runs;
+  --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace or an arrow
+                        (left, right, up, down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --give <item>:<count> start the play experiment carrying something extra, for
                         testing: a raw item such as stone:10, or health, fed or
@@ -201,7 +201,7 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
     ];
     let problem = || {
         format!(
-            "--press wants a letter, digit, F1 to F12, esc or an arrow (left, right, up, down) and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
+            "--press wants a letter, digit, F1 to F12, esc, enter, backspace or an arrow (left, right, up, down) and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
         )
     };
     let (key, frames) = text.split_once('@').ok_or_else(problem)?;
@@ -238,6 +238,8 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
     let code = match function {
         Some(&code) => code,
         None if key.eq_ignore_ascii_case("esc") => KeyCode::Escape,
+        None if key.eq_ignore_ascii_case("enter") => KeyCode::Enter,
+        None if key.eq_ignore_ascii_case("backspace") => KeyCode::Backspace,
         None if key.eq_ignore_ascii_case("left") => KeyCode::ArrowLeft,
         None if key.eq_ignore_ascii_case("right") => KeyCode::ArrowRight,
         None if key.eq_ignore_ascii_case("up") => KeyCode::ArrowUp,

@@ -131,7 +131,49 @@ pub enum Kind {
 
 pub struct Part {
     pub name: &'static str,
+    /// Where the build menu shows it.
+    pub tab: Tab,
     pub kind: Kind,
+}
+
+/// The build menu's tabs (docs/construction.md, the build menu).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Tab {
+    Claim,
+    Structure,
+    Openings,
+    Crafting,
+    Furniture,
+    Storage,
+    Fire,
+    /// Not in the menu: modes the hammer has on keys of their own.
+    Hidden,
+}
+
+impl Tab {
+    /// The tabs the menu shows, in order.
+    pub const SHOWN: [Tab; 7] = [
+        Tab::Claim,
+        Tab::Structure,
+        Tab::Openings,
+        Tab::Crafting,
+        Tab::Furniture,
+        Tab::Storage,
+        Tab::Fire,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Tab::Claim => "Claim",
+            Tab::Structure => "Structure",
+            Tab::Openings => "Openings",
+            Tab::Crafting => "Crafting",
+            Tab::Furniture => "Furniture",
+            Tab::Storage => "Storage",
+            Tab::Fire => "Light and fire",
+            Tab::Hidden => "",
+        }
+    }
 }
 
 impl Part {
@@ -157,43 +199,50 @@ impl Part {
     }
 }
 
-/// The parts, in the order they go round the dial, clockwise from the top. The first
-/// ten are also on the number keys.
-pub static PARTS: [Part; 14] = [
+/// The parts, in the order the build menu lists them within each tab.
+pub static PARTS: [Part; 16] = [
     Part {
-        name: "Craft",
-        kind: Kind::Items(&[
-            Item {
-                claims: true,
-                ..item(
-                    "Claim stone",
-                    "../nature/Rock_Moss_2",
-                    1.3,
-                    &[(Raw::Stone, 2)],
-                )
-            },
-            station(
-                Station::Workbench,
-                item(
-                    "Workbench",
-                    "Table_Small",
-                    1.7,
-                    &[(Raw::Wood, 4), (Raw::Stone, 2)],
-                ),
+        name: "Claim stone",
+        tab: Tab::Claim,
+        kind: Kind::Items(&[Item {
+            claims: true,
+            ..item(
+                "Claim stone",
+                "../nature/Rock_Moss_2",
+                1.3,
+                &[(Raw::Stone, 2)],
+            )
+        }]),
+    },
+    Part {
+        name: "Workbench",
+        tab: Tab::Crafting,
+        kind: Kind::Items(&[station(
+            Station::Workbench,
+            item(
+                "Workbench",
+                "Table_Small",
+                1.7,
+                &[(Raw::Wood, 4), (Raw::Stone, 2)],
             ),
-            station(
-                Station::Smithy,
-                item(
-                    "Smithy",
-                    "../village/Blacksmith",
-                    6.5,
-                    &[(Raw::Wood, 8), (Raw::Stone, 8)],
-                ),
+        )]),
+    },
+    Part {
+        name: "Smithy",
+        tab: Tab::Crafting,
+        kind: Kind::Items(&[station(
+            Station::Smithy,
+            item(
+                "Smithy",
+                "../village/Blacksmith",
+                6.5,
+                &[(Raw::Wood, 8), (Raw::Stone, 8)],
             ),
-        ]),
+        )]),
     },
     Part {
         name: "Room",
+        tab: Tab::Structure,
         kind: Kind::Room(&[
             RoomShape {
                 name: "4.5 by 4.5 m",
@@ -215,14 +264,17 @@ pub static PARTS: [Part; 14] = [
     },
     Part {
         name: "Reshape",
+        tab: Tab::Structure,
         kind: Kind::Reshape,
     },
     Part {
         name: "Wall",
+        tab: Tab::Structure,
         kind: Kind::Wall(&[("3 m", 3.0), ("1.5 m", 1.5), ("0.5 m", 0.5)]),
     },
     Part {
         name: "Window",
+        tab: Tab::Openings,
         kind: Kind::Window(&[
             ("1.5 m", 1.5, Panel::WINDOW),
             ("3 m", 3.0, Panel::WINDOW),
@@ -232,18 +284,22 @@ pub static PARTS: [Part; 14] = [
     },
     Part {
         name: "Door",
+        tab: Tab::Openings,
         kind: Kind::Door,
     },
     Part {
         name: "Remove",
+        tab: Tab::Hidden,
         kind: Kind::Remove,
     },
     Part {
         name: "Move",
+        tab: Tab::Hidden,
         kind: Kind::Move,
     },
     Part {
         name: "Seat",
+        tab: Tab::Furniture,
         kind: Kind::Items(&[
             item(
                 "Couch",
@@ -257,6 +313,7 @@ pub static PARTS: [Part; 14] = [
     },
     Part {
         name: "Table",
+        tab: Tab::Furniture,
         kind: Kind::Items(&[
             item("Round table", "Table_RoundSmall", 1.1, &[(Raw::Wood, 3)]),
             item("Night stand", "NightStand_1", 0.55, &[(Raw::Wood, 2)]),
@@ -264,6 +321,7 @@ pub static PARTS: [Part; 14] = [
     },
     Part {
         name: "Bed",
+        tab: Tab::Furniture,
         kind: Kind::Items(&[item(
             "Single bed",
             "Bed_Single",
@@ -273,6 +331,7 @@ pub static PARTS: [Part; 14] = [
     },
     Part {
         name: "Storage",
+        tab: Tab::Storage,
         kind: Kind::Items(&[
             item("Crate", "Props_Crate", 0.8, &[(Raw::Wood, 2)]),
             item("Long crate", "Props_CrateLong", 1.2, &[(Raw::Wood, 3)]),
@@ -288,6 +347,7 @@ pub static PARTS: [Part; 14] = [
     },
     Part {
         name: "Decor",
+        tab: Tab::Furniture,
         kind: Kind::Items(&[
             item("Leafy plant", "Houseplant_7", 1.1, &[(Raw::Fibre, 1)]),
             item("Cactus", "Houseplant_3", 0.9, &[(Raw::Fibre, 1)]),
@@ -299,6 +359,7 @@ pub static PARTS: [Part; 14] = [
     },
     Part {
         name: "Fire",
+        tab: Tab::Fire,
         kind: Kind::Items(&[
             station(
                 Station::Campfire,

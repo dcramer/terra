@@ -9,6 +9,7 @@
 //!   gear in the backpack to wear it, and click a slot of the sheet to take it off.
 
 use super::Player;
+use super::build_menu::BuildMenu;
 use super::controls::{Action, Settings};
 use super::dial::Dial;
 use super::grab_mouse;
@@ -305,6 +306,7 @@ fn use_keys(
     settings: Res<Settings>,
     menu: Res<OptionsMenu>,
     dial: Res<Dial>,
+    build_menu: Res<BuildMenu>,
     shown: Query<(&Interaction, &Shown)>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut screen: ResMut<InventoryScreen>,
@@ -323,7 +325,8 @@ fn use_keys(
         grab_mouse(&mut cursor, !screen.open && window.focused);
     }
     // While the dial is open the numbers pick parts from it instead.
-    if dial.open || dial.closed_by_key {
+    // While the build menu is open the numbers pick its tabs instead.
+    if dial.open || build_menu.open {
         return;
     }
     let pointed = shown
