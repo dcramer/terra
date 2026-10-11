@@ -34,6 +34,9 @@ mod interact;
 mod inventory;
 mod map;
 mod models;
+mod music;
+mod noise;
+mod noises;
 mod options;
 mod people;
 mod pooling;
@@ -42,6 +45,8 @@ mod save;
 mod scene;
 mod settlement;
 mod skills;
+mod sounds;
+mod soundscape;
 mod station_screen;
 mod tiles;
 mod tool;
@@ -143,6 +148,12 @@ pub fn plugin(app: &mut App) {
     save::plugin(app);
     harvest::plugin(app);
     options::plugin(app);
+    // Sound: noises from what happens, what they sound like, the place, and music.
+    noise::plugin(app);
+    noises::plugin(app);
+    sounds::plugin(app);
+    soundscape::plugin(app);
+    music::plugin(app);
     app.insert_resource(DrivenByPlayer)
         .add_systems(PostStartup, spawn)
         .add_systems(

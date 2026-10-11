@@ -34,6 +34,7 @@ use super::controls::{Action, Controls, Settings, capitalised};
 use super::dial::Dial;
 use super::flora::Obstacles;
 use super::inventory::{self, Belongings, Cost, InventoryScreen, Raw, Tool};
+use super::noise::{Cue, Noise};
 use super::props::{self, Blocked, Models, Prop, Standing};
 use super::skills::{Did, ONCE, Skill};
 use super::work::Hold;
@@ -865,6 +866,7 @@ fn act(
     mut notice: ResMut<Notice>,
     mut site: ResMut<Site>,
     mut did: MessageWriter<Did>,
+    mut noise: MessageWriter<Noise>,
     player: Single<(&Transform, &mut Player)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -913,6 +915,8 @@ fn act(
             return;
         }
         builder.must_release = true;
+        // Heard just in front of the player, where the work is.
+        let work_at = player_at + player_at.normalize_or(Vec3::Y);
         match work.job {
             Job::Structure { ops, pay, refund } => {
                 // As in Subnautica, nothing is taken apart if what it gives back would
@@ -924,6 +928,12 @@ fn act(
                     return;
                 }
                 if site.apply_all(&ops, &mut commands, &planet, &mut meshes) {
+                    let cue = if refund.is_some() {
+                        Cue::TakenApart
+                    } else {
+                        Cue::Built
+                    };
+                    noise.write(Noise::at(cue, work_at));
                     if pay.is_some() {
                         did.write(Did(Skill::Building, ONCE));
                     }
@@ -958,12 +968,14 @@ fn act(
                     );
                     info!("Placed a {} at {at}, {lift} up.", item.name);
                     did.write(Did(Skill::Building, ONCE));
+                    noise.write(Noise::at(Cue::Placed, work_at));
                 }
             }
             Job::TakeAway(entity) => {
                 if let Ok(prop) = props.get(entity) {
                     if belongings.refund(prop.item.cost, 1) {
                         info!("Removed a {}.", prop.item.name);
+                        noise.write(Noise::at(Cue::TakenApart, work_at));
                         commands.entity(entity).despawn();
                     } else {
                         notice.say("No room in your backpack for what that gives back");

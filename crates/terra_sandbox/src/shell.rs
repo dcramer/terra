@@ -1,7 +1,7 @@
 //! The parts every experiment gets for free: the window, overlays, inspectors, and the
 //! scripted modes that let a run be checked without anyone watching.
 
-use crate::debug;
+use crate::{audio, debug};
 use bevy::{
     audio::AudioPlugin,
     camera_controller::free_camera::FreeCameraPlugin,
@@ -34,6 +34,8 @@ usage: terra_sandbox [options]
   --radius <metres>     planet radius (default 2000)
   --shot <file.png>     save a screenshot once the scene has settled, then exit
   --clean               leave the frame-time readout off the screen, for pictures
+  --mute                no sound
+  --sound               sound under WSL too, where it is off by default
   --bench               measure frame times with vsync off, print them, then exit
   --settle <frames>     frames to run before capturing or measuring (default 120)
   --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace or an arrow
@@ -79,6 +81,9 @@ pub struct Options {
     pub bench: bool,
     /// No readout on screen.
     pub clean: bool,
+    /// No sound, and sound under WSL, where it is off unless asked for.
+    pub mute: bool,
+    pub sound: bool,
     /// A key, the frame it goes down, and the frame it comes back up.
     pub presses: Vec<(KeyCode, u32, u32)>,
     /// A fixed camera: where it stands and what it looks at, in an experiment's own space.
@@ -120,6 +125,8 @@ impl Options {
             settle_frames: SETTLE_FRAMES,
             bench: false,
             clean: false,
+            mute: false,
+            sound: false,
             presses: Vec::new(),
             vantage: None,
             gives: Vec::new(),
@@ -137,6 +144,8 @@ impl Options {
                 "--list" => options.list = true,
                 "--bench" => options.bench = true,
                 "--clean" => options.clean = true,
+                "--mute" => options.mute = true,
+                "--sound" => options.sound = true,
                 "--fresh" => options.fresh = true,
                 "--at" => options.start_at = Some(east_south("--at", &value("--at")?)?),
                 "--face" => options.start_facing = Some(east_south("--face", &value("--face")?)?),
@@ -197,6 +206,14 @@ impl Options {
     /// Whether this run drives itself and exits, rather than waiting for a person.
     pub fn scripted(&self) -> bool {
         self.shot.is_some() || self.bench
+    }
+
+    /// Whether anything is heard. A scripted run is silent, so it neither plays sounds
+    /// over whatever the person at the machine is doing nor needs a sound device. WSL
+    /// usually has no sound device, and its sound library fills the log saying so, so
+    /// sound is off there unless asked for.
+    pub fn sound_on(&self) -> bool {
+        !self.scripted() && !self.mute && (self.sound || !on_wsl())
     }
 }
 
@@ -340,24 +357,26 @@ impl Plugin for ShellPlugin {
                 1.0 / 60.0,
             )));
         }
+        let sound = options.sound_on();
+        let engine = DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(window),
+                ..default()
+            })
+            .set(LogPlugin {
+                filter: format!("{DEFAULT_FILTER},{QUIET}"),
+                ..default()
+            });
         app.insert_resource(options)
             .init_resource::<ScriptFrame>()
             .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.02)))
-            .add_plugins(
-                DefaultPlugins
-                    .set(WindowPlugin {
-                        primary_window: Some(window),
-                        ..default()
-                    })
-                    .set(LogPlugin {
-                        filter: format!("{DEFAULT_FILTER},{QUIET}"),
-                        ..default()
-                    })
-                    // Nothing makes a sound yet, and without a sound card (as under WSL)
-                    // the audio library fills the log with complaints.
-                    .disable::<AudioPlugin>(),
-            )
+            .add_plugins(if sound {
+                engine
+            } else {
+                engine.disable::<AudioPlugin>()
+            })
             .add_plugins((
+                audio::plugin(sound),
                 FreeCameraPlugin,
                 EguiPlugin::default(),
                 // On by default, screenshots included, so it is there when it is needed.
@@ -459,6 +478,11 @@ fn scripted_run(
             exit.write(AppExit::Success);
         }
     }
+}
+
+/// Whether this is Linux under Windows.
+fn on_wsl() -> bool {
+    std::fs::read_to_string("/proc/version").is_ok_and(|v| v.to_lowercase().contains("microsoft"))
 }
 
 #[cfg(test)]

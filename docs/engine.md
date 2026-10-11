@@ -40,7 +40,7 @@ Since then the developers have set out the worlds: several planets, each themed,
 | 9 | Networking | A server and the clients that join it, ordered operations, snapshots, late join | Nothing |
 | 10 | Simulation runtime | Running the simulation on its thread, snapshots, fields into textures. Parked with terraforming (D60) | The existing crate |
 
-Saving, physics for loose objects, audio and UI are engine work too, but nothing needs them yet. Collision is needed now and is described below.
+Saving, physics for loose objects and UI are engine work too. Sound has a first version ([audio.md](audio.md)). Collision is needed now and is described below.
 
 ## What makes them separable
 

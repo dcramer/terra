@@ -8,7 +8,7 @@
 //! What can be set, and how it is saved, is in `controls.rs`. Every change is saved as
 //! it is made.
 
-use super::controls::{Action, Binding, FIELD_OF_VIEW, LOOK_SPEED, Settings, capitalised};
+use super::controls::{Action, Binding, FIELD_OF_VIEW, LOOK_SPEED, Settings, VOLUME, capitalised};
 use super::inventory::InventoryScreen;
 use super::{grab_mouse, tool};
 use crate::shell::Options;
@@ -46,15 +46,49 @@ enum General {
     FieldOfView,
     FullScreen,
     Vsync,
+    Volume(Part),
+}
+
+/// A part of the sound, with its own volume.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Part {
+    Master,
+    Music,
+    Ambience,
+    Effects,
+}
+
+impl Part {
+    fn of(self, settings: &mut Settings) -> &mut f32 {
+        match self {
+            Part::Master => &mut settings.master_volume,
+            Part::Music => &mut settings.music_volume,
+            Part::Ambience => &mut settings.ambience_volume,
+            Part::Effects => &mut settings.effects_volume,
+        }
+    }
+
+    fn get(self, settings: &Settings) -> f32 {
+        match self {
+            Part::Master => settings.master_volume,
+            Part::Music => settings.music_volume,
+            Part::Ambience => settings.ambience_volume,
+            Part::Effects => settings.effects_volume,
+        }
+    }
 }
 
 impl General {
-    const ALL: [General; 5] = [
+    const ALL: [General; 9] = [
         General::LookSpeed,
         General::InvertLook,
         General::FieldOfView,
         General::FullScreen,
         General::Vsync,
+        General::Volume(Part::Master),
+        General::Volume(Part::Music),
+        General::Volume(Part::Ambience),
+        General::Volume(Part::Effects),
     ];
 
     fn name(self) -> &'static str {
@@ -64,6 +98,10 @@ impl General {
             General::FieldOfView => "Field of view",
             General::FullScreen => "Full screen",
             General::Vsync => "Vsync",
+            General::Volume(Part::Master) => "Volume",
+            General::Volume(Part::Music) => "Music",
+            General::Volume(Part::Ambience) => "Sounds of the world",
+            General::Volume(Part::Effects) => "Sounds of things done",
         }
     }
 
@@ -75,12 +113,16 @@ impl General {
             General::FieldOfView => format!("{}", settings.field_of_view),
             General::FullScreen => on_off(settings.full_screen),
             General::Vsync => on_off(settings.vsync),
+            General::Volume(part) => format!("{}%", libm::roundf(part.get(settings) * 100.0)),
         }
     }
 
     /// Whether it has a range of values, stepped down and up, rather than on and off.
     fn ranged(self) -> bool {
-        matches!(self, General::LookSpeed | General::FieldOfView)
+        matches!(
+            self,
+            General::LookSpeed | General::FieldOfView | General::Volume(_)
+        )
     }
 
     fn change(self, settings: &mut Settings, up: bool) {
@@ -92,6 +134,10 @@ impl General {
             General::InvertLook => settings.invert_look = !settings.invert_look,
             General::FullScreen => settings.full_screen = !settings.full_screen,
             General::Vsync => settings.vsync = !settings.vsync,
+            General::Volume(part) => {
+                let volume = part.of(settings);
+                *volume = VOLUME.nudge(*volume, up);
+            }
         }
     }
 }

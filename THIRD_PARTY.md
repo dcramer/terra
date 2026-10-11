@@ -27,3 +27,13 @@ All by [Quaternius](https://quaternius.com), who releases everything under [CC0 
 | `crates/terra_sandbox/assets/models/tools/` | Survival pack: `Axe.glb`, `Knife.glb`. Medieval Weapons pack: hammer, sword, spear, bow, arrow | None to the files. |
 
 The individual model files were fetched from [quaternius-showcase](https://github.com/trebeljahr/quaternius-showcase), which republishes the packs one model to a file, and the animation library from [gltf-universal-animation-library](https://github.com/J-Ponzo/gltf-universal-animation-library). The licence was checked against Quaternius's own [FAQ](https://quaternius.com/faq.html) on 2026-10-10. The creatures, village pieces, tools and workbench were fetched from quaternius-showcase on 2026-10-11.
+
+## Sound
+
+By [Kenney](https://kenney.nl), under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): free for any use, no attribution required. We credit them anyway.
+
+| Where | From | Changes |
+|---|---|---|
+| `crates/terra_sandbox/assets/sounds/` | [Impact Sounds](https://kenney.nl/assets/impact-sounds) and [RPG Audio](https://kenney.nl/assets/rpg-audio): footsteps, impacts, chopping, creaks, clicks | None to the files; 88 of the packs' 180 sounds. Fetched from kenney.nl on 2026-10-11, licence checked in each pack's `License.txt`. |
+
+The rest of the game's sound, air, water, fire, birds and music, is made in code (`crates/terra_sandbox/src/audio/`).

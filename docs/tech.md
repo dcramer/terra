@@ -25,6 +25,7 @@ The earlier Godot build and its measurements are in [research/godot-spike.md](..
 | Physics | Avian for rigid bodies; the player walks on voxel data directly | Leaning |
 | Networking | Our own messages over `renet`; Steam transport later | Leaning |
 | UI | Bevy's UI for the game; `bevy_egui` for developer tools | Leaning |
+| Sound | Bevy's audio; ambience and music generated in code; recorded clips in named sets ([audio.md](audio.md)) | Decided (D113) |
 | Maths in shared state | The `libm` crate for sine and friends, not the system maths library | Decided |
 | Saves and messages | `serde` with `postcard` | Leaning |
 | Coordinates | One frame per world, relative to a moving origin; no `big_space` | Leaning (D36) |

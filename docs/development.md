@@ -35,6 +35,8 @@ A clean build of a Bevy application takes about two and a half minutes; a rebuil
 
 ## Seeing and measuring
 
+Sound is on in the sandbox except in scripted runs, which print what they would have played instead, and under WSL, which usually has no sound device: pass `--sound` to try it there, or `--mute` anywhere ([audio.md](audio.md)).
+
 WSL has no hardware Vulkan, which splits the work in two:
 
 - **To see output**, run the Linux build. It renders on the CPU, slowly but correctly, and can save screenshots. This works anywhere, including for agents.

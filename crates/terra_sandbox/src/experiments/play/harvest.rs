@@ -34,6 +34,11 @@ impl Cutting {
     pub fn progress(&self) -> Option<f32> {
         self.held.map(|(_, hold)| hold.fraction())
     }
+
+    /// What is being cut, while a cut is under way.
+    pub fn held(&self) -> Option<Entity> {
+        self.held.map(|(entity, _)| entity)
+    }
 }
 
 /// Something being cut: how it stood before it started to shake.
@@ -42,11 +47,18 @@ struct Shaken(Quat);
 
 /// Something cut through, on its way down.
 #[derive(Component)]
-struct Felled {
+pub struct Felled {
     age: f32,
     /// The level direction it falls over, for things tall enough to fall.
     over: Option<Vec3>,
     from: Transform,
+}
+
+impl Felled {
+    /// Whether it is big enough to fall over, like a tree, rather than just go.
+    pub fn tall(&self) -> bool {
+        self.over.is_some()
+    }
 }
 
 pub fn plugin(app: &mut App) {

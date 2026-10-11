@@ -306,6 +306,13 @@ pub const LOOK_SPEED: Range = Range {
     step: 0.1,
 };
 
+/// Loudness, for each part of the mix: from silent to full, in tenths.
+pub const VOLUME: Range = Range {
+    least: 0.0,
+    most: 1.0,
+    step: 0.1,
+};
+
 pub const FIELD_OF_VIEW: Range = Range {
     least: 40.0,
     most: 90.0,
@@ -324,6 +331,11 @@ pub struct Settings {
     pub field_of_view: f32,
     pub full_screen: bool,
     pub vsync: bool,
+    /// How loud everything is, and each part of it, from 0 to 1.
+    pub master_volume: f32,
+    pub music_volume: f32,
+    pub ambience_volume: f32,
+    pub effects_volume: f32,
 }
 
 impl Default for Settings {
@@ -337,6 +349,11 @@ impl Default for Settings {
             field_of_view: 55.0,
             full_screen: false,
             vsync: true,
+            master_volume: 0.8,
+            // Music is meant to sit under the world, not over it.
+            music_volume: 0.6,
+            ambience_volume: 0.8,
+            effects_volume: 0.9,
         }
     }
 }
@@ -416,6 +433,10 @@ impl Settings {
         text += &format!("field_of_view = {}\n", self.field_of_view);
         text += &format!("full_screen = {}\n", self.full_screen);
         text += &format!("vsync = {}\n", self.vsync);
+        text += &format!("master_volume = {}\n", self.master_volume);
+        text += &format!("music_volume = {}\n", self.music_volume);
+        text += &format!("ambience_volume = {}\n", self.ambience_volume);
+        text += &format!("effects_volume = {}\n", self.effects_volume);
         for action in Action::ALL {
             let bound: Vec<String> = self
                 .bindings(action)
@@ -450,6 +471,10 @@ impl Settings {
                 "invert_look" => settings.invert_look = value == "true",
                 "full_screen" => settings.full_screen = value == "true",
                 "vsync" => settings.vsync = value != "false",
+                "master_volume" => settings.master_volume = number(&VOLUME).unwrap_or(0.8),
+                "music_volume" => settings.music_volume = number(&VOLUME).unwrap_or(0.6),
+                "ambience_volume" => settings.ambience_volume = number(&VOLUME).unwrap_or(0.8),
+                "effects_volume" => settings.effects_volume = number(&VOLUME).unwrap_or(0.9),
                 _ => {
                     let Some(action) = Action::ALL.into_iter().find(|a| a.file_name() == name)
                     else {

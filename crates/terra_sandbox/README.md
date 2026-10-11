@@ -23,6 +23,8 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--radius <metres>` | Planet radius, 2000 by default |
 | `--shot <file.png>` | Save a screenshot once the scene has settled, then exit |
 | `--clean` | Leave the frame-time readout off the screen, for pictures |
+| `--mute` | No sound. Scripted runs are always silent, and print what they would have played: `SANDBOX heard: step.grass 4` |
+| `--sound` | Sound under WSL, where it is off by default because WSL usually has no sound device |
 | `--bench` | Measure frame times with vsync off, print them, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
 | `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |

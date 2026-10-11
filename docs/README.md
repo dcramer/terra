@@ -29,6 +29,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
 | [planet-sim.md](planet-sim.md) | Parked with terraforming: the planetary simulation, cells, fields, how local feeds global. |
 | [art.md](art.md) | Art direction, constraints, the beauty-corner test. |
+| [audio.md](audio.md) | Sound: how it is put together, what it sounds like now, and questions for the developers. |
 
 **The engine and how we work**
 
