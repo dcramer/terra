@@ -128,6 +128,12 @@ What the developers said settles the first open question's main fork: one square
 
 **One step for everything: half a metre.** Decided by the developers, as "something we can change later", and built: it is one constant in `terra_build`. A wall moves by it, a room is sized in it, a window or door is a run of its cells of any width anywhere along a wall, and an item snaps to it. It is "the smallest placeable kind of thing". The developers also want the same grid to appear on a wall when something is placed there, which is not built: nothing hangs on a wall yet.
 
+**Three sizes, from the player's side** (2026-10-11, with the voxel grid as the basis, D48):
+
+1. **The block**: the smallest thing the grid holds, half a metre today. Enshrouded's is said to be about a metre, from community guides, not checked; ours is finer. Halving it means eight times the blocks for the same building, in memory, meshing and what is sent, so it is cheap to change now and dear once saved bases and ready-made pieces are measured in it. Settle it after building with it in the voxel prototype, before content exists.
+2. **The brush**: how much one action places or carves. Several brush sizes over one fine grid keep big work fast and detail possible; Enshrouded's 1, 2 and 4 metre blocks work this way.
+3. **What is seen**: blending, bevels and rounded corners are what stop voxel building looking like a grid. That is meshing, separate from the block size.
+
 **Two kinds of structural buildable.**
 
 | Kind | Size | Joins others by |
