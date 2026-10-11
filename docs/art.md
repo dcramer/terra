@@ -1,6 +1,6 @@
 # Art direction
 
-Status: Leaning (D14). The developers named [Forever Ago](https://store.steampowered.com/app/1215940/Forever_Ago/) as the visual inspiration on 2026-10-10, with one firm constraint: it must not look chunky or Minecraft-like. Like everything in pre-production, this is current thinking.
+Status: Leaning (D14). **The target is now the four-world mood board** on [Terra Style Directions](https://claude.ai/artifact/AWgMLGJmS5GR7hvjJMbKq4): a medieval town, a techno-punk street, fantasy wilds and a gothic graveyard, in direction C's painted look and rich light, at life size (D110). The developers accepted it on 2026-10-11. The sections below were written for the earlier direction, [Forever Ago](https://store.steampowered.com/app/1215940/Forever_Ago/)'s flat-coloured facets, and are kept until this page is rewritten around the board; where they disagree with it, the board wins. The firm constraint stands: it must not look chunky or Minecraft-like.
 
 ## The essence
 
