@@ -41,3 +41,17 @@ export function cost(model, t) {
   const [, input, write, read, output] = p;
   return (t.input * input + t.cache_write * write + t.cache_read * read + t.output * output) / 1e6;
 }
+
+// What Tripo's credits cost, in dollars per credit (2026-10-11). The API sells them at
+// a cent each (https://developers.tripo3d.com/en/pricing). Studio's come with the
+// subscription: Professional is $19.90 a month, billed monthly, for 3,000 credits, so
+// this is what the credits a task took are worth on the plan, not an extra bill.
+const CREDITS = {
+  "tripo-api": 0.01,
+  "tripo-studio": 19.9 / 3000,
+};
+
+// Dollars for a number of credits of a service; 0 for a service with no known price.
+export function creditCost(service, credits) {
+  return (CREDITS[service] ?? 0) * credits;
+}

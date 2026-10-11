@@ -1,17 +1,18 @@
-// Records Claude token usage per message, and totals per person, day and model.
-// See ../README.md.
+// Records Claude token usage per message, and totals per person, day and model, and the
+// Tripo credits each task spent. See ../README.md.
 //
 // GET  /       the page: tokens per person, public
 // GET  /json   the same as JSON, public
 // GET  /ticker the running cost alone, small enough to embed in an iframe, public
 // GET  /ticker/<user> the same for one person, public
-// POST /report {user, messages: [{id, session, day, model, input, output, cache_read, cache_write}]}
+// POST /report {user, messages: [{id, session, day, model, input, output, cache_read, cache_write}],
+//               spends: [{id, day, service, credits}]}
 // GET  /stats  ?group=user,day,model&since=YYYY-MM-DD
 //
 // /report and /stats need `Authorization: Bearer <API_KEY>`.
 
 import { page } from "./page.js";
-import { cost } from "./prices.js";
+import { cost, creditCost } from "./prices.js";
 import { ticker } from "./ticker.js";
 
 const USER = /^[A-Za-z0-9_.-]{1,40}$/;
@@ -19,6 +20,7 @@ const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const SESSION = /^[A-Za-z0-9_-]{0,100}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const MODEL = /^[A-Za-z0-9_.:@/-]{1,100}$/;
+const SERVICE = /^[a-z0-9-]{1,40}$/;
 const COUNTS = ["input", "output", "cache_read", "cache_write"];
 const GROUPS = ["user", "day", "model"];
 const MAX_MESSAGES = 500;
@@ -56,6 +58,16 @@ const SCHEMA = [
     id INTEGER PRIMARY KEY CHECK (id = 1),
     day TEXT NOT NULL,
     json TEXT NOT NULL
+  )`,
+  // Credits spent on other services, such as Tripo's, one row per task. They are few,
+  // so the summary sums them as it goes, with no totals table.
+  `CREATE TABLE IF NOT EXISTS spends (
+    id TEXT PRIMARY KEY,
+    user TEXT NOT NULL,
+    day TEXT NOT NULL,
+    service TEXT NOT NULL,
+    credits INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
   )`,
   `CREATE TRIGGER IF NOT EXISTS messages_insert AFTER INSERT ON messages BEGIN
     ${addToUsage("new", 1)}
@@ -100,6 +112,16 @@ const UPSERT = `INSERT INTO messages (id, user, session, day, model, input_token
     OR excluded.output_tokens > messages.output_tokens
     OR excluded.cache_read_tokens > messages.cache_read_tokens
     OR excluded.cache_write_tokens > messages.cache_write_tokens`;
+
+// A task sent again keeps the larger count and the earlier day, as a message does.
+const UPSERT_SPENDS = `INSERT INTO spends (id, user, day, service, credits, updated_at)
+  SELECT s.value ->> 'id', ?1, s.value ->> 'day', s.value ->> 'service', s.value ->> 'credits', ?3
+  FROM json_each(?2) AS s WHERE true
+  ON CONFLICT (id) DO UPDATE SET
+    day = min(spends.day, excluded.day),
+    credits = max(spends.credits, excluded.credits),
+    updated_at = excluded.updated_at
+  WHERE excluded.day < spends.day OR excluded.credits > spends.credits`;
 
 export default {
   async fetch(request, env) {
@@ -151,15 +173,25 @@ async function report(request, env) {
     throw new BadRequest("body must be JSON");
   }
   if (typeof body?.user !== "string" || !USER.test(body.user)) throw new BadRequest("bad user");
-  if (!Array.isArray(body.messages) || body.messages.length > MAX_MESSAGES) throw new BadRequest("bad messages");
-  const messages = body.messages.map(cleanMessage);
-  if (messages.length === 0) return json({ messages: 0, rows_written: 0 });
+  const given = { messages: body.messages ?? [], spends: body.spends ?? [] };
+  if (!Array.isArray(given.messages)) throw new BadRequest("bad messages");
+  if (!Array.isArray(given.spends)) throw new BadRequest("bad spends");
+  if (given.messages.length + given.spends.length > MAX_MESSAGES) throw new BadRequest("too many messages and spends");
+  const messages = given.messages.map(cleanMessage);
+  const spends = given.spends.map(cleanSpend);
+  if (messages.length + spends.length === 0) return json({ messages: 0, spends: 0, rows_written: 0 });
 
-  const result = await withTables(env, () =>
-    env.DB.prepare(UPSERT).bind(body.user, JSON.stringify(messages), new Date().toISOString()).run(),
+  const now = new Date().toISOString();
+  const writes = [
+    [UPSERT, messages],
+    [UPSERT_SPENDS, spends],
+  ].filter(([, rows]) => rows.length > 0);
+  const results = await withTables(env, () =>
+    env.DB.batch(writes.map(([sql, rows]) => env.DB.prepare(sql).bind(body.user, JSON.stringify(rows), now))),
   );
-  if (result.meta.changes > 0) await saveSnapshot(env);
-  return json({ messages: messages.length, rows_written: result.meta.changes });
+  const written = results.reduce((sum, r) => sum + r.meta.changes, 0);
+  if (written > 0) await saveSnapshot(env);
+  return json({ messages: messages.length, spends: spends.length, rows_written: written });
 }
 
 // The summary as of the last report that changed anything, worked out again when a
@@ -194,6 +226,14 @@ function cleanMessage(m) {
   return clean;
 }
 
+function cleanSpend(s) {
+  if (typeof s?.id !== "string" || !ID.test(s.id)) throw new BadRequest("bad spend id");
+  if (typeof s.day !== "string" || !DAY.test(s.day)) throw new BadRequest("bad spend day");
+  if (typeof s.service !== "string" || !SERVICE.test(s.service)) throw new BadRequest("bad service");
+  if (!Number.isSafeInteger(s.credits) || s.credits < 0) throw new BadRequest("bad credits");
+  return { id: s.id, day: s.day, service: s.service, credits: s.credits };
+}
+
 async function stats(url, env) {
   const group = (url.searchParams.get("group") ?? "user").split(",").filter(Boolean);
   if (group.length === 0 || group.some((g) => !GROUPS.includes(g))) throw new BadRequest("bad group");
@@ -223,15 +263,21 @@ const SUMS = `sum(input_tokens) AS input, sum(output_tokens) AS output,
 
 // Everyone's totals, their models, and tokens a day for the last CHART_DAYS days, each
 // with `cost`: what the tokens would cost at API list prices, in dollars (prices.js).
+// Credits spent on other services count in `cost` too, and each service is listed with
+// the models, with its `credits` and no tokens.
 async function summary(env) {
   const today = new Date();
   const since = new Date(today.getTime() - (CHART_DAYS - 1) * 86400000).toISOString().slice(0, 10);
-  const [people, models, daily] = await withTables(env, () =>
+  const [people, models, daily, spent, spentDaily] = await withTables(env, () =>
     env.DB.batch([
       env.DB.prepare(`SELECT user, ${SUMS}, min(day) AS first_day, max(day) AS last_day
         FROM usage WHERE messages > 0 GROUP BY user`),
       env.DB.prepare(`SELECT user, model, ${SUMS} FROM usage WHERE messages > 0 GROUP BY user, model`),
       env.DB.prepare(`SELECT user, day, model, ${SUMS} FROM usage WHERE day >= ?1 GROUP BY user, day, model`).bind(since),
+      env.DB.prepare(`SELECT user, service, sum(credits) AS credits, min(day) AS first_day, max(day) AS last_day
+        FROM spends GROUP BY user, service`),
+      env.DB.prepare(`SELECT user, day, service, sum(credits) AS credits FROM spends WHERE day >= ?1
+        GROUP BY user, day, service`).bind(since),
     ]),
   );
   const withTotal = (r) => ({ ...r, total: r.input + r.output + r.cache_read + r.cache_write });
@@ -241,21 +287,32 @@ async function summary(env) {
     return into;
   };
   const priced = (r) => ({ ...withTotal(r), cost: cost(r.model, r) });
+  const spend = (r) => ({ model: r.service, ...zero(), credits: r.credits, cost: creditCost(r.service, r.credits) });
   const days = Array.from({ length: CHART_DAYS }, (_, i) =>
     new Date(Date.parse(since) + i * 86400000).toISOString().slice(0, 10),
   );
-  const users = people.results.map(withTotal).map((p) => {
-    const mine = models.results
-      .filter((m) => m.user === p.user)
-      .map(priced)
-      .map(({ user, ...m }) => m)
-      .sort((a, b) => b.total - a.total);
+  // Someone who has only spent credits is listed too.
+  const names = [...new Set([...people.results, ...spent.results].map((r) => r.user))];
+  const users = names.map((user) => {
+    const p = people.results.find((r) => r.user === user);
+    const services = spent.results.filter((s) => s.user === user);
+    const mine = [
+      ...models.results
+        .filter((m) => m.user === user)
+        .map(priced)
+        .map(({ user, ...m }) => m)
+        .sort((a, b) => b.total - a.total),
+      ...services.map(spend).sort((a, b) => b.cost - a.cost),
+    ];
     const byDay = new Map();
-    for (const d of daily.results.filter((d) => d.user === p.user)) {
-      add(byDay.get(d.day) ?? byDay.set(d.day, zero()).get(d.day), priced(d));
-    }
+    const on = (day) => byDay.get(day) ?? byDay.set(day, zero()).get(day);
+    for (const d of daily.results.filter((d) => d.user === user)) add(on(d.day), priced(d));
+    for (const d of spentDaily.results.filter((d) => d.user === user)) add(on(d.day), spend(d));
+    const spans = [p, ...services].filter(Boolean);
     return {
-      ...p,
+      ...(p ? withTotal(p) : { user, ...zero() }),
+      first_day: spans.map((s) => s.first_day).sort()[0],
+      last_day: spans.map((s) => s.last_day).sort().at(-1),
       cost: mine.reduce((sum, m) => sum + m.cost, 0),
       models: mine,
       daily: days.map((day) => ({ day, ...(byDay.get(day) ?? zero()) })),

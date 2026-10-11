@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { sep } from "node:path";
 import { test } from "node:test";
-import { addTranscript, parseEnv, totals } from "./report.mjs";
+import { addTranscript, parseEnv, readSpends, spendTotals, totals } from "./report.mjs";
 
 const ROOT = `${sep}src${sep}terra`;
 const ROOTS = [ROOT];
@@ -69,4 +69,25 @@ test("reads a .env file", () => {
     TERRA_STATS_KEY: "a b#c",
     TERRA_STATS_USER: "dcramer",
   });
+});
+
+test("reads each recorded task once, at its largest count and earliest day", () => {
+  const spend = (id, day, credits, service = "tripo-studio") => JSON.stringify({ id, day, service, credits });
+  const text = [
+    spend("tripo-studio-a", "2026-10-11", 35),
+    spend("tripo-studio-a", "2026-10-10", 20),
+    spend("tripo-api-b", "2026-10-11", 50, "tripo-api"),
+    '{"id": "broken"',
+    JSON.stringify({ id: "c", day: "2026-10-11", service: "tripo-api", credits: 1.5 }),
+    "",
+  ].join("\n");
+  const spends = readSpends(text);
+  assert.deepEqual(spends, [
+    { id: "tripo-studio-a", day: "2026-10-10", service: "tripo-studio", credits: 35 },
+    { id: "tripo-api-b", day: "2026-10-11", service: "tripo-api", credits: 50 },
+  ]);
+  assert.deepEqual(spendTotals(spends), [
+    { day: "2026-10-10", service: "tripo-studio", credits: 35, tasks: 1 },
+    { day: "2026-10-11", service: "tripo-api", credits: 50, tasks: 1 },
+  ]);
 });

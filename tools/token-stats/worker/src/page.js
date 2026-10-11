@@ -1,4 +1,4 @@
-// The public page at `/`: what building Terra has cost per person at API prices, in the look of docs/art.md:
+// The public page at `/`: what building Terra has cost per person at list prices, in the look of docs/art.md:
 // flat colour, distance as pastel layers, warm light and cool shadow.
 
 export function page(summary) {
@@ -13,7 +13,7 @@ export function page(summary) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Terra Token Stats</title>
-<meta name="description" content="What the Claude tokens spent building Terra would cost at API prices, per person.">
+<meta name="description" content="What the Claude tokens and Tripo credits spent building Terra cost at list prices, per person.">
 <link rel="icon" href="data:image/svg+xml,${encodeURIComponent(ICON)}">
 <style>${CSS}</style>
 </head>
@@ -28,14 +28,14 @@ export function page(summary) {
 <main>
   <section class="hero" aria-label="Everyone">
     <div class="big"${num(totals.cost, "cost", "usd")}>${money(totals.cost)}</div>
-    <div class="label">at API prices, across ${users.length} ${users.length === 1 ? "person" : "people"}</div>
+    <div class="label">at list prices, across ${users.length} ${users.length === 1 ? "person" : "people"}</div>
     ${facts(totals)}
   </section>
   ${empty}
   <section class="people" aria-label="Per person">${cards}</section>
 </main>
 <footer>
-  Counted from Claude Code transcripts of sessions in the repository, each message once.
+  Counted from Claude Code transcripts of sessions in the repository, each message once, and from the Tripo credits our scripts record, each task once.
   Updated <span id="updated">${esc(summary.generated_at.slice(0, 16).replace("T", " "))}</span> UTC. <a href="/json">JSON</a>
 </footer>
 <div id="tip" role="tooltip" hidden></div>
@@ -51,7 +51,7 @@ function card(u, peak, days) {
       return `<div class="day" data-day="${d.day}" data-output="${full(d.output)}" data-messages="${d.messages}" data-cost="${money(d.cost)}"><i style="height:${h.toFixed(1)}%"></i></div>`;
     })
     .join("");
-  const models = u.models.map((m) => `<span title="${money(m.cost)} at API prices">${esc(m.model)}</span>`).join("");
+  const models = u.models.map((m) => `<span title="${spent(m)}">${esc(m.model)}</span>`).join("");
   return `<article class="person" data-user="${esc(u.user)}">
   <div class="head">
     <h2>${esc(u.user)}</h2>
@@ -64,6 +64,11 @@ function card(u, peak, days) {
   </figure>
   <div class="models">${models}</div>
 </article>`;
+}
+
+// What a model's tokens or a service's credits cost.
+function spent(m) {
+  return m.credits === undefined ? `${money(m.cost)} at API prices` : `${full(m.credits)} credits, ${money(m.cost)}`;
 }
 
 // Tokens written and read fresh, leaving out cache reads: the same context read again
@@ -81,7 +86,7 @@ function value(t, key) {
 // A counter the script animates: its exact value, which field of /json it shows,
 // and whether it is dollars.
 function num(n, key, fmt) {
-  const title = fmt === "usd" ? "at API list prices" : full(n);
+  const title = fmt === "usd" ? "at list prices" : full(n);
   return ` data-n="${n}" data-key="${key}"${fmt ? ` data-fmt="${fmt}"` : ""} title="${title}"`;
 }
 
@@ -257,7 +262,7 @@ let on = null;
 function show(day, x, y) {
   if (on !== day) { on?.classList.remove("on"); on = day; day.classList.add("on"); }
   const d = day.dataset;
-  tip.innerHTML = "<b>" + d.day + "</b><br>" + d.cost + " at API prices<br>" + d.output + " output tokens · " + d.messages + " messages";
+  tip.innerHTML = "<b>" + d.day + "</b><br>" + d.cost + " at list prices<br>" + d.output + " output tokens · " + d.messages + " messages";
   tip.hidden = false;
   const w = tip.offsetWidth;
   tip.style.left = Math.min(window.innerWidth - w - 8, Math.max(8, x - w / 2)) + "px";

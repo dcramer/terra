@@ -14,10 +14,15 @@ import datetime
 import hashlib
 import hmac
 import json
+import os
 import sys
 import time
 import urllib.parse
 import urllib.request
+
+# Credits spent are recorded for the token stats (tools/token-stats).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools", "token-stats"))
+from spend import record  # noqa: E402
 
 API = "https://api.tripo3d.ai"
 BROWSER = {
@@ -110,7 +115,9 @@ class Studio:
         print(f"project {project_id}, operation {started.get('operator_id')}", file=sys.stderr)
         self.wait(started["operator_id"])
         project = self.call("GET", f"/v2/studio/project/detail/v3/{project_id}")
-        return started, project, before - self.credits()
+        credits = before - self.credits()
+        record("tripo-studio", started["operator_id"], credits)
+        return started, project, credits
 
     def image(self, request):
         """Generates images (the app's Image tool) and returns the finished asset. Professional

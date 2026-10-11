@@ -29,6 +29,9 @@ import uuid
 BASE = "https://openapi.tripo3d.ai/v3"
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out", "tripo")
+# Credits spent are recorded for the token stats (tools/token-stats).
+sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "token-stats"))
+from spend import record  # noqa: E402
 # Every prompt gets the house style, so the generator aims at our look.
 STYLE = "Low-poly stylised game asset, simple finely cut faceted shapes, flat planes, clean silhouette, no fine surface detail."
 # The concept image's brief: one subject, readable, in our look.
@@ -115,6 +118,7 @@ def generate(name, endpoint, request):
     task = call("POST", endpoint, request)["task_id"]
     print(f"{name}: task {task}", file=sys.stderr)
     result = wait(task)
+    record("tripo-api", task, result.get("credits_consumed"))
     files = save(name, result)
     record = {"name": name, "endpoint": endpoint, "request": request, "task": task, "result": result, "files": files}
     with open(os.path.join(OUT, f"{name}.json"), "w") as f:
@@ -170,10 +174,11 @@ def studio(a, subject):
         started, asset = client.image(request)
         path = os.path.join(OUT, f"{a.name}-generated_image_url.png")  # the API's name, for make.sh
         fetch(asset["output"]["data"][0]["url"], path)
-        record = {"name": a.name, "backend": "studio", "request": request, "started": started, "credits": before - client.credits(), "result": asset, "files": {"generated_image_url": os.path.relpath(path, HERE)}}
+        out = {"name": a.name, "backend": "studio", "request": request, "started": started, "credits": before - client.credits(), "result": asset, "files": {"generated_image_url": os.path.relpath(path, HERE)}}
+        record("tripo-studio", started["asset_id"], out["credits"])
         with open(os.path.join(OUT, f"{a.name}.json"), "w") as f:
-            json.dump(record, f, indent=2)
-        print(json.dumps({"name": a.name, "credits": record["credits"], "files": record["files"]}))
+            json.dump(out, f, indent=2)
+        print(json.dumps({"name": a.name, "credits": out["credits"], "files": out["files"]}))
         return
     model = a.model or "v3.1-20260211"
     # Smart Mesh (P1, run as Nexus) rejects texture settings: it textures in a second step.

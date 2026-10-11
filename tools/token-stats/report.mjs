@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Sends this person's Claude Code token usage on this repository to the stats worker.
-// See README.md. No dependencies: Node 18 or later.
+// Sends this person's Claude Code token usage on this repository to the stats worker,
+// with the credits spend.py recorded. See README.md. No dependencies: Node 18 or later.
 //
 //   node tools/token-stats/report.mjs             send messages not yet sent
 //   node tools/token-stats/report.mjs --full      send every message again
@@ -23,6 +23,8 @@ const BATCH = 200;
 const HOOK_INTERVAL_MS = 60 * 1000;
 const CACHE = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "terra-token-stats");
 const LOG = join(CACHE, "report.log");
+// Written by spend.py. Unlike the cache, it is the only record of what it holds.
+const SPENDS = join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "terra-token-stats", "spends.jsonl");
 
 // Adds the messages of one Claude Code transcript to `messages`, a map from message id.
 //
@@ -143,6 +145,45 @@ export function totals(messages) {
   return [...rows.values()];
 }
 
+// The credits spend.py recorded, one per task id, keeping the largest count and the
+// earliest day if a task was recorded twice. Lines that are not a spend are skipped.
+export function readSpends(text) {
+  const spends = new Map();
+  for (const line of text.split("\n")) {
+    let s;
+    try {
+      s = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (typeof s?.id !== "string" || typeof s.service !== "string" || !Number.isSafeInteger(s.credits)) continue;
+    if (typeof s.day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s.day)) continue;
+    const known = spends.get(s.id);
+    if (!known) spends.set(s.id, { id: s.id, day: s.day, service: s.service, credits: s.credits });
+    else {
+      known.credits = Math.max(known.credits, s.credits);
+      if (s.day < known.day) known.day = s.day;
+    }
+  }
+  return [...spends.values()].sort((a, b) => a.day.localeCompare(b.day) || a.id.localeCompare(b.id));
+}
+
+function spends() {
+  return existsSync(SPENDS) ? readSpends(readFileSync(SPENDS, "utf8")) : [];
+}
+
+export function spendTotals(spends) {
+  const rows = new Map();
+  for (const s of spends) {
+    const key = `${s.day}\t${s.service}`;
+    const row = rows.get(key) ?? { day: s.day, service: s.service, credits: 0, tasks: 0 };
+    row.credits += s.credits;
+    row.tasks += 1;
+    rows.set(key, row);
+  }
+  return [...rows.values()];
+}
+
 // What has been sent, so a run sends only new or grown messages. Losing it costs a
 // longer run, never a wrong count: the server ignores what it already has.
 function sentFile(cfg) {
@@ -216,8 +257,10 @@ async function main(args) {
     return;
   }
   const messages = collect(roots());
+  const spent = spends();
   if (args.includes("--dry-run")) {
     console.log(table(totals(messages), ["day", "model", ...counts]));
+    if (spent.length > 0) console.log("\n" + table(spendTotals(spent), ["day", "service", "credits", "tasks"]));
     return;
   }
 
@@ -231,21 +274,33 @@ async function main(args) {
       sent = {};
     }
   }
-  const pending = messages.filter((m) => sent[m.id] !== signature(m));
+  const items = [
+    ...messages.map((m) => ({ key: m.id, signature: signature(m), kind: "messages", row: m })),
+    ...spent.map((s) => ({ key: `spend:${s.id}`, signature: `${s.day} ${s.credits}`, kind: "spends", row: s })),
+  ];
+  const pending = items.filter((i) => sent[i.key] !== i.signature);
   const save = () => {
     // Forget messages no longer in any transcript, so the file does not grow forever.
-    const kept = Object.fromEntries(messages.filter((m) => m.id in sent).map((m) => [m.id, sent[m.id]]));
+    const kept = Object.fromEntries(items.filter((i) => i.key in sent).map((i) => [i.key, sent[i.key]]));
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(`${file}.tmp`, JSON.stringify(kept));
     renameSync(`${file}.tmp`, file);
   };
   for (let i = 0; i < pending.length; i += BATCH) {
     const batch = pending.slice(i, i + BATCH);
-    await call(cfg, "/report", { method: "POST", body: JSON.stringify({ user: cfg.user, messages: batch }) });
-    for (const m of batch) sent[m.id] = signature(m);
+    const of = (kind) => batch.filter((b) => b.kind === kind).map((b) => b.row);
+    const body = { user: cfg.user, messages: of("messages"), spends: of("spends") };
+    const reply = await call(cfg, "/report", { method: "POST", body: JSON.stringify(body) });
+    // A worker from before spends would drop them; keep them unsent until it is deployed.
+    if (body.spends.length > 0 && reply.spends === undefined) throw new Error("the worker does not take spends yet");
+    for (const b of batch) sent[b.key] = b.signature;
     save();
   }
-  console.log(`${new Date().toISOString()} sent ${pending.length} of ${messages.length} messages as ${cfg.user}`);
+  const count = (kind) => pending.filter((p) => p.kind === kind).length;
+  console.log(
+    `${new Date().toISOString()} sent ${count("messages")} of ${messages.length} messages` +
+      ` and ${count("spends")} of ${spent.length} spends as ${cfg.user}`,
+  );
 }
 
 // Called by Claude Code after every tool call and turn, so it must be quick and must

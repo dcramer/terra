@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cost } from "./prices.js";
+import { cost, creditCost } from "./prices.js";
 
 const counts = { input: 1e6, output: 1e6, cache_read: 1e6, cache_write: 1e6 };
 
@@ -16,4 +16,10 @@ test("matches the longest model prefix", () => {
 
 test("an unknown model costs nothing", () => {
   assert.equal(cost("some-other-model", counts), 0);
+});
+
+test("prices Tripo's credits by service", () => {
+  assert.equal(creditCost("tripo-api", 50), 0.5);
+  assert.equal(creditCost("tripo-studio", 3000), 19.9);
+  assert.equal(creditCost("tripo-somewhere", 50), 0);
 });

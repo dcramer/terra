@@ -1,9 +1,10 @@
 # Token stats
 
-Records how many Claude tokens each of us spends on Terra (D82), shown at <https://terra-token-stats.dcramer.workers.dev>, and as JSON at [`/json`](https://terra-token-stats.dcramer.workers.dev/json). Two parts:
+Records how many Claude tokens and Tripo credits each of us spends on Terra (D82), shown at <https://terra-token-stats.dcramer.workers.dev>, and as JSON at [`/json`](https://terra-token-stats.dcramer.workers.dev/json). Two parts:
 
 - `worker/`: a Cloudflare Worker with a D1 database. It stores each message once, by the id the API gave it, with its person, conversation, day, model and input, output, cache-read and cache-write tokens, and keeps totals per person, day and model. It runs on Cloudflare's free plan, which costs nothing and stops rather than bills when a limit is reached. A year of five busy developers is a few hundred megabytes of the free 5 GB.
-- `report.mjs`: a script Claude Code runs as you work (see below). It reads Claude Code's transcripts under `~/.claude/projects` and sends the messages it has not sent before. It needs Node 18 or later and nothing else.
+- `report.mjs`: a script Claude Code runs as you work (see below). It reads Claude Code's transcripts under `~/.claude/projects` and the credits `spend.py` recorded, and sends what it has not sent before. It needs Node 18 or later and nothing else.
+- `spend.py`: records the credits a task spent on another service. Our Tripo scripts call it (below).
 
 ## What counts, and counting once
 
@@ -13,7 +14,19 @@ A message's id is the only thing that identifies it. The same message turns up m
 
 ## Cost
 
-The page leads with what the tokens would cost at the API's list prices, per person and day, and `/json` has it per model too. It leaves out cache reads: they are most of the token count, the same context read again each turn, and little of the cost. Most of us pay by subscription, so this is the price of the work on the API, not what anyone paid. The prices are in [`worker/src/prices.js`](worker/src/prices.js) and need updating when they change or a model is added; a model not listed there counts as free. Cache writes are priced at the 1-hour rate, the only kind Claude Code writes, and Haiku 5.5 at its rate for prompts up to 100,000 tokens.
+The page leads with what the tokens would cost at the API's list prices, with the [Tripo credits](#tripo-credits) added, per person and day, and `/json` has it per model too. It leaves out cache reads: they are most of the token count, the same context read again each turn, and little of the cost. Most of us pay by subscription, so this is the price of the work on the API, not what anyone paid. The prices are in [`worker/src/prices.js`](worker/src/prices.js) and need updating when they change or a model is added; a model not listed there counts as free. Cache writes are priced at the 1-hour rate, the only kind Claude Code writes, and Haiku 5.5 at its rate for prompts up to 100,000 tokens.
+
+## Tripo credits
+
+Our Tripo scripts record the credits each task spent: `spike/model_bakeoff/tripo.py` on the API, from the credits the task reports, and on Studio, with `studio_rig.py` and the texture step, from the balance before and after. Each task is a line of `~/.local/state/terra-token-stats/spends.jsonl` (under `$XDG_STATE_HOME` if set), keyed by the task's id, which `report.mjs` sends with your messages and the worker stores once by that id, as it does messages. Unlike the cache, the file is the only record of what it holds until it is sent, so don't delete it.
+
+Credits count in each person's cost, priced in [`worker/src/prices.js`](worker/src/prices.js): API credits at a cent each, their list price, and Studio credits at what they cost on the subscription, Professional's $19.90 a month for 3,000 credits. The subscription is paid whether we use it or not, so like the token cost this is the price of the work, not an extra bill. Each service is listed beside the models on the page and in `/json`, with its credits.
+
+Work done in Tripo's web app by hand is not seen by the scripts. Record it yourself, with the project's id or anything unique:
+
+```bash
+python3 tools/token-stats/spend.py tripo-studio <id> <credits>
+```
 
 The page and `/json` are public. Sending and `/stats` need the shared key in `Authorization: Bearer <key>`. The key is a secret: never commit it.
 
@@ -43,7 +56,7 @@ By hand, from the repository:
 
 | Command | What it does |
 |---|---|
-| `node tools/token-stats/report.mjs --dry-run` | Print your totals by day and model, sending nothing |
+| `node tools/token-stats/report.mjs --dry-run` | Print your totals by day and model, and credits by day and service, sending nothing |
 | `node tools/token-stats/report.mjs` | Send new messages |
 | `node tools/token-stats/report.mjs --full` | Send every message again; harmless |
 | `node tools/token-stats/report.mjs --stats` | Everyone's totals; add `--by-day` or `--by-model` |
@@ -71,11 +84,11 @@ To try it locally, put `API_KEY=devkey` in `worker/.dev.vars` and run `npx wrang
 
 | Call | Body or query |
 |---|---|
-| `GET /` | The page: everyone's cost and tokens, models, and cost a day for 30 days |
+| `GET /` | The page: everyone's cost and tokens, models and services, and cost a day for 30 days |
 | `GET /json` | The same as JSON |
 | `GET /ticker` | The cost and everyone's, to embed; `theme`: `light` or `dark` |
 | `GET /ticker/<name>` | One person's cost and tokens |
-| `POST /report` | `{"user": "dcramer", "messages": [{"id": "msg_…", "session": "…", "day": "2026-10-10", "model": "claude-opus-5-5", "input": 1, "output": 2, "cache_read": 3, "cache_write": 4}]}`, at most 500 messages |
-| `GET /stats` | `group`: any of `user`, `day`, `model`, comma-separated (default `user`); `since`: a day |
+| `POST /report` | `{"user": "dcramer", "messages": [{"id": "msg_…", "session": "…", "day": "2026-10-10", "model": "claude-opus-5-5", "input": 1, "output": 2, "cache_read": 3, "cache_write": 4}], "spends": [{"id": "tripo-api-…", "day": "2026-10-11", "service": "tripo-api", "credits": 50}]}`, at most 500 messages and spends together |
+| `GET /stats` | Tokens only. `group`: any of `user`, `day`, `model`, comma-separated (default `user`); `since`: a day |
 
 Tests: `npm test` in `worker/`.

@@ -31,7 +31,7 @@ export function ticker(summary, theme, user) {
 <style>${CSS}</style>
 </head>
 <body>
-<a class="ticker" href="/" target="_blank" rel="noopener" title="${whose} at API list prices">
+<a class="ticker" href="/" target="_blank" rel="noopener" title="${whose} at list prices">
   ${SPARK}
   ${body}
 </a>
