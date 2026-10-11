@@ -8,14 +8,15 @@ Working title: **Terra**. A multiplayer survival sandbox across a dozen or so pr
 | [vision.md](vision.md) | Pitch, pillars, what we take from each inspiration, non-goals. |
 | [worlds.md](worlds.md) | The planets: themes, terrain, caverns, water, foliage, gravity, the starter planet, which can be terraformed. |
 | [survival.md](survival.md) | Draft: the survival attributes (health, stamina, oxygen, hunger, thirst) and how they vary by world. |
+| [progression.md](progression.md) | Draft: the research system and how things are unlocked. Mostly open questions. |
 | [gameplay.md](gameplay.md) | Core loops, survival needs, terraforming phases, hostile life, automation. |
-| [player.md](player.md) | Draft: the player's body, tools, acting on the world, carrying, building. Open questions for the developers. |
+| [player.md](player.md) | Draft: the player's body, tools, equipment, backpack and action bar, acting on the world, building. Open questions for the developers. |
 | [construction.md](construction.md) | Draft: what the developers want from building, a proposed shape for it, and open questions. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
 | [planet-sim.md](planet-sim.md) | The planetary simulation: cells, fields, biomes, how local feeds global. |
 | [tech.md](tech.md) | The stack, how the code is split, how co-op shares state, terrain, workflow, risks. |
 | [engine.md](engine.md) | The engine's parts, what each needs, and the parallel tracks they are built in. |
-| [development.md](development.md) | Setting up a machine, everyday commands, seeing and measuring output. |
+| [development.md](development.md) | Setting up a machine, everyday commands, seeing and measuring output, developer tools, and QA our agents can run. |
 | [terrain.md](terrain.md) | Brief for the first component, the voxel terrain crate. |
 | [art.md](art.md) | Art direction, constraints, the beauty-corner test. |
 | [prototypes.md](prototypes.md) | The builds so far and the milestones ahead, with their pass criteria. |

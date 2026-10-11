@@ -42,6 +42,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - **Use `libm` for trigonometry and exponentials**, never `f32::sin` and friends. The system maths library differs between platforms in both results and speed. The lints enforce this.
 - **No `unsafe`.** It is forbidden workspace-wide.
 - **Tests live next to the code** and need no GPU. A behaviour you rely on gets a test.
+- **Make what you build checkable without a person** (D69). Today that means the sandbox's scripted runs (`--press`, `--shot`, `--vantage`, `--bench`); later, Bevy's remote protocol. A feature is not done until an agent can drive it and see that it worked.
 - **Check the real API, don't recall it.** Bevy changes every release. Read the examples and source that ship with the pinned version under `~/.cargo/registry/src/` before writing against it.
 - **Look at what you made.** The Linux build renders on the CPU under WSL, so you can save a screenshot and read it without a GPU: `cargo run -p terra_sandbox -- --shot <file.png>`.
 - **Measure performance on a real GPU, in the loop a player runs**, and report the integrated GPU as well as the fast one. Software rendering numbers mean nothing. Under WSL, `cargo xtask win -p <package>` builds for Windows and runs there.

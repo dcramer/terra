@@ -42,6 +42,10 @@ Only on the planets that can be terraformed (D60). Draft names and order. Phases
 - **Order: plants, then swarms, then animals.** This matches the fiction and the cost. Plants need no pathfinding or animation. Swarms are particle systems. Walking creatures on deformable round terrain are the most expensive thing in the design.
 - **Variation by parameters**, not by an editor: a small set of archetypes that differ by biome.
 
+## NPCs
+
+The developers want NPCs (D70); what they are is open. People who trade, give work or tell the story? Machines that help? Survivors on other planets? Each kind asks something different of the engine: a figure that stands and talks is cheap, one that walks a planet and works is close to the cost of a creature (see Hostile life).
+
 ## Automation and defence
 
 Every threat has a built answer: oxygen lines, heaters, perimeter walls, turrets, flora suppressors. A well-built base survives without attention. There is no fail state; neglect costs you progress and equipment.

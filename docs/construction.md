@@ -19,7 +19,7 @@ In their words, shortened.
 - **It must be really easy to extend**: new buildables, and properties like that morphing applying to anything related. "We might let you build a round room, or connectors, or different materials for rooms, and they should be able to change their look based on what they're connected to."
 - **One square grid for everything**, though you might not see all of it all the time. Buildings join through connectors that can face any way, "more like Subnautica". The grid should be "a little flexible": in some games each cell is huge, "so you have no freedom to build".
 - **Some buildables are a fixed size.** A round building probably cannot be freely resized, and is reached through a connector, "which maybe auto-builds if you connect it to another room". It is on the same grid as everything else: "it just wouldn't fill 100% of the cells".
-- **A build menu on B** that you pull up to see the buildables you have unlocked.
+- **A build menu like Subnautica's** (D67): you equip the building tool and it brings up a menu of the buildables you have unlocked. (Earlier the same day this was "a B menu".)
 - **Building, taking apart and cutting take time.** You click and hold to complete the task, as other games do. Building animates the thing in, destroying animates it out, and cutting has an animation or a progress bar. How long depends on the task, and there will likely be different cutting tools, such as an axe or a pickaxe.
 - **Building costs things you carry.** "I think it's likely what we'll want is for you to have the raw items, which allow you to build anything that you might have the capabilities to build." With an inventory, and an action bar you put items on to use them (D55).
 
@@ -111,9 +111,7 @@ Fixed buildables, ports and connectors are not built.
 
 ## The build menu
 
-The developers want a menu on B showing the buildables you have unlocked. The sandbox has a dial on the right mouse button instead, which holds fifteen parts and is near its limit.
-
-Proposal: both, doing different jobs. **B opens the full list**: every buildable you have unlocked, grouped, with what each costs and whether you can afford it; pick one to put it in hand. **The dial stays as the quick pick**, holding the handful you used last or chose to keep there, the way Rust's wheel sits beside its crafting list. What "unlocked" means is open question 4.
+The developers want it like Subnautica's: you equip the building tool, and it brings up a build menu of what you have unlocked (D67, D68). The sandbox is already shaped that way: the builder is a tool on the action bar, and holding the right mouse button with it in hand brings up a dial of parts. What is open is the menu itself. Subnautica's is a tabbed grid (standard elements, interior, exterior, utility, furniture), which holds far more than the dial's fifteen parts. A likely answer is both: the full tabbed menu, and the dial as a quick pick of what you used last.
 
 ## What is built
 

@@ -50,6 +50,27 @@ Keep debug builds on the workspace's default profile: full debug information pro
 
 Every application we build gets scripted modes that fly a fixed camera path, print frame times and save screenshots, so results can be compared between machines and over time.
 
+## Developer tools
+
+The developers want tools that help refine each system (D71). The sandbox's experiments are where these live: each is a small plugin switched on from the command line ([sandbox README](../crates/terra_sandbox/README.md)). Wanted, first:
+
+- **A model workbench**: load any model against a simple patch of terrain, scale it, recolour it or put textures on it, look at it from set angles and in the game's light, and save the result.
+
+Each tool should be scriptable as well as usable by hand, so an agent can use it too.
+
+## Checking the game without a person (QA for agents)
+
+The developers want the game's QA reachable by our coding agents (D69): an agent should be able to run the game, drive it, look at it and ask it what is true, the way a tester would.
+
+What exists: scripted runs of the sandbox. `--press` holds keys on given frames, `--shot` saves a screenshot, `--vantage` fixes the camera, `--bench` measures frame time. That is how every feature so far was checked.
+
+What it should grow into, decided technically and untested (Leaning): **Bevy's remote protocol** (`bevy_remote`, part of the pinned Bevy). A game built with it answers requests over a local connection: list and read entities and components, change them, spawn things, send input, take screenshots. Bevy ships an example of exactly this, a test driving a running app. On top of it:
+
+- **A command line**, `cargo xtask qa ...`, for the checks we run often: start the game, teleport, build something, read the inventory, screenshot.
+- **An MCP server**, a thin layer over the same protocol, if agents work better with tools than with a command line.
+
+Off in release builds, since it lets anything on the machine control the game.
+
 ## Conventions
 
 - The rules for working in the workspace are in [AGENTS.md](../AGENTS.md). They apply to people as well as agents.

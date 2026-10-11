@@ -14,13 +14,16 @@ This repository is where the project is thought through: design docs, research n
 | **Play as a person in the world**, walking around with tools, gathering and building, in the manner of No Man's Sky or Subnautica. | [docs/player.md](docs/player.md) |
 | **Real round planets you can dig into**, procedurally generated, with no seam between standing on the ground and flying in space. | [docs/engine.md](docs/engine.md) |
 | **Take resources from the world itself**: mine the rock, chop the tree, cut the grass. | [docs/engine.md](docs/engine.md#harvesting) |
-| **Build bases you shape**, not assemble from fixed parts. | [research/subnautica-2-building.md](research/subnautica-2-building.md) |
+| **Gear up and carry**: an equipment grid, a backpack that grows, and an action bar of things to use. | [docs/player.md](docs/player.md) |
+| **Research new technology** to unlock more to build and craft. | [docs/progression.md](docs/progression.md) |
+| **Meet NPCs** on the worlds. | [docs/gameplay.md](docs/gameplay.md) |
+| **Build bases you shape**, from a build menu on a tool you equip, as in Subnautica. | [docs/construction.md](docs/construction.md) |
 | **A fully procedural world**, computed from rules and very cheap to compute, send and store. | [docs/engine.md](docs/engine.md) |
 | **Look like a carefully lit model**: simple shapes, flat colour, warm light and cool shadow, and never chunky. | [docs/art.md](docs/art.md) |
 | **A thousand players on one persistent server**, with a few friends playing together as the small case. | [docs/multiplayer.md](docs/multiplayer.md) |
 | **Stay fast with very many things on screen**, any of which the player can interact with. | [research/forest-scale-test.md](research/forest-scale-test.md) |
 | **Write everything in Rust**, on Bevy, with the game modelled in ECS and our own voxel terrain. | [docs/tech.md](docs/tech.md) |
-| **Be buildable by two people working with coding agents**, with every asset free, bought or generated. | [docs/decisions.md](docs/decisions.md) |
+| **Be buildable by two people working with coding agents**, with every asset free, bought or generated, developer tools to refine each system, and QA the agents can run themselves. | [docs/development.md](docs/development.md) |
 | **Design before building**, and write down what was decided and why. | [docs/README.md](docs/README.md) |
 
 How firm each of these is, and who decided it, is in [docs/decisions.md](docs/decisions.md).

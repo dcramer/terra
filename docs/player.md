@@ -83,19 +83,36 @@ Open:
 
 11. **Reach.** Arm's length, a few metres, or long-range beams as in No Man's Sky?
 
-## Collecting and carrying
+## Equipment, inventory and the action bar
 
-Open. The engine reports what an action took out of the world (a volume of rock, a tree, an area of grass). Turning that into things a player holds is design.
+From the developers, 2026-10-10:
 
-12. **What is an inventory?** Slots with stacks are simple and forgiving. A grid where items have shape makes carrying a puzzle and a constraint.
-13. **Weight or volume limits?**
+- **An equipment grid, a character sheet** (D64): slots for what you wear and carry as gear.
+- **An inventory that is your backpack** (D65): probably very small at the start, and made bigger by putting a better backpack in the backpack slot of the equipment grid.
+- **An action bar** (D66): you put items on it to use them. Whatever is in the picked slot is in your hand.
+
+What follows from those, proposed:
+
+| | What it holds | How it grows |
+|---|---|---|
+| Equipment grid | One item per slot: backpack, suit, helmet, tank, and so on | New slots, perhaps, through research (D68) |
+| Backpack | Raw items and things you have made | A bigger backpack in the backpack slot |
+| Action bar | Tools and things you use, a few slots | Fixed, or grows with gear |
+
+Each is a set of slots holding items, so in the game's model (D58) they are components on the player that hold item entities or item kinds, and the same rules serve all three. The sandbox has a stand-in: raw items as counts, two tools, and a six-slot bar. It has no equipment grid and no backpack.
+
+Still open:
+
+12. **Slots with stacks, or a grid where items take up shape?** "Grid" was said of equipment; it is open for the backpack.
+13. **Weight or volume limits** besides the number of slots?
 14. **Is anything shared between players**, or does each carry their own, with shared storage only in a base?
-15. **What happens to it when you die**, if you can?
+15. **What happens to it when you are down** (D18, [survival.md](survival.md))?
 
 ## Building as an action
 
 Proposed. Building is something you do with a tool in hand, standing in the world, not a separate mode viewed from above.
 
+- **The build menu comes from the tool** (D67), as in Subnautica: equip the building tool and it brings up a menu of what you can build, which is what you have unlocked (D68, [progression.md](progression.md)).
 - With the builder out, you see what you would place or change before committing.
 - Building costs what you are carrying. Taking something apart gives some or all of it back.
 - The construction system has its own doc: [construction.md](construction.md). The developers have said building should start from choosing a part, with variants to cycle through (D48); the tech demo now does that with a dial.
