@@ -47,13 +47,20 @@ pub struct Mix {
     pub effects: f32,
 }
 
+/// The mix's own balance, under the player's volumes: with every volume at full, each
+/// part sits where docs/audio.md sets it, with room to spare below full scale.
+const MUSIC_BALANCE: f32 = 0.69;
+const AMBIENCE_BALANCE: f32 = 0.64;
+const EFFECTS_BALANCE: f32 = 0.72;
+
 impl Default for Mix {
     fn default() -> Self {
         Mix {
-            master: 0.8,
-            music: 0.6,
-            ambience: 0.8,
-            effects: 0.9,
+            master: 1.0,
+            // Music is meant to sit under the world, not over it.
+            music: 0.7,
+            ambience: 1.0,
+            effects: 1.0,
         }
     }
 }
@@ -62,9 +69,9 @@ impl Mix {
     pub fn level(&self, bus: Bus) -> f32 {
         self.master
             * match bus {
-                Bus::Music => self.music,
-                Bus::Ambience => self.ambience,
-                Bus::Effects | Bus::Interface => self.effects,
+                Bus::Music => self.music * MUSIC_BALANCE,
+                Bus::Ambience => self.ambience * AMBIENCE_BALANCE,
+                Bus::Effects | Bus::Interface => self.effects * EFFECTS_BALANCE,
             }
     }
 }
@@ -202,15 +209,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_part_of_the_mix_is_its_level_times_the_whole() {
-        let mix = Mix {
-            master: 0.5,
-            music: 0.4,
+    fn a_part_of_the_mix_follows_its_volume_and_the_whole() {
+        let full = Mix {
+            master: 1.0,
+            music: 1.0,
             ambience: 1.0,
-            effects: 0.8,
+            effects: 1.0,
         };
-        assert_eq!(mix.level(Bus::Music), 0.2);
-        assert_eq!(mix.level(Bus::Ambience), 0.5);
-        assert_eq!(mix.level(Bus::Interface), mix.level(Bus::Effects));
+        let half = Mix {
+            master: 0.5,
+            ..full
+        };
+        let quiet_music = Mix { music: 0.5, ..full };
+        for bus in [Bus::Music, Bus::Ambience, Bus::Effects, Bus::Interface] {
+            assert_eq!(half.level(bus), full.level(bus) * 0.5);
+            // Everything at full still leaves room below full scale.
+            assert!(full.level(bus) < 1.0);
+        }
+        assert_eq!(quiet_music.level(Bus::Music), full.level(Bus::Music) * 0.5);
+        assert_eq!(quiet_music.level(Bus::Effects), full.level(Bus::Effects));
+        assert_eq!(full.level(Bus::Interface), full.level(Bus::Effects));
     }
 }

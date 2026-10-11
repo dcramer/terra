@@ -349,11 +349,11 @@ impl Default for Settings {
             field_of_view: 55.0,
             full_screen: false,
             vsync: true,
-            master_volume: 0.8,
+            master_volume: 1.0,
             // Music is meant to sit under the world, not over it.
-            music_volume: 0.6,
-            ambience_volume: 0.8,
-            effects_volume: 0.9,
+            music_volume: 0.7,
+            ambience_volume: 1.0,
+            effects_volume: 1.0,
         }
     }
 }
@@ -471,10 +471,10 @@ impl Settings {
                 "invert_look" => settings.invert_look = value == "true",
                 "full_screen" => settings.full_screen = value == "true",
                 "vsync" => settings.vsync = value != "false",
-                "master_volume" => settings.master_volume = number(&VOLUME).unwrap_or(0.8),
-                "music_volume" => settings.music_volume = number(&VOLUME).unwrap_or(0.6),
-                "ambience_volume" => settings.ambience_volume = number(&VOLUME).unwrap_or(0.8),
-                "effects_volume" => settings.effects_volume = number(&VOLUME).unwrap_or(0.9),
+                "master_volume" => settings.master_volume = number(&VOLUME).unwrap_or(1.0),
+                "music_volume" => settings.music_volume = number(&VOLUME).unwrap_or(0.7),
+                "ambience_volume" => settings.ambience_volume = number(&VOLUME).unwrap_or(1.0),
+                "effects_volume" => settings.effects_volume = number(&VOLUME).unwrap_or(1.0),
                 _ => {
                     let Some(action) = Action::ALL.into_iter().find(|a| a.file_name() == name)
                     else {
