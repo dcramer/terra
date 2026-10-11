@@ -39,7 +39,8 @@ This overview gives the idea, what drives the world, and the principles. Each sy
 | Survival | [survival.md](survival.md) | Needs that reward more than punish, day and night, weather, death and coming back |
 | Your character | [character.md](character.md) | No class, getting around big round worlds, what is on screen and what is not |
 | The arc | [arc.md](arc.md) | The fiction, the first hour without a tutorial, the long game by rank and the spread, playing together |
-| Building and claims | [construction.md](../../construction.md) | A voxel grid with shaped rooms first (D48); claims, outside which the world heals (D94) |
+| Building and claims | [construction.md](../../construction.md) | A voxel grid with shaped rooms first (D48); claims, outside which the world heals (D94), starting at a size that can be upgraded (D104) |
+| The MVP | [prototypes.md](../../prototypes.md#mvp-the-first-playable) | A first playable that tests the core loop (D105) |
 | Items | [items.md](../../items.md) | The backpack, equipment and action bar (D84) |
 
 ## What makes it go: magic as the world's weather
@@ -184,7 +185,7 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 ## Questions for the developers
 
 1. Answered in part: **the premise.** Not C; A and B are interesting. Both, or one?
-2. **Magic as the world's weather.** Is pooled magic making monsters the engine you want, or should monsters simply live in places?
+2. Answered: **monsters form where magic pools**, and there is ordinary wildlife besides (D103). Raids on claims are not a concern for now.
 3. **How much story?** Hand-written quests and characters, or only what comes out of the world's systems?
 4. **Combat.** As central as Enshrouded's, or one way among several to deal with things?
 5. **Essences.** Take the books' system closely (a few essences, a confluence, abilities that rank up), or loosely?

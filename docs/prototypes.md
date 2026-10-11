@@ -81,3 +81,43 @@ The sandbox (D46) covers most of B1: a scripted run prints frame times and saves
 The beauty corner follows M, since the art should be built on the engine we ship on.
 
 Every checkpoint reports frame times from the real play loop, not only from scripted runs (D25).
+
+## MVP: the first playable
+
+Proposed 2026-10-11, for the developers to edit. Not started.
+
+**Question:** is the core loop of [game design 001](proposals/game-design-001/README.md) fun, with almost nothing else around it? It is a prototype of that proposal (D89), built to answer this question before the proposal is adopted or anything is spent on scale.
+
+If the loop is not fun with one monster and one settlement, more content will not fix it.
+
+### In it
+
+- **One world**, smooth voxel terrain (D9), one biome, day and night.
+- **Gathering** with separate tools (D96): an axe for trees, a pickaxe for rock and ore, a knife for fibre and hide.
+- **Crafting** at a workbench and a forge, from a handful of materials: wood, stone, fibre, hide and one ore. Tools made of better material work more (crafting.md).
+- **A claim** you place, 40 metres on a side, upgradable to 80 and 160 (D94); building on the voxel grid with shaped rooms (D48); the world heals outside it.
+- **The backpack, equipment and action bar** (D84), with wear and repair (D99).
+- **One kind of wildlife** that grazes, flees and can be hunted for meat and hide.
+- **One kind of monster**, forming at one place where magic pools (D103), dangerous to go near, holding a prisoner.
+- **Combat**, third person (D97): one melee weapon and a bow; attack, block, dodge; stamina.
+- **One settlement** with a few people, a request in words, and the prisoner to rescue (D95). Rescued, they come home with you and run the forge (D90).
+- **Skills by doing** (D88): a few, such as chopping, mining, a weapon, crafting.
+- **Hunger** and food (D101); **death** drops the pack, costs a little skill progress, and you wake at your bed.
+- **The map**: only where you have been, and where you are (D76).
+- **A local server**: the game talks to a server inside it (D51).
+- **Saving** and loading.
+
+### Not in it
+
+Essences and abilities, raids, factions beyond the one settlement, portals and other worlds, taming and mounts, trade, many players, the spread. Essences are the first addition after it.
+
+### Done when
+
+- **A developer plays it from a fresh start**, with nothing explained beyond the controls, and finds their way through: gather, craft, claim, build a shelter, eat, find the settlement, rescue the prisoner, bring them home, have them make a better tool. Both developers say whether it was fun, which is the question.
+- **An agent can drive the same loop** (D69) and see that each step worked.
+- **Save and reload** restores the claim, what is built, what is carried and the recruit.
+- **Frame times** meet D25 in the play loop on the RTX 5090, and are reported on the integrated GPU.
+
+### What it needs first
+
+All engine work, mine: the voxel terrain (A1, A2), building on a voxel grid, collision and a character controller on voxels (D53), creatures with behaviour and pathfinding, combat, the local server, and saving. Placeholder content (materials, recipes, weapons, numbers) is chosen as it is built, as the inventory's was.
