@@ -64,7 +64,11 @@ The log is for what is worth reading: the engine's routine messages are filtered
 
 The developers want tools that help refine each system (D71). The sandbox's experiments are where these live: each is a small plugin switched on from the command line ([sandbox README](../crates/terra_sandbox/README.md)). Wanted, first:
 
-- **A model workbench**: load any model against a simple patch of terrain, scale it, recolour it or put textures on it, look at it from set angles and in the game's light, and save the result.
+- **A model workbench**: load any model against a simple patch of terrain, scale it, recolour it or put textures on it, look at it from set angles and in the game's light, and save the result. It is also where models are tested and reviewed:
+  - **Checks an agent runs**: triangle count, size against a reference figure, parts that float, every material named and in the palette, and a sheet of renders from set angles beside models already accepted.
+  - **Review by a person**: step through candidates in the game's light, accept or reject each, and leave a note on it, or on a spot on it, that the agent reads on its next pass. Some developers using AI tools do this with a viewer where you point at a part and write a note for the agent.
+
+  What it needs to check is in [research/ai-models-for-art.md](../research/ai-models-for-art.md#the-tools-the-agent-would-need).
 
 Each tool should be scriptable as well as usable by hand, so an agent can use it too.
 
