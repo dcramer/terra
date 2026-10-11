@@ -18,7 +18,7 @@ use terra_build::TILE_M;
 
 /// Bright enough to show beside daylight, which is what the camera is exposed for.
 const FIRELIGHT_LUMENS: f32 = 500_000.0;
-const LAMPLIGHT_LUMENS: f32 = 60_000.0;
+const LAMPLIGHT_LUMENS: f32 = 140_000.0;
 /// Anything lower than this is walked over, not round.
 const STEP_OVER_M: f32 = 0.25;
 
@@ -50,6 +50,11 @@ const EXAMPLE: &[(&str, f32, f32, f32, f32, bool)] = &[
     ("Kitchen_Sink", 15.5, 1.2, 0.0, 90.0, true),
     ("Kitchen_2Drawers", 15.5, 0.3, 0.0, 90.0, true),
     ("Houseplant_7", 20.2, 2.2, 0.0, 0.0, true),
+    // Rooms come with no lights of their own, so these are what light them.
+    ("Light_Floor1", 20.3, -5.3, 0.0, 0.0, true),
+    ("Light_Floor1", 14.4, -2.5, 0.0, 0.0, true),
+    ("Light_Floor1", 8.4, 2.4, 0.0, 0.0, true),
+    ("Light_Floor1", -5.3, -0.6, 0.0, 0.0, true),
     // By the door: what has not been carried in yet.
     ("Props_Crate", 10.6, 4.3, 0.0, 12.0, false),
     ("Props_Crate", 11.6, 4.6, 0.0, -8.0, false),

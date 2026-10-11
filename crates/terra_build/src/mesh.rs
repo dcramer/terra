@@ -1,9 +1,12 @@
 //! Turning a base's shape into triangles.
 //!
-//! The shape is tiles; what makes it read as a building is the trim. Every wall gets a
-//! coloured band at its foot, a post where it turns a corner, a seam where it meets the
-//! next panel, and a parapet where the roof begins. Openings get frames, windows a sill,
-//! doors a canopy with a light under it, and every ceiling a light panel.
+//! The shape is tiles; what makes it read as a building is the trim, and the trim is
+//! chosen by what each piece is next to. A wall gets a post where it turns a corner and a
+//! seam where it carries on; a parapet where the roof begins and a plain line where
+//! another storey starts. Openings get frames, and windows a sill.
+//!
+//! A room is a plain box. Lamps, roof fittings and anything else that is a thing in its
+//! own right is for a player to build, not part of the room.
 
 use crate::{Base, DOOR_HEIGHT_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, TILE_M};
 use glam::{IVec3, Vec3};
@@ -15,14 +18,12 @@ const BAND: [f32; 3] = [0.9, 0.46, 0.17];
 const DARK: [f32; 3] = [0.17, 0.18, 0.23];
 const PARAPET: [f32; 3] = [0.33, 0.34, 0.4];
 const ROOF: [f32; 3] = [0.74, 0.73, 0.7];
-const SOLAR: [f32; 3] = [0.09, 0.13, 0.3];
 const UNDERSIDE: [f32; 3] = [0.42, 0.43, 0.47];
 const INNER_WALL: [f32; 3] = [0.88, 0.82, 0.72];
 const FLOOR: [f32; 3] = [0.6, 0.45, 0.33];
 const FLOOR_ALTERNATE: [f32; 3] = [0.54, 0.4, 0.3];
 const CEILING: [f32; 3] = [0.93, 0.91, 0.86];
 const GLASS: [f32; 3] = [0.55, 0.8, 0.9];
-const LIGHT: [f32; 3] = [1.0, 0.86, 0.62];
 
 /// Height of the coloured band at the foot of every outside wall.
 const BAND_HEIGHT_M: f32 = 0.5;
@@ -61,8 +62,6 @@ pub struct BaseMesh {
     pub structure: Surface,
     /// Window glass, to be drawn see-through and from both sides.
     pub glass: Surface,
-    /// Light panels, to be drawn glowing.
-    pub lights: Surface,
 }
 
 /// A rectangle on a face, in metres from the face's low-left corner as seen from outside.
@@ -153,13 +152,8 @@ pub(crate) fn build(base: &Base) -> BaseMesh {
                 });
             }
         }
-        match face.side {
-            Side::Up => roof_fittings(&mut mesh, &frame, face),
-            Side::Down => {}
-            _ => wall_trim(&mut mesh, base, &frame, face, opening),
-        }
-        if face.side == Side::Up {
-            ceiling_light(&mut mesh, &frame);
+        if face.side.is_wall() {
+            wall_trim(&mut mesh, base, &frame, face, opening);
         }
     }
     // Interior walls: a slab with some thickness, so it reads as a wall from both sides,
@@ -241,7 +235,6 @@ pub(crate) fn build(base: &Base) -> BaseMesh {
             );
             mesh.structure
                 .quad(frame.corners(frame.whole(), true), -frame.normal, CEILING);
-            ceiling_light(&mut mesh, &frame);
         }
     }
     mesh
@@ -411,89 +404,8 @@ fn wall_trim(
             for side in surround {
                 frame.block(&mut mesh.structure, side, -0.1, 0.1, DARK);
             }
-            // A canopy over the door, with a light under it.
-            let canopy = Rect {
-                left: hole.left - 0.35,
-                right: hole.right + 0.35,
-                bottom: hole.top + 0.16,
-                top: hole.top + 0.26,
-            };
-            frame.block(&mut mesh.structure, canopy, 0.0, 1.0, PARAPET);
-            let lamp = Rect {
-                left: hole.left + 0.1,
-                right: hole.right - 0.1,
-                bottom: hole.top + 0.12,
-                top: hole.top + 0.16,
-            };
-            frame.block(&mut mesh.lights, lamp, 0.2, 0.8, LIGHT);
         }
         None => {}
-    }
-}
-
-/// A light panel in the ceiling under an upward face.
-fn ceiling_light(mesh: &mut BaseMesh, frame: &Frame) {
-    let panel = Rect {
-        left: frame.width * 0.5 - 0.55,
-        right: frame.width * 0.5 + 0.55,
-        bottom: frame.height * 0.5 - 0.55,
-        top: frame.height * 0.5 + 0.55,
-    };
-    frame.block(&mut mesh.lights, panel, -0.05, -0.001, LIGHT);
-}
-
-/// What stands on a roof tile. Which tiles get what is fixed by where they are, so a
-/// base looks the same every time it is drawn.
-fn roof_fittings(mesh: &mut BaseMesh, frame: &Frame, face: Face) {
-    let [x, y, z] = face.tile;
-    let pick =
-        (x.wrapping_mul(73_856_093) ^ y.wrapping_mul(19_349_663) ^ z.wrapping_mul(83_492_791))
-            .rem_euclid(7);
-    match pick {
-        // A solar panel on short feet.
-        0 | 3 | 5 => {
-            let panel = Rect {
-                left: 0.35,
-                right: frame.width - 0.35,
-                bottom: 0.45,
-                top: frame.height - 0.45,
-            };
-            frame.block(&mut mesh.structure, panel, 0.2, 0.26, SOLAR);
-            let frame_under = Rect {
-                left: panel.left - 0.04,
-                right: panel.right + 0.04,
-                bottom: panel.bottom - 0.04,
-                top: panel.top + 0.04,
-            };
-            frame.block(&mut mesh.structure, frame_under, 0.16, 0.2, DARK);
-            for (left, bottom) in [(0.6, 0.7), (frame.width - 0.75, frame.height - 0.85)] {
-                let foot = Rect {
-                    left,
-                    right: left + 0.15,
-                    bottom,
-                    top: bottom + 0.15,
-                };
-                frame.block(&mut mesh.structure, foot, 0.0, 0.16, DARK);
-            }
-        }
-        // A vent.
-        1 => {
-            let body = Rect {
-                left: 0.9,
-                right: 1.8,
-                bottom: 1.0,
-                top: 1.7,
-            };
-            frame.block(&mut mesh.structure, body, 0.0, 0.5, POST);
-            let cap = Rect {
-                left: 0.82,
-                right: 1.88,
-                bottom: 0.92,
-                top: 1.78,
-            };
-            frame.block(&mut mesh.structure, cap, 0.5, 0.58, DARK);
-        }
-        _ => {}
     }
 }
 
@@ -639,7 +551,7 @@ mod tests {
             max: [1, 1, 1],
         });
         let mesh = base.mesh();
-        for surface in [&mesh.structure, &mesh.glass, &mesh.lights] {
+        for surface in [&mesh.structure, &mesh.glass] {
             assert!(surface.triangle_count() > 0);
             for (corners, normals) in surface.positions.chunks(3).zip(surface.normals.chunks(3)) {
                 let winding = (corners[1] - corners[0])
@@ -665,17 +577,9 @@ mod tests {
         assert_eq!(framed.glass.triangle_count(), 2);
         assert!(framed.structure.triangle_count() > plain.structure.triangle_count());
 
-        // A door is an opening with no glass, and a light over it.
+        // A door is an opening with no glass.
         base.apply(BuildOp::SetPanel(wall, Panel::Door));
-        let door = base.mesh();
-        assert_eq!(door.glass.triangle_count(), 0);
-        assert!(door.lights.triangle_count() > plain.lights.triangle_count());
-    }
-
-    #[test]
-    fn every_ceiling_has_a_light() {
-        // Nine tiles, one panel each, twelve triangles a panel.
-        assert_eq!(room().mesh().lights.triangle_count(), 9 * 12);
+        assert_eq!(base.mesh().glass.triangle_count(), 0);
     }
 
     #[test]
@@ -684,7 +588,7 @@ mod tests {
         let mesh = room().mesh();
         for p in &mesh.structure.positions {
             assert!(p.x >= -0.2 && p.x <= 3.0 * TILE_M + 0.2);
-            assert!(p.y >= -1e-4 && p.y <= STOREY_M + 0.7);
+            assert!(p.y >= -1e-4 && p.y <= STOREY_M + 0.4);
             assert!(p.z >= -0.2 && p.z <= 3.0 * TILE_M + 0.2);
         }
     }

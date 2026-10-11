@@ -98,7 +98,7 @@ Proposed. Building is something you do with a tool in hand, standing in the worl
 
 - With the builder out, you see what you would place or change before committing.
 - Building costs what you are carrying. Taking something apart gives some or all of it back.
-- The construction system itself gets its own doc. The developers have said building should start from choosing a part, with variants to cycle through (D48); the tech demo now does that with a dial.
+- The construction system has its own doc: [construction.md](construction.md). The developers have said building should start from choosing a part, with variants to cycle through (D48); the tech demo now does that with a dial.
 
 ## Co-op
 

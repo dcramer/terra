@@ -107,7 +107,7 @@ With the grid on, items land on half-metre steps and turn in eighths of a circle
 - Aim at the top of another item and it stands on it.
 - Aim at nothing in reach and it is offered a few steps in front of you.
 
-Rooms are always on the base's three-metre tiles, so a new room lines up with the rooms already there. A room's foundation may go into the ground, but the room itself may not: where the ground is higher than its floor, the outline is red and it cannot be built.
+A room is a plain box: lamps and everything else in it are items you place. Rooms are always on the base's three-metre tiles, so a new room lines up with the rooms already there. A room's foundation may go into the ground, but the room itself may not: where the ground is higher than its floor, the outline is red and it cannot be built.
 
 ![An interior wall, about to have a window cut in it](../../docs/images/outpost-wall-2026-10-10.png)
 

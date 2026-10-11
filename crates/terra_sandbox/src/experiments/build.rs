@@ -14,10 +14,7 @@ use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, prelude::*,
     render::render_resource::PrimitiveTopology,
 };
-use terra_build::{
-    Base, BuildOp, DOOR_HEIGHT_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, Surface, TILE_M,
-    Walker,
-};
+use terra_build::{Base, BuildOp, DOOR_WIDTH_M, Face, Panel, Side, Surface, TILE_M, Walker};
 use terra_core::Ground;
 
 const REACH_M: f32 = 300.0;
@@ -30,8 +27,6 @@ const FOUNDATION_DEPTH_M: f32 = 0.7;
 const RAMP_RUN_PER_RISE: f32 = 2.4;
 const RAMP_WIDTH_M: f32 = DOOR_WIDTH_M + 0.7;
 const STEP_RISE_M: f32 = 0.17;
-/// Bright enough to show beside daylight, which is what the camera is exposed for.
-const INDOOR_LAMP_LUMENS: f32 = 110_000.0;
 const CONCRETE: Color = Color::srgb(0.5, 0.48, 0.47);
 
 /// Present when something else is driving construction, such as a player holding a
@@ -53,10 +48,8 @@ pub(super) struct Site {
     ramps: Vec<Ramp>,
     structure: Entity,
     glass: Entity,
-    lights: Entity,
     foundation: Entity,
     steps: Entity,
-    lamps: Entity,
     camera_placed: bool,
 }
 
@@ -469,10 +462,6 @@ fn setup(
         double_sided: true,
         ..default()
     });
-    let light_material = materials.add(StandardMaterial {
-        emissive: LinearRgba::rgb(5.0, 3.6, 2.2),
-        ..default()
-    });
     let concrete = materials.add(StandardMaterial {
         base_color: CONCRETE,
         perceptual_roughness: 0.95,
@@ -489,14 +478,6 @@ fn setup(
             NotShadowCaster,
         ))
         .id();
-    let lights = commands
-        .spawn((
-            Name::new("Base light panels"),
-            frame,
-            MeshMaterial3d(light_material),
-            NotShadowCaster,
-        ))
-        .id();
     let foundation = commands
         .spawn((
             Name::new("Base foundation"),
@@ -507,9 +488,6 @@ fn setup(
     let steps = commands
         .spawn((Name::new("Base steps"), frame, MeshMaterial3d(concrete)))
         .id();
-    let lamps = commands
-        .spawn((Name::new("Base lamps"), frame, Visibility::default()))
-        .id();
 
     let mut site = Site {
         base,
@@ -518,10 +496,8 @@ fn setup(
         revision: 0,
         structure,
         glass,
-        lights,
         foundation,
         steps,
-        lamps,
         ramps: Vec::new(),
         camera_placed: false,
     };
@@ -591,7 +567,6 @@ fn redraw(commands: &mut Commands, site: &mut Site, planet: &Planet, meshes: &mu
     };
     show(site.structure, to_mesh(&mesh.structure));
     show(site.glass, to_mesh(&mesh.glass));
-    show(site.lights, to_mesh(&mesh.lights));
 
     // A foundation under every ground-floor tile, down into the ground, standing a
     // little proud of the walls.
@@ -655,42 +630,6 @@ fn redraw(commands: &mut Commands, site: &mut Site, planet: &Planet, meshes: &mu
         site.ramps.push(ramp);
     }
     show(site.steps, steps.into_mesh());
-
-    // Lamps: one in every other tile, and one over each door outside.
-    commands.entity(site.lamps).despawn_related::<Children>();
-    let lamp = |at: Vec3, lumens: f32, range: f32| {
-        (
-            PointLight {
-                color: Color::srgb(1.0, 0.8, 0.56),
-                intensity: lumens,
-                range,
-                radius: 0.3,
-                shadow_maps_enabled: false,
-                ..default()
-            },
-            Transform::from_translation(at),
-            ChildOf(site.lamps),
-        )
-    };
-    for (tile, _) in site
-        .base
-        .tiles()
-        .filter(|(tile, _)| (tile.x + tile.z) % 2 == 0)
-    {
-        let centre = (tile.as_vec3() + Vec3::new(0.5, 0.0, 0.5)) * TILE_M;
-        commands.spawn(lamp(
-            centre.with_y(tile.y as f32 * STOREY_M + STOREY_M - 0.5),
-            INDOOR_LAMP_LUMENS,
-            9.0,
-        ));
-    }
-    for door in doors {
-        let corners = Base::corners(door);
-        let over = (corners[0] + corners[1]) * 0.5
-            + Vec3::Y * (DOOR_HEIGHT_M - 0.1)
-            + door.side.offset().as_vec3() * 0.6;
-        commands.spawn(lamp(over, INDOOR_LAMP_LUMENS * 0.5, 7.0));
-    }
 }
 
 /// Moves the camera to a good view of the base, once.
