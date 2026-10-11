@@ -2,7 +2,8 @@
 
 Tripo rigs onto its own humanoid skeleton (78 bones, with twist and helper bones). Ours is
 the Quaternius one every sandbox animation is made for. This:
-  1. turns Tripo's model to face -Y as ours does, and scales it to `height`,
+  1. turns Tripo's model to face -Y as ours does, scales it to `height`, and welds the
+     vertices glTF split at texture seams,
   2. moves each of our joints to the matching Tripo joint, keeping our bones' directions
      (the animations depend on them),
   3. renames Tripo's weights to our bones, folding each helper bone into the bone it helps,
@@ -98,6 +99,14 @@ body.modifiers.clear()
 body.data.transform(turn @ mw)
 body.matrix_world = Matrix.Identity(4)
 bpy.data.objects.remove(t_arm)
+# glTF splits a vertex wherever the texture has a seam. Weld them back (Blender keeps the
+# texture coordinates on the faces), or smoothing gives each copy different weights and the
+# seams open into gaps as the body moves.
+select_only(body)
+bpy.ops.object.mode_set(mode="EDIT")
+bpy.ops.mesh.select_all(action="SELECT")
+bpy.ops.mesh.remove_doubles(threshold=1e-5)
+bpy.ops.object.mode_set(mode="OBJECT")
 
 # 2. Our skeleton, its pose cleared, joints moved to Tripo's, directions kept.
 bpy.ops.import_scene.gltf(filepath=FIGURE)

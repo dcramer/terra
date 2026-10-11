@@ -10,6 +10,7 @@ mod forest;
 mod look;
 mod play;
 mod scatter;
+mod workbench;
 
 pub struct Experiment {
     pub name: &'static str,
@@ -41,6 +42,11 @@ pub const ALL: &[Experiment] = &[
         name: "play",
         about: "A player on the ground with a builder tool: walk, jump, go indoors, and reshape the base.",
         add: play::plugin,
+    },
+    Experiment {
+        name: "workbench",
+        about: "A model on a plain floor in the game's light: --model <path> to load, --anim <clip> to play, --sheet <prefix> to capture views and exit.",
+        add: workbench::plugin,
     },
     Experiment {
         name: "look",

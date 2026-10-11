@@ -8,6 +8,8 @@ Checks:
   skeleton      same bones, same parents as our skeleton
   rest pose     every bone points the same way as in our skeleton (animations assume it)
   weights       every vertex weighted, at most 4 bones each, weights summing to 1
+  seams         copies of a vertex split at a texture seam carry the same weights, or the
+                seam opens into a gap as the body moves
   reach         no vertex driven mostly by a bone far from it (an arm stuck to the hip)
   symmetry      a vertex and its mirror are driven by mirrored bones
   motion        through every animation: how many edges stretch or crush badly, whether
@@ -40,6 +42,8 @@ LIMITS = {
     "reach": 0.14,                  # of the character's height, from a vertex to its main bone
     "reach_fail_share": 0.005,      # share of vertices allowed beyond that
     "mirror_fail_share": 0.05,
+    "seam_weight_diff": 0.05,       # summed difference in weights between copies of one vertex
+    "seam_fail_share": 0.01,        # share of split vertices allowed beyond that
     "stretch_ratio": 1.8,           # an edge longer than this many times its rest length
     "crush_ratio": 0.45,            # or shorter than this
     "bad_edge_share": 0.01,         # share of edges allowed to do either, in any frame
@@ -117,6 +121,19 @@ ok["weights"] = unweighted == 0 and over == 0
 report["weights"]["note"] = "sums are normalised on export" if bad_sum else ""
 report["reach"] = {"far_share": round(far / n, 4)}
 ok["reach"] = far / n <= LIMITS["reach_fail_share"]
+
+# Seams: the copies of a vertex at one position must move together.
+copies = {}
+for v in body.data.vertices:
+    copies.setdefault(tuple(round(c, 5) for c in v.co), []).append(v)
+split = [vs for vs in copies.values() if len(vs) > 1]
+torn = 0
+for vs in split:
+    ws = [{groups[g.group]: g.weight for g in v.groups if g.weight > 0} for v in vs]
+    keys = set().union(*ws)
+    torn += max(sum(abs(a.get(k, 0) - b.get(k, 0)) for k in keys) for a in ws for b in ws) > LIMITS["seam_weight_diff"]
+report["seams"] = {"split_positions": len(split), "torn": torn}
+ok["seams"] = torn <= LIMITS["seam_fail_share"] * max(len(split), 1)
 
 # Symmetry: a vertex's mirror should be driven by the mirrored bone.
 pts = np.array([tuple(mw @ v.co) for v in body.data.vertices])

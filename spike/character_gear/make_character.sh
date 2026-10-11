@@ -8,7 +8,9 @@
 #   2. rig it with Tripo's auto-rig on Studio (about 20 credits)
 #   3. refine nothing (the texture is kept), convert the rig onto our skeleton
 #   4. check it against our skeleton and the mannequin, and render it moving
-# Writes out/NAME.glb (mesh and skin on our skeleton), out/rig-check.json and out/NAME-sheet.png.
+#   5. export it as the game loads it, with our clips re-sampled on its skeleton
+# Writes out/NAME.glb (mesh and skin on our skeleton), out/rig-check.json, out/NAME-sheet.png
+# and out/NAME-game.glb (the file the game reads).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 bake="$here/../model_bakeoff"
@@ -22,3 +24,4 @@ node "$tripo" rig "$project" --skeleton tripo -o "out/tripo/$name-rigged.glb"
 ./run.sh ../character_gear/convert_rig.py "out/tripo/$name-rigged.glb" "$name" "$height" 2 | grep -E "WEIGHTS|EXPORTED|Error" || true
 ./run.sh ../character_gear/rig_check.py "../character_gear/out/$name.glb" | grep RIGCHECK || true
 ./run.sh ../character_gear/rig_render.py "../character_gear/out/$name.glb" "$name-sheet" | grep -E "SHEET|Error" || true
+./run.sh ../character_gear/export_character.py "../character_gear/out/$name.glb" "../character_gear/out/$name-game.glb" | grep -E "EXPORTED|Error" || true

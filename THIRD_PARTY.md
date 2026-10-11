@@ -28,6 +28,14 @@ All by [Quaternius](https://quaternius.com), who releases everything under [CC0 
 
 The individual model files were fetched from [quaternius-showcase](https://github.com/trebeljahr/quaternius-showcase), which republishes the packs one model to a file, and the animation library from [gltf-universal-animation-library](https://github.com/J-Ponzo/gltf-universal-animation-library). The licence was checked against Quaternius's own [FAQ](https://quaternius.com/faq.html) on 2026-10-10. The creatures, village pieces, tools and workbench were fetched from quaternius-showcase on 2026-10-11.
 
+## Made with AI
+
+Made by us with generators on paid plans, whose terms leave what they make with the subscriber. We say so openly (D107).
+
+| Where | Made with | How |
+|---|---|---|
+| `crates/terra_sandbox/assets/models/character/base-male.glb` | [Tripo](https://www.tripo3d.ai) (model and rig, on our Studio subscription; design sheet on its API), animated with the Quaternius clips above | `.claude/skills/character/SKILL.md` and `spike/character_gear/`; D115 |
+
 ## Sound
 
 By [Kenney](https://kenney.nl), under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): free for any use, no attribution required. We credit them anyway.

@@ -20,7 +20,8 @@ terra_sim = { path = "crates/terra_sim" }
 # `libm` routes its trigonometry through the portable maths library (D30).
 glam = { version = "0.32", features = ["libm"] }
 # Pinned by policy (D31): upgrade once the crates we depend on support the new release.
-bevy = { version = "0.19", features = ["free_camera", "bevy_dev_tools", "file_watcher"] }
+# `jpeg`: models made with Tripo carry JPEG textures.
+bevy = { version = "0.19", features = ["free_camera", "bevy_dev_tools", "file_watcher", "jpeg"] }
 bevy-inspector-egui = "0.37"
 libm = "0.2"
 # Already built for Bevy; used to save worlds and, later, to send operations (D21).

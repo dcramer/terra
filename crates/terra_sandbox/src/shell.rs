@@ -38,6 +38,9 @@ usage: terra_sandbox [options]
   --sound               sound under WSL too, where it is off by default
   --bench               measure frame times with vsync off, print them, then exit
   --settle <frames>     frames to run before capturing or measuring (default 120)
+  --model <path>        in the workbench: the model to load, under assets/
+  --anim <clip>         in the workbench: a clip to play; repeatable
+  --sheet <prefix>      in the workbench: capture each clip from four sides, then exit
   --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace or an arrow
                         (left, right, up, down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
@@ -100,6 +103,10 @@ pub struct Options {
     pub start_facing: Option<(f32, f32)>,
     /// On a frame, put the play experiment's player at a spot, facing another.
     pub warps: Vec<Warp>,
+    /// In the workbench: the model to load, its clips to play, and where to save a sheet.
+    pub model: Option<String>,
+    pub anims: Vec<String>,
+    pub sheet: Option<PathBuf>,
 }
 
 /// A jump in a scripted run: on `frame`, stand `at` a spot facing `facing`, each in metres
@@ -135,6 +142,9 @@ impl Options {
             start_at: None,
             start_facing: None,
             warps: Vec::new(),
+            model: None,
+            anims: Vec::new(),
+            sheet: None,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -166,6 +176,9 @@ impl Options {
                 }
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
+                "--model" => options.model = Some(value("--model")?),
+                "--anim" => options.anims.push(value("--anim")?),
+                "--sheet" => options.sheet = Some(PathBuf::from(value("--sheet")?)),
                 "--radius" => {
                     options.radius_m = value("--radius")?
                         .parse()
@@ -205,7 +218,7 @@ impl Options {
 
     /// Whether this run drives itself and exits, rather than waiting for a person.
     pub fn scripted(&self) -> bool {
-        self.shot.is_some() || self.bench
+        self.shot.is_some() || self.bench || self.sheet.is_some()
     }
 
     /// Whether anything is heard. A scripted run is silent, so it neither plays sounds

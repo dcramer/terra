@@ -207,15 +207,17 @@ Worked out on 2026-10-11 ([spike/character_gear](../spike/character_gear/README.
 
 | Move | Mannequin, rigged by hand | Tripo's rig, converted | Blender's own weights |
 |---|---|---|---|
-| Idle | 0.16% | 0.16% | 0.32% |
-| Walk | 0.17% | 0.29% | 0.50% |
-| Jog | 0.45% | 1.1% | 1.5% |
-| Crouch | 0.55% | 1.8% | 1.6% |
-| Roll | 1.0% | 2.4% | 1.9% |
+| Idle | 0.16% | 0.18% | 0.32% |
+| Walk | 0.17% | 0.34% | 0.50% |
+| Jog | 0.45% | 1.2% | 1.5% |
+| Crouch | 0.55% | 1.9% | 1.6% |
+| Roll | 1.0% | 2.5% | 1.9% |
 
 Copying the mannequin's own weights onto the body did twice as badly as either.
 - **Mistakes this caught or would have:** the importer leaves the skeleton posed mid-animation, which silently became the rest pose; the skeleton's axes are turned by the importer, so "forward" in code was sideways; scaling the skeleton's data instead of its object broke the animations' hip movements; Blender's weighting fails on generated meshes unless given a watertight copy.
-- **Not yet done:** Bevy applies every joint position stored in the clips, which would undo the moved joints in the game; the clips need their unchanging joint positions stripped, keeping only the hips. The deepest bends stretch the texture's seams into thin light lines on the shorts. The female base, templates, hair and gear are next.
+- **In the game.** Bevy applies every joint position stored in a clip, so the mannequin's clips would pull the moved joints back to the mannequin's. `export_character.py` writes each character its own copy of the clips, re-sampled on its skeleton (3.3 MB with all 26). A shared library, with joint positions stripped except the hips, would be smaller once there are many characters. The sandbox's `workbench` experiment then shows the character in the game's renderer and saves views of each clip; on the Windows GPU a sheet of 16 takes about a minute, on WSL's CPU renderer it is too slow to use.
+- **Light lines that were gaps.** Thin light lines on the clothing, first taken for stretched texture seams, were the mesh tearing: glTF splits a vertex wherever the texture has a seam, the weight smoothing treated the copies as separate, and 973 of 1,984 seams ended with different weights on each side. Welding the copies before smoothing fixed every one. The checker missed it because no edge joins the copies; it now compares their weights (`seams`).
+- **Not yet done:** the female base, templates, hair and gear.
 
 ## Limits
 

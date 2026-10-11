@@ -35,6 +35,9 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--warp <east,south:east,south@frame>` | In the play experiment: on that frame, move the player to the first spot, facing the second, for testing. Repeatable. |
 | `--give <item>:<count>` | In the play experiment: carry something extra, for testing: a raw item such as `stone:10`, a tool such as `spear:1` (put on the bar), clothing such as `leather_coat:1` (worn), or `health`, `fed` or `stamina` at a value out of 100. Added to a loaded save too, so scripted runs can follow on from each other. Repeatable. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
+| `--model <path>` | In the workbench: the model to look at, a `.glb` or `.gltf` under `assets/` |
+| `--anim <clip>` | In the workbench: an animation to play. Repeatable; the first plays when looking by hand |
+| `--sheet <prefix>` | In the workbench: save `<prefix>-<clip>-<degrees>.png` for each `--anim`, paused partway, from four sides, then exit |
 
 ## Controls
 
@@ -238,6 +241,20 @@ cargo run -p terra_sandbox -- --experiment look --experiment build
 ```
 
 A base you shape, inspired by Subnautica 2. It stands on the most level ground near the start, on a foundation, with steps up to its door. Aim with the mark in the middle of the view: G pushes the wall you are looking at out by a tile, H pulls it in, V cycles the tile through solid, three sizes of window and a door, and B adds a room on open ground. The rules live in `terra_build`; what it does and does not do is in [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
+
+## The workbench
+
+```bash
+cargo run -p terra_sandbox -- --experiment workbench --model models/character/base-male.glb --anim Walk_Loop
+```
+
+On the Windows GPU, which a sheet needs (the CPU renderer under WSL is far too slow):
+
+```bash
+cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/base-male.glb --anim Idle_Loop --anim Walk_Loop --sheet shots/wb/base-male --clean --settle 90
+```
+
+One model on a plain floor in the game's own light and renderer, playing an animation (D71). It prints the model's clips and how many of our skeleton's joints it has. Fly round it with the free camera, or give `--sheet` to have it save views of each clip from four sides and exit, which is how an agent checks a model. How characters are made and checked before they get here is in `.claude/skills/character/SKILL.md`.
 
 ## Adding an experiment
 
