@@ -23,7 +23,7 @@ Draft. A feature that serves none of these is cut.
 
 ## Our inspirations
 
-Named by the developers on 2026-10-11 as the games and books we draw on (D85). Each design should be based on games we know we enjoy; how these combine for [game design 001](proposals/game-design-001.md) is in [research/reference-games.md](../research/reference-games.md).
+Named by the developers on 2026-10-11 as the games and books we draw on (D85). What we take is design and systems; a game's look is a separate question, answered by the art direction ([art.md](art.md), D14). Each design should be based on games we know we enjoy; how these combine for [game design 001](proposals/game-design-001.md) is in [research/reference-games.md](../research/reference-games.md).
 
 | Inspiration | We take | We leave |
 |---|---|---|

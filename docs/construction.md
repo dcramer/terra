@@ -7,7 +7,7 @@ Status: a draft for the developers to correct. It collects what they said on 202
 In their words, shortened.
 
 - **The inspiration is Subnautica 2**, blended with Rust, Ark and other advanced building games (D48).
-- **Enshrouded is a role model** for building and voxels, and for other mechanics (named 2026-10-10): "a ton of stuff we really might like to model off of". Its buildings are made of voxels, which D9 rules out for us today; see [research/enshrouded.md](../research/enshrouded.md) and the open question below.
+- **Enshrouded is a role model** for building and voxels, and for other mechanics (named 2026-10-10): "a ton of stuff we really might like to model off of". Building in voxels is fine; the terrain stays smooth voxels (2026-10-11). See [research/enshrouded.md](../research/enshrouded.md).
 - **You pick the part you want to build, and can cycle its variants**, from "the little dial building menus we see in things like Rust and Subnautica".
 - **Rooms are plain boxes.** No lights or fittings come with one.
 - **A room placed across another extends it** to the combined shape.
@@ -118,7 +118,7 @@ What the sandbox does today, measured against the above.
 6. **Do bases have needs**, as in Subnautica: power, air, hull strength? Rooms being plain boxes suggests lights at least need power from somewhere.
 7. **Upper storeys.** Stairs or ladders as buildables, and whether rooms can be stacked from the dial.
 8. **Who may change what** in co-op (also question 16 in [player.md](player.md)).
-9. **Are buildings made of voxels, as in Enshrouded?** The developers now think Enshrouded's building may be the better base (see above). Technically it no longer conflicts with D9: a base can be a voxel volume of its own, separate from the terrain.
+9. Answered: **buildings may be made of voxels.** The developers said on 2026-10-11 they are fine with building in voxels, as long as the terrain stays smooth voxels (D9). Whether Enshrouded's system is the base is still open (D48).
 10. **Shaped rooms on top?** Draw a room and have it filled in as blocks, then carve it, or blocks and ready-made pieces only?
 11. **Must structures hold themselves up?**
 
