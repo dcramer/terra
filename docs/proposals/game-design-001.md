@@ -56,7 +56,7 @@ Why this suits us:
 
 ## Factions and settlements, after Kenshi
 
-From the developers, 2026-10-11 (D95): Kenshi has many of the concepts we like for how the world exists: villages with things going on, and factions. We will need systems like these. Kenshi also lets you capture people; the developers ruled that out, along with prisoners: it sets the wrong tone. Recruiting is rescue and helping settlements (D90).
+From the developers, 2026-10-11 (D95): Kenshi has many of the concepts we like for how the world exists: villages with things going on, and factions. We will need systems like these. Kenshi also lets you capture people; the developers ruled that out for players, along with keeping prisoners: it sets the wrong tone. Hostile settlements may hold prisoners of their own, though, and rescuing them is one way to recruit (D90), alongside helping settlements.
 
 What Kenshi does, from memory and unchecked: the world is shared among factions, each with its towns, people and attitudes to the others and to you. Towns have shops, bars, guards and residents. Caravans, patrols, raiders and wanderers travel between them on their own errands. Raids come to towns and to the player's outposts, more as an outpost grows. What happens sticks: a town can be overrun, abandoned or taken over, and stays that way.
 
@@ -183,5 +183,5 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 17. **The base game.** Enshrouded and Soulmask together, or another? Worth a few hours of Soulmask and some Kenshi to judge.
 18. Answered in part: **factions.** No fixed set or number; added as we go and discovered by players (D95). Open: can a player found or lead one?
 19. Answered in part: **settlements that fall** can be lost for good, with repopulation if needed (D95). Open, to decide later: can players take one over, for instance by wiping it out and claiming the land?
-20. Answered: **no capture and no prisoners**; it sets the wrong tone (D95).
+20. Answered: **players do not capture or keep prisoners**; it sets the wrong tone. Hostile settlements may hold prisoners you can rescue (D95).
 21. Answered: **how many worlds.** No fixed limit (D17).
