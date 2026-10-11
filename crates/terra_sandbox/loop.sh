@@ -51,7 +51,7 @@ step rescue 'Killed a Spider' 'Freed Bren.' -- \
     --warp 63.8,-61.9:66,-64.4@1950 --press down@1955-1975 --press left@1976-1981 \
     --press f@1990 --warp 8,6:0,0@2020 --settle 3500
 
-# Where the last step placed something, as "east south" of the outpost, from its log.
+# Where the last step placed something, as "east south" of the start, from its log.
 placed() {
     grep -o "Placed a $1 at \[[^]]*\]" <<<"$log" | tail -1 | tr -d '[],' | awk '{print $5, $7}'
 }

@@ -3,64 +3,108 @@
 //! where to look, by the sun and the glow rather than by a marker (D92). Others say what
 //! they know. Bring the smith home to your claim and the elder says so.
 //!
-//! The houses are solid; the people go about their day where they stand.
+//! Everything in it is built from the same parts as the player's things (D108): each
+//! house is a build put up by the same operations as a player's rooms, doors and windows,
+//! and the well and stall are catalogue items, placed as a player places one. They are
+//! the villagers', not the player's. The people go about their day where they stand.
 
 use super::bag::Notice;
+use super::catalogue;
 use super::creatures::Lair;
-use super::flora::{ClearAround, Obstacles};
+use super::flora::ClearAround;
 use super::interact::{Focus, Focusing, Interactable};
 use super::people::{Arrive, Doing, Person};
+use super::props::{self, Models, Theirs};
 use super::scene::SUN_DIRECTION;
-use crate::experiments::build::Site;
+use crate::experiments::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use bevy::prelude::*;
+use terra_build::{Base, BuildOp, CELL_M, Face, Panel, Side};
 
-/// One building or piece of the village: its model, where it stands from the middle,
-/// how it is turned, how much bigger than its file it is drawn, and how far it keeps a
-/// walker off, if it does.
-struct Piece {
-    file: &'static str,
+/// A house: where the middle of its door stands from the village's middle, in metres
+/// east and south, and how wide and deep it is. Its door faces the well.
+struct House {
     east: f32,
     south: f32,
-    turn_degrees: f32,
-    scale: f32,
-    solid_m: Option<f32>,
+    wide: f32,
+    deep: f32,
+    /// Whether it has a room upstairs as well.
+    upstairs: bool,
 }
 
-const fn piece(
-    file: &'static str,
-    east: f32,
-    south: f32,
-    turn: f32,
-    scale: f32,
-    solid: f32,
-) -> Piece {
-    Piece {
-        file,
-        east,
-        south,
-        turn_degrees: turn,
-        scale,
-        solid_m: if solid > 0.0 { Some(solid) } else { None },
-    }
-}
-
-/// The village, laid out around its well.
-const PIECES: [Piece; 6] = [
-    piece("models/village/House_1.glb", -7.0, -5.0, 30.0, 1.9, 3.0),
-    piece("models/village/House_2.glb", 7.0, -6.0, -25.0, 1.9, 3.6),
-    piece("models/village/House_3.glb", 0.0, -11.0, 0.0, 1.9, 2.4),
-    piece("models/village/House_1.glb", -9.0, 6.0, 140.0, 1.9, 3.0),
-    piece("models/village/Well.glb", 0.0, 0.0, 0.0, 1.6, 0.9),
-    piece(
-        "models/village/MarketStand_1.glb",
-        6.0,
-        4.0,
-        -60.0,
-        1.8,
-        1.0,
-    ),
+const HOUSES: [House; 4] = [
+    House {
+        east: -6.0,
+        south: -5.0,
+        wide: 5.0,
+        deep: 4.0,
+        upstairs: false,
+    },
+    House {
+        east: 6.5,
+        south: -5.5,
+        wide: 6.0,
+        deep: 4.5,
+        upstairs: true,
+    },
+    House {
+        east: 0.0,
+        south: -9.5,
+        wide: 4.0,
+        deep: 4.0,
+        upstairs: false,
+    },
+    House {
+        east: -8.5,
+        south: 5.5,
+        wide: 5.0,
+        deep: 4.0,
+        upstairs: false,
+    },
 ];
+
+/// An item from the catalogue the village has: what it is, where it stands from the
+/// middle in metres east and south, and how many degrees it is turned.
+const ITEMS: [(&str, f32, f32, f32); 2] = [
+    ("../village/Well", 0.0, 0.0, 0.0),
+    ("../village/MarketStand_1", 6.0, 4.0, -60.0),
+];
+
+/// The operations that put a house up, in its own space: the door in the wall along
+/// z = 0, facing +Z, and the house behind it, its middle on x = 0.
+fn house(house: &House) -> Vec<BuildOp> {
+    let cells = |metres: f32| (metres / CELL_M).round() as i32;
+    let (half, deep) = (cells(house.wide * 0.5), cells(house.deep));
+    let mut ops = vec![BuildOp::AddRoom {
+        min: [-half, 0, -deep],
+        max: [half - 1, 0, -1],
+    }];
+    if house.upstairs {
+        ops.push(BuildOp::AddRoom {
+            min: [-half, 1, -deep],
+            max: [half - 1, 1, -cells(1.5)],
+        });
+    }
+    // A door a metre and a half wide, and a window in each end wall.
+    for x in -1..2 {
+        ops.push(BuildOp::SetPanel(
+            Face::new(IVec3::new(x, 0, -1), Side::South),
+            Panel::Door,
+        ));
+    }
+    let middle = -deep / 2;
+    for z in middle - 1..middle + 1 {
+        ops.push(BuildOp::SetPanel(
+            Face::new(IVec3::new(half - 1, 0, z), Side::East),
+            Panel::WINDOW,
+        ));
+        ops.push(BuildOp::SetPanel(
+            Face::new(IVec3::new(-half, 0, z), Side::West),
+            Panel::WINDOW,
+        ));
+    }
+    ops
+}
 
 #[derive(Resource)]
 pub struct Village(pub Vec3);
@@ -75,14 +119,17 @@ pub fn plugin(app: &mut App) {
     );
 }
 
-/// Once the lair is chosen, sets the village down somewhere else, dry and level enough.
+/// Once the lair is chosen, sets the village down somewhere else, dry and level enough,
+/// and builds it.
+#[allow(clippy::too_many_arguments)]
 fn found(
     mut commands: Commands,
     site: Res<Site>,
     planet: Res<Planet>,
     lair: Res<Lair>,
-    assets: Res<AssetServer>,
-    mut obstacles: ResMut<Obstacles>,
+    look: Res<BuildLook>,
+    models: Res<Models>,
+    mut meshes: ResMut<Assets<Mesh>>,
     mut arrive: MessageWriter<Arrive>,
     mut clear: MessageWriter<ClearAround>,
 ) {
@@ -108,19 +155,52 @@ fn found(
     let up = middle.normalize();
     let east = up.cross(Vec3::Y).normalize_or(up.any_orthonormal_vector());
     let south = east.cross(up);
-    for piece in &PIECES {
-        let at = planet.drawn((middle + east * piece.east + south * piece.south).normalize());
-        let up = at.normalize();
-        let turn = Quat::from_axis_angle(up, piece.turn_degrees.to_radians());
-        commands.spawn((
-            Name::new(piece.file),
-            WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(piece.file))),
-            Transform::from_translation(at)
-                .looking_to(turn * south, up)
-                .with_scale(Vec3::splat(piece.scale)),
-        ));
-        if let Some(solid) = piece.solid_m {
-            obstacles.0.push((at, solid));
+
+    let to_site = site.frame.compute_affine().inverse();
+    // The houses, each its own build, standing upright where it is, its door to the well.
+    for (index, plan) in HOUSES.iter().enumerate() {
+        let door = planet.drawn((middle + east * plan.east + south * plan.south).normalize());
+        let up = door.normalize();
+        let away = (door - middle).reject_from(up).normalize_or(south);
+        let ops = house(plan);
+        let mut shape = Base::default();
+        for &op in &ops {
+            shape.apply(op);
+        }
+        let frame = build::lifted(
+            Transform::from_translation(door).looking_to(away, up),
+            &shape,
+            &planet,
+        );
+        let mut built = Build::new(&mut commands, &look, frame, &format!("House {index}"));
+        built.replace_with(&ops, &mut commands, &planet, &mut meshes);
+        commands.spawn((Name::new(format!("House {index}")), Built(built)));
+        let local = to_site.transform_point3(door);
+        info!(
+            "House {index}'s door is {:.1} m east and {:.1} m south of the start.",
+            local.x, local.z
+        );
+    }
+
+    // The well and the stall, placed as a player places an item, but the villagers'.
+    for (file, item_east, item_south, turn) in ITEMS {
+        let Some(item) = catalogue::item_from(file) else {
+            error!("The village wants {file}, which is not in the catalogue.");
+            continue;
+        };
+        let at = to_site.transform_point3(middle + east * item_east + south * item_south);
+        if let Some(entity) = props::place(
+            &mut commands,
+            &models,
+            &site,
+            &planet,
+            item,
+            at.with_y(0.0),
+            0.0,
+            turn,
+            false,
+        ) {
+            commands.entity(entity).insert(Theirs);
         }
     }
 
@@ -178,7 +258,7 @@ fn found(
         .inverse()
         .transform_point3(middle);
     info!(
-        "The village stands {:.0} m east and {:.0} m south of the outpost.",
+        "The village stands {:.0} m east and {:.0} m south of the start.",
         local.x, local.z
     );
 }

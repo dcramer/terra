@@ -1,4 +1,4 @@
-//! A player at an outpost by the water, with a builder tool.
+//! A player in a meadow by the water, with a builder tool and nothing built yet.
 //!
 //! You are a body in the world: an animated figure you steer in third person, which
 //! walks on the planet, is held up by a base's floors, stopped by its walls and windows,
@@ -365,6 +365,7 @@ fn walk(
     controls: Controls,
     planet: Res<Planet>,
     site: Res<Site>,
+    builds: Query<&build::Built>,
     view: Res<View>,
     obstacles: Res<flora::Obstacles>,
     items: Query<(&props::Prop, &Transform, &Visibility), Without<Player>>,
@@ -426,7 +427,14 @@ fn walk(
     // Creatures and people take up room.
     target = bodies::push_out(target, walker.radius, others.iter());
 
-    // The base decides what blocks the way; it works in its own space.
+    // The build being walked at decides what blocks the way: the player's own, or someone
+    // else's, such as a house in the village. Builds stand well apart, so it is the one
+    // the player is at or nearest. It works in its own space.
+    let site: &build::Build = builds
+        .iter()
+        .map(|built| &built.0)
+        .find(|built| built.covers(feet, 3.0))
+        .unwrap_or(&site);
     let to_base = site.frame.compute_affine().inverse();
     let from_base = site.frame.compute_affine();
     let walked = site.base.walk(
@@ -549,6 +557,7 @@ fn follow(
     player: Single<&Transform, (With<Player>, Without<Camera3d>)>,
     view: Res<View>,
     site: Res<Site>,
+    builds: Query<&build::Built>,
     planet: Res<Planet>,
     options: Res<Options>,
     mut camera: Single<&mut Transform, With<Camera3d>>,
@@ -565,16 +574,21 @@ fn follow(
     let right = view.forward.cross(up);
     let pivot = head + right * 0.6 + up * 0.25;
 
-    let to_base = site.frame.compute_affine().inverse();
+    // The camera comes in front of any build's wall behind the player: theirs, or a
+    // house they are in.
     let back = -looking;
-    let blocked = site
-        .base
-        .raycast(
-            to_base.transform_point3(pivot),
-            to_base.transform_vector3(back).normalize(),
-            CAMERA_BACK_M,
-        )
-        .map_or(CAMERA_BACK_M, |hit| (hit.distance - 0.25).max(0.3));
+    let blocked = std::iter::once(&**site)
+        .chain(builds.iter().map(|built| &built.0))
+        .filter_map(|build| {
+            let to_base = build.frame.compute_affine().inverse();
+            build.base.raycast(
+                to_base.transform_point3(pivot),
+                to_base.transform_vector3(back).normalize(),
+                CAMERA_BACK_M,
+            )
+        })
+        .map(|hit| (hit.distance - 0.25).max(0.3))
+        .fold(CAMERA_BACK_M, f32::min);
     let mut at = pivot + back * blocked;
     // Keep the camera out of the ground.
     let ground = planet.drawn(at.normalize()).length() + 0.35;

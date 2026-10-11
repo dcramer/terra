@@ -1,10 +1,9 @@
-//! The things people put in and around a place they live: furniture indoors, and
-//! outdoors crates, fuel, and a fire with logs to sit on.
+//! The things people put in and around a place they live: furniture, stations, a well.
 //!
-//! Every one is an item from the builder's catalogue, placed the way a player places
-//! one. The example base starts furnished through that same call. An item is solid: its
-//! box stops a walker. If the base is reshaped so that an item is no longer indoors, or
-//! now stands in a wall, the item is hidden.
+//! Every one is an item from the builder's catalogue, placed the way a player places one
+//! (D108), whoever placed it. An item is solid: its box stops a walker. If the base is
+//! reshaped so that an item is no longer indoors, or now stands in a wall, the item is
+//! hidden.
 
 use super::catalogue::{self, Item, Light};
 use super::interact::{CanInteract, Interactable};
@@ -22,44 +21,11 @@ const FIRELIGHT_LUMENS: f32 = 500_000.0;
 /// Anything lower than this is walked over, not round.
 const STEP_OVER_M: f32 = 0.25;
 
-/// Where the example base's fire is, which its logs are arranged around.
-const FIRE: Vec3 = Vec3::new(4.0, 0.0, 15.0);
-
-/// The example base's furniture: an item's model, where the middle of its foot stands in
-/// the base's own space, how far it is raised above the floor or ground, how many degrees
-/// it is turned, and whether it is indoors.
-const EXAMPLE: &[(&str, f32, f32, f32, f32, bool)] = &[
-    // The main room: somewhere to sit, looking out at the water.
-    ("Carpet_Round", 1.5, -2.2, 0.0, 0.0, true),
-    ("Couch_Medium1", 1.5, -4.9, 0.0, 0.0, true),
-    ("Table_RoundSmall", 1.5, -2.2, 0.0, 0.0, true),
-    ("Stool", 3.0, -1.6, 0.0, 30.0, true),
-    ("Bookshelf", -5.55, -4.4, 0.0, 90.0, true),
-    ("Houseplant_7", -5.1, 2.2, 0.0, 0.0, true),
-    ("Houseplant_3", 5.2, -5.3, 0.0, 0.0, true),
-    ("Props_Shelf_Tall", 8.5, -1.8, 0.0, -90.0, true),
-    ("Chair_1", 7.4, -4.6, 0.0, 90.0, true),
-    // The far room: a bunk and a kitchen.
-    ("Carpet_1", 18.0, -1.0, 0.0, 90.0, true),
-    ("Bed_Single", 17.2, -4.8, 0.0, 90.0, true),
-    ("NightStand_1", 19.0, -5.45, 0.0, 0.0, true),
-    ("Houseplant_1", 19.0, -5.45, 0.55, 0.0, true),
-    ("Kitchen_2Drawers", 15.5, 0.3, 0.0, 90.0, true),
-    ("Houseplant_7", 20.2, 2.2, 0.0, 0.0, true),
-    // Rooms come with no lights of their own, so these are what light them.
-    // By the door: what has not been carried in yet.
-    ("Props_Crate", 10.6, 4.3, 0.0, 12.0, false),
-    ("Props_Crate", 11.6, 4.6, 0.0, -8.0, false),
-    ("Props_Crate", 11.1, 4.45, 0.78, 30.0, false),
-    ("Props_CrateLong", 12.6, 5.6, 0.0, 70.0, false),
-    ("Shovel", 3.0, 3.25, 0.0, 0.0, false),
-    ("Table_Small", 9.5, 9.5, 0.0, 20.0, false),
-    // Out front: a fire, and logs to sit on.
-    ("Bonfire_Fire", FIRE.x, FIRE.z, 0.0, 0.0, false),
-    ("WoodLog", FIRE.x - 2.0, FIRE.z + 0.4, 0.0, 80.0, false),
-    ("WoodLog", FIRE.x + 1.3, FIRE.z + 1.7, 0.0, -40.0, false),
-    ("WoodLog", FIRE.x + 1.6, FIRE.z - 1.5, 0.0, 35.0, false),
-];
+/// A placed item that belongs to the world's people, such as a village's well, rather
+/// than to the player: it is not saved with the player's things, and is not theirs to
+/// take apart.
+#[derive(Component)]
+pub struct Theirs;
 
 /// An item that has been placed.
 #[derive(Component)]
@@ -124,8 +90,7 @@ impl Models {
 struct CheckedFor(u64);
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, load)
-        .add_systems(PostStartup, furnish)
+    app.add_systems(Startup, (load, start_checking))
         .add_systems(Update, (flicker, keep_clear, settle));
 }
 
@@ -310,38 +275,27 @@ pub fn standing(
     indoors: bool,
 ) -> Transform {
     let floor = site.frame.transform_point(at);
-    let stood = if indoors {
-        floor
-    } else {
-        planet.drawn(floor.normalize())
-    };
+    let turned = site.frame.rotation * Quat::from_rotation_y(turn_degrees.to_radians());
+    if indoors {
+        return Transform {
+            translation: floor + *site.frame.up() * lift,
+            rotation: turned,
+            scale: Vec3::ONE,
+        };
+    }
+    // Outdoors it stands upright where it is, which far from the base is not quite the
+    // base's up, the planet being round.
+    let stood = planet.drawn(floor.normalize());
+    let up = stood.normalize();
     Transform {
-        translation: stood + *site.frame.up() * lift,
-        rotation: site.frame.rotation * Quat::from_rotation_y(turn_degrees.to_radians()),
+        translation: stood + up * lift,
+        rotation: Quat::from_rotation_arc(*site.frame.up(), up) * turned,
         scale: Vec3::ONE,
     }
 }
 
-/// Furnishes the example base, through the same call a player's builder makes.
-fn furnish(mut commands: Commands, models: Res<Models>, planet: Res<Planet>, site: Res<Site>) {
-    for &(file, east, south, lift, turn, indoors) in EXAMPLE {
-        let Some(item) = catalogue::item_from(file) else {
-            error!("The example base wants {file}, which is not in the catalogue.");
-            continue;
-        };
-        let at = Vec3::new(east, 0.0, south);
-        place(
-            &mut commands,
-            &models,
-            &site,
-            &planet,
-            item,
-            at,
-            lift,
-            turn,
-            indoors,
-        );
-    }
+/// Nothing has been checked against the base yet.
+fn start_checking(mut commands: Commands) {
     commands.insert_resource(CheckedFor(u64::MAX));
 }
 
@@ -745,15 +699,5 @@ mod tests {
         // Past it, or away from it.
         assert!(ray_box(&stood, half, Vec3::new(0.0, 0.4, 2.0), Vec3::X).is_none());
         assert!(ray_box(&stood, half, Vec3::new(0.0, 0.4, 0.0), Vec3::NEG_X).is_none());
-    }
-
-    #[test]
-    fn the_example_base_is_furnished_from_the_catalogue() {
-        for (file, ..) in EXAMPLE {
-            assert!(
-                catalogue::item_from(file).is_some(),
-                "{file} is not an item"
-            );
-        }
     }
 }

@@ -200,7 +200,7 @@ impl Part {
 }
 
 /// The parts, in the order the build menu lists them within each tab.
-pub static PARTS: [Part; 17] = [
+pub static PARTS: [Part; 19] = [
     Part {
         name: "Claim stone",
         tab: Tab::Claim,
@@ -299,6 +299,23 @@ pub static PARTS: [Part; 17] = [
         name: "Door",
         tab: Tab::Openings,
         kind: Kind::Door,
+    },
+    // Seen in the world but not yet buildable: a village's well and stall. How they are
+    // learned is open (D68, D108).
+    Part {
+        name: "Well",
+        tab: Tab::Hidden,
+        kind: Kind::Items(&[item("Well", "../village/Well", 2.4, &[(Raw::Stone, 12)])]),
+    },
+    Part {
+        name: "Market stall",
+        tab: Tab::Hidden,
+        kind: Kind::Items(&[item(
+            "Market stall",
+            "../village/MarketStand_1",
+            3.0,
+            &[(Raw::Wood, 8), (Raw::Fibre, 4)],
+        )]),
     },
     Part {
         name: "Remove",

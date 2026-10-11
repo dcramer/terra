@@ -14,7 +14,7 @@ use super::controls::Settings;
 use super::crafting::{self, RECIPES, SmithAtHand, Works};
 use super::inventory::{self, Backpack, Bar, Gear, Items, SLOTS};
 use super::people::{Doing, Person};
-use super::props::{self, Models, Prop};
+use super::props::{self, Models, Prop, Theirs};
 use super::skills::{Skill, Skills};
 use super::vitals::Vitals;
 use super::{Player, View};
@@ -141,7 +141,7 @@ fn load(
     mut view: ResMut<View>,
     mut waiting: ResMut<Waiting>,
     mut meshes: ResMut<Assets<Mesh>>,
-    placed: Query<Entity, With<Prop>>,
+    placed: Query<Entity, (With<Prop>, Without<Theirs>)>,
     player: Single<
         (
             &mut Transform,
@@ -331,7 +331,7 @@ fn autosave(
     claim: Res<Claim>,
     items: Res<Items>,
     view: Res<View>,
-    props: Query<(&Prop, Option<&Works>)>,
+    props: Query<(&Prop, Option<&Works>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
     player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), With<Player>>,
     mut since: Local<f32>,
@@ -366,7 +366,7 @@ fn save_on_exit(
     claim: Res<Claim>,
     items: Res<Items>,
     view: Res<View>,
-    props: Query<(&Prop, Option<&Works>)>,
+    props: Query<(&Prop, Option<&Works>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
     player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), With<Player>>,
 ) {
@@ -398,7 +398,7 @@ fn gather(
     claim: &Claim,
     items: &Items,
     view: &View,
-    props: &Query<(&Prop, Option<&Works>)>,
+    props: &Query<(&Prop, Option<&Works>), Without<Theirs>>,
     people: &Query<(&Person, &Transform), Without<Player>>,
     player: &PlayerParts,
 ) -> SaveFile {

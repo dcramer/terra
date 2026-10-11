@@ -1,4 +1,4 @@
-//! The map (D76): the land around the outpost, shown only where you have been. The rest
+//! The map (D76): the land around the start, shown only where you have been. The rest
 //! stays dark until you go there. It shows where you are, for now, and your claim; it
 //! does not show where anything else is, quests least of all (D92).
 //!

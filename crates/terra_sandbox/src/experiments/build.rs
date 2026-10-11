@@ -35,14 +35,15 @@ const CONCRETE: Color = Color::srgb(0.5, 0.48, 0.47);
 #[derive(Resource)]
 pub(super) struct DrivenByPlayer;
 
-/// The one base under construction, and where it stands.
-#[derive(Resource)]
-pub(super) struct Site {
+/// Something built from parts (D108): its shape, the operations that made it, where it
+/// stands, and what is drawn for it. The player's own is the [`Site`]; anyone else's,
+/// such as a village house, is [`Built`]. Both are made, drawn and walked on the same way.
+pub(super) struct Build {
     pub base: Base,
-    /// Places the base's own space on the planet.
+    /// Places the build's own space on the planet.
     pub frame: Transform,
     pub operations: Vec<BuildOp>,
-    /// Goes up by one every time the base changes shape.
+    /// Goes up by one every time the build changes shape.
     pub revision: u64,
     /// Steps from each ground-floor door down to the ground. A walker treats each flight
     /// as a ramp.
@@ -51,7 +52,27 @@ pub(super) struct Site {
     glass: Entity,
     foundation: Entity,
     steps: Entity,
+}
+
+/// The build under construction by the player, and where it stands.
+#[derive(Resource, Deref, DerefMut)]
+pub(super) struct Site {
+    #[deref]
+    pub build: Build,
     camera_placed: bool,
+}
+
+/// A build that is not the player's, such as a house in a village.
+#[derive(Component, Deref, DerefMut)]
+pub(super) struct Built(pub Build);
+
+/// What every build is drawn with: its structure, its glass, and the concrete of its
+/// foundations and steps. Colour comes from each triangle, so these serve every build.
+#[derive(Resource, Clone)]
+pub(super) struct BuildLook {
+    structure: Handle<StandardMaterial>,
+    glass: Handle<StandardMaterial>,
+    concrete: Handle<StandardMaterial>,
 }
 
 #[derive(Component)]
@@ -123,7 +144,42 @@ impl Ramp {
     }
 }
 
-impl Site {
+impl Build {
+    /// A build with nothing in it yet, standing at `frame`, with the entities its parts
+    /// are drawn on.
+    pub(super) fn new(
+        commands: &mut Commands,
+        look: &BuildLook,
+        frame: Transform,
+        name: &str,
+    ) -> Self {
+        let mut part = |what: &str, material: &Handle<StandardMaterial>| {
+            commands
+                .spawn((
+                    Name::new(format!("{name} {what}")),
+                    frame,
+                    MeshMaterial3d(material.clone()),
+                ))
+                .id()
+        };
+        let structure = part("structure", &look.structure);
+        let foundation = part("foundation", &look.concrete);
+        let steps = part("steps", &look.concrete);
+        let glass = part("glass", &look.glass);
+        commands.entity(glass).insert(NotShadowCaster);
+        Self {
+            base: Base::default(),
+            frame,
+            operations: Vec::new(),
+            revision: 0,
+            ramps: Vec::new(),
+            structure,
+            glass,
+            foundation,
+            steps,
+        }
+    }
+
     /// A point on the ground a little beyond the foot of the first door's ramp, facing
     /// which a walker would climb the ramp into the base. Returns the point and the
     /// direction to face, both in the base's own space.
@@ -467,22 +523,10 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
     })
 }
 
-fn setup(
-    mut commands: Commands,
-    planet: Res<Planet>,
-    driven: Option<Res<DrivenByPlayer>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let mut base = Base::default();
-    let operations = example();
-    for &op in &operations {
-        base.apply(op);
-    }
-    let mut frame = choose_site(&planet, &base);
-    // Lift the base until its floor clears the highest ground under it. The stand-in
-    // planet cannot be dug, so the base has to stay out of the ground's way; a foundation
-    // and steps make up the difference.
+/// Raises a build's frame until its floor clears the highest ground under it. The
+/// stand-in planet cannot be dug, so a build has to stay out of the ground's way; a
+/// foundation and steps make up the difference.
+pub(super) fn lifted(mut frame: Transform, base: &Base, planet: &Planet) -> Transform {
     let highest_ground = base
         .tiles()
         .filter(|(tile, _)| tile.y == 0)
@@ -497,65 +541,58 @@ fn setup(
             })
         })
         .fold(f32::MIN, f32::max);
-    let frame_up = *frame.up();
-    frame.translation += frame_up * (highest_ground + FLOOR_CLEARANCE_M);
+    let up = *frame.up();
+    frame.translation += up * (highest_ground + FLOOR_CLEARANCE_M);
+    frame
+}
 
-    // Colour comes from each triangle, so one material serves the whole structure.
-    let structure_material = materials.add(StandardMaterial {
-        perceptual_roughness: 0.82,
-        reflectance: 0.3,
-        ..default()
-    });
-    let glass_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.62, 0.86, 0.95, 0.3),
-        alpha_mode: AlphaMode::Blend,
-        perceptual_roughness: 0.06,
-        reflectance: 0.7,
-        cull_mode: None,
-        double_sided: true,
-        ..default()
-    });
-    let concrete = materials.add(StandardMaterial {
-        base_color: CONCRETE,
-        perceptual_roughness: 0.95,
-        ..default()
-    });
-    let structure = commands
-        .spawn((Name::new("Base"), frame, MeshMaterial3d(structure_material)))
-        .id();
-    let glass = commands
-        .spawn((
-            Name::new("Base glass"),
-            frame,
-            MeshMaterial3d(glass_material),
-            NotShadowCaster,
-        ))
-        .id();
-    let foundation = commands
-        .spawn((
-            Name::new("Base foundation"),
-            frame,
-            MeshMaterial3d(concrete.clone()),
-        ))
-        .id();
-    let steps = commands
-        .spawn((Name::new("Base steps"), frame, MeshMaterial3d(concrete)))
-        .id();
-
-    let mut site = Site {
-        base,
-        frame,
-        operations,
-        revision: 0,
-        structure,
-        glass,
-        foundation,
-        steps,
-        ramps: Vec::new(),
-        camera_placed: false,
+fn setup(
+    mut commands: Commands,
+    planet: Res<Planet>,
+    driven: Option<Res<DrivenByPlayer>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // The example base decides where the base stands, whether or not it is built: a
+    // player starts with nothing built, on the same spot.
+    let mut example_base = Base::default();
+    for op in example() {
+        example_base.apply(op);
+    }
+    let frame = lifted(choose_site(&planet, &example_base), &example_base, &planet);
+    let look = BuildLook {
+        structure: materials.add(StandardMaterial {
+            perceptual_roughness: 0.82,
+            reflectance: 0.3,
+            ..default()
+        }),
+        glass: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.62, 0.86, 0.95, 0.3),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 0.06,
+            reflectance: 0.7,
+            cull_mode: None,
+            double_sided: true,
+            ..default()
+        }),
+        concrete: materials.add(StandardMaterial {
+            base_color: CONCRETE,
+            perceptual_roughness: 0.95,
+            ..default()
+        }),
     };
-    redraw(&mut commands, &mut site, &planet, &mut meshes);
-    commands.insert_resource(site);
+    let mut build = Build::new(&mut commands, &look, frame, "Base");
+    let operations = if driven.is_some() {
+        Vec::new()
+    } else {
+        example()
+    };
+    build.replace_with(&operations, &mut commands, &planet, &mut meshes);
+    commands.insert_resource(look);
+    commands.insert_resource(Site {
+        build,
+        camera_placed: false,
+    });
 
     // A player brings their own readout and aiming mark.
     if driven.is_some() {
@@ -609,8 +646,8 @@ fn to_mesh(surface: &Surface) -> Option<Mesh> {
     )
 }
 
-/// Rebuilds everything drawn for the base from its current shape.
-fn redraw(commands: &mut Commands, site: &mut Site, planet: &Planet, meshes: &mut Assets<Mesh>) {
+/// Rebuilds everything drawn for a build from its current shape.
+fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &mut Assets<Mesh>) {
     let mesh = site.base.mesh();
     let mut show = |entity: Entity, mesh: Option<Mesh>| {
         match mesh {

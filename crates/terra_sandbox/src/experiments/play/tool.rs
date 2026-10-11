@@ -980,6 +980,8 @@ fn act(
         && belongings.holding() == Some(Tool::Hammer)
         && let Some(prop) = builder.viewed.and_then(|entity| props.get(entity).ok())
         && let Some((part, variant)) = catalogue::place_of(prop.item)
+        // What is not in the build menu, such as a village's well, cannot be copied.
+        && catalogue::PARTS[part].tab != catalogue::Tab::Hidden
     {
         builder.pick(part);
         builder.variants[part] = variant;

@@ -28,7 +28,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
 | `--save <file>` | In the play experiment: keep the saved game in this file. Scripted runs save and load only when given one. |
 | `--fresh` | In the play experiment: start over, throwing away the saved game |
-| `--at <east,south>` | In the play experiment: start the player so many metres east and south of the outpost, for testing. The log says where the deer, the spiders, the village and each person are. |
+| `--at <east,south>` | In the play experiment: start the player so many metres east and south of the start, for testing. The log says where the deer, the spiders, the village and each person are. |
 | `--face <east,south>` | In the play experiment: start facing that spot, for testing. |
 | `--warp <east,south:east,south@frame>` | In the play experiment: on that frame, move the player to the first spot, facing the second, for testing. Repeatable. |
 | `--give <item>:<count>` | In the play experiment: carry something extra, for testing: a raw item such as `stone:10`, a tool such as `spear:1` (put on the bar), clothing such as `leather_coat:1` (worn), or `health`, `fed` or `stamina` at a value out of 100. Added to a loaded save too, so scripted runs can follow on from each other. Repeatable. |
@@ -66,9 +66,9 @@ Shader reloading works when run through `cargo run`. The Windows build launched 
 cargo xtask win -p terra_sandbox -- --experiment play
 ```
 
-The tech demo of the MVP's loop (docs/prototypes.md), being built on the earlier proof of concept: an abandoned outpost in a meadow by a lake, a little before sunset, and a player who arrives with a few tools and nothing else. You steer an animated figure in third person. It walks on the planet, climbs the steps to the base's door, is held up by floors, stopped by walls, windows, trees and boulders, and let through doors.
+The tech demo of the MVP's loop (docs/prototypes.md): a meadow by a lake, a little before sunset, and a player who arrives with a few tools and nothing built. You steer an animated figure in third person. It walks on the planet, climbs the steps to a building's door, is held up by floors, stopped by walls, windows, trees and boulders, and let through doors.
 
-![The outpost](../../docs/images/outpost-2026-10-10.png)
+![The village, built from the same parts as the player's rooms](../../docs/images/village-2026-10-11.png)
 
 | Input | Action |
 |---|---|
@@ -83,7 +83,7 @@ The tech demo of the MVP's loop (docs/prototypes.md), being built on the earlier
 | Left click | With anything but the hammer in hand: swing at a creature in front of you |
 | Hold right mouse | With anything but the hammer in hand: guard, taking a quarter of a blow on stamina |
 | Ctrl | Roll clear of blows |
-| M | The map: the land around the outpost, only where you have been |
+| M | The map: the land around the start, only where you have been |
 | F5 | Save now. The game also saves every half minute and when it closes. |
 | Right mouse | With the hammer in hand: the build menu, a panel of tabs with what you can build and what it costs. Click a tile, or 1 to 7 for a tab, the arrows and Enter. B does the same; Backspace puts the hammer's part away. While carrying an item, it puts the item back. |
 | Hold R | The wheel of kinds of what the hammer has: room sizes, window shapes, chair styles. Move the mouse to one and let go. A tap of R steps to the next kind; with Shift, the one before. |
@@ -109,16 +109,16 @@ You carry a backpack, on the rules in `terra_items` and the Subnautica baseline 
 - **Gathering**: one tool to a job. The axe fells trees for wood, the pickaxe breaks rock for stone and ore rocks (a rusty colour) for ore, the knife cuts bushes and plants for fibre. Aim at one, or just stand in front of it, and hold left click until it gives. A tool's material decides what it can work: the great pines are too tough for a stone axe, and a stone pickaxe is slow on ore. A full backpack takes nothing more, and what does not fit is left behind.
 - **Claiming**: you build only inside your claim (D94). Anything you aim to build outside one shows red, and the prompt says why. With the hammer, open the build menu, pick Claim stone (two stone), and place it; the claim is 40 metres across, drawn on the ground while the hammer is in hand, and F at the stone grows it to 80 and then 160 for a price (D104). Until you place one, the hammer builds nothing and takes nothing apart.
 - **Building** spends materials. Everything has a cost, shown in the prompt before you commit: wood for floors and walls, fibre for windows, hide for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost, if there is room in the backpack for it; if not, it stays, and a notice above the bar says why.
-- **Crafting** (D109): F at a station opens its screen beside the backpack, the build menu's look with recipes for tiles, each saying what it takes as have/need. Click one, or use the arrows and Enter, to queue one; it is paid for then, and clicking it in the queue takes it off and gives back what it took. Number keys choose a tab where a station has them. Making takes time. The workbench (stone tools, leather gear, a larger pack) and the forge (iron tools, only once a smith lives at your claim) work while you stay near them, and what they make goes into your backpack. The smelter (ore into iron) and a campfire (cooking) work on their own; what they make waits in them until you open them again. Queues are saved. The outpost has an old workbench by its door. The smelter and forge are shaped from simple pieces until there are models of them.
+- **Crafting** (D109): F at a station opens its screen beside the backpack, the build menu's look with recipes for tiles, each saying what it takes as have/need. Click one, or use the arrows and Enter, to queue one; it is paid for then, and clicking it in the queue takes it off and gives back what it took. Number keys choose a tab where a station has them. Making takes time. The workbench (stone tools, leather gear, a larger pack) and the forge (iron tools, only once a smith lives at your claim) work while you stay near them, and what they make goes into your backpack. The smelter (ore into iron) and a campfire (cooking) work on their own; what they make waits in them until you open them again. Queues are saved. The smelter and forge are shaped from simple pieces until there are models of them.
 - **Staying alive**: health, stamina and hunger, as bars at the bottom left. Sprinting, jumping and working spend stamina, which comes back when you stop. Hunger falls all the time; hungry, less comes back; starving drains health until you die (D101). Berry bushes give berries to the knife; meat cooks at a campfire into something far more filling.
 - **Dying**: you fall, everything in your backpack drops where you fell in a bag, and you wake at a bed in your claim, or where you first arrived. F at the bag takes back what fits; left alone, it is gone after ten minutes (D84). What you wear stays on you, and the action bar still points at your tools when they come back.
 - **Skills by doing** (D88): chopping, mining, foraging, building and crafting are learned the first time you do them and improve as you do them more; each step makes that work quicker. The list shows beside the backpack while the inventory is open. Dying costs half the way to each skill's next step, never a step already reached (D101).
 - **Creatures** (game design 001, creatures.md): a herd of deer grazes and wanders in the meadow and runs from anyone close or anyone who hurts it; spiders wait in a hollow further off, chase whoever comes near, bite within reach, and go home if led too far. A dead deer can be butchered with F, if you carry a knife, for meat and hide.
 - **Fighting** (D97): click to swing at a creature in front of you. The spear, made at the workbench, hits hardest and reaches furthest; tools hit less well. Swings and guards cost stamina; a roll takes you clear of a bite. Landing blows teaches fighting.
 - **A place where magic pools** (D103): a hollow further off, lit violet with motes drifting up, seen from a distance. Spiders guard it; while fewer than three remain, another forms there every minute and a half. Nothing marks it on a map (D92).
-- **A village** (D95): a few houses, a well and a stall, set down away from the hollow, with people going about their day. F talks to them. The elder, Maren, says the spiders took their smith and which way the glow lies, by the sun; the others say what they know.
+- **A village** (D95): a few houses, a well and a stall, set down away from the hollow, with people going about their day. Everything in it is built from the same parts as the player's things (D108): each house is its own build, put up by the same operations as a player's rooms, door and windows, and walked into the same way; the well and stall are catalogue items, placed as a player places one, but not yet in the build menu. F talks to them. The elder, Maren, says the spiders took their smith and which way the glow lies, by the sun; the others say what they know.
 - **A rescue** (D90): the smith, Bren, kneels bound at the edge of the hollow. With the spiders near them dead, F frees them, and they follow you. Bring them into your claim and they ask for a forge; once one stands there, they settle and work it, and the forge's iron recipes open.
-- **The map** (D76): M shows the land around the outpost, 512 metres across, dark until you have been near it; you are marked on it, and so is your claim. Nothing else is: not the village, not the glow (D92).
+- **The map** (D76): M shows the land around the start, 512 metres across, dark until you have been near it; you are marked on it, and so is your claim. Nothing else is: not the village, not the glow (D92).
 - **Saving**: what you built, what you carry and wear, your body and skills, your claim and the people you brought home are saved beside the settings, as `save.ron`, every half minute, on F5 and when the game closes, and loaded when it starts. The land, its plants and creatures come from the world's rules and are not saved, so what was cut or killed grows back (D94). Delete the file, or start with `--fresh`, to begin again.
 - **The inventory** shows the character sheet and the backpack's grid. Point at a tool and press 1 to 6 to put it in that slot of the bar. Click a slot of the sheet to take off what is in it, and click gear in the backpack to wear it. The pack will not come off while what you carry would not fit without it. Opening it puts away the part in the hammer's hand.
 
@@ -164,7 +164,7 @@ Everything is on one grid of half a metre, set by one constant in `terra_build`.
 
 The game holds the mouse while you play and lets go when the window is no longer in front; click to take it back.
 
-Everything in and around the example base was placed through the same call the builder makes, and can be moved or taken away. The list of parts, with what each costs, is in `catalogue.rs` and is a stand-in.
+Everything placed in the world, the player's and the village's, goes through the same call the builder makes. The list of parts, with what each costs, is in `catalogue.rs` and is a stand-in.
 
 It is made of these pieces, each a module in `src/experiments/play/`:
 
@@ -199,15 +199,15 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 
 The models are free ones, recoloured in code; see [THIRD_PARTY.md](../../THIRD_PARTY.md). How it was put together and what it costs to draw is in [research/outpost-scene.md](../../research/outpost-scene.md).
 
-What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; you cannot stand on an item, and an item stood on another stays in the air if the one under it goes; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the base and runs out about 100 m away; placed items and what you carry are not saved or part of the base's list of operations; and a cut tree never grows back; and none of the work has sound.
+What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and every building stands on a foundation clear of it; buildings all look like the old outpost until the art direction is settled; collision is arithmetic (circles round trees and boulders, boxes round items, a grid for walls), not a physics engine, and bushes, small rocks and the figure's own limbs have none; you cannot stand on an item, and an item stood on another stays in the air if the one under it goes; there are no stairs, so upper storeys cannot be reached, and items go on the ground floor only; grass is planted once around the start and runs out about 100 m away; a cut tree never grows back; and none of the work has sound.
 
-**The loop, scripted.** `crates/terra_sandbox/loop.sh` drives the play experiment's loop on the Windows GPU, in the `test` copy, and checks the log for each step: talk to the elder, eat, kill the spiders, free the smith and bring them home, place a claim stone and a forge, see the smith take it up, and smelt iron. Every on-screen notice is in the log, so a script reads what happened as a player would. It exits non-zero if a step did not happen. Hunting is not in it yet: the deer cannot be caught without a bow.
+**The loop, scripted.** `crates/terra_sandbox/loop.sh` drives the play experiment's loop on the Windows GPU, in the `test` copy, and checks the log for each step: talk to the elder, eat, kill the spiders, free the smith and bring them home, place a claim stone, a smelter and a forge, see the smith take up the forge, smelt iron, and have the smith make an iron axe. Every on-screen notice is in the log, so a script reads what happened as a player would. It exits non-zero if a step did not happen. Hunting is not in it yet: the deer cannot be caught without a bow.
 
 In a scripted run the game clock advances a sixtieth of a second per frame and real keyboard and mouse input is ignored, so the same script does the same thing on any machine:
 
 ```bash
 cargo run -p terra_sandbox -- --experiment play --settle 480 --press w@20-215 --press b@232-246 --press 8@240 --press e@270-450 --press i@460 --shot shots/a-couch-and-the-backpack.png
-cargo run -p terra_sandbox -- --experiment play --vantage 0,2.4,24,9,1.6,0 --shot shots/outpost.png
+cargo run -p terra_sandbox -- --experiment play --vantage -52,14,74,-69,0,52 --shot shots/village.png
 ```
 
 ## The look experiment

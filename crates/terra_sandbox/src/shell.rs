@@ -48,7 +48,7 @@ usage: terra_sandbox [options]
                         save and load only when given this
   --fresh               start the play experiment over, throwing away its saved game
   --at <east,south>     start the play experiment's player so many metres east and south
-                        of the outpost, for testing
+                        of the start, for testing
   --face <east,south>   start the play experiment's player facing that spot, for testing
   --warp <east,south:east,south@frame>
                         on that frame, move the play experiment's player to the first
@@ -89,16 +89,16 @@ pub struct Options {
     pub save: Option<PathBuf>,
     /// Start over, throwing away any saved game.
     pub fresh: bool,
-    /// Where the play experiment's player starts, east and south of the outpost in metres.
+    /// Where the play experiment's player starts, east and south of the start in metres.
     pub start_at: Option<(f32, f32)>,
-    /// What the play experiment's player starts facing, east and south of the outpost.
+    /// What the play experiment's player starts facing, east and south of the start.
     pub start_facing: Option<(f32, f32)>,
     /// On a frame, put the play experiment's player at a spot, facing another.
     pub warps: Vec<Warp>,
 }
 
 /// A jump in a scripted run: on `frame`, stand `at` a spot facing `facing`, each in metres
-/// east and south of the outpost.
+/// east and south of the start.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Warp {
     pub frame: u32,
@@ -200,7 +200,7 @@ impl Options {
     }
 }
 
-/// Metres east and south of the outpost, written like 70,-55.
+/// Metres east and south of the start, written like 70,-55.
 fn east_south(name: &str, text: &str) -> Result<(f32, f32), String> {
     text.split_once(',')
         .and_then(|(east, south)| Some((east.trim().parse().ok()?, south.trim().parse().ok()?)))

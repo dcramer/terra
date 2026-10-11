@@ -261,7 +261,7 @@ fn prepare(
     if let Some(home) = herd {
         let local = site.frame.compute_affine().inverse().transform_point3(home);
         info!(
-            "Deer graze {:.0} m east and {:.0} m south of the outpost.",
+            "Deer graze {:.0} m east and {:.0} m south of the start.",
             local.x, local.z
         );
         for _ in 0..5 {
@@ -280,7 +280,7 @@ fn prepare(
     if let Some(lair) = lair {
         let local = site.frame.compute_affine().inverse().transform_point3(lair);
         info!(
-            "Spiders nest {:.0} m east and {:.0} m south of the outpost.",
+            "Spiders nest {:.0} m east and {:.0} m south of the start.",
             local.x, local.z
         );
         commands.insert_resource(Lair(lair));

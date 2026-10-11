@@ -190,7 +190,7 @@ Settled with the developers on 2026-10-11: the world never pauses, and the keys 
 
 Said by the developers on 2026-10-11 (D108): everything built in the world, by anyone, is made of the same parts and components as what a player builds. A village's houses are rooms, walls, roofs and doors from the build catalogue, put up by the same operations, not models dropped in whole. A well is a buildable thing too, a prop or station rather than a room. You may not be able to build everything you see; some of it may have to be learned or unlocked first (D68), which is open.
 
-So the test of a building system is that a settlement can be described in it. If something in a village cannot be, the catalogue grows, rather than the village keeping a special case.
+So the test of a building system is that a settlement can be described in it. The sandbox's village is: its houses are put up by the same operations as a player's rooms. If something in a village cannot be, the catalogue grows, rather than the village keeping a special case.
 
 ## What is built
 
