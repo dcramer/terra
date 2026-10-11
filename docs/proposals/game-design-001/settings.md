@@ -1,6 +1,6 @@
 # Settings: how any theme works
 
-A proposal for game design 001: one way for any realm's theme to work, medieval, machine, wild, gothic or another, so that each feels like itself, none is better than the others, a new one is data rather than new code, and dozens of generated realms still fit one lore. Open, for the developers to react to.
+A proposal for game design 001: one way for any realm's theme to work, medieval, machine, wild, gothic or another, so that each feels like itself, none is better than the others, a new one is data rather than new code, and dozens of generated realms still fit one lore. The developers called it roughly on point on 2026-10-11 (D116, Leaning); their answers are folded in below.
 
 ## What the developers have said
 
@@ -8,6 +8,7 @@ A proposal for game design 001: one way for any realm's theme to work, medieval,
 - The art target is the four-world mood board: a medieval town, a techno-punk street, fantasy wilds and a gothic graveyard, in one look ([art.md](../../art.md)).
 - On 2026-10-11, about a technological realm: no machine guns; advanced but on theme with magic, and not superior. Whether its makers are gone or still at work could be either. What matters is **ways to make different kinds of themes work, as the visual design goals do.**
 - Also on 2026-10-11: there may be **dozens of generated realms**, so what is needed is **techniques that make each one fit the lore**, not a handful of hand-made worlds.
+- Later the same day, reacting to this proposal: **roughly on point.** Some realms have **more magic or less**. A theme's **weapons should differ, as swords differ from staves: not better or worse, different ways to play.** **Loot**, procedural loot included, may become part of the game, though not a large part. **Mixing settings** within a realm, yes, carefully, as an advanced feature for later. The cosmology's premise and an ancient people who built everywhere are left to the generator: "this is procedural". Each setting's speciality is undecided.
 - Standing: one art style (D14), your gear is your gear in every realm (D86), no science fiction toolsets.
 
 ## The idea: roles, as the art has palette roles
@@ -31,9 +32,22 @@ Two rules keep settings equal:
 | **Cultures** | Who lives there, how they build and what they want (D86, D95) | Built from the same building parts (D108); recruits work the same way (D90) |
 | **Materials** | What fills the material roles: a soft, a hard, a metal, a cloth, a rare | Same roles, same counts in recipes; a realm's rare material is what draws you there |
 | **Stations** | Its look for each station role: making, smelting, cooking, a special one | Same station kinds and timing (D109) |
-| **Weapons** | Its look for each weapon role: one-handed, two-handed, ranged, a focus for abilities | Same numbers by role and rank; a setting adds a small twist, never a bigger number |
+| **Weapons** | Its own kinds of weapon, each a way to fight: a sword, a staff, a bolt-thrower | Each kind plays differently; none is stronger at a rank than another |
 | **Speciality** | What it teaches that no other setting does | One field each, all needed, none the top |
 | **Look** | Its palette, its kit of models, its light | One art style, the same material and light (D14) |
+
+## Weapons: different ways to play
+
+From the developers: a theme's weapons differ the way a sword differs from a staff, not better or worse but a different way to play. Proposed, so that holds across many themes:
+
+- **Every weapon kind has a way it plays**: close and quick, slow and heavy, at range, through abilities, defensive. A theme brings its own kinds, or its own take on one, such as a gothic scythe that reaps several at once or a machine realm's bolt-thrower that fires a few shots from its core and then must be recharged.
+- **Rank sets the budget, the kind spends it.** At a rank, every kind is worth about the same over a fight; one hits hard and slow, another light and often, another from afar with less. That is what keeps a theme from outclassing another.
+- **Skills follow the kind** (D88): you get better with what you use, so trying a new realm's weapons is starting a new skill, not trading up.
+- **Gear goes with you** (D86), so a player can carry a staff from one realm and a sword from another, and fight their own way.
+
+## Loot
+
+From the developers: loot, procedural loot included, may become part of the game, though not a large part. Proposed, through the same roles: a found item is **a theme's weapon or gear kind, at a rank, with a few rolled properties drawn from the realm's affinity**, such as a death realm's blade that drains, or a storm realm's that arcs. The rank caps what it can roll, so loot is a sidegrade or a way to play, not a ladder above crafting. Crafting stays the steady way to equip (D109); loot is the surprise.
 
 ## Four settings, from the mood board
 
@@ -55,7 +69,7 @@ The techno-punk street in more depth, with its risks, is [a realm of machines](t
 
 Four hand-made settings do not reach dozens of generated realms. Proposed: a generator that **starts from a cause and derives the rest**, so every realm is explained by the same few ideas and none is a random pile of themes. After Dwarf Fortress and Caves of Qud, which generate histories that read as lore, and No Man's Sky, whose fiction explains why its worlds repeat.
 
-**1. One cosmology that expects variety.** Proposed, for the fiction ([arc.md](arc.md)): realms are many places in one cosmos, joined by portals, and **each is shaped by the magic that dominates it**. That one premise explains why realms differ so much, why their peoples use magic in different ways, and why portals lead from one to another, without a story written for each.
+**1. One cosmology that expects variety.** Left to the generator by the developers. Proposed as the working premise: realms are many places in one cosmos, joined by portals, and **each is shaped by the magic that dominates it**. That one premise explains why realms differ so much, why their peoples use magic in different ways, and why portals lead from one to another, without a story written for each.
 
 **2. A few seeds, everything else derived.** A realm is generated from a handful of choices, and every role is worked out from them by rules:
 
@@ -65,8 +79,9 @@ Four hand-made settings do not reach dozens of generated realms. Proposed: a gen
 | **Climate** | Its land and weather, from the planet's theme (D59) | Cold and misty suits death; a hot one gives a desert of the dead |
 | **Age** | Where its people are in their history: rising, thriving, declining, fallen, returning | Fallen: ruins and guardians; rising: settlements still building |
 | **Rank** | How strong it is ([arc.md](arc.md)) | Iron for a starting realm, gold for a far one |
+| **Magic** | How much magic there is, from the developers: some realms have more, some less | Little: few pooling places, few monsters, more wildlife and plain craft, cores scarce. Much: magic pools everywhere, monsters form fast, the land itself is strange |
 
-Each affinity names a **setting template**: how its people use magic, what pools and forms, its material and station roles, its palette. Climate and age bend the template; the seed makes each place on the realm unlike the others. The four mood-board worlds become four templates among many, and a new template is data.
+How much magic a realm has is apart from its rank: a low-magic realm can still be dangerous, through its wildlife, its people or its land. Each affinity names a **setting template**: how its people use magic, what pools and forms, its material and station roles, its palette. Climate and age bend the template; the seed makes each place on the realm unlike the others. The four mood-board worlds become four templates among many, and a new template is data.
 
 **3. A generated history, left in the land.** Each realm gets a short history of a few events, made by rule from its seeds: a people rose, used the magic in their way, and something happened, such as overreach, war, a plague or a portal opening. The history is never shown as text. It is **built into the world**: ruins where the old works stood, magic pooling where it was overdrawn, the culture that survived and what it believes, names on old stones. Players read a realm's past from its places and people (D92), as Enshrouded's and Kenshi's are read.
 
@@ -92,11 +107,14 @@ Each affinity names a **setting template**: how its people use magic, what pools
 
 A setting is part of a realm's theme (D59): a list of what fills each role, with its palette and its kit of models. Recipes, stations, weapons and creatures name roles, and the setting says what each is called, looks like and is made of. The sandbox does a little of this already: the stations' screens and the build menu read their lists from data, and everything built uses one catalogue (D108, D109).
 
+## Mixing settings
+
+From the developers: settings may mix within a realm, such as a gothic quarter in a medieval town, but carefully, and as an advanced feature for later. A first version keeps one setting to a realm; when mixing comes, it is a second template given a place within the first, with a reason in the realm's history.
+
 ## Questions for the developers
 
-1. **Are these the right roles**, and is anything missing, such as how a setting's day, weather or music differ?
-2. **Is "a twist, never a bigger number" the right rule** for a setting's weapons and tools?
-3. **Do the four specialities sound right**, and what would the primitive setting's be?
-4. **Should settings mix**, such as a gothic quarter in a medieval town, or is a realm one setting?
-5. **Is "each realm is shaped by the magic that dominates it" a premise you would want** for the fiction, or should the cosmology be left open?
-6. **An old people who built everywhere:** a thread worth having, or too close to a written story?
+1. **Are these the right roles**, and is anything missing, such as how a setting's day, weather or music differ? Called roughly on point.
+2. Answered: **weapons differ by how they play**, not by being better (2026-10-11).
+3. Open: **each setting's speciality**, and what the primitive one would be. Undecided.
+4. Answered: **settings may mix**, carefully, later.
+5. Answered: **the cosmology and an ancient people** are left to the generator.
