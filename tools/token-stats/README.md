@@ -17,6 +17,14 @@ The page leads with what the tokens would cost at the API's list prices, per per
 
 The page and `/json` are public. Sending and `/stats` need the shared key in `Authorization: Bearer <key>`. The key is a secret: never commit it.
 
+## The ticker
+
+[`/ticker`](https://terra-token-stats.dcramer.workers.dev/ticker) is the running cost alone, with the tokens behind it (cache reads left out, as on the page), small enough to embed. It checks for new numbers every 5 seconds while the page it sits on is visible, and a click opens the full page. The colours follow the embedding page's light or dark scheme; add `?theme=light` or `?theme=dark` to fix them.
+
+```html
+<iframe src="https://terra-token-stats.dcramer.workers.dev/ticker" width="200" height="56" style="border:0" title="What building Terra has cost"></iframe>
+```
+
 ## Reporting your usage
 
 Ask for the key, then copy `.env.example` at the repository root to `.env` and fill it in. Git ignores `.env`. Worktrees read the main checkout's `.env`, so one file is enough.
@@ -63,6 +71,7 @@ To try it locally, put `API_KEY=devkey` in `worker/.dev.vars` and run `npx wrang
 |---|---|
 | `GET /` | The page: everyone's cost and tokens, models, and cost a day for 30 days |
 | `GET /json` | The same as JSON |
+| `GET /ticker` | The cost and tokens alone, to embed; `theme`: `light` or `dark` |
 | `POST /report` | `{"user": "dcramer", "messages": [{"id": "msg_…", "session": "…", "day": "2026-10-10", "model": "claude-opus-5-5", "input": 1, "output": 2, "cache_read": 3, "cache_write": 4}]}`, at most 500 messages |
 | `GET /stats` | `group`: any of `user`, `day`, `model`, comma-separated (default `user`); `since`: a day |
 

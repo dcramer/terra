@@ -3,6 +3,7 @@
 //
 // GET  /       the page: tokens per person, public
 // GET  /json   the same as JSON, public
+// GET  /ticker the running cost alone, small enough to embed in an iframe, public
 // POST /report {user, messages: [{id, session, day, model, input, output, cache_read, cache_write}]}
 // GET  /stats  ?group=user,day,model&since=YYYY-MM-DD
 //
@@ -10,6 +11,7 @@
 
 import { page } from "./page.js";
 import { cost } from "./prices.js";
+import { ticker } from "./ticker.js";
 
 const USER = /^[A-Za-z0-9_.-]{1,40}$/;
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
@@ -103,6 +105,10 @@ export default {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/") {
       return new Response(page(await snapshot(env)), { headers: { "Content-Type": "text/html; charset=utf-8", ...PUBLIC } });
+    }
+    if (request.method === "GET" && url.pathname === "/ticker") {
+      const html = ticker(await snapshot(env), url.searchParams.get("theme"));
+      return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", ...PUBLIC } });
     }
     if (request.method === "GET" && url.pathname === "/json") {
       return json(await snapshot(env), 200, PUBLIC);

@@ -85,7 +85,7 @@ function num(n, key, fmt) {
   return ` data-n="${n}" data-key="${key}"${fmt ? ` data-fmt="${fmt}"` : ""} title="${title}"`;
 }
 
-function compact(n) {
+export function compact(n) {
   if (n < 1000) return String(n);
   const units = [
     [1e12, "T"],
@@ -98,7 +98,7 @@ function compact(n) {
   return `${v >= 100 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, "")}${unit}`;
 }
 
-function money(n) {
+export function money(n) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
@@ -162,7 +162,7 @@ const SCENE = `<svg class="scene" viewBox="0 0 1200 320" preserveAspectRatio="xM
   ${ridge(53, 334, 22, 26, "l5")}
 </svg>`;
 
-const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#e9a38a"/><path d="M1 18 L8 13 L13 16 L19 10 L25 14 L31 12 L31 20 A15 15 0 0 1 1 20 Z" fill="#1a8c63"/></svg>`;
+export const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#e9a38a"/><path d="M1 18 L8 13 L13 16 L19 10 L25 14 L31 12 L31 20 A15 15 0 0 1 1 20 Z" fill="#1a8c63"/></svg>`;
 
 const CSS = `
 :root {
