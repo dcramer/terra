@@ -2,3 +2,5 @@
 # Godot files break otherwise.
 * text=auto eol=lf
 *.png binary
+*.glb binary
+*.bin binary

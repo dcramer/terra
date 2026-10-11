@@ -5374,6 +5374,8 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy-inspector-egui",
+ "gltf",
+ "libm",
  "terra_build",
  "terra_core",
  "terra_gen",

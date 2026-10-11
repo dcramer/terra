@@ -14,6 +14,7 @@
 mod experiments;
 mod planet;
 mod shell;
+mod sky;
 
 use bevy::prelude::*;
 

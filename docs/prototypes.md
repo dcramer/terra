@@ -53,6 +53,12 @@ Added 2026-10-04 at the developers' request, ahead of the beauty corner: the fir
 
 It is not a prototype of the game's design: there is no survival, no co-op and no art in it.
 
+## Outpost scene
+
+Added 2026-10-10 at the developers' request: a proof of concept worth showing someone. It is the sandbox's `play` experiment, in Rust on Bevy: an animated figure with a builder tool at a furnished base by a lake. See the [sandbox README](../crates/terra_sandbox/README.md) and [research/outpost-scene.md](../research/outpost-scene.md).
+
+It is a picture of where the game could end up, not a prototype of its design: there is no survival, no terraforming, no voxel terrain and no co-op in it.
+
 ## Rust milestones
 
 A working plan, still to be determined. The engine would be built as a foundation and four parallel tracks, described in [engine.md](engine.md). These are the checkpoints. Each is measured against the Godot numbers in [research/godot-spike.md](../research/godot-spike.md), on the RTX 5090 and on the integrated GPU.

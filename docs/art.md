@@ -34,6 +34,8 @@ Four of its store screenshots, and what to look for in each:
 
 These are linked, not copied into the repository, because they are someone else's copyrighted images.
 
+What to take from it is the **environments and props**. The developers said on 2026-10-10 that its characters are a particular taste: they fit, more or less, but ours may well look different.
+
 ## Other references
 
 Games with a related look, and the one thing worth taking from each:
@@ -50,7 +52,27 @@ Games with a related look, and the one thing worth taking from each:
 
 ## Where we are
 
-First tests of the look, made in the sandbox on 2026-10-10. Run them with `cargo run -p terra_sandbox -- --experiment look --experiment forest`.
+The closest we have come is the outpost scene, the sandbox's `play` experiment, made on 2026-10-10. Run it with `cargo xtask win -p terra_sandbox -- --experiment play`, or `cargo run` anywhere but WSL.
+
+![The outpost: a base in a meadow, pines behind it, a fire in front](images/outpost-2026-10-10.png)
+
+![The same place from above, with the lake beyond](images/outpost-from-above-2026-10-10.png)
+
+![Indoors, lit by its own lamps and by the sun through the windows](images/outpost-indoors-2026-10-10.png)
+
+What it has that the earlier tests did not: designed shapes, from free model packs recoloured to one palette; grass, flowers and bushes in quantity, moving in a wind; fine smooth ground with grass, soil and sand; water that is clear at the shore and mirrors the sky further out; a base with trim, a foundation and lit rooms; furniture; and shading in corners and under things.
+
+What it still lacks against the reference:
+
+- **A dead planet.** This is the living end of the game. The barren start has not been attempted.
+- **Our own shapes.** The trees and furniture are a stock pack's. They carry our colours, not our design.
+- **Layered distance.** The planet is small, so there are no far mountains to fade into bands.
+- **Blur and framing.** No depth of field, and the camera is simply behind the player.
+- **A character.** The figure is a recoloured mannequin.
+
+### Earlier tests
+
+Made the same day, before any models. Run them with `cargo run -p terra_sandbox -- --experiment look --experiment forest`.
 
 ![Look test: a faceted desert with boulders, shrubs, haze and a soft sky](images/look-test-2026-10-10.png)
 
@@ -78,8 +100,12 @@ What it does not have, and the reference does:
 | Sky | A gradient shader with soft clouds | Working; no day and night |
 | Bloom and grading | Camera effects built into Bevy | Working |
 | Blur in the distance | A camera effect built into Bevy | Not tried; needs care in first person |
-| Elegant shapes | Bought low-polygon packs, and generators for rocks and plants | Started: generated boulders, shrubs and one pine |
-| Dense foliage | Instancing many small pieces | Not started; the load test says a discrete GPU can draw hundreds of thousands |
+| Elegant shapes | Free and bought low-polygon packs, read for shape and given our colours in code; generators for rocks and plants | Working with free packs in the outpost scene (D54); generators started |
+| Dense foliage | Instancing models; grass as many single-triangle blades merged into one mesh per square of ground | Working near the outpost: 13,000 plants and rocks and 650,000 blades |
+| Wind | One vertex shader for every plant, used for shadows too | Working |
+| Ground cover | Each vertex of the ground says what grows there; the shader paints it and roughens the edges | Working on the stand-in planet |
+| Water | A see-through surface that mirrors the sky at a low angle, over ground that darkens with depth | Working; no waves, no swimming |
+| Shade in corners | Screen-space ambient occlusion, built into Bevy | Working |
 | A palette per place | Generated from the simulation's values | Not started |
 
 ## Why this direction suits us

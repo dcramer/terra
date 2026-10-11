@@ -15,16 +15,24 @@ use bevy::{
     render::render_resource::PrimitiveTopology,
 };
 use terra_build::{
-    Base, BuildOp, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, Surface, TILE_M, Walker,
+    Base, BuildOp, DOOR_HEIGHT_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, Surface, TILE_M,
+    Walker,
 };
 use terra_core::Ground;
 
 const REACH_M: f32 = 300.0;
 /// The base's floor clears the highest ground under it by this much.
-const FLOOR_CLEARANCE_M: f32 = 0.5;
-/// A ramp runs this far out for every metre it has to climb.
+const FLOOR_CLEARANCE_M: f32 = 0.12;
+/// The foundation stands this far out from the walls, and reaches this far into the ground.
+const FOUNDATION_LEDGE_M: f32 = 0.14;
+const FOUNDATION_DEPTH_M: f32 = 0.7;
+/// Steps run this far out for every metre they have to climb.
 const RAMP_RUN_PER_RISE: f32 = 2.4;
 const RAMP_WIDTH_M: f32 = DOOR_WIDTH_M + 0.7;
+const STEP_RISE_M: f32 = 0.17;
+/// Bright enough to show beside daylight, which is what the camera is exposed for.
+const INDOOR_LAMP_LUMENS: f32 = 110_000.0;
+const CONCRETE: Color = Color::srgb(0.5, 0.48, 0.47);
 
 /// Present when something else is driving construction, such as a player holding a
 /// builder tool. The keys and camera here then stand aside.
@@ -38,15 +46,17 @@ pub(super) struct Site {
     /// Places the base's own space on the planet.
     pub frame: Transform,
     pub operations: Vec<BuildOp>,
-    /// A ramp from each ground-floor door down to the ground.
+    /// Goes up by one every time the base changes shape.
+    pub revision: u64,
+    /// Steps from each ground-floor door down to the ground. A walker treats each flight
+    /// as a ramp.
     ramps: Vec<Ramp>,
-    ramp_holder: Entity,
     structure: Entity,
     glass: Entity,
-    legs: Entity,
-    leg_mesh: Handle<Mesh>,
-    leg_material: Handle<StandardMaterial>,
-    ramp_material: Handle<StandardMaterial>,
+    lights: Entity,
+    foundation: Entity,
+    steps: Entity,
+    lamps: Entity,
     camera_placed: bool,
 }
 
@@ -90,36 +100,22 @@ struct Ramp {
 }
 
 impl Ramp {
-    /// The ramp as a wedge: its sloping top and a wall down each side.
-    fn mesh(&self) -> Mesh {
-        let half = self.outward.cross(Vec3::Y) * (RAMP_WIDTH_M * 0.5);
-        let fall = self.outward * self.length - Vec3::Y * self.drop;
-        let (near_left, near_right) = (self.top - half, self.top + half);
-        let (far_left, far_right) = (near_left + fall, near_right + fall);
-        let under = Vec3::Y * self.drop;
-        let triangles = [
-            [near_left, far_left, far_right],
-            [near_left, far_right, near_right],
-            [near_left, near_left - under, far_left],
-            [near_right, far_right, near_right - under],
-        ];
-        let mut positions = Vec::new();
-        let mut normals = Vec::new();
-        for [a, b, c] in triangles {
-            let mut normal = (b - a).cross(c - a).normalize_or_zero();
-            // The top should face up; the material is double sided, so the rest is free.
-            if normal.y < 0.0 {
-                normal = -normal;
-            }
-            positions.extend([a, b, c]);
-            normals.extend([normal; 3]);
+    /// The ramp drawn as a flight of steps, each a block reaching down into the ground.
+    fn steps(&self, surface: &mut Blocks) {
+        let across = self.outward.cross(Vec3::Y) * (RAMP_WIDTH_M * 0.5);
+        let count = (self.drop / STEP_RISE_M).ceil().max(1.0);
+        let tread = self.length / count;
+        for step in 0..count as usize {
+            let near = self.top + self.outward * (tread * step as f32);
+            let far = near + self.outward * tread;
+            // Level with the ramp at the middle of the tread.
+            let top = self.top.y - self.drop * (step as f32 + 0.5) / count;
+            let bottom = self.top.y - self.drop - FOUNDATION_DEPTH_M;
+            surface.block(
+                (near - across).min(far + across).with_y(bottom),
+                (near - across).max(far + across).with_y(top),
+            );
         }
-        Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::RENDER_WORLD,
-        )
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
     }
 
     /// The height of the ramp's surface under a point, if the point is over the ramp.
@@ -158,6 +154,30 @@ impl Site {
         }
     }
 
+    /// Whether a point in the world is under the base, or within a margin of it.
+    pub(super) fn covers(&self, point: Vec3, margin: f32) -> bool {
+        let local = self
+            .frame
+            .compute_affine()
+            .inverse()
+            .transform_point3(point);
+        let reach = [-margin, 0.0, margin];
+        reach.iter().any(|dx| {
+            reach.iter().any(|dz| {
+                let tile = ((local + Vec3::new(*dx, 0.0, *dz)) / TILE_M)
+                    .floor()
+                    .as_ivec3();
+                self.base.contains(tile.with_y(0))
+            })
+        }) || self.ramps.iter().any(|ramp| {
+            let offset = local - ramp.top;
+            let along = offset.dot(ramp.outward);
+            let across = offset.dot(ramp.outward.cross(Vec3::Y));
+            (-margin..=ramp.length + margin).contains(&along)
+                && across.abs() <= RAMP_WIDTH_M * 0.5 + margin
+        })
+    }
+
     /// Applies an operation and redraws the base. Returns whether anything changed.
     pub(super) fn apply(
         &mut self,
@@ -169,6 +189,7 @@ impl Site {
         let changed = self.base.apply(op);
         if changed {
             self.operations.push(op);
+            self.revision += 1;
             info!("Applied {op:?}");
             redraw(commands, self, planet, meshes);
         } else {
@@ -178,8 +199,8 @@ impl Site {
     }
 }
 
-/// The example base: two rooms joined by a corridor, a small upper storey, a run of
-/// windows and a door.
+/// The example base: two rooms joined by a corridor, a small upper storey, windows on
+/// every side and a door.
 fn example() -> Vec<BuildOp> {
     let wall = |x: i32, y: i32, z: i32, side: Side| Face::new(IVec3::new(x, y, z), side);
     vec![
@@ -210,32 +231,212 @@ fn example() -> Vec<BuildOp> {
         BuildOp::SetPanel(wall(4, 0, -1, Side::South), Panel::WINDOW),
         BuildOp::SetPanel(wall(6, 0, 0, Side::South), Panel::WINDOW),
         BuildOp::SetPanel(wall(6, 0, -1, Side::East), Panel::TALL_WINDOW),
+        BuildOp::SetPanel(wall(-2, 0, -2, Side::North), Panel::WINDOW),
+        BuildOp::SetPanel(wall(2, 0, -2, Side::North), Panel::WINDOW),
+        BuildOp::SetPanel(wall(6, 0, -2, Side::North), Panel::WINDOW),
+        BuildOp::SetPanel(wall(-1, 1, -2, Side::North), Panel::WINDOW),
     ]
+}
+
+/// Axis-aligned boxes in the base's own space, as flat-faced triangles of one colour.
+#[derive(Default)]
+struct Blocks {
+    positions: Vec<Vec3>,
+    normals: Vec<Vec3>,
+}
+
+impl Blocks {
+    fn block(&mut self, min: Vec3, max: Vec3) {
+        let corner = |x: bool, y: bool, z: bool| {
+            Vec3::new(
+                if x { max.x } else { min.x },
+                if y { max.y } else { min.y },
+                if z { max.z } else { min.z },
+            )
+        };
+        // Each side as four corners, anticlockwise seen from outside.
+        let sides = [
+            (
+                Vec3::X,
+                [
+                    (true, false, true),
+                    (true, false, false),
+                    (true, true, false),
+                    (true, true, true),
+                ],
+            ),
+            (
+                Vec3::NEG_X,
+                [
+                    (false, false, false),
+                    (false, false, true),
+                    (false, true, true),
+                    (false, true, false),
+                ],
+            ),
+            (
+                Vec3::Y,
+                [
+                    (false, true, true),
+                    (true, true, true),
+                    (true, true, false),
+                    (false, true, false),
+                ],
+            ),
+            (
+                Vec3::NEG_Y,
+                [
+                    (false, false, false),
+                    (true, false, false),
+                    (true, false, true),
+                    (false, false, true),
+                ],
+            ),
+            (
+                Vec3::Z,
+                [
+                    (false, false, true),
+                    (true, false, true),
+                    (true, true, true),
+                    (false, true, true),
+                ],
+            ),
+            (
+                Vec3::NEG_Z,
+                [
+                    (true, false, false),
+                    (false, false, false),
+                    (false, true, false),
+                    (true, true, false),
+                ],
+            ),
+        ];
+        for (normal, corners) in sides {
+            let [a, b, c, d] = corners.map(|(x, y, z)| corner(x, y, z));
+            self.positions.extend([a, b, c, a, c, d]);
+            self.normals.extend([normal; 6]);
+        }
+    }
+
+    fn into_mesh(self) -> Option<Mesh> {
+        if self.positions.is_empty() {
+            return None;
+        }
+        Some(
+            Mesh::new(
+                PrimitiveTopology::TriangleList,
+                RenderAssetUsages::RENDER_WORLD,
+            )
+            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals),
+        )
+    }
+}
+
+/// Where to stand a base: the most level ground near the start that is clear of the sea,
+/// turned so its door looks out over the water if there is any.
+fn choose_site(planet: &Planet, base: &Base) -> Transform {
+    let start = planet.start();
+    let up = start.normalize();
+    let east = up.cross(Vec3::X).normalize();
+    let north = east.cross(up);
+    let sea = planet.sea_radius_m();
+
+    let ground_floor = || base.tiles().filter(|(tile, _)| tile.y == 0);
+    let low = ground_floor().fold(IVec3::MAX, |low, (tile, _)| low.min(tile));
+    let high = ground_floor().fold(IVec3::MIN, |high, (tile, _)| high.max(tile));
+    let (low, high) = (
+        low.as_vec3() * TILE_M - 3.0,
+        (high + 1).as_vec3() * TILE_M + 3.0,
+    );
+    let middle = (low + high) * 0.5;
+
+    let mut best: Option<(f32, Transform)> = None;
+    for ring in 3..22 {
+        for spoke in 0..24 {
+            let angle = spoke as f32 / 24.0 * std::f32::consts::TAU;
+            let offset =
+                (east * libm::cosf(angle) + north * libm::sinf(angle)) * (ring as f32 * 6.0);
+            let anchor = planet.surface((start + offset).normalize());
+            let anchor_up = anchor.normalize();
+            for turn in 0..8 {
+                let facing =
+                    Quat::from_axis_angle(anchor_up, turn as f32 * std::f32::consts::TAU / 8.0)
+                        * east.reject_from(anchor_up).normalize();
+                let mut frame = Transform::from_translation(anchor).looking_to(facing, anchor_up);
+                // Put the middle of the base, not its corner, on the chosen spot.
+                frame.translation -= frame.rotation * Vec3::new(middle.x, 0.0, middle.z);
+
+                // How far the ground under the base rises above and falls below the frame.
+                let (mut lowest, mut highest) = (f32::MAX, f32::MIN);
+                let mut x = low.x;
+                while x <= high.x {
+                    let mut z = low.z;
+                    while z <= high.z {
+                        let height = -planet
+                            .ground
+                            .distance(frame.transform_point(Vec3::new(x, 0.0, z)));
+                        lowest = lowest.min(height);
+                        highest = highest.max(height);
+                        z += 3.0;
+                    }
+                    x += 3.0;
+                }
+                let above_sea = anchor.length() + lowest - sea;
+                if above_sea < 1.6 {
+                    continue;
+                }
+                if highest - lowest > 2.5 {
+                    continue;
+                }
+                // Doors are on the base's +Z side; water a short walk out that way is
+                // worth a little slope.
+                let water_ahead = [40.0, 60.0, 85.0]
+                    .iter()
+                    .filter(|&&ahead| {
+                        let point = frame.transform_point(Vec3::new(middle.x, 0.0, ahead));
+                        planet.surface(point.normalize()).length() < sea
+                    })
+                    .count();
+                // Grass to stand on, at the base and out in front of it.
+                let grassy: f32 = [0.0, 12.0, 24.0]
+                    .iter()
+                    .map(|&ahead| {
+                        let point = frame.transform_point(Vec3::new(middle.x, 0.0, ahead));
+                        let point = planet.surface(point.normalize());
+                        planet.cover(point, planet.ground.normal(point)).grass
+                    })
+                    .sum();
+                let score = (highest - lowest) - 0.8 * water_ahead as f32 - 0.5 * grassy
+                    + 0.04 * (above_sea - 4.0).abs();
+                if best.as_ref().is_none_or(|(least, _)| score < *least) {
+                    best = Some((score, frame));
+                }
+            }
+        }
+    }
+    best.map(|(_, frame)| frame).unwrap_or_else(|| {
+        let anchor = planet.surface((start + east * 60.0).normalize());
+        Transform::from_translation(anchor).looking_to(north, anchor.normalize())
+    })
 }
 
 fn setup(
     mut commands: Commands,
     planet: Res<Planet>,
+    driven: Option<Res<DrivenByPlayer>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Stand the base on the ground a short walk ahead of where the camera starts.
-    let start = planet.start();
-    let up = start.normalize();
-    let ahead = up.cross(Vec3::X).normalize();
-    let anchor = planet.surface((start + ahead * 60.0).normalize());
-    let anchor_up = anchor.normalize();
-    let mut frame =
-        Transform::from_translation(anchor).looking_to(ahead.reject_from(anchor_up), anchor_up);
-    frame.rotate_local_y(0.5);
     let mut base = Base::default();
     let operations = example();
     for &op in &operations {
         base.apply(op);
     }
+    let mut frame = choose_site(&planet, &base);
     // Lift the base until its floor clears the highest ground under it. The stand-in
-    // planet cannot be dug, so the base has to stay out of the ground's way; legs and
-    // ramps make up the difference.
+    // planet cannot be dug, so the base has to stay out of the ground's way; a foundation
+    // and steps make up the difference.
     let highest_ground = base
         .tiles()
         .filter(|(tile, _)| tile.y == 0)
@@ -250,19 +451,31 @@ fn setup(
             })
         })
         .fold(f32::MIN, f32::max);
-    frame.translation += anchor_up * (highest_ground + FLOOR_CLEARANCE_M);
+    let frame_up = *frame.up();
+    frame.translation += frame_up * (highest_ground + FLOOR_CLEARANCE_M);
 
     // Colour comes from each triangle, so one material serves the whole structure.
     let structure_material = materials.add(StandardMaterial {
-        perceptual_roughness: 0.85,
+        perceptual_roughness: 0.82,
+        reflectance: 0.3,
         ..default()
     });
     let glass_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.7, 0.9, 1.0, 0.28),
+        base_color: Color::srgba(0.62, 0.86, 0.95, 0.3),
         alpha_mode: AlphaMode::Blend,
-        perceptual_roughness: 0.08,
+        perceptual_roughness: 0.06,
+        reflectance: 0.7,
         cull_mode: None,
         double_sided: true,
+        ..default()
+    });
+    let light_material = materials.add(StandardMaterial {
+        emissive: LinearRgba::rgb(5.0, 3.6, 2.2),
+        ..default()
+    });
+    let concrete = materials.add(StandardMaterial {
+        base_color: CONCRETE,
+        perceptual_roughness: 0.95,
         ..default()
     });
     let structure = commands
@@ -276,44 +489,49 @@ fn setup(
             NotShadowCaster,
         ))
         .id();
-    let legs = commands
+    let lights = commands
         .spawn((
-            Name::new("Base legs"),
-            Transform::default(),
-            Visibility::default(),
+            Name::new("Base light panels"),
+            frame,
+            MeshMaterial3d(light_material),
+            NotShadowCaster,
         ))
         .id();
-    let ramp_holder = commands
-        .spawn((Name::new("Base ramps"), frame, Visibility::default()))
+    let foundation = commands
+        .spawn((
+            Name::new("Base foundation"),
+            frame,
+            MeshMaterial3d(concrete.clone()),
+        ))
+        .id();
+    let steps = commands
+        .spawn((Name::new("Base steps"), frame, MeshMaterial3d(concrete)))
+        .id();
+    let lamps = commands
+        .spawn((Name::new("Base lamps"), frame, Visibility::default()))
         .id();
 
     let mut site = Site {
         base,
         frame,
         operations,
+        revision: 0,
         structure,
         glass,
-        legs,
-        leg_mesh: meshes.add(Cuboid::new(0.35, 1.0, 0.35)),
-        leg_material: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.4, 0.41, 0.45),
-            perceptual_roughness: 0.9,
-            ..default()
-        }),
+        lights,
+        foundation,
+        steps,
+        lamps,
         ramps: Vec::new(),
-        ramp_holder,
-        ramp_material: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.62, 0.63, 0.67),
-            perceptual_roughness: 0.9,
-            cull_mode: None,
-            double_sided: true,
-            ..default()
-        }),
         camera_placed: false,
     };
     redraw(&mut commands, &mut site, &planet, &mut meshes);
     commands.insert_resource(site);
 
+    // A player brings their own readout and aiming mark.
+    if driven.is_some() {
+        return;
+    }
     commands.spawn((
         Readout,
         Text::new(""),
@@ -345,10 +563,11 @@ fn to_mesh(surface: &Surface) -> Option<Mesh> {
     if surface.positions.is_empty() {
         return None;
     }
+    // The base's colours are as they should look on screen; a mesh wants them linear.
     let colours: Vec<[f32; 4]> = surface
         .colours
         .iter()
-        .map(|c| [c[0], c[1], c[2], 1.0])
+        .map(|c| Color::srgb(c[0], c[1], c[2]).to_linear().to_f32_array())
         .collect();
     Some(
         Mesh::new(
@@ -364,72 +583,113 @@ fn to_mesh(surface: &Surface) -> Option<Mesh> {
 /// Rebuilds everything drawn for the base from its current shape.
 fn redraw(commands: &mut Commands, site: &mut Site, planet: &Planet, meshes: &mut Assets<Mesh>) {
     let mesh = site.base.mesh();
-    for (entity, surface) in [(site.structure, &mesh.structure), (site.glass, &mesh.glass)] {
-        match to_mesh(surface) {
+    let mut show = |entity: Entity, mesh: Option<Mesh>| {
+        match mesh {
             Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
             None => commands.entity(entity).remove::<Mesh3d>(),
         };
-    }
+    };
+    show(site.structure, to_mesh(&mesh.structure));
+    show(site.glass, to_mesh(&mesh.glass));
+    show(site.lights, to_mesh(&mesh.lights));
 
-    // A leg under every ground-floor tile that stands clear of the ground.
-    commands.entity(site.legs).despawn_related::<Children>();
-    for face in site.base.hull().filter(|face| face.side == Side::Down) {
-        let tile = face.tile().as_vec3();
-        let under = Vec3::new(
-            (tile.x + 0.5) * TILE_M,
-            tile.y * STOREY_M,
-            (tile.z + 0.5) * TILE_M,
-        );
-        let point = site.frame.transform_point(under);
-        let gap = planet.ground.distance(point);
-        if tile.y == 0.0 && gap > 0.15 {
-            let length = gap + 0.6;
-            let down = -site.frame.up();
-            commands.spawn((
-                Mesh3d(site.leg_mesh.clone()),
-                MeshMaterial3d(site.leg_material.clone()),
-                Transform::from_translation(point + down * (length * 0.5))
-                    .with_rotation(site.frame.rotation)
-                    .with_scale(Vec3::new(1.0, length, 1.0)),
-                ChildOf(site.legs),
-            ));
-        }
+    // A foundation under every ground-floor tile, down into the ground, standing a
+    // little proud of the walls.
+    let mut foundation = Blocks::default();
+    for (tile, _) in site.base.tiles().filter(|(tile, _)| tile.y == 0) {
+        let ledge = |step: IVec3| {
+            if site.base.contains(tile + step) {
+                0.0
+            } else {
+                FOUNDATION_LEDGE_M
+            }
+        };
+        let min =
+            tile.as_vec3() * TILE_M - Vec3::new(ledge(IVec3::NEG_X), 0.0, ledge(IVec3::NEG_Z));
+        let max = (tile + IVec3::new(1, 0, 1)).as_vec3() * TILE_M
+            + Vec3::new(ledge(IVec3::X), 0.0, ledge(IVec3::Z));
+        let gap = [
+            (min.x, min.z),
+            (max.x, min.z),
+            (min.x, max.z),
+            (max.x, max.z),
+        ]
+        .map(|(x, z)| {
+            planet
+                .ground
+                .distance(site.frame.transform_point(Vec3::new(x, 0.0, z)))
+        })
+        .into_iter()
+        .fold(0.0, f32::max);
+        foundation.block(min.with_y(-gap - FOUNDATION_DEPTH_M), max.with_y(-0.004));
     }
+    show(site.foundation, foundation.into_mesh());
 
-    // A ramp from every ground-floor door down to the ground.
-    commands
-        .entity(site.ramp_holder)
-        .despawn_related::<Children>();
+    // Steps from every ground-floor door down to the ground.
     site.ramps.clear();
+    let mut steps = Blocks::default();
     let doors: Vec<Face> = site
         .base
         .hull()
         .filter(|&face| face.tile[1] == 0 && site.base.panel(face) == Panel::Door)
         .collect();
-    for door in doors {
-        let corners = Base::corners(door);
+    for door in &doors {
+        let corners = Base::corners(*door);
         let top = (corners[0] + corners[1]) * 0.5;
         let outward = door.side.offset().as_vec3();
-        // Long enough for the climb, measured where the ramp starts and where it ends.
+        // Long enough for the climb, measured where the steps start and where they end.
         let rise_here = planet
             .ground
             .distance(site.frame.transform_point(top))
             .max(0.0);
-        let length = (rise_here * RAMP_RUN_PER_RISE).clamp(1.5, 16.0);
+        let length = (rise_here * RAMP_RUN_PER_RISE).clamp(1.2, 16.0);
         let far_end = site.frame.transform_point(top + outward * length);
-        let drop = planet.ground.distance(far_end).max(0.0) + 0.1;
+        let drop = planet.ground.distance(far_end).max(0.0) + 0.05;
         let ramp = Ramp {
             top,
             outward,
             length,
             drop,
         };
-        commands.spawn((
-            Mesh3d(meshes.add(ramp.mesh())),
-            MeshMaterial3d(site.ramp_material.clone()),
-            ChildOf(site.ramp_holder),
-        ));
+        ramp.steps(&mut steps);
         site.ramps.push(ramp);
+    }
+    show(site.steps, steps.into_mesh());
+
+    // Lamps: one in every other tile, and one over each door outside.
+    commands.entity(site.lamps).despawn_related::<Children>();
+    let lamp = |at: Vec3, lumens: f32, range: f32| {
+        (
+            PointLight {
+                color: Color::srgb(1.0, 0.8, 0.56),
+                intensity: lumens,
+                range,
+                radius: 0.3,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            Transform::from_translation(at),
+            ChildOf(site.lamps),
+        )
+    };
+    for (tile, _) in site
+        .base
+        .tiles()
+        .filter(|(tile, _)| (tile.x + tile.z) % 2 == 0)
+    {
+        let centre = (tile.as_vec3() + Vec3::new(0.5, 0.0, 0.5)) * TILE_M;
+        commands.spawn(lamp(
+            centre.with_y(tile.y as f32 * STOREY_M + STOREY_M - 0.5),
+            INDOOR_LAMP_LUMENS,
+            9.0,
+        ));
+    }
+    for door in doors {
+        let corners = Base::corners(door);
+        let over = (corners[0] + corners[1]) * 0.5
+            + Vec3::Y * (DOOR_HEIGHT_M - 0.1)
+            + door.side.offset().as_vec3() * 0.6;
+        commands.spawn(lamp(over, INDOOR_LAMP_LUMENS * 0.5, 7.0));
     }
 }
 

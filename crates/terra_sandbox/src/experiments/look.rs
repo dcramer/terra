@@ -8,18 +8,12 @@
 
 use super::scatter::placements;
 use crate::planet::{Planet, Tweaks};
+use crate::sky::{Sky, SkyPlugin};
 use bevy::{
-    camera::visibility::NoFrustumCulling,
-    light::NotShadowCaster,
     mesh::VertexAttributeValues,
     post_process::bloom::Bloom,
     prelude::*,
-    reflect::TypePath,
-    render::{
-        render_resource::AsBindGroup,
-        view::{ColorGrading, ColorGradingGlobal},
-    },
-    shader::ShaderRef,
+    render::view::{ColorGrading, ColorGradingGlobal},
 };
 use terra_gen::{Noise, Seed};
 
@@ -27,29 +21,15 @@ const HORIZON: Color = Color::srgb(0.98, 0.84, 0.74);
 const ZENITH: Color = Color::srgb(0.36, 0.58, 0.86);
 const SUN_DIRECTION: Vec3 = Vec3::new(0.62, 0.42, 0.5);
 
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-struct SkyMaterial {
-    #[uniform(0)]
-    horizon: LinearRgba,
-    #[uniform(0)]
-    zenith: LinearRgba,
-    #[uniform(0)]
-    sun_direction: Vec3,
-    #[uniform(0)]
-    radius_m: f32,
-}
-
-impl Material for SkyMaterial {
-    fn fragment_shader() -> ShaderRef {
-        "shaders/sky.wgsl".into()
-    }
-}
-
-#[derive(Component)]
-struct SkyDome;
-
 pub fn plugin(app: &mut App) {
-    app.add_plugins(MaterialPlugin::<SkyMaterial>::default())
+    app.add_plugins(SkyPlugin)
+        .insert_resource(Sky {
+            horizon: HORIZON,
+            zenith: ZENITH,
+            glow: Color::srgb(1.0, 0.82, 0.6),
+            cloudiness: 0.5,
+            brightness: 2.6,
+        })
         // Shadows are lit by the sky, so they come out cool against the warm sun.
         .insert_resource(GlobalAmbientLight {
             color: Color::srgb(0.62, 0.68, 1.0),
@@ -57,8 +37,7 @@ pub fn plugin(app: &mut App) {
             ..default()
         })
         .add_systems(Startup, (preset, dress))
-        .add_systems(PostStartup, style_camera)
-        .add_systems(Update, keep_sky_around_camera);
+        .add_systems(PostStartup, style_camera);
 }
 
 fn preset(mut tweaks: ResMut<Tweaks>) {
@@ -104,35 +83,8 @@ fn dress(
     planet: Res<Planet>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut skies: ResMut<Assets<SkyMaterial>>,
 ) {
-    let radius_m = planet.ground.spec().radius_m;
     let seed = planet.ground.spec().seed.derive("look");
-
-    // The sky is the inside of a large sphere that follows the camera.
-    commands.spawn((
-        Name::new("Sky"),
-        SkyDome,
-        Mesh3d(
-            meshes.add(
-                Sphere::new(1.0)
-                    .mesh()
-                    .ico(6)
-                    .unwrap()
-                    .with_inverted_winding()
-                    .unwrap(),
-            ),
-        ),
-        MeshMaterial3d(skies.add(SkyMaterial {
-            horizon: HORIZON.into(),
-            zenith: ZENITH.into(),
-            sun_direction: SUN_DIRECTION,
-            radius_m,
-        })),
-        Transform::from_scale(Vec3::splat(radius_m * 20.0)),
-        NotShadowCaster,
-        NoFrustumCulling,
-    ));
 
     // Boulders and shrubs: a few generated shapes each, reused many times.
     let flat = |colour: Color| StandardMaterial {
@@ -177,13 +129,6 @@ fn dress(
             },
         ));
     }
-}
-
-fn keep_sky_around_camera(
-    camera: Single<&Transform, (With<Camera3d>, Without<SkyDome>)>,
-    mut sky: Single<&mut Transform, With<SkyDome>>,
-) {
-    sky.translation = camera.translation;
 }
 
 /// A lumpy low-polygon shape with flat faces: a coarse sphere with every corner pushed in

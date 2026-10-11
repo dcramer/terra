@@ -9,6 +9,9 @@ publish.workspace = true
 [dependencies]
 bevy.workspace = true
 bevy-inspector-egui.workspace = true
+libm.workspace = true
+# The version Bevy itself reads models with, used here to read model shapes directly.
+gltf = { version = "1.4", default-features = false, features = ["utils"] }
 terra_build.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true

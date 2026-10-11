@@ -195,17 +195,14 @@ fn nearest_within<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use terra_core::{PlanetSpec, StandInPlanet};
+    use terra_core::PlanetSpec;
 
     fn planet() -> Planet {
         let spec = PlanetSpec {
             seed: Seed(1),
             radius_m: 2000.0,
         };
-        Planet {
-            ground: Arc::new(StandInPlanet::new(spec, 150.0, None)),
-        }
+        Planet::new(spec)
     }
 
     #[test]

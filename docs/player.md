@@ -128,13 +128,20 @@ Survival needs, terraforming, progression, creatures and combat. The developers 
 
 ## A first walk-around
 
-A first version exists, built on 2026-10-10 at the developers' request as a really simple tech demo: the sandbox's `play` experiment. To get started it made two choices this doc leaves open, neither of which is a decision: third person, so the figure can be seen, and one builder tool with three modes.
+A playable version exists: the sandbox's `play` experiment, built on 2026-10-10 at the developers' request and then rebuilt the same day as something worth showing. To get started it made two choices this doc leaves open, neither of which is a decision: third person, so the figure can be seen, and one builder tool with three modes.
 
-![The placeholder figure at the foot of the ramp to the base](images/play-test-2026-10-10.png)
+![The player outside the base, with the builder aimed at a wall](images/outpost-builder-2026-10-10.png)
 
-![Indoors, with the builder aimed at a wall](images/play-indoors-2026-10-10.png)
+![The outpost from the fire](images/outpost-2026-10-10.png)
 
-It has a placeholder figure with no animation, walking, running and jumping on the stand-in planet, a ramp and door into the base, and the builder reshaping the base from outside and inside. It has no harvesting, inventory or real collision. How to run it is in the [sandbox README](../crates/terra_sandbox/README.md).
+What it has:
+
+- An animated figure that jogs, sprints, jumps and turns to face the way it is going, on the stand-in planet.
+- Steps and a door into the base, floors that hold the figure up, walls and windows that stop it, and trees and boulders it has to walk round.
+- The builder, reshaping the base from outside and inside. What it would act on lights up before you commit, and a line of text says what each button would do.
+- A place to do it in: a furnished base in a meadow by a lake.
+
+What it does not have: harvesting, inventory, costs, swimming, stairs between storeys, real collision (D53), or a character of our own. The figure is a recoloured mannequin from a free animation library. How to run it is in the [sandbox README](../crates/terra_sandbox/README.md).
 
 What was proposed, for comparison:
 
@@ -142,5 +149,3 @@ What was proposed, for comparison:
 - One tool in hand that harvests the rocks and trees the sandbox already scatters.
 - The builder, acting on the existing construction experiment.
 - Walking into a base through its door.
-
-It deliberately leaves out inventory, costs, swimming, and leaving the planet.

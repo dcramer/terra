@@ -29,7 +29,11 @@ usage: terra_sandbox [options]
   --bench               measure frame times with vsync off, print them, then exit
   --settle <frames>     frames to run before capturing or measuring (default 120)
   --press <key>@<frame> press a letter key on a given frame, for scripted runs;
-                        <key>@<from>-<to> holds it over a range of frames";
+                        <key>@<from>-<to> holds it over a range of frames
+  --vantage <x,y,z,x,y,z>
+                        where a fixed camera stands and what it looks at, in metres
+                        east, up and south of the base's corner, for experiments
+                        that have one";
 
 /// Frames to wait before measuring or capturing by default, so shaders have compiled and
 /// the scene has finished loading.
@@ -46,6 +50,8 @@ pub struct Options {
     pub bench: bool,
     /// A key, the frame it goes down, and the frame it comes back up.
     pub presses: Vec<(KeyCode, u32, u32)>,
+    /// A fixed camera: where it stands and what it looks at, in an experiment's own space.
+    pub vantage: Option<(Vec3, Vec3)>,
 }
 
 impl Options {
@@ -58,6 +64,7 @@ impl Options {
             settle_frames: SETTLE_FRAMES,
             bench: false,
             presses: Vec::new(),
+            vantage: None,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -78,6 +85,16 @@ impl Options {
                         .map_err(|_| "--settle needs a number of frames".to_string())?;
                 }
                 "--press" => options.presses.push(parse_press(&value("--press")?)?),
+                "--vantage" => {
+                    let numbers: Vec<f32> = value("--vantage")?
+                        .split(',')
+                        .filter_map(|number| number.trim().parse().ok())
+                        .collect();
+                    let [a, b, c, d, e, f] = numbers[..] else {
+                        return Err("--vantage needs six numbers, like 4,3,20,6,2,0".to_string());
+                    };
+                    options.vantage = Some((Vec3::new(a, b, c), Vec3::new(d, e, f)));
+                }
                 other => return Err(format!("Unknown option `{other}`")),
             }
         }
@@ -303,6 +320,12 @@ mod tests {
         assert_eq!(held.presses, [(KeyCode::KeyW, 40, 90)]);
         assert!(options.scripted());
         assert!(!parse(&[]).unwrap().scripted());
+        let fixed = parse(&["--vantage", "4,3,20,6,2,0"]).unwrap();
+        assert_eq!(
+            fixed.vantage,
+            Some((Vec3::new(4.0, 3.0, 20.0), Vec3::new(6.0, 2.0, 0.0)))
+        );
+        assert!(parse(&["--vantage", "1,2"]).unwrap_err().contains("six"));
     }
 
     #[test]

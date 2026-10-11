@@ -25,6 +25,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--bench` | Measure frame times with vsync off, print them, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
 | `--press <key>@<frame>` | Press a letter key on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. |
+| `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
 
 ## Controls
 
@@ -42,7 +43,7 @@ The camera is Bevy's free camera, which treats +Y as up. The start is at the pla
 
 ## Working on graphics
 
-The ground's look is in `assets/shaders/ground.wgsl`. Save it while the sandbox is running and the ground updates. The F2 panel changes the colours and the sun without touching code, and F1 lets you edit any material.
+The ground's look is in `assets/shaders/ground.wgsl`, the sea's in `water.wgsl`, the sky's in `sky.wgsl`, and the wind that moves plants in `wind.wgsl`. Save one while the sandbox is running and it updates. The F2 panel changes the colours and the sun without touching code, and F1 lets you edit any material.
 
 To check a change without watching it, take a screenshot and read it:
 
@@ -55,26 +56,45 @@ Shader reloading works when run through `cargo run`. The Windows build launched 
 ## The play experiment
 
 ```bash
-cargo xtask win -p terra_sandbox -- --experiment look --experiment play
+cargo xtask win -p terra_sandbox -- --experiment play
 ```
 
-A simple tech demo: a player on the ground with a builder tool. You steer a figure in third person. It walks on the planet, climbs the ramp to the base's door, is held up by floors, stopped by walls and windows, and let through doors.
+The proof of concept: an outpost in a meadow by a lake, a little before sunset, and a player with a builder tool. You steer an animated figure in third person. It walks on the planet, climbs the steps to the base's door, is held up by floors, stopped by walls, windows, trees and boulders, and let through doors.
+
+![The outpost](../../docs/images/outpost-2026-10-10.png)
 
 | Input | Action |
 |---|---|
 | Click | Capture the mouse; Esc releases it |
 | Mouse | Look |
-| W A S D, Shift, Space | Walk, run, jump |
+| W A S D, Shift, Space | Move, sprint, jump |
 | 1, 2, 3 | Builder mode: shape, openings, room |
 | Left click, or E | Main action: push the wall out, change the tile, or add a room |
 | Right click, or R | Second action: pull the wall in, or make the tile solid |
+| F3 | Show the frame rate |
 
-What is placeholder: the figure is a few simple shapes with no animation; the planet is the stand-in one, so it cannot be dug and the base stands on legs clear of it; and collision is arithmetic on the base's grid, not a physics engine. There are no stairs, so upper storeys cannot be reached, and interiors have no lights.
+Whatever the builder would act on lights up before you commit, and the line over the mode chips says what each button would do.
+
+It is made of these pieces, each a module in `src/experiments/play/`:
+
+| Module | What it is |
+|---|---|
+| `scene` | The sun, the sky's colours, haze, shadows, and the camera's effects |
+| `flora` | Trees, rocks, bushes and flowers placed from the seed, and the grass |
+| `props` | Furniture and outdoor kit, placed by hand for the example base |
+| `figure` | The player's body and which animation it plays |
+| `tool` | The builder, its highlight, and the prompts |
+| `models` | Reading shapes out of model files |
+
+The models are free ones, recoloured in code; see [THIRD_PARTY.md](../../THIRD_PARTY.md). How it was put together and what it costs to draw is in [research/outpost-scene.md](../../research/outpost-scene.md).
+
+What is placeholder: the figure is a mannequin from an animation library; the planet is the stand-in one, so it cannot be dug and the base stands on a foundation clear of it; collision is arithmetic, not a physics engine; there are no stairs, so upper storeys cannot be reached; grass is planted once around the base and runs out about 100 m away; and nothing can be picked up.
 
 In a scripted run the game clock advances a sixtieth of a second per frame and real keyboard and mouse input is ignored, so the same script does the same thing on any machine:
 
 ```bash
-cargo run -p terra_sandbox -- --experiment look --experiment play --settle 300 --press w@20-230 --press e@260 --shot shots/indoors.png
+cargo run -p terra_sandbox -- --experiment play --settle 200 --press w@20-70 --shot shots/at-the-door.png
+cargo run -p terra_sandbox -- --experiment play --vantage 0,2.4,24,9,1.6,0 --shot shots/outpost.png
 ```
 
 ## The look experiment
@@ -83,7 +103,7 @@ cargo run -p terra_sandbox -- --experiment look --experiment play --settle 300 -
 cargo run -p terra_sandbox -- --experiment look
 ```
 
-A test of the art direction in [docs/art.md](../../docs/art.md): faceted ground, generated boulders and shrubs, a warm sun with cool shadows, haze, a gradient sky with clouds, and bloom. The sky is `assets/shaders/sky.wgsl` and reloads when saved, like the ground.
+An early test of the art direction in [docs/art.md](../../docs/art.md): faceted ground, generated boulders and shrubs, a warm sun with cool shadows, haze, a gradient sky with clouds, and bloom. The play experiment has since gone further.
 
 ## The forest experiment
 
@@ -99,7 +119,7 @@ About a million generated pines over the whole planet. Left click or F chops the
 cargo run -p terra_sandbox -- --experiment look --experiment build
 ```
 
-A base you shape, inspired by Subnautica 2. Aim with the mark in the middle of the view: G pushes the wall you are looking at out by a tile, H pulls it in, V cycles the tile through solid, three sizes of window and a door, and B adds a room on open ground. The rules live in `terra_build`; what it does and does not do is in [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
+A base you shape, inspired by Subnautica 2. It stands on the most level ground near the start, on a foundation, with steps up to its door. Aim with the mark in the middle of the view: G pushes the wall you are looking at out by a tile, H pulls it in, V cycles the tile through solid, three sizes of window and a door, and B adds a room on open ground. The rules live in `terra_build`; what it does and does not do is in [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
 
 ## Adding an experiment
 
@@ -112,6 +132,7 @@ It can use the `Planet` resource to ask where the ground is, and anything in `te
 
 ## Known limits
 
-- The planet's mesh is coarse, about 12 m between vertices, while objects are placed on the exact ground. Small objects can sit a little above or below what is drawn.
-- No atmosphere or sky by default; the background is flat. The `look` experiment adds a sky.
+- The planet's mesh is fine, about a metre between vertices, only within 250 m of the start. Beyond that it is coarse, about 16 m, and cuts across hollows and humps by metres. Ask the planet for `drawn` rather than `surface` to put something on the ground as it is seen out there.
+- No sky by default; the background is flat. The `look` and `play` experiments add one.
 - Outside the `play` experiment there is no player, gravity or collision, and the camera flies freely.
+- The play experiment is not tuned for weak graphics hardware: every tree is drawn at full detail at any distance.

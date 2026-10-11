@@ -1,17 +1,20 @@
-// The sky for the "look" experiment: a soft gradient from the horizon up, a glow around
-// the sun, thinning to black as the camera climbs out of the air.
+// The sky: a soft gradient from the horizon up, clouds lit by the sun, a glow around the
+// sun, thinning to black as the camera climbs out of the air.
 
 #import bevy_pbr::{
     forward_io::VertexOutput,
-    mesh_view_bindings::view,
+    mesh_view_bindings::{globals, view},
 }
 
-// Field order must match SkyMaterial in look.rs.
+// Field order must match SkyMaterial in sky.rs.
 struct Sky {
     horizon: vec4<f32>,
     zenith: vec4<f32>,
+    glow: vec4<f32>,
     sun_direction: vec3<f32>,
     radius_m: f32,
+    cloudiness: f32,
+    brightness: f32,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
@@ -35,10 +38,9 @@ fn noise(p: vec3<f32>) -> f32 {
     return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
 }
 
-fn clouds(direction: vec3<f32>) -> f32 {
-    let p = direction * 3.5;
-    let billow = noise(p) * 0.55 + noise(p * 2.1 + 7.0) * 0.3 + noise(p * 4.3 + 19.0) * 0.15;
-    return smoothstep(0.52, 0.7, billow);
+fn billow(p: vec3<f32>) -> f32 {
+    return noise(p) * 0.5 + noise(p * 2.1 + 7.0) * 0.27 + noise(p * 4.3 + 19.0) * 0.15
+        + noise(p * 8.9 + 5.0) * 0.08;
 }
 
 @fragment
@@ -47,22 +49,34 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // The planet's centre is the world origin, so "up" is away from it.
     let up = normalize(eye);
     let direction = normalize(mesh.world_position.xyz - eye);
+    let sun = normalize(sky.sun_direction);
 
     // -1 looking straight down, 0 at the horizon, 1 straight up.
     let lift = dot(direction, up);
-    var colour = mix(sky.horizon.rgb, sky.zenith.rgb, pow(smoothstep(-0.02, 0.6, lift), 0.6));
+    let toward_sun = max(dot(direction, sun), 0.0);
+    var colour = mix(sky.horizon.rgb, sky.zenith.rgb, pow(smoothstep(-0.02, 0.62, lift), 0.55));
+    // The air glows toward the sun, most of all low down.
+    colour += sky.glow.rgb * pow(toward_sun, 5.0) * 0.35 * (1.0 - smoothstep(0.0, 0.7, lift));
 
-    // Soft clouds, fading out toward the horizon, lit warm on the side facing the sun.
-    let toward_sun = max(dot(direction, normalize(sky.sun_direction)), 0.0);
-    let cloud = clouds(direction) * smoothstep(0.03, 0.3, lift) * 0.85;
-    let cloud_colour = mix(vec3<f32>(0.93, 0.9, 0.95), vec3<f32>(1.0, 0.93, 0.84), toward_sun);
-    colour = mix(colour, cloud_colour, cloud);
+    // Clouds on a flat layer overhead, so they stretch out toward the horizon, drifting
+    // slowly. Their sunward edges are bright and their bodies take the sky's shade.
+    let layer = direction / max(lift, 0.05);
+    let drift = vec3<f32>(globals.time * 0.004, 0.0, globals.time * 0.002);
+    let p = (layer - up * dot(layer, up)) * 0.55 + drift;
+    let body = billow(p);
+    let threshold = 1.0 - sky.cloudiness * 0.62;
+    let cloud = smoothstep(threshold - 0.12, threshold + 0.1, body) * smoothstep(0.02, 0.2, lift);
+    // Thicker toward the sun means darker; thin edges facing it catch the light.
+    let toward = billow(p + (sun - up * dot(sun, up)) * 0.12);
+    let lit = clamp((body - toward) * 4.0 + 0.55, 0.0, 1.0);
+    let shade = mix(sky.zenith.rgb * 0.75 + sky.horizon.rgb * 0.25, sky.horizon.rgb, 0.35);
+    let bright = mix(vec3<f32>(1.0, 0.97, 0.94), sky.glow.rgb, 0.55) * 1.25;
+    let cloud_colour = mix(shade, bright, lit * (0.55 + 0.45 * pow(toward_sun, 2.0)));
+    colour = mix(colour, cloud_colour, cloud * 0.9);
 
-    colour += vec3<f32>(1.0, 0.82, 0.6) * (pow(toward_sun, 6.0) * 0.2 + pow(toward_sun, 600.0) * 5.0);
+    // The sun itself.
+    colour += sky.glow.rgb * (pow(toward_sun, 40.0) * 0.5 + smoothstep(0.9994, 0.9998, toward_sun) * 30.0);
 
-    // The camera is exposed for sunlit ground, which is far brighter than 1.0; lift the
-    // sky to sit with it.
-    let brightness = 2.6;
     let altitude = max(length(eye) - sky.radius_m, 0.0);
-    return vec4<f32>(colour * brightness * exp(-altitude / 700.0), 1.0);
+    return vec4<f32>(colour * sky.brightness * exp(-altitude / 700.0), 1.0);
 }
