@@ -1,50 +1,90 @@
-// Records Claude token usage per person, day and model. See ../README.md.
+// Records Claude token usage per message, and totals per person, day and model.
+// See ../README.md.
 //
-// POST /report  {user, rows: [{day, model, input, output, cache_read, cache_write, messages}]}
+// POST /report  {user, messages: [{id, session, day, model, input, output, cache_read, cache_write}]}
 // GET  /stats?group=user,day,model&since=YYYY-MM-DD
 //
 // Both need `Authorization: Bearer <API_KEY>`.
 
 const USER = /^[A-Za-z0-9_.-]{1,40}$/;
+const ID = /^[A-Za-z0-9_-]{1,100}$/;
+const SESSION = /^[A-Za-z0-9_-]{0,100}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const MODEL = /^[A-Za-z0-9_.:@/-]{1,100}$/;
-const COUNTS = ["input", "output", "cache_read", "cache_write", "messages"];
+const COUNTS = ["input", "output", "cache_read", "cache_write"];
 const GROUPS = ["user", "day", "model"];
-const MAX_ROWS = 2000;
+const MAX_MESSAGES = 500;
 
-const SCHEMA = `CREATE TABLE IF NOT EXISTS usage (
-  user TEXT NOT NULL,
-  day TEXT NOT NULL,
-  model TEXT NOT NULL,
-  input_tokens INTEGER NOT NULL DEFAULT 0,
-  output_tokens INTEGER NOT NULL DEFAULT 0,
-  cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-  cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-  messages INTEGER NOT NULL DEFAULT 0,
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY (user, day, model)
-)`;
+// Every message is stored once, keyed by the id the API gave it, so it cannot be
+// counted twice however often it is sent or from how many transcripts. `usage`
+// holds the totals, kept in step by triggers, so reading stats stays cheap.
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    user TEXT NOT NULL,
+    session TEXT NOT NULL,
+    day TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    cache_read_tokens INTEGER NOT NULL,
+    cache_write_tokens INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS usage (
+    user TEXT NOT NULL,
+    day TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    cache_read_tokens INTEGER NOT NULL,
+    cache_write_tokens INTEGER NOT NULL,
+    messages INTEGER NOT NULL,
+    PRIMARY KEY (user, day, model)
+  )`,
+  `CREATE TRIGGER IF NOT EXISTS messages_insert AFTER INSERT ON messages BEGIN
+    ${addToUsage("new", 1)}
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS messages_update AFTER UPDATE ON messages BEGIN
+    ${addToUsage("old", -1)}
+    ${addToUsage("new", 1)}
+  END`,
+];
 
-// The reporter sends running totals, so a row only grows: keep the larger of old
-// and new, and skip the write when nothing grew. One statement for every row,
-// since the free plan allows 50 queries a request and 100 bound values a query.
-const UPSERT = `INSERT INTO usage (user, day, model, input_tokens, output_tokens,
-    cache_read_tokens, cache_write_tokens, messages, updated_at)
-  SELECT ?1, r.value ->> 'day', r.value ->> 'model', r.value ->> 'input', r.value ->> 'output',
-    r.value ->> 'cache_read', r.value ->> 'cache_write', r.value ->> 'messages', ?3
-  FROM json_each(?2) AS r WHERE true
-  ON CONFLICT (user, day, model) DO UPDATE SET
-    input_tokens = max(usage.input_tokens, excluded.input_tokens),
-    output_tokens = max(usage.output_tokens, excluded.output_tokens),
-    cache_read_tokens = max(usage.cache_read_tokens, excluded.cache_read_tokens),
-    cache_write_tokens = max(usage.cache_write_tokens, excluded.cache_write_tokens),
-    messages = max(usage.messages, excluded.messages),
+function addToUsage(row, sign) {
+  const v = (col) => (sign < 0 ? `-${row}.${col}` : `${row}.${col}`);
+  return `INSERT INTO usage (user, day, model, input_tokens, output_tokens,
+      cache_read_tokens, cache_write_tokens, messages)
+    VALUES (${row}.user, ${row}.day, ${row}.model, ${v("input_tokens")}, ${v("output_tokens")},
+      ${v("cache_read_tokens")}, ${v("cache_write_tokens")}, ${sign})
+    ON CONFLICT (user, day, model) DO UPDATE SET
+      input_tokens = input_tokens + excluded.input_tokens,
+      output_tokens = output_tokens + excluded.output_tokens,
+      cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
+      cache_write_tokens = cache_write_tokens + excluded.cache_write_tokens,
+      messages = messages + excluded.messages;`;
+}
+
+// A message sent again keeps the larger counts and the earlier day, and is not
+// written at all when nothing changed. One statement for every message, since the
+// free plan allows 50 queries a request and 100 bound values a query.
+const UPSERT = `INSERT INTO messages (id, user, session, day, model, input_tokens, output_tokens,
+    cache_read_tokens, cache_write_tokens, updated_at)
+  SELECT m.value ->> 'id', ?1, m.value ->> 'session', m.value ->> 'day', m.value ->> 'model',
+    m.value ->> 'input', m.value ->> 'output', m.value ->> 'cache_read', m.value ->> 'cache_write', ?3
+  FROM json_each(?2) AS m WHERE true
+  ON CONFLICT (id) DO UPDATE SET
+    day = min(messages.day, excluded.day),
+    input_tokens = max(messages.input_tokens, excluded.input_tokens),
+    output_tokens = max(messages.output_tokens, excluded.output_tokens),
+    cache_read_tokens = max(messages.cache_read_tokens, excluded.cache_read_tokens),
+    cache_write_tokens = max(messages.cache_write_tokens, excluded.cache_write_tokens),
     updated_at = excluded.updated_at
-  WHERE excluded.input_tokens > usage.input_tokens
-    OR excluded.output_tokens > usage.output_tokens
-    OR excluded.cache_read_tokens > usage.cache_read_tokens
-    OR excluded.cache_write_tokens > usage.cache_write_tokens
-    OR excluded.messages > usage.messages`;
+  WHERE excluded.day < messages.day
+    OR excluded.input_tokens > messages.input_tokens
+    OR excluded.output_tokens > messages.output_tokens
+    OR excluded.cache_read_tokens > messages.cache_read_tokens
+    OR excluded.cache_write_tokens > messages.cache_write_tokens`;
 
 export default {
   async fetch(request, env) {
@@ -81,22 +121,25 @@ async function report(request, env) {
     throw new BadRequest("body must be JSON");
   }
   if (typeof body?.user !== "string" || !USER.test(body.user)) throw new BadRequest("bad user");
-  if (!Array.isArray(body.rows) || body.rows.length > MAX_ROWS) throw new BadRequest("bad rows");
-  const rows = body.rows.map(cleanRow);
-  if (rows.length === 0) return json({ rows: 0, written: 0 });
+  if (!Array.isArray(body.messages) || body.messages.length > MAX_MESSAGES) throw new BadRequest("bad messages");
+  const messages = body.messages.map(cleanMessage);
+  if (messages.length === 0) return json({ messages: 0, rows_written: 0 });
 
-  const result = await withTable(env, () =>
-    env.DB.prepare(UPSERT).bind(body.user, JSON.stringify(rows), new Date().toISOString()).run(),
+  const result = await withTables(env, () =>
+    env.DB.prepare(UPSERT).bind(body.user, JSON.stringify(messages), new Date().toISOString()).run(),
   );
-  return json({ rows: rows.length, written: result.meta.changes });
+  return json({ messages: messages.length, rows_written: result.meta.changes });
 }
 
-function cleanRow(row) {
-  if (typeof row?.day !== "string" || !DAY.test(row.day)) throw new BadRequest("bad day");
-  if (typeof row.model !== "string" || !MODEL.test(row.model)) throw new BadRequest("bad model");
-  const clean = { day: row.day, model: row.model };
+function cleanMessage(m) {
+  if (typeof m?.id !== "string" || !ID.test(m.id)) throw new BadRequest("bad id");
+  const session = m.session ?? "";
+  if (typeof session !== "string" || !SESSION.test(session)) throw new BadRequest("bad session");
+  if (typeof m.day !== "string" || !DAY.test(m.day)) throw new BadRequest("bad day");
+  if (typeof m.model !== "string" || !MODEL.test(m.model)) throw new BadRequest("bad model");
+  const clean = { id: m.id, session, day: m.day, model: m.model };
   for (const key of COUNTS) {
-    const n = row[key] ?? 0;
+    const n = m[key] ?? 0;
     if (!Number.isSafeInteger(n) || n < 0) throw new BadRequest(`bad ${key}`);
     clean[key] = n;
   }
@@ -111,12 +154,12 @@ async function stats(url, env) {
 
   // `group` holds only names from GROUPS, so it is safe to place in the query.
   const cols = group.join(", ");
-  const { results } = await withTable(env, () =>
+  const { results } = await withTables(env, () =>
     env.DB.prepare(
       `SELECT ${cols},
         sum(input_tokens) AS input, sum(output_tokens) AS output,
         sum(cache_read_tokens) AS cache_read, sum(cache_write_tokens) AS cache_write,
-        sum(messages) AS messages, max(updated_at) AS updated_at
+        sum(messages) AS messages
       FROM usage WHERE day >= ?1 GROUP BY ${cols} ORDER BY ${cols}`,
     )
       .bind(since)
@@ -125,13 +168,13 @@ async function stats(url, env) {
   return json({ since, group, rows: results });
 }
 
-// Create the table the first time it is missing, so a deploy needs no migration step.
-async function withTable(env, query) {
+// Create the tables the first time they are missing, so a deploy needs no migration step.
+async function withTables(env, query) {
   try {
     return await query();
   } catch (err) {
     if (!String(err?.message).includes("no such table")) throw err;
-    await env.DB.prepare(SCHEMA).run();
+    await env.DB.batch(SCHEMA.map((sql) => env.DB.prepare(sql)));
     return await query();
   }
 }

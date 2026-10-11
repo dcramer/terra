@@ -2,57 +2,77 @@
 // Sends this person's Claude Code token usage on this repository to the stats worker.
 // See README.md. No dependencies: Node 18 or later.
 //
-//   node tools/token-stats/report.mjs             send totals
-//   node tools/token-stats/report.mjs --dry-run   print what would be sent
+//   node tools/token-stats/report.mjs             send messages not yet sent
+//   node tools/token-stats/report.mjs --full      send every message again
+//   node tools/token-stats/report.mjs --dry-run   print this person's totals, sending nothing
 //   node tools/token-stats/report.mjs --stats     print everyone's totals
 //   node tools/token-stats/report.mjs --cron      print a crontab line that runs it hourly
 
 import { execFileSync } from "node:child_process";
-import { createReadStream, existsSync, readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const BATCH = 200;
 
-// Adds one Claude Code transcript line to `totals`, a map from "day\tmodel" to counts.
-// Counts only assistant messages whose working directory is inside `root`. A message
-// appears once per content block, and again in resumed sessions, so `seen` holds the
-// message ids already counted.
-export function addLine(line, root, seen, totals) {
-  if (!line.includes('"usage"')) return;
-  let entry;
-  try {
-    entry = JSON.parse(line);
-  } catch {
-    return;
-  }
-  const message = entry?.message;
-  const usage = message?.usage;
-  if (entry.type !== "assistant" || !usage || !inside(entry.cwd, root)) return;
-  const model = message.model;
-  if (typeof model !== "string" || model.startsWith("<")) return;
-  const id = message.id ?? entry.requestId;
-  if (id) {
-    if (seen.has(id)) return;
-    seen.add(id);
-  }
-  const day = typeof entry.timestamp === "string" ? entry.timestamp.slice(0, 10) : null;
-  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+// Adds the messages of one Claude Code transcript to `messages`, a map from message id.
+//
+// A transcript counts only if its session started inside one of `roots`, wherever it
+// went after; Claude Code files a session under the folder it started in.
+//
+// Each message has a unique id from the API, and that id is the only thing that
+// identifies it. One message is logged once per content block, with partial usage
+// on the early lines, and again in every session resumed or forked from its own,
+// under the new session's id and sometimes a later timestamp. So each message keeps
+// the largest of each count and the earliest day, and the server keys on the id too.
+export function addTranscript(text, roots, messages) {
+  let started = null;
+  for (const line of text.split("\n")) {
+    if (started === null && !line.includes('"cwd"')) continue;
+    if (started !== null && !line.includes('"usage"')) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (started === null) {
+      if (typeof entry?.cwd !== "string") continue;
+      started = entry.cwd;
+      if (!roots.some((root) => inside(started, root))) return;
+    }
+    const message = entry?.message;
+    const usage = message?.usage;
+    if (entry.type !== "assistant" || !usage || typeof message.id !== "string") continue;
+    if (typeof message.model !== "string" || message.model.startsWith("<")) continue;
+    const day = typeof entry.timestamp === "string" ? entry.timestamp.slice(0, 10) : "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    const session = typeof entry.sessionId === "string" ? entry.sessionId : "";
 
-  const key = `${day}\t${model}`;
-  const row = totals.get(key) ?? { day, model, input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0 };
-  row.input += usage.input_tokens ?? 0;
-  row.output += usage.output_tokens ?? 0;
-  row.cache_read += usage.cache_read_input_tokens ?? 0;
-  row.cache_write += usage.cache_creation_input_tokens ?? 0;
-  row.messages += 1;
-  totals.set(key, row);
+    const counts = {
+      input: usage.input_tokens ?? 0,
+      output: usage.output_tokens ?? 0,
+      cache_read: usage.cache_read_input_tokens ?? 0,
+      cache_write: usage.cache_creation_input_tokens ?? 0,
+    };
+    const known = messages.get(message.id);
+    if (!known) {
+      messages.set(message.id, { id: message.id, session, day, model: message.model, ...counts });
+      continue;
+    }
+    for (const [key, n] of Object.entries(counts)) known[key] = Math.max(known[key], n);
+    if (day < known.day || (day === known.day && session < known.session)) {
+      known.day = day;
+      known.session = session;
+    }
+  }
 }
 
 function inside(cwd, root) {
-  return typeof cwd === "string" && (cwd === root || cwd.startsWith(root + sep));
+  return cwd === root || cwd.startsWith(root + sep);
 }
 
 function git(...args) {
@@ -68,12 +88,23 @@ function checkoutRoot() {
   return resolve(git("rev-parse", "--show-toplevel"));
 }
 
-// Claude Code names each project's folder after its path with every other character
-// replaced by "-", so the repository and its worktrees share a prefix.
-function transcripts(root) {
+// The main checkout and any worktrees kept outside it.
+function roots() {
+  const listed = git("worktree", "list", "--porcelain")
+    .split("\n")
+    .filter((l) => l.startsWith("worktree "))
+    .map((l) => resolve(l.slice(9)));
+  const all = [repoRoot(), ...listed];
+  return [...new Set(all)].filter((r) => !all.some((o) => o !== r && inside(r, o)));
+}
+
+// Claude Code names each project's folder after the path a session started in, with
+// every other character replaced by "-". That can match other folders too, such as
+// "terra-old"; addTranscript checks the real path.
+function transcripts(roots) {
   const projects = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects");
   if (!existsSync(projects)) return [];
-  const prefix = root.replace(/[^A-Za-z0-9]/g, "-");
+  const prefixes = roots.map((root) => root.replace(/[^A-Za-z0-9]/g, "-"));
   const files = [];
   const walk = (dir) => {
     for (const item of readdirSync(dir, { withFileTypes: true })) {
@@ -83,19 +114,39 @@ function transcripts(root) {
     }
   };
   for (const item of readdirSync(projects, { withFileTypes: true })) {
-    if (item.isDirectory() && item.name.startsWith(prefix)) walk(join(projects, item.name));
+    if (item.isDirectory() && prefixes.some((p) => item.name.startsWith(p))) walk(join(projects, item.name));
   }
   return files;
 }
 
-export async function collect(root) {
-  const seen = new Set();
-  const totals = new Map();
-  for (const file of transcripts(root)) {
-    const lines = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
-    for await (const line of lines) addLine(line, root, seen, totals);
+export function collect(roots) {
+  const messages = new Map();
+  for (const file of transcripts(roots)) addTranscript(readFileSync(file, "utf8"), roots, messages);
+  return [...messages.values()].sort((a, b) => a.day.localeCompare(b.day) || a.id.localeCompare(b.id));
+}
+
+export function totals(messages) {
+  const rows = new Map();
+  for (const m of messages) {
+    const key = `${m.day}\t${m.model}`;
+    const row = rows.get(key) ?? { day: m.day, model: m.model, input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0 };
+    for (const k of ["input", "output", "cache_read", "cache_write"]) row[k] += m[k];
+    row.messages += 1;
+    rows.set(key, row);
   }
-  return [...totals.values()].sort((a, b) => a.day.localeCompare(b.day) || a.model.localeCompare(b.model));
+  return [...rows.values()];
+}
+
+// What has been sent, so a run sends only new or grown messages. Losing it costs a
+// longer run, never a wrong count: the server ignores what it already has.
+function sentFile(cfg) {
+  const name = createHash("sha256").update(`${cfg.url}\n${cfg.user}`).digest("hex").slice(0, 16);
+  const cache = process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache");
+  return join(cache, "terra-token-stats", `sent-${name}.json`);
+}
+
+function signature(m) {
+  return [m.day, m.input, m.output, m.cache_read, m.cache_write].join(" ");
 }
 
 // Reads KEY=value lines, ignoring blanks and # comments; a value may be quoted.
@@ -158,14 +209,37 @@ async function main(args) {
     console.log(table(rows, [...group.split(","), ...counts]));
     return;
   }
-  const rows = await collect(repoRoot());
+  const messages = collect(roots());
   if (args.includes("--dry-run")) {
-    console.log(table(rows, ["day", "model", ...counts]));
+    console.log(table(totals(messages), ["day", "model", ...counts]));
     return;
   }
+
   const cfg = config();
-  const result = await call(cfg, "/report", { method: "POST", body: JSON.stringify({ user: cfg.user, rows }) });
-  console.log(`${new Date().toISOString()} sent ${result.rows} rows as ${cfg.user}, ${result.written} changed`);
+  const file = sentFile(cfg);
+  let sent = {};
+  if (!args.includes("--full") && existsSync(file)) {
+    try {
+      sent = JSON.parse(readFileSync(file, "utf8"));
+    } catch {
+      sent = {};
+    }
+  }
+  const pending = messages.filter((m) => sent[m.id] !== signature(m));
+  const save = () => {
+    // Forget messages no longer in any transcript, so the file does not grow forever.
+    const kept = Object.fromEntries(messages.filter((m) => m.id in sent).map((m) => [m.id, sent[m.id]]));
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(`${file}.tmp`, JSON.stringify(kept));
+    renameSync(`${file}.tmp`, file);
+  };
+  for (let i = 0; i < pending.length; i += BATCH) {
+    const batch = pending.slice(i, i + BATCH);
+    await call(cfg, "/report", { method: "POST", body: JSON.stringify({ user: cfg.user, messages: batch }) });
+    for (const m of batch) sent[m.id] = signature(m);
+    save();
+  }
+  console.log(`${new Date().toISOString()} sent ${pending.length} of ${messages.length} messages as ${cfg.user}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
