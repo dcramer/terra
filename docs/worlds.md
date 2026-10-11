@@ -81,7 +81,7 @@ Open:
 
 Said later the same day, with "maybe" and "idk": a planet's setting shows in the **cultures, or tribes, found there**. Finding a different culture might unlock different things, and you might recruit people from it. The art style stays the same across the whole game; what changes from culture to culture is the exact models and details, made by the procedural generation and the theme. Your gear is your gear: what you carry goes with you from planet to planet.
 
-How a "futuristic" setting can stay on theme, after the developers asked on 2026-10-11 for one that feels advanced without guns and without being superior to magic, is proposed in [a realm of machines](proposals/game-design-001/techno-realm.md) (Open).
+How any setting can work, after the developers asked on 2026-10-11 for themes that work as the art's four-world mood board does, is proposed in [settings](proposals/game-design-001/settings.md) (Open): every setting fills the same gameplay roles, as models fill palette roles, and rank is the only power axis. A "futuristic" one, advanced without guns and not superior to magic, is worked through in [a realm of machines](proposals/game-design-001/techno-realm.md).
 
 So a setting proposed as data would name its cultures, and a culture its models, its colours within the one art style, what it can teach you, and who in it might join you.
 

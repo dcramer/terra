@@ -1,6 +1,6 @@
 # A realm of machines
 
-A proposal for game design 001: how a realm can feel technologically advanced without guns, without science fiction, and without being better than magic. Open, for the developers to react to; nothing here is built or decided.
+A proposal for game design 001: how a realm can feel technologically advanced without guns, without science fiction, and without being better than magic. Open, for the developers to react to; nothing here is built or decided. It is one setting worked through under the general frame in [settings.md](settings.md), where every realm's theme fills the same roles.
 
 ## What the developers have said
 
@@ -41,16 +41,16 @@ Proposed: **a fallen civilisation of magitech, whose machines run on magic, cann
 
 **4. What they are not.** No guns, no lasers, no vehicles that outrun everything, no machine that out-fights a person of its rank in their hands. A hand-held device is at most a charged tool: a bolt-thrower with a few shots from its core, slower than a bow in skilled hands, useful to someone without the skill.
 
-**5. A fallen civilisation.** The realm's makers are gone. What is left:
+**5. Its makers, gone or still at work.** The developers said on 2026-10-11 it could be either. If they are gone, what is left:
 
 - **Ruins** where the old works drew magic in, so magic pools there now and monsters form among the machines ([creatures.md](creatures.md)).
 - **Guardians**: constructs still keeping their posts, at the rank of their cores, as dangerous as monsters and worth more.
 - **Survivors or descendants**, perhaps: a culture living among the ruins, who keep some of the old knowledge and might teach it or join you (D86, D90).
 - **Learning by finding** (D68): you learn a device by salvaging one, or from people who know it, not from a research tree.
 
-That keeps the realm from feeling ahead of the others. Its machines are the past, and something went wrong with them; what, is part of the fiction ([arc.md](arc.md)).
+That keeps the realm from feeling ahead of the others: its machines are the past, and something went wrong with them. If the makers are still at work, a living culture of tinkers, the same rules hold: their machines run on cores and are capped by them, and what they teach is the realm's speciality ([settings.md](settings.md)). A realm could have both, the living among the ruins of the old.
 
-**6. Each realm has a speciality.** If realms teach different things (D86), each should be needed and none should be the top:
+**6. Each realm has a speciality.** If realms teach different things (D86), each should be needed and none should be the top. The general version, for every setting, is in [settings.md](settings.md):
 
 | Setting | What it teaches, proposed |
 |---|---|
@@ -80,7 +80,7 @@ A hold that uses all three is stronger than one that uses one, which is a reason
 
 ## Questions for the developers
 
-1. **Is the fallen civilisation the right frame**, or is it a living culture that builds machines now?
+1. Answered: **gone or still at work** could be either (2026-10-11).
 2. **Cores from monsters, charge from pooling places, or both?**
 3. **Constructs:** in, and if so, what may they do?
 4. **Hand-held devices:** none at all, or charged tools like the bolt-thrower?

@@ -39,7 +39,8 @@ This overview gives the idea, what drives the world, and the principles. Each sy
 | Survival | [survival.md](survival.md) | Needs that reward more than punish, day and night, weather, death and coming back |
 | Your character | [character.md](character.md) | No class, getting around big round worlds, what is on screen and what is not |
 | The arc | [arc.md](arc.md) | The fiction, the first hour without a tutorial, the long game by rank and the spread, playing together |
-| A realm of machines | [techno-realm.md](techno-realm.md) | Open: a fallen magitech civilisation whose machines run on cores, cannot grow, and are best at holding a place; no guns |
+| Settings | [settings.md](settings.md) | Open: every realm's theme fills the same gameplay roles, as the art's palette roles do; rank is the only power axis; a setting is a way of using magic |
+| A realm of machines | [techno-realm.md](techno-realm.md) | Open, one setting worked through: magitech whose machines run on cores, cannot grow, and are best at holding a place; no guns |
 | Building and claims | [construction.md](../../construction.md) | A voxel grid with shaped rooms first (D48); claims, outside which the world heals (D94), starting at a size that can be upgraded (D104) |
 | The MVP | [prototypes.md](../../prototypes.md#mvp-the-first-playable) | A first playable that tests the core loop (D105) |
 | Items | [items.md](../../items.md) | The backpack, equipment and action bar (D84) |
