@@ -18,6 +18,7 @@
 mod bag;
 mod catalogue;
 mod controls;
+mod crafting;
 mod dial;
 mod figure;
 mod flora;
@@ -88,6 +89,7 @@ pub fn plugin(app: &mut App) {
     tool::plugin(app);
     dial::plugin(app);
     bag::plugin(app);
+    crafting::plugin(app);
     harvest::plugin(app);
     options::plugin(app);
     app.insert_resource(DrivenByPlayer)

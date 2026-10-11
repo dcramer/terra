@@ -391,7 +391,7 @@ fn draw(
         match (holding, part.variant_name(builder.variant())) {
             (None, _) => "Empty hand".to_string(),
             (Some(tool), _) if tool != Tool::Hammer => tool.name().to_string(),
-            _ if builder.stowed => "Builder:  nothing picked".to_string(),
+            _ if builder.stowed => "Hammer:  nothing picked".to_string(),
             (_, Some(variant)) if part.variants() > 1 => format!(
                 "{}:  {}  ({} of {})",
                 part.name,
@@ -411,6 +411,8 @@ fn draw(
         &mut texts.p2(),
         if tool::waiting(&cursor, &options) && !inventory.open {
             "Click to take control".to_string()
+        } else if inventory.at.is_some() {
+            format!("{}  leave the station", settings.key(Action::Interact))
         } else if inventory.open {
             format!("{}  close the inventory", settings.key(Action::Inventory))
         } else if dial.open {

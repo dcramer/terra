@@ -5,6 +5,7 @@
 //! list is a stand-in. What can be built, what it costs and how it is unlocked are design
 //! questions nobody has answered (docs/player.md).
 
+use super::crafting::Station;
 use super::inventory::{Cost, Raw};
 use terra_build::{CELL_M, Panel};
 
@@ -61,6 +62,8 @@ pub struct Item {
     pub lift: f32,
     /// Whether it gives off light, and how.
     pub light: Light,
+    /// What can be made at it, if it is a station.
+    pub station: Option<Station>,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -77,6 +80,7 @@ const fn item(name: &'static str, file: &'static str, size: f32, cost: Cost) -> 
         cost,
         lift: 0.0,
         light: Light::None,
+        station: None,
     }
 }
 
@@ -89,6 +93,13 @@ const fn rug(name: &'static str, file: &'static str, size: f32, cost: Cost) -> I
 
 const fn lit(light: Light, item: Item) -> Item {
     Item { light, ..item }
+}
+
+const fn station(station: Station, item: Item) -> Item {
+    Item {
+        station: Some(station),
+        ..item
+    }
 }
 
 /// A room's footprint in metres, east by south.
@@ -145,7 +156,7 @@ impl Part {
 
 /// The parts, in the order they go round the dial, clockwise from the top. The first
 /// ten are also on the number keys.
-pub static PARTS: [Part; 13] = [
+pub static PARTS: [Part; 14] = [
     Part {
         name: "Room",
         kind: Kind::Room(&[
@@ -249,6 +260,29 @@ pub static PARTS: [Part; 13] = [
             rug("Round rug", "Carpet_Round", 3.2, &[(Raw::Hide, 2)]),
             rug("Long rug", "Carpet_1", 3.0, &[(Raw::Hide, 2)]),
             item("Shovel", "Shovel", 1.3, &[(Raw::Wood, 1), (Raw::Iron, 1)]),
+        ]),
+    },
+    Part {
+        name: "Craft",
+        kind: Kind::Items(&[
+            station(
+                Station::Workbench,
+                item(
+                    "Workbench",
+                    "Table_Small",
+                    1.7,
+                    &[(Raw::Wood, 4), (Raw::Stone, 2)],
+                ),
+            ),
+            station(
+                Station::Smithy,
+                item(
+                    "Smithy",
+                    "../village/Blacksmith",
+                    6.5,
+                    &[(Raw::Wood, 8), (Raw::Stone, 8)],
+                ),
+            ),
         ]),
     },
     Part {

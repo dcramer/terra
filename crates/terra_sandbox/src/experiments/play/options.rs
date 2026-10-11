@@ -384,6 +384,7 @@ pub fn toggle(
     }
     if inventory.open {
         inventory.open = false;
+        inventory.at = None;
     } else {
         menu.open = !menu.open;
     }

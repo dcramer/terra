@@ -52,6 +52,7 @@ const EXAMPLE: &[(&str, f32, f32, f32, f32, bool)] = &[
     ("Props_Crate", 11.1, 4.45, 0.78, 30.0, false),
     ("Props_CrateLong", 12.6, 5.6, 0.0, 70.0, false),
     ("Shovel", 3.0, 3.25, 0.0, 0.0, false),
+    ("Table_Small", 9.5, 9.5, 0.0, 20.0, false),
     // Out front: a fire, and logs to sit on.
     ("Bonfire_Fire", FIRE.x, FIRE.z, 0.0, 0.0, false),
     ("WoodLog", FIRE.x - 2.0, FIRE.z + 0.4, 0.0, 80.0, false),

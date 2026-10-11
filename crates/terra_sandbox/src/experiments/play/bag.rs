@@ -282,7 +282,7 @@ fn setup(mut commands: Commands) {
                             "Point at a tool and press 1 to 6 to put it on the bar. Click gear \
                              to wear it, and a slot of the equipment to take it off. The \
                              builder spends raw items and taking a thing apart gives them \
-                             back, if there is room; the cutter gathers more.",
+                             back, if there is room; your tools gather more.",
                         ),
                         small.clone(),
                         dim,
@@ -315,6 +315,7 @@ fn use_keys(
     let captured = cursor.grab_mode != CursorGrabMode::None;
     if settings.went_down(Action::Inventory, &keys, &mouse, captured) {
         screen.open = !screen.open;
+        screen.at = None;
         // The pointer is needed to point at things in the inventory, and goes back to
         // steering the view when it closes.
         grab_mouse(&mut cursor, !screen.open && window.focused);

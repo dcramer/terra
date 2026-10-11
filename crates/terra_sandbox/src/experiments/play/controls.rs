@@ -41,10 +41,12 @@ pub enum Action {
     /// Held, places off the grid when it is on, and on it when it is off.
     OffGrid,
     Inventory,
+    /// Use a station, talk to someone, open something.
+    Interact,
 }
 
 impl Action {
-    pub const ALL: [Action; 17] = [
+    pub const ALL: [Action; 18] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -62,6 +64,7 @@ impl Action {
         Action::Grid,
         Action::OffGrid,
         Action::Inventory,
+        Action::Interact,
     ];
 
     /// What the options menu calls it.
@@ -84,6 +87,7 @@ impl Action {
             Action::Grid => "Grid on or off",
             Action::OffGrid => "Hold to leave the grid",
             Action::Inventory => "Inventory",
+            Action::Interact => "Interact",
         }
     }
 
@@ -107,6 +111,7 @@ impl Action {
             Action::Grid => "grid",
             Action::OffGrid => "off_grid",
             Action::Inventory => "inventory",
+            Action::Interact => "interact",
         }
     }
 
@@ -127,10 +132,11 @@ impl Action {
             Action::TurnLeft => (Key(KeyCode::KeyZ), None),
             Action::TurnRight => (Key(KeyCode::KeyC), None),
             Action::TakeApart => (Key(KeyCode::KeyQ), None),
-            Action::MoveItems => (Key(KeyCode::KeyF), None),
+            Action::MoveItems => (Key(KeyCode::KeyG), None),
             Action::Grid => (Key(KeyCode::KeyX), None),
             Action::OffGrid => (Key(KeyCode::AltLeft), None),
             Action::Inventory => (Key(KeyCode::Tab), Some(Key(KeyCode::KeyI))),
+            Action::Interact => (Key(KeyCode::KeyF), None),
         };
         [Some(first), second]
     }

@@ -170,6 +170,76 @@ pub const SLOTS: [(GearSlot, &str); 3] = [
 ];
 const PACK: GearSlot = SLOTS[0].0;
 
+/// What is worn: packs, and clothing that protects.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Apparel {
+    SmallPack,
+    LargePack,
+    LeatherCap,
+    LeatherCoat,
+}
+
+impl Apparel {
+    pub const ALL: [Apparel; 4] = [
+        Apparel::SmallPack,
+        Apparel::LargePack,
+        Apparel::LeatherCap,
+        Apparel::LeatherCoat,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Apparel::SmallPack => "Small pack",
+            Apparel::LargePack => "Large pack",
+            Apparel::LeatherCap => "Leather cap",
+            Apparel::LeatherCoat => "Leather coat",
+        }
+    }
+
+    fn def(self) -> KindDef {
+        match self {
+            Apparel::SmallPack => KindDef::new(self.name())
+                .size(2, 2)
+                .gear(PACK)
+                .backpack(6, 5),
+            Apparel::LargePack => KindDef::new(self.name())
+                .size(2, 2)
+                .gear(PACK)
+                .backpack(7, 6),
+            Apparel::LeatherCap => KindDef::new(self.name()).size(1, 1).gear(SLOTS[1].0),
+            Apparel::LeatherCoat => KindDef::new(self.name()).size(2, 2).gear(SLOTS[2].0),
+        }
+    }
+}
+
+/// What a recipe makes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Made {
+    Raw(Raw, u32),
+    Tool(Tool),
+    Apparel(Apparel),
+}
+
+impl Made {
+    pub fn name(self) -> String {
+        match self {
+            Made::Raw(raw, 1) => raw.name().to_string(),
+            Made::Raw(raw, count) => format!("{count} {}", raw.name()),
+            Made::Tool(tool) => tool.name().to_string(),
+            Made::Apparel(apparel) => apparel.name().to_string(),
+        }
+    }
+}
+
+/// Why something could not be made.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CantMake {
+    /// Not enough of this.
+    Short(Raw, u32),
+    /// No room in the backpack for what it makes.
+    NoRoom,
+}
+
 /// The backpack with no pack worn: about Subnautica 2's twenty cells. How big the first
 /// backpack is is open (docs/items.md).
 const BARE: Size = Size { w: 5, h: 4 };
@@ -192,8 +262,7 @@ pub struct Items {
     pub catalogue: Catalogue,
     raw: [ItemKind; Raw::ALL.len()],
     tools: [(Tool, ItemKind); Tool::ALL.len()],
-    /// What a player starts out wearing.
-    worn: Vec<ItemKind>,
+    apparel: [(Apparel, ItemKind); Apparel::ALL.len()],
     ids: IdSource,
 }
 
@@ -203,19 +272,12 @@ impl Default for Items {
         let raw = Raw::ALL.map(|raw| catalogue.add(KindDef::new(raw.name())));
         let tools =
             Tool::ALL.map(|tool| (tool, catalogue.add(KindDef::new(tool.name()).size(2, 1))));
-        let worn = vec![
-            catalogue.add(
-                KindDef::new("Small pack")
-                    .size(2, 2)
-                    .gear(PACK)
-                    .backpack(6, 5),
-            ),
-        ];
+        let apparel = Apparel::ALL.map(|apparel| (apparel, catalogue.add(apparel.def())));
         Self {
             catalogue,
             raw,
             tools,
-            worn,
+            apparel,
             ids: IdSource::default(),
         }
     }
@@ -243,6 +305,23 @@ impl Items {
             .iter()
             .find(|(_, each)| *each == kind)
             .map(|(tool, _)| *tool)
+    }
+
+    pub fn apparel_kind(&self, apparel: Apparel) -> ItemKind {
+        self.apparel
+            .iter()
+            .find(|(each, _)| *each == apparel)
+            .map(|(_, kind)| *kind)
+            .expect("all apparel has a kind")
+    }
+
+    /// The kinds of item something made is, and how many of each.
+    fn made(&self, made: Made) -> (ItemKind, u32) {
+        match made {
+            Made::Raw(raw, count) => (self.kind(raw), count),
+            Made::Tool(tool) => (self.tool_kind(tool), 1),
+            Made::Apparel(apparel) => (self.apparel_kind(apparel), 1),
+        }
     }
 
     pub fn name(&self, kind: ItemKind) -> &str {
@@ -274,17 +353,14 @@ pub struct Gear(pub Equipment);
 #[derive(Component, Clone, Debug)]
 pub struct Bar(pub ActionBar);
 
-/// What a player starts with: a small pack and a suit worn, both tools on the bar, and
-/// some raw items.
+/// What a player starts with: a small pack worn, and their tools on the bar.
 pub fn starting_kit(items: &mut Items) -> (Backpack, Gear, Bar) {
     let mut gear = Equipment::new(&SLOTS.map(|(slot, _)| slot));
     let mut grid = Grid::new(BARE.w, BARE.h);
-    for kind in items.worn.clone() {
-        let worn = items.make(kind);
-        grid.insert(&items.catalogue, worn, None)
-            .expect("gear fits an empty backpack");
-        wear(items, &mut grid, &mut gear, worn.id).expect("gear can be worn");
-    }
+    let pack = items.make(items.apparel_kind(Apparel::SmallPack));
+    grid.insert(&items.catalogue, pack, None)
+        .expect("a pack fits an empty backpack");
+    wear(items, &mut grid, &mut gear, pack.id).expect("a pack can be worn");
     let mut bar = ActionBar::new(BAR_SLOTS);
     for (slot, tool) in STARTING_TOOLS.into_iter().enumerate() {
         let kind = items.tool_kind(tool);
@@ -351,6 +427,35 @@ pub fn pay(items: &Items, grid: &mut Grid, bar: &mut ActionBar, cost: Cost, time
     paid
 }
 
+/// Makes something: pays its cost and puts what it makes in the backpack, all or
+/// nothing. What is paid frees room, so a recipe that uses up its materials can always
+/// put its result where they were.
+pub fn craft(
+    items: &mut Items,
+    grid: &mut Grid,
+    bar: &mut ActionBar,
+    cost: Cost,
+    made: Made,
+) -> Result<(), CantMake> {
+    if let Some((raw, more)) = missing(items, grid, cost, 1) {
+        return Err(CantMake::Short(raw, more));
+    }
+    let mut trial = grid.clone();
+    trial
+        .take(&items.wanted(cost, 1))
+        .map_err(|_| CantMake::NoRoom)?;
+    let (kind, count) = items.made(made);
+    for _ in 0..count {
+        let item = items.make(kind);
+        trial
+            .insert(&items.catalogue, item, None)
+            .map_err(|_| CantMake::NoRoom)?;
+    }
+    *grid = trial;
+    bar.tidy(grid);
+    Ok(())
+}
+
 /// Whether what a cost so many times over is made of would all fit in the backpack.
 pub fn room_for(items: &Items, grid: &Grid, cost: Cost, times: u32) -> bool {
     let mut trial = grid.clone();
@@ -386,6 +491,8 @@ pub fn give(items: &mut Items, grid: &mut Grid, raw: Raw, count: u32) -> u32 {
 #[derive(Resource, Default)]
 pub struct InventoryScreen {
     pub open: bool,
+    /// The station being used, if the screen was opened at one.
+    pub at: Option<super::crafting::Station>,
 }
 
 /// What the player carries, for a system to read or change.
@@ -426,6 +533,12 @@ impl Belongings<'_, '_> {
 
     pub fn room_for(&self, cost: Cost, times: u32) -> bool {
         room_for(&self.items, self.backpack(), cost, times)
+    }
+
+    /// Makes something from what is carried; see [`craft`].
+    pub fn craft(&mut self, cost: Cost, made: Made) -> Result<(), CantMake> {
+        let (backpack, bar, _) = &mut *self.player;
+        craft(&mut self.items, &mut backpack.0, &mut bar.0, cost, made)
     }
 
     /// Whether one more of a raw item would fit in the backpack.
@@ -504,9 +617,10 @@ mod tests {
     fn the_starting_kit_has_both_tools_on_the_bar_and_room_to_spare() {
         let mut items = Items::default();
         let (Backpack(grid), Gear(gear), Bar(mut bar)) = starting_kit(&mut items);
-        for ((slot, _), kind) in SLOTS.iter().zip(&items.worn) {
-            assert_eq!(gear.worn(*slot).map(|item| item.kind), Some(*kind));
-        }
+        assert_eq!(
+            gear.worn(PACK).map(|item| item.kind),
+            Some(items.apparel_kind(Apparel::SmallPack))
+        );
         assert_eq!(grid.size(), Size { w: 6, h: 5 });
         assert_eq!(holding(&items, &grid, &bar), Some(Tool::Hammer));
         bar.pick(1);
@@ -589,6 +703,68 @@ mod tests {
         let refused = take_off(&items, &mut grid, &mut gear, PACK).unwrap_err();
         assert!(matches!(refused, Refused::NoRoom | Refused::WouldNotFit));
         assert_eq!((grid, gear), before);
+    }
+
+    #[test]
+    fn crafting_pays_and_makes_all_or_nothing() {
+        const AXE: Cost = &[(Raw::Wood, 2), (Raw::Iron, 3)];
+        let mut items = Items::default();
+        let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
+        give(&mut items, &mut grid, Raw::Wood, 2);
+        give(&mut items, &mut grid, Raw::Iron, 2);
+        let before = grid.clone();
+        assert_eq!(
+            craft(
+                &mut items,
+                &mut grid,
+                &mut bar,
+                AXE,
+                Made::Tool(Tool::IronAxe)
+            ),
+            Err(CantMake::Short(Raw::Iron, 1))
+        );
+        assert_eq!(grid, before);
+        give(&mut items, &mut grid, Raw::Iron, 1);
+        craft(
+            &mut items,
+            &mut grid,
+            &mut bar,
+            AXE,
+            Made::Tool(Tool::IronAxe),
+        )
+        .unwrap();
+        assert_eq!(grid.count(items.tool_kind(Tool::IronAxe)), 1);
+        assert_eq!(grid.count(items.kind(Raw::Iron)), 0);
+    }
+
+    #[test]
+    fn crafting_into_a_full_backpack_uses_the_room_it_frees() {
+        const SMELT: Cost = &[(Raw::Ore, 2)];
+        let mut items = Items::default();
+        let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
+        give(&mut items, &mut grid, Raw::Ore, 100);
+        assert!(grid.space_for(Size::ONE).is_none());
+        craft(
+            &mut items,
+            &mut grid,
+            &mut bar,
+            SMELT,
+            Made::Raw(Raw::Iron, 1),
+        )
+        .unwrap();
+        assert_eq!(grid.count(items.kind(Raw::Iron)), 1);
+        // A coat needs two by two, which two freed cells in a row may not give.
+        const COAT: Cost = &[(Raw::Ore, 1)];
+        let before = grid.clone();
+        let made = craft(
+            &mut items,
+            &mut grid,
+            &mut bar,
+            COAT,
+            Made::Apparel(Apparel::LeatherCoat),
+        );
+        assert_eq!(made, Err(CantMake::NoRoom));
+        assert_eq!(grid, before);
     }
 
     #[test]
