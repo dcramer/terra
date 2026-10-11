@@ -184,4 +184,4 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 18. Answered in part: **factions.** No fixed set or number; added as we go and discovered by players (D95). Open: can a player found or lead one?
 19. Answered in part: **settlements that fall** can be lost for good, with repopulation if needed (D95). Open, to decide later: can players take one over, for instance by wiping it out and claiming the land?
 20. Answered: **no capture and no prisoners**; it sets the wrong tone (D95).
-21. **How many worlds?** The developers said worlds "can be infinite (more realms)", where D17 says about a dozen, not thousands. Has that changed?
+21. Answered: **how many worlds.** No fixed limit (D17).

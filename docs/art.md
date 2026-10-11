@@ -124,7 +124,7 @@ What it does not have, and the reference does:
 
 ## Open questions
 
-- **What does a dead planet look like in this style?** The references are lush or warm. Some of our planets are airless and lifeless, and have to be beautiful too. With a dozen planets, each needs a palette of its own (D59).
+- **What does a dead planet look like in this style?** The references are lush or warm. Some of our planets are airless and lifeless, and have to be beautiful too. With any number of worlds, each needs a palette of its own, made by rule (D59, D17).
 - **How does the look change through the phases?** A palette per biome and phase is the idea; nobody has drawn one.
 - **Night.**
 - **First person or third?** Blur and framing matter much more to this look in third person. First person removes a large animation cost.

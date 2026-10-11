@@ -1,6 +1,6 @@
 # Terra design docs
 
-Working title: **Terra**. A multiplayer survival sandbox across a dozen or so procedural worlds, reached through portals.
+Working title: **Terra**. A multiplayer survival sandbox across many procedural worlds, reached through portals.
 
 The source of truth, then the docs about the game as a whole, then one doc per part of the game, then the engine and how we work.
 

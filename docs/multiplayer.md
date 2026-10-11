@@ -10,7 +10,7 @@ This section was added when the number went from "ideally a hundred" to a thousa
 - **Nothing may be sent to everyone.** Every message has to be about a place and go only to who is near it. With a thousand players there is no "small enough to broadcast", except the planet's simulation, which is already one small snapshot (D29).
 - **Computed, not stored, becomes the main lever** (D47). A fully procedural world means a server holds only what players changed. The cost of a player then depends on how much they have built and dug, not on how far they have walked.
 - **Crowds.** A thousand players will sometimes be in one place. Drawing a few hundred animated figures and their bases is a rendering problem of its own, separate from the server's.
-- **Room for everyone.** At the old 2 km radius a planet was about 50 square kilometres, twenty players to the square kilometre. The proposed sizes (D13) make a dozen planets around a hundred thousand square kilometres; the question flips to whether players can find each other.
+- **Room for everyone.** At the old 2 km radius a planet was about 50 square kilometres, twenty players to the square kilometre. The proposed sizes (D13) make even a dozen worlds around a hundred thousand square kilometres, and there is no fixed limit on worlds (D17); the question flips to whether players can find each other.
 - **Building at this scale.** Bases are lists of operations on a half-metre grid (D57). A thousand builders make a great many of them; each area needs a compact record of its current state, and new arrivals need that, not the history.
 - **Strangers.** A thousand people are not friends. Ownership, permissions, griefing and cheating all need rules (open questions 3 and 6).
 
@@ -67,7 +67,7 @@ These are design questions the larger number raises, whatever the technology.
 - **Do resources run out?** If trees and ore do not come back, a hundred players strip a world. Regrowth and scarcity stop being optional questions.
 - **Whose planet is it?** (Parked with terraforming, D60.) Terraforming one shared world is a fine fantasy for four. For a hundred it is either a grand communal project or a fight over the thermostat.
 - **What happens when nobody is online?** Does the planet keep changing?
-- **More planets.** There will be about a dozen (D17), which spreads a crowd out, and raises whether one server holds them all.
+- **More worlds.** There is no fixed limit (D17), which spreads a crowd out, and raises how worlds are shared among servers, and which are running.
 
 ## Server-first
 

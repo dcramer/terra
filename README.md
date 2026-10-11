@@ -1,6 +1,6 @@
 # Terra
 
-A survival sandbox across a dozen or so procedural planets, played from the ground with tools in your hands. You start on a world that is easy to live on, then go to others that are not. Some are dead, and can be made to live; there you have to live with what you grew.
+A survival sandbox across many procedural worlds, realms reached through portals, played from the ground with tools in your hands. You start on a world that is easy to live on, then go to others that are not. The direction being considered, [game design 001](docs/proposals/game-design-001.md), is a living world in the spirit of Kenshi, Enshrouded and *He Who Fights With Monsters*.
 
 This repository is where the project is thought through: design docs, research notes and experiments. It is in pre-production and there is no game to play yet. Everything here is provisional: it records current thinking, and any of it may change.
 
@@ -8,7 +8,7 @@ This repository is where the project is thought through: design docs, research n
 
 | Goal | More |
 |---|---|
-| **Explore a dozen or so very different worlds**, each with its own terrain, caverns, water, plants, air, gravity and cultures, reached through portals or something like them. | [docs/worlds.md](docs/worlds.md) |
+| **Explore many very different worlds**, each with its own terrain, caverns, water, plants, air, gravity and cultures, reached through portals or something like them. | [docs/worlds.md](docs/worlds.md) |
 | **Always get better**: many skills, gained by doing and improved by doing more. | [docs/progression.md](docs/progression.md) |
 | **Survive each world**: health, stamina, oxygen, hunger and thirst, which each planet treats differently. | [docs/survival.md](docs/survival.md) |
 | **Play as a person in the world**, walking around with tools, gathering and building, in the manner of No Man's Sky or Subnautica. | [docs/player.md](docs/player.md) |
@@ -35,7 +35,7 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 
 **Worlds** ([worlds.md](docs/worlds.md))
 - Procedurally generated terrain on real, round planets.
-- About a dozen planets, each different, mostly in the obvious ways; perhaps more over time.
+- Many worlds, each different, with no fixed limit: realms, as in *He Who Fights With Monsters*. Not a promise to ship unlimited, but nothing constrains it.
 - Always round and finite, but large: walking all the way round should be ridiculous. About 30 km radius proposed for the starter planet.
 - Thematic variety on each: terrain, caverns, water features, foliage, palette.
 - A starter planet that is easy: normal, breathable air.

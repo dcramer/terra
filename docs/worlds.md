@@ -7,7 +7,7 @@ Status: the developers set out on 2026-10-10 what the planets are to be. What th
 | | Said | Status |
 |---|---|---|
 | **Terrain** | Procedurally generated. | Decided (D8) |
-| **More than one planet** | Each one different. Not thousands; "probably a dozen", and maybe more over time. | Decided that there are several (D17); the number is Leaning |
+| **Many worlds** | Each one different, with no fixed limit: realms, as in *He Who Fights With Monsters*. Not a promise to ship unlimited, but nothing constrains it. | Decided (D17) |
 | **Variety** | Planets are thematic and varied: caverns, water features and the like. | Decided (D59) |
 | **Terraforming** | Probably not. The notes are kept, but it is not a concern for now. | Leaning (D60) |
 | **Foliage** | Thematically varied from planet to planet. | Decided (D59) |
@@ -120,6 +120,7 @@ Open: which kinds of weather there are, whether they hurt, help or only look, wh
 - <a id="water"></a>**The sea** (D75) is a sphere round the planet's centre, which is what a level surface is on a round planet with gravity toward its centre. Water fills the ground below it that the sea can reach, so depth is whatever the ground makes it. A hollow below sea level that the sea cannot reach stays dry; working out what the sea reaches is a fill over the terrain, done once when a planet is generated and again only when digging opens a way in. The sandbox's stand-in is not yet this: it draws the sea everywhere below sea level, reached or not.
 - **Water features** go beyond one sea level (D24). Lakes at different heights and water underground need water to be asked for by place, which the engine's contract already allows (D45), and the decision on pools (D44) is the same decision.
 - **Gravity** pulls toward a planet's centre with a strength the planet sets. The player's movement already treats "down" as toward the centre. 
+- **Any number of worlds** (D17), so every world has to come from rules and its seed alone, its factions, cultures and portals included, with nothing tuned by hand that the game depends on; and a world nobody is in costs nothing, existing only as a seed until someone arrives.
 - **Several worlds, reached probably by portals** (D72). Each world has its own coordinate frame (D36), and only the one a player is in is generated in full. A crossing is a hand-off between worlds, and on a server of a thousand players (D52) between parts of the server. Nothing has crossed between worlds yet.
 - **Digging** is the terrain's job (D9); what you get from it is harvesting (D43).
 

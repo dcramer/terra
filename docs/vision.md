@@ -4,7 +4,7 @@
 
 Draft, rewritten on 2026-10-10 when the developers dropped space and, probably, terraforming.
 
-Players survive and build across a dozen or so very different worlds, realms reached through portals or something like them (D72, D87), starting on one that is easy to live on. Each world has its own land, life, cultures and dangers (D59, D86). You grow as you go: many skills that you gain by doing things and improve by doing them more (D88). Worlds are in [worlds.md](worlds.md); surviving them is in [survival.md](survival.md).
+Players survive and build across many very different worlds, realms reached through portals or something like them (D72, D87), starting on one that is easy to live on. Each world has its own land, life, cultures and dangers (D59, D86). You grow as you go: many skills that you gain by doing things and improve by doing them more (D88). Worlds are in [worlds.md](worlds.md); surviving them is in [survival.md](survival.md).
 
 The earlier pitch, of dead planets terraformed into living ones, is parked with terraforming (D60).
 
@@ -61,7 +61,6 @@ Slightly harder than Planet Crafter, well short of Vintage Story. Threats are re
 - Photorealism.
 - Handcrafted maps.
 - A creature editor.
-- Thousands of planets. About a dozen, each worth knowing (D17).
 
 ## Constraints
 
