@@ -86,6 +86,17 @@ dialog p { font-family: var(--mono); font-size: 12px; color: #e9e3d8; padding-to
     </div>
   </header>
 
+  <section class="board" id="d-tested" aria-labelledby="d-tested-title">
+    <div class="board-head">
+      <span class="key">D</span><h2 id="d-tested-title">D, tested: real renders and other worlds</h2>
+      <p>Not concepts: our own six models from the pipeline, placed in a scene in Blender and rendered. D is made after the render, with the light on each pixel cut into three crisp bands and the shadow band tinted cool, then haze by distance, which is what a game shader would do. Each realm is only a palette and a light: every model is the same file in all six.</p>
+      <div class="fit"><span class="chip good">Same models in every realm</span><span class="chip good">Shading, not repainting</span><span class="chip ask">Blender, not yet the game</span></div>
+    </div>
+    <div class="row" id="scenes"></div>
+    <div class="board-head"><span class="key">D</span><h3>Beyond fantasy</h3><p>Concepts in D for science fiction and tech, and for very different realms. These four subjects are being made into models next.</p></div>
+    <div class="row" id="range"></div>
+  </section>
+
   <main id="boards"></main>
   <main id="subjects" hidden></main>
 
@@ -171,6 +182,45 @@ for (const subject of SUBJECTS) {
   sec.append(h, row);
   subjects.append(sec);
 }
+
+function plain(path, label, wide) {
+  const f = document.createElement("figure");
+  const b = document.createElement("button");
+  b.type = "button";
+  const img = document.createElement("img");
+  img.src = path;
+  img.alt = label;
+  img.loading = "lazy";
+  if (wide) img.style.aspectRatio = "16 / 9";
+  b.append(img);
+  b.addEventListener("click", () => {
+    zoom.querySelector("img").src = img.src;
+    zoom.querySelector("img").alt = img.alt;
+    zoom.querySelector("p").textContent = label;
+    zoom.showModal();
+  });
+  const c = document.createElement("figcaption");
+  c.textContent = label;
+  f.append(b, c);
+  return f;
+}
+const SCENES = [
+  ["graphic-starter", "D · starter realm, golden hour"],
+  ["facets-starter", "A · the same scene, for comparison"],
+  ["graphic-cold", "D · cold realm"],
+  ["graphic-gothic", "D · gothic realm, moonlight"],
+  ["graphic-ashen", "D · ashen realm"],
+  ["graphic-crystal", "D · crystal realm"],
+];
+const scenesRow = document.getElementById("scenes");
+scenesRow.style.gridTemplateColumns = "repeat(auto-fit, minmax(min(100%, 340px), 1fr))";
+for (const [key, label] of SCENES) scenesRow.append(plain(`web/scene-${key}.jpg`, label, true));
+const RANGE = [
+  ["fabricator", "Fabricator, a crafting station"], ["drone", "Scout drone"], ["explorer", "Explorer in an exosuit"], ["flora", "Alien plant"],
+  ["realm-lush", "Lush realm"], ["realm-ashen", "Ashen realm"], ["realm-crystal", "Crystal realm"], ["realm-tech", "Tech outpost"],
+];
+const rangeRow = document.getElementById("range");
+for (const [key, label] of RANGE) rangeRow.append(plain(`web/d-${key}.jpg`, label, false));
 
 zoom.addEventListener("click", () => zoom.close());
 const bBoards = document.getElementById("view-boards");
