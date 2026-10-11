@@ -182,7 +182,7 @@ What it has:
 - Rooms that extend when placed across each other, and interior walls with doorways.
 - A place to do it in: a furnished base in a meadow by a lake.
 
-What it does not have beyond stand-ins for carrying, cost and gathering (D55): swimming, stairs between storeys, real collision (D53), or a character of our own. The figure is a recoloured mannequin from a free animation library. How to run it is in the [sandbox README](../crates/terra_sandbox/README.md).
+What it does not have beyond stand-ins for carrying, cost and gathering (D55): swimming, stairs between storeys or real collision (D53). The player is our male base body (D115), without hair or clothes yet; people are still a recoloured mannequin from a free animation library. How to run it is in the [sandbox README](../crates/terra_sandbox/README.md).
 
 What was proposed, for comparison:
 

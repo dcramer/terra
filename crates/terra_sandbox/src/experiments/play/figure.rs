@@ -1,15 +1,16 @@
-//! The player's body: a rigged figure from a free animation library (see
-//! THIRD_PARTY.md), in our colours, with a visor, a pack and the builder tool fixed to
-//! its bones. Which animation plays follows what the player is doing.
+//! The player's body: the male base body, made with Tripo and rigged onto the skeleton
+//! of a free animation library (D115, THIRD_PARTY.md), with what is in hand fixed to its
+//! right hand. Which animation plays follows what the player is doing.
 //!
-//! It is a stand-in. The game's own character is a design question (docs/player.md).
+//! A base body has no hair or clothes of its own; those are parts still to come (D111,
+//! D112).
 
 use super::Player;
 use super::held::Grip;
 use bevy::{prelude::*, world_serialization::WorldInstanceReady};
 use std::time::Duration;
 
-const MODEL: &str = "models/character/figure.gltf";
+const MODEL: &str = "models/character/base-male.glb";
 /// How long one animation takes to give way to the next.
 const BLEND: Duration = Duration::from_millis(180);
 /// Turns a held tool, which runs along +Y, to lie across the right palm with its head
@@ -119,8 +120,7 @@ fn spawn(
         .observe(dress);
 }
 
-/// When the figure's bones exist, starts it animating and fixes its kit to them.
-#[allow(clippy::too_many_arguments)]
+/// When the figure's bones exist, starts it animating and gives it a hand to hold things in.
 fn dress(
     ready: On<WorldInstanceReady>,
     mut commands: Commands,
@@ -128,8 +128,6 @@ fn dress(
     children: Query<&Children>,
     mut animators: Query<&mut AnimationPlayer>,
     bones: Query<(Entity, &Name)>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // The figure's own animation player, among everything its model spawned; creatures
     // have theirs.
@@ -152,25 +150,6 @@ fn dress(
         Animated(Doing::Idle),
     ));
 
-    let mut look = |colour: Color, glow: LinearRgba| {
-        materials.add(StandardMaterial {
-            base_color: colour,
-            emissive: glow,
-            perceptual_roughness: 0.6,
-            ..default()
-        })
-    };
-    let dark = look(Color::srgb(0.1, 0.11, 0.14), LinearRgba::BLACK);
-    let orange = look(Color::srgb(0.9, 0.46, 0.17), LinearRgba::BLACK);
-    let pale = look(Color::srgb(0.83, 0.8, 0.74), LinearRgba::BLACK);
-    let glow = look(Color::srgb(0.3, 0.9, 1.0), LinearRgba::rgb(1.0, 6.0, 8.0));
-    let glass = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.05, 0.1, 0.14),
-        emissive: LinearRgba::rgb(0.1, 0.5, 0.7),
-        perceptual_roughness: 0.1,
-        reflectance: 0.8,
-        ..default()
-    });
     let bone = |name: &str| {
         children
             .iter_descendants(ready.entity)
@@ -178,40 +157,6 @@ fn dress(
             .find(|(_, bone)| bone.as_str() == name)
             .map(|(entity, _)| entity)
     };
-    // Each piece: the bone it rides on, its shape, its look, and where it sits on the
-    // bone. A bone's own +Y runs along it.
-    let kit: [(&str, Mesh, &Handle<StandardMaterial>, Transform); 5] = [
-        (
-            "DEF-head",
-            Cuboid::new(0.2, 0.09, 0.06).into(),
-            &glass,
-            Transform::from_xyz(0.0, 0.13, 0.105),
-        ),
-        (
-            "DEF-spine.003",
-            Cuboid::new(0.32, 0.4, 0.16).into(),
-            &pale,
-            Transform::from_xyz(0.0, 0.06, -0.19),
-        ),
-        (
-            "DEF-spine.003",
-            Cuboid::new(0.34, 0.07, 0.18).into(),
-            &orange,
-            Transform::from_xyz(0.0, 0.2, -0.19),
-        ),
-        (
-            "DEF-spine.003",
-            Cuboid::new(0.1, 0.1, 0.03).into(),
-            &glow,
-            Transform::from_xyz(0.0, 0.04, -0.275),
-        ),
-        (
-            "DEF-spine.003",
-            Cylinder::new(0.035, 0.3).into(),
-            &dark,
-            Transform::from_xyz(0.19, 0.06, -0.19),
-        ),
-    ];
     // Whatever is in hand is held here: across the palm, head toward the thumb (`held`).
     if let Some(hand) = bone("DEF-hand.R") {
         commands.spawn((
@@ -224,18 +169,6 @@ fn dress(
             )),
             Visibility::default(),
             ChildOf(hand),
-        ));
-    }
-    for (name, mesh, material, transform) in kit {
-        let Some(bone) = bone(name) else {
-            warn!("The figure has no bone called {name}.");
-            continue;
-        };
-        commands.spawn((
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(material.clone()),
-            transform,
-            ChildOf(bone),
         ));
     }
 }
