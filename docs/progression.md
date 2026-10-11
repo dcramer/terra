@@ -32,6 +32,6 @@ To react to, not to choose from:
 
 1. **How is something researched?** Scanning, spending, time at a machine, the planet's progress, or a mix?
 2. **Per player, per group, or per server?**
-3. **Does research differ by planet?** Does a new planet open new nodes (D17, D59)?
+3. **Does research differ by planet?** Does a new planet open new nodes (D17, D59)? Leaning: finding a different culture on a planet might unlock different things (D86).
 4. **Can anything be lost** once unlocked?
 5. **How does it pace the game?** Is the starter planet the first tier?

@@ -77,10 +77,16 @@ A setting is a bigger thing than a climate. Proposed, to react to: a planet's th
 
 Open:
 
-9. **What does a setting change?** Only the look and what lies about (ruins, plants, creatures), or also what you can build, make and research there, or who you meet (D70)?
+Said later the same day, with "maybe" and "idk": a planet's setting shows in the **cultures, or tribes, found there**. Finding a different culture might unlock different things, and you might recruit people from it. The art style stays the same across the whole game; what changes from culture to culture is the exact models and details, made by the procedural generation and the theme. Your gear is your gear: what you carry goes with you from planet to planet.
+
+So a setting proposed as data would name its cultures, and a culture its models, its colours within the one art style, what it can teach you, and who in it might join you.
+
+Open:
+
+9. Answered in part: **what does a setting change?** The look of a culture's things within the one art style, what you can unlock by finding it, and perhaps who you can recruit. How unlocking from a culture works is open in [progression.md](progression.md), and recruiting in [gameplay.md](gameplay.md#npcs).
 10. **How do settings sit together in one solar system?** A story that explains a fantasy world a short flight from a futuristic one, or no explanation needed?
-11. **One art direction or several?** D14 is one look. A setting per planet could be palettes and shapes within that look, or distinct looks per planet, which costs far more art.
-12. **Is your own kit the same everywhere?** A futuristic suit on a primitive world, or does what you carry change with the planet?
+11. Answered: **one art style across the game** (D14). Cultures differ in their models and details, not in their style.
+12. Answered: **your gear is your gear.** What you carry works the same on every planet.
 
 ## Terraforming, on some planets
 

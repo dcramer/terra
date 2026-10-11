@@ -46,7 +46,7 @@ The developers floated a **terraform rating** for each such planet (D79, Leaning
 
 ## NPCs
 
-The developers want NPCs (D70); what they are is open. People who trade, give work or tell the story? Machines that help? Survivors on other planets? Each kind asks something different of the engine: a figure that stands and talks is cheap, one that walks a planet and works is close to the cost of a creature (see Hostile life).
+The developers want NPCs (D70); what they are is open. People who trade, give work or tell the story? Machines that help? Survivors on other planets? The developers have said, with "maybe", that you might recruit NPCs from the cultures found on other planets (D86, [worlds.md](worlds.md#breathable-planets-and-a-setting-per-planet)). Each kind asks something different of the engine: a figure that stands and talks is cheap, one that walks a planet and works is close to the cost of a creature (see Hostile life).
 
 ## Automation and defence
 
