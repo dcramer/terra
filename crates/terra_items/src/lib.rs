@@ -21,7 +21,7 @@ mod grid;
 pub use bar::ActionBar;
 pub use catalogue::{Catalogue, GearSlot, KindDef};
 pub use equipment::{Equipment, equip, unequip};
-pub use grid::{Cell, Grid, Placed, Size, transfer};
+pub use grid::{Cell, Grid, Placed, Size, Stack, transfer};
 
 /// A kind of item: an index into the [`Catalogue`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

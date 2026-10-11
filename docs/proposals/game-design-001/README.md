@@ -126,6 +126,8 @@ Proposed, for how quests and finding things then work:
 - **Help is in the world, if anywhere.** A recruit who knows the region, a guide, a sign by a road.
 - **No journal** (D92). What you were told is yours to remember.
 
+**Realistic but fun** (D122, from the developers): the core tenet. Things work as they would in the world, so players can reason about them; where realism would only be a chore, fun wins.
+
 **Rich systems, little on screen** (D93, from the developers): the game is rich with systems but somewhat realistic; you do not get a magic display of every piece of information, though some compromises keep it fun. Proposed compromises, to react to:
 
 - **On screen**: what your body would feel or you would see at a glance: health, stamina, hunger and thirst as you would sense them; what is in your hands; the action bar.

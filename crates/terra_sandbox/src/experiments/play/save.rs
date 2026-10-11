@@ -49,8 +49,10 @@ struct SavedPlayer {
     stamina: f32,
     fed: f32,
     skills: Vec<(String, f32)>,
-    /// What is worn, in the order of the slots.
+    /// What is worn, in the order of the slots, and how many a worn container holds.
     worn: Vec<Option<String>>,
+    #[serde(default)]
+    worn_held: Vec<u32>,
     backpack: Vec<SavedItem>,
     /// For each slot of the bar, which of the backpack's items it points at.
     bar: Vec<Option<usize>>,
@@ -62,6 +64,9 @@ struct SavedItem {
     kind: String,
     x: u8,
     y: u8,
+    /// How many a container holds, such as a quiver's arrows.
+    #[serde(default)]
+    held: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -237,6 +242,11 @@ fn load(
             let _ = inventory::wear(&items, &mut grid, &mut equipment, item.id);
         }
     }
+    for (&(slot, _), &held) in SLOTS.iter().zip(&player.worn_held) {
+        if held > 0 {
+            let _ = equipment.set_held(slot, held);
+        }
+    }
     let mut ids: Vec<Option<ItemId>> = Vec::new();
     for saved in &player.backpack {
         let id = items.make_named(&saved.kind).and_then(|item| {
@@ -249,6 +259,11 @@ fn load(
                 .ok()
                 .map(|_| item.id)
         });
+        if let Some(id) = id
+            && saved.held > 0
+        {
+            let _ = grid.set_held(id, saved.held);
+        }
         ids.push(id);
     }
     let mut action_bar = ActionBar::new(player.bar.len().max(inventory::BAR_SLOTS));
@@ -410,6 +425,7 @@ fn gather(
             kind: items.name(placed.item.kind).to_string(),
             x: placed.at.x,
             y: placed.at.y,
+            held: placed.stack.map_or(0, |stack| stack.held),
         })
         .collect();
     let bar_slots = (0..bar.0.len())
@@ -435,6 +451,10 @@ fn gather(
                 .0
                 .iter()
                 .map(|(_, item)| item.map(|item| items.name(item.kind).to_string()))
+                .collect(),
+            worn_held: SLOTS
+                .iter()
+                .map(|(slot, _)| gear.0.stack(*slot).map_or(0, |stack| stack.held))
                 .collect(),
             backpack: kept,
             bar: bar_slots,
@@ -516,11 +536,13 @@ mod tests {
                 stamina: 50.0,
                 fed: 60.0,
                 skills: vec![("Chopping".to_string(), 2.5)],
-                worn: vec![Some("Small pack".to_string()), None, None],
+                worn: vec![Some("Small pack".to_string()), None, None, None],
+                worn_held: vec![0, 0, 0, 0],
                 backpack: vec![SavedItem {
                     kind: "Wood".to_string(),
                     x: 1,
                     y: 2,
+                    held: 0,
                 }],
                 bar: vec![Some(0), None],
                 picked: 0,

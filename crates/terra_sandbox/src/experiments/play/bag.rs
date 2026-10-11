@@ -440,7 +440,11 @@ fn lay_out(
                 BorderColor::all(Color::NONE),
             ))
             .with_child((
-                Text::new(items.name(kind)),
+                // A container says how full it is.
+                Text::new(match placed.stack {
+                    Some(stack) => format!("{} {}/{}", items.name(kind), stack.held, stack.most),
+                    None => items.name(kind).to_string(),
+                }),
                 TextFont::from_font_size(9.0),
                 TextColor(Color::WHITE),
             ));
@@ -514,10 +518,15 @@ fn draw(
         set(&mut text, name.to_string());
     }
     for (name, mut text) in &mut texts.p4() {
-        let worn = gear
-            .worn(name.0)
-            .map_or("empty", |item| items.name(item.kind));
-        set(&mut text, worn.to_string());
+        // A worn container says how full it is.
+        let worn = match (gear.worn(name.0), gear.stack(name.0)) {
+            (Some(item), Some(stack)) => {
+                format!("{} {}/{}", items.name(item.kind), stack.held, stack.most)
+            }
+            (Some(item), None) => items.name(item.kind).to_string(),
+            (None, _) => "empty".to_string(),
+        };
+        set(&mut text, worn);
     }
 
     let mut about = " ".to_string();

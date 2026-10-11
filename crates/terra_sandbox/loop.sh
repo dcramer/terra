@@ -46,7 +46,7 @@ step talk 'Notice: Maren: "Spiders took Bren' 'Notice: Ate berries' -- \
 # A deer from the meadow's edge with a bow, out of its hearing, then butchered with the
 # knife where it fell.
 step hunt 'An arrow hit a Deer' 'Killed a Deer.' 'Notice: Butchered it' -- \
-    --fresh --give bow:1 --give arrow:4 \
+    --fresh --give bow:1 --give quiver:1 --give arrow:4 \
     --at -30,33 --face -45,34 --press 5@60 --press left@62-63 \
     --press e@100-160 --press e@190-250 \
     --warp -44.8,34.2:-47.1,34.2@330 --press 4@335 --press down@340-360 --press left@361-366 \

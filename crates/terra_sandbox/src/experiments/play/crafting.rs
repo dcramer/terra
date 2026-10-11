@@ -12,7 +12,7 @@ use super::Player;
 use super::bag::Notice;
 use super::grab_mouse;
 use super::interact::{Focus, Focusing, Interactable, REACH_M};
-use super::inventory::{Apparel, Belongings, Cost, InventoryScreen, Made, Raw, Tool};
+use super::inventory::{Apparel, Belongings, Container, Cost, InventoryScreen, Made, Raw, Tool};
 use super::props::Prop;
 use super::skills::{Did, ONCE, Skill};
 use bevy::{prelude::*, window::CursorOptions};
@@ -75,7 +75,7 @@ pub struct Recipe {
 impl Recipe {
     pub fn family(&self) -> Family {
         match self.makes {
-            Made::Tool(_) | Made::Raw(Raw::Arrow, _) => Family::Tools,
+            Made::Tool(_) | Made::Container(_) | Made::Raw(Raw::Arrow, _) => Family::Tools,
             Made::Apparel(_) => Family::Clothing,
             Made::Raw(..) => Family::Materials,
         }
@@ -130,6 +130,12 @@ pub const RECIPES: &[Recipe] = &[
         &[(Raw::Wood, 1), (Raw::Stone, 1)],
         Made::Raw(Raw::Arrow, 4),
         4.0,
+    ),
+    recipe(
+        Station::Workbench,
+        &[(Raw::Hide, 2), (Raw::Fibre, 2)],
+        Made::Container(Container::Quiver),
+        5.0,
     ),
     recipe(
         Station::Workbench,

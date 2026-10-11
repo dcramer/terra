@@ -68,6 +68,6 @@ Not covered: crafting, research, what the raw items are, item sizes, and how the
 ## Still open
 
 - **Weight, volume or other limits**: none for now; the developers may revisit (D84).
-- Settled for ammunition (D118): **a quiver is a container, holding a stack of arrows.** Arrows stack inside a quiver, which is one item in the backpack or worn. How many it holds, whether it is worn in a slot of its own, and whether other ammunition works the same way are open. It fits a pack that holds things (D106).
+- Settled for ammunition (D118): **a quiver is a container, holding a stack of arrows, worn on the belt in a slot of its own.** Arrows stack inside a quiver, which is one item. How many it holds, and whether other ammunition works the same way, are open. It fits a pack that holds things (D106).
 - **Is what you carry lost for good if you never go back for it?** And does it drop all of it, or only what you gathered since you were last at a base, as in the first Subnautica?
 - **How big is the first backpack**, and how many slots does the bar have? Subnautica 2 starts with about 20 cells; the first game's bar has five.

@@ -24,6 +24,16 @@ pub struct Placed {
     pub item: Item,
     pub at: Cell,
     pub size: Size,
+    /// If it is a container for a stack, what is in it (D118).
+    pub stack: Option<Stack>,
+}
+
+/// A stack in a container: of what kind, how many at most, and how many now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Stack {
+    pub kind: ItemKind,
+    pub most: u32,
+    pub held: u32,
 }
 
 impl Placed {
@@ -80,12 +90,60 @@ impl Grid {
             .find(|placed| placed.overlaps(cell, Size::ONE))
     }
 
-    /// How many items of a kind it holds.
+    /// How many items of a kind it holds, loose and in containers' stacks.
     pub fn count(&self, kind: ItemKind) -> u32 {
-        self.placed
+        let loose = self
+            .placed
             .iter()
             .filter(|placed| placed.item.kind == kind)
-            .count() as u32
+            .count() as u32;
+        loose + self.stacked(kind)
+    }
+
+    /// How many of a kind are in containers' stacks.
+    pub fn stacked(&self, kind: ItemKind) -> u32 {
+        self.placed
+            .iter()
+            .filter_map(|placed| placed.stack)
+            .filter(|stack| stack.kind == kind)
+            .map(|stack| stack.held)
+            .sum()
+    }
+
+    /// Puts up to `count` of a kind into containers with room for them. Returns how many
+    /// went in; the rest are for the caller to place loose, or not at all.
+    pub fn stow(&mut self, kind: ItemKind, count: u32) -> u32 {
+        let mut left = count;
+        for stack in self
+            .placed
+            .iter_mut()
+            .filter_map(|placed| placed.stack.as_mut())
+        {
+            if stack.kind == kind && left > 0 {
+                let room = stack.most - stack.held;
+                let put = room.min(left);
+                stack.held += put;
+                left -= put;
+            }
+        }
+        count - left
+    }
+
+    /// Sets how much a container holds, as when a saved one is put back. Refused if it is
+    /// not a container, or that is more than it holds.
+    pub fn set_held(&mut self, id: ItemId, held: u32) -> Result<(), Refused> {
+        let placed = self
+            .placed
+            .iter_mut()
+            .find(|placed| placed.item.id == id)
+            .ok_or(Refused::NotFound)?;
+        match placed.stack.as_mut() {
+            Some(stack) if held <= stack.most => {
+                stack.held = held;
+                Ok(())
+            }
+            _ => Err(Refused::NoRoom),
+        }
     }
 
     /// Whether something of this size could go here, ignoring one item (the one being
@@ -132,7 +190,18 @@ impl Grid {
             Some(_) => return Err(Refused::NoRoom),
             None => self.space_for(size).ok_or(Refused::NoRoom)?,
         };
-        self.placed.push(Placed { item, at, size });
+        let def = catalogue.get(item.kind)?;
+        let stack = def.holds.map(|(kind, most)| Stack {
+            kind,
+            most,
+            held: 0,
+        });
+        self.placed.push(Placed {
+            item,
+            at,
+            size: def.size,
+            stack,
+        });
         Ok(at)
     }
 
@@ -160,14 +229,27 @@ impl Grid {
         Ok(())
     }
 
-    /// Take so many of each kind, all or nothing: what building spends (D55).
+    /// Take so many of each kind, all or nothing: what building spends (D55). Stacks in
+    /// containers are drawn on first, then loose items, which are returned.
     pub fn take(&mut self, cost: &[(ItemKind, u32)]) -> Result<Vec<Item>, Refused> {
         if cost.iter().any(|&(kind, count)| self.count(kind) < count) {
             return Err(Refused::NotEnough);
         }
         let mut taken = Vec::new();
         for &(kind, count) in cost {
-            for _ in 0..count {
+            let mut left = count;
+            for stack in self
+                .placed
+                .iter_mut()
+                .filter_map(|placed| placed.stack.as_mut())
+            {
+                if stack.kind == kind {
+                    let drawn = stack.held.min(left);
+                    stack.held -= drawn;
+                    left -= drawn;
+                }
+            }
+            for _ in 0..left {
                 let id = self
                     .placed
                     .iter()
@@ -204,8 +286,12 @@ pub fn transfer(
     id: ItemId,
     at: Option<Cell>,
 ) -> Result<Cell, Refused> {
-    let item = from.get(id).ok_or(Refused::NotFound)?.item;
-    let cell = to.insert(catalogue, item, at)?;
+    let moving = *from.get(id).ok_or(Refused::NotFound)?;
+    let cell = to.insert(catalogue, moving.item, at)?;
+    // A container takes what is in it along.
+    if let Some(stack) = moving.stack {
+        to.set_held(moving.item.id, stack.held)?;
+    }
     from.remove(id)?;
     Ok(cell)
 }
@@ -220,6 +306,34 @@ mod tests {
         let ore = catalogue.add(KindDef::new("Ore"));
         let tank = catalogue.add(KindDef::new("Tank").size(2, 3));
         (catalogue, ore, tank, IdSource::default())
+    }
+
+    #[test]
+    fn a_container_holds_a_stack_that_counts_pays_and_travels() {
+        let mut catalogue = Catalogue::default();
+        let arrow = catalogue.add(KindDef::new("Arrow"));
+        let quiver = catalogue.add(KindDef::new("Quiver").size(1, 2).holds(arrow, 20));
+        let mut ids = IdSource::default();
+        let mut grid = Grid::new(3, 3);
+        let held = ids.make(quiver);
+        grid.insert(&catalogue, held, None).unwrap();
+        grid.insert(&catalogue, ids.make(arrow), None).unwrap();
+        // Fills to what it holds, and says how many went in.
+        assert_eq!(grid.stow(arrow, 25), 20);
+        assert_eq!(grid.count(arrow), 21, "the stack and the one loose arrow");
+        assert_eq!(grid.len(), 2, "the stack fills no cells of its own");
+        // Spends the stack first, then loose ones, all or nothing.
+        assert!(grid.take(&[(arrow, 22)]).is_err());
+        assert_eq!(grid.count(arrow), 21);
+        assert!(grid.take(&[(arrow, 20)]).unwrap().is_empty());
+        assert_eq!(grid.count(arrow), 1);
+        // Moved to another grid, it takes what is in it.
+        grid.stow(arrow, 7);
+        let mut bag = Grid::new(2, 2);
+        transfer(&catalogue, &mut grid, &mut bag, held.id, None).unwrap();
+        assert_eq!(bag.count(arrow), 7);
+        assert_eq!(grid.count(arrow), 1);
+        assert!(bag.set_held(held.id, 21).is_err());
     }
 
     #[test]

@@ -199,13 +199,15 @@ impl Tool {
 
 pub const BAR_SLOTS: usize = 6;
 
-/// The slots of the character sheet. Which slots there are is open (D64); a pack, and
-/// what is worn on the head and body.
-pub const SLOTS: [(GearSlot, &str); 3] = [
+/// The slots of the character sheet. Which slots there are is open (D64); a pack, what
+/// is worn on the head and body, and a belt for a quiver (D118).
+pub const SLOTS: [(GearSlot, &str); 4] = [
     (GearSlot(0), "Pack"),
     (GearSlot(1), "Head"),
     (GearSlot(2), "Body"),
+    (GearSlot(3), "Belt"),
 ];
+const BELT: GearSlot = SLOTS[3].0;
 const PACK: GearSlot = SLOTS[0].0;
 
 /// What is worn: packs, and clothing that protects.
@@ -269,12 +271,52 @@ impl Apparel {
     }
 }
 
+/// What carries a stack of something (D118).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Container {
+    /// Arrows, as many as it holds, in one item.
+    Quiver,
+}
+
+impl Container {
+    pub const ALL: [Container; 1] = [Container::Quiver];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Container::Quiver => "Quiver",
+        }
+    }
+
+    /// Where it is worn: a quiver on the belt (D118).
+    fn worn_on(self) -> GearSlot {
+        match self {
+            Container::Quiver => BELT,
+        }
+    }
+
+    /// What it holds, and how many.
+    pub fn holds(self) -> (Raw, u32) {
+        match self {
+            Container::Quiver => (Raw::Arrow, 20),
+        }
+    }
+
+    pub fn about(self) -> String {
+        let (raw, most) = self.holds();
+        format!(
+            "Worn on the belt, holds {most} {}s; they go in it when you get them, and a bow shoots from it",
+            raw.name().to_lowercase()
+        )
+    }
+}
+
 /// What a recipe makes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Made {
     Raw(Raw, u32),
     Tool(Tool),
     Apparel(Apparel),
+    Container(Container),
 }
 
 impl Made {
@@ -284,6 +326,7 @@ impl Made {
             Made::Raw(raw, count) => format!("{count} {}", raw.name()),
             Made::Tool(tool) => tool.name().to_string(),
             Made::Apparel(apparel) => apparel.name().to_string(),
+            Made::Container(container) => container.name().to_string(),
         }
     }
 }
@@ -311,6 +354,7 @@ pub struct Items {
     raw: [ItemKind; Raw::ALL.len()],
     tools: [(Tool, ItemKind); Tool::ALL.len()],
     apparel: [(Apparel, ItemKind); Apparel::ALL.len()],
+    containers: [(Container, ItemKind); Container::ALL.len()],
     ids: IdSource,
 }
 
@@ -321,11 +365,21 @@ impl Default for Items {
         let tools =
             Tool::ALL.map(|tool| (tool, catalogue.add(KindDef::new(tool.name()).size(2, 1))));
         let apparel = Apparel::ALL.map(|apparel| (apparel, catalogue.add(apparel.def())));
+        let raw_kinds = raw;
+        let containers = Container::ALL.map(|container| {
+            let (raw, most) = container.holds();
+            let def = KindDef::new(container.name())
+                .size(1, 2)
+                .gear(container.worn_on())
+                .holds(raw_kinds[raw as usize], most);
+            (container, catalogue.add(def))
+        });
         Self {
             catalogue,
             raw,
             tools,
             apparel,
+            containers,
             ids: IdSource::default(),
         }
     }
@@ -370,12 +424,21 @@ impl Items {
             .expect("all apparel has a kind")
     }
 
+    pub fn container_kind(&self, container: Container) -> ItemKind {
+        self.containers
+            .iter()
+            .find(|(each, _)| *each == container)
+            .map(|(_, kind)| *kind)
+            .expect("every container has a kind")
+    }
+
     /// The kinds of item something made is, and how many of each.
     fn made(&self, made: Made) -> (ItemKind, u32) {
         match made {
             Made::Raw(raw, count) => (self.kind(raw), count),
             Made::Tool(tool) => (self.tool_kind(tool), 1),
             Made::Apparel(apparel) => (self.apparel_kind(apparel), 1),
+            Made::Container(container) => (self.container_kind(container), 1),
         }
     }
 
@@ -440,7 +503,9 @@ pub fn give_for_testing(
     let named = |name: &str, wanted: &str| name.replace(' ', "_").eq_ignore_ascii_case(wanted);
     for (name, count) in gives {
         if let Some(raw) = Raw::ALL.into_iter().find(|raw| named(raw.name(), name)) {
-            let given = give(items, grid, raw, *count);
+            // Into a worn container first, as anything picked up goes.
+            let worn = gear.stow(items.kind(raw), *count);
+            let given = worn + give(items, grid, raw, *count - worn);
             if given < *count {
                 warn!("--give: room for only {given} of {count} {}", raw.name());
             }
@@ -468,6 +533,20 @@ pub fn give_for_testing(
                 .and_then(|_| wear(items, grid, gear, made.id).ok());
             if worn.is_none() {
                 warn!("--give: could not put on a {}", apparel.name());
+            }
+        } else if let Some(container) = Container::ALL
+            .into_iter()
+            .find(|each| named(each.name(), name))
+        {
+            for _ in 0..*count {
+                let made = items.make(items.container_kind(container));
+                let worn = grid
+                    .insert(&items.catalogue, made, None)
+                    .ok()
+                    .and_then(|_| wear(items, grid, gear, made.id).ok());
+                if worn.is_none() {
+                    warn!("--give: could not put on a {}", container.name());
+                }
             }
         } else if !["health", "fed", "stamina"].contains(&name.as_str()) {
             warn!("--give: there is no raw item, tool or clothing called {name}");
@@ -534,17 +613,43 @@ pub fn holding(items: &Items, grid: &Grid, bar: &ActionBar) -> Option<Tool> {
 }
 
 /// The first raw item there is not enough of to pay a cost so many times over, and how
-/// many more are needed.
-pub fn missing(items: &Items, grid: &Grid, cost: Cost, times: u32) -> Option<(Raw, u32)> {
+/// many more are needed. What worn containers hold counts, such as a belt quiver's arrows.
+pub fn missing(
+    items: &Items,
+    grid: &Grid,
+    gear: &Equipment,
+    cost: Cost,
+    times: u32,
+) -> Option<(Raw, u32)> {
     cost.iter().find_map(|&(raw, each)| {
-        let (wanted, have) = (each * times, grid.count(items.kind(raw)));
+        let kind = items.kind(raw);
+        let (wanted, have) = (each * times, grid.count(kind) + gear.stacked(kind));
         (have < wanted).then(|| (raw, wanted - have))
     })
 }
 
-/// Pays a cost so many times over, if it can be paid in full. Returns whether it was.
-pub fn pay(items: &Items, grid: &mut Grid, bar: &mut ActionBar, cost: Cost, times: u32) -> bool {
-    let paid = grid.take(&items.wanted(cost, times)).is_ok();
+/// Pays a cost so many times over, if it can be paid in full: from what worn containers
+/// hold first, such as a belt quiver's arrows, then the backpack. Returns whether it was.
+pub fn pay(
+    items: &Items,
+    grid: &mut Grid,
+    bar: &mut ActionBar,
+    gear: &mut Equipment,
+    cost: Cost,
+    times: u32,
+) -> bool {
+    if missing(items, grid, gear, cost, times).is_some() {
+        return false;
+    }
+    let wanted: Vec<(ItemKind, u32)> = cost
+        .iter()
+        .map(|&(raw, each)| {
+            let kind = items.kind(raw);
+            (kind, each * times - gear.draw(kind, each * times))
+        })
+        .filter(|&(_, count)| count > 0)
+        .collect();
+    let paid = grid.take(&wanted).is_ok();
     bar.tidy(grid);
     paid
 }
@@ -554,7 +659,9 @@ pub fn receive(items: &mut Items, grid: &mut Grid, bar: &mut ActionBar, made: Ma
     let (kind, count) = items.made(made);
     let mut trial = grid.clone();
     let mut made_ids = Vec::new();
-    for _ in 0..count {
+    // Into a container that holds them first, such as arrows into a quiver (D118).
+    let stowed = trial.stow(kind, count);
+    for _ in stowed..count {
         let item = items.make(kind);
         if trial.insert(&items.catalogue, item, None).is_err() {
             return false;
@@ -591,7 +698,8 @@ pub fn room_for(items: &Items, grid: &Grid, cost: Cost, times: u32) -> bool {
 pub fn give(items: &mut Items, grid: &mut Grid, raw: Raw, count: u32) -> u32 {
     let kind = items.kind(raw);
     let size = items.catalogue.get(kind).map_or(Size::ONE, |def| def.size);
-    let mut given = 0;
+    // Into a container that holds them first, such as arrows into a quiver (D118).
+    let mut given = grid.stow(kind, count);
     while given < count && grid.space_for(size).is_some() {
         let item = items.make(kind);
         if grid.insert(&items.catalogue, item, None).is_err() {
@@ -643,12 +751,15 @@ impl Belongings<'_, '_> {
         holding(&self.items, self.backpack(), self.bar())
     }
 
+    /// How many of a raw item are carried: in the backpack, and in what is worn, such as
+    /// a belt quiver's arrows.
     pub fn count(&self, raw: Raw) -> u32 {
-        self.backpack().count(self.items.kind(raw))
+        let kind = self.items.kind(raw);
+        self.backpack().count(kind) + self.gear().stacked(kind)
     }
 
     pub fn missing(&self, cost: Cost, times: u32) -> Option<(Raw, u32)> {
-        missing(&self.items, self.backpack(), cost, times)
+        missing(&self.items, self.backpack(), self.gear(), cost, times)
     }
 
     pub fn room_for(&self, cost: Cost, times: u32) -> bool {
@@ -698,10 +809,27 @@ impl Belongings<'_, '_> {
             .count()
     }
 
-    /// Makes something from what is carried; see [`craft`].
-    /// Puts what a station made in the backpack, all or nothing.
+    /// Puts what a station made where it goes, all or nothing: into what is worn that holds
+    /// it, such as arrows into a belt quiver, then the backpack.
     pub fn receive(&mut self, made: Made) -> bool {
-        let (backpack, bar, _) = &mut *self.player;
+        let (backpack, bar, gear) = &mut *self.player;
+        if let Made::Raw(raw, count) = made {
+            let kind = self.items.kind(raw);
+            let mut trial = gear.0.clone();
+            let worn = trial.stow(kind, count);
+            if worn == count
+                || receive(
+                    &mut self.items,
+                    &mut backpack.0,
+                    &mut bar.0,
+                    Made::Raw(raw, count - worn),
+                )
+            {
+                gear.0 = trial;
+                return true;
+            }
+            return false;
+        }
         receive(&mut self.items, &mut backpack.0, &mut bar.0, made)
     }
 
@@ -717,8 +845,15 @@ impl Belongings<'_, '_> {
     }
 
     pub fn pay(&mut self, cost: Cost, times: u32) -> bool {
-        let (backpack, bar, _) = &mut *self.player;
-        pay(&self.items, &mut backpack.0, &mut bar.0, cost, times)
+        let (backpack, bar, gear) = &mut *self.player;
+        pay(
+            &self.items,
+            &mut backpack.0,
+            &mut bar.0,
+            &mut gear.0,
+            cost,
+            times,
+        )
     }
 
     /// Gives back what a cost so many times over is made of, if all of it fits. Returns
@@ -733,10 +868,12 @@ impl Belongings<'_, '_> {
         true
     }
 
-    /// Puts so many of a raw item in the backpack, as many as fit. Returns how many did.
+    /// Puts so many of a raw item where it goes, as many as fit: into what is worn that
+    /// holds it, such as arrows into a belt quiver, then the backpack. Returns how many did.
     pub fn give(&mut self, raw: Raw, count: u32) -> u32 {
-        let backpack = &mut self.player.0;
-        give(&mut self.items, &mut backpack.0, raw, count)
+        let (backpack, _, gear) = &mut *self.player;
+        let worn = gear.0.stow(self.items.kind(raw), count);
+        worn + give(&mut self.items, &mut backpack.0, raw, count - worn)
     }
 
     pub fn pick(&mut self, slot: usize) {
@@ -801,20 +938,20 @@ mod tests {
     #[test]
     fn a_cost_is_paid_in_full_or_not_at_all() {
         let mut items = Items::default();
-        let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
+        let (Backpack(mut grid), Gear(mut gear), Bar(mut bar)) = starting_kit(&mut items);
         give(&mut items, &mut grid, Raw::Wood, 4);
         give(&mut items, &mut grid, Raw::Hide, 3);
         let count = |grid: &Grid, raw| grid.count(items.kind(raw));
-        assert!(pay(&items, &mut grid, &mut bar, COUCH, 1));
+        assert!(pay(&items, &mut grid, &mut bar, &mut gear, COUCH, 1));
         assert_eq!(count(&grid, Raw::Wood), 2);
         assert_eq!(count(&grid, Raw::Hide), 0);
         assert_eq!(
-            missing(&items, &grid, COUCH, 1),
+            missing(&items, &grid, &gear, COUCH, 1),
             Some((Raw::Hide, 3)),
             "all the hide is spent"
         );
         let before = grid.clone();
-        assert!(!pay(&items, &mut grid, &mut bar, COUCH, 1));
+        assert!(!pay(&items, &mut grid, &mut bar, &mut gear, COUCH, 1));
         assert_eq!(grid, before);
         assert_eq!(describe(COUCH, 2), "4 Wood, 6 Hide");
     }
@@ -905,18 +1042,60 @@ mod tests {
     }
 
     #[test]
+    fn arrows_go_in_a_quiver_and_are_shot_from_it() {
+        let mut items = Items::default();
+        let (Backpack(mut grid), Gear(mut gear), Bar(mut bar)) = starting_kit(&mut items);
+        let quiver = items.make(items.container_kind(Container::Quiver));
+        grid.insert(&items.catalogue, quiver, None).unwrap();
+        let cells = grid.len();
+        assert_eq!(give(&mut items, &mut grid, Raw::Arrow, 6), 6);
+        assert!(receive(
+            &mut items,
+            &mut grid,
+            &mut bar,
+            Made::Raw(Raw::Arrow, 4)
+        ));
+        assert_eq!(grid.len(), cells, "they fill no cells of their own");
+        assert_eq!(grid.count(items.kind(Raw::Arrow)), 10);
+        assert!(pay(
+            &items,
+            &mut grid,
+            &mut bar,
+            &mut gear,
+            &[(Raw::Arrow, 1)],
+            1
+        ));
+        assert_eq!(grid.count(items.kind(Raw::Arrow)), 9);
+        // Worn on the belt, it is shot from first, and still counts.
+        wear(&items, &mut grid, &mut gear, quiver.id).unwrap();
+        give(&mut items, &mut grid, Raw::Arrow, 2);
+        assert_eq!(gear.stacked(items.kind(Raw::Arrow)), 9);
+        assert_eq!(missing(&items, &grid, &gear, &[(Raw::Arrow, 11)], 1), None);
+        assert!(pay(
+            &items,
+            &mut grid,
+            &mut bar,
+            &mut gear,
+            &[(Raw::Arrow, 10)],
+            1
+        ));
+        assert_eq!(gear.stacked(items.kind(Raw::Arrow)), 0);
+        assert_eq!(grid.count(items.kind(Raw::Arrow)), 1);
+    }
+
+    #[test]
     fn paying_takes_all_or_nothing() {
         const AXE: Cost = &[(Raw::Wood, 2), (Raw::Iron, 3)];
         let mut items = Items::default();
-        let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
+        let (Backpack(mut grid), Gear(mut gear), Bar(mut bar)) = starting_kit(&mut items);
         give(&mut items, &mut grid, Raw::Wood, 2);
         give(&mut items, &mut grid, Raw::Iron, 2);
         let before = grid.clone();
-        assert_eq!(missing(&items, &grid, AXE, 1), Some((Raw::Iron, 1)));
-        assert!(!pay(&items, &mut grid, &mut bar, AXE, 1));
+        assert_eq!(missing(&items, &grid, &gear, AXE, 1), Some((Raw::Iron, 1)));
+        assert!(!pay(&items, &mut grid, &mut bar, &mut gear, AXE, 1));
         assert_eq!(grid, before);
         give(&mut items, &mut grid, Raw::Iron, 1);
-        assert!(pay(&items, &mut grid, &mut bar, AXE, 1));
+        assert!(pay(&items, &mut grid, &mut bar, &mut gear, AXE, 1));
         assert_eq!(grid.count(items.kind(Raw::Iron)), 0);
     }
 

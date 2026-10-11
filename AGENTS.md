@@ -2,6 +2,8 @@
 
 A multiplayer survival sandbox across many procedural worlds, reached through portals, built toward a thousand players on one persistent server. Pre-production. The worlds are in `docs/worlds.md` and the survival attributes in `docs/survival.md`.
 
+**Core tenet: realistic but fun** (D122). Things work as they would in the world, so players can reason about them: arrows ride in a quiver on your belt, and what you know you found out by looking (D93). Where realism would only be a chore, fun wins.
+
 Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in `docs/tech.md`, the parts and build order are in `docs/engine.md`, and the checkpoints are in `docs/prototypes.md`.
 
 | Folder | What it is |

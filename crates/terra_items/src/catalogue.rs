@@ -14,6 +14,9 @@ pub struct KindDef {
     pub gear: Option<GearSlot>,
     /// Worn, it makes the backpack this size (D65).
     pub backpack: Option<Size>,
+    /// A container for a stack of one kind, and how many it holds, as a quiver holds
+    /// arrows (D118). What it holds does not fill cells of its own.
+    pub holds: Option<(ItemKind, u32)>,
 }
 
 impl KindDef {
@@ -24,6 +27,7 @@ impl KindDef {
             size: Size::ONE,
             gear: None,
             backpack: None,
+            holds: None,
         }
     }
 
@@ -39,6 +43,11 @@ impl KindDef {
 
     pub fn backpack(mut self, w: u8, h: u8) -> Self {
         self.backpack = Some(Size { w, h });
+        self
+    }
+
+    pub fn holds(mut self, kind: ItemKind, most: u32) -> Self {
+        self.holds = Some((kind, most));
         self
     }
 }

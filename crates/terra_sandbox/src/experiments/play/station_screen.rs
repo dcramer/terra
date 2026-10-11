@@ -341,6 +341,7 @@ fn about(made: Made) -> String {
             )
         }
         Made::Apparel(apparel) => apparel.about().to_string(),
+        Made::Container(container) => container.about(),
         Made::Raw(raw, _) => match super::vitals::nourishment(raw) {
             fed if fed > 0.0 => format!("Food: fills you by {fed:.0}"),
             _ => format!("{}, for making other things", raw.name()),
