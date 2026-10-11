@@ -29,6 +29,7 @@ export function page(summary) {
   <section class="hero" aria-label="Everyone">
     <div class="big"${num(totals.total, "total")}>${compact(totals.total)}</div>
     <div class="label">tokens across ${users.length} ${users.length === 1 ? "person" : "people"}</div>
+    <div class="cost"><span${num(totals.cost, "cost", "usd")}>${money(totals.cost)}</span> at API prices</div>
     ${facts(totals)}
   </section>
   ${empty}
@@ -48,7 +49,7 @@ function card(u, peak, days) {
   const bars = u.daily
     .map((d) => {
       const h = d.total === 0 ? 0 : Math.max(2, (d.total / peak) * 100);
-      return `<div class="day" data-day="${d.day}" data-total="${full(d.total)}" data-output="${full(d.output)}" data-messages="${d.messages}"><i style="height:${h.toFixed(1)}%"></i></div>`;
+      return `<div class="day" data-day="${d.day}" data-total="${full(d.total)}" data-output="${full(d.output)}" data-messages="${d.messages}" data-cost="${money(d.cost)}"><i style="height:${h.toFixed(1)}%"></i></div>`;
     })
     .join("");
   const models = u.models.map((m) => `<span title="${full(m.total)} tokens">${esc(m.model)}</span>`).join("");
@@ -57,6 +58,7 @@ function card(u, peak, days) {
     <h2>${esc(u.user)}</h2>
     <div class="total"${num(u.total, "total")}>${compact(u.total)}</div>
   </div>
+  <div class="cost"><span${num(u.cost, "cost", "usd")}>${money(u.cost)}</span> at API prices</div>
   ${facts(u)}
   <figure>
     <div class="chart" role="img" aria-label="Tokens per day for ${esc(u.user)} over the last ${days} days">${bars}</div>
@@ -71,9 +73,11 @@ function facts(t) {
   return `<dl class="facts">${item("output", "output")}${item("input", "input")}${item("cache read", "cache_read")}${item("cache write", "cache_write")}${item("messages", "messages")}</dl>`;
 }
 
-// A counter the script animates: its exact value and which field of /json it shows.
-function num(n, key) {
-  return ` data-n="${n}" data-key="${key}" title="${full(n)}"`;
+// A counter the script animates: its exact value, which field of /json it shows,
+// and whether it is dollars.
+function num(n, key, fmt) {
+  const title = fmt === "usd" ? `$${n.toFixed(2)} at API list prices` : full(n);
+  return ` data-n="${n}" data-key="${key}"${fmt ? ` data-fmt="${fmt}"` : ""} title="${title}"`;
 }
 
 function compact(n) {
@@ -87,6 +91,12 @@ function compact(n) {
   const [size, unit] = units.find(([s]) => n >= s);
   const v = n / size;
   return `${v >= 100 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, "")}${unit}`;
+}
+
+function money(n) {
+  if (n < 10) return `$${n.toFixed(2)}`;
+  if (n < 1000) return `$${Math.round(n)}`;
+  return `$${compact(Math.round(n))}`;
 }
 
 function full(n) {
@@ -189,6 +199,11 @@ main { max-width: 960px; margin: 0 auto; padding: 24px 16px 8px; }
 .big { font-size: clamp(48px, 10vw, 84px); font-weight: 600; line-height: 1;
   font-variant-numeric: tabular-nums; }
 .label { color: var(--muted); margin-top: 6px; }
+.cost { color: var(--muted); font-size: 14px; }
+.cost [data-n] { color: var(--bar); font-weight: 600; font-variant-numeric: tabular-nums; }
+.hero .cost { margin-top: 4px; font-size: 16px; }
+.hero .cost [data-n] { font-size: 22px; }
+.person .cost { margin: -4px 0 8px; text-align: right; }
 .hero .facts { justify-content: center; margin-top: 16px; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; }
 .facts div { display: flex; gap: 6px; align-items: baseline; }
@@ -210,7 +225,7 @@ figcaption { display: flex; justify-content: space-between; color: var(--muted);
 .empty { text-align: center; color: var(--muted); }
 footer { max-width: 960px; margin: 0 auto; padding: 24px 16px 40px; color: var(--muted); font-size: 13px; text-align: center; }
 footer a { color: inherit; }
-.big, .total, .facts dd { position: relative; display: inline-block; }
+.big, .total, .facts dd, .cost [data-n] { position: relative; display: inline-block; }
 .counting { color: var(--count); }
 .landed { animation: land 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes land {
@@ -229,6 +244,13 @@ footer a { color: inherit; }
 .day i { transform-origin: bottom; transition: height 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .grow .day i { animation: grow 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 @keyframes grow { from { transform: scaleY(0); } }
+.cost .gain { left: auto; right: 100%; bottom: auto; top: 0.15em; margin-right: 8px; font-size: 12px;
+  animation-name: rise-side; }
+@keyframes rise-side {
+  0% { opacity: 0; transform: translateY(4px); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-16px); }
+}
 @media (prefers-reduced-motion: reduce) {
   .landed, .gain, .grow .day i { animation: none; }
   .gain { display: none; }
@@ -244,7 +266,7 @@ let on = null;
 function show(day, x, y) {
   if (on !== day) { on?.classList.remove("on"); on = day; day.classList.add("on"); }
   const d = day.dataset;
-  tip.innerHTML = "<b>" + d.day + "</b><br>" + d.total + " tokens<br>" + d.output + " output · " + d.messages + " messages";
+  tip.innerHTML = "<b>" + d.day + "</b><br>" + d.total + " tokens<br>" + d.output + " output · " + d.messages + " messages<br>" + d.cost + " at API prices";
   tip.hidden = false;
   const w = tip.offsetWidth;
   tip.style.left = Math.min(window.innerWidth - w - 8, Math.max(8, x - w / 2)) + "px";
@@ -260,15 +282,16 @@ document.addEventListener("pointerleave", hide);
 // Counters count up from zero the first time they are seen, and the page checks
 // /json every minute, rolling any counter that grew to its new value.
 ${compact}
+${money}
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const fmt = (n) => n.toLocaleString("en-US");
 const ease = (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
 // Write only the text node, so a rising "+gain" beside it survives.
-const put = (el, n) => { el.firstChild.nodeValue = compact(n); };
+const put = (el, n) => { el.firstChild.nodeValue = el.dataset.fmt === "usd" ? money(n) : compact(Math.round(n)); };
 
 function roll(el, from, to, ms, delay) {
   el.dataset.n = to;
-  el.title = fmt(to);
+  el.title = el.dataset.fmt === "usd" ? "$" + to.toFixed(2) + " at API list prices" : fmt(to);
   if (still || from === to) { put(el, to); return; }
   const start = performance.now() + (delay || 0);
   el.classList.remove("landed");
@@ -276,7 +299,7 @@ function roll(el, from, to, ms, delay) {
   const step = (now) => {
     const t = Math.min(1, Math.max(0, (now - start) / ms));
     if (t > 0) el.classList.add("counting");
-    put(el, Math.round(from + (to - from) * ease(t)));
+    put(el, from + (to - from) * ease(t));
     if (t < 1) return requestAnimationFrame(step);
     el.classList.remove("counting");
     void el.offsetWidth;
@@ -285,11 +308,11 @@ function roll(el, from, to, ms, delay) {
   requestAnimationFrame(step);
 }
 
-function gain(el, by) {
+function gain(el, by, usd) {
   if (still || by <= 0) return;
   const g = document.createElement("span");
   g.className = "gain";
-  g.textContent = "+" + compact(by);
+  g.textContent = "+" + (usd ? money(by) : compact(by));
   el.append(g);
   g.addEventListener("animationend", () => g.remove());
 }
@@ -302,7 +325,7 @@ const seen = new IntersectionObserver((entries) => {
     e.target.classList.add("grow");
     e.target.querySelectorAll(".day i").forEach((b, i) => { b.style.animationDelay = (i * 18) + "ms"; });
     e.target.querySelectorAll("[data-n]").forEach((el, i) => {
-      const big = el.matches(".big, .total");
+      const big = el.matches(".big, .total, .cost [data-n]");
       roll(el, 0, +el.dataset.n, big ? 2000 : 1400, big ? 0 : 150 + i * 70);
     });
   }
@@ -318,6 +341,7 @@ function update(group, data) {
     if (typeof now !== "number" || now === was) return;
     roll(el, was, now, 1500, 0);
     if (el.matches(".big, .total")) gain(el, now - was);
+    if (el.dataset.fmt === "usd") gain(el, now - was, true);
   });
 }
 
@@ -346,6 +370,7 @@ async function refresh() {
       day.dataset.total = fmt(d.total);
       day.dataset.output = fmt(d.output);
       day.dataset.messages = d.messages;
+      day.dataset.cost = money(d.cost);
       day.querySelector("i").style.height = (d.total === 0 ? 0 : Math.max(2, (d.total / peak) * 100)).toFixed(1) + "%";
     });
   }

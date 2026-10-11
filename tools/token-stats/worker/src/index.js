@@ -9,6 +9,7 @@
 // /report and /stats need `Authorization: Bearer <API_KEY>`.
 
 import { page } from "./page.js";
+import { cost } from "./prices.js";
 
 const USER = /^[A-Za-z0-9_.-]{1,40}$/;
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
@@ -184,7 +185,8 @@ const PUBLIC = { "Cache-Control": "public, max-age=30" };
 const SUMS = `sum(input_tokens) AS input, sum(output_tokens) AS output,
   sum(cache_read_tokens) AS cache_read, sum(cache_write_tokens) AS cache_write, sum(messages) AS messages`;
 
-// Everyone's totals, their models, and tokens a day for the last CHART_DAYS days.
+// Everyone's totals, their models, and tokens a day for the last CHART_DAYS days, each
+// with `cost`: what the tokens would cost at API list prices, in dollars (prices.js).
 async function summary(env) {
   const today = new Date();
   const since = new Date(today.getTime() - (CHART_DAYS - 1) * 86400000).toISOString().slice(0, 10);
@@ -193,32 +195,38 @@ async function summary(env) {
       env.DB.prepare(`SELECT user, ${SUMS}, min(day) AS first_day, max(day) AS last_day
         FROM usage WHERE messages > 0 GROUP BY user`),
       env.DB.prepare(`SELECT user, model, ${SUMS} FROM usage WHERE messages > 0 GROUP BY user, model`),
-      env.DB.prepare(`SELECT user, day, ${SUMS} FROM usage WHERE day >= ?1 GROUP BY user, day`).bind(since),
+      env.DB.prepare(`SELECT user, day, model, ${SUMS} FROM usage WHERE day >= ?1 GROUP BY user, day, model`).bind(since),
     ]),
   );
   const withTotal = (r) => ({ ...r, total: r.input + r.output + r.cache_read + r.cache_write });
+  const zero = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0, total: 0, cost: 0 });
+  const add = (into, r) => {
+    for (const k of Object.keys(into)) into[k] += r[k];
+    return into;
+  };
+  const priced = (r) => ({ ...withTotal(r), cost: cost(r.model, r) });
   const days = Array.from({ length: CHART_DAYS }, (_, i) =>
     new Date(Date.parse(since) + i * 86400000).toISOString().slice(0, 10),
   );
   const users = people.results.map(withTotal).map((p) => {
-    const byDay = new Map(daily.results.filter((d) => d.user === p.user).map((d) => [d.day, withTotal(d)]));
-    const zero = { input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0, total: 0 };
+    const mine = models.results
+      .filter((m) => m.user === p.user)
+      .map(priced)
+      .map(({ user, ...m }) => m)
+      .sort((a, b) => b.total - a.total);
+    const byDay = new Map();
+    for (const d of daily.results.filter((d) => d.user === p.user)) {
+      add(byDay.get(d.day) ?? byDay.set(d.day, zero()).get(d.day), priced(d));
+    }
     return {
       ...p,
-      models: models.results
-        .filter((m) => m.user === p.user)
-        .map(withTotal)
-        .map(({ user, ...m }) => m)
-        .sort((a, b) => b.total - a.total),
-      daily: days.map((day) => {
-        const { user, ...d } = byDay.get(day) ?? { day, ...zero };
-        return { ...d, day };
-      }),
+      cost: mine.reduce((sum, m) => sum + m.cost, 0),
+      models: mine,
+      daily: days.map((day) => ({ day, ...(byDay.get(day) ?? zero()) })),
     };
   });
   users.sort((a, b) => b.total - a.total);
-  const totals = { input: 0, output: 0, cache_read: 0, cache_write: 0, messages: 0, total: 0 };
-  for (const u of users) for (const k of Object.keys(totals)) totals[k] += u[k];
+  const totals = users.reduce(add, zero());
   return { generated_at: today.toISOString(), days: CHART_DAYS, totals, users };
 }
 
