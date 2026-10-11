@@ -29,6 +29,9 @@ const COUNTS = ["input", "output", "cache_read", "cache_write"];
 const GROUPS = ["user", "day", "model"];
 const MAX_MESSAGES = 500;
 const CHART_DAYS = 30;
+// Raise when the summary gains or loses a field, so a snapshot saved by an older
+// deploy is worked out again rather than handed to a page that expects the new one.
+const SUMMARY_VERSION = 2;
 
 // Every message is stored once, keyed by the id the API gave it, so it cannot be
 // counted twice however often it is sent or from how many transcripts. `usage`
@@ -208,11 +211,14 @@ async function report(request, env) {
 }
 
 // The summary as of the last report that changed anything, worked out again when a
-// new day moves the chart. Reading it costs one row however often the page polls,
-// where working it out reads every row of `usage`.
+// new day moves the chart, or when a deploy changes its shape. Reading it costs one
+// row however often the page polls, where working it out reads every row of `usage`.
 async function snapshot(env) {
   const row = await withTables(env, () => env.DB.prepare("SELECT day, json FROM snapshot WHERE id = 1").first());
-  if (row && row.day === new Date().toISOString().slice(0, 10)) return JSON.parse(row.json);
+  if (row && row.day === new Date().toISOString().slice(0, 10)) {
+    const s = JSON.parse(row.json);
+    if (s.version === SUMMARY_VERSION) return s;
+  }
   return await saveSnapshot(env);
 }
 
@@ -348,7 +354,7 @@ async function summary(env) {
   });
   users.sort((a, b) => b.cost - a.cost);
   const totals = users.reduce(add, zero());
-  return { generated_at: today.toISOString(), days: CHART_DAYS, totals, users };
+  return { version: SUMMARY_VERSION, generated_at: today.toISOString(), days: CHART_DAYS, totals, users };
 }
 
 // Create the tables the first time they are missing, so a deploy needs no migration step.
