@@ -11,14 +11,14 @@ What the books do, as I recall them, unchecked: a person absorbs a few essences,
 Proposed, to react to:
 
 - **Skills are many and small**, so something is always about to improve. A skill is an entry in a list, like an item or a buildable (D56): its name, what it does at each rank, and what raises it.
-- **Two ways forward**, both visible: getting better at skills you have, by using them; and gaining new ones, by finding them in the world, from a culture (D86) or a teacher.
+- **Two ways forward**, both visible: getting better at skills you have, by using them; and gaining new ones. Doing a thing gives you its skill automatically (said by the developers); finding one in the world, a culture (D86) or a teacher may be other ways.
 - **Ranks change kind, not only size.** A skill at a higher rank does something new, as in the books, so progress is felt in play and not only in numbers.
 - **Skills are yours.** They go with you to every world, as your gear does (D86). Research (below) may be shared; skills are personal.
 - **In the game's model** (D58): a player's skills are a component; using one is an action the server checks and credits (D51), so a thousand players cannot grant themselves ranks.
 
 Open:
 
-6. **How is a skill gained?** Found, taught, bought with points from levelling, or emerging from what you do, as an essence does?
+6. Answered in part: **how is a skill gained?** Probably by a variety of means, not yet chosen. One is settled: **doing a thing gives you its skill automatically.** Swim and you can swim; cut down a tree and you have the skill for it. Others might be finding, being taught, or a culture (D86).
 7. **How is a skill raised?** By use, by points, by milestones, or a mix?
 8. **What do skills cover?** Fighting (D85 names Enshrouded's combat), movement, gathering, building, survival, crafting, or all of them?
 9. **One rank for the player as well as for each skill?** The books rank the person as well as their abilities.
