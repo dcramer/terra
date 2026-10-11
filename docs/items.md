@@ -12,6 +12,18 @@ From 2026-10-10:
 - **You carry raw items, and they let you build what you are able to build** (D55, Leaning).
 - **Subnautica is the baseline** (D84), and the game must stay modelled in ECS (D58).
 
+## A pack that holds things, after Stationeers
+
+From the developers, 2026-10-11 (D106, Leaning): Stationeers may have some influence, and its backpack model could replace ours, so that wearing a backpack is not growing magical slots: the pack is an item that holds the items in it.
+
+Proposed, what that would mean:
+
+- **A pack is a container you carry.** Its grid is part of the pack. Take it off and the things stay in it; put on another and you carry what is in that one.
+- **Death drops your pack** (D84) with everything in it, where you fell.
+- **Without a pack** you carry only what is in your hands and on your body: a belt, pockets. Proposed: the action bar is a belt of a few slots that holds tools (D66), with the pack for everything else.
+- **Bigger packs** hold more because they are bigger, not because they unlock slots (replacing D65's growth).
+- **Technically** (mine): a container's contents belong to the item that is the container, kept by its identity, so moving the pack moves what is in it. `terra_items` would gain nested containers; nothing about a grid changes.
+
 ## How it works
 
 Subnautica's rules, with our backpack added:
