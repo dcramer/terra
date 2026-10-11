@@ -40,13 +40,15 @@ usage: terra_sandbox [options]
                         (left, right, up, down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --give <item>:<count> start the play experiment carrying something extra, for
-                        testing: a raw item such as stone:10, or health, fed or
-                        stamina out of 100 (repeatable)
+                        testing: a raw item such as stone:10, a tool such as
+                        spear:1 or iron_axe:1, or health, fed or stamina out of
+                        100 (repeatable)
   --save <file>         where the play experiment keeps its saved game; scripted runs
                         save and load only when given this
   --fresh               start the play experiment over, throwing away its saved game
   --at <east,south>     start the play experiment's player so many metres east and south
                         of the outpost, for testing
+  --face <east,south>   start the play experiment's player facing that spot, for testing
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the base's corner, for experiments
@@ -85,6 +87,8 @@ pub struct Options {
     pub fresh: bool,
     /// Where the play experiment's player starts, east and south of the outpost in metres.
     pub start_at: Option<(f32, f32)>,
+    /// What the play experiment's player starts facing, east and south of the outpost.
+    pub start_facing: Option<(f32, f32)>,
 }
 
 impl Options {
@@ -103,6 +107,7 @@ impl Options {
             save: None,
             fresh: false,
             start_at: None,
+            start_facing: None,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -113,18 +118,8 @@ impl Options {
                 "--bench" => options.bench = true,
                 "--clean" => options.clean = true,
                 "--fresh" => options.fresh = true,
-                "--at" => {
-                    let text = value("--at")?;
-                    let (east, south) = text
-                        .split_once(',')
-                        .and_then(|(east, south)| {
-                            Some((east.trim().parse().ok()?, south.trim().parse().ok()?))
-                        })
-                        .ok_or(format!(
-                            "--at wants metres east and south, like 70,-55, not `{text}`"
-                        ))?;
-                    options.start_at = Some((east, south));
-                }
+                "--at" => options.start_at = Some(east_south("--at", &value("--at")?)?),
+                "--face" => options.start_facing = Some(east_south("--face", &value("--face")?)?),
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--radius" => {
@@ -168,6 +163,15 @@ impl Options {
     pub fn scripted(&self) -> bool {
         self.shot.is_some() || self.bench
     }
+}
+
+/// Metres east and south of the outpost, written like 70,-55.
+fn east_south(name: &str, text: &str) -> Result<(f32, f32), String> {
+    text.split_once(',')
+        .and_then(|(east, south)| Some((east.trim().parse().ok()?, south.trim().parse().ok()?)))
+        .ok_or(format!(
+            "{name} wants metres east and south, like 70,-55, not `{text}`"
+        ))
 }
 
 fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
@@ -463,6 +467,14 @@ mod tests {
             Some((Vec3::new(4.0, 3.0, 20.0), Vec3::new(6.0, 2.0, 0.0)))
         );
         assert!(parse(&["--vantage", "1,2"]).unwrap_err().contains("six"));
+        let placed = parse(&["--at", "-40,30", "--face", "-45, 31"]).unwrap();
+        assert_eq!(placed.start_at, Some((-40.0, 30.0)));
+        assert_eq!(placed.start_facing, Some((-45.0, 31.0)));
+        assert!(
+            parse(&["--face", "north"])
+                .unwrap_err()
+                .contains("east and south")
+        );
     }
 
     #[test]

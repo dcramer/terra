@@ -92,7 +92,7 @@ If the loop is not fun with one monster and one settlement, more content will no
 
 ### In it
 
-- **One world**, smooth voxel terrain (D9), one biome, day and night.
+- **One small world**, smooth voxel terrain (D9), one biome, day and night. Everything in reach within a few hundred metres; the developers want the MVP small in scale, not a large world.
 - **Gathering** with separate tools (D96): an axe for trees, a pickaxe for rock and ore, a knife for fibre and hide.
 - **Crafting** at a workbench and a forge, from a handful of materials: wood, stone, fibre, hide and one ore. Tools made of better material work more (crafting.md).
 - **A claim** you place, 40 metres on a side, upgradable to 80 and 160 (D94); building on the voxel grid with shaped rooms (D48); the world heals outside it.
@@ -100,7 +100,7 @@ If the loop is not fun with one monster and one settlement, more content will no
 - **One kind of wildlife** that grazes, flees and can be hunted for meat and hide.
 - **One kind of monster**, forming at one place where magic pools (D103), dangerous to go near, holding a prisoner.
 - **Combat**, third person (D97): one melee weapon and a bow; attack, block, dodge; stamina.
-- **One settlement** with a few people, a request in words, and the prisoner to rescue (D95). Rescued, they come home with you and run the forge (D90).
+- **One settlement**, built from the same parts as the player's buildings (D108), with a few people, a request in words, and the prisoner to rescue (D95). Rescued, they come home with you and run the forge (D90).
 - **Skills by doing** (D88): a few, such as chopping, mining, a weapon, crafting.
 - **Hunger** and food (D101); **death** drops the pack, costs a little skill progress, and you wake at your bed.
 - **The map**: only where you have been, and where you are (D76).

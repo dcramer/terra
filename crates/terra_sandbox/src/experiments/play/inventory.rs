@@ -350,7 +350,7 @@ impl Items {
         Some(self.make(kind))
     }
 
-    fn make(&mut self, kind: ItemKind) -> Item {
+    pub fn make(&mut self, kind: ItemKind) -> Item {
         self.ids.make(kind)
     }
 

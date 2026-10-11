@@ -216,7 +216,6 @@ fn talk(
         return;
     };
     if let Some(line) = person.says {
-        info!("{line}");
         notice.say(line);
         return;
     }
@@ -240,6 +239,5 @@ fn talk(
             person.name
         ),
     };
-    info!("{line}");
     notice.say(line);
 }

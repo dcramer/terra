@@ -12,6 +12,7 @@ use super::crafting::{SmithAtHand, Station};
 use super::creatures::{Creature, Species};
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::props::Prop;
+use crate::experiments::build::Site;
 use crate::planet::Planet;
 use bevy::{
     prelude::*,
@@ -172,6 +173,7 @@ fn arrive(
     mut commands: Commands,
     figure: Res<Figure>,
     planet: Res<Planet>,
+    site: Res<Site>,
     mut asked: MessageReader<Arrive>,
     mut waiting: Local<Vec<Arrive>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -183,6 +185,12 @@ fn arrive(
     for arrival in waiting.drain(..) {
         let feet = planet.drawn(arrival.at.normalize());
         let up = feet.normalize();
+        // Where, in the terms --at and --face take, so a scripted run can go to them.
+        let local = site.frame.compute_affine().inverse().transform_point3(feet);
+        info!(
+            "{} is {:.1} m east and {:.1} m south of the outpost.",
+            arrival.name, local.x, local.z
+        );
         let facing = arrival
             .facing
             .reject_from(up)

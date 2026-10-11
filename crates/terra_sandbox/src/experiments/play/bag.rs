@@ -39,7 +39,7 @@ const CELL_PX: f32 = 48.0;
 /// How long a notice stays up.
 const NOTICE_SECONDS: f32 = 3.0;
 
-/// A line above the bar saying why something was not done, such as a full backpack.
+/// A line above the bar saying what happened, or why something was not done.
 #[derive(Resource, Default)]
 pub struct Notice {
     text: String,
@@ -47,8 +47,10 @@ pub struct Notice {
 }
 
 impl Notice {
+    /// Shows a line, and logs it, so a scripted run can read what happened (D69).
     pub fn say(&mut self, text: impl Into<String>) {
         self.text = text.into();
+        info!("Notice: {}", self.text);
         self.age = 0.0;
     }
 }

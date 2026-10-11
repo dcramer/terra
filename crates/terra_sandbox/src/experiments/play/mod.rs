@@ -169,9 +169,14 @@ fn spawn(
     };
     let feet = planet.drawn(outside.normalize());
     let up = feet.normalize();
+    // For testing, a run can start facing a given spot (--face).
+    let looking_at = match options.start_facing {
+        Some((east, south)) => Vec3::new(east, 0.0, south),
+        None => approach + facing,
+    };
     let toward_door = site
         .frame
-        .transform_point(approach + facing)
+        .transform_point(looking_at)
         .sub(outside)
         .reject_from(up)
         .normalize();
@@ -224,8 +229,27 @@ fn spawn(
                     Some(raw) => {
                         inventory::give(&mut items, &mut kit.0.0, raw, *count);
                     }
+                    // A tool, such as spear or iron_axe, goes in the backpack and on the bar.
+                    None if let Some(tool) = inventory::Tool::ALL
+                        .into_iter()
+                        .find(|tool| tool.name().replace(' ', "_").eq_ignore_ascii_case(name)) =>
+                    {
+                        let kind = items.tool_kind(tool);
+                        for _ in 0..*count {
+                            let made = items.make(kind);
+                            if kit.0.0.insert(&items.catalogue, made, None).is_err() {
+                                warn!("--give: no room for a {}", tool.name());
+                                break;
+                            }
+                            if let Some(slot) =
+                                (0..kit.2.0.len()).find(|&slot| kit.2.0.get(slot).is_none())
+                            {
+                                kit.2.0.set(slot, Some(made.id));
+                            }
+                        }
+                    }
                     None if ["health", "fed", "stamina"].contains(&name.as_str()) => {}
-                    None => warn!("--give: there is no raw item called {name}"),
+                    None => warn!("--give: there is no raw item or tool called {name}"),
                 }
             }
             kit
