@@ -51,7 +51,9 @@ By hand, from the repository:
 
 ## Deploying the worker
 
-It is deployed on David's Cloudflare account. To deploy changes, or to set it up again elsewhere:
+It is deployed on David's Cloudflare account, and deploys itself: [a GitHub Actions workflow](../../.github/workflows/token-stats.yml) runs the tests and `wrangler deploy` whenever anything under `tools/token-stats/` changes on `main`, and can be run by hand from the Actions tab. It needs a Cloudflare API token as the repository secret `CLOUDFLARE_API_TOKEN`, made from the "Edit Cloudflare Workers" template with D1 Edit added, and the account id as the repository variable `CLOUDFLARE_ACCOUNT_ID`. Deploying leaves the `API_KEY` secret as it is.
+
+To deploy by hand, or to set it up again elsewhere:
 
 ```bash
 cd tools/token-stats/worker
