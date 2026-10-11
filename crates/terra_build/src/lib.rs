@@ -48,7 +48,9 @@ pub fn cells(metres: f32) -> i32 {
     ((metres / CELL_M).round() as i32).max(1)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Side {
     East,
     West,
@@ -101,7 +103,9 @@ impl Side {
 }
 
 /// One side of one tile.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Face {
     pub tile: [i32; 3],
     pub side: Side,
@@ -121,7 +125,7 @@ impl Face {
 }
 
 /// What fills a wall cell.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Panel {
     Solid,
     /// Glass, from `sill` metres above the floor to `top` metres below the ceiling, the
@@ -159,7 +163,7 @@ impl Panel {
 }
 
 /// Something a player did to a base.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BuildOp {
     /// Add a block of tiles: a new room, or more of an existing one.
     AddRoom { min: [i32; 3], max: [i32; 3] },

@@ -26,6 +26,8 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--bench` | Measure frame times with vsync off, print them, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
 | `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
+| `--save <file>` | In the play experiment: keep the saved game in this file. Scripted runs save and load only when given one. |
+| `--fresh` | In the play experiment: start over, throwing away the saved game |
 | `--give <item>:<count>` | In the play experiment: start carrying something extra, such as `stone:10`, or start with `health`, `fed` or `stamina` at a value out of 100, for testing. Repeatable. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
 
@@ -78,6 +80,8 @@ The tech demo of the MVP's loop (docs/prototypes.md), being built on the earlier
 | Left click | With anything but the hammer in hand: swing at a creature in front of you |
 | Hold right mouse | With anything but the hammer in hand: guard, taking a quarter of a blow on stamina |
 | Ctrl | Roll clear of blows |
+| M | The map: the land around the outpost, only where you have been |
+| F5 | Save now. The game also saves every half minute and when it closes. |
 | Hold right mouse | With the hammer in hand: the dial of parts. Move the mouse toward one and let go, or press its number. B does the same. |
 | Tap right mouse | Put the part away, or put back what you picked up |
 | Hold left click | Build, take apart, or cut. It takes a moment; let go early and nothing is done. E does the same. |
@@ -111,6 +115,8 @@ You carry a backpack, on the rules in `terra_items` and the Subnautica baseline 
 - **A place where magic pools** (D103): a hollow further off, lit violet with motes drifting up, seen from a distance. Spiders guard it; while fewer than three remain, another forms there every minute and a half. Nothing marks it on a map (D92).
 - **A village** (D95): a few houses, a well and a stall, set down away from the hollow, with people going about their day. F talks to them. The elder, Maren, says the spiders took their smith and which way the glow lies, by the sun; the others say what they know.
 - **A rescue** (D90): the smith, Bren, kneels bound at the edge of the hollow. With the spiders near them dead, F frees them, and they follow you. Bring them into your claim and they ask for a smithy; once one stands there, they settle and work it, and the smithy's iron recipes open.
+- **The map** (D76): M shows the land around the outpost, 512 metres across, dark until you have been near it; you are marked on it, and so is your claim. Nothing else is: not the village, not the glow (D92).
+- **Saving**: what you built, what you carry and wear, your body and skills, your claim and the people you brought home are saved beside the settings, as `save.ron`, every half minute, on F5 and when the game closes, and loaded when it starts. The land, its plants and creatures come from the world's rules and are not saved, so what was cut or killed grows back (D94). Delete the file, or start with `--fresh`, to begin again.
 - **The inventory** shows the character sheet and the backpack's grid. Point at a tool and press 1 to 6 to put it in that slot of the bar. Click a slot of the sheet to take off what is in it, and click gear in the backpack to wear it. The pack will not come off while what you carry would not fit without it. Opening it puts away the part in the hammer's hand.
 
 The materials, costs, recipes and what you start with are stand-ins, chosen so the MVP's loop can be walked.
@@ -177,6 +183,8 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `people` | Figures who are not the player: their colours, animations, following, and settling to work |
 | `pooling` | The place where magic pools: its glow, its motes, and the monsters that form there |
 | `settlement` | The village, its people, and what they say |
+| `map` | The map: the land drawn from the planet's rules, revealed as you go |
+| `save` | Saving and loading the game |
 | `harvest` | Gathering with the right tool for each thing, and refusing what its material cannot work |
 | `work` | Holding a button until a job is done |
 | `tool` | The builder: what it is aimed at, the preview, and building |

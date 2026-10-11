@@ -29,11 +29,13 @@ mod flora;
 mod harvest;
 mod interact;
 mod inventory;
+mod map;
 mod models;
 mod options;
 mod people;
 mod pooling;
 mod props;
+mod save;
 mod scene;
 mod settlement;
 mod skills;
@@ -128,6 +130,8 @@ pub fn plugin(app: &mut App) {
     people::plugin(app);
     pooling::plugin(app);
     settlement::plugin(app);
+    map::plugin(app);
+    save::plugin(app);
     harvest::plugin(app);
     options::plugin(app);
     app.insert_resource(DrivenByPlayer)

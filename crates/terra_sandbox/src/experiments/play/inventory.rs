@@ -344,6 +344,12 @@ impl Items {
             .map_or("?", |def| def.name.as_str())
     }
 
+    /// Makes an item of a kind found by its name, as when a saved world is loaded.
+    pub fn make_named(&mut self, name: &str) -> Option<Item> {
+        let kind = self.catalogue.find(name)?;
+        Some(self.make(kind))
+    }
+
     fn make(&mut self, kind: ItemKind) -> Item {
         self.ids.make(kind)
     }
@@ -366,6 +372,11 @@ pub struct Gear(pub Equipment);
 /// The action bar.
 #[derive(Component, Clone, Debug)]
 pub struct Bar(pub ActionBar);
+
+/// A backpack with no pack worn, to fill as a saved world is loaded.
+pub fn bare_backpack() -> Grid {
+    Grid::new(BARE.w, BARE.h)
+}
 
 /// What a player starts with: a small pack worn, and their tools on the bar.
 pub fn starting_kit(items: &mut Items) -> (Backpack, Gear, Bar) {

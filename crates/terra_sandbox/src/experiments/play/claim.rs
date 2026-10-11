@@ -40,6 +40,15 @@ impl Claim {
         })
     }
 
+    /// How many times it has grown, for saving.
+    pub fn step(&self) -> usize {
+        self.step
+    }
+
+    pub fn set_step(&mut self, step: usize) {
+        self.step = step.min(ACROSS_M.len() - 1);
+    }
+
     /// What growing it costs, if it can grow.
     pub fn next(&self) -> Option<Cost> {
         GROW.get(self.step).copied()

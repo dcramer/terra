@@ -23,6 +23,9 @@ glam = { version = "0.32", features = ["libm"] }
 bevy = { version = "0.19", features = ["free_camera", "bevy_dev_tools", "file_watcher"] }
 bevy-inspector-egui = "0.37"
 libm = "0.2"
+# Already built for Bevy; used to save worlds and, later, to send operations (D21).
+serde = { version = "1", features = ["derive"] }
+ron = "0.12"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

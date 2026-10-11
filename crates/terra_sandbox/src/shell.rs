@@ -42,6 +42,9 @@ usage: terra_sandbox [options]
   --give <item>:<count> start the play experiment carrying something extra, for
                         testing: a raw item such as stone:10, or health, fed or
                         stamina out of 100 (repeatable)
+  --save <file>         where the play experiment keeps its saved game; scripted runs
+                        save and load only when given this
+  --fresh               start the play experiment over, throwing away its saved game
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the base's corner, for experiments
@@ -74,6 +77,10 @@ pub struct Options {
     pub vantage: Option<(Vec3, Vec3)>,
     /// Things to start carrying, by name, for testing.
     pub gives: Vec<(String, u32)>,
+    /// Where the play experiment keeps its saved game, if not the usual place.
+    pub save: Option<PathBuf>,
+    /// Start over, throwing away any saved game.
+    pub fresh: bool,
 }
 
 impl Options {
@@ -89,6 +96,8 @@ impl Options {
             presses: Vec::new(),
             vantage: None,
             gives: Vec::new(),
+            save: None,
+            fresh: false,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -98,6 +107,8 @@ impl Options {
                 "--list" => options.list = true,
                 "--bench" => options.bench = true,
                 "--clean" => options.clean = true,
+                "--fresh" => options.fresh = true,
+                "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--radius" => {
                     options.radius_m = value("--radius")?

@@ -5351,6 +5351,7 @@ name = "terra_build"
 version = "0.1.0"
 dependencies = [
  "glam",
+ "serde",
 ]
 
 [[package]]
@@ -5383,6 +5384,8 @@ dependencies = [
  "bevy-inspector-egui",
  "gltf",
  "libm",
+ "ron",
+ "serde",
  "terra_build",
  "terra_core",
  "terra_gen",

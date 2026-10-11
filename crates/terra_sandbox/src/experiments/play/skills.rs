@@ -110,6 +110,19 @@ impl Skills {
         }
     }
 
+    /// Every known skill and its progress, for saving.
+    pub fn known(&self) -> Vec<(Skill, f32)> {
+        Skill::ALL
+            .into_iter()
+            .filter_map(|skill| Some((skill, self.progress[skill as usize]?)))
+            .collect()
+    }
+
+    /// Sets a skill's progress, as when a saved world is loaded.
+    pub fn restore(&mut self, skill: Skill, progress: f32) {
+        self.progress[skill as usize] = Some(progress.max(0.0));
+    }
+
     /// Loses some of the way toward each next step, never a step already reached.
     pub fn lose_some(&mut self) {
         for progress in self.progress.iter_mut().flatten() {

@@ -197,6 +197,22 @@ impl Site {
         changed
     }
 
+    /// Starts the base again from a list of operations, as when a saved world is loaded.
+    pub(super) fn replace_with(
+        &mut self,
+        ops: &[BuildOp],
+        commands: &mut Commands,
+        planet: &Planet,
+        meshes: &mut Assets<Mesh>,
+    ) {
+        self.base = Base::default();
+        self.operations.clear();
+        if !self.apply_all(ops, commands, planet, meshes) {
+            self.revision += 1;
+            redraw(commands, self, planet, meshes);
+        }
+    }
+
     /// Applies an operation and redraws the base. Returns whether anything changed.
     pub(super) fn apply(
         &mut self,
