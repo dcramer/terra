@@ -153,6 +153,31 @@ A bake-off, not started. Six models chosen to cover the categories: a set of roc
 
 Every result is coloured in one palette and rendered in the sandbox's light on one sheet for the developers to judge. Meshy is left out: the developers found it underwhelming. Rodin or Hitem3D could be added for the creature if Tripo's is weak. Cost: a month of Tripo and well under $50 of API use. It would show where each route's ceiling is for our look, and whether the clean-up can be fully scripted.
 
+## The bake-off, first round
+
+Run on 2026-10-11 in [spike/model_bakeoff](../spike/model_bakeoff/README.md). Six models: rocks, a fence, a workbench, a tree, a wolf, a villager.
+
+**The agent in Blender, from scratch: not good enough.** The developers called the results "pretty garbage", and they were: readable blockouts. The fence and workbench were passable props, the rocks and tree generic, the wolf and villager crude. This matches the benchmarks' ceiling for organic shapes.
+
+**Image first, then a generator, then the agent: good.** All six concepts came out usable at the first attempt, and the wolf, villager, workbench, tree and fence came out close to their concepts. The rock lost its concept's broad planes and came out lumpy; it is the one case where a generator written as code does as well. The steps (`spike/model_bakeoff/make.sh`):
+
+1. **Concept**: gpt-image-2 through Tripo's API, with a fixed brief: one subject, three-quarter view, plain background, finely cut flat planes, flat colours. Checked by eye before anything else is spent. 10 credits ($0.10).
+2. **Four views** of the concept, made by Tripo from the one image. 10 credits.
+3. **A low-poly model from the four views** (Tripo P1), with a texture. 50 credits, not the 30 the price list suggests.
+4. **Refinement in Blender**, free:
+   - clear the generator's smoothed normals, which otherwise spoil flat shading here and in the game;
+   - weld the seams;
+   - cut to any number of triangle budgets;
+   - give each face the palette colour nearest its texture there, then make flat regions and speckle agree;
+   - set the size;
+   - check it, export glTF, and render a sheet in our light.
+
+**About $0.70 a model.** The round cost 470 credits ($4.70), including an extra wolf at a higher face cap. Tripo runs one task at a time on this account.
+
+**Budgets.** One model generated at a generous cap and reduced in Blender gives every level of detail for one price. The wolf held its shape from 7,700 triangles down to 1,500; the lower budgets have bolder facets, closer to the concept. The villager at 2,500, the workbench, tree and fence at 1,500, and the rock at 300 still read well.
+
+**What it does not yet do:** split a model into parts, rig or animate, or make sets of pieces that fit together. Faces come out rough (eyes as dark marks).
+
 ## Limits
 
 - **Nothing was tried.** Every quality claim here is a paper's, a vendor's or a commenter's.
