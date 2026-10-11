@@ -1,6 +1,6 @@
-# A living world
+# Game design 001: a living world
 
-One proposal for the direction of the game as a whole, among any the developers come up with ([directions](README.md)). "A living world" is a working name; the developers will name it. It says what kind of game this would be, what is going on in its worlds, and what the player does there. The other design docs each cover one part of the game; where they disagree with this proposal, the proposal is newer, and they are brought in line only as its decisions settle.
+One proposal for the design of the game as a whole, among any the developers come up with ([proposals](README.md)). "A living world" is a working name; the developers will name it. It says what kind of game this would be, what is going on in its worlds, and what the player does there. The other design docs each cover one part of the game; where they disagree with this proposal, the proposal is newer, and they are brought in line only as its decisions settle.
 
 Status: a direction the developers are considering (D89, Leaning), written up on 2026-10-11 for them to react to. The first section is theirs; everything after it is my proposal, with questions at the end. Nothing here is built, and nothing should be until they have read it.
 

@@ -113,7 +113,7 @@ Answered on 2026-10-10 by D84:
 
 ## The map
 
-There will be a map (D76). What it shows and how far it reaches are not yet decided. It must not hold your hand (D92): no quest markers pointing the way; proposed, it shows what you have seen and what you mark ([the living-world proposal](directions/living-world.md#no-hand-holding)).
+There will be a map (D76). What it shows and how far it reaches are not yet decided. It must not hold your hand (D92): no quest markers pointing the way; proposed, it shows what you have seen and what you mark ([game design 001](proposals/game-design-001.md#no-hand-holding)).
 
 Open:
 
