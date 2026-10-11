@@ -8,7 +8,7 @@ This repository is where the project is thought through: design docs, research n
 
 | Goal | More |
 |---|---|
-| **Explore a dozen or so very different planets**, each with its own terrain, caverns, water, plants, air and gravity. | [docs/worlds.md](docs/worlds.md) |
+| **Explore a dozen or so very different planets**, each with its own terrain, caverns, water, plants, air and gravity, and fly between them with no loading screens. | [docs/worlds.md](docs/worlds.md) |
 | **Turn dead planets into living ones** where that can be done, and then contend with the life you made. | [docs/vision.md](docs/vision.md) |
 | **Survive each world**: health, stamina, oxygen, hunger and thirst, which each planet treats differently. | [docs/survival.md](docs/survival.md) |
 | **Play as a person in the world**, walking around with tools, gathering and building, in the manner of No Man's Sky or Subnautica. | [docs/player.md](docs/player.md) |

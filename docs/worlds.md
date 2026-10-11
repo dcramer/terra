@@ -15,6 +15,8 @@ Status: the developers set out on 2026-10-10 what the planets are to be. What th
 | **Survival** | Attributes coupled to survival: health, stamina, oxygen, hunger, thirst, possibly more later. They may work differently on each world. See [survival.md](survival.md). | Decided that they exist (D61); the list may grow |
 | **The starter planet** | Normal atmosphere and the like: the easiest place to be, for now. | Leaning (D62) |
 | **Gravity** | Planets have gravity. | Decided (D63) |
+| **Getting between planets** | By flight, for sure; maybe other ways later. Leaving a planet, being in space and arriving at another has to perform well. | Decided (D72) |
+| **How planets differ** | Mostly in the obvious ways. | Answers the old open question 2 |
 
 ## What a planet is
 
@@ -45,13 +47,19 @@ The simulation of a planet becoming livable (D6, [planet-sim.md](planet-sim.md))
 - **Caverns** are no extra work for the shape of the ground: smooth voxels describe the inside of a planet as easily as its surface (D9). They are extra work for generation (shaping them so they are worth exploring), for light (it is dark underground), and for streaming (what is below you matters as much as what is beside you).
 - **Water features** go beyond one sea level (D24). Lakes at different heights and water underground need water to be asked for by place, which the engine's contract already allows (D45), and the decision on pools (D44) is the same decision.
 - **Gravity** pulls toward a planet's centre with a strength the planet sets. The player's movement already treats "down" as toward the centre. Between planets, and in orbit, it is open.
-- **Several planets** need one coordinate frame per planet and a way between them (D36), and a server that holds more than one (D52).
+- **Several planets, reached by flight** (D72). Leaving a planet, crossing space and arriving at another, without a loading screen (D4) and without the frame rate falling, is a system of its own:
+  - **Coordinates.** A position far from the origin loses precision. Each planet needs its own frame, and space needs one that holds them all (D36).
+  - **Detail by distance.** From orbit a planet is one simple shape; on the ground it is terrain, plants and bases. The terrain's levels of detail (D9) carry most of this; plants, objects and bases need the same.
+  - **What is loaded.** Only the planet you are near is generated in full; the rest are a few numbers until you approach.
+  - **The server.** A thousand players across a dozen planets (D52) means a player flying from one to another moves between parts of the server.
+  The Godot spike flew from the ground to orbit on one planet; nothing has crossed between planets yet.
 - **Digging** is the terrain's job (D9); what you get from it is harvesting (D43).
 
 ## Open questions
 
-1. **How many planets**, and are they all in one solar system you can fly across (D4), or reached some other way?
-2. **How do planets differ in play**, not only in look? Gravity and air are obvious. What else: day length, weather, hazards, resources found nowhere else?
+1. **How many planets**, and are they all in one solar system? Answered in part: you fly between them (D72), perhaps by other means later.
+2. Answered: planets mostly differ in the obvious ways (gravity, air, temperature, terrain, water, life). Whether any differ in less obvious ways (day length, weather, resources found nowhere else) can be settled planet by planet.
+8. **What do you fly in?** A ship you board, a suit that keeps climbing, or something else? It is the largest open piece of the player's design ([player.md](player.md), question 6).
 3. **Which planets can be terraformed**, and is a terraformed planet a reward, a goal, or the endgame?
 4. **How is the next planet reached and unlocked?**
 5. **Caverns**: a feature of some planets or all? Do they hold anything the surface does not?

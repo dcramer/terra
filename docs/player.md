@@ -49,7 +49,7 @@ Open:
 
 Open, and the largest unknown here. The world is a real round planet you can leave (D4), so something has to carry you.
 
-6. **How does a player reach orbit?** A ship you board and fly, as in No Man's Sky, is a second control scheme, a second camera, and a vehicle to model. A jetpack that simply keeps going is far less work and far less grand. Nothing needs this until there is somewhere to go, but the player's design should not rule it out.
+6. **How does a player reach orbit?** By flight (D72), and that is how planets are reached; other ways may come later. What flies is open: a ship you board, as in No Man's Sky, is a second control scheme, a second camera, and a vehicle to model. A jetpack that simply keeps going is far less work and far less grand.
 
 ## Tools
 
