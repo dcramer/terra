@@ -40,6 +40,10 @@ Everything is in planet-local coordinates, in metres, with the planet's centre a
 - **Harvest adds up.** The volume reported for a dig matches the volume that disappeared, split correctly between materials.
 - **It is fast enough to build on.** Meshing a 32-cubed chunk takes no longer than the 6 ms measured in the toolchain check, on both the Linux and Windows builds.
 
+## Where it plugs in
+
+The tech demo asks every question about the ground through the sandbox's `Planet`: where something at a point stands (`ground_at`), whether a point is under the sea, which way the ground faces, how far a point is above it, and a ray cast. Nothing reaches past those, so voxel terrain replaces what answers them rather than the code that asks. `ground_at` takes a point, not a direction, because with voxels there can be ground above you as well as below.
+
 ## Where to read in Voxel Tools
 
 Version 1.7. The port follows its design; see [research/voxel-tools-port.md](../research/voxel-tools-port.md).

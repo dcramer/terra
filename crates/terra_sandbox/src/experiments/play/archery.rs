@@ -20,7 +20,6 @@ use super::{Player, View};
 use crate::experiments::build::Site;
 use crate::planet::Planet;
 use bevy::prelude::*;
-use terra_core::Ground;
 
 /// Seconds to draw the bow fully.
 const FULL_DRAW_S: f32 = 0.9;
@@ -156,10 +155,7 @@ fn draw(
         })
         .min_by(|a, b| a.total_cmp(b))
         .map(|along| along * AIM_M);
-    let on_ground = planet
-        .ground
-        .raycast(eye, ahead, AIM_M)
-        .map(|hit| hit.distance);
+    let on_ground = planet.raycast(eye, ahead, AIM_M).map(|hit| hit.distance);
     let distance = [on_creature, on_ground]
         .into_iter()
         .flatten()
@@ -257,7 +253,7 @@ fn fly(
             continue;
         }
 
-        let ground = planet.drawn(to.normalize());
+        let ground = planet.ground_at(to);
         if to.length() <= ground.length() {
             transform.translation = ground;
             arrow.stuck = true;

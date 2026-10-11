@@ -84,7 +84,7 @@ fn dress(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let seed = planet.ground.spec().seed.derive("look");
+    let seed = planet.seed().derive("look");
 
     // Boulders and shrubs: a few generated shapes each, reused many times.
     let flat = |colour: Color| StandardMaterial {

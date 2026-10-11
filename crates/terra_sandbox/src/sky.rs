@@ -55,7 +55,7 @@ impl SkyMaterial {
             zenith: sky.zenith.into(),
             glow: sky.glow.into(),
             sun_direction: tweaks.sun_direction.normalize_or(Vec3::Y),
-            radius_m: planet.ground.spec().radius_m,
+            radius_m: planet.radius_m(),
             cloudiness: sky.cloudiness,
             brightness: sky.brightness,
         }
@@ -100,7 +100,7 @@ fn spawn(
         SkyDome,
         Mesh3d(meshes.add(dome)),
         MeshMaterial3d(materials.add(SkyMaterial::new(&sky, &tweaks, &planet))),
-        Transform::from_scale(Vec3::splat(planet.ground.spec().radius_m * 20.0)),
+        Transform::from_scale(Vec3::splat(planet.radius_m() * 20.0)),
         NotShadowCaster,
         NoFrustumCulling,
     ));

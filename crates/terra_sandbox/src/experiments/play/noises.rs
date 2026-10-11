@@ -131,11 +131,7 @@ fn step(
         feet.walked -= stride;
         let surface = match (feet.walker, player) {
             (Walker::Player, Some(player)) if player.indoors => Feet::Wood,
-            (Walker::Player | Walker::Person, _)
-                if planet.drawn(up).length() < planet.sea_radius_m() =>
-            {
-                Feet::Water
-            }
+            (Walker::Player | Walker::Person, _) if planet.under_sea(here) => Feet::Water,
             (Walker::Player | Walker::Person, _) => Feet::Grass,
             (Walker::Deer, _) => Feet::Hoof,
             (Walker::Spider, _) => Feet::Skitter,

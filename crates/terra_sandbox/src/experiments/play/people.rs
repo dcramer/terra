@@ -184,7 +184,7 @@ fn arrive(
         return;
     };
     for arrival in waiting.drain(..) {
-        let feet = planet.drawn(arrival.at.normalize());
+        let feet = planet.ground_at(arrival.at);
         let up = feet.normalize();
         // Where, in the terms --at and --face take, so a scripted run can go to them.
         let local = site.frame.compute_affine().inverse().transform_point3(feet);
@@ -334,7 +334,7 @@ fn follow(
                 .reject_from(up)
                 .normalize_or(direction);
         }
-        let next = planet.drawn((here + direction * speed * dt).normalize());
+        let next = planet.ground_at(here + direction * speed * dt);
         *at = Transform::from_translation(next).looking_to(person.facing, next.normalize());
     }
 }

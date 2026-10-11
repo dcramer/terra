@@ -253,7 +253,7 @@ fn prepare(
     // A herd of deer in the meadow, and spiders in a hollow further off.
     let on_ground = |east: f32, south: f32| {
         let point = site.frame.transform_point(Vec3::new(east, 0.0, south));
-        planet.drawn(point.normalize())
+        planet.ground_at(point)
     };
     let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 0.6;
     let herd = [(-45.0, 30.0), (-55.0, -20.0), (40.0, 45.0), (-30.0, 60.0)]
@@ -320,7 +320,7 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
         return;
     };
     let about = kind(species);
-    let feet = planet.drawn(at.normalize());
+    let feet = planet.ground_at(at);
     let up = feet.normalize();
     let facing = up.any_orthonormal_vector();
     let creature = commands
@@ -473,14 +473,14 @@ fn walk(
         }
         let mut next = here + direction * speed * dt;
         // Creatures keep out of the water.
-        let ground = planet.drawn(next.normalize());
+        let ground = planet.ground_at(next);
         if ground.length() < planet.sea_radius_m() + 0.2 {
             next = here;
             if let State::Wander(_) = creature.state {
                 creature.state = State::Idle(1.0);
             }
         }
-        let ground = planet.drawn(next.normalize());
+        let ground = planet.ground_at(next);
         *at = Transform::from_translation(ground)
             .looking_to(creature.facing, ground.normalize())
             .with_scale(at.scale);

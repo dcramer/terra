@@ -123,7 +123,7 @@ fn keep_apart(
             }
         }
         if at != transform.translation {
-            transform.translation = planet.drawn(at.normalize());
+            transform.translation = planet.ground_at(at);
         }
     }
 }

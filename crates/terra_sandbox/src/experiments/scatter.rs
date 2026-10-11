@@ -6,7 +6,7 @@
 
 use crate::planet::Planet;
 use bevy::prelude::*;
-use terra_core::{Ground, Harvested, KindId, ObjectId, Operation, Yield};
+use terra_core::{Harvested, KindId, ObjectId, Operation, Yield};
 use terra_gen::Seed;
 
 const ROCKS: u64 = 2000;
@@ -52,7 +52,7 @@ pub(super) fn placements(planet: &Planet, seed: Seed, count: u64) -> Vec<Placeme
     let start_up = planet.start().normalize();
     let east = start_up.cross(Vec3::X).normalize();
     let north = east.cross(start_up);
-    let radius_m = planet.ground.spec().radius_m;
+    let radius_m = planet.radius_m();
     (0..count)
         .map(|index| {
             let mut rng = seed.index(index).rng();
@@ -64,7 +64,7 @@ pub(super) fn placements(planet: &Planet, seed: Seed, count: u64) -> Vec<Placeme
                 }
             };
             let on_ground = planet.surface((start_up * radius_m + offset).normalize());
-            let up = planet.ground.normal(on_ground);
+            let up = planet.normal(on_ground);
             let turn = Quat::from_axis_angle(Vec3::Y, rng.range(0.0, std::f32::consts::TAU));
             let scale = Vec3::new(
                 rng.range(0.4, 1.6),
@@ -95,7 +95,7 @@ fn spawn(
         perceptual_roughness: 0.9,
         ..default()
     });
-    let seed = planet.ground.spec().seed.derive("scatter rocks");
+    let seed = planet.seed().derive("scatter rocks");
     for rock in placements(&planet, seed, ROCKS) {
         commands.spawn((
             Rock(rock.id),
@@ -145,7 +145,7 @@ fn harvest(
         None
     };
     let Some(ray) = ray else { return };
-    let Some(hit) = planet.ground.raycast(ray.origin, *ray.direction, REACH_M) else {
+    let Some(hit) = planet.raycast(ray.origin, *ray.direction, REACH_M) else {
         info!("Nothing in reach.");
         return;
     };
@@ -213,7 +213,7 @@ mod tests {
         assert_eq!(rocks.len(), ROCKS as usize);
         for rock in &rocks {
             // On the ground, bedded in by no more than their own height.
-            let depth = -planet.ground.distance(rock.position);
+            let depth = -planet.distance(rock.position);
             assert!((0.0..=rock.scale.y).contains(&depth), "depth {depth}");
             assert!(rock.position.distance(planet.start()) < SPREAD_M * 1.2);
             assert!((rock.rotation.length() - 1.0).abs() < 1e-4);

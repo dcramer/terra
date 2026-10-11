@@ -150,15 +150,14 @@ fn place_level(sound: Sound, outdoors: bool, lair_m: f32, shore_m: Option<f32>) 
 fn shore_distance(planet: &Planet, here: Vec3) -> Option<f32> {
     let up = here.normalize_or(Vec3::Y);
     let east = up.any_orthonormal_vector();
-    let sea = planet.sea_radius_m();
-    if planet.drawn(up).length() < sea {
+    if planet.under_sea(here) {
         return Some(0.0);
     }
     SHORE_RINGS_M.into_iter().find(|&metres| {
         (0..12).any(|i| {
             let round = Quat::from_axis_angle(up, i as f32 * std::f32::consts::TAU / 12.0);
             let there = here + round * east * metres;
-            planet.drawn(there.normalize()).length() < sea
+            planet.under_sea(there)
         })
     })
 }

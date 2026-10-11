@@ -18,7 +18,7 @@ use bevy::{
     render::render_resource::PrimitiveTopology,
 };
 use std::time::Instant;
-use terra_core::{Ground, Harvested, KindId, ObjectId, Operation, Water, Yield};
+use terra_core::{Harvested, KindId, ObjectId, Operation, Yield};
 use terra_gen::{Rng, Seed};
 
 /// Cells along each edge of each of the planet's six faces.
@@ -123,11 +123,7 @@ fn trees_in(planet: &Planet, seed: Seed, cell: u32) -> Vec<Tree> {
             let direction = cell_direction(cell, rng.unit(), rng.unit());
             let base = planet.surface(direction);
             // No trees in the sea.
-            if planet
-                .ground
-                .level(direction)
-                .is_some_and(|sea| base.length() < sea + 1.0)
-            {
+            if base.length() < planet.sea_radius_m() + 1.0 {
                 return None;
             }
             Some(Tree {
@@ -255,7 +251,7 @@ fn setup(
         .map(|cell| planet.surface(cell_direction(cell, 0.5, 0.5)))
         .collect();
     commands.insert_resource(Forest {
-        seed: planet.ground.spec().seed.derive("forest"),
+        seed: planet.seed().derive("forest"),
         centres,
         chopped: HashMap::default(),
         drawn: HashMap::default(),
@@ -393,9 +389,7 @@ fn chop(
     } else {
         None
     };
-    if let Some(hit) =
-        ray.and_then(|ray| planet.ground.raycast(ray.origin, *ray.direction, REACH_M))
-    {
+    if let Some(hit) = ray.and_then(|ray| planet.raycast(ray.origin, *ray.direction, REACH_M)) {
         // Only the cells around the point looked at are searched, never the whole forest.
         let nearest = neighbourhood(hit.point.normalize())
             .flat_map(|cell| {
@@ -480,7 +474,7 @@ mod tests {
             for (tree, same) in trees.iter().zip(&again) {
                 assert_eq!((tree.index, tree.base), (same.index, same.base));
                 assert_eq!(cell_at(tree.up), cell);
-                assert!(planet.ground.distance(tree.base).abs() < 0.01);
+                assert!(planet.distance(tree.base).abs() < 0.01);
                 assert!(tree.index < TREES_PER_CELL);
             }
             any_trees |= !trees.is_empty();

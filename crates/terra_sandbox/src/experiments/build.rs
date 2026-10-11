@@ -15,7 +15,6 @@ use bevy::{
     render::render_resource::PrimitiveTopology,
 };
 use terra_build::{Base, BuildOp, CELL_M, Face, Panel, Side, Surface, Walker};
-use terra_core::Ground;
 
 const REACH_M: f32 = 300.0;
 /// The base's floor clears the highest ground under it by this much.
@@ -459,7 +458,7 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
             let angle = spoke as f32 / 24.0 * std::f32::consts::TAU;
             let offset =
                 (east * libm::cosf(angle) + north * libm::sinf(angle)) * (ring as f32 * 6.0);
-            let anchor = planet.surface((start + offset).normalize());
+            let anchor = planet.ground_at(start + offset);
             let anchor_up = anchor.normalize();
             for turn in 0..8 {
                 let facing =
@@ -475,9 +474,7 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
                 while x <= high.x {
                     let mut z = low.z;
                     while z <= high.z {
-                        let height = -planet
-                            .ground
-                            .distance(frame.transform_point(Vec3::new(x, 0.0, z)));
+                        let height = -planet.distance(frame.transform_point(Vec3::new(x, 0.0, z)));
                         lowest = lowest.min(height);
                         highest = highest.max(height);
                         z += 3.0;
@@ -497,7 +494,7 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
                     .iter()
                     .filter(|&&ahead| {
                         let point = frame.transform_point(Vec3::new(middle.x, 0.0, ahead));
-                        planet.surface(point.normalize()).length() < sea
+                        planet.under_sea(point)
                     })
                     .count();
                 // Grass to stand on, at the base and out in front of it.
@@ -505,8 +502,8 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
                     .iter()
                     .map(|&ahead| {
                         let point = frame.transform_point(Vec3::new(middle.x, 0.0, ahead));
-                        let point = planet.surface(point.normalize());
-                        planet.cover(point, planet.ground.normal(point)).grass
+                        let point = planet.ground_at(point);
+                        planet.cover(point, planet.normal(point)).grass
                     })
                     .sum();
                 let score = (highest - lowest) - 0.8 * water_ahead as f32 - 0.5 * grassy
@@ -518,7 +515,7 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
         }
     }
     best.map(|(_, frame)| frame).unwrap_or_else(|| {
-        let anchor = planet.surface((start + east * 60.0).normalize());
+        let anchor = planet.ground_at(start + east * 60.0);
         Transform::from_translation(anchor).looking_to(north, anchor.normalize())
     })
 }
@@ -537,7 +534,7 @@ pub(super) fn lifted(mut frame: Transform, base: &Base, planet: &Planet) -> Tran
                     0.0,
                     (tile.z as f32 + dz) * CELL_M,
                 );
-                -planet.ground.distance(frame.transform_point(on_floor))
+                -planet.distance(frame.transform_point(on_floor))
             })
         })
         .fold(f32::MIN, f32::max);
@@ -679,11 +676,7 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
             (min.x, max.z),
             (max.x, max.z),
         ]
-        .map(|(x, z)| {
-            planet
-                .ground
-                .distance(site.frame.transform_point(Vec3::new(x, 0.0, z)))
-        })
+        .map(|(x, z)| planet.distance(site.frame.transform_point(Vec3::new(x, 0.0, z))))
         .into_iter()
         .fold(0.0, f32::max);
         foundation.block(min.with_y(-gap - FOUNDATION_DEPTH_M), max.with_y(-0.004));
@@ -709,13 +702,10 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
         let top = (near + far) * 0.5;
         let outward = first.side.offset().as_vec3();
         // Long enough for the climb, measured where the steps start and where they end.
-        let rise_here = planet
-            .ground
-            .distance(site.frame.transform_point(top))
-            .max(0.0);
+        let rise_here = planet.distance(site.frame.transform_point(top)).max(0.0);
         let length = (rise_here * RAMP_RUN_PER_RISE).clamp(1.2, 16.0);
         let far_end = site.frame.transform_point(top + outward * length);
-        let drop = planet.ground.distance(far_end).max(0.0) + 0.05;
+        let drop = planet.distance(far_end).max(0.0) + 0.05;
         let ramp = Ramp {
             top,
             outward,
@@ -788,7 +778,6 @@ fn edit(
     } else if keys.just_pressed(KeyCode::KeyB) {
         // A new room, three tiles square, on the ground being looked at.
         planet
-            .ground
             .raycast(camera.translation(), *camera.forward(), REACH_M)
             .map(|ground| {
                 let local = to_base.transform_point3(ground.point);

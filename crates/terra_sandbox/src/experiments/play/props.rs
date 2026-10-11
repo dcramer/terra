@@ -285,7 +285,7 @@ pub fn standing(
     }
     // Outdoors it stands upright where it is, which far from the base is not quite the
     // base's up, the planet being round.
-    let stood = planet.drawn(floor.normalize());
+    let stood = planet.ground_at(floor);
     let up = stood.normalize();
     Transform {
         translation: stood + up * lift,

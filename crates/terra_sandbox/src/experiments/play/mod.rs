@@ -192,7 +192,7 @@ fn spawn(
         Some((east, south)) => site.frame.transform_point(Vec3::new(east, 0.0, south)),
         None => site.frame.transform_point(approach - facing * 5.0),
     };
-    let feet = planet.drawn(outside.normalize());
+    let feet = planet.ground_at(outside);
     let up = feet.normalize();
     // For testing, a run can start facing a given spot (--face).
     let looking_at = match options.start_facing {
@@ -274,7 +274,7 @@ fn warp(
     };
     let (mut transform, mut player) = player.into_inner();
     let place = |(east, south): (f32, f32)| site.frame.transform_point(Vec3::new(east, 0.0, south));
-    let feet = planet.drawn(place(warp.at).normalize());
+    let feet = planet.ground_at(place(warp.at));
     let up = feet.normalize();
     let facing = (place(warp.facing) - feet)
         .reject_from(up)
@@ -465,9 +465,9 @@ fn walk(
         }
     }
     // The sea is for looking at: wade in a little way and no further.
-    let ground_ahead = planet.drawn(target.normalize()).length();
+    let ground_ahead = planet.ground_at(target).length();
     if ground_ahead < planet.sea_radius_m() - WADE_DEPTH_M
-        && ground_ahead < planet.drawn(up).length()
+        && ground_ahead < planet.ground_at(feet).length()
     {
         target = feet;
     }
@@ -491,7 +491,7 @@ fn walk(
     // The ground as it is drawn, so the player stands on what they see. Near the start
     // that is the true ground; further off the planet's mesh is coarser, and walking on
     // the true ground there sinks the player into the drawn one or lifts them off it.
-    let ground = planet.drawn(target.normalize()).length();
+    let ground = planet.ground_at(target).length();
     let held_at = match offered {
         Some(floor) if site.base.ceiling(before).is_some() => floor,
         Some(surface) => surface.max(ground),
@@ -604,7 +604,7 @@ fn follow(
         .fold(CAMERA_BACK_M, f32::min);
     let mut at = pivot + back * blocked;
     // Keep the camera out of the ground.
-    let ground = planet.drawn(at.normalize()).length() + 0.35;
+    let ground = planet.ground_at(at).length() + 0.35;
     if at.length() < ground {
         at = at.normalize() * ground;
     }

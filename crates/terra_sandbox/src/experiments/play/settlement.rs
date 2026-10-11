@@ -134,11 +134,7 @@ fn found(
     mut clear: MessageWriter<ClearAround>,
 ) {
     let on_ground = |east: f32, south: f32| {
-        planet.drawn(
-            site.frame
-                .transform_point(Vec3::new(east, 0.0, south))
-                .normalize(),
-        )
+        planet.ground_at(site.frame.transform_point(Vec3::new(east, 0.0, south)))
     };
     let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 1.0;
     let Some(middle) = [(-70.0, 55.0), (75.0, 60.0), (-60.0, -75.0), (60.0, -80.0)]
@@ -159,7 +155,7 @@ fn found(
     let to_site = site.frame.compute_affine().inverse();
     // The houses, each its own build, standing upright where it is, its door to the well.
     for (index, plan) in HOUSES.iter().enumerate() {
-        let door = planet.drawn((middle + east * plan.east + south * plan.south).normalize());
+        let door = planet.ground_at(middle + east * plan.east + south * plan.south);
         let up = door.normalize();
         let away = (door - middle).reject_from(up).normalize_or(south);
         let ops = house(plan);

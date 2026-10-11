@@ -53,7 +53,6 @@ use bevy::{
 use terra_build::{
     Base, BuildOp, CELL_M, DOOR_HEIGHT_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, cells,
 };
-use terra_core::Ground;
 
 /// How far from the player walls and rooms can be worked on, and items placed.
 const STRUCTURE_REACH_M: f32 = 18.0;
@@ -477,7 +476,7 @@ fn aim(
     // The first of the base's walls, floors and roofs the view meets, interior walls
     // included; the ground; and the first item.
     let hull = site.base.raycast(local_origin, local_direction, 200.0);
-    let ground = planet.ground.raycast(origin, direction, 200.0);
+    let ground = planet.raycast(origin, direction, 200.0);
     let met = |distance: f32| local_origin + local_direction * distance;
     let outside_wall = hull
         .filter(|hit| !hit.partition && hit.face.side.is_wall())
@@ -596,7 +595,7 @@ fn aim(
             .filter(|(at, ..)| within(site.frame.transform_point(*at), ITEM_REACH_M))
             .unwrap_or_else(ahead);
         let world = site.frame.transform_point(at);
-        let wet = !indoors && planet.drawn(world.normalize()).length() < planet.sea_radius_m();
+        let wet = !indoors && planet.under_sea(world);
         let blocked = props::blocked(
             &site,
             &boxed(at, lift, indoors),
@@ -720,7 +719,7 @@ fn aim(
                     let fits = (0..=size.x).step_by(every).chain([size.x]).all(|i| {
                         (0..=size.y).step_by(every).chain([size.y]).all(|j| {
                             let on_floor = (corner + IVec3::new(i, 0, j)).as_vec3() * CELL_M;
-                            planet.ground.distance(site.frame.transform_point(on_floor)) > 0.02
+                            planet.distance(site.frame.transform_point(on_floor)) > 0.02
                         })
                     });
                     let adds = (0..size.x).any(|i| {
@@ -1506,7 +1505,7 @@ fn highlight(
                     if indoors {
                         point
                     } else {
-                        planet.drawn(point.normalize()) + point.normalize() * 0.05
+                        planet.ground_at(point) + point.normalize() * 0.05
                     }
                 };
                 let points: Vec<Vec<Vec3>> = (-reach..=reach)

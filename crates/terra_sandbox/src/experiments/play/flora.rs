@@ -21,7 +21,6 @@ use bevy::{
     render::render_resource::{AsBindGroup, PrimitiveTopology},
     shader::ShaderRef,
 };
-use terra_core::Ground;
 use terra_gen::{Noise, Rng, Seed};
 
 /// Grass is planted this far from the base, thinning out over the last stretch.
@@ -98,7 +97,7 @@ struct Patch {
 impl Patch {
     /// The point on the ground, as drawn, at a place on the map.
     fn ground(&self, planet: &Planet, east_m: f32, north_m: f32) -> Vec3 {
-        planet.drawn((self.middle + self.east * east_m + self.north * north_m).normalize())
+        planet.ground_at(self.middle + self.east * east_m + self.north * north_m)
     }
 }
 
@@ -269,7 +268,7 @@ fn plant(
         east,
         north: east.cross(up),
     };
-    let seed = planet.ground.spec().seed.derive("flora");
+    let seed = planet.seed().derive("flora");
 
     // The wind blows in off the water, which is where the sun is.
     let wind = WindExtension {
@@ -406,7 +405,7 @@ fn plant(
     // Trees: woods with clearings, thinning to nothing around the base and at the shore.
     scatter(seed.derive("trees"), 340.0, 6.5, |rng, x, z| {
         let point = ground.ground(&planet, x, z);
-        let normal = planet.ground.normal(point);
+        let normal = planet.normal(point);
         let from_base = Vec2::new(x, z).length();
         if point.length() - sea < 1.4 || normal.dot(point.normalize()) < 0.86 {
             return;
@@ -454,7 +453,7 @@ fn plant(
     // Rocks: anywhere, more of them on bare and steep ground, mossy in the grass.
     scatter(seed.derive("rocks"), 300.0, 7.0, |rng, x, z| {
         let point = ground.ground(&planet, x, z);
-        let cover = planet.cover(point, planet.ground.normal(point));
+        let cover = planet.cover(point, planet.normal(point));
         if point.length() - sea < -0.4 || rng.unit() > 0.4 - 0.22 * cover.grass {
             return;
         }
@@ -495,7 +494,7 @@ fn plant(
     // Bushes and leafy plants, in the grass.
     scatter(seed.derive("bushes"), 230.0, 5.5, |rng, x, z| {
         let point = ground.ground(&planet, x, z);
-        let cover = planet.cover(point, planet.ground.normal(point));
+        let cover = planet.cover(point, planet.normal(point));
         if rng.unit() > 0.3 * cover.grass {
             return;
         }
@@ -522,7 +521,7 @@ fn plant(
     });
     scatter(seed.derive("plants"), 150.0, 3.2, |rng, x, z| {
         let point = ground.ground(&planet, x, z);
-        let cover = planet.cover(point, planet.ground.normal(point));
+        let cover = planet.cover(point, planet.normal(point));
         if rng.unit() > 0.28 * cover.grass {
             return;
         }
@@ -548,7 +547,7 @@ fn plant(
         if rng.unit() > 0.75 * drift {
             return;
         }
-        let cover = planet.cover(point, planet.ground.normal(point));
+        let cover = planet.cover(point, planet.normal(point));
         if cover.grass < 0.5 {
             return;
         }
@@ -568,7 +567,7 @@ fn plant(
         (&props[0], Vec3::new(1.0, 0.0, 11.0), 0.7),
         (&props[1], Vec3::new(-2.5, 0.0, 12.5), 0.9),
     ] {
-        let point = planet.drawn(site.frame.transform_point(beside).normalize());
+        let point = planet.ground_at(site.frame.transform_point(beside));
         let mut rng = seed.derive("props").rng();
         put(
             model,
@@ -660,7 +659,7 @@ fn grass_square(meadow: &Meadow, planet: &Planet, site: &Site, i: i32, j: i32) -
                 continue;
             }
             let root = meadow.ground.ground(planet, at.x, at.y);
-            let ground_normal = planet.ground.normal(root);
+            let ground_normal = planet.normal(root);
             let cover = planet.cover(root, ground_normal);
             if luck > smoothstep(0.3, 0.7, cover.grass) * thinning || site.covers(root, 0.25) {
                 continue;

@@ -140,7 +140,7 @@ fn fall(
     };
     let up = at.normalize();
     // On a floor if the bed is indoors, and never below the ground.
-    let feet = up * planet.drawn(up).length().max(at.length());
+    let feet = up * planet.ground_at(at).length().max(at.length());
     *transform = Transform::from_translation(feet).looking_to(facing, up);
     view.forward = facing;
     player.down = None;

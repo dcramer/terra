@@ -128,7 +128,7 @@ fn show(claim: Res<Claim>, planet: Res<Planet>, belongings: Belongings, mut gizm
     let points = (0..=steps).map(|step| {
         let turn = step as f32 / steps as f32 * std::f32::consts::TAU;
         let out = Quat::from_axis_angle(up, turn) * east * radius;
-        let ground = planet.drawn((centre + out).normalize());
+        let ground = planet.ground_at(centre + out);
         ground + ground.normalize() * 0.15
     });
     gizmos.linestrip(points, Color::srgba(1.0, 0.78, 0.3, 0.8));

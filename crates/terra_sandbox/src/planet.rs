@@ -21,7 +21,7 @@ use bevy::{
 };
 use bevy_inspector_egui::{prelude::*, quick::ResourceInspectorPlugin};
 use std::sync::Arc;
-use terra_core::{Ground, PlanetSpec, Seed, StandInPlanet, Water};
+use terra_core::{Ground, PlanetSpec, RayHit, Seed, StandInPlanet, Water};
 use terra_gen::Noise;
 
 /// Height of the tallest hills, in metres.
@@ -57,9 +57,12 @@ pub const FACES: [(Vec3, Vec3, Vec3); 6] = [
 ];
 
 /// The planet every experiment shares. Ask it where the ground is.
+/// The planet the game stands on. Everything asks it about the ground through the
+/// questions below, and nothing reaches into what answers them, so the stand-in's
+/// heights can give way to voxel terrain (docs/terrain.md) behind them.
 #[derive(Resource, Clone)]
 pub struct Planet {
-    pub ground: Arc<StandInPlanet>,
+    ground: Arc<StandInPlanet>,
     cover: Noise,
 }
 
@@ -79,6 +82,41 @@ impl Planet {
             ground: Arc::new(StandInPlanet::new(spec, RELIEF_M, Some(SEA_LEVEL_M))),
             cover: Noise::new(spec.seed.derive("ground cover")),
         }
+    }
+
+    /// Where something at a point stands: the ground under it, as it is drawn. The point
+    /// is a place in the world, not a direction, since with voxels there may be ground
+    /// above as well as below, as in a cave or under an overhang.
+    pub fn ground_at(&self, point: Vec3) -> Vec3 {
+        self.drawn(point.normalize())
+    }
+
+    /// Whether the ground at a point is under the sea.
+    pub fn under_sea(&self, point: Vec3) -> bool {
+        self.ground_at(point).length() < self.sea_radius_m()
+    }
+
+    /// Which way the ground faces at a point on it.
+    pub fn normal(&self, point: Vec3) -> Vec3 {
+        self.ground.normal(point)
+    }
+
+    /// How far a point is above the ground, below it if negative.
+    pub fn distance(&self, point: Vec3) -> f32 {
+        self.ground.distance(point)
+    }
+
+    /// Where a ray first meets the ground, within so far. `direction` is unit length.
+    pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f32) -> Option<RayHit> {
+        self.ground.raycast(origin, direction, max_distance)
+    }
+
+    pub fn radius_m(&self) -> f32 {
+        self.ground.spec().radius_m
+    }
+
+    pub fn seed(&self) -> Seed {
+        self.ground.spec().seed
     }
 
     /// The point on the ground in a direction from the centre.

@@ -82,7 +82,7 @@ fn draw_land(
     let mut land = vec![[0u8; 4]; PIXELS * PIXELS];
     for y in 0..PIXELS {
         for x in 0..PIXELS {
-            let point = planet.drawn(pixel_to_planet(&site, x, y).normalize());
+            let point = planet.ground_at(pixel_to_planet(&site, x, y));
             heights[y * PIXELS + x] = point.length() - sea;
         }
     }
@@ -97,7 +97,7 @@ fn draw_land(
                 let deep = (-height / 6.0).clamp(0.0, 1.0);
                 [0.32 - 0.12 * deep, 0.5 - 0.15 * deep, 0.62 - 0.1 * deep]
             } else {
-                let point = planet.drawn(pixel_to_planet(&site, x, y).normalize());
+                let point = planet.ground_at(pixel_to_planet(&site, x, y));
                 let cover = planet.cover(point, point.normalize());
                 let grass = cover.grass;
                 [
