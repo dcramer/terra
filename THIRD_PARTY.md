@@ -20,7 +20,10 @@ All by [Quaternius](https://quaternius.com), who releases everything under [CC0 
 | Where | From | Changes |
 |---|---|---|
 | `crates/terra_sandbox/assets/models/nature/` | Ultimate Nature Pack: trees, rocks, bushes, plants, flowers | None to the files. The sandbox reads their shapes and applies its own colours. |
-| `crates/terra_sandbox/assets/models/props/` | House Interior, Modular Sci-Fi and Survival packs: furniture, crates, tanks, a fire | None to the files. Recoloured the same way. |
-| `crates/terra_sandbox/assets/models/character/` | Universal Animation Library, standard edition: a rigged figure and its animations | Cut down to eight animations, and the figure's two colours changed. |
+| `crates/terra_sandbox/assets/models/props/` | House Interior, Modular Sci-Fi and Survival packs: furniture, crates, tanks, a fire. Modular Dungeon pack: `Table_Small.glb`, a workbench | None to the files. Recoloured the same way. |
+| `crates/terra_sandbox/assets/models/character/` | Universal Animation Library, standard edition: a rigged figure and its animations | Cut down to 26 of its 46 animations, and the figure's two colours changed, by `cut_figure.py` in the same folder. |
+| `crates/terra_sandbox/assets/models/creatures/` | Ultimate Animated Animals pack: `Deer.glb`. Easy Enemies pack: `Spider.glb`. Both rigged and animated | None to the files. |
+| `crates/terra_sandbox/assets/models/village/` | Medieval Village pack: houses, a blacksmith's, a fence, a well, a market stall. Fantasy RTS pack: `Wall_FirstAge.glb`, a palisade | None to the files. |
+| `crates/terra_sandbox/assets/models/tools/` | Survival pack: `Axe.glb`, `Knife.glb`. Medieval Weapons pack: hammer, sword, spear, bow, arrow | None to the files. |
 
-The individual model files were fetched from [quaternius-showcase](https://github.com/trebeljahr/quaternius-showcase), which republishes the packs one model to a file, and the animation library from [gltf-universal-animation-library](https://github.com/J-Ponzo/gltf-universal-animation-library). The licence was checked against Quaternius's own [FAQ](https://quaternius.com/faq.html) on 2026-10-10.
+The individual model files were fetched from [quaternius-showcase](https://github.com/trebeljahr/quaternius-showcase), which republishes the packs one model to a file, and the animation library from [gltf-universal-animation-library](https://github.com/J-Ponzo/gltf-universal-animation-library). The licence was checked against Quaternius's own [FAQ](https://quaternius.com/faq.html) on 2026-10-10. The creatures, village pieces, tools and workbench were fetched from quaternius-showcase on 2026-10-11.
