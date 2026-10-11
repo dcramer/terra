@@ -7,6 +7,7 @@ Status: a draft for the developers to correct. It collects what they said on 202
 In their words, shortened.
 
 - **The inspiration is Subnautica 2**, blended with Rust, Ark and other advanced building games (D48).
+- **Enshrouded is a role model** for building, and for other mechanics (named 2026-10-10).
 - **You pick the part you want to build, and can cycle its variants**, from "the little dial building menus we see in things like Rust and Subnautica".
 - **Rooms are plain boxes.** No lights or fittings come with one.
 - **A room placed across another extends it** to the combined shape.
