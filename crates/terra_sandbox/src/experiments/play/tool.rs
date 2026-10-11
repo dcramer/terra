@@ -35,6 +35,7 @@ use super::dial::Dial;
 use super::flora::Obstacles;
 use super::inventory::{self, Belongings, Cost, InventoryScreen, Raw, Tool};
 use super::props::{self, Blocked, Models, Prop, Standing};
+use super::skills::{Did, ONCE, Skill};
 use super::work::Hold;
 use super::{Player, View};
 use crate::experiments::build::Site;
@@ -826,6 +827,7 @@ fn act(
     mut notice: ResMut<Notice>,
     mut site: ResMut<Site>,
     claim: Res<Claim>,
+    mut did: MessageWriter<Did>,
     player: Single<(&Transform, &mut Player)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -885,6 +887,9 @@ fn act(
                     return;
                 }
                 if site.apply_all(&ops, &mut commands, &planet, &mut meshes) {
+                    if pay.is_some() {
+                        did.write(Did(Skill::Building, ONCE));
+                    }
                     if let Some((cost, times)) = refund {
                         belongings.refund(cost, times);
                     }
@@ -915,6 +920,7 @@ fn act(
                         indoors,
                     );
                     info!("Placed a {} at {at}, {lift} up.", item.name);
+                    did.write(Did(Skill::Building, ONCE));
                 }
             }
             Job::TakeAway(entity) => {

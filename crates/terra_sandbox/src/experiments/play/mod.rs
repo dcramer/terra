@@ -31,6 +31,7 @@ mod models;
 mod options;
 mod props;
 mod scene;
+mod skills;
 mod tool;
 mod vitals;
 mod work;
@@ -104,6 +105,7 @@ pub fn plugin(app: &mut App) {
     claim::plugin(app);
     vitals::plugin(app);
     death::plugin(app);
+    skills::plugin(app);
     harvest::plugin(app);
     options::plugin(app);
     app.insert_resource(DrivenByPlayer)
@@ -172,6 +174,7 @@ fn spawn(
             }
             body
         },
+        skills::Skills::default(),
         {
             let mut kit = inventory::starting_kit(&mut items);
             for (name, count) in &options.gives {

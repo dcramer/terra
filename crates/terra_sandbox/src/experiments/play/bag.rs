@@ -155,7 +155,7 @@ fn setup(mut commands: Commands) {
             Hud,
             Node {
                 position_type: PositionType::Absolute,
-                top: percent(26),
+                top: percent(12),
                 width: percent(100),
                 justify_content: JustifyContent::Center,
                 ..default()

@@ -9,7 +9,8 @@ use super::bag::Notice;
 use super::controls::{Action, Controls, Settings};
 use super::dial::Dial;
 use super::flora::{Growth, Obstacles};
-use super::inventory::{Belongings, Cuttable, InventoryScreen, Tool};
+use super::inventory::{Belongings, Cut, Cuttable, InventoryScreen, Tool};
+use super::skills::{Did, ONCE, Skill, Skills};
 use super::work::Hold;
 use bevy::prelude::*;
 
@@ -74,6 +75,8 @@ fn cut(
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
     mut obstacles: ResMut<Obstacles>,
+    skills: Single<&Skills, With<Player>>,
+    mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
 ) {
     let (player_at, mut player) = player.into_inner();
@@ -170,9 +173,10 @@ fn cut(
     }
 
     let Some(speed) = speed_on(&cut) else { return };
-    let (_, mut hold) = *cutting
-        .held
-        .get_or_insert((entity, Hold::new(cut.seconds / speed.max(0.01))));
+    let (_, mut hold) = *cutting.held.get_or_insert((
+        entity,
+        Hold::new(cut.seconds / (speed * skills.speed(skill_for(cut.what))).max(0.01)),
+    ));
     let finished = hold.advance(time.delta_secs());
     cutting.held = Some((entity, hold));
     player.since_acting = 0.0;
@@ -212,6 +216,7 @@ fn cut(
         obstacles.0.retain(|(at, _)| *at != stood);
     }
     info!("Cut something for {given} {}.", raw.name());
+    did.write(Did(skill_for(cut.what), ONCE));
     cutting.held = None;
     cutting.target = None;
     transform.rotation = rest;
@@ -286,5 +291,14 @@ pub fn prompt(
             Tool::Knife => "Aim at a bush or plant nearby".to_string(),
             Tool::Hammer => String::new(),
         },
+    }
+}
+
+/// The skill gathering a sort of thing grows.
+fn skill_for(what: Cut) -> Skill {
+    match what {
+        Cut::Tree | Cut::GreatTree => Skill::Chopping,
+        Cut::Rock | Cut::Ore => Skill::Mining,
+        Cut::Plant => Skill::Foraging,
     }
 }

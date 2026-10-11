@@ -102,6 +102,7 @@ You carry a backpack, on the rules in `terra_items` and the Subnautica baseline 
 - **Crafting**: F at a workbench or a smithy opens its recipes beside the backpack; press a number or click one to make it. The workbench makes stone tools, leather gear and a larger pack; the smithy smelts ore into iron and makes iron tools, but only once a smith lives at your claim. The outpost has an old workbench by its door.
 - **Staying alive**: health, stamina and hunger, as bars at the bottom left. Sprinting, jumping and working spend stamina, which comes back when you stop. Hunger falls all the time; hungry, less comes back; starving drains health until you die (D101). Berry bushes give berries to the knife; meat cooks at a campfire into something far more filling.
 - **Dying**: you fall, everything in your backpack drops where you fell in a bag, and you wake at a bed in your claim, or where you first arrived. F at the bag takes back what fits; left alone, it is gone after ten minutes (D84). What you wear stays on you, and the action bar still points at your tools when they come back.
+- **Skills by doing** (D88): chopping, mining, foraging, building and crafting are learned the first time you do them and improve as you do them more; each step makes that work quicker. The list shows beside the backpack while the inventory is open. Dying costs half the way to each skill's next step, never a step already reached (D101).
 - **The inventory** shows the character sheet and the backpack's grid. Point at a tool and press 1 to 6 to put it in that slot of the bar. Click a slot of the sheet to take off what is in it, and click gear in the backpack to wear it. The pack will not come off while what you carry would not fit without it. Opening it puts away the part in the hammer's hand.
 
 The materials, costs, recipes and what you start with are stand-ins, chosen so the MVP's loop can be walked.
@@ -162,6 +163,7 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `claim` | Your claim: placing it, growing it, and drawing its edge |
 | `vitals` | Health, stamina and hunger: what wears them down, what brings them back, and the bars |
 | `death` | Going down, the dropped bag, and waking at a bed |
+| `skills` | Skills by doing: what was done becomes progress, steps make work quicker, dying costs some |
 | `harvest` | Gathering with the right tool for each thing, and refusing what its material cannot work |
 | `work` | Holding a button until a job is done |
 | `tool` | The builder: what it is aimed at, the preview, and building |

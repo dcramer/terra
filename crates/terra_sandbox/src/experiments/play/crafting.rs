@@ -12,6 +12,7 @@ use super::bag::Notice;
 use super::grab_mouse;
 use super::interact::{Focus, Focusing, Interactable};
 use super::inventory::{Apparel, Belongings, CantMake, Cost, InventoryScreen, Made, Raw, Tool};
+use super::skills::{Did, ONCE, Skill};
 use bevy::{prelude::*, window::CursorOptions};
 
 /// Where things are made.
@@ -216,6 +217,7 @@ fn make(
     rows: Query<(&Interaction, &Row), Changed<Interaction>>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
+    mut did: MessageWriter<Did>,
 ) {
     let Some(station) = screen.at else { return };
     const NUMBERS: [KeyCode; 9] = [
@@ -246,6 +248,7 @@ fn make(
     }
     match belongings.craft(recipe.cost, recipe.makes) {
         Ok(()) => {
+            did.write(Did(Skill::Crafting, ONCE));
             info!("Made {}.", recipe.makes.name());
             notice.say(format!("Made {}", recipe.makes.name()));
         }
