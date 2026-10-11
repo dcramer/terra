@@ -162,7 +162,20 @@ fn setup(mut commands: Commands) {
                 ..default()
             },
         ))
-        .with_child((NoticeText, Text::new(""), normal.clone(), white));
+        .with_child((
+            NoticeText,
+            Text::new(""),
+            normal.clone(),
+            white,
+            // A dark backing, so it reads against a bright sky.
+            Node {
+                max_width: px(1100),
+                padding: UiRect::axes(px(12), px(6)),
+                border_radius: BorderRadius::all(px(6)),
+                ..default()
+            },
+            BackgroundColor(Color::NONE),
+        ));
 
     // The inventory itself, hidden until opened.
     commands
@@ -471,7 +484,10 @@ fn draw(
         Query<(&SlotLabel, &mut Text)>,
         Single<&mut Text, With<About>>,
         Single<&mut Text, With<Capacity>>,
-        Single<(&mut Text, &mut TextColor), With<NoticeText>>,
+        Single<
+            (&mut Text, &mut TextColor, &mut BackgroundColor),
+            (With<NoticeText>, Without<Slot>),
+        >,
         Query<(&GearName, &mut Text)>,
     )>,
 ) {
@@ -592,7 +608,11 @@ fn draw(
     // Longer things said stay up longer, so they can be read.
     let lasts = NOTICE_SECONDS + notice.text.len() as f32 / 22.0;
     let fade = (lasts - notice.age).clamp(0.0, 1.0);
-    let (mut text, mut text_colour) = texts.p3().into_inner();
+    let (mut text, mut text_colour, mut backing) = texts.p3().into_inner();
+    let wanted = BackgroundColor(Color::srgba(0.04, 0.05, 0.07, 0.62 * fade));
+    if *backing != wanted {
+        *backing = wanted;
+    }
     let wanted = if fade > 0.0 {
         notice.text.clone()
     } else {

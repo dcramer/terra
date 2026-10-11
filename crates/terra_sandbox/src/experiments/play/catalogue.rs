@@ -330,13 +330,10 @@ pub static PARTS: [Part; 19] = [
     Part {
         name: "Seat",
         tab: Tab::Furniture,
+        // Modern pieces from the free packs, such as a couch, kitchen drawers, sci-fi crates
+        // and potted houseplants, are left out until the art direction settles; they do
+        // not belong in game design 001's world.
         kind: Kind::Items(&[
-            item(
-                "Couch",
-                "Couch_Medium1",
-                2.2,
-                &[(Raw::Wood, 2), (Raw::Hide, 3)],
-            ),
             item("Chair", "Chair_1", 0.95, &[(Raw::Wood, 2)]),
             item("Stool", "Stool", 0.5, &[(Raw::Wood, 1)]),
         ]),
@@ -362,26 +359,12 @@ pub static PARTS: [Part; 19] = [
     Part {
         name: "Storage",
         tab: Tab::Storage,
-        kind: Kind::Items(&[
-            item("Crate", "Props_Crate", 0.8, &[(Raw::Wood, 2)]),
-            item("Long crate", "Props_CrateLong", 1.2, &[(Raw::Wood, 3)]),
-            item("Bookshelf", "Bookshelf", 2.0, &[(Raw::Wood, 4)]),
-            item("Drawers", "Kitchen_2Drawers", 0.92, &[(Raw::Wood, 3)]),
-            item(
-                "Tall shelf",
-                "Props_Shelf_Tall",
-                2.0,
-                &[(Raw::Wood, 2), (Raw::Iron, 1)],
-            ),
-        ]),
+        kind: Kind::Items(&[item("Bookshelf", "Bookshelf", 2.0, &[(Raw::Wood, 4)])]),
     },
     Part {
         name: "Decor",
         tab: Tab::Furniture,
         kind: Kind::Items(&[
-            item("Leafy plant", "Houseplant_7", 1.1, &[(Raw::Fibre, 1)]),
-            item("Cactus", "Houseplant_3", 0.9, &[(Raw::Fibre, 1)]),
-            item("Small plant", "Houseplant_1", 0.45, &[(Raw::Fibre, 1)]),
             rug("Round rug", "Carpet_Round", 3.2, &[(Raw::Hide, 2)]),
             rug("Long rug", "Carpet_1", 3.0, &[(Raw::Hide, 2)]),
             item("Shovel", "Shovel", 1.3, &[(Raw::Wood, 1), (Raw::Iron, 1)]),

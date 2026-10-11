@@ -599,9 +599,9 @@ pub fn push_out<'a>(
 mod tests {
     use super::*;
 
-    fn crate_at_origin() -> (Prop, Transform, Visibility) {
+    fn box_at_origin() -> (Prop, Transform, Visibility) {
         let prop = Prop {
-            item: catalogue::item_from("Props_Crate").unwrap(),
+            item: catalogue::item_from("Bookshelf").unwrap(),
             at: Vec3::ZERO,
             indoors: false,
             lift: 0.0,
@@ -613,7 +613,7 @@ mod tests {
 
     #[test]
     fn a_walker_is_pushed_out_of_an_item_by_its_nearest_side() {
-        let (prop, transform, visibility) = crate_at_origin();
+        let (prop, transform, visibility) = box_at_origin();
         let push =
             |target: Vec3| push_out(target, 0.3, [(&prop, &transform, &visibility)].into_iter());
         // Just inside the east side: out to the east, a radius clear of the box.
@@ -627,7 +627,7 @@ mod tests {
 
     #[test]
     fn a_rug_and_a_hidden_item_are_walked_over() {
-        let (mut prop, transform, visibility) = crate_at_origin();
+        let (mut prop, transform, visibility) = box_at_origin();
         let inside = Vec3::new(0.1, 0.0, 0.1);
         assert_eq!(
             push_out(

@@ -14,6 +14,8 @@ use bevy::{
 
 /// How far from you something can be and still be used.
 pub const REACH_M: f32 = 3.5;
+/// How far the aiming mark may pass outside a thing's target and still be on it.
+const AIM_SLACK_M: f32 = 0.6;
 
 /// Something the interact key does something to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -102,7 +104,9 @@ fn focus(
     let feet = player.translation;
     let eye = camera.translation();
     let looking = *camera.forward();
-    // The nearest thing along the line of the aiming mark that is within reach.
+    // The thing within reach that the aiming mark passes closest to. It may pass a little
+    // wide, since the camera looks over a shoulder and so sees things close by from the
+    // side; it is still aiming, not whatever happens to be nearest.
     let aimed = things
         .iter()
         .filter_map(|(entity, can, at)| {
@@ -111,7 +115,11 @@ fn focus(
             let along = (middle - eye).dot(looking);
             let off = (eye + looking * along).distance(middle);
             let near = middle.distance(feet) - radius < REACH_M;
-            (along > 0.0 && off < radius && near).then_some((entity, can.0, along))
+            (along > 0.0 && off < radius + AIM_SLACK_M && near).then_some((
+                entity,
+                can.0,
+                off - radius,
+            ))
         })
         .min_by(|a, b| a.2.total_cmp(&b.2));
     focus.entity = aimed.map(|(entity, ..)| entity);
