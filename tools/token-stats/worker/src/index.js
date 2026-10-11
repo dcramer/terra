@@ -225,7 +225,7 @@ async function summary(env) {
       daily: days.map((day) => ({ day, ...(byDay.get(day) ?? zero()) })),
     };
   });
-  users.sort((a, b) => b.total - a.total);
+  users.sort((a, b) => b.cost - a.cost);
   const totals = users.reduce(add, zero());
   return { generated_at: today.toISOString(), days: CHART_DAYS, totals, users };
 }

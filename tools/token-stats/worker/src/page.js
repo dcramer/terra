@@ -1,9 +1,9 @@
-// The public page at `/`: tokens spent per person, in the look of docs/art.md:
+// The public page at `/`: what building Terra has cost per person at API prices, in the look of docs/art.md:
 // flat colour, distance as pastel layers, warm light and cool shadow.
 
 export function page(summary) {
   const { totals, users, days } = summary;
-  const peak = Math.max(1, ...users.flatMap((u) => u.daily.map((d) => d.total)));
+  const peak = Math.max(0.01, ...users.flatMap((u) => u.daily.map((d) => d.cost)));
   const cards = users.map((u) => card(u, peak, days)).join("");
   const empty = users.length === 0 ? `<p class="empty">Nothing reported yet.</p>` : "";
 
@@ -13,7 +13,7 @@ export function page(summary) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Terra Token Stats</title>
-<meta name="description" content="Claude tokens spent building Terra, per person.">
+<meta name="description" content="What the Claude tokens spent building Terra would cost at API prices, per person.">
 <link rel="icon" href="data:image/svg+xml,${encodeURIComponent(ICON)}">
 <style>${CSS}</style>
 </head>
@@ -22,14 +22,13 @@ export function page(summary) {
   ${SCENE}
   <div class="title">
     <h1>Terra</h1>
-    <p>Tokens spent building it</p>
+    <p>What building it has cost</p>
   </div>
 </header>
 <main>
   <section class="hero" aria-label="Everyone">
-    <div class="big"${num(totals.total, "total")}>${compact(totals.total)}</div>
-    <div class="label">tokens across ${users.length} ${users.length === 1 ? "person" : "people"}</div>
-    <div class="cost"><span${num(totals.cost, "cost", "usd")}>${money(totals.cost)}</span> at API prices</div>
+    <div class="big"${num(totals.cost, "cost", "usd")}>${money(totals.cost)}</div>
+    <div class="label">at API prices, across ${users.length} ${users.length === 1 ? "person" : "people"}</div>
     ${facts(totals)}
   </section>
   ${empty}
@@ -48,35 +47,41 @@ export function page(summary) {
 function card(u, peak, days) {
   const bars = u.daily
     .map((d) => {
-      const h = d.total === 0 ? 0 : Math.max(2, (d.total / peak) * 100);
-      return `<div class="day" data-day="${d.day}" data-total="${full(d.total)}" data-output="${full(d.output)}" data-messages="${d.messages}" data-cost="${money(d.cost)}"><i style="height:${h.toFixed(1)}%"></i></div>`;
+      const h = d.cost === 0 ? 0 : Math.max(2, (d.cost / peak) * 100);
+      return `<div class="day" data-day="${d.day}" data-output="${full(d.output)}" data-messages="${d.messages}" data-cost="${money(d.cost)}"><i style="height:${h.toFixed(1)}%"></i></div>`;
     })
     .join("");
-  const models = u.models.map((m) => `<span title="${full(m.total)} tokens">${esc(m.model)}</span>`).join("");
+  const models = u.models.map((m) => `<span title="${money(m.cost)} at API prices">${esc(m.model)}</span>`).join("");
   return `<article class="person" data-user="${esc(u.user)}">
   <div class="head">
     <h2>${esc(u.user)}</h2>
-    <div class="total"${num(u.total, "total")}>${compact(u.total)}</div>
+    <div class="total"${num(u.cost, "cost", "usd")}>${money(u.cost)}</div>
   </div>
-  <div class="cost"><span${num(u.cost, "cost", "usd")}>${money(u.cost)}</span> at API prices</div>
   ${facts(u)}
   <figure>
-    <div class="chart" role="img" aria-label="Tokens per day for ${esc(u.user)} over the last ${days} days">${bars}</div>
-    <figcaption><span>${u.daily[0].day.slice(5)}</span><span>tokens a day, last ${days} days</span><span>${u.daily.at(-1).day.slice(5)}</span></figcaption>
+    <div class="chart" role="img" aria-label="Cost per day for ${esc(u.user)} over the last ${days} days">${bars}</div>
+    <figcaption><span>${u.daily[0].day.slice(5)}</span><span>cost a day, last ${days} days</span><span>${u.daily.at(-1).day.slice(5)}</span></figcaption>
   </figure>
   <div class="models">${models}</div>
 </article>`;
 }
 
+// Tokens written and read fresh, leaving out cache reads: the same context read again
+// each turn, which is most of the count and little of the cost.
 function facts(t) {
-  const item = (label, key) => `<div><dt>${label}</dt><dd${num(t[key], key)}>${compact(t[key])}</dd></div>`;
-  return `<dl class="facts">${item("output", "output")}${item("input", "input")}${item("cache read", "cache_read")}${item("cache write", "cache_write")}${item("messages", "messages")}</dl>`;
+  const item = (label, key) => `<div><dt>${label}</dt><dd${num(value(t, key), key)}>${compact(value(t, key))}</dd></div>`;
+  return `<dl class="facts">${item("output tokens", "output")}${item("input tokens", "new_input")}${item("messages", "messages")}</dl>`;
+}
+
+// A field of a /json row; `new_input` is input not read from the cache.
+function value(t, key) {
+  return key === "new_input" ? t.input + t.cache_write : t[key];
 }
 
 // A counter the script animates: its exact value, which field of /json it shows,
 // and whether it is dollars.
 function num(n, key, fmt) {
-  const title = fmt === "usd" ? `$${n.toFixed(2)} at API list prices` : full(n);
+  const title = fmt === "usd" ? "at API list prices" : full(n);
   return ` data-n="${n}" data-key="${key}"${fmt ? ` data-fmt="${fmt}"` : ""} title="${title}"`;
 }
 
@@ -94,9 +99,7 @@ function compact(n) {
 }
 
 function money(n) {
-  if (n < 10) return `$${n.toFixed(2)}`;
-  if (n < 1000) return `$${Math.round(n)}`;
-  return `$${compact(Math.round(n))}`;
+  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function full(n) {
@@ -199,11 +202,6 @@ main { max-width: 960px; margin: 0 auto; padding: 24px 16px 8px; }
 .big { font-size: clamp(48px, 10vw, 84px); font-weight: 600; line-height: 1;
   font-variant-numeric: tabular-nums; }
 .label { color: var(--muted); margin-top: 6px; }
-.cost { color: var(--muted); font-size: 14px; }
-.cost [data-n] { color: var(--bar); font-weight: 600; font-variant-numeric: tabular-nums; }
-.hero .cost { margin-top: 4px; font-size: 16px; }
-.hero .cost [data-n] { font-size: 22px; }
-.person .cost { margin: -4px 0 8px; text-align: right; }
 .hero .facts { justify-content: center; margin-top: 16px; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; }
 .facts div { display: flex; gap: 6px; align-items: baseline; }
@@ -225,7 +223,7 @@ figcaption { display: flex; justify-content: space-between; color: var(--muted);
 .empty { text-align: center; color: var(--muted); }
 footer { max-width: 960px; margin: 0 auto; padding: 24px 16px 40px; color: var(--muted); font-size: 13px; text-align: center; }
 footer a { color: inherit; }
-.big, .total, .facts dd, .cost [data-n] { position: relative; display: inline-block; }
+.big, .total, .facts dd { position: relative; display: inline-block; }
 .counting { color: var(--count); }
 .landed { animation: land 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes land {
@@ -244,13 +242,6 @@ footer a { color: inherit; }
 .day i { transform-origin: bottom; transition: height 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .grow .day i { animation: grow 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 @keyframes grow { from { transform: scaleY(0); } }
-.cost .gain { left: auto; right: 100%; bottom: auto; top: 0.15em; margin-right: 8px; font-size: 12px;
-  animation-name: rise-side; }
-@keyframes rise-side {
-  0% { opacity: 0; transform: translateY(4px); }
-  15% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-16px); }
-}
 @media (prefers-reduced-motion: reduce) {
   .landed, .gain, .grow .day i { animation: none; }
   .gain { display: none; }
@@ -266,7 +257,7 @@ let on = null;
 function show(day, x, y) {
   if (on !== day) { on?.classList.remove("on"); on = day; day.classList.add("on"); }
   const d = day.dataset;
-  tip.innerHTML = "<b>" + d.day + "</b><br>" + d.total + " tokens<br>" + d.output + " output · " + d.messages + " messages<br>" + d.cost + " at API prices";
+  tip.innerHTML = "<b>" + d.day + "</b><br>" + d.cost + " at API prices<br>" + d.output + " output tokens · " + d.messages + " messages";
   tip.hidden = false;
   const w = tip.offsetWidth;
   tip.style.left = Math.min(window.innerWidth - w - 8, Math.max(8, x - w / 2)) + "px";
@@ -283,6 +274,7 @@ document.addEventListener("pointerleave", hide);
 // /json every minute, rolling any counter that grew to its new value.
 ${compact}
 ${money}
+${value}
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const fmt = (n) => n.toLocaleString("en-US");
 const ease = (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
@@ -291,7 +283,7 @@ const put = (el, n) => { el.firstChild.nodeValue = el.dataset.fmt === "usd" ? mo
 
 function roll(el, from, to, ms, delay) {
   el.dataset.n = to;
-  el.title = el.dataset.fmt === "usd" ? "$" + to.toFixed(2) + " at API list prices" : fmt(to);
+  if (el.dataset.fmt !== "usd") el.title = fmt(to);
   if (still || from === to) { put(el, to); return; }
   const start = performance.now() + (delay || 0);
   el.classList.remove("landed");
@@ -325,7 +317,7 @@ const seen = new IntersectionObserver((entries) => {
     e.target.classList.add("grow");
     e.target.querySelectorAll(".day i").forEach((b, i) => { b.style.animationDelay = (i * 18) + "ms"; });
     e.target.querySelectorAll("[data-n]").forEach((el, i) => {
-      const big = el.matches(".big, .total, .cost [data-n]");
+      const big = el.matches(".big, .total");
       roll(el, 0, +el.dataset.n, big ? 2000 : 1400, big ? 0 : 150 + i * 70);
     });
   }
@@ -337,11 +329,10 @@ document.querySelectorAll(".hero, .person").forEach((s) => {
 
 function update(group, data) {
   group.querySelectorAll("[data-n]").forEach((el) => {
-    const was = +el.dataset.n, now = data[el.dataset.key];
+    const was = +el.dataset.n, now = value(data, el.dataset.key);
     if (typeof now !== "number" || now === was) return;
     roll(el, was, now, 1500, 0);
-    if (el.matches(".big, .total")) gain(el, now - was);
-    if (el.dataset.fmt === "usd") gain(el, now - was, true);
+    if (el.matches(".big, .total")) gain(el, now - was, el.dataset.fmt === "usd");
   });
 }
 
@@ -361,17 +352,16 @@ async function refresh() {
   }
   document.getElementById("updated").textContent = s.generated_at.slice(0, 16).replace("T", " ");
   update(document.querySelector(".hero"), s.totals);
-  const peak = Math.max(1, ...s.users.flatMap((u) => u.daily.map((d) => d.total)));
+  const peak = Math.max(0.01, ...s.users.flatMap((u) => u.daily.map((d) => d.cost)));
   for (const u of s.users) {
     const card = cards.find((c) => c.dataset.user === u.user);
     update(card, u);
     card.querySelectorAll(".day").forEach((day, i) => {
       const d = u.daily[i];
-      day.dataset.total = fmt(d.total);
       day.dataset.output = fmt(d.output);
       day.dataset.messages = d.messages;
       day.dataset.cost = money(d.cost);
-      day.querySelector("i").style.height = (d.total === 0 ? 0 : Math.max(2, (d.total / peak) * 100)).toFixed(1) + "%";
+      day.querySelector("i").style.height = (d.cost === 0 ? 0 : Math.max(2, (d.cost / peak) * 100)).toFixed(1) + "%";
     });
   }
 }

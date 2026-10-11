@@ -13,7 +13,7 @@ A message's id is the only thing that identifies it. The same message turns up m
 
 ## Cost
 
-The page and `/json` also show what the tokens would cost at the API's list prices, per person, model and day. Most of us pay by subscription, so this is the price of the work on the API, not what anyone paid. The prices are in [`worker/src/prices.js`](worker/src/prices.js) and need updating when they change or a model is added; a model not listed there counts as free. Cache writes are priced at the 1-hour rate, the only kind Claude Code writes, and Haiku 5.5 at its rate for prompts up to 100,000 tokens.
+The page leads with what the tokens would cost at the API's list prices, per person and day, and `/json` has it per model too. It leaves out cache reads: they are most of the token count, the same context read again each turn, and little of the cost. Most of us pay by subscription, so this is the price of the work on the API, not what anyone paid. The prices are in [`worker/src/prices.js`](worker/src/prices.js) and need updating when they change or a model is added; a model not listed there counts as free. Cache writes are priced at the 1-hour rate, the only kind Claude Code writes, and Haiku 5.5 at its rate for prompts up to 100,000 tokens.
 
 The page and `/json` are public. Sending and `/stats` need the shared key in `Authorization: Bearer <key>`. The key is a secret: never commit it.
 
@@ -61,7 +61,7 @@ To try it locally, put `API_KEY=devkey` in `worker/.dev.vars` and run `npx wrang
 
 | Call | Body or query |
 |---|---|
-| `GET /` | The page: everyone's totals and cost, models, and tokens a day for 30 days |
+| `GET /` | The page: everyone's cost and tokens, models, and cost a day for 30 days |
 | `GET /json` | The same as JSON |
 | `POST /report` | `{"user": "dcramer", "messages": [{"id": "msg_…", "session": "…", "day": "2026-10-10", "model": "claude-opus-5-5", "input": 1, "output": 2, "cache_read": 3, "cache_write": 4}]}`, at most 500 messages |
 | `GET /stats` | `group`: any of `user`, `day`, `model`, comma-separated (default `user`); `since`: a day |
