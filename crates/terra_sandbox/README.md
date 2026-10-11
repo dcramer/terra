@@ -26,7 +26,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--bench` | Measure frame times with vsync off, print them, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
 | `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
-| `--give <item>:<count>` | In the play experiment: start carrying something extra, such as `stone:10`, for testing. Repeatable. |
+| `--give <item>:<count>` | In the play experiment: start carrying something extra, such as `stone:10`, or start with `health`, `fed` or `stamina` at a value out of 100, for testing. Repeatable. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
 
 ## Controls
@@ -73,7 +73,8 @@ The tech demo of the MVP's loop (docs/prototypes.md), being built on the earlier
 | W A S D, Shift, Space | Move, sprint, jump |
 | 1 to 6 | Pick a slot of the action bar. What is in it is the tool in hand. |
 | Tab | Open and close the inventory. I does the same. |
-| F | Use what you stand beside: a workbench or smithy opens its recipes, the claim stone grows your claim |
+| F | Use what you stand beside: a workbench, smithy or campfire opens its recipes, the claim stone grows your claim, a dropped bag gives back what fits |
+| H | Eat the most filling food you carry. Clicking food in the backpack eats it too. |
 | Hold right mouse | With the hammer in hand: the dial of parts. Move the mouse toward one and let go, or press its number. B does the same. |
 | Tap right mouse | Put the part away, or put back what you picked up |
 | Hold left click | Build, take apart, or cut. It takes a moment; let go early and nothing is done. E does the same. |
@@ -99,6 +100,8 @@ You carry a backpack, on the rules in `terra_items` and the Subnautica baseline 
 - **Claiming**: you build only inside your claim (D94). With the hammer, pick Craft, then Claim stone, and place it; the claim is 40 metres across, drawn on the ground while the hammer is in hand, and F at the stone grows it to 80 and then 160 for a price (D104). Until you place one, the hammer builds nothing and takes nothing apart.
 - **Building** spends materials. Everything has a cost, shown in the prompt before you commit: wood for floors and walls, fibre for windows, hide for a couch. If you are short, the thing shows red and the prompt says what is missing. Taking something apart gives back everything it cost, if there is room in the backpack for it; if not, it stays, and a notice above the bar says why.
 - **Crafting**: F at a workbench or a smithy opens its recipes beside the backpack; press a number or click one to make it. The workbench makes stone tools, leather gear and a larger pack; the smithy smelts ore into iron and makes iron tools, but only once a smith lives at your claim. The outpost has an old workbench by its door.
+- **Staying alive**: health, stamina and hunger, as bars at the bottom left. Sprinting, jumping and working spend stamina, which comes back when you stop. Hunger falls all the time; hungry, less comes back; starving drains health until you die (D101). Berry bushes give berries to the knife; meat cooks at a campfire into something far more filling.
+- **Dying**: you fall, everything in your backpack drops where you fell in a bag, and you wake at a bed in your claim, or where you first arrived. F at the bag takes back what fits; left alone, it is gone after ten minutes (D84). What you wear stays on you, and the action bar still points at your tools when they come back.
 - **The inventory** shows the character sheet and the backpack's grid. Point at a tool and press 1 to 6 to put it in that slot of the bar. Click a slot of the sheet to take off what is in it, and click gear in the backpack to wear it. The pack will not come off while what you carry would not fit without it. Opening it puts away the part in the hammer's hand.
 
 The materials, costs, recipes and what you start with are stand-ins, chosen so the MVP's loop can be walked.
@@ -157,6 +160,8 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `interact` | What the interact key would act on: the nearest station, claim stone or person within reach |
 | `crafting` | Stations, recipes, and making things from what you carry |
 | `claim` | Your claim: placing it, growing it, and drawing its edge |
+| `vitals` | Health, stamina and hunger: what wears them down, what brings them back, and the bars |
+| `death` | Going down, the dropped bag, and waking at a bed |
 | `harvest` | Gathering with the right tool for each thing, and refusing what its material cannot work |
 | `work` | Holding a button until a job is done |
 | `tool` | The builder: what it is aimed at, the preview, and building |

@@ -573,7 +573,6 @@ impl Belongings<'_, '_> {
             let _ =
                 terra_items::transfer(&self.items.catalogue, &mut backpack.0, &mut bag, id, None);
         }
-        bar.0.tidy(&backpack.0);
         bag
     }
 
