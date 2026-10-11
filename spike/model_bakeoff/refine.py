@@ -25,7 +25,10 @@ import look
 
 look.PALETTE.update(kit.ROLES)
 
-src, name, height, budgets, *allowed = look.args()
+args = look.args()
+# --smooth: shade smooth (hard edges kept), as characters in the painted look are.
+smooth = "--smooth" in args
+src, name, height, budgets, *allowed = [a for a in args if a != "--smooth"]
 height = float(height)
 budgets = [int(b) for b in budgets.split(",")]
 palette = np.array([look.PALETTE[n] for n in allowed])
@@ -181,5 +184,10 @@ for budget in budgets:
     look.ground_to_origin(ob)
     ob.data.transform(Matrix.Scale(height / ob.dimensions.z, 4))
     look.ground_to_origin(ob)
+    if smooth:
+        for o in bpy.context.scene.objects:
+            o.select_set(o is ob)
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.shade_smooth_by_angle(angle=0.7)
     models.append(ob)
 look.finish(models, f"refined-{name}", budget=max(budgets) or 20000)
