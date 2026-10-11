@@ -14,7 +14,7 @@ request, the task and the credits spent, so every model says where it came from.
 TRIPO_API_KEY, from the environment or a .env in this checkout or the main one.
 
 --studio spends the Studio subscription's credits instead, through the web app's own backend
-(studio.py; balance, image and text only). It needs TRIPO_STUDIO_COOKIE the same way.
+(studio.py; balance, concept, image and text only). It needs TRIPO_STUDIO_COOKIE the same way.
 Standard library only.
 """
 
@@ -145,14 +145,35 @@ def save(name, result):
 
 def studio(a, subject):
     """The same models from the Studio subscription's credits (studio.py). Image and text only so far."""
-    if a.kind not in ("balance", "image", "text"):
-        sys.exit(f"{a.kind} is not captured from the Studio app yet; use the API, without --studio")
+    if a.kind not in ("balance", "concept", "image", "text") or (a.kind == "concept" and a.ref):
+        sys.exit(f"{a.kind}{' with --ref' if a.ref else ''} is not captured from the Studio app yet; use the API, without --studio")
     sys.path.insert(0, HERE)  # python3 -I leaves this folder off the path
     from studio import Studio, node_name
 
     client = Studio(env("TRIPO_STUDIO_COOKIE"))
     if a.kind == "balance":
         print(client.call("GET", "/v2/studio/user/profile/payment").get("wallet"))
+        return
+    if a.kind == "concept":
+        os.makedirs(OUT, exist_ok=True)
+        request = {
+            "if_upload": True,
+            "sketch_to_render": False,
+            "t_pose": False,
+            "amount": 1,
+            "model_version": "gpt_image_2.5_sunburst",
+            "prompt": subject if a.raw else CONCEPT.format(subject=subject),
+            "resolution": "1K",
+            "scale": "1:1",
+        }
+        before = client.credits()
+        started, asset = client.image(request)
+        path = os.path.join(OUT, f"{a.name}-generated_image_url.png")  # the API's name, for make.sh
+        fetch(asset["output"]["data"][0]["url"], path)
+        record = {"name": a.name, "backend": "studio", "request": request, "started": started, "credits": before - client.credits(), "result": asset, "files": {"generated_image_url": os.path.relpath(path, HERE)}}
+        with open(os.path.join(OUT, f"{a.name}.json"), "w") as f:
+            json.dump(record, f, indent=2)
+        print(json.dumps({"name": a.name, "credits": record["credits"], "files": record["files"]}))
         return
     model = a.model or "v3.1-20260211"
     # Smart Mesh (P1, run as Nexus) rejects texture settings: it textures in a second step.

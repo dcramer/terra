@@ -29,7 +29,7 @@ python3 spike/model_bakeoff/tripo.py views wolf spike/model_bakeoff/out/tripo/wo
 
 Every Tripo result is saved with a `.json` saying what was asked for, which model made it and what it cost.
 
-`--studio` spends the Studio subscription's credits instead of the API's, through the web app's private backend ([research/tripo-studio-credits.md](../../research/tripo-studio-credits.md)). It covers `balance`, `image` and `text` so far. Put the `cookie` request header of any call the signed-in app makes to `api.tripo3d.ai` (developer tools, Network) in `.env` as `TRIPO_STUDIO_COOKIE`; it lasts about 30 days:
+`--studio` spends the Studio subscription's credits instead of the API's, through the web app's private backend ([research/tripo-studio-credits.md](../../research/tripo-studio-credits.md)). It covers `balance`, `concept` (no `--ref` yet), `image` and `text` so far. Put the `cookie` request header of any call the signed-in app makes to `api.tripo3d.ai` (developer tools, Network) in `.env` as `TRIPO_STUDIO_COOKIE`; it lasts about 30 days:
 
 ```bash
 python3 spike/model_bakeoff/tripo.py balance --studio

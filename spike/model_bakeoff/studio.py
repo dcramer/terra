@@ -112,6 +112,19 @@ class Studio:
         project = self.call("GET", f"/v2/studio/project/detail/v3/{project_id}")
         return started, project, before - self.credits()
 
+    def image(self, request):
+        """Generates images (the app's Image tool) and returns the finished asset. Professional
+        includes a number of these free (remaining_free_count)."""
+        started = self.call("POST", "/v2/studio/image/gen_image_v2", request)
+        print(f"image {started['asset_id']}, {started.get('remaining_free_count')} free left", file=sys.stderr)
+        while True:
+            asset = self.call("POST", "/v2/studio/image/get_image_asset", {"asset_id": started["asset_id"]})
+            if asset.get("status") == "success":
+                return started, asset
+            if asset.get("status") in ("failed", "error", "cancelled"):
+                sys.exit(f"image {started['asset_id']} {asset.get('status')}: {asset}")
+            time.sleep(5)
+
     def texture(self, project_id, image, part):
         """Textures a finished model from its image, as the app's Texture tool does. Smart Mesh
         models (P1) come back untextured; the API does this in the same call. The part is the
