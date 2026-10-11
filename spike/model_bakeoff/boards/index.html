@@ -86,6 +86,15 @@ dialog p { font-family: var(--mono); font-size: 12px; color: #e9e3d8; padding-to
     </div>
   </header>
 
+  <section class="board" id="mood" aria-labelledby="mood-title">
+    <div class="board-head">
+      <span class="key">C</span><h2 id="mood-title">The mood board: four worlds in C's light</h2>
+      <p>The target, as concept art: two cities and two landscapes across settings, at life size (D110), in direction C's painted look and rich light. To make C work with many realms, colour stays a palette role on each part and the painted look moves into shared, tintable materials and the lighting, so the same models can be recoloured per realm.</p>
+      <div class="fit"><span class="chip good">Two cities, two landscapes</span><span class="chip ask">Concept art, not yet our renders</span></div>
+    </div>
+    <div class="row" id="moodboard"></div>
+  </section>
+
   <section class="board" id="d-tested" aria-labelledby="d-tested-title">
     <div class="board-head">
       <span class="key">D</span><h2 id="d-tested-title">D, tested: real renders and other worlds</h2>
@@ -204,6 +213,15 @@ function plain(path, label, wide) {
   f.append(b, c);
   return f;
 }
+const MOOD = [
+  ["medieval-town", "Medieval market town · city"],
+  ["techno-street", "Techno-punk street · city"],
+  ["fantasy-wilds", "Fantasy wilds · landscape"],
+  ["gothic-graveyard", "Gothic graveyard · landscape"],
+];
+const moodRow = document.getElementById("moodboard");
+moodRow.style.gridTemplateColumns = "repeat(auto-fit, minmax(min(100%, 420px), 1fr))";
+for (const [key, label] of MOOD) moodRow.append(plain(`web/mood-${key}.jpg`, label, false));
 const SCENES = [
   ["graphic-starter", "D · starter realm, golden hour"],
   ["facets-starter", "A · the same scene, for comparison"],
