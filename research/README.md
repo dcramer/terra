@@ -13,6 +13,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [subnautica-2-building.md](subnautica-2-building.md) | How does Subnautica 2's construction work, and what would the same idea look like here? |
 | [subnautica-inventory.md](subnautica-inventory.md) | How do items and containers work in Subnautica? |
 | [enshrouded.md](enshrouded.md) | What do Enshrouded's voxel terrain and building do, and where do they meet our decisions? |
+| [reference-games.md](reference-games.md) | Which existing games could game design 001 be based on, so its core mechanics are known to be fun? |
 | [outpost-scene.md](outpost-scene.md) | With no artist, how far do free models, our own colours and the engine's built-in effects get? |
 | [agents-playing-games.md](agents-playing-games.md) | How do AI agents play games, from the screen or through the game's state, and what would make them efficient at Terra? |
 | [godot-spike.md](godot-spike.md) | What did the Godot build prove, and what are the numbers to beat? |

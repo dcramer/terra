@@ -15,6 +15,10 @@ From 2026-10-11:
 - **He Who Fights With Monsters as a core basis** for the mechanics and for how the world works (D87, D88).
 - The atmosphere, what is going on in the world, and the design around it are still to be worked out.
 
+## Based on
+
+Open. The developers want each design based on a game they know they enjoy, so its core mechanics are known to be fun. A comparison of candidates is in [research/reference-games.md](../../research/reference-games.md); its suggestion is **Enshrouded for how it plays, Soulmask for what you are doing**: Enshrouded's movement, fighting, building and rescued survivors, with Soulmask's recruits who work and defend, outposts at resources, and attacks provoked by your activity. Kenshi is the reference for a world that goes on without you.
+
 ## The idea in one line
 
 Proposed: **the world goes on whether or not you are there, and you join in.** Monsters gather, animals roam and hunt, settlements trade, grow and get attacked. Nothing waits for the player to start it, and what players do changes where it goes next.
@@ -159,3 +163,4 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 14. Answered: **no journal.** What to remember is up to the player (D92).
 15. **The map.** May players mark it freely? Does it show anything you have not seen?
 16. Answered in part: **knowing your progress.** There will be some on-screen display and character stats (D93). Open: whether other things' ranks, a monster's for one, are shown or must be judged.
+17. **The base game.** Enshrouded and Soulmask together, or another? Worth a few hours of Soulmask and some Kenshi to judge.
