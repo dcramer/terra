@@ -5,9 +5,10 @@
 //! on with it whether you are there or not, and what it makes waits in it until you come
 //! back to it. Its screen is in `station_screen`.
 //!
-//! The forge only works while a smith is at work at it, as Enshrouded's rescued
-//! survivors run its stations; until one is rescued it says so. Who works where is read
-//! from the people themselves (`Staff`), so there is nothing to keep in step with them.
+//! Stations and recipes are data, in `assets/data/stations.ron` and `recipes.ron` (D136).
+//! A station can need someone of a trade at work at it, as the forge needs a smith, as
+//! Enshrouded's rescued survivors run its stations; until one is, it says so. Who works
+//! where is read from the people themselves (`Staff`), so there is nothing to keep in step.
 
 use super::bag::Notice;
 use super::grab_mouse;
@@ -19,47 +20,103 @@ use super::props::Prop;
 use super::skills::{Did, ONCE, Skill};
 use super::{IsLocalPlayer, Player};
 use bevy::{ecs::system::SystemParam, prelude::*, window::CursorOptions};
-use std::collections::VecDeque;
+use serde::Deserialize;
+use std::{collections::VecDeque, sync::LazyLock};
 
 /// How many things a station can have waiting at once.
 pub const MOST_QUEUED: usize = 8;
 
-/// Where things are made.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Station {
-    Workbench,
-    Smelter,
-    Forge,
-    Campfire,
+const STATIONS_FILE: &str = include_str!("../../../../assets/data/stations.ron");
+const RECIPES_FILE: &str = include_str!("../../../../assets/data/recipes.ron");
+
+/// A kind of station, as `assets/data/stations.ron` has it. The file says what each part
+/// means.
+#[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct StationDef {
+    pub name: String,
+    #[serde(default)]
+    pub works_alone: bool,
+    #[serde(default)]
+    pub worked_by: Option<String>,
+    #[serde(default = "aim_at_middle")]
+    pub aim: (f32, f32),
+    #[serde(default)]
+    pub strokes: Option<(String, f32)>,
+    #[serde(default)]
+    pub fire: Option<Fire>,
 }
 
+fn aim_at_middle() -> (f32, f32) {
+    (0.8, 0.9)
+}
+
+/// When a fire in a station is heard.
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Fire {
+    Always,
+    WhileWorking,
+}
+
+/// Every kind of station, built in so every machine has the same (D136).
+static STATIONS: LazyLock<Vec<StationDef>> = LazyLock::new(|| {
+    ron::from_str(STATIONS_FILE)
+        .unwrap_or_else(|problem| panic!("assets/data/stations.ron: {problem}"))
+});
+
+/// A kind of station: its place in `assets/data/stations.ron`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub struct Station(u8);
+
 impl Station {
-    pub fn name(self) -> &'static str {
-        match self {
-            Station::Workbench => "Workbench",
-            Station::Smelter => "Smelter",
-            Station::Forge => "Forge",
-            Station::Campfire => "Campfire",
-        }
+    /// Every kind of station.
+    pub fn all() -> impl Iterator<Item = Station> {
+        (0..STATIONS.len()).map(|index| Station(index as u8))
     }
 
-    pub const ALL: [Station; 4] = [
-        Station::Workbench,
-        Station::Smelter,
-        Station::Forge,
-        Station::Campfire,
-    ];
-
-    /// The station called a name.
+    /// The kind of station called a name.
     pub fn named(name: &str) -> Option<Station> {
-        Station::ALL
-            .into_iter()
-            .find(|station| station.name() == name)
+        STATIONS
+            .iter()
+            .position(|station| station.name == name)
+            .map(|index| Station(index as u8))
+    }
+
+    fn def(self) -> &'static StationDef {
+        &STATIONS[self.0 as usize]
+    }
+
+    pub fn name(self) -> &'static str {
+        &self.def().name
     }
 
     /// Whether it works through its queue without anyone at it, like a furnace.
     pub fn works_alone(self) -> bool {
-        matches!(self, Station::Smelter | Station::Campfire)
+        self.def().works_alone
+    }
+
+    /// The trade of whoever must be at work at it before it works at all, such as a smith.
+    pub fn worked_by(self) -> Option<&'static str> {
+        self.def().worked_by.as_deref()
+    }
+
+    /// Where to aim at it, as a height above its foot, and how near the aiming mark has to
+    /// pass to count as on it, in metres.
+    pub fn aim(self) -> (f32, f32) {
+        self.def().aim
+    }
+
+    /// The sound of work at it, a stroke at a time, and seconds between strokes.
+    pub fn strokes(self) -> Option<(&'static str, f32)> {
+        self.def()
+            .strokes
+            .as_ref()
+            .map(|(sound, every)| (sound.as_str(), *every))
+    }
+
+    /// When a fire in it is heard, if it has one.
+    pub fn fire(self) -> Option<Fire> {
+        self.def().fire
     }
 }
 
@@ -78,111 +135,36 @@ impl Recipe {
     }
 }
 
-const fn recipe(station: Station, cost: Cost, makes: Made, seconds: f32) -> Recipe {
-    Recipe {
-        station,
-        cost,
-        makes,
-        seconds,
-    }
+/// A recipe as `assets/data/recipes.ron` has it. The file says what each part means.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecipeDef {
+    station: &'static str,
+    cost: Vec<(&'static str, u32)>,
+    makes: (&'static str, u32),
+    seconds: f32,
 }
 
-/// Every recipe. A stand-in list, chosen so the MVP's loop can be walked: stone tools and
-/// leather at the workbench, then iron from the smelter and iron tools at the forge
-/// (docs/prototypes.md).
-pub const RECIPES: &[Recipe] = &[
-    // Fibre bound round a stick and lit at the fire.
-    recipe(
-        Station::Campfire,
-        &[("Wood", 1), ("Fibre", 1)],
-        Made::one("Torch"),
-        2.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Wood", 2), ("Stone", 2)],
-        Made::one("Stone axe"),
-        4.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Wood", 2), ("Stone", 3)],
-        Made::one("Stone pickaxe"),
-        4.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Wood", 1), ("Stone", 1)],
-        Made::one("Knife"),
-        3.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Wood", 3), ("Stone", 2)],
-        Made::one("Spear"),
-        5.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Wood", 3), ("Fibre", 2)],
-        Made::one("Bow"),
-        6.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Wood", 1), ("Stone", 1)],
-        Made::many("Arrow", 4),
-        4.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Hide", 2), ("Fibre", 2)],
-        Made::one("Quiver"),
-        5.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Hide", 2), ("Fibre", 1)],
-        Made::one("Leather cap"),
-        5.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Hide", 4), ("Fibre", 2)],
-        Made::one("Leather coat"),
-        8.0,
-    ),
-    recipe(
-        Station::Workbench,
-        &[("Hide", 4), ("Fibre", 4)],
-        Made::one("Large pack"),
-        8.0,
-    ),
-    recipe(
-        Station::Campfire,
-        &[("Meat", 1)],
-        Made::one("Cooked meat"),
-        10.0,
-    ),
-    recipe(
-        Station::Smelter,
-        &[("Ore", 2), ("Wood", 1)],
-        Made::one("Iron"),
-        10.0,
-    ),
-    recipe(
-        Station::Forge,
-        &[("Wood", 2), ("Iron", 3)],
-        Made::one("Iron axe"),
-        6.0,
-    ),
-    recipe(
-        Station::Forge,
-        &[("Wood", 2), ("Iron", 3)],
-        Made::one("Iron pickaxe"),
-        6.0,
-    ),
-];
+/// Every recipe, built in so every machine has the same (D136). Each is known by its place
+/// here, which a station's queue keeps.
+pub static RECIPES: LazyLock<Vec<Recipe>> = LazyLock::new(|| {
+    let defs: Vec<RecipeDef> = ron::from_str(RECIPES_FILE)
+        .unwrap_or_else(|problem| panic!("assets/data/recipes.ron: {problem}"));
+    defs.into_iter()
+        .map(|def| Recipe {
+            station: Station::named(def.station).unwrap_or_else(|| {
+                panic!(
+                    "assets/data/recipes.ron: there is no station called {}",
+                    def.station
+                )
+            }),
+            // The list lives as long as the game, like the recipe it is part of.
+            cost: def.cost.leak(),
+            makes: Made::many(def.makes.0, def.makes.1),
+            seconds: def.seconds,
+        })
+        .collect()
+});
 
 /// The recipes a station makes, in order, by their place in `RECIPES`.
 pub fn recipes(station: Station) -> impl Iterator<Item = usize> {
@@ -209,8 +191,8 @@ pub fn families(station: Station, items: &Items) -> Vec<Family> {
 /// How near a station someone at work at it stands.
 const WORKER_REACH_M: f32 = 3.0;
 
-/// Who works the stations that need someone to: the forge works only while a smith is at
-/// work beside it.
+/// Who works the stations that need someone of a trade at work at them, as the forge needs a
+/// smith.
 #[derive(SystemParam)]
 pub struct Staff<'w, 's> {
     people: Query<'w, 's, &'static Person>,
@@ -220,19 +202,17 @@ pub struct Staff<'w, 's> {
 impl Staff<'_, '_> {
     /// Whoever is at work at a station, if it is one that needs someone.
     pub fn worker(&self, entity: Entity, station: Station) -> Option<&Person> {
-        if station != Station::Forge {
-            return None;
-        }
+        let trade = station.worked_by()?;
         let at = self.stations.get(entity).ok()?.translation;
         self.people
             .iter()
-            .find(|person| person.smith && at_work(person, at))
+            .find(|person| person.trade == Some(trade) && at_work(person, at))
     }
 
     /// Whether a station can get on with its queue: always, unless it needs someone to
     /// work it and nobody is.
     pub fn works(&self, entity: Entity, station: Station) -> bool {
-        station != Station::Forge || self.worker(entity, station).is_some()
+        station.worked_by().is_none() || self.worker(entity, station).is_some()
     }
 }
 
@@ -303,7 +283,7 @@ pub fn plugin(app: &mut App) {
 /// saved game replaces what stands, so that is not an error.
 fn fit_out(mut commands: Commands, stations: Query<(Entity, &Prop), Without<Works>>) {
     for (entity, prop) in &stations {
-        if prop.item.station.is_some() {
+        if prop.item.station().is_some() {
             commands.entity(entity).try_insert(Works::default());
         }
     }
@@ -367,7 +347,7 @@ fn work(
     mut stations: Query<(Entity, &Prop, &Transform, &mut Works)>,
 ) {
     for (entity, prop, at, mut works) in &mut stations {
-        let Some(station) = prop.item.station else {
+        let Some(station) = prop.item.station() else {
             continue;
         };
         let attended = || {
@@ -392,7 +372,7 @@ fn hand_over(
     mut did: MessageWriter<Did>,
 ) {
     for (entity, prop, at, mut works) in &mut stations {
-        let Some(station) = prop.item.station else {
+        let Some(station) = prop.item.station() else {
             continue;
         };
         // A worked station hands over to whoever is working it, so only to this machine's
@@ -438,7 +418,11 @@ pub fn queue(
 ) {
     let recipe = &RECIPES[index];
     if !staffed {
-        notice.say("The forge needs a smith to work it");
+        notice.say(format!(
+            "The {} needs a {} to work it",
+            recipe.station.name().to_lowercase(),
+            recipe.station.worked_by().unwrap_or("worker")
+        ));
     } else if works.queue.len() >= MOST_QUEUED {
         notice.say(format!(
             "The {} has enough to do",
@@ -483,12 +467,16 @@ pub fn cancel(works: &mut Works, place: usize, belongings: &mut Belongings, noti
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn station(name: &str) -> Station {
+        Station::named(name).unwrap()
+    }
     use bevy::ecs::system::RunSystemOnce;
 
     #[test]
     fn every_recipe_makes_and_costs_kinds_of_item_there_are() {
         let items = Items::default();
-        for recipe in RECIPES {
+        for recipe in RECIPES.iter() {
             let named = recipe.cost.iter().map(|(name, _)| *name);
             for name in named.chain([recipe.makes.item]) {
                 assert!(items.find(name).is_some(), "{name} is not a kind of item");
@@ -523,47 +511,47 @@ mod tests {
     fn the_forge_waits_for_a_smith_and_the_smelter_works_alone() {
         let mut world = World::new();
         let forge = Vec3::new(0.0, 2000.0, 0.0);
-        let station = world
+        let built = world
             .spawn((Transform::from_translation(forge), Works::default()))
             .id();
-        let staffed = |world: &mut World, station_kind| {
+        let staffed = |world: &mut World, kind| {
             world
-                .run_system_once(move |staff: Staff| staff.works(station, station_kind))
+                .run_system_once(move |staff: Staff| staff.works(built, kind))
                 .unwrap()
         };
-        assert!(!staffed(&mut world, Station::Forge));
-        assert!(staffed(&mut world, Station::Smelter));
-        assert!(Station::Smelter.works_alone() && !Station::Forge.works_alone());
+        assert!(!staffed(&mut world, station("Forge")));
+        assert!(staffed(&mut world, station("Smelter")));
+        assert!(station("Smelter").works_alone() && !station("Forge").works_alone());
         // A smith following you is not at work; one working beside the forge is.
         let smith = world
             .spawn(Person::new(
                 "Bren",
                 Doing::Following(Entity::PLACEHOLDER),
-                true,
+                Some("smith"),
             ))
             .id();
-        assert!(!staffed(&mut world, Station::Forge));
+        assert!(!staffed(&mut world, station("Forge")));
         world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 1.8);
-        assert!(staffed(&mut world, Station::Forge));
+        assert!(staffed(&mut world, station("Forge")));
         // Someone at work at another forge far off does not work this one.
         world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 50.0);
-        assert!(!staffed(&mut world, Station::Forge));
+        assert!(!staffed(&mut world, station("Forge")));
     }
 
     #[test]
     fn the_workbench_has_tabs_and_the_smelter_none() {
         let items = Items::default();
         assert_eq!(
-            families(Station::Workbench, &items),
+            families(station("Workbench"), &items),
             [Family::Tools, Family::Clothing]
         );
-        assert_eq!(families(Station::Smelter, &items).len(), 1);
+        assert_eq!(families(station("Smelter"), &items).len(), 1);
     }
 
     #[test]
     fn a_saved_name_finds_its_recipe_at_its_own_station() {
-        let iron = recipe_named(Station::Smelter, "Iron").unwrap();
+        let iron = recipe_named(station("Smelter"), "Iron").unwrap();
         assert_eq!(RECIPES[iron].makes, Made::one("Iron"));
-        assert_eq!(recipe_named(Station::Forge, "Iron"), None);
+        assert_eq!(recipe_named(station("Forge"), "Iron"), None);
     }
 }

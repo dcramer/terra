@@ -54,20 +54,21 @@ pub struct Person {
     /// What they say when spoken to, if anything in particular.
     pub says: Option<&'static str>,
     pub doing: Doing,
-    /// Whether they can work a forge.
-    pub smith: bool,
+    /// Their trade, if they have one: what stations they can work (`worked_by` in
+    /// `assets/data/stations.ron`), such as a smith a forge.
+    pub trade: Option<&'static str>,
     facing: Vec3,
-    /// Whether they have asked for a forge yet, so they ask once.
+    /// Whether they have asked for a station to work yet, so they ask once.
     asked: bool,
 }
 
 impl Person {
-    pub fn new(name: &'static str, doing: Doing, smith: bool) -> Self {
+    pub fn new(name: &'static str, doing: Doing, trade: Option<&'static str>) -> Self {
         Self {
             name,
             says: None,
             doing,
-            smith,
+            trade,
             facing: Vec3::ZERO,
             asked: false,
         }
@@ -111,7 +112,7 @@ pub struct Arrive {
     pub at: Vec3,
     pub facing: Vec3,
     pub doing: Doing,
-    pub smith: bool,
+    pub trade: Option<&'static str>,
     pub body: &'static str,
     pub wears: Vec<Dyed>,
     pub interact: Option<Interactable>,
@@ -246,7 +247,7 @@ fn arrive(
             Person {
                 facing,
                 says: arrival.says,
-                ..Person::new(arrival.name, arrival.doing, arrival.smith)
+                ..Person::new(arrival.name, arrival.doing, arrival.trade)
             },
             Transform::from_translation(feet).looking_to(facing, up),
             Visibility::default(),
@@ -335,10 +336,13 @@ fn free(
     person.doing = Doing::Following(*player);
     commands.entity(entity).remove::<CanInteract>();
     info!("Freed {}.", person.name);
-    notice.say(format!(
-        "{}: \"Thank you. I'm the smith from the village. I'll come with you.\"",
-        person.name
-    ));
+    notice.say(match person.trade {
+        Some(trade) => format!(
+            "{}: \"Thank you. I'm the {trade} from the village. I'll come with you.\"",
+            person.name
+        ),
+        None => format!("{}: \"Thank you. I'll come with you.\"", person.name),
+    });
 }
 
 /// Followers keep up with the player they follow, walking when near and jogging when behind.
@@ -386,7 +390,8 @@ fn follow(
     }
 }
 
-/// A smith who has followed a player into their claim settles at its forge and works it.
+/// Someone with a trade who has followed a player into their claim settles at a station in
+/// it that their trade works, such as a smith at a forge, and works it.
 fn settle(
     claims: Query<(&Claim, Has<LocalPlayer>)>,
     props: Query<(&Prop, &Transform)>,
@@ -400,7 +405,10 @@ fn settle(
         let Ok((claim, ours)) = claims.get(leader) else {
             continue;
         };
-        if !person.smith || !claim.covers(at.translation) {
+        let Some(trade) = person.trade else {
+            continue;
+        };
+        if !claim.covers(at.translation) {
             continue;
         }
         // Only what happens to this machine's own player is said on its screen.
@@ -409,31 +417,29 @@ fn settle(
                 notice.say(text);
             }
         };
-        let forge = props
+        let worked = props
             .iter()
-            .find(|(prop, there)| {
-                prop.item.station == Some(Station::Forge) && claim.covers(there.translation)
-            })
-            .map(|(_, there)| there.translation);
-        match forge {
-            Some(forge) => {
-                let up = forge.normalize();
-                let spot = forge + up.any_orthonormal_vector() * 1.8;
+            .filter_map(|(prop, there)| Some((prop.item.station()?, there.translation)))
+            .find(|(station, there)| station.worked_by() == Some(trade) && claim.covers(*there));
+        let wanted = Station::all().find(|station| station.worked_by() == Some(trade));
+        match (worked, wanted) {
+            (Some((station, at)), _) => {
+                let up = at.normalize();
+                let spot = at + up.any_orthonormal_vector() * 1.8;
                 person.doing = Doing::Working(spot);
-                info!("{} took up the forge.", person.name);
-                say(format!(
-                    "{} takes up the forge: iron can be worked now",
-                    person.name
-                ));
+                let station = station.name().to_lowercase();
+                info!("{} took up the {station}.", person.name);
+                say(format!("{} takes up the {station}", person.name));
             }
-            None if !person.asked => {
+            (None, Some(station)) if !person.asked => {
                 person.asked = true;
                 say(format!(
-                    "{}: \"Build a forge here and I'll work it.\"",
-                    person.name
+                    "{}: \"Build a {} here and I'll work it.\"",
+                    person.name,
+                    station.name().to_lowercase()
                 ));
             }
-            None => {}
+            _ => {}
         }
     }
 }

@@ -113,7 +113,7 @@ fn mark(
         at: edge,
         facing: (middle - edge).reject_from(up),
         doing: Doing::Bound,
-        smith: true,
+        trade: Some("smith"),
         body: "base-male",
         wears: vec![Dyed(
             "leather_coat",

@@ -1,0 +1,20 @@
+#![enable(implicit_some)]
+// Every kind of station, where things are made (D109, D127, D136). A station is a prop
+// built from the build menu (crates/terra_game/src/play/catalogue.rs) that names one here;
+// what it makes is in recipes.ron. No code names a station.
+//
+// Each:
+//   name         what it is called
+//   works_alone  whether it gets on with its queue with nobody at it, like a furnace;
+//                otherwise only while a player stays within reach
+//   worked_by    the trade of whoever must be at work at it before it works at all
+//   aim          where to aim at it, as a height above its foot, and how near the aiming
+//                mark has to pass to count as on it, in metres
+//   strokes      the sound of work at it, made a stroke at a time, and how often
+//   fire         whether a fire in it is heard: Always, or WhileWorking
+[
+    (name: "Workbench", strokes: ("bench", 0.6)),
+    (name: "Smelter", works_alone: true, aim: (1.0, 1.1), fire: WhileWorking),
+    (name: "Forge", worked_by: "smith", aim: (1.0, 1.3), strokes: ("anvil", 0.8), fire: WhileWorking),
+    (name: "Campfire", works_alone: true, fire: Always),
+]

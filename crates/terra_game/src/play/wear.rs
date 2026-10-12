@@ -125,11 +125,11 @@ mod tests {
     fn each_thing_is_mended_where_it_is_made() {
         let items = Items::default();
         let at = |name| mended_at(&items, items.kind(name));
-        assert_eq!(at("Stone axe"), Some(Station::Workbench));
-        assert_eq!(at("Iron axe"), Some(Station::Forge));
-        assert_eq!(at("Torch"), Some(Station::Campfire));
-        assert_eq!(at("Hammer"), Some(Station::Workbench));
-        assert_eq!(at("Leather coat"), Some(Station::Workbench));
+        assert_eq!(at("Stone axe"), Station::named("Workbench"));
+        assert_eq!(at("Iron axe"), Station::named("Forge"));
+        assert_eq!(at("Torch"), Station::named("Campfire"));
+        assert_eq!(at("Hammer"), Station::named("Workbench"));
+        assert_eq!(at("Leather coat"), Station::named("Workbench"));
         // Every thing that wears can be mended somewhere.
         for kind in items
             .kinds()

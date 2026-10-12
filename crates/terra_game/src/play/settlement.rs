@@ -263,7 +263,7 @@ fn found(
             at,
             facing: (middle - at).reject_from(up),
             doing,
-            smith: false,
+            trade: None,
             body,
             wears,
             interact,
@@ -324,7 +324,7 @@ fn talk(
     // The elder speaks of the smith.
     let smith = people
         .iter()
-        .find(|person| person.smith)
+        .find(|person| person.trade == Some("smith"))
         .map(|smith| smith.doing);
     let line = match smith {
         Some(Doing::Bound) | None => format!(

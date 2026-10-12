@@ -7,7 +7,7 @@
 //! a thing carry `Ambient`, and are heard only within earshot, so a world can hold any
 //! number of them.
 
-use super::crafting::{Station, Works};
+use super::crafting::{Fire, Station, Works};
 use super::creatures::Lair;
 use super::noise::{Cue, Noise};
 use super::props::Prop;
@@ -173,11 +173,11 @@ fn mark_sources(
     mut marked: Local<(bool, bool)>,
 ) {
     for (entity, prop) in &stations {
-        let level = match prop.item.station {
-            Some(Station::Campfire) => CAMPFIRE,
+        let level = match prop.item.station().and_then(Station::fire) {
+            Some(Fire::Always) => CAMPFIRE,
             // Lit only while they work (`stoke`).
-            Some(Station::Forge | Station::Smelter) => 0.0,
-            _ => continue,
+            Some(Fire::WhileWorking) => 0.0,
+            None => continue,
         };
         commands
             .entity(entity)
@@ -202,10 +202,11 @@ fn mark_sources(
     }
 }
 
-/// A forge or smelter burns while it works.
+/// A station whose fire burns while it works, such as a forge or a smelter, burns while it
+/// works.
 fn stoke(mut fires: Query<(&Prop, &Works, &mut Ambient)>) {
     for (prop, works, mut ambient) in &mut fires {
-        if matches!(prop.item.station, Some(Station::Forge | Station::Smelter)) {
+        if prop.item.station().and_then(Station::fire) == Some(Fire::WhileWorking) {
             let level = if works.queue.is_empty() { 0.0 } else { LIT };
             if ambient.level != level {
                 ambient.level = level;

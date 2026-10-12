@@ -281,12 +281,10 @@ fn stations_heard(
     mut was: Local<HashMap<Entity, (f32, usize, f32)>>,
     mut noise: MessageWriter<Noise>,
 ) {
-    let every = |station: Station| match station {
-        Station::Forge => 0.8,
-        _ => 0.6,
-    };
+    // Each stroke of work, as often as the station says, or of no use to hear.
+    let every = |station: Station| station.strokes().map_or(0.6, |(_, every)| every);
     for (entity, prop, works, at) in &stations {
-        let Some(station) = prop.item.station else {
+        let Some(station) = prop.item.station() else {
             continue;
         };
         let (progress, made, beat) =

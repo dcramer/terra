@@ -1,0 +1,28 @@
+// Every recipe: what a station makes, from what, and how long it takes (D109, D127, D136).
+// A stand-in list, chosen so the MVP's loop can be walked: stone tools and leather at the
+// workbench, then iron from the smelter and iron tools at the forge (docs/prototypes.md).
+// Stations are in stations.ron, items in items.ron; each is named as it is there.
+//
+// Each:
+//   station  where it is made
+//   cost     so many of each item, paid when it is queued
+//   makes    the item it makes, and how many if more than one
+//   seconds  how long it takes
+[
+    // Fibre bound round a stick and lit at the fire.
+    (station: "Campfire", cost: [("Wood", 1), ("Fibre", 1)], makes: ("Torch", 1), seconds: 2.0),
+    (station: "Workbench", cost: [("Wood", 2), ("Stone", 2)], makes: ("Stone axe", 1), seconds: 4.0),
+    (station: "Workbench", cost: [("Wood", 2), ("Stone", 3)], makes: ("Stone pickaxe", 1), seconds: 4.0),
+    (station: "Workbench", cost: [("Wood", 1), ("Stone", 1)], makes: ("Knife", 1), seconds: 3.0),
+    (station: "Workbench", cost: [("Wood", 3), ("Stone", 2)], makes: ("Spear", 1), seconds: 5.0),
+    (station: "Workbench", cost: [("Wood", 3), ("Fibre", 2)], makes: ("Bow", 1), seconds: 6.0),
+    (station: "Workbench", cost: [("Wood", 1), ("Stone", 1)], makes: ("Arrow", 4), seconds: 4.0),
+    (station: "Workbench", cost: [("Hide", 2), ("Fibre", 2)], makes: ("Quiver", 1), seconds: 5.0),
+    (station: "Workbench", cost: [("Hide", 2), ("Fibre", 1)], makes: ("Leather cap", 1), seconds: 5.0),
+    (station: "Workbench", cost: [("Hide", 4), ("Fibre", 2)], makes: ("Leather coat", 1), seconds: 8.0),
+    (station: "Workbench", cost: [("Hide", 4), ("Fibre", 4)], makes: ("Large pack", 1), seconds: 8.0),
+    (station: "Campfire", cost: [("Meat", 1)], makes: ("Cooked meat", 1), seconds: 10.0),
+    (station: "Smelter", cost: [("Ore", 2), ("Wood", 1)], makes: ("Iron", 1), seconds: 10.0),
+    (station: "Forge", cost: [("Wood", 2), ("Iron", 3)], makes: ("Iron axe", 1), seconds: 6.0),
+    (station: "Forge", cost: [("Wood", 2), ("Iron", 3)], makes: ("Iron pickaxe", 1), seconds: 6.0),
+]

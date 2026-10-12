@@ -62,8 +62,8 @@ pub struct Item {
     pub lift: f32,
     /// Whether it gives off light, and how.
     pub light: Light,
-    /// What can be made at it, if it is a station.
-    pub station: Option<Station>,
+    /// The station it is, by its name in `assets/data/stations.ron`, if it is one.
+    pub station_name: Option<&'static str>,
     /// Whether it is a claim stone, which claims the land around it (D94).
     pub claims: bool,
 }
@@ -82,7 +82,7 @@ const fn item(name: &'static str, file: &'static str, size: f32, cost: Cost) -> 
         cost,
         lift: 0.0,
         light: Light::None,
-        station: None,
+        station_name: None,
         claims: false,
     }
 }
@@ -98,10 +98,17 @@ const fn lit(light: Light, item: Item) -> Item {
     Item { light, ..item }
 }
 
-const fn station(station: Station, item: Item) -> Item {
+const fn station(name: &'static str, item: Item) -> Item {
     Item {
-        station: Some(station),
+        station_name: Some(name),
         ..item
+    }
+}
+
+impl Item {
+    /// The kind of station it is, if it is one.
+    pub fn station(&self) -> Option<Station> {
+        self.station_name.and_then(Station::named)
     }
 }
 
@@ -213,7 +220,7 @@ pub static PARTS: [Part; 19] = [
         name: "Workbench",
         tab: Tab::Crafting,
         kind: Kind::Items(&[station(
-            Station::Workbench,
+            "Workbench",
             item(
                 "Workbench",
                 "Table_Small",
@@ -226,7 +233,7 @@ pub static PARTS: [Part; 19] = [
         name: "Smelter",
         tab: Tab::Crafting,
         kind: Kind::Items(&[station(
-            Station::Smelter,
+            "Smelter",
             item(
                 "Smelter",
                 "shaped:smelter",
@@ -239,7 +246,7 @@ pub static PARTS: [Part; 19] = [
         name: "Forge",
         tab: Tab::Crafting,
         kind: Kind::Items(&[station(
-            Station::Forge,
+            "Forge",
             item("Forge", "shaped:forge", 2.6, &[("Wood", 4), ("Stone", 8)]),
         )]),
     },
@@ -365,7 +372,7 @@ pub static PARTS: [Part; 19] = [
         tab: Tab::Fire,
         kind: Kind::Items(&[
             station(
-                Station::Campfire,
+                "Campfire",
                 lit(
                     Light::Fire,
                     item(
@@ -424,6 +431,19 @@ pub fn part_of(wanted: fn(&Kind) -> bool) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_station_built_is_a_kind_of_station() {
+        let named = PARTS.iter().filter_map(|part| match part.kind {
+            Kind::Items(items) => Some(items),
+            _ => None,
+        });
+        for item in named.flatten() {
+            if let Some(name) = item.station_name {
+                assert!(Station::named(name).is_some(), "{name} is not a station");
+            }
+        }
+    }
 
     #[test]
     fn everything_costs_kinds_of_item_there_are() {

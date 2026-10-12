@@ -10,7 +10,6 @@
 //! can check that walking made steps and cutting made strikes.
 
 use super::controls::Settings;
-use super::crafting::Station;
 use super::inventory::Cut;
 use super::noise::{Cue, Feet, Noise};
 use crate::audio::{
@@ -59,10 +58,12 @@ fn sounds_like(cue: Cue) -> Like {
         Cue::Built => Clips("built"),
         Cue::Placed => Clips("placed"),
         Cue::TakenApart => Clips("taken_apart"),
-        Cue::Working(Station::Forge) => Clips("anvil"),
-        Cue::Working(Station::Workbench) => Clips("bench"),
-        // Fires are heard as they burn (soundscape.rs), not in strokes.
-        Cue::Working(Station::Smelter | Station::Campfire) => Nothing,
+        // Work at a station is heard in strokes, as its kind says; fires are heard as they
+        // burn (soundscape.rs), not in strokes.
+        Cue::Working(station) => match station.strokes() {
+            Some((sound, _)) => Clips(sound),
+            None => Nothing,
+        },
         Cue::Made => Clips("made"),
         Cue::Snort => Made("snort", Sound::Snort, 0.38, 5.0),
         Cue::Hiss => Made("hiss", Sound::Hiss, 0.44, 5.0),
@@ -500,6 +501,7 @@ fn report(options: Res<Options>, mut exits: MessageReader<AppExit>, heard: Res<H
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::play::crafting::Station;
     use bevy::asset::io::file::FileAssetReader;
 
     #[test]
@@ -536,15 +538,16 @@ mod tests {
             Cue::Built,
             Cue::Placed,
             Cue::TakenApart,
-            Cue::Working(Station::Forge),
-            Cue::Working(Station::Workbench),
             Cue::Made,
             Cue::Bell,
             Cue::Click,
             Cue::Open,
             Cue::Close,
         ];
-        for cue in cues {
+        let worked = Station::all()
+            .filter(|station| station.strokes().is_some())
+            .map(Cue::Working);
+        for cue in cues.into_iter().chain(worked) {
             let Like::Clips(name) = sounds_like(cue) else {
                 panic!("{cue:?} should be recorded clips");
             };

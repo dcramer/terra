@@ -263,7 +263,7 @@ fn load(
                 prop.turn,
                 prop.indoors,
             )
-            && let Some(station) = item.station
+            && let Some(station) = item.station()
         {
             // A station takes up its queue where it left off.
             let named = |names: &[String]| -> Vec<usize> {

@@ -230,7 +230,7 @@ pub fn place(
         Visibility::default(),
         Settling(0.0),
     ));
-    if let Some(station) = item.station {
+    if let Some(station) = item.station() {
         prop.insert(CanInteract(Interactable::Station(station)));
     } else if item.claims {
         prop.insert(CanInteract(Interactable::ClaimStone));

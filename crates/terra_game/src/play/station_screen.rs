@@ -349,10 +349,11 @@ fn about(items: &Items, made: Made) -> String {
 
 /// Who works a station, or how it works.
 fn who(entity: Entity, station: Station, staff: &Staff) -> String {
-    if station == Station::Forge {
+    if let Some(trade) = station.worked_by() {
+        let name = station.name().to_lowercase();
         return match staff.worker(entity, station) {
-            Some(person) => format!("{} works this forge", person.name),
-            None => "No smith works this forge yet".to_string(),
+            Some(person) => format!("{} works this {name}", person.name),
+            None => format!("No {trade} works this {name} yet"),
         };
     }
     if station.works_alone() {
@@ -489,8 +490,9 @@ mod tests {
     #[test]
     fn a_tab_shows_only_its_family() {
         let items = Items::default();
-        let tools = shown(Station::Workbench, 0, &items);
-        let clothing = shown(Station::Workbench, 1, &items);
+        let workbench = Station::named("Workbench").unwrap();
+        let tools = shown(workbench, 0, &items);
+        let clothing = shown(workbench, 1, &items);
         assert!(
             tools
                 .iter()
@@ -503,7 +505,7 @@ mod tests {
         );
         assert_eq!(
             tools.len() + clothing.len(),
-            crafting::recipes(Station::Workbench).count()
+            crafting::recipes(workbench).count()
         );
     }
 }
