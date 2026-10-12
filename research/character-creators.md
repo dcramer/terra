@@ -56,6 +56,17 @@ Inferred, and a design question that is theirs:
 2. **Cultures on top.** Templates that pick parts, scales and colours for generated NPCs, and paint layers (tattoos, body paint) that mark a culture, as Soulmask does.
 3. **Later, if wanted:** body-shape sliders, copied onto every piece of gear offline.
 
+## What shipped systems confirm, 2026-10-12
+
+Looked up again after generated gear, fitted one piece at a time, clipped and sat wrong on our bodies:
+
+- **Hide the body under gear.** Mutable clips body geometry with a clothing mesh ([node reference](https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/class/CustomizableObjectNodeModifierClipWithMesh)); MetaHuman outfits carry body masks; Cyberpunk modders toggle body parts off under clothing that fully covers them, and warn against it where skin is only partly covered ([ArchiveXL body toggles](https://www.nexusmods.com/cyberpunk2077/mods/26627)). Asset makers ship a full body and hide the parts that clip ([Ida Faber](https://docs.idafaber3d.com/unreal-engine/modular)).
+- **Author gear on reference bodies.** MetaHuman's resizable outfits keep several source sizes and pick the one nearest the body's measurements ([MetaHuman 5.6](https://metahuman.com/news/metahuman-leaves-early-access-with-a-feature-packed-new-release), [parametric clothing](https://dev.epicgames.com/documentation/metahuman/creating-parametric-clothing-for-metahuman), [forum](https://forums.unrealengine.com/t/new-outfit-asset-for-metahumans-in-unreal-5-6/2520056)); BodySlide builds every outfit with the body's own sliders, "so armour conforms to the body preset without clipping", and outfits made for one body don't fit another with different sliders without conversion ([BodySlide](https://www.nexusmods.com/fallout4/mods/25)). One poster suggests a few skeletons (small, male, female, large) with morphs in between, since one chest piece across a dwarf and a tall elf distorts badly ([Epic forum](https://forums.unrealengine.com/t/modular-equipment-system-for-multiple-characters-best-practices/247805)).
+- **Same named points on every skeleton; the item carries its grip.** Every skeleton has the same attachment points; clothing is merged into the skinned mesh and rigid items attach to sockets ([Epic forum](https://forums.unrealengine.com/t/modular-equipment-system-for-multiple-characters-best-practices/247805)). A weapon's own pivot is set to line up with the hand socket, since meshes differ in where their handles are ([Epic forum](https://forums.unrealengine.com/t/weapon-socket/19413), [UE sockets](https://docs.unrealengine.com/4.26/WorkingWithContent/Types/SkeletalMeshes/Sockets)); the off hand reaches a second grip by IK ([IK Rig weapon goals](https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/class/IKRetargetWeaponGoalsOpSettings)).
+- **Enshrouded** shows only slots (head, upper body, arms, legs, feet) and a cosmetic layer that can hide pieces; nothing public on how its armour fits bodies ([wiki](https://enshrouded.fandom.com/wiki/Armor), [vanity system](https://metaforge.app/enshrouded/enshrouded-the-new-vanity-system)).
+
+What this means for us is in [docs/characters.md](../docs/characters.md).
+
 ## Limits
 
 - Nothing found on how Enshrouded shades or textures its characters, and nothing technical on Black Desert, Elden Ring or Conan Exiles.

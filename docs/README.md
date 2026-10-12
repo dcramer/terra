@@ -24,6 +24,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [survival.md](survival.md) | Draft: the survival attributes (health, stamina, oxygen, hunger, thirst) and how they vary by world. |
 | [player.md](player.md) | Draft: the player's body, tools, equipment, backpack and action bar, acting on the world, building. Open questions for the developers. |
 | [items.md](items.md) | Items and containers: equipment, backpack, action bar and storage, on a Subnautica baseline, and how they work in code. |
+| [characters.md](characters.md) | How bodies, clothing, armour and weapons are made so every item fits every body without fitting each by hand (D128). Questions for the developers. |
 | [construction.md](construction.md) | Draft: what the developers want from building, a proposed shape for it, and open questions. |
 | [progression.md](progression.md) | Draft: player skills, the research system, and how things are unlocked. Mostly open questions. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
