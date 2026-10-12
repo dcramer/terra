@@ -169,23 +169,112 @@ The draw is made once, by the server (D51), and kept: it is a change to you, sto
 
 **At the moment you awaken, the power's whole ladder is made:** what it does at iron and what each rank adds up to diamond, as in the books. You can't reroll it.
 
-### What a power is made of
+### Hundreds of powers, from shared mechanics
 
-So there is a lot to draw from without writing each power by hand, a power is generated from parts, and its rank sets how much it may do:
+From the developers, 2026-10-12: procedural, and **hundreds of powers, not dozens.** Characters may overlap a little. The mechanics behind powers overlap a lot, as they do in the books, where many people can fly or teleport, each in their own way. Some powers combine several mechanics, and nearly every power is different.
+
+So powers aren't written as lists. They are built from three layers:
+
+1. **Mechanics: what a power does.** A shared library of a few dozen, the same for every essence. This is where powers overlap.
+2. **Flavour: how this essence does it.** Each essence gives a mechanic its look, its sound and, above all, a side effect. This is where powers differ.
+3. **Composition: what goes with it.** One main mechanic, up to two more combined with it, a delivery, a twist, a cost and a ladder of ranks:
 
 | Part | Choices, for example |
 |---|---|
 | **Kind** | strike (stamina), spell (mana), conjuration, summon, familiar, aura, perception, passive, movement, zone |
 | **Delivery** | touch, weapon, bolt, cone, area, self, an ally, a place, a mark that triggers later |
-| **Effect** | harm of an idea (fire, cold, poison, holy), heal, shield, push or pull, slow, root, blind, reveal, hide, change form, move |
 | **Twist** | lingers, chains, stacks, builds up then releases, costs health instead of mana, stronger at night, stronger near water |
 | **Cost and wait** | mana, stamina or health; a cooldown |
-| **Ladder** | an effect added at each rank, iron to diamond |
+| **Ladder** | something added at each rank, iron to diamond |
 
-- **The essence's idea limits the parts.** Ember can't heal, except through Ash.
-- **The rank sets a budget,** so a power drawn at random is never better than one picked by hand; it differs.
-- **Hand-written anchors** sit in every list with high weight: the classics a player expects of an idea, such as a ball of fire for Ember, a healing touch for Brook, a howl that calls the pack for Hound. Those are the nostalgia, while the generated ones are the surprise.
-- **Names come from [naming.md](naming.md),** the idea plus what the power does: Cinder Bolt, Pack Call, Bedrock.
+#### The mechanics library
+
+Proposed, to grow over time. Each is a small piece of game logic written once (D127):
+
+| Family | Mechanics |
+|---|---|
+| **Moving** | blink, dash, leap, glide, flight, wall-walking, water-walking, phasing through, swapping places, pulling yourself to a point, returning to a marked point |
+| **Harming** | strike, bolt, beam, cone, burst around you, chain, harm over time, delayed burst, finishing blow, harm paid back |
+| **Defending** | shield on yourself, shield on others, barrier, harder skin, reflecting, absorbing into mana, untouchable for a moment, cleansing |
+| **Controlling** | slow, root, stun, knock back, pull, fear, sleep, blind, silence, drawing attacks to you |
+| **Supporting** | heal, heal over time, boon, quickening, raising the fallen, sharing harm, sharing senses |
+| **Making** | summoning a creature, conjuring a weapon, conjuring a wall or ground, a construct, a familiar, a decoy or double |
+| **Knowing** | seeing through walls, tracking, sensing magic, foresight, marking, reading auras |
+| **Changing** | changing form, changing size, an elemental body, hiding in plain sight |
+| **Paying** | costing health for mana, refunding on a kill, stacks that build and then spend, borrowing from later |
+| **Places** | an aura, a zone on the ground, a totem, a trap |
+
+#### One mechanic, many essences
+
+The same mechanic through different essences, as the books do with flight and teleporting:
+
+| Essence | Blink, as this essence does it | Side effect |
+|---|---|---|
+| Ember | Burst into flame and reappear | Burning ground where you left |
+| Mist | Dissolve into fog and form again | Unseen for a moment after |
+| Raven | Scatter into birds that fly to the spot | Can't be hit while scattered |
+| Root | Sink into the ground and rise from a tree's roots | Only between living wood, but far |
+| Ford | Open a small door and step through | An ally can follow you through |
+| Storm | Become a bolt of lightning | Harms what lies between |
+| Dream | Wake where you dreamed of being | Must have seen the place before |
+
+| Essence | Flight, as this essence does it | Side effect |
+|---|---|---|
+| Plume | Wings | Fast, and tires you |
+| Gale | Ride the wind | Only with the wind, or slowly against it |
+| Ember | Fire beneath you | Lights you to everything, and burns what's below |
+| Dusk | Shadow that carries you | Only out of the sun |
+| Abyss | Fall upward | Unaffected by blows that push |
+
+#### Combinations
+
+Some powers stack mechanics, which is where the most distinctive ones come from:
+
+- **Undertow** (Tide): pulls everything in an area toward its centre, slows them, then bursts. Pull, slow and delayed burst.
+- **Carrion Watch** (Raven): a familiar that sees for you, marks what it sees, and pecks what you mark. Familiar, sharing senses, marking and harm over time.
+- **Hearthguard** (Hearth): a zone around your fire where allies heal, warm (D153) and take less harm. Zone, heal over time and shield on others.
+- **Oathbound Strike** (Oath): mark a foe and swear to fell it. You are faster and stronger toward it, and weaker if you turn away. Mark, boon and paying.
+
+#### Why it gives hundreds each
+
+With about 70 mechanics to start, a dozen deliveries, a few dozen twists and an essence's flavour, one essence's possible powers run to thousands. Its weights narrow them to the few hundred that fit its idea and tags. With 38 core essences and more per realm, the whole space is far beyond what any player will see.
+
+- **Two characters with the same essence will usually share a mechanic or two,** such as both having a blink. They rarely share a power, because the flavour, the combination and the ladder differ.
+- **A rank-up adds one of:**
+  - a mechanic combined in;
+  - a twist;
+  - a widening (more targets, more area, longer);
+  - a stronger side effect.
+
+  All of it is generated with the power, so two blinks that start alike can end far apart.
+
+#### Rules that keep it sound
+
+- **Fit:** a mechanic must suit the essence's tags. Ember harms and moves; it can't heal, except through Ash. The confluence can bridge what its three can't.
+- **Budget:** a rank sets how much a power may do. Combining mechanics costs budget, so a power that does three things does each less. A drawn power is never stronger than a hand-made one; it is different.
+- **Limits, as in the books:**
+  - one aura and one perception to a person;
+  - one summon and one familiar to an essence;
+  - no second lasting boost of a kind you already have.
+- **Hand-written anchors** sit in every essence's pool with high weight: the classics a player expects of an idea, such as a ball of fire for Ember, a healing touch for Brook, a howl that calls the pack for Hound. They are the nostalgia, and the generated powers are the surprise.
+
+#### Names
+
+From [naming.md](naming.md): the essence's word, or its flavour, joined to what the power does. Emberstep, Mistwalk, Ravenflight, Rootpassage, Undertow, Cinder Bolt. A generated name must pass naming's checks, and a few hand-written names cover the anchors.
+
+#### Essences are generated too
+
+The 38 core essences are the hand-made anchors. Realms add essences of their own, generated the same way: an idea word from the realm's leaning, by naming's rules, with tags, a rarity and a flavour for each mechanic family. A gothic realm's Lantern blinks by guttering out and lighting again elsewhere. Every essence, made or generated, draws from the one library.
+
+#### Checking it without a person (D69)
+
+A tool, built with the generator: draw thousands of characters and report
+- how often two characters share a whole power (aimed low, a few in a hundred);
+- how often they share a mechanic (aimed high);
+- how the mechanics spread across essences;
+- any power over its rank's budget.
+
+The numbers tell us when the library needs more mechanics or an essence needs more flavour.
 
 ### Three worked examples
 
