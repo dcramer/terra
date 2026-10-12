@@ -35,6 +35,8 @@ So a corner looks the same in the blueprint as it does built, just ghosted. Noth
 | Built | One mesh per building and material, rebuilt in the background when a part changes | Never an entity per log (structures.md) |
 | Far off | The plan's boxes in the wood's colour, faded in with `VisibilityRange` | As structures.md |
 
+**A real preview, before a click** (asked for on 2026-10-12: "ideally it could be a real preview of whats happening? enshrouded is great at this"). Proposed: whatever the tool would do is applied to a copy of the base and laid again, and the difference drawn where it would be: pieces that would be added as the blueprint ghost, pieces that would be cut or taken away in red, the rest left as they are. A door aimed at a wall shows the logs it would shorten and the frame it would put in; a wall drawn across another shows its corner forming. It is laid again only when what the tool aims at changes, not every frame. This replaces today's outlines and films.
+
 What a walker hits stays the grid's: the wall as a box its kit's thickness, 0.3 m for logs (D175). Log ends sticking out at corners do not block anyone. A blueprint blocks nothing (construction.md).
 
 ## Logs (D178)
