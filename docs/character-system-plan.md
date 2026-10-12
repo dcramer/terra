@@ -7,7 +7,7 @@ How bodies and what they wear would be built if we started over, for humans firs
 - **Many bodies, many items, no item × body work** (D127). A new item is made once; a new body works with every item.
 - **A small creator** (D111): male and female, up to twenty templates, skin and hair colours, hairstyles; sliders possible later. NPCs drawn from the same system by seed, varied enough that the world feels alive (D85, Red Dead Redemption 2).
 - **No artist**: generated art for looks, scripts for everything else, every step checked by a machine (D69).
-- **Looks good** in the painted style of the mood board (D14), at life size (D110).
+- **Looks good** in the art style ([art-style.md](art-style.md), D14), at life size (D110).
 - **Performs** with many characters on screen and a thousand players (D127).
 - **Easy to work on**: adding a body or an item is one command and a check.
 

@@ -66,7 +66,7 @@ If a look truly needs to sit differently in its slot, don't add a number for one
 
 ## The painted style
 
-The style reference is `tools/icons/style/painted-workbench.jpg`, from the mood board; the anchors (`@anchors` in `icons.txt`) are approved icons given as references too. The prompt is in `paint.ts`. Changing the style is the developers' call (D130): ask, change the reference, anchors or prompt, paint everything again (name every item), and record it in `docs/decisions.md`. Changing the render style also means raising `STYLE` in `icons.rs`.
+Icons follow the art style, [docs/art-style.md](../../../docs/art-style.md) (D14, direction D). Every icon so far is painted in the earlier direction C, and stays so until a D style reference is approved and everything is repainted; until then, keep new icons matching the existing ones. The style reference is `tools/icons/style/painted-workbench.jpg`, from the earlier mood board; the anchors (`@anchors` in `icons.txt`) are approved icons given as references too. The prompt is in `paint.ts`. Changing the style is the developers' call (D130): ask, change the reference, anchors or prompt, paint everything again (name every item), and record it in `docs/decisions.md`. Changing the render style also means raising `STYLE` in `icons.rs`.
 
 ## Keep the docs' sheet current
 

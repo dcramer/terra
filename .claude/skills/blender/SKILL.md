@@ -5,7 +5,7 @@ description: Work in Blender for Terra, headless through tools/blender/run.sh or
 
 # Blender
 
-Blender is for cleaning up, fitting, rigging, rendering and exporting models, not for making them: the agent's own models were blockouts, and Tripo is the generator (`tripo` and `character` skills, [research](../../../research/ai-models-for-art.md)). Setup is in [docs/development.md](../../../docs/development.md#blender). Rigging traps are in the `character` skill.
+Blender is for cleaning up, fitting, rigging, rendering and exporting models, not for making them: the agent's own models were blockouts, and Tripo is the generator (`tripo` and `character` skills, [research](../../../research/ai-models-for-art.md)). Setup is in [docs/development.md](../../../docs/development.md#blender). Rigging traps are in the `character` skill. A model cleaned up for the game ends as [docs/art-style.md](../../../docs/art-style.md) says: every face in a palette role, no texture or painted shading, normals split at creases and smooth across curves, inside its triangle budget; check it against the guide's checklist.
 
 ## Which way
 

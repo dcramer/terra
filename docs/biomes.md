@@ -155,7 +155,7 @@ From the developers, 2026-10-12 (D174): trees behave as in The Forest. You chop 
 
 ### What each layer needs from art
 
-- **Trees** are the hardest, and the weakest area for generated models. Trees made by code, with rules for trunk and branches (as SpeedTree does), would give many variations per species, at life size, in our painted look. Each species would be parameters, not models. **For felling (D174), a generated tree is made in parts:** a trunk in lengths that become its logs, branches, a crown and a stump, with the notch drawn where it is cut.
+- **Trees** are the hardest, and the weakest area for generated models. Trees made by code, with rules for trunk and branches (as SpeedTree does), would give many variations per species, at life size, in our art style ([art-style.md](art-style.md)). Each species would be parameters, not models. **For felling (D174), a generated tree is made in parts:** a trunk in lengths that become its logs, branches, a crown and a stump, with the notch drawn where it is cut.
 - **Rocks, logs, stumps, mushrooms and the like** suit Tripo. The pipeline already makes them.
 - **Ferns, grass and flowers** are few triangles and many copies. Small generators or simple models are enough.
 - **Leaves as flat cards or solid clumps** is open.

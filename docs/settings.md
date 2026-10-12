@@ -5,7 +5,7 @@ Part of the game's design ([gameplay.md](gameplay.md), D89): one way for any rea
 ## What the developers have said
 
 - Realms may differ in setting, "like fantasy or primitive or futuristic", shown in their cultures, which may teach different things and from which you may recruit (D86, Leaning).
-- The art target is the four-world mood board: a medieval town, a techno-punk street, fantasy wilds and a gothic graveyard, in one look ([art.md](art.md)).
+- The art style is one guide for every setting, direction D ([art-style.md](art-style.md), D14): a realm brings its parts, palette and light, never a style of its own. The four settings below come from an earlier mood board of four worlds ([research](../research/art-explorations.md)).
 - On 2026-10-11, about a technological realm: no machine guns; advanced but on theme with magic, and not superior. Whether its makers are gone or still at work could be either. What matters is **ways to make different kinds of themes work, as the visual design goals do.**
 - Also on 2026-10-11: there may be **dozens of generated realms**, so what is needed is **techniques that make each one fit the lore**, not a handful of hand-made worlds.
 - Later the same day, reacting to this proposal: **roughly on point.** Some realms have **more magic or less**. A theme's **weapons should differ, as swords differ from staves: not better or worse, different ways to play.** **Loot**, procedural loot included, may become part of the game, though not a large part. **Mixing settings** within a realm, yes, carefully, as an advanced feature for later. The cosmology's premise and an ancient people who built everywhere are left to the generator: "this is procedural". Each setting's speciality is undecided.
@@ -49,7 +49,7 @@ From the developers: a theme's weapons differ the way a sword differs from a sta
 
 From the developers: loot, procedural loot included, may become part of the game, though not a large part. Proposed, through the same roles: a found item is **a theme's weapon or gear kind, at a rank, with a few rolled properties drawn from the realm's affinity**, such as a death realm's blade that drains, or a storm realm's that arcs. The rank caps what it can roll, so loot is a sidegrade or a way to play, not a ladder above crafting. Crafting stays the steady way to equip (D109); loot is the surprise.
 
-## Four settings, from the mood board
+## Four settings, from the earlier mood board
 
 | Role | Medieval town | Techno-punk street | Fantasy wilds | Gothic graveyard |
 |---|---|---|---|---|

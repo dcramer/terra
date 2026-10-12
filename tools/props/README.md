@@ -1,6 +1,6 @@
 # Props
 
-Makes the props things are built as (stations, markers, furniture, anything that stands in the world) from a one-line description to the file the game loads. It is the bake-off's route ([research/ai-models-for-art.md](../../research/ai-models-for-art.md)), kept as a tool: a concept image drawn in the mood board's style, a low-poly Tripo model of it, then a free clean-up in Blender that welds it, cuts it to a triangle budget and gives every face one of our palette colours, so the game can colour it as it colours every prop (D14, D54).
+Makes the props things are built as (stations, markers, furniture, anything that stands in the world) from a one-line description to the file the game loads. It is the bake-off's route ([research/ai-models-for-art.md](../../research/ai-models-for-art.md)), kept as a tool: a concept image drawn to the [style guide](../../docs/art-style.md), a low-poly Tripo model of it, then a free clean-up in Blender that welds it, cuts it to a triangle budget and gives every face one of our palette colours, so the game can colour it as it colours every prop (D14, D54).
 
 Each prop is a folder in [art/props](../../art/props), named as you like, holding `prop.json` and what it was made from:
 

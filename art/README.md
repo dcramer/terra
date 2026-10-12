@@ -11,7 +11,7 @@ The inputs the asset pipeline makes the game's files from (D133): approved desig
 | `gear/<item>/` | A worn thing modelled on its own from a concept, fitted to each body | `models/gear/<body>/<item>.glb` |
 | `props/<prop>/` | `prop.json`, what the prop is and how it is made ours; `concept.png`, its concept; `model.glb`, Tripo's model of it | `models/props/<file>.glb`, by `tools/props` (D147) |
 | `animation/` | `clips.txt`, the clips the game plays. `library/` holds Quaternius's Universal Animation Library 1 (Pro, `UAL1.glb`) and 2 (Source, `UAL2.glb`) as bought from [quaternius.itch.io](https://quaternius.itch.io/universal-animation-library); it is not committed, as they are paid editions: each developer puts their own copy there | `models/character/mannequin.glb`, by `tools/characters/clips.py` |
-| `style/` | The mood board image every sheet is drawn in the style of (`--ref`) | — |
+| `style/` | Style references given to the image model (`--ref`). `mood-medieval-town.png` is the earlier painted mood board (direction C), kept as research; the style is now D ([docs/art-style.md](../docs/art-style.md)), whose reference image is still to be added | — |
 
 A `*.prompt.txt` beside an image is the prompt that made it. Tripo's own records of each task are not kept: they name the account.
 

@@ -15,13 +15,13 @@ Costs per character, on the Studio subscription: design sheets are free (100 ima
 
 A turnaround sheet: the same character three times, front, side and back, **in a T-pose** (arms straight out at shoulder height, palms down, legs straight and a little apart), plain light grey background. A base body wears plain underclothes and has a shaved head: hair and clothes are separate parts (D111, D112).
 
-Draw it in the mood board's style by giving the image model a mood-board image as a reference:
+Draw it in the art style, [docs/art-style.md](../../../docs/art-style.md) (D14, direction D), which every character, creature and piece of gear follows: big simple shapes, flat areas of colour, true proportions, no painted shading. End the prompt with the guide's concept paragraph, keeping the sheet's own framing (three views, T-pose, light grey background):
 
 ```bash
-node tools/tripo/tripo.ts image "Character turnaround sheet for a stylised game character: <who they are, build, clothing>. The same person three times side by side, front view, side view and back view, standing in a T-pose with both arms straight out to the sides at shoulder height, palms down, legs straight and slightly apart. Draw it in the art style of the townsfolk in the reference image: hand-painted, slightly simplified forms, warm soft light, not realistic. Plain light grey background, no text, no scenery." --t-pose --aspect 16:9 --ref art/style/mood-medieval-town.png -o tools/characters/out/NAME-sheet.png
+node tools/tripo/tripo.ts image "Character turnaround sheet for a stylised game character: <who they are, build, clothing>. The same person three times side by side, front view, side view and back view, standing in a T-pose with both arms straight out to the sides at shoulder height, palms down, legs straight and slightly apart. Stylised 3D render with a graphic, illustrative look: bold simplified shapes, large flat areas of colour from a limited palette, no texture, no outlines, no painted shading; strong, clear silhouette; true real-world proportions. Lit evenly and softly from the upper left. Plain light grey background, no text, no scenery." --t-pose --aspect 16:9 -o tools/characters/out/NAME-sheet.png
 ```
 
-The reference is the medieval-town mood board (docs/art.md); any approved image in our style works.
+Once an approved D image is in `art/style/`, give it as `--ref` too. Don't use `art/style/mood-medieval-town.png`: it is the earlier painted direction (C), kept as research. The bodies made so far were drawn after it and still carry Tripo's painted textures; moving them to flat palette roles is listed in the guide as work to do.
 
 For a second body of a cast, such as the female base to match the male, give the first body's sheet as a second reference and say so ("the female base body to match the man in the second reference image ... wearing the same underclothes"), so the two share a style and their underclothes.
 

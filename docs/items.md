@@ -60,7 +60,7 @@ Not built: variants shown on top of an icon (a palette shift for a dyed item, a 
 
 **Which look**: a tool's held look, gear's look on the player's body, and for anything else the item's own look, `models/items/<item>.glb`: the thing on its own as it lies, life size, facing +Z. No item has one of those yet.
 
-**What they look like** (D130, Leaning): painted, in the mood board's style: hand-painted surfaces, chunky readable forms, slightly exaggerated proportions, a bold silhouette, warm light from the upper left, no background. Composed by the render: held things lie along the icon's diagonal, square on, working end up and to the right; everything else faces the front, seen from 15 degrees above, worn things as worn with no body in them.
+**What they look like** (D130, Leaning): in the art style ([art-style.md](art-style.md), direction D). Every icon is still painted in direction C (hand-painted surfaces, chunky readable forms, slightly exaggerated proportions), to be repainted in D. A bold silhouette, warm light from the upper left, no background. Composed by the render: held things lie along the icon's diagonal, square on, working end up and to the right; everything else faces the front, seen from 15 degrees above, worn things as worn with no body in them.
 
 Every icon on 2026-10-12, renders above and paintings below (materials have no render), at 96 pixels a cell and at 48, a backpack cell's size:
 
