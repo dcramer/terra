@@ -41,6 +41,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--background` | Stay out of the way of whoever is at the machine, as scripted runs do: the window opens behind the others without taking focus, never takes the mouse, ignores the real keyboard and mouse, and is silent. `tools/sandbox` passes it by default |
 | `--steady` | Advance the game a sixtieth of a second every frame, however fast frames are drawn, as scripted runs do. `tools/sandbox` passes it by default |
 | `--model <path>` | In the workbench: a model to look at, a `.glb` or `.gltf` under `assets/`. Repeatable: models stand side by side doing the same thing |
+| `--prop <name>` | In the workbench: an item of the build catalogue, such as `Forge`, drawn as it is when placed in play and stood in a row beside the models, its size printed (`workbench: prop …`). Repeatable; `all` for every item. With `--sides 0`, a row to judge proportions against a body |
 | `--anim <clip>` | In the workbench: an animation to play. Repeatable; the first plays when looking by hand |
 | `--hold <item>` | In the workbench: an item's held look in the right hand, as in play, named as in `--give`, such as `stone_axe` |
 | `--wear <item>` | In the workbench: an item's look, on every model, named as in `--give`, such as `leather_coat`. Repeatable |

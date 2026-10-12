@@ -71,6 +71,10 @@ PALETTE = {
     "AlienStem": (0.25, 0.36, 0.50),
     "Olive": (0.55, 0.58, 0.42),
     "Peach": (0.95, 0.70, 0.55),
+    "Clay": (0.72, 0.53, 0.33),
+    "ClothDark": (0.33, 0.31, 0.30),
+    # Glows in the game: coals, a furnace's mouth (props.rs).
+    "Fire": (1.00, 0.72, 0.35),
 }
 
 # The game's light (experiments/look.rs): a warm sun, shadows lit by a cool sky.

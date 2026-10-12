@@ -108,7 +108,10 @@ struct SavedItem {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct SavedProp {
-    file: String,
+    /// The item, by name. Saves before names were kept give its model's file instead, which
+    /// finds it while the model is the same one.
+    #[serde(alias = "file")]
+    item: String,
     at: [f32; 3],
     lift: f32,
     turn: f32,
@@ -260,7 +263,16 @@ fn load(
         commands.entity(entity).despawn();
     }
     for prop in &save.props {
-        if let Some(item) = builds.item_from(&prop.file)
+        let item = builds
+            .item_named(&prop.item)
+            .or_else(|| builds.item_from(&prop.item));
+        if item.is_none() {
+            warn!(
+                "The save has a {}, which is not in the catalogue.",
+                prop.item
+            );
+        }
+        if let Some(item) = item
             && let Some(entity) = props::place(
                 &mut commands,
                 &models,
@@ -576,7 +588,7 @@ fn gather(
                         .collect()
                 };
                 SavedProp {
-                    file: prop.item.file.to_string(),
+                    item: prop.item.name.to_string(),
                     at: prop.at.into(),
                     lift: prop.lift,
                     turn: prop.turn,
@@ -700,7 +712,7 @@ mod tests {
             }],
             frame: Some(([1.0, 2000.0, 2.0], [0.0, 0.0, 0.0, 1.0])),
             props: vec![SavedProp {
-                file: "Table_Small".to_string(),
+                item: "Workbench".to_string(),
                 at: [1.0, 0.0, 2.0],
                 lift: 0.0,
                 turn: 20.0,

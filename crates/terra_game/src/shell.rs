@@ -56,6 +56,9 @@ usage: terra_sandbox [options]
   --loading             keep the loading screen up, to look at it
   --model <path>        in the workbench: a model to load, under assets/; repeatable,
                         to stand several side by side
+  --prop <name>         in the workbench: an item of the build catalogue, such as Forge,
+                        drawn as placed in play and stood beside the models, its size
+                        printed; repeatable, or all for every item
   --anim <clip>         in the workbench: a clip to play; repeatable
   --hold <item>         in the workbench: an item's held look in the right hand, named as
                         in --give, such as stone_axe
@@ -165,6 +168,9 @@ pub struct Options {
     /// wear, what to look at closely, and where to save a sheet, from which sides, at
     /// which moments.
     pub models: Vec<String>,
+    /// In the workbench: items of the builder's catalogue to stand beside the models, by
+    /// name, or `all`.
+    pub props: Vec<String>,
     pub hold: Option<String>,
     pub attaches: Vec<String>,
     pub wears: Vec<String>,
@@ -225,6 +231,7 @@ impl Options {
             start_facing: None,
             warps: Vec::new(),
             models: Vec::new(),
+            props: Vec::new(),
             hold: None,
             attaches: Vec::new(),
             wears: Vec::new(),
@@ -292,6 +299,7 @@ impl Options {
                 "--trace" => options.trace = Some(PathBuf::from(value("--trace")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--model" => options.models.push(value("--model")?),
+                "--prop" => options.props.push(value("--prop")?),
                 "--hold" => options.hold = Some(value("--hold")?),
                 "--attach" => options.attaches.push(value("--attach")?),
                 "--wear" => options.wears.push(value("--wear")?),

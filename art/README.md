@@ -9,6 +9,7 @@ The inputs the asset pipeline makes the game's files from (D133): approved desig
 | `characters/rig-baseline.json` | The rig checker's scores for the hand-rigged mannequin, the bar every body is checked against | — |
 | `gear/dressed-<body>-<item>/` | A base body wearing the item, drawn and modelled by Tripo, from which the garment is cut as a shell | `models/gear/<body>/<item>.glb` |
 | `gear/<item>/` | A worn thing modelled on its own from a concept, fitted to each body | `models/gear/<body>/<item>.glb` |
+| `props/<prop>/` | `prop.json`, what the prop is and how it is made ours; `concept.png`, its concept; `model.glb`, Tripo's model of it | `models/props/<file>.glb`, by `tools/props` (D147) |
 | `style/` | The mood board image every sheet is drawn in the style of (`--ref`) | — |
 
 A `*.prompt.txt` beside an image is the prompt that made it. Tripo's own records of each task are not kept: they name the account.

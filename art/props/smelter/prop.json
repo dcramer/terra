@@ -1,0 +1,20 @@
+{
+  "subject": "primitive bloomery furnace for smelting iron ore: a squat tapering chimney of stacked stone and clay, wider at its foot, taller than a person, with a small arched opening at its base glowing orange",
+  "file": "Smelter",
+  "size": 2.0,
+  "budget": 2000,
+  "roles": [
+    "Rock",
+    "RockDark",
+    "Clay",
+    "Fire",
+    "Black"
+  ],
+  "match": {
+    "Clay": [
+      0.5,
+      0.38,
+      0.24
+    ]
+  }
+}

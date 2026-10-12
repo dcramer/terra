@@ -9,7 +9,7 @@ use super::catalogue::Rest;
 use super::claim::Claim;
 use super::interact::{CanInteract, Interactable, Interacted};
 use super::inventory::{self, Backpack, Belongings, Items};
-use super::props::Prop;
+use super::props::{self, Prop};
 use super::tick::Sim;
 use super::told::{Notice, Told};
 use super::vitals::{Effort, Vitals};
@@ -22,6 +22,9 @@ use terra_items::Grid;
 const DOWN_S: f32 = 3.0;
 /// How long a dropped bag lasts before it is gone (D84). A stand-in.
 const BAG_LASTS_S: f32 = 600.0;
+/// What a dropped bag, or a pile (`pile`), looks like: a prop's model and its longest side
+/// in metres.
+const BAG_MODEL: (&str, f32) = ("Sack", 0.7);
 
 /// Where a player first arrived, to wake at when there is no bed to wake in.
 #[derive(Component)]
@@ -44,13 +47,47 @@ impl DroppedBag {
     }
 }
 
+/// What a dropped bag or a pile looks like, made once.
+#[derive(Resource)]
+pub struct BagLook {
+    pub mesh: Handle<Mesh>,
+    pub material: Handle<StandardMaterial>,
+}
+
 /// Sent when a player goes down, for whatever else has to answer it.
 #[derive(Message, Clone, Copy)]
 pub struct WentDown(pub Entity);
 
 pub fn plugin(app: &mut App) {
     app.add_message::<WentDown>()
+        .add_systems(Startup, load_look)
         .add_systems(FixedUpdate, (live, fall, recover, decay).in_set(Sim::World));
+}
+
+fn load_look(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let (file, size) = BAG_MODEL;
+    let mesh = match props::read_look(file, size, &mut meshes).map(|model| model.solid) {
+        Ok(Some(mesh)) => mesh,
+        problem => {
+            if let Err(problem) = problem {
+                error!("Could not read the bag's model. {problem}");
+            }
+            meshes.add(
+                Cuboid::new(0.55, 0.4, 0.45)
+                    .mesh()
+                    .build()
+                    .translated_by(Vec3::Y * 0.2),
+            )
+        }
+    };
+    commands.insert_resource(BagLook {
+        mesh,
+        material: materials.add(props::lit()),
+    });
 }
 
 /// Moves every player's body on by a moment, and lays it down when health runs out.
@@ -107,8 +144,7 @@ fn fall(
         With<Player>,
     >,
     mut notice: ResMut<Notice>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    look: Res<BagLook>,
 ) {
     for (
         entity,
@@ -142,13 +178,9 @@ fn fall(
                         age: 0.0,
                     },
                     CanInteract(Interactable::Bag),
-                    Mesh3d(meshes.add(Cuboid::new(0.55, 0.4, 0.45))),
-                    MeshMaterial3d(materials.add(StandardMaterial {
-                        base_color: Color::srgb(0.55, 0.38, 0.24),
-                        perceptual_roughness: 0.9,
-                        ..default()
-                    })),
-                    Transform::from_translation(at + up * 0.2).looking_to(motion.facing, up),
+                    Mesh3d(look.mesh.clone()),
+                    MeshMaterial3d(look.material.clone()),
+                    Transform::from_translation(at).looking_to(motion.facing, up),
                 ));
             }
             say("You have fallen. What you carried lies where you fell");

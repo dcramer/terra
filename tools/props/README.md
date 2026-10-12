@@ -1,0 +1,60 @@
+# Props
+
+Makes the props things are built as (stations, markers, furniture, anything that stands in the world) from a one-line description to the file the game loads. It is the bake-off's route ([research/ai-models-for-art.md](../../research/ai-models-for-art.md)), kept as a tool: a concept image drawn in the mood board's style, a low-poly Tripo model of it, then a free clean-up in Blender that welds it, cuts it to a triangle budget and gives every face one of our palette colours, so the game can colour it as it colours every prop (D14, D54).
+
+Each prop is a folder in [art/props](../../art/props), named as you like, holding `prop.json` and what it was made from:
+
+| File | What it is |
+|---|---|
+| `prop.json` | What it is and how it is made ours, below |
+| `concept.png`, `concept.prompt.txt` | The concept, and the prompt that drew it |
+| `model.glb` | Tripo's textured model of the concept, as Studio keeps it |
+
+```json
+{
+  "subject": "village blacksmith's forge: a waist-high hearth of stacked stone …",
+  "file": "Forge",
+  "size": 2.6,
+  "budget": 2500,
+  "roles": ["Rock", "RockDark", "Ore", "MetalDark", "Wood", "WoodDark", "Fire", "Black"]
+}
+```
+
+`subject` finishes the concept's brief, "A single …". `file` is its name in `assets/models/props`, as `assets/data/builds.ron` names it, and `size` its longest side in metres, as there. `budget` is the triangles it may have. `roles` are the palette colours its faces may take, named in [tools/characters/look.py](../characters/look.py)'s `PALETTE`; give only the ones the concept shows, since every face takes the nearest of them. A face coloured `Fire` glows in the game. Optional: `turn`, degrees about the up axis if its front comes out facing the wrong way; `faces`, Tripo's face limit (5,000); and `into`, another folder of `assets/models` to write it to. A tool's model goes `into` `tools`, standing on the end of its handle, with its parts as `Wood` and `Metal`: [fit_held.py](../characters/fit_held.py) makes the look held in the hand from it, colouring the metal for a stone or an iron head.
+
+## Making one
+
+Run from the repository root. Tripo needs its setup ([tools/tripo](../tripo/README.md)); Blender runs through [tools/blender](../blender/README.md).
+
+```bash
+node tools/props/props.ts concept forge   # free: draws art/props/forge/concept.png; look at it
+node tools/props/props.ts model forge     # about 45 Studio credits: views, then a P1 model textured at 2K
+node tools/props/props.ts refine forge    # free: assets/models/props/Forge.glb, and a sheet
+```
+
+A prop's front is wherever Tripo left it; `refine` squares the model up first, turning it by the smallest angle that gives it the tightest footprint, so a model set askew, such as a pickaxe with its head at 45 degrees, lies along the axes. Where a colour comes out wrong because the texture paints a part in another shade than its role's, such as a forge's dull red coals that should be `Fire`, `match` gives the texture's sRGB colour for that role: `"match": {"Fire": [0.68, 0.24, 0.17]}`. To see what the texture really paints, sample it in Blender before guessing.
+
+`all` runs the three in turn, skipping a concept or model `art/props` already has (`--again` remakes it). With no props named, a step does every prop. Look at the concept before spending on a model, and at the sheet, `tools/props/out/<prop>.png`, before calling it done: four views in the game's light, with the figure beside it for scale. `out/<prop>.json` beside it has the checks: triangles, size, loose parts, and how much of it each colour covers.
+
+The concept, model and `prop.json` are source art and are committed (`art/README.md`); the views and sheets in `out/` are not. `refine` is free, so when it improves, run it on every prop:
+
+```bash
+node tools/props/props.ts refine
+```
+
+## Checking it in the game
+
+The sheet shows a prop in Blender. To see it as the game draws it (our colours, the glow, the size `builds.ron` gives it) beside a body, without playing, line it up in the sandbox's workbench; each prop's size is printed:
+
+```bash
+cargo run -p terra_sandbox -- --experiment workbench --model models/character/base.glb --prop Forge --prop Workbench --sides 0 --sheet shots/props
+```
+
+`--prop all` stands every item in the catalogue. A tool is checked in the hand with `--hold stone_pickaxe`, after [fit_held.py](../characters/fit_held.py) has made its held look.
+
+Every item in `builds.ron` says how tall a real one stands (`height`, lowest and highest in metres), and a test reads every item's model at its catalogue size and fails if it stands outside that (`play::props`, `cargo xtask check`). A squat model, such as a coffee table sold as a dining table, is caught there rather than in play. A held tool's real length is set in `fit_held.py`'s `TOOLS`.
+
+| File | What it does |
+|---|---|
+| `props.ts` | The steps above |
+| `refine.py` | The clean-up, inside Blender |

@@ -6,7 +6,7 @@
 //! after a while, as a bag is.
 
 use super::Player;
-use super::death::DroppedBag;
+use super::death::{BagLook, DroppedBag};
 use super::interact::{CanInteract, Interactable};
 use super::inventory::{Items, Spilled};
 use super::tick::Sim;
@@ -19,38 +19,15 @@ const SAME_PILE_M: f32 = 2.5;
 /// How many cells a pile holds.
 const PILE_CELLS: u8 = 10;
 
-/// What a pile looks like, made once.
-#[derive(Resource)]
-struct PileLook {
-    mesh: Handle<Mesh>,
-    material: Handle<StandardMaterial>,
-}
-
 pub fn plugin(app: &mut App) {
     app.add_message::<Spilled>()
-        .add_systems(Startup, setup)
         .add_systems(FixedUpdate, drop.in_set(Sim::World));
-}
-
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    commands.insert_resource(PileLook {
-        mesh: meshes.add(Cuboid::new(0.5, 0.25, 0.5)),
-        material: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.48, 0.4, 0.3),
-            perceptual_roughness: 0.95,
-            ..default()
-        }),
-    });
 }
 
 /// Puts what did not fit on the nearest pile at that player's feet, or a new one.
 fn drop(
     mut commands: Commands,
-    look: Res<PileLook>,
+    look: Res<BagLook>,
     mut items: ResMut<Items>,
     players: Query<&Transform, With<Player>>,
     mut piles: Query<(Entity, &mut DroppedBag, &Transform), Without<Player>>,
@@ -97,7 +74,7 @@ fn drop(
                     CanInteract(Interactable::Bag),
                     Mesh3d(look.mesh.clone()),
                     MeshMaterial3d(look.material.clone()),
-                    Transform::from_translation(feet + up * 0.12)
+                    Transform::from_translation(feet)
                         .with_rotation(Quat::from_rotation_arc(Vec3::Y, up)),
                 ));
             }

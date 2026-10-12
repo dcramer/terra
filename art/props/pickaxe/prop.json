@@ -1,0 +1,19 @@
+{
+  "subject": "pickaxe standing upright on the end of its handle, the handle vertical and the head across the top: a plain wooden handle and a forged metal head curving down to a point at each end, a few turns of leather binding where they meet",
+  "file": "Pickaxe",
+  "into": "tools",
+  "size": 0.9,
+  "budget": 600,
+  "roles": [
+    "Wood",
+    "Metal",
+    "Leather"
+  ],
+  "match": {
+    "Leather": [
+      0.3,
+      0.18,
+      0.13
+    ]
+  }
+}

@@ -22,7 +22,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `carry_gear.py` | A worn look made on the base carried onto a morph |
 | `paint_skin.sh NAME FRONT` | A template's own skin, painted by Tripo on the base's mesh in its shape (`paint_skin.py`), baked onto the base's layout |
 | `compare.py` | Bodies side by side, dressed with `a.glb+b.glb`, for a person to look at |
-| `fit_held.py` | The held look of each tool, from the free models in `assets/models/tools` |
+| `fit_held.py` | The held look of each tool, from the models in `assets/models/tools`: free ones, and ours made by [tools/props](../props/README.md) |
 
 `look.py` holds what the scripts share: paths, our palette and light, and contact sheets.
 

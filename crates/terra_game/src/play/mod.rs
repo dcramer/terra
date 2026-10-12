@@ -55,6 +55,7 @@ mod pile;
 mod pooling;
 mod probe;
 mod props;
+pub use props::{Look as PropLook, glowing as prop_glowing, lit as prop_lit, looks as prop_looks};
 mod save;
 mod scene;
 mod settlement;

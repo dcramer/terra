@@ -14,7 +14,9 @@
 // parts      in the order the build menu lists them within each tab. Each is in a tab
 //            (Hidden ones are not in the menu) and is one of:
 //              Items    things stood on a floor or the ground, each with its model in
-//                       assets/models/props, its longest size in metres, and its cost.
+//                       assets/models/props, its longest size in metres, how tall a
+//                       real one stands (height, lowest and highest in metres, which a
+//                       test holds its model to at that size), and its cost.
 //                       Some lie flat (lift, metres above the floor), give light
 //                       (light: Fire), are a station (station, by stations.ron's name),
 //                       claim the land around them (claims, D94), or are to rest on
@@ -40,16 +42,16 @@
     ),
     parts: [
         (name: "Claim stone", tab: Claim, kind: Items([
-            (name: "Claim stone", file: "../nature/Rock_Moss_2", size: 1.3, cost: [("Stone", 2)], claims: true),
+            (name: "Claim stone", file: "ClaimStone", size: 1.3, height: (0.8, 1.6), cost: [("Stone", 2)], claims: true),
         ])),
         (name: "Workbench", tab: Crafting, kind: Items([
-            (name: "Workbench", file: "Table_Small", size: 1.7, cost: [("Wood", 4), ("Stone", 2)], station: "Workbench"),
+            (name: "Workbench", file: "Workbench", size: 1.7, height: (0.85, 1.1), cost: [("Wood", 4), ("Stone", 2)], station: "Workbench"),
         ])),
         (name: "Smelter", tab: Crafting, kind: Items([
-            (name: "Smelter", file: "shaped:smelter", size: 2.0, cost: [("Stone", 10), ("Wood", 2)], station: "Smelter"),
+            (name: "Smelter", file: "Smelter", size: 2.0, height: (1.5, 2.5), cost: [("Stone", 10), ("Wood", 2)], station: "Smelter"),
         ])),
         (name: "Forge", tab: Crafting, kind: Items([
-            (name: "Forge", file: "shaped:forge", size: 2.6, cost: [("Wood", 4), ("Stone", 8)], station: "Forge"),
+            (name: "Forge", file: "Forge", size: 2.6, height: (2.0, 3.5), cost: [("Wood", 4), ("Stone", 8)], station: "Forge"),
         ])),
         (name: "Room", tab: Structure, kind: Room([
             (name: "4.5 by 4.5 m", metres: (4.5, 4.5)),
@@ -69,10 +71,10 @@
         // Seen in the world but not yet buildable: a village's well and stall. How they
         // are learned is open (D68, D108).
         (name: "Well", tab: Hidden, kind: Items([
-            (name: "Well", file: "../village/Well", size: 2.4, cost: [("Stone", 12)]),
+            (name: "Well", file: "../village/Well", size: 2.4, height: (2.0, 3.0), cost: [("Stone", 12)]),
         ])),
         (name: "Market stall", tab: Hidden, kind: Items([
-            (name: "Market stall", file: "../village/MarketStand_1", size: 3.0, cost: [("Wood", 8), ("Fibre", 4)]),
+            (name: "Market stall", file: "../village/MarketStand_1", size: 3.0, height: (2.3, 3.0), cost: [("Wood", 8), ("Fibre", 4)]),
         ])),
         (name: "Remove", tab: Hidden, kind: Remove),
         (name: "Move", tab: Hidden, kind: Move),
@@ -80,27 +82,27 @@
         // crates and potted houseplants, are left out until the art direction settles;
         // they do not belong in game design 001's world.
         (name: "Seat", tab: Furniture, kind: Items([
-            (name: "Chair", file: "Chair_1", size: 0.95, cost: [("Wood", 2)], rest: Sit),
-            (name: "Stool", file: "Stool", size: 0.5, cost: [("Wood", 1)], rest: Sit),
+            (name: "Chair", file: "Chair_1", size: 0.95, height: (0.8, 1.05), cost: [("Wood", 2)], rest: Sit),
+            (name: "Stool", file: "Stool", size: 0.6, height: (0.45, 0.75), cost: [("Wood", 1)], rest: Sit),
         ])),
         (name: "Table", tab: Furniture, kind: Items([
-            (name: "Round table", file: "Table_RoundSmall", size: 1.1, cost: [("Wood", 3)]),
-            (name: "Night stand", file: "NightStand_1", size: 0.55, cost: [("Wood", 2)]),
+            (name: "Round table", file: "Table_RoundSmall", size: 1.25, height: (0.7, 0.8), cost: [("Wood", 3)]),
+            (name: "Night stand", file: "NightStand_1", size: 0.55, height: (0.45, 0.65), cost: [("Wood", 2)]),
         ])),
         (name: "Bed", tab: Furniture, kind: Items([
-            (name: "Single bed", file: "Bed_Single", size: 2.15, cost: [("Wood", 3), ("Fibre", 3)], rest: Sleep),
+            (name: "Single bed", file: "Bed_Single", size: 2.15, height: (0.4, 1.0), cost: [("Wood", 3), ("Fibre", 3)], rest: Sleep),
         ])),
         (name: "Storage", tab: Storage, kind: Items([
-            (name: "Bookshelf", file: "Bookshelf", size: 2.0, cost: [("Wood", 4)]),
+            (name: "Bookshelf", file: "Bookshelf", size: 2.0, height: (1.6, 2.2), cost: [("Wood", 4)]),
         ])),
         (name: "Decor", tab: Furniture, kind: Items([
-            (name: "Round rug", file: "Carpet_Round", size: 3.2, cost: [("Hide", 2)], lift: 0.015),
-            (name: "Long rug", file: "Carpet_1", size: 3.0, cost: [("Hide", 2)], lift: 0.015),
-            (name: "Shovel", file: "Shovel", size: 1.3, cost: [("Wood", 1), ("Iron", 1)]),
+            (name: "Round rug", file: "Carpet_Round", size: 3.2, height: (0.0, 0.05), cost: [("Hide", 2)], lift: 0.015),
+            (name: "Long rug", file: "Carpet_1", size: 3.0, height: (0.0, 0.05), cost: [("Hide", 2)], lift: 0.015),
+            (name: "Shovel", file: "Shovel", size: 1.3, height: (1.1, 1.6), cost: [("Wood", 1), ("Iron", 1)]),
         ])),
         (name: "Fire", tab: Fire, kind: Items([
-            (name: "Campfire", file: "Bonfire_Fire", size: 1.3, cost: [("Wood", 3), ("Stone", 2)], light: Fire, station: "Campfire"),
-            (name: "Log", file: "WoodLog", size: 1.7, cost: [("Wood", 2)]),
+            (name: "Campfire", file: "Bonfire_Fire", size: 1.3, height: (0.8, 1.6), cost: [("Wood", 3), ("Stone", 2)], light: Fire, station: "Campfire"),
+            (name: "Log", file: "WoodLog", size: 1.7, height: (0.3, 0.6), cost: [("Wood", 2)]),
         ])),
     ],
 )

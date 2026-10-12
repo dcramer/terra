@@ -13,6 +13,11 @@
 //! `workbench.shape {model, template | morphs, skin}` reshapes a model's body live
 //! (`appearance`): a template by name, or any mix of morphs, such as `{"heavy": 0.5}`.
 //! Clips, joints and sockets are printed when a model loads.
+//!
+//! `--prop <name>` stands an item of the builder's catalogue beside the models, drawn as it
+//! is when placed in play (`play::prop_looks`): its model at the catalogue's size, in our
+//! colours, glowing where it glows. Its size is printed, so a prop's proportions can be
+//! checked against a body and by number without playing. `--prop all` stands every item.
 
 mod sheet;
 
@@ -32,6 +37,10 @@ use terra_game::{character, planet::Planet, remote, shell::Options};
 
 /// How far apart models stand, side by side.
 const SPACING_M: f32 = 1.2;
+/// The gap between props in the row, and the height a body is taken to have when
+/// framing them.
+const PROP_GAP_M: f32 = 0.6;
+const BODY_M: f32 = 1.8;
 /// How far the camera stands from a whole figure, and from a part looked at closely.
 const FIGURE_VIEW_M: f32 = 3.6;
 const FOCUS_VIEW_M: f32 = 0.9;
@@ -44,6 +53,13 @@ struct Bench {
     stand: Vec3,
     up: Vec3,
     front: Vec3,
+    /// How far along the row each model stands from its middle; the row's length, and
+    /// the height of the tallest thing in it.
+    slots: Vec<f32>,
+    length: f32,
+    tallest: f32,
+    /// It has props, so the row is wider than a figure and its sheet keeps the whole view.
+    wide: bool,
     spawned: bool,
     models: Vec<Model>,
 }
@@ -91,25 +107,73 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if options.models.is_empty() {
-        error!("the workbench needs --model <path under assets/>");
+    if options.models.is_empty() && options.props.is_empty() {
+        error!("the workbench needs --model <path under assets/> or --prop <item>");
         return;
     }
     let stand = planet.start();
     let up = stand.normalize();
     // Models face +Z, as glTF models do; at the start, up is close to +Y.
     let front = Vec3::X.cross(up).normalize();
+    let floor = stand + up * 0.525;
+    let turned = Quat::from_rotation_arc(Vec3::Y, up);
+    let side = up.cross(front);
+    // The row: each model in a slot of its own, then each prop in one as wide as it is.
+    let looks: Vec<_> = terra_game::play::prop_looks(&options.props, &mut meshes)
+        .into_iter()
+        .filter_map(|look| look.map_err(|problem| error!("workbench: {problem}")).ok())
+        .collect();
+    let widths: Vec<f32> = std::iter::repeat_n(SPACING_M, options.models.len())
+        .chain(
+            looks
+                .iter()
+                .map(|look| look.model.half.x * 2.0 + PROP_GAP_M),
+        )
+        .collect();
+    let length: f32 = widths.iter().sum();
+    let mut slots = Vec::new();
+    let mut along = -length * 0.5;
+    for width in &widths {
+        slots.push(along + width * 0.5);
+        along += width;
+    }
+    let mut tallest = if options.models.is_empty() {
+        0.0
+    } else {
+        BODY_M
+    };
+    let (lit, glowing) = (
+        materials.add(terra_game::play::prop_lit()),
+        materials.add(terra_game::play::prop_glowing()),
+    );
+    for (look, offset) in looks.iter().zip(&slots[options.models.len()..]) {
+        let size = look.model.half * 2.0;
+        info!(
+            "workbench: prop {}: {:.2} m wide, {:.2} m high, {:.2} m deep",
+            look.name, size.x, size.y, size.z
+        );
+        tallest = f32::max(tallest, size.y);
+        let mut prop = commands.spawn((
+            Name::new(format!("Workbench prop {}", look.name)),
+            Transform::from_translation(floor + side * *offset).with_rotation(turned),
+            Visibility::default(),
+        ));
+        for (mesh, material) in [(&look.model.solid, &lit), (&look.model.glow, &glowing)] {
+            if let Some(mesh) = mesh {
+                prop.with_child((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())));
+            }
+        }
+    }
     // A plain floor, so the models are judged on their own.
     commands.spawn((
         Name::new("Workbench floor"),
-        Mesh3d(meshes.add(Cylinder::new(6.0, 0.05))),
+        Mesh3d(meshes.add(Cylinder::new(f32::max(6.0, length * 0.5 + 1.0), 0.05))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.62, 0.6, 0.56),
             perceptual_roughness: 0.95,
             ..default()
         })),
-        Transform::from_translation(stand + up * 0.5)
-            .with_rotation(Quat::from_rotation_arc(Vec3::Y, up)),
+        Transform::from_translation(stand + up * 0.5).with_rotation(turned),
     ));
     if options.joints {
         commands.insert_resource(ReportJoints);
@@ -121,9 +185,13 @@ fn setup(
             .map(|path| assets.load(path.clone()))
             .collect(),
         clips: options.anims.clone(),
-        stand: stand + up * 0.525,
+        stand: floor,
         up,
         front,
+        slots,
+        length,
+        tallest,
+        wide: !looks.is_empty(),
         spawned: false,
         models: Vec::new(),
     });
@@ -168,7 +236,7 @@ fn spawn(
     }
     bench.spawned = true;
     if bench.clips.is_empty() {
-        let first = gltfs.get(&bench.files[0]);
+        let first = bench.files.first().and_then(|file| gltfs.get(file));
         bench.clips = ["Idle_Loop", "Walk_Loop"]
             .into_iter()
             .filter(|name| first.is_some_and(|gltf| gltf.named_animations.contains_key(*name)))
@@ -180,7 +248,6 @@ fn spawn(
         bench.clips.push("still".to_string());
     }
     let side = bench.up.cross(bench.front);
-    let count = bench.files.len();
     let mut models = Vec::new();
     for (index, (file, path)) in bench.files.iter().zip(&options.models).enumerate() {
         let Some(gltf) = gltfs.get(file) else {
@@ -207,7 +274,7 @@ fn spawn(
         let Some(scene) = gltf.default_scene.clone() else {
             continue;
         };
-        let offset = (index as f32 - (count - 1) as f32 * 0.5) * SPACING_M;
+        let offset = bench.slots[index];
         // Shaped as its template, if given one (`appearance`).
         let shape = options
             .templates
@@ -356,8 +423,16 @@ fn dress(
 
 /// Where the camera stands to see every model whole from `degrees` round their front.
 fn whole_view(bench: &Bench, degrees: f32) -> Transform {
-    let target = bench.stand + bench.up * 0.9;
-    let distance = FIGURE_VIEW_M + SPACING_M * (bench.files.len() - 1) as f32;
+    let target = bench.stand + bench.up * f32::max(0.9, bench.tallest * 0.5);
+    // Far enough for the row's length across a wide frame and its height up a 45° one.
+    let fits = f32::max(
+        bench.length * 0.5 / libm::tanf(36f32.to_radians()),
+        bench.tallest * 0.5 / libm::tanf(22.5f32.to_radians()),
+    ) * 1.2;
+    let distance = f32::max(
+        FIGURE_VIEW_M + SPACING_M * bench.files.len().saturating_sub(1) as f32,
+        fits,
+    );
     around(bench, target, degrees, distance, 0.7)
 }
 

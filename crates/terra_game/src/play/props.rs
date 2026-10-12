@@ -8,7 +8,7 @@
 use super::catalogue::{Builds, Item, Light};
 use super::flora::Obstacles;
 use super::interact::{CanInteract, Interactable};
-use super::models::{Part, read_model, shaped};
+use super::models::{Part, read_model};
 use crate::build::Site;
 use crate::planet::Planet;
 use bevy::{
@@ -170,6 +170,25 @@ fn build(parts: &[Part], size: f32, meshes: &mut Assets<Mesh>) -> Model {
     }
 }
 
+/// The model in `assets/models/props/<file>.glb`, coloured as every prop is, with its
+/// longest side `size` metres.
+pub fn read_look(file: &str, size: f32, meshes: &mut Assets<Mesh>) -> Result<Model, String> {
+    Ok(build(
+        &read_model(&format!("props/{file}.glb"))?,
+        size,
+        meshes,
+    ))
+}
+
+/// The material a prop's lit parts are drawn with: their colours are its vertices'.
+pub fn lit() -> StandardMaterial {
+    StandardMaterial {
+        perceptual_roughness: 0.8,
+        reflectance: 0.3,
+        ..default()
+    }
+}
+
 fn load(
     mut commands: Commands,
     builds: Res<Builds>,
@@ -178,29 +197,63 @@ fn load(
 ) {
     let mut models = HashMap::default();
     for item in builds.items() {
-        let parts = match item.file.strip_prefix("shaped:") {
-            Some(name) => shaped(name).ok_or(format!("There is no shaped model called {name}.")),
-            None => read_model(&format!("props/{}.glb", item.file)),
-        };
-        match parts {
-            Ok(parts) => {
-                models.insert(item.file.clone(), build(&parts, item.size, &mut meshes));
+        match read_look(&item.file, item.size, &mut meshes) {
+            Ok(model) => {
+                models.insert(item.file.clone(), model);
             }
             Err(problem) => error!("Could not read a model. {problem}"),
         }
     }
     commands.insert_resource(Models {
         models,
-        lit: materials.add(StandardMaterial {
-            perceptual_roughness: 0.8,
-            reflectance: 0.3,
-            ..default()
-        }),
-        glowing: materials.add(StandardMaterial {
-            emissive: LinearRgba::rgb(14.0, 6.0, 1.6),
-            ..default()
-        }),
+        lit: materials.add(lit()),
+        glowing: materials.add(glowing()),
     });
+}
+
+/// The material a prop's glowing parts are drawn with, such as a forge's coals.
+pub fn glowing() -> StandardMaterial {
+    StandardMaterial {
+        emissive: LinearRgba::rgb(14.0, 6.0, 1.6),
+        ..default()
+    }
+}
+
+/// An item of the builder's catalogue as it is drawn when placed, for looking at models
+/// outside play, as the sandbox's workbench does.
+pub struct Look {
+    pub name: String,
+    pub model: Model,
+}
+
+/// The looks of the catalogue's items called `names`, or of every item for `all`, in the
+/// catalogue's order then. Each is the item's model at the size the catalogue gives it,
+/// or why it could not be read.
+pub fn looks(names: &[String], meshes: &mut Assets<Mesh>) -> Vec<Result<Look, String>> {
+    let builds = Builds::read(
+        &super::inventory::Items::default(),
+        &super::crafting::Stations::read(),
+    );
+    let wanted: Vec<Arc<Item>> = if names.iter().any(|name| name == "all") {
+        builds.items().cloned().collect()
+    } else {
+        names
+            .iter()
+            .filter_map(|name| builds.item_named(name))
+            .collect()
+    };
+    let mut found: Vec<Result<Look, String>> = names
+        .iter()
+        .filter(|name| *name != "all" && builds.item_named(name).is_none())
+        .map(|name| Err(format!("There is no item called {name} in the catalogue.")))
+        .collect();
+    found.extend(wanted.iter().map(|item| {
+        read_look(&item.file, item.size, meshes).map(|model| Look {
+            name: item.name.clone(),
+            model,
+        })
+    }));
+    found
 }
 
 /// Stands an item in the world. `at` is in the base's own space; outdoors only its east
@@ -610,6 +663,28 @@ mod tests {
     use super::*;
     use crate::play::crafting::Stations;
     use crate::play::inventory::Items;
+
+    #[test]
+    fn every_item_stands_as_tall_as_a_real_one() {
+        let builds = Builds::read(&Items::default(), &Stations::read());
+        let mut meshes = Assets::<Mesh>::default();
+        let wrong: Vec<String> = builds
+            .items()
+            .filter_map(|item| {
+                let model = read_look(&item.file, item.size, &mut meshes)
+                    .unwrap_or_else(|problem| panic!("{problem}"));
+                let high = model.half.y * 2.0;
+                let (low, top) = item.height;
+                (high < low - 1e-3 || high > top + 1e-3).then(|| {
+                    format!(
+                        "{} stands {high:.2} m at size {}, not {low} to {top} m",
+                        item.name, item.size
+                    )
+                })
+            })
+            .collect();
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
 
     fn box_at_origin() -> (Prop, Transform, Visibility) {
         let prop = Prop {

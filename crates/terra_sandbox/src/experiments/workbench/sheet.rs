@@ -120,14 +120,18 @@ pub fn capture(
     sheet.waited = 0;
     sheet.step += 1;
     sheet.waiting = true;
+    // A row with props in it is kept whole; a figure alone, its middle.
+    let whole = bench.wide;
     commands.spawn(Screenshot::primary_window()).observe(
-        |captured: On<ScreenshotCaptured>, mut sheet: ResMut<Sheet>| {
+        move |captured: On<ScreenshotCaptured>, mut sheet: ResMut<Sheet>| {
             sheet.waiting = false;
             match captured.image.clone().try_into_dynamic() {
                 Ok(picture) => {
                     let picture = picture.to_rgb8();
                     let (width, height) = (picture.width(), picture.height());
-                    sheet.cells.push(cut(width, height, &picture.into_raw()));
+                    sheet
+                        .cells
+                        .push(cut(width, height, &picture.into_raw(), whole));
                 }
                 Err(error) => error!("workbench: could not read a screenshot: {error}"),
             }
@@ -135,9 +139,14 @@ pub fn capture(
     );
 }
 
-/// The middle of a picture, as wide as three quarters of its height, at half size.
-fn cut(width: u32, height: u32, rgb: &[u8]) -> Cell {
-    let keep = (height * 3 / 4).min(width);
+/// The middle of a picture, as wide as three quarters of its height, or the `whole` of it,
+/// at half size.
+fn cut(width: u32, height: u32, rgb: &[u8], whole: bool) -> Cell {
+    let keep = if whole {
+        width
+    } else {
+        (height * 3 / 4).min(width)
+    };
     let left = (width - keep) / 2;
     let (out_w, out_h) = (keep / 2, height / 2);
     let mut out = Vec::with_capacity((out_w * out_h * 3) as usize);
@@ -209,9 +218,12 @@ mod tests {
         let rgb: Vec<u8> = (0..4)
             .flat_map(|_| (0..8u8).flat_map(|x| [x * 10, 0, 0]))
             .collect();
-        let cell = cut(8, 4, &rgb);
+        let cell = cut(8, 4, &rgb, false);
         assert_eq!((cell.width, cell.height), (1, 2));
         // The average of columns 2 and 3.
         assert_eq!(cell.rgb[0], 25);
+        let cell = cut(8, 4, &rgb, true);
+        assert_eq!((cell.width, cell.height), (4, 2));
+        assert_eq!(cell.rgb[0], 5);
     }
 }

@@ -86,6 +86,7 @@ struct ItemFile {
     name: String,
     file: String,
     size: f32,
+    height: (f32, f32),
     cost: Vec<(String, u32)>,
     #[serde(default)]
     lift: f32,
@@ -113,6 +114,7 @@ impl Builds {
             name: item.name,
             file: item.file,
             size: item.size,
+            height: item.height,
             lift: item.lift,
             light: item.light,
             claims: item.claims,
@@ -200,6 +202,11 @@ impl Builds {
         self.items().find(|item| item.file == file).cloned()
     }
 
+    /// The item called `name`: what it is, which outlasts how it looks.
+    pub fn item_named(&self, name: &str) -> Option<Arc<Item>> {
+        self.items().find(|item| item.name == name).cloned()
+    }
+
     /// The part and variant that an item is, for picking "another of those".
     pub fn place_of(&self, wanted: &Item) -> Option<(usize, usize)> {
         self.parts
@@ -260,6 +267,10 @@ pub struct Item {
     pub file: String,
     /// Its longest dimension, in metres.
     pub size: f32,
+    /// How tall a real one stands, lowest to highest, in metres (D110): its model at
+    /// `size` must stand within it, which a test checks, so a squat or lanky model is
+    /// caught rather than drawn at the wrong height.
+    pub height: (f32, f32),
     /// The raw items it is built from, and gives back when taken apart.
     pub cost: Vec<(ItemKind, u32)>,
     /// Flat things lie this far above the floor, so the two do not flicker.
@@ -433,6 +444,10 @@ mod tests {
         for file in &files {
             assert_eq!(files.iter().filter(|other| other == &file).count(), 1);
             assert!(builds.item_from(file).is_some());
+        }
+        let names: Vec<_> = builds.items().map(|item| item.name.clone()).collect();
+        for name in &names {
+            assert_eq!(names.iter().filter(|other| other == &name).count(), 1);
         }
     }
 }

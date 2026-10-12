@@ -18,7 +18,7 @@ All by [Quaternius](https://quaternius.com), who releases everything under [CC0 
 | Where | From | Changes |
 |---|---|---|
 | `assets/models/nature/` | Ultimate Nature Pack: trees, rocks, bushes, plants, flowers | None to the files. The sandbox reads their shapes and applies its own colours. |
-| `assets/models/props/` | House Interior, Modular Sci-Fi and Survival packs: furniture, crates, tanks, a fire. Modular Dungeon pack: `Table_Small.glb`, a workbench | None to the files. Recoloured the same way. |
+| `assets/models/props/` | House Interior, Modular Sci-Fi and Survival packs: furniture, crates, tanks, a fire | None to the files. Recoloured the same way. |
 | `assets/models/character/` | Universal Animation Library, standard edition: a rigged figure and its animations | Cut down to 26 of its 46 animations, and the figure's two colours changed, by a script since retired (D121), which copied the kept nodes, skin, mesh and keyframes unchanged. |
 | `assets/models/creatures/` | Ultimate Animated Animals pack: `Deer.glb`. Easy Enemies pack: `Spider.glb`. Both rigged and animated | None to the files. |
 | `assets/models/village/` | Medieval Village pack: a fence, a well, a market stall | None to the files. Its houses and blacksmith's, and a palisade from the Fantasy RTS pack, were removed: buildings are built from parts (D108). |
@@ -35,6 +35,7 @@ Made by us with generators on paid plans, whose terms leave what they make with 
 | `assets/models/character/base.glb` | [Tripo](https://www.tripo3d.ai) (the base male's model and rig, on our Studio subscription; design sheet on its API), animated with the Quaternius clips above. Its morphs from Tripo models of designs of the same man (heavy, thin, strong; image model and Studio) and from the female body (Tripo design, model and rig) | `.claude/skills/character/SKILL.md` and `tools/characters/build_bodies.sh`, from the source art in `art/characters/`; D112, D115 |
 | `assets/models/character/skins/` | Tripo (texture, on our Studio subscription): a template's skin painted on the base's mesh from its design | `tools/characters/paint_skin.sh` |
 | `assets/models/gear/` | Tripo (concept images and models, on our Studio subscription): a pack in two sizes, a cap, a coat and a quiver | Made once on the base body and given its morphs, by `tools/characters/build_bodies.sh` |
+| `assets/models/props/Forge.glb`, `Smelter.glb`, `Workbench.glb`, `ClaimStone.glb`, `Sack.glb`; `assets/models/tools/Pickaxe.glb`, `Torch.glb` | Tripo (concept images and models, on our Studio subscription) | `tools/props`, from the source art in `art/props/`: cleaned up and given our palette in Blender; D147 |
 
 ## Sound
 
