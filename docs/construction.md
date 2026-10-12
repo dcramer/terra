@@ -26,6 +26,7 @@ In their words, shortened.
 - **What does not fit in the inventory drops to the ground** (2026-10-12).
 - **You build only inside a claim** (D94, Leaning), which starts small and grows (D104).
 - **Structures are planned, then constructed** (D139, Leaning, 2026-10-12): "for structures, you place a blueprint/plan of it, and then you have to actually construct it somehow… it makes it more realistic. So each wall you'd have to do that, and then doors are like carve outs so it can be slightly diff? Same with windows? We'll wanna think this through."
+- **A blueprint shows its parts, and they can be small** (D139): "ideally a blueprint shows its 'parts' if you will, kind of like Forest shows the logs, and that can vary based on the type of construction".
 - **Large structures take large materials, carried** (D140, Leaning): "you probably need large materials and can carry them? And later in the game maybe you unlock ways to transport them more efficiently."
 - **Building draws on storage** (D141): "building from storage absolutely, but large items probably will need a special storage? And that probably would be unlocked later game (some of this)."
 - **No stability in the MVP, but wanted later** (D142).
@@ -97,19 +98,24 @@ The developers' direction (D139, Leaning): a structure is first laid out as a pl
 
 **Laying a plan.** Everything structural that the build menu places, a room, a wall, a floor, a fence, goes down as a plan: a pale ghost in the claim that costs nothing and blocks nothing yet. Lay as many as you like; move them, resize them, take them away for free. A plan shows, part by part, what it needs. This is also how a whole base is tried out, and its full cost seen, before anything is gathered (The Forest, Ark Ascended's planning mode).
 
-**Constructing it.** A plan is made of parts, and each part is built on its own: stand at it with the hammer and the materials it needs, in your pack or in storage nearby (D141), and hold the build key; the part rises, and its materials are spent. A room plan's parts are:
+**Constructing it.** A plan shows its parts, the way The Forest's blueprint shows each log (D139): every piece that will make it is outlined in the ghost, and each is put in one at a time. Stand at the plan with the hammer and what the next part needs, in your pack or in storage nearby (D141), and hold the build key: that part goes in, its material is spent, and the outline fills. Parts can be small, a single log or a single stone.
 
-| Part | Proposed size | Needs first |
-|---|---|---|
-| Foundation and floor | A square of the grid, 1.5 metres a side | Nothing |
-| Wall panel | A run of wall 1.5 metres long, a storey high, between posts | The floor under it |
-| Roof | A square, 1.5 metres a side | The walls round it |
+**What the parts are depends on the kind of construction.** Each kind of construction says how a wall, floor or roof of it is made, as data, like everything else built (D56, D136):
 
-So a 4.5 by 4.5 metre room is nine floor squares, twelve wall panels and nine roof squares, and you see it go up: floor first, walls rising panel by panel, the roof last. The order is what makes sense physically, not a stability check (D142): you cannot raise a wall with no floor under it, or roof a room with no walls.
+| Construction | A wall is | A floor is | A roof is |
+|---|---|---|---|
+| Logs | Logs laid one on another, each as long as the wall or a log can be, notched at the corners | Logs side by side on beams | Poles, then a covering |
+| Planks | Posts at the corners and every so far, then planks across them | Beams, then planks | Rafters, then planks or shingles |
+| Stone | Courses of cut stone, each block a part | Flagstones on a bed | Beams, then slates |
+| Wattle and daub (early) | Stakes, woven sticks, then a coat of mud | Packed earth | Thatch on poles |
+
+So a log cabin's wall of 4.5 metres, a storey high, is about a dozen logs, put in from the bottom up; a stone wall is many more, smaller parts. The order is the physical one: what a part rests on goes in first. That is not a stability check (D142), only which outline is next.
+
+**Building in bulk.** Putting in parts one by one is the realistic way and must not become a chore: holding the build key keeps putting in the next part while you have the materials; a skilled builder (D88) puts them in faster; recruits put them in for you (D90). The Forest's later option to skip each part's animation is the lesson: show each part going in, quickly.
 
 **Doors and windows are carved out** (the developers' "carve outs, so it can be slightly different"):
 
-- **On a plan**, an opening is planned into the wall: the panels it crosses need less material, since the opening's cells are left out, and gain a frame to build.
+- **On a plan**, an opening is planned into the wall: the parts it crosses are shortened or left out, so the wall needs less, and a frame is added to build.
 - **In a finished wall**, an opening is cut: it takes work with a tool, gives back the material of what was cut away, and leaves a frame to build.
 - **The door or the glass is its own item**, made at a station and fitted into the frame. A doorway without a door is just a gap; a window frame without glass is open to the weather.
 
@@ -119,7 +125,7 @@ So a 4.5 by 4.5 metre room is nine floor squares, twelve wall panels and nine ro
 
 **Who constructs.** Anyone allowed in the claim (D94), and recruits who work at the base (D90), as Sons of the Forest's companion finishes blueprints. A claim-wide list of what all its plans still need, as The Forest's counter, tells a group what to go and get.
 
-**On the voxel grid** (D48): constructing a part writes its blocks; a plan is blocks not yet written. Carving an opening is removing blocks. The parts above are how the brush is sized for structures.
+**On the voxel grid** (D48): constructing a part writes its blocks; a plan is blocks not yet written. Carving an opening is removing blocks. A kind of construction's parts are how the brush is sized for structures.
 
 ## Large materials and carrying
 
@@ -269,10 +275,10 @@ For the developers to reorder. Each step is small enough to play and judge.
 
 For the developers. Each has my recommendation.
 
-Answered on 2026-10-12: structures are planned, then constructed (D139); big materials are carried, with better transport later (D140); building draws on storage, with special storage for big materials later (D141); no stability in the MVP, but later (D142); rooms can be underground (D143).
+Answered on 2026-10-12: structures are planned, then constructed, a blueprint showing its parts, which can be small and depend on the kind of construction (D139); big materials are carried, with better transport later (D140); building draws on storage, with special storage for big materials later (D141); no stability in the MVP, but later (D142); rooms can be underground (D143).
 
-1. **What is a part?** Proposed above: floor squares and wall panels of 1.5 metres, roof squares. Smaller is more work and more realistic; Sons of the Forest goes down to a single log. Recommend 1.5 metres to start.
-2. **Must parts go up in order**, floor, then walls, then roof? Recommend yes.
+1. **The kinds of construction**: which there are, and when each is learned (D68). Recommend wattle and daub, then logs, then planks, then stone for the MVP's first two.
+2. **Must parts go up in order**, what rests on something after it? Recommend yes.
 3. **Are stations constructed too**, being large, or placed whole like furniture? Recommend placed whole for now.
 4. **Cutting an opening in a finished wall**: with which tool, and does it give back what was cut? Recommend the axe for wood, the pickaxe for stone, giving it back.
 5. **Which materials are big**, and how many does a player carry? Recommend logs and cut stone; one comfortably, two at a walk.
