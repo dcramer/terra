@@ -53,6 +53,11 @@ struct Yield {
 pub struct Yields(Vec<Yield>);
 
 impl Yields {
+    /// The materials that give something, in order.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|each| each.name.as_str())
+    }
+
     pub fn read(items: &Items) -> Self {
         const FILE: &str = "ground.ron";
         let defs: Vec<YieldDef> = data::read(FILE);

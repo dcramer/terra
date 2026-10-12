@@ -135,6 +135,14 @@ impl Default for Items {
 }
 
 impl Items {
+    /// Takes the kinds of another, read afresh, keeping the identities already given out, so
+    /// no two items ever share one.
+    pub fn take_kinds(&mut self, fresh: Items) {
+        self.catalogue = fresh.catalogue;
+        self.defs = fresh.defs;
+        self.start = fresh.start;
+    }
+
     /// The kind called a name, if there is one.
     pub fn find(&self, name: &str) -> Option<ItemKind> {
         self.catalogue.find(name)
