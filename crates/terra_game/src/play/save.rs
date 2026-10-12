@@ -225,6 +225,8 @@ pub fn plugin(app: &mut App) {
 
 fn choose_path(mut commands: Commands, options: Res<Options>) {
     let path = match &options.save {
+        // The yard, the flat test level, is never saved, and never touches a save.
+        _ if options.yard() => None,
         Some(path) => Some(path.clone()),
         None if options.scripted() => None,
         None => Settings::path().map(|settings| settings.with_file_name("save.ron")),

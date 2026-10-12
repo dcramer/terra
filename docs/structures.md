@@ -103,6 +103,10 @@ The base today is rooms of cells with a generated hull (`terra_build`). It is re
 - **The tools**: the room tool's drawn rectangle lays walls and a floor (D152); the wall tool draws walls inside and out; a roof tool is new.
 - **Walking, raycasts and the meshing** move from the hull to the parts.
 
+## Where it is worked on
+
+On the yard, a flat test level: `cargo xtask yard`, or `--level yard` on the play experiment for the sandbox remote. Nothing on it, building free and instant, nothing saved.
+
 ## Order
 
 Each step is played and checked by script before the next (D69):

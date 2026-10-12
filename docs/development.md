@@ -28,6 +28,7 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 |---|---|
 | `cargo xtask tools` | Every task and tool, with what it does |
 | `cargo xtask play` | Play the tech demo on the real GPU, wherever you are; your game is kept between runs. `cargo xtask play --fresh` starts a new one. |
+| `cargo xtask yard` | Play the yard: a flat test level for working on building. Smooth ground with nothing on it, building free and instant without a claim stone, the sun at noon, nothing saved. The same as `--level yard` on the play experiment, so the sandbox remote can drive it. |
 | `cargo xtask loop` | Play the demo's loop by script and check every step happened |
 | `cargo xtask check` | Formatting, lints, tests (the TypeScript tools' too) and the dependency rule. Must pass before a commit. |
 | `cargo test -p terra_sim` | One crate's tests |

@@ -188,7 +188,7 @@ The developers' direction (D139, Decided): a structure is first laid out as a pl
 
 So a log cabin's wall of 4.5 metres, a storey high, is about a dozen logs, put in from the bottom up; a stone wall is many more, smaller parts. The order is the physical one: what a part rests on goes in first. That is not a stability check (D142), only which outline is next.
 
-**How a part goes in: carried, set, hammered.** The developers want it to feel immersive, and named both ways: bringing the material and placing it, as The Forest and Grounded 2, and going up and hitting it with a hammer. Proposed, both, by the size of the material, which is how building is really done:
+**How a part goes in: carried, set, hammered.** The developers want it to feel immersive, and named both ways: bringing the material and placing it, as The Forest and Grounded 2, and going up and hitting it with a hammer. Then, settled for large construction (2026-10-12): "it'd originally be placed as a blueprint, and you'd have to then bring the materials to it to build it (kind of like the forest or grounded 2)". The rest of this is a proposal, by the size of the material, which is how building is really done:
 
 - **Big parts are carried and set.** A log, a beam or a cut stone is brought to the plan, on the shoulder (D140) or picked up from a pile within reach, and set into the outline it fits: you see it go in, and the outline fills.
 - **Then the hammer fixes it.** A few swings at what was just set peg, nail or mortar it in, the small fixings coming from the pack or storage (D141). Until it is fixed, the part is in place but loose: it can be lifted out again freely.

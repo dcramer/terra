@@ -483,6 +483,7 @@ pub(super) fn aim(
 /// Works out what the thing aimed at would cost to build, and whether it can be paid.
 pub(super) fn afford(
     site: Res<Site>,
+    options: Res<Options>,
     builds: Res<Builds>,
     props: Query<&Prop>,
     mut belongings: Belongings,
@@ -503,6 +504,8 @@ pub(super) fn afford(
         let on_planet =
             target_point(&builder.target, &props).map(|point| site.frame.transform_point(point));
         builder.unclaimed = match on_planet {
+            // The yard, the flat test level, is all one claim.
+            _ if options.yard() => None,
             Some(_) if placing_claim && claim.stone.is_some() => {
                 Some("You already have a claim; take its stone away to move it")
             }
@@ -567,6 +570,8 @@ pub(super) fn afford(
             }
             _ => None,
         };
+        // On the yard, building costs nothing.
+        let price = price.filter(|_| !options.yard());
         builder.short = price
             .as_ref()
             .and_then(|(cost, times)| belongings.missing(cost, *times));

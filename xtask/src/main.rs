@@ -25,6 +25,13 @@ const TASKS: &[Task] = &[
         run: play,
     },
     Task {
+        name: "yard",
+        takes: "[game args]",
+        does: "play the yard, a flat test level for building: nothing on it, building free and instant, nothing saved",
+        group: "Play and check",
+        run: yard,
+    },
+    Task {
         name: "loop",
         takes: "",
         does: "play the demo's loop by script and check every step happened (D69)",
@@ -471,6 +478,13 @@ fn play(args: &[String]) -> bool {
     let mut cargo = vec!["run", "-p", "terra_sandbox", "--"];
     cargo.extend(game.iter().map(String::as_str));
     run("cargo", &cargo)
+}
+
+/// Plays the yard, the flat test level for working on building (`--level yard`).
+fn yard(args: &[String]) -> bool {
+    let mut game: Vec<String> = vec!["--level".into(), "yard".into()];
+    game.extend(args.iter().cloned());
+    play(&game)
 }
 
 /// The Windows temp folder, as a path WSL can use.

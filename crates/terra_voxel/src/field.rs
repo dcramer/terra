@@ -157,6 +157,8 @@ pub struct GeneratedPlanet {
     detail: Noise,
     ore: Noise,
     relief_m: f32,
+    /// How tall the finer detail is.
+    detail_m: f32,
     sea_level_m: Option<f32>,
     /// Lattice points along each edge of a face.
     lattice: u32,
@@ -187,9 +189,17 @@ impl GeneratedPlanet {
             detail: Noise::new(spec.seed.derive("ground detail")),
             ore: Noise::new(spec.seed.derive("ore veins")),
             relief_m,
+            detail_m: Self::DETAIL_M,
             sea_level_m,
             lattice: (quarter_round / Self::LATTICE_M).ceil().max(1.0) as u32,
         }
+    }
+
+    /// The same planet without its finer detail: with no relief, perfectly smooth, as a
+    /// test level wants.
+    pub fn smooth(mut self) -> Self {
+        self.detail_m = 0.0;
+        self
     }
 
     pub fn spec(&self) -> PlanetSpec {
@@ -212,7 +222,7 @@ impl GeneratedPlanet {
             * self
                 .hills
                 .fbm(direction * Self::FEATURES_AROUND, 5, 2.0, 0.5);
-        let detail = Self::DETAIL_M
+        let detail = self.detail_m
             * self.detail.fbm(
                 direction * (self.spec.radius_m / Self::DETAIL_SCALE_M),
                 3,

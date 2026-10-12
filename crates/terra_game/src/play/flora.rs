@@ -142,7 +142,8 @@ pub struct ClearAround(pub Vec3, pub f32);
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<WindMaterial>::default())
         .init_resource::<Obstacles>()
-        .add_systems(PostStartup, plant)
+        // The yard, the flat test level, has nothing growing on it.
+        .add_systems(PostStartup, plant.run_if(crate::shell::in_the_world))
         .add_message::<ClearAround>()
         .add_systems(Update, (make_way, clear_around, follow_digs));
 }

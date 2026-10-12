@@ -23,6 +23,7 @@ pub(super) fn act(
     mut planet: ResMut<Planet>,
     models: Res<Models>,
     builds: Res<Builds>,
+    options: Res<crate::shell::Options>,
     props: Query<&Prop>,
     mut players: Query<(Entity, &Transform, &Intent, &mut Builder, &mut Stance), With<Player>>,
     mut belongings: Belongings,
@@ -198,7 +199,8 @@ pub(super) fn act(
                 } => {
                     // Paid for on finishing. If what it costs has gone since the button
                     // went down, nothing is built.
-                    if belongings.pay(&item.cost, 1) {
+                    // On the yard, building costs nothing.
+                    if options.yard() || belongings.pay(&item.cost, 1) {
                         if let Some(placed) = props::place(
                             &mut commands,
                             &models,
@@ -533,6 +535,8 @@ pub(super) fn act(
                 Err(_) => continue,
             },
         };
+        // On the yard, building is all but instant: a moment, so a click is not a build.
+        let seconds = if options.yard() { 0.1 } else { seconds };
         builder.drag = None;
         builder.work = Some(Work {
             job,

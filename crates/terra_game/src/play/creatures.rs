@@ -138,7 +138,11 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                prepare.run_if(not(resource_exists::<Populated>)),
+                // The yard, the flat test level, has no creatures, and so no lair and
+                // no village beside it.
+                prepare
+                    .run_if(not(resource_exists::<Populated>))
+                    .run_if(crate::shell::in_the_world),
                 animate,
                 form.run_if(resource_exists::<Populated>),
             ),

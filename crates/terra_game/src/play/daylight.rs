@@ -243,11 +243,19 @@ pub fn plugin(app: &mut App) {
         .register_type::<Clock>()
         .add_systems(Startup, set_clock)
         .add_systems(PostStartup, find_sky)
-        .add_systems(Update, (tick, shine).chain());
+        // On the yard, the flat test level, the sun stands still.
+        .add_systems(
+            Update,
+            (tick.run_if(crate::shell::in_the_world), shine).chain(),
+        );
 }
 
-/// A scripted run may set the hour; otherwise it is the morning, or what a save says.
+/// A scripted run may set the hour; otherwise it is the morning, or what a save says, or
+/// on the yard, noon.
 fn set_clock(options: Res<Options>, mut clock: ResMut<Clock>) {
+    if options.yard() {
+        clock.hour = 12.0;
+    }
     if let Some(hour) = options.time {
         clock.hour = hour;
     }

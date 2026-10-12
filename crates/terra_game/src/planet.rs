@@ -52,6 +52,8 @@ pub struct Planet {
     /// Shared, so chunks can be meshed on other threads; an edit makes a new copy when
     /// one is still being read.
     ground: Arc<VoxelPlanet<GeneratedPlanet>>,
+    /// How high its hills rise, in metres.
+    relief_m: f32,
     cover: Noise,
 }
 
@@ -72,6 +74,19 @@ impl Planet {
                 RELIEF_M,
                 Some(SEA_LEVEL_M),
             ))),
+            relief_m: RELIEF_M,
+            cover: Noise::new(spec.seed.derive("ground cover")),
+        }
+    }
+
+    /// A planet with no hills, no sea and no finer detail: ground as flat as a sphere is,
+    /// for the yard, the test level.
+    pub fn smooth(spec: PlanetSpec) -> Self {
+        Planet {
+            ground: Arc::new(VoxelPlanet::new(
+                GeneratedPlanet::new(spec, 0.0, None).smooth(),
+            )),
+            relief_m: 0.0,
             cover: Noise::new(spec.seed.derive("ground cover")),
         }
     }
@@ -163,7 +178,7 @@ impl Planet {
 
     /// How tall the tallest hills are, in metres.
     pub fn relief_m(&self) -> f32 {
-        RELIEF_M
+        self.relief_m
     }
 
     /// The point on the ground as it was generated, in a direction from the centre: before
@@ -290,7 +305,7 @@ impl GroundExtension {
         let radius_m = planet.radius_m();
         GroundExtension {
             radius_m,
-            relief_m: RELIEF_M,
+            relief_m: planet.relief_m(),
             low: tweaks.ground_low.into(),
             high: tweaks.ground_high.into(),
             steep: tweaks.ground_steep.into(),
@@ -349,12 +364,17 @@ pub fn plugin(app: &mut App) {
         seed: Seed(1),
         radius_m,
     };
-    let planet = Planet::new(spec);
+    let yard = app.world().resource::<Options>().yard();
+    let planet = if yard {
+        Planet::smooth(spec)
+    } else {
+        Planet::new(spec)
+    };
     let tweaks = Tweaks {
         sun_direction: Vec3::new(0.5, 0.75, 0.45),
         sun_color: Color::WHITE,
         sun_illuminance: 12_000.0,
-        sea: true,
+        sea: !yard,
         sea_level_m: SEA_LEVEL_M,
         sea_shallow: Color::srgb(0.1, 0.38, 0.5),
         sea_deep: Color::srgb(0.02, 0.1, 0.24),

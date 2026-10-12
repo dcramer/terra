@@ -99,6 +99,9 @@ usage: terra_sandbox [options]
   --trace <file.jsonl>  write the play experiment's whole state every frame, one line of
                         JSON each, to compare two runs (tools/sandbox/diverge.ts)
   --fresh               start the play experiment over, throwing away its saved game
+  --level yard          play on the yard, a flat test level for building: no hills, sea,
+                        trees, creatures or village; building is free and instant in
+                        a claim that covers it; the sun stands at noon; nothing is saved
   --time <hour>         set the play experiment's clock to an hour of the day, 0 to 24,
                         such as 22 for night, for testing
   --at <east,south>     start the play experiment's player so many metres east and south
@@ -122,6 +125,29 @@ sctk_adwaita=off";
 /// and anything that eases in have settled.
 const SETTLE_FRAMES: u32 = 120;
 const BENCH_FRAMES: usize = 600;
+
+/// Which level the play experiment is on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Level {
+    /// The world, as a player has it.
+    #[default]
+    World,
+    /// A flat test level for working on building: smooth ground and nothing on it,
+    /// building free and instant in a claim that covers it, the sun at noon, never saved.
+    Yard,
+}
+
+impl Options {
+    /// Whether this is the yard, the flat test level.
+    pub fn yard(&self) -> bool {
+        self.level == Level::Yard
+    }
+}
+
+/// A run condition: the play experiment is in the world, not on a test level.
+pub fn in_the_world(options: Res<Options>) -> bool {
+    !options.yard()
+}
 
 #[derive(Resource, Clone, Debug)]
 pub struct Options {
@@ -158,6 +184,8 @@ pub struct Options {
     pub trace: Option<PathBuf>,
     /// Start over, throwing away any saved game.
     pub fresh: bool,
+    /// Which level the play experiment is on: the world, or a test level.
+    pub level: Level,
     /// The hour of the day the play experiment's clock is set to, if not its own.
     pub time: Option<f32>,
     /// Where the play experiment's player starts, east and south of the start in metres.
@@ -230,6 +258,7 @@ impl Options {
             save: None,
             trace: None,
             fresh: false,
+            level: Level::World,
             start_at: None,
             time: None,
             start_facing: None,
@@ -272,6 +301,13 @@ impl Options {
                 "--mute" => options.mute = true,
                 "--sound" => options.sound = true,
                 "--fresh" => options.fresh = true,
+                "--level" => {
+                    options.level = match value("--level")?.as_str() {
+                        "world" => Level::World,
+                        "yard" => Level::Yard,
+                        other => return Err(format!("--level is world or yard, not `{other}`")),
+                    }
+                }
                 "--time" => {
                     let text = value("--time")?;
                     let hour = text

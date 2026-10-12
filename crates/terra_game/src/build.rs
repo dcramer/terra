@@ -606,17 +606,26 @@ pub(super) fn lifted(mut frame: Transform, base: &Base, planet: &Planet) -> Tran
 fn setup(
     mut commands: Commands,
     planet: Res<Planet>,
+    options: Res<crate::shell::Options>,
     driven: Option<Res<DrivenByPlayer>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // The example base decides where the base stands, whether or not it is built: a
-    // player starts with nothing built, on the same spot.
+    // player starts with nothing built, on the same spot. On the yard, the flat test
+    // level, the base's grid is laid at the start itself, facing east.
     let mut example_base = Base::default();
     for op in example() {
         example_base.apply(op);
     }
-    let frame = lifted(choose_site(&planet, &example_base), &example_base, &planet);
+    let frame = if options.yard() {
+        let start = planet.start();
+        let up = start.normalize();
+        let east = up.cross(Vec3::X).normalize();
+        Transform::from_translation(start + up * FLOOR_CLEARANCE_M).looking_to(east, up)
+    } else {
+        lifted(choose_site(&planet, &example_base), &example_base, &planet)
+    };
     let look = BuildLook {
         structure: materials.add(StandardMaterial {
             perceptual_roughness: 0.82,
