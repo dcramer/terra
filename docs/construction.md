@@ -171,7 +171,7 @@ What makes placing feel good is mostly that the ghost goes where you meant witho
 
 ## Planned, then constructed
 
-The developers' direction (D139, Leaning): a structure is first laid out as a plan, and then actually constructed, part by part. What follows is my working-through of it, to react to; nothing here is settled.
+The developers' direction (D139, Decided): a structure is first laid out as a plan, and then actually constructed, part by part. What follows is my working-through of it, to react to; nothing here is settled.
 
 **Laying a plan.** Everything structural that the build menu places, a room, a wall, a floor, a fence, goes down as a plan: a pale ghost in the claim that costs nothing and blocks nothing yet. Lay as many as you like; move them, resize them, take them away for free. A plan shows, part by part, what it needs. This is also how a whole base is tried out, and its full cost seen, before anything is gathered (The Forest, Ark Ascended's planning mode).
 
@@ -221,7 +221,7 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 
 Technically (mine): worked out from the grid when a part is built or taken away, not every frame (D127): the parts that touch, flood-filled into buildings; the cells inside each, flood-filled from its floor, are a room unless they reach the open air. Each building is then an entity with its rooms, which weather, warmth and stations read.
 
-Technically (mine): `terra_build` keeps a base as rooms of cells with a hull round them, and interior walls as edges between cells. It would become floor cells, wall edges and roof cells, with the inside worked out from them; the interior walls are most of the way there. Best done with plans (step 2 of the [order](#proposed-order)), since a plan is a wall at a time. Until then the room tool builds a room as it does, and drawing it carries over unchanged as the shortcut.
+The technical design is [structures.md](structures.md) (D160). Before it: `terra_build` keeps a base as rooms of cells with a hull round them, and interior walls as edges between cells. It would become floor cells, wall edges and roof cells, with the inside worked out from them; the interior walls are most of the way there. Best done with plans (step 2 of the [order](#proposed-order)), since a plan is a wall at a time. Until then the room tool builds a room as it does, and drawing it carries over unchanged as the shortcut.
 
 **How a material is split into parts, so it looks built and not tiled.** Each kind of construction is a small kit of pieces sized to the grid, and a rule for laying them, as real masonry and carpentry have:
 
