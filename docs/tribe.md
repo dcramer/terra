@@ -14,7 +14,7 @@ From 2026-10-12:
 - **They have stats they level up, as you do** (D88, D123), so they get better at the work they do.
 - **Building help is useful for carrying things to a building** (D161). They must not start building a plan while you are still designing it. Recruits should potentially help build, too (Leaning). A plan is handed to them by switching from blueprint to build: Plan and Build modes, agreed for now, perhaps to revisit (D170, Leaning).
 - **They take their gear on their own** (D161). A container is either personal or the tribe's, and that is enough.
-- **Recruits are much like players** (D169): health, stamina and mana, hunger, thirst and body temperature. Cold or heat slows their work. They likely sleep at night.
+- **Recruits are much like players** (D169): health, stamina and mana, hunger, thirst and body temperature. Cold or heat slows their work. They sleep at night, and need a bed: without one, their stamina stays very low, so they work very slowly all the time.
 - **They help defend you in some situations** (D90, Leaning): if you are attacked near your claim, or in raids, if raids come later. Monsters will likely not form inside an outpost, but danger comes close to home, and protecting the outpost, with walls, guards or otherwise, is part of having one (D169).
 - **They travel and fight beside you**, later (D161): a future to-do.
 - **They die when their health runs out** (D161, D169). They also die of hunger and thirst: an empty gauge weakens them and wears health away over a few days, not fast, the same as for players. A way to revive them may come later. For now they drop what they had; graves may come later.
@@ -148,11 +148,12 @@ From the developers (D169): **recruits are generally much like a player.** Same 
 | Stamina and mana | As yours (D61, D102), spent in fighting and abilities | Rest, food |
 | Hunger and thirst | As yours: an empty gauge weakens them, then wears health away over days | Meals and drink from the stores; cooked food is better than foraged |
 | Body temperature | As yours (D153). Out of comfort, they work slower; far out, it harms them | Shelter, fire, clothing |
-| Sleep | Likely, they sleep at night (Leaning) | A bed of their own, indoors (D155) |
+| Sleep | They sleep at night (D169). Without a bed, their stamina stays very low | A bed of their own, indoors (D155) |
 
 Proposed, for how:
 
-- **Sleep is their day's shape, not a meter.** Recruits work by day and sleep at night in their own bed, so an outpost is busy by day and quiet at night, with a watch kept by whoever guards it. A new bed goes to the nearest recruit without one, as in Enshrouded. Without a bed, they sleep badly by a fire and work slower the next day.
+- **Sleep is their day's shape, not a meter** (D169). Recruits work by day and sleep at night in their own bed, so an outpost is busy by day and quiet at night, with a watch kept by whoever guards it. A new bed goes to the nearest recruit without one, as in Enshrouded.
+- **No bed, no stamina** (from the developers). A recruit without a bed barely rests, so their stamina stays very low, and they work very slowly, all the time, not only the next day. Work draws on stamina as fighting does, so a bed is the first thing a new recruit needs. Proposed: they say so ("I've nowhere to sleep"), and the claim stone's roster shows who has no bed.
 - **They look after themselves** from what the outpost has: they eat, drink, warm up and go to bed on their own. You provide the place, the food and the fire, not each person's care, as Dragon Quest Builders 2's rooms do.
 - **Hunger and thirst are slow to kill, and loud before they do** (D169, and the same for players, D101). From the developers: the gauge itself is fine; once it is empty, health wears away slowly, over a few days, not fast, and meanwhile they are weaker. Proposed:
   - The outpost runs out of food. Recruits say so, and the roster says so.
