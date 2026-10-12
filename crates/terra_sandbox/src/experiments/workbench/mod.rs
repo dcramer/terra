@@ -49,6 +49,8 @@ struct Bench {
 /// its clips as places in its own animation graph, by name, with their lengths.
 struct Model {
     root: Entity,
+    /// Its scene has been spawned; a model without animations never gets a player.
+    loaded: bool,
     player: Option<Entity>,
     clips: Vec<(String, AnimationNodeIndex, f32)>,
 }
@@ -66,7 +68,7 @@ impl Bench {
     }
 
     fn ready(&self) -> bool {
-        self.spawned && self.models.iter().all(|model| model.player.is_some())
+        self.spawned && self.models.iter().all(|model| model.loaded)
     }
 }
 
@@ -166,6 +168,10 @@ fn spawn(
             .map(String::from)
             .collect();
     }
+    // A model without animations is still looked at, as it stands.
+    if bench.clips.is_empty() {
+        bench.clips.push("still".to_string());
+    }
     let side = bench.up.cross(bench.front);
     let count = bench.files.len();
     let mut models = Vec::new();
@@ -252,6 +258,7 @@ fn spawn(
                         .find(|each| players.contains(*each))
                     else {
                         info!("workbench: model {index} has no animation player");
+                        model.loaded = true;
                         return;
                     };
                     commands
@@ -263,11 +270,13 @@ fn spawn(
                         player.play(*node).repeat();
                     }
                     model.player = Some(entity);
+                    model.loaded = true;
                 },
             )
             .id();
         models.push(Model {
             root,
+            loaded: false,
             player: None,
             clips: nodes,
         });

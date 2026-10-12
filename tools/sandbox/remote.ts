@@ -4,12 +4,17 @@
 // Node 22.18 or later, which runs TypeScript directly; no dependencies.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
-const URL = "http://127.0.0.1:15702";
 const ROOT = resolve(import.meta.dirname, "../..");
+// The sandbox this checkout started listens on its own port, kept here, so commands never
+// reach a sandbox another session is driving. TERRA_REMOTE_PORT overrides it.
+const PORT_FILE = resolve(ROOT, "shots/remote.port");
+const FIRST_PORT = 15702;
+let port = Number(process.env.TERRA_REMOTE_PORT) || (existsSync(PORT_FILE) ? Number(readFileSync(PORT_FILE, "utf8")) : FIRST_PORT);
+const url = () => `http://127.0.0.1:${port}`;
 const onWsl = (() => {
   try {
     return readFileSync("/proc/version", "utf8").toLowerCase().includes("microsoft");
@@ -35,18 +40,18 @@ async function call(method: string, params?: unknown): Promise<unknown> {
 async function send(body: string): Promise<Reply> {
   if (through !== "windows") {
     try {
-      const response = await fetch(URL, { method: "POST", body, headers: { "content-type": "application/json" } });
+      const response = await fetch(url(), { method: "POST", body, headers: { "content-type": "application/json" } });
       through = "direct";
       return (await response.json()) as Reply;
     } catch (error) {
-      if (through === "direct" || !onWsl) throw new Error(`no sandbox answering on ${URL}; start one with --remote`);
+      if (through === "direct" || !onWsl) throw new Error(`no sandbox answering on ${url()}; start one with \`start\``);
     }
   }
-  const curl = spawnSync("/mnt/c/Windows/System32/curl.exe", ["-s", "-X", "POST", URL, "-H", "content-type: application/json", "--data-binary", "@-"], {
+  const curl = spawnSync("/mnt/c/Windows/System32/curl.exe", ["-s", "--max-time", "5", "-X", "POST", url(), "-H", "content-type: application/json", "--data-binary", "@-"], {
     input: body,
     encoding: "utf8",
   });
-  if (curl.status !== 0 || !curl.stdout) throw new Error(`no sandbox answering on ${URL}, here or on Windows; start one with --remote`);
+  if (curl.status !== 0 || !curl.stdout) throw new Error(`no sandbox answering on ${url()}, here or on Windows; start one with \`start\``);
   through = "windows";
   return JSON.parse(curl.stdout) as Reply;
 }
@@ -90,9 +95,21 @@ const COMMANDS: Record<string, Command> = {
     help: "start a sandbox listening, in the background, and wait until it answers; its log goes to shots/remote.log",
     options: { windows: { type: "boolean", help: "on Windows' GPU (cargo xtask win), from WSL" } },
     run: async ({ values, positionals }) => {
-      const args = ["--remote", ...positionals];
+      // A port nothing answers on: another session's sandbox may be on the first.
+      for (port = FIRST_PORT; port < FIRST_PORT + 50; port++) {
+        through = undefined;
+        try {
+          await call("rpc.discover");
+        } catch {
+          break;
+        }
+      }
+      through = undefined;
+      mkdirSync(dirname(PORT_FILE), { recursive: true });
+      writeFileSync(PORT_FILE, String(port));
+      const args = ["--remote-port", String(port), ...positionals];
       const command = values.windows
-        ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", "--copy", "remote", "--", ...args]]
+        ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", "--copy", `remote-${port}`, "--", ...args]]
         : ["cargo", ["run", "-q", "-p", "terra_sandbox", "--", ...args]];
       mkdirSync(resolve(ROOT, "shots"), { recursive: true });
       const log = openSync(resolve(ROOT, "shots/remote.log"), "w");
@@ -100,7 +117,7 @@ const COMMANDS: Record<string, Command> = {
       for (let i = 0; i < 600; i++) {
         try {
           await call("rpc.discover");
-          console.log("ready");
+          console.log(`ready on port ${port}`);
           return;
         } catch {
           await sleep(1000);

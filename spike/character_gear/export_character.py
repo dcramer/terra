@@ -21,6 +21,7 @@ import bpy
 from mathutils import Matrix, Vector
 
 import look
+import patches
 import twist
 
 FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
@@ -109,6 +110,10 @@ for s, side in (("R", -1), ("L", 1)):
     edge = max(waist, key=lambda p: side * p.x)
     sockets.append(socket(f"socket.belt.{s}", "DEF-hips", Vector((edge.x, sum(p.y for p in waist) / len(waist), edge.z))))
 print("SOCKETS", ", ".join(f"{e.name} {tuple(round(c, 3) for c in e.matrix_world.translation)}" for e in sockets))
+
+# The body's patches, which what is worn can hide (patches.py).
+patches.mark(body)
+print("PATCHES", patches.PATCHES)
 
 # The clips, from the mannequin's file; its objects are thrown away.
 before = set(bpy.data.objects)

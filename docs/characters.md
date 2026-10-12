@@ -54,9 +54,9 @@ Run on every item, on every base body, through clips that bend and reach:
 
 An item that fails a check isn't used until it passes.
 
-## Against what we have
+## Against what we have, 2026-10-12
 
-The bodies, sockets, twist bones, held looks, tints and per-body gear files are built. What clips and looks off today comes from not following the contracts above: nothing hides the body under clothing, so skin shows through the coat; and the gear was generated as objects on their own and placed by numbers set per item, which is why the pack sits low. The coat and cap would be remade on each body; the pack, quiver and held things would be refitted to their socket rules.
+Built: the bodies, their skeleton with twist bones, sockets, held looks, tints, one look per item per body, and a body that hides its skin under what it wears, by 256 patches its shader collapses (`patches.py`, `body_mask.wgsl`). The leather jerkin is made on each body (`shell_garment.py`), from that body's own surface with its own weights, and bakes its look from a dressed model; on both bodies, skin comes through it in under 2.5% of the watched skin in everyday clips, and up to about 5% in a crouch or roll, at the armholes and the hem (`gear_check.py`). The pack, cap and quiver are still models fitted at their sockets with numbers per item; their socket rules, and pieces that hang loose (a coat's skirt, a cloak), are not built.
 
 ## Settled by the developers, 2026-10-12
 

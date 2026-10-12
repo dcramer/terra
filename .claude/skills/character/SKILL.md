@@ -84,20 +84,33 @@ The export also gives the body its sockets, the points what is held and worn han
 
 The game has many items and several bodies (D127), so gear is data: every worn item has one look per base body, `crates/terra_sandbox/assets/models/gear/<body>/<item>.glb`, the item named as in the catalogue in lower case with `_` for spaces (`leather_coat`). The game finds it by that name and puts it on as the file says: a skinned look is bound to the body's skeleton; a rigid one names its socket in its glTF extras. No game code names an item, so adding gear is adding files.
 
-A look is made like any model (the `tripo` skill: a concept image in the character's style, with the body's sheet and a mood board as references, then `model`), then fitted to every base body:
+**Clothing and armour that bend with the body** (chest, legs, gloves, feet) are made on each base body, so nothing is set per character (D128):
+
+1. Draw that base's own sheet wearing it (free): `--ref` the base's approved sheet, and say "the same person, in exactly the same T-pose ... now also wearing <the piece>". Check it kept the person and the pose.
+2. Make the dressed model (25 credits): crop the front view as `make_character.sh` does, then `tripo.ts model`.
+3. Build the piece from the base body:
 
 ```bash
-spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb small_pack large_pack leather_cap leather_coat quiver
-spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-female.glb small_pack large_pack leather_cap leather_coat quiver
+spike/model_bakeoff/run.sh ../character_gear/shell_garment.py ../../crates/terra_sandbox/assets/models/character/base-male.glb out/tripo/dressed-male-coat.glb leather_coat Leather chest_sleeveless
 ```
 
-Rigid pieces (a pack, a cap, a quiver) are placed against the body at their socket and saved in the socket's space; clothing that bends (a coat) is sized to the torso, pushed clear of the skin, given the body's weights and saved on its skeleton. Each piece's turn, size (a share of the body's height) and fit are in `PIECES` at the top of the script. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front.
+The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveless`, `chest_long_sleeves`, `legs_long`, `gloves`, `feet`...): which parts of the body it covers and where its hems fall. The piece is those faces of the base body, pushed out (and as far as the dressed model stands off, for bulk), keeping the body's own weights, so it moves as the skin under it does; its colour is baked from the dressed model. Do not try to cut the piece out of the dressed model by colour or distance: Tripo paints its dressed body a shade off ours and makes it a little thinner, and every such cut came out full of holes.
 
-Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does, as a pack placed by the tips of its straps did. Then look at it on every body in the workbench, close, from the side, through clips that move the arms and bend the body; a sheet from the front hides a gap behind:
+**Rigid worn things** (a pack, a cap, a quiver) are made as models on their own and fitted at their socket:
 
 ```bash
-cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/base-female.glb --model models/character/base-male.glb --wear leather_coat --wear small_pack --focus socket.back --anim Idle_Loop --anim Sword_Attack --sides 90,180,270 --moments 0.3,0.6 --sheet shots/wb/gear --clean --settle 60
+spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb small_pack large_pack leather_cap quiver
 ```
+
+Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front. Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does.
+
+**Check every piece on every body**, by numbers first:
+
+```bash
+spike/model_bakeoff/run.sh ../character_gear/gear_check.py ../../crates/terra_sandbox/assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
+```
+
+It plays our clips and reports, per clip, the share of skin near each piece that comes through it (or that it sinks into), and `where` on the body. Then look, live, with the body hidden if need be ([tools/sandbox](../../../tools/sandbox/README.md)): a picture through the body hid a coat full of holes. Each piece also lists the patches of skin it covers, which the game does not draw under it (`patches.py`, `body_mask.wgsl`).
 
 Then add a row for it to `THIRD_PARTY.md`.
 
@@ -116,3 +129,6 @@ What is held is the same idea, without a body: one look per item, `models/held/<
 - Our skeleton has no twist bones, so without `twist.py` a forearm's turn all happens at the elbow and the skin there pinches to a thin neck in swings and reaches. glTF does not keep Blender's constraints, so every script that loads a character and plays it calls `twist.drive`.
 - The edge check cannot see a pinch: a ring of skin shrinking changes no edge's length much. The `pinched` measure watches the rings at elbows, knees and wrists.
 - Scripts that `cd` lose relative paths; resolve them first (`realpath`).
+- Current Blender keeps vertex group names on the mesh: a piece built on a new mesh loses them, and the exporter writes it without a skin. Build on a copy of the body's mesh.
+- A body file splits vertices at texture seams and patch borders; weld before working on its surface as one, or every patch looks like a separate speck.
+- In zsh, `r pose $c` passes "Idle_Loop 0.3" as one word; use `${=c}`.

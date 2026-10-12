@@ -67,6 +67,14 @@ Looked up again after generated gear, fitted one piece at a time, clipped and sa
 
 What this means for us is in [docs/characters.md](../docs/characters.md).
 
+## Tried, 2026-10-12: making clothing on the body
+
+From a model of the base body wearing the piece (its own sheet, redrawn wearing it, made by Tripo):
+
+- **Cutting the piece out of the dressed model failed.** Tripo's dressed model is one outer surface: no skin under the jerkin. Kept by standing off our base's skin, a close jerkin came out patchy, since Tripo's dressed body is a little thinner than ours. Kept by colour as well, against our base's colours or the dressed model's own skin and shorts, it came out full of holes and strips: Tripo paints the dressed body a shade off ours, with its own light and shade. Its segmentation splits by anatomy (head, torso, limbs), not by clothing.
+- **Building the piece from our own body works.** Mark the body's faces the piece covers, by a coverage said once per item (the parts it covers and where its hems fall), copy them, push them out (as far as the dressed model stands off, for bulk), keep each vertex's weights, and bake the dressed model's colour onto it. It moves as the skin under it does. A sleeveless jerkin on both bodies: under 1% of nearby skin through it in idle, walk, jog and the sword swing on the male, under 2.5% on the female; about 4-5% in a crouch or a roll, where the thigh rises into the hem and the arm presses the armhole. Cutting the armholes back to skin the arm moves less than 15% took the female's idle from 6% to under 2%.
+- What a check measures matters as much as the piece: the first two clipping checks reported nonsense (nearest-surface sides on single-sided generated meshes, rays that miss when arms come down). Skin with the piece's surface just beneath it is the measure that held.
+
 ## Limits
 
 - Nothing found on how Enshrouded shades or textures its characters, and nothing technical on Black Desert, Elden Ring or Conan Exiles.

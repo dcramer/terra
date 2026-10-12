@@ -1,6 +1,7 @@
 //! Live control of a running sandbox (D69), over Bevy's remote protocol, so a script can
 //! look and change things without a restart. On with `--remote`; it listens on
-//! `localhost:15702`. `tools/sandbox/remote.ts` is the client.
+//! `localhost:15702`, or the port `--remote-port` gives, so several runs (other sessions'
+//! included) are driven apart. `tools/sandbox/remote.ts` is the client.
 //!
 //! Besides Bevy's own `world.*` methods, the sandbox answers:
 //!
@@ -18,6 +19,7 @@
 //! An experiment adds its own methods with [`method`].
 
 use crate::planet::MainCamera;
+use crate::shell::Options;
 use bevy::{
     prelude::*,
     remote::{
@@ -35,10 +37,14 @@ use serde_json::{Value, json};
 const LOOK_DISTANCE_M: f32 = 2.5;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((RemotePlugin::default(), RemoteHttpPlugin::default()))
-        .init_resource::<HeldCamera>()
-        .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
-        .add_systems(PostUpdate, hold_camera.in_set(CameraHold));
+    let port = app.world().resource::<Options>().remote_port;
+    app.add_plugins((
+        RemotePlugin::default(),
+        RemoteHttpPlugin::default().with_port(port),
+    ))
+    .init_resource::<HeldCamera>()
+    .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
+    .add_systems(PostUpdate, hold_camera.in_set(CameraHold));
     method(app, "sandbox.find", find);
     method(app, "sandbox.place", place);
     method(app, "sandbox.look", look);
@@ -46,7 +52,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.pause", pause);
     method(app, "sandbox.shot", shot);
     method(app, "sandbox.quit", quit);
-    info!("remote: listening on localhost:15702");
+    info!("remote: listening on localhost:{port}");
 }
 
 /// Where a held camera is placed: after an experiment places its own camera, before

@@ -11,6 +11,11 @@
 //! are swapped for the body's own; a rigid one names its socket in its glTF extras,
 //! `{"socket": "socket.back"}`, and is hung there.
 //!
+//! A body hides the skin under what it wears: a look lists the patches of skin it covers
+//! (`{"covers": [..]}`, worked out by `fit_gear.py`), and the body's material collapses those
+//! patches while it is worn (`BodyMask`, `body_mask.wgsl`). Bodies with the same mask share
+//! one material.
+//!
 //! Something held is used at one angle and carried at another: swung, the grip holds it as
 //! a hand would to strike; walking or standing, it tips forward and down (`Held`).
 //!
@@ -20,7 +25,10 @@
 use bevy::{
     gltf::{GltfExtras, GltfMaterialName},
     mesh::skinning::SkinnedMesh,
+    pbr::{ExtendedMaterial, MaterialExtension},
     prelude::*,
+    render::render_resource::AsBindGroup,
+    shader::ShaderRef,
     world_serialization::{WorldAsset, WorldAssetRoot, WorldInstanceReady},
 };
 use std::collections::{HashMap, HashSet};
@@ -106,6 +114,59 @@ pub struct Tint(pub Vec<(String, Color)>);
 #[derive(Resource, Default)]
 struct Tinted(HashMap<(AssetId<StandardMaterial>, [u32; 4]), Handle<StandardMaterial>>);
 
+/// A body's material: the standard one, collapsing the patches of skin its mask hides.
+pub type BodyMaterial = ExtendedMaterial<StandardMaterial, BodyMask>;
+
+/// Which of a body's 256 patches are hidden, one bit each. Field order must match
+/// body_mask.wgsl.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Copy, Default, PartialEq)]
+pub struct BodyMask {
+    #[uniform(100)]
+    hidden: [UVec4; 2],
+}
+
+impl BodyMask {
+    /// The mask hiding these patches.
+    pub fn hiding(patches: impl IntoIterator<Item = u32>) -> Self {
+        let mut hidden = [UVec4::ZERO; 2];
+        for patch in patches.into_iter().filter(|patch| *patch < 256) {
+            let word = &mut hidden[(patch / 128) as usize][((patch / 32) % 4) as usize];
+            *word |= 1 << (patch % 32);
+        }
+        BodyMask { hidden }
+    }
+
+    fn key(&self) -> [u32; 8] {
+        let [a, b] = self.hidden;
+        [a.x, a.y, a.z, a.w, b.x, b.y, b.z, b.w]
+    }
+}
+
+impl MaterialExtension for BodyMask {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/body_mask.wgsl".into()
+    }
+
+    fn prepass_vertex_shader() -> ShaderRef {
+        "shaders/body_mask.wgsl".into()
+    }
+}
+
+/// The patches of skin a worn look covers, from its file.
+#[derive(Component)]
+pub struct Covers(Vec<u32>);
+
+/// A body's meshes and the standard materials they came with, and the mask they show now.
+#[derive(Component)]
+struct Skin {
+    parts: Vec<(Entity, Handle<StandardMaterial>)>,
+    showing: Option<BodyMask>,
+}
+
+/// Body materials, shared: one per original material and mask.
+#[derive(Resource, Default)]
+struct BodyMaterials(HashMap<(AssetId<StandardMaterial>, [u32; 8]), Handle<BodyMaterial>>);
+
 /// A body whose model has loaded, so its sockets exist.
 #[derive(Component)]
 pub struct BodyReady;
@@ -139,7 +200,10 @@ pub fn item_look(item: &str) -> String {
 }
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Tinted>()
+    app.add_plugins(MaterialPlugin::<BodyMaterial>::default())
+        .init_resource::<Tinted>()
+        .init_resource::<BodyMaterials>()
+        .add_systems(Update, mask_bodies)
         .add_observer(put_on)
         .add_observer(body_ready)
         .add_observer(held_ready)
@@ -150,10 +214,75 @@ pub fn plugin(app: &mut App) {
 fn body_ready(
     ready: On<WorldInstanceReady>,
     bodies: Query<(), With<Body>>,
+    children: Query<&Children>,
+    looks: Query<(Entity, &MeshMaterial3d<StandardMaterial>)>,
     mut commands: Commands,
 ) {
-    if bodies.contains(ready.entity) {
-        commands.entity(ready.entity).insert(BodyReady);
+    if !bodies.contains(ready.entity) {
+        return;
+    }
+    // Its meshes now, before anything is worn: the skin.
+    let parts = children
+        .iter_descendants(ready.entity)
+        .filter_map(|each| looks.get(each).ok())
+        .map(|(each, material)| (each, material.0.clone()))
+        .collect();
+    commands.entity(ready.entity).insert((
+        BodyReady,
+        Skin {
+            parts,
+            showing: None,
+        },
+    ));
+}
+
+/// Gives each body the material hiding what its looks cover, when that changes.
+fn mask_bodies(
+    mut commands: Commands,
+    mut bodies: Query<(Entity, &mut Skin)>,
+    looks: Query<(&Worn, &Covers)>,
+    added: Query<(), Added<Covers>>,
+    mut removed: RemovedComponents<Worn>,
+    standard: Res<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<BodyMaterial>>,
+    mut shared: ResMut<BodyMaterials>,
+) {
+    let changed = !added.is_empty() || removed.read().count() > 0;
+    for (body, mut skin) in &mut bodies {
+        if !changed && !skin.is_added() {
+            continue;
+        }
+        let mask = BodyMask::hiding(
+            looks
+                .iter()
+                .filter(|(worn, _)| worn.body == body)
+                .flat_map(|(_, covers)| covers.0.iter().copied()),
+        );
+        if skin.showing == Some(mask) {
+            continue;
+        }
+        skin.showing = Some(mask);
+        for (part, base) in &skin.parts {
+            let key = (base.id(), mask.key());
+            let handle = match shared.0.get(&key) {
+                Some(handle) => handle.clone(),
+                None => {
+                    let Some(base_material) = standard.get(base).cloned() else {
+                        continue;
+                    };
+                    let handle = materials.add(BodyMaterial {
+                        base: base_material,
+                        extension: mask,
+                    });
+                    shared.0.insert(key, handle.clone());
+                    handle
+                }
+            };
+            commands
+                .entity(*part)
+                .remove::<MeshMaterial3d<StandardMaterial>>()
+                .insert(MeshMaterial3d(handle));
+        }
     }
 }
 
@@ -315,6 +444,12 @@ fn put_on(
         return;
     };
     let own: HashSet<Entity> = children.iter_descendants(ready.entity).collect();
+    let covered: Vec<u32> = own
+        .iter()
+        .find_map(|each| extra(extras.get(*each).ok()?, "covers"))
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default();
+    commands.entity(ready.entity).insert(Covers(covered));
     if !own.iter().any(|each| skins.contains(*each)) {
         let socket = own
             .iter()
@@ -371,6 +506,12 @@ mod tests {
         let blue = dye(Color::linear_rgb(0.1, 0.2, 0.4)).to_linear();
         assert!((blue.blue - 1.0).abs() < 1e-5);
         assert!((blue.green - 0.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn a_mask_sets_one_bit_per_patch() {
+        let mask = BodyMask::hiding([0, 33, 255]);
+        assert_eq!(mask.key(), [1, 2, 0, 0, 0, 0, 0, 1 << 31]);
     }
 
     #[test]

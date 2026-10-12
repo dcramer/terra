@@ -14,7 +14,7 @@ r shot shots/hand.png                    # waits for the file
 r stop
 ```
 
-`start` runs the sandbox with `--remote` in the background and waits until it answers; anything after `--` goes to the sandbox, and `--windows` runs it on the Windows GPU from WSL (`cargo xtask win`), which is much faster than WSL's CPU renderer. Its log is `shots/remote.log`. A sandbox started by hand with `--remote` works the same.
+`start` runs the sandbox in the background on a port nothing else answers on, records the port in `shots/remote.port`, and waits until it answers; every other command talks only to that port, so commands never reach a sandbox another session is driving (`TERRA_REMOTE_PORT` overrides it); anything after `--` goes to the sandbox, and `--windows` runs it on the Windows GPU from WSL (`cargo xtask win`), which is much faster than WSL's CPU renderer. Its log is `shots/remote.log`. A sandbox started by hand with `--remote` works the same.
 
 | Command | What it does |
 |---|---|
@@ -33,6 +33,6 @@ Changes made this way last only as long as the run. When a value is right, put i
 
 ## How it reaches the sandbox
 
-The sandbox listens on `localhost:15702`. Under WSL, a sandbox running on Windows is on Windows' own localhost, which WSL cannot reach, so the client sends through Windows' `curl.exe` there, and writes screenshots through WSL's share so they land where you asked. The remote protocol can change anything in the running world, so it only listens on localhost and only when started with `--remote`.
+The sandbox listens on `localhost:15702`, or the port `--remote-port` gives. Under WSL, a sandbox running on Windows is on Windows' own localhost, which WSL cannot reach, so the client sends through Windows' `curl.exe` there, and writes screenshots through WSL's share so they land where you asked. The remote protocol can change anything in the running world, so it only listens on localhost and only when started with `--remote`.
 
 To add a method, see `crates/terra_sandbox/src/remote.rs`: an experiment registers its own with `remote::method`, as the workbench does with `workbench.pose`. An experiment that moves its camera in `PostUpdate` orders that `.before(remote::CameraHold)`, so a held camera wins and what it sees is not culled from the old view.

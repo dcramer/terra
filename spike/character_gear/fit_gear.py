@@ -8,7 +8,9 @@ pushed clear of the skin, given the body's skin weights, and saved on the same s
 the game binds it to the body's joints. Each piece reports how much of it rests on the body;
 less than its kind should means it floats.
 
-    spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb small_pack large_pack leather_cap leather_coat quiver
+    spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb small_pack large_pack leather_cap quiver
+
+Clothing that bends is made on the body instead, by shell_garment.py.
 
 Reads out/tripo/gear-<model>.glb in the bake-off folder; writes
 crates/terra_sandbox/assets/models/gear/<body>/<item>.glb, the item named as in the game's
@@ -23,11 +25,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
+sys.path.insert(0, HERE)
 
 import bpy
 from mathutils import Matrix, Vector
 
 import look
+import patches
 
 GEAR = os.path.join(HERE, "..", "model_bakeoff", "out", "tripo")
 OUT = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "gear")
@@ -39,7 +43,6 @@ PIECES = {
     "small_pack": ("pack", 90, "back", 0.23, "Pack"),
     "large_pack": ("pack", 90, "back", 0.31, "Pack"),
     "leather_cap": ("cap", -90, "head", None, "Leather"),
-    "leather_coat": ("coat", -90, "torso", None, "Leather"),
     "quiver": ("quiver", 90, "belt", 0.4, "Leather"),
 }
 
@@ -50,6 +53,8 @@ look.reset()
 bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, body_path))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
+# Each vertex's patch of skin (patches.py), which a piece may hide.
+patch_of = patches.of(body) or {}
 arm.animation_data_clear()
 for pb in arm.pose.bones:
     pb.matrix_basis.identity()
@@ -217,6 +222,33 @@ def fit_torso(ob):
     return None
 
 
+# A patch is covered when this share of its skin, looking straight out, meets the piece
+# within REACH_M; covered patches are not drawn while the piece is worn.
+COVERED = 0.9
+REACH_M = 0.12
+
+
+def covers(ob):
+    """The patches of skin this piece hides from view."""
+    from mathutils.bvhtree import BVHTree
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    tree = BVHTree.FromObject(ob, depsgraph)
+    to_piece = ob.matrix_world.inverted() @ body.matrix_world
+    turn = to_piece.to_3x3()
+    hit, total = {}, {}
+    for v in body.data.vertices:
+        patch = patch_of.get(v.index)
+        if patch is None:
+            continue
+        start = to_piece @ v.co
+        normal = (turn @ v.normal).normalized()
+        total[patch] = total.get(patch, 0) + 1
+        hit[patch] = hit.get(patch, 0) + (tree.ray_cast(start + normal * 0.002, normal, REACH_M)[0] is not None)
+    covered = sorted(p for p in total if hit[p] / total[p] >= COVERED)
+    print("COVERAGE", ob.name, f"{len(covered)} of {len(total)} patches")
+    return covered
+
+
 def contact(ob):
     """The share of a piece's vertices within 3 cm of the skin: how much of it rests on the
     body rather than floating off it."""
@@ -249,6 +281,9 @@ for name in names:
         socket = fit_belt(ob, size)
     else:
         socket = fit_torso(ob)
+    hides = covers(ob) if how in ("torso", "head") else []
+    if hides:
+        ob["covers"] = hides
     touching = contact(ob)
     print("FIT", name, f"touching {touching:.0%}", "ok" if touching >= TOUCHING[how] else f"FLOATING, under {TOUCHING[how]:.0%}")
     path = os.path.join(OUT, f"{name}.glb")
@@ -262,6 +297,6 @@ for name in names:
     else:
         select(ob, arm)
         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_animations=False,
-                                  export_influence_nb=4)
-    print("FITTED", name, "on", socket or "the skeleton", len(ob.data.vertices), "vertices")
+                                  export_influence_nb=4, export_extras=True)
+    print("FITTED", name, "on", socket or "the skeleton", len(ob.data.vertices), "vertices", "covers", hides)
     bpy.data.objects.remove(ob)

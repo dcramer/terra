@@ -39,6 +39,7 @@ usage: terra_sandbox [options]
   --bench               measure frame times with vsync off, print them, then exit
   --remote              let a script drive this run over Bevy's remote protocol, on
                         localhost:15702 (tools/sandbox/remote.ts)
+  --remote-port <port>  listen on this port instead, so several runs can be driven apart
   --settle <frames>     frames to run before capturing or measuring (default 120)
   --model <path>        in the workbench: a model to load, under assets/; repeatable,
                         to stand several side by side
@@ -99,8 +100,9 @@ pub struct Options {
     pub shot: Option<PathBuf>,
     pub settle_frames: u32,
     pub bench: bool,
-    /// Listen for a script driving the run (`remote`).
+    /// Listen for a script driving the run (`remote`), and on which port.
     pub remote: bool,
+    pub remote_port: u16,
     /// No readout on screen.
     pub clean: bool,
     /// No sound, and sound under WSL, where it is off unless asked for.
@@ -159,6 +161,7 @@ impl Options {
             settle_frames: SETTLE_FRAMES,
             bench: false,
             remote: false,
+            remote_port: 15702,
             clean: false,
             mute: false,
             sound: false,
@@ -188,6 +191,12 @@ impl Options {
                 "--list" => options.list = true,
                 "--bench" => options.bench = true,
                 "--remote" => options.remote = true,
+                "--remote-port" => {
+                    options.remote = true;
+                    options.remote_port = value("--remote-port")?
+                        .parse()
+                        .map_err(|_| "--remote-port needs a port number".to_string())?;
+                }
                 "--clean" => options.clean = true,
                 "--mute" => options.mute = true,
                 "--sound" => options.sound = true,
