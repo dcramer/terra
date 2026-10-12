@@ -29,7 +29,7 @@ From the repository root:
 | The item | Its look |
 |---|---|
 | A tool or weapon | `models/held/<item>.glb` |
-| Gear | `models/gear/base-male/<item>.glb` (the player's body) |
+| Gear | `models/gear/<item>.glb` (one look for every body) |
 | Anything else, such as a material | `models/items/<item>.glb`: the thing on its own, as it lies, life size, facing +Z |
 
 `<item>` is the catalogue name in lower case with `_` for spaces (`character::item_id`): "Cooked meat" is `cooked_meat`. Items with no look yet are listed when baking.
@@ -37,6 +37,8 @@ From the repository root:
 ## Checks
 
 **Automatic.** The manifest records the look and render style each icon came from. `every_icon_is_made_from_its_current_look` (run by `cargo xtask check`) fails when a look has changed since its icon was rendered or painted, or the render style since it was rendered: bake (`cargo xtask icons`) or paint it again, and commit.
+
+When an item's file changes but its look does not (gear rebuilt with its morphs by `tools/characters/build_bodies.sh`), compare its render with its painting (`cargo xtask icons --renders DIR`), and if they match keep the painting: `cargo xtask icons --keep <item>` records the file as it is now.
 
 **By eye, on the review sheet.** A good icon:
 

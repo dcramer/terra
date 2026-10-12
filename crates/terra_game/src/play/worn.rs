@@ -1,5 +1,5 @@
 //! What is worn, on each character: each item in its outfit (`character::Outfit`) shown as
-//! that item's look for the character's body, found by the item's name and put on as its
+//! that item's look, which fits every body (`appearance`), found by the item's name and put on as its
 //! file says (`character`). Nothing here knows any one item; a new piece of gear is a new
 //! look file. Looks change only when an outfit does. The player's outfit is what its
 //! equipment holds.
@@ -42,12 +42,12 @@ fn outfit_from_gear(
 /// Puts on each loaded body what its character wears, when that changes.
 fn show(
     mut commands: Commands,
-    bodies: Query<(Entity, &Body, &ChildOf, Option<&Dressed>), With<BodyReady>>,
+    bodies: Query<(Entity, &ChildOf, Option<&Dressed>), (With<Body>, With<BodyReady>)>,
     outfits: Query<Ref<Outfit>>,
     looks: Query<(Entity, &Worn)>,
     assets: Res<AssetServer>,
 ) {
-    for (root, body, parent, dressed) in &bodies {
+    for (root, parent, dressed) in &bodies {
         let Ok(outfit) = outfits.get(parent.parent()) else {
             continue;
         };
@@ -60,7 +60,7 @@ fn show(
             }
         }
         for clothing in &outfit.0 {
-            let file = character::look(body.name, &clothing.item);
+            let file = character::look(&clothing.item);
             let look = character::wear(
                 &mut commands,
                 assets.load(GltfAssetLabel::Scene(0).from_asset(file)),

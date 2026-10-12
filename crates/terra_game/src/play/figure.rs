@@ -1,7 +1,7 @@
-//! The player's body: the male base body, made with Tripo and rigged onto the skeleton
-//! of a free animation library (D115, THIRD_PARTY.md), with what is in hand held in its
-//! right hand's socket (`character`). Every player stands on one, and which animation
-//! plays follows what that player is doing.
+//! The player's body: the base body (D112, `appearance`), shaped as the player's template,
+//! made with Tripo and rigged onto the skeleton of a free animation library (D115,
+//! THIRD_PARTY.md), with what is in hand held in its right hand's socket (`character`).
+//! Every player stands on one, and which animation plays follows what that player is doing.
 //!
 //! A base body has no hair or clothes of its own; those are parts still to come (D111,
 //! D112).
@@ -13,9 +13,8 @@ use crate::loading::Loading;
 use bevy::{prelude::*, world_serialization::WorldInstanceReady};
 use std::time::Duration;
 
-/// The base body the player has, which is also the name its gear is fitted under
-/// (`character::look`).
-pub const BODY: &str = "base-male";
+/// The template the player's body is shaped as (`appearance::Appearance::template`).
+pub const TEMPLATE: &str = "male";
 /// How long one animation takes to give way to the next.
 const BLEND: Duration = Duration::from_millis(180);
 
@@ -96,7 +95,7 @@ pub fn plugin(app: &mut App) {
 }
 
 fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
-    let model = assets.load(format!("models/character/{BODY}.glb"));
+    let model = assets.load(crate::appearance::BASE);
     loading.wait_for(&model);
     commands.insert_resource(FigureModel(model));
 }
@@ -164,7 +163,8 @@ fn stand(
         commands
             .spawn((
                 Name::new("Figure"),
-                crate::character::Body { name: BODY },
+                crate::character::Body,
+                crate::appearance::Appearance::template(TEMPLATE).unwrap_or_default(),
                 WorldAssetRoot(scene.clone()),
                 // The model faces +Z; things here face -Z.
                 Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),

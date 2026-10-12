@@ -117,6 +117,16 @@ const COMMANDS: Record<string, Command> = {
     help: "in the workbench: hold every model at FRACTION (0 to 1) through CLIP; without one, play it",
     run: async ({ positionals: [clip, fraction] }) => print(await call("workbench.pose", { clip, fraction: number(fraction) })),
   },
+  shape: {
+    usage: "shape [--model N] TEMPLATE | MORPH=WEIGHT …",
+    help: "in the workbench: reshape a model's body live, as a template or a mix of morphs (heavy=0.5 thin=0.2)",
+    options: { model: { type: "string", help: "which model, by its order on the command line (all if not given)" } },
+    run: async ({ values, positionals }) => {
+      const morphs = Object.fromEntries(positionals.filter((p) => p.includes("=")).map((p) => [p.split("=")[0], number(p.split("=")[1])]));
+      const template = positionals.find((p) => !p.includes("="));
+      print(await call("workbench.shape", { model: values.model === undefined ? undefined : number(values.model), template, morphs: Object.keys(morphs).length ? morphs : undefined }));
+    },
+  },
   shot: { usage: "shot FILE.png", help: "save a screenshot and wait for it", run: async ({ positionals: [file] }) => console.log(await sandbox.shot(file)) },
 };
 

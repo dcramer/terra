@@ -114,7 +114,7 @@ fn mark(
         facing: (middle - edge).reject_from(up),
         doing: Doing::Bound,
         trade: Some("smith"),
-        body: "base-male",
+        template: "strong",
         wears: vec![Dyed(
             "leather_coat",
             Some(("Leather", Color::srgb(0.45, 0.32, 0.22))),

@@ -70,7 +70,9 @@ Run on every item, on every base body, through clips that bend and reach:
 
 An item that fails a check isn't used until it passes.
 
-## Against what we have, 2026-10-12
+## Against what we have, 2026-10-12 (before morphs)
+
+Superseded by the morphs, built the same day: one base body with its morphs, gear made once, every body a template in the game. Where it stands is in [research/body-morphs.md](../research/body-morphs.md#in-the-game-2026-10-12); still open there are the packs' straps on the biggest builds in a sword swing, and the sawtooth, dark-rimmed edges of the jerkin. What follows is how it stood before.
 
 Built: the bodies, their skeleton with twist bones, sockets, held looks, tints, one look per item per body, and a body that hides its skin under what it wears, by 1024 patches of about two centimetres its shader collapses (`patches.py`, `body_mask.wgsl`). Every piece is checked on every body through our clips (`gear_check.py`, the share of nearby skin that comes through it, at most 2%):
 

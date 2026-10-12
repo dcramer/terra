@@ -5,9 +5,10 @@ Drives a running sandbox from the command line over Bevy's remote protocol (D69)
 ```bash
 r() { node tools/sandbox/remote.ts "$@"; }
 
-r start --windows -- --experiment workbench --model models/character/base-male.glb --hold stone_axe --anim Walk_Loop
+r start --windows -- --experiment workbench --model models/character/base.glb --hold stone_axe --anim Walk_Loop
 r find socket.hand                       # names containing it, with where they are
 r pose Walk_Loop 0.6                     # every model held 60% through the walk
+r shape --model 0 heavy=0.5 strong=0.3   # the first model's body, half heavy and a little strong
 r look socket.hand.R --distance 0.9 --around 90
 r place socket.hand.R --rotation 70,0,0  # its local transform; rotation in degrees
 r shot shots/hand.png                    # waits for the file
@@ -51,6 +52,7 @@ r said                                   # everything said since the last action
 | `aim EAST,SOUTH [--up m]` | In play: turn the view until its middle, where a bow shoots and a tool reaches, is on a spot so far above the ground (1 m), and wait until it is |
 | `give ITEM[:COUNT] …` | In play: carry something, as `--give` does, or set the body (`health:20`), and wait until it is given; fails if it did not fit |
 | `pose CLIP [FRACTION]` | In the workbench: hold every model that far through a clip given with `--anim`, or play it |
+| `shape [--model N] TEMPLATE` or `shape heavy=0.5 thin=0.2` | In the workbench: reshape a model's body live, as a template or any mix of morphs (`appearance`) |
 | `shot FILE.png` | Save a screenshot and wait for it |
 | `call METHOD [JSON]` | Any method; `call rpc.discover` lists them, Bevy's `world.*` ones included |
 

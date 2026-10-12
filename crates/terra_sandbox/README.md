@@ -42,7 +42,9 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--model <path>` | In the workbench: a model to look at, a `.glb` or `.gltf` under `assets/`. Repeatable: models stand side by side doing the same thing |
 | `--anim <clip>` | In the workbench: an animation to play. Repeatable; the first plays when looking by hand |
 | `--hold <item>` | In the workbench: an item's held look in the right hand, as in play, named as in `--give`, such as `stone_axe` |
-| `--wear <item>` | In the workbench: an item's look for each model's body, named as in `--give`, such as `leather_coat`. Repeatable |
+| `--wear <item>` | In the workbench: an item's look, on every model, named as in `--give`, such as `leather_coat`. Repeatable |
+| `--template <name>` | In the workbench: the template the next model's body is shaped as (`models/character/templates.json`), such as `female` or `heavy`. Repeatable, in the order of the models |
+| `--joints` | In the workbench: print where each model's joints and sockets stand once shaped (`JOINTS` lines), to compare with the export's `SOCKETS` |
 | `--attach <file>[@<socket>]` | In the workbench: any look, on a socket such as `models/x.glb@socket.back`, or without one as its file says. Repeatable |
 | `--focus <name>` | In the workbench: look closely at one part, such as `socket.hand.R` |
 | `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. In `icons`: also save the baked icons laid out, `<prefix>.png` and `<prefix>-half.png` |
@@ -103,7 +105,7 @@ About a million generated pines over the whole planet. Left click or F chops the
 ## The workbench
 
 ```bash
-cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/figure.gltf --model models/character/base-male.glb --anim Jog_Fwd_Loop --sides 30,100 --moments 0.1,0.35,0.6,0.85 --sheet shots/wb/compare --clean --settle 60
+cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/figure.gltf --model models/character/base.glb --anim Jog_Fwd_Loop --sides 30,100 --moments 0.1,0.35,0.6,0.85 --sheet shots/wb/compare --clean --settle 60
 ```
 
 Models on a plain floor in the game's own light and renderer, playing animations (D71), holding and wearing things as they would in play (`--hold`, `--wear`, `--attach`, through the shared `character` module). It prints each model's clips, joints and sockets. Fly round by hand, drive it live with `--remote` ([tools/sandbox](../../tools/sandbox/README.md), which adds `pose CLIP FRACTION`), or give `--sheet` to save one contact sheet per clip and exit, which is how an agent checks a model. The command above puts the mannequin and the base body side by side through the jog, from two sides at four moments. Run sheets on the Windows GPU; the CPU renderer under WSL is far too slow. How characters are made and checked before they get here is in `.claude/skills/character/SKILL.md`.

@@ -56,8 +56,12 @@ usage: terra_sandbox [options]
   --anim <clip>         in the workbench: a clip to play; repeatable
   --hold <item>         in the workbench: an item's held look in the right hand, named as
                         in --give, such as stone_axe
-  --wear <item>         in the workbench: an item's look for each model's body, named as
-                        in --give, such as leather_coat (repeatable)
+  --wear <item>         in the workbench: an item's look, on every model, named as in
+                        --give, such as leather_coat (repeatable)
+  --template <name>     in the workbench: the template the next model's body is shaped
+                        as, such as female or heavy (repeatable, in the models' order)
+  --joints              in the workbench: print where each model's joints and sockets
+                        stand once shaped, to compare with the export's
   --attach <file>[@<socket>]
                         in the workbench: any look, on a socket such as socket.back, or
                         without one as its file says (repeatable)
@@ -66,6 +70,9 @@ usage: terra_sandbox [options]
                         clip as <prefix>-<clip>.png, then exit
   --renders <folder>    in the icon baker: also write every item's render here, for
                         painting (tools/icons)
+  --keep <item>         in the icon baker: keep an item's painted icon though its look's
+                        file changed (moved, or given morphs), recording the look as it is
+                        now; only after checking the icon still matches it (repeatable)
   --sides <degrees,…>   in the workbench sheet: directions to look from, round from the
                         front (default 30,120,210,300)
   --moments <fraction,…>
@@ -156,12 +163,19 @@ pub struct Options {
     pub hold: Option<String>,
     pub attaches: Vec<String>,
     pub wears: Vec<String>,
+    /// In the workbench: the template each model's body is shaped as, in the order of the
+    /// models (`appearance`); with `joints`, where its joints and sockets stand once shaped.
+    pub templates: Vec<String>,
+    pub joints: bool,
     pub focus: Option<String>,
     pub sides: Vec<f32>,
     pub moments: Vec<f32>,
     pub anims: Vec<String>,
     pub sheet: Option<PathBuf>,
     pub renders: Option<PathBuf>,
+    /// In the icon baker: items whose painted icons still match their looks, though the
+    /// looks' files changed, so they are recorded as made from the looks as they are now.
+    pub keeps: Vec<String>,
 }
 
 /// A jump in a scripted run: on `frame`, stand `at` a spot facing `facing`, each in metres
@@ -208,12 +222,15 @@ impl Options {
             hold: None,
             attaches: Vec::new(),
             wears: Vec::new(),
+            templates: Vec::new(),
+            joints: false,
             focus: None,
             sides: Vec::new(),
             moments: Vec::new(),
             anims: Vec::new(),
             sheet: None,
             renders: None,
+            keeps: Vec::new(),
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -271,12 +288,15 @@ impl Options {
                 "--hold" => options.hold = Some(value("--hold")?),
                 "--attach" => options.attaches.push(value("--attach")?),
                 "--wear" => options.wears.push(value("--wear")?),
+                "--template" => options.templates.push(value("--template")?),
+                "--joints" => options.joints = true,
                 "--focus" => options.focus = Some(value("--focus")?),
                 "--sides" => options.sides = numbers("--sides", &value("--sides")?)?,
                 "--moments" => options.moments = numbers("--moments", &value("--moments")?)?,
                 "--anim" => options.anims.push(value("--anim")?),
                 "--sheet" => options.sheet = Some(PathBuf::from(value("--sheet")?)),
                 "--renders" => options.renders = Some(PathBuf::from(value("--renders")?)),
+                "--keep" => options.keeps.push(value("--keep")?),
                 "--radius" => {
                     options.radius_m = value("--radius")?
                         .parse()

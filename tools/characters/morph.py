@@ -3,7 +3,7 @@ change of shape of the base's own mesh (D112; how and why in research/body-morph
 
     tools/blender/run.sh tools/characters/morph.py BASE.glb DESIGN.glb NAME [--joints]
 
-BASE is the game's base body (assets/models/character/base-male.glb). DESIGN is either
+BASE is the base body as exported (tools/characters/out/base-male-game.glb, by build_bodies.sh). DESIGN is either
   - a Tripo model of a design of the base person (art/characters/base-male/morphs/NAME/model.glb):
     it is turned to face -Y, scaled to the base's height, feet on the ground, centred, and only
     its largest connected part is kept (a generated model can carry a slab of its backdrop); or
@@ -27,7 +27,7 @@ Steps:
 
 Prints the fit (MORPH lines: mean and 95th percentile distance from the design's skin, and the
 share of skin with no match). Writes tools/characters/out/NAME.npz, the morph per vertex of the
-base and its joint offsets, and tools/characters/out/NAME.glb, the base at the morph's full
+base (with the base's vertex positions, to find them again) and its joint offsets, and tools/characters/out/NAME.glb, the base at the morph's full
 weight, rigged and without clips or sockets, for export_character.py.
 """
 
@@ -335,7 +335,7 @@ if DJ is not None:
 elif "--joints" not in look.args():
     heads = dict(J)
 os.makedirs(OUT, exist_ok=True)
-np.savez(os.path.join(OUT, f"{name}.npz"), delta=delta[canon], joints=np.array([heads[b] - J[b] for b in sorted(J)]), bones=np.array(sorted(J)))
+np.savez(os.path.join(OUT, f"{name}.npz"), points=V_all, delta=delta[canon], joints=np.array([heads[b] - J[b] for b in sorted(J)]), bones=np.array(sorted(J)))
 
 # The base reshaped and rigged at the morph's full weight, its joints moved, its clips dropped.
 for v in body.data.vertices:

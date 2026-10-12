@@ -2,9 +2,9 @@
 //! named points on its skeleton placed for that body when it was exported
 //! (`tools/characters/export_character.py`).
 //!
-//! What is worn has a look for each base body, fitted to it once
-//! (`tools/characters/fit_gear.py`) and found by name: `models/gear/<body>/<item>.glb`,
-//! the item named as in the catalogue (`item_id`). Looks name their materials by role
+//! What is worn has one look, made once on the base body and carrying the base's morphs, so
+//! it fits every body (`appearance`, D128; `tools/characters/build_bodies.sh`), found by name:
+//! `models/gear/<item>.glb`, the item named as in the catalogue (`item_id`). Looks name their materials by role
 //! (Leather, Metal, Wood...), so a `Tint` can recolour one look many ways without a new
 //! file, and tinted materials are shared, one per colour. The file says how it goes on, so
 //! nothing here knows any one item: a look with a skin bends with the body, and its joints
@@ -76,12 +76,10 @@ impl Held {
     }
 }
 
-/// A character's model: the root of a base body, by the name its gear is fitted under. Its
-/// parent is the character, whose gear it wears.
+/// A character's model: the root of the base body (`appearance::BASE`), shaped by its
+/// `Appearance`. Its parent is the character, whose gear it wears.
 #[derive(Component)]
-pub struct Body {
-    pub name: &'static str,
-}
+pub struct Body;
 
 /// What a character wears: the looks its body shows (`worn` in the play experiment). The
 /// player's follows its equipment; anyone else's is set by whatever stands them in the world.
@@ -158,15 +156,17 @@ impl MaterialExtension for BodyMask {
     }
 }
 
-/// The patches of skin a worn look covers, from its file.
+/// The patches of skin a worn look covers, from its file; on a look once it is put on.
 #[derive(Component)]
 pub struct Covers(Vec<u32>);
 
-/// A body's meshes and the standard materials they came with, and the mask they show now.
+/// A body's meshes and the standard materials they show now (their own, or a template's
+/// painted skin, `appearance`), the materials they came with, and the mask they show now.
 #[derive(Component)]
-struct Skin {
-    parts: Vec<(Entity, Handle<StandardMaterial>)>,
-    showing: Option<BodyMask>,
+pub(crate) struct Skin {
+    pub(crate) parts: Vec<(Entity, Handle<StandardMaterial>)>,
+    pub(crate) original: Vec<Handle<StandardMaterial>>,
+    pub(crate) showing: Option<BodyMask>,
 }
 
 /// Body materials, shared: one per original material and mask.
@@ -189,9 +189,9 @@ pub fn item_id(name: &str) -> String {
     name.to_lowercase().replace(' ', "_")
 }
 
-/// Where an item's look for a base body is.
-pub fn look(body: &str, item: &str) -> String {
-    format!("models/gear/{body}/{item}.glb")
+/// Where an item's look is: one for every body (`appearance`).
+pub fn look(item: &str) -> String {
+    format!("models/gear/{item}.glb")
 }
 
 /// Where a held item's look is: the same for every body, since every hand socket is alike.
@@ -228,15 +228,17 @@ fn body_ready(
         return;
     }
     // Its meshes now, before anything is worn: the skin.
-    let parts = children
+    let parts: Vec<_> = children
         .iter_descendants(ready.entity)
         .filter_map(|each| looks.get(each).ok())
         .map(|(each, material)| (each, material.0.clone()))
         .collect();
+    let original = parts.iter().map(|(_, material)| material.clone()).collect();
     commands.entity(ready.entity).insert((
         BodyReady,
         Skin {
             parts,
+            original,
             showing: None,
         },
     ));
@@ -255,7 +257,7 @@ fn mask_bodies(
 ) {
     let changed = !added.is_empty() || removed.read().count() > 0;
     for (body, mut skin) in &mut bodies {
-        if !changed && !skin.is_added() {
+        if !changed && !skin.is_changed() {
             continue;
         }
         let mask = BodyMask::hiding(
@@ -522,10 +524,7 @@ mod tests {
     fn a_look_is_found_by_body_and_item_name() {
         assert_eq!(item_id("Leather coat"), "leather_coat");
         assert_eq!(item_id("Quiver"), "quiver");
-        assert_eq!(
-            look("base-female", &item_id("Small pack")),
-            "models/gear/base-female/small_pack.glb"
-        );
+        assert_eq!(look(&item_id("Small pack")), "models/gear/small_pack.glb");
     }
 
     #[test]

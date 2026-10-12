@@ -209,7 +209,7 @@ fn found(
             "Maren",
             place(1.6, 1.4),
             Doing::Standing,
-            "base-female",
+            "female",
             vec![Dyed(
                 "leather_coat",
                 Some(("Leather", Color::srgb(0.32, 0.42, 0.55))),
@@ -221,7 +221,7 @@ fn found(
             "Tobin",
             place(5.0, 2.6),
             Doing::Standing,
-            "base-male",
+            "heavy",
             vec![
                 Dyed(
                     "leather_coat",
@@ -236,7 +236,7 @@ fn found(
             "Ilse",
             place(-3.5, 2.5),
             Doing::Sitting,
-            "base-female",
+            "female",
             vec![Dyed(
                 "leather_cap",
                 Some(("Leather", Color::srgb(0.46, 0.5, 0.3))),
@@ -248,7 +248,7 @@ fn found(
             "Wyn",
             place(-2.0, -3.0),
             Doing::Standing,
-            "base-male",
+            "thin",
             vec![Dyed(
                 "small_pack",
                 Some(("Pack", Color::srgb(0.6, 0.3, 0.28))),
@@ -257,14 +257,14 @@ fn found(
             Some("Wyn: \"Meat keeps you longer cooked. Any fire will do.\""),
         ),
     ];
-    for (name, at, doing, body, wears, interact, says) in people {
+    for (name, at, doing, template, wears, interact, says) in people {
         arrive.write(Arrive {
             name,
             at,
             facing: (middle - at).reject_from(up),
             doing,
             trade: None,
-            body,
+            template,
             wears,
             interact,
             says,

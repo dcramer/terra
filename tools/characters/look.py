@@ -16,6 +16,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 # What the pipeline writes and does not keep.
 OUT = os.path.join(HERE, "out")
+# Worn looks as made on a base body, before its morphs are added (shell_garment.py, fit_gear.py):
+# out/gear/<body>/<item>.glb. The game loads assets/models/gear/<item>.glb, made from these by
+# build_bodies.sh, one per item for every body.
+GEAR_MADE = os.path.join(OUT, "gear")
 # The source art it reads (art/README.md), and the assets it writes for the game.
 ART = os.path.join(ROOT, "art")
 ASSETS = os.path.join(ROOT, "assets")
@@ -87,6 +91,12 @@ def args():
 def path(given):
     """A path given to a script, relative to the repository root it is run from."""
     return os.path.abspath(given)
+
+
+def body_name(path):
+    """A body's name from its file: base-male.glb and out/base-male-game.glb are base-male."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    return stem[: -len("-game")] if stem.endswith("-game") else stem
 
 
 def reset():

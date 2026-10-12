@@ -14,12 +14,12 @@ made by Tripo, as one outer surface. This:
      skin under it does, so skin cannot come through it in any pose;
   5. bakes the dressed model's colour onto it, and lists the patches of skin it hides.
 
-    tools/blender/run.sh tools/characters/shell_garment.py assets/models/character/base-male.glb art/gear/dressed-male-coat/model.glb leather_coat Leather chest
+    tools/blender/run.sh tools/characters/shell_garment.py tools/characters/out/base-male-game.glb art/gear/dressed-male-coat/model.glb leather_coat Leather chest
 
 The slot (D64) says where on the body the piece can be: a chest piece never reaches the thighs,
 whatever colour Tripo gave the dressed model's shorts.
 
-Writes assets/models/gear/<body>/<item>.glb and prints SHELL lines.
+Writes tools/characters/out/gear/<body>/<item>.glb (look.GEAR_MADE) and prints SHELL lines.
 """
 
 import math
@@ -38,7 +38,7 @@ from mathutils.bvhtree import BVHTree
 import look
 import patches
 
-OUT = os.path.join(HERE, "..", "..", "assets", "models", "gear")
+OUT = look.GEAR_MADE
 LOOK_M = 0.06          # how far out and in from the skin to look for the dressed surface
 STANDS_OFF_M = 0.008   # dressed surface further out than this is the piece, whatever its colour
 SMOOTH_ROUNDS = 4      # rounds of smoothing the mark
@@ -69,7 +69,7 @@ COVERAGE = {
 
 body_path, dressed_path, item, role, coverage = (look.args() + ["Cloth", "chest_sleeveless"])[:5]
 COVER = COVERAGE[coverage]
-body_name = os.path.splitext(os.path.basename(body_path))[0]
+body_name = look.body_name(body_path)
 
 look.reset()
 bpy.ops.import_scene.gltf(filepath=look.path(body_path))

@@ -7,7 +7,8 @@ Re-sampling the clips on this skeleton writes its own joint positions into them.
 
     tools/blender/run.sh tools/characters/export_character.py tools/characters/out/NAME.glb tools/characters/out/NAME-game.glb
 
-make_character.sh runs it last.
+make_character.sh runs it last. With --morphs=heavy,thin,... it also gives the body those morphs
+(made by make_morph.sh), as the game's base body is exported: see the MORPHS step below.
 """
 
 import os
@@ -16,7 +17,10 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import re
+
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 
 import look
@@ -119,6 +123,60 @@ else:
     patches.mark(body)
     print("PATCHES", patches.PATCHES)
 
+# The base's morphs (D112, make_morph.sh), each a morph target of the body, in the order
+# given. The game also needs to know where each morph moves the skeleton's joints and the
+# sockets: those are read off the morph's own exported body (tools/characters/out/M-game.glb),
+# as offsets in the model's space, glTF's axes (x, z, -y of Blender's), and kept on the
+# skeleton's node as `{"morphs": {M: {node: [x, y, z]}}}` in its glTF extras.
+MORPHS = next((a.split("=", 1)[1].split(",") for a in look.args() if a.startswith("--morphs=")), [])
+if MORPHS:
+    import json
+    from mathutils.kdtree import KDTree
+
+    world = [mw @ v.co for v in body.data.vertices]
+    if body.data.shape_keys is None:
+        body.shape_key_add(name="Basis", from_mix=False)
+    node_world = {b.name: arm.matrix_world @ b.head_local for b in arm.data.bones}
+    node_world.update({e.name: e.matrix_world.translation.copy() for e in sockets})
+    offsets = {}
+    for m in MORPHS:
+        data = np.load(os.path.join(look.OUT, f"{m}.npz"))
+        kd = KDTree(len(data["points"]))
+        for i, p in enumerate(data["points"]):
+            kd.insert(Vector(p), i)
+        kd.balance()
+        key = body.shape_key_add(name=m, from_mix=False)
+        inv = mw.inverted().to_3x3()
+        for v, p in zip(body.data.vertices, world):
+            _, i, _ = kd.find(p)
+            key.data[v.index].co = v.co + inv @ Vector(data["delta"][i])
+        before = set(bpy.data.objects)
+        had = set(bpy.data.actions)
+        bpy.ops.import_scene.gltf(filepath=os.path.join(look.OUT, f"{m}-game.glb"))
+        new = [o for o in bpy.data.objects if o not in before]
+        other = next(o for o in new if o.type == "ARMATURE")
+        if other.animation_data:
+            other.animation_data.action = None
+        for pb in other.pose.bones:
+            pb.matrix_basis.identity()
+        bpy.context.view_layer.update()
+        theirs = {b.name: other.matrix_world @ b.head_local for b in other.data.bones}
+        # Its sockets import with Blender's ".001" on their names, ours being taken.
+        theirs.update({re.sub(r"\.\d{3}$", "", o.name): o.matrix_world.translation.copy() for o in new if o.type == "EMPTY" and o.name.startswith("socket.")})
+        moved = {}
+        for n, p in node_world.items():
+            if n in theirs:
+                d = theirs[n] - p
+                if d.length > 1e-5:
+                    moved[n] = [round(d.x, 5), round(d.z, 5), round(-d.y, 5)]
+        offsets[m] = moved
+        for o in new:
+            bpy.data.objects.remove(o)
+        for a in [a for a in bpy.data.actions if a not in had]:
+            bpy.data.actions.remove(a)
+        print("MORPH", m, "target added;", len(moved), "joints and sockets move")
+    arm["morphs"] = json.dumps(offsets)
+
 # The clips, from the mannequin's file; its objects are thrown away.
 before = set(bpy.data.objects)
 bpy.ops.import_scene.gltf(filepath=FIGURE)
@@ -142,6 +200,6 @@ bpy.context.view_layer.objects.active = arm
 bpy.ops.export_scene.gltf(
     filepath=look.path(dst), export_format="GLB", use_selection=True,
     export_animations=True, export_animation_mode="NLA_TRACKS", export_force_sampling=True,
-    export_influence_nb=4,
+    export_influence_nb=4, export_extras=True, export_morph=True,
 )
 print("EXPORTED", dst, len(actions), "clips")

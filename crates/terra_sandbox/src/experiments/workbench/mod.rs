@@ -9,7 +9,9 @@
 //! `--attach <file>[@<socket>]` puts on any look, on a socket if given, otherwise as the file
 //! says (`character`). `--focus <name>` looks closely at one
 //! part. `--sheet <prefix>` saves a contact sheet per clip and exits (`sheet`). With
-//! `--remote`, `workbench.pose {clip, fraction}` holds every model at a moment of a clip.
+//! `--remote`, `workbench.pose {clip, fraction}` holds every model at a moment of a clip, and
+//! `workbench.shape {model, template | morphs, skin}` reshapes a model's body live
+//! (`appearance`): a template by name, or any mix of morphs, such as `{"heavy": 0.5}`.
 //! Clips, joints and sockets are printed when a model loads.
 
 mod sheet;
@@ -25,6 +27,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use terra_game::planet::MainCamera;
 
+use terra_game::appearance::{Appearance, ReportJoints};
 use terra_game::{character, planet::Planet, remote, shell::Options};
 
 /// How far apart models stand, side by side.
@@ -76,6 +79,7 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
         .add_systems(Update, (spawn, sheet::capture).chain());
     remote::method(app, "workbench.pose", pose_method);
+    remote::method(app, "workbench.shape", shape_method);
     sheet::plugin(app);
 }
 
@@ -107,6 +111,9 @@ fn setup(
         Transform::from_translation(stand + up * 0.5)
             .with_rotation(Quat::from_rotation_arc(Vec3::Y, up)),
     ));
+    if options.joints {
+        commands.insert_resource(ReportJoints);
+    }
     commands.insert_resource(Bench {
         files: options
             .models
@@ -201,13 +208,23 @@ fn spawn(
             continue;
         };
         let offset = (index as f32 - (count - 1) as f32 * 0.5) * SPACING_M;
-        // The body's name, which its gear is fitted under (`character::look`).
-        let body = std::path::Path::new(path)
-            .file_stem()
-            .map_or(String::new(), |stem| stem.to_string_lossy().into_owned());
+        // Shaped as its template, if given one (`appearance`).
+        let shape = options
+            .templates
+            .get(index)
+            .and_then(|name| {
+                let found = Appearance::template(name);
+                if found.is_none() {
+                    warn!("workbench: there is no template {name}");
+                }
+                found
+            })
+            .unwrap_or_default();
         let root = commands
             .spawn((
                 Name::new(format!("Workbench model {index}")),
+                character::Body,
+                shape,
                 WorldAssetRoot(scene),
                 Transform::from_translation(bench.stand + side * offset)
                     .with_rotation(Quat::from_rotation_arc(Vec3::Y, bench.up)),
@@ -239,7 +256,6 @@ fn spawn(
                     dress(
                         &mut commands,
                         ready.entity,
-                        &body,
                         &options,
                         &assets,
                         &children,
@@ -291,7 +307,6 @@ fn spawn(
 fn dress(
     commands: &mut Commands,
     root: Entity,
-    body: &str,
     options: &Options,
     assets: &AssetServer,
     children: &Query<&Children>,
@@ -330,7 +345,7 @@ fn dress(
         }
     }
     for item in &options.wears {
-        let file = character::look(body, item);
+        let file = character::look(item);
         character::wear(
             commands,
             assets.load(GltfAssetLabel::Scene(0).from_asset(file)),
@@ -407,6 +422,54 @@ fn pose(
 struct Pose {
     clip: String,
     fraction: Option<f32>,
+}
+
+#[derive(Deserialize)]
+struct Reshape {
+    /// Which model, by its order on the command line; every model if not given.
+    model: Option<usize>,
+    template: Option<String>,
+    morphs: Option<std::collections::HashMap<String, f32>>,
+    skin: Option<String>,
+}
+
+fn shape_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Reshape {
+        model,
+        template,
+        morphs,
+        skin,
+    } = parse_some(params)?;
+    let mut shape = match &template {
+        Some(name) => Appearance::template(name)
+            .ok_or_else(|| remote::refused(format!("there is no template {name}")))?,
+        None => Appearance::default(),
+    };
+    if let Some(morphs) = morphs {
+        let mut morphs: Vec<(String, f32)> = morphs.into_iter().collect();
+        morphs.sort_by(|a, b| a.0.cmp(&b.0));
+        shape.morphs = morphs;
+    }
+    if skin.is_some() {
+        shape.skin = skin;
+    }
+    let mut bodies = world.query::<(&Name, &mut Appearance)>();
+    let mut changed = 0;
+    for (name, mut appearance) in bodies.iter_mut(world) {
+        let index = name
+            .as_str()
+            .strip_prefix("Workbench model ")
+            .and_then(|i| i.parse::<usize>().ok());
+        if index.is_none() || model.is_some_and(|m| Some(m) != index) {
+            continue;
+        }
+        *appearance = shape.clone();
+        changed += 1;
+    }
+    if changed == 0 {
+        return Err(remote::refused("no workbench model matches"));
+    }
+    Ok(json!({ "shaped": changed, "morphs": shape.morphs, "skin": shape.skin }))
 }
 
 fn pose_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {

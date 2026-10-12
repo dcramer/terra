@@ -14,7 +14,7 @@
 mod experiments;
 
 use bevy::prelude::*;
-use terra_game::{character, planet, shell, terrain};
+use terra_game::{appearance, character, planet, shell, terrain};
 
 fn main() -> AppExit {
     let options = match shell::Options::from_args(std::env::args().skip(1)) {
@@ -37,6 +37,7 @@ fn main() -> AppExit {
         planet::plugin,
         terrain::plugin,
         character::plugin,
+        appearance::plugin,
     ));
     for name in &options.experiments {
         let Some(experiment) = experiments::ALL.iter().find(|e| e.name == name) else {

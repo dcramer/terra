@@ -14,7 +14,8 @@
 #   5. that body exported as the game loads it (export_character.py), keeping the base's patches
 #   6. every worn look made for the base carried onto it (carry_gear.py), and checked (gear_check.py)
 # Look at the sheet before step 3 spends credits, and at the result with compare.py after.
-# BASE defaults to base-male; set BASE= to use another.
+# BASE defaults to base-male; set BASE= to use another. The base is its exported body,
+# tools/characters/out/BASE-game.glb (build_bodies.sh or finish_character.sh makes it).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
@@ -41,12 +42,12 @@ else
   [[ -f "$art/model.glb" ]] || node tools/tripo/tripo.ts model "$art/front.png" --faces 30000 -o "$art/model.glb" >/dev/null
   design="$art/model.glb"
 fi
-$blender $here/morph.py "assets/models/character/$base.glb" "$design" "$name" | grep -E "MORPH|EXPORTED|Error" || true
+$blender $here/morph.py "$out/$base-game.glb" "$design" "$name" | grep -E "MORPH|EXPORTED|Error" || true
 $blender $here/export_character.py "$out/$name.glb" "$out/$name-game.glb" | grep -E "PATCHES|EXPORTED|Error" || true
 looks=()
-for look in assets/models/gear/$base/*.glb; do
+for look in tools/characters/out/gear/$base/*.glb; do
   item=$(basename "$look" .glb)
-  $blender $here/carry_gear.py "assets/models/character/$base.glb" "$out/$name.npz" "$look" "$out/$name-$item.glb" | grep -E "Error" || true
+  $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "$out/$name-$item.glb" "$name" | grep -E "Error" || true
   looks+=("$out/$name-$item.glb")
 done
 $blender $here/gear_check.py "$out/$name-game.glb" "${looks[@]}" | grep -E "^GEARCHECK|Error" || true

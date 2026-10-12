@@ -105,7 +105,7 @@ fn finish(
     if failed > 0 {
         error!("icons: {failed} could not be rendered; the log above says why");
     }
-    bake(&rendered);
+    bake(&rendered, &options.keeps);
     if let Some(folder) = &options.renders {
         write_renders(&rendered, folder);
     }
@@ -129,9 +129,10 @@ fn manifest() -> Vec<Baked> {
 }
 
 /// Writes each item's rendered icon, unless it has a painted one, which is kept as it is
-/// even if its look has changed (the test then asks for it to be painted again); removes
-/// icons of items no longer in the catalogue; and writes the manifest.
-fn bake(rendered: &[(&Wanted, &[u8])]) {
+/// even if its look has changed (the test then asks for it to be painted again, unless the
+/// item is in `keeps`, whose paintings are recorded as made from their looks as they are now);
+/// removes icons of items no longer in the catalogue; and writes the manifest.
+fn bake(rendered: &[(&Wanted, &[u8])], keeps: &[String]) {
     let folder = assets().join("icons");
     std::fs::create_dir_all(&folder).ok();
     let before = manifest();
@@ -144,6 +145,19 @@ fn bake(rendered: &[(&Wanted, &[u8])]) {
         .collect();
     for (wanted, rgba) in rendered {
         let item = &wanted.item;
+        if let Some(kept) = lines
+            .iter_mut()
+            .find(|baked| &baked.item == item && keeps.contains(item))
+        {
+            let look = std::fs::read(assets().join(&wanted.icon.look)).unwrap_or_default();
+            kept.look = Some(wanted.icon.look.clone());
+            kept.fingerprint = Some(icons::fingerprint(&look));
+            println!(
+                "ICONS kept the painting of {item}, now from {}",
+                wanted.icon.look
+            );
+            continue;
+        }
         if lines.iter().any(|baked| &baked.item == item) {
             continue;
         }

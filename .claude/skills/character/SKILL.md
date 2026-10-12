@@ -66,32 +66,32 @@ If Tripo's rig cannot be made to pass, `rig_base.py` rigs the same body with Ble
 
 ## 4. Into the game
 
-```bash
-cp tools/characters/out/NAME-game.glb assets/models/character/NAME.glb
-```
+The game has one body, the base (`assets/models/character/base.glb`), and every other body is a morph of it (section 6). A new base, or the base remade, goes in through `build_bodies.sh` (section 7), which exports it with its morphs. To look at a body before that, its export is `tools/characters/out/NAME-game.glb`.
 
 Add a row for it to `THIRD_PARTY.md` under "Made with AI". Then look at it in the game's own renderer with the workbench, on the Windows GPU (about a minute; WSL's CPU renderer takes far too long). Beside the mannequin, through the same clips, from two sides at four moments:
 
 ```bash
-cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/figure.gltf --model models/character/NAME.glb --anim Idle_Loop --anim Walk_Loop --anim Jog_Fwd_Loop --anim Sword_Attack --sides 30,100 --moments 0.1,0.35,0.6,0.85 --sheet shots/wb/NAME --clean --settle 60
+cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/figure.gltf --model models/character/base.glb --anim Idle_Loop --anim Walk_Loop --anim Jog_Fwd_Loop --anim Sword_Attack --sides 30,100 --moments 0.1,0.35,0.6,0.85 --sheet shots/wb/NAME --clean --settle 60
 ```
 
-It prints each model's clips, joints and sockets, saves one contact sheet per clip, `shots/wb/NAME-<clip>.png` (rows are sides, columns moments), and exits; `xtask win` runs it in a copy under the Windows temp folder (`%TEMP%\terra\terra_sandbox-wb`), so the pictures are there. A model that fails to load says why and exits with an error. Look for limbs bending at the joints, no light lines or tears, nothing crushed at the shoulders and groin, feet on the floor, the face and hands intact, and how it moves beside the mannequin. Then a tool in hand, close up: `--model models/character/NAME.glb --hold stone_axe --focus socket.hand.R`. Then show the developers.
+It prints each model's clips, joints and sockets, saves one contact sheet per clip, `shots/wb/NAME-<clip>.png` (rows are sides, columns moments), and exits; `xtask win` runs it in a copy under the Windows temp folder (`%TEMP%\terra\terra_sandbox-wb`), so the pictures are there. A model that fails to load says why and exits with an error. Look for limbs bending at the joints, no light lines or tears, nothing crushed at the shoulders and groin, feet on the floor, the face and hands intact, and how it moves beside the mannequin. Then a tool in hand, close up: `--model models/character/base.glb --hold stone_axe --focus socket.hand.R`. Then show the developers.
 
 The export also gives the body its sockets, the points what is held and worn hangs from: `socket.hand.R` and `.L`, `socket.head`, `socket.back`, `socket.belt.R` and `.L`, placed from this body's own bones and skin. To check or adjust one, drive a running workbench live ([tools/sandbox](../../../tools/sandbox/README.md)): `look socket.hand.R`, `place socket.hand.R --rotation …`, `shot`. When a value is right, put it in `export_character.py`, which places sockets for every body.
 
 ## 5. Gear
 
-The game has many items and several bodies (D127), so gear is data: every worn item has one look per base body, `assets/models/gear/<body>/<item>.glb`, the item named as in the catalogue in lower case with `_` for spaces (`leather_coat`). The game finds it by that name and puts it on as the file says: a skinned look is bound to the body's skeleton; a rigid one names its socket in its glTF extras. No game code names an item, so adding gear is adding files.
+The game has many items and many bodies (D127), so gear is data: every worn item has one look, `assets/models/gear/<item>.glb`, made once on the base body and carrying the base's morphs, so it fits every body (D128). The item is named as in the catalogue in lower case with `_` for spaces (`leather_coat`). The game finds it by that name and puts it on as the file says: a skinned look is bound to the body's skeleton and follows its morphs; a rigid one names its socket in its glTF extras. No game code names an item, so adding gear is adding files.
 
-**Clothing and armour that bend with the body** (chest, legs, gloves, feet) are made on each base body, so nothing is set per character (D128):
+A piece is made on the base (below), into `tools/characters/out/gear/base-male/`, then added to the lists in `build_bodies.sh`, which checks it on every morph and writes the game's file (section 7).
+
+**Clothing and armour that bend with the body** (chest, legs, gloves, feet) are made on the base body, so nothing is set per character:
 
 1. Draw that base's own sheet wearing it (free): `--ref` the base's approved sheet, and say "the same person, in exactly the same T-pose ... now also wearing <the piece>". Check it kept the person and the pose.
 2. Make the dressed model (25 credits): crop the front view as `make_character.sh` does, then `tripo.ts model`. Keep the sheet, front view and model as source art in `art/gear/dressed-<body>-<item>/` (`sheet.png`, `front.png`, `model.glb`) and commit them.
 3. Build the piece from the base body:
 
 ```bash
-tools/blender/run.sh tools/characters/shell_garment.py assets/models/character/base-male.glb art/gear/dressed-male-coat/model.glb leather_coat Leather chest_sleeveless
+tools/blender/run.sh tools/characters/shell_garment.py tools/characters/out/base-male-game.glb art/gear/dressed-male-coat/model.glb leather_coat Leather chest_sleeveless
 ```
 
 The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveless`, `chest_long_sleeves`, `legs_long`, `gloves`, `feet`...): which parts of the body it covers and where its hems fall. The piece is those faces of the base body, pushed out (and as far as the dressed model stands off, for bulk), keeping the body's own weights, so it moves as the skin under it does; its colour is baked from the dressed model. Do not try to cut the piece out of the dressed model by colour or distance: Tripo paints its dressed body a shade off ours and makes it a little thinner, and every such cut came out full of holes.
@@ -99,7 +99,7 @@ The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveles
 **Rigid worn things** (a pack, a cap, a quiver) are made as models on their own and fitted at their socket:
 
 ```bash
-tools/blender/run.sh tools/characters/fit_gear.py assets/models/character/base-male.glb small_pack large_pack leather_cap quiver
+tools/blender/run.sh tools/characters/fit_gear.py tools/characters/out/base-male-game.glb small_pack large_pack quiver
 ```
 
 Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. A pack keeps only its bag from the model: its straps are made from the body's own skin (`bands.py`), along a route of rays cast from the body's joints, so they bend as the shoulders do and fit any body. Keep to the heights off the skin in `docs/characters.md`: a chest piece within 1.8 cm above the waist, straps solid from the skin to 2.2 cm, so a pack and a jerkin from different makers still stack. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front. Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does.
@@ -107,10 +107,10 @@ Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. 
 **Check every piece on every body**, by numbers first:
 
 ```bash
-tools/blender/run.sh tools/characters/gear_check.py assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
+tools/blender/run.sh tools/characters/gear_check.py tools/characters/out/base-male-game.glb leather_coat leather_cap small_pack quiver
 ```
 
-It plays our clips and reports, per clip, the share of skin near each piece that comes through it (or that it sinks into), and `where` on the body. Then look, live, with the body hidden if need be ([tools/sandbox](../../../tools/sandbox/README.md)): a picture through the body hid a coat full of holes. Each piece also lists the patches of skin it covers, which the game does not draw under it (`patches.py`, `body_mask.wgsl`).
+It plays our clips and reports, per clip, the share of skin near each piece that shows through it (the piece just beneath the skin, and nothing of it covering the skin from outside), and `where` on the body. Then look, live, with the body hidden if need be ([tools/sandbox](../../../tools/sandbox/README.md)): a picture through the body hid a coat full of holes. Each piece also lists the patches of skin it covers, which the game does not draw under it (`patches.py`, `body_mask.wgsl`).
 
 Then add a row for it to `THIRD_PARTY.md`.
 
@@ -139,7 +139,8 @@ Each step is skipped when its source art is already kept, so rerunning costs not
 **Make the female (or any other rigged body) a morph** of the base, its own skeleton giving its proportions:
 
 ```bash
-tools/characters/make_morph.sh female --design assets/models/character/base-female.glb
+tools/characters/finish_character.sh base-female 1.70
+tools/characters/make_morph.sh female --design tools/characters/out/base-female-game.glb
 tools/characters/paint_skin.sh female art/characters/base-female/front.png
 ```
 
@@ -151,7 +152,7 @@ tools/characters/paint_skin.sh female art/characters/base-female/front.png
   - Expect a few millimetres and under about 6% unmatched.
   - Much worse means the design is not in the base's pose, or the model carries something besides the body.
 - `GEARCHECK` lines, one per worn look: as in section 5, each under 2%.
-- Then look: `tools/blender/run.sh tools/characters/compare.py out.png "assets/models/character/base-male.glb" "tools/characters/out/heavy-game.glb+tools/characters/out/heavy-leather_coat.glb"`. Use `+` to dress a body, `--clay` for shape alone.
+- Then look: `tools/blender/run.sh tools/characters/compare.py out.png "tools/characters/out/base-male-game.glb" "tools/characters/out/heavy-game.glb+tools/characters/out/heavy-leather_coat.glb"`. Use `+` to dress a body, `--clay` for shape alone.
 
 **What each step does, and why:**
 
@@ -160,6 +161,39 @@ tools/characters/paint_skin.sh female art/characters/base-female/front.png
 - **A build morph keeps the base's skeleton.** Placing joints from the skin round them let belly fat drag the hips and spine 9 to 12 cm. Height and limb length are bone proportions, made separately; a rigged design, such as the female, brings its own joints.
 - **The body keeps the base's patches**, so a garment's list of hidden patches means the same skin on every body.
 - **Gear is carried, not remade.** A part on the skin follows it vertex by vertex. A part that stands off (a pack's bag) moves as one piece, clearing the skin that moved out most beneath it.
+
+## 7. Rebuilding everything, and into the game
+
+```bash
+tools/characters/build_bodies.sh
+```
+
+One command rebuilds every character asset the game loads from the source art in `art/`, for free: the base, its gear, every morph (each checked with every look on it), each template's painted skin, and the game's files:
+
+| File | What it is |
+|---|---|
+| `assets/models/character/base.glb` | The base body with every morph as a morph target, and each morph's joint and socket offsets in the skeleton node's glTF extras (`{"morphs": {M: {node: [x, y, z]}}}`) |
+| `assets/models/character/skins/<template>.png` | A template's painted skin, on the base's layout |
+| `assets/models/character/templates.json` | The templates (D111): each a mix of morphs and a skin. Edited by hand |
+| `assets/models/gear/<item>.glb` | Each worn look, with the same morph targets in the same order |
+
+Run it after changing a script it calls, or after adding a morph, a skin or a piece of gear to the lists at its top. Every `RIGCHECK`, `MORPH` and `GEARCHECK` line it prints must pass. A long run: about an hour, most of it writing the items' files. Don't edit the scripts while it runs: bash reads its script as it goes, and each step loads the Python afresh, so a change mid-run mixes two versions.
+
+Rewriting the items' files changes their bytes, so `cargo xtask check` then finds their painted icons stale. If an item's look did not change, compare its render with its icon (`cargo xtask icons --renders DIR`) and keep the painting, `cargo xtask icons --keep <item>`. If it did change, paint it again (the `item-icons` playbook).
+
+**In the game** (`crates/terra_game/src/appearance.rs`):
+- A body's `Appearance` (morph weights and skin) sets its morph weights by name.
+- Each of its joints and sockets moves by the mix of its morphs' offsets, kept there under animation.
+- Its skin, and everything worn on it, gets bind poses for the moved joints, shared between bodies that look the same.
+
+**Check it in the game's own renderer**: each template side by side, dressed, through the clips, with where its sockets stand:
+
+```bash
+cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/base.glb --template male --model models/character/base.glb --template female --model models/character/base.glb --template heavy --wear leather_coat --wear leather_cap --wear small_pack --anim Idle_Loop --anim Jog_Fwd_Loop --anim Sword_Attack --sides 30,200 --moments 0.3,0.7 --joints --sheet shots/wb/templates --clean --settle 60
+```
+
+- **The `JOINTS` lines**, in Blender's axes, must match the `SOCKETS` lines the export printed for that morph (`tools/characters/out/M-game.glb`) to a millimetre or so: that is the game shaping a body as the tools do.
+- **Live, with `--remote`**: `node tools/sandbox/remote.ts shape --model 2 heavy=0.5 strong=0.3` reshapes a body in the running workbench, to look at any mix.
 
 ## Traps already found
 
@@ -178,5 +212,5 @@ tools/characters/paint_skin.sh female art/characters/base-female/front.png
 - A body file splits vertices at texture seams and patch borders; weld before working on its surface as one, or every patch looks like a separate speck.
 - A sheet drawn at 1,024 pixels and padded to 2,048 without scaling leaves a small figure in a pale box, and Tripo models the box. Both `make_character.sh` and `make_morph.sh` scale the front view and pad it with the sheet's own background.
 - A generated model can carry stray pieces (a slab of backdrop); `morph.py` keeps only its largest connected part, after joining points split at texture seams.
-- The clipping check counts skin inside a rigid piece's volume (a heavy back inside a pack's bag) though it cannot be seen; a rigid piece should hide the patches wholly under it.
+- The clipping check once counted skin that had passed into a closed piece (a heavy back inside a pack's bag), which no one can see. It now counts only skin with nothing of the piece covering it from outside. Packs also hide the patches wholly under them, as garments do.
 - In zsh, `r pose $c` passes "Idle_Loop 0.3" as one word; use `${=c}`.

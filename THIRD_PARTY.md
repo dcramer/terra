@@ -32,9 +32,9 @@ Made by us with generators on paid plans, whose terms leave what they make with 
 
 | Where | Made with | How |
 |---|---|---|
-| `assets/models/character/base-male.glb` | [Tripo](https://www.tripo3d.ai) (model and rig, on our Studio subscription; design sheet on its API), animated with the Quaternius clips above | `.claude/skills/character/SKILL.md` and `tools/characters/`, from the source art in `art/characters/base-male/`; D115 |
-| `assets/models/character/base-female.glb` | Tripo (design sheet, model and rig, on our Studio subscription), animated with the Quaternius clips above | The same |
-| `assets/models/gear/` | Tripo (concept images and models, on our Studio subscription): a pack in two sizes, a cap, a coat and a quiver | Fitted to each base body, one folder each, by `tools/characters/fit_gear.py` |
+| `assets/models/character/base.glb` | [Tripo](https://www.tripo3d.ai) (the base male's model and rig, on our Studio subscription; design sheet on its API), animated with the Quaternius clips above. Its morphs from Tripo models of designs of the same man (heavy, thin, strong; image model and Studio) and from the female body (Tripo design, model and rig) | `.claude/skills/character/SKILL.md` and `tools/characters/build_bodies.sh`, from the source art in `art/characters/`; D112, D115 |
+| `assets/models/character/skins/` | Tripo (texture, on our Studio subscription): a template's skin painted on the base's mesh from its design | `tools/characters/paint_skin.sh` |
+| `assets/models/gear/` | Tripo (concept images and models, on our Studio subscription): a pack in two sizes, a cap, a coat and a quiver | Made once on the base body and given its morphs, by `tools/characters/build_bodies.sh` |
 
 ## Sound
 

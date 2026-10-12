@@ -16,6 +16,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `shell_garment.py` | Clothing cut from the base body, from a model of that body wearing it (`art/gear/dressed-<body>-<item>/`) |
 | `fit_gear.py` | Rigid gear (a pack, a quiver) fitted to a body at its socket, from `art/gear/<item>/`; straps from the skin (`bands.py`) |
 | `gear_check.py` | How much skin comes through each worn piece, through our clips |
+| `build_bodies.sh` | Rebuilds every character asset the game loads from `art/`: the base, its gear, every morph, the skins, and the game's files |
 | `make_morph.sh NAME "CHANGE"` or `NAME --design BODY.glb` | A morph of the base body end to end: design (free), model (25 credits), registration, export, gear carried and checked; skips what `art/` already keeps |
 | `morph.py` | Registers the base onto a design's model: pose by the base's skeleton, shape by a pull smoothed over distance, back to the T-pose; the morph |
 | `carry_gear.py` | A worn look made on the base carried onto a morph |
@@ -25,7 +26,10 @@ Run everything from the repository root. Blender scripts run headless through [t
 
 `look.py` holds what the scripts share: paths, our palette and light, and contact sheets.
 
+Everything the game loads is rebuilt from `art/` by one command, free (the playbook's section 7):
+
 ```bash
-tools/characters/finish_character.sh base-male 1.80
-cp tools/characters/out/base-male-game.glb assets/models/character/base-male.glb
+tools/characters/build_bodies.sh
 ```
+
+It writes `assets/models/character/base.glb` (the base body with every morph), `assets/models/character/skins/`, and `assets/models/gear/<item>.glb` (each worn look, made once, with the same morphs). Everything between, such as the base's own export `out/base-male-game.glb` and the gear as made on it `out/gear/base-male/`, stays in `tools/characters/out/`.

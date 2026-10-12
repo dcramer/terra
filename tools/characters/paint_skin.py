@@ -7,7 +7,8 @@ baked onto the base's texture layout (D112; research/body-morphs.md).
 `out` writes tools/characters/out/NAME-bare.glb: the body of out/NAME-game.glb, bare, facing +X
 as Tripo's models do. Tripo then paints it from the design's front view (paint_skin.sh does
 both). `in` bakes out/NAME-painted.glb, which Tripo returns a unit tall and centred, back onto
-the body's own layout and writes out/NAME-game.glb with it.
+the body's own layout and writes out/NAME-game.glb with it, and the skin alone as out/NAME-skin.png
+(the game's skin for that template).
 """
 
 import math
@@ -96,6 +97,9 @@ else:
     body.select_set(True)
     bpy.context.view_layer.objects.active = body
     bpy.ops.object.bake(type="DIFFUSE")
+    baked.filepath_raw = os.path.join(OUT, f"{name}-skin.png")
+    baked.file_format = "PNG"
+    baked.save()
     baked.pack()
     for o in painted:
         bpy.data.objects.remove(o)

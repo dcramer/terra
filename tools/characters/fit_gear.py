@@ -8,13 +8,13 @@ pushed clear of the skin, given the body's skin weights, and saved on the same s
 the game binds it to the body's joints. Each piece reports how much of it rests on the body;
 less than its kind should means it floats.
 
-    tools/blender/run.sh tools/characters/fit_gear.py assets/models/character/base-male.glb small_pack large_pack quiver
+    tools/blender/run.sh tools/characters/fit_gear.py tools/characters/out/base-male-game.glb small_pack large_pack quiver
 
 Clothing, and anything worn close on the body such as a cap, is made on the body instead, by
 shell_garment.py.
 
 Reads art/gear/<model>/model.glb; writes
-assets/models/gear/<body>/<item>.glb, the item named as in the game's
+tools/characters/out/gear/<body>/<item>.glb (look.GEAR_MADE), the item named as in the game's
 catalogue in lower case with `_` for spaces. Each piece's turn, size and fit are in PIECES,
 found by looking at the models and then at the fitted result in the workbench; run it for
 every base body.
@@ -36,7 +36,7 @@ import look
 import patches
 
 GEAR = os.path.join(look.ART, "gear")
-OUT = os.path.join(HERE, "..", "..", "assets", "models", "gear")
+OUT = look.GEAR_MADE
 
 # item: (Tripo model, turn about Z in degrees so its front faces the body's front (-Y) and
 # its body side faces the body, how it is fitted, size as a share of the body's height, and
@@ -48,7 +48,7 @@ PIECES = {
 }
 
 body_path, names = look.args()[0], look.args()[1:]
-body_name = os.path.splitext(os.path.basename(body_path))[0]
+body_name = look.body_name(body_path)
 
 look.reset()
 bpy.ops.import_scene.gltf(filepath=look.path(body_path))
@@ -312,9 +312,11 @@ def fit_torso(ob):
 # within REACH_M; covered patches are not drawn while the piece is worn.
 COVERED = 0.9
 REACH_M = 0.12
+# A pack's bag stands further off the back than a garment does off the skin.
+REACH_BACK_M = 0.3
 
 
-def covers(ob):
+def covers(ob, reach=REACH_M):
     """The patches of skin this piece hides from view."""
     from mathutils.bvhtree import BVHTree
     depsgraph = bpy.context.evaluated_depsgraph_get()
@@ -329,7 +331,7 @@ def covers(ob):
         start = to_piece @ v.co
         normal = (turn @ v.normal).normalized()
         total[patch] = total.get(patch, 0) + 1
-        hit[patch] = hit.get(patch, 0) + (tree.ray_cast(start + normal * 0.002, normal, REACH_M)[0] is not None)
+        hit[patch] = hit.get(patch, 0) + (tree.ray_cast(start + normal * 0.002, normal, reach)[0] is not None)
     covered = sorted(p for p in total if hit[p] / total[p] >= COVERED)
     print("COVERAGE", ob.name, f"{len(covered)} of {len(total)} patches")
     return covered
@@ -367,7 +369,9 @@ for name in names:
         socket = fit_belt(ob, size)
     else:
         socket = fit_torso(ob)
-    hides = covers(ob) if how in ("torso", "head") else []
+    # A pack hides the skin under its bag and straps as a garment does: that skin cannot be
+    # seen, and a heavier back pressing into the bag would otherwise count as coming through.
+    hides = covers(ob, REACH_BACK_M if how == "back" else REACH_M) if how in ("torso", "head", "back") else []
     if hides:
         ob["covers"] = hides
     touching = contact(ob)

@@ -205,8 +205,8 @@ impl Items {
         (self.kind(made.item), made.count)
     }
 
-    /// What a kind's icon is baked from (D129): a tool's held look, gear's look on the
-    /// player's body, and anything else's own look; and the cells it fills, which set the
+    /// What a kind's icon is baked from (D129): a tool's held look, gear's look (on the
+    /// base body), and anything else's own look; and the cells it fills, which set the
     /// icon's shape. Whether the look exists yet is for the caller to find out.
     pub fn icon_source(&self, kind: ItemKind) -> Option<(String, crate::icons::Icon)> {
         let def = self.catalogue.get(kind).ok()?;
@@ -214,7 +214,7 @@ impl Items {
         let look = if self.tool(kind).is_some() {
             crate::character::held_look(&id)
         } else if def.gear.is_some() {
-            crate::character::look(super::figure::BODY, &id)
+            crate::character::look(&id)
         } else {
             crate::character::item_look(&id)
         };

@@ -120,6 +120,8 @@ So sex is a morph on one base, and gear is made once for both.
 
 ## 6. Order of work
 
+Steps 1 to 3 are built (2026-10-12; [research/body-morphs.md](../research/body-morphs.md#in-the-game-2026-10-12)). Still open from them: the packs' straps on the biggest builds, and the jerkin's ragged edges.
+
 1. **Spike**, one question: does a base body with a few parameters reproduce our two bodies well enough to look right, and does a jerkin made once pass its clipping check on both and at each parameter's limits?
    - build the base and pass the rig checks;
    - estimate our two bodies' parameters and paint them;
