@@ -134,9 +134,28 @@ Bevy 0.20 (out 2026-10-08) adds mesh shaders, which its notes suggest for grass;
 - **Light through the canopy:** dappled sun, and fog catching it. This is most of Sons of the Forest's mood, and Bevy has the pieces.
 - **Shadows only where they show:** full near, cheap or none far.
 
+### Felling a tree
+
+From the developers, 2026-10-12 (D174): trees behave as in The Forest. You chop them down, and all of it is seen. Proposed:
+
+1. **Each blow leaves its mark.** A notch is cut into the trunk where the axe lands, deeper with each blow. How many blows a tree takes depends on its size and the tool (flora.ron's cut rules already say so).
+2. **It falls.** At the last blow it creaks, tips away from the side you cut, and falls, swaying through its arc. Its crown crashes through small plants, and it can hurt whoever stands where it lands.
+3. **It breaks where it lands.**
+   - The trunk lies in **logs**, as many as its length gives (up to about four metres each), where it fell, to be carried on the shoulder (D140) and built with ([construction.md](construction.md#large-materials-and-carrying)).
+   - Branches and leaves scatter as litter and small materials: sticks and leaves.
+4. **A stump stays.** It is what regrows (D150) unless you dig it out, which stops it.
+5. **Logs can be cut further:** shorter lengths, and perhaps planks or beams with the axe as Sons of the Forest does, or at a sawbench.
+
+**How it works with the many trees:**
+- A tree standing is a computed thing in its cell, costing nothing (D47).
+- **Felling is one operation:** this tree, and the side it was cut from. The server decides it, and everyone sees the same fall (D51).
+- **The fall is shown on each machine.** Where the logs end up is worked out from the operation, so it is the same everywhere without sending the fall itself.
+- **While it falls, and after,** the tree is a short-lived entity. The logs are loose objects, kept as changes until they are carried off or used. The stump replaces the tree in its cell.
+- **Physics** (D33): a fall that settles the same everywhere is simplest as an animation along an arc, ending in logs laid by rule. A real rigid-body fall can come later where it matters, such as onto a slope or another tree.
+
 ### What each layer needs from art
 
-- **Trees** are the hardest, and the weakest area for generated models. Trees made by code, with rules for trunk and branches (as SpeedTree does), would give many variations per species, at life size, in our painted look. Each species would be parameters, not models.
+- **Trees** are the hardest, and the weakest area for generated models. Trees made by code, with rules for trunk and branches (as SpeedTree does), would give many variations per species, at life size, in our painted look. Each species would be parameters, not models. **For felling (D174), a generated tree is made in parts:** a trunk in lengths that become its logs, branches, a crown and a stump, with the notch drawn where it is cut.
 - **Rocks, logs, stumps, mushrooms and the like** suit Tripo. The pipeline already makes them.
 - **Ferns, grass and flowers** are few triangles and many copies. Small generators or simple models are enough.
 - **Leaves as flat cards or solid clumps** is open.

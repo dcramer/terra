@@ -139,8 +139,23 @@ From the developers, 2026-10-12: **no single long threat.** What threatens a rea
   - A few lieutenants recur across realms, so they become people you know.
 - **What they are not:** a fixed story. They are a faction like any other (D95), with places, aims and standing, run by the same systems, and what you do to them sticks.
 
+**Name and creed, proposed, to choose from.** The developers asked for inspiration from the books (2026-10-12). The books have cults that serve something vast beyond the world, working rituals that set off monster surges and weaken the world for it. Taking that pattern, never its names or story:
+
+| | Name | Creed | What drives them |
+|---|---|---|---|
+| **A, recommended** | **The Opened** | "The walls between realms are a cage. Open them, and what waits beyond will lift us up." | They serve one of the beings of the astral, which they believe will reward them when it comes through. They wake pools and feed surges because every surge thins the walls between realms. Their patron is never seen (D157); players only ever learn of it from them |
+| B | **The Harvest** | "Magic is a crop, the world a field, monsters the yield." | Power for its own sake, with no patron. Plainer and greedier |
+| C | **The Wakers** | "A sleeping pool is wasted power. Wake them all." | Zealots who believe a world thick with magic is better, whatever it costs the people in it |
+
+**A** fits best:
+- it explains why they cross realms and why they feed surges, from the lore itself;
+- it gives the long game a slow mystery: what they serve, and what happens if they succeed;
+- it uses the beings of the astral without ever putting one on screen.
+
+Its members could also be the only people who carry essences that harm innocents, as the books ban some.
+
 ## Open: for the developers
 
 1. Answered: **gods** exist, realm-bound, kept simple for now (D156). **Beings of the astral** are in the lore only (D157). **Coming back from death** is the hearth (D171). **The long threat** varies by realm, with a dangerous organisation across them (D172).
-2. **The organisation:** its name, its creed, and whether its aims above are right.
+2. **The organisation:** its name and creed, from the three above (A recommended), and whether its aims are right.
 3. **Names.** Our own words, plain English: [naming.md](naming.md) (D158).
