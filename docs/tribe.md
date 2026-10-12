@@ -152,7 +152,14 @@ From the developers (D169): **recruits are generally much like a player.** Same 
 
 Proposed, for how:
 
-- **Sleep is their day's shape, not a meter** (D169). Recruits work by day and sleep at night in their own bed, so an outpost is busy by day and quiet at night, with a watch kept by whoever guards it. A new bed goes to the nearest recruit without one, as in Enshrouded.
+- **Sleep is their day's shape, not a meter** (D169). Recruits work by day and sleep at night in their own bed, so an outpost is busy by day and quiet at night, with a watch kept by whoever guards it.
+- **Beds are claimed on their own** (D169, from the developers), as work is ([Who does what](#who-does-what)): you build beds, and the outpost settles who sleeps where. Proposed:
+  - A recruit without a bed takes a free one at their outpost, the nearest to their work. As in Enshrouded, a new bed is taken by someone who needs it.
+  - A bed, once taken, is theirs. They keep it, and nobody is moved from one to another.
+  - When there are fewer beds than people, those who came first keep theirs, and the newest go without until another is built.
+  - A bed is freed when its sleeper dies or moves to another outpost.
+  - A bed can be personal, as a container can ([Equipment](#equipment)), so the bed you sleep in stays yours. Others are the tribe's.
+  - Asking a recruit to sleep somewhere else is the same word as asking them to take other work: rare, and never needed.
 - **No bed, no stamina** (from the developers). A recruit without a bed barely rests, so their stamina stays very low, and they work very slowly, all the time, not only the next day. Work draws on stamina as fighting does, so a bed is the first thing a new recruit needs. Proposed: they say so ("I've nowhere to sleep"), and the claim stone's roster shows who has no bed.
 - **They look after themselves** from what the outpost has: they eat, drink, warm up and go to bed on their own. You provide the place, the food and the fire, not each person's care, as Dragon Quest Builders 2's rooms do.
 - **Hunger and thirst are slow to kill, and loud before they do** (D169, and the same for players, D101). From the developers: the gauge itself is fine; once it is empty, health wears away slowly, over a few days, not fast, and meanwhile they are weaker. Proposed:
