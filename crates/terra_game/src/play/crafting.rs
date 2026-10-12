@@ -10,10 +10,9 @@
 //! Enshrouded's rescued survivors run its stations; until one is, it says so. Who works
 //! where is read from the people themselves (`Staff`), so there is nothing to keep in step.
 
-use super::bag::{Notice, Told};
+use super::camera::grab_mouse;
 use super::controls::{Action, Settings};
 use super::data;
-use super::grab_mouse;
 use super::interact::{Focus, Interactable, REACH_M};
 use super::inventory::{Belongings, Inventory, InventoryScreen, Items, Made};
 pub use super::kinds::Family;
@@ -22,6 +21,7 @@ use super::people::{Doing, Person};
 use super::props::Prop;
 use super::skills::{Did, ONCE, Skill};
 use super::tick::Sim;
+use super::told::{Notice, Told};
 use super::{IsLocalPlayer, Player};
 use bevy::{
     ecs::system::SystemParam,

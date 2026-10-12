@@ -4,13 +4,13 @@
 use super::*;
 use crate::build::Site;
 use crate::planet::Planet;
-use crate::play::bag::Told;
 use crate::play::catalogue::{self, Builds, Kind, Tab};
 use crate::play::controls::Action;
 use crate::play::inventory::Belongings;
 use crate::play::noise::{Cue, Noise};
 use crate::play::props::{self, Models, PlacedBy, Prop};
 use crate::play::skills::{Did, ONCE, Skill};
+use crate::play::told::Told;
 use crate::play::work::Hold;
 use crate::play::{IsLocalPlayer, Stance};
 use terra_build::{BuildOp, Face, Panel};

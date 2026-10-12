@@ -8,9 +8,9 @@
 //!   Backspace          put the hammer's part away
 
 use super::IsLocalPlayer;
+use super::camera::grab_mouse;
 use super::catalogue::{Builds, Kind, Tab};
 use super::controls::{Action, Settings};
-use super::grab_mouse;
 use super::inventory::{Belongings, InventoryScreen, Items, describe};
 use super::options::OptionsMenu;
 use super::tiles::{self, PICKED, PLAIN, TILE};

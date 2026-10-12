@@ -6,9 +6,9 @@
 //! progress. The list shows beside the backpack while the inventory is open (D93).
 
 use super::IsLocalPlayer;
-use super::bag::Told;
 use super::death::WentDown;
 use super::inventory::InventoryScreen;
+use super::told::Told;
 use bevy::prelude::*;
 
 /// Something you can get better at.

@@ -8,11 +8,11 @@
 //! burns a torch down, and mends.
 
 use super::IsLocalPlayer;
-use super::bag::Notice;
 use super::claim::Claim;
 use super::crafting::{Crafts, Station};
 use super::inventory::{Belongings, Broke, InventoryScreen, Items};
 use super::props::Prop;
+use super::told::Notice;
 use bevy::prelude::*;
 use terra_items::ItemKind;
 

@@ -10,7 +10,6 @@
 //! Behaviour is a few small states per creature, run in full for every one; at this
 //! scale that is cheap. Detail by distance comes when there are many (creatures.md).
 
-use super::bag::Told;
 use super::bodies::Body;
 use super::flora::ClearAround;
 use super::interact::{CanInteract, Interactable, Interacted};
@@ -20,6 +19,7 @@ use super::skills::{Did, ONCE};
 pub use super::species::Species;
 use super::species::{Bestiary, Lives, Temper};
 use super::tick::{Sim, Smoothed, Ticks};
+use super::told::Told;
 use super::{Downed, Player};
 use crate::build::Site;
 use crate::loading::Loading;

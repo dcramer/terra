@@ -8,9 +8,10 @@
 //! What can be set, and how it is saved, is in `controls.rs`. Every change is saved as
 //! it is made.
 
+use super::camera::grab_mouse;
 use super::controls::{Action, Binding, FIELD_OF_VIEW, LOOK_SPEED, Settings, VOLUME, capitalised};
 use super::inventory::InventoryScreen;
-use super::{grab_mouse, tool};
+use super::tool;
 use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::{

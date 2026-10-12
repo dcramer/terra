@@ -8,7 +8,6 @@
 //! and the well and stall are catalogue items, placed as a player places one. They are
 //! the villagers', not the player's. The people go about their day where they stand.
 
-use super::bag::Told;
 use super::catalogue::Builds;
 use super::creatures::Lair;
 use super::daylight::{Clock, SkyPath};
@@ -17,6 +16,7 @@ use super::interact::{Interactable, Interacted};
 use super::people::{Arrive, Doing, Dyed, Person};
 use super::props::{self, Models, Theirs};
 use super::tick::Sim;
+use super::told::Told;
 use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use bevy::prelude::*;

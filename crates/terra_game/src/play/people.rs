@@ -8,7 +8,6 @@
 //! and say what is going on when you speak to them (D92), from `settlement`.
 
 use super::Player;
-use super::bag::Told;
 use super::bodies::Body;
 use super::catalogue::Rest;
 use super::claim::Claim;
@@ -17,6 +16,7 @@ use super::creatures::Creature;
 use super::interact::{CanInteract, Interactable, Interacted};
 use super::props::Prop;
 use super::tick::{Sim, Smoothed};
+use super::told::Told;
 use crate::build::Site;
 use crate::loading::Loading;
 use crate::planet::Planet;

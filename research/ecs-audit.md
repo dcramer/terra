@@ -83,6 +83,7 @@ The rest of the plan that came out of this audit was done the same day:
 - **Intent and the fixed tick:** each player acts on an `Intent` component (D137), and gameplay runs on a fixed tick with interpolation (D138).
 - **Registries:** every kind is a registry read from `assets/data`, reloaded when a file changes (D136).
 - **Simulation level of detail:** creatures are simulated by distance from the nearest player (D145).
+- **Big modules split.** `play/mod.rs` gave up `movement` and `camera`. `inventory` became a folder: the registry (`items`), what can be done with what is carried (`rules`), and `Belongings`. What is said to a player (`Told`, `Notice`) moved from the bag to `told`.
 - **Change detection.** A survey found systems doing work every frame for nothing. These were fixed:
   - **Ground material:** it was prepared again every frame, because the sun moving marked the tweaks changed. It is now written only when its own values differ.
   - **Builder:** it raycast every tick without the hammer in hand, and re-inserted its ghost and film every frame.

@@ -6,11 +6,11 @@
 //! after a while, as a bag is.
 
 use super::Player;
-use super::bag::Told;
 use super::death::DroppedBag;
 use super::interact::{CanInteract, Interactable};
 use super::inventory::{Items, Spilled};
 use super::tick::Sim;
+use super::told::Told;
 use bevy::prelude::*;
 use terra_items::Grid;
 

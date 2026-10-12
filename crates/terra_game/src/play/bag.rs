@@ -11,11 +11,12 @@
 
 use super::IsLocalPlayer;
 use super::build_menu::BuildMenu;
+use super::camera::grab_mouse;
 use super::controls::{Action, Settings};
 use super::dial::Dial;
-use super::grab_mouse;
 use super::inventory::{self, BAR_SLOTS, Backpack, Belongings, InventoryScreen, Items, SLOTS};
 use super::options::OptionsMenu;
+use super::told::Notice;
 use super::vitals::Vitals;
 use crate::{character, icons};
 use bevy::{
@@ -45,54 +46,6 @@ const NUMBERS: [KeyCode; BAR_SLOTS] = [
 const CELL_PX: f32 = 48.0;
 /// How long a notice stays up.
 const NOTICE_SECONDS: f32 = 3.0;
-
-/// A line above the bar saying what happened, or why something was not done.
-#[derive(Resource, Default)]
-pub struct Notice {
-    text: String,
-    age: f32,
-}
-
-impl Notice {
-    /// Shows a line, and logs it, so a scripted run can read what happened (D69).
-    pub fn say(&mut self, text: impl Into<String>) {
-        self.text = text.into();
-        info!("Notice: {}", self.text);
-        self.age = 0.0;
-    }
-}
-
-/// Something said to a player: what happened to them, or why something was not done.
-/// This machine shows what is said to its own player (`Notice`); a server will send each
-/// player theirs.
-#[derive(Message, Clone, Debug)]
-pub struct Told {
-    pub player: Entity,
-    pub text: String,
-}
-
-impl Told {
-    pub fn new(player: Entity, text: impl Into<String>) -> Self {
-        Self {
-            player,
-            text: text.into(),
-        }
-    }
-}
-
-/// Shows what is said to this machine's player.
-fn hear(
-    mut told: MessageReader<Told>,
-    ours: Option<Single<Entity, IsLocalPlayer>>,
-    mut notice: ResMut<Notice>,
-) {
-    let ours = ours.map(|player| *player);
-    for said in told.read() {
-        if Some(said.player) == ours {
-            notice.say(said.text.clone());
-        }
-    }
-}
 
 #[derive(Component)]
 struct Slot(usize);
@@ -219,11 +172,8 @@ fn draw_wear(
 pub fn plugin(app: &mut App) {
     app.init_resource::<ItemIcons>()
         .init_resource::<InventoryScreen>()
-        .init_resource::<Notice>()
-        .add_message::<Told>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (use_keys, click, lay_out, draw, draw_wear).chain())
-        .add_systems(PostUpdate, hear);
+        .add_systems(Update, (use_keys, click, lay_out, draw, draw_wear).chain());
 }
 
 fn setup(mut commands: Commands) {

@@ -8,10 +8,11 @@
 //!   1 to 9            a tab, where a station has them
 //!   Click the queue   take one off it, and get back what it took
 
-use super::bag::{Notice, Shown};
+use super::bag::Shown;
 use super::crafting::{self, Crafts, Recipes, Staff, Station, Works};
 use super::inventory::{Belongings, InventoryScreen, Items, Made};
 use super::tiles::{self, PICKED, PLAIN, TILE};
+use super::told::Notice;
 use bevy::prelude::*;
 
 const COLUMNS: usize = 2;

@@ -19,6 +19,7 @@ mod archery;
 mod bag;
 mod bodies;
 mod build_menu;
+mod camera;
 mod catalogue;
 mod claim;
 mod combat;
@@ -44,6 +45,7 @@ mod kinds;
 mod lod;
 mod map;
 mod models;
+mod movement;
 mod music;
 mod noise;
 mod noises;
@@ -63,6 +65,7 @@ mod species;
 mod station_screen;
 mod tick;
 mod tiles;
+mod told;
 mod tool;
 mod torchlight;
 mod vitals;
@@ -75,47 +78,9 @@ use super::build::{self, DrivenByPlayer, Site};
 use crate::planet::MainCamera;
 use crate::planet::Planet;
 use crate::shell::Options;
-use bevy::{
-    camera_controller::free_camera::FreeCamera,
-    input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
-    prelude::*,
-    window::{CursorGrabMode, CursorOptions},
-};
-use controls::{Action, Controls};
-use intent::Intent;
+use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
 use std::ops::Sub;
-use terra_build::Walker;
-use tick::{Sim, Smoothed};
-
-const JOG_SPEED: f32 = 4.3;
-const SPRINT_SPEED: f32 = 7.4;
-const JUMP_SPEED: f32 = 6.0;
-const GRAVITY: f32 = 16.0;
-/// What a jump costs in stamina, out of 100.
-const JUMP_STAMINA: f32 = 8.0;
-/// A roll: what it costs, how long it lasts and how fast it goes.
-const DODGE_STAMINA: f32 = 18.0;
-const DODGE_S: f32 = 0.45;
-const DODGE_SPEED: f32 = 8.5;
-const LOOK_SPEED: f32 = 0.0025;
-/// How fast the arrow keys turn the view, in radians a second.
-const KEY_LOOK_SPEED: f32 = 1.6;
-/// How far behind the player the camera sits at the start, and how near and far the
-/// wheel takes it.
-const CAMERA_BACK_M: f32 = 4.6;
-const NEAREST_M: f32 = 1.4;
-const FURTHEST_M: f32 = 9.0;
-/// How far one notch of the wheel moves the camera, and holding a zoom key a second.
-const ZOOM_NOTCH_M: f32 = 0.6;
-const ZOOM_KEY_M_S: f32 = 5.0;
-const HEAD_M: f32 = 1.62;
-/// The player can wade this deep and no deeper.
-const WADE_DEPTH_M: f32 = 0.7;
-/// The steepest ground the player walks up, as rise over run (about 50 degrees).
-const STEEPEST: f32 = 1.2;
-/// The highest ledge the player steps onto, and how far on it is looked for.
-const STEP_UP_M: f32 = 0.7;
-const STRIDE_M: f32 = 0.4;
+use tick::Smoothed;
 
 /// Someone playing. What they are doing is in the components beside this one: how they
 /// move (`Motion`), what their hands and feet are up to (`Stance`), and whether they are
@@ -221,6 +186,7 @@ pub fn plugin(app: &mut App) {
     figure::plugin(app);
     tool::plugin(app);
     dial::plugin(app);
+    told::plugin(app);
     bag::plugin(app);
     gains::plugin(app);
     build_menu::plugin(app);
@@ -256,28 +222,28 @@ pub fn plugin(app: &mut App) {
     music::plugin(app);
     tick::plugin(app);
     lod::plugin(app);
+    camera::plugin(app);
+    movement::plugin(app);
     app.insert_resource(DrivenByPlayer)
-        .init_resource::<Zoom>()
         .add_systems(PostStartup, spawn)
         .add_systems(
             Update,
-            (options::toggle, capture_mouse, dial::steer, warp, zoom)
+            (
+                options::toggle,
+                camera::capture_mouse,
+                dial::steer,
+                warp,
+                camera::zoom,
+            )
                 .chain()
                 .before(tool::Acting),
         )
         // What this machine's player means to do, read before the frame's ticks.
         .add_systems(
             RunFixedMainLoop,
-            (look, intent::read)
+            (camera::look, intent::read)
                 .chain()
                 .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
-        )
-        .add_systems(FixedUpdate, walk.in_set(Sim::Act))
-        .add_systems(
-            PostUpdate,
-            follow
-                .before(TransformSystems::Propagate)
-                .before(crate::remote::CameraHold),
         );
 }
 
@@ -387,454 +353,6 @@ fn warp(
     info!("Warped to {:.1} m east and {:.1} m south.", at.0, at.1);
 }
 
-/// Takes the mouse for the game, or gives it back.
-///
-/// Windows has no way to lock the pointer in place, only to fence it into the window; see
-/// `capture_mouse` for what that costs.
-fn grab_mouse(cursor: &mut CursorOptions, take: bool) {
-    cursor.grab_mode = match take {
-        false => CursorGrabMode::None,
-        true if cfg!(target_os = "windows") => CursorGrabMode::Confined,
-        true => CursorGrabMode::Locked,
-    };
-    cursor.visible = !take;
-}
-
-/// Takes the mouse on a click and gives it back when the window is no longer the one in
-/// front. Esc gives it back too, by opening the options menu (`options::toggle`).
-///
-/// Windows drops its fence round the pointer whenever another window takes over. So while
-/// the game has the mouse it also puts the pointer back in the middle of the window every
-/// frame, and it lets go properly the moment the window loses focus instead of believing
-/// a fence that is gone.
-///
-/// macOS does lock the pointer, and moving the pointer there undoes the lock, so on a Mac
-/// it is left where it is.
-fn capture_mouse(
-    mouse: Res<ButtonInput<MouseButton>>,
-    screen: Res<inventory::InventoryScreen>,
-    menu: Res<options::OptionsMenu>,
-    build_menu: Res<build_menu::BuildMenu>,
-    window: Single<(&mut Window, &mut CursorOptions)>,
-) {
-    // While a menu or the inventory is open, the pointer is for pointing at it.
-    if screen.open || menu.open || build_menu.open {
-        return;
-    }
-    let (mut window, mut cursor) = window.into_inner();
-    let captured = cursor.grab_mode != CursorGrabMode::None;
-    if captured && !window.focused {
-        grab_mouse(&mut cursor, false);
-    } else if !captured && window.focused && mouse.just_pressed(MouseButton::Left) {
-        grab_mouse(&mut cursor, true);
-    } else if captured && !cfg!(target_os = "macos") {
-        let middle = window.size() * 0.5;
-        window.set_cursor_position(Some(middle));
-    }
-}
-
-fn look(
-    time: Res<Time>,
-    motion: Res<AccumulatedMouseMotion>,
-    settings: Res<controls::Settings>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    cursor: Single<&CursorOptions>,
-    dial: Res<dial::Dial>,
-    menu: Res<options::OptionsMenu>,
-    build_menu: Res<build_menu::BuildMenu>,
-    player: Single<(&Transform, &mut View), IsLocalPlayer>,
-) {
-    let (player, mut view) = player.into_inner();
-    let up = player.translation.normalize();
-    // The arrow keys look about too, for keyboards and for scripted runs, except while
-    // the build menu uses them.
-    if !menu.open && !build_menu.open {
-        let held = |action| f32::from(settings.held(action, &keys, &mouse, true));
-        let turn = KEY_LOOK_SPEED * time.delta_secs();
-        let across = held(Action::LookRight) - held(Action::LookLeft);
-        let rise = held(Action::LookUp) - held(Action::LookDown);
-        view.forward = Quat::from_axis_angle(up, -across * turn) * view.forward;
-        view.pitch = (view.pitch + rise * turn).clamp(-1.2, 1.2);
-    }
-    // While the dial is open the mouse steers it, not the view.
-    if cursor.grab_mode != CursorGrabMode::None && !dial.open {
-        let speed = LOOK_SPEED * settings.look_speed;
-        let rise = if settings.invert_look { -1.0 } else { 1.0 };
-        view.forward = Quat::from_axis_angle(up, -motion.delta.x * speed) * view.forward;
-        view.pitch = (view.pitch - rise * motion.delta.y * speed).clamp(-1.2, 1.2);
-    }
-    // "Level" changes as the player walks round the planet.
-    view.forward = view
-        .forward
-        .reject_from(up)
-        .normalize_or(up.any_orthonormal_vector());
-}
-
-/// Whether walking from the feet to a place is stopped by a wall: ground rising there
-/// more steeply than the player walks up, and still too high to step onto a stride on.
-/// `ground` says how far from the centre the ground is at a place.
-fn walled(feet: Vec3, target: Vec3, ground: impl Fn(Vec3) -> f32) -> bool {
-    let up = feet.normalize();
-    let across = (target - feet).reject_from(up);
-    let rise = ground(target) - feet.length();
-    let steep = rise > 0.05 && rise > across.length() * STEEPEST;
-    let beyond = feet + across.normalize_or_zero() * STRIDE_M;
-    steep && ground(beyond) - feet.length() > STEP_UP_M
-}
-
-/// Whether a body standing at a place has ground at its chest or head. `room` says how
-/// far a point is from the ground.
-fn cramped(stand: Vec3, walker: &Walker, room: impl Fn(Vec3) -> f32) -> bool {
-    let up = stand.normalize();
-    [0.9, walker.height - walker.radius]
-        .into_iter()
-        .any(|height| room(stand + up * height) < walker.radius * 0.8)
-}
-
-/// Moves every player by what they mean to do: walking, sprinting, rolling and jumping,
-/// held up by the ground and their base, and stopped by walls, bodies and the sea.
-fn walk(
-    time: Res<Time>,
-    planet: Res<Planet>,
-    site: Res<Site>,
-    builds: Query<&build::Built>,
-    obstacles: Res<flora::Obstacles>,
-    items: Query<(&props::Prop, &Transform, &Visibility), Without<Player>>,
-    others: Query<(&bodies::Body, &Transform), Without<Player>>,
-    mut players: Query<
-        (
-            &mut Transform,
-            &mut Motion,
-            &mut Stance,
-            &mut vitals::Vitals,
-            &View,
-            &Intent,
-            Has<Downed>,
-        ),
-        With<Player>,
-    >,
-) {
-    for (mut transform, mut motion, mut stance, mut vitals, view, intent, downed) in &mut players {
-        // Lying where you fell, you do not move.
-        if downed {
-            motion.velocity = Vec3::ZERO;
-            continue;
-        }
-        let walker = Walker::default();
-        let dt = time.delta_secs().min(0.05);
-        let feet = transform.translation;
-        let up = feet.normalize();
-        let right = view.forward.cross(up);
-
-        let held = |action| f32::from(intent.held(action));
-        let wish = (view.forward * (held(Action::Forward) - held(Action::Back))
-            + right * (held(Action::Right) - held(Action::Left)))
-        .normalize_or_zero();
-        // A roll carries you a short way fast, clear of blows; a guard slows you.
-        stance.attacking = (stance.attacking - dt).max(0.0);
-        stance.flinch = (stance.flinch - dt).max(0.0);
-        stance.dodging = (stance.dodging - dt).max(0.0);
-        if stance.dodging == 0.0
-            && motion.on_ground
-            && intent.pressed(Action::Dodge)
-            && vitals.spend(DODGE_STAMINA)
-        {
-            stance.dodging = DODGE_S;
-            stance.dodge_direction = if wish == Vec3::ZERO {
-                -view.forward
-            } else {
-                wish
-            };
-        }
-        let top_speed = if stance.dodging > 0.0 {
-            DODGE_SPEED
-        } else if stance.guarding {
-            JOG_SPEED * 0.5
-        } else if intent.held(Action::Sprint) && vitals.can_sprint() {
-            SPRINT_SPEED
-        } else {
-            JOG_SPEED
-        };
-        // Ease into and out of a run rather than starting and stopping dead.
-        let ease = 1.0 - libm::expf(-dt * if motion.on_ground { 11.0 } else { 2.5 });
-        let wish = if stance.dodging > 0.0 {
-            stance.dodge_direction
-        } else {
-            wish
-        };
-        motion.velocity = motion.velocity.lerp(wish * top_speed, ease).reject_from(up);
-        let mut target = feet + motion.velocity * dt;
-        // Furniture and kit are solid. Walls come after, so they have the last word.
-        target = props::push_out(target, walker.radius, items.iter());
-        // Creatures and people take up room.
-        target = bodies::push_out(target, walker.radius, others.iter());
-
-        // The build being walked at decides what blocks the way: the player's own, or someone
-        // else's, such as a house in the village. Builds stand well apart, so it is the one
-        // the player is at or nearest. It works in its own space.
-        let site: &build::Build = builds
-            .iter()
-            .map(|built| &built.0)
-            .find(|built| built.covers(feet, 3.0))
-            .unwrap_or(&site);
-        let to_base = site.frame.compute_affine().inverse();
-        let from_base = site.frame.compute_affine();
-        let walked = site.base.walk(
-            to_base.transform_point3(feet),
-            to_base.transform_point3(target),
-            &walker,
-        );
-        target = from_base.transform_point3(walked);
-        // Trees and boulders push the player round them.
-        for (at, radius) in obstacles.near(target, walker.radius) {
-            let apart = (target - at).reject_from(up);
-            let reach = radius + walker.radius;
-            if apart.length_squared() < reach * reach && (target - at).dot(up).abs() < 3.0 {
-                target += apart.normalize_or(view.forward) * (reach - apart.length());
-            }
-        }
-        // The sea is for looking at: wade in a little way and no further.
-        let ground_ahead = planet.ground_at(target).length();
-        if ground_ahead < planet.sea_radius_m() - WADE_DEPTH_M
-            && ground_ahead < planet.ground_at(feet).length()
-        {
-            target = feet;
-        }
-        // Ground rising too steeply is a wall, as the side of a dug hole is: it stops the
-        // player rather than lifting them up it, and they slide along it as far as it lets
-        // them. A jump can clear a low one; hills are walked up as before.
-        let ground = |at: Vec3| planet.ground_at(at).length();
-        if walled(feet, target, ground) {
-            let facing = planet
-                .normal(planet.ground_at(target))
-                .reject_from(up)
-                .normalize_or_zero();
-            let step = target - feet;
-            let along = feet + step - facing * step.dot(facing).min(0.0);
-            target = if walled(feet, along, ground) {
-                feet
-            } else {
-                along
-            };
-        }
-        // The body must fit where it goes, as it does not under the overhang of a slanting
-        // pit. Someone already caught in the ground may move, to get out.
-        let room = |at: Vec3| planet.distance(at);
-        let stands = |at: Vec3| planet.ground_at(at);
-        if cramped(stands(target), &walker, room) && !cramped(stands(feet), &walker, room) {
-            target = feet;
-        }
-
-        motion.rising -= GRAVITY * dt;
-        if motion.on_ground && intent.pressed(Action::Jump) && vitals.spend(JUMP_STAMINA) {
-            motion.rising = JUMP_SPEED;
-        }
-        target += up * motion.rising * dt;
-
-        // What holds the player up: indoors, the base's floor; outdoors, whichever is higher of
-        // the ground and anything the base offers there, such as its steps or a roof.
-        let local = to_base.transform_point3(target);
-        let before = to_base.transform_point3(feet);
-        let offered = site.support(Vec3::new(local.x, before.y.max(local.y), local.z), &walker);
-        let offered = offered.map(|height| {
-            from_base
-                .transform_point3(Vec3::new(local.x, height, local.z))
-                .length()
-        });
-        // The ground as it is drawn, so the player stands on what they see. Near the start
-        // that is the true ground; further off the planet's mesh is coarser, and walking on
-        // the true ground there sinks the player into the drawn one or lifts them off it.
-        let ground = planet.ground_at(target).length();
-        let held_at = match offered {
-            Some(floor) if site.base.ceiling(before).is_some() => floor,
-            Some(surface) => surface.max(ground),
-            None => ground,
-        };
-        motion.on_ground = target.length() <= held_at + 0.02 && motion.rising <= 0.0;
-        if motion.on_ground {
-            target = target.normalize() * held_at;
-            motion.rising = 0.0;
-            motion.airborne = 0.0;
-        } else {
-            motion.airborne += dt;
-        }
-        // A ceiling stops a jump.
-        if let Some(ceiling) = site.base.ceiling(before)
-            && motion.rising > 0.0
-            && to_base.transform_point3(target).y + walker.height > ceiling
-        {
-            target =
-                from_base.transform_point3(Vec3::new(local.x, ceiling - walker.height, local.z));
-            motion.rising = 0.0;
-        }
-
-        let indoors = site
-            .base
-            .ceiling(to_base.transform_point3(target))
-            .is_some();
-        if indoors != motion.indoors {
-            motion.indoors = indoors;
-            info!(
-                "Player is now {}.",
-                if indoors {
-                    "inside the base"
-                } else {
-                    "outside"
-                }
-            );
-        }
-
-        // What was actually covered, which is less than what was asked when something is in
-        // the way. The figure's stride follows this.
-        let up = target.normalize();
-        motion.velocity = ((target - feet) / dt.max(1e-4)).reject_from(up);
-        // Turn to face the way the figure is going, or the way it is working.
-        stance.since_acting += dt;
-        let toward = if stance.since_acting < 0.8 {
-            view.forward
-        } else {
-            wish
-        };
-        let turn = 1.0 - libm::expf(-dt * 12.0);
-        // Turning right round has no shorter way to go, so it is given one.
-        let about_face = toward != Vec3::ZERO && motion.facing.dot(toward) < -0.98;
-        let from = if about_face {
-            motion.facing + motion.facing.cross(up) * 0.3
-        } else {
-            motion.facing
-        };
-        motion.facing = from
-            .lerp(toward, if toward == Vec3::ZERO { 0.0 } else { turn })
-            .reject_from(up)
-            .normalize_or(view.forward);
-        *transform = Transform::from_translation(target).looking_to(motion.facing, up);
-    }
-}
-
-/// The eye, and the direction it looks, for the player's view.
-fn eye(player: &Transform, view: &View) -> (Vec3, Vec3) {
-    let up = player.translation.normalize();
-    let right = view.forward.cross(up);
-    let looking = Quat::from_axis_angle(right, view.pitch) * view.forward;
-    (player.translation + up * HEAD_M, looking)
-}
-
-/// Third person: behind and a little to the side of the figure, pulled in when a wall of
-/// the base would otherwise come between the camera and the player.
-/// How far behind the player the camera is, and where the wheel is taking it.
-#[derive(Resource)]
-struct Zoom {
-    now: f32,
-    wanted: f32,
-}
-
-impl Default for Zoom {
-    fn default() -> Self {
-        Self {
-            now: CAMERA_BACK_M,
-            wanted: CAMERA_BACK_M,
-        }
-    }
-}
-
-/// Where the camera is wanted after so much asked of the wheel and keys.
-fn zoomed(wanted: f32, closer_m: f32) -> f32 {
-    (wanted - closer_m).clamp(NEAREST_M, FURTHEST_M)
-}
-
-/// The mouse wheel, or the zoom keys, bring the camera nearer or take it further, unless
-/// the wheel is turning a part in the builder. It eases to where it is wanted.
-fn zoom(
-    time: Res<Time>,
-    controls: Controls,
-    scroll: Res<AccumulatedMouseScroll>,
-    builder: Single<&tool::Builder, IsLocalPlayer>,
-    builds: Res<catalogue::Builds>,
-    screen: Res<inventory::InventoryScreen>,
-    mut zoom: ResMut<Zoom>,
-) {
-    let dt = time.delta_secs();
-    let wheel = if builder.wants_wheel(&builds) || screen.open {
-        0.0
-    } else {
-        match scroll.unit {
-            MouseScrollUnit::Line => scroll.delta.y * ZOOM_NOTCH_M,
-            MouseScrollUnit::Pixel => scroll.delta.y * 0.01,
-        }
-    };
-    let keys = (f32::from(controls.held(Action::ZoomIn))
-        - f32::from(controls.held(Action::ZoomOut)))
-        * ZOOM_KEY_M_S
-        * dt;
-    zoom.wanted = zoomed(zoom.wanted, wheel + keys);
-    let ease = 1.0 - libm::expf(-dt * 12.0);
-    zoom.now += (zoom.wanted - zoom.now) * ease;
-}
-
-fn follow(
-    player: Single<(&Transform, &View), (IsLocalPlayer, Without<MainCamera>)>,
-    zoom: Res<Zoom>,
-    site: Res<Site>,
-    builds: Query<&build::Built>,
-    planet: Res<Planet>,
-    options: Res<Options>,
-    mut camera: Single<&mut Transform, With<MainCamera>>,
-) {
-    // A fixed camera, for taking pictures.
-    if let Some((from, toward)) = options.vantage {
-        let from = site.frame.transform_point(from);
-        **camera = Transform::from_translation(from)
-            .looking_at(site.frame.transform_point(toward), from.normalize());
-        return;
-    }
-    let (player, view) = *player;
-    let (head, looking) = eye(player, view);
-    let up = head.normalize();
-    let right = view.forward.cross(up);
-    // Over the shoulder, unless the ground is in the way there, as in a narrow pit.
-    let shoulder = right * 0.6 + up * 0.25;
-    let pivot = head
-        + shoulder
-            * planet
-                .raycast(head, shoulder.normalize(), shoulder.length() + 0.2)
-                .map_or(1.0, |hit| {
-                    ((hit.distance - 0.2) / shoulder.length()).max(0.0)
-                });
-
-    // The camera comes in front of any build's wall behind the player: theirs, or a
-    // house they are in.
-    let back = -looking;
-    let blocked = std::iter::once(&**site)
-        .chain(builds.iter().map(|built| &built.0))
-        .filter_map(|build| {
-            let to_base = build.frame.compute_affine().inverse();
-            build
-                .base
-                .raycast(
-                    to_base.transform_point3(pivot),
-                    to_base.transform_vector3(back).normalize(),
-                    zoom.now,
-                )
-                .map(|hit| hit.distance)
-        })
-        // The ground behind comes in front of the camera too, such as a pit's wall.
-        .chain(
-            planet
-                .raycast(pivot, back, zoom.now)
-                .map(|hit| hit.distance),
-        )
-        .map(|distance| (distance - 0.25).max(0.3))
-        .fold(zoom.now, f32::min);
-    let mut at = pivot + back * blocked;
-    // Keep the camera out of the ground.
-    let ground = planet.ground_at(at).length() + 0.35;
-    if at.length() < ground {
-        at = at.normalize() * ground;
-    }
-    **camera = Transform::from_translation(at).looking_to(looking, up);
-}
-
 /// A world with what the play systems read and write that is not of any one entity: the
 /// kinds of item, and the messages about what players carry and are told. For tests.
 #[cfg(test)]
@@ -844,7 +362,7 @@ fn test_world() -> World {
     world.init_resource::<Messages<inventory::Gained>>();
     world.init_resource::<Messages<inventory::Broke>>();
     world.init_resource::<Messages<inventory::Spilled>>();
-    world.init_resource::<Messages<bag::Told>>();
+    world.init_resource::<Messages<told::Told>>();
     world.init_resource::<Messages<interact::Interacted>>();
     world
 }
@@ -867,43 +385,4 @@ fn test_player(world: &mut World, at: Vec3) -> Entity {
             Transform::from_translation(at),
         ))
         .id()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_hill_and_a_ledge_are_walked_up_and_a_wall_is_not() {
-        let feet = Vec3::Y * 2000.0;
-        let stride = feet + Vec3::X * 0.07;
-        // Ground rising one in three.
-        let hill = |at: Vec3| 2000.0 + at.x / 3.0;
-        assert!(!walled(feet, stride, hill));
-        // A ledge a little ahead, low and then high.
-        let ledge = |height: f32| move |at: Vec3| 2000.0 + if at.x > 0.05 { height } else { 0.0 };
-        assert!(!walled(feet, stride, ledge(0.3)));
-        assert!(walled(feet, stride, ledge(1.5)));
-        // Going down is never stopped.
-        assert!(!walled(feet, stride, ledge(-2.0)));
-    }
-
-    #[test]
-    fn the_camera_comes_no_nearer_or_further_than_it_may() {
-        assert_eq!(zoomed(CAMERA_BACK_M, 1.0), CAMERA_BACK_M - 1.0);
-        assert_eq!(zoomed(CAMERA_BACK_M, 100.0), NEAREST_M);
-        assert_eq!(zoomed(CAMERA_BACK_M, -100.0), FURTHEST_M);
-    }
-
-    #[test]
-    fn a_body_does_not_fit_under_a_low_roof() {
-        let walker = Walker::default();
-        let stand = Vec3::Y * 2000.0;
-        // Open sky, a roof two metres up, and one a metre and a half up.
-        let open = |at: Vec3| at.length() - 2000.0;
-        let roof = |height: f32| move |at: Vec3| (2000.0 + height - at.length()).min(open(at));
-        assert!(!cramped(stand, &walker, open));
-        assert!(!cramped(stand, &walker, roof(2.1)));
-        assert!(cramped(stand, &walker, roof(1.5)));
-    }
 }

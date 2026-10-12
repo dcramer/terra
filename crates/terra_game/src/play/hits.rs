@@ -74,7 +74,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             PostUpdate,
             shake
-                .after(super::follow)
+                .after(super::camera::follow)
                 .before(TransformSystems::Propagate)
                 .before(crate::remote::CameraHold),
         );

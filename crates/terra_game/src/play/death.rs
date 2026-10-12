@@ -5,13 +5,13 @@
 //!
 //! Death also costs a little skill progress (D101); that is in `skills`.
 
-use super::bag::{Notice, Told};
 use super::catalogue::Rest;
 use super::claim::Claim;
 use super::interact::{CanInteract, Interactable, Interacted};
 use super::inventory::{self, Backpack, Belongings, Items};
 use super::props::Prop;
 use super::tick::Sim;
+use super::told::{Notice, Told};
 use super::vitals::{Effort, Vitals};
 use super::{Downed, LocalPlayer, Motion, Player, Stance, View};
 use crate::planet::Planet;

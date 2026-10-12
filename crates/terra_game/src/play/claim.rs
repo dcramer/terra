@@ -5,12 +5,12 @@
 //!
 //! While the hammer is in hand, its edge is drawn on the ground.
 
-use super::bag::Told;
 use super::catalogue::{Builds, ClaimRule};
 use super::interact::{Interactable, Interacted};
 use super::inventory::{Belongings, Cost, describe};
 use super::props::{PlacedBy, Prop};
 use super::tick::Sim;
+use super::told::Told;
 use super::{IsLocalPlayer, Player};
 use crate::build::{Site, frame_at};
 use crate::planet::Planet;

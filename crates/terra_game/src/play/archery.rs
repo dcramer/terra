@@ -7,7 +7,6 @@
 //! An arrow is used up when shot. A deer hit runs, as it does from anything that hurts
 //! it, so a hunter shoots from further than it can hear them.
 
-use super::bag::Told;
 use super::bodies::Body;
 use super::combat::{Blow, Struck, strike};
 use super::controls::Action;
@@ -19,6 +18,7 @@ use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
 use super::species::{Bestiary, Part};
 use super::tick::{Sim, Smoothed};
+use super::told::Told;
 use super::zones::Zones;
 use super::{Downed, Player, Stance, View};
 use crate::build::Site;

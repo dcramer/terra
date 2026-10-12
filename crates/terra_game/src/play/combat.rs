@@ -7,7 +7,6 @@
 //!
 //!   Left click    swing          Hold right mouse   guard          Ctrl   roll
 
-use super::bag::Told;
 use super::controls::Action;
 use super::creatures::{self, Bitten, Creature, Species};
 use super::intent::Intent;
@@ -16,6 +15,7 @@ use super::kinds::ToolDef;
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::species::{Bestiary, Part};
 use super::tick::Sim;
+use super::told::Told;
 use super::vitals::Vitals;
 use super::zones::Zones;
 use super::{Downed, Player, Stance, View};

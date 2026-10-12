@@ -7,11 +7,11 @@
 //!
 //!   H             eat the most filling food you carry
 
-use super::bag::Told;
 use super::controls::Action;
 use super::intent::Intent;
 use super::inventory::Belongings;
 use super::tick::Sim;
+use super::told::Told;
 use super::{IsLocalPlayer, Player};
 use bevy::prelude::*;
 

@@ -7,7 +7,6 @@
 //! the game closes, and read when it starts. Scripted runs never touch it unless given
 //! `--save <file>`, so a script does the same on every machine; `--fresh` starts over.
 
-use super::bag::Notice;
 use super::catalogue::Builds;
 use super::claim::Claim;
 use super::controls::Settings;
@@ -17,6 +16,7 @@ use super::inventory::{self, Backpack, Bar, Gear, Items, SLOTS};
 use super::people::{Doing, Person};
 use super::props::{self, Models, Prop, Theirs};
 use super::skills::{Skill, Skills};
+use super::told::Notice;
 use super::vitals::Vitals;
 use super::{IsLocalPlayer, Player, View};
 use crate::build::Site;
