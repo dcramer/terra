@@ -105,8 +105,22 @@ fn check() -> bool {
             &["--workspace", "--all-targets", "--", "-D", "warnings"],
         )
         && cargo("test", &["--workspace"])
+        && tools_tests()
         && shared_crates_avoid_bevy()
         && shared_crates_are_repeatable()
+}
+
+/// The tests of the TypeScript tools (D121), which Node runs as they are.
+fn tools_tests() -> bool {
+    let Some(files) = output(
+        "git",
+        &["ls-files", "tools/**/*.test.ts", "tools/**/*.test.mjs"],
+    ) else {
+        println!("\n> tools tests: git cannot list them");
+        return false;
+    };
+    let files: Vec<&str> = files.lines().collect();
+    run("node", &[&["--test"], files.as_slice()].concat())
 }
 
 /// Anything every player must agree on lives in crates that know nothing about Bevy.
@@ -447,6 +461,15 @@ fn doctor() -> bool {
         );
     }
 
+    println!("\nTools");
+    let node = output("node", &["--version"]).unwrap_or_default();
+    report.item(
+        &format!("Node 22.18 or later, which runs the TypeScript tools (found: {node})"),
+        node_runs_typescript(&node),
+        true,
+        "install Node 22.18 or later (https://nodejs.org)",
+    );
+
     println!("\nArt tools");
     report.item(
         "ImageMagick, for painting item icons (tools/icons)",
@@ -462,4 +485,28 @@ fn doctor() -> bool {
         println!("This machine is ready.");
     }
     !report.missing_required
+}
+
+/// Whether a `node --version` is 22.18 or later, the first to run TypeScript as it is.
+fn node_runs_typescript(version: &str) -> bool {
+    let mut parts = version
+        .trim_start_matches('v')
+        .split('.')
+        .map(|p| p.parse::<u32>().unwrap_or(0));
+    let (major, minor) = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
+    major > 22 || (major == 22 && minor >= 18)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::node_runs_typescript;
+
+    #[test]
+    fn node_runs_typescript_from_22_18() {
+        assert!(node_runs_typescript("v22.18.0"));
+        assert!(node_runs_typescript("v24.14.0"));
+        assert!(!node_runs_typescript("v22.17.1"));
+        assert!(!node_runs_typescript("v20.19.0"));
+        assert!(!node_runs_typescript(""));
+    }
 }

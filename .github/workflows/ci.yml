@@ -27,6 +27,10 @@ jobs:
       # Installs the compiler pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+      # The check runs the TypeScript tools' tests too; 22 is the oldest line they support.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - run: cargo xtask check
 
   windows:
