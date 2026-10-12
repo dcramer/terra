@@ -73,6 +73,8 @@ usage: terra_sandbox [options]
                         (repeatable)
   --save <file>         where the play experiment keeps its saved game; scripted runs
                         save and load only when given this
+  --trace <file.jsonl>  write the play experiment's whole state every frame, one line of
+                        JSON each, to compare two runs (tools/sandbox/diverge.ts)
   --fresh               start the play experiment over, throwing away its saved game
   --at <east,south>     start the play experiment's player so many metres east and south
                         of the start, for testing
@@ -123,6 +125,8 @@ pub struct Options {
     pub gives: Vec<(String, u32)>,
     /// Where the play experiment keeps its saved game, if not the usual place.
     pub save: Option<PathBuf>,
+    /// Where the play experiment writes its whole state every frame, to compare runs.
+    pub trace: Option<PathBuf>,
     /// Start over, throwing away any saved game.
     pub fresh: bool,
     /// Where the play experiment's player starts, east and south of the start in metres.
@@ -178,6 +182,7 @@ impl Options {
             vantage: None,
             gives: Vec::new(),
             save: None,
+            trace: None,
             fresh: false,
             start_at: None,
             start_facing: None,
@@ -230,6 +235,7 @@ impl Options {
                     });
                 }
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
+                "--trace" => options.trace = Some(PathBuf::from(value("--trace")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--model" => options.models.push(value("--model")?),
                 "--hold" => options.hold = Some(value("--hold")?),

@@ -84,6 +84,17 @@ The sandbox's remote protocol gained, in [remote.rs](../crates/terra_sandbox/src
 
 The CLI gained `press`, `step`, `status`, `said`, `wait`, `mark`, `state`, `warp` and `give` ([README](../tools/sandbox/README.md)). Tried on the Windows GPU: one start, then a bow, quiver and arrows given, the player warped beside the deer, the bow drawn and loosed, all checked by waiting for the game's own words, with `state` saying where the deer were. Stepping 30 frames moved the game's clock by exactly half a second. The arrow went over the deer, which is a question of aim for the game, not the tools.
 
+## Built since
+
+On the developers' go-ahead the same day, the next four of the recommendations, kept small:
+
+- **The loop moved onto the live commands** ([loop.ts](../tools/sandbox/loop.ts), `cargo xtask loop`): two starts instead of eleven, each step setting itself up and asking the game where things are. Moving it found two faults the scripted loop had hidden: quitting over the remote protocol skipped the save, since remote requests are answered after the frame's last systems; and arrows aimed by turning the player toward a target miss, since the bow shoots along the camera's line, which sits off the shoulder. The first is fixed; for the second, `play.aim` turns the view until the crosshair is on a spot. Playing on in one game also showed what a fresh start per step had hidden: the body and the pack carry over, so a step must set up what it relies on (full health before a fight, room in a pack where every raw item takes a cell), and a give that did not fit only warned. Now it fails, and `play.take` clears a pack.
+- **A trace and a first-difference tool** ([diverge.ts](../tools/sandbox/diverge.ts)). Its first use showed the trace itself had to name creatures and people by who they are, since the world lists them in a different order each run; after that, two runs of the scripted hunt agreed on all 422 frames with every number exact.
+- **Repeatability of shared code** as a rule in `cargo xtask check`, not a test per crate: no clock, no system randomness. The shared crates passed already; the chunk tree builds from a hash set but sorts what it returns.
+- **Counts under random actions** in `terra_items`, beside the existing test for moves, using the crate's own seeded streams rather than a new dependency.
+
+Not done: Bevy's ambiguity detection on the sandbox's schedules, since nothing that runs on a server lives there yet; it belongs on the server's schedules when they exist.
+
 ## Limits
 
 - Most claims about other studios and engines are from write-ups and search summaries, not from using the tools; vendor claims are the vendors'. The vision benchmarks are on other games' pictures, not ours.

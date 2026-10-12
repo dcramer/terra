@@ -1,7 +1,8 @@
 //! Project tasks. Run as `cargo xtask <task>`.
 //!
 //!   check    Everything a change must pass: formatting, lints, tests, and the rule
-//!            that shared-state crates do not depend on Bevy. CI runs exactly this.
+//!            that shared-state crates do not depend on Bevy or read the clock or the
+//!            system's randomness. CI runs exactly this.
 //!   doctor   Checks this machine has what it needs to build and run the project.
 //!   play     Plays the tech demo, on the real GPU wherever you are: under WSL it runs the
 //!            Windows build. Your game is saved between runs; `--fresh` starts over.
@@ -36,7 +37,7 @@ fn main() -> ExitCode {
         "doctor" => doctor(),
         "win" => win(&std::env::args().skip(2).collect::<Vec<_>>()),
         "play" => play(&std::env::args().skip(2).collect::<Vec<_>>()),
-        "loop" => run("bash", &["crates/terra_sandbox/loop.sh"]),
+        "loop" => run("node", &["tools/sandbox/loop.ts"]),
         "icons" => icons(&std::env::args().skip(2).collect::<Vec<_>>()),
         _ => {
             eprintln!("{USAGE}");
@@ -105,6 +106,7 @@ fn check() -> bool {
         )
         && cargo("test", &["--workspace"])
         && shared_crates_avoid_bevy()
+        && shared_crates_are_repeatable()
 }
 
 /// Anything every player must agree on lives in crates that know nothing about Bevy.
@@ -131,6 +133,71 @@ fn shared_crates_avoid_bevy() -> bool {
         ok &= !uses_bevy;
     }
     ok
+}
+
+/// What makes a run of shared code come out differently from the same start: the clock and
+/// the operating system's randomness. Shared code takes time and seeds as arguments.
+const UNREPEATABLE: [&str; 6] = [
+    "Instant::now",
+    "SystemTime::now",
+    "thread_rng",
+    "rand::random",
+    "RandomState::new",
+    "getrandom",
+];
+
+fn shared_crates_are_repeatable() -> bool {
+    println!("\n> shared-state crates must not read the clock or the system's randomness");
+    let mut ok = true;
+    let Ok(entries) = std::fs::read_dir(root().join("crates")) else {
+        return true;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if BEVY_CRATES.contains(&name.as_str()) || !entry.path().join("Cargo.toml").exists() {
+            continue;
+        }
+        let mut found = Vec::new();
+        sources(&entry.path().join("src"), &mut found);
+        let mut clean = true;
+        for file in found {
+            // A benchmark's own program may time itself.
+            if file.ends_with("main.rs") || file.components().any(|part| part.as_os_str() == "bin")
+            {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&file) else {
+                continue;
+            };
+            for (number, line) in text.lines().enumerate() {
+                if let Some(what) = UNREPEATABLE.iter().find(|what| line.contains(*what)) {
+                    let at = file.strip_prefix(root()).unwrap_or(&file).display();
+                    println!("  {at}:{}: {what}", number + 1);
+                    clean = false;
+                }
+            }
+        }
+        if clean {
+            println!("  {name}: ok");
+        }
+        ok &= clean;
+    }
+    ok
+}
+
+/// Every Rust file under a folder.
+fn sources(folder: &Path, found: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            sources(&path, found);
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            found.push(path);
+        }
+    }
 }
 
 fn on_wsl() -> bool {

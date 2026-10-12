@@ -21,7 +21,8 @@ r start --windows -- --experiment play --fresh --save test.ron
 r give bow quiver arrow:4                # waits until each is given
 r warp -32,34 --facing -45,36            # waits until the player is there
 r state                                  # where they are, their body, what they carry, what is near
-r press 5 e:60                           # the bow, then draw for 60 frames and loose
+r aim -45,36 --up 0.8                    # the middle of the view on the deer's chest
+r press 5 e@10:60                        # the bow, then ten frames later draw for 60 and loose
 r wait "An arrow hit" --timeout 20       # or fail, showing what was said instead
 r said                                   # everything said since the last action
 ```
@@ -38,17 +39,27 @@ r said                                   # everything said since the last action
 | `release` | Let the camera go |
 | `pause`, `resume` | Stop and start the game's clock, animations included |
 | `step FRAMES` | Stop the clock, let it run that many frames, stop it again, and wait until it has |
-| `press KEY[:FRAMES] …` | Hold keys for so many frames, one if not given, named as `--press` names them: `e`, `w:60`, `F3`, `esc`, `left:20` |
+| `press KEY[@AFTER][:FRAMES] …` | Hold keys, named as `--press` names them, for so many frames (one if not given), starting so many frames from now (none if not given): `e`, `w:60`, `f@40`, `e@90:80`. A sequence of keys goes in one command, timed against the game's frames rather than the script's |
 | `status` | The frame, the game's time, whether the clock is stopped, and the next line's number |
 | `said [--containing TEXT] [--all] [--from LINE]` | What the run has said since the mark, with the frame of each |
 | `wait TEXT [--timeout s]` | Wait until the run says something containing TEXT since the mark; on timeout, show what it said instead and fail |
 | `mark` | Start `said` and `wait` from now |
 | `state` | In play: where the player is and faces, their body, what they hold, carry and wear, and the creatures and people within 40 m |
 | `warp EAST,SOUTH [--facing EAST,SOUTH]` | In play: move the player, as `--warp` does, and wait until they are there |
-| `give ITEM[:COUNT] …` | In play: carry something, as `--give` does, or set the body (`health:20`), and wait until it is given |
+| `take ITEM[:COUNT] …` | In play: take raw items away, all of a kind if no count (`meat`, `stone:5`), so a test starts from a known pack |
+| `unpress` | Let go of every key held or queued by `press` |
+| `aim EAST,SOUTH [--up m]` | In play: turn the view until its middle, where a bow shoots and a tool reaches, is on a spot so far above the ground (1 m), and wait until it is |
+| `give ITEM[:COUNT] …` | In play: carry something, as `--give` does, or set the body (`health:20`), and wait until it is given; fails if it did not fit |
 | `pose CLIP [FRACTION]` | In the workbench: hold every model that far through a clip given with `--anim`, or play it |
 | `shot FILE.png` | Save a screenshot and wait for it |
 | `call METHOD [JSON]` | Any method; `call rpc.discover` lists them, Bevy's `world.*` ones included |
+
+## Scripts
+
+The commands are also a module, [client.ts](client.ts), for scripts that test the game: `start`, `stop`, `press`, `unpress`, `step`, `waitFor`, `waitUntil`, `waitSeconds`, `state`, `warp`, `aim`, `give`, `take`, `hold` and `shot`. Two use it:
+
+- [loop.ts](loop.ts), run by `cargo xtask loop`: the play experiment's loop end to end in one running game, restarted once to load what it saved. Each step sets itself up, aims at what it needs by asking the game where it is, acts, and waits for the game to say what happened. A failing step says what the game said instead and leaves `shots/loop-<step>.png`.
+- [diverge.ts](diverge.ts): where two runs of the game part ways. The sandbox writes the play experiment's whole state every frame with `--trace FILE.jsonl`; `diverge.ts A.jsonl B.jsonl` names the first frame that differs and the values that differ in it. `diverge.ts --twice -- <options for a scripted run>` runs the same run twice and compares, which says whether the game does the same thing from the same start and keys.
 
 ## What the run said, and the mark
 

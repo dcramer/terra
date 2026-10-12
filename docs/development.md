@@ -109,11 +109,16 @@ node tools/tripo/tripo.ts animate <project> walk run idle -o crate-anim.glb
 
 The developers want the game's QA reachable by our coding agents (D69): an agent should be able to run the game, drive it, look at it and ask it what is true, the way a tester would.
 
-What exists: scripted runs of the sandbox. `--press` holds keys on given frames, `--shot` saves a screenshot, `--vantage` fixes the camera, `--bench` measures frame time. In the play experiment, `--at`, `--face`, `--warp` and `--give` set a scene up, and every on-screen notice is logged, so `crates/terra_sandbox/loop.sh` can drive the MVP's loop and check each step. That is how every feature so far was checked.
+What exists: scripted runs of the sandbox. `--press` holds keys on given frames, `--shot` saves a screenshot, `--vantage` fixes the camera, `--bench` measures frame time. In the play experiment, `--at`, `--face`, `--warp` and `--give` set a scene up, and every on-screen notice is logged, which is how features were checked until the live commands below.
 
 Live, in one running game (D69): any sandbox run started with `--remote` answers Bevy's remote protocol, and [tools/sandbox](../tools/sandbox/README.md) drives it from the command line. Besides moving things and taking screenshots, a script can press keys, stop and step the clock exactly, read everything the run has said and wait for words to be said, and in the play experiment read a digest of the player's state (`state`) and set a scene up (`warp`, `give`). A check acts, then waits for what the game says or reads what is true, rather than counting frames or reading the screen. When a check needs a fact the game does not yet answer, add it to the game's methods; a command line over them is the interface, and an MCP server would only be a thin layer over the same methods if some client needed one.
 
-Next, in order (from [research/agent-debugging-tools.md](../research/agent-debugging-tools.md)): move `loop.sh` onto the live commands, with a way to load a saved scene between steps; keep the shared simulation deterministic from the start, with a test that runs a seed twice and compares; a per-tick state dump and a tool that finds the first difference between two runs; property tests over action sequences for the inventory and crafting.
+Built on it:
+
+- **The loop, played live**: `cargo xtask loop` plays the MVP's loop in one running game and checks each step, restarting once to load what it saved ([tools/sandbox](../tools/sandbox/README.md#scripts)).
+- **Same start, same game**: with `--trace FILE.jsonl` the play experiment writes its whole state every frame, and `tools/sandbox/diverge.ts --twice -- <a scripted run>` runs it twice and names the first frame and the values where the runs part. Two runs of the hunt agree on every frame.
+- **Shared code stays repeatable**: `cargo xtask check` refuses a shared-state crate that reads the clock or the system's randomness; time and seeds are passed in.
+- **Property tests over action sequences** in `terra_items`: random moves, and random stowing, paying and wearing, over many seeds, checked against a simple tally after every step. A failure names its seed and step.
 
 Off in release builds, since it lets anything on the machine control the game.
 

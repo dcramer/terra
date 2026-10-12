@@ -14,7 +14,9 @@
 //!   `sandbox.release` lets the camera go.
 //! - `sandbox.pause {paused}`: stops or restarts the game's clock, animations included.
 //! - `sandbox.step {frames}`: lets a stopped clock run for so many frames, then stops it.
-//! - `sandbox.press {key, frames?}`: holds a key down for so many frames, one by default.
+//! - `sandbox.press {key, frames?, after?}`: holds a key down for so many frames, one by
+//!   default, starting so many frames from now, none by default.
+//! - `sandbox.unpress`: lets go of every key a script is holding or has queued.
 //! - `sandbox.status`: the frame, the game's time, whether it is stopped, frames still to
 //!   step, and the number the run's next line will get.
 //! - `sandbox.said {since?, containing?, most?}`: what the run has said, from the line
@@ -57,9 +59,11 @@ pub fn plugin(app: &mut App) {
     .init_resource::<HeldCamera>()
     .init_resource::<Steps>()
     .init_resource::<Pressed>()
+    .init_resource::<Quitting>()
     .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
     .add_systems(First, step.before(TimeSystems))
     .add_systems(PreUpdate, press_keys.after(InputSystems))
+    .add_systems(Update, quit_when_asked)
     .add_systems(PostUpdate, hold_camera.in_set(CameraHold));
     method(app, "sandbox.find", find);
     method(app, "sandbox.place", place);
@@ -68,6 +72,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.pause", pause);
     method(app, "sandbox.step", start_steps);
     method(app, "sandbox.press", press);
+    method(app, "sandbox.unpress", unpress);
     method(app, "sandbox.status", status);
     method(app, "sandbox.said", said);
     method(app, "sandbox.shot", shot);
@@ -342,39 +347,73 @@ fn step(mut steps: ResMut<Steps>, mut time: ResMut<Time<Virtual>>) {
     }
 }
 
-/// Keys a script is holding down, and for how many more frames.
+/// Keys a script has pressed: how many frames until each goes down, then how many it is
+/// held for.
 #[derive(Resource, Default)]
-struct Pressed(Vec<(KeyCode, u32)>);
+struct Pressed(Vec<Held>);
+
+struct Held {
+    key: KeyCode,
+    wait: u32,
+    left: u32,
+}
 
 #[derive(Deserialize)]
 struct Press {
     key: String,
     frames: Option<u32>,
+    after: Option<u32>,
 }
 
 fn press(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
-    let Press { key, frames } = parse_some(params)?;
+    let Press { key, frames, after } = parse_some(params)?;
     let code = shell::parse_key(&key)
         .ok_or_else(|| refused(format!("wanted {}, not `{key}`", shell::KEYS)))?;
     let frames = frames.unwrap_or(1).max(1);
-    let mut pressed = world.resource_mut::<Pressed>();
-    pressed.0.retain(|(held, _)| *held != code);
-    pressed.0.push((code, frames));
-    Ok(json!({ "key": key, "frames": frames }))
+    let after = after.unwrap_or(0);
+    world.resource_mut::<Pressed>().0.push(Held {
+        key: code,
+        wait: after,
+        left: frames,
+    });
+    Ok(json!({ "key": key, "after": after, "frames": frames }))
+}
+
+fn unpress(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let held = std::mem::take(&mut world.resource_mut::<Pressed>().0);
+    let mut keys = world.resource_mut::<ButtonInput<KeyCode>>();
+    for each in &held {
+        keys.release(each.key);
+    }
+    Ok(json!({ "let_go": held.len() }))
 }
 
 /// Holds down what a script pressed, after the real keyboard is read and, in a scripted
-/// run, after its own presses, and lets each key up once its frames are done.
+/// run, after its own presses, and lets each key up once its frames are done, unless
+/// another press is holding it.
 fn press_keys(mut pressed: ResMut<Pressed>, mut keys: ResMut<ButtonInput<KeyCode>>) {
-    pressed.0.retain_mut(|(key, left)| {
-        if *left == 0 {
-            keys.release(*key);
+    let mut done = Vec::new();
+    pressed.0.retain_mut(|held| {
+        if held.wait > 0 {
+            held.wait -= 1;
+        } else if held.left > 0 {
+            keys.press(held.key);
+            held.left -= 1;
+        } else {
+            done.push(held.key);
             return false;
         }
-        keys.press(*key);
-        *left -= 1;
         true
     });
+    for key in done {
+        let still = pressed
+            .0
+            .iter()
+            .any(|held| held.key == key && held.wait == 0);
+        if !still {
+            keys.release(key);
+        }
+    }
 }
 
 fn status(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
@@ -445,11 +484,23 @@ fn shot(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     Ok(json!({ "path": path }))
 }
 
+/// Asked to close. Requests are answered after the frame's last systems, too late for
+/// anything that does its work as the game closes, such as saving, so the game closes on
+/// the next frame, the way it would if its window were closed.
+#[derive(Resource, Default)]
+struct Quitting(bool);
+
 fn quit(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
-    world.write_message(AppExit::Success);
+    world.resource_mut::<Quitting>().0 = true;
     Ok(json!("closing"))
 }
 
 fn whoami(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
     Ok(json!({ "token": world.resource::<Options>().remote_token }))
+}
+
+fn quit_when_asked(quitting: Res<Quitting>, mut exit: MessageWriter<AppExit>) {
+    if quitting.0 {
+        exit.write(AppExit::Success);
+    }
 }

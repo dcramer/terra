@@ -118,6 +118,12 @@ impl Creature {
     pub fn alive(&self) -> bool {
         !matches!(self.state, State::Dead(_))
     }
+
+    /// Where it was placed, which stays the same for as long as it lives and is the same
+    /// in every run of the same world, so it tells one creature from another.
+    pub fn home(&self) -> Vec3 {
+        self.home
+    }
 }
 
 /// Sent when a creature lands a blow on the player.
