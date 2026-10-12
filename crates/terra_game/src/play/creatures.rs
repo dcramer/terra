@@ -13,11 +13,12 @@
 use super::bag::Told;
 use super::bodies::Body;
 use super::flora::ClearAround;
-use super::interact::{CanInteract, Focusing, Interactable, Interacted};
+use super::interact::{CanInteract, Interactable, Interacted};
 use super::inventory::Belongings;
 use super::skills::{Did, ONCE};
 pub use super::species::Species;
 use super::species::{Lives, Temper};
+use super::tick::{Sim, Smoothed};
 use super::{Downed, Player};
 use crate::build::Site;
 use crate::loading::Loading;
@@ -50,6 +51,7 @@ pub enum State {
 }
 
 #[derive(Component)]
+#[require(Smoothed)]
 pub struct Creature {
     pub species: Species,
     pub health: f32,
@@ -136,10 +138,13 @@ pub fn plugin(app: &mut App) {
             Update,
             (
                 prepare.run_if(not(resource_exists::<Populated>)),
-                (think, walk, animate).chain(),
-                butcher.after(Focusing),
+                animate,
                 form.run_if(resource_exists::<Populated>),
             ),
+        )
+        .add_systems(
+            FixedUpdate,
+            ((think, walk).chain(), butcher).in_set(Sim::World),
         );
 }
 

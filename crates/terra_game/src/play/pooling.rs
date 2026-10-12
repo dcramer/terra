@@ -10,6 +10,7 @@ use super::creatures::{Creature, Form, Lair, Species};
 use super::flora::ClearAround;
 use super::interact::Interactable;
 use super::people::{Arrive, Doing, Dyed};
+use super::tick::Sim;
 use bevy::{light::NotShadowCaster, prelude::*};
 
 /// How many spiders the place keeps, and how often it forms another below that.
@@ -38,8 +39,12 @@ pub fn plugin(app: &mut App) {
         Update,
         (
             mark.run_if(resource_added::<Lair>),
-            (rise, form).run_if(resource_exists::<Pool>),
+            rise.run_if(resource_exists::<Pool>),
         ),
+    )
+    .add_systems(
+        FixedUpdate,
+        form.run_if(resource_exists::<Pool>).in_set(Sim::World),
     );
 }
 

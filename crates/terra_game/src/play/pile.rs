@@ -10,6 +10,7 @@ use super::bag::Told;
 use super::death::DroppedBag;
 use super::interact::{CanInteract, Interactable};
 use super::inventory::{Items, Spilled};
+use super::tick::Sim;
 use bevy::prelude::*;
 use terra_items::Grid;
 
@@ -28,7 +29,7 @@ struct PileLook {
 pub fn plugin(app: &mut App) {
     app.add_message::<Spilled>()
         .add_systems(Startup, setup)
-        .add_systems(Update, drop);
+        .add_systems(FixedUpdate, drop.in_set(Sim::World));
 }
 
 fn setup(

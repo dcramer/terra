@@ -12,6 +12,7 @@ use super::controls::{Action, Controls};
 use super::dial::Dial;
 use super::inventory::InventoryScreen;
 use super::options::OptionsMenu;
+use super::tick::Sim;
 use super::{IsLocalPlayer, Player};
 use crate::planet::MainCamera;
 use bevy::{input::mouse::AccumulatedMouseScroll, prelude::*};
@@ -73,10 +74,23 @@ impl Intent {
 }
 
 pub fn plugin(app: &mut App) {
-    app.register_required_components::<Player, Intent>();
+    app.register_required_components::<Player, Intent>()
+        .add_systems(FixedUpdate, spend.in_set(Sim::End));
 }
 
-/// Writes this machine's player's intent from its keys, mouse and screens.
+/// After a tick, the presses and wheel it has seen are spent; what is held stays held.
+fn spend(mut intents: Query<&mut Intent>) {
+    for mut intent in &mut intents {
+        if intent.pressed != 0 || intent.wheel != 0 {
+            intent.pressed = 0;
+            intent.wheel = 0;
+        }
+    }
+}
+
+/// Writes this machine's player's intent from its keys, mouse and screens, before the
+/// frame's ticks. A press is kept until a tick has seen it, so none is lost on a frame
+/// with no tick or seen twice on a frame with two.
 pub fn read(
     controls: Controls,
     scroll: Res<AccumulatedMouseScroll>,
@@ -91,8 +105,9 @@ pub fn read(
         busy: screen.open || menu.open,
         choosing: dial.open || build_menu.open,
         aim: Some(Ray3d::new(camera.translation(), camera.forward())),
-        // One notch at a time, however the wheel reports it.
-        wheel: (scroll.delta.y > 0.0) as i32 - (scroll.delta.y < 0.0) as i32,
+        // One notch at a time, however the wheel reports it, kept with what is unspent.
+        wheel: intent.wheel + (scroll.delta.y > 0.0) as i32 - (scroll.delta.y < 0.0) as i32,
+        pressed: intent.pressed,
         ..default()
     };
     for action in Action::ALL {

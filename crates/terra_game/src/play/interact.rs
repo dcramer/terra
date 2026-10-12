@@ -8,6 +8,7 @@ use super::Player;
 use super::controls::Action;
 use super::crafting::Station;
 use super::intent::Intent;
+use super::tick::Sim;
 use bevy::prelude::*;
 
 /// How far from you something can be and still be used.
@@ -91,7 +92,8 @@ pub struct Focusing;
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Focus>()
         .add_message::<Interacted>()
-        .add_systems(Update, focus.in_set(Focusing));
+        .configure_sets(FixedUpdate, Focusing.in_set(Sim::Act))
+        .add_systems(FixedUpdate, focus.in_set(Focusing));
 }
 
 /// Finds what each player aims at within reach, and sends their use of it.

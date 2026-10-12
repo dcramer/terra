@@ -11,6 +11,7 @@ use super::intent::Intent;
 use super::inventory::{Belongings, Cuttable};
 use super::kinds::ToolDef;
 use super::skills::{Did, ONCE, Skills};
+use super::tick::Sim;
 use super::work::Hold;
 use super::{LocalPlayer, Player, Stance};
 use bevy::prelude::*;
@@ -68,7 +69,8 @@ pub struct Harvesting;
 
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Cutting>()
-        .add_systems(Update, (cut.in_set(Harvesting), fall));
+        .add_systems(FixedUpdate, cut.in_set(Harvesting).in_set(Sim::Act))
+        .add_systems(Update, fall);
 }
 
 fn cut(

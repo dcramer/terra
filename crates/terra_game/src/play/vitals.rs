@@ -11,6 +11,7 @@ use super::bag::Told;
 use super::controls::Action;
 use super::intent::Intent;
 use super::inventory::Belongings;
+use super::tick::Sim;
 use super::{IsLocalPlayer, Player};
 use bevy::prelude::*;
 
@@ -126,7 +127,8 @@ enum Which {
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
-        .add_systems(Update, (eat, show));
+        .add_systems(FixedUpdate, eat.in_set(Sim::Act))
+        .add_systems(Update, show);
 }
 
 fn setup(mut commands: Commands) {

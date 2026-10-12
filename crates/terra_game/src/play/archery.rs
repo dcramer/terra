@@ -18,6 +18,7 @@ use super::models::bake;
 use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
 use super::species::Part;
+use super::tick::{Sim, Smoothed};
 use super::zones::Zones;
 use super::{Downed, Player, Stance, View};
 use crate::build::Site;
@@ -54,6 +55,7 @@ struct Drawing {
 
 /// An arrow in flight, or stuck where it landed.
 #[derive(Component)]
+#[require(Smoothed)]
 struct Arrow {
     /// Who shot it.
     by: Entity,
@@ -73,7 +75,7 @@ struct ArrowLook {
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Drawing>()
         .add_systems(Startup, load)
-        .add_systems(Update, (draw, fly).chain());
+        .add_systems(FixedUpdate, (draw.in_set(Sim::Act), fly.in_set(Sim::World)));
 }
 
 fn load(

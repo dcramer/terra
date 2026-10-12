@@ -11,17 +11,22 @@
 //! where is read from the people themselves (`Staff`), so there is nothing to keep in step.
 
 use super::bag::{Notice, Told};
-use super::controls::Action;
+use super::controls::{Action, Settings};
 use super::grab_mouse;
-use super::intent::Intent;
-use super::interact::{Focus, Focusing, Interactable, REACH_M};
+use super::interact::{Focus, Interactable, REACH_M};
 use super::inventory::{Belongings, Cost, Inventory, InventoryScreen, Items, Made};
 pub use super::kinds::Family;
+use super::options::OptionsMenu;
 use super::people::{Doing, Person};
 use super::props::Prop;
 use super::skills::{Did, ONCE, Skill};
+use super::tick::Sim;
 use super::{IsLocalPlayer, Player};
-use bevy::{ecs::system::SystemParam, prelude::*, window::CursorOptions};
+use bevy::{
+    ecs::system::SystemParam,
+    prelude::*,
+    window::{CursorGrabMode, CursorOptions},
+};
 use serde::Deserialize;
 use std::{collections::VecDeque, sync::LazyLock};
 
@@ -279,12 +284,8 @@ impl Works {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(
-        Update,
-        (fit_out, open, leave, work, hand_over)
-            .chain()
-            .after(Focusing),
-    );
+    app.add_systems(Update, (fit_out, open, leave).chain())
+        .add_systems(FixedUpdate, (work, hand_over).chain().in_set(Sim::World));
 }
 
 /// Every station keeps a queue. A station may be gone by the time this applies, when a
@@ -306,15 +307,20 @@ fn within_reach(player: Vec3, prop: &Prop, at: Vec3) -> bool {
 
 /// The interact key at a station opens its screen; again closes it.
 fn open(
-    player: Single<(&Intent, &Focus), IsLocalPlayer>,
+    settings: Res<Settings>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    menu: Res<OptionsMenu>,
+    focus: Single<&Focus, IsLocalPlayer>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut screen: ResMut<InventoryScreen>,
 ) {
-    let (intent, focus) = *player;
-    if !intent.pressed(Action::Interact) {
+    // The screen is this machine's, so its own key opens and closes it.
+    let (window, mut cursor) = window.into_inner();
+    let captured = cursor.grab_mode != CursorGrabMode::None;
+    if menu.open || !settings.went_down(Action::Interact, &keys, &mouse, captured) {
         return;
     }
-    let (window, mut cursor) = window.into_inner();
     if screen.at.is_some() {
         screen.open = false;
         screen.at = None;

@@ -8,9 +8,10 @@
 use super::bag::{Notice, Told};
 use super::catalogue::Rest;
 use super::claim::Claim;
-use super::interact::{CanInteract, Focusing, Interactable, Interacted};
+use super::interact::{CanInteract, Interactable, Interacted};
 use super::inventory::{self, Backpack, Belongings, Items};
 use super::props::Prop;
+use super::tick::Sim;
 use super::vitals::{Effort, Vitals};
 use super::{Downed, LocalPlayer, Motion, Player, Stance, View};
 use crate::planet::Planet;
@@ -49,7 +50,7 @@ pub struct WentDown(pub Entity);
 
 pub fn plugin(app: &mut App) {
     app.add_message::<WentDown>()
-        .add_systems(Update, (live, fall, (recover, decay).after(Focusing)));
+        .add_systems(FixedUpdate, (live, fall, recover, decay).in_set(Sim::World));
 }
 
 /// Moves every player's body on by a moment, and lays it down when health runs out.

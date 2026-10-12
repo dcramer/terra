@@ -34,6 +34,7 @@ use super::controls::Action;
 use super::intent::Intent;
 use super::inventory::{Belongings, Cost};
 use super::props::{Blocked, Prop};
+use super::tick::Sim;
 use super::work::Hold;
 use super::{IsLocalPlayer, Player};
 use bevy::{
@@ -332,11 +333,10 @@ pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Builder>()
         .add_systems(Startup, setup)
         .add_systems(
-            Update,
-            (choose, aim, afford, act, animate, highlight)
-                .chain()
-                .in_set(Acting),
-        );
+            FixedUpdate,
+            (choose, aim, afford, act).chain().in_set(Sim::Act),
+        )
+        .add_systems(Update, (animate, highlight).chain().in_set(Acting));
 }
 
 fn setup(

@@ -6,9 +6,10 @@
 //! While the hammer is in hand, its edge is drawn on the ground.
 
 use super::bag::Told;
-use super::interact::{Focusing, Interactable, Interacted};
+use super::interact::{Interactable, Interacted};
 use super::inventory::{Belongings, Cost, describe};
 use super::props::{PlacedBy, Prop};
+use super::tick::Sim;
 use super::{IsLocalPlayer, Player};
 use crate::build::{Site, frame_at};
 use crate::planet::Planet;
@@ -59,10 +60,8 @@ impl Claim {
 
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Claim>()
-        .add_systems(
-            Update,
-            ((track, settle).chain(), grow.after(Focusing), show),
-        );
+        .add_systems(Update, ((track, settle).chain(), show))
+        .add_systems(FixedUpdate, grow.in_set(Sim::World));
 }
 
 /// A base is begun where its claim is: when the player's first claim stone goes down

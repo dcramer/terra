@@ -14,8 +14,9 @@ use super::catalogue::Rest;
 use super::claim::Claim;
 use super::crafting::Station;
 use super::creatures::Creature;
-use super::interact::{CanInteract, Focusing, Interactable, Interacted};
+use super::interact::{CanInteract, Interactable, Interacted};
 use super::props::Prop;
+use super::tick::{Sim, Smoothed};
 use crate::build::Site;
 use crate::loading::Loading;
 use crate::planet::Planet;
@@ -48,6 +49,7 @@ pub enum Doing {
 }
 
 #[derive(Component)]
+#[require(Smoothed)]
 pub struct Person {
     pub name: &'static str,
     /// What they say when spoken to, if anything in particular.
@@ -123,18 +125,10 @@ pub struct Dyed(pub &'static str, pub Option<(&'static str, Color)>);
 pub fn plugin(app: &mut App) {
     app.add_message::<Arrive>()
         .add_systems(Startup, load)
+        .add_systems(Update, (prepare, arrive, animate, sit).chain())
         .add_systems(
-            Update,
-            (
-                prepare,
-                arrive,
-                free.after(Focusing),
-                follow,
-                settle,
-                animate,
-                sit,
-            )
-                .chain(),
+            FixedUpdate,
+            (free, follow, settle).chain().in_set(Sim::World),
         );
 }
 

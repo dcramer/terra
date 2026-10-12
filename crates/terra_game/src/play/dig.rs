@@ -13,6 +13,7 @@ use super::harvest::Cutting;
 use super::intent::Intent;
 use super::inventory::{Belongings, Cut};
 use super::skills::{Did, ONCE, Skill, Skills};
+use super::tick::Sim;
 use super::work::Hold;
 use super::{LocalPlayer, Player, Stance};
 use crate::planet::Planet;
@@ -79,7 +80,10 @@ struct Spoil(Vec<f32>);
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Digging>()
         .register_required_components::<Player, Spoil>()
-        .add_systems(Update, dig.after(super::harvest::Harvesting));
+        .add_systems(
+            FixedUpdate,
+            dig.after(super::harvest::Harvesting).in_set(Sim::Act),
+        );
 }
 
 /// The items a part of what was dug makes, when so much makes one, and what is left toward

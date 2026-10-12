@@ -59,6 +59,7 @@ mod sounds;
 mod soundscape;
 mod species;
 mod station_screen;
+mod tick;
 mod tiles;
 mod tool;
 mod torchlight;
@@ -82,6 +83,7 @@ use controls::{Action, Controls};
 use intent::Intent;
 use std::ops::Sub;
 use terra_build::Walker;
+use tick::{Sim, Smoothed};
 
 const JOG_SPEED: f32 = 4.3;
 const SPRINT_SPEED: f32 = 7.4;
@@ -117,6 +119,7 @@ const STRIDE_M: f32 = 0.4;
 /// move (`Motion`), what their hands and feet are up to (`Stance`), and whether they are
 /// down (`Downed`), along with what they carry, know and feel.
 #[derive(Component)]
+#[require(Smoothed)]
 struct Player;
 
 /// The player this machine steers: its input moves them, and the camera, the screen and
@@ -248,24 +251,24 @@ pub fn plugin(app: &mut App) {
     sounds::plugin(app);
     soundscape::plugin(app);
     music::plugin(app);
+    tick::plugin(app);
     app.insert_resource(DrivenByPlayer)
         .init_resource::<Zoom>()
         .add_systems(PostStartup, spawn)
         .add_systems(
             Update,
-            (
-                options::toggle,
-                capture_mouse,
-                dial::steer,
-                intent::read,
-                warp,
-                look,
-                zoom,
-                walk,
-            )
+            (options::toggle, capture_mouse, dial::steer, warp, zoom)
                 .chain()
                 .before(tool::Acting),
         )
+        // What this machine's player means to do, read before the frame's ticks.
+        .add_systems(
+            RunFixedMainLoop,
+            (look, intent::read)
+                .chain()
+                .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
+        )
+        .add_systems(FixedUpdate, walk.in_set(Sim::Act))
         .add_systems(
             PostUpdate,
             follow

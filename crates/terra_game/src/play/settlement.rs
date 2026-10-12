@@ -13,9 +13,10 @@ use super::catalogue;
 use super::creatures::Lair;
 use super::daylight::{Clock, SkyPath};
 use super::flora::ClearAround;
-use super::interact::{Focusing, Interactable, Interacted};
+use super::interact::{Interactable, Interacted};
 use super::people::{Arrive, Doing, Dyed, Person};
 use super::props::{self, Models, Theirs};
+use super::tick::Sim;
 use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use bevy::prelude::*;
@@ -112,13 +113,11 @@ fn house(house: &House) -> Vec<BuildOp> {
 pub struct Village(pub Vec3);
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(
-        Update,
-        (
-            found.run_if(resource_added::<Lair>),
-            talk.after(Focusing).run_if(resource_exists::<Village>),
-        ),
-    );
+    app.add_systems(Update, found.run_if(resource_added::<Lair>))
+        .add_systems(
+            FixedUpdate,
+            talk.run_if(resource_exists::<Village>).in_set(Sim::World),
+        );
 }
 
 /// Once the lair is chosen, sets the village down somewhere else, dry and level enough,

@@ -15,6 +15,7 @@ use super::inventory::{self, Belongings, Broke, Gear, Items};
 use super::kinds::ToolDef;
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::species::Part;
+use super::tick::Sim;
 use super::vitals::Vitals;
 use super::zones::Zones;
 use super::{Downed, Player, Stance, View};
@@ -88,7 +89,13 @@ pub fn plugin(app: &mut App) {
     app.add_message::<Struck>()
         .add_message::<Hurt>()
         .register_required_components::<Player, Swing>()
-        .add_systems(Update, (swing, guard, take_blows).chain());
+        .add_systems(
+            FixedUpdate,
+            (
+                (swing, guard).chain().in_set(Sim::Act),
+                take_blows.in_set(Sim::Resolve),
+            ),
+        );
 }
 
 /// Swings at the creature in front, if there is one within reach.

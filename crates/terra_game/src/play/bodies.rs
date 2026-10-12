@@ -10,9 +10,10 @@
 
 use super::Player;
 use super::flora::Obstacles;
+use super::tick::Sim;
 use crate::planet::Planet;
 use crate::spatial::SpatialHash;
-use bevy::{prelude::*, transform::TransformSystems};
+use bevy::prelude::*;
 use terra_build::Walker;
 
 /// How much room something takes up on the ground, and how hard it is to shove.
@@ -38,7 +39,7 @@ impl Body {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(PostUpdate, keep_apart.before(TransformSystems::Propagate));
+    app.add_systems(FixedUpdate, keep_apart.in_set(Sim::Resolve));
 }
 
 /// How far each of two overlapping bodies moves, by weight: the heavier moves less, a fixed
