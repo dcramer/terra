@@ -91,7 +91,8 @@ Each is its own commit and passes `cargo xtask check`.
 
 - Done: the Godot builds and finished spikes deleted (5); source art copied into `art/` (3, the pipeline still reads its scratch folder); the research picture moved (6).
 - Then, at the developers' word, without waiting for other sessions working in the same files: assets to the root (1), the pipeline to `tools/characters` (2, rebuilding the male body gave an identical file), and the game into `terra_game` (4).
-- Left: `loop.sh`, which another session is turning into `cargo xtask loop`; `token-stats` in TypeScript, since it runs after every turn for everyone and is not a layout question.
+- `loop.sh` became `cargo xtask loop` and `tools/sandbox/loop.ts`, in the QA work (D69).
+- Left: `token-stats` in TypeScript, since it runs after every turn for everyone and is not a layout question.
 
 ## Questions for the developers
 
