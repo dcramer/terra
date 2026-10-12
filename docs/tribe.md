@@ -12,15 +12,15 @@ From 2026-10-12:
 - **They take part on their own, however the simulation makes sense** (D161, D162): working crafting stations and helping haul resources. You do not assign them.
 - **It is not a colony sim** (D161). You do not micromanage them. "A little automatically managed tribe simulator."
 - **They have stats they level up, as you do** (D88, D123), so they get better at the work they do.
-- **Building help is useful for carrying things to a building** (D161). They must not start building a plan while you are still designing it. Then: recruits should potentially help build, too (Leaning).
-- **They take their gear on their own** (D161). Systems may be needed to help you decide what they can and cannot use. Then: perhaps a personal chest is enough, or perhaps you can set how each storage container is used (Leaning).
-- **Needs**: document ideas now, decide later (Open).
-- **They help defend you in some situations** (D90, Leaning): if you are attacked near your claim, or in raids, if raids come later.
+- **Building help is useful for carrying things to a building** (D161). They must not start building a plan while you are still designing it. Recruits should potentially help build, too (Leaning). How a plan is handed to them is proposed below (D170, Open).
+- **They take their gear on their own** (D161). A container is either personal or the tribe's, and that is enough.
+- **Recruits are much like players** (D169): health, stamina and mana, hunger, thirst and body temperature. Cold or heat slows their work. They likely sleep at night.
+- **They help defend you in some situations** (D90, Leaning): if you are attacked near your claim, or in raids, if raids come later. Monsters will likely not form inside an outpost, but danger comes close to home, and protecting the outpost, with walls, guards or otherwise, is part of having one (D169).
 - **They travel and fight beside you**, later (D161): a future to-do.
-- **They can die** (D161).
+- **They die when their health runs out** (D161, D169). They also die of hunger and thirst, slowly, so it is a hard mistake to make. A way to revive them may come later.
 - **No ageing, for now** (D161). Families, as in Medieval Dynasty, would be neat but are wishful thinking.
-- **A tribe holds its claims, and each claim is an outpost** (D166). Everyone in the tribe, players as well as recruits, is part of it, since you can recruit other players too. All of a tribe's outposts are shared within it, but **each recruit belongs to one outpost**; whether they travel between outposts is to be decided later.
-- **A player is in one tribe at a time** (D166). Tribes are like clans or guilds, with at least two ranks, such as member and leader.
+- **A tribe holds its claims, and each claim is an outpost** (D166). Everyone in the tribe, players as well as recruits, is part of it, since you can recruit other players too. All of a tribe's outposts are shared within it, but **each recruit belongs to one outpost**. Moving one is likely done at a station: you take them with you, or let them walk on their own and risk death (Leaning).
+- **A player is in one tribe at a time** (D166). Tribes are like clans or guilds, with two ranks, member and leader. A player on their own is a tribe of one.
 - **Medieval Dynasty is a source of inspiration** alongside Kenshi.
 
 ## Based on
@@ -39,10 +39,10 @@ The line between the two, proposed: **in a colony sim the player is the schedule
 |---|---|
 | Find people, recruit them and bring them home safely ([people.md](people.md#recruits)) | Set work priorities, schedules or zones |
 | Build what the tribe needs: beds, stations, storage, fields | Assign each recruit to a job before they will work |
-| Draw the plans for what is to be built (D152, D154), and say when one is ready | Equip each recruit by hand |
+| Draw the plans for what is to be built (D152, D154), and stake them out when they are ready ([Building](#building)) | Equip each recruit by hand |
 | Stock the stores, and sometimes ask one person for something | Put the injured to bed, or remind anyone to eat |
 
-**Building a forge is how you say you want smithing.** Someone who can smith takes it up. A field is how you say you want farming. A finished plan is how you say you want a wall. The world is the interface, as in Dragon Quest Builders 2.
+**Building a forge is how you say you want smithing.** Someone who can smith takes it up. A field is how you say you want farming. A staked plan is how you say you want a wall. The world is the interface, as in Dragon Quest Builders 2.
 
 ## Who does what
 
@@ -78,65 +78,92 @@ Proposed:
 
 ## Building
 
-From the developers (D161): help is useful for carrying things to a building, and **no one starts on a plan you are still designing**. Proposed:
+From the developers (D161): help is useful for carrying things to a building, and no one starts on a plan you are still designing. Recruits should potentially help build, too (Leaning). How a plan passes from you to the tribe was left to me to propose (D170, Open).
 
-- **A plan is yours until you say it is ready.** While you draw, a plan is a draft, which only you change and the tribe leaves alone. When you are happy with it, you say so: one action on the plan, such as "build this", or one for every draft in the claim. Only then does the tribe touch it. Palworld starts building the moment a plan is laid, which is the failure the developers named.
-- **Then they carry.** Recruits with nothing else to do bring what the plan needs from the stores and lay it by the build: logs over the shoulder (D140), stone, beams. This is the help the developers asked for. You put the parts in, and the materials are already there.
-- **Putting parts in themselves**: potentially yes, from the developers (D161, Leaning), as Dragon Quest Builders 2, Palworld and Sons of the Forest let them; [construction.md](construction.md#planned-then-constructed) allows it. Proposed: carrying first; building comes with a recruit who is a skilled builder (D88), so a big build goes up around you while you work on it too.
-- **Recruits never draw plans.** What the claim looks like is yours.
-- **When materials run out**, the build waits, and the claim's list of what its plans still need tells you what to fetch ([construction.md](construction.md#planned-then-constructed)).
+### Staking out: handing a plan to the tribe
 
+The problem: plans cost nothing to lay and are meant to be tried, moved and redrawn (D139). Recruits must not start on one while you are still drawing it, but nor should you have to manage them to stop them. How other games do it, from memory and unchecked:
+
+- **Palworld** starts building the moment a plan is laid, which is the failure the developers named.
+- **Dragon Quest Builders 2** separates designing from building: a blueprint is made first and handed to residents.
+- **Manor Lords** has you draw a plot, then confirm it, and only then do workers come.
+- **RimWorld** lets you forbid a plan until it is wanted.
+
+The common answer is one deliberate act that says "this one is ready". Proposed, as it would be in a real village: **you stake it out.**
+
+| A plan is | What you see | Who works on it |
+|---|---|---|
+| **Drawn** | The pale ghost of today, with your name on it for the rest of the tribe | You, and other players. Recruits leave it alone. |
+| **Staked** | Wooden stakes at its corners and string along its walls, set into the ground. The ghost turns firmer. | Everyone: recruits carry for it and, later, build it |
+| **Built** | The building | |
+
+**How it plays**:
+
+- **Every plan is drawn when laid.** Draw, move, resize, redraw as much as you like; nothing happens. This is what the developers asked for.
+- **Stake it when you are happy.** With the hammer in hand, aim at a plan and hold a key (proposed T). Staking takes the whole building the plan is part of (D155), so a cabin of a floor, four walls and a roof is staked at once, not piece by piece. A recruit nearby answers ("Right, the cabin, then"), and the tribe starts.
+- **Then the tribe carries.** Recruits with nothing else to do bring what the plan needs from the stores and pile it beside the build: logs (D140), stone, beams. The prompt on a part says so: "Log: 3 of 12. 4 here, 5 on the way". You put the parts in from the pile without fetching anything.
+- **Then, later, they build.** A recruit who is a skilled builder (D88) puts parts in from the pile in the physical order, floor first and roof last ([construction.md](construction.md#planned-then-constructed)). You can work beside them.
+- **Changing your mind is safe.**
+  - Touch a staked plan again (move, resize or redraw it) and that plan goes back to drawn: its stakes come up and recruits stop on it. The rest of the building carries on.
+  - A new plan added to a staked building is drawn until you stake it.
+  - Holding the key on a staked building pulls all its stakes.
+  - Undo (Y) takes back a staking within its minute, like anything else.
+  - Materials already piled stay where they are, and are carried back to the stores if the plan is taken away.
+- **You never have to stake.** Staking only asks for the tribe's help. On your own, or building it yourself, you put parts into a drawn plan as now. Players with no recruits never meet it.
+- **Several staked buildings are worked in the order they were staked.** To have one done first, stake it first, or ask a recruit to work on it.
+- **Among players, staking says "agreed"**: a drawn plan is someone's idea, a staked one the tribe's. Any member may stake their own plans; a leader may stake or pull anyone's (see [ranks](#tribes-and-outposts)).
+- **What is needed counts what is staked.** The outpost's list of what its plans still need counts only staked plans. Aiming at a drawn plan still shows its own cost, so you can plan.
+
+Why stakes: it is how a building really is begun, so it reads without being explained (D122). It shows from across the outpost which plans are wanted. It is one act per building, not per part, so it is never a chore.
+
+### Also
+
+- **Recruits never draw plans.** What the outpost looks like is yours.
+- **When materials run out**, carrying waits, and a recruit says what is missing ("We're out of stone for the wall").
 ## Equipment
 
-From the developers (D161): they take their gear on their own. Systems may be needed to help you decide what they can and cannot use. Proposed:
+From the developers (D161): they take their gear on their own. A container is either **personal** or **the tribe's**, and that is enough.
 
 - **They arrive with what they had**, and it is theirs.
-- **They take what their work needs from the stores**: a woodcutter the best axe they can use, a guard armour and a weapon. They put it back when it is not needed. No one is equipped by hand, which is the chore players complain of in Kenshi and Soulmask.
+- **They take what their work needs from the tribe's containers**: a woodcutter the best axe they can use, a guard armour and a weapon. They put it back when it is not needed. No one is equipped by hand, which is the chore players complain of in Kenshi and Soulmask.
+- **A personal container is yours alone.** Recruits and other players leave it be, so your best sword and last good food stay yours. Proposed: the tribe's is the default, and you switch a container to personal when you open it. A recruit never takes what anyone wears or has on their action bar.
 - **Hand it over yourself** if you want someone to have a thing. What you give a recruit is theirs to keep.
 - **Gear wears** (D99), and they mend it themselves at the station that mends it, quicker if they know the craft.
 - **What they wear shows** on them (D128), so a guard looks like a guard.
-- **Deciding what they may use** (D161, Leaning): perhaps a personal chest is enough, or perhaps you set how each storage container is used. Proposed: the second, kept small, since it includes the first. Every container has one setting, chosen when you open it:
-
-  | Setting | Who takes from it |
-  |---|---|
-  | The tribe's (the default) | Anyone in the outpost, recruits included |
-  | Mine | Only you |
-  | Kept | Players only; recruits leave it alone, such as a chest of spare gear or seed |
-
-  A recruit never takes what is worn or on the action bar. Finer rules, such as which recruit may take what, are left until play shows they are needed.
-
 ## Needs
 
-Open: ideas written down now, to be chosen later (D161). The one constraint so far is that needs must not turn the tribe into a colony sim. What the reference games do is in the [research](../research/recruits-at-the-base.md#what-they-have-in-common).
+From the developers (D169): **recruits are generally much like a player.** Same body, same needs:
 
-**What they might need**:
-
-| Need | Met by | Seen in |
+| | For a recruit | Met by |
 |---|---|---|
-| Sleep | A bed of their own, indoors (D155); a new bed goes to the nearest recruit without one, as in Enshrouded | Medieval Dynasty, Palworld, Enshrouded |
-| Food | Meals from the stores, better if someone cooks; drink | Medieval Dynasty, Palworld, Kenshi |
-| Warmth | Shelter, fire, clothing (D153), as for you | Medieval Dynasty's firewood |
-| Safety | Walls, a watch, light at night; frightened by monsters nearby | Our own, from the magic that pools (D89) |
-| Comfort | A better house, a table, a fire to sit by, decoration | Medieval Dynasty, Soulmask, Dragon Quest Builders 2 |
-| Their liking | Doing the work they like (see [Who does what](#who-does-what)) | Medieval Dynasty's bonus for the best skill |
-| Company | Others to eat and talk with, a place to gather | Our own; what makes an outpost look lived in |
+| Health | As yours. When it runs out, they die (see [When a recruit dies](#when-a-recruit-dies)) | Rest, food, healing |
+| Stamina and mana | As yours (D61, D102), spent in fighting and abilities | Rest, food |
+| Hunger and thirst | As yours, but starving and thirst kill only slowly | Meals and drink from the stores, better if someone cooks |
+| Body temperature | As yours (D153). Out of comfort, they work slower; far out, it harms them | Shelter, fire, clothing |
+| Sleep | Likely, they sleep at night (Leaning) | A bed of their own, indoors (D155) |
 
-**What a need could do** when it is met or not, from gentlest to hardest:
+Proposed, for how:
 
-- **Only flavour**: they say how they are and it shows in how they move. Nothing else changes.
-- **Work goes better or worse**: faster, better made, quicker to learn when content; slower when not, as Palworld's sanity and Medieval Dynasty's mood do.
-- **They grow better**: a well-kept recruit learns faster or reaches a higher rank, so a good home is how you raise masters.
-- **They leave** when pushed too far, as in Medieval Dynasty and Soulmask, and say why first.
-- **They fall ill or die**: starving or freezing, as you can (D101). Not recommended; the research found it the way such systems become a chore.
+- **Sleep is their day's shape, not a meter.** Recruits work by day and sleep at night in their own bed, so an outpost is busy by day and quiet at night, with a watch kept by whoever guards it. A new bed goes to the nearest recruit without one, as in Enshrouded. Without a bed, they sleep badly by a fire and work slower the next day.
+- **They look after themselves** from what the outpost has: they eat, drink, warm up and go to bed on their own. You provide the place, the food and the fire, not each person's care, as Dragon Quest Builders 2's rooms do.
+- **Hunger and thirst are slow to kill, and loud before they do** (D169). Proposed:
+  - The outpost runs out of food. Recruits say so, and the roster says so.
+  - Those who can hunt, fish or gather go out for food on their own before working.
+  - Hungry, they work slower and recover less.
+  - Starving, they grow weak: no fighting, little work.
+  - Only after several days of that does someone die.
 
-**Ways to keep it from being managed**:
+  So a death from hunger means an outpost left without food for days, with everyone saying so.
+- **Cold and heat slow work.** A forge-hand in winter without a coat works slower, as the developers said; a warm workshop is worth building.
+- **How someone is doing shows** in how they look and what they say (D93), and the roster gathers it ([Seeing what they do](#seeing-what-they-do)). No mood meter to tend.
 
-- **Needs are the outpost's, not each person's.** A cook, a stocked larder, beds for all and a fire make the outpost content; you look after the place, not every recruit, as Dragon Quest Builders 2's rooms do.
-- **No meter to tend.** How someone is doing shows in how they look and what they say (D93), and the roster says why ([Seeing what they do](#seeing-what-they-do)).
-- **Recruits meet their own needs** from what the outpost has. You only have to provide it.
+**Ideas for later**, not chosen:
 
-Recommended starting point, for when it is chosen: sleep, food and warmth, met by the outpost; content means work goes a little better, neglected means slower and, at the far end, leaving. Comfort, safety and company come later.
-
+- **Comfort**: a better house, a table, a fire to sit by, decoration, making work better, as in Medieval Dynasty, Soulmask and Dragon Quest Builders 2.
+- **Safety**: walls, a watch and light at night, with recruits frightened when monsters are near.
+- **Company**: others to eat and talk with, a place to gather.
+- **Liking their work**: doing the work they like making them better at it.
+- **Leaving**: a recruit kept badly for long enough goes, as in Medieval Dynasty, saying why first.
 ## Growing
 
 Recruits grow as you do (D123). Their work's skills rise by doing it, on the same rank ladder as yours ([essences.md](essences.md#skills-on-the-rank-ladder)). What they can make follows their rank: an iron-rank smith cannot work silver-rank metal.
@@ -149,25 +176,24 @@ Their skills, ranks and likings read on their own sheet, like yours (D93).
 
 ## Defence
 
-From the developers (D90, Leaning): they help defend you if you are attacked near your claim, and in raids if those come later. Proposed:
+From the developers (D90, Leaning): they help defend you if you are attacked near your claim, and in raids if those come later. And (D169): monsters likely will not form inside an outpost, but **danger needs to be close to home**. Part of having an outpost is protecting it, with walls, guards or whatever else. Proposed:
 
-- **When danger comes into the claim, or you are attacked near it, everyone who can fight drops their work and fights.** The rest take shelter indoors. Afterwards, everyone goes back to what they were doing. This is the one switch every game in the research uses.
-- **The watch is work like any other**: a guard or two who keep at it, patrol the claim, and ring a bell or shout when something comes.
+- **Monsters do not form inside an outpost, but they come to it.** They form in the wild around it, roam, hunt and spill out ([creatures.md](creatures.md)), and an outpost is in their way. Walls, gates, light and a watch are what keep them out.
+- **When danger comes into the outpost, or you are attacked near it, everyone who can fight drops their work and fights.** The rest take shelter indoors. Afterwards, everyone goes back to what they were doing. This is the one switch every game in the research uses.
+- **The watch is work like any other**: a guard or two who keep at it, by day and through the night, patrol the outpost, and ring a bell or shout when something comes.
 - **How well they fight is their skill and rank**, as for you ([combat.md](combat.md)). A bronze-rank monster walks through iron-rank farmers.
-- **Raids are not a concern for now** ([gameplay.md](gameplay.md#questions-for-the-developers), question 2). When they come, they come to claims. A raid should be something you can answer, not a summons that nags, as Fallout 4's settlement quests do.
-
+- **Raids are not a concern for now** ([gameplay.md](gameplay.md#questions-for-the-developers), question 2). When they come, they come to outposts. A raid should be something you can answer, not a summons that nags, as Fallout 4's settlement quests do.
 ## Coming with you
 
 From the developers (D161): recruits can travel and fight beside you, as a future to-do. Nothing is designed for it yet. When it comes, the questions are how many can come, how you ask them, and how they keep up on big round realms ([your-character.md](your-character.md)).
 
 ## When a recruit dies
 
-From the developers (D161): **recruits can die.** Proposed for how:
+From the developers (D169): **a recruit dies when their health runs out**, and slowly of hunger and thirst ([Needs](#needs)). A way to revive them may come later, if it is wanted.
 
-- **Downed before dead.** A recruit beaten in a fight goes down first, as in Kenshi. Help them up, or carry them home, and they mend in bed. Left down while the fight goes on, they can die.
-- **Dead is dead.** What they carried lies where they fell, as yours does (D84).
-- **Never from the system's own failings**: a pathing bug, a recruit who wandered out of the claim into a monster. The research found these the losses players resent most in Kenshi and Soulmask. Deaths should follow from danger the player could see and answer.
-
+- **Dead is dead**, for now. What they carried lies where they fell, as yours does (D84). The tribe mourns them: a grave or a pyre is something recruits might make on their own.
+- **Deaths come from danger close to home, and from leaving the outpost unprotected or unfed.** That is the game: an outpost is a place you keep.
+- **Never from the system's own failings**, such as a pathing bug or a recruit stuck behind a door. The research found these the losses players resent most in Kenshi and Soulmask. A recruit should only die where a player, watching, would see why.
 ## How many
 
 Proposed: as many as each outpost can house and feed ([people.md](people.md#recruits)). Since recruits come by rescue and by helping settlements (D90), the supply is a limit of its own, as in Enshrouded.
@@ -178,7 +204,7 @@ There will also be a cap per outpost, technical and mine to set, since every rec
 
 Proposed:
 
-- **A roster, to read, not to run**: who is in the tribe, what they are doing now, and their skills.
+- **A roster, to read, not to run**: who lives at the outpost, what they are doing now, and their skills. Proposed: kept on the outpost's board, a thing in the world, which is also where a recruit is sent to another outpost ([Moving a recruit](#moving-a-recruit-to-another-outpost)).
 - **Above all, why someone is not working**: "Bren is waiting: no charcoal in the stores." An idle worker with no visible reason is the failure every game in the research shares, and their guides are troubleshooting lists.
 - **Said in the world first** (D93): Bren tells you the forge is out of charcoal when you pass. The roster only gathers what you could have heard.
 
@@ -188,15 +214,9 @@ From the developers (D166):
 
 - **A tribe holds its claims, and each claim is an outpost of it.** All of a tribe's outposts are shared within it.
 - **Everyone in the tribe is part of it, players as well as recruits**, since you can recruit other players too. Whoever is in it may build in its outposts, use their stores and stations, and ask their recruits for something ([construction.md](construction.md#claims)).
-- **Recruits are not shared between outposts.** Each lives and works at one. Different outposts may want different people: a miner at the one by the ore, a smith at home. Whether recruits travel between them is to be decided later.
-- **A player is in one tribe at a time.** Tribes are like clans or guilds, with at least two ranks, such as member and leader.
-
-Proposed:
-
-- **A player on their own is a tribe of one**, and its leader. Joining another tribe means leaving your own.
-- **Recruiting a player** is asking them to join, and their accepting. Unlike a recruit, a player can leave whenever they like.
-- **A recruit belongs to the outpost you bring them home to**, and to the tribe, not to one player. One who joined because you rescued them stays if you leave. What you kept in containers set as yours ([Equipment](#equipment)) leaves with you.
-- **Two ranks to start**, as Ark's tribes and Conan Exiles' clans have more of (from memory, unchecked):
+- **Recruits are not shared between outposts.** Each lives and works at one. Different outposts may want different people: a miner at the one by the ore, a smith at home.
+- **A player is in one tribe at a time**, and **a player on their own is a tribe of one**, and its leader. Joining another tribe means leaving your own.
+- **Two ranks, member and leader**, as tribes in Ark and clans in Conan Exiles have (from memory, unchecked):
 
   | | Member | Leader |
   |---|---|---|
@@ -205,9 +225,20 @@ Proposed:
   | Invite and remove players, and set their rank | No | Yes |
   | Place, grow and give up claims; take down anything | No | Yes |
 
-  More ranks, or ranks a tribe sets up itself, can come if tribes of strangers need them ([multiplayer.md](multiplayer.md)).
-- **Moving a recruit**, if it comes: ask them to go to another outpost, and they set off on foot, as everyone must without fast travel between claims (D72). Seen on the road, so a recruit on the move can meet danger.
+Proposed:
 
+- **Recruiting a player** is asking them to join, and their accepting. Unlike a recruit, a player can leave whenever they like.
+- **A recruit belongs to the outpost you bring them home to**, and to the tribe, not to one player. One who joined because you rescued them stays if you leave. What you kept in personal containers leaves with you.
+
+### Moving a recruit to another outpost
+
+From the developers (D166, Leaning): likely done at a station. You take them with you, or let them walk on their own and risk death. Proposed:
+
+- **The station is the outpost's board**: a board, or a ledger on a stand, near the heart of the outpost. It lists who lives there and what they do, which is the roster ([Seeing what they do](#seeing-what-they-do)) as a thing in the world. Every outpost has one.
+- **At the board, you pick a recruit and another outpost of the tribe**, and how they go:
+  - **With you**: they follow you until you reach it, as a companion would (D161, later). Safer, but you must make the trip.
+  - **On their own**: they pack up and set off on foot, by roads where there are any. There is no fast travel between claims (D72), so it takes the time it takes. They can meet what is on the way, and a weak recruit sent through dangerous country may not arrive.
+- **They arrive and settle**, taking a bed and work there as any new recruit does.
 ## What it asks of the engine
 
 Technical, mine:
@@ -219,10 +250,7 @@ Technical, mine:
 
 ## Questions for the developers
 
-1. **Plans are drafts until you say they are ready**, and only then does the tribe carry for them and, later, build them: is that right?
-2. **Container settings**: the tribe's, mine, and kept for players. Are three enough?
-3. **Needs**: which of the ideas above, when the time comes?
-4. **Downed before dead**: is that how recruits should die?
-5. **Ranks**: member and leader, with the split proposed above?
-6. **A tribe of one**: is a player on their own a tribe, so everything works the same alone or together?
-7. Later: **recruits moving between outposts**.
+1. **Staking out** (D170): plans are drawn until you stake them, a whole building at a time, and only then does the tribe carry for them and, later, build them. Does it play right?
+2. **Hunger as proposed**: recruits forage on their own when the stores run dry, and death comes only after days of warnings. Right, or harsher?
+3. **The board** as the station for moving recruits, and for reading the roster?
+4. **Graves**: should the tribe mark its dead?
