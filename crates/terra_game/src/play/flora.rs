@@ -6,7 +6,8 @@
 //! every run. Trees, rocks and plants are one entity each, sharing a mesh per model.
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
-use super::inventory::{Cut, Cuttable};
+use super::flora_kinds::{FloraDef, Grows, Sway, choose, kinds};
+use super::inventory::Cuttable;
 use super::models::{Part, read_model};
 use super::scene::SUN_DIRECTION;
 use crate::build::Site;
@@ -51,12 +52,6 @@ impl MaterialExtension for WindExtension {
         "shaders/wind.wgsl".into()
     }
 }
-
-/// Things solid enough to walk into: a place and a radius around it.
-/// Trees at least this tall are great trees, which only an iron axe fells.
-const GREAT_TREE_M: f32 = 13.0;
-/// How many of the bigger rocks hold ore.
-const ORE_SHARE: f32 = 0.18;
 
 /// Trees and rocks that stop a walker: where each stands and how far round it, filed by
 /// place so a walker asks only about those near it.
@@ -152,20 +147,6 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (make_way, clear_around, follow_digs));
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Kind {
-    Pine,
-    Leafy,
-    Birch,
-    Rock,
-    /// Rock with ore in it: the same shapes, in a colour that gives it away.
-    OreRock,
-    Bush,
-    Plant,
-    Flower,
-    Prop,
-}
-
 /// A model ready to place: its mesh, and its size as modelled.
 #[derive(Clone)]
 struct Model {
@@ -175,39 +156,9 @@ struct Model {
     spread: f32,
 }
 
-/// Our colour for a part of a model, as it should look on screen, and whether it is
-/// foliage, which catches the wind.
-fn colour_of(kind: Kind, material: &str) -> (Color, bool) {
-    let material = material.split('.').next().unwrap_or(material);
-    match (kind, material) {
-        (Kind::Birch, "White") => (Color::srgb(0.93, 0.9, 0.84), false),
-        (Kind::Birch, "Black") => (Color::srgb(0.24, 0.2, 0.2), false),
-        (Kind::Birch, "Green") => (Color::srgb(0.96, 0.68, 0.2), true),
-        (Kind::Birch, "DarkGreen") => (Color::srgb(0.88, 0.5, 0.16), true),
-        (Kind::Pine, "Green") => (Color::srgb(0.2, 0.4, 0.3), true),
-        (Kind::Leafy, "Green") => (Color::srgb(0.47, 0.6, 0.22), true),
-        (Kind::Leafy, "DarkGreen") => (Color::srgb(0.33, 0.5, 0.22), true),
-        (Kind::Rock, "Rock") => (Color::srgb(0.66, 0.58, 0.54), false),
-        (Kind::Rock, "Green") => (Color::srgb(0.5, 0.58, 0.26), false),
-        (Kind::OreRock, _) => (Color::srgb(0.52, 0.33, 0.27), false),
-        (Kind::Bush, "Green") => (Color::srgb(0.36, 0.53, 0.24), true),
-        (Kind::Bush, "Berry") => (Color::srgb(0.85, 0.22, 0.26), true),
-        (Kind::Flower, "Cyan") => (Color::srgb(0.98, 0.95, 0.88), true),
-        (Kind::Flower, "Yellow") => (Color::srgb(1.0, 0.8, 0.2), true),
-        (Kind::Flower, "Pink") => (Color::srgb(0.96, 0.5, 0.6), true),
-        (_, "Wood") => (Color::srgb(0.43, 0.29, 0.22), false),
-        (_, "LightWood") => (Color::srgb(0.78, 0.62, 0.44), false),
-        (_, "Mushroom_Top") => (Color::srgb(0.84, 0.32, 0.22), false),
-        (_, "Mushroom_Bottom") => (Color::srgb(0.93, 0.88, 0.78), false),
-        (_, "DarkGreen") => (Color::srgb(0.27, 0.45, 0.22), true),
-        (_, "Leaves") => (Color::srgb(0.42, 0.58, 0.25), true),
-        _ => (Color::srgb(0.4, 0.56, 0.24), true),
-    }
-}
-
 /// Turns a model's parts into one mesh in our colours, carrying how each vertex moves in
 /// the wind.
-fn build_model(kind: Kind, parts: &[Part], meshes: &mut Assets<Mesh>) -> Model {
+fn build_model(kind: &FloraDef, parts: &[Part], meshes: &mut Assets<Mesh>) -> Model {
     let all = || parts.iter().flat_map(|part| part.positions.iter());
     let height = all().map(|p| p.y).fold(0.01, f32::max);
     let spread = all()
@@ -220,7 +171,7 @@ fn build_model(kind: Kind, parts: &[Part], meshes: &mut Assets<Mesh>) -> Model {
     let mut sways = Vec::new();
     let mut indices = Vec::new();
     for part in parts {
-        let (colour, foliage) = colour_of(kind, &part.material);
+        let (colour, foliage) = kind.colour(&part.material);
         let colour = colour.to_linear();
         let low = part.positions.iter().map(|p| p.y).fold(f32::MAX, f32::min);
         let high = part.positions.iter().map(|p| p.y).fold(f32::MIN, f32::max);
@@ -234,13 +185,11 @@ fn build_model(kind: Kind, parts: &[Part], meshes: &mut Assets<Mesh>) -> Model {
             } else {
                 0.85 + 0.15 * up_plant
             };
-            let (bend, flutter) = match kind {
-                Kind::Pine | Kind::Leafy | Kind::Birch => {
-                    (1.7 * up_plant * up_plant, if foliage { 0.7 } else { 0.0 })
-                }
-                Kind::Bush => (0.5 * up_plant, 0.5),
-                Kind::Plant | Kind::Flower => (0.9 * up_plant, 0.4 * up_plant),
-                Kind::Rock | Kind::OreRock | Kind::Prop => (0.0, 0.0),
+            let (bend, flutter) = match kind.sway {
+                Sway::Tree => (1.7 * up_plant * up_plant, if foliage { 0.7 } else { 0.0 }),
+                Sway::Bush => (0.5 * up_plant, 0.5),
+                Sway::Plant => (0.9 * up_plant, 0.4 * up_plant),
+                Sway::Still => (0.0, 0.0),
             };
             positions.push(*position);
             normals.push(*normal);
@@ -329,71 +278,30 @@ fn plant(
         extension: wind,
     });
 
-    let mut load = |kind: Kind, names: &[&str]| -> Vec<Model> {
-        names
-            .iter()
-            .filter_map(|name| match read_model(&format!("nature/{name}.glb")) {
-                Ok(parts) => Some(build_model(kind, &parts, &mut meshes)),
-                Err(problem) => {
-                    error!("Could not read a model. {problem}");
-                    None
-                }
-            })
-            .collect()
-    };
-    let pines = load(
-        Kind::Pine,
-        &[
-            "PineTree_1",
-            "PineTree_2",
-            "PineTree_3",
-            "PineTree_4",
-            "PineTree_5",
-        ],
-    );
-    let leafy = load(
-        Kind::Leafy,
-        &[
-            "CommonTree_1",
-            "CommonTree_2",
-            "CommonTree_3",
-            "CommonTree_4",
-            "CommonTree_5",
-        ],
-    );
-    let birches = load(Kind::Birch, &["BirchTree_1", "BirchTree_2", "BirchTree_3"]);
-    let rocks = load(
-        Kind::Rock,
-        &[
-            "Rock_1", "Rock_2", "Rock_3", "Rock_4", "Rock_5", "Rock_6", "Rock_7",
-        ],
-    );
-    let mossy_rocks = load(Kind::Rock, &["Rock_Moss_1", "Rock_Moss_2", "Rock_Moss_3"]);
-    let ore_rocks = load(Kind::OreRock, &["Rock_1", "Rock_3", "Rock_5", "Rock_7"]);
-    let bushes = load(Kind::Bush, &["Bush_1", "Bush_2"]);
-    let berry_bushes = load(Kind::Bush, &["BushBerries_1"]);
-    let plants = load(Kind::Plant, &["Plant_1", "Plant_3", "Plant_4"]);
-    let flowers = load(Kind::Flower, &["Flowers", "Plant_5"]);
-    let props = load(Kind::Prop, &["TreeStump", "WoodLog_Moss"]);
-    if [
-        &pines,
-        &leafy,
-        &birches,
-        &rocks,
-        &mossy_rocks,
-        &ore_rocks,
-        &berry_bushes,
-        &bushes,
-        &plants,
-        &flowers,
-        &props,
-    ]
-    .iter()
-    .any(|models| models.is_empty())
-    {
+    // Every kind's models, by its place in `assets/data/flora.ron`.
+    let models: Vec<Vec<Model>> = kinds()
+        .iter()
+        .map(|kind| {
+            kind.models
+                .iter()
+                .filter_map(|name| match read_model(&format!("nature/{name}.glb")) {
+                    Ok(parts) => Some(build_model(kind, &parts, &mut meshes)),
+                    Err(problem) => {
+                        error!("Could not read a model of {}. {problem}", kind.name);
+                        None
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    if models.iter().any(Vec::is_empty) {
         error!("Some models are missing, so nothing is planted. Is assets/models/nature there?");
         return;
     }
+    let size = |rng: &mut Rng, kind: usize| {
+        let (least, most) = kinds()[kind].size.unwrap_or((1.0, 1.0));
+        rng.range(least, most)
+    };
 
     let sea = planet.sea_radius_m();
     let to_base = site.frame.compute_affine().inverse();
@@ -459,26 +367,15 @@ fn plant(
             return;
         }
         let which = species.fbm(point / 150.0 + 9.0, 2, 2.0, 0.5) + rng.range(-0.12, 0.12);
-        let (models, tall) = if which < -0.06 {
-            (&pines, rng.range(9.0, 16.0))
-        } else if which > 0.1 {
-            (&birches, rng.range(7.0, 11.0))
-        } else {
-            (&leafy, rng.range(6.0, 10.5))
+        let Some(kind) = choose(Grows::Trees, which, 0.0, 0.0, rng) else {
+            return;
         };
-        let model = pick(rng, models);
+        let tall = size(rng, kind);
+        let model = pick(rng, &models[kind]);
         let scale = tall / model.height;
         let trunk = (point, (model.spread * scale).clamp(0.25, 0.6));
         // The tallest are great trees, which only an iron axe will fell (D96).
-        let wood = Some(Cuttable {
-            what: if tall >= GREAT_TREE_M {
-                Cut::GreatTree
-            } else {
-                Cut::Tree
-            },
-            gives: ("Wood", (tall / 3.0).round() as u32),
-            seconds: 1.0 + tall * 0.12,
-        });
+        let wood = kinds()[kind].cuttable(tall);
         put(
             &model,
             standing(rng, point, 0.06, scale, 0.1),
@@ -497,29 +394,14 @@ fn plant(
         }
         // Mostly small, now and then a boulder; a few of the bigger ones hold ore.
         let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
-        let ore = size > 0.7 && rng.unit() < ORE_SHARE;
-        let model = if ore {
-            pick(rng, &ore_rocks)
-        } else if cover.grass > 0.6 && rng.unit() < 0.6 {
-            pick(rng, &mossy_rocks)
-        } else {
-            pick(rng, &rocks)
+        // A few of the bigger ones hold ore; in the grass, most are mossy.
+        let Some(kind) = choose(Grows::Rocks, 0.0, cover.grass, size, rng) else {
+            return;
         };
+        let model = pick(rng, &models[kind]);
         let scale = size / model.height;
         let stops = (size > 0.9).then_some((point, model.spread * scale * 0.8));
-        let metal = Some(if ore {
-            Cuttable {
-                what: Cut::Ore,
-                gives: ("Ore", size.ceil() as u32),
-                seconds: 1.2 + size * 0.6,
-            }
-        } else {
-            Cuttable {
-                what: Cut::Rock,
-                gives: ("Stone", (size * 1.5).ceil() as u32),
-                seconds: 0.8 + size * 0.5,
-            }
-        });
+        let metal = kinds()[kind].cuttable(size);
         put(
             &model,
             standing(rng, point, 0.5, scale, size * 0.22),
@@ -536,19 +418,14 @@ fn plant(
         if rng.unit() > 0.3 * cover.grass {
             return;
         }
-        // A third of the bushes bear berries, the first food to be found.
-        let berries = rng.unit() < 0.33;
-        let model = pick(rng, if berries { &berry_bushes } else { &bushes });
-        let scale = rng.range(0.7, 1.5) / model.height;
-        let fibre = Some(Cuttable {
-            what: Cut::Plant,
-            gives: if berries {
-                ("Berries", 3)
-            } else {
-                ("Fibre", 1)
-            },
-            seconds: 0.7,
-        });
+        // Some bear berries, the first food to be found.
+        let Some(kind) = choose(Grows::Bushes, 0.0, cover.grass, 0.0, rng) else {
+            return;
+        };
+        let model = pick(rng, &models[kind]);
+        let tall = size(rng, kind);
+        let scale = tall / model.height;
+        let fibre = kinds()[kind].cuttable(tall);
         put(
             &model,
             standing(rng, point, 0.1, scale, 0.05),
@@ -563,13 +440,13 @@ fn plant(
         if rng.unit() > 0.28 * cover.grass {
             return;
         }
-        let model = pick(rng, &plants);
-        let scale = rng.range(0.35, 0.75) / model.height;
-        let fibre = Some(Cuttable {
-            what: Cut::Plant,
-            gives: ("Fibre", 1),
-            seconds: 0.4,
-        });
+        let Some(kind) = choose(Grows::Plants, 0.0, cover.grass, 0.0, rng) else {
+            return;
+        };
+        let model = pick(rng, &models[kind]);
+        let tall = size(rng, kind);
+        let scale = tall / model.height;
+        let fibre = kinds()[kind].cuttable(tall);
         put(
             &model,
             standing(rng, point, 0.15, scale, 0.02),
@@ -589,33 +466,38 @@ fn plant(
         if cover.grass < 0.5 {
             return;
         }
-        let model = pick(rng, &flowers);
-        let scale = rng.range(0.4, 0.62) / model.height;
+        let Some(kind) = choose(Grows::Flowers, 0.0, cover.grass, 0.0, rng) else {
+            return;
+        };
+        let model = pick(rng, &models[kind]);
+        let tall = size(rng, kind);
+        let scale = tall / model.height;
         put(
             &model,
             standing(rng, point, 0.15, scale, 0.02),
             0.5,
-            None,
+            kinds()[kind].cuttable(tall),
             None,
         );
     });
 
-    // A stump and a mossy log by the door, as if the clearing had been cut.
-    for (model, beside, size) in [
-        (&props[0], Vec3::new(1.0, 0.0, 11.0), 0.7),
-        (&props[1], Vec3::new(-2.5, 0.0, 12.5), 0.9),
-    ] {
+    // What lies by the door, such as a stump and a log, as if the clearing had been cut.
+    let by_the_door = kinds()
+        .iter()
+        .enumerate()
+        .filter_map(|(kind, def)| match def.grows {
+            Grows::ByTheDoor(east, south, size) => Some((kind, Vec3::new(east, 0.0, south), size)),
+            _ => None,
+        });
+    for (kind, beside, size) in by_the_door {
+        let model = &models[kind][0];
         let point = planet.ground_at(site.frame.transform_point(beside));
         let mut rng = seed.derive("props").rng();
         put(
             model,
             standing(&mut rng, point, 0.0, size / model.height, 0.03),
             1.0,
-            Some(Cuttable {
-                what: Cut::Tree,
-                gives: ("Wood", 2),
-                seconds: 1.0,
-            }),
+            kinds()[kind].cuttable(size),
             Some((point, 0.5)),
         );
     }

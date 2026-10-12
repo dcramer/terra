@@ -31,6 +31,7 @@ mod dial;
 mod dig;
 mod figure;
 mod flora;
+mod flora_kinds;
 mod gains;
 mod harvest;
 pub(crate) mod held;

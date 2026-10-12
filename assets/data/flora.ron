@@ -1,0 +1,159 @@
+#![enable(implicit_some)]
+// Every kind of thing that grows or lies about the ground (D39, D127, D136): trees, rocks,
+// bushes, plants and flowers. A new kind is an entry here with its models in
+// assets/models/nature; no code names one. Where things grow is worked out layer by layer
+// (crates/terra_game/src/play/flora.rs); each layer chooses among the kinds that grow in it.
+//
+// Each kind:
+//   name     what it is called
+//   models   the models it is drawn from, in assets/models/nature
+//   colours  our colour for each material its models name, and whether that part is
+//            foliage, which catches the wind, or Firm; * is any material. Materials not named
+//            here take the shared colours below.
+//   sway     how it moves in the wind: Tree, Bush, Plant or Still
+//   grows    the layer it grows in: Trees, Rocks, Bushes, Plants or Flowers, or
+//            ByTheDoor(east, south, height) for one placed by the base's door
+//   size     its height, in metres, from and to; a rock's comes from its layer
+//   below, above, grass_above, size_above, chance
+//            when its layer chooses it: the layer tries its kinds in the order here and
+//            takes the first whose noise is below or above so much, whose ground is grassier
+//            than so much, whose size is over so much, and that wins a roll of chance; the
+//            last of a layer, with none of these, is what grows otherwise
+//   cut      what cutting it takes and gives: the sort of thing it is (as items.ron's
+//            tools cut), the item it gives as so many plus so many more a metre of its
+//            size, rounded, the seconds it takes likewise, and the size from which it is
+//            cut as a greater sort, such as a great tree that only iron fells (D96)
+(
+    shared_colours: [
+        ("Wood", (0.43, 0.29, 0.22), Firm),
+        ("LightWood", (0.78, 0.62, 0.44), Firm),
+        ("Mushroom_Top", (0.84, 0.32, 0.22), Firm),
+        ("Mushroom_Bottom", (0.93, 0.88, 0.78), Firm),
+        ("DarkGreen", (0.27, 0.45, 0.22), Foliage),
+        ("Leaves", (0.42, 0.58, 0.25), Foliage),
+        ("*", (0.4, 0.56, 0.24), Foliage),
+    ],
+    kinds: [
+        (
+            name: "Pine",
+            models: ["PineTree_1", "PineTree_2", "PineTree_3", "PineTree_4", "PineTree_5"],
+            colours: [("Green", (0.2, 0.4, 0.3), Foliage)],
+            sway: Tree,
+            grows: Trees,
+            below: -0.06,
+            size: (9.0, 16.0),
+            cut: (what: Tree, gives: ("Wood", 0.0, 0.33333334), seconds: (1.0, 0.12), greater: (13.0, GreatTree)),
+        ),
+        (
+            name: "Birch",
+            models: ["BirchTree_1", "BirchTree_2", "BirchTree_3"],
+            colours: [
+                ("White", (0.93, 0.9, 0.84), Firm),
+                ("Black", (0.24, 0.2, 0.2), Firm),
+                ("Green", (0.96, 0.68, 0.2), Foliage),
+                ("DarkGreen", (0.88, 0.5, 0.16), Foliage),
+            ],
+            sway: Tree,
+            grows: Trees,
+            above: 0.1,
+            size: (7.0, 11.0),
+            cut: (what: Tree, gives: ("Wood", 0.0, 0.33333334), seconds: (1.0, 0.12), greater: (13.0, GreatTree)),
+        ),
+        (
+            name: "Leafy tree",
+            models: ["CommonTree_1", "CommonTree_2", "CommonTree_3", "CommonTree_4", "CommonTree_5"],
+            colours: [("Green", (0.47, 0.6, 0.22), Foliage), ("DarkGreen", (0.33, 0.5, 0.22), Foliage)],
+            sway: Tree,
+            grows: Trees,
+            size: (6.0, 10.5),
+            cut: (what: Tree, gives: ("Wood", 0.0, 0.33333334), seconds: (1.0, 0.12), greater: (13.0, GreatTree)),
+        ),
+
+        // Rock with ore in it: the same shapes, in a colour that gives it away.
+        (
+            name: "Ore rock",
+            models: ["Rock_1", "Rock_3", "Rock_5", "Rock_7"],
+            colours: [("*", (0.52, 0.33, 0.27), Firm)],
+            sway: Still,
+            grows: Rocks,
+            size_above: 0.7,
+            chance: 0.18,
+            cut: (what: Ore, gives: ("Ore", 0.5, 1.0), seconds: (1.2, 0.6)),
+        ),
+        (
+            name: "Mossy rock",
+            models: ["Rock_Moss_1", "Rock_Moss_2", "Rock_Moss_3"],
+            colours: [("Rock", (0.66, 0.58, 0.54), Firm), ("Green", (0.5, 0.58, 0.26), Firm)],
+            sway: Still,
+            grows: Rocks,
+            grass_above: 0.6,
+            chance: 0.6,
+            cut: (what: Rock, gives: ("Stone", 0.5, 1.5), seconds: (0.8, 0.5)),
+        ),
+        (
+            name: "Rock",
+            models: ["Rock_1", "Rock_2", "Rock_3", "Rock_4", "Rock_5", "Rock_6", "Rock_7"],
+            colours: [("Rock", (0.66, 0.58, 0.54), Firm), ("Green", (0.5, 0.58, 0.26), Firm)],
+            sway: Still,
+            grows: Rocks,
+            cut: (what: Rock, gives: ("Stone", 0.5, 1.5), seconds: (0.8, 0.5)),
+        ),
+
+        // The first food to be found.
+        (
+            name: "Berry bush",
+            models: ["BushBerries_1"],
+            colours: [("Green", (0.36, 0.53, 0.24), Foliage), ("Berry", (0.85, 0.22, 0.26), Foliage)],
+            sway: Bush,
+            grows: Bushes,
+            chance: 0.33,
+            size: (0.7, 1.5),
+            cut: (what: Plant, gives: ("Berries", 3.0, 0.0), seconds: (0.7, 0.0)),
+        ),
+        (
+            name: "Bush",
+            models: ["Bush_1", "Bush_2"],
+            colours: [("Green", (0.36, 0.53, 0.24), Foliage), ("Berry", (0.85, 0.22, 0.26), Foliage)],
+            sway: Bush,
+            grows: Bushes,
+            size: (0.7, 1.5),
+            cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.7, 0.0)),
+        ),
+        (
+            name: "Plant",
+            models: ["Plant_1", "Plant_3", "Plant_4"],
+            sway: Plant,
+            grows: Plants,
+            size: (0.35, 0.75),
+            cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.4, 0.0)),
+        ),
+        (
+            name: "Flower",
+            models: ["Flowers", "Plant_5"],
+            colours: [
+                ("Cyan", (0.98, 0.95, 0.88), Foliage),
+                ("Yellow", (1.0, 0.8, 0.2), Foliage),
+                ("Pink", (0.96, 0.5, 0.6), Foliage),
+            ],
+            sway: Plant,
+            grows: Flowers,
+            size: (0.4, 0.62),
+        ),
+
+        // A stump and a mossy log by the door, as if the clearing had been cut.
+        (
+            name: "Stump",
+            models: ["TreeStump"],
+            sway: Still,
+            grows: ByTheDoor(1.0, 11.0, 0.7),
+            cut: (what: Tree, gives: ("Wood", 2.0, 0.0), seconds: (1.0, 0.0)),
+        ),
+        (
+            name: "Log",
+            models: ["WoodLog_Moss"],
+            sway: Still,
+            grows: ByTheDoor(-2.5, 12.5, 0.9),
+            cut: (what: Tree, gives: ("Wood", 2.0, 0.0), seconds: (1.0, 0.0)),
+        ),
+    ],
+)
