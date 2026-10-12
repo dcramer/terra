@@ -15,10 +15,11 @@ use super::bodies::Body;
 use super::flora::ClearAround;
 use super::interact::{CanInteract, Interactable, Interacted};
 use super::inventory::Belongings;
+use super::lod::Detail;
 use super::skills::{Did, ONCE};
 pub use super::species::Species;
 use super::species::{Bestiary, Lives, Temper};
-use super::tick::{Sim, Smoothed};
+use super::tick::{Sim, Smoothed, Ticks};
 use super::{Downed, Player};
 use crate::build::Site;
 use crate::loading::Loading;
@@ -51,7 +52,7 @@ pub enum State {
 }
 
 #[derive(Component)]
-#[require(Smoothed)]
+#[require(Smoothed, Detail)]
 pub struct Creature {
     pub species: Species,
     pub health: f32,
@@ -393,18 +394,23 @@ fn spawn(
 /// Decides what each creature does next.
 fn think(
     time: Res<Time>,
+    ticks: Res<Ticks>,
     bestiary: Res<Bestiary>,
     players: Query<(Entity, &Transform), (With<Player>, Without<Downed>)>,
-    mut creatures: Query<(&mut Creature, &Transform), Without<Player>>,
+    mut creatures: Query<(Entity, &mut Creature, &Transform, &Detail), Without<Player>>,
     mut bitten: MessageWriter<Bitten>,
     mut dice: ResMut<Dice>,
     mut awake: Local<SpatialHash<Entity>>,
 ) {
-    let dt = time.delta_secs().min(0.1);
+    let tick = time.delta_secs().min(0.1);
     // Players filed by place, so each creature looks only at those near it (D127).
     awake.clear();
     awake.extend(players.iter().map(|(player, at)| (at.translation, player)));
-    for (mut creature, at) in &mut creatures {
+    for (entity, mut creature, at, detail) in &mut creatures {
+        // Far from everyone it thinks less often, over the ticks it waited (D145).
+        let Some(dt) = detail.thinks(ticks.0, entity, tick) else {
+            continue;
+        };
         let here = at.translation;
         let (quarry, apart) = nearest(&awake, here).unzip();
         creature.quarry = quarry;
@@ -514,10 +520,13 @@ fn walk(
     bestiary: Res<Bestiary>,
     planet: Res<Planet>,
     players: Query<&Transform, With<Player>>,
-    mut creatures: Query<(&mut Creature, &mut Transform), Without<Player>>,
+    mut creatures: Query<(&mut Creature, &mut Transform, &Detail), Without<Player>>,
 ) {
     let dt = time.delta_secs().min(0.1);
-    for (mut creature, mut at) in &mut creatures {
+    for (mut creature, mut at, detail) in &mut creatures {
+        if !detail.moves() {
+            continue;
+        }
         let here = at.translation;
         let up = here.normalize();
         let about = bestiary.get(creature.species);
@@ -730,6 +739,7 @@ mod tests {
         world.init_resource::<Messages<Bitten>>();
         world.insert_resource(Dice(Seed(1).derive("test").rng()));
         world.insert_resource(Bestiary::read(&Default::default()));
+        world.init_resource::<Ticks>();
         world
     }
 

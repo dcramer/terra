@@ -41,6 +41,7 @@ mod intent;
 mod interact;
 pub mod inventory;
 mod kinds;
+mod lod;
 mod map;
 mod models;
 mod music;
@@ -254,6 +255,7 @@ pub fn plugin(app: &mut App) {
     soundscape::plugin(app);
     music::plugin(app);
     tick::plugin(app);
+    lod::plugin(app);
     app.insert_resource(DrivenByPlayer)
         .init_resource::<Zoom>()
         .add_systems(PostStartup, spawn)

@@ -266,7 +266,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         &Bar,
         &View,
     ), IsLocalPlayer>();
-    let mut creatures = world.query::<(&Creature, &GlobalTransform)>();
+    let mut creatures = world.query::<(&Creature, &GlobalTransform, &super::lod::Detail)>();
     let mut people = world.query_filtered::<(&Name, &GlobalTransform), With<Person>>();
     let site = world
         .get_resource::<Site>()
@@ -299,7 +299,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
     let near = |distance: f32| whole || distance < NEAR_M;
     let mut around = Vec::new();
     let bestiary = world.resource::<super::species::Bestiary>();
-    for (creature, at) in creatures.iter(world) {
+    for (creature, at, detail) in creatures.iter(world) {
         let name = bestiary.name(creature.species);
         let distance = at.translation().distance(feet);
         if near(distance) {
@@ -313,6 +313,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
                     "distance": number(distance),
                     "health": number(creature.health),
                     "doing": format!("{:?}", creature.state),
+                    "detail": format!("{detail:?}"),
                 }),
             ));
         }

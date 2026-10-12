@@ -27,6 +27,10 @@ pub enum Sim {
     End,
 }
 
+/// How many ticks have run, for what acts once in so many.
+#[derive(Resource, Default)]
+pub struct Ticks(pub u64);
+
 /// Something that moves tick by tick and is shown smoothly between ticks: where it stood
 /// before the tick and where it stands after it.
 #[derive(Component, Default, Clone, Copy)]
@@ -43,12 +47,17 @@ pub fn plugin(app: &mut App) {
         FixedUpdate,
         (Sim::Act, Sim::World, Sim::Resolve, Sim::End).chain(),
     )
-    .add_systems(FixedFirst, take_up)
+    .init_resource::<Ticks>()
+    .add_systems(FixedFirst, (count, take_up))
     .add_systems(FixedLast, put_down)
     .add_systems(
         RunFixedMainLoop,
         show.in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
     );
+}
+
+fn count(mut ticks: ResMut<Ticks>) {
+    ticks.0 += 1;
 }
 
 /// Before a tick: each body stands where it truly is, which is where it starts the tick.
