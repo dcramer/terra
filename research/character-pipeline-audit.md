@@ -62,7 +62,8 @@
 | Turn and size of each model | `PIECES`: a turn per model (Tripo faces its models its own way) and a share of height | Duct tape, per item; should be found from the model |
 | The pack's strap loops | Cut below the socket plus 1.5 cm | Duct tape, for one model |
 | Strap routes | Rays from the body's joints; a ray that misses moves 15% inward, up to 8 times | Duct tape in its search; the idea is sound |
-| Straps on the biggest morphs | Fail in the sword swing (2.3–3.1%) | See below |
+| Straps on the biggest morphs | Fail in the sword swing (2.3–3.1%) on heavy and strong; pass at rest on every morph (0%) | A failure in pose only, not of the morph carry. The straps are copies of the body's faces with their weights, so they skin as the skin under them does; the flank skin of a bigger body slides under them in a twist. Fix after the deformation work, then re-measure |
+| `skin_weights` in `fit_gear.py` | Fades weights to one bone away from the skin; called by nothing since the straps were made from the skin | Dead code; delete |
 
 ## Morphs and the game
 
@@ -70,7 +71,7 @@
 |---|---|---|
 | Registration | Pose by the base's own skeleton, a pull smoothed over distance, back to the T-pose | Sound (non-rigid fitting) |
 | Build morphs keep the skeleton | As Starfield's Heavy | Sound |
-| Gear carried by nearest skin | BodySlide's conform | Sound; rigid parts' clearance rule is duct tape |
+| Gear carried by nearest skin | The morph of the nearest skin vertex. BodySlide averages up to ten neighbours by distance; Mutable binds each vertex to nearby faces. Nearest-vertex picks are noisy where a morph changes fast, and a strap's inner and outer faces can pick different vertices | Duct tape: bind to the surface (triangle and barycentric weights), spread through each part's connections as BodySlide's clipping fixer does, so thin parts keep their thickness. The rigid parts' clearance rule matches BodySlide's "solid object" in spirit |
 | Joints and sockets in the game | Offsets per morph; bind poses moved | Sound; verified at rest (exact) and live in the sword swing (1–3 mm, 9 mm at the fast hand from frame rounding) |
 | Joints kept after animation | Each frame, a joint the clip set is moved by its offset; "set this frame" is guessed from whether it changed since last written | Duct tape. Sound: export clips with only rotations and the hips' translation, so the body's own joint positions are never overwritten |
 | Culling of morphed bodies | Bevy's skinned bounds come from the base mesh | Unverified: a heavy body is up to 9 cm larger |
@@ -98,8 +99,16 @@
    - the cut relaxed;
    - a turned-in rim;
    - the bake masked to inside the dressed garment.
-4. **Straps on the biggest builds,** after the research on gear across morphs.
+4. **Gear across morphs,** after the deformation work, re-measured first:
+   - bind each look to the body's surface instead of the nearest vertex;
+   - bake a push-out per morph extreme, at rest and through every clip, into each morph's target: BodySlide's clipping fixer, with a clearance of about 4 mm, spread through connections, seams welded. A large push needed only in pose means the weights need fixing, not more inflation;
+   - check a grid of morph mixes, not just each extreme.
 5. **The duct tape above,** each replaced by the sound version or kept and marked as authoring data.
+
+Gear across morphs (the fourth survey, which read BodySlide and Outfit Studio's source):
+- No shipped system pushes skinned gear out of the body at run time; that is for simulated cloth.
+- Gear morphs are authored or corrected per extreme offline: Skyrim's two weight meshes, Starfield's Heavy, Thin and Strong deltas, BodySlide's clipping fixer in its sliders mode.
+- Rigid parts move as one; covered skin is hidden.
 
 Sources are in the four surveys this note summarises (the session's research agents); the main ones:
 - [Unreal twist bones](https://cascadeur.com/help/rig/advanced_rigging/advanced_rigging_techniques/twist_bones)
@@ -111,4 +120,5 @@ Sources are in the four surveys this note summarises (the session's research age
 - [Robust skin weight transfer](https://www.dgp.toronto.edu/~rinat/projects/RobustSkinWeightsTransfer)
 - [CLOTH3D boundary smoothing](https://arxiv.org/pdf/1912.02792)
 - [Blender Solidify](https://docs.blender.org/manual/en/latest/modeling/modifiers/generate/solidify.html)
+- [BodySlide source](https://github.com/ousnius/BodySlide-and-Outfit-Studio) (`Automorph.cpp`, `ClippingFixer.cpp`)
 - [Roblox cages](https://create.roblox.com/docs/art/accessories/caging-best-practices)
