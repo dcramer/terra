@@ -16,7 +16,8 @@ The foundation every system stands on: what magic is, where monsters come from, 
 | Many worlds, and ways between them | Every realm, generated ([worlds.md](worlds.md), [settings.md](settings.md)) |
 | Magic that can be studied as well as held | Every discipline and style |
 | People whose work is keeping monsters down | Every people, faction, culture and settlement ([people.md](people.md)) |
-| | Gods or great powers, if any; the history; the long threat; every name |
+| Gods who are the greatest users of magic | Every god, each belonging to one realm |
+| | The history; the long threat; every name, by the rules in [naming.md](naming.md) |
 
 **Not taken at all:**
 - the books' characters and their story;
@@ -24,7 +25,7 @@ The foundation every system stands on: what magic is, where monsters come from, 
 - their particular essences and abilities;
 - terms the books coined.
 
-Where our docs still use a working term that is the books' own, it is listed under [names](#names) to be replaced. A reader who knows the books should recognise how our universe works, and find nothing in it they have read before.
+Where our docs still use a working term that is the books' own, it is listed in [naming.md](naming.md) with our own word to replace it. A reader who knows the books should recognise how our universe works, and find nothing in it they have read before.
 
 ## Magic
 
@@ -77,6 +78,19 @@ Where our docs still use a working term that is the books' own, it is listed und
 - **The realms are one cosmos** with one set of rules. That is why the same magic, the same ranks and the same kinds of essence are found in every one, however strange the realm ([settings.md](settings.md#making-generated-realms-fit-the-lore)).
 - **What it means for play:** realms are reached by portals, generated with no fixed number, and each is shaped by the magic that dominates it.
 
+## Gods
+
+Decided that they exist (D156), because they enrich the world.
+
+- **A god is a superior user of magic:** one of a realm who went deeper into its magic than anyone, far past the highest rank a person reaches. It is the same magic and the same ladder, at its far end, not a different order of thing.
+- **Gods belong to a realm.** Each realm has its own, and their natures follow its magic: a death realm's gods are of death and endings, a growth realm's of seasons and life. No god is worshipped everywhere.
+- **Peoples believe things about them,** not always the same things, and not always true. Shrines, priests, rites and offerings are part of a culture ([people.md](people.md)).
+- **What it means for play:** gods are made by the generator with their realm, from its magic and its history ([naming.md](naming.md#lore-by-the-same-rules)). How far they act in play (blessings, a priest's powers, a god's anger at what you do) is open.
+
+## Beings of the gap
+
+Proposed, Leaning (D157): **in the lore only.** Something lives in the formless gap between realms, older and larger than any god, and perhaps keeps the cosmos in order. It is known from old carvings, from what the deepest scholars of the gap claim, and from what the gods themselves seem to fear. It is never met in play, for now.
+
 ## People and monsters
 
 - **Wherever magic makes monsters, people organise to keep them down:** hunters, wardens, sworn bands, whatever a culture calls them. The work is dangerous and well rewarded, and the people who do it are respected and needed.
@@ -85,20 +99,10 @@ Where our docs still use a working term that is the books' own, it is listed und
 
 ## Open: for the developers
 
-1. **Gods and great powers.** The books have them. Are there beings in ours who embody great ideas, or keep the cosmos in order? Proposed: perhaps, but distant, bound by rules, and found as belief and ruins before anything else. Left out until decided.
+1. Answered: **gods** exist, as realm-bound superior users of magic (D156). **Beings of the gap** are in the lore only, for now (D157).
 2. **Why the player comes back from death** (D18). Proposed: something in the lore, such as a bond to the place you rest, rather than an unexplained respawn.
-3. **The long threat** (premise B in [arc.md](arc.md)). What spreads, and how it fits the rules above: magic gone wrong, something from the gap between realms, or something else.
-4. **Names.** Our own words for everything below.
-
-## Names
-
-Working terms in our docs that come from the books and should be replaced with our own, or that are plain English and can stay. To decide:
-
-| Working term | From the books? | Proposed |
-|---|---|---|
-| Essence | Plain English, used by the books | Keep, or our own word |
-| Confluence (the fourth from three) | The books' term | Replace with our own |
-| Iron, bronze, silver, gold, diamond (ranks) | The books' ladder | Keep the idea; perhaps our own names, metals or otherwise |
-| Mana | Common in games | Keep |
-| Astral magic (a studied discipline, D124) | The books' term | Replace with our own |
-| Surge | Ours | Keep |
+3. **The long threat** (premise B in [arc.md](arc.md)), not yet chosen. Three that fit the rules, to react to:
+   - **a drought:** magic draining out of realms, leaving them dead;
+   - **a rot in the water:** magic turning foul and making worse things wherever it pools;
+   - **something rising from the gap,** pressing through where realms wear thin.
+4. **Names.** Our own words, made by one pattern: proposed in [naming.md](naming.md) (D158).

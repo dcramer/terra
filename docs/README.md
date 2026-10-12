@@ -15,6 +15,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [vision.md](vision.md) | Pitch, pillars, tone, our inspirations, non-goals. |
 | [gameplay.md](gameplay.md) | **The game's design, and the source of truth for it** (D89): a living world, after Enshrouded and *He Who Fights With Monsters*; what goes on in the realms, the loops, factions and settlements, holding ground, no hand-holding. Links a page per system, below. |
 | [lore.md](lore.md) | The foundational lore: how the universe works, from *He Who Fights With Monsters*'s world-building, written in our own words. The basis for every system. |
+| [naming.md](naming.md) | Proposed rules for making names and lore: a shared tongue for how the universe works, with magic spoken of as water, and generated tongues for each realm's peoples. |
 | [proposals](proposals/README.md) | Numbered proposals, each one candidate. Game design 001 was adopted on 2026-10-12 and is now gameplay.md and its system pages. |
 
 **Parts of the game**
