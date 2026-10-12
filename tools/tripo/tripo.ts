@@ -225,7 +225,8 @@ const COMMANDS: Record<string, Command> = {
   },
 };
 
-async function main(argv: string[]): Promise<void> {
+// Runs one command line. `connect` makes the client, so tests can give a fake one.
+export async function main(argv: string[], connect = () => new Studio()): Promise<void> {
   const name = argv[0];
   const command = COMMANDS[name];
   if (!command || name === "help" || argv.includes("--help") || argv.includes("-h")) {
@@ -243,7 +244,7 @@ async function main(argv: string[]): Promise<void> {
   }
   let client: Studio | undefined;
   try {
-    client = new Studio();
+    client = connect();
     await command.run(client, a);
   } catch (err) {
     // Tripo's answers are StudioErrors; anything else is a bug here, so keep its stack.
