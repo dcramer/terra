@@ -43,7 +43,8 @@ usage: terra_sandbox [options]
   --model <path>        in the workbench: a model to load, under assets/; repeatable,
                         to stand several side by side
   --anim <clip>         in the workbench: a clip to play; repeatable
-  --hold <tool>         in the workbench: a tool in the right hand, named as in --give
+  --hold <item>         in the workbench: an item's held look in the right hand, named as
+                        in --give, such as stone_axe
   --wear <item>         in the workbench: an item's look for each model's body, named as
                         in --give, such as leather_coat (repeatable)
   --attach <file>[@<socket>]

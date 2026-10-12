@@ -4,8 +4,8 @@
 //!
 //! `--model <path>` loads a .glb or .gltf under `assets/`; given more than once, the
 //! models stand side by side doing the same thing. `--anim <clip>` plays a clip
-//! (repeatable; the first plays when looking by hand). `--hold <tool>` puts a tool in the
-//! right hand, `--wear <item>` puts on an item's look for each model's body, and
+//! (repeatable; the first plays when looking by hand). `--hold <item>` puts an item's held
+//! look in the right hand, `--wear <item>` puts on an item's look for each model's body, and
 //! `--attach <file>[@<socket>]` puts on any look, on a socket if given, otherwise as the file
 //! says (`character`). `--focus <name>` looks closely at one
 //! part. `--sheet <prefix>` saves a contact sheet per clip and exits (`sheet`). With
@@ -24,7 +24,6 @@ use bevy::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::play::held::{carry_tilt, tool_material, tool_mesh, tool_named};
 use crate::{character, planet::Planet, remote, shell::Options};
 
 /// How far apart models stand, side by side.
@@ -214,9 +213,7 @@ fn spawn(
                       mut players: Query<&mut AnimationPlayer>,
                       mut bench: ResMut<Bench>,
                       options: Res<Options>,
-                      assets: Res<AssetServer>,
-                      mut meshes: ResMut<Assets<Mesh>>,
-                      mut materials: ResMut<Assets<StandardMaterial>>| {
+                      assets: Res<AssetServer>| {
                     let descendants: Vec<Entity> =
                         children.iter_descendants(ready.entity).collect();
                     let named = |prefix: &str| {
@@ -240,8 +237,6 @@ fn spawn(
                         &assets,
                         &children,
                         &names,
-                        &mut meshes,
-                        &mut materials,
                     );
                     let Some(model) = bench
                         .models
@@ -291,26 +286,19 @@ fn dress(
     assets: &AssetServer,
     children: &Query<&Children>,
     names: &Query<&Name>,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
 ) {
-    if let Some(name) = &options.hold {
-        let hand = character::find(root, character::HAND_R, children, names);
-        let tool = tool_named(name);
-        match (tool.and_then(tool_mesh), tool, hand) {
-            (Some(mesh), Some(tool), Some(hand)) => {
+    if let Some(item) = &options.hold {
+        match character::find(root, character::HAND_R, children, names) {
+            Some(hand) => {
                 commands.entity(hand).insert(character::Carrying::default());
-                commands.spawn((
-                    Name::new("Held tool"),
-                    character::Held::new(carry_tilt(tool)),
-                    Mesh3d(meshes.add(mesh)),
-                    MeshMaterial3d(materials.add(tool_material())),
-                    Transform::default(),
-                    ChildOf(hand),
-                ));
+                let file = character::held_look(item);
+                character::hold(
+                    commands,
+                    assets.load(GltfAssetLabel::Scene(0).from_asset(file)),
+                    hand,
+                );
             }
-            (_, None, _) | (None, _, _) => warn!("workbench: no tool called {name}"),
-            (_, _, None) => warn!("workbench: the model has no {}", character::HAND_R),
+            None => warn!("workbench: the model has no {}", character::HAND_R),
         }
     }
     for attach in &options.attaches {

@@ -94,9 +94,15 @@ pub fn look(body: &str, item: &str) -> String {
     format!("models/gear/{body}/{item}.glb")
 }
 
+/// Where a held item's look is: the same for every body, since every hand socket is alike.
+pub fn held_look(item: &str) -> String {
+    format!("models/held/{item}.glb")
+}
+
 pub fn plugin(app: &mut App) {
     app.add_observer(put_on)
         .add_observer(body_ready)
+        .add_observer(held_ready)
         .add_systems(Update, tilt);
 }
 
@@ -157,10 +163,46 @@ pub fn wear(commands: &mut Commands, model: Handle<WorldAsset>, body: Entity) ->
         .id()
 }
 
+/// Puts a held thing's look in `hand`, a hand socket. Once it has loaded it tips, when
+/// carried, as its file says (`carry_tilt` in its glTF extras). Returns the look's root.
+pub fn hold(commands: &mut Commands, model: Handle<WorldAsset>, hand: Entity) -> Entity {
+    commands
+        .spawn((
+            WorldAssetRoot(model),
+            Transform::default(),
+            Held::new(0.0),
+            ChildOf(hand),
+        ))
+        .id()
+}
+
+/// A value a look's file gives in its glTF extras.
+fn extra(extras: &GltfExtras, key: &str) -> Option<serde_json::Value> {
+    let value: serde_json::Value = serde_json::from_str(&extras.value).ok()?;
+    value.get(key).cloned()
+}
+
 /// The socket a rigid look names in its glTF extras.
 fn socket_in(extras: &GltfExtras) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_str(&extras.value).ok()?;
-    Some(value.get("socket")?.as_str()?.to_string())
+    Some(extra(extras, "socket")?.as_str()?.to_string())
+}
+
+/// Once a held look has loaded, takes how far it tips when carried from its file.
+fn held_ready(
+    ready: On<WorldInstanceReady>,
+    mut held: Query<&mut Held>,
+    children: Query<&Children>,
+    extras: Query<&GltfExtras>,
+) {
+    let Ok(mut held) = held.get_mut(ready.entity) else {
+        return;
+    };
+    if let Some(tilt) = children
+        .iter_descendants(ready.entity)
+        .find_map(|each| extra(extras.get(each).ok()?, "carry_tilt")?.as_f64())
+    {
+        held.carry_tilt = tilt as f32;
+    }
 }
 
 /// Once a worn look has loaded: a skinned one's joints become the body's; a rigid one moves

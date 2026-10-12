@@ -38,7 +38,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--remote` | Let a script drive the run over Bevy's remote protocol, on `localhost:15702`: [tools/sandbox](../../tools/sandbox/README.md) |
 | `--model <path>` | In the workbench: a model to look at, a `.glb` or `.gltf` under `assets/`. Repeatable: models stand side by side doing the same thing |
 | `--anim <clip>` | In the workbench: an animation to play. Repeatable; the first plays when looking by hand |
-| `--hold <tool>` | In the workbench: a tool in the right hand, as in play, named as in `--give` |
+| `--hold <item>` | In the workbench: an item's held look in the right hand, as in play, named as in `--give`, such as `stone_axe` |
 | `--wear <item>` | In the workbench: an item's look for each model's body, named as in `--give`, such as `leather_coat`. Repeatable |
 | `--attach <file>[@<socket>]` | In the workbench: any look, on a socket such as `models/x.glb@socket.back`, or without one as its file says. Repeatable |
 | `--focus <name>` | In the workbench: look closely at one part, such as `socket.hand.R` |
@@ -119,7 +119,7 @@ You carry a backpack, on the rules in `terra_items` and the Subnautica baseline 
 
 ![The character sheet and the backpack at the start](../../docs/images/outpost-backpack-2026-10-11.png)
 
-- **In hand**: whatever is in the picked slot is in the figure's right hand, as its own model: a hammer, an axe, a knife, a spear, a bow, or a pickaxe made in code, since no free one exists. Walking or standing, it is carried, an axe's head tipped forward and down; swinging, it is held to strike. A tool you make goes on the bar's first free slot.
+- **In hand**: whatever is in the picked slot is in the figure's right hand, as its own look, `models/held/<item>.glb`, made by `spike/character_gear/fit_held.py` from free models (and a pickaxe built there, since no free one exists): a hammer, an axe, a knife, a spear, a bow, a pickaxe. Walking or standing, it is carried, an axe's head tipped forward and down; swinging, it is held to strike. A tool you make goes on the bar's first free slot.
 - **Worn**: what is in the equipment slots is on the figure: the pack on the back, larger when it is the large pack, the leather cap, the leather coat over the shirt, the quiver at the right hip. Each item's look is a file for the figure's body, `models/gear/<body>/<item>.glb`, which says how it goes on; nothing in the code names an item (D127).
 - **Gathering**: one tool to a job. The axe fells trees for wood, the pickaxe breaks rock for stone and ore rocks (a rusty colour) for ore, the knife cuts bushes and plants for fibre. Aim at one, or just stand in front of it, and hold left click until it gives. A tool's material decides what it can work: the great pines are too tough for a stone axe, and a stone pickaxe is slow on ore. A full backpack takes nothing more, and what does not fit is left behind.
 - **Claiming**: you build only inside your claim (D94). Anything you aim to build outside one shows red, and the prompt says why. With the hammer, open the build menu, pick Claim stone (two stone), and place it; the claim is 40 metres across, drawn on the ground while the hammer is in hand, and F at the stone grows it to 80 and then 160 for a price (D104). Until you place one, the hammer builds nothing and takes nothing apart.
@@ -204,7 +204,7 @@ It is made of these pieces, each a module in `src/experiments/play/`:
 | `pooling` | The place where magic pools: its glow, its motes, and the monsters that form there |
 | `settlement` | The village, its people, and what they say |
 | `map` | The map: the land drawn from the planet's rules, revealed as you go |
-| `held` | The tool in hand, on the figure |
+| `held` | What is in hand, on the figure, by its name |
 | `worn` | What is worn, on the figure |
 | `save` | Saving and loading the game |
 | `harvest` | Gathering with the right tool for each thing, and refusing what its material cannot work |

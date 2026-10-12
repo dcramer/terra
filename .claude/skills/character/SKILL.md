@@ -101,6 +101,8 @@ cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model mod
 
 Then add a row for it to `THIRD_PARTY.md`.
 
+What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, and how far it tips when carried in its glTF extras (`carry_tilt`). `spike/character_gear/fit_held.py` makes them; each item's length, grip and tilt are in its `TOOLS`. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
+
 ## Traps already found
 
 - Blender's glTF importer leaves the skeleton posed in the first frame of some animation. Clear every pose bone's transform before using its rest pose, or that pose becomes the rest pose.
