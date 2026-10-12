@@ -25,7 +25,7 @@ In their words, shortened.
 - **Building costs things you carry**: "you have the raw items, which allow you to build anything that you might have the capabilities to build" (D55).
 - **What does not fit in the inventory drops to the ground** (2026-10-12).
 - **You build only inside a claim** (D94, Leaning), which starts small and grows (D104).
-- **Structures are planned, then constructed** (D139, Leaning, 2026-10-12): "for structures, you place a blueprint/plan of it, and then you have to actually construct it somehow… it makes it more realistic. So each wall you'd have to do that, and then doors are like carve outs so it can be slightly diff? Same with windows? We'll wanna think this through."
+- **Structures are planned, then constructed** (D139, Decided, 2026-10-12): "for structures, you place a blueprint/plan of it, and then you have to actually construct it somehow… it makes it more realistic. So each wall you'd have to do that, and then doors are like carve outs so it can be slightly diff? Same with windows? We'll wanna think this through."
 - **Constructing should feel immersive** (D139, 2026-10-12): "you'll actually go up and hit the thing with a hammer or similar? Or maybe it's like, you bring the resource and place it? Like you carry it, like The Forest / Grounded 2? We want it to feel a little immersive when you build up these structures."
 - **The controls and plans proposed here "feel good"** (D144, 2026-10-12).
 - **A blueprint shows its parts, and they can be small** (D139): "ideally a blueprint shows its 'parts' if you will, kind of like Forest shows the logs, and that can vary based on the type of construction".
@@ -53,7 +53,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Undo for a short while | Enshrouded, Rust | Built: Y, within a minute |
 | Repair | Rust, Valheim, The Forest | Missing: nothing built takes damage yet |
 | Change a piece's material in place | Rust, 7 Days to Die | Missing: no materials yet |
-| Plans that cost nothing, then constructed part by part | The Forest, Ark Ascended | Missing; the direction (D139, Leaning) |
+| Plans that cost nothing, then constructed part by part | The Forest, Ark Ascended | Missing; decided (D139) |
 | Building from storage nearby, not only the pack | Subnautica 2, Valheim | Missing; decided (D141) |
 | Carrying big materials by hand, better transport later | The Forest | Missing; the direction (D140, Leaning) |
 | A base level with the ground where it is begun | Ark Ascended's heights | Built: the base's grid is set where its claim stone goes |
