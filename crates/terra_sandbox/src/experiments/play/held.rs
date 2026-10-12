@@ -4,7 +4,7 @@
 //! `spike/character_gear/fit_held.py`), which also says how it is carried; nothing here knows
 //! any one tool.
 
-use super::inventory::{Belongings, Items};
+use super::inventory::Belongings;
 use crate::character;
 use bevy::{gltf::GltfAssetLabel, prelude::*};
 use terra_items::ItemKind;
@@ -26,7 +26,6 @@ pub fn plugin(app: &mut App) {
 fn show(
     mut commands: Commands,
     belongings: Belongings,
-    items: Res<Items>,
     grip: Option<Single<Entity, With<Grip>>>,
     shown: Query<Entity, With<Shown>>,
     assets: Res<AssetServer>,
@@ -46,7 +45,7 @@ fn show(
     for entity in &shown {
         commands.entity(entity).despawn();
     }
-    let Some(def) = holding.and_then(|kind| items.catalogue.get(kind).ok()) else {
+    let Some(def) = holding.and_then(|kind| belongings.items().catalogue.get(kind).ok()) else {
         return;
     };
     let file = character::held_look(&character::item_id(&def.name));

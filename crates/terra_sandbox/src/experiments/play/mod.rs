@@ -394,6 +394,15 @@ fn walled(feet: Vec3, target: Vec3, ground: impl Fn(Vec3) -> f32) -> bool {
     steep && ground(beyond) - feet.length() > STEP_UP_M
 }
 
+/// Whether a body standing at a place has ground at its chest or head. `room` says how
+/// far a point is from the ground.
+fn cramped(stand: Vec3, walker: &Walker, room: impl Fn(Vec3) -> f32) -> bool {
+    let up = stand.normalize();
+    [0.9, walker.height - walker.radius]
+        .into_iter()
+        .any(|height| room(stand + up * height) < walker.radius * 0.8)
+}
+
 fn walk(
     time: Res<Time>,
     controls: Controls,
@@ -493,9 +502,27 @@ fn walk(
         target = feet;
     }
     // Ground rising too steeply is a wall, as the side of a dug hole is: it stops the
-    // player rather than lifting them up it. A jump can clear a low one; hills are walked
-    // up as before.
-    if walled(feet, target, |at| planet.ground_at(at).length()) {
+    // player rather than lifting them up it, and they slide along it as far as it lets
+    // them. A jump can clear a low one; hills are walked up as before.
+    let ground = |at: Vec3| planet.ground_at(at).length();
+    if walled(feet, target, ground) {
+        let facing = planet
+            .normal(planet.ground_at(target))
+            .reject_from(up)
+            .normalize_or_zero();
+        let step = target - feet;
+        let along = feet + step - facing * step.dot(facing).min(0.0);
+        target = if walled(feet, along, ground) {
+            feet
+        } else {
+            along
+        };
+    }
+    // The body must fit where it goes, as it does not under the overhang of a slanting
+    // pit. Someone already caught in the ground may move, to get out.
+    let room = |at: Vec3| planet.distance(at);
+    let stands = |at: Vec3| planet.ground_at(at);
+    if cramped(stands(target), &walker, room) && !cramped(stands(feet), &walker, room) {
         target = feet;
     }
 
@@ -612,7 +639,15 @@ fn follow(
     let (head, looking) = eye(&player, &view);
     let up = head.normalize();
     let right = view.forward.cross(up);
-    let pivot = head + right * 0.6 + up * 0.25;
+    // Over the shoulder, unless the ground is in the way there, as in a narrow pit.
+    let shoulder = right * 0.6 + up * 0.25;
+    let pivot = head
+        + shoulder
+            * planet
+                .raycast(head, shoulder.normalize(), shoulder.length() + 0.2)
+                .map_or(1.0, |hit| {
+                    ((hit.distance - 0.2) / shoulder.length()).max(0.0)
+                });
 
     // The camera comes in front of any build's wall behind the player: theirs, or a
     // house they are in.
@@ -621,13 +656,22 @@ fn follow(
         .chain(builds.iter().map(|built| &built.0))
         .filter_map(|build| {
             let to_base = build.frame.compute_affine().inverse();
-            build.base.raycast(
-                to_base.transform_point3(pivot),
-                to_base.transform_vector3(back).normalize(),
-                CAMERA_BACK_M,
-            )
+            build
+                .base
+                .raycast(
+                    to_base.transform_point3(pivot),
+                    to_base.transform_vector3(back).normalize(),
+                    CAMERA_BACK_M,
+                )
+                .map(|hit| hit.distance)
         })
-        .map(|hit| (hit.distance - 0.25).max(0.3))
+        // The ground behind comes in front of the camera too, such as a pit's wall.
+        .chain(
+            planet
+                .raycast(pivot, back, CAMERA_BACK_M)
+                .map(|hit| hit.distance),
+        )
+        .map(|distance| (distance - 0.25).max(0.3))
         .fold(CAMERA_BACK_M, f32::min);
     let mut at = pivot + back * blocked;
     // Keep the camera out of the ground.
@@ -655,5 +699,17 @@ mod tests {
         assert!(walled(feet, stride, ledge(1.5)));
         // Going down is never stopped.
         assert!(!walled(feet, stride, ledge(-2.0)));
+    }
+
+    #[test]
+    fn a_body_does_not_fit_under_a_low_roof() {
+        let walker = Walker::default();
+        let stand = Vec3::Y * 2000.0;
+        // Open sky, a roof two metres up, and one a metre and a half up.
+        let open = |at: Vec3| at.length() - 2000.0;
+        let roof = |height: f32| move |at: Vec3| (2000.0 + height - at.length()).min(open(at));
+        assert!(!cramped(stand, &walker, open));
+        assert!(!cramped(stand, &walker, roof(2.1)));
+        assert!(cramped(stand, &walker, roof(1.5)));
     }
 }
