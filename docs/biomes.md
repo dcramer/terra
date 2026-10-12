@@ -139,7 +139,10 @@ Bevy 0.20 (out 2026-10-08) adds mesh shaders, which its notes suggest for grass;
 - **Trees** are the hardest, and the weakest area for generated models. Trees made by code, with rules for trunk and branches (as SpeedTree does), would give many variations per species, at life size, in our painted look. Each species would be parameters, not models.
 - **Rocks, logs, stumps, mushrooms and the like** suit Tripo. The pipeline already makes them.
 - **Ferns, grass and flowers** are few triangles and many copies. Small generators or simple models are enough.
-- **Leaves as flat cards or solid painted clumps** is open: the developers have no view yet. Cards are what realistic forests use (SpeedTree, and very likely Sons of the Forest); clumps suit a painted look. Proposed: a tree generator grows a branch skeleton, and leaves are a layer on it in either form, so both can be rendered side by side on the vantage sheet and chosen by eye. Leaves as a layer also give bare winter trees (D149).
+- **Leaves as flat cards or solid clumps** is open.
+  - **Cards:** flat see-through panels, each carrying a picture of many leaves. This is how realistic forests are made (SpeedTree, and very likely Sons of the Forest). They look lacy, let light through and give leafy outlines, but cost overdraw and need leaf textures.
+  - **Clumps:** solid shapes for each mass of leaves, coloured or painted. They are cheap and soft-edged, and our trees today are clumps.
+  - **Leaf textures are pictures,** which image models make well, unlike 3D foliage, so cards may suit our pipeline better than it first seems. Proposed: a tree generator grows a branch skeleton, and leaves are a layer on it in either form, so both can be rendered side by side on the vantage sheet and chosen by eye. Leaves as a layer also give bare winter trees (D149).
 
 ### Biomes from rules, not a list
 
@@ -162,52 +165,16 @@ That things grow back is decided (D150); how is open. Proposed, to react to:
 
 ### Seasons
 
-That there are seasons is decided, and that they change play, not only the look (D149). One season covers a whole world: the hemispheres are not opposite, which would be complex for little use (2026-10-12). Realms give the same variety instead: through a portal, another world may be in another season.
+Seasons, weather and what they do are in [climate.md](climate.md): a season is a slow swing in temperature, daylight and precipitation, and plants respond to those quantities by their niches, not to a season flag (D149). For the look, that means, as data per kind:
 
-#### How long a year is
-
-Proposed, for the developers. How others do it:
-
-| Game | Year | Season | Real time |
-|---|---|---|---|
-| [Sons of the Forest](https://dotesports.com/indies/news/sons-of-the-forest-season-length-how-long-does-winter-last) | 20 days | 5 days by default; 10 on Long, 90 on Realistic | Paused when no one plays |
-| [Don't Starve Together](https://gamerempire.net/dont-starve-together-summer-winter-start-and-end-time/) | 70 days | 15 to 20 days | About 9 hours of 8-minute days, paused when the server is empty |
-| [Wurm Online](https://wurmpedia.com/index.php/Day), a persistent MMO | 336 days | | 42 real days; a day is 3 real hours |
-
-The difference that matters: those first two pause, and ours is a persistent world (D52), so its year passes in real time whether you play or not.
-
-What the length has to do:
-
-- **Long enough to prepare for and live through.** Autumn is for laying in food and wood, and winter must last long enough to test it.
-- **Short enough to meet.** A player who plays some evenings should meet every season within a few weeks.
-- **Not a whole number of real days or weeks,** so whoever plays on the same evening each week doesn't always find the same season.
-
-**Proposal: a year of 365 days, as a real one (D122).** At the half-hour day (D134), that is about 7.6 real days, so a season is about 45 real hours: one or two evenings for most players, a whole year in about a week, and drifting against the real week. It is a number per world in its theme, so a realm can have a long year, a short one, or none. Days could also lengthen in summer and shorten in winter around the half-hour, as real ones do. Tuned by playing.
-
-#### How seasons change play
-
-Proposed, to choose from; most build on survival (D61) and creatures:
-
-- **Cold.** Winter wears down health without warmth: clothing, fire and shelter matter.
-- **Food.** Berries and fruit come in summer and autumn and are scarce in winter. Laying food in and preserving it (drying, smoking) becomes a loop.
-- **Growth.** Plants and regrowth grow only in the growing season. Spring is when cut land greens again.
-- **Creatures.** They breed in spring, migrate or sleep through winter, and are bolder when hungry.
-- **The land.** Snow slows walking and shows tracks, which fits knowing by looking (D93). Lakes freeze and can be crossed, and rivers rise with the thaw.
-- **Seeing.** A bare winter wood can be seen through, and a summer one hides.
-- **Weather by season** (D78): summer storms, winter blizzards.
-
-#### What it changes in the look
-
-Mostly data per kind:
-
-- colour through the year;
+- colour following accumulated warmth and day length;
 - deciduous canopies thinning to bare branches;
-- leaf litter in autumn;
-- snow on the ground and on surfaces facing up;
-- grass browning;
-- flowers in their months.
+- leaf litter;
+- snow where it has fallen and not yet melted, on the ground and on surfaces facing up;
+- grass browning in drought or cold;
+- flowers in their time.
 
-It costs mostly shader parameters and colour tables. Snow needs a ground channel, and bare winter trees need leaves as a separable layer.
+It costs mostly shader parameters and colour tables. Snow needs a ground channel, and bare trees need leaves as a separable layer.
 
 ### Worn paths
 
@@ -261,10 +228,9 @@ Answered on 2026-10-12:
 - **Leaves:** no view yet.
 - **The look:** Sons of the Forest's art style is liked, "ambitious, we probably can't pull it off". D14 is unchanged.
 - **Stumps:** removing one stops regrowth (D150).
+- **Grass:** short ground cover can't be harvested; tall grass and reeds can, giving fibre (D43).
+- **Seasons:** fundamentals, not hardcoded seasons; the year changeable per world. Now in [climate.md](climate.md).
 
 Still open:
 
-1. **Which grass can't be harvested?** Proposed: short ground cover can't be, and tall grass and reeds can, giving fibre.
-2. **How long a year is.** Proposed: 365 days, about 7.6 real days ([above](#how-long-a-year-is)).
-3. **Which of seasons' effects on play** we want ([above](#how-seasons-change-play)).
-4. **Cards or clumps** for leaves, chosen by eye from a side-by-side once a tree generator exists.
+1. **Cards or clumps** for leaves, chosen by eye from a side-by-side once a tree generator exists.

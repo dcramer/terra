@@ -112,7 +112,7 @@ The simulation of a planet becoming livable (D6, [planet-sim.md](planet-sim.md))
 
 ## Weather
 
-<a id="weather"></a>There are weather systems (D78), different on each planet and, where a planet can be terraformed, changing as it goes: the phases in [gameplay.md](gameplay.md#terraforming-phases) already have storms while thawing and rain once wet. A terraform rating (D79, Leaning) might be what weather and those phases follow.
+<a id="weather"></a>Proposed in [climate.md](climate.md): weather and seasons as swings in a few quantities that everything responds to. There are weather systems (D78), different on each planet and, where a planet can be terraformed, changing as it goes: the phases in [gameplay.md](gameplay.md#terraforming-phases) already have storms while thawing and rain once wet. A terraform rating (D79, Leaning) might be what weather and those phases follow.
 
 Open: which kinds of weather there are, whether they hurt, help or only look, whether they are the same for everyone on a planet at once (with a thousand players, D52, weather is shared state the server sends), and how far the planet simulation (D6) drives them.
 
