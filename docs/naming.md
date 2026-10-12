@@ -22,9 +22,9 @@ The two never mix. A realm's people call their god by their own name for it, whi
 The docs already talk this way: pooling places, surges, magic as the world's weather. Taking it as the rule makes every new term guessable, and it holds in every realm: a fire realm's magic still pools and floods, only it runs hot.
 
 **The rules for a shared word:**
-1. **It says what the thing does, as water would.** A crossing between realms is where the gap runs shallow, so it is a ford.
-2. **Plain, old English:** short words of one or two syllables, which can be joined into compounds, as wellspring or deepcraft. No Latin or Greek coinages, and nothing that sounds like science.
-3. **Never a term the books coined,** and never a near copy of one. Common words the books also use, such as essence, monster, magic and mana, are free to use. **Exceptions, by the developers' choice: the books' core names for the rank names (D159), spirit coins (D167) and quintessence (D168).**
+1. **It says what the thing does, as water would.** A natural crossing between realms is where the astral runs shallow, so in the lore it is a ford.
+2. **Plain, old English:** short words of one or two syllables, which can be joined into compounds, as wardcraft or bindcraft. No Latin or Greek coinages, and nothing that sounds like science.
+3. **The books' names for the universe's core systems are used as they are** (D125, 2026-10-12): rank names, essence, confluence, awakening stone, spirit coins, quintessence, aura, the astral, astral magic. **What is never the books' is the content:** no essence, ability, awakening stone, confluence, monster, people, place or god on our lists may be one of theirs. These rules name everything that is ours.
 4. **Readable in play:** order and size are obvious without a manual. Rank names say at a glance which is bigger.
 5. **One word, one meaning.** A word used for magic is not also a place or a season. The ranks are metals and a gem (D159), so a rank is always said with "rank" (an iron-rank monster, a bronze-rank portal), and the metal alone always means the material.
 
@@ -38,16 +38,18 @@ The docs already talk this way: pooling places, surges, magic as the world's wea
 | Monsters spilling out | surge | **a surge** | Already ours |
 | Those without magic in them | normal, unranked | **normal rank**, and in the lore **still** (still water) | People and beasts the flow doesn't move |
 | The ranks, low to high | iron, bronze, silver, gold, diamond | **iron, bronze, silver, gold, diamond**, as in the books (D159) | The developers' choice |
-| A few essences joining into one more | confluence (the books' term) | **the wellspring** | What springs up from the three, yours alone |
-| A person's felt power | presence | **presence**, and in the lore "pressure", as the weight of deep water | Already ours |
-| The gap between realms | (the books': astral) | **the Deep** | What lies under everything, without form |
-| A way between realms | portal | **portal** on screen; in the lore a **ford** where it is natural and a **bridge** where it was made | Ways open where the Deep runs shallow |
-| Studied magic of the Deep (D124) | astral magic (the books' term) | **deepcraft** | |
-| Other studied disciplines | (none yet) | **-craft**: wardcraft, ritecraft, bindcraft | One pattern for every discipline |
+| A few essences joining into one more | confluence | **confluence**, as in the books | Core system name (D125) |
+| What wakes an essence's powers | awakening stone | **awakening stone**, as in the books | Core system name (D125) |
+| A person's felt power | presence | **aura**, as in the books; in the lore also "pressure", as the weight of deep water | Core system name (D125) |
+| The gap between realms | the gap | **the astral**, as in the books | Core system name (D125) |
+| A way between realms | portal | **portal** on screen; in the lore a **ford** where it is natural and a **bridge** where it was made | Ways open where the astral runs shallow |
+| Studied magic of the astral (D124) | astral magic | **astral magic**, as in the books | Core system name (D125) |
+| Ritual magic | ritual magic | **ritual magic**, as in the books | Core system name (D125) |
+| Our own studied disciplines | (none yet) | **-craft**: wardcraft, bindcraft | One pattern for disciplines that are ours |
 | Money that is magic (D167) | spirit coins | **spirit coins**, as in the books | The developers' choice |
 | Fragments of an essence (D168) | quintessence | **quintessence**, as in the books | The developers' choice |
 | A realm's gods, as a kind of thing (D156) | gods | **gods**, and in the lore **tides** | Powers that move a whole realm's water |
-| Beings of the Deep itself, in lore only (D157) | (the books': great astral beings) | **the currents** | What moves in the Deep between realms |
+| Beings of the astral itself, in lore only (D157) | (the books': great astral beings) | **the currents** | What moves in the Deep between realms |
 
 
 ## The tongues of peoples

@@ -37,9 +37,9 @@ What made magic in Ultima Online, EverQuest, RuneScape, Morrowind and tabletop D
 | Reagents in your pack: pearls, roots, ash | Components, used up, as in the books: monster cores, fragments of essences, and other remnants and herbs a realm's role names ([settings.md](settings.md)) |
 | Words of power, spoken as you cast | Chanted spells, as in the books: some essence powers are chanted, a cast that can be broken off, stronger for it, and never quicker with rank. And the diagrams of crafts are written in the symbols of magic, whose structure is the same in every realm |
 | Spell circles, first to eighth | Workings by rank: iron workings to diamond |
-| Mark and Recall; Gate Travel | Deepcraft, below |
+| Mark and Recall; Gate Travel | Astral magic, below |
 | Scrolls and wands | Inscription, below |
-| Identify | Ritecraft's first working |
+| Identify | Ritual magic's first working |
 | A wizard's familiar | Bindcraft, below |
 | Meditating to get mana back | Rest: mana returns faster sitting still, and Meditation is a skill by doing (D88) |
 | Fizzling | Backlash, as in the books: a working a rank above you risks exhaustion, your attributes dropping a rank for a while, injury or death; two ranks above kills; and in thin magic a working is unreliable |
@@ -53,66 +53,68 @@ From the lore and the books' mechanics (D98), with our own essences:
 - **Five powers to an essence.** The first wakes when you absorb it; each of the other four needs an awakening stone. Twenty powers in all, which is a whole character.
 - **Rarity:** common, uncommon, rare, epic, legendary. As in the books, rarity is relative to a place: a frozen pool mostly gives Frost and rarely something stranger. Where you hunt decides what you can become (D91).
 - **Where essences form:** in pools and in surges, and in monsters made there, so each realm's leaning decides what its pools give ([lore.md](lore.md#magic)).
-- **Absorbing one hurts,** and can only be done at rest, in safety. Proposed: also possible as a ritual (ritecraft), which is gentler.
+- **Absorbing one hurts,** and can only be done at rest, in safety. Proposed: also possible as a ritual (ritual magic), which is gentler.
 - **Each essence binds to one of your four attributes** when absorbed ([below](#attributes)).
 - **No essence is better than another.** They differ in how they play.
 
 ### Core essences
 
-Our own list to start with, proposed. Each has an idea, its tags (which the confluence and awakening read), where it forms, and what its powers lean to. Generic ideas (fire, blood) appear in many games, the books included; the list, its tags and its powers are ours.
+Our own list, proposed (D125: the lists are ours, never the books'). Each has an idea, its tags (which the confluence and awakening read), where it forms, and what its powers lean to.
 
 | Essence | Rarity | Tags | Forms in | Its powers lean to |
 |---|---|---|---|---|
-| **Blade** | Common | weapon, edge | Battlefields, armouries' ruins | Strikes, parries, conjured blades |
-| **Bow** | Common | weapon, reach | Hunting grounds | Aimed shots, marking prey |
-| **Shield** | Common | weapon, guard | Old forts | Blocks, guarding others, walls |
-| **Hammer** | Common | weapon, force | Forges, quarries | Staggers, breaking, shock |
-| **Fire** | Common | element, heat | Volcanic and burnt ground | Bolts, burning, light, warmth |
-| **Water** | Common | element, flow | Springs, lakes | Healing, pushing, breathing under water |
+| **Blade** | Common | weapon, edge | Battlefields, fallen armouries | Strikes, parries, conjured edges |
+| **Arrow** | Common | weapon, reach | Hunting grounds | Aimed shots, marking prey |
+| **Bulwark** | Common | weapon, guard | Old forts | Blocks, guarding others, walls |
+| **Maul** | Common | weapon, force | Quarries, forges | Staggers, breaking, shockwaves |
+| **Ember** | Common | element, heat | Burnt and volcanic ground | Bolts, burning, light, warmth |
+| **Brook** | Common | element, flow | Streams, springs | Mending, pushing, breathing under water |
 | **Stone** | Common | element, earth | Caverns, cliffs | Hardening, walls, tremors |
-| **Wind** | Common | element, air | High places | Speed, leaps, pushing, carrying sound |
-| **Wolf** | Common | beast, pack | Forest and plain | Hunting, calling a pack, senses |
-| **Bear** | Common | beast, strength | Deep forest | Toughness, mauling, rage |
+| **Gale** | Common | element, air | Ridges, high places | Speed, leaps, pushing, carrying sound |
+| **Hound** | Common | beast, pack | Forest and plain | Tracking, calling a pack, keen senses |
+| **Boar** | Common | beast, charge | Thickets | Charging, toughness, goring |
 | **Hawk** | Common | beast, sight | Cliffs, open sky | Far sight, diving strikes |
-| **Root** | Common | growth, earth | Old woods | Snaring, rooting in place, mending |
-| **Swift** | Common | body, speed | Anywhere things flee | Movement, dodges, quick strikes |
-| **Might** | Common | body, strength | Anywhere things fight | Power, carrying, breaking |
-| **Blood** | Uncommon | body, life, cost | Battlefields, hunting grounds | Powers paid in health, draining, bleeding |
-| **Bone** | Uncommon | body, death | Graves, old kills | Armour, spikes, the dead |
+| **Root** | Common | growth, earth | Old woods | Snaring, holding fast, mending |
+| **Stride** | Common | body, speed | Anywhere things flee | Movement, dodges, quick strikes |
+| **Brawn** | Common | body, strength | Anywhere things fight | Power, carrying, breaking |
 | **Frost** | Uncommon | element, cold | Ice and high ground | Slowing, freezing, cold armour |
 | **Storm** | Uncommon | element, sky | Peaks, open sea | Lightning, chaining, thunder |
-| **Light** | Uncommon | force, holy | Sunlit holy places | Healing, revealing, burning the unholy |
-| **Dark** | Uncommon | force, shadow | Deep caverns | Hiding, fear, blinding |
-| **Venom** | Uncommon | beast, poison | Swamps, nests | Poisons, weakening, resistance |
-| **Song** | Uncommon | mind, sound | Where people gather | Boons for allies, lulling, echoes |
-| **Smoke** | Uncommon | element, veil | Burnt land | Concealment, choking, slipping away |
+| **Mist** | Uncommon | element, veil | Marshes, dawn valleys | Hiding, confusing, slipping away |
+| **Thorn** | Uncommon | growth, harm | Bramble and briar | Barbs, bleeding, hedges |
+| **Marrow** | Uncommon | body, death | Graves, old kills | Bone armour, spikes, the dead |
+| **Pulse** | Uncommon | body, life, cost | Battlefields | Powers paid in health, draining, quickening |
+| **Dawn** | Uncommon | force, holy | Sunlit holy places | Healing, revealing, burning the unholy |
+| **Dusk** | Uncommon | force, shadow | Deep caverns, long nights | Hiding, fear, blinding |
+| **Whisper** | Uncommon | mind, sound | Ruins, where people gather | Boons for allies, lulling, voices |
+| **Raven** | Uncommon | beast, omen | Battlefields, gallows | Scouting, ill luck, carrion |
+| **Hearth** | Uncommon | home, warmth | Old homes, long-held claims | Shelter, warmth (D153), guarding a place |
 | **Ash** | Rare | death, heat, renewal | Burnt forest after the fire | Rising again, burning out, regrowth |
 | **Tide** | Rare | flow, time | Coasts, the edges of pools | Ebb and flow: building up, then releasing |
-| **Moon** | Rare | night, change | Where night is long | Strength at night, change of form |
-| **Echo** | Rare | sound, repeat | Caverns, ruins | Repeating what you did, doubles |
-| **Hunger** | Rare | body, take | Places that drain magic | Taking what others have: health, mana, power |
-| **Rune** | Epic | knowledge, mark | Ruins of studied peoples | Marks that work later, traps, empowering crafts |
-| **Wing** | Epic | beast, sky | The highest places | Gliding, then flight at high rank |
-| **Omen** | Epic | fate, mind | Where something terrible will happen | Foresight, curses, luck |
+| **Leech** | Rare | body, take | Places that drain magic | Taking what others have: health, mana, power |
+| **Dream** | Rare | mind, sleep | Where many have slept | Sleep, visions, walking in others' minds |
+| **Grave** | Rare | death, rest | Old burial grounds | Raising the dead, ending things, wards against them |
+| **Glyph** | Epic | knowledge, mark | Ruins of studied peoples | Marks that work later, traps, empowering crafts |
 | **Rot** | Epic | death, growth | Blighted ground | Decay that spreads, fungus, plague |
 | **Ward** | Epic | guard, magic | Old held places | Protecting places and others, turning magic aside |
-| **Abyss** | Legendary | the Deep, void | Where realms wear thin | Pulling, swallowing, stepping through the gap |
-| **Crown** | Legendary | rule, presence | Where the mighty died | Commanding, presence, followers |
-| **Ford** | Legendary | crossing, the Deep | Natural portals | Moving between places: blinks, doors, gates |
+| **Oath** | Epic | bond, will | Where vows were kept or broken | Binding promises, strength while keeping them |
+| **Plume** | Epic | beast, sky | The highest places | Gliding, then flight at high rank |
+| **Abyss** | Legendary | astral, void | Where realms wear thin | Pulling, swallowing, stepping through the astral |
+| **Crown** | Legendary | rule, aura | Where the mighty died | Commanding, aura, followers |
+| **Ford** | Legendary | crossing, astral | Natural portals | Moving between places: blinks, doors, gates |
 
-More come per realm as data: a gothic realm adds Grave and Mist, a machine realm Gear and Spark. Each is a row like these.
+More come per realm as data: a gothic realm adds Lantern and Shroud, a machine realm Gear and Spark. Each is a row like these.
 
 ### Confluences: from tags, by rules
 
 A confluence is worked out from the three essences' tags by a few rules, so players can learn the patterns and trade recipes:
 
-- **Kindred:** three that share a family (say three elements) give that family's greater form. Fire, Stone and Wind give **Elemental**.
-- **Opposed and balanced:** two opposites plus a balancing one give a union of the two. Light, Dark and Song give **Twilight**.
-- **Opposed and escalated:** two opposites plus a strength give a violent one. Fire, Frost and Might give **Shatter**.
-- **Beast and element:** a beast with elements gives a creature of that element. Hawk, Storm and Wind give **Thunderbird**.
-- **Body and cost:** two body essences with Blood or Hunger give something that spends itself. Blood, Might and Hunger give **Berserk**.
-- **Weapon and guard:** Blade, Shield and Swift give **Duellist**; Bow, Hawk and Wind give **Far Shot**.
-- **Death and growth:** Bone, Root and Rot give **Barrow**; Ash with any growth gives **Phoenix**, rarely.
+- **Kindred:** three that share a family (say three elements) give that family's greater form. Ember, Stone and Gale give **Primal**.
+- **Opposed and balanced:** two opposites plus a balancing one give a union of the two. Dawn, Dusk and Whisper give **Gloaming**.
+- **Opposed and escalated:** two opposites plus a strength give a violent one. Ember, Frost and Brawn give **Shatter**.
+- **Beast and element:** a beast with elements gives a creature of that element. Hawk, Storm and Gale give **Stormwing**.
+- **Body and cost:** two body essences with Pulse or Leech give something that spends itself. Pulse, Brawn and Leech give **Frenzy**.
+- **Weapon and guard:** Blade, Bulwark and Stride give **Duellist**; Arrow, Hawk and Gale give **Far Shot**.
+- **Death and growth:** Marrow, Root and Rot give **Barrow**; Ash with any growth gives **Rekindle**, rarely.
 
 The usual result is the likeliest, not certain, as in the books' later volumes: a common recipe gives its confluence most of the time and sometimes a neighbour. Recipes become knowledge players share and argue about, which is the old-school feel of a game with secrets.
 
@@ -120,7 +122,7 @@ The usual result is the likeliest, not certain, as in the books' later volumes: 
 
 Kept, as in the books (D164): **Power, Speed, Spirit and Recovery.**
 
-- **Each essence binds to one of them** when you absorb it, usually the one its idea suits: Might to Power, Swift to Speed, Light to Spirit, Water to Recovery.
+- **Each essence binds to one of them** when you absorb it, usually the one its idea suits: Brawn to Power, Stride to Speed, Dawn to Spirit, Brook to Recovery.
 - **Each attribute has its own rank and steps,** and **your rank is a function of your attributes.** You are silver when they are.
 - **They rise as the powers of the essences bound to them rise,** so how you use your powers shapes your body. Skills (D88) don't raise them; skills are what your hands know.
 - **What each does, proposed and tunable:**
@@ -129,7 +131,7 @@ Kept, as in the books (D164): **Power, Speed, Spirit and Recovery.**
 |---|---|
 | **Power** | Blows and throws, carrying (D55), breaking, the stamina pool |
 | **Speed** | Moving, striking, dodging, reacting |
-| **Spirit** | The mana pool (D102), the strength of powers, resisting magic, presence |
+| **Spirit** | The mana pool (D102), the strength of powers, resisting magic, aura |
 | **Recovery** | The health pool, and how fast health, stamina and mana come back; resisting poison, sickness and cold or heat (D153) |
 
 - **A rank's gap shows in them:** a higher-rank attacker's attributes beat a lower-rank defender's resistance, which is why two ranks up is death ([combat.md](combat.md)).
@@ -137,17 +139,17 @@ Kept, as in the books (D164): **Power, Speed, Spirit and Recovery.**
 
 ## Awakening stones: drawing a power
 
-Proposed: the books' second kind of thing kept as it is, with its name to settle (D158 proposes "quickening stone"). A stone is found as essences are, in pools, surges and the remains of strong monsters. Each has a kind that pulls the draw its way:
+The books' second kind of thing, kept with its name (D125); the kinds of stone are ours. A stone is found as essences are, in pools, surges and the remains of strong monsters. Each has a kind that pulls the draw its way:
 
 | Stone, examples | Rarity | Pulls toward |
 |---|---|---|
-| Of the Hand, of the Eye, of the Foot | Common | Strikes; perception; movement |
-| Of Embers, of Rain, of Stone | Common | That element's effects |
-| Of the Wall, of Mending | Uncommon | Guarding; healing |
-| Of Wrath, of Patience | Uncommon | Big single blows; slow builds that release |
-| Of the Pack, of Calling | Rare | Summons and familiars |
-| Of Ruin, of the Crowd | Rare | Areas; many targets |
-| Of the Gate, of Ages | Legendary | Movement through the Deep; powers that grow with time |
+| Of the Grip, of the Watch, of the Step | Common | Strikes; perception; movement |
+| Of Kindling, of the Well, of the Hill | Common | That element's effects |
+| Of the Rampart, of Mending | Uncommon | Guarding; healing |
+| Of the Blow, of Patience | Uncommon | Big single blows; slow builds that release |
+| Of the Pack, of the Bond | Rare | Summons and familiars |
+| Of the Flood, of the Throng | Rare | Areas; many targets |
+| Of Crossing, of Ages | Legendary | Movement through the astral; powers that grow with time |
 
 ### How a draw works
 
@@ -159,7 +161,7 @@ When you use a stone on an essence, the server draws a power from that essence's
    - kinds you lack are likelier, so no one ends with five passives;
    - kinds you have many of are less likely;
    - some kinds are one to a person (an aura, a perception) or one to an essence (a summon, a familiar).
-4. **What you know:** a crafter of ritecraft draws more ritual-like powers, and a practised swordsman more blade strikes. Your skills and books shape your powers.
+4. **What you know:** someone who knows ritual magic draws more ritual-like powers, and a practised swordsman more blade strikes. Your skills and books shape your powers.
 5. **What you have been doing:** proposed, our addition, still open ([below](#habits-shaping-the-draw)). Powers would follow habits, which is the lore's "who you are".
 6. **Where you are:** a little toward the leaning of the realm you awaken in. Awakening a stone in a death realm leans a little toward death.
 
@@ -180,14 +182,14 @@ So there is a lot to draw from without writing each power by hand, a power is ge
 | **Cost and wait** | mana, stamina or health; a cooldown |
 | **Ladder** | an effect added at each rank, iron to diamond |
 
-- **The essence's idea limits the parts.** Fire can't heal, except through Ash.
+- **The essence's idea limits the parts.** Ember can't heal, except through Ash.
 - **The rank sets a budget,** so a power drawn at random is never better than one picked by hand; it differs.
-- **Hand-written anchors** sit in every list with high weight: the classics a player expects of an idea, such as a ball of fire for Fire, a healing touch for Water, a howl that calls wolves for Wolf. Those are the nostalgia, while the generated ones are the surprise.
-- **Names come from [naming.md](naming.md),** the idea plus what the power does: Cinder Bolt, Wolf's Call, Bedrock.
+- **Hand-written anchors** sit in every list with high weight: the classics a player expects of an idea, such as a ball of fire for Ember, a healing touch for Brook, a howl that calls the pack for Hound. Those are the nostalgia, while the generated ones are the surprise.
+- **Names come from [naming.md](naming.md),** the idea plus what the power does: Cinder Bolt, Pack Call, Bedrock.
 
 ### Three worked examples
 
-**Cinder Bolt** (Fire; spell; a bolt):
+**Cinder Bolt** (Ember; spell; a bolt):
 
 | Rank | What it does |
 |---|---|
@@ -197,14 +199,14 @@ So there is a lot to draw from without writing each power by hand, a power is ge
 | Gold | Hold the cast to throw three |
 | Diamond | A target burned to death leaves a burning patch that keeps burning |
 
-**Wolf's Call** (Wolf; summon; a place):
+**Pack Call** (Hound; summon; a place):
 
 | Rank | What it does |
 |---|---|
-| Iron | Calls a wolf of your rank to fight beside you for a while |
-| Bronze | Two wolves |
-| Silver | The wolves share your marks: what you mark, they hunt |
-| Gold | Wolves that fall rise once more |
+| Iron | Calls a hound of your rank to fight beside you for a while |
+| Bronze | Two hounds |
+| Silver | The hounds share your marks: what you mark, they hunt |
+| Gold | Hounds that fall rise once more |
 | Diamond | A pack leader joins them, and you hear what they hear |
 
 **Bedrock** (Stone; passive):
@@ -260,7 +262,7 @@ The old-school spellbook lives here. A craft is a discipline of working with mag
 - **Workings draw on the magic of the place,** so in a thin realm or a drained spot they are unreliable, and near a pool they are strong. Where you work matters.
 - **Written in the symbols of magic:** a diagram's symbols have a structure that holds in every realm, as in the books. A book from another realm's people teaches the same structure in their hand.
 
-**Ritecraft: ritual magic.** Diagrams drawn in chalk, salt or ash, with candles and components, over minutes.
+**Ritual magic.** Diagrams drawn in chalk, salt or ash, with candles and components, over minutes.
 
 | Rank | Workings |
 |---|---|
@@ -268,7 +270,7 @@ The old-school spellbook lives here. A craft is a discipline of working with mag
 | Bronze | **Calm** (lower a pool for days, so fewer monsters form); **Seat Essence** (absorb an essence gently, without the pain); **Far Sight** (see a place you have marked) |
 | Silver | **Call Rain** (or call it off); **Hallow** (a claim's ground resists monsters forming) |
 | Gold | **Drain** (empty a pool, taking its magic as components); **Raise** (make a pool, deliberately) |
-| Diamond | **Wake a Ford** (open a natural portal where the Deep runs thin) |
+| Diamond | **Wake a Ford** (open a natural portal where the astral runs thin) |
 
 **Wardcraft: protecting places.** Glyphs on doors, posts and ground.
 
@@ -280,7 +282,7 @@ The old-school spellbook lives here. A craft is a discipline of working with mag
 | Gold | **Standing Ward** (a ring of stones around a claim that weakens monsters' rank inside) |
 | Diamond | **Sanctuary** (no monster forms or enters, while it is kept fed) |
 
-**Deepcraft: the Deep between places.** The old-school travel magic.
+**Astral magic: the astral between places.** The old-school travel magic.
 
 | Rank | Workings |
 |---|---|
@@ -290,7 +292,7 @@ The old-school spellbook lives here. A craft is a discipline of working with mag
 | Gold | **Gate** (open a short-lived portal to a marker, for a party) |
 | Diamond | **Bridge** (a lasting portal between two of your claims) |
 
-There is no fast travel between claims (D72, 2026-10-12): getting around quickly is the work of systems like this one, so deepcraft is the travel network. A marker can be anywhere, claim or not. Recall and Gate cost components and take a long cast that can be broken, so travel is earned and planned. Portals players build (D72) and mounts (D100) are the other ways.
+There is no fast travel between claims (D72, 2026-10-12): getting around quickly is the work of systems like this one, so astral magic is the travel network. A marker can be anywhere, claim or not. Recall and Gate cost components and take a long cast that can be broken, so travel is earned and planned. Portals players build (D72) and mounts (D100) are the other ways.
 
 **Bindcraft: familiars and summons.**
 
@@ -320,7 +322,7 @@ There is no fast travel between claims (D72, 2026-10-12): getting around quickly
 What the developers asked about: magic-like things the list above leaves out.
 
 - **Gods' gifts** (D156). A realm's gods can give their followers an essence or an awakening stone of their choosing, and can take it back, as in the books. Also blessings at shrines (boons for a while) and priests among the peoples who work them.
-- **Presence** ([lore.md](lore.md#presence)). Trained by doing: holding it in, pressing others with it, reading others'. It is a skill, and the one magic everyone has.
+- **Aura** ([lore.md](lore.md#aura)). Trained by doing: holding it in, pressing others with it, reading others'. It is a skill, and the one magic everyone has.
 - **Sensing magic.** Seeing pools, remnants and the leaning of a place: a perception power for some, a skill for anyone over time (D93).
 - **Food.** Food from magic ingredients gives boons (D101), and food above your rank gives backlash.
 - **Remnants and cores as fuel.** What monsters leave is the reagent, the fuel and the trade good of every craft above, and of loot.
@@ -352,12 +354,12 @@ Decided (D167): money works as in the books. The currency is magic itself, conde
 
 ## Fragments of essences
 
-Decided (D168): kept as components, and named as the books name them: **quintessence**, as in "Fire quintessence".
+Decided (D168): kept as components, and named as the books name them: **quintessence**, as in "Ember quintessence".
 
 - **What they are:** a small fragment of one essence's kind. Not an essence: they can't be absorbed, and many don't make one.
 - **Where they come from:** monsters and pools of that kind, more often than essences.
 - **What they are for:**
-  - workings that need an idea, such as a fire ward needing Fire quintessence;
+  - workings that need an idea, such as a fire ward needing Ember quintessence;
   - enchanting gear with a property of that kind;
   - fuel for items of that kind.
 

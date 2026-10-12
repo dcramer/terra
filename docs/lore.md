@@ -4,7 +4,7 @@ The foundation every system stands on: what magic is, where monsters come from, 
 
 ## Where it comes from, and where it doesn't
 
-**The foundational lore is taken from *He Who Fights With Monsters*, as world-building.** We use the books' fundamental systems: the rules of how their universe works. We do not use their content, and we do not copy their text. Everything below is in our own words, and is ours to change.
+**The foundational lore is taken from *He Who Fights With Monsters*, as world-building.** We use the books' fundamental systems, the rules of how their universe works, and their names for those systems: ranks, essences, confluences, awakening stones, spirit coins, quintessence, auras, the astral. We do not use their content: the actual lists of essences, abilities, stones, confluences, monsters, peoples, places and gods are ours (D125). And we don't copy their text. Everything below is in our own words, and is ours to change.
 
 | Taken from the books: the fundamentals | Ours: everything specific |
 |---|---|
@@ -12,7 +12,7 @@ The foundation every system stands on: what magic is, where monsters come from, 
 | Monsters formed from gathered magic | Every kind of monster ([creatures.md](creatures.md)) |
 | Essences that give a person powers, a few to a person | Every essence and every ability ([essences.md](essences.md)) |
 | Ranks that everything climbs | What each rank means in play, and how it is crossed |
-| A presence that betrays your power | How it is shown ([your-character.md](your-character.md)) |
+| An aura that betrays your power | How it is shown ([your-character.md](your-character.md)) |
 | Many worlds, and ways between them | Every realm, generated ([worlds.md](worlds.md), [settings.md](settings.md)) |
 | Magic that can be studied as well as held | Every discipline and style |
 | People whose work is keeping monsters down | Every people, faction, culture and settlement ([people.md](people.md)) |
@@ -21,11 +21,10 @@ The foundation every system stands on: what magic is, where monsters come from, 
 
 **Not taken at all:**
 - the books' characters and their story;
-- their places, peoples, organisations, gods and currencies;
-- their particular essences and abilities;
-- terms the books coined.
+- their places, peoples, organisations and gods;
+- their lists: which essences, abilities, awakening stones and confluences exist.
 
-Where our docs still use a working term that is the books' own, it is listed in [naming.md](naming.md) with our own word to replace it. A reader who knows the books should recognise how our universe works, and find nothing in it they have read before.
+A reader who knows the books should recognise how our universe works and what its parts are called, and find none of its particular essences, powers, people or places.
 
 ## Magic
 
@@ -58,10 +57,10 @@ Where our docs still use a working term that is the books' own, it is listed in 
 - **Ranks are climbed by using one's powers,** and by taking in magic to feed them. Crossing to the next often needs more than practice ([essences.md](essences.md#crossing-to-the-next-rank)).
 - **What it means for play:** rank is the one power axis, in every realm (D116). It orders the world without a story: low-rank land and portals lead to higher ones ([arc.md](arc.md)).
 
-## Presence
+## Aura
 
-- **Power shows.** Everyone with magic gives off a presence that others can feel: a pressure, a weight in the air.
-- **The stronger press the weaker.** A much higher rank's presence can make the weak struggle to stand. The skilled can hold theirs in, hide it, or turn it on others.
+- **Power shows.** Everyone with magic gives off an aura that others can feel: a pressure, a weight in the air.
+- **The stronger press the weaker.** A much higher rank's aura can make the weak struggle to stand. The skilled can hold theirs in, hide it, or turn it on others.
 - **What it means for play:** this is how you judge a monster or a stranger without a number over their head (D93). You feel it, and learn to read it. It is also an ability of its own to train.
 
 ## Studied magic
@@ -72,7 +71,7 @@ Where our docs still use a working term that is the books' own, it is listed in 
 
 ## Realms and the ways between
 
-- **There are many realms,** each a whole world (D17, D87). Between them lies a space that is no place: the gap that separates them, where the magic that underlies everything runs without form.
+- **There are many realms,** each a whole world (D17, D87). Between them lies the astral, a space that is no place: the gap that separates them, where the magic that underlies everything runs without form.
 - **Ways open between realms** where the separation wears thin, often where magic gathers. Some are natural, some were made, and the knowledge of making them can be learned (D72).
 - **A way has a rank,** and leads to a place of about its rank. That is how the realms are ordered for whoever travels them.
 - **The realms are one cosmos** with one set of rules. That is why the same magic, the same ranks and the same kinds of essence are found in every one, however strange the realm ([settings.md](settings.md#making-generated-realms-fit-the-lore)).
