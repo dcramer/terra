@@ -8,10 +8,11 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 - Recruits come mostly by rescue, or as something like a reward for helping their settlement (D90). Hostile settlements may hold prisoners you can rescue; players do not capture or keep prisoners (D95).
 - Quests may exist, but no tracked quest log and no journal (D92).
 - **Recruits have their own progression** (D123, 2026-10-11): at least those who join you grow, with a progression system of their own. Whether other people do is open.
+- **Recruits live in your tribe and work on their own** (D161, 2026-10-12): stations, hauling and perhaps building, functional without micromanaging; not a colony sim. What they do once they have joined is in [tribe.md](tribe.md).
 
 ## Based on
 
-**Kenshi** for people with their own lives in a world that goes on. **Enshrouded** for rescued people who come to live and work at your base. **Soulmask** for recruits who work and defend.
+**Kenshi** for people with their own lives in a world that goes on. **Enshrouded** for rescued people who come to live and work at your base. **Soulmask** for recruits who work and defend. **Medieval Dynasty** for a village that grows around you (D161).
 
 ## Life in a settlement
 
@@ -29,7 +30,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 
 - **Who**: people you rescued, or who chose to follow you for what you did for their settlement.
 - **Where**: they live in your claims (D94), and need a bed, food and safety.
-- **What they do**, by what they are good at: run a station ([crafting.md](crafting.md)), gather, farm, haul, guard (D90). Some might travel with you.
+- **What they do**, by what they are good at: run a station ([crafting.md](crafting.md)), gather, farm, haul, guard (D90). They take work on their own, without being managed (D161, D162); how is in [tribe.md](tribe.md). Some might travel with you.
 - **What they become** (D123): they improve at their work by doing it, as you do (D88). Proposed: on the same ladder as your skills ([essences.md](essences.md#skills-on-the-rank-ladder)), so a recruit has a rank in what they do, such as Bren a bronze-rank smith, and what they can make follows it. A recruit you bring along grows; one you rescue arrives with what they had already learned. Their skills read on their own sheet, like yours (D93).
 - **How many**: limited by what your claims can house and feed.
 

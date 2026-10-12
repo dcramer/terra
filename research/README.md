@@ -34,6 +34,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [building-systems-prior-art.md](building-systems-prior-art.md) | How do the building systems of Enshrouded, Rust, Ark, Subnautica and The Forest work, from keys to claims, so ours misses nothing players expect? |
 | [procedural-vegetation.md](procedural-vegetation.md) | How do shipped games place and draw vegetation over large procedural terrain so it reads full and organic, and what does Bevy give us toward it? |
 | [procedural-buildings.md](procedural-buildings.md) | How do games turn a drawn plan into a detailed building (roofs over any footprint, walls from a kit, drawing many pieces, building piece by piece, indoors), and how hard is each for us? |
+| [recruits-at-the-base.md](recruits-at-the-base.md) | How do shipped games handle recruits who live and work at your base, and which work without the player managing each one? |
 
 ## Adding a note
 

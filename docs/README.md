@@ -31,6 +31,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [essences.md](essences.md) | Essences, abilities and ranks; skills, studied techniques and powers as three ways to grow; mana. |
 | [crafting.md](crafting.md) | Resources by region and rank, tools, stations run by recruits, learning what to make. |
 | [people.md](people.md) | Settlements with days, quests as what people say, recruits, trade. |
+| [tribe.md](tribe.md) | Your tribe: recruits who live in your claims and work, build and defend on their own, without being managed. |
 | [your-character.md](your-character.md) | No class, getting around big round realms, what is on screen and what is not. |
 | [arc.md](arc.md) | The start without a tutorial, the long game by rank, playing together. |
 | [settings.md](settings.md) | How any realm's theme works: gameplay roles every setting fills, rank the only power axis. |

@@ -37,7 +37,8 @@ This overview gives the idea, what drives the world, and the principles. Each sy
 | Creatures | [creatures.md](creatures.md) | Wildlife with routines and a food chain; monsters that form where magic pools, kinds made by rule |
 | Essences, abilities and ranks | [essences.md](essences.md) | After the books: a few essences and a confluence, abilities that improve by use, ranks as the spine |
 | Resources, tools and crafting | [crafting.md](crafting.md) | Materials by region and rank, one tool to a job, stations in claims run by recruits, wear and repair (open) |
-| People | [people.md](people.md) | Settlements with days, quests as what people say, recruits who live and work in your claims, trade |
+| People | [people.md](people.md) | Settlements with days, quests as what people say, recruits, trade |
+| Your tribe | [tribe.md](tribe.md) | Recruits who live in your claims and work on their own (D161): not a colony sim; posts taken by skill, building from your plans, defending the claim |
 | Survival | [survival.md](survival.md) | Needs that reward more than punish, day and night, weather, death and coming back |
 | Your character | [character.md](your-character.md) | No class, getting around big round worlds, what is on screen and what is not |
 | The arc | [arc.md](arc.md) | The fiction, the first hour without a tutorial, the long game by rank and the spread, playing together |
