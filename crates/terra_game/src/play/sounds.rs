@@ -17,6 +17,7 @@ use crate::audio::{
     bank::{Bank, Clips},
     synth::{Sound, Synth},
 };
+use crate::loading::Loading;
 use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::prelude::*;
@@ -401,8 +402,13 @@ impl Heard {
     }
 }
 
-fn load(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.insert_resource(Bank::load(CLIPS, &assets));
+fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
+    let bank = Bank::load(CLIPS, &assets);
+    // The first sounds are heard as the game starts, so the loading screen waits for them.
+    for take in bank.takes() {
+        loading.wait_for(take);
+    }
+    commands.insert_resource(bank);
 }
 
 /// The options menu's volumes, into the mix.

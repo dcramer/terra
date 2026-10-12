@@ -8,6 +8,7 @@
 //! ready, so the ground never shows holes. A scripted run waits for every chunk each
 //! frame, so the same script shows the same ground on any machine.
 
+use crate::loading::{self, Progress};
 use crate::planet::MainCamera;
 use crate::planet::{GroundLook, Planet};
 use crate::shell::Options;
@@ -58,7 +59,19 @@ struct Pending {
 pub fn plugin(app: &mut App) {
     app.init_resource::<Terrain>()
         .add_systems(PostStartup, first_view)
-        .add_systems(Update, (choose, receive).chain());
+        .add_systems(
+            Update,
+            (choose, receive, track.in_set(loading::Track)).chain(),
+        );
+}
+
+/// The loading screen waits for the ground in view to be meshed.
+fn track(terrain: Res<Terrain>, mut progress: ResMut<Progress>) {
+    progress.report(
+        "Shaping the ground",
+        terrain.pending.len(),
+        terrain.shown.len(),
+    );
 }
 
 fn detail(planet: &Planet) -> Detail {

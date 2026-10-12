@@ -3,20 +3,36 @@
 //! arriving one by one.
 //!
 //! Every build starts on [`Screen::Loading`]. The screen stays up while anything is still
-//! coming: a file a system asked to be waited for ([`Loading::wait_for`]), a model put in
-//! the world that has not loaded or been placed yet, or a shader still compiling. Then it
-//! waits a few quiet frames more, since what has just loaded often puts the next thing in
-//! the world, and the game goes to [`Screen::Playing`] while the screen fades. The game
-//! clock is held while loading, so nothing happens in a world nobody can see yet.
+//! coming, then waits a few quiet frames more, since what has just loaded often puts the
+//! next thing in the world, and the game goes to [`Screen::Playing`] while the screen fades.
+//! The game clock is held while loading, so nothing happens in a world nobody can see yet.
 //!
-//! Nothing here knows the game. Another screen, such as a title screen, enters
-//! `Screen::Loading` to get the same screen for whatever it starts.
+//! What is coming is gathered each frame into [`Progress`] by systems in the [`Track`] set.
+//! This module tracks what any game has, without knowing it:
+//!
+//! - files a system asked to be waited for ([`Loading::wait_for`]), such as a model it
+//!   reads before putting anything in the world, or its sounds;
+//! - models put in the world that have not loaded or been placed yet;
+//! - pictures on screen ([`ImageNode`]) still loading;
+//! - anything in view the renderer cannot draw yet, whatever its material, because its
+//!   mesh, its material or a texture it uses has not been prepared;
+//! - shaders still compiling.
+//!
+//! Work only a feature knows about, such as ground still being meshed, it reports itself,
+//! with a system in [`Track`] that calls [`Progress::report`].
+//!
+//! Another screen, such as a title screen, enters `Screen::Loading` to get the same screen
+//! for whatever it starts.
 
 use crate::shell::Options;
 use bevy::{
     asset::{LoadState, UntypedAssetId},
+    pbr::{PreparedMaterial, RenderMaterialInstances, RenderMeshInstances},
     prelude::*,
-    render::{ExtractSchedule, MainWorld, RenderApp, render_resource::PipelineCache},
+    render::{
+        ExtractSchedule, MainWorld, RenderApp, erased_render_asset::ErasedRenderAssets,
+        mesh::RenderMesh, render_asset::RenderAssets, render_resource::PipelineCache,
+    },
     text::LetterSpacing,
     world_serialization::{WorldAssetRoot, WorldInstance, WorldInstanceSpawner},
 };
@@ -83,6 +99,81 @@ impl Shaders {
     }
 }
 
+/// How many things in view the render world could not yet draw, and could, as it last said
+/// while loading.
+#[derive(Resource, Default)]
+struct Drawables {
+    waiting: usize,
+    ready: usize,
+}
+
+/// The systems that report to [`Progress`]. They run only while loading, before the screen
+/// looks at what they said.
+#[derive(SystemSet, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Track;
+
+/// What is still coming and what has come, gathered afresh each frame while loading.
+#[derive(Resource, Default, Debug)]
+pub struct Progress(Vec<Part>);
+
+#[derive(Debug, PartialEq)]
+struct Part {
+    what: &'static str,
+    coming: usize,
+    done: usize,
+}
+
+impl Progress {
+    /// Says that so many of something are still coming and so many have come. `what` is
+    /// shown on the screen while it holds the most back, such as "Shaping the ground".
+    /// Reports of the same thing add up.
+    pub fn report(&mut self, what: &'static str, coming: usize, done: usize) {
+        match self.0.iter_mut().find(|part| part.what == what) {
+            Some(part) => {
+                part.coming += coming;
+                part.done += done;
+            }
+            None => self.0.push(Part { what, coming, done }),
+        }
+    }
+
+    fn coming(&self) -> usize {
+        self.0.iter().map(|part| part.coming).sum()
+    }
+
+    /// How far along, from 0 to 1, counting everything alike.
+    fn fraction(&self) -> f32 {
+        let coming = self.coming();
+        let all = coming + self.0.iter().map(|part| part.done).sum::<usize>();
+        if all == 0 {
+            1.0
+        } else {
+            (all - coming) as f32 / all as f32
+        }
+    }
+
+    /// What came and what is still coming, for the log: `Loading 40 of 40, ...`.
+    fn summary(&self) -> String {
+        self.0
+            .iter()
+            .map(|part| {
+                let all = part.coming + part.done;
+                format!("{} {} of {all}", part.what, part.done)
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// What holds the most back.
+    fn status(&self) -> &'static str {
+        self.0
+            .iter()
+            .filter(|part| part.coming > 0)
+            .max_by_key(|part| part.coming)
+            .map_or("Ready", |part| part.what)
+    }
+}
+
 /// The loading screen's root.
 #[derive(Component)]
 struct Cover;
@@ -105,18 +196,26 @@ pub fn plugin(app: &mut App) {
     app.init_state::<Screen>()
         .init_resource::<Loading>()
         .init_resource::<Shaders>()
+        .init_resource::<Drawables>()
+        .init_resource::<Progress>()
+        .configure_sets(
+            Update,
+            Track.run_if(in_state(Screen::Loading)).before(watch),
+        )
         .add_systems(OnEnter(Screen::Loading), (cover, hold_clock))
         .add_systems(OnExit(Screen::Loading), (uncover, release_clock))
         .add_systems(
             Update,
             (
+                (files, models, pictures, drawables, shaders).in_set(Track),
                 watch.run_if(in_state(Screen::Loading)),
                 fade.run_if(in_state(Screen::Playing)),
             ),
         );
-    // Only the render world knows whether shaders are compiling; it says so as it extracts.
+    // Only the render world knows whether shaders are compiling and what it can draw; it
+    // says so as it extracts.
     app.sub_app_mut(RenderApp)
-        .add_systems(ExtractSchedule, count_shaders);
+        .add_systems(ExtractSchedule, (count_shaders, count_drawables));
 }
 
 fn count_shaders(mut main_world: ResMut<MainWorld>, pipelines: Res<PipelineCache>) {
@@ -124,6 +223,87 @@ fn count_shaders(mut main_world: ResMut<MainWorld>, pipelines: Res<PipelineCache
         shaders.compiling = pipelines.waiting_pipelines().count();
         shaders.made = pipelines.pipelines().count() - shaders.compiling;
     }
+}
+
+/// Counts what is in view and whether it can be drawn: its mesh and its material, with the
+/// textures the material uses, prepared on the GPU. A material whose texture is still
+/// loading is not drawn at all, so a figure in a skin still loading is missing, not plain.
+/// Counted only while loading, since it looks at everything in view.
+fn count_drawables(
+    mut main_world: ResMut<MainWorld>,
+    instances: Option<Res<RenderMaterialInstances>>,
+    materials: Option<Res<ErasedRenderAssets<PreparedMaterial>>>,
+    placed: Option<Res<RenderMeshInstances>>,
+    meshes: Option<Res<RenderAssets<RenderMesh>>>,
+) {
+    let loading = main_world
+        .get_resource::<State<Screen>>()
+        .is_some_and(|screen| *screen.get() == Screen::Loading);
+    let (true, Some(instances), Some(materials), Some(placed), Some(meshes)) =
+        (loading, instances, materials, placed, meshes)
+    else {
+        return;
+    };
+    let waiting = instances
+        .instances
+        .iter()
+        .filter(|(entity, instance)| {
+            materials.get(instance.asset_id).is_none()
+                || placed
+                    .mesh_asset_id(**entity)
+                    .is_some_and(|mesh| meshes.get(mesh).is_none())
+        })
+        .count();
+    if let Some(mut drawables) = main_world.get_resource_mut::<Drawables>() {
+        drawables.waiting = waiting;
+        drawables.ready = instances.instances.len() - waiting;
+    }
+}
+
+/// Files asked to be waited for. A file that failed is not coming; whatever asked for it
+/// says so.
+fn files(mut loading: ResMut<Loading>, assets: Res<AssetServer>, mut progress: ResMut<Progress>) {
+    loading.files.retain(|&id| {
+        !assets.is_loaded_with_dependencies(id)
+            && !matches!(assets.load_state(id), LoadState::Failed(_))
+    });
+    let coming = loading.files.len();
+    progress.report("Loading", coming, loading.asked - coming);
+}
+
+/// Models put in the world, until they have loaded and been placed.
+fn models(
+    assets: Res<AssetServer>,
+    spawner: Res<WorldInstanceSpawner>,
+    models: Query<(&WorldAssetRoot, Option<&WorldInstance>)>,
+    mut progress: ResMut<Progress>,
+) {
+    let placing = models
+        .iter()
+        .filter(|(model, instance)| {
+            !matches!(assets.load_state(&model.0), LoadState::Failed(_))
+                && !instance.is_some_and(|instance| spawner.instance_is_ready(**instance))
+        })
+        .count();
+    progress.report("Loading", placing, models.iter().len() - placing);
+}
+
+/// Pictures on screen, such as the icons in the bag, until they have loaded. One made by
+/// the game rather than loaded is there at once.
+fn pictures(assets: Res<AssetServer>, pictures: Query<&ImageNode>, mut progress: ResMut<Progress>) {
+    let coming = pictures
+        .iter()
+        .filter(|picture| matches!(assets.load_state(&picture.image), LoadState::Loading))
+        .count();
+    progress.report("Loading", coming, pictures.iter().len() - coming);
+}
+
+fn drawables(drawables: Res<Drawables>, mut progress: ResMut<Progress>) {
+    progress.report("Preparing the scene", drawables.waiting, drawables.ready);
+}
+
+fn shaders(shaders: Res<Shaders>, mut progress: ResMut<Progress>) {
+    progress.report("Preparing shaders", shaders.compiling, shaders.made);
 }
 
 fn hold_clock(mut time: ResMut<Time<Virtual>>) {
@@ -134,7 +314,12 @@ fn release_clock(mut time: ResMut<Time<Virtual>>) {
     time.unpause();
 }
 
-fn cover(mut commands: Commands, mut loading: ResMut<Loading>, old: Query<Entity, With<Cover>>) {
+fn cover(
+    mut commands: Commands,
+    mut loading: ResMut<Loading>,
+    mut drawables: ResMut<Drawables>,
+    old: Query<Entity, With<Cover>>,
+) {
     // Loading again while the last screen is still fading.
     for entity in &old {
         commands.entity(entity).despawn();
@@ -143,6 +328,8 @@ fn cover(mut commands: Commands, mut loading: ResMut<Loading>, old: Query<Entity
     loading.quiet = 0;
     loading.shown = 0.0;
     loading.up_for = Duration::ZERO;
+    // What the render world said when last loading is no longer so.
+    *drawables = Drawables::default();
     commands
         .spawn((
             Name::new("Loading screen"),
@@ -210,91 +397,46 @@ fn cover(mut commands: Commands, mut loading: ResMut<Loading>, old: Query<Entity
         });
 }
 
-/// What is still coming, and how much has come.
-#[derive(Debug, Default, PartialEq)]
-struct Count {
-    files: (usize, usize),
-    models: (usize, usize),
-    shaders: (usize, usize),
-}
-
-impl Count {
-    fn coming(&self) -> bool {
-        self.files.0 + self.models.0 + self.shaders.0 > 0
-    }
-
-    /// How far along, from 0 to 1, counting each file, model and shader alike.
-    fn fraction(&self) -> f32 {
-        let coming = self.files.0 + self.models.0 + self.shaders.0;
-        let all = coming + self.files.1 + self.models.1 + self.shaders.1;
-        if all == 0 {
-            1.0
-        } else {
-            (all - coming) as f32 / all as f32
-        }
-    }
-
-    fn status(&self) -> &'static str {
-        if self.files.0 + self.models.0 > 0 {
-            "Loading"
-        } else if self.shaders.0 > 0 {
-            "Preparing shaders"
-        } else {
-            "Ready"
-        }
-    }
-}
-
 /// Watches what is still coming, moves the bar, and starts the game once nothing has come
 /// for a few frames.
 fn watch(
     mut loading: ResMut<Loading>,
-    shaders: Res<Shaders>,
-    assets: Res<AssetServer>,
-    spawner: Res<WorldInstanceSpawner>,
-    models: Query<(&WorldAssetRoot, Option<&WorldInstance>)>,
+    mut progress: ResMut<Progress>,
     real: Res<Time<Real>>,
     options: Res<Options>,
     mut bar: Single<&mut Node, With<Bar>>,
     mut status: Single<&mut Text, With<Status>>,
     mut next: ResMut<NextState<Screen>>,
 ) {
+    // What was said this frame; next frame is said afresh.
+    let progress = std::mem::take(&mut *progress);
     loading.up_for += real.delta();
-    // A file that failed is not coming; whatever asked for it says so.
-    let arrived = |id: UntypedAssetId| {
-        assets.is_loaded_with_dependencies(id)
-            || matches!(assets.load_state(id), LoadState::Failed(_))
+    loading.quiet = if progress.coming() > 0 {
+        0
+    } else {
+        loading.quiet + 1
     };
-    loading.files.retain(|&id| !arrived(id));
-    let placing = models
-        .iter()
-        .filter(|(model, instance)| {
-            !matches!(assets.load_state(&model.0), LoadState::Failed(_))
-                && !instance.is_some_and(|instance| spawner.instance_is_ready(**instance))
-        })
-        .count();
-    let count = Count {
-        files: (loading.files.len(), loading.asked - loading.files.len()),
-        models: (placing, models.iter().len() - placing),
-        shaders: (shaders.compiling, shaders.made),
-    };
-    loading.quiet = if count.coming() { 0 } else { loading.quiet + 1 };
-    loading.shown = loading.shown.max(count.fraction());
+    loading.shown = loading.shown.max(progress.fraction());
     bar.width = percent(100.0 * loading.shown);
-    if status.0 != count.status() {
-        status.0 = count.status().into();
+    if status.0 != progress.status() {
+        status.0 = progress.status().into();
     }
     // A screen held up to be looked at stays (--loading).
     if options.hold_loading {
         return;
     }
     if loading.quiet >= QUIET_FRAMES {
-        info!("Loaded in {:.1} s.", loading.up_for.as_secs_f32());
+        info!(
+            "Loaded in {:.1} s: {}.",
+            loading.up_for.as_secs_f32(),
+            progress.summary()
+        );
         next.set(Screen::Playing);
     } else if loading.up_for > GIVE_UP {
         warn!(
-            "Still loading after {} s, starting anyway: {count:?}",
-            GIVE_UP.as_secs()
+            "Still loading after {} s, starting anyway: {}.",
+            GIVE_UP.as_secs(),
+            progress.summary()
         );
         next.set(Screen::Playing);
     }
@@ -347,22 +489,36 @@ mod tests {
 
     #[test]
     fn counts_everything_alike() {
-        let count = Count {
-            files: (1, 1),
-            models: (0, 2),
-            shaders: (3, 3),
-        };
-        assert!(count.coming());
-        assert_eq!(count.fraction(), 0.6);
-        assert_eq!(count.status(), "Loading");
-        let compiling = Count {
-            shaders: (1, 9),
-            ..default()
-        };
+        let mut progress = Progress::default();
+        progress.report("Loading", 1, 1);
+        progress.report("Loading", 0, 2);
+        progress.report("Preparing shaders", 3, 3);
+        assert_eq!(progress.coming(), 4);
+        assert_eq!(progress.fraction(), 0.6);
+        assert_eq!(progress.status(), "Preparing shaders");
+        let mut compiling = Progress::default();
+        compiling.report("Loading", 0, 4);
+        compiling.report("Preparing shaders", 1, 5);
         assert_eq!(compiling.status(), "Preparing shaders");
         assert_eq!(compiling.fraction(), 0.9);
-        let nothing = Count::default();
-        assert!(!nothing.coming());
+        let nothing = Progress::default();
+        assert_eq!(nothing.coming(), 0);
         assert_eq!(nothing.fraction(), 1.0);
+        assert_eq!(nothing.status(), "Ready");
+    }
+
+    #[test]
+    fn reports_of_one_thing_add_up() {
+        let mut progress = Progress::default();
+        progress.report("Loading", 2, 1);
+        progress.report("Loading", 1, 3);
+        assert_eq!(
+            progress.0,
+            vec![Part {
+                what: "Loading",
+                coming: 3,
+                done: 4
+            }]
+        );
     }
 }

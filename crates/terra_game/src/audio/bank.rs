@@ -53,6 +53,11 @@ impl Bank {
         }
     }
 
+    /// Every take of every sound, as asked to be loaded.
+    pub fn takes(&self) -> impl Iterator<Item = &Handle<AudioSource>> {
+        self.sets.values().flat_map(|(_, takes)| takes)
+    }
+
     /// Plays a take of the named sound, at a place in the world or, with none, in the ear.
     pub fn play(&mut self, commands: &mut Commands, mix: &Mix, name: &str, at: Option<Vec3>) {
         let Some((clips, takes)) = self.sets.get(name) else {
