@@ -12,7 +12,7 @@ From 2026-10-12:
 - **They take part on their own, however the simulation makes sense** (D161, D162): working crafting stations and helping haul resources. You do not assign them.
 - **It is not a colony sim** (D161). You do not micromanage them. "A little automatically managed tribe simulator."
 - **They have stats they level up, as you do** (D88, D123), so they get better at the work they do.
-- **Building help is useful for carrying things to a building** (D161). They must not start building a plan while you are still designing it. Recruits should potentially help build, too (Leaning). How a plan is handed to them is still to be thought through; perhaps you switch from blueprint to build (D170, Open).
+- **Building help is useful for carrying things to a building** (D161). They must not start building a plan while you are still designing it. Recruits should potentially help build, too (Leaning). A plan is handed to them by switching from blueprint to build: Plan and Build modes, agreed for now, perhaps to revisit (D170, Leaning).
 - **They take their gear on their own** (D161). A container is either personal or the tribe's, and that is enough.
 - **Recruits are much like players** (D169): health, stamina and mana, hunger, thirst and body temperature. Cold or heat slows their work. They likely sleep at night.
 - **They help defend you in some situations** (D90, Leaning): if you are attacked near your claim, or in raids, if raids come later. Monsters will likely not form inside an outpost, but danger comes close to home, and protecting the outpost, with walls, guards or otherwise, is part of having one (D169).
@@ -78,7 +78,7 @@ Proposed:
 
 ## Building
 
-From the developers (D161): help is useful for carrying things to a building, and no one starts on a plan you are still designing. Recruits should potentially help build, too (Leaning). How a plan passes from you to the tribe is still being thought through (D170, Open).
+From the developers (D161): help is useful for carrying things to a building, and no one starts on a plan you are still designing. Recruits should potentially help build, too (Leaning). How a plan passes from you to the tribe: Plan and Build modes, agreed for now and perhaps to be revisited (D170, Leaning).
 
 ### Plan and Build: handing work to the tribe
 
@@ -252,6 +252,6 @@ Technical, mine:
 
 ## Questions for the developers
 
-1. **Plan and Build** (D170): Build mode as today, so a single wall needs no extra step; Plan mode for drafts the tribe leaves alone; T taps to switch and holds to turn a building between draft and plan. Does that feel right, and should Plan mode do more, such as copying a building?
+1. Answered for now: **Plan and Build** (D170, Leaning), perhaps to revisit. Still open: should Plan mode do more, such as copying a building, and are drafts seen by the whole tribe?
 2. **Food quality**: foraged food poor and cooked food better, so a cook saves the outpost time?
 3. **How long starving takes**: about three days for hunger and two for thirst, an hour and a half and an hour of play, for players and recruits alike?

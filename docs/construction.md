@@ -250,7 +250,7 @@ Because every wall is a whole number of half metres, the kit always fits: a ston
 
 **Taking down.** A constructed part comes down to its plan, giving back its materials (or dropping them at your feet if they do not fit). A plan with nothing built is removed for free. Undo works on both.
 
-**Who constructs.** Anyone allowed in the claim (D94), and recruits who work at the base (D90), as Sons of the Forest's companion finishes blueprints, but never a draft still being designed (D170, Open; [tribe.md](tribe.md#plan-and-build-handing-work-to-the-tribe)). A claim-wide list of what all its plans still need, as The Forest's counter, tells a group what to go and get.
+**Who constructs.** Anyone allowed in the claim (D94), and recruits who work at the base (D90), as Sons of the Forest's companion finishes blueprints, but never a draft still being designed (D170, Leaning; [tribe.md](tribe.md#plan-and-build-handing-work-to-the-tribe)). A claim-wide list of what all its plans still need, as The Forest's counter, tells a group what to go and get.
 
 **On the voxel grid** (D48): constructing a part writes its blocks; a plan is blocks not yet written. Carving an opening is removing blocks. A kind of construction's parts are how the brush is sized for structures.
 
