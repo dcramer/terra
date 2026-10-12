@@ -61,9 +61,14 @@ impl Felled {
     }
 }
 
+/// Choosing what to cut and cutting it, which digging waits on: a pickaxe digs only where
+/// nothing is to be cut.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Harvesting;
+
 pub fn plugin(app: &mut App) {
     app.init_resource::<Cutting>()
-        .add_systems(Update, (cut, fall));
+        .add_systems(Update, (cut.in_set(Harvesting), fall));
 }
 
 fn cut(

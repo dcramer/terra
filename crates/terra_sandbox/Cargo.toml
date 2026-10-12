@@ -21,6 +21,7 @@ terra_build.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true
 terra_items.workspace = true
+terra_voxel.workspace = true
 
 [lints]
 workspace = true

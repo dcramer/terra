@@ -5,7 +5,8 @@
 // is its height, and the direction from the origin is "up".
 //
 // Each vertex carries what grows there in its colour: red is how much grass, green is how
-// lush it is. The mesh decides that so that whatever is planted on the ground can agree
+// lush it is, blue is rock showing through where the ground has been dug (half for
+// stone, all for ore), and alpha is how much of the sky it sees. The mesh decides that so that whatever is planted on the ground can agree
 // with it; this only draws it, and roughens the edges.
 
 #import bevy_pbr::{
@@ -98,6 +99,14 @@ fn fragment(
         grass_colour *= 0.92 + 0.16 * fleck;
         colour = mix(colour, grass_colour, grass);
 
+        // Dug ground shows what it is made of: grey stone, and ore rusty in it.
+        let rock = smoothstep(0.2, 0.4, grows.b);
+        let ore = smoothstep(0.7, 0.9, grows.b);
+        // Warm, so a pit lit only by the blue sky reads as stone and not as water.
+        let stone_colour = vec3<f32>(0.56, 0.49, 0.42) * (0.85 + 0.3 * blotch);
+        let ore_colour = vec3<f32>(0.55, 0.3, 0.2) * (0.8 + 0.4 * fleck);
+        colour = mix(colour, mix(stone_colour, ore_colour, ore), rock);
+
         // The shore: sand above the waterline, darker where it is wet, foam where the
         // water meets it, and the bed fading into the deep below.
         let above_sea = from_centre - ground.sea_radius_m;
@@ -112,6 +121,11 @@ fn fragment(
     }
 #endif
     pbr_input.material.base_color = vec4<f32>(colour, 1.0);
+#ifdef VERTEX_COLORS
+    // The vertex's alpha is how much of the sky it sees: the sky's light is dimmed by it,
+    // so the bottom of a dug hole is dark rather than lit as open ground.
+    pbr_input.diffuse_occlusion *= vec3<f32>(in.color.a);
+#endif
 
     // Faceted: light each triangle as one flat plane. The plane's direction comes from
     // how the surface position changes between neighbouring pixels.

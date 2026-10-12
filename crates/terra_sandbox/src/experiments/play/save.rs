@@ -25,6 +25,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use terra_build::BuildOp;
+use terra_core::{MaterialId, Operation};
 use terra_items::{ActionBar, Cell, Equipment, ItemId};
 
 /// Bumped when the format changes in a way old saves cannot be read in.
@@ -39,6 +40,19 @@ struct SaveFile {
     props: Vec<SavedProp>,
     claim_step: usize,
     people: Vec<SavedPerson>,
+    /// How the ground has been dug and filled, in order (D21).
+    #[serde(default)]
+    ground: Vec<SavedEdit>,
+}
+
+/// One change to the ground: a sphere dug out, or filled with a material.
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct SavedEdit {
+    centre: [f32; 3],
+    radius: f32,
+    /// The material it was filled with, for a fill; nothing for a dig.
+    #[serde(default)]
+    fill: Option<u16>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -139,7 +153,7 @@ fn load(
     mut commands: Commands,
     path: Option<Res<SavePath>>,
     options: Res<crate::shell::Options>,
-    planet: Res<Planet>,
+    mut planet: ResMut<Planet>,
     models: Res<Models>,
     mut site: ResMut<Site>,
     mut items: ResMut<Items>,
@@ -180,6 +194,25 @@ fn load(
     }
     let (mut transform, mut vitals, mut skills, mut backpack, mut gear, mut bar) =
         player.into_inner();
+
+    // The ground as it was dug and filled, replayed in order (D21).
+    if planet.operations().is_empty() && !save.ground.is_empty() {
+        info!("Replayed {} changes to the ground.", save.ground.len());
+        for edit in &save.ground {
+            let centre = Vec3::from(edit.centre);
+            planet.apply(&match edit.fill {
+                None => Operation::Dig {
+                    centre,
+                    radius: edit.radius,
+                },
+                Some(material) => Operation::Fill {
+                    centre,
+                    radius: edit.radius,
+                    material: MaterialId(material),
+                },
+            });
+        }
+    }
 
     // The base and what stands in and around it.
     site.replace_with(&save.base, &mut commands, &planet, &mut meshes);
@@ -342,6 +375,7 @@ fn autosave(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     path: Res<SavePath>,
+    planet: Res<Planet>,
     site: Res<Site>,
     claim: Res<Claim>,
     items: Res<Items>,
@@ -359,6 +393,7 @@ fn autosave(
     }
     *since = 0.0;
     let save = gather(
+        &planet,
         &site,
         &claim,
         &items,
@@ -377,6 +412,7 @@ fn autosave(
 fn save_on_exit(
     mut exits: MessageReader<AppExit>,
     path: Res<SavePath>,
+    planet: Res<Planet>,
     site: Res<Site>,
     claim: Res<Claim>,
     items: Res<Items>,
@@ -387,6 +423,7 @@ fn save_on_exit(
 ) {
     if exits.read().next().is_some() {
         let save = gather(
+            &planet,
             &site,
             &claim,
             &items,
@@ -409,6 +446,7 @@ type PlayerParts<'a> = (
 );
 
 fn gather(
+    planet: &Planet,
     site: &Site,
     claim: &Claim,
     items: &Items,
@@ -480,6 +518,27 @@ fn gather(
             })
             .collect(),
         claim_step: claim.step(),
+        ground: planet
+            .operations()
+            .into_iter()
+            .filter_map(|operation| match operation {
+                Operation::Dig { centre, radius } => Some(SavedEdit {
+                    centre: centre.into(),
+                    radius,
+                    fill: None,
+                }),
+                Operation::Fill {
+                    centre,
+                    radius,
+                    material,
+                } => Some(SavedEdit {
+                    centre: centre.into(),
+                    radius,
+                    fill: Some(material.0),
+                }),
+                _ => None,
+            })
+            .collect(),
         people: people
             .iter()
             .filter_map(|(person, at)| {
@@ -562,6 +621,11 @@ mod tests {
                 done: vec!["Iron".to_string()],
             }],
             claim_step: 1,
+            ground: vec![SavedEdit {
+                centre: [1.0, 2000.0, 2.0],
+                radius: 0.7,
+                fill: None,
+            }],
             people: vec![SavedPerson {
                 name: "Bren".to_string(),
                 doing: "working".to_string(),

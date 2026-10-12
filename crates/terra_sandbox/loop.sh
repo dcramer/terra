@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Drives the play experiment's loop end to end and checks each step happened (D69):
-# talk to the elder, eat, hunt a deer with a bow and butcher it, kill the spiders, free the smith and bring them home, claim
+# talk to the elder, eat, hunt a deer with a bow and butcher it, dig stone out of the
+# ground and find the hole still there after loading, kill the spiders, free the smith and bring them home, claim
 # land, build a smelter and a forge, have the smith take up the forge, smelt iron, and
 # have the smith make an iron axe. Each run reads
 # what happened from the log, where every on-screen notice is written.
@@ -51,6 +52,14 @@ step hunt 'An arrow hit a Deer' 'Killed a Deer.' 'Notice: Butchered it' -- \
     --press e@100-160 --press e@190-250 \
     --warp -44.8,34.2:-47.1,34.2@330 --press 4@335 --press down@340-360 --press left@361-366 \
     --press f@380 --settle 420
+
+# Digging the meadow with the pickaxe: soil, then stone. Saved, and the hole is there
+# again when the game is loaded.
+step dig 'Notice: Dug out' -- \
+    --fresh --save dig.ron --press 3@40 --press down@45-70 \
+    --press e@100-165 --press e@175-240 --press e@250-315 --settle 330
+step reload 'Replayed 3 changes to the ground.' -- \
+    --save dig.ron --settle 60
 
 # In leather with a spear, facing the spiders as they come, then over to Bren.
 step rescue 'Killed a Spider' 'Freed Bren.' -- \

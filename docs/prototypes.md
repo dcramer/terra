@@ -96,7 +96,7 @@ As of 2026-10-11.
 
 | Part | State |
 |---|---|
-| One small world, day and night | On the stand-in planet, not voxels; no night yet |
+| One small world, day and night | Voxel terrain, dug with the pickaxe for stone and ore, saved; no night yet |
 | Gathering with separate tools (D96) | Built |
 | Crafting at stations, timed and queued (D109) | Built: workbench, smelter, forge, campfire |
 | A claim, upgradable (D94, D104) | Built |

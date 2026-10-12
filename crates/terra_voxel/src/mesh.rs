@@ -10,7 +10,7 @@
 use crate::field::{Field, material};
 use glam::Vec3;
 use std::cell::RefCell;
-use terra_core::{ChunkId, ChunkMesh, MaterialId, MaterialWeights};
+use terra_core::{ChunkId, ChunkMesh, MaterialWeights};
 use transvoxel::prelude::*;
 use transvoxel::structs::grid_point::GridPoint;
 use transvoxel::structs::vertex_index::VertexIndex;
@@ -105,11 +105,10 @@ impl Sides {
     }
 }
 
-/// A voxel as the mesher sees it: a density, positive inside the ground, and a material.
+/// A voxel as the mesher sees it: a density, positive inside the ground.
 #[derive(Clone, Copy, Debug, Default)]
 struct Voxel {
     density: f32,
-    material: MaterialId,
 }
 
 impl transvoxel::traits::voxel_data::VoxelData for Voxel {
@@ -142,16 +141,8 @@ impl MeshBuilder<Voxel, f32> for Builder {
         let position = at(&a).lerp(at(&b), toward_b);
         // Density rises into the ground, so the surface faces down its gradient.
         let normal = -gradient(&a).lerp(gradient(&b), toward_b);
-        // The vertex lies where the surface crosses between the two; it is made of
-        // whichever of them is in the ground.
-        let inside = if a.voxel_data.density() > 0.0 { &a } else { &b };
-        let made_of = match inside.voxel_data.material {
-            material::AIR => material::STONE,
-            other => other,
-        };
         self.mesh.positions.push(position);
         self.mesh.normals.push(normal.normalize_or(Vec3::Y));
-        self.mesh.materials.push(MaterialWeights::single(made_of));
         VertexIndex(self.mesh.positions.len() - 1)
     }
 
@@ -180,19 +171,8 @@ pub fn mesh_chunk<F: Field>(field: &F, id: ChunkId, finer: Sides) -> ChunkMesh {
     let spacing = VOXEL_M * (1u32 << id.level) as f32;
     let reader = |spacing: f32| {
         let memo = RefCell::new(field.memo_for(spacing));
-        move |x: f32, y: f32, z: f32| {
-            let point = Vec3::new(x, y, z);
-            let memo = &mut *memo.borrow_mut();
-            let distance = field.distance_in(point, memo);
-            let material = if distance.abs() < 2.0 * spacing {
-                field.sample_in(point, memo).material
-            } else {
-                material::AIR
-            };
-            Voxel {
-                density: -distance,
-                material,
-            }
+        move |x: f32, y: f32, z: f32| Voxel {
+            density: -field.distance_in(Vec3::new(x, y, z), &mut memo.borrow_mut()),
         }
     };
     let sample = reader(spacing);
@@ -211,8 +191,28 @@ pub fn mesh_chunk<F: Field>(field: &F, id: ChunkId, finer: Sides) -> ChunkMesh {
             side,
         );
     }
-    extract(&blocks, 0.0, Builder::default()).mesh
+    let mut mesh = extract(&blocks, 0.0, Builder::default()).mesh;
+    // What each vertex is made of is asked where it lies, just under the surface, so a
+    // coarse chunk shows the same topsoil as a fine one rather than whatever its widely
+    // spaced voxels happen to sit in.
+    let mut memo = field.memo_for(VOXEL_M);
+    mesh.materials = mesh
+        .positions
+        .iter()
+        .zip(&mesh.normals)
+        .map(|(&point, &normal)| {
+            let under = field.sample_in(point - normal * UNDER_SURFACE_M, &mut memo);
+            MaterialWeights::single(match under.material {
+                material::AIR => material::STONE,
+                other => other,
+            })
+        })
+        .collect();
+    mesh
 }
+
+/// How far under the surface a vertex's material is read.
+const UNDER_SURFACE_M: f32 = 0.2;
 
 #[cfg(test)]
 mod tests {
@@ -377,5 +377,94 @@ mod tests {
             cracks_at(1, false) > 0,
             "the test finds cracks when there are some"
         );
+    }
+}
+
+#[cfg(test)]
+mod hole_tests {
+    use super::*;
+    use crate::{GeneratedPlanet, VoxelPlanet};
+    use glam::IVec3;
+    use std::collections::HashMap;
+    use terra_core::{Operation, PlanetSpec};
+    use terra_gen::Seed;
+
+    #[test]
+    fn a_dug_hole_has_no_gaps() {
+        let mut planet = VoxelPlanet::new(GeneratedPlanet::new(
+            PlanetSpec {
+                seed: Seed(1),
+                radius_m: 2000.0,
+            },
+            150.0,
+            Some(-20.0),
+        ));
+        let up = Vec3::Y;
+        let ground = up * (2000.0 + planet.field().height_m(up));
+        for depth in [0.2, 0.8, 1.4] {
+            planet.apply(&Operation::Dig {
+                centre: ground - up * depth,
+                radius: 0.7,
+            });
+        }
+        let middle = chunk_at(ground, 0);
+        let mut meshes = Vec::new();
+        for x in -1..=1 {
+            for y in -1..=1 {
+                for z in -1..=1 {
+                    let id = ChunkId {
+                        level: 0,
+                        coord: middle.coord + IVec3::new(x, y, z),
+                    };
+                    meshes.push(mesh_chunk(&planet, id, Sides::none()));
+                }
+            }
+        }
+        let key = |p: Vec3| (p * 1000.0).round().as_ivec3();
+        let mut count: HashMap<(IVec3, IVec3), (usize, Vec3)> = HashMap::new();
+        for mesh in &meshes {
+            for t in mesh.indices.chunks(3) {
+                for (i, j) in [(0, 1), (1, 2), (2, 0)] {
+                    let (a, b) = (mesh.positions[t[i] as usize], mesh.positions[t[j] as usize]);
+                    let (ka, kb) = (key(a), key(b));
+                    if ka == kb {
+                        continue;
+                    }
+                    let edge = if (ka.x, ka.y, ka.z) < (kb.x, kb.y, kb.z) {
+                        (ka, kb)
+                    } else {
+                        (kb, ka)
+                    };
+                    count.entry(edge).or_insert((0, a)).0 += 1;
+                }
+            }
+        }
+        let near: Vec<Vec3> = count
+            .values()
+            .filter(|(n, at)| *n == 1 && at.distance(ground) < 4.0)
+            .map(|(_, at)| *at)
+            .collect();
+        assert!(
+            near.is_empty(),
+            "{} open edges near the hole, such as {:?}",
+            near.len(),
+            near.first()
+        );
+        // The floor of the hole faces up, out of it.
+        let floor: Vec<(Vec3, Vec3)> = meshes
+            .iter()
+            .flat_map(|mesh| {
+                mesh.positions
+                    .iter()
+                    .copied()
+                    .zip(mesh.normals.iter().copied())
+            })
+            .filter(|(at, _)| at.reject_from(up).distance(ground.reject_from(up)) < 0.3)
+            .filter(|(at, _)| at.y < ground.y - 1.0)
+            .collect();
+        assert!(!floor.is_empty());
+        for (at, normal) in &floor {
+            assert!(normal.y > 0.5, "the floor at {at:?} faces {normal:?}");
+        }
     }
 }

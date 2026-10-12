@@ -65,6 +65,7 @@ const HARVEST_STEP_M: f32 = 0.2;
 const EDIT_MARGIN_M: f32 = 2.0;
 
 /// A planet's ground: its generated field and the edits made to it.
+#[derive(Clone)]
 pub struct VoxelPlanet<F: Field> {
     field: F,
     edits: Vec<Edit>,
@@ -82,9 +83,38 @@ impl<F: Field> VoxelPlanet<F> {
         &self.field
     }
 
+    /// The operations that shaped the ground, in the order they were applied: what a save
+    /// keeps, and what replaying makes the same ground again (D21).
+    pub fn operations(&self) -> Vec<Operation> {
+        self.edits
+            .iter()
+            .map(|edit| match *edit {
+                Edit::Dig { centre, radius } => Operation::Dig { centre, radius },
+                Edit::Fill {
+                    centre,
+                    radius,
+                    material,
+                } => Operation::Fill {
+                    centre,
+                    radius,
+                    material,
+                },
+            })
+            .collect()
+    }
+
     /// How many edits have been made.
     pub fn edit_count(&self) -> usize {
         self.edits.len()
+    }
+
+    /// Where the edits made since the first so many were, as spheres, with the margin
+    /// past them that their bent surface reaches: what to draw again after them.
+    pub fn edits_since(&self, first: usize) -> impl Iterator<Item = (Vec3, f32)> + '_ {
+        self.edits.iter().skip(first).map(|edit| {
+            let (centre, radius) = edit.centre_and_radius();
+            (centre, radius + EDIT_MARGIN_M)
+        })
     }
 
     /// The ground at a point, with every edit laid over the generated field in order.
@@ -325,6 +355,12 @@ mod tests {
             let point = ground + Vec3::new(i as f32 * 0.07 - 3.5, i as f32 * 0.05 - 2.5, 0.2);
             assert_eq!(one.sample(point), two.sample(point));
         }
+        // Replaying what one kept gives the same ground again.
+        let mut replayed = planet();
+        for operation in one.operations() {
+            replayed.apply(&operation);
+        }
+        assert_eq!(replayed.sample(ground), one.sample(ground));
         // And in another order, another ground: the order is part of the history.
         let mut three = planet();
         for operation in operations.iter().rev() {

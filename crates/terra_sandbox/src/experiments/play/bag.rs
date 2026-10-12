@@ -607,7 +607,11 @@ fn draw(
     notice.age += time.delta_secs();
     // Longer things said stay up longer, so they can be read.
     let lasts = NOTICE_SECONDS + notice.text.len() as f32 / 22.0;
-    let fade = (lasts - notice.age).clamp(0.0, 1.0);
+    let fade = if notice.text.is_empty() {
+        0.0
+    } else {
+        (lasts - notice.age).clamp(0.0, 1.0)
+    };
     let (mut text, mut text_colour, mut backing) = texts.p3().into_inner();
     let wanted = BackgroundColor(Color::srgba(0.04, 0.05, 0.07, 0.62 * fade));
     if *backing != wanted {

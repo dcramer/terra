@@ -19,6 +19,7 @@ mod planet;
 mod remote;
 mod shell;
 mod sky;
+mod terrain;
 
 use bevy::prelude::*;
 
@@ -41,6 +42,7 @@ fn main() -> AppExit {
     app.add_plugins((
         shell::ShellPlugin(options.clone()),
         planet::plugin,
+        terrain::plugin,
         character::plugin,
     ));
     for name in &options.experiments {

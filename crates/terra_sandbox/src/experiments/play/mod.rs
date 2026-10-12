@@ -27,6 +27,7 @@ mod crafting;
 mod creatures;
 mod death;
 mod dial;
+mod dig;
 mod figure;
 mod flora;
 mod harvest;
@@ -151,6 +152,7 @@ pub fn plugin(app: &mut App) {
     worn::plugin(app);
     save::plugin(app);
     harvest::plugin(app);
+    dig::plugin(app);
     options::plugin(app);
     // Sound: noises from what happens, what they sound like, the place, and music.
     noise::plugin(app);

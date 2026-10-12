@@ -312,6 +312,7 @@ fn draw(
     focus: Res<Focus>,
     belongings: Belongings,
     cutting: Res<Cutting>,
+    digging: Res<super::dig::Digging>,
     growth: Query<&Growth>,
     options: Res<Options>,
     cursor: Single<&CursorOptions>,
@@ -432,6 +433,16 @@ fn draw(
         } else {
             let doing = match holding {
                 Some(Tool::Hammer) => tool::prompt(&builder, &settings),
+                // A pickaxe on bare ground digs it.
+                Some(_) if cutting.target.is_none() && digging.target.is_some() => {
+                    match digging.progress() {
+                        Some(_) => "Digging      Let go to stop".to_string(),
+                        None => format!(
+                            "{}  dig      Stone and ore come out of the ground",
+                            settings.hold(Action::Use)
+                        ),
+                    }
+                }
                 Some(tool) => harvest::prompt(tool, &cutting, &growth, &settings),
                 None => format!(
                     "1 to 6  pick a tool      {}  inventory",
@@ -458,17 +469,19 @@ fn draw(
     );
 }
 
-/// Fills the bar under the aiming mark while a job is held down: building, taking apart
-/// or cutting.
+/// Fills the bar under the aiming mark while a job is held down: building, taking apart,
+/// cutting or digging.
 fn draw_progress(
     builder: Res<Builder>,
     cutting: Res<Cutting>,
+    digging: Res<super::dig::Digging>,
     mut bar: Single<&mut Visibility, With<ProgressBar>>,
     mut fill: Single<(&mut Node, &mut BackgroundColor), With<ProgressFill>>,
 ) {
     let progress = builder
         .progress()
-        .or(cutting.progress().map(|done| (done, false)));
+        .or(cutting.progress().map(|done| (done, false)))
+        .or(digging.progress().map(|done| (done, false)));
     let wanted = if progress.is_some() {
         Visibility::Visible
     } else {

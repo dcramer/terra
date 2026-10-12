@@ -1,6 +1,6 @@
 # Terrain: brief for `terra_voxel`
 
-Status: A1 built in `crates/terra_voxel`; A2, drawing it, next, and provisional like the rest of the engine plan ([engine.md](engine.md)). This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
+Status: A1 built in `crates/terra_voxel`; A2 under way: the sandbox draws and digs it, and provisional like the rest of the engine plan ([engine.md](engine.md)). This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
 
 ## What it is
 
@@ -41,6 +41,10 @@ Where it stands, 2026-10-11: A1 is built in `terra_voxel`, the field, edits, har
 - **Edits behave.** Digging then filling restores the ground. The same operations in the same order give the same voxels.
 - **Harvest adds up.** The volume reported for a dig matches the volume that disappeared, split correctly between materials.
 - **It is fast enough to build on.** Meshing a 32-cubed chunk takes no longer than the 6 ms measured in the toolchain check, on both the Linux and Windows builds.
+
+## A2: in the sandbox
+
+As of 2026-10-11, the sandbox's ground is the voxel planet (`src/terrain.rs` draws it, `src/planet.rs` answers for it): the first view, about 890 chunks, is meshed across every core before the first frame; after that chunks are meshed in the background as the camera moves, the old kept until the new are ready; any edit chooses the chunks again and re-meshes those it reached. Each vertex carries what grows there, what it is made of, and how much sky it sees, so a dug pit is dark at the bottom. A pickaxe on bare ground digs; digs are saved and replayed. Not yet: grass and plants standing over a hole stay; trees can be left floating; the world healing outside a claim (D94); building into the ground; walking and colliding on voxels beyond standing on them (D53); frame times on the integrated GPU.
 
 ## Where it plugs in
 
