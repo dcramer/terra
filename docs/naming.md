@@ -24,7 +24,7 @@ The docs already talk this way: pooling places, surges, magic as the world's wea
 **The rules for a shared word:**
 1. **It says what the thing does, as water would.** A crossing between realms is where the gap runs shallow, so it is a ford.
 2. **Plain, old English:** short words of one or two syllables, which can be joined into compounds, as wellspring or deepcraft. No Latin or Greek coinages, and nothing that sounds like science.
-3. **Never a term the books coined,** and never a near copy of one. Common words the books also use, such as essence, monster, magic and mana, are free to use. **One exception, by the developers' choice: the rank names are the books' own** (D159).
+3. **Never a term the books coined,** and never a near copy of one. Common words the books also use, such as essence, monster, magic and mana, are free to use. **Exceptions, by the developers' choice: the books' core names for the rank names (D159), spirit coins (D167) and quintessence (D168).**
 4. **Readable in play:** order and size are obvious without a manual. Rank names say at a glance which is bigger.
 5. **One word, one meaning.** A word used for magic is not also a place or a season. The ranks are metals and a gem (D159), so a rank is always said with "rank" (an iron-rank monster, a bronze-rank portal), and the metal alone always means the material.
 
@@ -44,8 +44,8 @@ The docs already talk this way: pooling places, surges, magic as the world's wea
 | A way between realms | portal | **portal** on screen; in the lore a **ford** where it is natural and a **bridge** where it was made | Ways open where the Deep runs shallow |
 | Studied magic of the Deep (D124) | astral magic (the books' term) | **deepcraft** | |
 | Other studied disciplines | (none yet) | **-craft**: wardcraft, ritecraft, bindcraft | One pattern for every discipline |
-| Money that is magic (D167) | spirit coins (the books' term) | **pearls**: an iron pearl, a gold pearl | Magic condensed in a pool, as a pearl forms in water |
-| Fragments of an essence (D168) | quintessence (the books' term) | **beads**: a bead of Fire | A drop of one kind, held |
+| Money that is magic (D167) | spirit coins | **spirit coins**, as in the books | The developers' choice |
+| Fragments of an essence (D168) | quintessence | **quintessence**, as in the books | The developers' choice |
 | A realm's gods, as a kind of thing (D156) | gods | **gods**, and in the lore **tides** | Powers that move a whole realm's water |
 | Beings of the Deep itself, in lore only (D157) | (the books': great astral beings) | **the currents** | What moves in the Deep between realms |
 

@@ -340,24 +340,24 @@ Technical, mine:
 
 Decided (D167): money works as in the books. The currency is magic itself, condensed, so it can be spent or burned.
 
-- **What it is:** magic condensed into small hard beads with a rank: iron, bronze, silver, gold, diamond. Its name is to choose (the books call theirs spirit coins; [naming.md](naming.md) proposes **pearls**, which form in pools as pearls form in water).
+- **What it is:** **spirit coins**, as the books name them (D167): magic condensed into small hard coins with a rank, iron, bronze, silver, gold or diamond.
 - **Where it comes from:** monsters leave it, and it forms where magic pools thickly. Culling is a living ([people.md](people.md#trade)).
 - **What it buys:** everything settlements and traders sell. One rank's worth is many of the rank below.
 - **What it burns for:**
   - **Fuel:** for workings, for magic items, and for a standing ward or a bridge kept running ([crafting.md](crafting.md)).
   - **A surge of strength:** absorbing one above your rank lifts your attributes to its rank for a short while, enough to strike or survive what you couldn't. Then it leaves you exhausted, and the backlash is worse the higher the coin.
-  - **Components:** what some workings need, alongside cores and beads.
+  - **Components:** what some workings need, alongside cores and quintessence.
 - **The same in every realm,** because it is the same magic and the same ranks everywhere ([lore.md](lore.md)). This answers [people.md](people.md)'s question of one currency or many: one, by the lore.
 - **Why it suits us:** every purse is also a store of power, so spending is always a choice between buying, building and burning.
 
 ## Fragments of essences
 
-Decided (D168): kept as components, as the books' quintessence, under a name of our own ([naming.md](naming.md) proposes **beads**: "a bead of Fire").
+Decided (D168): kept as components, and named as the books name them: **quintessence**, as in "Fire quintessence".
 
 - **What they are:** a small fragment of one essence's kind. Not an essence: they can't be absorbed, and many don't make one.
 - **Where they come from:** monsters and pools of that kind, more often than essences.
 - **What they are for:**
-  - workings that need an idea, such as a fire ward needing a bead of Fire;
+  - workings that need an idea, such as a fire ward needing Fire quintessence;
   - enchanting gear with a property of that kind;
   - fuel for items of that kind.
 
@@ -388,4 +388,4 @@ Procedural, like every realm. There is no fixed list: the starting realm's essen
 2. **Habits shaping the draw,** as worked out above: in or out?
 3. Answered: **money is magic,** as in the books (D167).
 4. Answered: **fragments of essences** are components (D168).
-5. **Their names:** pearls and beads, or others ([naming.md](naming.md)).
+5. Answered: **their names** are the books': spirit coins and quintessence (2026-10-12).
