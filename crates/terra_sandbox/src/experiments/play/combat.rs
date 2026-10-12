@@ -9,7 +9,7 @@
 
 use super::bag::Notice;
 use super::controls::{Action, Controls};
-use super::creatures::{self, Bitten, Creature};
+use super::creatures::{self, Bitten, Creature, Species};
 use super::inventory::{Belongings, InventoryScreen, Tool};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::vitals::Vitals;
@@ -50,8 +50,23 @@ impl Default for Swing {
     }
 }
 
+/// A blow landed on a creature: which, where on it, and whether it fell.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Struck {
+    pub creature: Entity,
+    pub species: Species,
+    pub at: Vec3,
+    pub killed: bool,
+}
+
+/// The player took a blow, of so much health.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Hurt(pub f32);
+
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Swing>()
+    app.add_message::<Struck>()
+        .add_message::<Hurt>()
+        .init_resource::<Swing>()
         .add_systems(Update, (swing, guard, take_blows).chain());
 }
 
@@ -68,6 +83,7 @@ fn swing(
     mut creatures: Query<(Entity, &mut Creature, &Transform), Without<Player>>,
     mut swung: ResMut<Swing>,
     mut did: MessageWriter<Did>,
+    mut struck: MessageWriter<Struck>,
     mut notice: ResMut<Notice>,
 ) {
     swung.since += time.delta_secs();
@@ -94,10 +110,15 @@ fn swing(
             let toward = (at.translation - feet).reject_from(up);
             let distance = toward.length();
             let ahead = toward.normalize_or_zero().dot(view.forward);
-            (distance < reach + 0.6 && ahead > 0.4).then_some((entity, creature, distance))
+            (distance < reach + 0.6 && ahead > 0.4).then_some((
+                entity,
+                creature,
+                distance,
+                at.translation,
+            ))
         })
         .min_by(|a, b| a.2.total_cmp(&b.2));
-    let Some((entity, mut creature, _)) = target else {
+    let Some((entity, mut creature, _, there)) = target else {
         return;
     };
     // A tired arm hits softly.
@@ -110,31 +131,44 @@ fn swing(
     swung.since = 0.0;
     player.since_acting = 0.0;
     player.attacking = 0.6;
+    // Where the blade meets it: its side toward the player, at about its middle.
+    let at = there + (feet - there).reject_from(up).normalize_or_zero() * 0.3 + up * 0.5;
     strike(
         &mut commands,
         entity,
         &mut creature,
         blow,
+        at,
         Skill::Fighting,
         &mut did,
+        &mut struck,
         &mut notice,
     );
 }
 
-/// Lands a blow on a creature, however it was dealt: a swing or an arrow, each growing its
-/// own skill. It learns it was hurt, and falls if that was enough.
+/// Lands a blow on a creature at a point on it, however it was dealt: a swing or an arrow,
+/// each growing its own skill. It learns it was hurt, and falls if that was enough.
+#[allow(clippy::too_many_arguments)]
 pub fn strike(
     commands: &mut Commands,
     entity: Entity,
     creature: &mut Creature,
     blow: f32,
+    at: Vec3,
     skill: Skill,
     did: &mut MessageWriter<Did>,
+    struck: &mut MessageWriter<Struck>,
     notice: &mut Notice,
 ) {
     creature.health -= blow;
     creature.hurt = true;
     did.write(Did(skill, ONCE));
+    struck.write(Struck {
+        creature: entity,
+        species: creature.species,
+        at,
+        killed: creature.health <= 0.0,
+    });
     if creature.health <= 0.0 {
         creatures::fallen(commands, entity, creature);
         did.write(Did(skill, ONCE * 2.0));
@@ -157,6 +191,7 @@ fn take_blows(
     mut bitten: MessageReader<Bitten>,
     belongings: Belongings,
     player: Single<(&mut Player, &mut Vitals)>,
+    mut hurt: MessageWriter<Hurt>,
 ) {
     let (mut player, mut vitals) = player.into_inner();
     for &Bitten(damage) in bitten.read() {
@@ -171,6 +206,7 @@ fn take_blows(
             damage
         };
         vitals.hurt(taken);
+        hurt.write(Hurt(taken));
         player.flinch = 0.35;
         info!("Bitten for {taken:.0}; health {:.0}.", vitals.health);
     }

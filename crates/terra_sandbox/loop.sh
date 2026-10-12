@@ -55,7 +55,7 @@ step hunt 'An arrow hit a Deer' 'Killed a Deer.' 'Notice: Butchered it' -- \
 
 # Digging the meadow with the pickaxe: soil, then stone. Saved, and the hole is there
 # again when the game is loaded.
-step dig 'Notice: Dug out' -- \
+step dig 'Gained 2 Stone.' -- \
     --fresh --save dig.ron --press 3@40 --press down@45-70 \
     --press e@100-165 --press e@175-240 --press e@250-315 --settle 330
 step reload 'Replayed 3 changes to the ground.' -- \

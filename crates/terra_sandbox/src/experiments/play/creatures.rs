@@ -553,7 +553,8 @@ fn butcher(
         } else {
             let meat = belongings.give(Raw::Meat, 3);
             let hide = belongings.give(Raw::Hide, 2);
-            notice.say(format!("Butchered it: {meat} meat, {hide} hide"));
+            info!("Butchered it for {meat} meat and {hide} hide.");
+            notice.say("Butchered it");
             did.write(Did(Skill::Foraging, ONCE));
             commands.entity(entity).despawn();
         }

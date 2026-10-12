@@ -718,11 +718,20 @@ pub struct InventoryScreen {
     pub at: Option<(Entity, super::crafting::Station)>,
 }
 
+/// Something came into what the player carries: so many of a kind of item. Written by
+/// [`Belongings`] whatever brought it, so whatever shows it needs to know nothing else.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Gained {
+    pub kind: ItemKind,
+    pub count: u32,
+}
+
 /// What the player carries, for a system to read or change.
 #[derive(SystemParam)]
 pub struct Belongings<'w, 's> {
     items: ResMut<'w, Items>,
     player: Single<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static mut Gear)>,
+    gained: MessageWriter<'w, Gained>,
 }
 
 impl Belongings<'_, '_> {
@@ -801,17 +810,35 @@ impl Belongings<'_, '_> {
     /// Takes back what fits from a bag. Returns how many things came back.
     pub fn take_from(&mut self, bag: &mut Grid) -> usize {
         let backpack = &mut self.player.0;
-        let ids: Vec<ItemId> = bag.iter().map(|placed| placed.item.id).collect();
-        ids.into_iter()
-            .filter(|&id| {
+        let ids: Vec<(ItemId, ItemKind)> = bag
+            .iter()
+            .map(|placed| (placed.item.id, placed.item.kind))
+            .collect();
+        let taken: Vec<ItemKind> = ids
+            .into_iter()
+            .filter(|&(id, _)| {
                 terra_items::transfer(&self.items.catalogue, bag, &mut backpack.0, id, None).is_ok()
             })
-            .count()
+            .map(|(_, kind)| kind)
+            .collect();
+        for &kind in &taken {
+            self.tell(kind, 1);
+        }
+        taken.len()
     }
 
     /// Puts what a station made where it goes, all or nothing: into what is worn that holds
     /// it, such as arrows into a belt quiver, then the backpack.
     pub fn receive(&mut self, made: Made) -> bool {
+        let (kind, count) = self.items.made(made);
+        let received = self.receive_quietly(made);
+        if received {
+            self.tell(kind, count);
+        }
+        received
+    }
+
+    fn receive_quietly(&mut self, made: Made) -> bool {
         let (backpack, bar, gear) = &mut *self.player;
         if let Made::Raw(raw, count) = made {
             let kind = self.items.kind(raw);
@@ -872,8 +899,17 @@ impl Belongings<'_, '_> {
     /// holds it, such as arrows into a belt quiver, then the backpack. Returns how many did.
     pub fn give(&mut self, raw: Raw, count: u32) -> u32 {
         let (backpack, _, gear) = &mut *self.player;
-        let worn = gear.0.stow(self.items.kind(raw), count);
-        worn + give(&mut self.items, &mut backpack.0, raw, count - worn)
+        let kind = self.items.kind(raw);
+        let worn = gear.0.stow(kind, count);
+        let given = worn + give(&mut self.items, &mut backpack.0, raw, count - worn);
+        self.tell(kind, given);
+        given
+    }
+
+    fn tell(&mut self, kind: ItemKind, count: u32) {
+        if count > 0 {
+            self.gained.write(Gained { kind, count });
+        }
     }
 
     pub fn pick(&mut self, slot: usize) {

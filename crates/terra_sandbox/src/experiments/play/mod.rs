@@ -30,8 +30,10 @@ mod dial;
 mod dig;
 mod figure;
 mod flora;
+mod gains;
 mod harvest;
 pub(crate) mod held;
+mod hits;
 mod interact;
 pub(crate) mod inventory;
 mod map;
@@ -137,6 +139,7 @@ pub fn plugin(app: &mut App) {
     tool::plugin(app);
     dial::plugin(app);
     bag::plugin(app);
+    gains::plugin(app);
     build_menu::plugin(app);
     crafting::plugin(app);
     station_screen::plugin(app);
@@ -148,6 +151,7 @@ pub fn plugin(app: &mut App) {
     creatures::plugin(app);
     bodies::plugin(app);
     combat::plugin(app);
+    hits::plugin(app);
     archery::plugin(app);
     people::plugin(app);
     pooling::plugin(app);

@@ -151,8 +151,8 @@ fn dig(
     });
     spoil.stone_m3 += taken.amount(Harvested::Material(material::STONE));
     spoil.ore_m3 += taken.amount(Harvested::Material(material::ORE));
+    // What it gives is shown as it comes in (`gains`).
     let spoil = &mut *spoil;
-    let mut got = Vec::new();
     for (raw, kept) in [
         (Raw::Stone, &mut spoil.stone_m3),
         (Raw::Ore, &mut spoil.ore_m3),
@@ -164,17 +164,11 @@ fn dig(
         let given = belongings.give(raw, count);
         // What does not fit stays in the spoil, to be taken when there is room.
         *kept = rest + (count - given) as f32 * PER_ITEM_M3;
-        if given > 0 {
-            got.push(format!("{given} {}", raw.name()));
-        }
         if given < count {
             notice.say("Your backpack is full");
         }
     }
     did.write(Did(Skill::Mining, ONCE));
-    if !got.is_empty() {
-        notice.say(format!("Dug out {}", got.join(", ")));
-    }
     info!(
         "Dug at {:.1} m: {:.2} m³ of stone, {:.2} m³ of ore, the rest soil.",
         at.length(),

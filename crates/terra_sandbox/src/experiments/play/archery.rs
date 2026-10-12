@@ -9,7 +9,7 @@
 
 use super::bag::Notice;
 use super::bodies::Body;
-use super::combat::strike;
+use super::combat::{Struck, strike};
 use super::controls::{Action, Controls};
 use super::creatures::Creature;
 use super::inventory::{Belongings, InventoryScreen, Raw, Tool};
@@ -192,6 +192,7 @@ fn fly(
     mut arrows: Query<(Entity, &mut Arrow, &mut Transform), Without<Creature>>,
     mut creatures: Query<(Entity, &mut Creature, &Transform, &Body), Without<Arrow>>,
     mut did: MessageWriter<Did>,
+    mut struck: MessageWriter<Struck>,
     mut notice: ResMut<Notice>,
 ) {
     let dt = time.delta_secs().min(0.05);
@@ -222,21 +223,23 @@ fn fly(
                 Some((along, entity, creature))
             })
             .min_by(|a, b| a.0.total_cmp(&b.0));
-        if let Some((_, struck, mut creature)) = hit {
+        if let Some((_, hit_entity, mut creature)) = hit {
             let speed = arrow.velocity.length() / FULL_SPEED;
             let blow = arrow.damage * speed.min(1.0) * skills.speed(Skill::Archery);
             strike(
                 &mut commands,
-                struck,
+                hit_entity,
                 &mut creature,
                 blow,
+                to,
                 Skill::Archery,
                 &mut did,
+                &mut struck,
                 &mut notice,
             );
             info!("An arrow hit a {:?} for {blow:.0}.", creature.species);
             if !creature.alive()
-                && let Ok((.., at, _)) = creatures.get(struck)
+                && let Ok((.., at, _)) = creatures.get(hit_entity)
             {
                 // Where, in the terms --at takes, so a scripted hunt can go to it.
                 let local = site
