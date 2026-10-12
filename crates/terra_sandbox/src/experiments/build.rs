@@ -9,6 +9,7 @@
 //!
 //! With the `play` experiment on, a player's builder tool drives this instead.
 
+use crate::planet::MainCamera;
 use crate::planet::Planet;
 use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, prelude::*,
@@ -745,7 +746,7 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
 }
 
 /// Moves the camera to a good view of the base, once.
-fn place_camera(mut site: ResMut<Site>, mut camera: Single<&mut Transform, With<Camera3d>>) {
+fn place_camera(mut site: ResMut<Site>, mut camera: Single<&mut Transform, With<MainCamera>>) {
     if site.camera_placed {
         return;
     }
@@ -759,7 +760,7 @@ fn place_camera(mut site: ResMut<Site>, mut camera: Single<&mut Transform, With<
 fn edit(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
-    camera: Single<&GlobalTransform, With<Camera3d>>,
+    camera: Single<&GlobalTransform, With<MainCamera>>,
     planet: Res<Planet>,
     mut site: ResMut<Site>,
     mut meshes: ResMut<Assets<Mesh>>,

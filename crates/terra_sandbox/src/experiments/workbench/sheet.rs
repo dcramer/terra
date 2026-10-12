@@ -3,6 +3,7 @@
 //! sides, top to bottom; columns are the moments, left to right; side by side models
 //! share each picture. Then the sandbox exits.
 
+use crate::planet::MainCamera;
 use std::path::PathBuf;
 
 use bevy::{
@@ -53,7 +54,7 @@ pub fn capture(
     mut sheet: ResMut<Sheet>,
     mut players: Query<&mut AnimationPlayer>,
     mut hands: Query<&mut crate::character::Carrying>,
-    mut camera: Query<&mut Transform, With<Camera3d>>,
+    mut camera: Query<&mut Transform, With<MainCamera>>,
     children: Query<&Children>,
     names: Query<&Name>,
     globals: Query<&GlobalTransform>,

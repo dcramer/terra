@@ -15,6 +15,7 @@ use super::harvest::Cutting;
 use super::inventory::{Belongings, Cut, InventoryScreen, Raw};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::work::Hold;
+use crate::planet::MainCamera;
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_core::{Harvested, Operation};
@@ -67,7 +68,7 @@ fn dig(
     dial: Res<Dial>,
     screen: Res<InventoryScreen>,
     cutting: Res<Cutting>,
-    camera: Single<&GlobalTransform, With<Camera3d>>,
+    camera: Single<&GlobalTransform, With<MainCamera>>,
     player: Single<(&Transform, &mut Player)>,
     skills: Single<&Skills, With<Player>>,
     mut planet: ResMut<Planet>,

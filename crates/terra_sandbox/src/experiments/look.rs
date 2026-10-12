@@ -7,6 +7,7 @@
 //! foliage that make the reference what it is are not something a shader provides.
 
 use super::scatter::placements;
+use crate::planet::MainCamera;
 use crate::planet::{Planet, Tweaks};
 use crate::sky::{Sky, SkyPlugin};
 use bevy::{
@@ -50,7 +51,10 @@ fn preset(mut tweaks: ResMut<Tweaks>) {
     tweaks.ground_faceted = true;
 }
 
-fn style_camera(mut commands: Commands, camera: Single<(Entity, &mut Transform), With<Camera3d>>) {
+fn style_camera(
+    mut commands: Commands,
+    camera: Single<(Entity, &mut Transform), With<MainCamera>>,
+) {
     let (camera, mut transform) = camera.into_inner();
     // Lift the view so the sky is in it.
     transform.rotate_local_x(0.22);

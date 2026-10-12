@@ -14,6 +14,7 @@
 
 mod sheet;
 
+use crate::planet::MainCamera;
 use bevy::{
     asset::RecursiveDependencyLoadState,
     gltf::{Gltf, GltfAssetLabel},
@@ -129,7 +130,7 @@ fn spawn(
     gltfs: Res<Assets<Gltf>>,
     clips: Res<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
-    mut camera: Query<&mut Transform, With<Camera3d>>,
+    mut camera: Query<&mut Transform, With<MainCamera>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let Some(mut bench) = bench else { return };

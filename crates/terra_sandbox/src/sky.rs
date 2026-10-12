@@ -4,6 +4,7 @@
 //! An experiment that wants one adds [`SkyPlugin`] and a [`Sky`] saying what it looks like.
 //! The sun's place in it follows the sandbox's tweaks.
 
+use crate::planet::MainCamera;
 use crate::planet::{Planet, Tweaks};
 use bevy::{
     camera::visibility::NoFrustumCulling, light::NotShadowCaster, prelude::*, reflect::TypePath,
@@ -118,7 +119,7 @@ fn update(
 }
 
 fn keep_around_camera(
-    camera: Single<&Transform, (With<Camera3d>, Without<SkyDome>)>,
+    camera: Single<&Transform, (With<MainCamera>, Without<SkyDome>)>,
     mut sky: Single<&mut Transform, With<SkyDome>>,
 ) {
     sky.translation = camera.translation;

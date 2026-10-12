@@ -22,7 +22,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [agents-playing-games.md](agents-playing-games.md) | How do AI agents play games, from the screen or through the game's state, and what would make them efficient at Terra? |
 | [godot-spike.md](godot-spike.md) | What did the Godot build prove, and what are the numbers to beat? |
 | [terrain-meshing.md](terrain-meshing.md) | Can `terra_voxel` mesh a real planet's chunk within budget on Linux and Windows, and what stands in the way? |
-| [item-icons.md](item-icons.md) | How do games make the pictures of items in slots, and which way keeps one style across procedural variants? |
+| [item-icons.md](item-icons.md) | How do games make the icons of items in slots, and which way keeps one style across procedural variants? |
 
 ## Adding a note
 

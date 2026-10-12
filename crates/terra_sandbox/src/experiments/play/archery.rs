@@ -18,6 +18,7 @@ use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
 use super::{Player, View};
 use crate::experiments::build::Site;
+use crate::planet::MainCamera;
 use crate::planet::Planet;
 use bevy::prelude::*;
 
@@ -111,7 +112,7 @@ fn draw(
     look: Res<ArrowLook>,
     planet: Res<Planet>,
     creatures: Query<(&Creature, &Transform, &Body), Without<Player>>,
-    camera: Single<&Transform, (With<Camera3d>, Without<Player>)>,
+    camera: Single<&Transform, (With<MainCamera>, Without<Player>)>,
     player: Single<(&Transform, &mut Player)>,
     mut belongings: Belongings,
     mut drawing: ResMut<Drawing>,

@@ -42,7 +42,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--wear <item>` | In the workbench: an item's look for each model's body, named as in `--give`, such as `leather_coat`. Repeatable |
 | `--attach <file>[@<socket>]` | In the workbench: any look, on a socket such as `models/x.glb@socket.back`, or without one as its file says. Repeatable |
 | `--focus <name>` | In the workbench: look closely at one part, such as `socket.hand.R` |
-| `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. In `pictures`: the sheet of item pictures, `<prefix>.png` and `<prefix>-64.png`, then exit |
+| `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. In `icons`: the sheet of item icons, `<prefix>.png` and `<prefix>-half.png`, then exit |
 | `--sides <degrees,…>` | In the workbench sheet: where to look from, round from the front; 30,120,210,300 by default |
 | `--moments <fraction,…>` | In the workbench sheet: how far through each clip; 0.4 by default |
 
@@ -261,13 +261,13 @@ cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model mod
 
 Models on a plain floor in the game's own light and renderer, playing animations (D71), holding and wearing things as they would in play (`--hold`, `--wear`, `--attach`, through the shared `character` module). It prints each model's clips, joints and sockets. Fly round by hand, drive it live with `--remote` ([tools/sandbox](../../tools/sandbox/README.md), which adds `pose CLIP FRACTION`), or give `--sheet` to save one contact sheet per clip and exit, which is how an agent checks a model. The command above puts the mannequin and the base body side by side through the jog, from two sides at four moments. Run sheets on the Windows GPU; the CPU renderer under WSL is far too slow. How characters are made and checked before they get here is in `.claude/skills/character/SKILL.md`.
 
-## Item pictures
+## Item icons
 
 ```bash
-cargo run -p terra_sandbox -- --experiment pictures --sheet shots/pictures/all
+cargo run -p terra_sandbox -- --experiment icons --sheet shots/icons/all
 ```
 
-Every held look and every worn look on one base body, drawn from the look itself in the house style (D130), laid out on empty slots at 128 and 64 pixels, then it exits. `--model <path>` draws only the looks named. The camera draws into an image on a render layer of its own, framed by each look's bounds; nothing is set per item. How to check and fix a picture is in `.claude/skills/item-pictures/SKILL.md`.
+Every held look and every worn look on one base body, rendered one cell square by the game's own icon renderer (`src/icons.rs`, D129) in the house style (D130), laid out on empty slots at 96 and 48 pixels (`<prefix>.png`, `<prefix>-half.png`), then it exits. `--model <path>` draws only the looks named. In play, the same renderer fills the bar, backpack and equipment slots. How to check and fix an icon is in `.claude/skills/item-icons/SKILL.md`.
 
 ## Adding an experiment
 

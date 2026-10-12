@@ -7,8 +7,8 @@ use bevy::prelude::*;
 
 mod build;
 mod forest;
+mod icons;
 mod look;
-mod pictures;
 mod play;
 mod scatter;
 mod workbench;
@@ -50,9 +50,9 @@ pub const ALL: &[Experiment] = &[
         add: workbench::plugin,
     },
     Experiment {
-        name: "pictures",
-        about: "Item pictures in the house style (D130): every look, or --model <path>, drawn as a slot shows it; --sheet <prefix> saves them and exits.",
-        add: pictures::plugin,
+        name: "icons",
+        about: "Item icons in the house style (D130): every look, or --model <path>, drawn as a slot shows it; --sheet <prefix> saves them and exits.",
+        add: icons::plugin,
     },
     Experiment {
         name: "look",

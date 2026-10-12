@@ -12,6 +12,7 @@
 //! - **Interaction needs no per-tree object.** Finding the tree you are pointing at is a
 //!   search through the few cells around that point.
 
+use crate::planet::MainCamera;
 use crate::planet::{FACES, Planet};
 use bevy::{
     asset::RenderAssetUsages, platform::collections::HashMap, prelude::*,
@@ -283,7 +284,7 @@ fn stream(
     mut commands: Commands,
     planet: Res<Planet>,
     mut forest: ResMut<Forest>,
-    camera: Single<&Transform, With<Camera3d>>,
+    camera: Single<&Transform, With<MainCamera>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let eye = camera.translation;

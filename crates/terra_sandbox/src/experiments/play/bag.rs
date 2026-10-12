@@ -1,7 +1,8 @@
 //! The inventory on screen: the action bar along the bottom, a count of raw items, a
 //! notice above the bar when something could not be done, and the inventory itself,
 //! which Tab opens: the character sheet of what is worn (D64), and the backpack's grid,
-//! with each item filling its cells.
+//! with each item filling its cells. Items show their icon (D129, `icons`), or their name
+//! while it is drawn or if they have no look yet.
 //!
 //!   1 to 6        pick a slot of the action bar; whatever it points at is in hand
 //!   Tab           open and close the inventory (I does the same; either can be changed)
@@ -12,10 +13,13 @@ use super::Player;
 use super::build_menu::BuildMenu;
 use super::controls::{Action, Settings};
 use super::dial::Dial;
+use super::figure::BODY;
 use super::grab_mouse;
 use super::inventory::{self, BAR_SLOTS, Backpack, Belongings, InventoryScreen, Items, Raw, SLOTS};
 use super::options::OptionsMenu;
 use super::vitals::{Vitals, nourishment};
+use crate::character;
+use crate::icons::{Icon, Icons};
 use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
@@ -26,6 +30,8 @@ const PLAIN: Color = Color::srgba(0.07, 0.08, 0.1, 0.6);
 const PICKED: Color = Color::srgba(0.9, 0.46, 0.17, 0.95);
 const POINTED: Color = Color::srgba(0.35, 0.75, 0.85, 0.95);
 const EMPTY_CELL: Color = Color::srgba(1.0, 1.0, 1.0, 0.06);
+/// Behind an item shown by its icon.
+const FULL_CELL: Color = Color::srgba(1.0, 1.0, 1.0, 0.11);
 const NUMBERS: [KeyCode; BAR_SLOTS] = [
     KeyCode::Digit1,
     KeyCode::Digit2,
@@ -82,6 +88,24 @@ struct About;
 /// How big the backpack is and how much of it is free.
 #[derive(Component)]
 struct Capacity;
+
+/// Where an icon is shown outside the backpack's grid: a slot of the bar, or of the
+/// character sheet. Its node is sized to the icon's shape within the room it has.
+#[derive(Component)]
+enum IconAt {
+    Bar(usize),
+    Gear(GearSlot),
+}
+
+impl IconAt {
+    /// The most room the icon has, in pixels.
+    fn room(&self) -> Vec2 {
+        match self {
+            IconAt::Bar(_) => Vec2::new(70.0, 46.0),
+            IconAt::Gear(_) => Vec2::new(40.0, 40.0),
+        }
+    }
+}
 
 /// A slot of the character sheet.
 #[derive(Component)]
@@ -140,6 +164,25 @@ fn setup(mut commands: Commands) {
                     BorderColor::all(Color::NONE),
                 ))
                 .with_children(|slot_box| {
+                    slot_box
+                        .spawn(Node {
+                            position_type: PositionType::Absolute,
+                            left: px(0),
+                            right: px(0),
+                            top: px(0),
+                            bottom: px(0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        })
+                        .with_child((
+                            IconAt::Bar(slot),
+                            ImageNode::default(),
+                            Node {
+                                display: Display::None,
+                                ..default()
+                            },
+                        ));
                     slot_box.spawn((
                         Text::new((slot + 1).to_string()),
                         small.clone(),
@@ -227,9 +270,10 @@ fn setup(mut commands: Commands) {
                                             GearBox(slot),
                                             Button,
                                             Node {
-                                                width: px(150),
-                                                flex_direction: FlexDirection::Column,
-                                                row_gap: px(2),
+                                                width: px(170),
+                                                min_height: px(54),
+                                                column_gap: px(8),
+                                                align_items: AlignItems::Center,
                                                 padding: UiRect::axes(px(10), px(7)),
                                                 border: UiRect::all(px(2)),
                                                 border_radius: BorderRadius::all(px(7)),
@@ -239,13 +283,33 @@ fn setup(mut commands: Commands) {
                                             BorderColor::all(Color::NONE),
                                         ))
                                         .with_children(|gear_box| {
-                                            gear_box.spawn((Text::new(name), small.clone(), dim));
                                             gear_box.spawn((
-                                                GearName(slot),
-                                                Text::new(""),
-                                                normal.clone(),
-                                                white,
+                                                IconAt::Gear(slot),
+                                                ImageNode::default(),
+                                                Node {
+                                                    display: Display::None,
+                                                    ..default()
+                                                },
                                             ));
+                                            gear_box
+                                                .spawn(Node {
+                                                    flex_direction: FlexDirection::Column,
+                                                    row_gap: px(2),
+                                                    ..default()
+                                                })
+                                                .with_children(|names| {
+                                                    names.spawn((
+                                                        Text::new(name),
+                                                        small.clone(),
+                                                        dim,
+                                                    ));
+                                                    names.spawn((
+                                                        GearName(slot),
+                                                        Text::new(""),
+                                                        normal.clone(),
+                                                        white,
+                                                    ));
+                                                });
                                         });
                                 }
                             });
@@ -400,17 +464,36 @@ fn colour(items: &Items, kind: ItemKind) -> Color {
     }
 }
 
-/// Draws the backpack's grid again whenever what is in it changes.
+/// An item's icon (D129), drawn from its look: a tool's held look, gear's look on the
+/// player's body, and anything else's own look (`character::item_look`). An item whose
+/// look does not exist yet is shown by its name.
+fn icon(items: &Items, kind: ItemKind) -> Option<Icon> {
+    let def = items.catalogue.get(kind).ok()?;
+    let id = character::item_id(&def.name);
+    let look = if items.tool(kind).is_some() {
+        character::held_look(&id)
+    } else if def.gear.is_some() {
+        character::look(BODY, &id)
+    } else {
+        character::item_look(&id)
+    };
+    Some(Icon::new(look, (def.size.w, def.size.h)))
+}
+
+/// Draws the backpack's grid again whenever what is in it changes, or an icon it waits
+/// for is made.
 fn lay_out(
     mut commands: Commands,
     items: Res<Items>,
     backpack: Single<Ref<Backpack>>,
     area: Single<(Entity, &mut Node), With<GridArea>>,
+    mut icons: ResMut<Icons>,
     mut drawn: Local<bool>,
 ) {
-    if *drawn && !backpack.is_changed() {
+    if *drawn && !backpack.is_changed() && !icons.is_changed() {
         return;
     }
+    let icons = icons.bypass_change_detection();
     *drawn = true;
     let grid = &backpack.0;
     let (area, mut node) = area.into_inner();
@@ -440,6 +523,24 @@ fn lay_out(
         }
         for placed in grid.iter() {
             let kind = placed.item.kind;
+            let icon = icon(&items, kind);
+            if let Some(icon) = &icon {
+                icons.want(icon);
+            }
+            let image = icon.as_ref().and_then(|icon| icons.get(icon));
+            let name = items.name(kind);
+            // A container says how full it is; an item without an icon says what it is.
+            let label = match (placed.stack, image.is_some()) {
+                (Some(stack), true) => format!("{}/{}", stack.held, stack.most),
+                (Some(stack), false) => format!("{name} {}/{}", stack.held, stack.most),
+                (None, true) => String::new(),
+                (None, false) => name.to_string(),
+            };
+            let background = if image.is_some() {
+                FULL_CELL
+            } else {
+                colour(&items, kind)
+            };
             area.spawn((
                 Shown(placed.item.id, kind),
                 Button,
@@ -449,20 +550,38 @@ fn lay_out(
                     placed.size.w as f32,
                     placed.size.h as f32,
                 ),
-                BackgroundColor(colour(&items, kind)),
+                BackgroundColor(background),
                 BorderColor::all(Color::NONE),
             ))
-            .with_child((
-                // A container says how full it is.
-                Text::new(match placed.stack {
-                    Some(stack) => format!("{} {}/{}", items.name(kind), stack.held, stack.most),
-                    None => items.name(kind).to_string(),
-                }),
-                TextFont::from_font_size(9.0),
-                TextColor(Color::WHITE),
-            ));
+            .with_children(|tile| {
+                if let Some(image) = image {
+                    tile.spawn((
+                        ImageNode::new(image),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: px(0),
+                            top: px(0),
+                            width: percent(100),
+                            height: percent(100),
+                            ..default()
+                        },
+                    ));
+                }
+                tile.spawn((
+                    Text::new(label),
+                    TextFont::from_font_size(9.0),
+                    TextColor(Color::WHITE),
+                ));
+            });
         }
     });
+}
+
+/// The size of an icon `cells` across and down, as big as fits in `room`.
+fn fit(cells: (u8, u8), room: Vec2) -> Vec2 {
+    let aspect = f32::from(cells.0.max(1)) / f32::from(cells.1.max(1));
+    let width = room.x.min(room.y * aspect);
+    Vec2::new(width, width / aspect)
 }
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
@@ -480,6 +599,8 @@ fn draw(
     >,
     mut shown: Query<(&Interaction, &Shown, &mut BorderColor), (Without<Slot>, Without<GearBox>)>,
     mut boxes: Query<(&Interaction, &GearBox, &mut BorderColor), (Without<Slot>, Without<Shown>)>,
+    mut icons: ResMut<Icons>,
+    mut icon_nodes: Query<(&IconAt, &mut ImageNode, &mut Node)>,
     mut texts: ParamSet<(
         Query<(&SlotLabel, &mut Text)>,
         Single<&mut Text, With<About>>,
@@ -526,10 +647,49 @@ fn draw(
             *border = BorderColor::all(if held { Color::WHITE } else { Color::NONE });
         }
     }
+    // Icons on the bar and the sheet, once made; until then, and for things with none,
+    // the bar shows the name.
+    let icons = icons.bypass_change_detection();
+    let mut bar_icons = [false; BAR_SLOTS];
+    for (at, mut image, mut node) in &mut icon_nodes {
+        let kind = match at {
+            IconAt::Bar(slot) => bar
+                .get(*slot)
+                .and_then(|id| backpack.get(id))
+                .map(|placed| placed.item.kind),
+            IconAt::Gear(slot) => gear.worn(*slot).map(|item| item.kind),
+        };
+        let icon = kind.and_then(|kind| icon(items, kind));
+        if let Some(icon) = &icon {
+            icons.want(icon);
+        }
+        let shown = icon.and_then(|icon| icons.get(&icon).map(|handle| (icon.cells, handle)));
+        if let (IconAt::Bar(slot), Some(_)) = (at, &shown) {
+            bar_icons[*slot] = true;
+        }
+        let display = match shown {
+            Some((cells, handle)) => {
+                if image.image != handle {
+                    image.image = handle;
+                }
+                let size = fit(cells, at.room());
+                if node.width != px(size.x) || node.height != px(size.y) {
+                    node.width = px(size.x);
+                    node.height = px(size.y);
+                }
+                Display::Flex
+            }
+            None => Display::None,
+        };
+        if node.display != display {
+            node.display = display;
+        }
+    }
     for (label, mut text) in &mut texts.p0() {
         let name = bar
             .get(label.0)
             .and_then(|id| backpack.get(id))
+            .filter(|_| !bar_icons[label.0])
             .map_or("", |placed| items.name(placed.item.kind));
         set(&mut text, name.to_string());
     }

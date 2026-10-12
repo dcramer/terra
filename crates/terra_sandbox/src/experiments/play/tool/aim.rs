@@ -9,6 +9,7 @@ use crate::experiments::play::flora::Obstacles;
 use crate::experiments::play::inventory::{Belongings, Cost};
 use crate::experiments::play::props::{self, Blocked, Models, Prop, Standing};
 use crate::experiments::play::{Player, View};
+use crate::planet::MainCamera;
 use crate::planet::Planet;
 use crate::shell::Options;
 use terra_build::{CELL_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, cells};
@@ -21,7 +22,7 @@ pub(super) fn aim(
     view: Res<View>,
     models: Res<Models>,
     obstacles: Res<Obstacles>,
-    camera: Single<&GlobalTransform, With<Camera3d>>,
+    camera: Single<&GlobalTransform, With<MainCamera>>,
     player: Single<&Transform, With<Player>>,
     props: Query<(Entity, &Prop, &Transform, &Visibility)>,
     mut builder: ResMut<Builder>,

@@ -8,6 +8,7 @@
 //! ready, so the ground never shows holes. A scripted run waits for every chunk each
 //! frame, so the same script shows the same ground on any machine.
 
+use crate::planet::MainCamera;
 use crate::planet::{GroundLook, Planet};
 use crate::shell::Options;
 use bevy::{
@@ -174,7 +175,7 @@ fn first_view(
     mut commands: Commands,
     planet: Res<Planet>,
     look: Res<GroundLook>,
-    camera: Single<&Transform, With<Camera3d>>,
+    camera: Single<&Transform, With<MainCamera>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain: ResMut<Terrain>,
 ) {
@@ -214,7 +215,7 @@ fn first_view(
 /// starts meshing those that are new or out of date.
 fn choose(
     planet: Res<Planet>,
-    camera: Single<&GlobalTransform, With<Camera3d>>,
+    camera: Single<&GlobalTransform, With<MainCamera>>,
     mut terrain: ResMut<Terrain>,
 ) {
     let viewer = camera.translation();

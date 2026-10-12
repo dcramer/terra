@@ -1,6 +1,7 @@
 //! The light, air and sky of the scene: a low warm sun, cool shade, haze, and the
 //! camera effects that make flat-coloured shapes read as solid.
 
+use crate::planet::MainCamera;
 use crate::planet::Tweaks;
 use crate::sky::{Sky, SkyPlugin};
 use bevy::{
@@ -73,7 +74,7 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
 }
 
 /// The field of view is a setting, put into effect by `options::apply`.
-fn style_camera(mut commands: Commands, camera: Single<Entity, With<Camera3d>>) {
+fn style_camera(mut commands: Commands, camera: Single<Entity, With<MainCamera>>) {
     let camera = *camera;
     commands.entity(camera).insert((
         // Ambient occlusion works on single samples, so edges are smoothed afterwards.

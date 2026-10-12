@@ -238,6 +238,11 @@ struct Sea;
 #[derive(Component)]
 struct Sun;
 
+/// The camera the world is seen through. Other cameras, such as the one that draws item
+/// icons (`icons`), draw into images; queries for the view ask for this one.
+#[derive(Component)]
+pub struct MainCamera;
+
 pub type GroundMaterial = ExtendedMaterial<StandardMaterial, GroundExtension>;
 
 /// What the ground is drawn with: every chunk of it shares this.
@@ -436,6 +441,7 @@ fn setup(
     let along = up.cross(Vec3::X).normalize();
     commands.spawn((
         Name::new("Camera"),
+        MainCamera,
         Camera3d::default(),
         Projection::Perspective(PerspectiveProjection {
             near: 0.2,

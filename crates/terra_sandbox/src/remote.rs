@@ -17,6 +17,7 @@
 //!
 //! An experiment adds its own methods with [`method`].
 
+use crate::planet::MainCamera;
 use bevy::{
     prelude::*,
     remote::{
@@ -228,7 +229,7 @@ fn hold_camera(
     globals: Query<&GlobalTransform>,
     parents: Query<&ChildOf>,
     roots: Query<(), With<WorldAssetRoot>>,
-    mut cameras: Query<&mut Transform, With<Camera3d>>,
+    mut cameras: Query<&mut Transform, With<MainCamera>>,
 ) {
     let Some(hold) = &held.0 else { return };
     let (target, front) = match hold.at {

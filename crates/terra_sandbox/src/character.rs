@@ -132,6 +132,12 @@ pub fn held_look(item: &str) -> String {
     format!("models/held/{item}.glb")
 }
 
+/// Where the look of an item that is neither held nor worn is, such as a material: the
+/// thing on its own, as it lies, life size. Its icon is drawn from it (`icons`).
+pub fn item_look(item: &str) -> String {
+    format!("models/items/{item}.glb")
+}
+
 pub fn plugin(app: &mut App) {
     app.init_resource::<Tinted>()
         .add_observer(put_on)

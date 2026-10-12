@@ -13,6 +13,7 @@ use super::flora::{Growth, Obstacles};
 use super::inventory::{Belongings, Cut, Cuttable, InventoryScreen, Tool};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::work::Hold;
+use crate::planet::MainCamera;
 use bevy::prelude::*;
 
 /// How far from the player a cutting tool reaches.
@@ -76,7 +77,7 @@ fn cut(
     time: Res<Time>,
     controls: Controls,
     dial: Res<Dial>,
-    camera: Single<&GlobalTransform, With<Camera3d>>,
+    camera: Single<&GlobalTransform, With<MainCamera>>,
     mut growth: Query<
         (
             Entity,

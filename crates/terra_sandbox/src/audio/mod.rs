@@ -19,6 +19,7 @@ pub mod bank;
 pub mod music;
 pub mod synth;
 
+use crate::planet::MainCamera;
 use bevy::{
     audio::{AddAudioSource, AudioSinkPlayback, SpatialScale, Volume},
     ecs::system::EntityCommands,
@@ -164,7 +165,7 @@ pub fn play_synth(
 /// The camera is where sounds are heard from.
 fn listen(
     mut commands: Commands,
-    cameras: Query<Entity, (With<Camera3d>, Without<SpatialListener>)>,
+    cameras: Query<Entity, (With<MainCamera>, Without<SpatialListener>)>,
 ) {
     for camera in &cameras {
         commands.entity(camera).insert(SpatialListener::new(0.3));

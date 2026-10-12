@@ -18,6 +18,7 @@ use crate::audio::{
     bank::{Bank, Clips},
     synth::{Sound, Synth},
 };
+use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::prelude::*;
 
@@ -419,7 +420,7 @@ fn hear(
     mut commands: Commands,
     mut noises: MessageReader<Noise>,
     mix: Res<Mix>,
-    ear: Query<&GlobalTransform, With<Camera3d>>,
+    ear: Query<&GlobalTransform, With<MainCamera>>,
     bank: Option<ResMut<Bank>>,
     synths: Option<ResMut<Assets<Synth>>>,
     mut heard: ResMut<Heard>,

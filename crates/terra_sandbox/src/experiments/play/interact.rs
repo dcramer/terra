@@ -7,6 +7,7 @@ use super::Player;
 use super::controls::{Action, Settings};
 use super::crafting::Station;
 use super::options::OptionsMenu;
+use crate::planet::MainCamera;
 use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
@@ -96,7 +97,7 @@ fn focus(
     settings: Res<Settings>,
     menu: Res<OptionsMenu>,
     cursor: Single<&CursorOptions>,
-    camera: Single<&GlobalTransform, With<Camera3d>>,
+    camera: Single<&GlobalTransform, With<MainCamera>>,
     player: Single<&Transform, With<Player>>,
     things: Query<(Entity, &CanInteract, &GlobalTransform)>,
     mut focus: ResMut<Focus>,

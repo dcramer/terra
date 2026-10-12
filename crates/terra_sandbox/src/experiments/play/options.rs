@@ -11,6 +11,7 @@
 use super::controls::{Action, Binding, FIELD_OF_VIEW, LOOK_SPEED, Settings, VOLUME, capitalised};
 use super::inventory::InventoryScreen;
 use super::{grab_mouse, tool};
+use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::{
     prelude::*,
@@ -590,7 +591,7 @@ fn apply(
     settings: Res<Settings>,
     options: Res<Options>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
-    mut projection: Single<&mut Projection, With<Camera3d>>,
+    mut projection: Single<&mut Projection, With<MainCamera>>,
 ) {
     if !settings.is_changed() {
         return;

@@ -59,6 +59,7 @@ mod work;
 mod worn;
 
 use super::build::{self, DrivenByPlayer, Site};
+use crate::planet::MainCamera;
 use crate::planet::Planet;
 use crate::shell::Options;
 use bevy::{
@@ -207,7 +208,7 @@ fn spawn(
     options: Res<Options>,
     site: Res<Site>,
     planet: Res<Planet>,
-    camera: Single<Entity, With<Camera3d>>,
+    camera: Single<Entity, With<MainCamera>>,
 ) {
     // The player steers the camera now.
     commands.entity(*camera).remove::<FreeCamera>();
@@ -688,14 +689,14 @@ fn zoom(
 }
 
 fn follow(
-    player: Single<&Transform, (With<Player>, Without<Camera3d>)>,
+    player: Single<&Transform, (With<Player>, Without<MainCamera>)>,
     view: Res<View>,
     zoom: Res<Zoom>,
     site: Res<Site>,
     builds: Query<&build::Built>,
     planet: Res<Planet>,
     options: Res<Options>,
-    mut camera: Single<&mut Transform, With<Camera3d>>,
+    mut camera: Single<&mut Transform, With<MainCamera>>,
 ) {
     // A fixed camera, for taking pictures.
     if let Some((from, toward)) = options.vantage {

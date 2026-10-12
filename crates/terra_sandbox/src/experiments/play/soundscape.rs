@@ -17,6 +17,7 @@ use crate::audio::{
     self, Bus, Fade, Mix, Voice,
     synth::{Sound, Synth},
 };
+use crate::planet::MainCamera;
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_gen::{Rng, Seed};
@@ -219,7 +220,7 @@ fn earshot(
     mut commands: Commands,
     mut synths: ResMut<Assets<Synth>>,
     mix: Res<Mix>,
-    ear: Single<&GlobalTransform, With<Camera3d>>,
+    ear: Single<&GlobalTransform, With<MainCamera>>,
     mut sources: Query<(Entity, &GlobalTransform, &mut Ambient)>,
     voices: Query<&Voice>,
 ) {

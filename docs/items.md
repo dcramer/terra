@@ -46,32 +46,36 @@ Picking something up puts it in the first place it fits, scanning from the top l
 - **Every item has an identity**, so the action bar can point at it and the server can say which one moved.
 - **Where raw items come from**: harvesting returns a yield in cubic metres, objects or square metres (D45). A table in data turns a yield into items. What the raw items are is design and still open (D43, D55).
 
-## Item pictures
+## Item icons
 
-Every slot that holds an item shows a picture of it: the bar, the backpack, the equipment slots, storage and the station screens. Today they show the item's name. Research in [research/item-icons.md](../research/item-icons.md); how to check or fix one in [the item-pictures playbook](../.claude/skills/item-pictures/SKILL.md).
+Every slot that holds an item shows its icon: the bar, the backpack and the equipment slots so far, and storage and the station screens when they show items. An item with no look yet, such as a raw material, shows its name. Research in [research/item-icons.md](../research/item-icons.md); how to check or fix one in [the item-icons playbook](../.claude/skills/item-icons/SKILL.md).
 
-**How they are made** (D129, Leaning, technical): the game draws each picture from the item's own look, in its tint and state, through one fixed camera and light rig, the first time it is shown, and keeps it. Nobody paints a picture, so a new item, colour or variant has one as soon as it has a look (D127), and the picture is always the real thing (D93). A look can say how it sits in a slot, as it says how it is carried; none needs to yet.
+**How they are made** (D129, Leaning, technical; built): the game renders each icon from the item's own look, in its tint, the first time a screen asks for it, and caches it, keyed by look, tint and the cells the item fills. Nobody paints an icon, so a new item, colour or variant has one as soon as it has a look (D127), and the icon is always the real thing (D93). Icons are rendered one at a time on a render layer of their own, by a camera made for each into an image the item's shape (96 pixels a cell), and kept once no shader is still compiling. The renderer is `crates/terra_sandbox/src/icons.rs`; nothing in it names an item. A look could say how it sits in a slot, as it says how it is carried; none needs to yet. State such as broken is not shown yet.
+
+**Which look**: a tool's held look, gear's look on the wearer's body, and for anything else, such as a material, the item's own look, `models/items/<item>.glb`: the thing on its own as it lies, life size, facing +Z, its materials named by role. The same look would show an item dropped in the world. No material has one yet (stone, wood, fibre, hide, ore, iron, meat, berries, cooked meat, arrows), so they show their names.
 
 **What they look like** (D130, Decided): the game's art style, by drawing the looks in the world's own light.
 
 - **Held things** lie corner to corner, square on, broad side to the front, working end up and to the right.
 - **Worn things** face the front, seen from 15 degrees above, as worn, with no body in them.
-- **One rig for every picture**: the play scene's warm sun from above and to the left, its blue shade, and a cool light from behind that picks the shape out of the slot. The play camera's grading. No outline and no background: the slot shows through.
-- **Framed by the look's bounds**, without perspective, with a little room round it.
+- **One rig for every icon**: the play scene's warm sun from above and to the left, its blue shade, and a cool light from behind that picks the shape out of the slot. The play camera's grading. No outline and no background: the slot shows through.
+- **Framed by the look's bounds** and the item's cells, without perspective, with a little room round it. A held thing lies along its icon's diagonal, so a tool two cells wide lies flatter.
 
-![Every look in the house style, at 128 pixels](images/item-pictures.png)
+![Every look in the house style, one cell each, at 96 pixels](images/item-icons.png)
 
-![The same at 64 pixels, the size of a slot](images/item-pictures-64.png)
+![The same at 48 pixels, a backpack cell on a plain display](images/item-icons-half.png)
 
-The sandbox's `pictures` experiment draws these; nothing in it is set per item. How it was chosen: on 2026-10-12 every look was drawn five ways, a row each: three-quarter from above; the same with the edge light; square on with it; on a plate of the sky's colours; in a darker realm's light. The last three columns are tinted. The developers ruled out the plate and left the rest to me.
+![In play: icons in the equipment slots, the backpack and the bar; stone has no look yet and shows its name](images/item-icons-in-play.png)
 
-![The five ways compared, a row per way](images/item-pictures-64-2026-10-12.png)
+The sandbox's `icons` experiment draws the sheet with the game's renderer. How it was chosen: on 2026-10-12 every look was drawn five ways, a row each: three-quarter from above; the same with the edge light; square on with it; on a plate of the sky's colours; in a darker realm's light. The last three columns are tinted. The developers ruled out the plate and left the rest to me.
+
+![The five ways compared, a row per way](images/item-icons-compared-2026-10-12.png)
 
 What that showed, and still holds:
 
-- **The darker realm's light lost detail** at 64 pixels, so pictures keep one rig whatever realm an item is from.
-- **Long, thin things are small in a square**: the bow, the spear, the quiver. Framing each picture to its item's cells, when the game draws them, fixes that.
-- **Some items are hard to tell apart**, such as the stone and iron axes. That is their models' colours, to fix in the looks, not the pictures.
+- **The darker realm's light lost detail** at 64 pixels, so icons keep one rig whatever realm an item is from.
+- **Long, thin things are small in a square**: the bow, the spear, the quiver. In play each icon is framed to its item's cells.
+- **Some items are hard to tell apart**, such as the stone and iron axes. That is their models' colours, to fix in the looks, not the icons.
 
 ## In the game's model
 
