@@ -6,7 +6,7 @@
 //! questions nobody has answered (docs/player.md).
 
 use super::crafting::Station;
-use super::inventory::{Cost, Raw};
+use super::inventory::Cost;
 use terra_build::{CELL_M, Panel};
 
 /// What the pieces of a base cost. Sizes are measured, not counted in cells, so the
@@ -14,10 +14,10 @@ use terra_build::{CELL_M, Panel};
 ///
 /// Floor is paid for by area, however a room comes to have it: built, extended, or by
 /// pushing a wall out.
-pub const FLOOR: Cost = &[(Raw::Wood, 1)];
-pub const WALL: Cost = &[(Raw::Wood, 1)];
-pub const WINDOW: Cost = &[(Raw::Wood, 1), (Raw::Fibre, 1)];
-pub const DOOR: Cost = &[(Raw::Wood, 2)];
+pub const FLOOR: Cost = &[("Wood", 1)];
+pub const WALL: Cost = &[("Wood", 1)];
+pub const WINDOW: Cost = &[("Wood", 1), ("Fibre", 1)];
+pub const DOOR: Cost = &[("Wood", 2)];
 
 /// How many times over `FLOOR` is paid for so many cells of floor: once for every three
 /// square metres, or part of that.
@@ -206,12 +206,7 @@ pub static PARTS: [Part; 19] = [
         tab: Tab::Claim,
         kind: Kind::Items(&[Item {
             claims: true,
-            ..item(
-                "Claim stone",
-                "../nature/Rock_Moss_2",
-                1.3,
-                &[(Raw::Stone, 2)],
-            )
+            ..item("Claim stone", "../nature/Rock_Moss_2", 1.3, &[("Stone", 2)])
         }]),
     },
     Part {
@@ -223,7 +218,7 @@ pub static PARTS: [Part; 19] = [
                 "Workbench",
                 "Table_Small",
                 1.7,
-                &[(Raw::Wood, 4), (Raw::Stone, 2)],
+                &[("Wood", 4), ("Stone", 2)],
             ),
         )]),
     },
@@ -236,7 +231,7 @@ pub static PARTS: [Part; 19] = [
                 "Smelter",
                 "shaped:smelter",
                 2.0,
-                &[(Raw::Stone, 10), (Raw::Wood, 2)],
+                &[("Stone", 10), ("Wood", 2)],
             ),
         )]),
     },
@@ -245,12 +240,7 @@ pub static PARTS: [Part; 19] = [
         tab: Tab::Crafting,
         kind: Kind::Items(&[station(
             Station::Forge,
-            item(
-                "Forge",
-                "shaped:forge",
-                2.6,
-                &[(Raw::Wood, 4), (Raw::Stone, 8)],
-            ),
+            item("Forge", "shaped:forge", 2.6, &[("Wood", 4), ("Stone", 8)]),
         )]),
     },
     Part {
@@ -305,7 +295,7 @@ pub static PARTS: [Part; 19] = [
     Part {
         name: "Well",
         tab: Tab::Hidden,
-        kind: Kind::Items(&[item("Well", "../village/Well", 2.4, &[(Raw::Stone, 12)])]),
+        kind: Kind::Items(&[item("Well", "../village/Well", 2.4, &[("Stone", 12)])]),
     },
     Part {
         name: "Market stall",
@@ -314,7 +304,7 @@ pub static PARTS: [Part; 19] = [
             "Market stall",
             "../village/MarketStand_1",
             3.0,
-            &[(Raw::Wood, 8), (Raw::Fibre, 4)],
+            &[("Wood", 8), ("Fibre", 4)],
         )]),
     },
     Part {
@@ -334,16 +324,16 @@ pub static PARTS: [Part; 19] = [
         // and potted houseplants, are left out until the art direction settles; they do
         // not belong in game design 001's world.
         kind: Kind::Items(&[
-            item("Chair", "Chair_1", 0.95, &[(Raw::Wood, 2)]),
-            item("Stool", "Stool", 0.5, &[(Raw::Wood, 1)]),
+            item("Chair", "Chair_1", 0.95, &[("Wood", 2)]),
+            item("Stool", "Stool", 0.5, &[("Wood", 1)]),
         ]),
     },
     Part {
         name: "Table",
         tab: Tab::Furniture,
         kind: Kind::Items(&[
-            item("Round table", "Table_RoundSmall", 1.1, &[(Raw::Wood, 3)]),
-            item("Night stand", "NightStand_1", 0.55, &[(Raw::Wood, 2)]),
+            item("Round table", "Table_RoundSmall", 1.1, &[("Wood", 3)]),
+            item("Night stand", "NightStand_1", 0.55, &[("Wood", 2)]),
         ]),
     },
     Part {
@@ -353,21 +343,21 @@ pub static PARTS: [Part; 19] = [
             "Single bed",
             "Bed_Single",
             2.15,
-            &[(Raw::Wood, 3), (Raw::Fibre, 3)],
+            &[("Wood", 3), ("Fibre", 3)],
         )]),
     },
     Part {
         name: "Storage",
         tab: Tab::Storage,
-        kind: Kind::Items(&[item("Bookshelf", "Bookshelf", 2.0, &[(Raw::Wood, 4)])]),
+        kind: Kind::Items(&[item("Bookshelf", "Bookshelf", 2.0, &[("Wood", 4)])]),
     },
     Part {
         name: "Decor",
         tab: Tab::Furniture,
         kind: Kind::Items(&[
-            rug("Round rug", "Carpet_Round", 3.2, &[(Raw::Hide, 2)]),
-            rug("Long rug", "Carpet_1", 3.0, &[(Raw::Hide, 2)]),
-            item("Shovel", "Shovel", 1.3, &[(Raw::Wood, 1), (Raw::Iron, 1)]),
+            rug("Round rug", "Carpet_Round", 3.2, &[("Hide", 2)]),
+            rug("Long rug", "Carpet_1", 3.0, &[("Hide", 2)]),
+            item("Shovel", "Shovel", 1.3, &[("Wood", 1), ("Iron", 1)]),
         ]),
     },
     Part {
@@ -382,11 +372,11 @@ pub static PARTS: [Part; 19] = [
                         "Campfire",
                         "Bonfire_Fire",
                         1.3,
-                        &[(Raw::Wood, 3), (Raw::Stone, 2)],
+                        &[("Wood", 3), ("Stone", 2)],
                     ),
                 ),
             ),
-            item("Log", "WoodLog", 1.7, &[(Raw::Wood, 2)]),
+            item("Log", "WoodLog", 1.7, &[("Wood", 2)]),
         ]),
     },
 ];
@@ -436,9 +426,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn everything_costs_kinds_of_item_there_are() {
+        let items = super::super::inventory::Items::default();
+        let costs = [FLOOR, WALL, WINDOW, DOOR].into_iter().chain(
+            PARTS
+                .iter()
+                .filter_map(|part| match part.kind {
+                    Kind::Items(items) => Some(items),
+                    _ => None,
+                })
+                .flatten()
+                .map(|item| item.cost),
+        );
+        for cost in costs {
+            for (name, _) in cost {
+                assert!(items.find(name).is_some(), "{name} is not a kind of item");
+            }
+        }
+    }
+
+    #[test]
     fn bigger_things_take_longer_and_coming_apart_is_quicker() {
-        const STOOL: Cost = &[(Raw::Wood, 1)];
-        const BED: Cost = &[(Raw::Wood, 3), (Raw::Fibre, 3)];
+        const STOOL: Cost = &[("Wood", 1)];
+        const BED: Cost = &[("Wood", 3), ("Fibre", 3)];
         assert!(build_seconds(BED, 1) > build_seconds(STOOL, 1));
         assert!(take_apart_seconds(BED, 1) < build_seconds(BED, 1));
         // Never instant, never endless.

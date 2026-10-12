@@ -14,9 +14,9 @@ use super::build_menu::BuildMenu;
 use super::controls::{Action, Settings};
 use super::dial::Dial;
 use super::grab_mouse;
-use super::inventory::{self, BAR_SLOTS, Backpack, Belongings, InventoryScreen, Items, Raw, SLOTS};
+use super::inventory::{self, BAR_SLOTS, Backpack, Belongings, InventoryScreen, Items, SLOTS};
 use super::options::OptionsMenu;
-use super::vitals::{Vitals, nourishment};
+use super::vitals::Vitals;
 use crate::{character, icons};
 use bevy::{
     prelude::*,
@@ -483,16 +483,11 @@ fn click(
     let mut result = None;
     for (interaction, shown) in &shown {
         // Food is eaten.
-        let food = belongings
-            .items()
-            .raw(shown.1)
-            .filter(|&raw| nourishment(raw) > 0.0);
-        if *interaction == Interaction::Pressed
-            && let Some(food) = food
-            && belongings.eat(food)
-        {
-            vitals.eat(food);
-            notice.say(format!("Ate {}", food.name().to_lowercase()));
+        let filling = belongings.items().food(shown.1);
+        if *interaction == Interaction::Pressed && filling > 0.0 && belongings.eat(shown.1) {
+            vitals.eat(filling);
+            let name = belongings.items().name(shown.1).to_lowercase();
+            notice.say(format!("Ate {name}"));
             continue;
         }
         let is_gear = belongings
@@ -514,19 +509,11 @@ fn click(
     }
 }
 
-/// The colour an item is drawn in: one per raw item, and one for tools and gear.
+/// The colour an item is drawn in while it has no icon: its kind's own, or one for tools
+/// and gear.
 fn colour(items: &Items, kind: ItemKind) -> Color {
-    match items.raw(kind) {
-        Some(Raw::Wood) => Color::srgb(0.5, 0.36, 0.22),
-        Some(Raw::Stone) => Color::srgb(0.5, 0.5, 0.52),
-        Some(Raw::Fibre) => Color::srgb(0.55, 0.6, 0.35),
-        Some(Raw::Hide) => Color::srgb(0.62, 0.48, 0.36),
-        Some(Raw::Ore) => Color::srgb(0.56, 0.34, 0.26),
-        Some(Raw::Iron) => Color::srgb(0.42, 0.45, 0.5),
-        Some(Raw::Meat) => Color::srgb(0.7, 0.3, 0.3),
-        Some(Raw::Berries) => Color::srgb(0.7, 0.2, 0.35),
-        Some(Raw::CookedMeat) => Color::srgb(0.6, 0.36, 0.2),
-        Some(Raw::Arrow) => Color::srgb(0.66, 0.6, 0.45),
+    match items.def(kind).colour {
+        Some((red, green, blue)) => Color::srgb(red, green, blue),
         None => Color::srgb(0.2, 0.48, 0.45),
     }
 }
@@ -798,11 +785,11 @@ fn draw(
             .and_then(|slot| SLOTS.iter().find(|(each, _)| *each == slot))
             .map(|(_, slot_name)| *slot_name);
         about = match (items.tool(shown.1), worn_in) {
-            (Some(tool), _) => {
+            (Some(_), _) => {
                 let slot = (0..bar.len()).find(|&slot| bar.get(slot) == Some(shown.0));
                 format!(
                     "{name}.  {}.  {}",
-                    tool.about(),
+                    items.def(shown.1).about.as_deref().unwrap_or_default(),
                     slot.map_or("Not on the bar.".to_string(), |slot| format!(
                         "On the bar at {}.",
                         slot + 1

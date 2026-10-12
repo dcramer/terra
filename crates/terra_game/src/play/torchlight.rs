@@ -4,7 +4,7 @@
 
 use super::Player;
 use super::held::Grip;
-use super::inventory::{self, Backpack, Bar, Items, Tool};
+use super::inventory::{self, Backpack, Bar, Items};
 use crate::character::Held;
 use bevy::{light::NotShadowCaster, platform::collections::HashSet, prelude::*};
 
@@ -63,7 +63,9 @@ fn light(
     let mut alight = HashSet::new();
     for (hand, grip) in &grips {
         let burning = players.get(grip.player).is_ok_and(|(backpack, bar)| {
-            inventory::holding(&items, &backpack.0, &bar.0) == Some(Tool::Torch)
+            inventory::holding(&items, &backpack.0, &bar.0)
+                .and_then(|kind| items.tool(kind))
+                .is_some_and(|tool| tool.lights)
         });
         let in_hand = children
             .get(hand)

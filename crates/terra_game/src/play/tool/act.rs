@@ -8,7 +8,7 @@ use crate::play::bag::Notice;
 use crate::play::catalogue::{self, Kind};
 use crate::play::controls::{Action, Controls};
 use crate::play::dial::Dial;
-use crate::play::inventory::{Belongings, Cost, Tool};
+use crate::play::inventory::{Belongings, Cost};
 use crate::play::noise::{Cue, Noise};
 use crate::play::props::{self, Models, Prop};
 use crate::play::skills::{Did, ONCE, Skill};
@@ -70,7 +70,7 @@ pub(super) fn act(
     // Carry on with what is under way, or drop it.
     if let Some(mut work) = builder.work.take() {
         let stayed = work.began_at.distance(player_at) < WANDER_M;
-        let in_hand = !dial.open && belongings.holding() == Some(Tool::Hammer);
+        let in_hand = !dial.open && belongings.tool_in_hand().is_some_and(|tool| tool.builds);
         if !held || !stayed || !in_hand {
             return;
         }
@@ -163,7 +163,7 @@ pub(super) fn act(
     // The middle button: another of whatever the view is on.
     if controls.went_down(Action::Copy)
         && !builder.is_carrying()
-        && belongings.holding() == Some(Tool::Hammer)
+        && belongings.tool_in_hand().is_some_and(|tool| tool.builds)
         && let Some(prop) = builder.viewed.and_then(|entity| props.get(entity).ok())
         && let Some((part, variant)) = catalogue::place_of(prop.item)
         // What is not in the build menu, such as a village's well, cannot be copied.

@@ -32,7 +32,7 @@
 use super::catalogue::{self, Item, Kind, PARTS, Part};
 use super::controls::{Action, Controls};
 use super::dial::Dial;
-use super::inventory::{Belongings, Cost, InventoryScreen, Raw, Tool};
+use super::inventory::{Belongings, Cost, InventoryScreen};
 use super::props::{Blocked, Prop};
 use super::work::Hold;
 use super::{IsLocalPlayer, Player};
@@ -42,6 +42,7 @@ use bevy::{
     prelude::*,
 };
 use terra_build::{BuildOp, CELL_M, Face, cells};
+use terra_items::ItemKind;
 
 mod act;
 mod aim;
@@ -186,7 +187,7 @@ pub struct Builder {
     /// What building the thing aimed at would cost, and how many times over.
     price: Option<(Cost, u32)>,
     /// What there is not enough of to pay that, and how many more are needed.
-    short: Option<(Raw, u32)>,
+    short: Option<(ItemKind, u32)>,
     /// Why the claim forbids building here, if it does (D94).
     unclaimed: Option<&'static str>,
     pub target: Target,
@@ -415,7 +416,7 @@ fn choose(
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
     builder.wheel = 0;
-    if screen.open || belongings.holding() != Some(Tool::Hammer) {
+    if screen.open || !belongings.tool_in_hand().is_some_and(|tool| tool.builds) {
         // Put back anything being carried, and put the part away.
         builder.cancel = builder.is_carrying();
         builder.stowed = true;

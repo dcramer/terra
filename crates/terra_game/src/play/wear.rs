@@ -11,7 +11,7 @@ use super::IsLocalPlayer;
 use super::bag::Notice;
 use super::claim::Claim;
 use super::crafting::{RECIPES, Station};
-use super::inventory::{Belongings, Broke, InventoryScreen, Items, Made, Tool};
+use super::inventory::{Belongings, Broke, InventoryScreen, Items};
 use super::props::Prop;
 use bevy::prelude::*;
 use terra_items::ItemKind;
@@ -21,26 +21,23 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (burn, tell, mend).chain());
 }
 
-/// The station that mends a kind of thing: the one that makes it. The hammer, which no
-/// station makes, is mended at the workbench.
+/// The station that mends a kind of thing: the one its kind says, or else the one that
+/// makes it, if it wears at all.
 pub fn mended_at(items: &Items, kind: ItemKind) -> Option<Station> {
-    let made = if let Some(tool) = items.tool(kind) {
-        if tool == Tool::Hammer {
-            return Some(Station::Workbench);
-        }
-        Made::Tool(tool)
-    } else {
-        Made::Apparel(items.apparel(kind)?)
-    };
+    let def = items.def(kind);
+    def.lasts?;
+    if let Some(station) = &def.mended_at {
+        return Station::named(station);
+    }
     RECIPES
         .iter()
-        .find(|recipe| recipe.makes == made)
+        .find(|recipe| recipe.makes.item == def.name)
         .map(|recipe| recipe.station)
 }
 
 /// A torch in hand burns down, a use for each second.
 fn burn(time: Res<Time>, mut belongings: Belongings, mut burnt: Local<f32>) {
-    if belongings.holding() != Some(Tool::Torch) {
+    if !belongings.tool_in_hand().is_some_and(|tool| tool.lights) {
         return;
     }
     *burnt += time.delta_secs();
@@ -56,7 +53,7 @@ fn tell(items: Res<Items>, mut broke: MessageReader<Broke>, mut notice: ResMut<N
     for &Broke { kind } in broke.read() {
         let items = &*items;
         let name = items.name(kind).to_lowercase();
-        let verb = if items.tool(kind) == Some(Tool::Torch) {
+        let verb = if items.tool(kind).is_some_and(|tool| tool.lights) {
             "burnt out"
         } else {
             "broke"
@@ -123,21 +120,22 @@ fn mend(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::inventory::Apparel;
 
     #[test]
     fn each_thing_is_mended_where_it_is_made() {
         let items = Items::default();
-        let at = |tool| mended_at(&items, items.tool_kind(tool));
-        assert_eq!(at(Tool::StoneAxe), Some(Station::Workbench));
-        assert_eq!(at(Tool::IronAxe), Some(Station::Forge));
-        assert_eq!(at(Tool::Torch), Some(Station::Campfire));
-        assert_eq!(at(Tool::Hammer), Some(Station::Workbench));
-        let coat = items.apparel_kind(Apparel::LeatherCoat);
-        assert_eq!(mended_at(&items, coat), Some(Station::Workbench));
-        // Every tool can be mended somewhere.
-        for tool in Tool::ALL {
-            assert!(at(tool).is_some(), "{tool:?}");
+        let at = |name| mended_at(&items, items.kind(name));
+        assert_eq!(at("Stone axe"), Some(Station::Workbench));
+        assert_eq!(at("Iron axe"), Some(Station::Forge));
+        assert_eq!(at("Torch"), Some(Station::Campfire));
+        assert_eq!(at("Hammer"), Some(Station::Workbench));
+        assert_eq!(at("Leather coat"), Some(Station::Workbench));
+        // Every thing that wears can be mended somewhere.
+        for kind in items
+            .kinds()
+            .filter(|&kind| items.def(kind).lasts.is_some())
+        {
+            assert!(mended_at(&items, kind).is_some(), "{}", items.name(kind));
         }
     }
 }

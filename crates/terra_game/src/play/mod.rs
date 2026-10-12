@@ -37,6 +37,7 @@ pub(crate) mod held;
 mod hits;
 mod interact;
 pub mod inventory;
+mod kinds;
 mod map;
 mod models;
 mod music;

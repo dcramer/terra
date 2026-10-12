@@ -12,7 +12,7 @@ use super::bodies::Body;
 use super::combat::{Struck, strike};
 use super::controls::{Action, Controls};
 use super::creatures::Creature;
-use super::inventory::{Belongings, InventoryScreen, Raw, Tool};
+use super::inventory::{Belongings, InventoryScreen};
 use super::models::bake;
 use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
@@ -119,11 +119,15 @@ fn draw(
     mut notice: ResMut<Notice>,
 ) {
     let (at, mut stance, downed) = player.into_inner();
-    let ready = belongings.holding() == Some(Tool::Bow) && !screen.open && !downed;
-    if !ready {
+    // What the thing in hand shoots, if it shoots.
+    let ammo = belongings
+        .tool_in_hand()
+        .and_then(|tool| tool.shoots.as_deref())
+        .map(|name| belongings.items().kind(name));
+    let (Some(ammo), false, false) = (ammo, screen.open, downed) else {
         drawing.held = None;
         return;
-    }
+    };
     if controls.held(Action::Use) {
         let held = drawing.held.unwrap_or(0.0) + time.delta_secs();
         drawing.held = Some(held.min(FULL_DRAW_S));
@@ -136,8 +140,13 @@ fn draw(
     if held < LEAST_DRAW_S {
         return;
     }
-    if !belongings.pay(&[(Raw::Arrow, 1)], 1) {
-        notice.say(format!("You have no arrows: {}", Raw::Arrow.where_found()));
+    if !belongings.spend(ammo, 1) {
+        let items = belongings.items();
+        notice.say(format!(
+            "You have no {}s: {}",
+            items.name(ammo).to_lowercase(),
+            items.found(ammo)
+        ));
         return;
     }
     // From the bow toward what the middle of the view is on, some way off.
@@ -299,7 +308,11 @@ mod tests {
 
     #[test]
     fn a_full_draw_hits_about_as_hard_as_a_spear() {
-        let (spear, _) = super::super::combat::weapon(Tool::Spear);
+        let items = crate::play::inventory::Items::default();
+        let (spear, _) = items
+            .tool(items.kind("Spear"))
+            .and_then(|tool| tool.strikes())
+            .unwrap();
         let (bow, _) = bow();
         assert!(
             bow < spear && bow > spear * 0.6,

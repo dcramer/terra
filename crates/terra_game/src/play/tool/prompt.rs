@@ -9,7 +9,7 @@ use crate::shell::Options;
 use bevy::window::{CursorGrabMode, CursorOptions};
 
 /// What each button would do right now, for the prompt under the aiming mark.
-pub fn prompt(builder: &Builder, settings: &Settings) -> String {
+pub fn prompt(builder: &Builder, settings: &Settings, items: &inventory::Items) -> String {
     if builder.stowed {
         return format!(
             "{}  build menu",
@@ -24,11 +24,11 @@ pub fn prompt(builder: &Builder, settings: &Settings) -> String {
     if let Some(reason) = builder.unclaimed {
         return reason.to_string();
     }
-    if let Some((raw, more)) = builder.short {
+    if let Some((kind, more)) = builder.short {
         return format!(
             "Not enough to build this: {more} more {} needed ({})",
-            raw.name(),
-            raw.where_found()
+            items.name(kind),
+            items.found(kind)
         );
     }
     let hold = settings.hold(Action::Use);

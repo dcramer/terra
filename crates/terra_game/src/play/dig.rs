@@ -11,7 +11,7 @@ use super::bag::Notice;
 use super::controls::{Action, Controls};
 use super::dial::Dial;
 use super::harvest::Cutting;
-use super::inventory::{Belongings, Cut, InventoryScreen, Raw};
+use super::inventory::{Belongings, Cut, InventoryScreen};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::work::Hold;
 use super::{IsLocalPlayer, Player, Stance};
@@ -85,8 +85,9 @@ fn dig(
     let feet = player_at.translation;
     digging.target = None;
     let pickaxe = belongings
-        .holding()
-        .filter(|tool| tool.works(Cut::Rock) && !screen.open && !dial.open);
+        .tool_in_hand()
+        .filter(|tool| tool.works(Cut::Rock) && !screen.open && !dial.open)
+        .cloned();
     // Something to cut in the way is cut, not dug round.
     let (Some(pickaxe), None) = (pickaxe, cutting.target) else {
         digging.held = None;
@@ -156,15 +157,14 @@ fn dig(
     spoil.ore_m3 += taken.amount(Harvested::Material(material::ORE));
     // What it gives is shown as it comes in (`gains`).
     let spoil: &mut Spoil = &mut spoil;
-    for (raw, kept) in [
-        (Raw::Stone, &mut spoil.stone_m3),
-        (Raw::Ore, &mut spoil.ore_m3),
-    ] {
+    // What each material of the ground gives (`assets/data/items.ron`).
+    for (gives, kept) in [("Stone", &mut spoil.stone_m3), ("Ore", &mut spoil.ore_m3)] {
         let (count, rest) = items_from(*kept);
         if count == 0 {
             continue;
         }
-        let given = belongings.give(raw, count);
+        let kind = belongings.items().kind(gives);
+        let given = belongings.give(kind, count);
         // What does not fit stays in the spoil, to be taken when there is room.
         *kept = rest + (count - given) as f32 * PER_ITEM_M3;
         if given < count {
@@ -184,7 +184,7 @@ fn dig(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::inventory::Tool;
+    use crate::play::inventory::Items;
 
     #[test]
     fn what_is_dug_makes_items_and_keeps_the_rest() {
@@ -197,7 +197,9 @@ mod tests {
 
     #[test]
     fn a_pickaxe_digs_and_an_axe_does_not() {
-        assert!(Tool::StonePickaxe.works(Cut::Rock));
-        assert!(!Tool::StoneAxe.works(Cut::Rock));
+        let items = Items::default();
+        let works = |name| items.tool(items.kind(name)).unwrap().works(Cut::Rock);
+        assert!(works("Stone pickaxe"));
+        assert!(!works("Stone axe"));
     }
 }

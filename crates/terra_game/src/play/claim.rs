@@ -7,7 +7,7 @@
 
 use super::bag::Notice;
 use super::interact::{Focus, Focusing, Interactable};
-use super::inventory::{Belongings, Cost, Raw, Tool, describe};
+use super::inventory::{Belongings, Cost, describe};
 use super::props::Prop;
 use super::{IsLocalPlayer, LocalPlayer, Player};
 use crate::planet::Planet;
@@ -17,8 +17,8 @@ use bevy::prelude::*;
 const ACROSS_M: [f32; 3] = [40.0, 80.0, 160.0];
 /// What growing a claim to the next step costs.
 const GROW: [Cost; 2] = [
-    &[(Raw::Wood, 10), (Raw::Stone, 10)],
-    &[(Raw::Wood, 20), (Raw::Stone, 20), (Raw::Iron, 4)],
+    &[("Wood", 10), ("Stone", 10)],
+    &[("Wood", 20), ("Stone", 20), ("Iron", 4)],
 ];
 
 /// A player's claim, if they have placed one.
@@ -102,11 +102,11 @@ fn grow(
         ));
         return;
     };
-    if let Some((raw, more)) = belongings.missing(cost, 1) {
+    if let Some((kind, more)) = belongings.missing(cost, 1) {
         notice.say(format!(
             "Growing your claim takes {}: you need {more} more {}",
             describe(cost, 1),
-            raw.name()
+            belongings.items().name(kind)
         ));
         return;
     }
@@ -128,7 +128,7 @@ fn show(
     let Some((_, centre)) = claim.stone else {
         return;
     };
-    if belongings.holding() != Some(Tool::Hammer) {
+    if !belongings.tool_in_hand().is_some_and(|tool| tool.builds) {
         return;
     }
     let up = centre.normalize();
@@ -147,6 +147,14 @@ fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn growing_costs_kinds_of_item_there_are() {
+        let items = super::super::inventory::Items::default();
+        for (name, _) in GROW.iter().copied().flatten() {
+            assert!(items.find(name).is_some(), "{name} is not a kind of item");
+        }
+    }
 
     #[test]
     fn a_claim_covers_what_is_within_half_its_width_and_grows() {

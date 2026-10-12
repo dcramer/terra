@@ -52,7 +52,7 @@ fn sounds_like(cue: Cue) -> Like {
         Cue::Down => Clips("down"),
         Cue::Strike(Cut::Tree | Cut::GreatTree) => Clips("strike.wood"),
         Cue::Strike(Cut::Rock | Cut::Ore) => Clips("strike.rock"),
-        Cue::Strike(Cut::Plant) => Clips("strike.plant"),
+        Cue::Strike(Cut::Plant | Cut::Flesh) => Clips("strike.plant"),
         Cue::Felled { tall: true } => Clips("felled.tree"),
         Cue::Felled { tall: false } => Clips("felled.small"),
         Cue::Hammer => Clips("hammer"),

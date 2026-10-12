@@ -12,7 +12,8 @@
 use super::bag::Notice;
 use super::grab_mouse;
 use super::interact::{Focus, Focusing, Interactable, REACH_M};
-use super::inventory::{Apparel, Belongings, Container, Cost, InventoryScreen, Made, Raw, Tool};
+use super::inventory::{Belongings, Cost, InventoryScreen, Items, Made};
+pub use super::kinds::Family;
 use super::people::{Doing, Person};
 use super::props::Prop;
 use super::skills::{Did, ONCE, Skill};
@@ -42,27 +43,23 @@ impl Station {
         }
     }
 
+    pub const ALL: [Station; 4] = [
+        Station::Workbench,
+        Station::Smelter,
+        Station::Forge,
+        Station::Campfire,
+    ];
+
+    /// The station called a name.
+    pub fn named(name: &str) -> Option<Station> {
+        Station::ALL
+            .into_iter()
+            .find(|station| station.name() == name)
+    }
+
     /// Whether it works through its queue without anyone at it, like a furnace.
     pub fn works_alone(self) -> bool {
         matches!(self, Station::Smelter | Station::Campfire)
-    }
-}
-
-/// What kind of thing a recipe makes, for a station's tabs.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Family {
-    Tools,
-    Clothing,
-    Materials,
-}
-
-impl Family {
-    pub fn name(self) -> &'static str {
-        match self {
-            Family::Tools => "Tools",
-            Family::Clothing => "Clothing",
-            Family::Materials => "Materials",
-        }
     }
 }
 
@@ -75,12 +72,9 @@ pub struct Recipe {
 }
 
 impl Recipe {
-    pub fn family(&self) -> Family {
-        match self.makes {
-            Made::Tool(_) | Made::Container(_) | Made::Raw(Raw::Arrow, _) => Family::Tools,
-            Made::Apparel(_) => Family::Clothing,
-            Made::Raw(..) => Family::Materials,
-        }
+    /// The tab it is under at its station: what kind of thing it makes.
+    pub fn family(&self, items: &Items) -> Family {
+        items.def(items.kind(self.makes.item)).family()
     }
 }
 
@@ -100,92 +94,92 @@ pub const RECIPES: &[Recipe] = &[
     // Fibre bound round a stick and lit at the fire.
     recipe(
         Station::Campfire,
-        &[(Raw::Wood, 1), (Raw::Fibre, 1)],
-        Made::Tool(Tool::Torch),
+        &[("Wood", 1), ("Fibre", 1)],
+        Made::one("Torch"),
         2.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Wood, 2), (Raw::Stone, 2)],
-        Made::Tool(Tool::StoneAxe),
+        &[("Wood", 2), ("Stone", 2)],
+        Made::one("Stone axe"),
         4.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Wood, 2), (Raw::Stone, 3)],
-        Made::Tool(Tool::StonePickaxe),
+        &[("Wood", 2), ("Stone", 3)],
+        Made::one("Stone pickaxe"),
         4.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Wood, 1), (Raw::Stone, 1)],
-        Made::Tool(Tool::Knife),
+        &[("Wood", 1), ("Stone", 1)],
+        Made::one("Knife"),
         3.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Wood, 3), (Raw::Stone, 2)],
-        Made::Tool(Tool::Spear),
+        &[("Wood", 3), ("Stone", 2)],
+        Made::one("Spear"),
         5.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Wood, 3), (Raw::Fibre, 2)],
-        Made::Tool(Tool::Bow),
+        &[("Wood", 3), ("Fibre", 2)],
+        Made::one("Bow"),
         6.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Wood, 1), (Raw::Stone, 1)],
-        Made::Raw(Raw::Arrow, 4),
+        &[("Wood", 1), ("Stone", 1)],
+        Made::many("Arrow", 4),
         4.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Hide, 2), (Raw::Fibre, 2)],
-        Made::Container(Container::Quiver),
+        &[("Hide", 2), ("Fibre", 2)],
+        Made::one("Quiver"),
         5.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Hide, 2), (Raw::Fibre, 1)],
-        Made::Apparel(Apparel::LeatherCap),
+        &[("Hide", 2), ("Fibre", 1)],
+        Made::one("Leather cap"),
         5.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Hide, 4), (Raw::Fibre, 2)],
-        Made::Apparel(Apparel::LeatherCoat),
+        &[("Hide", 4), ("Fibre", 2)],
+        Made::one("Leather coat"),
         8.0,
     ),
     recipe(
         Station::Workbench,
-        &[(Raw::Hide, 4), (Raw::Fibre, 4)],
-        Made::Apparel(Apparel::LargePack),
+        &[("Hide", 4), ("Fibre", 4)],
+        Made::one("Large pack"),
         8.0,
     ),
     recipe(
         Station::Campfire,
-        &[(Raw::Meat, 1)],
-        Made::Raw(Raw::CookedMeat, 1),
+        &[("Meat", 1)],
+        Made::one("Cooked meat"),
         10.0,
     ),
     recipe(
         Station::Smelter,
-        &[(Raw::Ore, 2), (Raw::Wood, 1)],
-        Made::Raw(Raw::Iron, 1),
+        &[("Ore", 2), ("Wood", 1)],
+        Made::one("Iron"),
         10.0,
     ),
     recipe(
         Station::Forge,
-        &[(Raw::Wood, 2), (Raw::Iron, 3)],
-        Made::Tool(Tool::IronAxe),
+        &[("Wood", 2), ("Iron", 3)],
+        Made::one("Iron axe"),
         6.0,
     ),
     recipe(
         Station::Forge,
-        &[(Raw::Wood, 2), (Raw::Iron, 3)],
-        Made::Tool(Tool::IronPickaxe),
+        &[("Wood", 2), ("Iron", 3)],
+        Made::one("Iron pickaxe"),
         6.0,
     ),
 ];
@@ -201,10 +195,10 @@ pub fn recipe_named(station: Station, name: &str) -> Option<usize> {
 }
 
 /// The kinds of thing a station makes, in the order its recipes first make them.
-pub fn families(station: Station) -> Vec<Family> {
+pub fn families(station: Station, items: &Items) -> Vec<Family> {
     let mut families = Vec::new();
     for index in recipes(station) {
-        let family = RECIPES[index].family();
+        let family = RECIPES[index].family(items);
         if !families.contains(&family) {
             families.push(family);
         }
@@ -450,11 +444,12 @@ pub fn queue(
             "The {} has enough to do",
             recipe.station.name().to_lowercase()
         ));
-    } else if let Some((raw, more)) = belongings.missing(recipe.cost, 1) {
+    } else if let Some((kind, more)) = belongings.missing(recipe.cost, 1) {
+        let items = belongings.items();
         notice.say(format!(
             "You need {more} more {}: {}",
-            raw.name(),
-            raw.where_found()
+            items.name(kind),
+            items.found(kind)
         ));
     } else if belongings.pay(recipe.cost, 1) {
         works.queue.push_back(index);
@@ -490,6 +485,17 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
+    #[test]
+    fn every_recipe_makes_and_costs_kinds_of_item_there_are() {
+        let items = Items::default();
+        for recipe in RECIPES {
+            let named = recipe.cost.iter().map(|(name, _)| *name);
+            for name in named.chain([recipe.makes.item]) {
+                assert!(items.find(name).is_some(), "{name} is not a kind of item");
+            }
+        }
+    }
+
     fn index_of(makes: Made) -> usize {
         RECIPES
             .iter()
@@ -499,7 +505,7 @@ mod tests {
 
     #[test]
     fn a_queue_finishes_in_order_and_carries_time_over() {
-        let iron = index_of(Made::Raw(Raw::Iron, 1));
+        let iron = index_of(Made::one("Iron"));
         let seconds = RECIPES[iron].seconds;
         let mut works = Works::default();
         works.queue.extend([iron, iron, iron]);
@@ -546,17 +552,18 @@ mod tests {
 
     #[test]
     fn the_workbench_has_tabs_and_the_smelter_none() {
+        let items = Items::default();
         assert_eq!(
-            families(Station::Workbench),
+            families(Station::Workbench, &items),
             [Family::Tools, Family::Clothing]
         );
-        assert_eq!(families(Station::Smelter).len(), 1);
+        assert_eq!(families(Station::Smelter, &items).len(), 1);
     }
 
     #[test]
     fn a_saved_name_finds_its_recipe_at_its_own_station() {
         let iron = recipe_named(Station::Smelter, "Iron").unwrap();
-        assert_eq!(RECIPES[iron].makes, Made::Raw(Raw::Iron, 1));
+        assert_eq!(RECIPES[iron].makes, Made::one("Iron"));
         assert_eq!(recipe_named(Station::Forge, "Iron"), None);
     }
 }

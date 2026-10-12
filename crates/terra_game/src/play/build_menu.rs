@@ -11,7 +11,7 @@ use super::IsLocalPlayer;
 use super::catalogue::{self, Kind, PARTS, Tab};
 use super::controls::{Action, Settings};
 use super::grab_mouse;
-use super::inventory::{Belongings, InventoryScreen, Tool, describe};
+use super::inventory::{Belongings, InventoryScreen, describe};
 use super::options::OptionsMenu;
 use super::tiles::{self, PICKED, PLAIN, TILE};
 use super::tool::{self, Builder};
@@ -150,7 +150,7 @@ fn toggle(
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
     let (window, mut cursor) = window.into_inner();
-    let hammer = belongings.holding() == Some(Tool::Hammer);
+    let hammer = belongings.tool_in_hand().is_some_and(|tool| tool.builds);
     if menu.open && (!hammer || screen.open || options.open) {
         menu.open = false;
         return;

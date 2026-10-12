@@ -10,7 +10,7 @@ use super::controls::{Action, Controls, Settings};
 use super::flora::Growth;
 use super::harvest::{self, Cutting};
 use super::interact::Focus;
-use super::inventory::{Belongings, InventoryScreen, Tool};
+use super::inventory::{Belongings, InventoryScreen};
 use super::options::OptionsMenu;
 use super::tool::{self, Builder};
 use crate::shell::Options;
@@ -262,7 +262,7 @@ pub fn steer(
     let usable = !inventory.open
         && !menu.open
         && !build_menu.open
-        && belongings.holding() == Some(Tool::Hammer)
+        && belongings.tool_in_hand().is_some_and(|tool| tool.builds)
         && !builder.stowed
         && !builder.is_carrying()
         && !builder.is_working();
@@ -399,15 +399,17 @@ fn draw(
     );
 
     let holding = belongings.holding();
+    let items = belongings.items();
+    let hammer = belongings.tool_in_hand().is_some_and(|tool| tool.builds);
     let part = builder.picked();
     set(
         &mut texts.p1(),
         match (holding, part.variant_name(builder.variant())) {
             (None, _) => match belongings.broken_in_hand() {
-                Some(tool) => format!("{}  (broken)", tool.name()),
+                Some(tool) => format!("{}  (broken)", items.name(tool)),
                 None => "Empty hand".to_string(),
             },
-            (Some(tool), _) if tool != Tool::Hammer => tool.name().to_string(),
+            (Some(tool), _) if !hammer => items.name(tool).to_string(),
             _ if builder.stowed => "Hammer:  nothing picked".to_string(),
             (_, Some(variant)) if part.variants() > 1 => format!(
                 "{}:  {}  ({} of {})",
@@ -418,7 +420,7 @@ fn draw(
             ),
             (_, Some(variant)) => format!("{}:  {}", part.name, variant),
             (_, None) => part.name.to_string(),
-        } + if builder.snap || holding != Some(Tool::Hammer) {
+        } + if builder.snap || !hammer {
             ""
         } else {
             "     grid off"
@@ -436,7 +438,7 @@ fn draw(
             "Move the mouse to a kind and let go".to_string()
         } else {
             let doing = match holding {
-                Some(Tool::Hammer) => tool::prompt(&builder, &settings),
+                Some(_) if hammer => tool::prompt(&builder, &settings, items),
                 // A pickaxe on bare ground digs it.
                 Some(_) if cutting.target.is_none() && digging.target.is_some() => {
                     match digging.progress() {
@@ -447,10 +449,14 @@ fn draw(
                         ),
                     }
                 }
-                Some(tool) => harvest::prompt(tool, &cutting, &growth, &settings),
-                None if let Some(tool) = belongings.broken_in_hand() => {
-                    let kind = belongings.items().tool_kind(tool);
-                    match super::wear::mended_at(belongings.items(), kind) {
+                Some(tool) => match items.tool(tool) {
+                    Some(does) => {
+                        harvest::prompt(items.name(tool), does, &cutting, &growth, &settings)
+                    }
+                    None => String::new(),
+                },
+                None if let Some(kind) = belongings.broken_in_hand() => {
+                    match super::wear::mended_at(items, kind) {
                         Some(station) => format!(
                             "Broken: mend it at a {} in your claim",
                             station.name().to_lowercase()
@@ -475,7 +481,7 @@ fn draw(
     );
     set(
         &mut texts.p3(),
-        if dial.open || inventory.open || holding != Some(Tool::Hammer) {
+        if dial.open || inventory.open || !hammer {
             String::new()
         } else {
             tool::legend(&builder, &settings)

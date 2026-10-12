@@ -9,8 +9,9 @@ use super::combat::Swing;
 use super::controls::{Action, Controls, Settings};
 use super::dial::Dial;
 use super::flora::{Growth, Obstacles};
-use super::inventory::{Belongings, Cut, Cuttable, InventoryScreen, Tool};
-use super::skills::{Did, ONCE, Skill, Skills};
+use super::inventory::{Belongings, Cuttable, InventoryScreen};
+use super::kinds::ToolDef;
+use super::skills::{Did, ONCE, Skills};
 use super::work::Hold;
 use super::{IsLocalPlayer, Player, Stance};
 use crate::planet::MainCamera;
@@ -102,11 +103,14 @@ fn cut(
     let (player_at, mut stance) = player.into_inner();
     let feet = player_at.translation;
     cutting.target = None;
-    let tool = belongings.holding().filter(|_| !screen.open && !dial.open);
+    let tool = belongings
+        .tool_in_hand()
+        .cloned()
+        .filter(|_| !screen.open && !dial.open);
     // Aimed at: anything the tool in hand is the kind of tool for, whether or not its
     // material is up to it, so the prompt can say why it will not cut.
-    let works = |cut: &Cuttable| tool.is_some_and(|tool| tool.works(cut.what));
-    let speed_on = |cut: &Cuttable| tool.and_then(|tool| tool.cuts(cut.what));
+    let works = |cut: &Cuttable| tool.as_ref().is_some_and(|tool| tool.works(cut.what));
+    let speed_on = |cut: &Cuttable| tool.as_ref().and_then(|tool| tool.cuts(cut.what));
 
     // The nearest thing this tool can cut that the view passes close to; failing that,
     // the nearest one just in front of the player, so small things need no careful aim.
@@ -196,7 +200,7 @@ fn cut(
     let Some(speed) = speed_on(&cut) else { return };
     let (_, mut hold) = *cutting.held.get_or_insert((
         entity,
-        Hold::new(cut.seconds / (speed * skills.speed(skill_for(cut.what))).max(0.01)),
+        Hold::new(cut.seconds / (speed * skills.speed(cut.what.skill())).max(0.01)),
     ));
     let finished = hold.advance(time.delta_secs());
     cutting.held = Some((entity, hold));
@@ -215,30 +219,31 @@ fn cut(
         return;
     }
 
-    let (raw, count) = cut.gives;
+    let (gives, count) = cut.gives;
+    let kind = belongings.items().kind(gives);
     // As in Subnautica, nothing is gathered into a full backpack. What does not fit is
     // left behind.
-    if !belongings.room_for_one(raw) {
+    if !belongings.room_for_one(kind) {
         notice.say("Your backpack is full");
         cutting.held = None;
         transform.rotation = rest;
         commands.entity(entity).remove::<Shaken>();
         return;
     }
-    let given = belongings.give(raw, count);
+    let given = belongings.give(kind, count);
     belongings.wear_in_hand(1);
     if given < count {
         notice.say(format!(
             "Your backpack is full: {} {} left behind",
             count - given,
-            raw.name()
+            gives
         ));
     }
     if let Some(stood) = obstacle {
         obstacles.remove(stood);
     }
-    info!("Cut something for {given} {}.", raw.name());
-    did.write(Did(skill_for(cut.what), ONCE));
+    info!("Cut something for {given} {gives}.");
+    did.write(Did(cut.what.skill(), ONCE));
     cutting.held = None;
     cutting.target = None;
     transform.rotation = rest;
@@ -283,9 +288,11 @@ fn fall(
     }
 }
 
-/// What the tool in hand would do right now, for the prompt.
+/// What the tool in hand would do right now, for the prompt: a kind of tool called
+/// `name`, which does `tool`.
 pub fn prompt(
-    tool: Tool,
+    name: &str,
+    tool: &ToolDef,
     cutting: &Cutting,
     growth: &Query<&Growth>,
     settings: &Settings,
@@ -299,37 +306,16 @@ pub fn prompt(
         .and_then(|growth| growth.cut);
     match aimed {
         Some(cut) if tool.cuts(cut.what).is_none() => {
-            format!("Too tough for a {}", tool.name().to_lowercase())
+            format!("Too tough for a {}", name.to_lowercase())
         }
         Some(cut) => format!(
             "{}  work this      Gives {} {}",
             settings.hold(Action::Use),
             cut.gives.1,
-            cut.gives.0.name()
+            cut.gives.0
         ),
-        None => match tool {
-            Tool::StoneAxe | Tool::IronAxe => "Aim at a tree nearby".to_string(),
-            Tool::StonePickaxe | Tool::IronPickaxe => "Aim at a rock nearby".to_string(),
-            Tool::Knife => "Aim at a bush or plant nearby".to_string(),
-            Tool::Hammer => String::new(),
-            Tool::Torch => "Lights the way while it is in hand".to_string(),
-            Tool::Spear => format!(
-                "{}  swing at a creature in front of you",
-                settings.key(Action::Use)
-            ),
-            Tool::Bow => format!(
-                "{}  draw, and let go to shoot where you aim",
-                settings.hold(Action::Use)
-            ),
-        },
-    }
-}
-
-/// The skill gathering a sort of thing grows.
-fn skill_for(what: Cut) -> Skill {
-    match what {
-        Cut::Tree | Cut::GreatTree => Skill::Chopping,
-        Cut::Rock | Cut::Ore => Skill::Mining,
-        Cut::Plant => Skill::Foraging,
+        None => tool
+            .hint(&settings.key(Action::Use), &settings.hold(Action::Use))
+            .unwrap_or_default(),
     }
 }

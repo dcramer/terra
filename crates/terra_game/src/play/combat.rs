@@ -10,7 +10,8 @@
 use super::bag::Notice;
 use super::controls::{Action, Controls};
 use super::creatures::{self, Bitten, Creature, Species};
-use super::inventory::{self, Belongings, Broke, Gear, InventoryScreen, Items, Tool};
+use super::inventory::{self, Belongings, Broke, Gear, InventoryScreen, Items};
+use super::kinds::ToolDef;
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::vitals::Vitals;
 use super::{Downed, IsLocalPlayer, LocalPlayer, Player, Stance, View};
@@ -23,22 +24,6 @@ const SWING_EVERY_S: f32 = 0.65;
 /// How much of a blow a guard takes, and what each guarded blow costs in stamina.
 const GUARDED: f32 = 0.25;
 const GUARD_STAMINA: f32 = 12.0;
-
-/// How hard a thing in hand hits, and how far it reaches.
-pub fn weapon(tool: Tool) -> (f32, f32) {
-    match tool {
-        Tool::Spear => (18.0, 3.2),
-        Tool::IronAxe => (14.0, 2.4),
-        Tool::StoneAxe => (9.0, 2.3),
-        Tool::IronPickaxe => (11.0, 2.3),
-        Tool::StonePickaxe => (7.0, 2.3),
-        Tool::Knife => (6.0, 1.9),
-        // A burning torch is a poor club, but it is one.
-        Tool::Torch => (5.0, 1.9),
-        // The bow shoots instead (`archery`); the hammer builds.
-        Tool::Hammer | Tool::Bow => (0.0, 0.0),
-    }
-}
 
 /// When a player last swung, so another waits its turn and gathering waits for it.
 #[derive(Component)]
@@ -93,10 +78,8 @@ fn swing(
 ) {
     swung.since += time.delta_secs();
     let (player_at, mut stance, mut vitals, skills, downed) = player.into_inner();
-    let Some(tool) = belongings
-        .holding()
-        .filter(|tool| !matches!(tool, Tool::Hammer | Tool::Bow))
-    else {
+    // Whatever in hand strikes at all: a weapon, or a tool used as one.
+    let Some((damage, reach)) = belongings.tool_in_hand().and_then(ToolDef::strikes) else {
         return;
     };
     if screen.open || downed || !controls.went_down(Action::Use) {
@@ -107,7 +90,6 @@ fn swing(
     }
     let feet = player_at.translation;
     let up = feet.normalize();
-    let (damage, reach) = weapon(tool);
     let target = creatures
         .iter_mut()
         .filter(|(_, creature, _)| creature.alive())
@@ -191,10 +173,9 @@ fn guard(
     player: Single<(&mut Stance, Has<Downed>), IsLocalPlayer>,
 ) {
     let (mut stance, downed) = player.into_inner();
-    let holding = belongings.holding();
-    stance.guarding = holding.is_some_and(|tool| tool != Tool::Hammer)
-        && !downed
-        && controls.held(Action::BuildMenu);
+    let holding = belongings.tool_in_hand();
+    stance.guarding =
+        holding.is_some_and(|tool| !tool.builds) && !downed && controls.held(Action::BuildMenu);
 }
 
 /// Lands the blows creatures deal on whoever they hit, less what leather, a guard or a
@@ -275,12 +256,15 @@ mod tests {
 
     #[test]
     fn the_spear_is_the_weapon_and_the_hammer_is_not() {
-        let (spear, spear_reach) = weapon(Tool::Spear);
-        for tool in Tool::ALL {
-            let (damage, reach) = weapon(tool);
-            assert!(damage <= spear && reach <= spear_reach);
+        let items = Items::default();
+        let strikes = |name: &str| items.tool(items.kind(name)).and_then(ToolDef::strikes);
+        let (spear, spear_reach) = strikes("Spear").unwrap();
+        for kind in items.kinds() {
+            if let Some((damage, reach)) = items.tool(kind).and_then(ToolDef::strikes) {
+                assert!(damage <= spear && reach <= spear_reach);
+            }
         }
-        assert_eq!(weapon(Tool::Hammer).0, 0.0);
-        assert!(weapon(Tool::IronAxe).0 > weapon(Tool::StoneAxe).0);
+        assert_eq!(strikes("Hammer"), None);
+        assert!(strikes("Iron axe").unwrap().0 > strikes("Stone axe").unwrap().0);
     }
 }

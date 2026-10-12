@@ -1,0 +1,151 @@
+#![enable(implicit_some)]
+// Every kind of item there is, and what a player starts with (docs/items.md, D127, D136).
+// A new kind is an entry here, with its icon in assets/icons and its looks in
+// assets/models; no code names one. The numbers are stand-ins (docs/construction.md, D55).
+//
+// Each kind:
+//   name       what it is called; its icon, looks and saved copies are found by it
+//   size       the cells it fills in a backpack, wide by high; one cell if not given
+//   found      where it comes from, for a prompt that says what is missing
+//   about      what it does, for a station's screen
+//   food       how much eating one fills you, out of 100
+//   colour     its tile's colour while it has no icon, red, green and blue
+//   lasts      how much use it takes before it breaks (D99)
+//   mended_at  the station that mends it, when none makes it
+//   tab        the station tab it is made under, when not the one for what it is
+//   tool       what it does in hand:
+//                builds   builds and takes apart, with the build menu
+//                cuts     the sorts of thing it cuts, and how fast; any sort its family
+//                         of tool works it at least tries (D96)
+//                strikes  how hard it hits and how far it reaches, as a weapon
+//                shoots   the item it shoots, from the backpack or a quiver
+//                lights   burns while in hand, wearing a use a second
+//                hint     what the prompt says it is for; {press} and {hold} are the
+//                         use key, pressed or held
+//   worn       where it is worn and what it does there:
+//                slot        Pack, Head, Body or Belt
+//                backpack    the backpack's size while it is worn
+//                protection  how much of a blow it takes, out of one
+//                holds       what it carries and how many, filling no cells (D118)
+(
+    start: (
+        wears: ["Small pack"],
+        // On the bar, in this order. A torch among them, so the first night can be got
+        // through before a campfire makes more.
+        tools: ["Hammer", "Stone axe", "Stone pickaxe", "Knife", "Torch"],
+    ),
+    kinds: [
+        (name: "Wood", found: "fell trees with an axe", colour: (0.5, 0.36, 0.22)),
+        (name: "Stone", found: "break rocks with a pickaxe", colour: (0.5, 0.5, 0.52)),
+        (name: "Fibre", found: "cut plants with a knife", colour: (0.55, 0.6, 0.35)),
+        (name: "Hide", found: "butcher a deer", colour: (0.62, 0.48, 0.36)),
+        (name: "Ore", found: "break the rusty rocks with a pickaxe", colour: (0.56, 0.34, 0.26)),
+        (name: "Iron", found: "smelt ore at a smelter", colour: (0.42, 0.45, 0.5)),
+        (name: "Meat", found: "butcher a deer", food: 15.0, colour: (0.7, 0.3, 0.3)),
+        (name: "Berries", found: "pick them from berry bushes", food: 8.0, colour: (0.7, 0.2, 0.35)),
+        (name: "Cooked meat", found: "cook meat at a campfire", food: 40.0, colour: (0.6, 0.36, 0.2)),
+        // Shot from a bow, and used up. One to a cell, like everything (D84).
+        (name: "Arrow", found: "make them at a workbench", colour: (0.66, 0.6, 0.45), tab: Tools),
+
+        (
+            name: "Hammer",
+            size: (2, 1),
+            about: "Builds rooms, walls and items from what you carry",
+            lasts: 300,
+            mended_at: "Workbench",
+            tool: (builds: true),
+        ),
+        (
+            name: "Stone axe",
+            size: (2, 1),
+            about: "Fells ordinary trees for wood",
+            lasts: 60,
+            tool: (cuts: [(Tree, 1.0)], strikes: (9.0, 2.3), hint: "Aim at a tree nearby"),
+        ),
+        (
+            name: "Stone pickaxe",
+            size: (2, 1),
+            about: "Breaks rock for stone, and ore slowly",
+            lasts: 60,
+            tool: (cuts: [(Rock, 1.0), (Ore, 0.6)], strikes: (7.0, 2.3), hint: "Aim at a rock nearby"),
+        ),
+        (
+            name: "Knife",
+            size: (2, 1),
+            about: "Cuts plants for fibre",
+            lasts: 80,
+            tool: (cuts: [(Plant, 1.0), (Flesh, 1.0)], strikes: (6.0, 1.9), hint: "Aim at a bush or plant nearby"),
+        ),
+        (
+            name: "Iron axe",
+            size: (2, 1),
+            about: "Fells any tree, the great ones too",
+            lasts: 200,
+            tool: (cuts: [(Tree, 1.8), (GreatTree, 1.0)], strikes: (14.0, 2.4), hint: "Aim at a tree nearby"),
+        ),
+        (
+            name: "Iron pickaxe",
+            size: (2, 1),
+            about: "Breaks rock and ore quickly",
+            lasts: 200,
+            tool: (cuts: [(Rock, 1.8), (Ore, 1.5)], strikes: (11.0, 2.3), hint: "Aim at a rock nearby"),
+        ),
+        (
+            name: "Spear",
+            size: (2, 1),
+            about: "A hunting spear: hits hardest and reaches furthest",
+            lasts: 100,
+            tool: (strikes: (18.0, 3.2), hint: "{press}  swing at a creature in front of you"),
+        ),
+        (
+            name: "Bow",
+            size: (2, 1),
+            about: "Shoots arrows: hold to draw, let go to loose",
+            lasts: 120,
+            tool: (shoots: "Arrow", hint: "{hold}  draw, and let go to shoot where you aim"),
+        ),
+        (
+            name: "Torch",
+            size: (2, 1),
+            about: "Lights the way at night while it is in hand",
+            // A use for each second it burns: eight minutes.
+            lasts: 480,
+            // A burning torch is a poor club, but it is one.
+            tool: (strikes: (5.0, 1.9), lights: true, hint: "Lights the way while it is in hand"),
+        ),
+
+        (
+            name: "Small pack",
+            size: (2, 2),
+            about: "Worn, makes the backpack 6 by 5",
+            worn: (slot: "Pack", backpack: (6, 5)),
+        ),
+        (
+            name: "Large pack",
+            size: (2, 2),
+            about: "Worn, makes the backpack 7 by 6",
+            worn: (slot: "Pack", backpack: (7, 6)),
+        ),
+        // Armour wears with each blow it takes (D99).
+        (
+            name: "Leather cap",
+            about: "Worn, takes a tenth of every blow",
+            lasts: 60,
+            worn: (slot: "Head", protection: 0.1),
+        ),
+        (
+            name: "Leather coat",
+            size: (2, 2),
+            about: "Worn, takes a quarter of every blow",
+            lasts: 80,
+            worn: (slot: "Body", protection: 0.25),
+        ),
+        (
+            name: "Quiver",
+            size: (1, 2),
+            about: "Worn on the belt, holds 20 arrows; they go in it when you get them, and a bow shoots from it",
+            worn: (slot: "Belt", holds: ("Arrow", 20)),
+            tab: Tools,
+        ),
+    ],
+)

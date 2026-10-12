@@ -12,7 +12,7 @@ use super::bag::Notice;
 use super::bodies::Body;
 use super::flora::ClearAround;
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
-use super::inventory::{Belongings, Raw, Tool};
+use super::inventory::{Belongings, Cut};
 use super::skills::{Did, ONCE, Skill};
 use super::{Downed, Player};
 use crate::build::Site;
@@ -594,15 +594,20 @@ fn butcher(
     if focus.used(Interactable::Carcass)
         && let Some(entity) = focus.entity
     {
-        let carries_knife = belongings
-            .backpack()
-            .iter()
-            .any(|placed| belongings.items().tool(placed.item.kind) == Some(Tool::Knife));
+        // Anything carried that cuts flesh, such as a knife.
+        let carries_knife = belongings.backpack().iter().any(|placed| {
+            belongings
+                .items()
+                .tool(placed.item.kind)
+                .is_some_and(|tool| tool.cuts(Cut::Flesh).is_some())
+        });
         if !carries_knife {
             notice.say("You need a knife to butcher it");
         } else {
-            let meat = belongings.give(Raw::Meat, 3);
-            let hide = belongings.give(Raw::Hide, 2);
+            let items = belongings.items();
+            let (meat_kind, hide_kind) = (items.kind("Meat"), items.kind("Hide"));
+            let meat = belongings.give(meat_kind, 3);
+            let hide = belongings.give(hide_kind, 2);
             info!("Butchered it for {meat} meat and {hide} hide.");
             notice.say("Butchered it");
             did.write(Did(Skill::Foraging, ONCE));

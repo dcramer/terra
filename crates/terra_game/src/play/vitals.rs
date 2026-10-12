@@ -10,7 +10,7 @@
 use super::IsLocalPlayer;
 use super::bag::Notice;
 use super::controls::{Action, Controls};
-use super::inventory::{Belongings, Raw};
+use super::inventory::Belongings;
 use bevy::prelude::*;
 
 pub const FULL: f32 = 100.0;
@@ -107,18 +107,9 @@ impl Vitals {
         self.health <= 0.0
     }
 
-    pub fn eat(&mut self, food: Raw) {
-        self.fed = (self.fed + nourishment(food)).min(FULL);
-    }
-}
-
-/// How filling a food is, out of [`FULL`]; nothing for what is not food.
-pub fn nourishment(raw: Raw) -> f32 {
-    match raw {
-        Raw::Berries => 8.0,
-        Raw::Meat => 15.0,
-        Raw::CookedMeat => 40.0,
-        _ => 0.0,
+    /// Eats something that fills you so much, out of [`FULL`] (its kind's `food`).
+    pub fn eat(&mut self, filling: f32) {
+        self.fed = (self.fed + filling).min(FULL);
     }
 }
 
@@ -204,8 +195,9 @@ fn eat(
     }
     match belongings.eat_best() {
         Some(food) => {
-            vitals.eat(food);
-            notice.say(format!("Ate {}", food.name().to_lowercase()));
+            let items = belongings.items();
+            vitals.eat(items.food(food));
+            notice.say(format!("Ate {}", items.name(food).to_lowercase()));
         }
         None => notice.say("You have nothing to eat"),
     }
@@ -277,8 +269,10 @@ mod tests {
             vitals.tick(0.1, Effort::Resting);
         }
         assert!(vitals.health > 50.0);
-        assert!(nourishment(Raw::CookedMeat) > nourishment(Raw::Meat));
-        assert_eq!(nourishment(Raw::Wood), 0.0);
+        let items = crate::play::inventory::Items::default();
+        let food = |name| items.food(items.kind(name));
+        assert!(food("Cooked meat") > food("Meat"));
+        assert_eq!(food("Wood"), 0.0);
     }
 
     #[test]

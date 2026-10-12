@@ -21,7 +21,7 @@
 use super::{
     Downed, IsLocalPlayer, Motion, View,
     creatures::Creature,
-    inventory::{self, Backpack, Bar, Gear, Items, Raw},
+    inventory::{self, Backpack, Bar, Gear, Items},
     people::Person,
     vitals::Vitals,
 };
@@ -124,14 +124,13 @@ fn take(
     let (mut backpack, mut gear, mut bar) = player.into_inner();
     for (name, count) in std::mem::take(&mut asked.takes) {
         let wanted = name.replace('_', " ");
-        let Some(raw) = Raw::ALL
-            .into_iter()
-            .find(|raw| raw.name().eq_ignore_ascii_case(&wanted))
+        let Some(kind) = items
+            .kinds()
+            .find(|&kind| items.name(kind).eq_ignore_ascii_case(&wanted))
         else {
-            warn!("Took nothing: there is no raw item called {name}.");
+            warn!("Took nothing: there is no kind of item called {name}.");
             continue;
         };
-        let kind = items.kind(raw);
         let loose = backpack.0.count(kind);
         let from_pack = count.unwrap_or(u32::MAX).min(loose);
         let paid = backpack.0.take(&[(kind, from_pack)]).is_ok();
@@ -140,7 +139,7 @@ fn take(
             .draw(kind, count.map_or(u32::MAX, |count| count - from_pack));
         bar.0.tidy(&backpack.0);
         let took = if paid { from_pack } else { 0 } + from_gear;
-        info!("Took {took} {} for testing.", raw.name());
+        info!("Took {took} {} for testing.", items.name(kind));
     }
 }
 
@@ -345,7 +344,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         "health": number(body.health),
         "stamina": number(body.stamina),
         "fed": number(body.fed),
-        "holding": inventory::holding(items, &backpack.0, &bar.0).map(|tool| tool.name()),
+        "holding": inventory::holding(items, &backpack.0, &bar.0).map(|tool| items.name(tool)),
         // What is in hand whether or not it works, and how much use it has left (D99).
         "in_hand": bar.0.in_hand(&backpack.0).map(|item| json!({
             "name": items.name(item.kind),

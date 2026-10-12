@@ -6,7 +6,7 @@
 //! every run. Trees, rocks and plants are one entity each, sharing a mesh per model.
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
-use super::inventory::{Cut, Cuttable, Raw};
+use super::inventory::{Cut, Cuttable};
 use super::models::{Part, read_model};
 use super::scene::SUN_DIRECTION;
 use crate::build::Site;
@@ -476,7 +476,7 @@ fn plant(
             } else {
                 Cut::Tree
             },
-            gives: (Raw::Wood, (tall / 3.0).round() as u32),
+            gives: ("Wood", (tall / 3.0).round() as u32),
             seconds: 1.0 + tall * 0.12,
         });
         put(
@@ -510,13 +510,13 @@ fn plant(
         let metal = Some(if ore {
             Cuttable {
                 what: Cut::Ore,
-                gives: (Raw::Ore, size.ceil() as u32),
+                gives: ("Ore", size.ceil() as u32),
                 seconds: 1.2 + size * 0.6,
             }
         } else {
             Cuttable {
                 what: Cut::Rock,
-                gives: (Raw::Stone, (size * 1.5).ceil() as u32),
+                gives: ("Stone", (size * 1.5).ceil() as u32),
                 seconds: 0.8 + size * 0.5,
             }
         });
@@ -543,9 +543,9 @@ fn plant(
         let fibre = Some(Cuttable {
             what: Cut::Plant,
             gives: if berries {
-                (Raw::Berries, 3)
+                ("Berries", 3)
             } else {
-                (Raw::Fibre, 1)
+                ("Fibre", 1)
             },
             seconds: 0.7,
         });
@@ -567,7 +567,7 @@ fn plant(
         let scale = rng.range(0.35, 0.75) / model.height;
         let fibre = Some(Cuttable {
             what: Cut::Plant,
-            gives: (Raw::Fibre, 1),
+            gives: ("Fibre", 1),
             seconds: 0.4,
         });
         put(
@@ -613,7 +613,7 @@ fn plant(
             1.0,
             Some(Cuttable {
                 what: Cut::Tree,
-                gives: (Raw::Wood, 2),
+                gives: ("Wood", 2),
                 seconds: 1.0,
             }),
             Some((point, 0.5)),

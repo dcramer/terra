@@ -9,9 +9,8 @@
 //!   Click the queue   take one off it, and get back what it took
 
 use super::bag::{Notice, Shown};
-use super::combat::weapon;
 use super::crafting::{self, RECIPES, Staff, Station, Works};
-use super::inventory::{Belongings, InventoryScreen, Made, Tool};
+use super::inventory::{Belongings, InventoryScreen, Items, Made};
 use super::tiles::{self, PICKED, PLAIN, TILE};
 use bevy::prelude::*;
 
@@ -146,11 +145,11 @@ fn setup(mut commands: Commands) {
 }
 
 /// The recipes shown: the station's, in the tab chosen.
-fn shown(station: Station, tab: usize) -> Vec<usize> {
-    let families = crafting::families(station);
+fn shown(station: Station, tab: usize, items: &Items) -> Vec<usize> {
+    let families = crafting::families(station, items);
     let family = families.get(tab).copied();
     crafting::recipes(station)
-        .filter(|&index| family.is_none_or(|family| RECIPES[index].family() == family))
+        .filter(|&index| family.is_none_or(|family| RECIPES[index].family(items) == family))
         .collect()
 }
 
@@ -183,7 +182,7 @@ fn choose(
     let on_backpack = backpack
         .iter()
         .any(|interaction| *interaction != Interaction::None);
-    let tabs = crafting::families(station).len();
+    let tabs = crafting::families(station, belongings.items()).len();
     if !on_backpack
         && let Some(tab) = NUMBERS.iter().position(|&key| keys.just_pressed(key))
         && tab < tabs
@@ -191,7 +190,7 @@ fn choose(
         state.tab = tab;
         state.cursor = 0;
     }
-    let list = shown(station, state.tab);
+    let list = shown(station, state.tab, belongings.items());
     state.cursor = tiles::step(&keys, state.cursor, list.len(), COLUMNS);
     if keys.just_pressed(KeyCode::Enter)
         && let Some(&index) = list.get(state.cursor)
@@ -239,6 +238,7 @@ fn click(
 /// the queue does.
 #[allow(clippy::too_many_arguments)]
 fn lay_out(
+    items: Res<Items>,
     mut commands: Commands,
     screen: Res<InventoryScreen>,
     stations: Query<&Works>,
@@ -259,7 +259,7 @@ fn lay_out(
     }
     if state.laid_out != Some((entity, state.tab)) {
         state.laid_out = Some((entity, state.tab));
-        let families = crafting::families(station);
+        let families = crafting::families(station, &items);
         commands
             .entity(*tabs)
             .despawn_children()
@@ -274,7 +274,7 @@ fn lay_out(
             .entity(*grid)
             .despawn_children()
             .with_children(|grid| {
-                for index in shown(station, state.tab) {
+                for index in shown(station, state.tab, &items) {
                     let name = RECIPES[index].makes.name();
                     tiles::tile(grid, Tile(index), &name, (TileLine(index), Text::new("")));
                 }
@@ -326,28 +326,23 @@ fn lay_out(
 }
 
 /// What a thing does, for the strip beneath the tiles.
-fn about(made: Made) -> String {
-    match made {
-        Made::Tool(Tool::Hammer) => Tool::Hammer.about().to_string(),
-        Made::Tool(Tool::Bow) => {
+fn about(items: &Items, made: Made) -> String {
+    let kind = items.kind(made.item);
+    let def = items.def(kind);
+    let said = def.about.clone().unwrap_or_default();
+    match &def.tool {
+        Some(tool) if tool.shoots.is_some() => {
             let (damage, speed) = super::archery::bow();
-            format!(
-                "{}. Hits for {damage:.0} at a full draw, at {speed:.0} m a second",
-                Tool::Bow.about()
-            )
+            format!("{said}. Hits for {damage:.0} at a full draw, at {speed:.0} m a second")
         }
-        Made::Tool(tool) => {
-            let (damage, reach) = weapon(tool);
-            format!(
-                "{}. Hits for {damage:.0}, reaching {reach:.1} m",
-                tool.about()
-            )
-        }
-        Made::Apparel(apparel) => apparel.about().to_string(),
-        Made::Container(container) => container.about(),
-        Made::Raw(raw, _) => match super::vitals::nourishment(raw) {
+        Some(tool) => match tool.strikes() {
+            Some((damage, reach)) => format!("{said}. Hits for {damage:.0}, reaching {reach:.1} m"),
+            None => said,
+        },
+        None if def.worn.is_some() => said,
+        None => match items.food(kind) {
             fed if fed > 0.0 => format!("Food: fills you by {fed:.0}"),
-            _ => format!("{}, for making other things", raw.name()),
+            _ => format!("{}, for making other things", def.name),
         },
     }
 }
@@ -414,7 +409,7 @@ fn draw(
         );
     }
 
-    let list = shown(station, state.tab);
+    let list = shown(station, state.tab, belongings.items());
     let mut pointed = list.get(state.cursor).copied();
     for (tile, interaction, mut border, mut background) in &mut tiles_shown {
         let hovered = *interaction != Interaction::None;
@@ -436,7 +431,10 @@ fn draw(
         let have_need = RECIPES[line.0]
             .cost
             .iter()
-            .map(|&(raw, need)| format!("{} {}/{need}", raw.name(), belongings.count(raw)))
+            .map(|&(name, need)| {
+                let have = belongings.count(belongings.items().kind(name));
+                format!("{name} {have}/{need}")
+            })
             .collect::<Vec<_>>()
             .join("  ");
         set(&mut text, have_need);
@@ -444,12 +442,17 @@ fn draw(
 
     let about_text = pointed.map_or(String::new(), |index| {
         let recipe = &RECIPES[index];
-        let mut text = format!("{}. Takes {:.0} s.", about(recipe.makes), recipe.seconds);
-        if let Some((raw, more)) = belongings.missing(recipe.cost, 1) {
+        let mut text = format!(
+            "{}. Takes {:.0} s.",
+            about(belongings.items(), recipe.makes),
+            recipe.seconds
+        );
+        if let Some((kind, more)) = belongings.missing(recipe.cost, 1) {
+            let items = belongings.items();
             text += &format!(
                 "\nNeeds {more} more {}: {}.",
-                raw.name().to_lowercase(),
-                raw.where_found()
+                items.name(kind).to_lowercase(),
+                items.found(kind)
             );
         }
         text
@@ -485,17 +488,18 @@ mod tests {
 
     #[test]
     fn a_tab_shows_only_its_family() {
-        let tools = shown(Station::Workbench, 0);
-        let clothing = shown(Station::Workbench, 1);
+        let items = Items::default();
+        let tools = shown(Station::Workbench, 0, &items);
+        let clothing = shown(Station::Workbench, 1, &items);
         assert!(
             tools
                 .iter()
-                .all(|&index| RECIPES[index].family() == Family::Tools)
+                .all(|&index| RECIPES[index].family(&items) == Family::Tools)
         );
         assert!(
             clothing
                 .iter()
-                .all(|&index| RECIPES[index].family() == Family::Clothing)
+                .all(|&index| RECIPES[index].family(&items) == Family::Clothing)
         );
         assert_eq!(
             tools.len() + clothing.len(),
