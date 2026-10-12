@@ -50,6 +50,7 @@ Run on every item, on every base body, through clips that bend and reach:
 - **Rigid worn things:** how much of it rests on the body, and that it never sinks in (the first half built).
 - **Held things:** that it never passes through the body or the head through the swings.
 - **A sheet of every item on every body**, for a person to look at last, not first.
+- **Every item's picture**, drawn from its look in the house style (D130) and read at slot size: a look that breaks a contract shows it here too (built: the `pictures` experiment, `.claude/skills/item-pictures`).
 
 An item that fails a check isn't used until it passes.
 

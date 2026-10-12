@@ -1,10 +1,16 @@
-//! A spike for D130, what item pictures look like: every held and worn look, drawn each
-//! of the ways in `STYLES` from the look itself (D129), in the game's own light, laid out
-//! as one sheet with a column per item and a row per style. `--sheet <prefix>` saves
-//! `<prefix>.png` at 128 pixels a picture and `<prefix>-64.png` at 64, then exits.
+//! Item pictures in the house style (D130): each look drawn from the look itself (D129),
+//! in the world's light, the way the game will draw it for a slot. Held things lie corner
+//! to corner, square on, broad side to the front, working end up and to the right; worn
+//! things face the front, seen from a little above. One rig for every picture, no
+//! background. The playbook is `.claude/skills/item-pictures/SKILL.md`.
 //!
-//! The camera draws into an image on a layer of its own, so the planet and its sun are not
-//! in the picture; the look's own lights are on that layer too.
+//! `--model <path>` draws one look under `assets/` (repeatable); with none, every held
+//! look and every worn look on one base body. `--sheet <prefix>` lays them out on empty
+//! slots and saves `<prefix>.png` at 128 pixels a picture and `<prefix>-64.png` at 64,
+//! then exits.
+//!
+//! The sandbox's camera draws into an image on a render layer of its own, so the planet
+//! and its sun are not in the picture; the picture's lights are on that layer too.
 
 use std::path::{Path, PathBuf};
 
@@ -25,152 +31,99 @@ use bevy::{
     world_serialization::{WorldAssetRoot, WorldInstanceReady},
 };
 
-use crate::{character::Tint, shell::Options};
+use crate::shell::Options;
 
 const LAYER: usize = 1;
 /// Drawn at this size, then shrunk, which smooths the edges.
 const DRAWN: u32 = 256;
 const SHOWN: [u32; 2] = [128, 64];
-/// Frames to let a new view and light settle before a capture.
+const COLUMNS: usize = 8;
+/// Frames to let a new view settle before a capture.
 const SETTLE: u32 = 6;
-/// The empty slot behind a picture, and the gap between slots, as the play screens have them.
+/// The empty slot behind a picture on the sheet, and the gap between slots, as the play
+/// screens have them.
 const SLOT: [f32; 3] = [0.12, 0.13, 0.16];
 const GAP: [f32; 3] = [0.05, 0.06, 0.08];
-/// A plate behind the picture: the play scene's sky, darkened, from zenith to horizon.
-const PLATE_TOP: [f32; 3] = [0.13, 0.22, 0.38];
-const PLATE_BOTTOM: [f32; 3] = [0.42, 0.34, 0.27];
 
-/// One way of drawing a picture.
-struct Style {
-    /// Seen from a little above and to the side, rather than square on.
-    above: bool,
-    /// A cool light from behind, outlining the shape without a line.
-    rim: bool,
-    light: Light,
-    plate: bool,
-}
-
-#[derive(Clone, Copy)]
-enum Light {
-    /// The play scene's: a warm sun, shade lit by a blue sky.
-    World,
-    /// A darker realm's, to see what a realm's own light would do: cold moon, violet shade.
-    Gloom,
-}
-
-const STYLES: [Style; 5] = [
-    Style {
-        above: true,
-        rim: false,
-        light: Light::World,
-        plate: false,
-    },
-    Style {
-        above: true,
-        rim: true,
-        light: Light::World,
-        plate: false,
-    },
-    Style {
-        above: false,
-        rim: true,
-        light: Light::World,
-        plate: false,
-    },
-    Style {
-        above: true,
-        rim: true,
-        light: Light::World,
-        plate: true,
-    },
-    Style {
-        above: true,
-        rim: true,
-        light: Light::Gloom,
-        plate: false,
-    },
-];
-
-/// One picture's subject: a look, and how it is coloured.
-struct Entry {
-    file: String,
-    /// Held things are laid across the picture, handle low and working end high; worn ones
-    /// stand as worn.
-    held: bool,
-    tint: Tint,
-}
+/// The house style's rig: the play scene's warm sun and blue shade, and a cool light from
+/// behind that picks the shape out of the slot without an outline.
+const SUN: Color = Color::srgb(1.0, 0.87, 0.7);
+const SUN_LUX: f32 = 21_000.0;
+const SHADE: Color = Color::srgb(0.66, 0.76, 1.0);
+const SHADE_BRIGHTNESS: f32 = 1800.0;
+const EDGE: Color = Color::srgb(0.85, 0.92, 1.0);
+const EDGE_LUX: f32 = SUN_LUX * 3.0;
+/// How far above a worn thing the camera looks down from, so a cap shows its crown and
+/// not its inside.
+const WORN_RISE_DEGREES: f32 = 15.0;
+/// Room round the look, as a share of its size.
+const MARGIN: f32 = 1.15;
 
 #[derive(Resource)]
 struct Studio {
-    entries: Vec<Entry>,
+    files: Vec<String>,
     target: Handle<Image>,
-    entry: usize,
-    style: usize,
+    next: usize,
     item: Option<Entity>,
-    /// The item's corners in the world, once it has loaded and been placed.
+    /// The item's corners in the world, once it has loaded and been laid.
     corners: Option<Vec<Vec3>>,
     waited: u32,
     waiting: bool,
-    /// Every picture so far, entry by entry, style by style, as RGBA.
+    /// Every picture so far, in order, as RGBA.
     pictures: Vec<Vec<u8>>,
 }
 
 #[derive(Component)]
-struct Key;
-#[derive(Component)]
-struct Rim;
-#[derive(Component)]
 struct Ready;
+
+/// The picture's sun and edge light, turned with the camera for each picture.
+#[derive(Component)]
+enum PictureLight {
+    Sun,
+    Edge,
+}
 
 pub fn plugin(app: &mut App) {
     app.add_systems(PostStartup, setup).add_systems(Update, run);
 }
 
-/// Every held look, every worn look on one body, and a few tinted, sorted by file.
-fn entries() -> Vec<Entry> {
+fn is_held(file: &str) -> bool {
+    file.starts_with("models/held/")
+}
+
+/// What `--model` names, or every held look and every worn look on the first base body.
+fn files(options: &Options) -> Vec<String> {
+    if !options.models.is_empty() {
+        return options.models.clone();
+    }
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
-    let mut entries = Vec::new();
-    for (folder, held) in [("models/held", true), ("models/gear/base-female", false)] {
-        let mut files: Vec<String> = std::fs::read_dir(assets.join(folder))
+    let listed = |folder: &str| {
+        let mut names: Vec<String> = std::fs::read_dir(assets.join(folder))
             .into_iter()
             .flatten()
             .flatten()
             .map(|file| file.file_name().to_string_lossy().into_owned())
-            .filter(|name| name.ends_with(".glb"))
             .collect();
-        files.sort();
-        entries.extend(files.into_iter().map(|name| Entry {
-            file: format!("{folder}/{name}"),
-            held,
-            tint: Tint::default(),
-        }));
-    }
-    let dyed = |file: &str, role: &str, colour: Color| Entry {
-        file: file.to_string(),
-        held: false,
-        tint: Tint(vec![(role.to_string(), colour)]),
+        names.sort();
+        names
     };
-    entries.push(dyed(
-        "models/gear/base-female/leather_coat.glb",
-        "Leather",
-        Color::srgb(0.25, 0.35, 0.6),
-    ));
-    entries.push(dyed(
-        "models/gear/base-female/leather_coat.glb",
-        "Leather",
-        Color::srgb(0.55, 0.18, 0.15),
-    ));
-    entries.push(dyed(
-        "models/gear/base-female/small_pack.glb",
-        "Pack",
-        Color::srgb(0.4, 0.45, 0.22),
-    ));
-    entries
+    let looks = |folder: String| {
+        listed(&folder)
+            .into_iter()
+            .filter(|name| name.ends_with(".glb"))
+            .map(move |name| format!("{folder}/{name}"))
+    };
+    let mut files: Vec<String> = looks("models/held".to_string()).collect();
+    if let Some(body) = listed("models/gear").first() {
+        files.extend(looks(format!("models/gear/{body}")));
+    }
+    files
 }
 
 fn setup(
     mut commands: Commands,
     camera: Single<Entity, With<Camera3d>>,
+    options: Res<Options>,
     mut images: ResMut<Assets<Image>>,
 ) {
     let mut image = Image::new_target_texture(
@@ -189,6 +142,11 @@ fn setup(
         },
         RenderTarget::Image(target.clone().into()),
         RenderLayers::layer(LAYER),
+        AmbientLight {
+            color: SHADE,
+            brightness: SHADE_BRIGHTNESS,
+            ..default()
+        },
         Bloom {
             intensity: 0.2,
             ..Bloom::NATURAL
@@ -207,26 +165,30 @@ fn setup(
             ..default()
         },
     ));
-    commands.spawn((
-        Name::new("Picture key light"),
-        Key,
-        DirectionalLight {
-            shadow_maps_enabled: true,
-            ..default()
-        },
-        RenderLayers::layer(LAYER),
-    ));
-    commands.spawn((
-        Name::new("Picture rim light"),
-        Rim,
-        DirectionalLight::default(),
-        RenderLayers::layer(LAYER),
-    ));
+    for (light, colour, lux) in [
+        (PictureLight::Sun, SUN, SUN_LUX),
+        (PictureLight::Edge, EDGE, EDGE_LUX),
+    ] {
+        commands.spawn((
+            Name::new("Picture light"),
+            DirectionalLight {
+                color: colour,
+                illuminance: lux,
+                shadow_maps_enabled: matches!(light, PictureLight::Sun),
+                ..default()
+            },
+            light,
+            RenderLayers::layer(LAYER),
+        ));
+    }
+    let files = files(&options);
+    if files.is_empty() {
+        error!("pictures: no looks to draw");
+    }
     commands.insert_resource(Studio {
-        entries: entries(),
+        files,
         target,
-        entry: 0,
-        style: 0,
+        next: 0,
         item: None,
         corners: None,
         waited: 0,
@@ -243,40 +205,28 @@ fn run(
     ready: Query<(), With<Ready>>,
     children: Query<&Children>,
     bounds: Query<(&Aabb, &GlobalTransform)>,
-    mut camera: Query<(&mut Transform, &mut Projection, Entity), With<Camera3d>>,
-    mut key: Query<(&mut Transform, &mut DirectionalLight), (With<Key>, Without<Camera3d>)>,
-    mut rim: Query<
-        (&mut Transform, &mut DirectionalLight),
-        (With<Rim>, Without<Key>, Without<Camera3d>),
-    >,
+    mut camera: Query<(&mut Transform, &mut Projection), With<Camera3d>>,
+    mut lights: Query<(&mut Transform, &PictureLight), Without<Camera3d>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let Some(mut studio) = studio else { return };
     if studio.waiting {
         return;
     }
-    if studio.entry >= studio.entries.len() {
+    if studio.next >= studio.files.len() {
         if let Some(prefix) = &options.sheet {
-            save(&studio, prefix);
+            save(&studio.pictures, prefix);
         }
         exit.write(AppExit::Success);
         return;
     }
     let Some(item) = studio.item else {
-        let entry = &studio.entries[studio.entry];
-        let lay = if entry.held {
-            lay_across()
-        } else {
-            Quat::IDENTITY
-        };
+        let file = studio.files[studio.next].clone();
         let item = commands
             .spawn((
-                Name::new(format!("Picture of {}", entry.file)),
-                WorldAssetRoot(
-                    assets.load(GltfAssetLabel::Scene(0).from_asset(entry.file.clone())),
-                ),
-                entry.tint.clone(),
-                Transform::from_rotation(lay),
+                Name::new(format!("Picture of {file}")),
+                WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(file))),
+                Transform::IDENTITY,
             ))
             .observe(
                 |ready: On<WorldInstanceReady>,
@@ -298,11 +248,13 @@ fn run(
         return;
     }
     studio.waited += 1;
+    let held = is_held(&studio.files[studio.next]);
     if studio.corners.is_none() {
         // Bounds are worked out after the frame the look appears in.
         if studio.waited < 3 {
             return;
         }
+        // The look stands unturned at the origin, so these are its own corners.
         let corners: Vec<Vec3> = children
             .iter_descendants(item)
             .filter_map(|each| bounds.get(each).ok())
@@ -321,27 +273,22 @@ fn run(
         if corners.is_empty() {
             warn!(
                 "pictures: {} has nothing to draw",
-                studio.entries[studio.entry].file
+                studio.files[studio.next]
             );
         }
-        studio.corners = Some(corners);
+        let turn = if held { lay(&corners) } else { Quat::IDENTITY };
+        commands.entity(item).insert(Transform::from_rotation(turn));
+        studio.corners = Some(corners.into_iter().map(|corner| turn * corner).collect());
         studio.waited = 0;
+        return;
     }
-    let style = &STYLES[studio.style];
     if studio.waited == 1 {
         let corners = studio.corners.as_deref().unwrap_or_default();
-        if let Ok((mut transform, mut projection, _)) = camera.single_mut() {
-            (*transform, *projection) = frame(corners, style.above);
-            let (key_light, rim_light) = lights(style, &transform);
-            if let Ok((mut at, mut light)) = key.single_mut() {
-                (*at, *light) = key_light;
-            }
-            if let Ok((mut at, mut light)) = rim.single_mut() {
-                (*at, *light) = rim_light;
-            }
-            let entity = camera.single().map(|(_, _, entity)| entity).ok();
-            if let Some(entity) = entity {
-                commands.entity(entity).insert(ambient(style.light));
+        let rise = if held { 0.0 } else { WORN_RISE_DEGREES };
+        if let Ok((mut transform, mut projection)) = camera.single_mut() {
+            (*transform, *projection) = frame(corners, rise);
+            for (mut at, light) in &mut lights {
+                *at = shining(light, &transform);
             }
         }
     }
@@ -364,40 +311,42 @@ fn run(
                 };
                 studio.pictures.push(picture);
                 studio.waiting = false;
-                studio.waited = 0;
-                studio.style += 1;
-                if studio.style == STYLES.len() {
-                    studio.style = 0;
-                    studio.entry += 1;
-                    if let Some(item) = studio.item.take() {
-                        commands.entity(item).despawn();
-                    }
+                studio.next += 1;
+                if let Some(item) = studio.item.take() {
+                    commands.entity(item).despawn();
                 }
             },
         );
 }
 
-/// Turns a held look, handle along +Y, so it lies corner to corner, working end up and to
-/// the right, its broad side to the front.
-fn lay_across() -> Quat {
-    Quat::from_rotation_z(-std::f32::consts::FRAC_PI_4)
+/// How to turn a held look, handle along +Y, so it lies corner to corner with its working
+/// end up and to the right and its broad side to the front (+Z): whichever of X and Z it
+/// is thinner along is turned to face the camera.
+fn lay(corners: &[Vec3]) -> Quat {
+    let (low, high) = span(corners);
+    let size = high - low;
+    let broadside = if size.x < size.z {
+        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+    } else {
+        Quat::IDENTITY
+    };
+    Quat::from_rotation_z(-std::f32::consts::FRAC_PI_4) * broadside
 }
 
-/// The camera, square on or from a little above and to the side, looking at the corners'
-/// middle and seeing all of them with a margin, without perspective.
-fn frame(corners: &[Vec3], above: bool) -> (Transform, Projection) {
-    let (low, high) = corners.iter().fold(
+fn span(corners: &[Vec3]) -> (Vec3, Vec3) {
+    corners.iter().fold(
         (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
         |(low, high), corner| (low.min(*corner), high.max(*corner)),
-    );
+    )
+}
+
+/// The camera, from the front and `rise` degrees above, looking at the corners and
+/// seeing all of them with a margin, without perspective.
+fn frame(corners: &[Vec3], rise: f32) -> (Transform, Projection) {
+    let (low, high) = span(corners);
     let middle = (low + high) * 0.5;
-    let (turn, rise) = if above { (30f32, 25f32) } else { (0.0, 0.0) };
-    let (turn, rise) = (turn.to_radians(), rise.to_radians());
-    let out = Vec3::new(
-        libm::sinf(turn) * libm::cosf(rise),
-        libm::sinf(rise),
-        libm::cosf(turn) * libm::cosf(rise),
-    );
+    let rise = rise.to_radians();
+    let out = Vec3::new(0.0, libm::sinf(rise), libm::cosf(rise));
     let mut transform =
         Transform::from_translation(middle + out * 10.0).looking_at(middle, Vec3::Y);
     // Centre the picture on what is seen, not on the box's middle.
@@ -410,7 +359,7 @@ fn frame(corners: &[Vec3], above: bool) -> (Transform, Projection) {
             (left.min(x), most_right.max(x), bottom.min(y), top.max(y));
     }
     transform.translation += right * (left + most_right) * 0.5 + up * (bottom + top) * 0.5;
-    let side = (most_right - left).max(top - bottom).max(0.01) * 1.15;
+    let side = (most_right - left).max(top - bottom).max(0.01) * MARGIN;
     let projection = Projection::Orthographic(OrthographicProjection {
         scaling_mode: ScalingMode::Fixed {
             width: side,
@@ -423,60 +372,19 @@ fn frame(corners: &[Vec3], above: bool) -> (Transform, Projection) {
     (transform, projection)
 }
 
-/// The key light from above, front and left of the camera, and the rim from behind.
-fn lights(
-    style: &Style,
-    camera: &Transform,
-) -> ((Transform, DirectionalLight), (Transform, DirectionalLight)) {
+/// Where a light shines from, by the camera: the sun from above, in front and to the
+/// left; the edge light from behind and to the right.
+fn shining(light: &PictureLight, camera: &Transform) -> Transform {
     let (back, up, right) = (*camera.back(), *camera.up(), *camera.right());
-    let toward = |direction: Vec3| Transform::IDENTITY.looking_to(-direction.normalize(), Vec3::Y);
-    let (key_colour, key_lux, rim_colour) = match style.light {
-        Light::World => (
-            Color::srgb(1.0, 0.87, 0.7),
-            21_000.0,
-            Color::srgb(0.85, 0.92, 1.0),
-        ),
-        Light::Gloom => (
-            Color::srgb(0.62, 0.72, 1.0),
-            9_000.0,
-            Color::srgb(0.75, 0.55, 1.0),
-        ),
+    let from = match light {
+        PictureLight::Sun => back * 0.7 + up * 0.8 - right * 0.6,
+        PictureLight::Edge => -back * 0.9 + up * 0.35 + right * 0.5,
     };
-    let key = DirectionalLight {
-        color: key_colour,
-        illuminance: key_lux,
-        shadow_maps_enabled: true,
-        ..default()
-    };
-    let rim = DirectionalLight {
-        color: rim_colour,
-        illuminance: if style.rim { key_lux * 3.0 } else { 0.0 },
-        ..default()
-    };
-    (
-        (toward(back * 0.7 + up * 0.8 - right * 0.6), key),
-        (toward(-back * 0.9 + up * 0.35 + right * 0.5), rim),
-    )
+    Transform::IDENTITY.looking_to(-from.normalize(), Vec3::Y)
 }
 
-/// Shade lit by the sky: blue in the play scene's world, violet in the gloom.
-fn ambient(light: Light) -> AmbientLight {
-    match light {
-        Light::World => AmbientLight {
-            color: Color::srgb(0.66, 0.76, 1.0),
-            brightness: 1800.0,
-            ..default()
-        },
-        Light::Gloom => AmbientLight {
-            color: Color::srgb(0.55, 0.45, 0.8),
-            brightness: 900.0,
-            ..default()
-        },
-    }
-}
-
-/// Lays the pictures out, a column per entry and a row per style, at each shown size.
-fn save(studio: &Studio, prefix: &Path) {
+/// Lays the pictures out on empty slots, `COLUMNS` across, at each shown size.
+fn save(pictures: &[Vec<u8>], prefix: &Path) {
     for (index, size) in SHOWN.into_iter().enumerate() {
         let path = if index == 0 {
             PathBuf::from(format!("{}.png", prefix.display()))
@@ -485,28 +393,24 @@ fn save(studio: &Studio, prefix: &Path) {
         };
         let gap = (size / 16).max(3) as usize;
         let size = size as usize;
-        let columns = studio.entries.len();
-        let rows = STYLES.len();
+        let columns = COLUMNS.min(pictures.len()).max(1);
+        let rows = pictures.len().div_ceil(columns).max(1);
         let (width, height) = (columns * (size + gap) + gap, rows * (size + gap) + gap);
         let mut rgba: Vec<u8> = (0..width * height).flat_map(|_| bytes(GAP)).collect();
-        for (at, picture) in studio.pictures.iter().enumerate() {
-            let (column, row) = (at / rows, at % rows);
-            let (left, top) = (gap + column * (size + gap), gap + row * (size + gap));
+        for (at, picture) in pictures.iter().enumerate() {
+            let (left, top) = (
+                gap + (at % columns) * (size + gap),
+                gap + (at / columns) * (size + gap),
+            );
             let shrunk = shrink(picture, DRAWN as usize, size);
             for y in 0..size {
-                let behind = if STYLES[row].plate {
-                    let along = y as f32 / size as f32;
-                    std::array::from_fn(|c| PLATE_TOP[c] + (PLATE_BOTTOM[c] - PLATE_TOP[c]) * along)
-                } else {
-                    SLOT
-                };
                 for x in 0..size {
                     let from = (y * size + x) * 4;
                     let alpha = shrunk[from + 3];
                     let to = ((top + y) * width + left + x) * 4;
                     for c in 0..3 {
-                        // The capture's colour is already weighted by its coverage.
-                        let value = shrunk[from + c] + behind[c] * (1.0 - alpha);
+                        // The shrunk colour is already weighted by its coverage.
+                        let value = shrunk[from + c] + SLOT[c] * (1.0 - alpha);
                         rgba[to + c] = (value.clamp(0.0, 1.0) * 255.0) as u8;
                     }
                 }
@@ -585,7 +489,7 @@ mod tests {
     #[test]
     fn a_frame_sees_every_corner() {
         let corners = [Vec3::new(-1.0, -0.2, -0.1), Vec3::new(1.0, 0.2, 0.1)];
-        let (transform, projection) = frame(&corners, true);
+        let (transform, projection) = frame(&corners, WORN_RISE_DEGREES);
         let Projection::Orthographic(projection) = projection else {
             panic!("pictures are drawn without perspective");
         };
@@ -597,5 +501,19 @@ mod tests {
             assert!(offset.dot(*transform.right()).abs() < width * 0.5);
             assert!(offset.dot(*transform.up()).abs() < width * 0.5);
         }
+    }
+
+    #[test]
+    fn a_held_look_lies_broadside_with_its_working_end_up_and_right() {
+        // An axe head thin along X, as the held contract has it (edge toward +Z).
+        let corners = [Vec3::new(-0.01, 0.0, -0.1), Vec3::new(0.01, 0.6, 0.1)];
+        let turn = lay(&corners);
+        let thin = turn * Vec3::X;
+        assert!(
+            thin.z.abs() > 0.99,
+            "its thin side faces the camera: {thin}"
+        );
+        let working_end = turn * Vec3::Y;
+        assert!(working_end.x > 0.6 && working_end.y > 0.6, "{working_end}");
     }
 }

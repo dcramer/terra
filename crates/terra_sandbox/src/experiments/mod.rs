@@ -51,7 +51,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "pictures",
-        about: "A spike for item pictures (D130): every look drawn several ways in the game's light; --sheet <prefix> saves the sheet and exits.",
+        about: "Item pictures in the house style (D130): every look, or --model <path>, drawn as a slot shows it; --sheet <prefix> saves them and exits.",
         add: pictures::plugin,
     },
     Experiment {

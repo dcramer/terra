@@ -48,40 +48,30 @@ Picking something up puts it in the first place it fits, scanning from the top l
 
 ## Item pictures
 
-Every slot that holds an item shows a picture of it: the bar, the backpack, the equipment slots, storage and the station screens. Today they show the item's name. Research in [research/item-icons.md](../research/item-icons.md).
+Every slot that holds an item shows a picture of it: the bar, the backpack, the equipment slots, storage and the station screens. Today they show the item's name. Research in [research/item-icons.md](../research/item-icons.md); how to check or fix one in [the item-pictures playbook](../.claude/skills/item-pictures/SKILL.md).
 
-**How they are made** (D129, Leaning, technical): the game draws each picture from the item's own look, in its tint and state, through one fixed camera and light rig, the first time it is shown, and keeps it. Nobody paints a picture, so a new item, colour or variant has one as soon as it has a look (D127), and the picture is always the real thing (D93). A look can say how it sits in a slot, as it says how it is carried; most need nothing. The workbench can write every item's picture to a sheet to check them.
+**How they are made** (D129, Leaning, technical): the game draws each picture from the item's own look, in its tint and state, through one fixed camera and light rig, the first time it is shown, and keeps it. Nobody paints a picture, so a new item, colour or variant has one as soon as it has a look (D127), and the picture is always the real thing (D93). A look can say how it sits in a slot, as it says how it is carried; none needs to yet.
 
-**What they look like** (D130, Open). The developers said on 2026-10-12 that ideally they match the art style. Drawing them from the looks gives most of that: the same models and painted materials as the world, so when the art direction moves (D14), the pictures move with it. The rest is the rig, which should be the world's own: a warm key light and a cool sky fill (art.md), the same grading and bloom, and no outline, since the world has none. If that does not read at 64 pixels, a stronger rim light comes before an outline. Still for the developers:
+**What they look like** (D130, Decided): the game's art style, by drawing the looks in the world's own light.
 
-1. **Angle**: a three-quarter view from above, or flat side-on, as many survival games lay tools?
-2. **Background**: none, so the slot shows through, or a painted plate in the style behind each?
-3. **Light**: one rig for every picture, or the light of the realm the item comes from?
-4. **Clothing**: drawn as worn with no body in it, folded, or on a mannequin?
+- **Held things** lie corner to corner, square on, broad side to the front, working end up and to the right.
+- **Worn things** face the front, seen from 15 degrees above, as worn, with no body in them.
+- **One rig for every picture**: the play scene's warm sun from above and to the left, its blue shade, and a cool light from behind that picks the shape out of the slot. The play camera's grading. No outline and no background: the slot shows through.
+- **Framed by the look's bounds**, without perspective, with a little room round it.
 
-Every look we have, drawn by the sandbox's `pictures` spike on 2026-10-12, a column per item (eight tools, five worn things, then the coat in two tints and the small pack in one) and a row per way:
+![Every look in the house style, at 128 pixels](images/item-pictures.png)
 
-1. Three-quarter from above, the world's light.
-2. The same with a cool light from behind on the edges.
-3. Square on, with that edge light.
-4. Row 2 on a plate of the sky's colours.
-5. Row 2 in a darker realm's light: a cold moon and violet shade.
+![The same at 64 pixels, the size of a slot](images/item-pictures-64.png)
 
-![Every item drawn five ways, at 128 pixels](images/item-pictures-2026-10-12.png)
+The sandbox's `pictures` experiment draws these; nothing in it is set per item. How it was chosen: on 2026-10-12 every look was drawn five ways, a row each: three-quarter from above; the same with the edge light; square on with it; on a plate of the sky's colours; in a darker realm's light. The last three columns are tinted. The developers ruled out the plate and left the rest to me.
 
-![The same at 64 pixels, the size of a slot](images/item-pictures-64-2026-10-12.png)
+![The five ways compared, a row per way](images/item-pictures-64-2026-10-12.png)
 
-What the sheet shows:
+What that showed, and still holds:
 
-- **Drawing from the looks works.** Pictures come out clear of any background, framed from each look's bounds, and tints apply, with nothing done by hand.
-- **The edge light reads on clothing** and picks out a shape from the slot without an outline. On thin tools it shows little.
-- **Square on fills the slot better** and shows a tool's outline best. From straight in front, a cap shows its inside, so worn things want a little height.
-- **The darker realm's light loses detail** at 64 pixels: the light of the realm an item comes from costs readability.
-- **The plate ties a picture to the world**, but its warm bottom competes with tools of the same colour.
-- **Long, thin things are small in a square**: the bow, the spear, the quiver. Framing each picture to its item's cells (D129) would fix that.
-- **Some items are hard to tell apart**, such as the stone and iron axes. That is their models' colours, not the pictures.
-
-Recommended now: row 3 for tools; for worn things, row 3 raised a little, about 15 degrees. One rig with the world's warm and cool light and the edge light; no background; clothing as worn, with no body in it.
+- **The darker realm's light lost detail** at 64 pixels, so pictures keep one rig whatever realm an item is from.
+- **Long, thin things are small in a square**: the bow, the spear, the quiver. Framing each picture to its item's cells, when the game draws them, fixes that.
+- **Some items are hard to tell apart**, such as the stone and iron axes. That is their models' colours, to fix in the looks, not the pictures.
 
 ## In the game's model
 
