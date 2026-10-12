@@ -1,7 +1,8 @@
 //! Digging (D39, D96): a pickaxe aimed at bare ground digs it. Hold the button, and after
 //! a moment a scoop of ground comes out and the hole shows. What came out is measured by
-//! material: stone and ore become items by the volume dug, the rest of a part kept toward
-//! the next, so nothing dug is lost. Soil and sand give nothing yet.
+//! material, and each material becomes items by the volume dug, as
+//! `assets/data/ground.ron` says (D136), the rest of a part kept toward the next, so nothing
+//! dug is lost. Materials it does not name, such as soil and sand, give nothing yet.
 //!
 //! A tree, a rock or a plant in the way is worked as before (`harvest`); digging is for
 //! when the pickaxe meets the ground itself. Digging works anywhere for now; that the
@@ -18,6 +19,9 @@ use super::{IsLocalPlayer, Player, Stance};
 use crate::planet::MainCamera;
 use crate::planet::Planet;
 use bevy::prelude::*;
+use serde::Deserialize;
+use std::sync::LazyLock;
+use terra_core::MaterialId;
 use terra_core::{Harvested, Operation};
 use terra_voxel::material;
 
@@ -27,11 +31,36 @@ const REACH_M: f32 = 4.0;
 const SCOOP_M: f32 = 0.7;
 /// How long a dig takes with a stone pickaxe at the start, in seconds.
 const DIG_SECONDS: f32 = 0.9;
-/// How much ground makes one item of what it is made of, in cubic metres.
-const PER_ITEM_M3: f32 = 0.4;
+const GROUND: &str = include_str!("../../../../assets/data/ground.ron");
+
+/// What digging one material gives, as `assets/data/ground.ron` has it.
+#[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+struct Yield {
+    material: &'static str,
+    gives: &'static str,
+    per_item_m3: f32,
+}
+
+/// What digging each material gives, built in so every machine has the same (D136).
+static YIELDS: LazyLock<Vec<(MaterialId, Yield)>> = LazyLock::new(|| {
+    let yields: Vec<Yield> =
+        ron::from_str(GROUND).unwrap_or_else(|problem| panic!("assets/data/ground.ron: {problem}"));
+    yields
+        .into_iter()
+        .map(|each| {
+            let material = material::named(each.material).unwrap_or_else(|| {
+                panic!(
+                    "assets/data/ground.ron: there is no material called {}",
+                    each.material
+                )
+            });
+            (material, each)
+        })
+        .collect()
+});
 
 /// Where the pickaxe meets the ground, and how far through digging there it is.
-/// What a player is digging, if anything.
 #[derive(Component, Default)]
 pub struct Digging {
     pub target: Option<Vec3>,
@@ -44,13 +73,10 @@ impl Digging {
     }
 }
 
-/// What has been dug but not yet made an item, by what it is made of.
-/// The loose stone and ore a player has dug that has not yet made a whole one.
+/// What a player has dug but not yet made an item, by what it is made of: cubic metres of
+/// each material that gives anything, in the order `YIELDS` has them.
 #[derive(Component, Default)]
-struct Spoil {
-    stone_m3: f32,
-    ore_m3: f32,
-}
+struct Spoil(Vec<f32>);
 
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Digging>()
@@ -58,10 +84,11 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, dig.after(super::harvest::Harvesting));
 }
 
-/// The items a part of what was dug makes, and what is left toward the next.
-fn items_from(volume_m3: f32) -> (u32, f32) {
-    let items = (volume_m3 / PER_ITEM_M3 + 1e-4).floor();
-    (items as u32, (volume_m3 - items * PER_ITEM_M3).max(0.0))
+/// The items a part of what was dug makes, when so much makes one, and what is left toward
+/// the next.
+fn items_from(volume_m3: f32, per_item_m3: f32) -> (u32, f32) {
+    let items = (volume_m3 / per_item_m3 + 1e-4).floor();
+    (items as u32, (volume_m3 - items * per_item_m3).max(0.0))
 }
 
 fn dig(
@@ -153,20 +180,24 @@ fn dig(
         centre: at - normal * (SCOOP_M * 0.3),
         radius: SCOOP_M,
     });
-    spoil.stone_m3 += taken.amount(Harvested::Material(material::STONE));
-    spoil.ore_m3 += taken.amount(Harvested::Material(material::ORE));
     // What it gives is shown as it comes in (`gains`).
-    let spoil: &mut Spoil = &mut spoil;
-    // What each material of the ground gives (`assets/data/items.ron`).
-    for (gives, kept) in [("Stone", &mut spoil.stone_m3), ("Ore", &mut spoil.ore_m3)] {
-        let (count, rest) = items_from(*kept);
+    spoil.0.resize(YIELDS.len(), 0.0);
+    let mut dug = Vec::new();
+    for ((material, each), kept) in YIELDS.iter().zip(spoil.0.iter_mut()) {
+        let amount = taken.amount(Harvested::Material(*material));
+        dug.push(format!(
+            "{amount:.2} m³ of {}",
+            each.material.to_lowercase()
+        ));
+        *kept += amount;
+        let (count, rest) = items_from(*kept, each.per_item_m3);
         if count == 0 {
             continue;
         }
-        let kind = belongings.items().kind(gives);
+        let kind = belongings.items().kind(each.gives);
         let given = belongings.give(kind, count);
         // What does not fit stays in the spoil, to be taken when there is room.
-        *kept = rest + (count - given) as f32 * PER_ITEM_M3;
+        *kept = rest + (count - given) as f32 * each.per_item_m3;
         if given < count {
             notice.say("Your backpack is full");
         }
@@ -174,10 +205,9 @@ fn dig(
     did.write(Did(Skill::Mining, ONCE));
     belongings.wear_in_hand(1);
     info!(
-        "Dug at {:.1} m: {:.2} m³ of stone, {:.2} m³ of ore, the rest soil.",
+        "Dug at {:.1} m: {}, the rest giving nothing.",
         at.length(),
-        taken.amount(Harvested::Material(material::STONE)),
-        taken.amount(Harvested::Material(material::ORE))
+        dug.join(", ")
     );
 }
 
@@ -188,11 +218,29 @@ mod tests {
 
     #[test]
     fn what_is_dug_makes_items_and_keeps_the_rest() {
-        assert_eq!(items_from(PER_ITEM_M3 * 0.5).0, 0);
-        let (count, rest) = items_from(PER_ITEM_M3 * 2.25);
+        const PER: f32 = 0.4;
+        assert_eq!(items_from(PER * 0.5, PER).0, 0);
+        let (count, rest) = items_from(PER * 2.25, PER);
         assert_eq!(count, 2);
-        assert!((rest - PER_ITEM_M3 * 0.25).abs() < 1e-5);
-        assert_eq!(items_from(PER_ITEM_M3 * 2.0).0, 2);
+        assert!((rest - PER * 0.25).abs() < 1e-5);
+        assert_eq!(items_from(PER * 2.0, PER).0, 2);
+    }
+
+    #[test]
+    fn digging_stone_and_ore_gives_kinds_of_item_there_are() {
+        let items = Items::default();
+        assert!(
+            YIELDS
+                .iter()
+                .any(|(material, _)| *material == material::STONE)
+        );
+        for (_, each) in YIELDS.iter() {
+            assert!(
+                items.find(each.gives).is_some(),
+                "{} is not a kind of item",
+                each.gives
+            );
+        }
     }
 
     #[test]

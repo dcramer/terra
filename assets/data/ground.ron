@@ -1,0 +1,8 @@
+// What digging the ground gives (D39, D45, D136): for each material of the ground that
+// gives anything, the item it makes, and how much of it, in cubic metres, makes one. What
+// does not make a whole one is kept toward the next. Materials not here give nothing yet,
+// such as soil and sand. Materials are named as terra_voxel names them.
+[
+    (material: "Stone", gives: "Stone", per_item_m3: 0.4),
+    (material: "Ore", gives: "Ore", per_item_m3: 0.4),
+]

@@ -23,6 +23,23 @@ pub mod material {
     pub const ORE: MaterialId = MaterialId(3);
     /// The top layer by the sea.
     pub const SAND: MaterialId = MaterialId(4);
+
+    /// Each material, and the name data files know it by.
+    pub const NAMED: [(MaterialId, &str); 5] = [
+        (AIR, "Air"),
+        (SOIL, "Soil"),
+        (STONE, "Stone"),
+        (ORE, "Ore"),
+        (SAND, "Sand"),
+    ];
+
+    /// The material a data file names.
+    pub fn named(name: &str) -> Option<MaterialId> {
+        NAMED
+            .iter()
+            .find(|(_, called)| *called == name)
+            .map(|(material, _)| *material)
+    }
 }
 
 /// The ground at one point.
