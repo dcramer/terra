@@ -104,7 +104,7 @@ As of 2026-10-11.
 | Backpack, equipment, action bar (D84); a belt quiver (D118) | Built; the bar has eight slots. Wear and repair (D99): tools, weapons and leather wear with use and stop working when broken; a line under each icon shows it; opening the station that makes a thing, in your claim, mends it free |
 | One wildlife, hunted for meat and hide | Built: deer, with the bow |
 | One monster, forming where magic pools (D103), holding a prisoner | Built: spiders at a glowing hollow |
-| Combat: melee, a bow, block, dodge, stamina (D97) | Built; hit zones and critical hits (D119) missing |
+| Combat: melee, a bow, block, dodge, stamina (D97) | Built, with hit zones (D119): head, body and legs from each creature's joints, the head worth twice a body; a blow it did not see coming is a critical |
 | One settlement, a request, the prisoner to rescue, who runs the forge (D90, D95) | Built, the village from building parts (D108) |
 | Skills by doing (D88) | Built, archery among them (D117) |
 | Hunger and food, death and the dropped pack (D101) | Built |

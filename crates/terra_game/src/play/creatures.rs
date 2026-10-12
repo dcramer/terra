@@ -63,6 +63,16 @@ pub struct Creature {
 }
 
 impl Creature {
+    /// Whether it has not noticed anyone: resting, grazing or wandering, and unhurt, rather
+    /// than fleeing, chasing or fighting. A blow it does not see coming lands harder (D119).
+    pub fn unaware(&self) -> bool {
+        !self.hurt
+            && matches!(
+                self.state,
+                State::Idle(_) | State::Graze(_) | State::Wander(_)
+            )
+    }
+
     pub fn alive(&self) -> bool {
         !matches!(self.state, State::Dead(_))
     }
@@ -638,6 +648,25 @@ mod tests {
     use super::*;
     use crate::play::test_player;
     use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
+        let mut creature = Creature {
+            species: Species::named("Deer").unwrap(),
+            health: 10.0,
+            state: State::Graze(1.0),
+            home: Vec3::ZERO,
+            facing: Vec3::X,
+            hurt: false,
+            quarry: None,
+        };
+        assert!(creature.unaware());
+        creature.state = State::Flee(2.0);
+        assert!(!creature.unaware());
+        creature.state = State::Idle(1.0);
+        creature.hurt = true;
+        assert!(!creature.unaware());
+    }
 
     fn spider(world: &mut World, at: Vec3) -> Entity {
         world

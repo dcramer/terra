@@ -1,7 +1,8 @@
 //! Showing a blow land (the developers' list for the MVP, prototypes.md).
 //!
 //! A creature struck gives a spray of what is inside it, blood from a deer and pale
-//! ichor from a spider, and its body jerks; a killing blow sprays more. The player
+//! ichor from a spider, and its body jerks; a killing or critical blow (D119) sprays more
+//! and kicks the view harder. The player
 //! struck sees red at the edges of the view and the view shakes. The sounds are
 //! `noises`' job. No numbers float up: what a blow did shows in how the creature acts.
 //!
@@ -152,7 +153,12 @@ fn spray(
             Blood::Red => look.blood.clone(),
             Blood::Ichor => look.ichor.clone(),
         };
-        let count = if blow.killed { KILL_SPARKS } else { SPARKS };
+        // A killing or critical blow throws more, and kicks harder.
+        let count = if blow.killed || blow.critical {
+            KILL_SPARKS
+        } else {
+            SPARKS
+        };
         for _ in 0..count {
             let wild = Vec3::new(
                 scatter(&mut state),
@@ -182,10 +188,15 @@ fn spray(
                 rest: rest.scale,
             });
         }
-        if shake.left <= 0.0 || shake.reach < HIT_SHAKE_M {
+        let kick = if blow.critical {
+            HIT_SHAKE_M * 2.0
+        } else {
+            HIT_SHAKE_M
+        };
+        if shake.left <= 0.0 || shake.reach < kick {
             *shake = Shake {
                 left: SHAKE_S * 0.5,
-                reach: HIT_SHAKE_M,
+                reach: kick,
             };
         }
     }

@@ -13,8 +13,11 @@ use super::creatures::{self, Bitten, Creature, Species};
 use super::inventory::{self, Belongings, Broke, Gear, InventoryScreen, Items};
 use super::kinds::ToolDef;
 use super::skills::{Did, ONCE, Skill, Skills};
+use super::species::Part;
 use super::vitals::Vitals;
+use super::zones::Zones;
 use super::{Downed, IsLocalPlayer, LocalPlayer, Player, Stance, View};
+use crate::planet::MainCamera;
 use bevy::prelude::*;
 
 /// What a swing costs in stamina.
@@ -24,6 +27,32 @@ const SWING_EVERY_S: f32 = 0.65;
 /// How much of a blow a guard takes, and what each guarded blow costs in stamina.
 const GUARDED: f32 = 0.25;
 const GUARD_STAMINA: f32 = 12.0;
+/// How much more a blow does where it lands (D119): a head takes twice a body's, legs a
+/// little over half. Proposed numbers.
+const HEAD: f32 = 2.0;
+const LEGS: f32 = 0.6;
+/// How much more a blow does that its target did not see coming: a critical by timing,
+/// not by dice (D119).
+const AMBUSH: f32 = 1.5;
+
+/// How much a blow on a part counts for.
+fn counts(part: Part) -> f32 {
+    match part {
+        Part::Head => HEAD,
+        Part::Body => 1.0,
+        Part::Legs => LEGS,
+    }
+}
+
+/// A blow, however it was dealt: how hard it would hit a body, where it landed, on what
+/// part, and which skill dealt it.
+#[derive(Clone, Copy, Debug)]
+pub struct Blow {
+    pub damage: f32,
+    pub at: Vec3,
+    pub part: Part,
+    pub skill: Skill,
+}
 
 /// When a player last swung, so another waits its turn and gathering waits for it.
 #[derive(Component)]
@@ -43,6 +72,8 @@ pub struct Struck {
     pub creature: Entity,
     pub species: Species,
     pub at: Vec3,
+    /// A head, or a blow it did not see coming: one that counts for more (D119).
+    pub critical: bool,
     pub killed: bool,
 }
 
@@ -75,6 +106,8 @@ fn swing(
     mut did: MessageWriter<Did>,
     mut struck: MessageWriter<Struck>,
     mut notice: ResMut<Notice>,
+    camera: Single<&GlobalTransform, With<MainCamera>>,
+    zones: Zones,
 ) {
     swung.since += time.delta_secs();
     let (player_at, mut stance, mut vitals, skills, downed) = player.into_inner();
@@ -118,15 +151,27 @@ fn swing(
     swung.since = 0.0;
     stance.since_acting = 0.0;
     stance.attacking = 0.6;
-    // Where the blade meets it: its side toward the player, at about its middle.
-    let at = there + (feet - there).reject_from(up).normalize_or_zero() * 0.3 + up * 0.5;
+    // It lands where the aim is, if that is on it; otherwise on its body, on the side
+    // toward the player.
+    let eye = camera.translation();
+    let ray = eye + *camera.forward() * (eye.distance(there) + reach + 1.0);
+    let (at, part) = match zones.along(entity, eye, ray) {
+        Some((along, part)) => (eye.lerp(ray, along), part),
+        None => (
+            there + (feet - there).reject_from(up).normalize_or_zero() * 0.3 + up * 0.5,
+            Part::Body,
+        ),
+    };
     strike(
         &mut commands,
         entity,
         &mut creature,
-        blow,
-        at,
-        Skill::Fighting,
+        Blow {
+            damage: blow,
+            at,
+            part,
+            skill: Skill::Fighting,
+        },
         &mut did,
         &mut struck,
         &mut notice,
@@ -134,29 +179,38 @@ fn swing(
     belongings.wear_in_hand(1);
 }
 
-/// Lands a blow on a creature at a point on it, however it was dealt: a swing or an arrow,
-/// each growing its own skill. It learns it was hurt, and falls if that was enough.
-#[allow(clippy::too_many_arguments)]
+/// Lands a blow on a creature, however it was dealt: a swing or an arrow, each growing its
+/// own skill. Where it lands, and whether the creature saw it coming, decide how much it
+/// does (D119). It learns it was hurt, and falls if that was enough. Returns how much
+/// the blow did.
 pub fn strike(
     commands: &mut Commands,
     entity: Entity,
     creature: &mut Creature,
-    blow: f32,
-    at: Vec3,
-    skill: Skill,
+    blow: Blow,
     did: &mut MessageWriter<Did>,
     struck: &mut MessageWriter<Struck>,
     notice: &mut Notice,
-) {
-    creature.health -= blow;
+) -> f32 {
+    let ambush = creature.unaware();
+    let dealt = blow.damage * counts(blow.part) * if ambush { AMBUSH } else { 1.0 };
+    creature.health -= dealt;
     creature.hurt = true;
-    did.write(Did(skill, ONCE));
+    did.write(Did(blow.skill, ONCE));
     struck.write(Struck {
         creature: entity,
         species: creature.species,
-        at,
+        at: blow.at,
+        critical: ambush || blow.part == Part::Head,
         killed: creature.health <= 0.0,
     });
+    info!(
+        "Struck a {} in the {}{} for {dealt:.0}.",
+        creature.species,
+        blow.part.name(),
+        if ambush { ", unaware" } else { "" }
+    );
+    let skill = blow.skill;
     if creature.health <= 0.0 {
         creatures::fallen(commands, entity, creature);
         did.write(Did(skill, ONCE * 2.0));
@@ -164,6 +218,7 @@ pub fn strike(
         let name = creature.species.name().to_lowercase();
         notice.say(format!("The {name} falls"));
     }
+    dealt
 }
 
 /// Holding the build menu's button without the hammer in hand guards.

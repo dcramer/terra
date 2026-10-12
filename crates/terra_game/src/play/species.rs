@@ -35,6 +35,38 @@ pub struct SpeciesDef {
     #[serde(default)]
     pub carcass: Option<Carcass>,
     pub lies_s: f32,
+    /// Where on it a blow can land (D119): which of its model's joints are its head, body
+    /// and legs, and how far round each a blow still counts.
+    #[serde(default)]
+    pub zones: Vec<ZoneDef>,
+}
+
+/// Part of a creature a blow can land on, around the model's joints whose names contain
+/// `joint`, out to `radius_m`.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ZoneDef {
+    pub joint: String,
+    pub part: Part,
+    pub radius_m: f32,
+}
+
+/// Where on a creature a blow lands (D119).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Part {
+    Head,
+    Body,
+    Legs,
+}
+
+impl Part {
+    pub fn name(self) -> &'static str {
+        match self {
+            Part::Head => "head",
+            Part::Body => "body",
+            Part::Legs => "legs",
+        }
+    }
 }
 
 /// Its animations, by the names the model gives them.

@@ -23,6 +23,8 @@
 //   blood    what sprays from it when it is struck
 //   carcass  what butchering it takes and gives, if it can be butchered
 //   lies_s   how long its body lies after it falls
+//   zones    where a blow can land (D119): around the model's joints whose names contain
+//            `joint`, out to radius_m; the head takes the most from a blow, the legs least
 [
     (
         name: "Deer",
@@ -47,6 +49,13 @@
         blood: Red,
         carcass: (needs: Flesh, gives: [("Meat", 3), ("Hide", 2)]),
         lies_s: 300.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.13),
+            (joint: "Neck", part: Body, radius_m: 0.12),
+            (joint: "Torso", part: Body, radius_m: 0.26),
+            (joint: "UpperLeg", part: Legs, radius_m: 0.08),
+            (joint: "LowerLeg", part: Legs, radius_m: 0.06),
+        ],
     ),
     (
         name: "Spider",
@@ -78,5 +87,11 @@
         voice: Hiss,
         blood: Ichor,
         lies_s: 8.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.12),
+            (joint: "Thorax", part: Body, radius_m: 0.2),
+            (joint: "Abdomen", part: Body, radius_m: 0.28),
+            (joint: "Leg", part: Legs, radius_m: 0.05),
+        ],
     ),
 ]

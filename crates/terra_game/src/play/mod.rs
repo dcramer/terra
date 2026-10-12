@@ -64,6 +64,7 @@ mod vitals;
 mod wear;
 mod work;
 mod worn;
+mod zones;
 
 use super::build::{self, DrivenByPlayer, Site};
 use crate::planet::MainCamera;
@@ -204,6 +205,7 @@ pub fn plugin(app: &mut App) {
     daylight::plugin(app);
     torchlight::plugin(app);
     wear::plugin(app);
+    zones::plugin(app);
     flora::plugin(app);
     props::plugin(app);
     figure::plugin(app);

@@ -9,13 +9,15 @@
 
 use super::bag::Notice;
 use super::bodies::Body;
-use super::combat::{Struck, strike};
+use super::combat::{Blow, Struck, strike};
 use super::controls::{Action, Controls};
 use super::creatures::Creature;
 use super::inventory::{Belongings, InventoryScreen};
 use super::models::bake;
 use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
+use super::species::Part;
+use super::zones::Zones;
 use super::{Downed, IsLocalPlayer, Player, Stance, View};
 use crate::build::Site;
 use crate::planet::MainCamera;
@@ -205,6 +207,7 @@ fn fly(
     mut did: MessageWriter<Did>,
     mut struck: MessageWriter<Struck>,
     mut notice: ResMut<Notice>,
+    zones: Zones,
 ) {
     let dt = time.delta_secs().min(0.05);
     for (entity, mut arrow, mut transform) in &mut arrows {
@@ -236,19 +239,31 @@ fn fly(
             .min_by(|a, b| a.0.total_cmp(&b.0));
         if let Some((_, hit_entity, mut creature)) = hit {
             let speed = arrow.velocity.length() / FULL_SPEED;
-            let blow = arrow.damage * speed.min(1.0) * skills.speed(Skill::Archery);
-            strike(
+            let damage = arrow.damage * speed.min(1.0) * skills.speed(Skill::Archery);
+            // The zone it passed through first; one that only grazed them all, the body.
+            let (at, part) = match zones.along(hit_entity, from, to) {
+                Some((along, part)) => (from.lerp(to, along), part),
+                None => (to, Part::Body),
+            };
+            let dealt = strike(
                 &mut commands,
                 hit_entity,
                 &mut creature,
-                blow,
-                to,
-                Skill::Archery,
+                Blow {
+                    damage,
+                    at,
+                    part,
+                    skill: Skill::Archery,
+                },
                 &mut did,
                 &mut struck,
                 &mut notice,
             );
-            info!("An arrow hit a {} for {blow:.0}.", creature.species);
+            info!(
+                "An arrow hit a {} in the {} for {dealt:.0}.",
+                creature.species,
+                part.name()
+            );
             if !creature.alive()
                 && let Ok((.., at, _)) = creatures.get(hit_entity)
             {
