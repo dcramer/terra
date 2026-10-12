@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { page, split, stack } from "./page.js";
+import { ledger, page, stack } from "./page.js";
 
 const day = (d, claude, tripo) => ({
   day: d, input: 0, output: 10, cache_read: 0, cache_write: 0, messages: 1, total: 10,
@@ -18,17 +18,28 @@ const summary = {
   users: [person("ana", 30, 2), person("ben", 5, 0)],
 };
 
-test("splits a total between Claude and Tripo", () => {
-  const html = split(summary.totals);
-  assert.match(html, /data-key="claude_cost"[^>]*>\$30\.00<\/b> Claude/);
-  assert.match(html, /data-key="tripo_cost"[^>]*>\$2\.00<\/b> Tripo/);
-  assert.match(html, /data-key="tripo_credits"[^>]*>300<\/span> credits/);
+test("breaks a total down into Claude, with its tokens, and Tripo, with its credits", () => {
+  const html = ledger(summary.users[0], summary.users[0].models);
+  assert.match(html, /Claude <small><span title="\$30\.00 at API prices">opus-5-5<\/span><\/small>/);
+  assert.match(html, /data-key="claude_cost"[^>]*>\$30\.00<\/b>/);
+  assert.match(html, /data-key="output"[^>]*>10<\/b> output tokens/);
+  assert.match(html, /data-key="messages"[^>]*>1<\/b> messages/);
+  assert.match(html, /Tripo <small><span title="300 credits, \$2\.00">studio<\/span><\/small>/);
+  assert.match(html, /data-key="tripo_cost"[^>]*>\$2\.00<\/b>/);
+  assert.match(html, /data-key="tripo_credits"[^>]*>300<\/b> credits/);
 });
 
-test("shows the split under the total and on everyone", () => {
+test("leaves Tripo out of a total that has none", () => {
+  const html = ledger(summary.users[1], summary.users[1].models);
+  assert.match(html, /class="line claude"/);
+  assert.doesNotMatch(html, /class="line tripo"/);
+});
+
+test("breaks down the total and everyone's, and records the layout", () => {
   const html = page(summary);
-  assert.equal(html.match(/class="split"/g).length, 3);
-  assert.match(html, /<span class="tripo" title="300 credits, \$2\.00">tripo-studio<\/span>/);
+  assert.equal(html.match(/class="ledger"/g).length, 3);
+  assert.equal(html.match(/class="line tripo"/g).length, 2);
+  assert.match(html, /<main data-shape="\+ 2026-10-10 ana\+ ben">/);
 });
 
 test("stacks Tripo's cost on Claude's in a day's bar, rounding only the top", () => {

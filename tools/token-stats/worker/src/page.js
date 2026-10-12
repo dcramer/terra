@@ -5,6 +5,7 @@ export function page(summary) {
   const { totals, users, days } = summary;
   const peak = Math.max(0.01, ...users.flatMap((u) => u.daily.map((d) => d.cost)));
   const cards = users.map((u) => card(u, peak, days)).join("");
+  const models = merge(users.flatMap((u) => u.models));
   const empty = users.length === 0 ? `<p class="empty">Nothing reported yet.</p>` : "";
 
   return `<!doctype html>
@@ -25,12 +26,11 @@ export function page(summary) {
     <p>What building it has cost</p>
   </div>
 </header>
-<main>
+<main data-shape="${esc(shape(summary))}">
   <section class="hero" aria-label="Everyone">
     <div class="big"${num(totals.cost, "cost", "usd")}>${money(totals.cost)}</div>
     <div class="label">at list prices, across ${users.length} ${users.length === 1 ? "person" : "people"}</div>
-    ${split(totals)}
-    ${facts(totals)}
+    ${ledger(totals, models)}
   </section>
   ${empty}
   <section class="people" aria-label="Per person">${cards}</section>
@@ -47,19 +47,16 @@ export function page(summary) {
 
 function card(u, peak, days) {
   const bars = u.daily.map((d) => `<div class="day"${tip(d)}>${stack(d, peak)}</div>`).join("");
-  const models = u.models.map((m) => `<span${m.credits === undefined ? "" : ` class="tripo"`} title="${spent(m)}">${esc(m.model)}</span>`).join("");
   return `<article class="person" data-user="${esc(u.user)}">
   <div class="head">
     <h2>${esc(u.user)}</h2>
     <div class="total"${num(u.cost, "cost", "usd")}>${money(u.cost)}</div>
   </div>
-  ${split(u)}
-  ${facts(u)}
+  ${ledger(u, u.models)}
   <figure>
     <div class="chart" role="img" aria-label="Cost per day for ${esc(u.user)} over the last ${days} days">${bars}</div>
     <figcaption><span>${u.daily[0].day.slice(5)}</span><span>cost a day, last ${days} days</span><span>${u.daily.at(-1).day.slice(5)}</span></figcaption>
   </figure>
-  <div class="models">${models}</div>
 </article>`;
 }
 
@@ -76,9 +73,28 @@ function tip(d) {
   return ` data-day="${d.day}" data-cost="${money(d.cost)}" data-claude="${money(d.claude_cost)}" data-tripo="${money(d.tripo_cost)}" data-credits="${full(d.tripo_credits)}" data-output="${full(d.output)}" data-messages="${d.messages}"`;
 }
 
-// Claude's share of the cost and Tripo's, each a counter that rolls on its own.
-export function split(t) {
-  return `<div class="split"><span class="claude"><b${num(t.claude_cost, "claude_cost", "usd")}>${money(t.claude_cost)}</b> Claude</span><span class="tripo"><b${num(t.tripo_cost, "tripo_cost", "usd")}>${money(t.tripo_cost)}</b> Tripo · <span${num(t.tripo_credits, "tripo_credits")}>${compact(t.tripo_credits)}</span> credits</span></div>`;
+// A total broken down by service, one line each: what it cost, what it was spent in,
+// and the models or plans behind it. Claude's tokens leave out cache reads: the same
+// context read again each turn, which is most of the count and little of the cost.
+// A service nobody used is left out.
+export function ledger(t, models) {
+  const claude = models.filter((m) => m.credits === undefined);
+  const tripo = models.filter((m) => m.credits !== undefined);
+  const n = (key, label) => `<span><b${num(value(t, key), key)}>${compact(value(t, key))}</b> ${label}</span>`;
+  const rows = [
+    line("claude", "Claude", t.claude_cost, claude, [n("output", "output tokens"), n("new_input", "input"), n("messages", "messages")]),
+  ];
+  if (hasTripo(t)) rows.push(line("tripo", "Tripo", t.tripo_cost, tripo, [n("tripo_credits", "credits")]));
+  return `<div class="ledger">${rows.join("")}</div>`;
+}
+
+function line(cls, name, cost, models, facts) {
+  const via = models.map((m) => `<span title="${spent(m)}">${esc(m.model.replace(/^(claude|tripo)-/, ""))}</span>`).join(", ");
+  return `<div class="line ${cls}">
+    <div class="name">${name}${via ? ` <small>${via}</small>` : ""}</div>
+    <div class="cost"><b${num(cost, `${cls}_cost`, "usd")}>${money(cost)}</b></div>
+    <div class="detail">${facts.join(" · ")}</div>
+  </div>`;
 }
 
 // What a model's tokens or a service's credits cost.
@@ -86,11 +102,25 @@ function spent(m) {
   return m.credits === undefined ? `${money(m.cost)} at API prices` : `${full(m.credits)} credits, ${money(m.cost)}`;
 }
 
-// Tokens written and read fresh, leaving out cache reads: the same context read again
-// each turn, which is most of the count and little of the cost.
-function facts(t) {
-  const item = (label, key) => `<div><dt>${label}</dt><dd${num(value(t, key), key)}>${compact(value(t, key))}</dd></div>`;
-  return `<dl class="facts">${item("output tokens", "output")}${item("input tokens", "new_input")}${item("messages", "messages")}</dl>`;
+// Everyone's models as one list, adding up what each cost.
+function merge(models) {
+  const by = new Map();
+  for (const m of models) {
+    const was = by.get(m.model);
+    by.set(m.model, was ? { ...was, cost: was.cost + m.cost, credits: m.credits === undefined ? undefined : was.credits + m.credits } : m);
+  }
+  return [...by.values()].sort((a, b) => b.cost - a.cost);
+}
+
+function hasTripo(t) {
+  return t.tripo_cost > 0 || t.tripo_credits > 0;
+}
+
+// What decides the page's layout: who is on it, who has a Tripo line, and the first
+// day charted. When a check of /json finds this changed, the page is drawn again.
+function shape(s) {
+  const people = s.users.map((u) => `${u.user}${hasTripo(u) ? "+" : ""}`).sort();
+  return [hasTripo(s.totals) ? "+" : "", s.users[0]?.daily[0]?.day ?? "", ...people].join(" ");
 }
 
 // A field of a /json row; `new_input` is input not read from the cache.
@@ -222,17 +252,13 @@ main { max-width: 960px; margin: 0 auto; padding: 24px 16px 8px; }
 .big { font-size: clamp(48px, 10vw, 84px); font-weight: 600; line-height: 1;
   font-variant-numeric: tabular-nums; }
 .label { color: var(--muted); margin-top: 6px; }
-.hero .facts { justify-content: center; margin-top: 16px; }
-.facts { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; }
-.facts div { display: flex; gap: 6px; align-items: baseline; }
-.facts dt { color: var(--muted); font-size: 13px; }
-.facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
-.person { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 14px; }
-.head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.person { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 14px; padding: 18px 20px 16px; }
+.head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 h2 { margin: 0; font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
 .total { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
-figure { margin: 16px 0 0; }
+figure { margin: auto 0 0; padding-top: 16px; }
 .chart { display: flex; align-items: flex-end; gap: 2px; height: 84px; border-bottom: 1px solid var(--line); }
 .day { flex: 1; height: 100%; display: flex; align-items: flex-end; cursor: default; }
 .day { flex-direction: column-reverse; align-items: stretch; justify-content: flex-start; }
@@ -241,21 +267,25 @@ figure { margin: 16px 0 0; }
 .day i.tripo { background: var(--tripo); }
 .day:hover i.claude, .day.on i.claude { background: var(--bar-hover); }
 .day:hover i.tripo, .day.on i.tripo { background: var(--tripo-hover); }
-.split { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 2px 0 10px; color: var(--muted); font-size: 14px; }
-.hero .split { justify-content: center; margin-top: 12px; font-size: 16px; }
-.split > span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
-.split .claude::before { background: var(--bar); }
-.split .tripo::before { background: var(--tripo); }
-.split b { color: var(--ink); font-weight: 600; }
-.models span.tripo { color: var(--tripo); border-color: var(--tripo); }
-.split b, .split span span { position: relative; display: inline-block; font-variant-numeric: tabular-nums; }
+.ledger { margin: 0; }
+.hero .ledger { max-width: 480px; margin: 28px auto 0; text-align: left; }
+.line { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 10px 0; }
+.line + .line { border-top: 1px solid var(--line); }
+.name { font-weight: 600; }
+.name::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; }
+.claude .name::before { background: var(--bar); }
+.tripo .name::before { background: var(--tripo); }
+.name small { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 4px; }
+.line .cost { font-weight: 600; text-align: right; }
+.detail { grid-column: 1 / -1; padding-left: 18px; color: var(--muted); font-size: 13px; }
+.detail b { color: var(--ink); font-weight: 600; }
+.detail > span { white-space: nowrap; }
+.line b { position: relative; display: inline-block; font-variant-numeric: tabular-nums; }
 figcaption { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 4px; }
-.models { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-.models span { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
 .empty { text-align: center; color: var(--muted); }
 footer { max-width: 960px; margin: 0 auto; padding: 24px 16px 40px; color: var(--muted); font-size: 13px; text-align: center; }
 footer a { color: inherit; }
-.big, .total, .facts dd { position: relative; display: inline-block; }
+.big, .total { position: relative; display: inline-block; }
 .counting { color: var(--count); }
 .landed { animation: land 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes land {
@@ -289,7 +319,8 @@ let on = null;
 function show(day, x, y) {
   if (on !== day) { on?.classList.remove("on"); on = day; day.classList.add("on"); }
   const d = day.dataset;
-  tip.innerHTML = "<b>" + d.day + "</b> · " + d.cost + " at list prices<br>Claude " + d.claude + " · " + d.output + " output tokens · " + d.messages + " messages<br>Tripo " + d.tripo + " · " + d.credits + " credits";
+  tip.innerHTML = "<b>" + d.day + "</b> · " + d.cost + " at list prices<br>Claude " + d.claude + " · " + d.output + " output tokens · " + d.messages + " messages"
+    + (d.credits === "0" ? "" : "<br>Tripo " + d.tripo + " · " + d.credits + " credits");
   tip.hidden = false;
   const w = tip.offsetWidth;
   tip.style.left = Math.min(window.innerWidth - w - 8, Math.max(8, x - w / 2)) + "px";
@@ -307,6 +338,8 @@ document.addEventListener("pointerleave", hide);
 ${compact}
 ${money}
 ${value}
+${hasTripo}
+${shape}
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const fmt = (n) => n.toLocaleString("en-US");
 const ease = (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
@@ -381,13 +414,9 @@ async function refresh() {
     if (!r.ok) return;
     s = await r.json();
   } catch { return; } finally { busy = false; }
+  // A new person, a new day or someone's first Tripo credits change the layout; draw the page again.
+  if (shape(s) !== document.querySelector("main").dataset.shape) return location.reload();
   const cards = [...document.querySelectorAll(".person")];
-  const names = cards.map((c) => c.dataset.user).sort().join();
-  const firstDay = cards[0]?.querySelector(".day")?.dataset.day;
-  // A new person or a new day changes the layout; draw the page again.
-  if (names !== s.users.map((u) => u.user).sort().join() || (s.users[0] && s.users[0].daily[0].day !== firstDay)) {
-    return location.reload();
-  }
   document.getElementById("updated").textContent = s.generated_at.slice(0, 16).replace("T", " ");
   update(document.querySelector(".hero"), s.totals);
   const peak = Math.max(0.01, ...s.users.flatMap((u) => u.daily.map((d) => d.cost)));
