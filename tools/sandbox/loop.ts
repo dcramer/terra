@@ -241,8 +241,12 @@ async function play() {
 
 try {
   await play();
-} catch {
-  // Said by the step that failed.
+} catch (error) {
+  // A failed step has said so; anything else, such as the game not starting, has not.
+  if (!(error instanceof Done) && !failed) {
+    console.log(`FAIL  ${(error as Error).message} (see shots/remote.log)`);
+    failed = true;
+  }
 } finally {
   await game.stop().catch(() => {});
 }
