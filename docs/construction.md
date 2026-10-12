@@ -204,7 +204,7 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 - **Drawing on from a wall's end continues it**, and closing a loop of walls offers to make it a room.
 - **A plain click lays the variant's own size**, as now: a 4.5 metre wall, a 3 by 3 metre room.
 
-**Walls, not rooms** (D152, Leaning). The developers, 2026-10-12: "maybe we should get rid of 'rooms' and only allow walls? … a room should be N walls anyways, it's a shortcut … it's weird to place blueprints of rooms". Proposed:
+**Walls, not rooms** (D152, Decided). The developers, 2026-10-12: "maybe we should get rid of 'rooms' and only allow walls? … a room should be N walls anyways, it's a shortcut … it's weird to place blueprints of rooms". Then: "blueprints need to be fundamentally walls/floors/roofs, and you build up piece by piece instead of prebuilt. it just feels better". How placing them works is [the next question](#enshrouded-or-subnautica-how-placing-works) (D154). Proposed:
 
 - **The parts are walls, floors and roofs**, and later foundations and stairs. A room is not a thing that is built; it is what walls, a floor and a roof enclose.
 - **The room in the build menu is a shortcut**: a rectangle drawn with it lays its walls and its floor as plans, each its own, as if drawn one by one. Closing a loop of walls drawn by hand offers the same floor.
@@ -297,19 +297,33 @@ The baseline catalogue. Everything is an entry in a list (D56), drawn by what it
 
 None in the MVP, and wanted later (D142). Rust, Valheim and Sons of the Forest make structures hold themselves up; Enshrouded and Subnautica do not; Ark does but hides its rules, which players complain about. When it comes: shown only while building, as Valheim's colours; a part that holds others up cannot be taken out from under them, as Sons of the Forest's; and constructing in order (floor, walls, roof) already reads as physical without it.
 
-## Enshrouded as the base?
+## Enshrouded or Subnautica: how placing works
 
-From the developers, 2026-10-11: Enshrouded's building might be the better base concept than Subnautica 2's. Later the same day they settled the basis (D48): **a voxel grid, as Enshrouded's**. "Subnautica 2 is just easier, but as long as the basis is almost like this voxel grid we could have flexibility in time." So shaped rooms come first, as the easy way in, written as blocks on the grid.
+Open (D154). The developers, 2026-10-12, with walls, floors and roofs settled as the parts (D152): "the only question we have is how it should work. like enshrouded style, or subnautica style. i do like enshroudeds flexibility to design something truly interesting/unique/beautiful but i will admit its also a little overwhelming".
 
-What Enshrouded's does, from [research/enshrouded.md](../research/enshrouded.md): buildings of small voxel blocks in a material, placed one at a time or as ready-made pieces; pieces join seamlessly and materials blend where they meet; cutting an opening styles its edges; the ground can be dug, filled and flattened; you build only within an altar's radius.
+Earlier, on 2026-10-11: Enshrouded's building might be the better base concept than Subnautica 2's, and the basis was settled (D48): **a voxel grid, as Enshrouded's**. "Subnautica 2 is just easier, but as long as the basis is almost like this voxel grid we could have flexibility in time." What Enshrouded's does, from [research/enshrouded.md](../research/enshrouded.md): buildings of small voxel blocks in a material, placed one at a time or as ready-made pieces; pieces join seamlessly and materials blend where they meet; cutting an opening styles its edges; the ground can be dug, filled and flattened; you build only within an altar's radius.
 
-| | Shaped rooms (Subnautica 2) | Voxel blocks (Enshrouded) |
+| | Subnautica 2 | Enshrouded |
 |---|---|---|
-| What you place | A room, a wall, an opening | A block, or a ready-made piece of many blocks |
-| Freedom | Boxes on a grid, resized | Any shape, down to one block |
-| Speed for big things | Fast: a room in one go | Slower, unless ready-made pieces are used |
-| Details that suit their neighbours | Written per part | Natural: blocks join and blend |
-| A new material or shape | New code per kind of part | A new kind of block, or a new piece |
+| What you place | Fixed modules that snap together | Blocks and ready-made pieces, in any shape |
+| Freedom | Little: the modules' shapes | Any shape, down to one block |
+| Speed for big things | Fast | Slower, unless ready-made pieces are used |
+| What makes it look good | The modules' design | The player's skill and time |
+| Learning it | Minutes | Long; many shapes, and roofs by hand |
+
+**Why Enshrouded's overwhelms**, as far as we can tell: the player makes every detail by hand, from many shapes; roofs are built a piece at a time; nothing helps a beginner's house look good. Its freedom is in the shape of the building; its effort is in the detail.
+
+**Proposed: the freedom of the one, the ease of the other.** Freedom in what matters to a design, the system doing the detail:
+
+1. **Few kinds of part**: wall, floor, roof, stairs, foundation, openings. Not hundreds of shapes in the menu.
+2. **Any size and layout**: each drawn on the half-metre grid (D57) at any length, on any storey, at any height (a half wall, a parapet, a tall hall), so the shape of a building is the player's own.
+3. **The system does the detail**: corners, trims and edges by what a piece is next to (D56); each kind of construction laying its own pieces so a wall looks built (D146); a roof laid over what is enclosed, in a style and pitch chosen (gable, hip, flat, lean-to), its parts worked out. A first house looks good without skill.
+4. **Depth comes with progress**: arches, round and diagonal walls, carving (D146), new materials and decoration are found and learned (D68), as Terraria's are (D85), so the menu grows with the player instead of starting full.
+5. **Shortcuts for big things**: a room drawn as a rectangle (D152); later, a building saved as a design and laid again as a plan.
+
+The Sims' build mode is the nearest precedent for this: walls drawn by dragging, a room tool, roofs laid over walls; many players make striking houses with it without being builders.
+
+The other two: **Subnautica's**, fixed modules, is easiest but gives up the unique buildings the developers want. **Enshrouded's** whole, every block by hand, is the most free and the overwhelm they named; its blocks stay possible later as a kind of construction for those who want them (D146).
 
 **Where we improve on it**, agreed by the developers on 2026-10-11: shape rooms, then carve them; bases that matter, held, defended and lived in (D90); built on a round world, each base on its own square grid (D57); building together (D52); strength, perhaps.
 
@@ -393,7 +407,7 @@ For the developers to reorder. Each step is small enough to play and judge.
 
 For the developers. Each has my recommendation.
 
-Raised on 2026-10-12, Leaning: walls, floors and roofs instead of rooms, a room being a shortcut that lays them (D152).
+Answered on 2026-10-12: blueprints are walls, floors and roofs, built up piece by piece, not rooms (D152). Open: how placing works, Enshrouded's way or Subnautica's; proposed, a middle way ([above](#enshrouded-or-subnautica-how-placing-works), D154).
 
 Answered on 2026-10-12: structures are planned, then constructed, a blueprint showing its parts, which can be small and depend on the kind of construction (D139); big materials are carried, with better transport later (D140); building draws on storage, with special storage for big materials later (D141); no stability in the MVP, but later (D142); rooms can be underground (D143). A kind's pieces are kit models, parts of the blueprint, not made first and placed; walls in four directions for now; carving later (D146).
 
