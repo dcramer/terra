@@ -33,7 +33,7 @@ This overview gives the idea, what drives the world, and the principles. Each sy
 
 | System | Proposal | In short |
 |---|---|---|
-| Combat | [combat.md](combat.md) | Real time, on stamina, after Enshrouded; weapons as skills by doing; abilities from essences; rank decides more than skill |
+| Combat | [combat.md](combat.md) | A fast-paced action RPG with Enshrouded as the baseline (D180), on stamina; weapons as skills by doing; abilities from essences; rank decides more than skill |
 | Creatures | [creatures.md](creatures.md) | Wildlife with routines and a food chain; monsters that form where magic pools, kinds made by rule |
 | Magic | [magic.md](magic.md) | Open (D163): core essences, awakening as a weighted draw of generated powers, combat styles and crafts from skill books, old-school spellcraft |
 | Essences, abilities and ranks | [essences.md](essences.md) | After the books: a few essences and a confluence, abilities that improve by use, ranks as the spine |
@@ -197,7 +197,7 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 1. Answered in part: **the premise.** Not C; A and B are interesting. Both, or one?
 2. Answered: **monsters form where magic pools**, and there is ordinary wildlife besides (D103). Raids on claims are not a concern for now.
 3. **How much story?** Hand-written quests and characters, or only what comes out of the world's systems?
-4. **Combat.** As central as Enshrouded's, or one way among several to deal with things?
+4. Answered: **combat** is important (D97), and Enshrouded is its baseline, a fast-paced action RPG (D180).
 5. **Essences.** Take the books' system closely (a few essences, a confluence, abilities that rank up), or loosely?
 6. **Ranks.** For players only, or for monsters, places and portals too?
 7. **Settlements.** Can they be overrun and lost? Can players found them? Bases and outposts are part of survival (D90); is an outpost with recruits living in it a settlement?
