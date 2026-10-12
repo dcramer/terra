@@ -4,7 +4,7 @@
 #   tools/characters/make_character.sh NAME SHEET.png HEIGHT
 #
 # SHEET is an approved design sheet in a T-pose (front view on the left third). Steps:
-#   1. crop the front view, make a textured model on Studio (about 25 credits)
+#   1. crop the front view, make a textured model on Studio (about 55 credits)
 #   2. rig it with Tripo's auto-rig on Studio (about 20 credits)
 #   3. the rest, free, with finish_character.sh: convert the rig onto our skeleton, check
 #      it, render it moving, and export it as the game loads it

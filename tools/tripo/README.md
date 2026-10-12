@@ -29,27 +29,43 @@ Every command that makes or changes a model prints one line of JSON with the `pr
 |---|---|---|
 | `balance` | Credits left | |
 | `list` | Your projects, newest first | |
-| `show PROJECT` | What has been done to a project: textured, rigged, its animations | |
-| `image PROMPT [--ref IMG …]` | Images from a prompt, optionally like up to ten reference images. `--t-pose` for a figure to rig, `--count`, `--aspect`, `--4k`, `--model` | free (100 a month), then 10 |
-| `views IMAGE` | Front, left, back and right views of the subject, for `model --views` | up to 20 |
-| `model IMAGE` | A model from one image | 25 (H3.1, textured) |
-| `model --text PROMPT` | A model from a prompt | 25 |
-| `model --views F L B R` | A model from views; `-` for a missing one, front and one more needed | 25; 45 with `--model p1` |
+| `show PROJECT` | What has been done to a project: textured, rigged, its animations, and its steps, newest first | |
+| `image PROMPT [--ref IMG …]` | Images from a prompt, optionally like up to ten reference images. `--t-pose` for a figure to rig, `--count`, `--aspect` (with references, theirs unless given), `--4k`, `--model` (default `nano-banana-2`, as the app's) | free (100 a month), then 10 to 20 by model |
+| `views IMAGE` | Front, left, back and right views of the subject, for `model --views` | 20 in the app, 0 from the CLI |
+| `model IMAGE` | A model from one image | 55 by default; 25 with `--geometry standard --texture-quality standard --no-pbr` |
+| `model --text PROMPT` | A model from a prompt | as above |
+| `model --views F L B R` | A model from views; `-` for a missing one, front and one more needed | as above |
 | `import FILE` | Brings in our own GLB, FBX, OBJ or STL to work on | free |
-| `texture PROJECT --image IMG \| --views F L B R \| --prompt TEXT` | Textures a model; `--quality standard\|detailed\|extreme` is 2K, 4K or 8K | 10 |
-| `upscale PROJECT [--8k]` | Raises the texture to 4K or 8K | 10 |
+| `texture PROJECT --image IMG \| --views F L B R \| --prompt TEXT` | Textures a model; `--quality standard\|detailed\|extreme` is 2K, 4K (default) or 8K | 20 (10 at 2K) |
+| `upscale PROJECT [--8k]` | Raises the texture to 4K or 8K | 10, 20 for 8K |
 | `pbr PROJECT` | Adds normal, roughness and metallic maps | 5 |
-| `retopo PROJECT --faces N [--quad]` | Rebuilds the mesh at a face budget | 5 |
+| `retopo PROJECT [--faces 10000] [--no-quad]` | Rebuilds the mesh at a face budget, in quads unless `--no-quad` | 10 (5 in triangles) |
 | `segment PROJECT` | Splits the model into parts | 40 |
 | `fill PROJECT [--ai]` | Closes the holes segmenting leaves, or rebuilds hidden parts | free |
 | `uv PROJECT` | Unwraps the UVs again (Smart UV) | 20 (free during a trial) |
-| `rig PROJECT [--skeleton …]` | Auto-rig, with fingers, by Tripo's current (V3) rigger. `unreal` (default), `mixamo` (65 joints), `actorcore`, `unity` and `vrm` name the bones for that target; `tripo` is Tripo's older V1 rig (78 joints, `BoneRoot`, `Hip`, `L_Thigh`…). Only `unreal` weights its twist bones (upper arm, forearm, thigh, calf); V1's and `actorcore`'s twist and share bones move nothing, and `mixamo` and `unity` have none on the limbs | 20 |
-| `animate PROJECT NAME … [--prompt TEXT]` | Puts preset animations (`walk`, `run`, `idle`, `jump`, …) or ones made from a description on a rigged model, and exports them in one GLB or FBX | presets free, `--prompt` 20 |
-| `export PROJECT --format glb\|fbx\|obj\|stl\|usdz\|3mf` | Exports in a format; `--animations` to include animations, `--texture-size`. OBJ comes zipped with its textures | free |
+| `edit PROJECT --box X0,Y0,Z0,X1,Y1,Z1` | Remakes what is inside a box on an untextured P2 Smart Mesh (Mesh Edit); the box is in the model's coordinates as `download` gives them, each -1 to 1 | 50 |
+| `rig PROJECT [--skeleton …] [--type humanoid\|other]` | Auto-rig, with fingers; see Rigs below | 20 |
+| `animate PROJECT NAME … [--prompt TEXT]` | Puts preset animations (`walk`, `run`, `idle`, `jump`, …) or ones made from a description (humanoids only) on a rigged model, and exports them in one GLB or FBX | presets free, `--prompt` 20 |
+| `unanimate PROJECT NAME …` | Removes animations from a rigged model | free |
+| `export PROJECT --format glb\|fbx\|obj\|stl\|usdz\|3mf` | Exports in a format; `--animations` to include animations, `--texture-size` (default the model's own). OBJ comes zipped with its textures | free |
 | `download PROJECT` | The model as Studio stores it | free |
+| `cancel PROJECT` | Cancels the operation running on a project | |
+| `restore PROJECT OPERATOR` | Rolls a project back to an earlier step, from `show`'s steps | free |
+| `fork PROJECT [OPERATOR]` | Copies a project, at its latest step or an earlier one, into a new project | 5 by the app's price list |
+| `rename PROJECT NAME` | Renames a project | free |
 | `report [--all]` | Notes the account's spending for the token stats; every command does this too | |
 
-`model` options: `--model` picks the generator: `h3.1` (the default, the best quality), `h3.0`, `h2.5`, or Smart Mesh `p1` and `p2`, which make cleaner low-poly meshes and are textured in a second step, about 45 credits in all. `--faces` (default 10,000), `--quad`, `--no-texture`, `--detailed` (finer geometry and a 4K texture, more credits), `--pbr`, `--parts`, `--public`.
+Credits are from Tripo's price list in the app's own code, checked against the wallet where a run says so; Tripo can change them.
+
+`model` options, defaulting to what the app does: `--model` picks the generator: `h3.1` (the default, the best quality), `h3.0`, `h2.5`, or Smart Mesh `p1` (35) and `p2` (100), which make cleaner low-poly meshes and are textured in a second step as the app does (20 more). `--geometry detailed` (h3.1), `--texture-quality detailed` (4K) and `--pbr` are on unless turned down (`--geometry standard`, `--texture-quality standard`, `--no-pbr`). `--faces` (10,000, or 5,000 for Smart Mesh), `--quad` (on for p2; `--no-quad`), `--no-texture`, `--parts`, `--variations 2|4` (p2: several models from one input, each its own project), `--public`.
+
+Where the CLI's defaults differ from the app's, on purpose: a model's face limit is 10,000 where the app's is one or two million, since our models go in a game; `image` makes one image where the app makes four; `export` gives GLB where the app offers FBX for a quad model; `rig` names its bones for `unreal` where the app picks `mixamo`.
+
+## Rigs
+
+The app's Auto Rig is Tripo's V3 rig, and `rig` sends what it does. A humanoid (`--type humanoid`, the default) is rigged as a biped with its bones named for `--skeleton`: `unreal` (default), `mixamo` (65 joints), `actorcore`, `unity` or `vrm`. Only `unreal` weights its twist bones (upper arm, forearm, thigh, calf); `actorcore`'s twist and share bones move nothing, and `mixamo` and `unity` have none on the limbs (checked on our base body, 2026-10-12). When Tripo's check says a humanoid is not ready, the app offers to try anyway, and so does `--anyway`. Anything else (`--type other`) is rigged as Tripo reads its shape (quadruped, avian, serpentine…), with no choice of bones; generated motions need a humanoid.
+
+`--skeleton tripo` is the older V1 rig in Tripo's own skeleton (78 joints, `BoneRoot`, `Hip`, `L_Thigh`…), which the app no longer offers; its twist and share bones move nothing. Our character converter takes it (`tools/characters`), and on the same body it passed our rig check where V3's Mixamo rig pinched at the knees and elbows (2026-10-12), so the character pipeline keeps it for now.
 
 `download` gives Studio's meshopt-compressed GLB, which some tools cannot open; `export --format glb` gives a plain one.
 
@@ -61,4 +77,4 @@ The [token stats](../token-stats/README.md) count Tripo's credits beside Claude'
 
 ## When it breaks
 
-This is not a public API: it makes the requests the web app makes, and Tripo can change them without notice. When a command fails where it used to work, capture what the web app sends now and fix the request in `tripo.ts` (the requests) or `studio.ts` (login, uploads, waiting). `node --test` in this folder runs the tests that need no Tripo. The way to capture is in [research/tripo-studio-api.md](../../research/tripo-studio-api.md).
+This is not a public API: it makes the requests the web app makes, and Tripo can change them without notice. When a command fails where it used to work, or to check the CLI still matches the app, see [MAINTAINING.md](MAINTAINING.md): `bundle.ts` reads the app's own code and reports what changed. Fix the request in `tripo.ts` (the requests) or `studio.ts` (login, uploads, waiting). `node --test` in this folder runs the tests that need no Tripo.

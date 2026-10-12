@@ -26,17 +26,18 @@ const IMAGE_MODELS: Record<string, string> = {
   midjourney: "midjourney",
 };
 const VIEWS = ["front", "left", "back", "right"]; // the order Studio uses everywhere
-// Rig skeletons. All but "tripo" are the V3 rig, its bones named for that target; "tripo" is
-// Tripo's own older V1 rig (BoneRoot, Hip, L_Thigh…). Both come with fingers. "unreal" is the
-// default: checked on our base body (2026-10-12), it is the only one whose twist bones carry
-// skin (upper arm, forearm, thigh, calf). V1 and "actorcore" have twist and share bones that
-// move nothing, and "mixamo" and "unity" have none on the limbs.
+// Rig skeletons. All but "tripo" are the V3 rig the app's Auto Rig sends, its bones named for
+// that target; "tripo" is Tripo's own older V1 rig (BoneRoot, Hip, L_Thigh…), which the app
+// no longer offers but the server still runs. All come with fingers. "unreal" is the default:
+// checked on our base body (2026-10-12), it is the only one whose twist bones carry skin
+// (upper arm, forearm, thigh, calf). V1 and "actorcore" have twist and share bones that move
+// nothing, and "mixamo" and "unity" have none on the limbs. Our character converter takes V1.
 const SKELETONS = ["mixamo", "actorcore", "unreal", "unity", "vrm", "tripo"];
 const RIG_V1 = "v1.0-20240301";
 const RIG_V3 = "v3.0-20260909";
 const EXPORT_FORMATS: Record<string, string> = { glb: "gltf", fbx: "fbx", obj: "obj", stl: "stl", usdz: "usdz", "3mf": "3mf" };
 // Commands that cannot spend credits, so need not note any.
-const FREE = ["help", "balance", "list", "show", "report"];
+const FREE = ["help", "balance", "list", "show", "report", "rename", "cancel", "unanimate"];
 
 type Opt = { type: "string" | "boolean"; short?: string; multiple?: boolean; default?: string | boolean; choices?: string[]; help: string };
 type Args = { values: Record<string, any>; positionals: string[] };
@@ -52,14 +53,14 @@ const COMMANDS: Record<string, Command> = {
     options: { n: { type: "string", short: "n", default: "20", help: "how many" } },
     run: list,
   },
-  show: { usage: "show PROJECT", help: "a project's state: what has been done to it, its rig and animations", run: show },
+  show: { usage: "show PROJECT", help: "a project's state: what has been done to it, its rig and animations, and its steps, newest first", run: show },
   image: {
     usage: 'image "PROMPT" [--ref IMAGE …] [-o out.png]',
     help: "generate images from a prompt, optionally like up to ten reference images",
     options: {
       ref: { type: "string", multiple: true, help: "a reference image (repeatable, up to 10)" },
-      model: { type: "string", default: "gpt-image-2.5", choices: Object.keys(IMAGE_MODELS), help: "the image model" },
-      aspect: { type: "string", default: "1:1", choices: ["1:1", "16:9", "9:16", "4:3", "3:4"], help: "aspect ratio" },
+      model: { type: "string", default: "nano-banana-2", choices: Object.keys(IMAGE_MODELS), help: "the image model (the app's default)" },
+      aspect: { type: "string", choices: ["1:1", "16:9", "9:16", "4:3", "3:4"], help: "aspect ratio (default 1:1, or the reference's own)" },
       count: { type: "string", default: "1", choices: ["1", "2", "3", "4"], help: "how many images" },
       "4k": { type: "boolean", help: "4K instead of 1K (costs extra)" },
       "t-pose": { type: "boolean", help: "draw a figure in a T-pose, ready to rig" },
@@ -80,11 +81,13 @@ const COMMANDS: Record<string, Command> = {
       text: { type: "string", help: "a prompt instead of an image" },
       views: { type: "boolean", help: "the images given are front, left, back and right views" },
       model: { type: "string", default: "h3.1", help: `${Object.keys(MODELS).join(", ")} or a dated version` },
-      faces: { type: "string", default: "10000", help: "face limit" },
-      quad: { type: "boolean", help: "quads instead of triangles" },
-      "no-texture": { type: "boolean", help: "geometry only" },
-      detailed: { type: "boolean", help: "detailed geometry and a 4K texture (H models; costs extra)" },
-      pbr: { type: "boolean", help: "PBR maps as well as colour (H models)" },
+      faces: { type: "string", help: "face limit (default 10000, or 5000 for p1 and p2 as the app has it)" },
+      quad: { type: "boolean", help: "quads instead of triangles (default for p2, as the app has it; --no-quad for triangles)" },
+      variations: { type: "string", default: "1", choices: ["1", "2", "4"], help: "p2: several models from one input, each its own project" },
+      texture: { type: "boolean", default: true, help: "texture the model (--no-texture for geometry only)" },
+      geometry: { type: "string", default: "detailed", choices: ["standard", "detailed"], help: "h3.1's geometry; standard is 15 credits less" },
+      "texture-quality": { type: "string", default: "detailed", choices: ["standard", "detailed", "extreme"], help: "2K, 4K or 8K; 4K is 10 credits more than 2K" },
+      pbr: { type: "boolean", default: true, help: "PBR maps as well as colour, 5 credits (H models; --no-pbr for colour only)" },
       parts: { type: "string", choices: ["simple", "balanced", "detailed"], help: "generate in separate parts (H models)" },
       "smart-poly": { type: "boolean", help: "low-poly topology (H models)" },
       "t-pose": { type: "boolean", help: "with --text: model a figure in a T-pose" },
@@ -106,7 +109,7 @@ const COMMANDS: Record<string, Command> = {
       image: { type: "string", help: "an image to texture from" },
       views: { type: "boolean", help: "texture from the views given after the project" },
       prompt: { type: "string", help: "describe the texture instead" },
-      quality: { type: "string", default: "standard", choices: ["standard", "detailed", "extreme"], help: "2K, 4K or 8K" },
+      quality: { type: "string", default: "detailed", choices: ["standard", "detailed", "extreme"], help: "2K, 4K or 8K (4K is the app's default)" },
       align: { type: "string", default: "original_image", choices: ["original_image", "geometry"], help: "follow the image or the shape" },
       delight: { type: "boolean", help: "remove the lighting baked into the image" },
       ...out,
@@ -121,11 +124,11 @@ const COMMANDS: Record<string, Command> = {
   },
   pbr: { usage: "pbr PROJECT", help: "add normal, roughness and metallic maps to a textured model", options: out, run: pbr },
   retopo: {
-    usage: "retopo PROJECT --faces N [--quad] [--smart-poly]",
+    usage: "retopo PROJECT [--faces 10000] [--no-quad] [--smart-poly]",
     help: "rebuild a model's mesh at a face budget",
     options: {
-      faces: { type: "string", help: "face limit (required)" },
-      quad: { type: "boolean", help: "quads instead of triangles" },
+      faces: { type: "string", default: "10000", help: "face limit" },
+      quad: { type: "boolean", default: true, help: "quads, as the app's default (--no-quad for triangles, 5 credits less)" },
       "smart-poly": { type: "boolean", help: "hand-made-looking low-poly topology (costs extra)" },
       ...out,
     },
@@ -145,9 +148,14 @@ const COMMANDS: Record<string, Command> = {
   },
   uv: { usage: "uv PROJECT", help: "unwrap a model's UVs again (Smart UV)", options: out, run: uv },
   rig: {
-    usage: "rig PROJECT [--skeleton unreal]",
+    usage: "rig PROJECT [--skeleton unreal] [--type humanoid|other]",
     help: "rig a model with Tripo's auto-rig",
-    options: { skeleton: { type: "string", default: "unreal", choices: SKELETONS, help: "whose bone names to use" }, ...out },
+    options: {
+      skeleton: { type: "string", default: "unreal", choices: SKELETONS, help: "a humanoid's bone names; tripo is the older V1 rig our character converter takes" },
+      type: { type: "string", default: "humanoid", choices: ["humanoid", "other"], help: "other rigs an animal or creature as Tripo reads its shape" },
+      anyway: { type: "boolean", help: "rig a humanoid even when Tripo's check says it is not ready" },
+      ...out,
+    },
     run: rig,
   },
   animate: {
@@ -167,7 +175,7 @@ const COMMANDS: Record<string, Command> = {
     help: "export a model in another format, with its animations if asked",
     options: {
       format: { type: "string", default: "glb", choices: Object.keys(EXPORT_FORMATS), help: "file format; OBJ comes zipped with its textures" },
-      "texture-size": { type: "string", default: "2048", choices: ["512", "1024", "2048", "4096", "8192"], help: "texture size" },
+      "texture-size": { type: "string", choices: ["512", "1024", "2048", "4096", "8192"], help: "texture size (default the model's own: 2048, or 4096 or 8192 when upscaled)" },
       "fbx-for": { type: "string", default: "blender", choices: ["blender", "3dsmax", "mixamo"], help: "the FBX flavour" },
       animations: { type: "boolean", help: "include the animations named after the project, or all of them" },
       "in-place": { type: "boolean", help: "keep the root still" },
@@ -181,6 +189,34 @@ const COMMANDS: Record<string, Command> = {
     options: out,
     run: download,
   },
+  edit: {
+    usage: "edit PROJECT --box X0,Y0,Z0,X1,Y1,Z1 [--faces N]",
+    help: "remake the part of an untextured P2 Smart Mesh inside a box (Mesh Edit)",
+    options: {
+      box: { type: "string", help: "the box's corners in the model's coordinates as Studio stores it, each -1 to 1 (required)" },
+      faces: { type: "string", help: "face limit (default the model's own, at most 50,000, as the app does)" },
+      ...out,
+    },
+    run: edit,
+  },
+  unanimate: {
+    usage: "unanimate PROJECT MOTION …",
+    help: "remove animations from a rigged model",
+    run: unanimate,
+  },
+  cancel: { usage: "cancel PROJECT", help: "cancel the operation running on a project", run: cancel },
+  restore: {
+    usage: "restore PROJECT OPERATOR",
+    help: "roll a project back to an earlier step (an operator id from `show`'s steps)",
+    options: out,
+    run: restore,
+  },
+  fork: {
+    usage: "fork PROJECT [OPERATOR]",
+    help: "copy a project, at its latest step or an earlier one, into a new project",
+    run: fork,
+  },
+  rename: { usage: 'rename PROJECT "NAME"', help: "rename a project", run: rename },
   report: {
     usage: "report [--all]",
     help: "note this account's Tripo spending for the token stats (every command does this too)",
@@ -222,7 +258,7 @@ function parse(command: Command, argv: string[]): Args {
   const options = command.options ?? {};
   const defined = (o: object) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
   const spec = Object.fromEntries(Object.entries(options).map(([k, o]) => [k, defined({ type: o.type, short: o.short, multiple: o.multiple, default: o.default })]));
-  const { values, positionals } = parseArgs({ args: argv, options: spec as any, allowPositionals: true, strict: true });
+  const { values, positionals } = parseArgs({ args: argv, options: spec as any, allowPositionals: true, allowNegative: true, strict: true });
   for (const [k, o] of Object.entries(options)) {
     const v = values[k];
     if (o.choices && typeof v === "string" && !o.choices.includes(v)) throw new Error(`--${k} must be one of ${o.choices.join(", ")}`);
@@ -266,7 +302,9 @@ async function list(client: Studio, a: Args): Promise<void> {
 }
 
 async function show(client: Studio, a: Args): Promise<void> {
-  const d = await client.project(projectId(a));
+  const pid = projectId(a);
+  const d = await client.project(pid);
+  const history = (await client.call("GET", `/v2/studio/project/history/${pid}`)).history ?? [];
   const op = d.operator ?? {};
   const rig = op.rigging ?? {};
   const flags = Object.entries(op)
@@ -283,6 +321,7 @@ async function show(client: Studio, a: Args): Promise<void> {
         running: d.running_operator?.type,
         rig: rig.type ? { type: rig.type, status: rig.status } : undefined,
         animations: (op.retarget ?? []).map((r: any) => ({ name: r.name.split(":").at(-1), status: r.status })),
+        steps: history.map((h: any) => ({ operator: h.operator_id, type: h.type, at: new Date(h.created_at * 1000).toISOString() })),
       },
       null,
       2,
@@ -304,7 +343,8 @@ async function image(client: Studio, a: Args): Promise<void> {
     model_version: IMAGE_MODELS[v.model],
     prompt,
     resolution: v["4k"] ? "4K" : "1K",
-    scale: v.aspect,
+    // As the app does: with references and no ratio chosen, the result keeps theirs.
+    scale: v.aspect ?? (refs.length ? undefined : "1:1"),
   };
   const uploaded = [];
   for (const path of refs) uploaded.push(await client.uploadImage(path));
@@ -339,11 +379,13 @@ async function model(client: Studio, a: Args): Promise<void> {
   const v = a.values;
   const version = MODELS[String(v.model).toLowerCase()] ?? v.model;
   const smartMesh = version.startsWith("Nexus");
-  const textured = !v["no-texture"];
+  const textured = Boolean(v.texture);
+  const variations = int(v.variations, "--variations");
+  if (variations > 1 && version !== MODELS.p2) throw new StudioError("--variations needs --model p2");
   const body: Record<string, any> = {
     model_version: version,
-    face_limit: int(v.faces, "--faces"),
-    quad: Boolean(v.quad),
+    face_limit: int(v.faces ?? (smartMesh ? 5000 : 10000), "--faces"),
+    quad: v.quad ?? version === MODELS.p2,
     visibility: v.public ? "shareable" : "private",
   };
   if (!smartMesh) {
@@ -351,9 +393,9 @@ async function model(client: Studio, a: Args): Promise<void> {
     Object.assign(body, { generate_parts: Boolean(v.parts), smart_poly: Boolean(v["smart-poly"]), texture: textured });
     if (v.parts) body.segmentation_granularity = v.parts;
     if (textured) {
-      Object.assign(body, { delight: false, pbr: Boolean(v.pbr), texture_alignment: "original_image", texture_quality: v.detailed ? "detailed" : "standard" });
+      Object.assign(body, { delight: false, pbr: Boolean(v.pbr), texture_alignment: "original_image", texture_quality: v["texture-quality"] });
     }
-    if (version === MODELS["h3.1"]) body.geometry_quality = v.detailed ? "detailed" : "standard";
+    if (version === MODELS["h3.1"]) body.geometry_quality = v.geometry;
   }
 
   let endpoint: string;
@@ -379,24 +421,40 @@ async function model(client: Studio, a: Args): Promise<void> {
     textureFrom = { image: body.image };
   }
   if (version === MODELS.p2) {
+    // Whether the subject is symmetric, from the main view; the app takes a failed check as no.
     const front = Array.isArray(body.image) ? body.image[0] : body.image;
+    body.symmetry = false;
     if (front) {
-      const check = await client.call("POST", "/v2/studio/operation/symmetry_check", { image: { bucket: front.bucket, key: front.key } });
-      body.symmetry = Boolean(check.symmetry);
+      try {
+        const check = await client.call("POST", "/v2/studio/operation/symmetry_check", { image: { bucket: front.bucket, key: front.key } });
+        body.symmetry = Boolean(check.symmetry);
+      } catch (err) {
+        log(`symmetry check failed, so none assumed: ${(err as Error).message}`);
+      }
     }
   }
-
-  const before = await client.credits();
-  const receipt = await client.operate(endpoint, body);
-  log(`project ${receipt.project_id}`);
-  await client.wait(receipt.operator_id, "model");
-  let op = receipt.operator_id;
-  if (smartMesh && textured) {
-    // Smart Mesh comes untextured; the app textures it in a second step, as we do.
-    log("Smart Mesh comes untextured; texturing it");
-    op = await textureModel(client, receipt.project_id, textureFrom, "standard", "original_image", false);
+  if (variations > 1) {
+    body.variations = Array.from({ length: variations }, () => ({ face_limit: body.face_limit }));
+    delete body.face_limit;
   }
-  await finish(client, receipt.project_id, op, v.out ?? `${name}.glb`, before);
+
+  let before = await client.credits();
+  const reply = await client.call("POST", `/v2/studio/operation/${endpoint}`, body);
+  const receipts: any[] = reply.variations ? reply.variations.filter((r: any) => r.accepted !== false) : [Array.isArray(reply) ? reply[0] : reply];
+  for (const [i, receipt] of receipts.entries()) {
+    log(`project ${receipt.project_id}`);
+    await client.wait(receipt.operator_id, "model");
+    let op = receipt.operator_id;
+    if (smartMesh && textured) {
+      // Smart Mesh comes untextured; the app textures it in a second step, as we do, with
+      // the app's settings for it.
+      log("Smart Mesh comes untextured; texturing it");
+      op = await textureModel(client, receipt.project_id, textureFrom, v["texture-quality"], "original_image", true);
+    }
+    const path = v.out ?? `${name}.glb`;
+    await finish(client, receipt.project_id, op, receipts.length > 1 ? numbered(path, i + 1) : path, before);
+    before = await client.credits();
+  }
 }
 
 async function importModel(client: Studio, a: Args): Promise<void> {
@@ -406,7 +464,7 @@ async function importModel(client: Studio, a: Args): Promise<void> {
   const place = await client.put(path, format);
   const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; // placed as it is, column-major
   const before = await client.credits();
-  const receipt = await client.operate("import_user_model", { format, model: place, name: basename(path), transform_matrix: identity, use_original_uv: true });
+  const receipt = await client.operate("import_user_model", { format, model: place, name: basename(path), transform_matrix: identity, use_original_uv: hasUVs(path, format) });
   await client.wait(receipt.operator_id, "import");
   await finish(client, receipt.project_id, receipt.operator_id, a.values.out ?? `${stem(path)}-imported.glb`, before);
 }
@@ -438,7 +496,6 @@ async function pbr(client: Studio, a: Args): Promise<void> {
 
 async function retopo(client: Studio, a: Args): Promise<void> {
   const pid = projectId(a);
-  if (!a.values.faces) throw new StudioError("give a face budget with --faces");
   const body = {
     bake: true,
     face_limit: int(a.values.faces, "--faces"),
@@ -470,23 +527,32 @@ async function uv(client: Studio, a: Args): Promise<void> {
   const head = (await client.project(pid)).operator.operator_id;
   const current = { project_id: pid, current_operator_id: head };
   const before = await client.credits();
-  const context = await client.call("POST", "/v2/studio/operation/uv_edit/context", current);
+  let context = await client.call("POST", "/v2/studio/operation/uv_edit/context", current);
+  if (context.running_task?.operator_id) {
+    log("waiting for the unwrap already running on this project");
+    await client.wait(context.running_task.operator_id, "uv");
+    context = await client.call("POST", "/v2/studio/operation/uv_edit/context", current);
+  }
   const started = await client.call("POST", "/v2/studio/operation/uv_edit/generate", { ...current, action: context.next_action || "generate" });
   await client.wait(started.operator_id, "uv");
   await client.call("POST", "/v2/studio/operation/uv_edit/apply", { ...current, candidate_operator_id: started.operator_id });
   await finish(client, pid, undefined, output(a, pid, "uv"), before);
 }
 
+// As the app's Auto Rig: a humanoid is rigged as a biped on the skeleton chosen; anything
+// else as the free pre-check reads it (quadruped, avian, serpentine…), with no choice of bones.
 async function rig(client: Studio, a: Args): Promise<void> {
   const pid = projectId(a);
-  const skeleton = a.values.skeleton;
+  const { skeleton, type } = a.values;
   const version = skeleton === "tripo" ? RIG_V1 : RIG_V3;
   await ready(client, pid);
   const check = await client.call("POST", "/v2/studio/operation/pre_rig_check", { model_version: version, project_id: pid });
-  if (!check.riggable) throw new StudioError(`Tripo cannot rig this model: ${JSON.stringify(check)}. A figure rigs best in a T-pose or A-pose.`);
-  const rigType = check.rig_type || "biped";
+  if (type === "humanoid" && !check.riggable && !a.values.anyway) {
+    throw new StudioError(`Tripo reads this as not ready to rig as a humanoid (${JSON.stringify(check)}). A figure rigs best in a T-pose or A-pose; --anyway tries regardless, as the app offers.`);
+  }
+  const rigType = type === "humanoid" ? "biped" : check.rig_type || "others";
   const body: Record<string, unknown> = { model_version: version, project_id: pid, rig_type: rigType };
-  if (version === RIG_V3 && rigType === "biped") body.spec = skeleton;
+  if (version === RIG_V3 && type === "humanoid") body.spec = skeleton;
   log(`rigging a ${rigType}`);
   await operation(client, a, pid, "rigging_model", body, "rigged");
 }
@@ -499,12 +565,14 @@ async function animate(client: Studio, a: Args): Promise<void> {
   await ready(client, pid);
   const rigging = (await client.project(pid)).operator.rigging ?? {};
   if (rigging.status !== "success") throw new StudioError("the model is not rigged yet: run `tripo.ts rig` first");
+  if (prompts.length && rigging.type !== "biped") throw new StudioError(`motions made from a description need a humanoid rig; this one is ${rigging.type}`);
   const before = await client.credits();
   const ids = [];
   for (const m of motions) ids.push(await retarget(client, pid, rigging.type, { animation: `preset:${rigging.type}:${m}` }));
   for (const p of prompts) ids.push(await retarget(client, pid, rigging.type, { motion: await aiMotion(client, p, int(a.values.seconds, "--seconds")) }));
   const format = a.values.format;
-  const path = await exportFile(client, pid, output(a, pid, "animated", `.${format}`), format, ids, Boolean(a.values["in-place"]));
+  const size = textureSize((await client.project(pid)).operator);
+  const path = await exportFile(client, pid, output(a, pid, "animated", `.${format}`), format, ids, Boolean(a.values["in-place"]), size);
   report({ project: pid, credits: before - (await client.credits()), files: [path] });
 }
 
@@ -521,8 +589,75 @@ async function exportModel(client: Studio, a: Args): Promise<void> {
   }
   const ext = v.format === "obj" ? ".zip" : `.${v.format}`; // OBJ comes zipped with its textures
   const before = await client.credits();
-  const path = await exportFile(client, pid, output(a, pid, "export", ext), v.format, ids, Boolean(v["in-place"]), int(v["texture-size"], "--texture-size"), v["fbx-for"]);
+  const size = v["texture-size"] ? int(v["texture-size"], "--texture-size") : textureSize((await client.project(pid)).operator);
+  const path = await exportFile(client, pid, output(a, pid, "export", ext), v.format, ids, Boolean(v["in-place"]), size, v["fbx-for"]);
   report({ project: pid, credits: before - (await client.credits()), files: [path] });
+}
+
+// Mesh Edit: the app lets a box be drawn on an untextured P2 model that is the project's
+// latest step, and remakes what is inside it.
+async function edit(client: Studio, a: Args): Promise<void> {
+  const pid = projectId(a);
+  const box = String(a.values.box ?? "").split(",").map(Number);
+  if (box.length !== 6 || box.some((n) => !Number.isFinite(n))) throw new StudioError("give the box as --box X0,Y0,Z0,X1,Y1,Z1");
+  const clamp = (n: number) => Math.min(1, Math.max(-1, n));
+  const lo = box.slice(0, 3).map((n, i) => clamp(Math.min(n, box[i + 3])));
+  const hi = box.slice(0, 3).map((n, i) => clamp(Math.max(n, box[i + 3])));
+  await ready(client, pid);
+  const op = (await client.project(pid)).operator;
+  if (!op.is_nexus_mesh || op.is_textured || op.is_rigged || op.is_segmented || op.is_pbr) {
+    throw new StudioError("Mesh Edit works on an untextured P2 Smart Mesh only (model --model p2 --no-texture)");
+  }
+  const faces = a.values.faces ? int(a.values.faces, "--faces") : Math.min(triangles(await modelGltf(client, pid)), 50000);
+  await operation(client, a, pid, "local_edit", { bbox: [lo, hi], face_limit: faces, project_id: pid, source_operator_id: op.operator_id }, "edited");
+}
+
+async function unanimate(client: Studio, a: Args): Promise<void> {
+  const pid = projectId(a);
+  const wanted = a.positionals.slice(1);
+  if (!wanted.length) throw new StudioError("name the animations to remove");
+  await ready(client, pid);
+  const detail = await client.project(pid);
+  const on = (detail.operator.retarget ?? []).filter((r: any) => r.status === "success");
+  const short = (r: any) => r.name.split(":").at(-1);
+  const missing = wanted.filter((w) => !on.some((r: any) => short(r) === w));
+  if (missing.length) throw new StudioError(`${missing.join(", ")} not on the model; it has ${on.map(short).join(", ") || "none"}`);
+  for (const r of on.filter((r: any) => wanted.includes(short(r)))) {
+    await client.call("POST", "/v2/studio/operation/remove_retarget", { model_operator_id: detail.operator.operator_id, project_id: pid, retarget_operator_id: r.operator_id });
+  }
+  report({ project: pid, removed: wanted });
+}
+
+async function cancel(client: Studio, a: Args): Promise<void> {
+  const pid = projectId(a);
+  const running = (await client.project(pid)).running_operator;
+  if (!running?.operator_id) throw new StudioError("nothing is running on this project");
+  await client.call("POST", "/v2/studio/operation/cancel", { operation_type: running.type, operator_id: running.operator_id, scene: "workspace" });
+  report({ project: pid, cancelled: running.type ?? running.operator_id });
+}
+
+async function restore(client: Studio, a: Args): Promise<void> {
+  const pid = projectId(a);
+  const op = a.positionals[1];
+  if (!op) throw new StudioError("give the operator id of the step to go back to");
+  await ready(client, pid);
+  await client.call("POST", "/v2/studio/operation/restore", { operator_id: op, project_id: pid });
+  await finish(client, pid, undefined, output(a, pid, "restored"), await client.credits());
+}
+
+async function fork(client: Studio, a: Args): Promise<void> {
+  const pid = projectId(a);
+  const op = a.positionals[1] ?? (await client.project(pid)).operator.operator_id;
+  const made = await client.call("POST", "/v2/studio/operation/save_as_new", { operator_id: op, project_id: pid });
+  report({ project: made.project_id, from: pid, operator: op });
+}
+
+async function rename(client: Studio, a: Args): Promise<void> {
+  const pid = projectId(a);
+  const name = a.positionals[1];
+  if (!name || a.positionals.length > 2) throw new StudioError('give the new name, quoted: rename PROJECT "NAME"');
+  await client.call("POST", "/v2/studio/operation/update_name", { name, project_id: pid });
+  report({ project: pid, name });
 }
 
 async function download(client: Studio, a: Args): Promise<void> {
@@ -615,7 +750,9 @@ async function exportFile(client: Studio, pid: string, path: string, format: str
     name: stem(path),
     pack_uv: false,
     project_id: pid,
-    // What the app sends: a GLB still comes back as one file, an OBJ zipped with its textures.
+    // The app's panel always sends zip: a GLB still comes back as one file and an OBJ zipped
+    // with its textures, but an FBX as a zip too. Its Blender, Max and Maya bridges send
+    // embedded, which gives one FBX, so we do for every other format.
     texture_packaging: format === "glb" || format === "obj" ? "zip" : "embedded",
     texture_size: textureSize,
     with_animation: animations.length > 0,
@@ -629,19 +766,55 @@ async function exportFile(client: Studio, pid: string, path: string, format: str
   return client.download(url, path);
 }
 
-// The names of a model's meshes, which texture, retopology and filling act on.
-async function partNames(client: Studio, pid: string): Promise<string[]> {
+// The glTF of a project's latest model: its JSON, without the binary.
+async function modelGltf(client: Studio, pid: string): Promise<any> {
   const dir = mkdtempSync(join(tmpdir(), "tripo-"));
   try {
-    const glb = readFileSync(await client.download((await client.project(pid)).model_url, join(dir, "model.glb")));
-    if (glb.toString("latin1", 0, 4) !== "glTF") throw new StudioError("the project's model is not a GLB; cannot read its part names");
-    const doc = JSON.parse(glb.toString("utf8", 20, 20 + glb.readUInt32LE(12)));
-    const names = (doc.nodes ?? []).filter((n: any) => n.mesh !== undefined && n.name).map((n: any) => n.name);
-    if (!names.length) throw new StudioError("the project's model has no named meshes");
-    return names;
+    const glb = gltfOf(readFileSync(await client.download((await client.project(pid)).model_url, join(dir, "model.glb"))));
+    if (!glb) throw new StudioError("the project's model is not a GLB; cannot read it");
+    return glb;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+// A GLB's JSON chunk, or undefined if the bytes are not a GLB; exported for the tests.
+export function gltfOf(glb: Buffer): any {
+  if (glb.length < 20 || glb.toString("latin1", 0, 4) !== "glTF") return undefined;
+  return JSON.parse(glb.toString("utf8", 20, 20 + glb.readUInt32LE(12)));
+}
+
+// The names of a model's meshes, which texture, retopology and filling act on.
+async function partNames(client: Studio, pid: string): Promise<string[]> {
+  const doc = await modelGltf(client, pid);
+  const names = (doc.nodes ?? []).filter((n: any) => n.mesh !== undefined && n.name).map((n: any) => n.name);
+  if (!names.length) throw new StudioError("the project's model has no named meshes");
+  return names;
+}
+
+// How many triangles a glTF's meshes have; exported for the tests.
+export function triangles(doc: any): number {
+  let n = 0;
+  for (const mesh of doc.meshes ?? []) {
+    for (const p of mesh.primitives ?? []) {
+      const counted = p.indices !== undefined ? doc.accessors[p.indices] : doc.accessors[p.attributes?.POSITION];
+      if ((p.mode ?? 4) === 4 && counted) n += Math.floor(counted.count / 3);
+    }
+  }
+  return n;
+}
+
+// Whether a model file of ours has texture coordinates for Studio to keep on import.
+function hasUVs(path: string, format: string): boolean {
+  if (format === "stl") return false;
+  if (format === "obj") return /^vt\s/m.test(readFileSync(path, "latin1"));
+  if (format === "glb") return Boolean(gltfOf(readFileSync(path))?.meshes?.some((m: any) => m.primitives?.some((p: any) => p.attributes?.TEXCOORD_0 !== undefined)));
+  return true; // FBX: too costly to read here; Studio copes when there are none
+}
+
+// The texture size a model was made at, which the app exports at unless asked otherwise.
+export function textureSize(op: any): number {
+  return op?.is_ultra_textured ? 8192 : op?.is_hd_textured ? 4096 : 2048;
 }
 
 async function uploadViews(client: Studio, paths: string[]): Promise<(ImageRef | null)[]> {

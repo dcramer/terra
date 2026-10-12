@@ -9,7 +9,7 @@
 # Steps, each skipped when what it makes is already kept in art/characters/BASE/morphs/NAME/:
 #   1. the base's approved sheet redrawn with the change, same person and T-pose (free)
 #   2. its front view, scaled to 2048 on the sheet's own background
-#   3. Tripo's model of it (about 25 credits)
+#   3. Tripo's model of it (about 55 credits)
 #   4. the base registered onto the model (morph.py): the morph and the base at full weight
 #   5. that body exported as the game loads it (export_character.py), keeping the base's patches
 #   6. every worn look made for the base carried onto it (carry_gear.py), and checked (gear_check.py)

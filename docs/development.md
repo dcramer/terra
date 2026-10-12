@@ -102,7 +102,7 @@ node tools/tripo/tripo.ts animate <project> walk run idle -o crate-anim.glb
 
 - **Set up** once: put the `ory_kratos_session` cookie of a browser signed in to Studio in `.env` as `TRIPO_STUDIO_COOKIE` (the README says where to find it). It lasts about 30 days; when a command says the login failed, copy it again.
 - **Every command prints one line of JSON** with the project, the credits spent and the files written, so commands chain. A project keeps every step done to it, and each command works on its latest.
-- **It costs credits**: about 25 for a model, 20 for a rig, 10 for a texture; images and preset animations are free. `balance` says what is left. Credits count in the token stats beside Claude's tokens ([tools/token-stats](../tools/token-stats/README.md)), read from Tripo's own history, so work done by hand in the web app counts too.
+- **It costs credits**: about 55 for a model, 20 for a rig, 20 for a texture; images and preset animations are free. `balance` says what is left. Credits count in the token stats beside Claude's tokens ([tools/token-stats](../tools/token-stats/README.md)), read from Tripo's own history, so work done by hand in the web app counts too.
 - **Use the CLI, not the web app's API by hand, and not the bake-off's `tripo.py`**, which spends API credits. When Tripo changes its requests and a command breaks, fix the CLI; [research/tripo-studio-api.md](../research/tripo-studio-api.md) says how to capture what the web app sends now.
 
 ## Checking the game without a person (QA for agents)
