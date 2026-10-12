@@ -46,6 +46,22 @@ Picking something up puts it in the first place it fits, scanning from the top l
 - **Every item has an identity**, so the action bar can point at it and the server can say which one moved.
 - **Where raw items come from**: harvesting returns a yield in cubic metres, objects or square metres (D45). A table in data turns a yield into items. What the raw items are is design and still open (D43, D55).
 
+## Item pictures
+
+Every slot that holds an item shows a picture of it: the bar, the backpack, the equipment slots, storage and the station screens. Today they show the item's name. Research in [research/item-icons.md](../research/item-icons.md).
+
+**How they are made** (D129, Leaning, technical): the game draws each picture from the item's own look, in its tint and state, through one fixed camera and light rig, the first time it is shown, and keeps it. Nobody paints a picture, so a new item, colour or variant has one as soon as it has a look (D127), and the picture is always the real thing (D93). A look can say how it sits in a slot, as it says how it is carried; most need nothing. The workbench can write every item's picture to a sheet to check them.
+
+**What they look like** (D130, Open), for the developers:
+
+1. **Angle**: a three-quarter view from above, or flat side-on, as many survival games lay tools?
+2. **Background**: none, so the slot shows through, or a plate or vignette behind each?
+3. **Edge**: the world has no outlines (art.md), but a 64-pixel picture may need a thin dark silhouette to read. Allowed here?
+4. **Light**: one rig for every picture, or the light of the realm the item comes from?
+5. **Clothing**: drawn as worn with no body in it, folded, or on a mannequin?
+
+Recommended: three-quarter from above, no background, a soft rim light with a thin silhouette edge, the painted look's own materials, and clothing as worn. Best settled by looking at a sheet of our items drawn each way.
+
 ## In the game's model
 
 Technical, recorded as D83.
