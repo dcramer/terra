@@ -59,7 +59,29 @@ Every slot that holds an item shows a picture of it: the bar, the backpack, the 
 3. **Light**: one rig for every picture, or the light of the realm the item comes from?
 4. **Clothing**: drawn as worn with no body in it, folded, or on a mannequin?
 
-Recommended: three-quarter from above, no background, one rig with the world's warm and cool light, and clothing as worn. Best settled by looking at a sheet of our items drawn each way.
+Every look we have, drawn by the sandbox's `pictures` spike on 2026-10-12, a column per item (eight tools, five worn things, then the coat in two tints and the small pack in one) and a row per way:
+
+1. Three-quarter from above, the world's light.
+2. The same with a cool light from behind on the edges.
+3. Square on, with that edge light.
+4. Row 2 on a plate of the sky's colours.
+5. Row 2 in a darker realm's light: a cold moon and violet shade.
+
+![Every item drawn five ways, at 128 pixels](images/item-pictures-2026-10-12.png)
+
+![The same at 64 pixels, the size of a slot](images/item-pictures-64-2026-10-12.png)
+
+What the sheet shows:
+
+- **Drawing from the looks works.** Pictures come out clear of any background, framed from each look's bounds, and tints apply, with nothing done by hand.
+- **The edge light reads on clothing** and picks out a shape from the slot without an outline. On thin tools it shows little.
+- **Square on fills the slot better** and shows a tool's outline best. From straight in front, a cap shows its inside, so worn things want a little height.
+- **The darker realm's light loses detail** at 64 pixels: the light of the realm an item comes from costs readability.
+- **The plate ties a picture to the world**, but its warm bottom competes with tools of the same colour.
+- **Long, thin things are small in a square**: the bow, the spear, the quiver. Framing each picture to its item's cells (D129) would fix that.
+- **Some items are hard to tell apart**, such as the stone and iron axes. That is their models' colours, not the pictures.
+
+Recommended now: row 3 for tools; for worn things, row 3 raised a little, about 15 degrees. One rig with the world's warm and cool light and the edge light; no background; clothing as worn, with no body in it.
 
 ## In the game's model
 

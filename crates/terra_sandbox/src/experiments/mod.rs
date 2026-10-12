@@ -8,6 +8,7 @@ use bevy::prelude::*;
 mod build;
 mod forest;
 mod look;
+mod pictures;
 mod play;
 mod scatter;
 mod workbench;
@@ -47,6 +48,11 @@ pub const ALL: &[Experiment] = &[
         name: "workbench",
         about: "Models on a plain floor in the game's light: --model <path> to load, --anim <clip> to play, --hold and --attach for what they carry, --sheet <prefix> to capture views and exit; --remote to drive it live.",
         add: workbench::plugin,
+    },
+    Experiment {
+        name: "pictures",
+        about: "A spike for item pictures (D130): every look drawn several ways in the game's light; --sheet <prefix> saves the sheet and exits.",
+        add: pictures::plugin,
     },
     Experiment {
         name: "look",

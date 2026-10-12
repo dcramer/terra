@@ -42,7 +42,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--wear <item>` | In the workbench: an item's look for each model's body, named as in `--give`, such as `leather_coat`. Repeatable |
 | `--attach <file>[@<socket>]` | In the workbench: any look, on a socket such as `models/x.glb@socket.back`, or without one as its file says. Repeatable |
 | `--focus <name>` | In the workbench: look closely at one part, such as `socket.hand.R` |
-| `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments |
+| `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. In `pictures`: the sheet of item pictures, `<prefix>.png` and `<prefix>-64.png` |
 | `--sides <degrees,…>` | In the workbench sheet: where to look from, round from the front; 30,120,210,300 by default |
 | `--moments <fraction,…>` | In the workbench sheet: how far through each clip; 0.4 by default |
 
@@ -259,6 +259,14 @@ cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model mod
 ```
 
 Models on a plain floor in the game's own light and renderer, playing animations (D71), holding and wearing things as they would in play (`--hold`, `--wear`, `--attach`, through the shared `character` module). It prints each model's clips, joints and sockets. Fly round by hand, drive it live with `--remote` ([tools/sandbox](../../tools/sandbox/README.md), which adds `pose CLIP FRACTION`), or give `--sheet` to save one contact sheet per clip and exit, which is how an agent checks a model. The command above puts the mannequin and the base body side by side through the jog, from two sides at four moments. Run sheets on the Windows GPU; the CPU renderer under WSL is far too slow. How characters are made and checked before they get here is in `.claude/skills/character/SKILL.md`.
+
+## Item pictures
+
+```bash
+cargo run -p terra_sandbox -- --experiment pictures --sheet shots/pictures
+```
+
+A spike for D130, what item pictures look like: every held and worn look, drawn from the look itself in the game's light (D129), five ways, laid out with a column per item and a row per way, at 128 and 64 pixels, then it exits. The camera draws into an image on a render layer of its own, framed by the look's bounds; tints apply as in play. See [items.md](../../docs/items.md#item-pictures).
 
 ## Adding an experiment
 
