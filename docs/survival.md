@@ -39,5 +39,5 @@ Each attribute is a component on whoever has it: the player, and later creatures
 1. **What happens at zero?** D18 says no fail state. Is "down" a respawn at base, a loss of what you carry, or something gentler?
 2. **How hard is it?** D3 sets the tone between Planet Crafter and Vintage Story. On the starter planet, does hunger matter at all?
 3. **Is stamina a survival attribute or a movement one?** It refills in seconds, unlike the others.
-4. **Which come next?** Temperature and radiation as attributes of their own, or as things that drain health?
+4. **Which come next?** Body temperature, probably, as its own attribute (D153, [climate](climate.md#body-temperature)). Radiation is open.
 5. **Are they shown as meters**, as in Subnautica, or worked into the world?

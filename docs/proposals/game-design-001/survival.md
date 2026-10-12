@@ -19,7 +19,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 | Hunger | Food: hunted, fished, gathered, farmed, cooked | Health and stamina recover slowly and their limits shrink; in the end, starving kills (D101) |
 | Thirst | Water: springs, rivers, wells, a waterskin | The same, faster |
 | Breath | Air: only under water (D74) | Health falls fast |
-| Warmth | Fire, shelter, clothing | Cold at night, in high places and in some worlds wears health down |
+| Warmth | Fire, shelter, clothing, work | Body temperature (D153): too cold raises hunger and stamina costs, too hot raises thirst and stamina costs, and far out of bounds either wears health down ([climate](../../climate.md#body-temperature)) |
 | Rest | A bed in a claim | Proposed: rested, you recover faster for a while |
 
 **Food is essential** (D101): it is what keeps you from dying; going without makes you weaker, and then kills you. **Good food may also give buffs**, as in Valheim and Enshrouded; whether, and what they are, the developers will decide later.
@@ -28,7 +28,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 - **Day and night.** Night is darker, colder and more dangerous: more monsters, and stranger ones ([creatures.md](creatures.md)). Light matters: torches, fires, lit claims. Proposed (D134): a whole day lasts half an hour of play, as Valheim's and Enshrouded's do, a little more day than night; night dark enough that a fire or torch matters, never so dark you cannot see the ground. In the tech demo, night is only dark for now.
 - **Weather** (D78): rain soaks and chills, storms ground you, heat drains thirst. Each world its own.
-- **Seasons**, perhaps: animals move, plants change, food is stored for lean times.
+- **Seasons** (D149): temperature, daylight and precipitation swing over a year and everything responds; winter on the starter world is a real challenge to prepare for ([climate](../../climate.md)).
 
 ## Death
 
@@ -41,6 +41,6 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 1. Answered: **starving can kill**; food is essential (D101).
 2. Later: **food buffs** may exist; whether and what is for later (D101).
-3. **Seasons**: yes or no?
+3. Answered: **seasons**, yes (D149).
 4. Answered in part: **death's cost** is the pack and a little skill or experience (D101). How much, and from which skills, is open.
-5. **Temperature**: a need of its own, or something that wears health down?
+5. Answered: **body temperature** is probably its own attribute (D153).

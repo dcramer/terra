@@ -67,7 +67,7 @@ What makes a planet that size affordable:
 
 ## The starter planet
 
-Breathable, temperate, ordinary gravity, water and plants. The survival attributes all work, but nothing about the place is trying to kill you. It is where the player learns the game, and it is the planet the sandbox's stand-in is closest to.
+Breathable, temperate, ordinary gravity, water and plants. The easiest world, but not a freebie: its winters are a real challenge to prepare for (D62, [climate](climate.md#winter-on-the-starter-world)). It is where the player learns the game, and it is the planet the sandbox's stand-in is closest to.
 
 ## Breathable planets, and a setting per planet
 

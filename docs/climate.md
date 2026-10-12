@@ -28,7 +28,7 @@ None of these is code; each is numbers. "Winter" is a label the game can show fo
 
 Each thing reads the quantities where it is:
 
-- **Bodies.** A body loses or gains heat by the air's temperature, the wind, being wet, clothing, shelter and fire. Cold wears you down; so does heat, and a desert world's summer can kill. Which survival attribute this is, is open ([survival](proposals/game-design-001/survival.md), question 5).
+- **Bodies** have a body temperature ([below](#body-temperature), D153). Cold wears you down; so does heat, and a desert world's summer can kill.
 - **Ground and water.**
   - Snow lies where precipitation fell below freezing, and melts with warmth and sun. Winter has snowy spells and thaws, lowlands may get rain, and mountaintops keep snow all year.
   - Water freezes after enough cold and thaws after enough warmth, so a lake can be walked on in a hard winter but not a mild one.
@@ -57,6 +57,52 @@ A number per world, in its theme, and so changeable at any time. Since our world
 - **Days lengthen and shorten with the season** around the half-hour.
 - **Growth is compressed,** as games compress it: a great tree regrows in some fraction of a year, not decades (D122, fun over realism).
 
+## Body temperature
+
+Probably an attribute of its own (D153, Leaning): "if you're too cold it could increase stamina usage (same with too hot) or increase thirst or something else". Proposed, after what a real body does:
+
+- **What moves it:**
+  - It drifts toward what the surroundings push it to: the air's temperature, the wind, being wet, the sun, shelter, a fire nearby.
+  - Clothing slows the drift.
+  - Work warms you.
+- **Comfortable within a band**, and nothing happens there. Beyond the band, effects grow with how far out you are:
+
+| | Cold | Hot |
+|---|---|---|
+| A little | Shivering burns food: hunger rises faster | Sweating: thirst rises faster |
+| More | Work and sprinting cost more stamina, and it comes back slower | The same |
+| Far | Hands are clumsy: tools work slower | Dizzy: stamina runs out sooner |
+| Too far | Health falls (hypothermia) | Health falls (heatstroke) |
+
+- **Seen on the body before any meter** (D93): breath in cold air, shivering, sweat, a flushed face. Whether there is also a meter is survival's open question 5.
+- **Creatures have it too,** by their own band. That is why some sleep through the cold.
+
+## Winter on the starter world
+
+The starter world is challenging, not a freebie (2026-10-12, D62). Winter poses real problems, harder than Valheim's or Enshrouded's and gentler than Vintage Story's brutal ones (D3). The point is goals, not punishment. Proposed:
+
+- **What autumn asks for:**
+  - food laid in and kept from spoiling;
+  - firewood;
+  - warm clothing, from hides and wool;
+  - a shelter that holds heat.
+- **What winter gives:**
+  - tracks in the snow to hunt by;
+  - frozen lakes that reach islands and far shores;
+  - what is found or met only in the cold.
+- **The first winter is survivable with a fire, a shelter and clothing** made in the first days. A good autumn makes it comfortable; a poor one makes it a struggle, never a wall (D18).
+
+## Reading the weather
+
+Players can forecast it (2026-10-12) by looking, as D93 asks:
+
+- clouds building and the sky's colour;
+- the wind turning;
+- animals sheltering or moving;
+- for those who learn it, a skill or a tool.
+
+Since weather is worked out from the seed and the time, what is coming is already known to the game, so a forecast can be exactly right.
+
 ## How it could work
 
 Technical, Leaning, and nothing is built until the design is agreed:
@@ -72,6 +118,13 @@ Technical, Leaning, and nothing is built until the design is agreed:
 
 ## Open questions
 
-1. **Which survival attribute** cold and heat wear down: their own (body temperature), or health ([survival](proposals/game-design-001/survival.md))?
-2. **How hard a winter should be on the starter world.** Proposed: survivable with a fire and clothing from the first days, never a wall.
-3. **Can players forecast weather?** Proposed: by looking, at the sky and at animals (D93), not by a readout.
+Answered on 2026-10-12:
+
+- **Body temperature:** probably its own attribute (D153).
+- **The starter world's winter:** challenging, with goals (D62).
+- **Forecasting:** yes.
+
+Still open:
+
+1. **Which effects** of cold and heat to start with, from the table above.
+2. **How a forecast is learned:** by looking alone, or also by a skill or a tool.
