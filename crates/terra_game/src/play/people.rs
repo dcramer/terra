@@ -8,10 +8,10 @@
 
 use super::bag::Notice;
 use super::bodies::Body;
-use super::catalogue;
+use super::catalogue::Rest;
 use super::claim::Claim;
 use super::crafting::Station;
-use super::creatures::{Creature, Species};
+use super::creatures::Creature;
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::props::Prop;
 use super::{IsLocalPlayer, LocalPlayer, Player};
@@ -325,7 +325,7 @@ fn free(
         return;
     };
     let guarded = creatures.iter().any(|(creature, there)| {
-        creature.species == Species::Spider
+        creature.species.hostile()
             && creature.alive()
             && there.translation.distance(at.translation) < GUARDED_M
     });
@@ -465,7 +465,7 @@ fn sit(
         }
         let Some(seat_top) = seats
             .iter()
-            .filter(|(prop, _)| catalogue::is_seat(prop.item))
+            .filter(|(prop, _)| prop.item.rest == Some(Rest::Sit))
             .map(|(prop, seat)| seat.transform_point(Vec3::Y * prop.half.y * 2.0))
             .filter(|top| top.distance(at.translation) < SEAT_REACH_M)
             .min_by(|a, b| {

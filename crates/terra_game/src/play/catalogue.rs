@@ -66,6 +66,17 @@ pub struct Item {
     pub station_name: Option<&'static str>,
     /// Whether it is a claim stone, which claims the land around it (D94).
     pub claims: bool,
+    /// What someone can rest on it for, if anything: sitting, or sleeping and waking.
+    pub rest: Option<Rest>,
+}
+
+/// What something is to rest on.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Rest {
+    /// People sit on it (`people`).
+    Sit,
+    /// A bed: you wake in it after going down, if it is in your claim (`death`).
+    Sleep,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -84,6 +95,7 @@ const fn item(name: &'static str, file: &'static str, size: f32, cost: Cost) -> 
         light: Light::None,
         station_name: None,
         claims: false,
+        rest: None,
     }
 }
 
@@ -91,6 +103,13 @@ const fn rug(name: &'static str, file: &'static str, size: f32, cost: Cost) -> I
     Item {
         lift: 0.015,
         ..item(name, file, size, cost)
+    }
+}
+
+const fn rest(rest: Rest, item: Item) -> Item {
+    Item {
+        rest: Some(rest),
+        ..item
     }
 }
 
@@ -331,8 +350,8 @@ pub static PARTS: [Part; 19] = [
         // and potted houseplants, are left out until the art direction settles; they do
         // not belong in game design 001's world.
         kind: Kind::Items(&[
-            item("Chair", "Chair_1", 0.95, &[("Wood", 2)]),
-            item("Stool", "Stool", 0.5, &[("Wood", 1)]),
+            rest(Rest::Sit, item("Chair", "Chair_1", 0.95, &[("Wood", 2)])),
+            rest(Rest::Sit, item("Stool", "Stool", 0.5, &[("Wood", 1)])),
         ]),
     },
     Part {
@@ -346,11 +365,14 @@ pub static PARTS: [Part; 19] = [
     Part {
         name: "Bed",
         tab: Tab::Furniture,
-        kind: Kind::Items(&[item(
-            "Single bed",
-            "Bed_Single",
-            2.15,
-            &[("Wood", 3), ("Fibre", 3)],
+        kind: Kind::Items(&[rest(
+            Rest::Sleep,
+            item(
+                "Single bed",
+                "Bed_Single",
+                2.15,
+                &[("Wood", 3), ("Fibre", 3)],
+            ),
         )]),
     },
     Part {
@@ -401,11 +423,6 @@ pub fn item_from(file: &str) -> Option<&'static Item> {
     items().find(|item| item.file == file)
 }
 
-/// Whether an item is something to sit on: one of the seats.
-pub fn is_seat(wanted: &Item) -> bool {
-    place_of(wanted).is_some_and(|(part, _)| PARTS[part].name == "Seat")
-}
-
 /// The part and variant that an item is, for picking "another of those".
 pub fn place_of(wanted: &Item) -> Option<(usize, usize)> {
     PARTS
@@ -431,6 +448,13 @@ pub fn part_of(wanted: fn(&Kind) -> bool) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn there_is_something_to_sit_on_and_a_bed_to_wake_in() {
+        let rests: Vec<Rest> = items().filter_map(|item| item.rest).collect();
+        assert!(rests.contains(&Rest::Sit));
+        assert!(rests.contains(&Rest::Sleep));
+    }
 
     #[test]
     fn every_station_built_is_a_kind_of_station() {

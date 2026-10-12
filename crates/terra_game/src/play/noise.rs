@@ -71,7 +71,7 @@ pub enum Cue {
 }
 
 /// What a step is on, or made by.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Deserialize)]
 pub enum Feet {
     Grass,
     Wood,

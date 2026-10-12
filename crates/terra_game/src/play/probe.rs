@@ -302,9 +302,9 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
             let home = east_south(&site, creature.home());
             around.push((
                 distance,
-                format!("{:?} {:.3} {:.3}", creature.species, home[0], home[1]),
+                format!("{} {:.3} {:.3}", creature.species, home[0], home[1]),
                 json!({
-                    "what": format!("{:?}", creature.species),
+                    "what": creature.species.name(),
                     "at": place(east_south(&site, at.translation())),
                     "distance": number(distance),
                     "health": number(creature.health),

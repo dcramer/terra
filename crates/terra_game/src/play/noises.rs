@@ -15,6 +15,7 @@ use super::noise::{Cue, Feet, Noise};
 use super::options::OptionsMenu;
 use super::people::Person;
 use super::props::Prop;
+use super::species::Voice;
 use super::tool::Builder;
 use super::{Downed, IsLocalPlayer, Motion, Player, Stance, View};
 use crate::planet::Planet;
@@ -52,8 +53,8 @@ pub struct Footsteps {
 enum Walker {
     Player,
     Person,
-    Deer,
-    Spider,
+    /// A creature, whose kind says how it steps (`assets/data/creatures.ron`).
+    Creature(Species),
 }
 
 impl Walker {
@@ -62,8 +63,10 @@ impl Walker {
     fn stride_m(self, speed: f32) -> f32 {
         match self {
             Walker::Player | Walker::Person => 0.55 + 0.25 * speed,
-            Walker::Deer => 0.5 + 0.2 * speed,
-            Walker::Spider => 0.3 + 0.05 * speed,
+            Walker::Creature(species) => {
+                let (least, per_mps) = species.def().stride;
+                least + per_mps * speed
+            }
         }
     }
 }
@@ -88,11 +91,7 @@ fn give_feet(
         .iter()
         .for_each(|entity| give(entity, Walker::Person));
     for (entity, creature) in &creatures {
-        let walker = match creature.species {
-            Species::Deer => Walker::Deer,
-            Species::Spider => Walker::Spider,
-        };
-        give(entity, walker);
+        give(entity, Walker::Creature(creature.species));
     }
 }
 
@@ -133,8 +132,7 @@ fn step(
             (Walker::Player, Some((motion, _))) if motion.indoors => Feet::Wood,
             (Walker::Player | Walker::Person, _) if planet.under_sea(here) => Feet::Water,
             (Walker::Player | Walker::Person, _) => Feet::Grass,
-            (Walker::Deer, _) => Feet::Hoof,
-            (Walker::Spider, _) => Feet::Skitter,
+            (Walker::Creature(species), _) => species.def().feet,
         };
         noise.write(Noise::at(Cue::Step(surface), here));
     }
@@ -154,9 +152,10 @@ fn creatures_heard(
     mut noise: MessageWriter<Noise>,
 ) {
     for (entity, creature, at, was) in &mut creatures {
+        // Running from someone, or going for them.
         let alarmed = matches!(
-            (creature.species, creature.state),
-            (Species::Deer, State::Flee(_)) | (Species::Spider, State::Chase | State::Attack(_))
+            creature.state,
+            State::Flee(_) | State::Chase | State::Attack(_)
         );
         let Some(mut was) = was else {
             commands.entity(entity).try_insert(Was {
@@ -175,9 +174,9 @@ fn creatures_heard(
             noise.write(Noise::at(cue, here));
         }
         if alarmed && !was.alarmed && creature.alive() {
-            let cue = match creature.species {
-                Species::Deer => Cue::Snort,
-                Species::Spider => Cue::Hiss,
+            let cue = match creature.species.def().voice {
+                Voice::Snort => Cue::Snort,
+                Voice::Hiss => Cue::Hiss,
             };
             noise.write(Noise::at(cue, here));
         }
@@ -345,6 +344,7 @@ mod tests {
             "{sprint} steps a second sprinting"
         );
         // A spider's legs go far quicker than a person's.
-        assert!(2.0 / Walker::Spider.stride_m(2.0) > 2.0 * per_second(2.0));
+        let spider = Walker::Creature(Species::named("Spider").unwrap());
+        assert!(2.0 / spider.stride_m(2.0) > 2.0 * per_second(2.0));
     }
 }

@@ -1,9 +1,11 @@
 //! Creatures (game design 001, creatures.md): wildlife with routines, and monsters.
 //!
-//! Deer graze, wander near home and run from anyone who comes close or hurts them. Dead,
-//! they lie where they fell, and F with a knife in your pack butchers one for meat and
-//! hide. Spiders are monsters: they wait at home, chase whoever comes near, bite within
-//! reach, and give up and go home if led too far.
+//! What each kind is like is data, in `assets/data/creatures.ron` (`species`, D136); its
+//! temper decides how it behaves. Shy ones, such as deer, graze, wander near home and run
+//! from anyone who comes close or hurts them; dead, they lie where they fell, and F with
+//! the right tool in your pack butchers one for what its kind gives. Hostile ones, such as
+//! spiders, wait at home, chase whoever comes near, bite within reach, and give up and go
+//! home if led too far.
 //!
 //! Behaviour is a few small states per creature, run in full for every one; at this
 //! scale that is cheap. Detail by distance comes when there are many (creatures.md).
@@ -12,8 +14,10 @@ use super::bag::Notice;
 use super::bodies::Body;
 use super::flora::ClearAround;
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
-use super::inventory::{Belongings, Cut};
-use super::skills::{Did, ONCE, Skill};
+use super::inventory::Belongings;
+use super::skills::{Did, ONCE};
+pub use super::species::Species;
+use super::species::{Lives, Temper};
 use super::{Downed, Player};
 use crate::build::Site;
 use crate::loading::Loading;
@@ -27,70 +31,8 @@ use std::time::Duration;
 use terra_gen::{Rng, Seed};
 
 const BLEND: Duration = Duration::from_millis(200);
-/// How hard a spider bites, out of 100 health.
-const BITE: f32 = 9.0;
 /// How far off a creature notices a player, or keeps track of one it chases.
 const SENSE_M: f32 = 40.0;
-/// How long a butchered or fallen creature's body lies before it is gone.
-const BODY_LASTS_S: f32 = 300.0;
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
-pub enum Species {
-    Deer,
-    Spider,
-}
-
-/// What a species is like.
-struct Kind {
-    model: &'static str,
-    /// From the model's size to ours.
-    scale: f32,
-    /// Its clips by what they show; `None` where it has none.
-    idle: &'static str,
-    walk: &'static str,
-    run: &'static str,
-    eat: Option<&'static str>,
-    attack: &'static str,
-    death: &'static str,
-    health: f32,
-    walk_mps: f32,
-    run_mps: f32,
-    /// The room it takes up on the ground, and how hard it is to shove.
-    body: Body,
-}
-
-fn kind(species: Species) -> Kind {
-    match species {
-        Species::Deer => Kind {
-            model: "models/creatures/Deer.glb",
-            scale: 0.36,
-            idle: "AnimalArmature|Idle",
-            walk: "AnimalArmature|Walk",
-            run: "AnimalArmature|Gallop",
-            eat: Some("AnimalArmature|Eating"),
-            attack: "AnimalArmature|Attack_Kick",
-            death: "AnimalArmature|Death",
-            health: 16.0,
-            walk_mps: 1.4,
-            run_mps: 7.5,
-            body: Body::new(0.45, 2.0),
-        },
-        Species::Spider => Kind {
-            model: "models/creatures/Spider.glb",
-            scale: 0.42,
-            idle: "SpiderArmature|Spider_Idle",
-            walk: "SpiderArmature|Spider_Walk",
-            run: "SpiderArmature|Spider_Walk",
-            eat: None,
-            attack: "SpiderArmature|Spider_Attack",
-            death: "SpiderArmature|Spider_Death",
-            health: 45.0,
-            walk_mps: 1.6,
-            run_mps: 4.6,
-            body: Body::new(0.55, 1.0),
-        },
-    }
-}
 
 /// What a creature is doing.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -196,13 +138,13 @@ struct Populated;
 
 fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
     commands.insert_resource(Kinds {
-        models: [Species::Deer, Species::Spider]
+        models: Species::all()
             .map(|species| {
-                let model = assets.load(kind(species).model);
+                let model = assets.load(&species.def().model.0);
                 loading.wait_for(&model);
                 (species, model)
             })
-            .to_vec(),
+            .collect(),
         ready: Vec::new(),
     });
 }
@@ -231,25 +173,25 @@ fn prepare(
     for (species, model) in &kinds.models {
         let Some(gltf) = gltfs.get(model) else { return };
         let Some(scene) = gltf.default_scene.clone() else {
-            error!("{species:?} has no scene.");
+            error!("{species} has no scene.");
             return;
         };
-        let about = kind(*species);
+        let about = &species.def().clips;
         let clip = |name: &str| gltf.named_animations.get(name).cloned();
         let names = [
-            about.idle,
-            about.walk,
-            about.run,
-            about.eat.unwrap_or(about.idle),
-            about.attack,
-            about.death,
+            &about.idle,
+            &about.walk,
+            &about.run,
+            about.eat.as_ref().unwrap_or(&about.idle),
+            &about.attack,
+            &about.death,
         ];
         let Some(clips) = names
             .iter()
             .map(|name| clip(name))
             .collect::<Option<Vec<_>>>()
         else {
-            error!("{species:?} is missing an animation.");
+            error!("{species} is missing an animation.");
             return;
         };
         let (graph, nodes) = AnimationGraph::from_clips(clips);
@@ -269,7 +211,8 @@ fn prepare(
     }
     kinds.ready = ready;
 
-    // A herd of deer in the meadow, and spiders in a hollow further off.
+    // Herds in the meadow, and those that keep a lair in a hollow further off, each as
+    // many as its kind says.
     let on_ground = |east: f32, south: f32| {
         let point = site.frame.transform_point(Vec3::new(east, 0.0, south));
         planet.ground_at(point)
@@ -279,43 +222,62 @@ fn prepare(
         .into_iter()
         .map(|(east, south)| on_ground(east, south))
         .find(|&point| dry(point));
-    if let Some(home) = herd {
-        let local = site.frame.compute_affine().inverse().transform_point3(home);
-        info!(
-            "Deer graze {:.0} m east and {:.0} m south of the start.",
-            local.x, local.z
-        );
-        // They graze in the open, as the village says.
-        clear.write(ClearAround(home, 16.0));
-        for _ in 0..5 {
-            let up = home.normalize();
-            let side = up.any_orthonormal_vector();
-            let offset = Quat::from_axis_angle(up, dice.0.range(0.0, std::f32::consts::TAU))
-                * side
-                * dice.0.range(1.0, 7.0);
-            spawn(&mut commands, &kinds, &planet, Species::Deer, home + offset);
-        }
-    }
     let lair = [(70.0, -60.0), (-80.0, -70.0), (90.0, 20.0), (-90.0, 10.0)]
         .into_iter()
         .map(|(east, south)| on_ground(east, south))
         .find(|&point| dry(point));
+    let local = |point: Vec3| {
+        site.frame
+            .compute_affine()
+            .inverse()
+            .transform_point3(point)
+    };
+    if let Some(home) = herd {
+        // They graze in the open, as the village says.
+        clear.write(ClearAround(home, 16.0));
+    }
     if let Some(lair) = lair {
-        let local = site.frame.compute_affine().inverse().transform_point3(lair);
-        info!(
-            "Spiders nest {:.0} m east and {:.0} m south of the start.",
-            local.x, local.z
-        );
         commands.insert_resource(Lair(lair));
-        for offset in [Vec3::ZERO, Vec3::X * 3.0, Vec3::Z * 3.0] {
-            let up = lair.normalize();
-            spawn(
-                &mut commands,
-                &kinds,
-                &planet,
-                Species::Spider,
-                lair + offset.reject_from(up),
-            );
+    }
+    for species in Species::all() {
+        match (species.def().lives, herd, lair) {
+            (Lives::Herd(count), Some(home), _) => {
+                let at = local(home);
+                info!(
+                    "{species} graze {:.0} m east and {:.0} m south of the start.",
+                    at.x, at.z
+                );
+                for _ in 0..count {
+                    let up = home.normalize();
+                    let side = up.any_orthonormal_vector();
+                    let offset =
+                        Quat::from_axis_angle(up, dice.0.range(0.0, std::f32::consts::TAU))
+                            * side
+                            * dice.0.range(1.0, 7.0);
+                    spawn(&mut commands, &kinds, &planet, species, home + offset);
+                }
+            }
+            (Lives::Lair(count), _, Some(lair)) => {
+                let at = local(lair);
+                info!(
+                    "{species} nest {:.0} m east and {:.0} m south of the start.",
+                    at.x, at.z
+                );
+                // One at the middle, the rest three metres out, a quarter turn apart.
+                let ways = [Vec3::ZERO, Vec3::X, Vec3::Z, Vec3::NEG_X, Vec3::NEG_Z];
+                for index in 0..count as usize {
+                    let out = ways[index % ways.len()] * 3.0 * (1 + index / ways.len()) as f32;
+                    let up = lair.normalize();
+                    spawn(
+                        &mut commands,
+                        &kinds,
+                        &planet,
+                        species,
+                        lair + out.reject_from(up),
+                    );
+                }
+            }
+            _ => {}
         }
     }
     commands.insert_resource(Populated);
@@ -338,13 +300,13 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
     else {
         return;
     };
-    let about = kind(species);
+    let about = species.def();
     let feet = planet.ground_at(at);
     let up = feet.normalize();
     let facing = up.any_orthonormal_vector();
     let creature = commands
         .spawn((
-            Name::new(format!("{species:?}")),
+            Name::new(species.name()),
             Creature {
                 species,
                 health: about.health,
@@ -354,7 +316,7 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
                 hurt: false,
                 quarry: None,
             },
-            about.body,
+            species.body(),
             Transform::from_translation(feet).looking_to(facing, up),
             Visibility::default(),
         ))
@@ -365,7 +327,7 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
             WorldAssetRoot(scene.clone()),
             // The models face +Z; things here face -Z.
             Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI))
-                .with_scale(Vec3::splat(about.scale)),
+                .with_scale(Vec3::splat(about.model.1)),
             ChildOf(creature),
         ))
         .observe(
@@ -412,49 +374,73 @@ fn think(
         let player_up = quarry.is_some();
         let apart = apart.unwrap_or(f32::INFINITY);
         let from_home = (here - creature.home).length();
-        let next = match (creature.species, creature.state) {
+        let temper = creature.species.def().temper;
+        let next = match (temper, creature.state) {
             (_, State::Dead(lying)) => State::Dead(lying + dt),
-            (Species::Deer, State::Flee(left)) if left > 0.0 => State::Flee(left - dt),
-            (Species::Deer, _) if creature.hurt || (apart < 9.0 && player_up) => {
+            (Temper::Shy { .. }, State::Flee(left)) if left > 0.0 => State::Flee(left - dt),
+            (
+                Temper::Shy {
+                    flees_within_m,
+                    flees_s,
+                },
+                _,
+            ) if creature.hurt || (apart < flees_within_m && player_up) => {
                 creature.hurt = false;
-                State::Flee(4.0)
+                State::Flee(flees_s)
             }
-            (Species::Spider, State::Attack(through)) => {
+            (
+                Temper::Hostile {
+                    bite,
+                    bite_at_s,
+                    bite_reach_m,
+                    attack_s,
+                    ..
+                },
+                State::Attack(through),
+            ) => {
                 let through = through + dt;
                 // The bite lands partway through, if its quarry is still there.
-                if through - dt < 0.45
-                    && through >= 0.45
-                    && apart < 2.8
+                if through - dt < bite_at_s
+                    && through >= bite_at_s
+                    && apart < bite_reach_m
                     && let Some(player) = quarry
                 {
                     bitten.write(Bitten {
                         player,
-                        damage: BITE,
+                        damage: bite,
                     });
                 }
-                if through > 1.3 {
+                if through > attack_s {
                     State::Chase
                 } else {
                     State::Attack(through)
                 }
             }
-            (Species::Spider, _) if player_up && apart < 2.2 => State::Attack(0.0),
-            (Species::Spider, _)
-                if player_up && (apart < 14.0 || creature.hurt) && from_home < 30.0 =>
-            {
+            (
+                Temper::Hostile {
+                    attacks_within_m, ..
+                },
+                _,
+            ) if player_up && apart < attacks_within_m => State::Attack(0.0),
+            (
+                Temper::Hostile {
+                    notices_m, leash_m, ..
+                },
+                _,
+            ) if player_up && (apart < notices_m || creature.hurt) && from_home < leash_m => {
                 State::Chase
             }
-            (Species::Spider, State::Chase) => State::Return,
+            (Temper::Hostile { .. }, State::Chase) => State::Return,
             (_, State::Return) if from_home > 2.0 => State::Return,
             (_, State::Idle(left)) if left > 0.0 => State::Idle(left - dt),
             (_, State::Graze(left)) if left > 0.0 => State::Graze(left - dt),
             (_, State::Wander(to)) if (to - here).length() > 1.0 => State::Wander(to),
-            (species, _) => {
+            _ => {
                 // Rest a while, graze if it can, or wander somewhere near home.
                 let roll = dice.0.unit();
                 if roll < 0.4 {
                     State::Idle(dice.0.range(2.0, 5.0))
-                } else if roll < 0.75 && kind(species).eat.is_some() {
+                } else if roll < 0.75 && creature.species.def().clips.eat.is_some() {
                     State::Graze(dice.0.range(3.0, 7.0))
                 } else {
                     let up = creature.home.normalize();
@@ -466,7 +452,7 @@ fn think(
                 }
             }
         };
-        if creature.species == Species::Spider && !matches!(next, State::Chase | State::Attack(_)) {
+        if creature.species.hostile() && !matches!(next, State::Chase | State::Attack(_)) {
             creature.hurt = false;
         }
         creature.state = next;
@@ -495,7 +481,7 @@ fn walk(
     for (mut creature, mut at) in &mut creatures {
         let here = at.translation;
         let up = here.normalize();
-        let about = kind(creature.species);
+        let about = creature.species.def();
         let toward = |point: Vec3| (point - here).reject_from(up).normalize_or_zero();
         let quarry = creature
             .quarry
@@ -570,19 +556,21 @@ fn animate(
     }
 }
 
-/// Marks the dead: a deer can be butchered; anything lies a while, then is gone.
+/// Marks the dead: one whose kind leaves a carcass can be butchered; anything lies a
+/// while, then is gone.
 pub fn fallen(commands: &mut Commands, entity: Entity, creature: &mut Creature) {
     creature.state = State::Dead(0.0);
     // The dead are walked over and round, not into.
     commands.entity(entity).remove::<Body>();
-    if creature.species == Species::Deer {
+    if creature.species.def().carcass.is_some() {
         commands
             .entity(entity)
             .insert(CanInteract(Interactable::Carcass));
     }
 }
 
-/// F with a knife carried butchers a carcass for meat and hide.
+/// F with something carried that cuts it, such as a knife, butchers a carcass for what its
+/// kind gives.
 fn butcher(
     mut commands: Commands,
     focus: Res<Focus>,
@@ -593,31 +581,52 @@ fn butcher(
 ) {
     if focus.used(Interactable::Carcass)
         && let Some(entity) = focus.entity
+        && let Ok((_, creature)) = bodies.get(entity)
+        && let Some(carcass) = &creature.species.def().carcass
     {
-        // Anything carried that cuts flesh, such as a knife.
-        let carries_knife = belongings.backpack().iter().any(|placed| {
-            belongings
-                .items()
-                .tool(placed.item.kind)
-                .is_some_and(|tool| tool.cuts(Cut::Flesh).is_some())
-        });
-        if !carries_knife {
-            notice.say("You need a knife to butcher it");
+        let items = belongings.items();
+        let cuts = |kind| {
+            items
+                .tool(kind)
+                .is_some_and(|tool| tool.cuts(carcass.needs).is_some())
+        };
+        let carries = belongings
+            .backpack()
+            .iter()
+            .any(|placed| cuts(placed.item.kind));
+        if !carries {
+            // Say what would do, such as a knife.
+            let needed = items
+                .kinds()
+                .find(|&kind| cuts(kind))
+                .map_or("tool", |kind| items.name(kind));
+            notice.say(format!(
+                "You need a {} to butcher it",
+                needed.to_lowercase()
+            ));
         } else {
-            let items = belongings.items();
-            let (meat_kind, hide_kind) = (items.kind("Meat"), items.kind("Hide"));
-            let meat = belongings.give(meat_kind, 3);
-            let hide = belongings.give(hide_kind, 2);
-            info!("Butchered it for {meat} meat and {hide} hide.");
+            let gives: Vec<_> = carcass
+                .gives
+                .iter()
+                .map(|(name, count)| (items.kind(name), *count))
+                .collect();
+            let given: Vec<String> = gives
+                .into_iter()
+                .map(|(kind, count)| {
+                    let given = belongings.give(kind, count);
+                    format!("{given} {}", belongings.items().name(kind))
+                })
+                .collect();
+            info!("Butchered it for {}.", given.join(", "));
             notice.say("Butchered it");
-            did.write(Did(Skill::Foraging, ONCE));
+            did.write(Did(carcass.needs.skill(), ONCE));
             commands.entity(entity).despawn();
         }
     }
     // Bodies left long enough are gone.
     for (entity, creature) in &bodies {
         if let State::Dead(lying) = creature.state
-            && (lying > BODY_LASTS_S || (creature.species == Species::Spider && lying > 8.0))
+            && lying > creature.species.def().lies_s
         {
             commands.entity(entity).despawn();
         }
@@ -634,7 +643,7 @@ mod tests {
         world
             .spawn((
                 Creature {
-                    species: Species::Spider,
+                    species: Species::named("Spider").unwrap(),
                     health: 10.0,
                     state: State::Idle(1.0),
                     home: at,

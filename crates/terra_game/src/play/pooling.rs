@@ -135,25 +135,32 @@ fn rise(time: Res<Time>, pool: Res<Pool>, mut motes: Query<(&mut Mote, &mut Tran
     }
 }
 
-/// While fewer than three spiders remain, another forms now and then.
+/// While fewer than three of a kind that forms here remain (`pools` in
+/// `assets/data/creatures.ron`), another forms now and then.
 fn form(
     time: Res<Time>,
     mut pool: ResMut<Pool>,
     creatures: Query<&Creature>,
     mut forming: MessageWriter<Form>,
 ) {
-    let spiders = creatures
-        .iter()
-        .filter(|creature| creature.species == Species::Spider && creature.alive())
-        .count();
-    if spiders >= KEEPS {
+    let alive = |species| {
+        creatures
+            .iter()
+            .filter(|creature| creature.species == species && creature.alive())
+            .count()
+    };
+    let short = Species::all().find(|&species| species.def().pools && alive(species) < KEEPS);
+    let Some(species) = short else {
         pool.until_next = FORMS_EVERY_S;
         return;
-    }
+    };
     pool.until_next -= time.delta_secs();
     if pool.until_next <= 0.0 {
         pool.until_next = FORMS_EVERY_S;
-        forming.write(Form(Species::Spider, pool.middle));
-        info!("A spider formed where the magic pools.");
+        forming.write(Form(species, pool.middle));
+        info!(
+            "A {} formed where the magic pools.",
+            species.name().to_lowercase()
+        );
     }
 }

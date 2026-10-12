@@ -160,8 +160,8 @@ pub fn strike(
     if creature.health <= 0.0 {
         creatures::fallen(commands, entity, creature);
         did.write(Did(skill, ONCE * 2.0));
-        info!("Killed a {:?}.", creature.species);
-        let name = format!("{:?}", creature.species).to_lowercase();
+        info!("Killed a {}.", creature.species);
+        let name = creature.species.name().to_lowercase();
         notice.say(format!("The {name} falls"));
     }
 }

@@ -6,6 +6,7 @@
 //! Death also costs a little skill progress (D101); that is in `skills`.
 
 use super::bag::Notice;
+use super::catalogue::Rest;
 use super::claim::Claim;
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::inventory::{self, Backpack, Belongings, Items};
@@ -154,7 +155,9 @@ fn fall(
         // Wake at a bed in the claim, or where you first arrived.
         let bed = beds
             .iter()
-            .filter(|(prop, at)| prop.item.file == "Bed_Single" && claim.covers(at.translation))
+            .filter(|(prop, at)| {
+                prop.item.rest == Some(Rest::Sleep) && claim.covers(at.translation)
+            })
             .map(|(_, at)| at.translation)
             .next();
         let (at, facing) = match bed {

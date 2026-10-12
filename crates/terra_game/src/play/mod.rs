@@ -54,6 +54,7 @@ mod settlement;
 mod skills;
 mod sounds;
 mod soundscape;
+mod species;
 mod station_screen;
 mod tiles;
 mod tool;

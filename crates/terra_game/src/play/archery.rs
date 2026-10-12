@@ -248,7 +248,7 @@ fn fly(
                 &mut struck,
                 &mut notice,
             );
-            info!("An arrow hit a {:?} for {blow:.0}.", creature.species);
+            info!("An arrow hit a {} for {blow:.0}.", creature.species);
             if !creature.alive()
                 && let Ok((.., at, _)) = creatures.get(hit_entity)
             {

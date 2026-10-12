@@ -1,0 +1,82 @@
+#![enable(implicit_some)]
+// Every kind of creature (game design 001, creatures.md; D127, D136). A new kind is an entry
+// here with its model; no code names one. The numbers are stand-ins.
+//
+// Each:
+//   name     what it is called
+//   model    its model, and the scale from the model's size to ours
+//   clips    its animations by what they show; one to eat with if it grazes
+//   health   out of how much
+//   walk_mps, run_mps   its speeds
+//   body     the room it takes up on the ground, and how hard it is to shove
+//   temper   how it treats players:
+//              Shy      runs from anyone within flees_within_m, or that hurts it, for flees_s
+//              Hostile  chases anyone within notices_m, or that hurts it, while within
+//                       leash_m of home; attacks within attacks_within_m; a bite of bite
+//                       lands bite_at_s into an attack lasting attack_s, on anyone still
+//                       within bite_reach_m
+//   lives    where it is put in a world: in a herd of so many, or so many at a lair
+//   pools    whether it forms where magic pools (D103)
+//   stride   how far a step carries, as so far and so much more for each metre a second
+//   feet     what its steps sound like
+//   voice    what it sounds like when it is alarmed
+//   blood    what sprays from it when it is struck
+//   carcass  what butchering it takes and gives, if it can be butchered
+//   lies_s   how long its body lies after it falls
+[
+    (
+        name: "Deer",
+        model: ("models/creatures/Deer.glb", 0.36),
+        clips: (
+            idle: "AnimalArmature|Idle",
+            walk: "AnimalArmature|Walk",
+            run: "AnimalArmature|Gallop",
+            eat: "AnimalArmature|Eating",
+            attack: "AnimalArmature|Attack_Kick",
+            death: "AnimalArmature|Death",
+        ),
+        health: 16.0,
+        walk_mps: 1.4,
+        run_mps: 7.5,
+        body: (radius: 0.45, weight: 2.0),
+        temper: Shy(flees_within_m: 9.0, flees_s: 4.0),
+        lives: Herd(5),
+        stride: (0.5, 0.2),
+        feet: Hoof,
+        voice: Snort,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 3), ("Hide", 2)]),
+        lies_s: 300.0,
+    ),
+    (
+        name: "Spider",
+        model: ("models/creatures/Spider.glb", 0.42),
+        clips: (
+            idle: "SpiderArmature|Spider_Idle",
+            walk: "SpiderArmature|Spider_Walk",
+            run: "SpiderArmature|Spider_Walk",
+            attack: "SpiderArmature|Spider_Attack",
+            death: "SpiderArmature|Spider_Death",
+        ),
+        health: 45.0,
+        walk_mps: 1.6,
+        run_mps: 4.6,
+        body: (radius: 0.55, weight: 1.0),
+        temper: Hostile(
+            notices_m: 14.0,
+            leash_m: 30.0,
+            attacks_within_m: 2.2,
+            bite: 9.0,
+            bite_at_s: 0.45,
+            bite_reach_m: 2.8,
+            attack_s: 1.3,
+        ),
+        lives: Lair(3),
+        pools: true,
+        stride: (0.3, 0.05),
+        feet: Skitter,
+        voice: Hiss,
+        blood: Ichor,
+        lies_s: 8.0,
+    ),
+]

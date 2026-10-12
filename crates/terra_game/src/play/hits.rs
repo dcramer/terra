@@ -10,7 +10,7 @@
 
 use super::IsLocalPlayer;
 use super::combat::{Hurt, Struck};
-use super::creatures::Species;
+use super::species::Blood;
 use bevy::prelude::*;
 
 /// How long a drop of the spray lasts, and how many a blow throws, or a killing one.
@@ -148,9 +148,9 @@ fn spray(
         let out = (camera.translation() - blow.at)
             .reject_from(up)
             .normalize_or(up);
-        let material = match blow.species {
-            Species::Deer => look.blood.clone(),
-            Species::Spider => look.ichor.clone(),
+        let material = match blow.species.def().blood {
+            Blood::Red => look.blood.clone(),
+            Blood::Ichor => look.ichor.clone(),
         };
         let count = if blow.killed { KILL_SPARKS } else { SPARKS };
         for _ in 0..count {

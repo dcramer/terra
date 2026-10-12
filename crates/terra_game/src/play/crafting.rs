@@ -64,9 +64,15 @@ static STATIONS: LazyLock<Vec<StationDef>> = LazyLock::new(|| {
         .unwrap_or_else(|problem| panic!("assets/data/stations.ron: {problem}"))
 });
 
-/// A kind of station: its place in `assets/data/stations.ron`.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+/// A kind of station: its place in `assets/data/stations.ron`. It prints as its name.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Station(u8);
+
+impl std::fmt::Debug for Station {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
 
 impl Station {
     /// Every kind of station.
