@@ -49,7 +49,7 @@ Proposed, and reshaped by the developers' answers of 2026-10-12. Each goal says 
 
 **Not goals:**
 
-- Photographic detail, while the look is stylised (D14). The developers' "realistic" of 2026-10-12 is recorded here for the forest's density; whether it also means the look is asked below.
+- Photographic detail, while the look is stylised (D14). The developers like Sons of the Forest's art style but think it is likely beyond us (2026-10-12), so its realism applies to the forest's density, not the look.
 - Anything placed by hand. Any number of worlds (D17) means every place comes from rules.
 
 ## How shipped games do it
@@ -157,7 +157,7 @@ That things grow back is decided (D150); how is open. Proposed, to react to:
 - **In stages, from time alone.** A cut leaves a stump, and the stored change records when it happened. The plant's stage (stump, sapling, young, grown) is worked out from the time since, the species' growth rate and the season. Nothing ticks. When the plant is grown again its change is forgotten, so the world's stored state shrinks back on its own (D47, D52).
 - **Seen to grow, never popping.** A stage changes only while no player can see the plant. You never watch a tree jump, but come back after a while and the clearing has saplings, later young trees. Shipped games do the same out of sight: Rust refills resources away from players, and The Forest regrows trees while you sleep.
 - **At each kind's own pace** (decided, D150): a growth rate per kind, as data. Grass takes hours, bushes days, and great trees much longer.
-- **Removing the stump stops it,** as in The Forest. That gives a way to clear land for good.
+- **Removing the stump stops it** (decided, D150, to revisit if it causes trouble), as in The Forest. That gives a way to clear land for good.
 - **Inside a claim, nothing grows back by default** (D150, to revisit). The world heals outside claims (D94), and inside them is the owner's.
 
 ### Seasons
@@ -259,12 +259,12 @@ Answered on 2026-10-12:
 - **Worn paths:** "would be amazing as a goal", if it can be done.
 - **Biomes:** made procedurally, not chosen.
 - **Leaves:** no view yet.
+- **The look:** Sons of the Forest's art style is liked, "ambitious, we probably can't pull it off". D14 is unchanged.
+- **Stumps:** removing one stops regrowth (D150).
 
 Still open:
 
-1. **Realistic in look too?** "Sons of the Forest is more realistic, and that's our goal" is recorded for density. If it also means the art direction, D14 changes, and so does what we ask of the art pipeline.
-2. **Which grass can't be harvested?** Proposed: short ground cover can't be, and tall grass and reeds can, giving fibre.
-3. **Whether removing a stump stops regrowth.**
-4. **How long a year is.** Proposed: 365 days, about 7.6 real days ([above](#how-long-a-year-is)).
-5. **Which of seasons' effects on play** we want ([above](#how-seasons-change-play)).
-6. **Cards or clumps** for leaves, chosen by eye from a side-by-side once a tree generator exists.
+1. **Which grass can't be harvested?** Proposed: short ground cover can't be, and tall grass and reeds can, giving fibre.
+2. **How long a year is.** Proposed: 365 days, about 7.6 real days ([above](#how-long-a-year-is)).
+3. **Which of seasons' effects on play** we want ([above](#how-seasons-change-play)).
+4. **Cards or clumps** for leaves, chosen by eye from a side-by-side once a tree generator exists.

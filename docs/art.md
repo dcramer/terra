@@ -58,7 +58,7 @@ Games with a related look, and the one thing worth taking from each:
 | [Jusant](https://store.steampowered.com/app/1977170/) | Soft stylised rock and a climb through changing biomes |
 | [No Man's Sky](https://store.steampowered.com/app/275850/) | Not the look, but the method: a palette generated per planet, and variety from rules |
 | [Enshrouded](https://store.steampowered.com/app/1203620/) | Named by the developers on 2026-10-10 as looking beautiful, with good art (D85). It is painterly, textured and detailed, unlike Forever Ago's flat colour; which way the look leans between them is theirs to say (D14) |
-| [Sons of the Forest](https://store.steampowered.com/app/1326470/) | Named by the developers on 2026-10-12 for its world design: beautiful, full, organic (D85). Realistic, so not the look itself, but the fullness: growth in layers from ground cover to canopy, nothing standing on bare ground. That fullness comes from density and set dressing more than from any one model, and carries to a stylised look |
+| [Sons of the Forest](https://store.steampowered.com/app/1326470/) | Named by the developers on 2026-10-12 for its world design: beautiful, full, organic (D85). Realistic, so not the look itself, but the fullness: growth in layers from ground cover to canopy, nothing standing on bare ground. That fullness comes from density and set dressing more than from any one model, and carries to a stylised look. They like its art style too, "ambitious, we probably can't pull it off" (2026-10-12); D14 is unchanged |
 
 ## Where we are
 
