@@ -70,7 +70,7 @@ Most things come in many variants (D182), so make them for it:
 
 ## The concept prompt
 
-Most models start as a concept image ([props](../tools/props/README.md), [characters](../.claude/skills/character/SKILL.md)). End the subject's description with this paragraph, word for word, so that every concept is drawn alike:
+Most models start as a concept image ([props](../tools/props/README.md), [characters](../.claude/skills/character/SKILL.md)). End the subject's description with this paragraph, word for word, so that every concept is drawn alike. `tools/props/props.ts` reads it from here, so keep it as the one quoted line under this heading:
 
 > Stylised 3D render with a graphic, illustrative look: bold simplified shapes, large flat areas of colour from a limited palette, no texture, no outlines, no painted shading; strong, clear silhouette; true real-world proportions. Single subject, whole subject in frame and centred, lit evenly and softly from the upper left, on a plain light grey background, no ground, no text.
 
@@ -105,7 +105,7 @@ Check every model in the game's own light, beside a figure for scale (the workbe
 
 Not everything we have made yet follows this guide. Each gap is work to do, not an exception to the rules:
 
-- **No D reference image in the repository yet.** The concept prompt above is the reference. The D images are on the private style page; one approved D image should go into `art/style/` for tools to give as `--ref`. Until then, don't give `art/style/mood-medieval-town.png` as a reference: it is direction C.
+- **No D reference image in the repository yet.** The concept prompt above is the reference. The D images are on the private style page; one approved D image should be saved as `art/style/reference.png`, which `props.ts` then gives as `--ref`. Until then, don't give `art/style/mood-medieval-town.png` as a reference: it is direction C.
 - **The prop clean-up flat-shades every face** (`tools/props/refine.py`). It must keep hard creases and smooth the curves instead.
 - **The game has no banded light yet.** It shades with Bevy's standard lighting, so models look softer in the game than in this guide.
 - **Characters and gear keep Tripo's painted textures**, and template skins are painted. They have not yet been moved to flat roles.
