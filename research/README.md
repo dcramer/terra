@@ -27,6 +27,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [repo-layout.md](repo-layout.md) | Where should each kind of thing in this repository live, what do our folders actually hold, and what does the industry call these things? |
 | [one-mesh-for-every-body.md](one-mesh-for-every-body.md) | How do we fit every item to every body and template without a model per pair, and still look good? |
 | [modern-character-variety.md](modern-character-variety.md) | In modern games with deep creators or varied crowds, how are body variety and worn gear combined, and what is authored per body versus once? |
+| [body-morphs.md](body-morphs.md) | Can build and sex morphs be made from designs of the base person, and does gear made once pass on every morph? |
 
 ## Adding a note
 

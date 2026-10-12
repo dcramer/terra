@@ -109,6 +109,15 @@ The base is checked with the rig checks until it passes, once.
 
 They live in `tools/characters/` (D133): TypeScript to drive, Blender for imports, posing and baking, Rust for what the game shares.
 
+## Tried, 2026-10-12
+
+The spike's first question, answered yes ([research/body-morphs.md](../research/body-morphs.md)):
+- Heavy, thin and strong morphs were made from designs of the base man.
+- The female body was made a morph of the male base, on her own proportions with her own painted skin.
+- The jerkin, cap and pack, made once on the base, were carried onto all four by a tool. Of 12 clipping checks, 11 pass. The one failure is the pack on the heavy body, by skin hidden inside the bag; the fix is to hide the patches under it.
+
+So sex is a morph on one base, and gear is made once for both.
+
 ## 6. Order of work
 
 1. **Spike**, one question: does a base body with a few parameters reproduce our two bodies well enough to look right, and does a jerkin made once pass its clipping check on both and at each parameter's limits?

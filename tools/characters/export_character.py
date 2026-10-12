@@ -111,8 +111,13 @@ for s, side in (("R", -1), ("L", 1)):
 print("SOCKETS", ", ".join(f"{e.name} {tuple(round(c, 3) for c in e.matrix_world.translation)}" for e in sockets))
 
 # The body's patches, which what is worn can hide (patches.py).
-patches.mark(body)
-print("PATCHES", patches.PATCHES)
+# A body that is a shape of the base keeps the base's patches, so what a garment hides
+# is the same skin on every body; only a new base cuts them.
+if len(body.data.uv_layers) >= 2:
+    print("PATCHES kept from the base")
+else:
+    patches.mark(body)
+    print("PATCHES", patches.PATCHES)
 
 # The clips, from the mannequin's file; its objects are thrown away.
 before = set(bpy.data.objects)

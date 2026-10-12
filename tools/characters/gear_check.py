@@ -102,7 +102,9 @@ def through(pts, nrm, bvh, which):
 
 def wear(item):
     before = set(bpy.context.scene.objects)
-    bpy.ops.import_scene.gltf(filepath=os.path.join(GEAR, body_name, f"{item}.glb"))
+    # An item is named as in the catalogue, or given as a path to a look (a .glb).
+    given = item if item.endswith(".glb") else os.path.join(GEAR, body_name, f"{item}.glb")
+    bpy.ops.import_scene.gltf(filepath=os.path.join(look.ROOT, given))
     new = [o for o in bpy.context.scene.objects if o not in before]
     piece = max((o for o in new if o.type == "MESH"), key=lambda o: len(o.data.vertices))
     covers = set(piece.get("covers", []))
