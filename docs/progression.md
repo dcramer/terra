@@ -45,6 +45,7 @@ To react to, not to choose from:
 | Factorio | Feed materials into labs over time |
 | Rust | Spend scrap at a workbench; learn by taking found items apart |
 | Satisfactory | Hand in materials at a hub to finish tiers and milestones |
+| Terraria | Go to other zones, find new materials, and they open new things to craft and build, many only for their look; a station nearby is often what is needed. Named by the developers as an inspiration (D85, 2026-10-12): ours would be realms (D87) |
 
 ## What any answer needs
 

@@ -335,7 +335,7 @@ D108: everything built in the world, by anyone, is made of the same parts as wha
 
 For the developers to reorder. Each step is small enough to play and judge.
 
-1. **Placing, finished**: raise and lower, undo, the room-over-a-placed-thing check, what blocks a ghost shown through walls, and the controls above. These hold whatever comes after.
+1. **The controls, locked, and placing finished**: the keys above, raise and lower, undo, drawing, the room-over-a-placed-thing check, what blocks a ghost shown through walls, and snapping as [Snapping and feel](#snapping-and-feel) says. These hold whatever comes after.
 2. **Plans, then constructing** (D139): rooms and walls laid as plans, built part by part from the pack and from storage in the claim (D141); doors and windows carved out and fitted.
 3. **Large materials** (D140): logs that lie where trees fall, carried on the shoulder; a log pile to keep them, later unlocked.
 4. **Downward and upward**: rooms underground (D143), a storey up, stairs and ladders.
@@ -360,7 +360,7 @@ Answered on 2026-10-12: structures are planned, then constructed, a blueprint sh
 7. **Taking apart**: always a full refund? Recommend yes, as now; Rust's window exists because of raiding, which we do not have (D2).
 8. **What gets rounded**: the upright corners of walls only, or the roof's edge and the foot of the wall too?
 9. **What is a material a property of**: a whole room, a wall panel, or a block?
-10. **What "capable of building" means** (D68): blueprints found, things scanned, a research tree, skill?
+10. **What "capable of building" means** (D68): blueprints found, things scanned, a research tree, skill? The developers named Terraria (2026-10-12): going to other zones, finding new materials, which unlock new things to craft and build, many of them only for their look. Realms (D87) would be our zones: each realm's materials open its own kinds of construction and decoration.
 11. **Do bases have needs**, as Subnautica's: power, light, warmth?
 12. **Who may change what** in co-op? Recommend the claim's owner and whom they allow (D94).
 13. **Claims**: how many per player, what keeps one alive, how fast the world heals outside them?
