@@ -86,6 +86,7 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 |---|---|
 | [docs](docs) | Decisions and design docs. Start with [docs/decisions.md](docs/decisions.md). |
 | [research](research) | What we looked into and found, one dated note per question. |
+| [art](art) | Source art: approved design sheets and the models made from them, which the asset pipeline turns into the game's files. |
 | [crates](crates) | The Rust workspace, including the [sandbox](crates/terra_sandbox) where experiments run. |
 | [spike](spike) | Throwaway experiments. |
 

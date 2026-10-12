@@ -10,6 +10,7 @@ Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in 
 |---|---|
 | `docs/` | Decisions and plans. Start here. |
 | `research/` | Findings, surveys and measurements, one dated note per question. |
+| `art/` | Source art: the approved sheets and generated models the asset pipeline makes the game's files from. See `art/README.md`. |
 | `crates/` | The Rust workspace: the game's code. See `crates/README.md`. |
 | `xtask/` | Project tasks, run as `cargo xtask <task>`. |
 | `tools/` | Team tooling outside the game, such as [token stats](tools/token-stats/README.md), the [Tripo CLI](tools/tripo/README.md), the [sandbox remote](tools/sandbox/README.md) and the [Blender runner](tools/blender/README.md). |
