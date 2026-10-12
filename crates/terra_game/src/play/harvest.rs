@@ -226,6 +226,7 @@ fn cut(
         return;
     }
     let given = belongings.give(raw, count);
+    belongings.wear_in_hand(1);
     if given < count {
         notice.say(format!(
             "Your backpack is full: {} {} left behind",

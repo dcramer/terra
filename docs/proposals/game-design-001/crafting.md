@@ -77,6 +77,8 @@ Proposed, replacing research as a tree of technology (D68): you learn a thing by
 
 Agreed by the developers for now, 2026-10-11 (D99), as recommended here, after Valheim: **tools, weapons and armour wear with use, a broken one stops working but is never lost, and repair is cheap at a station in a claim**, quicker with a recruit who knows the craft. It is a gentle reason to come home (D91), it makes smiths worth rescuing, and it stays clear of the chore of grinding repairs (D3). The other way, no wear at all, is simpler and loses those.
 
+In the tech demo, proposed numbers: felling, breaking or cutting one thing, digging a scoop, landing a blow, loosing an arrow or building a part is a use; a stone tool lasts 60, an iron one 200, the hammer 300, the spear 100, the bow 120; leather wears a use for each blow taken, the cap lasting 60 and the coat 80; a torch burns 8 minutes. A thing is mended, free, at the station that makes it, when you open it in your claim: the workbench mends stone tools, leather and the hammer, the forge iron, a campfire torches. A recruit who knows the craft mending quicker is still to come.
+
 ## Questions
 
 1. Answered: **wear and repair** as recommended, for now (D99).

@@ -120,13 +120,77 @@ struct GearName(GearSlot);
 #[derive(Component)]
 struct Hud;
 
+/// The line along the foot of a bar slot saying how worn its tool is (D99).
+#[derive(Component)]
+struct BarWear(usize);
+
+/// A wear line, as long as the use left, or all the way across in red when broken.
+fn wear_node(fraction: f32) -> Node {
+    let shown = if fraction <= 0.0 {
+        1.0
+    } else {
+        fraction.min(1.0)
+    };
+    Node {
+        position_type: PositionType::Absolute,
+        left: px(4),
+        bottom: px(2),
+        width: percent(shown.max(0.04) * 92.0),
+        height: px(3),
+        border_radius: BorderRadius::all(px(2)),
+        ..default()
+    }
+}
+
+/// The colour of a wear line: green while there is plenty of use left, amber when
+/// little, red when broken.
+fn wear_colour(condition: f32) -> Color {
+    if condition <= 0.0 {
+        Color::srgb(0.9, 0.2, 0.15)
+    } else if condition < 0.25 {
+        Color::srgb(0.95, 0.65, 0.2)
+    } else {
+        Color::srgba(0.55, 0.85, 0.45, 0.9)
+    }
+}
+
+/// The wear of an item, if it is of a kind that wears and has been used at all.
+fn worn(items: &Items, item: terra_items::Item) -> Option<f32> {
+    let def = items.catalogue.get(item.kind).ok()?;
+    item.condition(def).filter(|condition| *condition < 1.0)
+}
+
+/// Draws each bar slot's wear line, for a tool that has been used.
+fn draw_wear(
+    items: Res<Items>,
+    player: Single<(&Backpack, &inventory::Bar)>,
+    mut lines: Query<(&BarWear, &mut Node, &mut BackgroundColor)>,
+) {
+    let (backpack, bar) = *player;
+    for (BarWear(slot), mut node, mut colour) in &mut lines {
+        let condition = bar
+            .0
+            .get(*slot)
+            .and_then(|id| backpack.0.get(id))
+            .and_then(|placed| worn(&items, placed.item));
+        let wanted = condition.map_or(Color::NONE, wear_colour);
+        if colour.0 != wanted {
+            colour.0 = wanted;
+        }
+        let width = wear_node(condition.unwrap_or(0.0)).width;
+        if node.width != width {
+            node.width = width;
+        }
+    }
+}
+
 pub fn plugin(app: &mut App) {
     app.init_resource::<Items>()
         .init_resource::<ItemIcons>()
         .init_resource::<InventoryScreen>()
         .init_resource::<Notice>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (use_keys, click, lay_out, draw).chain());
+        .add_systems(Update, (use_keys, click, lay_out, draw, draw_wear).chain());
 }
 
 fn setup(mut commands: Commands) {
@@ -191,6 +255,7 @@ fn setup(mut commands: Commands) {
                         TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
                     ));
                     slot_box.spawn((SlotLabel(slot), Text::new(""), small.clone(), white));
+                    slot_box.spawn((BarWear(slot), wear_node(0.0), BackgroundColor(Color::NONE)));
                 });
             }
         });
@@ -581,6 +646,12 @@ fn lay_out(
                     TextFont::from_font_size(9.0),
                     TextColor(Color::WHITE),
                 ));
+                if let Some(condition) = worn(&items, placed.item) {
+                    tile.spawn((
+                        wear_node(condition),
+                        BackgroundColor(wear_colour(condition)),
+                    ));
+                }
             });
         }
     });

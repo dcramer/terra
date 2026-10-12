@@ -180,6 +180,7 @@ fn draw(
     ));
     player.attacking = 0.4;
     info!("Loosed an arrow at {:.0}% draw.", pull * 100.0);
+    belongings.wear_in_hand(1);
 }
 
 /// Arrows fly, fall, hit what they pass through, and stick where they land.

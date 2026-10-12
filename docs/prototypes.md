@@ -101,7 +101,7 @@ As of 2026-10-11.
 | Crafting at stations, timed and queued (D109) | Built: workbench, smelter, forge, campfire |
 | A claim, upgradable (D94, D104) | Built |
 | Building on the voxel grid (D48) | Rooms and items on the build grid; a room cuts into the ground it stands on, once trees and rocks are cleared (D131). Blocks on the voxel grid are missing |
-| Backpack, equipment, action bar (D84); a belt quiver (D118) | Built; wear and repair (D99) missing |
+| Backpack, equipment, action bar (D84); a belt quiver (D118) | Built; the bar has eight slots. Wear and repair (D99): tools, weapons and leather wear with use and stop working when broken; a line under each icon shows it; opening the station that makes a thing, in your claim, mends it free |
 | One wildlife, hunted for meat and hide | Built: deer, with the bow |
 | One monster, forming where magic pools (D103), holding a prisoner | Built: spiders at a glowing hollow |
 | Combat: melee, a bow, block, dodge, stamina (D97) | Built; hit zones and critical hits (D119) missing |

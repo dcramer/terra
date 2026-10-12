@@ -37,6 +37,31 @@ pub struct ItemId(pub u64);
 pub struct Item {
     pub id: ItemId,
     pub kind: ItemKind,
+    /// How much it has been used, for a kind that wears (D99): 0 is as made. At its kind's
+    /// [`KindDef::lasts`] it is broken. Moving it never changes this.
+    pub wear: u16,
+}
+
+impl Item {
+    /// Whether it is worn out: broken, and of no use until mended. It is still kept.
+    pub fn broken(&self, def: &KindDef) -> bool {
+        def.lasts.is_some_and(|lasts| self.wear >= lasts)
+    }
+
+    /// How much of its use is left, from 1 as made to 0 broken; nothing for a kind that
+    /// does not wear.
+    pub fn condition(&self, def: &KindDef) -> Option<f32> {
+        def.lasts
+            .map(|lasts| 1.0 - self.wear.min(lasts) as f32 / lasts.max(1) as f32)
+    }
+
+    /// Wears it by so much use. Returns whether that broke it.
+    fn wear_by(&mut self, def: &KindDef, amount: u16) -> bool {
+        let Some(lasts) = def.lasts else { return false };
+        let was = self.broken(def);
+        self.wear = self.wear.saturating_add(amount).min(lasts);
+        !was && self.broken(def)
+    }
 }
 
 /// Hands out item identities. The server owns the one source for a world, so no two items
@@ -56,7 +81,7 @@ impl IdSource {
     pub fn make(&mut self, kind: ItemKind) -> Item {
         let id = ItemId(self.next);
         self.next += 1;
-        Item { id, kind }
+        Item { id, kind, wear: 0 }
     }
 }
 
@@ -83,6 +108,60 @@ pub enum Refused {
 mod tests {
     use super::*;
     use terra_gen::Seed;
+
+    /// A tool wears with use, breaks at its kind's limit and is kept, carries its wear
+    /// wherever it goes, and is as made again when mended (D99).
+    #[test]
+    fn wear_breaks_an_item_without_losing_it() {
+        const BODY: GearSlot = GearSlot(0);
+        let mut catalogue = Catalogue::default();
+        let axe = catalogue.add(KindDef::new("Axe").size(2, 1).lasts(3));
+        let coat = catalogue.add(KindDef::new("Coat").gear(BODY).lasts(2));
+        let stone = catalogue.add(KindDef::new("Stone"));
+        let mut ids = IdSource::default();
+        let mut backpack = Grid::new(4, 4);
+        let mut locker = Grid::new(4, 4);
+        let (axe, stone) = (ids.make(axe), ids.make(stone));
+        backpack.insert(&catalogue, axe, None).unwrap();
+        backpack.insert(&catalogue, stone, None).unwrap();
+
+        assert!(!backpack.wear(&catalogue, axe.id, 2).unwrap());
+        assert!(
+            backpack.wear(&catalogue, axe.id, 5).unwrap(),
+            "the third use breaks it"
+        );
+        assert!(
+            !backpack.wear(&catalogue, axe.id, 1).unwrap(),
+            "it breaks only once"
+        );
+        let worn = backpack.get(axe.id).unwrap().item;
+        let def = catalogue.get(worn.kind).unwrap();
+        assert!(worn.broken(def));
+        assert_eq!(worn.condition(def), Some(0.0));
+        // Broken, it is still carried, and moving it keeps its wear.
+        transfer(&catalogue, &mut backpack, &mut locker, axe.id, None).unwrap();
+        assert!(locker.get(axe.id).unwrap().item.broken(def));
+        locker.set_wear(axe.id, 0).unwrap();
+        assert_eq!(locker.get(axe.id).unwrap().item.condition(def), Some(1.0));
+        // What does not wear is untouched.
+        assert!(!backpack.wear(&catalogue, stone.id, 9).unwrap());
+        assert_eq!(backpack.get(stone.id).unwrap().item.wear, 0);
+        // Worn gear wears where it is worn.
+        let mut gear = Equipment::new(&[BODY]);
+        let coat = ids.make(coat);
+        backpack.insert(&catalogue, coat, None).unwrap();
+        equip(
+            &catalogue,
+            &mut backpack,
+            &mut gear,
+            Size { w: 4, h: 4 },
+            coat.id,
+        )
+        .unwrap();
+        assert!(gear.wear(&catalogue, BODY, 2).unwrap());
+        gear.set_wear(BODY, 0).unwrap();
+        assert_eq!(gear.worn(BODY).unwrap().wear, 0);
+    }
 
     /// Random moves between a backpack, a locker and what is worn never make or lose an
     /// item, never overlap two, and never leave one outside its grid.

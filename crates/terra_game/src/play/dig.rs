@@ -170,6 +170,7 @@ fn dig(
         }
     }
     did.write(Did(Skill::Mining, ONCE));
+    belongings.wear_in_hand(1);
     info!(
         "Dug at {:.1} m: {:.2} m³ of stone, {:.2} m³ of ore, the rest soil.",
         at.length(),

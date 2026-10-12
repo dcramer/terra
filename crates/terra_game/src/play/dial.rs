@@ -402,7 +402,10 @@ fn draw(
     set(
         &mut texts.p1(),
         match (holding, part.variant_name(builder.variant())) {
-            (None, _) => "Empty hand".to_string(),
+            (None, _) => match belongings.broken_in_hand() {
+                Some(tool) => format!("{}  (broken)", tool.name()),
+                None => "Empty hand".to_string(),
+            },
             (Some(tool), _) if tool != Tool::Hammer => tool.name().to_string(),
             _ if builder.stowed => "Hammer:  nothing picked".to_string(),
             (_, Some(variant)) if part.variants() > 1 => format!(
@@ -444,6 +447,16 @@ fn draw(
                     }
                 }
                 Some(tool) => harvest::prompt(tool, &cutting, &growth, &settings),
+                None if let Some(tool) = belongings.broken_in_hand() => {
+                    let kind = belongings.items().tool_kind(tool);
+                    match super::wear::mended_at(belongings.items(), kind) {
+                        Some(station) => format!(
+                            "Broken: mend it at a {} in your claim",
+                            station.name().to_lowercase()
+                        ),
+                        None => "Broken".to_string(),
+                    }
+                }
                 None => format!(
                     "1 to 8  pick a tool      {}  inventory",
                     settings.key(Action::Inventory)

@@ -81,6 +81,9 @@ struct SavedPlayer {
     worn: Vec<Option<String>>,
     #[serde(default)]
     worn_held: Vec<u32>,
+    /// How worn what is worn is, in the order of the slots (D99).
+    #[serde(default)]
+    worn_wear: Vec<u16>,
     backpack: Vec<SavedItem>,
     /// For each slot of the bar, which of the backpack's items it points at.
     bar: Vec<Option<usize>>,
@@ -95,6 +98,9 @@ struct SavedItem {
     /// How many a container holds, such as a quiver's arrows.
     #[serde(default)]
     held: u32,
+    /// How worn it is (D99).
+    #[serde(default)]
+    wear: u16,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -305,6 +311,11 @@ fn load(
             let _ = equipment.set_held(slot, held);
         }
     }
+    for (&(slot, _), &wear) in SLOTS.iter().zip(&player.worn_wear) {
+        if wear > 0 {
+            let _ = equipment.set_wear(slot, wear);
+        }
+    }
     let mut ids: Vec<Option<ItemId>> = Vec::new();
     for saved in &player.backpack {
         let id = items.make_named(&saved.kind).and_then(|item| {
@@ -321,6 +332,11 @@ fn load(
             && saved.held > 0
         {
             let _ = grid.set_held(id, saved.held);
+        }
+        if let Some(id) = id
+            && saved.wear > 0
+        {
+            let _ = grid.set_wear(id, saved.wear);
         }
         ids.push(id);
     }
@@ -494,6 +510,7 @@ fn gather(
             x: placed.at.x,
             y: placed.at.y,
             held: placed.stack.map_or(0, |stack| stack.held),
+            wear: placed.item.wear,
         })
         .collect();
     let bar_slots = (0..bar.0.len())
@@ -523,6 +540,10 @@ fn gather(
             worn_held: SLOTS
                 .iter()
                 .map(|(slot, _)| gear.0.stack(*slot).map_or(0, |stack| stack.held))
+                .collect(),
+            worn_wear: SLOTS
+                .iter()
+                .map(|(slot, _)| gear.0.worn(*slot).map_or(0, |item| item.wear))
                 .collect(),
             backpack: kept,
             bar: bar_slots,
@@ -642,12 +663,14 @@ mod tests {
                 fed: 60.0,
                 skills: vec![("Chopping".to_string(), 2.5)],
                 worn: vec![Some("Small pack".to_string()), None, None, None],
+                worn_wear: vec![0, 0, 3, 0],
                 worn_held: vec![0, 0, 0, 0],
                 backpack: vec![SavedItem {
                     kind: "Wood".to_string(),
                     x: 1,
                     y: 2,
                     held: 0,
+                    wear: 12,
                 }],
                 bar: vec![Some(0), None],
                 picked: 0,

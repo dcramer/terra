@@ -83,6 +83,25 @@ impl Equipment {
         Ok(&mut self.stacks[index])
     }
 
+    /// Wears what is in a slot by so much use (D99). Returns whether that broke it.
+    pub fn wear(
+        &mut self,
+        catalogue: &Catalogue,
+        slot: GearSlot,
+        amount: u16,
+    ) -> Result<bool, Refused> {
+        let item = self.slot_mut(slot)?.as_mut().ok_or(Refused::NotFound)?;
+        let def = catalogue.get(item.kind)?;
+        Ok(item.wear_by(def, amount))
+    }
+
+    /// Sets how worn what is in a slot is: to 0 when it is mended, or as a saved game says.
+    pub fn set_wear(&mut self, slot: GearSlot, wear: u16) -> Result<(), Refused> {
+        let item = self.slot_mut(slot)?.as_mut().ok_or(Refused::NotFound)?;
+        item.wear = wear;
+        Ok(())
+    }
+
     pub fn worn(&self, slot: GearSlot) -> Option<Item> {
         self.slots
             .iter()

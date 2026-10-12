@@ -108,6 +108,7 @@ pub(super) fn act(
                     noise.write(Noise::at(cue, work_at));
                     if pay.is_some() {
                         did.write(Did(Skill::Building, ONCE));
+                        belongings.wear_in_hand(1);
                     }
                     if let Some((cost, times)) = refund {
                         belongings.refund(cost, times);
@@ -140,6 +141,7 @@ pub(super) fn act(
                     );
                     info!("Placed a {} at {at}, {lift} up.", item.name);
                     did.write(Did(Skill::Building, ONCE));
+                    belongings.wear_in_hand(1);
                     noise.write(Noise::at(Cue::Placed, work_at));
                 }
             }

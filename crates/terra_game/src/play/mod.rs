@@ -58,6 +58,7 @@ mod tiles;
 mod tool;
 mod torchlight;
 mod vitals;
+mod wear;
 mod work;
 mod worn;
 
@@ -146,6 +147,7 @@ pub fn plugin(app: &mut App) {
     scene::plugin(app);
     daylight::plugin(app);
     torchlight::plugin(app);
+    wear::plugin(app);
     flora::plugin(app);
     props::plugin(app);
     figure::plugin(app);

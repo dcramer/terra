@@ -80,7 +80,7 @@ fn swing(
     controls: Controls,
     screen: Res<InventoryScreen>,
     view: Res<View>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     player: Single<(&Transform, &mut Player, &mut Vitals, &Skills)>,
     mut creatures: Query<(Entity, &mut Creature, &Transform), Without<Player>>,
     mut swung: ResMut<Swing>,
@@ -146,6 +146,7 @@ fn swing(
         &mut struck,
         &mut notice,
     );
+    belongings.wear_in_hand(1);
 }
 
 /// Lands a blow on a creature at a point on it, however it was dealt: a swing or an arrow,
@@ -191,7 +192,7 @@ fn guard(controls: Controls, belongings: Belongings, mut player: Single<&mut Pla
 /// Lands the blows creatures deal, less what leather, a guard or a roll takes.
 fn take_blows(
     mut bitten: MessageReader<Bitten>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     player: Single<(&mut Player, &mut Vitals)>,
     mut hurt: MessageWriter<Hurt>,
 ) {
@@ -209,6 +210,8 @@ fn take_blows(
         };
         vitals.hurt(taken);
         hurt.write(Hurt(taken));
+        // What is worn takes the blow too, and wears.
+        belongings.wear_worn(1);
         player.flinch = 0.35;
         info!("Bitten for {taken:.0}; health {:.0}.", vitals.health);
     }

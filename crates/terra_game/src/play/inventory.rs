@@ -187,6 +187,21 @@ impl Tool {
         }
     }
 
+    /// How much use it takes before it breaks (D99): felling, breaking or cutting one
+    /// thing, digging one scoop, landing one blow, loosing one arrow or building one part
+    /// is a use; a torch uses one for each second it burns. Proposed numbers.
+    pub fn lasts(self) -> u16 {
+        match self {
+            Tool::Hammer => 300,
+            Tool::StoneAxe | Tool::StonePickaxe => 60,
+            Tool::Knife => 80,
+            Tool::IronAxe | Tool::IronPickaxe => 200,
+            Tool::Spear => 100,
+            Tool::Bow => 120,
+            Tool::Torch => 8 * 60,
+        }
+    }
+
     pub fn about(self) -> &'static str {
         match self {
             Tool::Hammer => "Builds rooms, walls and items from what you carry",
@@ -271,8 +286,15 @@ impl Apparel {
                 .size(2, 2)
                 .gear(PACK)
                 .backpack(7, 6),
-            Apparel::LeatherCap => KindDef::new(self.name()).size(1, 1).gear(SLOTS[1].0),
-            Apparel::LeatherCoat => KindDef::new(self.name()).size(2, 2).gear(SLOTS[2].0),
+            // Armour wears with each blow it takes (D99).
+            Apparel::LeatherCap => KindDef::new(self.name())
+                .size(1, 1)
+                .gear(SLOTS[1].0)
+                .lasts(60),
+            Apparel::LeatherCoat => KindDef::new(self.name())
+                .size(2, 2)
+                .gear(SLOTS[2].0)
+                .lasts(80),
         }
     }
 }
@@ -370,8 +392,10 @@ impl Default for Items {
     fn default() -> Self {
         let mut catalogue = Catalogue::default();
         let raw = Raw::ALL.map(|raw| catalogue.add(KindDef::new(raw.name())));
-        let tools =
-            Tool::ALL.map(|tool| (tool, catalogue.add(KindDef::new(tool.name()).size(2, 1))));
+        let tools = Tool::ALL.map(|tool| {
+            let def = KindDef::new(tool.name()).size(2, 1).lasts(tool.lasts());
+            (tool, catalogue.add(def))
+        });
         let apparel = Apparel::ALL.map(|apparel| (apparel, catalogue.add(apparel.def())));
         let raw_kinds = raw;
         let containers = Container::ALL.map(|container| {
@@ -632,8 +656,12 @@ pub fn reason(refused: Refused) -> &'static str {
 }
 
 /// The tool in hand: whatever the picked slot of the bar points at.
+/// The tool in hand, if there is one and it is not broken: a broken one does nothing
+/// until it is mended (D99).
 pub fn holding(items: &Items, grid: &Grid, bar: &ActionBar) -> Option<Tool> {
-    items.tool(bar.in_hand(grid)?.kind)
+    let item = bar.in_hand(grid)?;
+    let def = items.catalogue.get(item.kind).ok()?;
+    (!item.broken(def)).then(|| items.tool(item.kind)).flatten()
 }
 
 /// The first raw item there is not enough of to pay a cost so many times over, and how
@@ -712,6 +740,7 @@ pub fn room_for(items: &Items, grid: &Grid, cost: Cost, times: u32) -> bool {
             let item = Item {
                 id: ItemId(id),
                 kind,
+                wear: 0,
             };
             trial.insert(&items.catalogue, item, None).is_ok()
         })
@@ -742,6 +771,12 @@ pub struct InventoryScreen {
     pub at: Option<(Entity, super::crafting::Station)>,
 }
 
+/// Something the player carries wore out (D99): what kind it is.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Broke {
+    pub kind: ItemKind,
+}
+
 /// Something came into what the player carries: so many of a kind of item. Written by
 /// [`Belongings`] whatever brought it, so whatever shows it needs to know nothing else.
 #[derive(Message, Clone, Copy, Debug)]
@@ -756,6 +791,7 @@ pub struct Belongings<'w, 's> {
     items: ResMut<'w, Items>,
     player: Single<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static mut Gear)>,
     gained: MessageWriter<'w, Gained>,
+    broke: MessageWriter<'w, Broke>,
 }
 
 impl Belongings<'_, '_> {
@@ -782,6 +818,70 @@ impl Belongings<'_, '_> {
 
     pub fn holding(&self) -> Option<Tool> {
         holding(&self.items, self.backpack(), self.bar())
+    }
+
+    /// The tool in hand if it is broken, so it can be said why it does nothing.
+    pub fn broken_in_hand(&self) -> Option<Tool> {
+        let item = self.bar().in_hand(self.backpack())?;
+        let def = self.items.catalogue.get(item.kind).ok()?;
+        item.broken(def)
+            .then(|| self.items.tool(item.kind))
+            .flatten()
+    }
+
+    /// Wears the tool in hand by so much use (D99), saying so if that broke it.
+    pub fn wear_in_hand(&mut self, amount: u16) {
+        let Some(item) = self.bar().in_hand(self.backpack()) else {
+            return;
+        };
+        let broke = self.player.0.0.wear(&self.items.catalogue, item.id, amount);
+        if broke == Ok(true) {
+            self.broke.write(Broke { kind: item.kind });
+        }
+    }
+
+    /// Wears everything worn that wears, by so much: a blow taken (D99).
+    pub fn wear_worn(&mut self, amount: u16) {
+        let slots: Vec<GearSlot> = self.gear().iter().map(|(slot, _)| slot).collect();
+        for slot in slots {
+            let Some(item) = self.gear().worn(slot) else {
+                continue;
+            };
+            if self.player.2.0.wear(&self.items.catalogue, slot, amount) == Ok(true) {
+                self.broke.write(Broke { kind: item.kind });
+            }
+        }
+    }
+
+    /// Mends everything carried or worn that `mends` says can be mended here, returning
+    /// the kinds mended (D99).
+    pub fn mend(&mut self, mends: impl Fn(ItemKind) -> bool) -> Vec<ItemKind> {
+        let mut mended = Vec::new();
+        let worn_out: Vec<(ItemId, ItemKind)> = self
+            .backpack()
+            .iter()
+            .filter(|placed| placed.item.wear > 0 && mends(placed.item.kind))
+            .map(|placed| (placed.item.id, placed.item.kind))
+            .collect();
+        for (id, kind) in worn_out {
+            if self.player.0.0.set_wear(id, 0).is_ok() {
+                mended.push(kind);
+            }
+        }
+        let slots: Vec<(GearSlot, ItemKind)> = self
+            .gear()
+            .iter()
+            .filter_map(|(slot, item)| {
+                item.filter(|item| item.wear > 0 && mends(item.kind))
+                    .map(|item| (slot, item.kind))
+            })
+            .collect();
+        for (slot, kind) in slots {
+            if self.player.2.0.set_wear(slot, 0).is_ok() {
+                mended.push(kind);
+            }
+        }
+        mended
     }
 
     /// How many of a raw item are carried: in the backpack, and in what is worn, such as

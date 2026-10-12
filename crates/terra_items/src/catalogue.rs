@@ -17,6 +17,8 @@ pub struct KindDef {
     /// A container for a stack of one kind, and how many it holds, as a quiver holds
     /// arrows (D118). What it holds does not fill cells of its own.
     pub holds: Option<(ItemKind, u32)>,
+    /// For a kind that wears with use (D99), how much use it takes before it breaks.
+    pub lasts: Option<u16>,
 }
 
 impl KindDef {
@@ -28,6 +30,7 @@ impl KindDef {
             gear: None,
             backpack: None,
             holds: None,
+            lasts: None,
         }
     }
 
@@ -43,6 +46,12 @@ impl KindDef {
 
     pub fn backpack(mut self, w: u8, h: u8) -> Self {
         self.backpack = Some(Size { w, h });
+        self
+    }
+
+    /// Wears with use, breaking after so much (D99).
+    pub fn lasts(mut self, uses: u16) -> Self {
+        self.lasts = Some(uses);
         self
     }
 

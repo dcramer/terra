@@ -8,6 +8,8 @@
 //!   `--give` does, on the next frame.
 //! - `play.take {item, count?}`: takes raw items away, all of that kind if no count is
 //!   given, so a test can start from a known pack, on the next frame.
+//! - `play.wear {amount}`: wears the tool in hand by so many uses (D99), as using it
+//!   would, on the next frame, so a test can see one break without using it so often.
 //! - `play.aim {at, up?}`: turns the view until the middle of it, where a bow shoots and a
 //!   tool reaches, is on a spot so far above the ground (a metre if not given), and says so.
 //!
@@ -43,13 +45,14 @@ const AIM_FRAMES: u32 = 90;
 pub fn plugin(app: &mut App) {
     app.init_resource::<Asked>()
         .add_systems(Startup, open_trace)
-        .add_systems(Update, (give, take, aim).before(super::tool::Acting))
+        .add_systems(Update, (give, take, wear, aim).before(super::tool::Acting))
         .add_systems(Last, trace);
     method(app, "play.state", state);
     method(app, "play.warp", warp);
     method(app, "play.give", ask_give);
     method(app, "play.take", ask_take);
     method(app, "play.aim", ask_aim);
+    method(app, "play.wear", ask_wear);
 }
 
 /// What a script asked for, done on the next frame by the systems that do the same for
@@ -60,6 +63,8 @@ pub(super) struct Asked {
     pub warp: Option<((f32, f32), Option<(f32, f32)>)>,
     gives: Vec<(String, u32)>,
     takes: Vec<(String, Option<u32>)>,
+    /// Uses to wear the tool in hand by.
+    wear: u16,
     /// A spot to aim at, east and south and how far above the ground, and the frames
     /// spent turning toward it so far.
     aim: Option<((f32, f32), f32, u32)>,
@@ -75,6 +80,25 @@ fn warp(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Warp { at, facing } = parse_some(params)?;
     world.resource_mut::<Asked>().warp = Some(((at[0], at[1]), facing.map(|f| (f[0], f[1]))));
     Ok(json!("warping on the next frame"))
+}
+
+#[derive(Deserialize)]
+struct Wear {
+    amount: u16,
+}
+
+fn ask_wear(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Wear { amount } = parse_some(params)?;
+    world.resource_mut::<Asked>().wear += amount;
+    Ok(json!("wearing on the next frame"))
+}
+
+fn wear(mut asked: ResMut<Asked>, mut belongings: inventory::Belongings) {
+    let amount = std::mem::take(&mut asked.wear);
+    if amount > 0 {
+        info!("Wore what is in hand by {amount} for testing.");
+        belongings.wear_in_hand(amount);
+    }
 }
 
 #[derive(Deserialize)]
@@ -315,6 +339,16 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         "stamina": number(body.stamina),
         "fed": number(body.fed),
         "holding": inventory::holding(items, &backpack.0, &bar.0).map(|tool| tool.name()),
+        // What is in hand whether or not it works, and how much use it has left (D99).
+        "in_hand": bar.0.in_hand(&backpack.0).map(|item| json!({
+            "name": items.name(item.kind),
+            "condition": items
+                .catalogue
+                .get(item.kind)
+                .ok()
+                .and_then(|def| item.condition(def))
+                .map(number),
+        })),
         "carrying": carrying,
         "wearing": wearing,
         "near": around.into_iter().map(|(_, _, each)| each).collect::<Vec<_>>(),

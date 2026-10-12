@@ -205,6 +205,34 @@ impl Grid {
         Ok(at)
     }
 
+    /// Wears an item by so much use (D99). Returns whether that broke it. An item of a
+    /// kind that does not wear is unchanged.
+    pub fn wear(
+        &mut self,
+        catalogue: &Catalogue,
+        id: ItemId,
+        amount: u16,
+    ) -> Result<bool, Refused> {
+        let placed = self
+            .placed
+            .iter_mut()
+            .find(|placed| placed.item.id == id)
+            .ok_or(Refused::NotFound)?;
+        let def = catalogue.get(placed.item.kind)?;
+        Ok(placed.item.wear_by(def, amount))
+    }
+
+    /// Sets how worn an item is: to 0 when it is mended, or as a saved game says.
+    pub fn set_wear(&mut self, id: ItemId, wear: u16) -> Result<(), Refused> {
+        let placed = self
+            .placed
+            .iter_mut()
+            .find(|placed| placed.item.id == id)
+            .ok_or(Refused::NotFound)?;
+        placed.item.wear = wear;
+        Ok(())
+    }
+
     /// Take an item out.
     pub fn remove(&mut self, id: ItemId) -> Result<Item, Refused> {
         let index = self
