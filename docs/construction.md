@@ -212,6 +212,15 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 - **Indoors is worked out**: inside walls and under a roof, by the grid. It is what shelters from weather and lets interior things go in.
 - **Into the ground**: a wall or floor laid where the ground is high cuts it away, as rooms do now (D131); a cellar is the ground dug out, then walled.
 
+**What a building is** (D155). The developers, 2026-10-12: station expansions count "anywhere in the building … buildings will need to know if they're 'complete' (aka walls/roof) anyways because otherwise you have natural elements like rain/cold that should have effect". So the game keeps track of buildings:
+
+- **A building** is the walls, floors and roofs that touch one another. Two separate cabins in a claim are two buildings.
+- **Its rooms** are the spaces enclosed by its walls, floor and roof. A room that is closed all round is **indoors**: sheltered from rain, wind and cold (D78), and where interior items go. A room missing its roof, or with a gap in its walls, is not, and says what is missing ("No roof over this room").
+- **Doors and windows**: an open doorway lets weather in; a fitted door, shut, keeps it out, and an open window lets in a little (D139).
+- **Stations** belong to the building they stand in: their expansions count anywhere in it (D151).
+
+Technically (mine): worked out from the grid when a part is built or taken away, not every frame (D127): the parts that touch, flood-filled into buildings; the cells inside each, flood-filled from its floor, are a room unless they reach the open air. Each building is then an entity with its rooms, which weather, warmth and stations read.
+
 Technically (mine): `terra_build` keeps a base as rooms of cells with a hull round them, and interior walls as edges between cells. It would become floor cells, wall edges and roof cells, with the inside worked out from them; the interior walls are most of the way there. Best done with plans (step 2 of the [order](#proposed-order)), since a plan is a wall at a time. Until then the room tool builds a room as it does, and drawing it carries over unchanged as the shortcut.
 
 **How a material is split into parts, so it looks built and not tiled.** Each kind of construction is a small kit of pieces sized to the grid, and a rule for laying them, as real masonry and carpentry have:
@@ -313,17 +322,27 @@ Earlier, on 2026-10-11: Enshrouded's building might be the better base concept t
 
 **Why Enshrouded's overwhelms**, as far as we can tell: the player makes every detail by hand, from many shapes; roofs are built a piece at a time; nothing helps a beginner's house look good. Its freedom is in the shape of the building; its effort is in the detail.
 
-**Proposed: the freedom of the one, the ease of the other.** Freedom in what matters to a design, the system doing the detail:
+**Proposed: The Sims' way, with our materials.** You draw the shape of the building; the game makes the details. The developers find The Sims "not bad" (2026-10-12). Building a log cabin would go:
 
-1. **Few kinds of part**: wall, floor, roof, stairs, foundation, openings. Not hundreds of shapes in the menu.
-2. **Any size and layout**: each drawn on the half-metre grid (D57) at any length, on any storey, at any height (a half wall, a parapet, a tall hall), so the shape of a building is the player's own.
-3. **The system does the detail**: corners, trims and edges by what a piece is next to (D56); each kind of construction laying its own pieces so a wall looks built (D146); a roof laid over what is enclosed, in a style and pitch chosen (gable, hip, flat, lean-to), its parts worked out. A first house looks good without skill.
-4. **Depth comes with progress**: arches, round and diagonal walls, carving (D146), new materials and decoration are found and learned (D68), as Terraria's are (D85), so the menu grows with the player instead of starting full.
-5. **Shortcuts for big things**: a room drawn as a rectangle (D152); later, a building saved as a design and laid again as a plan.
+1. **Walls.** Pick *Wall*, log. Press and drag 6 m: a wall's blueprint, shown log by log. Drag on from its end, round three more sides; when the loop closes, the game offers a floor inside, a click to accept.
+2. **Roof.** Pick *Roof* and click inside the walls: a roof's blueprint covers what they enclose. The wheel picks its style (gable, hip, flat, lean-to), Shift and the wheel its pitch. Its rafters, ridge and gable ends are worked out.
+3. **Openings.** Pick *Door* or *Window* and click a wall: the opening is planned into it, and the wall's logs shorten round it.
+4. **Construct.** Bring logs, set them, hammer them in (D139). The cabin goes up log by log.
 
-The Sims' build mode is the nearest precedent for this: walls drawn by dragging, a room tool, roofs laid over walls; many players make striking houses with it without being builders.
+| You decide | The game decides |
+|---|---|
+| Where every wall goes, how long and how high, in which material | How the logs or stones of each wall are laid, and how corners interlock |
+| Floors and storeys | Corner posts, trims, sills and lintels |
+| Where doors and windows go, and their size | How the wall is cut round them |
+| The roof's style and pitch, over what you enclosed | Its rafters, ridge, eaves and gable ends |
+| Stairs, foundations, what goes inside | What is indoors, sheltered from rain and cold (D155) |
 
-The other two: **Subnautica's**, fixed modules, is easiest but gives up the unique buildings the developers want. **Enshrouded's** whole, every block by hand, is the most free and the overwhelm they named; its blocks stay possible later as a kind of construction for those who want them (D146).
+**Against the other two**, for the same cabin:
+
+- **Subnautica's way**: you place a ready-made room module of a fixed size and join modules with corridors. Quick, but every cabin is the same.
+- **Enshrouded's way**: you place each wall section and each block, then build the roof slope by slope, with ridge pieces, gable ends and trims by hand. Any shape is possible; that is the freedom the developers like, and the overwhelm.
+
+Ours gives the same freedom of shape as Enshrouded's, any footprint, any length, any height, many storeys, without making every detail by hand. **Later, with progress**: arches, round and diagonal walls, carving (D146), more roof styles and materials are learned (D68), as Terraria's are (D85); a builder who wants a detail of their own can place it, such as a piece of roof or trim by hand. And a building can be saved as a design and laid again.
 
 **Where we improve on it**, agreed by the developers on 2026-10-11: shape rooms, then carve them; bases that matter, held, defended and lived in (D90); built on a round world, each base on its own square grid (D57); building together (D52); strength, perhaps.
 
