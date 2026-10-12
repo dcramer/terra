@@ -34,7 +34,7 @@ Named by the developers on 2026-10-11 as the games and books we draw on (D85), w
 | [Subnautica 2](https://store.steampowered.com/app/1962700/Subnautica_2/) | Base building you shape (D48), the build menu on a tool (D67), the inventory (D84), its controls for building. See [research/subnautica-2-building.md](../research/subnautica-2-building.md). | The science-fiction setting, for now (D89). |
 | *He Who Fights With Monsters* (books) | How the world works: magic, monsters, essences and abilities that rank up (D88), realms (D87), cultures (D86). | Not yet said. Its on-screen status, beyond some stats (D93). |
 | [Soulmask](https://store.steampowered.com/app/2646460/Soulmask/) | Recruits who work and defend, outposts at resources, and attacks provoked by your activity (D90). | Not yet said. Recruiting by force rather than rescue. |
-| [Red Dead Redemption 2](https://store.steampowered.com/app/1174180/Red_Dead_Redemption_2/) | A world that feels very alive (named by the developers on 2026-10-12): people with their own lives and routines, each looking like someone in particular. How its crowds get their variety informs ours ([characters](characters.md)). | Not yet said. |
+| [Red Dead Redemption 2](https://store.steampowered.com/app/1174180/Red_Dead_Redemption_2/) | A world that feels very alive, as a general inspiration (named by the developers on 2026-10-12). | Not yet said. |
 
 ### Earlier references
 
