@@ -187,6 +187,30 @@ So powers aren't written as lists. They are built from three layers:
 | **Cost and wait** | mana, stamina or health; a cooldown |
 | **Ladder** | something added at each rank, iron to diamond |
 
+#### The generator, after loot
+
+From the developers, 2026-10-12: the basis is how shipped games generate loot, with much from the books, applied to powers. One machine serves powers and loot alike ([settings.md](settings.md#loot), D127). The survey is [research/procedural-loot-and-spells.md](../research/procedural-loot-and-spells.md).
+
+| Loot's way | Ours |
+|---|---|
+| **A base decides the behaviour:** Diablo's base item, Path of Exile's skill gem, Noita's projectile | **The mechanic** is the base: a verb with tags and a declared type |
+| **A maker gives a signature:** a Borderlands manufacturer, a Hades god | **The essence** gives its flavour and side effect, and multiplies the pools' weights by tag: ×0 forbids, more favours, as Path of Exile's fossils do |
+| **Affixes in families, one of each, in tiers gated by level** | **Twists and added effects** in families, one of each to a power, their tiers opened by rank |
+| **Slot caps by rarity** | **How many twists a power may have,** set by its rarity |
+| **Support gems and duo boons:** a modifier declares what it can join | **Combinations:** a mechanic declares which others it can carry. Tags are the first filter and the declared rule is the test, since Path of Exile found tags alone weren't enough |
+| **Prerequisites:** Hades' duo boons | **Powers open others:** what you have makes some candidates eligible and likelier, never certain |
+| **Player tilting:** fossils, keepsakes, class-biased loot | **Your stone, powers and skills** tilt the weights ([How a draw works](#how-a-draw-works)) |
+| **A budget:** Noita's wand cost, Diablo IV's item power | **The rank's budget,** spent by mechanics, twists and numbers |
+| **Hand-written uniques,** with their own route to the player | **Anchors:** the classics, written as data with rolled numbers |
+| **Bad-luck protection:** Slay the Spire's rising rare chance | **No one goes too long without a kind they lack:** the weight of a missing kind grows with each draw that passes it by |
+| **Seeded draws,** safe from reloading | **Draws seeded from the world** and made by the server (D51) |
+
+**Rarity of a power:** as loot has rarity, so does a drawn power: common, uncommon, rare, epic, legendary.
+- Rarity gives more twist slots and higher tiers, within the rank's budget.
+- A rarer stone, and a rarer essence, raise the odds, as magic find does.
+
+**Diablo IV's lesson,** taken on: fewer, bigger, unconditional effects read better than many small conditional ones. A power does one or two clear things, and its twist is something you notice.
+
 #### The mechanics library
 
 Proposed, to grow over time. Each is a small piece of game logic written once (D127):
