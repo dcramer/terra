@@ -1,46 +1,179 @@
-//! Project tasks. Run as `cargo xtask <task>`.
-//!
-//!   check    Everything a change must pass: formatting, lints, tests, and the rule
-//!            that shared-state crates do not depend on Bevy or read the clock or the
-//!            system's randomness. CI runs exactly this.
-//!   doctor   Checks this machine has what it needs to build and run the project.
-//!   play     Plays the tech demo, on the real GPU wherever you are: under WSL it runs the
-//!            Windows build. Your game is saved between runs; `--fresh` starts over.
-//!            Anything else after it goes to the game, such as `--at 10,20`.
-//!   loop     Plays the demo's loop by script and checks every step happened (D69).
-//!   icons    Bakes every item's icon from its look (D129) into assets/icons.
-//!            Anything after it goes to the baker, such as `--sheet shots/icons/all`.
-//!   win      Under WSL: builds a program for Windows and runs it there, on the real
-//!            GPU. `cargo xtask win -p <package> [--release] [--copy <name>] [-- program args]`
+//! Project tasks, and the one place every tool is started from. Run as `cargo xtask <task>`;
+//! `cargo xtask tools` lists them all, from `TASKS` below. A new tool gets a line there.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
-const USAGE: &str = "\
-usage: cargo xtask <task>
+/// A task: its name, what it takes, what it does, the group it is listed under, and how
+/// it runs, given the arguments after its name.
+struct Task {
+    name: &'static str,
+    takes: &'static str,
+    does: &'static str,
+    group: &'static str,
+    run: fn(&[String]) -> bool,
+}
 
-  play [--fresh]   play the tech demo, on the real GPU; --fresh starts a new game
-  loop             play the demo's loop by script and check every step
-  icons [args]     bake every item's icon from its look into assets/icons
-  check            what every change must pass: formatting, lints, tests, rules
-  doctor           what this machine is missing
-  win -p <package> [--release] [--copy <name>] [-- args]
-                   under WSL, build for Windows and run it there";
+/// Every task, in the order `tools` lists them. The TypeScript and Blender tools are started
+/// here too, so nobody has to remember where each one lives; each has its own README.
+const TASKS: &[Task] = &[
+    Task {
+        name: "play",
+        takes: "[--fresh] [game args]",
+        does: "play the tech demo on the real GPU, wherever you are; --fresh starts a new game",
+        group: "Play and check",
+        run: play,
+    },
+    Task {
+        name: "loop",
+        takes: "",
+        does: "play the demo's loop by script and check every step happened (D69)",
+        group: "Play and check",
+        run: |_| run("node", &["tools/sandbox/loop.ts"]),
+    },
+    Task {
+        name: "check",
+        takes: "",
+        does: "what every change must pass: formatting, lints, tests, the dependency rules",
+        group: "Play and check",
+        run: |_| check(),
+    },
+    Task {
+        name: "sandbox",
+        takes: "[args]",
+        does: "the sandbox, the test environment; --list for its experiments (crates/terra_sandbox)",
+        group: "Look at things",
+        run: |args| cargo_run("terra_sandbox", &[], args),
+    },
+    Task {
+        name: "workbench",
+        takes: "[args]",
+        does: "models in the game's renderer: --model, --prop Forge|all, --hold, --sheet",
+        group: "Look at things",
+        run: |args| cargo_run("terra_sandbox", &["--experiment", "workbench"], args),
+    },
+    Task {
+        name: "remote",
+        takes: "<command> [args]",
+        does: "drive a running sandbox: start, warp, give, look, shot… (tools/sandbox)",
+        group: "Look at things",
+        run: |args| node("tools/sandbox/remote.ts", args),
+    },
+    Task {
+        name: "models",
+        takes: "[--port 8765]",
+        does: "the model gallery in a browser: every model, its size, problems and a page each (tools/models)",
+        group: "Look at things",
+        run: |args| node("tools/models/serve.ts", args),
+    },
+    Task {
+        name: "props",
+        takes: "<step> [prop…]",
+        does: "make props: concept, model, refine, all; fronts to see every model from the front (tools/props)",
+        group: "Make art",
+        run: |args| node("tools/props/props.ts", args),
+    },
+    Task {
+        name: "tripo",
+        takes: "<command> [args]",
+        does: "Tripo on our Studio subscription: image, model, rig, animate, balance… (tools/tripo)",
+        group: "Make art",
+        run: |args| node("tools/tripo/tripo.ts", args),
+    },
+    Task {
+        name: "bodies",
+        takes: "",
+        does: "rebuild every character asset the game loads from art/ (tools/characters)",
+        group: "Make art",
+        run: |_| run("tools/characters/build_bodies.sh", &[]),
+    },
+    Task {
+        name: "blender",
+        takes: "<script.py> [args]",
+        does: "run a script in Blender, headless (tools/blender)",
+        group: "Make art",
+        run: |args| run_owned("tools/blender/run.sh", args),
+    },
+    Task {
+        name: "icons",
+        takes: "[args]",
+        does: "bake every item's icon from its look into assets/icons (D129)",
+        group: "Make art",
+        run: icons,
+    },
+    Task {
+        name: "paint-icons",
+        takes: "<item…> | --unpainted",
+        does: "paint item icons in the art style (tools/icons)",
+        group: "Make art",
+        run: |args| node("tools/icons/paint.ts", args),
+    },
+    Task {
+        name: "doctor",
+        takes: "",
+        does: "what this machine is missing",
+        group: "This machine",
+        run: |_| doctor(),
+    },
+    Task {
+        name: "win",
+        takes: "-p <package> [--release] [--copy <name>] [-- args]",
+        does: "under WSL, build for Windows and run it there, on the real GPU",
+        group: "This machine",
+        run: win,
+    },
+    Task {
+        name: "tools",
+        takes: "",
+        does: "this list",
+        group: "This machine",
+        run: |_| {
+            println!("{}", usage());
+            true
+        },
+    },
+];
+
+/// Every task, by group, for `tools` and for a task that is not known.
+fn usage() -> String {
+    let mut text = String::from("usage: cargo xtask <task> [args]\n");
+    let width = TASKS
+        .iter()
+        .map(|task| task.name.len() + task.takes.len() + 1)
+        .max()
+        .unwrap_or(0)
+        .min(34);
+    let mut group = "";
+    for task in TASKS {
+        if task.group != group {
+            group = task.group;
+            text.push_str(&format!("\n{group}\n"));
+        }
+        let call = format!("{} {}", task.name, task.takes);
+        let call = call.trim_end();
+        if call.len() > width {
+            text.push_str(&format!("  {call}\n  {:width$}  {}\n", "", task.does));
+        } else {
+            text.push_str(&format!("  {call:width$}  {}\n", task.does));
+        }
+    }
+    text
+}
 
 /// The only crates allowed to depend on Bevy (D28): the applications.
 const BEVY_CRATES: [&str; 2] = ["terra_game", "terra_sandbox"];
 
 fn main() -> ExitCode {
-    let task = std::env::args().nth(1).unwrap_or_default();
-    let ok = match task.as_str() {
-        "check" => check(),
-        "doctor" => doctor(),
-        "win" => win(&std::env::args().skip(2).collect::<Vec<_>>()),
-        "play" => play(&std::env::args().skip(2).collect::<Vec<_>>()),
-        "loop" => run("node", &["tools/sandbox/loop.ts"]),
-        "icons" => icons(&std::env::args().skip(2).collect::<Vec<_>>()),
-        _ => {
-            eprintln!("{USAGE}");
+    let mut args = std::env::args().skip(1);
+    let name = args.next().unwrap_or_default();
+    let rest: Vec<String> = args.collect();
+    let ok = match TASKS
+        .iter()
+        .find(|task| task.name == name || (name == "help" && task.name == "tools"))
+    {
+        Some(task) => (task.run)(&rest),
+        None => {
+            eprintln!("{}", usage());
             false
         }
     };
@@ -49,6 +182,28 @@ fn main() -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// A TypeScript tool, run by Node from the root.
+fn node(script: &str, args: &[String]) -> bool {
+    let mut all = vec![script.to_string()];
+    all.extend(args.iter().cloned());
+    run_owned("node", &all)
+}
+
+/// A package's program, with some arguments first.
+fn cargo_run(package: &str, first: &[&str], args: &[String]) -> bool {
+    let mut all = vec!["run", "-p", package, "--"];
+    all.extend(first);
+    all.extend(args.iter().map(String::as_str));
+    run("cargo", &all)
+}
+
+fn run_owned(program: &str, args: &[String]) -> bool {
+    run(
+        program,
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
 }
 
 fn root() -> PathBuf {
@@ -508,5 +663,28 @@ mod tests {
         assert!(!node_runs_typescript("v22.17.1"));
         assert!(!node_runs_typescript("v20.19.0"));
         assert!(!node_runs_typescript(""));
+    }
+}
+
+#[cfg(test)]
+mod task_tests {
+    use super::*;
+
+    #[test]
+    fn every_task_has_one_name_and_is_listed() {
+        let text = usage();
+        for task in TASKS {
+            assert_eq!(
+                TASKS.iter().filter(|other| other.name == task.name).count(),
+                1,
+                "{} twice",
+                task.name
+            );
+            assert!(
+                text.contains(&format!("  {}", task.name)),
+                "{} not listed",
+                task.name
+            );
+        }
     }
 }

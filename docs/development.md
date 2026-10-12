@@ -22,14 +22,18 @@ macOS has been checked only by CI, which builds and tests there. Nobody has run 
 
 ## Everyday commands
 
+Every task and tool starts from `cargo xtask`, from anywhere in the repository; `cargo xtask tools` lists them all.
+
 | Command | What it does |
 |---|---|
+| `cargo xtask tools` | Every task and tool, with what it does |
 | `cargo xtask play` | Play the tech demo on the real GPU, wherever you are; your game is kept between runs. `cargo xtask play --fresh` starts a new one. |
 | `cargo xtask loop` | Play the demo's loop by script and check every step happened |
 | `cargo xtask check` | Formatting, lints, tests (the TypeScript tools' too) and the dependency rule. Must pass before a commit. |
 | `cargo test -p terra_sim` | One crate's tests |
 | `cargo fmt --all` | Format everything |
-| `cargo run -p terra_sandbox` | Open the sandbox, the test environment for graphics and utilities. See its [README](../crates/terra_sandbox/README.md). |
+| `cargo xtask sandbox` | Open the sandbox, the test environment for graphics and utilities; anything after it goes to the sandbox. See its [README](../crates/terra_sandbox/README.md). |
+| `cargo xtask models` | The model gallery in a browser, at `http://localhost:8765/` ([tools/models](../tools/models/README.md)) |
 | `cargo xtask doctor` | Check this machine |
 | `cargo xtask win -p <package>` | Under WSL, build for Windows and run on the real GPU |
 
@@ -66,15 +70,29 @@ The log is for what is worth reading: the engine's routine messages are filtered
 
 ## Developer tools
 
-The developers want tools that help refine each system (D71). The sandbox's experiments are where these live: each is a small plugin switched on from the command line ([sandbox README](../crates/terra_sandbox/README.md)). Wanted, first:
+The developers want tools that help refine each system (D71), and as many of them as possible reachable from a browser by a link (research/web-build.md). Tools that look at the game's own world are the sandbox's experiments, each a small plugin switched on from the command line ([sandbox README](../crates/terra_sandbox/README.md)); tools that make or inspect files live in `tools/`. Every one starts from `cargo xtask`:
+
+| Tool | Start it with | What it is for |
+|---|---|---|
+| [Model gallery](../tools/models/README.md) | `cargo xtask models` | Every model in a browser, drawn the same way beside the 1.8 m figure, with its size, triangles and problems; a page per model with materials, animations, bounds, skeleton, wireframe. Every view is a link. Shape, size and orientation, not the game's exact look |
+| [Model workbench](../crates/terra_sandbox/README.md#the-workbench) | `cargo xtask workbench --model … --prop …` | Models in the game's own renderer: bodies animated, holding and wearing things (`--hold`, `--wear`), catalogue items as placed in play with their sizes (`--prop Forge`, `--prop all`), contact sheets for agents (`--sheet`) |
+| [Sandbox remote](../tools/sandbox/README.md) | `cargo xtask remote start …` | Drive a running sandbox live: move things, hold the camera, pose, give, warp, screenshot, without restarting |
+| [Prop maker](../tools/props/README.md) | `cargo xtask props concept\|model\|refine <prop>` | A prop from a description to the game: concept, Tripo model, clean-up into our palette, levelled and facing front; `props fronts` shows every model from the front on one sheet |
+| [Tripo CLI](../tools/tripo/README.md) | `cargo xtask tripo <command>` | Everything Tripo's Studio does, on our subscription's credits (below) |
+| [Character pipeline](../tools/characters/README.md) | `cargo xtask bodies` | Bodies, morphs, skins, worn and held looks, from `art/`; the `character` skill has the steps |
+| [Blender runner](../tools/blender/README.md) | `cargo xtask blender <script.py>` | Any Blender script, headless, on the Windows Blender from WSL (below) |
+| [Icon painter](../tools/icons/README.md) | `cargo xtask icons`, `cargo xtask paint-icons <item>` | Item icons: baked from each item's look, then painted in the art style |
+| [Token stats](../tools/token-stats/README.md) | a Claude Code hook | Claude tokens and Tripo credits per developer, on a public page |
+
+A new tool gets a line in `TASKS` in `xtask/src/main.rs` and a row here, so it is found the same way as the rest.
+
+Checks that run with `cargo xtask check` keep models honest without anyone looking: every catalogue item states how tall a real one stands, and a test holds its model to that (`play::props`); icons must be made from their item's current look.
+
+The workbench grew from this wish list, kept for what is not built yet:
 
 - **A model workbench**: load any model against a simple patch of terrain, scale it, recolour it or put textures on it, look at it from set angles and in the game's light, and save the result. It is also where models are tested and reviewed:
-  - **Checks an agent runs**: triangle count, size against a reference figure, parts that float, every material named and in the palette, and a sheet of renders from set angles beside models already accepted.
-  - **Review by a person**: step through candidates in the game's light, accept or reject each, and leave a note on it, or on a spot on it, that the agent reads on its next pass. Some developers using AI tools do this with a viewer where you point at a part and write a note for the agent.
-
-  What it needs to check is in [research/ai-models-for-art.md](../research/ai-models-for-art.md#the-tools-the-agent-would-need).
-
-  Built so far: the `workbench` experiment shows models in the game's renderer, side by side, animated, holding and wearing things, and with `--sheet` saves a contact sheet per animation for an agent to read ([sandbox README](../crates/terra_sandbox/README.md#the-workbench)). Any sandbox run started with `--remote` can be driven live, to move things, hold the camera on them, pose and screenshot without a restart ([tools/sandbox](../tools/sandbox/README.md)). Characters are checked before that by `tools/characters/rig_check.py`, which compares a rig with the hand-rigged mannequin on every animation. Not yet built: scaling, recolouring and the review by a person.
+  - **Checks an agent runs**: triangle count, size against a reference figure, parts that float, every material named and in the palette, and a sheet of renders from set angles beside models already accepted. Built: the gallery and the prop maker's checks give all but the palette check.
+  - **Review by a person**: step through candidates in the game's light, accept or reject each, and leave a note on it, or on a spot on it, that the agent reads on its next pass. Not built.
 
 Each tool should be scriptable as well as usable by hand, so an agent can use it too.
 

@@ -14,7 +14,7 @@ Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in 
 | `art/` | Source art: the approved sheets and generated models the asset pipeline makes the game's files from. See `art/README.md`. |
 | `crates/` | The Rust workspace: the game's code. See `crates/README.md`. |
 | `xtask/` | Project tasks, run as `cargo xtask <task>`. |
-| `tools/` | Team tooling outside the game, such as [token stats](tools/token-stats/README.md), the [Tripo CLI](tools/tripo/README.md), the [sandbox remote](tools/sandbox/README.md), the [Blender runner](tools/blender/README.md), the [character pipeline](tools/characters/README.md), the [prop maker](tools/props/README.md), the [model viewer](tools/models/README.md) and the [icon painter](tools/icons/README.md). |
+| `tools/` | Team tooling outside the game, each started with `cargo xtask` (`cargo xtask tools` lists them), such as [token stats](tools/token-stats/README.md), the [Tripo CLI](tools/tripo/README.md), the [sandbox remote](tools/sandbox/README.md), the [Blender runner](tools/blender/README.md), the [character pipeline](tools/characters/README.md), the [prop maker](tools/props/README.md), the [model viewer](tools/models/README.md) and the [icon painter](tools/icons/README.md). |
 | `spike/` | Throwaway experiments, each answering one question, deleted once its research note is written (D133). |
 
 ## Before doing anything
