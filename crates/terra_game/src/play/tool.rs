@@ -412,9 +412,12 @@ fn choose(
     scroll: Res<AccumulatedMouseScroll>,
     dial: Res<Dial>,
     screen: Res<InventoryScreen>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
+    let Some(belongings) = belongings.mine() else {
+        return;
+    };
     builder.wheel = 0;
     if screen.open || !belongings.tool_in_hand().is_some_and(|tool| tool.builds) {
         // Put back anything being carried, and put the part away.

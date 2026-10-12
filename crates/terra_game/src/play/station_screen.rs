@@ -165,6 +165,9 @@ fn choose(
     mut notice: ResMut<Notice>,
     mut state: ResMut<StationScreen>,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     let Some((entity, station)) = screen.at else {
         return;
     };
@@ -214,6 +217,9 @@ fn click(
     mut notice: ResMut<Notice>,
     mut state: ResMut<StationScreen>,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     let Some((entity, station)) = screen.at else {
         return;
     };
@@ -370,7 +376,7 @@ fn draw(
     screen: Res<InventoryScreen>,
     staff: Staff,
     state: Res<StationScreen>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     stations: Query<&Works>,
     mut panel: Single<&mut Visibility, With<Panel>>,
     mut tabs: Query<(&TabButton, &mut BackgroundColor), (Without<Tile>, Without<Queued>)>,
@@ -391,6 +397,9 @@ fn draw(
         Single<&mut Text, With<Footer>>,
     )>,
 ) {
+    let Some(belongings) = belongings.mine() else {
+        return;
+    };
     tiles::show(&mut panel, screen.at.is_some());
     let Some((entity, station)) = screen.at else {
         return;

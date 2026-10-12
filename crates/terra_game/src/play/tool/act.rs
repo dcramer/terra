@@ -35,6 +35,9 @@ pub(super) fn act(
     player: Single<(&Transform, &mut Stance), IsLocalPlayer>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     let (player_at, mut stance) = player.into_inner();
     let player_at = player_at.translation;
     // A tap of the right button: stop what is being done; or put back what was picked
@@ -107,7 +110,7 @@ pub(super) fn act(
                     };
                     noise.write(Noise::at(cue, work_at));
                     if pay.is_some() {
-                        did.write(Did(Skill::Building, ONCE));
+                        did.write(Did(belongings.player(), Skill::Building, ONCE));
                         belongings.wear_in_hand(1);
                     }
                     if let Some((cost, times)) = refund {
@@ -144,7 +147,7 @@ pub(super) fn act(
                         item.name,
                         from_start(&site, at)
                     );
-                    did.write(Did(Skill::Building, ONCE));
+                    did.write(Did(belongings.player(), Skill::Building, ONCE));
                     belongings.wear_in_hand(1);
                     noise.write(Noise::at(Cue::Placed, work_at));
                 }

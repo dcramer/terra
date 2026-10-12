@@ -97,7 +97,9 @@ fn wear(mut asked: ResMut<Asked>, mut belongings: inventory::Belongings) {
     let amount = std::mem::take(&mut asked.wear);
     if amount > 0 {
         info!("Wore what is in hand by {amount} for testing.");
-        belongings.wear_in_hand(amount);
+        if let Some(mut inventory) = belongings.mine() {
+            inventory.wear_in_hand(amount);
+        }
     }
 }
 

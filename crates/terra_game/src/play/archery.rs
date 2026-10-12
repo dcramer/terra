@@ -7,20 +7,20 @@
 //! An arrow is used up when shot. A deer hit runs, as it does from anything that hurts
 //! it, so a hunter shoots from further than it can hear them.
 
-use super::bag::Notice;
+use super::bag::Told;
 use super::bodies::Body;
 use super::combat::{Blow, Struck, strike};
-use super::controls::{Action, Controls};
+use super::controls::Action;
 use super::creatures::Creature;
-use super::inventory::{Belongings, InventoryScreen};
+use super::intent::Intent;
+use super::inventory::Belongings;
 use super::models::bake;
 use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
 use super::species::Part;
 use super::zones::Zones;
-use super::{Downed, IsLocalPlayer, Player, Stance, View};
+use super::{Downed, Player, Stance, View};
 use crate::build::Site;
-use crate::planet::MainCamera;
 use crate::planet::Planet;
 use bevy::prelude::*;
 
@@ -45,7 +45,8 @@ pub fn bow() -> (f32, f32) {
     (FULL_DAMAGE, FULL_SPEED)
 }
 
-#[derive(Resource, Default)]
+/// How far a player has drawn a bow.
+#[derive(Component, Default)]
 struct Drawing {
     /// Seconds the bow has been held drawn, if it is.
     held: Option<f32>,
@@ -54,6 +55,8 @@ struct Drawing {
 /// An arrow in flight, or stuck where it landed.
 #[derive(Component)]
 struct Arrow {
+    /// Who shot it.
+    by: Entity,
     velocity: Vec3,
     /// How hard it hits at full speed, by the draw it was shot with.
     damage: f32,
@@ -68,7 +71,7 @@ struct ArrowLook {
 }
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Drawing>()
+    app.register_required_components::<Player, Drawing>()
         .add_systems(Startup, load)
         .add_systems(Update, (draw, fly).chain());
 }
@@ -108,90 +111,104 @@ fn load(
 fn draw(
     mut commands: Commands,
     time: Res<Time>,
-    controls: Controls,
-    screen: Res<InventoryScreen>,
-    view: Single<&View, IsLocalPlayer>,
     look: Res<ArrowLook>,
     planet: Res<Planet>,
     creatures: Query<(&Creature, &Transform, &Body), Without<Player>>,
-    camera: Single<&Transform, (With<MainCamera>, Without<Player>)>,
-    player: Single<(&Transform, &mut Stance, Has<Downed>), IsLocalPlayer>,
+    mut players: Query<
+        (
+            Entity,
+            &Transform,
+            &View,
+            &Intent,
+            &mut Stance,
+            &mut Drawing,
+            Has<Downed>,
+        ),
+        With<Player>,
+    >,
     mut belongings: Belongings,
-    mut drawing: ResMut<Drawing>,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
 ) {
-    let (at, mut stance, downed) = player.into_inner();
-    // What the thing in hand shoots, if it shoots.
-    let ammo = belongings
-        .tool_in_hand()
-        .and_then(|tool| tool.shoots.as_deref())
-        .map(|name| belongings.items().kind(name));
-    let (Some(ammo), false, false) = (ammo, screen.open, downed) else {
-        drawing.held = None;
-        return;
-    };
-    if controls.held(Action::Use) {
-        let held = drawing.held.unwrap_or(0.0) + time.delta_secs();
-        drawing.held = Some(held.min(FULL_DRAW_S));
-        stance.since_acting = 0.0;
-        return;
-    }
-    let Some(held) = drawing.held.take() else {
-        return;
-    };
-    if held < LEAST_DRAW_S {
-        return;
-    }
-    if !belongings.spend(ammo, 1) {
-        let items = belongings.items();
-        notice.say(format!(
-            "You have no {}s: {}",
-            items.name(ammo).to_lowercase(),
-            items.found(ammo)
+    for (player, at, view, intent, mut stance, mut drawing, downed) in &mut players {
+        let Some(mut belongings) = belongings.of(player) else {
+            continue;
+        };
+        // What the thing in hand shoots, if it shoots.
+        let ammo = belongings
+            .tool_in_hand()
+            .and_then(|tool| tool.shoots.as_deref())
+            .map(|name| belongings.items().kind(name));
+        let (Some(ammo), false, false) = (ammo, intent.busy, downed) else {
+            drawing.held = None;
+            continue;
+        };
+        if intent.held(Action::Use) {
+            let held = drawing.held.unwrap_or(0.0) + time.delta_secs();
+            drawing.held = Some(held.min(FULL_DRAW_S));
+            stance.since_acting = 0.0;
+            continue;
+        }
+        let Some(held) = drawing.held.take() else {
+            continue;
+        };
+        if held < LEAST_DRAW_S {
+            continue;
+        }
+        if !belongings.spend(ammo, 1) {
+            let items = belongings.items();
+            let say = format!(
+                "You have no {}s: {}",
+                items.name(ammo).to_lowercase(),
+                items.found(ammo)
+            );
+            told.write(Told::new(player, say));
+            continue;
+        }
+        // From the bow toward what the middle of the view is on, some way off.
+        let up = at.translation.normalize();
+        let right = view.forward.cross(up);
+        let from = at.translation + up * 1.45 + right * 0.25 + view.forward * 0.4;
+        // Whatever the middle of the view is on: a creature, the ground, or far off.
+        let Some(aim) = intent.aim else {
+            continue;
+        };
+        let (eye, ahead) = (aim.origin, *aim.direction);
+        let on_creature = creatures
+            .iter()
+            .filter(|(creature, ..)| creature.alive())
+            .filter_map(|(_, at, body)| {
+                let middle = at.translation + at.translation.normalize() * body.radius;
+                passes_within(eye, eye + ahead * AIM_M, middle, body.radius)
+            })
+            .min_by(|a, b| a.total_cmp(b))
+            .map(|along| along * AIM_M);
+        let on_ground = planet.raycast(eye, ahead, AIM_M).map(|hit| hit.distance);
+        let distance = [on_creature, on_ground]
+            .into_iter()
+            .flatten()
+            .fold(AIM_M, f32::min);
+        let aimed = eye + ahead * distance;
+        let direction = (aimed - from).normalize_or(view.forward);
+        let pull = held / FULL_DRAW_S;
+        let velocity = direction * FULL_SPEED * pull;
+        commands.spawn((
+            Name::new("Arrow"),
+            Arrow {
+                by: player,
+                velocity,
+                damage: FULL_DAMAGE * pull,
+                age: 0.0,
+                stuck: false,
+            },
+            Mesh3d(look.mesh.clone()),
+            MeshMaterial3d(look.material.clone()),
+            Transform::from_translation(from)
+                .with_rotation(Quat::from_rotation_arc(Vec3::Y, direction)),
         ));
-        return;
+        stance.attacking = 0.4;
+        info!("Loosed an arrow at {:.0}% draw.", pull * 100.0);
+        belongings.wear_in_hand(1);
     }
-    // From the bow toward what the middle of the view is on, some way off.
-    let up = at.translation.normalize();
-    let right = view.forward.cross(up);
-    let from = at.translation + up * 1.45 + right * 0.25 + view.forward * 0.4;
-    // Whatever the middle of the view is on: a creature, the ground, or far off.
-    let eye = camera.translation;
-    let ahead = *camera.forward();
-    let on_creature = creatures
-        .iter()
-        .filter(|(creature, ..)| creature.alive())
-        .filter_map(|(_, at, body)| {
-            let middle = at.translation + at.translation.normalize() * body.radius;
-            passes_within(eye, eye + ahead * AIM_M, middle, body.radius)
-        })
-        .min_by(|a, b| a.total_cmp(b))
-        .map(|along| along * AIM_M);
-    let on_ground = planet.raycast(eye, ahead, AIM_M).map(|hit| hit.distance);
-    let distance = [on_creature, on_ground]
-        .into_iter()
-        .flatten()
-        .fold(AIM_M, f32::min);
-    let aimed = eye + ahead * distance;
-    let direction = (aimed - from).normalize_or(view.forward);
-    let pull = held / FULL_DRAW_S;
-    let velocity = direction * FULL_SPEED * pull;
-    commands.spawn((
-        Name::new("Arrow"),
-        Arrow {
-            velocity,
-            damage: FULL_DAMAGE * pull,
-            age: 0.0,
-            stuck: false,
-        },
-        Mesh3d(look.mesh.clone()),
-        MeshMaterial3d(look.material.clone()),
-        Transform::from_translation(from)
-            .with_rotation(Quat::from_rotation_arc(Vec3::Y, direction)),
-    ));
-    stance.attacking = 0.4;
-    info!("Loosed an arrow at {:.0}% draw.", pull * 100.0);
-    belongings.wear_in_hand(1);
 }
 
 /// Arrows fly, fall, hit what they pass through, and stick where they land.
@@ -201,12 +218,12 @@ fn fly(
     time: Res<Time>,
     planet: Res<Planet>,
     site: Res<Site>,
-    skills: Single<&Skills, IsLocalPlayer>,
+    skills: Query<&Skills>,
     mut arrows: Query<(Entity, &mut Arrow, &mut Transform), Without<Creature>>,
     mut creatures: Query<(Entity, &mut Creature, &Transform, &Body), Without<Arrow>>,
     mut did: MessageWriter<Did>,
     mut struck: MessageWriter<Struck>,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
     zones: Zones,
 ) {
     let dt = time.delta_secs().min(0.05);
@@ -239,7 +256,10 @@ fn fly(
             .min_by(|a, b| a.0.total_cmp(&b.0));
         if let Some((_, hit_entity, mut creature)) = hit {
             let speed = arrow.velocity.length() / FULL_SPEED;
-            let damage = arrow.damage * speed.min(1.0) * skills.speed(Skill::Archery);
+            let skill = skills
+                .get(arrow.by)
+                .map_or(1.0, |skills| skills.speed(Skill::Archery));
+            let damage = arrow.damage * speed.min(1.0) * skill;
             // The zone it passed through first; one that only grazed them all, the body.
             let (at, part) = match zones.along(hit_entity, from, to) {
                 Some((along, part)) => (from.lerp(to, along), part),
@@ -247,6 +267,7 @@ fn fly(
             };
             let dealt = strike(
                 &mut commands,
+                arrow.by,
                 hit_entity,
                 &mut creature,
                 Blow {
@@ -257,7 +278,7 @@ fn fly(
                 },
                 &mut did,
                 &mut struck,
-                &mut notice,
+                &mut told,
             );
             info!(
                 "An arrow hit a {} in the {} for {dealt:.0}.",

@@ -4,17 +4,16 @@
 //! tool's material decides what it can work (D96): a stone axe will not fell a great
 //! tree.
 
-use super::bag::Notice;
+use super::bag::Told;
 use super::combat::Swing;
-use super::controls::{Action, Controls, Settings};
-use super::dial::Dial;
+use super::controls::{Action, Settings};
 use super::flora::{Growth, Obstacles};
-use super::inventory::{Belongings, Cuttable, InventoryScreen};
+use super::intent::Intent;
+use super::inventory::{Belongings, Cuttable};
 use super::kinds::ToolDef;
 use super::skills::{Did, ONCE, Skills};
 use super::work::Hold;
-use super::{IsLocalPlayer, Player, Stance};
-use crate::planet::MainCamera;
+use super::{LocalPlayer, Player, Stance};
 use bevy::prelude::*;
 
 /// How far from the player a cutting tool reaches.
@@ -76,9 +75,6 @@ pub fn plugin(app: &mut App) {
 fn cut(
     mut commands: Commands,
     time: Res<Time>,
-    controls: Controls,
-    dial: Res<Dial>,
-    camera: Single<&GlobalTransform, With<MainCamera>>,
     mut growth: Query<
         (
             Entity,
@@ -89,177 +85,192 @@ fn cut(
         ),
         (Without<Player>, Without<Felled>),
     >,
-    player: Single<(&Transform, &mut Stance), (IsLocalPlayer, Without<Growth>)>,
-    mut cutting: Single<&mut Cutting, IsLocalPlayer>,
-    screen: Res<InventoryScreen>,
+    mut players: Query<
+        (
+            Entity,
+            &Transform,
+            &Intent,
+            &Skills,
+            &Swing,
+            &mut Stance,
+            &mut Cutting,
+            Has<LocalPlayer>,
+        ),
+        (With<Player>, Without<Growth>),
+    >,
     mut belongings: Belongings,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
     mut obstacles: ResMut<Obstacles>,
-    skills: Single<&Skills, IsLocalPlayer>,
-    swing: Single<&Swing, IsLocalPlayer>,
     mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
 ) {
-    let (player_at, mut stance) = player.into_inner();
-    let feet = player_at.translation;
-    cutting.target = None;
-    let tool = belongings
-        .tool_in_hand()
-        .cloned()
-        .filter(|_| !screen.open && !dial.open);
-    // Aimed at: anything the tool in hand is the kind of tool for, whether or not its
-    // material is up to it, so the prompt can say why it will not cut.
-    let works = |cut: &Cuttable| tool.as_ref().is_some_and(|tool| tool.works(cut.what));
-    let speed_on = |cut: &Cuttable| tool.as_ref().and_then(|tool| tool.cuts(cut.what));
+    for (player, player_at, intent, skills, swing, mut stance, mut cutting, ours) in &mut players {
+        let Some(mut belongings) = belongings.of(player) else {
+            continue;
+        };
+        let feet = player_at.translation;
+        cutting.target = None;
+        let tool = belongings.tool_in_hand().cloned().filter(|_| !intent.busy);
+        // Aimed at: anything the tool in hand is the kind of tool for, whether or not its
+        // material is up to it, so the prompt can say why it will not cut.
+        let works = |cut: &Cuttable| tool.as_ref().is_some_and(|tool| tool.works(cut.what));
+        let speed_on = |cut: &Cuttable| tool.as_ref().and_then(|tool| tool.cuts(cut.what));
 
-    // The nearest thing this tool can cut that the view passes close to; failing that,
-    // the nearest one just in front of the player, so small things need no careful aim.
-    let origin = camera.translation();
-    let direction = *camera.forward();
-    let level = direction.reject_from(feet.normalize()).normalize_or_zero();
-    let within_reach = || {
-        growth
-            .iter()
-            .filter(|(_, _, _, visibility, _)| **visibility != Visibility::Hidden)
-            .filter_map(|(entity, growth, transform, _, _)| {
-                let cut = growth.cut.filter(|cut| works(cut))?;
-                let up = transform.translation.normalize();
-                let middle = transform.translation + up * growth.middle_m;
-                (middle.distance_squared(feet) < REACH_M * REACH_M).then_some((
-                    entity,
-                    cut,
-                    middle,
-                    growth.middle_m,
-                    growth.obstacle,
-                ))
+        // The nearest thing this tool can cut that the view passes close to; failing that,
+        // the nearest one just in front of the player, so small things need no careful aim.
+        let Some(aim) = intent.aim else {
+            continue;
+        };
+        let (origin, direction) = (aim.origin, *aim.direction);
+        let level = direction.reject_from(feet.normalize()).normalize_or_zero();
+        let within_reach = || {
+            growth
+                .iter()
+                .filter(|(_, _, _, visibility, _)| **visibility != Visibility::Hidden)
+                .filter_map(|(entity, growth, transform, _, _)| {
+                    let cut = growth.cut.filter(|cut| works(cut))?;
+                    let up = transform.translation.normalize();
+                    let middle = transform.translation + up * growth.middle_m;
+                    (middle.distance_squared(feet) < REACH_M * REACH_M).then_some((
+                        entity,
+                        cut,
+                        middle,
+                        growth.middle_m,
+                        growth.obstacle,
+                    ))
+                })
+        };
+        let on_view = within_reach()
+            .filter_map(|found| {
+                let (_, _, middle, size, _) = found;
+                let along = (middle - origin).dot(direction);
+                let off = (origin + direction * along).distance(middle);
+                (along > 0.0 && off < size.max(0.5)).then_some((found, along))
             })
-    };
-    let on_view = within_reach()
-        .filter_map(|found| {
-            let (_, _, middle, size, _) = found;
-            let along = (middle - origin).dot(direction);
-            let off = (origin + direction * along).distance(middle);
-            (along > 0.0 && off < size.max(0.5)).then_some((found, along))
-        })
-        .min_by(|a, b| a.1.total_cmp(&b.1));
-    let in_front = || {
-        within_reach()
-            .filter(|(_, _, middle, _, _)| {
-                let toward = (*middle - feet).reject_from(feet.normalize());
-                toward.length() < NEAR_M && toward.normalize_or_zero().dot(level) > 0.0
-            })
-            .map(|found| (found, found.2.distance(feet)))
-            .min_by(|a, b| a.1.total_cmp(&b.1))
-    };
-    let aimed = on_view.or_else(in_front).map(|(found, _)| found);
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        let in_front = || {
+            within_reach()
+                .filter(|(_, _, middle, _, _)| {
+                    let toward = (*middle - feet).reject_from(feet.normalize());
+                    toward.length() < NEAR_M && toward.normalize_or_zero().dot(level) > 0.0
+                })
+                .map(|found| (found, found.2.distance(feet)))
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+        };
+        let aimed = on_view.or_else(in_front).map(|(found, _)| found);
 
-    // A click that swung at a creature is not a cut.
-    let holding_button = controls.held(Action::Use) && swing.since > 0.6;
-    // Whatever was being cut and no longer is stops shaking and stands as it did.
-    let still = match (aimed, holding_button) {
-        (Some((entity, ..)), true) => Some(entity),
-        _ => None,
-    };
-    if let Some((was, _)) = cutting.held
-        && still != Some(was)
-    {
-        if let Ok((_, _, mut transform, _, Some(shaken))) = growth.get_mut(was) {
-            transform.rotation = shaken.0;
-            commands.entity(was).remove::<Shaken>();
+        // A click that swung at a creature is not a cut.
+        let holding_button = intent.held(Action::Use) && swing.since > 0.6;
+        // Whatever was being cut and no longer is stops shaking and stands as it did.
+        let still = match (aimed, holding_button) {
+            (Some((entity, ..)), true) => Some(entity),
+            _ => None,
+        };
+        if let Some((was, _)) = cutting.held
+            && still != Some(was)
+        {
+            if let Ok((_, _, mut transform, _, Some(shaken))) = growth.get_mut(was) {
+                transform.rotation = shaken.0;
+                commands.entity(was).remove::<Shaken>();
+            }
+            cutting.held = None;
         }
-        cutting.held = None;
-    }
-    let Some((entity, cut, middle, size, obstacle)) = aimed else {
-        return;
-    };
-    cutting.target = Some(entity);
-    let fraction = cutting.progress().unwrap_or(0.0);
-    // A ring round what would be cut, filling as it is cut.
-    let up = middle.normalize();
-    let across = up.any_orthonormal_vector();
-    let around = |turn: f32| {
-        middle - up * size * 0.9
-            + Quat::from_axis_angle(up, turn * std::f32::consts::TAU) * across * size.max(0.5)
-    };
-    let amber = Color::srgb(1.0, 0.78, 0.25);
-    gizmos.linestrip(
-        (0..=32).map(|step| around(step as f32 / 32.0)),
-        amber.with_alpha(0.45),
-    );
-    if fraction > 0.0 {
-        let steps = (fraction * 32.0).ceil() as usize;
-        gizmos.linestrip(
-            (0..=steps).map(|step| around(step as f32 / steps as f32 * fraction)),
-            Color::WHITE,
-        );
-    }
-    if !holding_button {
-        return;
-    }
+        let Some((entity, cut, middle, size, obstacle)) = aimed else {
+            continue;
+        };
+        cutting.target = Some(entity);
+        let fraction = cutting.progress().unwrap_or(0.0);
+        // A ring round what would be cut, filling as it is cut.
+        let up = middle.normalize();
+        let across = up.any_orthonormal_vector();
+        let around = |turn: f32| {
+            middle - up * size * 0.9
+                + Quat::from_axis_angle(up, turn * std::f32::consts::TAU) * across * size.max(0.5)
+        };
+        let amber = Color::srgb(1.0, 0.78, 0.25);
+        if ours {
+            gizmos.linestrip(
+                (0..=32).map(|step| around(step as f32 / 32.0)),
+                amber.with_alpha(0.45),
+            );
+        }
+        if ours && fraction > 0.0 {
+            let steps = (fraction * 32.0).ceil() as usize;
+            gizmos.linestrip(
+                (0..=steps).map(|step| around(step as f32 / steps as f32 * fraction)),
+                Color::WHITE,
+            );
+        }
+        if !holding_button {
+            continue;
+        }
 
-    let Some(speed) = speed_on(&cut) else { return };
-    let (_, mut hold) = *cutting.held.get_or_insert((
-        entity,
-        Hold::new(cut.seconds / (speed * skills.speed(cut.what.skill())).max(0.01)),
-    ));
-    let finished = hold.advance(time.delta_secs());
-    cutting.held = Some((entity, hold));
-    stance.since_acting = 0.0;
-    let Ok((_, _, mut transform, _, shaken)) = growth.get_mut(entity) else {
-        return;
-    };
-    let rest = shaken.map_or(transform.rotation, |shaken| shaken.0);
-    if shaken.is_none() {
-        commands.entity(entity).insert(Shaken(rest));
-    }
-    if !finished {
-        // It shudders under the tool, harder as it gives.
-        let shudder = libm::sinf(time.elapsed_secs() * 38.0) * 0.012 * (0.4 + hold.fraction());
-        transform.rotation = Quat::from_axis_angle(across, shudder) * rest;
-        return;
-    }
-
-    let (gives, count) = cut.gives;
-    let kind = belongings.items().kind(gives);
-    // As in Subnautica, nothing is gathered into a full backpack. What does not fit is
-    // left behind.
-    if !belongings.room_for_one(kind) {
-        notice.say("Your backpack is full");
-        cutting.held = None;
-        transform.rotation = rest;
-        commands.entity(entity).remove::<Shaken>();
-        return;
-    }
-    let given = belongings.give(kind, count);
-    belongings.wear_in_hand(1);
-    if given < count {
-        notice.say(format!(
-            "Your backpack is full: {} {} left behind",
-            count - given,
-            gives
+        let Some(speed) = speed_on(&cut) else { return };
+        let (_, mut hold) = *cutting.held.get_or_insert((
+            entity,
+            Hold::new(cut.seconds / (speed * skills.speed(cut.what.skill())).max(0.01)),
         ));
+        let finished = hold.advance(time.delta_secs());
+        cutting.held = Some((entity, hold));
+        stance.since_acting = 0.0;
+        let Ok((_, _, mut transform, _, shaken)) = growth.get_mut(entity) else {
+            continue;
+        };
+        let rest = shaken.map_or(transform.rotation, |shaken| shaken.0);
+        if shaken.is_none() {
+            commands.entity(entity).insert(Shaken(rest));
+        }
+        if !finished {
+            // It shudders under the tool, harder as it gives.
+            let shudder = libm::sinf(time.elapsed_secs() * 38.0) * 0.012 * (0.4 + hold.fraction());
+            transform.rotation = Quat::from_axis_angle(across, shudder) * rest;
+            continue;
+        }
+
+        let (gives, count) = cut.gives;
+        let kind = belongings.items().kind(gives);
+        // As in Subnautica, nothing is gathered into a full backpack. What does not fit is
+        // left behind.
+        if !belongings.room_for_one(kind) {
+            told.write(Told::new(player, "Your backpack is full"));
+            cutting.held = None;
+            transform.rotation = rest;
+            commands.entity(entity).remove::<Shaken>();
+            continue;
+        }
+        let given = belongings.give(kind, count);
+        belongings.wear_in_hand(1);
+        if given < count {
+            told.write(Told::new(
+                player,
+                format!(
+                    "Your backpack is full: {} {gives} left behind",
+                    count - given
+                ),
+            ));
+        }
+        if let Some(stood) = obstacle {
+            obstacles.remove(stood);
+        }
+        info!("Cut something for {given} {gives}.");
+        did.write(Did(player, cut.what.skill(), ONCE));
+        cutting.held = None;
+        cutting.target = None;
+        transform.rotation = rest;
+        let from = *transform;
+        // A tree goes over away from whoever cut it; smaller things just go.
+        let away = (from.translation - feet)
+            .reject_from(up)
+            .normalize_or(across);
+        commands
+            .entity(entity)
+            .remove::<(Growth, Shaken)>()
+            .insert(Felled {
+                age: 0.0,
+                over: (size > 1.0).then_some(away),
+                from,
+            });
     }
-    if let Some(stood) = obstacle {
-        obstacles.remove(stood);
-    }
-    info!("Cut something for {given} {gives}.");
-    did.write(Did(cut.what.skill(), ONCE));
-    cutting.held = None;
-    cutting.target = None;
-    transform.rotation = rest;
-    let from = *transform;
-    // A tree goes over away from whoever cut it; smaller things just go.
-    let away = (from.translation - feet)
-        .reject_from(up)
-        .normalize_or(across);
-    commands
-        .entity(entity)
-        .remove::<(Growth, Shaken)>()
-        .insert(Felled {
-            age: 0.0,
-            over: (size > 1.0).then_some(away),
-            from,
-        });
 }
 
 /// Brings down what has been cut through, then takes it out of the world.

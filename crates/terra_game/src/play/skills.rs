@@ -6,7 +6,7 @@
 //! progress. The list shows beside the backpack while the inventory is open (D93).
 
 use super::IsLocalPlayer;
-use super::bag::Notice;
+use super::bag::Told;
 use super::death::WentDown;
 use super::inventory::InventoryScreen;
 use bevy::prelude::*;
@@ -142,9 +142,9 @@ fn step_of(progress: f32) -> (u32, f32) {
     (step as u32, progress - step)
 }
 
-/// Something done that a skill grows from, so much of it.
+/// Something a player did that a skill grows from, so much of it.
 #[derive(Message, Clone, Copy)]
-pub struct Did(pub Skill, pub f32);
+pub struct Did(pub Entity, pub Skill, pub f32);
 
 #[derive(Component)]
 struct Panel;
@@ -158,21 +158,25 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (learn, forget, draw));
 }
 
+/// Whoever did something learns from it, and is told when they learn something new.
 fn learn(
     mut did: MessageReader<Did>,
-    mut skills: Single<&mut Skills, IsLocalPlayer>,
-    mut notice: ResMut<Notice>,
+    mut skills: Query<&mut Skills>,
+    mut told: MessageWriter<Told>,
 ) {
-    for &Did(skill, amount) in did.read() {
+    for &Did(player, skill, amount) in did.read() {
+        let Ok(mut skills) = skills.get_mut(player) else {
+            continue;
+        };
+        let name = skill.name().to_lowercase();
         match skills.did(skill, amount) {
             Learned::Nothing => {}
-            Learned::New => notice.say(format!("You are learning {}", skill.name().to_lowercase())),
+            Learned::New => {
+                told.write(Told::new(player, format!("You are learning {name}")));
+            }
             Learned::Step(step) => {
                 info!("{} reached step {step}.", skill.name());
-                notice.say(format!(
-                    "Your {} improves ({step})",
-                    skill.name().to_lowercase()
-                ));
+                told.write(Told::new(player, format!("Your {name} improves ({step})")));
             }
         }
     }

@@ -7,17 +7,17 @@
 //!
 //!   Left click    swing          Hold right mouse   guard          Ctrl   roll
 
-use super::bag::Notice;
-use super::controls::{Action, Controls};
+use super::bag::Told;
+use super::controls::Action;
 use super::creatures::{self, Bitten, Creature, Species};
-use super::inventory::{self, Belongings, Broke, Gear, InventoryScreen, Items};
+use super::intent::Intent;
+use super::inventory::{self, Belongings, Broke, Gear, Items};
 use super::kinds::ToolDef;
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::species::Part;
 use super::vitals::Vitals;
 use super::zones::Zones;
-use super::{Downed, IsLocalPlayer, LocalPlayer, Player, Stance, View};
-use crate::planet::MainCamera;
+use super::{Downed, Player, Stance, View};
 use bevy::prelude::*;
 
 /// What a swing costs in stamina.
@@ -96,107 +96,127 @@ pub fn plugin(app: &mut App) {
 fn swing(
     mut commands: Commands,
     time: Res<Time>,
-    controls: Controls,
-    screen: Res<InventoryScreen>,
-    view: Single<&View, IsLocalPlayer>,
     mut belongings: Belongings,
-    player: Single<(&Transform, &mut Stance, &mut Vitals, &Skills, Has<Downed>), IsLocalPlayer>,
+    mut players: Query<
+        (
+            Entity,
+            &Transform,
+            &View,
+            &Intent,
+            &Skills,
+            &mut Stance,
+            &mut Vitals,
+            &mut Swing,
+            Has<Downed>,
+        ),
+        With<Player>,
+    >,
     mut creatures: Query<(Entity, &mut Creature, &Transform), Without<Player>>,
-    mut swung: Single<&mut Swing, IsLocalPlayer>,
     mut did: MessageWriter<Did>,
     mut struck: MessageWriter<Struck>,
-    mut notice: ResMut<Notice>,
-    camera: Single<&GlobalTransform, With<MainCamera>>,
+    mut told: MessageWriter<Told>,
     zones: Zones,
 ) {
-    swung.since += time.delta_secs();
-    let (player_at, mut stance, mut vitals, skills, downed) = player.into_inner();
-    // Whatever in hand strikes at all: a weapon, or a tool used as one.
-    let Some((damage, reach)) = belongings.tool_in_hand().and_then(ToolDef::strikes) else {
-        return;
-    };
-    if screen.open || downed || !controls.went_down(Action::Use) {
-        return;
+    for (player, player_at, view, intent, skills, mut stance, mut vitals, mut swung, downed) in
+        &mut players
+    {
+        swung.since += time.delta_secs();
+        let Some(mut belongings) = belongings.of(player) else {
+            continue;
+        };
+        // Whatever in hand strikes at all: a weapon, or a tool used as one.
+        let Some((damage, reach)) = belongings.tool_in_hand().and_then(ToolDef::strikes) else {
+            continue;
+        };
+        if downed || !intent.starts(Action::Use) {
+            continue;
+        }
+        if swung.since < SWING_EVERY_S {
+            continue;
+        }
+        let feet = player_at.translation;
+        let up = feet.normalize();
+        let target = creatures
+            .iter_mut()
+            .filter(|(_, creature, _)| creature.alive())
+            .filter_map(|(entity, creature, at)| {
+                let toward = (at.translation - feet).reject_from(up);
+                let distance = toward.length();
+                let ahead = toward.normalize_or_zero().dot(view.forward);
+                (distance < reach + 0.6 && ahead > 0.4).then_some((
+                    entity,
+                    creature,
+                    distance,
+                    at.translation,
+                ))
+            })
+            .min_by(|a, b| a.2.total_cmp(&b.2));
+        let Some((entity, mut creature, _, there)) = target else {
+            continue;
+        };
+        // A tired arm hits softly.
+        let strength = if vitals.spend(SWING_STAMINA) {
+            1.0
+        } else {
+            0.4
+        };
+        let blow = damage * strength * skills.speed(Skill::Fighting);
+        swung.since = 0.0;
+        stance.since_acting = 0.0;
+        stance.attacking = 0.6;
+        // It lands where the aim is, if that is on it; otherwise on its body, on the side
+        // toward the player.
+        let Some(aim) = intent.aim else {
+            continue;
+        };
+        let eye = aim.origin;
+        let ray = eye + *aim.direction * (eye.distance(there) + reach + 1.0);
+        let (at, part) = match zones.along(entity, eye, ray) {
+            Some((along, part)) => (eye.lerp(ray, along), part),
+            None => (
+                there + (feet - there).reject_from(up).normalize_or_zero() * 0.3 + up * 0.5,
+                Part::Body,
+            ),
+        };
+        strike(
+            &mut commands,
+            player,
+            entity,
+            &mut creature,
+            Blow {
+                damage: blow,
+                at,
+                part,
+                skill: Skill::Fighting,
+            },
+            &mut did,
+            &mut struck,
+            &mut told,
+        );
+        belongings.wear_in_hand(1);
     }
-    if swung.since < SWING_EVERY_S {
-        return;
-    }
-    let feet = player_at.translation;
-    let up = feet.normalize();
-    let target = creatures
-        .iter_mut()
-        .filter(|(_, creature, _)| creature.alive())
-        .filter_map(|(entity, creature, at)| {
-            let toward = (at.translation - feet).reject_from(up);
-            let distance = toward.length();
-            let ahead = toward.normalize_or_zero().dot(view.forward);
-            (distance < reach + 0.6 && ahead > 0.4).then_some((
-                entity,
-                creature,
-                distance,
-                at.translation,
-            ))
-        })
-        .min_by(|a, b| a.2.total_cmp(&b.2));
-    let Some((entity, mut creature, _, there)) = target else {
-        return;
-    };
-    // A tired arm hits softly.
-    let strength = if vitals.spend(SWING_STAMINA) {
-        1.0
-    } else {
-        0.4
-    };
-    let blow = damage * strength * skills.speed(Skill::Fighting);
-    swung.since = 0.0;
-    stance.since_acting = 0.0;
-    stance.attacking = 0.6;
-    // It lands where the aim is, if that is on it; otherwise on its body, on the side
-    // toward the player.
-    let eye = camera.translation();
-    let ray = eye + *camera.forward() * (eye.distance(there) + reach + 1.0);
-    let (at, part) = match zones.along(entity, eye, ray) {
-        Some((along, part)) => (eye.lerp(ray, along), part),
-        None => (
-            there + (feet - there).reject_from(up).normalize_or_zero() * 0.3 + up * 0.5,
-            Part::Body,
-        ),
-    };
-    strike(
-        &mut commands,
-        entity,
-        &mut creature,
-        Blow {
-            damage: blow,
-            at,
-            part,
-            skill: Skill::Fighting,
-        },
-        &mut did,
-        &mut struck,
-        &mut notice,
-    );
-    belongings.wear_in_hand(1);
 }
 
-/// Lands a blow on a creature, however it was dealt: a swing or an arrow, each growing its
-/// own skill. Where it lands, and whether the creature saw it coming, decide how much it
+/// Lands a player's blow on a creature, however it was dealt: a swing or an arrow, each
+/// growing its own skill. Where it lands, and whether the creature saw it coming, decide how much it
 /// does (D119). It learns it was hurt, and falls if that was enough. Returns how much
 /// the blow did.
+#[allow(clippy::too_many_arguments)]
 pub fn strike(
     commands: &mut Commands,
+    by: Entity,
     entity: Entity,
     creature: &mut Creature,
     blow: Blow,
     did: &mut MessageWriter<Did>,
     struck: &mut MessageWriter<Struck>,
-    notice: &mut Notice,
+    told: &mut MessageWriter<Told>,
 ) -> f32 {
     let ambush = creature.unaware();
     let dealt = blow.damage * counts(blow.part) * if ambush { AMBUSH } else { 1.0 };
     creature.health -= dealt;
     creature.hurt = true;
-    did.write(Did(blow.skill, ONCE));
+    did.write(Did(by, blow.skill, ONCE));
     struck.write(Struck {
         creature: entity,
         species: creature.species,
@@ -213,24 +233,29 @@ pub fn strike(
     let skill = blow.skill;
     if creature.health <= 0.0 {
         creatures::fallen(commands, entity, creature);
-        did.write(Did(skill, ONCE * 2.0));
+        did.write(Did(by, skill, ONCE * 2.0));
         info!("Killed a {}.", creature.species);
         let name = creature.species.name().to_lowercase();
-        notice.say(format!("The {name} falls"));
+        told.write(Told::new(by, format!("The {name} falls")));
     }
     dealt
 }
 
 /// Holding the build menu's button without the hammer in hand guards.
 fn guard(
-    controls: Controls,
-    belongings: Belongings,
-    player: Single<(&mut Stance, Has<Downed>), IsLocalPlayer>,
+    mut belongings: Belongings,
+    mut players: Query<(Entity, &Intent, &mut Stance, Has<Downed>), With<Player>>,
 ) {
-    let (mut stance, downed) = player.into_inner();
-    let holding = belongings.tool_in_hand();
-    stance.guarding =
-        holding.is_some_and(|tool| !tool.builds) && !downed && controls.held(Action::BuildMenu);
+    for (player, intent, mut stance, downed) in &mut players {
+        let Some(inventory) = belongings.of(player) else {
+            continue;
+        };
+        let weapon = inventory.tool_in_hand().is_some_and(|tool| !tool.builds);
+        let guarding = weapon && !downed && intent.working(Action::BuildMenu);
+        if stance.guarding != guarding {
+            stance.guarding = guarding;
+        }
+    }
 }
 
 /// Lands the blows creatures deal on whoever they hit, less what leather, a guard or a
@@ -238,21 +263,12 @@ fn guard(
 fn take_blows(
     mut bitten: MessageReader<Bitten>,
     items: Res<Items>,
-    mut players: Query<
-        (
-            &mut Stance,
-            &mut Vitals,
-            &mut Gear,
-            Has<Downed>,
-            Has<LocalPlayer>,
-        ),
-        With<Player>,
-    >,
+    mut players: Query<(&mut Stance, &mut Vitals, &mut Gear, Has<Downed>), With<Player>>,
     mut hurt: MessageWriter<Hurt>,
     mut broke: MessageWriter<Broke>,
 ) {
     for &Bitten { player, damage } in bitten.read() {
-        let Ok((mut stance, mut vitals, mut gear, downed, ours)) = players.get_mut(player) else {
+        let Ok((mut stance, mut vitals, mut gear, downed)) = players.get_mut(player) else {
             continue;
         };
         if downed || stance.dodging > 0.0 {
@@ -270,11 +286,9 @@ fn take_blows(
             player,
             amount: taken,
         });
-        // What is worn takes the blow too, and wears. Only this machine's player hears of it.
+        // What is worn takes the blow too, and wears.
         for kind in inventory::wear_worn(&items, &mut gear.0, 1) {
-            if ours {
-                broke.write(Broke { kind });
-            }
+            broke.write(Broke { player, kind });
         }
         stance.flinch = 0.35;
         info!("Bitten for {taken:.0}; health {:.0}.", vitals.health);

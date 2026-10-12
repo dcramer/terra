@@ -144,11 +144,14 @@ fn toggle(
     settings: Res<Settings>,
     options: Res<OptionsMenu>,
     screen: Res<InventoryScreen>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     window: Single<(&Window, &mut CursorOptions)>,
     mut menu: ResMut<BuildMenu>,
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
+    let Some(belongings) = belongings.mine() else {
+        return;
+    };
     let (window, mut cursor) = window.into_inner();
     let hammer = belongings.tool_in_hand().is_some_and(|tool| tool.builds);
     if menu.open && (!hammer || screen.open || options.open) {
@@ -328,7 +331,7 @@ fn lay_out(
 fn draw(
     menu: Res<BuildMenu>,
     builder: Single<&Builder, IsLocalPlayer>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     mut panel: Single<&mut Visibility, With<Panel>>,
     mut tabs: Query<(&TabButton, &mut BackgroundColor), Without<Tile>>,
     mut tiles: Query<
@@ -336,6 +339,9 @@ fn draw(
         Without<TabButton>,
     >,
 ) {
+    let Some(belongings) = belongings.mine() else {
+        return;
+    };
     tiles::show(&mut panel, menu.open);
     if !menu.open {
         return;

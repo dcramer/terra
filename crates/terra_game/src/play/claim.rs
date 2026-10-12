@@ -134,6 +134,9 @@ fn grow(
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     if !focus.used(Interactable::ClaimStone) {
         return;
     }
@@ -164,9 +167,12 @@ fn grow(
 fn show(
     claim: Single<&Claim, IsLocalPlayer>,
     planet: Res<Planet>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     mut gizmos: Gizmos,
 ) {
+    let Some(belongings) = belongings.mine() else {
+        return;
+    };
     let Some((_, centre)) = claim.stone else {
         return;
     };

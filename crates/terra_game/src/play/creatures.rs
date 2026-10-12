@@ -589,6 +589,9 @@ fn butcher(
     mut did: MessageWriter<Did>,
     bodies: Query<(Entity, &Creature)>,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     if focus.used(Interactable::Carcass)
         && let Some(entity) = focus.entity
         && let Ok((_, creature)) = bodies.get(entity)
@@ -629,7 +632,7 @@ fn butcher(
                 .collect();
             info!("Butchered it for {}.", given.join(", "));
             notice.say("Butchered it");
-            did.write(Did(carcass.needs.skill(), ONCE));
+            did.write(Did(belongings.player(), carcass.needs.skill(), ONCE));
             commands.entity(entity).despawn();
         }
     }

@@ -252,12 +252,15 @@ pub fn steer(
     controls: Controls,
     motion: Res<AccumulatedMouseMotion>,
     inventory: Res<InventoryScreen>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     menu: Res<OptionsMenu>,
     build_menu: Res<BuildMenu>,
     mut dial: ResMut<Dial>,
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
+    let Some(belongings) = belongings.mine() else {
+        return;
+    };
     // The wheel belongs to the hammer, with a part in it.
     let usable = !inventory.open
         && !menu.open
@@ -311,7 +314,7 @@ fn draw(
     builder: Single<&Builder, IsLocalPlayer>,
     inventory: Res<InventoryScreen>,
     focus: Res<Focus>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     cutting: Single<&Cutting, IsLocalPlayer>,
     digging: Single<&super::dig::Digging, IsLocalPlayer>,
     growth: Query<&Growth>,
@@ -328,6 +331,9 @@ fn draw(
         Query<(&DialLabelText, &mut Text)>,
     )>,
 ) {
+    let Some(belongings) = belongings.mine() else {
+        return;
+    };
     let set = |text: &mut Text, to: String| {
         if text.0 != to {
             text.0 = to;

@@ -11,9 +11,9 @@
 //! the list of raw items, what you start with, what things cost, the sizes, and that
 //! everything is refunded in full.
 
-use super::IsLocalPlayer;
 pub use super::kinds::Cut;
 use super::kinds::{self, ItemDef, ToolDef, WornDef};
+use super::{IsLocalPlayer, Player};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use terra_items::{
     ActionBar, Catalogue, Equipment, GearSlot, Grid, IdSource, Item, ItemId, ItemKind, KindDef,
@@ -556,52 +556,104 @@ pub struct InventoryScreen {
 /// Something the player carries wore out (D99): what kind it is.
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Broke {
+    pub player: Entity,
     pub kind: ItemKind,
 }
 
-/// Something came into what the player carries: so many of a kind of item. Written by
-/// [`Belongings`] whatever brought it, so whatever shows it needs to know nothing else.
+/// Something came into what a player carries: so many of a kind of item. Written by
+/// [`Inventory`] whatever brought it, so whatever shows it needs to know nothing else.
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Gained {
+    pub player: Entity,
     pub kind: ItemKind,
     pub count: u32,
 }
 
-/// What this machine's player carries, for a system driven by their input to read or change.
+/// What players carry, for a system to read or change: `of` a player, or `mine` for this
+/// machine's own, as a screen shows it.
 #[derive(SystemParam)]
 pub struct Belongings<'w, 's> {
     items: ResMut<'w, Items>,
-    player:
-        Single<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static mut Gear), IsLocalPlayer>,
+    carried:
+        Query<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static mut Gear), With<Player>>,
+    local: Query<'w, 's, Entity, IsLocalPlayer>,
     gained: MessageWriter<'w, Gained>,
     broke: MessageWriter<'w, Broke>,
 }
 
-impl Belongings<'_, '_> {
+impl<'w> Belongings<'w, '_> {
     pub fn items(&self) -> &Items {
         &self.items
     }
 
+    /// This machine's player, if there is one yet.
+    pub fn local_player(&self) -> Option<Entity> {
+        self.local.single().ok()
+    }
+
+    /// What a player carries, if they are a player.
+    pub fn of(&mut self, player: Entity) -> Option<Inventory<'_, 'w>> {
+        let (backpack, bar, gear) = self.carried.get_mut(player).ok()?;
+        Some(Inventory {
+            player,
+            items: &mut self.items,
+            backpack,
+            bar,
+            gear,
+            gained: &mut self.gained,
+            broke: &mut self.broke,
+        })
+    }
+
+    /// What this machine's player carries.
+    pub fn mine(&mut self) -> Option<Inventory<'_, 'w>> {
+        let player = self.local_player()?;
+        self.of(player)
+    }
+}
+
+/// What one player carries, to read or change. Every change either applies in full or is
+/// refused (`terra_items`), and what comes in or breaks is told as a message naming them.
+pub struct Inventory<'a, 'w> {
+    player: Entity,
+    items: &'a mut Items,
+    backpack: Mut<'a, Backpack>,
+    bar: Mut<'a, Bar>,
+    gear: Mut<'a, Gear>,
+    gained: &'a mut MessageWriter<'w, Gained>,
+    broke: &'a mut MessageWriter<'w, Broke>,
+}
+
+impl Inventory<'_, '_> {
+    /// Whose it is.
+    pub fn player(&self) -> Entity {
+        self.player
+    }
+
+    pub fn items(&self) -> &Items {
+        self.items
+    }
+
     pub fn backpack(&self) -> &Grid {
-        &self.player.0.0
+        &self.backpack.0
     }
 
     pub fn bar(&self) -> &ActionBar {
-        &self.player.1.0
+        &self.bar.0
     }
 
     pub fn gear(&self) -> &Equipment {
-        &self.player.2.0
+        &self.gear.0
     }
 
     /// How much of a blow what is worn takes, out of one.
     pub fn protection(&self) -> f32 {
-        protection(&self.items, self.gear())
+        protection(self.items, self.gear())
     }
 
     /// The kind of tool in hand, if it is not broken.
     pub fn holding(&self) -> Option<ItemKind> {
-        holding(&self.items, self.backpack(), self.bar())
+        holding(self.items, self.backpack(), self.bar())
     }
 
     /// What the tool in hand does, if there is one and it is not broken.
@@ -621,16 +673,22 @@ impl Belongings<'_, '_> {
         let Some(item) = self.bar().in_hand(self.backpack()) else {
             return;
         };
-        let broke = self.player.0.0.wear(&self.items.catalogue, item.id, amount);
+        let broke = self.backpack.0.wear(&self.items.catalogue, item.id, amount);
         if broke == Ok(true) {
-            self.broke.write(Broke { kind: item.kind });
+            self.broke.write(Broke {
+                player: self.player,
+                kind: item.kind,
+            });
         }
     }
 
     /// Wears everything worn that wears, by so much: a blow taken (D99).
     pub fn wear_worn(&mut self, amount: u16) {
-        for kind in wear_worn(&self.items, &mut self.player.2.0, amount) {
-            self.broke.write(Broke { kind });
+        for kind in wear_worn(self.items, &mut self.gear.0, amount) {
+            self.broke.write(Broke {
+                player: self.player,
+                kind,
+            });
         }
     }
 
@@ -645,7 +703,7 @@ impl Belongings<'_, '_> {
             .map(|placed| (placed.item.id, placed.item.kind))
             .collect();
         for (id, kind) in worn_out {
-            if self.player.0.0.set_wear(id, 0).is_ok() {
+            if self.backpack.0.set_wear(id, 0).is_ok() {
                 mended.push(kind);
             }
         }
@@ -658,7 +716,7 @@ impl Belongings<'_, '_> {
             })
             .collect();
         for (slot, kind) in slots {
-            if self.player.2.0.set_wear(slot, 0).is_ok() {
+            if self.gear.0.set_wear(slot, 0).is_ok() {
                 mended.push(kind);
             }
         }
@@ -672,11 +730,11 @@ impl Belongings<'_, '_> {
     }
 
     pub fn missing(&self, cost: Cost, times: u32) -> Option<(ItemKind, u32)> {
-        missing(&self.items, self.backpack(), self.gear(), cost, times)
+        missing(self.items, self.backpack(), self.gear(), cost, times)
     }
 
     pub fn room_for(&self, cost: Cost, times: u32) -> bool {
-        room_for(&self.items, self.backpack(), cost, times)
+        room_for(self.items, self.backpack(), cost, times)
     }
 
     /// Takes one of the most filling food carried, if there is any, and says which.
@@ -692,9 +750,8 @@ impl Belongings<'_, '_> {
 
     /// Takes one of a food, if it is carried. Returns whether it was.
     pub fn eat(&mut self, food: ItemKind) -> bool {
-        let (backpack, bar, _) = &mut *self.player;
-        let taken = backpack.0.take(&[(food, 1)]).is_ok();
-        bar.0.tidy(&backpack.0);
+        let taken = self.backpack.0.take(&[(food, 1)]).is_ok();
+        self.bar.0.tidy(&self.backpack.0);
         taken
     }
 
@@ -702,12 +759,12 @@ impl Belongings<'_, '_> {
     /// bar keeps pointing at what was on it, so taking the bag back puts the tools back
     /// in reach.
     pub fn empty_into_bag(&mut self) -> Grid {
-        empty_into_bag(&self.items, &mut self.player.0.0)
+        empty_into_bag(self.items, &mut self.backpack.0)
     }
 
     /// Takes back what fits from a bag. Returns how many things came back.
     pub fn take_from(&mut self, bag: &mut Grid) -> usize {
-        let backpack = &mut self.player.0;
+        let backpack = &mut self.backpack;
         let ids: Vec<(ItemId, ItemKind)> = bag
             .iter()
             .map(|placed| (placed.item.id, placed.item.kind))
@@ -737,20 +794,19 @@ impl Belongings<'_, '_> {
     }
 
     fn receive_quietly(&mut self, made: Made) -> bool {
-        let (backpack, bar, gear) = &mut *self.player;
         let (kind, count) = self.items.made(made);
-        let mut trial = gear.0.clone();
+        let mut trial = self.gear.0.clone();
         let worn = trial.stow(kind, count);
         if worn == count
             || receive_kind(
-                &mut self.items,
-                &mut backpack.0,
-                &mut bar.0,
+                self.items,
+                &mut self.backpack.0,
+                &mut self.bar.0,
                 kind,
                 count - worn,
             )
         {
-            gear.0 = trial;
+            self.gear.0 = trial;
             return true;
         }
         false
@@ -768,17 +824,20 @@ impl Belongings<'_, '_> {
 
     /// Spends so many of a kind, if there are that many. Returns whether it did.
     pub fn spend(&mut self, kind: ItemKind, count: u32) -> bool {
-        let (backpack, bar, gear) = &mut *self.player;
-        spend(&mut backpack.0, &mut bar.0, &mut gear.0, &[(kind, count)])
+        spend(
+            &mut self.backpack.0,
+            &mut self.bar.0,
+            &mut self.gear.0,
+            &[(kind, count)],
+        )
     }
 
     pub fn pay(&mut self, cost: Cost, times: u32) -> bool {
-        let (backpack, bar, gear) = &mut *self.player;
         pay(
-            &self.items,
-            &mut backpack.0,
-            &mut bar.0,
-            &mut gear.0,
+            self.items,
+            &mut self.backpack.0,
+            &mut self.bar.0,
+            &mut self.gear.0,
             cost,
             times,
         )
@@ -799,37 +858,38 @@ impl Belongings<'_, '_> {
     /// Puts so many of a kind of item where it goes, as many as fit: into what is worn that
     /// holds it, such as arrows into a belt quiver, then the backpack. Returns how many did.
     pub fn give(&mut self, kind: ItemKind, count: u32) -> u32 {
-        let (backpack, _, gear) = &mut *self.player;
-        let worn = gear.0.stow(kind, count);
-        let given = worn + give(&mut self.items, &mut backpack.0, kind, count - worn);
+        let worn = self.gear.0.stow(kind, count);
+        let given = worn + give(self.items, &mut self.backpack.0, kind, count - worn);
         self.tell(kind, given);
         given
     }
 
     fn tell(&mut self, kind: ItemKind, count: u32) {
         if count > 0 {
-            self.gained.write(Gained { kind, count });
+            self.gained.write(Gained {
+                player: self.player,
+                kind,
+                count,
+            });
         }
     }
 
     pub fn pick(&mut self, slot: usize) {
         if self.bar().picked() != slot {
-            self.player.1.0.pick(slot);
+            self.bar.0.pick(slot);
         }
     }
 
     /// Wears an item from the backpack.
     pub fn wear(&mut self, id: ItemId) -> Result<(), Refused> {
-        let (backpack, bar, gear) = &mut *self.player;
-        let worn = wear(&self.items, &mut backpack.0, &mut gear.0, id);
-        bar.0.tidy(&backpack.0);
+        let worn = wear(self.items, &mut self.backpack.0, &mut self.gear.0, id);
+        self.bar.0.tidy(&self.backpack.0);
         worn
     }
 
     /// Takes off what is in a slot, into the backpack.
     pub fn take_off(&mut self, slot: GearSlot) -> Result<(), Refused> {
-        let (backpack, _, gear) = &mut *self.player;
-        take_off(&self.items, &mut backpack.0, &mut gear.0, slot)
+        take_off(self.items, &mut self.backpack.0, &mut self.gear.0, slot)
     }
 
     /// Points a slot of the bar at a tool in the backpack. Only tools go on the bar.
@@ -839,7 +899,7 @@ impl Belongings<'_, '_> {
             .get(id)
             .is_some_and(|placed| self.items.tool(placed.item.kind).is_some());
         if is_tool {
-            self.player.1.0.set(slot, Some(id));
+            self.bar.0.set(slot, Some(id));
         }
     }
 }

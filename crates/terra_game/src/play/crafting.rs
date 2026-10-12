@@ -13,7 +13,7 @@
 use super::bag::Notice;
 use super::grab_mouse;
 use super::interact::{Focus, Focusing, Interactable, REACH_M};
-use super::inventory::{Belongings, Cost, InventoryScreen, Items, Made};
+use super::inventory::{Belongings, Cost, Inventory, InventoryScreen, Items, Made};
 pub use super::kinds::Family;
 use super::people::{Doing, Person};
 use super::props::Prop;
@@ -377,6 +377,9 @@ fn hand_over(
     mut notice: ResMut<Notice>,
     mut did: MessageWriter<Did>,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     for (entity, prop, at, mut works) in &mut stations {
         let Some(station) = prop.item.station() else {
             continue;
@@ -406,7 +409,7 @@ fn hand_over(
             }
             works.done.remove(0);
             works.told_full = false;
-            did.write(Did(Skill::Crafting, ONCE));
+            did.write(Did(belongings.player(), Skill::Crafting, ONCE));
             info!("Made {}.", made.name());
             notice.say(format!("Made {}", made.name()));
         }
@@ -419,7 +422,7 @@ pub fn queue(
     works: &mut Works,
     index: usize,
     staffed: bool,
-    belongings: &mut Belongings,
+    belongings: &mut Inventory,
     notice: &mut Notice,
 ) {
     let recipe = &RECIPES[index];
@@ -452,7 +455,7 @@ pub fn queue(
 }
 
 /// Takes something off a station's queue and gives back what it took, if there is room.
-pub fn cancel(works: &mut Works, place: usize, belongings: &mut Belongings, notice: &mut Notice) {
+pub fn cancel(works: &mut Works, place: usize, belongings: &mut Inventory, notice: &mut Notice) {
     let Some(&index) = works.queue.get(place) else {
         return;
     };

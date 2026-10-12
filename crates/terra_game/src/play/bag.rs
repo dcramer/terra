@@ -62,6 +62,38 @@ impl Notice {
     }
 }
 
+/// Something said to a player: what happened to them, or why something was not done.
+/// This machine shows what is said to its own player (`Notice`); a server will send each
+/// player theirs.
+#[derive(Message, Clone, Debug)]
+pub struct Told {
+    pub player: Entity,
+    pub text: String,
+}
+
+impl Told {
+    pub fn new(player: Entity, text: impl Into<String>) -> Self {
+        Self {
+            player,
+            text: text.into(),
+        }
+    }
+}
+
+/// Shows what is said to this machine's player.
+fn hear(
+    mut told: MessageReader<Told>,
+    ours: Option<Single<Entity, IsLocalPlayer>>,
+    mut notice: ResMut<Notice>,
+) {
+    let ours = ours.map(|player| *player);
+    for said in told.read() {
+        if Some(said.player) == ours {
+            notice.say(said.text.clone());
+        }
+    }
+}
+
 #[derive(Component)]
 struct Slot(usize);
 
@@ -189,8 +221,10 @@ pub fn plugin(app: &mut App) {
         .init_resource::<ItemIcons>()
         .init_resource::<InventoryScreen>()
         .init_resource::<Notice>()
+        .add_message::<Told>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (use_keys, click, lay_out, draw, draw_wear).chain());
+        .add_systems(Update, (use_keys, click, lay_out, draw, draw_wear).chain())
+        .add_systems(PostUpdate, hear);
 }
 
 fn setup(mut commands: Commands) {
@@ -434,6 +468,9 @@ fn use_keys(
     mut screen: ResMut<InventoryScreen>,
     mut belongings: Belongings,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     if menu.open {
         return;
     }
@@ -477,6 +514,9 @@ fn click(
     mut vitals: Single<&mut Vitals, IsLocalPlayer>,
     mut notice: ResMut<Notice>,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     if !screen.open {
         return;
     }
@@ -656,7 +696,7 @@ fn draw(
     time: Res<Time>,
     screen: Res<InventoryScreen>,
     options: Res<crate::shell::Options>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     mut notice: ResMut<Notice>,
     mut panel: Single<&mut Visibility, (With<Panel>, Without<Hud>)>,
     mut hud: Query<&mut Visibility, With<Hud>>,
@@ -680,6 +720,9 @@ fn draw(
         Query<(&GearName, &mut Text)>,
     )>,
 ) {
+    let Some(belongings) = belongings.mine() else {
+        return;
+    };
     let set = |text: &mut Text, to: String| {
         if text.0 != to {
             text.0 = to;

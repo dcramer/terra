@@ -37,6 +37,9 @@ pub fn mended_at(items: &Items, kind: ItemKind) -> Option<Station> {
 
 /// A torch in hand burns down, a use for each second.
 fn burn(time: Res<Time>, mut belongings: Belongings, mut burnt: Local<f32>) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     if !belongings.tool_in_hand().is_some_and(|tool| tool.lights) {
         return;
     }
@@ -49,8 +52,17 @@ fn burn(time: Res<Time>, mut belongings: Belongings, mut burnt: Local<f32>) {
 }
 
 /// Says when something has broken, and where to mend it.
-fn tell(items: Res<Items>, mut broke: MessageReader<Broke>, mut notice: ResMut<Notice>) {
-    for &Broke { kind } in broke.read() {
+fn tell(
+    items: Res<Items>,
+    mut broke: MessageReader<Broke>,
+    ours: Option<Single<Entity, IsLocalPlayer>>,
+    mut notice: ResMut<Notice>,
+) {
+    let ours = ours.map(|player| *player);
+    for &Broke { player, kind } in broke.read() {
+        if Some(player) != ours {
+            continue;
+        }
         let items = &*items;
         let name = items.name(kind).to_lowercase();
         let verb = if items.tool(kind).is_some_and(|tool| tool.lights) {
@@ -77,6 +89,9 @@ fn mend(
     mut notice: ResMut<Notice>,
     mut was_at: Local<Option<Entity>>,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     let at = screen.at.map(|(entity, _)| entity);
     if at == *was_at {
         return;

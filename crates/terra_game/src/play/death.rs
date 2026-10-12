@@ -202,6 +202,9 @@ fn recover(
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
 ) {
+    let Some(mut belongings) = belongings.mine() else {
+        return;
+    };
     if !focus.used(Interactable::Bag) {
         return;
     }

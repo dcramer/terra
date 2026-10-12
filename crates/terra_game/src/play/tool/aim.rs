@@ -362,9 +362,12 @@ pub(super) fn afford(
     site: Res<Site>,
     claim: Single<&Claim, IsLocalPlayer>,
     props: Query<&Prop>,
-    belongings: Belongings,
+    mut belongings: Belongings,
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
+    let Some(belongings) = belongings.mine() else {
+        return;
+    };
     if builder.work.is_some() {
         return;
     }

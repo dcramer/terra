@@ -6,6 +6,7 @@
 //! It reads [`Gained`], which `Belongings` writes, so it knows nothing of where the
 //! items came from.
 
+use super::IsLocalPlayer;
 use super::inventory::{Gained, Items};
 use bevy::prelude::*;
 use terra_items::ItemKind;
@@ -110,10 +111,21 @@ fn gather(
     time: Res<Time>,
     items: Res<Items>,
     mut gained: MessageReader<Gained>,
+    ours: Option<Single<Entity, IsLocalPlayer>>,
     mut feed: ResMut<Feed>,
 ) {
     feed.age(time.delta_secs());
-    for &Gained { kind, count } in gained.read() {
+    // What came to this machine's player, which is what its screen shows.
+    let ours = ours.map(|player| *player);
+    for &Gained {
+        player,
+        kind,
+        count,
+    } in gained.read()
+    {
+        if Some(player) != ours {
+            continue;
+        }
         // Logged, so a scripted run can read what came in (D69).
         info!("Gained {count} {}.", items.name(kind));
         feed.add(kind, count);

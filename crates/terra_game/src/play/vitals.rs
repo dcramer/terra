@@ -7,10 +7,11 @@
 //!
 //!   H             eat the most filling food you carry
 
-use super::IsLocalPlayer;
-use super::bag::Notice;
-use super::controls::{Action, Controls};
+use super::bag::Told;
+use super::controls::Action;
+use super::intent::Intent;
 use super::inventory::Belongings;
+use super::{IsLocalPlayer, Player};
 use bevy::prelude::*;
 
 pub const FULL: f32 = 100.0;
@@ -180,26 +181,29 @@ fn setup(mut commands: Commands) {
 }
 
 /// H eats the most filling food carried.
+/// The eat key eats the most filling food a player carries, if they are hungry.
 fn eat(
-    controls: Controls,
-    mut vitals: Single<&mut Vitals, IsLocalPlayer>,
+    mut players: Query<(Entity, &Intent, &mut Vitals), With<Player>>,
     mut belongings: Belongings,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
 ) {
-    if !controls.went_down(Action::Eat) {
-        return;
-    }
-    if vitals.fed >= FULL - 1.0 {
-        notice.say("You are not hungry");
-        return;
-    }
-    match belongings.eat_best() {
-        Some(food) => {
-            let items = belongings.items();
-            vitals.eat(items.food(food));
-            notice.say(format!("Ate {}", items.name(food).to_lowercase()));
+    for (player, intent, mut vitals) in &mut players {
+        if !intent.pressed(Action::Eat) {
+            continue;
         }
-        None => notice.say("You have nothing to eat"),
+        let Some(mut inventory) = belongings.of(player) else {
+            continue;
+        };
+        let said = if vitals.fed >= FULL - 1.0 {
+            "You are not hungry".to_string()
+        } else if let Some(food) = inventory.eat_best() {
+            let items = inventory.items();
+            vitals.eat(items.food(food));
+            format!("Ate {}", items.name(food).to_lowercase())
+        } else {
+            "You have nothing to eat".to_string()
+        };
+        told.write(Told::new(player, said));
     }
 }
 
@@ -235,6 +239,38 @@ fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::play::inventory::{Backpack, Broke, Gained, Items, give};
+    use crate::play::test_player;
+    use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn only_the_player_who_means_to_eat_eats() {
+        let mut world = World::new();
+        world.init_resource::<Messages<Gained>>();
+        world.init_resource::<Messages<Broke>>();
+        world.init_resource::<Messages<Told>>();
+        let ground = Vec3::Y * 2000.0;
+        let hungry = |world: &mut World, at| {
+            let player = test_player(world, at);
+            world.get_mut::<Vitals>(player).unwrap().fed = 20.0;
+            world.resource_scope(|world, mut items: Mut<Items>| {
+                let berries = items.kind("Berries");
+                let mut backpack = world.get_mut::<Backpack>(player).unwrap();
+                give(&mut items, &mut backpack.0, berries, 2);
+            });
+            player
+        };
+        let eats = hungry(&mut world, ground);
+        let waits = hungry(&mut world, ground + Vec3::X * 3.0);
+        world.get_mut::<Intent>(eats).unwrap().hold(Action::Eat);
+        world.run_system_once(eat).unwrap();
+        let fed = |world: &World, player| world.get::<Vitals>(player).unwrap().fed;
+        assert!(fed(&world, eats) > 20.0);
+        assert_eq!(fed(&world, waits), 20.0);
+        let told: Vec<_> = world.resource_mut::<Messages<Told>>().drain().collect();
+        assert_eq!(told.len(), 1);
+        assert_eq!(told[0].player, eats);
+    }
 
     #[test]
     fn sprinting_spends_stamina_and_resting_brings_it_back() {
