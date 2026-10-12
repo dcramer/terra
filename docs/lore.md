@@ -84,7 +84,7 @@ Decided that they exist (D156), because they enrich the world.
 - **A god is a superior user of magic:** one of a realm who went deeper into its magic than anyone, far past the highest rank a person reaches. It is the same magic and the same ladder, at its far end, not a different order of thing.
 - **Gods belong to a realm.** Each realm has its own, and their natures follow its magic: a death realm's gods are of death and endings, a growth realm's of seasons and life. No god is worshipped everywhere.
 - **Peoples believe things about them,** not always the same things, and not always true. Shrines, priests, rites and offerings are part of a culture ([people.md](people.md)).
-- **What it means for play:** gods are made by the generator with their realm, from its magic and its history ([naming.md](naming.md#lore-by-the-same-rules)). How far they act in play (blessings, a priest's powers, a god's anger at what you do) is open.
+- **What it means for play, kept simple for now** (2026-10-12): gods are made by the generator with their realm, from its magic and its history ([naming.md](naming.md#lore-by-the-same-rules)). They act through **blessings at shrines**, boons for a while, and through what is thematic: their shrines, priests, rites and holy places. More later.
 
 ## Beings of the gap
 
@@ -96,12 +96,51 @@ Proposed, Leaning (D157): **in the lore only.** Something lives in the formless 
 - **Settlements live by it.** A village near a pooling place is safe for as long as someone culls it ([people.md](people.md)).
 - **What it means for play:** the player's place in the world is ready-made. You are one of the people who go out into the wild, and every culture has a role for you.
 
+## Coming back from death
+
+Ours to choose, as the developers asked (2026-10-12), so it means something. Decided for now (D171):
+
+- **A soul that dies falls into the astral** and is lost there, as every soul is.
+- **Unless it is bound to a hearth.** Adventurers, the people whose work is keeping monsters down, learn a simple rite: when they rest at a hearth they keep, their soul is tied to it. When they die, the tie draws the soul back out of the astral, and the hearth's fire gives it a body again, made of magic, as monsters are.
+- **Coming back costs what the lore says it should:**
+  - **What you wore is bound with you** and comes back. What you carried isn't: it lies where you fell (D84).
+  - **The new body is made partly from you.** A little of the progress you had made toward your next step goes into it (D101). Never a step already reached, a rank, an essence or a power.
+- **Where:** the hearth you last rested at, in a claim ([survival.md](survival.md#death)). Settlements keep a common hearth that any adventurer who has rested there can be drawn back to, when your own is gone or too far.
+- **Why it matters in play:**
+  - a home is where you come back to, which is what makes holding ground (D90) more than storage;
+  - a lost or cold hearth is a real loss;
+  - a hearth deep in dangerous land is a bold forward camp.
+- **Why ordinary people die for good:** the rite takes a soul with some strength, and most people never learn it or keep a hearth for it. Recruits can die (D161); whether a recruit can be taught the rite is for later.
+
+## Threats
+
+From the developers, 2026-10-12: **no single long threat.** What threatens a realm varies realm by realm: its ordinary conditions (cold, drought, the land), its monsters and surges, and its events (raids, migrations, a pool waking). The generator gives each realm its own pressures from its magic, climate and history ([settings.md](settings.md#making-generated-realms-fit-the-lore)).
+
+**And one thread that crosses them: a dangerous organisation** (D172, Leaning). A recurring enemy across your journey, people who cause problems wherever you go, and perhaps behind some of the worst things you meet. Proposed, to react to:
+
+- **Who they are:**
+  - essence users, of every rank, who want power faster than the world gives it;
+  - they wake pools on purpose and feed surges to harvest essences, quintessence and spirit coins from what forms;
+  - they trade in essences that harm people;
+  - they bind monsters to serve them.
+- **Why they cross realms:** they know astral magic, and keep their own portals.
+- **How you meet them:**
+  - a surge that came too soon;
+  - a pool someone has fed;
+  - a boss that was bound or fattened on purpose;
+  - a settlement under their sway;
+  - a defector with a warning;
+  - their marks on ruins.
+
+  Escalating as you rank up, never announced (D92).
+- **How they are made:**
+  - **Their name and creed are written by hand,** once.
+  - **Each realm gets a cell, generated:** its leader, of a rank to fit the realm, with a name in the realm's tongue; what it is doing there, from the realm's magic and pressures; and which bosses it has touched.
+  - A few lieutenants recur across realms, so they become people you know.
+- **What they are not:** a fixed story. They are a faction like any other (D95), with places, aims and standing, run by the same systems, and what you do to them sticks.
+
 ## Open: for the developers
 
-1. Answered: **gods** exist, as realm-bound superior users of magic (D156). **Beings of the gap** are in the lore only, for now (D157).
-2. **Why the player comes back from death** (D18). Proposed: something in the lore, such as a bond to the place you rest, rather than an unexplained respawn.
-3. **The long threat** (premise B in [arc.md](arc.md)), not yet chosen. Three that fit the rules, to react to:
-   - **a drought:** magic draining out of realms, leaving them dead;
-   - **a rot in the water:** magic turning foul and making worse things wherever it pools;
-   - **something rising from the gap,** pressing through where realms wear thin.
-4. **Names.** Our own words, made by one pattern: proposed in [naming.md](naming.md) (D158).
+1. Answered: **gods** exist, realm-bound, kept simple for now (D156). **Beings of the astral** are in the lore only (D157). **Coming back from death** is the hearth (D171). **The long threat** varies by realm, with a dangerous organisation across them (D172).
+2. **The organisation:** its name, its creed, and whether its aims above are right.
+3. **Names.** Our own words, plain English: [naming.md](naming.md) (D158).

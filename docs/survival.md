@@ -33,7 +33,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 ## Death
 
 - **No fail state** (D18). You come back.
-- **Where**: proposed, at the bed you last slept in, in a claim; failing that, the nearest friendly settlement.
+- **Where**: the hearth you last rested at, in a claim; failing that, a settlement's common hearth you have rested at. Why, in the lore: [lore.md](lore.md#coming-back-from-death) (D171).
 - **What you lose**: your pack drops where you fell and decays after a while (D84); what you wear stays on you.
 - **A little progress**, from the developers (D101): death should have some consequence, perhaps skill or experience lost. Proposed, after Valheim: some progress toward the next step of your skills is lost, never a step already reached, a rank, an essence or an ability. It stings without undoing what you built, and keeps "always getting better" true over time.
 

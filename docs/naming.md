@@ -1,6 +1,6 @@
 # Names and lore: the rules for making more
 
-Status: Open, a proposal for the developers (D158), 2026-10-12. They asked for "a thematic pattern that you can continue to generate names, lore and so on from": a documented set of rules, so that every name and every piece of lore, written by us or by the generator, comes out of one pattern and never out of *He Who Fights With Monsters*'s own words (D125). The fundamentals the names are for are in [lore.md](lore.md).
+Status: Leaning (D158), 2026-10-12. They asked for "a thematic pattern that you can continue to generate names, lore and so on from": a documented set of rules, so that every name and every piece of lore, written by us or by the generator, comes out of one pattern and never out of *He Who Fights With Monsters*'s own words (D125). The fundamentals the names are for are in [lore.md](lore.md).
 
 ## Two layers
 
@@ -9,48 +9,32 @@ Status: Open, a proposal for the developers (D158), 2026-10-12. They asked for "
 
 The two never mix. A realm's people call their god by their own name for it, while the shared tongue only says what kind of thing a god is.
 
-## The shared tongue: magic is water
+## The shared tongue
 
-**The one metaphor.** Everything about magic is spoken of as water:
-- it flows;
-- it pools;
-- it runs deep or shallow;
-- it floods;
-- it wells up;
-- it is crossed.
-
-The docs already talk this way: pooling places, surges, magic as the world's weather. Taking it as the rule makes every new term guessable, and it holds in every realm: a fire realm's magic still pools and floods, only it runs hot.
+The words for how the universe works. The books' names for its core systems are used as they are (D125). Our own words are plain English. There is no metaphor behind them: the developers found the earlier one, magic spoken of as water, odd (2026-10-12).
 
 **The rules for a shared word:**
-1. **It says what the thing does, as water would.** A natural crossing between realms is where the astral runs shallow, so in the lore it is a ford.
-2. **Plain, old English:** short words of one or two syllables, which can be joined into compounds, as wardcraft or bindcraft. No Latin or Greek coinages, and nothing that sounds like science.
-3. **The books' names for the universe's core systems are used as they are** (D125, 2026-10-12): rank names, essence, confluence, awakening stone, spirit coins, quintessence, aura, the astral, astral magic. **What is never the books' is the content:** no essence, ability, awakening stone, confluence, monster, people, place or god on our lists may be one of theirs. These rules name everything that is ours.
-4. **Readable in play:** order and size are obvious without a manual. Rank names say at a glance which is bigger.
-5. **One word, one meaning.** A word used for magic is not also a place or a season. The ranks are metals and a gem (D159), so a rank is always said with "rank" (an iron-rank monster, a bronze-rank portal), and the metal alone always means the material.
+1. **The books' names for the universe's core systems are used as they are** (D125): rank names, essence, confluence, awakening stone, spirit coins, quintessence, aura, the astral, astral magic, ritual magic. **What is never the books' is the content:** no essence, ability, awakening stone, confluence, monster, people, place or god on our lists may be one of theirs.
+2. **Our own words are plain English:** short words of one or two syllables, which can be joined into compounds, as wardcraft or bindcraft. They say what the thing does. No Latin or Greek coinages, and nothing that sounds like science.
+3. **Readable in play:** order and size are obvious without a manual.
+4. **One word, one meaning.** The ranks are metals and a gem (D159), so a rank is always said with "rank" (an iron-rank monster, a bronze-rank portal), and the metal alone means the material.
 
-**The words, proposed:**
+**The words:**
 
-| What | Working term now | Proposed | Why |
-|---|---|---|---|
-| Magic | magic | **magic**; in the lore, also "the water" | Plain; the metaphor's root |
-| Personal reserve (D102) | mana | **mana** on screen; "your well" in the lore | Common in games, so free; the well is what you draw from |
-| Where magic gathers | pooling place | **a pool** | Already ours |
-| Monsters spilling out | surge | **a surge** | Already ours |
-| Those without magic in them | normal, unranked | **normal rank**, and in the lore **still** (still water) | People and beasts the flow doesn't move |
-| The ranks, low to high | iron, bronze, silver, gold, diamond | **iron, bronze, silver, gold, diamond**, as in the books (D159) | The developers' choice |
-| A few essences joining into one more | confluence | **confluence**, as in the books | Core system name (D125) |
-| What wakes an essence's powers | awakening stone | **awakening stone**, as in the books | Core system name (D125) |
-| A person's felt power | presence | **aura**, as in the books; in the lore also "pressure", as the weight of deep water | Core system name (D125) |
-| The gap between realms | the gap | **the astral**, as in the books | Core system name (D125) |
-| A way between realms | portal | **portal** on screen; in the lore a **ford** where it is natural and a **bridge** where it was made | Ways open where the astral runs shallow |
-| Studied magic of the astral (D124) | astral magic | **astral magic**, as in the books | Core system name (D125) |
-| Ritual magic | ritual magic | **ritual magic**, as in the books | Core system name (D125) |
-| Our own studied disciplines | (none yet) | **-craft**: wardcraft, bindcraft | One pattern for disciplines that are ours |
-| Money that is magic (D167) | spirit coins | **spirit coins**, as in the books | The developers' choice |
-| Fragments of an essence (D168) | quintessence | **quintessence**, as in the books | The developers' choice |
-| A realm's gods, as a kind of thing (D156) | gods | **gods**, and in the lore **tides** | Powers that move a whole realm's water |
-| Beings of the astral itself, in lore only (D157) | (the books': great astral beings) | **the currents** | What moves in the Deep between realms |
-
+| What | Word |
+|---|---|
+| Magic, and a person's reserve of it (D102) | **magic**, **mana** |
+| Where magic gathers, and monsters spilling out | **a pool**, **a surge** |
+| Those without magic in them | **normal rank** |
+| The ranks, low to high (D159) | **iron, bronze, silver, gold, diamond** |
+| A few essences joining into one more | **confluence** |
+| What wakes an essence's powers | **awakening stone** |
+| A person's felt power | **aura** |
+| The gap between realms | **the astral** |
+| A way between realms | **portal** |
+| Studied magic | **ritual magic**, **astral magic**, and our own: **wardcraft**, **bindcraft** |
+| Money that is magic (D167), fragments of an essence (D168) | **spirit coins**, **quintessence** |
+| A realm's gods (D156) | **gods** |
 
 ## The tongues of peoples
 
@@ -77,7 +61,7 @@ Other leanings get their own rows as they are made: more data, not code.
 
 **Two names for every place.**
 - **The people's own name,** in their tongue.
-- **A plain English name the players use:** what is there, said simply, after the land. Splitrock, the Black Ford, Hollow Hill, Three Wells.
+- **A plain English name the players use:** what is there, said simply, after the land. Splitrock, the Black Pool, Hollow Hill, Three Wells.
 
 The plain name is what directions are given in, since the game gives directions by landmarks, not by markers (D92), so it must say what you will see. It is made by rule from the place's features: a feature or colour plus a landform.
 
@@ -95,12 +79,12 @@ What the generator writes, beyond names, follows one chain, so every realm's sto
 2. **What it made:**
    - its land and climate;
    - what pools there and what forms;
-   - how its people learned to use the water;
+   - how its people learned to use its magic;
    - its gods, who are those of the realm who went deepest in its magic (D156).
-3. **Its history:** a few events, by rule. A people rose, used the water their way, and something happened: overreach, war, a drought of magic, a portal opening.
+3. **Its history:** a few events, by rule. A people rose, used the magic their way, and something happened: overreach, war, a drought of magic, a portal opening.
 4. **What is left:**
    - ruins;
-   - pools where the water was overdrawn;
+   - pools where the magic was overdrawn;
    - the people who survived;
    - what they believe about their gods and their past;
    - names on stones.
@@ -111,6 +95,4 @@ What the generator writes, beyond names, follows one chain, so every realm's sto
 
 ## Open
 
-1. **Is water the right metaphor?** The alternative: no metaphor, plain words only, with less flavour and less to generate from.
-2. Answered: **the rank names** are the books' own: iron, bronze, silver, gold, diamond (D159).
-3. **Which working terms change in the docs** once agreed. Until then the docs keep the working terms, and this table is the map between them.
+1. Answered: **no metaphor.** Plain English for what is ours, and the books' names for the core systems (2026-10-12).

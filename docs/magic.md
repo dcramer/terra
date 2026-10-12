@@ -210,7 +210,7 @@ From the developers, 2026-10-12: awakening is a ritual, and while doing it you s
 | Legendary in either | Nothing but rumours |
 
 - **Outcomes are shown in words.** "Ember with the stone of the Step commonly gives: bursting into flame and reappearing; a dash that leaves fire behind; a leap that lands in a burst." What most people got is what the world knows.
-- **Knowledge grows in the world.** Proposed: when anyone in a world awakens an outcome that wasn't known, it becomes known there. Rare pairings fill in as players discover them, and the first to find one is the first to know.
+- **Knowledge grows in the world** (decided, 2026-10-12): when anyone in a world awakens an outcome that wasn't known, it becomes known there. Rare pairings fill in as players discover them, and the first to find one is the first to know. **People in the world count too:** some areas may have essence users among their people, or special kinds of people who hold essences, and what they have is known locally and can be learned by asking them (D173).
 - **What can't happen is shown too:** "you already have an aura", "this essence has its summon". The limits are common knowledge.
 - **Nothing else:**
   - no numbers;
@@ -219,7 +219,7 @@ From the developers, 2026-10-12: awakening is a ritual, and while doing it you s
 
   The rare tail stays a surprise.
 - **The order is for you:** which known outcomes are usual is worked out with your tilt included ([How a draw works](#how-a-draw-works)), so two people reading the same stone may see different common effects. The reasons aren't shown.
-- **Proposed:** knowing ritual magic shows one or two more outcomes than the world knows, the better the ritualist the more. Books and scholars in settlements tell the known outcomes too, before you hold the stone.
+- **Knowing ritual magic shows one or two more outcomes than the world knows** (decided, 2026-10-12), the better the ritualist the more, so progress in one discipline pays in another. Books and scholars in settlements tell the known outcomes too, before you hold the stone.
 - **Nothing to game by waiting.** The draw is seeded from the world, you, the essence's slot and the stone, so putting the ritual off gives the same result. Choosing a different stone or a different essence is the real choice, as in the books.
 
 ### Hundreds of powers, from shared mechanics
@@ -307,7 +307,7 @@ The same mechanic through different essences, as the books do with flight and te
 
 Some powers stack mechanics, which is where the most distinctive ones come from:
 
-- **Undertow** (Tide): pulls everything in an area toward its centre, slows them, then bursts. Pull, slow and delayed burst.
+- **Riptide** (Tide): pulls everything in an area toward its centre, slows them, then bursts. Pull, slow and delayed burst.
 - **Carrion Watch** (Raven): a familiar that sees for you, marks what it sees, and pecks what you mark. Familiar, sharing senses, marking and harm over time.
 - **Hearthguard** (Hearth): a zone around your fire where allies heal, warm (D153) and take less harm. Zone, heal over time and shield on others.
 - **Oathbound Strike** (Oath): mark a foe and swear to fell it. You are faster and stronger toward it, and weaker if you turn away. Mark, boon and paying.
@@ -337,7 +337,7 @@ With a few dozen kinds of stone and five to ten outcomes each, one essence has a
 
 #### Names
 
-From [naming.md](naming.md): the essence's word, or its flavour, joined to what the power does. Emberstep, Mistwalk, Ravenflight, Rootpassage, Undertow, Cinder Bolt. A generated name must pass naming's checks, and a few hand-written names cover the anchors.
+From [naming.md](naming.md): the essence's word, or its flavour, joined to what the power does. Emberstep, Mistwalk, Ravenflight, Rootpassage, Riptide, Cinder Bolt. A generated name must pass naming's checks, and a few hand-written names cover the anchors.
 
 #### Essences are generated too
 
@@ -487,7 +487,7 @@ There is no fast travel between claims (D72, 2026-10-12): getting around quickly
 
 What the developers asked about: magic-like things the list above leaves out.
 
-- **Gods' gifts** (D156). A realm's gods can give their followers an essence or an awakening stone of their choosing, and can take it back, as in the books. Also blessings at shrines (boons for a while) and priests among the peoples who work them.
+- **Gods' gifts** (D156), kept simple for now: blessings at shrines (boons for a while), and thematic touches such as shrines, priests and holy places. Gods granting essences or stones of their choosing, as in the books, is for later.
 - **Aura** ([lore.md](lore.md#aura)). Trained by doing: holding it in, pressing others with it, reading others'. It is a skill, and the one magic everyone has.
 - **Sensing magic.** Seeing pools, remnants and the leaning of a place: a perception power for some, a skill for anyone over time (D93).
 - **Food.** Food from magic ingredients gives boons (D101), and food above your rank gives backlash.

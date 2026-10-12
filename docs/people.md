@@ -34,6 +34,10 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 - **What they become** (D123): they improve at their work by doing it, as you do (D88). Proposed: on the same ladder as your skills ([essences.md](essences.md#skills-on-the-rank-ladder)), so a recruit has a rank in what they do, such as Bren a bronze-rank smith, and what they can make follows it. A recruit you bring along grows; one you rescue arrives with what they had already learned. Their skills read on their own sheet, like yours (D93).
 - **How many**: limited by what your claims can house and feed.
 
+## Essence users
+
+From the developers, 2026-10-12, with "maybe" (D173): some areas may have people who hold essences, or special kinds of people who do. Proposed: most people are normal rank. Essence users are the few who keep monsters down, guard a settlement or lead it. Rarer still are the dangerous organisation's members ([lore.md](lore.md#threats)). What they hold is known locally, can be learned by asking, and adds to what the world knows of essences ([magic.md](magic.md#before-you-awaken-what-is-known)).
+
 ## Trade
 
 - **Shops and traders** in settlements; travelling traders on the roads.

@@ -153,7 +153,7 @@ Proposed, as levers that work together. The first three are the core; the rest a
 | **Carrying is limited** | The backpack is small and nothing stacks (D84), so hauling far is slow. An outpost by a resource lets you work it where it is. | A reason to settle near what you need, not haul it home. |
 | **People live in places** | Those you can rescue or help are in settlements spread through the wild, and cultures differ by region and world (D86). | The recruits you want are far away. |
 | **Magic sites** | Places where magic pools are dangerous, because monsters form there, and valuable, for what can be made or opened there. Holding one keeps it from surging and lets you use it. | Risk and reward drawn on the map. |
-| **The spread** (premise B) | Land nobody holds slowly falls to whatever is spreading. An outpost pushes it back around it. | Holding ground matters, and is visible on the map. |
+| **Each realm's pressures, and an organisation across them** (D172) | Every realm has its own threats: its conditions, monsters and events. A dangerous organisation works across realms, feeding pools and binding monsters ([lore.md](lore.md#threats)). | Holding ground matters, and their trail leads from realm to realm. |
 
 Answered on 2026-10-12: **there is no fast travel between claims**; quick travel comes from other systems, such as magic and built portals (D72). Answered before, on 2026-10-11: what you carry goes with you when you travel, and portals may be something players build, as in Valheim (D72). So outposts are for working and holding places, not for avoiding hauls; the small backpack (D84) is what still makes it worth working a resource where it is. What follows was the reasoning before the answer.
 
@@ -171,7 +171,7 @@ What the world is like and what is going on. These can combine; the choice is th
 | **B. Something is wrong** | Something is spreading: a blight, an invasion from elsewhere, portals opening where they should not. | Enshrouded's Shroud, the books' larger threats | A long arc and a reason worlds get harder |
 | **C. You came from elsewhere** | You arrived from another world, as the books' hero did, and see this one fresh. | The books' start; most LitRPG | Explains the skills and ranks on screen as part of the world, and lets the game be funny |
 
-The developers ruled out C on 2026-10-11 and find A and B interesting. My recommendation stands: **A as the everyday, B as the long arc**. A living world needs a daily life worth joining, and a slow-building threat gives sessions a direction without fixing a story the procedural worlds cannot tell.
+The developers ruled out C on 2026-10-11 and find A and B interesting. Answered on 2026-10-12: **A as the everyday**, and in place of B's single spreading threat, **threats that vary by realm, with a dangerous organisation across them** (D172, [lore.md](lore.md#threats)).
 
 ## What it changed
 
@@ -206,7 +206,7 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 10. **A thousand players.** In a living world, what do many players do together that a few cannot: defend a city, hold a frontier, answer a surge?
 11. Answered: **fast travel with materials.** What you carry goes with you; but there is no fast travel between claims, only travel by magic, built portals and mounts (D72).
 12. **Held ground.** Is building and crafting allowed only on ground you hold, as in Enshrouded?
-13. **Can held ground be lost** when an outpost falls, and does the wild, or the spread, take it back?
+13. **Can held ground be lost** when an outpost falls, and does the wild take it back?
 14. Answered: **no journal.** What to remember is up to the player (D92).
 15. **The map.** May players mark it freely? Does it show anything you have not seen?
 16. Answered in part: **knowing your progress.** There will be some on-screen display and character stats (D93). Open: whether other things' ranks, a monster's for one, are shown or must be judged.

@@ -25,7 +25,7 @@ Without tutorials or markers (D92), the start has to teach by its shape.
 
 - **Ranks are the ladder** ([essences.md](essences.md)): iron-rank lands and portals, then bronze, and up. A world, or a region of one, has a rank; portals lead to higher ones.
 - **Each rank brings** new materials, new monsters, new essences, new peoples.
-- **The spread** (premise B) is the long threat: something growing across realms, pushed back by held ground and by striking at its sources, as Enshrouded's Shroud is. It gives the long game a direction without a fixed story.
+- **No single long threat** (2026-10-12): each realm has its own pressures, from its conditions, monsters and events. **A dangerous organisation crosses them** (D172, [lore.md](lore.md#threats)), a recurring enemy across your journey, and the long game's direction without a fixed story.
 - **Holds grow**: from a camp, to an outpost, to a settlement of recruits, to a stretch of the wild kept safe.
 - **There is no end**, in a persistent sandbox; there are summits: the highest ranks, the hardest realms, the greatest holds.
 
@@ -38,7 +38,7 @@ Without tutorials or markers (D92), the start has to teach by its shape.
 ## Questions
 
 1. **The fiction**: who writes it, and how much is said?
-2. **Premise B**: what spreads?
+2. Answered: **premise B** is no single spreading threat; threats vary by realm, with an organisation across them (D172).
 3. **Where you start**: one starting world for everyone, or each their own?
 4. **Rank of worlds**: whole worlds of one rank, or ranks by region within a world?
 5. **Server-wide events**: run by the world's systems, or by us?
