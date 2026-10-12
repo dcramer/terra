@@ -169,22 +169,19 @@ The draw is made once, by the server (D51), and kept: it is a change to you, sto
 
 ### Before you awaken: what is known
 
-From the developers, 2026-10-12: awakening is a ritual, and while doing it you see **"known information and known chances"**: what the world knows about this stone on this essence, for you. What is known and what isn't is ours to set. Proposed:
+From the developers, 2026-10-12: awakening is a ritual, and while doing it you see what is known. Simplified the same day: **the most common effects are known.**
 
-| | What you see | How it comes to be known |
-|---|---|---|
-| **Always** | The essence's idea and the stone's pull, in plain words ("Ember: burning, moving fast, light"; "of the Bond: things that serve you") | Anyone who holds them can feel it |
-| **Always** | What can't happen: "you already have an aura", "this essence has its summon" | The limits are common knowledge |
-| **Broad chances** | The kinds of power, in words: likely, possible, unlikely, impossible | Anyone who does the ritual |
-| **Finer chances** | The families of mechanic, and kinds, in rough numbers: "about one in three it moves you" | Knowing ritual magic, at a rank: the better the ritualist, the finer the reading |
-| **What others found** | Powers this essence and stone have given before, as examples, and confluence recipes | Public knowledge: books, scholars in settlements, people you ask, and what players share among themselves |
-| **Never** | The power you will get, its twist, its ladder, its name | Unknown until it wakes. There are too many for anyone to list, and the draw is made at the ritual |
+- **The commonest effects are shown:** the few things this stone on this essence most often gives, said in words. "Ember with the stone of the Step commonly gives: bursting into flame and reappearing; a dash that leaves fire behind; a leap that lands in a burst." These are what most people who did it got, so they are what the world knows.
+- **What can't happen is shown too:** "you already have an aura", "this essence has its summon". The limits are common knowledge.
+- **Nothing else:**
+  - no numbers;
+  - none of the rarer outcomes;
+  - never the power you will get, its twist, its ladder or its name.
 
-- **Chances are true.** What is shown is the real weighting, rounded to what you can read, so learning ritual magic is worth something, and players can trust and compare readings.
-- **What tilts your draw shows in the reading, not as reasons.** You see that "moving fast" is likelier for you than for someone else, not that it's because of your Stride.
-- **Nothing to game by waiting.** The draw is seeded from the world, you, the essence's slot and the stone, so putting the ritual off or redoing a reading gives the same result. Choosing a different stone or a different essence is the real choice, as in the books.
-
-**At the moment you awaken, the power's whole ladder is made:** what it does at iron and what each rank adds up to diamond, as in the books. You can't reroll it.
+  The rare tail stays a surprise.
+- **The list is for you:** what is common is worked out with your tilt included ([How a draw works](#how-a-draw-works)), so two people reading the same stone may see different common effects. The reasons aren't shown.
+- **Proposed:** knowing ritual magic shows a few more effects further down the list, the better the ritualist the more. Books and scholars in settlements tell the commonest effects too, before you hold the stone.
+- **Nothing to game by waiting.** The draw is seeded from the world, you, the essence's slot and the stone, so putting the ritual off gives the same result. Choosing a different stone or a different essence is the real choice, as in the books.
 
 ### Hundreds of powers, from shared mechanics
 
@@ -501,7 +498,7 @@ Procedural, like every realm. There is no fixed list: the starting realm's essen
 
 ## Open questions
 
-0. Answered: **no picking among offers.** One draw, as in the books, with known information and known chances shown at the ritual ([above](#before-you-awaken-what-is-known)); what is known is proposed there.
+0. Answered: **no picking among offers.** One draw, as in the books, with the most common effects shown at the ritual, and never numbers ([above](#before-you-awaken-what-is-known)).
 
 1. Answered: **attributes** are kept (D164). **Monster cores** are kept (D165). **No fast travel between claims** (D72). **The starting realm's essences** come from its generation, with the rule above. **Old-school touches** follow the books: chanted spells, components used up, backlash.
 2. Answered: **no separate tally of habits.** What tilts a draw is what you already have, your powers and your skills (2026-10-12).
