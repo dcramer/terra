@@ -5,85 +5,222 @@
 //! data, in `assets/data/builds.ron` (D136), and a stand-in. What can be built, what it
 //! costs and how it is unlocked are design questions nobody has answered (docs/player.md).
 
-use super::crafting::Station;
-use super::inventory::Cost;
-use serde::{Deserialize, Deserializer};
-use std::sync::LazyLock;
+use super::crafting::{Station, Stations};
+use super::data;
+use super::inventory::{Cost, Items};
+use bevy::prelude::Resource;
+use serde::Deserialize;
+use std::sync::Arc;
 use terra_build::{CELL_M, Panel};
+use terra_items::ItemKind;
 
-const BUILDS: &str = include_str!("../../../../assets/data/builds.ron");
+const FILE: &str = "builds.ron";
 
-/// The file: what the pieces of a base cost, and the parts.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "'de: 'static"))]
-struct BuildsFile {
-    structure: Structure,
+/// What the hammer builds (`assets/data/builds.ron`): the parts, what the pieces of a base
+/// cost, and how a claim grows. Read with items and stations named as their registries
+/// name them.
+#[derive(Resource)]
+pub struct Builds {
     parts: Vec<Part>,
+    floor: Vec<(ItemKind, u32)>,
+    wall: Vec<(ItemKind, u32)>,
+    window: Vec<(ItemKind, u32)>,
+    door: Vec<(ItemKind, u32)>,
+    pub claim: ClaimRule,
 }
 
-/// What the pieces of a base cost: floor by every three square metres, interior wall by
-/// every metre and a half, a window by the metre, and a door each.
+/// How a claim grows (D104): how far across it is at each step, and what growing to the
+/// next costs.
+pub struct ClaimRule {
+    pub across_m: Vec<f32>,
+    pub grow: Vec<Vec<(ItemKind, u32)>>,
+}
+
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "'de: 'static"))]
-struct Structure {
-    #[serde(deserialize_with = "leaked")]
-    floor: Cost,
-    #[serde(deserialize_with = "leaked")]
-    wall: Cost,
-    #[serde(deserialize_with = "leaked")]
-    window: Cost,
-    #[serde(deserialize_with = "leaked")]
-    door: Cost,
+#[serde(deny_unknown_fields)]
+struct BuildsFile {
+    structure: StructureFile,
+    claim: ClaimFile,
+    parts: Vec<PartFile>,
 }
 
-/// A list from the file, kept for as long as the game runs, like the file itself.
-fn leaked<'de, D, T>(from: D) -> Result<&'static [T], D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de> + 'static,
-{
-    Ok(Vec::<T>::deserialize(from)?.leak())
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StructureFile {
+    floor: Vec<(String, u32)>,
+    wall: Vec<(String, u32)>,
+    window: Vec<(String, u32)>,
+    door: Vec<(String, u32)>,
 }
 
-/// Windows from the file: a name, a width in metres, and the glass's sill and top.
-fn windows<'de, D>(from: D) -> Result<&'static [(&'static str, f32, Panel)], D::Error>
-where
-    D: Deserializer<'de>,
-    'de: 'static,
-{
-    let windows: Vec<(&'static str, f32, (f32, f32))> = Vec::deserialize(from)?;
-    Ok(windows
-        .into_iter()
-        .map(|(name, width, (sill, top))| (name, width, Panel::Window { sill, top }))
-        .collect::<Vec<_>>()
-        .leak())
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClaimFile {
+    across_m: Vec<f32>,
+    grow: Vec<Vec<(String, u32)>>,
 }
 
-static BUILDS_FILE: LazyLock<BuildsFile> = LazyLock::new(|| {
-    ron::from_str(BUILDS).unwrap_or_else(|problem| panic!("assets/data/builds.ron: {problem}"))
-});
-
-/// The parts, in the order the build menu lists them within each tab.
-pub static PARTS: LazyLock<&'static [Part]> = LazyLock::new(|| &BUILDS_FILE.parts);
-
-/// What floor costs, paid by `floor_units`.
-pub fn floor() -> Cost {
-    BUILDS_FILE.structure.floor
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PartFile {
+    name: String,
+    tab: Tab,
+    kind: KindFile,
 }
 
-/// What interior wall costs, paid by `wall_units`.
-pub fn wall() -> Cost {
-    BUILDS_FILE.structure.wall
+#[derive(Deserialize)]
+enum KindFile {
+    Room(Vec<RoomShape>),
+    Reshape,
+    Wall(Vec<(String, f32)>),
+    Window(Vec<(String, f32, (f32, f32))>),
+    Door,
+    Items(Vec<ItemFile>),
+    Remove,
+    Move,
 }
 
-/// What a window costs, paid by `window_units`.
-pub fn window() -> Cost {
-    BUILDS_FILE.structure.window
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ItemFile {
+    name: String,
+    file: String,
+    size: f32,
+    cost: Vec<(String, u32)>,
+    #[serde(default)]
+    lift: f32,
+    #[serde(default)]
+    light: Light,
+    #[serde(default)]
+    station: Option<String>,
+    #[serde(default)]
+    claims: bool,
+    #[serde(default)]
+    rest: Option<Rest>,
 }
 
-/// What a door costs.
-pub fn door() -> Cost {
-    BUILDS_FILE.structure.door
+impl Builds {
+    pub fn read(items: &Items, stations: &Stations) -> Self {
+        let file: BuildsFile = data::read(FILE);
+        let cost = |named: &[(String, u32)]| items.cost(named, FILE);
+        let item = |item: ItemFile| Item {
+            cost: cost(&item.cost),
+            station: item.station.map(|name| {
+                stations
+                    .named(&name)
+                    .unwrap_or_else(|| panic!("{FILE}: there is no station called {name}"))
+            }),
+            name: item.name,
+            file: item.file,
+            size: item.size,
+            lift: item.lift,
+            light: item.light,
+            claims: item.claims,
+            rest: item.rest,
+        };
+        let parts = file
+            .parts
+            .into_iter()
+            .map(|part| Part {
+                name: part.name,
+                tab: part.tab,
+                kind: match part.kind {
+                    KindFile::Room(shapes) => Kind::Room(shapes),
+                    KindFile::Reshape => Kind::Reshape,
+                    KindFile::Wall(lengths) => Kind::Wall(lengths),
+                    KindFile::Window(windows) => Kind::Window(
+                        windows
+                            .into_iter()
+                            .map(|(name, width, (sill, top))| {
+                                (name, width, Panel::Window { sill, top })
+                            })
+                            .collect(),
+                    ),
+                    KindFile::Door => Kind::Door,
+                    KindFile::Items(items) => {
+                        Kind::Items(items.into_iter().map(|each| Arc::new(item(each))).collect())
+                    }
+                    KindFile::Remove => Kind::Remove,
+                    KindFile::Move => Kind::Move,
+                },
+            })
+            .collect();
+        Self {
+            parts,
+            floor: cost(&file.structure.floor),
+            wall: cost(&file.structure.wall),
+            window: cost(&file.structure.window),
+            door: cost(&file.structure.door),
+            claim: ClaimRule {
+                across_m: file.claim.across_m,
+                grow: file.claim.grow.iter().map(|each| cost(each)).collect(),
+            },
+        }
+    }
+
+    /// The parts, in the order the build menu lists them within each tab.
+    pub fn parts(&self) -> &[Part] {
+        &self.parts
+    }
+
+    pub fn part(&self, index: usize) -> &Part {
+        &self.parts[index]
+    }
+
+    /// What floor costs, paid by `floor_units`.
+    pub fn floor(&self) -> &Cost {
+        &self.floor
+    }
+
+    /// What interior wall costs, paid by `wall_units`.
+    pub fn wall(&self) -> &Cost {
+        &self.wall
+    }
+
+    /// What a window costs, paid by `window_units`.
+    pub fn window(&self) -> &Cost {
+        &self.window
+    }
+
+    /// What a door costs.
+    pub fn door(&self) -> &Cost {
+        &self.door
+    }
+
+    /// Every item any part offers.
+    pub fn items(&self) -> impl Iterator<Item = &Arc<Item>> {
+        self.parts.iter().flat_map(|part| match &part.kind {
+            Kind::Items(items) => items.iter(),
+            _ => [].iter(),
+        })
+    }
+
+    /// The item whose model is a given file.
+    pub fn item_from(&self, file: &str) -> Option<Arc<Item>> {
+        self.items().find(|item| item.file == file).cloned()
+    }
+
+    /// The part and variant that an item is, for picking "another of those".
+    pub fn place_of(&self, wanted: &Item) -> Option<(usize, usize)> {
+        self.parts
+            .iter()
+            .enumerate()
+            .find_map(|(part, entry)| match &entry.kind {
+                Kind::Items(items) => items
+                    .iter()
+                    .position(|item| **item == *wanted)
+                    .map(|variant| (part, variant)),
+                _ => None,
+            })
+    }
+
+    /// Where a part is in the list, for the parts that have their own key.
+    pub fn part_of(&self, wanted: fn(&Kind) -> bool) -> usize {
+        self.parts
+            .iter()
+            .position(|part| wanted(&part.kind))
+            .expect("the catalogue has this part")
+    }
 }
 
 /// How many times over `floor()` is paid for so many cells of floor: once for every three
@@ -105,42 +242,35 @@ pub fn window_units(cells: usize) -> u32 {
 
 /// How long something takes to build, from what it costs: half a second, and a little
 /// more for every raw item in it, up to three seconds. A stand-in, like the costs.
-pub fn build_seconds(cost: Cost, times: u32) -> f32 {
+pub fn build_seconds(cost: &Cost, times: u32) -> f32 {
     let raw_items: u32 = cost.iter().map(|&(_, each)| each * times).sum();
     (0.5 + 0.12 * raw_items as f32).min(3.0)
 }
 
 /// Taking a thing apart is quicker than building it.
-pub fn take_apart_seconds(cost: Cost, times: u32) -> f32 {
+pub fn take_apart_seconds(cost: &Cost, times: u32) -> f32 {
     build_seconds(cost, times) * 0.6
 }
 
 /// Something stood on a floor or on the ground. Its model is a file in
 /// `assets/models/props`.
-#[derive(Debug, PartialEq, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, PartialEq)]
 pub struct Item {
-    pub name: &'static str,
-    pub file: &'static str,
+    pub name: String,
+    pub file: String,
     /// Its longest dimension, in metres.
     pub size: f32,
     /// The raw items it is built from, and gives back when taken apart.
-    #[serde(deserialize_with = "leaked")]
-    pub cost: Cost,
+    pub cost: Vec<(ItemKind, u32)>,
     /// Flat things lie this far above the floor, so the two do not flicker.
-    #[serde(default)]
     pub lift: f32,
     /// Whether it gives off light, and how.
-    #[serde(default)]
     pub light: Light,
-    /// The station it is, by its name in `assets/data/stations.ron`, if it is one.
-    #[serde(default, rename = "station")]
-    pub station_name: Option<&'static str>,
+    /// The station it is, if it is one.
+    pub station: Option<Station>,
     /// Whether it is a claim stone, which claims the land around it (D94).
-    #[serde(default)]
     pub claims: bool,
     /// What someone can rest on it for, if anything: sitting, or sleeping and waking.
-    #[serde(default)]
     pub rest: Option<Rest>,
 }
 
@@ -160,44 +290,34 @@ pub enum Light {
     Fire,
 }
 
-impl Item {
-    /// The kind of station it is, if it is one.
-    pub fn station(&self) -> Option<Station> {
-        self.station_name.and_then(Station::named)
-    }
-}
-
 /// A room's footprint in metres, east by south.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RoomShape {
-    pub name: &'static str,
+    pub name: String,
     pub metres: [f32; 2],
 }
 
-#[derive(Deserialize)]
-#[serde(bound(deserialize = "'de: 'static"))]
 pub enum Kind {
-    Room(#[serde(deserialize_with = "leaked")] &'static [RoomShape]),
+    Room(Vec<RoomShape>),
     /// Push and pull the walls of what is already built.
     Reshape,
     /// A stretch of plain interior wall, so many metres long, on the grid between cells
     /// of the base. Windows and doors are cut in it with their own parts, as they are in
     /// an outside wall.
-    Wall(#[serde(deserialize_with = "leaked")] &'static [(&'static str, f32)]),
+    Wall(Vec<(String, f32)>),
     /// A window so many metres wide.
-    Window(#[serde(deserialize_with = "windows")] &'static [(&'static str, f32, Panel)]),
+    Window(Vec<(String, f32, Panel)>),
     Door,
-    Items(#[serde(deserialize_with = "leaked")] &'static [Item]),
+    Items(Vec<Arc<Item>>),
     /// Take away an item, or close up a window or door.
     Remove,
     /// Pick an item up and put it down somewhere else.
     Move,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Part {
-    pub name: &'static str,
+    pub name: String,
     /// Where the build menu shows it.
     pub tab: Tab,
     pub kind: Kind,
@@ -245,7 +365,7 @@ impl Tab {
 
 impl Part {
     pub fn variants(&self) -> usize {
-        match self.kind {
+        match &self.kind {
             Kind::Room(shapes) => shapes.len(),
             Kind::Window(shapes) => shapes.len(),
             Kind::Wall(lengths) => lengths.len(),
@@ -255,120 +375,64 @@ impl Part {
     }
 
     /// The name of one of this part's variants, if it has more than one kind.
-    pub fn variant_name(&self, variant: usize) -> Option<&'static str> {
-        match self.kind {
-            Kind::Room(shapes) => Some(shapes[variant].name),
-            Kind::Window(shapes) => Some(shapes[variant].0),
-            Kind::Wall(lengths) => Some(lengths[variant].0),
-            Kind::Items(items) => Some(items[variant].name),
+    pub fn variant_name(&self, variant: usize) -> Option<&str> {
+        match &self.kind {
+            Kind::Room(shapes) => Some(&shapes[variant].name),
+            Kind::Window(shapes) => Some(&shapes[variant].0),
+            Kind::Wall(lengths) => Some(&lengths[variant].0),
+            Kind::Items(items) => Some(&items[variant].name),
             Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => None,
         }
     }
-}
-
-/// Every item any part offers.
-pub fn items() -> impl Iterator<Item = &'static Item> {
-    PARTS.iter().flat_map(|part| match part.kind {
-        Kind::Items(items) => items.iter(),
-        _ => [].iter(),
-    })
-}
-
-/// The item whose model is a given file.
-pub fn item_from(file: &str) -> Option<&'static Item> {
-    items().find(|item| item.file == file)
-}
-
-/// The part and variant that an item is, for picking "another of those".
-pub fn place_of(wanted: &Item) -> Option<(usize, usize)> {
-    PARTS
-        .iter()
-        .enumerate()
-        .find_map(|(part, entry)| match entry.kind {
-            Kind::Items(items) => items
-                .iter()
-                .position(|item| item == wanted)
-                .map(|variant| (part, variant)),
-            _ => None,
-        })
-}
-
-/// Where a part is in the list, for the parts that have their own key.
-pub fn part_of(wanted: fn(&Kind) -> bool) -> usize {
-    PARTS
-        .iter()
-        .position(|part| wanted(&part.kind))
-        .expect("the catalogue has this part")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn builds() -> (Items, Builds) {
+        let items = Items::default();
+        let builds = Builds::read(&items, &Stations::read());
+        (items, builds)
+    }
+
+    /// Reading the file checks every item and station it names is one there is.
     #[test]
     fn there_is_something_to_sit_on_and_a_bed_to_wake_in() {
-        let rests: Vec<Rest> = items().filter_map(|item| item.rest).collect();
+        let (_, builds) = builds();
+        let rests: Vec<Rest> = builds.items().filter_map(|item| item.rest).collect();
         assert!(rests.contains(&Rest::Sit));
         assert!(rests.contains(&Rest::Sleep));
-    }
-
-    #[test]
-    fn every_station_built_is_a_kind_of_station() {
-        let named = PARTS.iter().filter_map(|part| match part.kind {
-            Kind::Items(items) => Some(items),
-            _ => None,
-        });
-        for item in named.flatten() {
-            if let Some(name) = item.station_name {
-                assert!(Station::named(name).is_some(), "{name} is not a station");
-            }
-        }
-    }
-
-    #[test]
-    fn everything_costs_kinds_of_item_there_are() {
-        let items = super::super::inventory::Items::default();
-        let costs = [floor(), wall(), window(), door()].into_iter().chain(
-            PARTS
-                .iter()
-                .filter_map(|part| match part.kind {
-                    Kind::Items(items) => Some(items),
-                    _ => None,
-                })
-                .flatten()
-                .map(|item| item.cost),
-        );
-        for cost in costs {
-            for (name, _) in cost {
-                assert!(items.find(name).is_some(), "{name} is not a kind of item");
-            }
-        }
+        assert!(builds.items().any(|item| item.station.is_some()));
+        assert!(builds.claim.grow.len() + 1 == builds.claim.across_m.len());
     }
 
     #[test]
     fn bigger_things_take_longer_and_coming_apart_is_quicker() {
-        const STOOL: Cost = &[("Wood", 1)];
-        const BED: Cost = &[("Wood", 3), ("Fibre", 3)];
-        assert!(build_seconds(BED, 1) > build_seconds(STOOL, 1));
-        assert!(take_apart_seconds(BED, 1) < build_seconds(BED, 1));
+        let (items, _) = builds();
+        let stool = [(items.kind("Wood"), 1)];
+        let bed = [(items.kind("Wood"), 3), (items.kind("Fibre"), 3)];
+        assert!(build_seconds(&bed, 1) > build_seconds(&stool, 1));
+        assert!(take_apart_seconds(&bed, 1) < build_seconds(&bed, 1));
         // Never instant, never endless.
         assert!(build_seconds(&[], 1) >= 0.5);
-        assert!(build_seconds(BED, 100) <= 3.0);
+        assert!(build_seconds(&bed, 100) <= 3.0);
     }
 
     #[test]
     fn every_part_has_a_variant_and_every_item_one_model() {
-        for part in PARTS.iter() {
+        let (_, builds) = builds();
+        for part in builds.parts() {
             assert!(part.variants() >= 1, "{} has nothing to build", part.name);
             assert_eq!(
                 part.variant_name(0).is_some(),
                 part.variants() > 1 || matches!(part.kind, Kind::Items(_))
             );
         }
-        let files: Vec<_> = items().map(|item| item.file).collect();
+        let files: Vec<_> = builds.items().map(|item| item.file.clone()).collect();
         for file in &files {
             assert_eq!(files.iter().filter(|other| other == &file).count(), 1);
-            assert!(item_from(file).is_some());
+            assert!(builds.item_from(file).is_some());
         }
     }
 }

@@ -5,9 +5,9 @@ use super::*;
 use crate::build::Site;
 use crate::planet::Planet;
 use crate::play::bag::Told;
-use crate::play::catalogue::{self, Kind};
+use crate::play::catalogue::{self, Builds, Kind, Tab};
 use crate::play::controls::Action;
-use crate::play::inventory::{Belongings, Cost};
+use crate::play::inventory::Belongings;
 use crate::play::noise::{Cue, Noise};
 use crate::play::props::{self, Models, PlacedBy, Prop};
 use crate::play::skills::{Did, ONCE, Skill};
@@ -22,6 +22,7 @@ pub(super) fn act(
     time: Res<Time>,
     mut planet: ResMut<Planet>,
     models: Res<Models>,
+    builds: Res<Builds>,
     props: Query<&Prop>,
     mut players: Query<(Entity, &Transform, &Intent, &mut Builder, &mut Stance), With<Player>>,
     mut belongings: Belongings,
@@ -49,7 +50,7 @@ pub(super) fn act(
                         &models,
                         &site,
                         &planet,
-                        carried.item,
+                        &carried.item,
                         carried.at,
                         carried.lift,
                         carried.turn,
@@ -105,10 +106,10 @@ pub(super) fn act(
                             belongings.wear_in_hand(1);
                         }
                         if let Some((cost, times)) = refund {
-                            belongings.refund(cost, times);
+                            belongings.refund(&cost, times);
                         }
                         if let Some((cost, times)) = pay {
-                            belongings.pay(cost, times);
+                            belongings.pay(&cost, times);
                         }
                     }
                 }
@@ -121,13 +122,13 @@ pub(super) fn act(
                 } => {
                     // Paid for on finishing. If what it costs has gone since the button
                     // went down, nothing is built.
-                    if belongings.pay(item.cost, 1) {
+                    if belongings.pay(&item.cost, 1) {
                         if let Some(placed) = props::place(
                             &mut commands,
                             &models,
                             &site,
                             &planet,
-                            item,
+                            &item,
                             at,
                             lift,
                             turn,
@@ -148,7 +149,7 @@ pub(super) fn act(
                 Job::TakeAway(entity) => {
                     if let Ok(prop) = props.get(entity) {
                         // What does not fit in the backpack drops at the player's feet.
-                        belongings.refund(prop.item.cost, 1);
+                        belongings.refund(&prop.item.cost, 1);
                         info!("Removed a {}.", prop.item.name);
                         noise.write(Noise::at(Cue::TakenApart, work_at));
                         commands.entity(entity).despawn();
@@ -163,12 +164,12 @@ pub(super) fn act(
         && !builder.is_carrying()
         && belongings.tool_in_hand().is_some_and(|tool| tool.builds)
         && let Some(prop) = builder.viewed.and_then(|entity| props.get(entity).ok())
-        && let Some((part, variant)) = catalogue::place_of(prop.item)
+        && let Some((part, variant)) = builds.place_of(&prop.item)
         // What is not in the build menu, such as a village's well, cannot be copied.
-        && catalogue::PARTS[part].tab != catalogue::Tab::Hidden
+        && builds.part(part).tab != Tab::Hidden
         {
-            builder.pick(part);
-            builder.variants[part] = variant;
+            builder.pick(part, &builds);
+            builder.choose_variant(part, variant, &builds);
             builder.turn = prop.turn;
             continue;
         }
@@ -182,13 +183,13 @@ pub(super) fn act(
         }
 
         // Moving is neither building nor taking apart, and happens at once.
-        match (&builder.picked().kind, builder.target) {
+        match (&builder.picked(&builds).kind, builder.target) {
             (Kind::Move, Target::Prop(entity)) => {
                 if let Ok(prop) = props.get(entity) {
                     info!("Picked up a {}.", prop.item.name);
                     builder.turn = prop.turn;
                     builder.carrying = Some(Carried {
-                        item: prop.item,
+                        item: prop.item.clone(),
                         at: prop.at,
                         lift: prop.lift,
                         turn: prop.turn,
@@ -214,7 +215,7 @@ pub(super) fn act(
                         &models,
                         &site,
                         &planet,
-                        carried.item,
+                        &carried.item,
                         at,
                         lift,
                         builder.turn,
@@ -237,14 +238,14 @@ pub(super) fn act(
         // Building is paid for from what is carried, and refused when that is not enough.
         // Taking apart gives everything back.
         let can_pay = builder.short.is_none();
-        let pay = builder.price;
+        let pay = builder.price.clone();
         // What closing a window or doorway gives back.
         let opening_worth =
             |run: &[Face]| match run.first().and_then(|&cell| site.base.filling(cell)) {
                 Some(Panel::Window { .. }) => {
-                    Some((catalogue::window(), catalogue::window_units(run.len())))
+                    Some((builds.window().to_vec(), catalogue::window_units(run.len())))
                 }
-                Some(Panel::Door) => Some((catalogue::door(), 1)),
+                Some(Panel::Door) => Some((builds.door().to_vec(), 1)),
                 _ => None,
             };
         // Fills every cell of the run, in an outside wall or an interior one.
@@ -261,21 +262,21 @@ pub(super) fn act(
         };
         let building = |ops: Vec<BuildOp>| Job::Structure {
             ops,
-            pay,
+            pay: pay.clone(),
             refund: None,
         };
-        let unbuilding = |ops: Vec<BuildOp>, refund: Option<(Cost, u32)>| Job::Structure {
+        let unbuilding = |ops: Vec<BuildOp>, refund: Option<Price>| Job::Structure {
             ops,
             pay: None,
             refund,
         };
-        let (job, removing) = match (&builder.picked().kind, builder.target) {
+        let (job, removing) = match (&builder.picked(&builds).kind, builder.target) {
             (Kind::Reshape, Target::Wall(face)) if !builder.pull && can_pay => {
                 (building(vec![BuildOp::Grow(face)]), false)
             }
             (Kind::Reshape, Target::Wall(face)) if builder.pull => {
                 let floor = catalogue::floor_units(site.base.wall(face).len());
-                let refund = Some((catalogue::floor(), floor));
+                let refund = Some((builds.floor().to_vec(), floor));
                 (unbuilding(vec![BuildOp::Shrink(face)], refund), true)
             }
             (Kind::Window(shapes), Target::Wall(_) | Target::Edge { .. }) if can_pay => (
@@ -312,7 +313,10 @@ pub(super) fn act(
                         .iter()
                         .map(|&cell| BuildOp::SetPartition(cell, None))
                         .collect(),
-                    Some((catalogue::wall(), catalogue::wall_units(builder.run.len()))),
+                    Some((
+                        builds.wall().to_vec(),
+                        catalogue::wall_units(builder.run.len()),
+                    )),
                 ),
                 true,
             ),
@@ -342,7 +346,7 @@ pub(super) fn act(
                 },
             ) if can_pay => (
                 Job::Place {
-                    item: &items[builder.variant()],
+                    item: items[builder.variant()].clone(),
                     at,
                     lift,
                     turn: builder.turn,
@@ -351,11 +355,11 @@ pub(super) fn act(
                 false,
             ),
             (Kind::Remove, Target::Prop(entity)) => (Job::TakeAway(entity), true),
-            _ => return,
+            _ => continue,
         };
         // How long it takes follows from what it costs.
         let seconds = match &job {
-            Job::Structure { ops, .. } if ops.is_empty() => return,
+            Job::Structure { ops, .. } if ops.is_empty() => continue,
             Job::Structure {
                 pay: Some((cost, times)),
                 ..
@@ -366,10 +370,10 @@ pub(super) fn act(
             } => catalogue::take_apart_seconds(cost, *times),
             // Changing the shape of an opening already there costs nothing and is quick.
             Job::Structure { .. } => catalogue::build_seconds(&[], 1),
-            Job::Place { item, .. } => catalogue::build_seconds(item.cost, 1),
+            Job::Place { item, .. } => catalogue::build_seconds(&item.cost, 1),
             Job::TakeAway(entity) => match props.get(*entity) {
-                Ok(prop) => catalogue::take_apart_seconds(prop.item.cost, 1),
-                Err(_) => return,
+                Ok(prop) => catalogue::take_apart_seconds(&prop.item.cost, 1),
+                Err(_) => continue,
             },
         };
         builder.work = Some(Work {
@@ -405,7 +409,7 @@ pub(super) fn animate(
             hold,
             ..
         }) => (
-            Some((*item, *at, *lift, *turn, *indoors, hold.fraction())),
+            Some((item.clone(), *at, *lift, *turn, *indoors, hold.fraction())),
             None,
         ),
         Some(Work {
@@ -416,8 +420,9 @@ pub(super) fn animate(
         _ => (None, None),
     };
     let rising = drawn.rising;
-    match growing.and_then(|growing| Some((growing, models.of(growing.0)?.solid.clone()?))) {
-        Some(((item, at, lift, turn, indoors, done), mesh)) => {
+    let mesh = |item: &Item| models.of(item)?.solid.clone();
+    match growing.and_then(|growing| Some((mesh(&growing.0)?, growing))) {
+        Some((mesh, (item, at, lift, turn, indoors, done))) => {
             let stood = props::standing(&site, &planet, at, lift + item.lift, turn, indoors);
             // Quick at first, easing to full size.
             let eased = 1.0 - (1.0 - done) * (1.0 - done);

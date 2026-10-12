@@ -12,9 +12,10 @@
 
 use super::bag::{Notice, Told};
 use super::controls::{Action, Settings};
+use super::data;
 use super::grab_mouse;
 use super::interact::{Focus, Interactable, REACH_M};
-use super::inventory::{Belongings, Cost, Inventory, InventoryScreen, Items, Made};
+use super::inventory::{Belongings, Inventory, InventoryScreen, Items, Made};
 pub use super::kinds::Family;
 use super::options::OptionsMenu;
 use super::people::{Doing, Person};
@@ -28,13 +29,11 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions},
 };
 use serde::Deserialize;
-use std::{collections::VecDeque, sync::LazyLock};
+use std::collections::VecDeque;
+use terra_items::ItemKind;
 
 /// How many things a station can have waiting at once.
 pub const MOST_QUEUED: usize = 8;
-
-const STATIONS_FILE: &str = include_str!("../../../../assets/data/stations.ron");
-const RECIPES_FILE: &str = include_str!("../../../../assets/data/recipes.ron");
 
 /// A kind of station, as `assets/data/stations.ron` has it. The file says what each part
 /// means.
@@ -65,78 +64,63 @@ pub enum Fire {
     WhileWorking,
 }
 
-/// Every kind of station, built in so every machine has the same (D136).
-static STATIONS: LazyLock<Vec<StationDef>> = LazyLock::new(|| {
-    ron::from_str(STATIONS_FILE)
-        .unwrap_or_else(|problem| panic!("assets/data/stations.ron: {problem}"))
-});
-
-/// A kind of station: its place in `assets/data/stations.ron`. It prints as its name.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+/// A kind of station: its place in `Stations`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Station(u8);
 
-impl std::fmt::Debug for Station {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str(self.name())
-    }
-}
+/// Every kind of station (`assets/data/stations.ron`).
+#[derive(Resource, Debug)]
+pub struct Stations(Vec<StationDef>);
 
-impl Station {
+impl Stations {
+    pub fn read() -> Self {
+        Self(data::read("stations.ron"))
+    }
+
     /// Every kind of station.
-    pub fn all() -> impl Iterator<Item = Station> {
-        (0..STATIONS.len()).map(|index| Station(index as u8))
+    pub fn all(&self) -> impl Iterator<Item = Station> + use<> {
+        (0..self.0.len()).map(|index| Station(index as u8))
     }
 
     /// The kind of station called a name.
-    pub fn named(name: &str) -> Option<Station> {
-        STATIONS
+    pub fn named(&self, name: &str) -> Option<Station> {
+        self.0
             .iter()
             .position(|station| station.name == name)
             .map(|index| Station(index as u8))
     }
 
-    fn def(self) -> &'static StationDef {
-        &STATIONS[self.0 as usize]
+    pub fn get(&self, station: Station) -> &StationDef {
+        &self.0[station.0 as usize]
     }
 
-    pub fn name(self) -> &'static str {
-        &self.def().name
+    pub fn name(&self, station: Station) -> &str {
+        &self.get(station).name
     }
 
     /// Whether it works through its queue without anyone at it, like a furnace.
-    pub fn works_alone(self) -> bool {
-        self.def().works_alone
+    pub fn works_alone(&self, station: Station) -> bool {
+        self.get(station).works_alone
     }
 
     /// The trade of whoever must be at work at it before it works at all, such as a smith.
-    pub fn worked_by(self) -> Option<&'static str> {
-        self.def().worked_by.as_deref()
-    }
-
-    /// Where to aim at it, as a height above its foot, and how near the aiming mark has to
-    /// pass to count as on it, in metres.
-    pub fn aim(self) -> (f32, f32) {
-        self.def().aim
+    pub fn worked_by(&self, station: Station) -> Option<&str> {
+        self.get(station).worked_by.as_deref()
     }
 
     /// The sound of work at it, a stroke at a time, and seconds between strokes.
-    pub fn strokes(self) -> Option<(&'static str, f32)> {
-        self.def()
+    pub fn strokes(&self, station: Station) -> Option<(&str, f32)> {
+        self.get(station)
             .strokes
             .as_ref()
             .map(|(sound, every)| (sound.as_str(), *every))
-    }
-
-    /// When a fire in it is heard, if it has one.
-    pub fn fire(self) -> Option<Fire> {
-        self.def().fire
     }
 }
 
 /// Something a station makes, from what, and how long it takes.
 pub struct Recipe {
     pub station: Station,
-    pub cost: Cost,
+    pub cost: Vec<(ItemKind, u32)>,
     pub makes: Made,
     pub seconds: f32,
 }
@@ -144,7 +128,7 @@ pub struct Recipe {
 impl Recipe {
     /// The tab it is under at its station: what kind of thing it makes.
     pub fn family(&self, items: &Items) -> Family {
-        items.def(items.kind(self.makes.item)).family()
+        items.def(self.makes.kind).family()
     }
 }
 
@@ -152,53 +136,107 @@ impl Recipe {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RecipeDef {
-    station: &'static str,
-    cost: Vec<(&'static str, u32)>,
-    makes: (&'static str, u32),
+    station: String,
+    cost: Vec<(String, u32)>,
+    makes: (String, u32),
     seconds: f32,
 }
 
-/// Every recipe, built in so every machine has the same (D136). Each is known by its place
-/// here, which a station's queue keeps.
-pub static RECIPES: LazyLock<Vec<Recipe>> = LazyLock::new(|| {
-    let defs: Vec<RecipeDef> = ron::from_str(RECIPES_FILE)
-        .unwrap_or_else(|problem| panic!("assets/data/recipes.ron: {problem}"));
-    defs.into_iter()
-        .map(|def| Recipe {
-            station: Station::named(def.station).unwrap_or_else(|| {
-                panic!(
-                    "assets/data/recipes.ron: there is no station called {}",
-                    def.station
-                )
-            }),
-            // The list lives as long as the game, like the recipe it is part of.
-            cost: def.cost.leak(),
-            makes: Made::many(def.makes.0, def.makes.1),
-            seconds: def.seconds,
-        })
-        .collect()
-});
+/// Every recipe (`assets/data/recipes.ron`). Each is known by its place here, which a
+/// station's queue keeps.
+#[derive(Resource)]
+pub struct Recipes(Vec<Recipe>);
 
-/// The recipes a station makes, in order, by their place in `RECIPES`.
-pub fn recipes(station: Station) -> impl Iterator<Item = usize> {
-    (0..RECIPES.len()).filter(move |&index| RECIPES[index].station == station)
-}
+impl std::ops::Index<usize> for Recipes {
+    type Output = Recipe;
 
-/// A station's recipe for what goes by a name, as a saved game names it.
-pub fn recipe_named(station: Station, name: &str) -> Option<usize> {
-    recipes(station).find(|&index| RECIPES[index].makes.name() == name)
-}
-
-/// The kinds of thing a station makes, in the order its recipes first make them.
-pub fn families(station: Station, items: &Items) -> Vec<Family> {
-    let mut families = Vec::new();
-    for index in recipes(station) {
-        let family = RECIPES[index].family(items);
-        if !families.contains(&family) {
-            families.push(family);
-        }
+    fn index(&self, index: usize) -> &Recipe {
+        &self.0[index]
     }
-    families
+}
+
+impl Recipes {
+    /// Reads the recipes, naming their stations and items as the registries do.
+    pub fn read(stations: &Stations, items: &Items) -> Self {
+        const FILE: &str = "recipes.ron";
+        let defs: Vec<RecipeDef> = data::read(FILE);
+        Self(
+            defs.into_iter()
+                .map(|def| Recipe {
+                    station: stations.named(&def.station).unwrap_or_else(|| {
+                        panic!("{FILE}: there is no station called {}", def.station)
+                    }),
+                    cost: items.cost(&def.cost, FILE),
+                    makes: Made {
+                        kind: items.named(&def.makes.0, FILE),
+                        count: def.makes.1,
+                    },
+                    seconds: def.seconds,
+                })
+                .collect(),
+        )
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Recipe> {
+        self.0.iter()
+    }
+
+    /// The recipes a station makes, in order, by their place here.
+    pub fn at(&self, station: Station) -> impl Iterator<Item = usize> + '_ {
+        (0..self.0.len()).filter(move |&index| self.0[index].station == station)
+    }
+
+    /// A station's recipe for what goes by a name, as a saved game names it.
+    pub fn named(&self, station: Station, name: &str, items: &Items) -> Option<usize> {
+        self.at(station)
+            .find(|&index| self.0[index].makes.name(items) == name)
+    }
+
+    /// The kinds of thing a station makes, in the order its recipes first make them.
+    pub fn families(&self, station: Station, items: &Items) -> Vec<Family> {
+        let mut families = Vec::new();
+        for index in self.at(station) {
+            let family = self.0[index].family(items);
+            if !families.contains(&family) {
+                families.push(family);
+            }
+        }
+        families
+    }
+}
+
+/// The kinds of station and their recipes, for a system that reads both.
+#[derive(SystemParam)]
+pub struct Crafts<'w> {
+    pub stations: Res<'w, Stations>,
+    pub recipes: Res<'w, Recipes>,
+}
+
+impl Crafts<'_> {
+    /// The station that mends a kind of thing: the one its kind says, or else the one that
+    /// makes it, if it wears at all.
+    pub fn mended_at(&self, items: &Items, kind: ItemKind) -> Option<Station> {
+        mended_at(items, &self.stations, &self.recipes, kind)
+    }
+}
+
+/// The station that mends a kind of thing (D99): the one its kind says, or else the one
+/// that makes it, if it wears at all.
+pub fn mended_at(
+    items: &Items,
+    stations: &Stations,
+    recipes: &Recipes,
+    kind: ItemKind,
+) -> Option<Station> {
+    let def = items.def(kind);
+    def.lasts?;
+    if let Some(station) = &def.mended_at {
+        return stations.named(station);
+    }
+    recipes
+        .iter()
+        .find(|recipe| recipe.makes.kind == kind)
+        .map(|recipe| recipe.station)
 }
 
 /// How near a station someone at work at it stands.
@@ -208,6 +246,7 @@ const WORKER_REACH_M: f32 = 3.0;
 /// smith.
 #[derive(SystemParam)]
 pub struct Staff<'w, 's> {
+    kinds: Res<'w, Stations>,
     people: Query<'w, 's, &'static Person>,
     stations: Query<'w, 's, &'static Transform, With<Works>>,
 }
@@ -215,7 +254,7 @@ pub struct Staff<'w, 's> {
 impl Staff<'_, '_> {
     /// Whoever is at work at a station, if it is one that needs someone.
     pub fn worker(&self, entity: Entity, station: Station) -> Option<&Person> {
-        let trade = station.worked_by()?;
+        let trade = self.kinds.worked_by(station)?;
         let at = self.stations.get(entity).ok()?.translation;
         self.people
             .iter()
@@ -225,7 +264,7 @@ impl Staff<'_, '_> {
     /// Whether a station can get on with its queue: always, unless it needs someone to
     /// work it and nobody is.
     pub fn works(&self, entity: Entity, station: Station) -> bool {
-        station.worked_by().is_none() || self.worker(entity, station).is_some()
+        self.kinds.worked_by(station).is_none() || self.worker(entity, station).is_some()
     }
 }
 
@@ -234,7 +273,7 @@ fn at_work(person: &Person, station: Vec3) -> bool {
     matches!(person.doing, Doing::Working(spot) if spot.distance(station) < WORKER_REACH_M)
 }
 
-/// A station's queue: what is to be made, by its place in `RECIPES`, how far into the
+/// A station's queue: what is to be made, by its place in `Recipes`, how far into the
 /// first it is, and what is made and waiting to be taken.
 #[derive(Component, Default, Debug)]
 pub struct Works {
@@ -257,11 +296,11 @@ impl Works {
     }
 
     /// Gets on with the queue for so many seconds. Returns how many things it finished.
-    pub fn advance(&mut self, seconds: f32) -> usize {
+    pub fn advance(&mut self, seconds: f32, recipes: &Recipes) -> usize {
         let mut left = seconds;
         let mut finished = 0;
         while let Some(&first) = self.queue.front() {
-            let needed = RECIPES[first].seconds - self.progress;
+            let needed = recipes[first].seconds - self.progress;
             if left < needed {
                 self.progress += left;
                 break;
@@ -276,10 +315,10 @@ impl Works {
     }
 
     /// How far through the first thing it is, out of one.
-    pub fn through(&self) -> f32 {
+    pub fn through(&self, recipes: &Recipes) -> f32 {
         self.queue
             .front()
-            .map_or(0.0, |&first| self.progress / RECIPES[first].seconds)
+            .map_or(0.0, |&first| self.progress / recipes[first].seconds)
     }
 }
 
@@ -292,7 +331,7 @@ pub fn plugin(app: &mut App) {
 /// saved game replaces what stands, so that is not an error.
 fn fit_out(mut commands: Commands, stations: Query<(Entity, &Prop), Without<Works>>) {
     for (entity, prop) in &stations {
-        if prop.item.station().is_some() {
+        if prop.item.station.is_some() {
             commands.entity(entity).try_insert(Works::default());
         }
     }
@@ -357,12 +396,14 @@ fn leave(
 /// player stays within reach.
 fn work(
     time: Res<Time>,
+    kinds: Res<Stations>,
+    recipes: Res<Recipes>,
     staff: Staff,
     players: Query<&Transform, (With<Player>, Without<Works>)>,
     mut stations: Query<(Entity, &Prop, &Transform, &mut Works)>,
 ) {
     for (entity, prop, at, mut works) in &mut stations {
-        let Some(station) = prop.item.station() else {
+        let Some(station) = prop.item.station else {
             continue;
         };
         let attended = || {
@@ -370,8 +411,8 @@ fn work(
                 .iter()
                 .any(|player| within_reach(player.translation, prop, at.translation))
         };
-        if staff.works(entity, station) && (station.works_alone() || attended()) {
-            works.advance(time.delta_secs());
+        if staff.works(entity, station) && (kinds.works_alone(station) || attended()) {
+            works.advance(time.delta_secs(), &recipes);
         }
     }
 }
@@ -380,6 +421,8 @@ fn work(
 /// working it; from one that works alone when they open it.
 fn hand_over(
     screen: Res<InventoryScreen>,
+    kinds: Res<Stations>,
+    recipes: Res<Recipes>,
     ours: Option<Single<Entity, IsLocalPlayer>>,
     players: Query<(Entity, &Transform), (With<Player>, Without<Works>)>,
     mut stations: Query<(Entity, &Prop, &Transform, &mut Works)>,
@@ -389,7 +432,7 @@ fn hand_over(
 ) {
     let ours = ours.map(|player| *player);
     for (entity, prop, at, mut works) in &mut stations {
-        let Some(station) = prop.item.station() else {
+        let Some(station) = prop.item.station else {
             continue;
         };
         if works.done.is_empty() {
@@ -397,7 +440,7 @@ fn hand_over(
         }
         // A worked station hands over to the nearest player working it; one that works
         // alone, to this machine's player when they open it.
-        let to = if station.works_alone() {
+        let to = if kinds.works_alone(station) {
             ours.filter(|_| screen.at.is_some_and(|(open, _)| open == entity))
         } else {
             players
@@ -414,15 +457,15 @@ fn hand_over(
         };
         let player = inventory.player();
         while let Some(&first) = works.done.first() {
-            let made = RECIPES[first].makes;
+            let made = recipes[first].makes;
+            let name = made.name(inventory.items());
             if !inventory.receive(made) {
                 if !works.told_full {
                     told.write(Told::new(
                         player,
                         format!(
-                            "No room in your backpack: the {} waits in the {}",
-                            made.name(),
-                            station.name().to_lowercase()
+                            "No room in your backpack: the {name} waits in the {}",
+                            kinds.name(station).to_lowercase()
                         ),
                     ));
                     works.told_full = true;
@@ -432,8 +475,8 @@ fn hand_over(
             works.done.remove(0);
             works.told_full = false;
             did.write(Did(player, Skill::Crafting, ONCE));
-            info!("Made {}.", made.name());
-            told.write(Told::new(player, format!("Made {}", made.name())));
+            info!("Made {name}.");
+            told.write(Told::new(player, format!("Made {name}")));
         }
     }
 }
@@ -444,101 +487,132 @@ pub fn queue(
     works: &mut Works,
     index: usize,
     staffed: bool,
+    (recipes, stations): (&Recipes, &Stations),
     belongings: &mut Inventory,
     notice: &mut Notice,
 ) {
-    let recipe = &RECIPES[index];
+    let recipe = &recipes[index];
+    let station = stations.name(recipe.station).to_lowercase();
     if !staffed {
         notice.say(format!(
-            "The {} needs a {} to work it",
-            recipe.station.name().to_lowercase(),
-            recipe.station.worked_by().unwrap_or("worker")
+            "The {station} needs a {} to work it",
+            stations.worked_by(recipe.station).unwrap_or("worker")
         ));
     } else if works.queue.len() >= MOST_QUEUED {
-        notice.say(format!(
-            "The {} has enough to do",
-            recipe.station.name().to_lowercase()
-        ));
-    } else if let Some((kind, more)) = belongings.missing(recipe.cost, 1) {
+        notice.say(format!("The {station} has enough to do"));
+    } else if let Some((kind, more)) = belongings.missing(&recipe.cost, 1) {
         let items = belongings.items();
         notice.say(format!(
             "You need {more} more {}: {}",
             items.name(kind),
             items.found(kind)
         ));
-    } else if belongings.pay(recipe.cost, 1) {
+    } else if belongings.pay(&recipe.cost, 1) {
         works.queue.push_back(index);
         info!(
             "Queued {} at the {}.",
-            recipe.makes.name(),
-            recipe.station.name()
+            recipe.makes.name(belongings.items()),
+            stations.name(recipe.station)
         );
     }
 }
 
 /// Takes something off a station's queue and gives back what it took, if there is room.
-pub fn cancel(works: &mut Works, place: usize, belongings: &mut Inventory, notice: &mut Notice) {
+pub fn cancel(
+    works: &mut Works,
+    place: usize,
+    recipes: &Recipes,
+    belongings: &mut Inventory,
+    notice: &mut Notice,
+) {
     let Some(&index) = works.queue.get(place) else {
         return;
     };
     // What does not fit in the backpack drops at the player's feet.
-    belongings.refund(RECIPES[index].cost, 1);
+    belongings.refund(&recipes[index].cost, 1);
     works.queue.remove(place);
     if place == 0 {
         works.progress = 0.0;
     }
     notice.say(format!(
         "Took {} off the queue",
-        RECIPES[index].makes.name()
+        recipes[index].makes.name(belongings.items())
     ));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn station(name: &str) -> Station {
-        Station::named(name).unwrap()
-    }
     use bevy::ecs::system::RunSystemOnce;
 
-    #[test]
-    fn every_recipe_makes_and_costs_kinds_of_item_there_are() {
+    struct Kinds {
+        items: Items,
+        stations: Stations,
+        recipes: Recipes,
+    }
+
+    fn kinds() -> Kinds {
         let items = Items::default();
-        for recipe in RECIPES.iter() {
-            let named = recipe.cost.iter().map(|(name, _)| *name);
-            for name in named.chain([recipe.makes.item]) {
-                assert!(items.find(name).is_some(), "{name} is not a kind of item");
-            }
+        let stations = Stations::read();
+        let recipes = Recipes::read(&stations, &items);
+        Kinds {
+            items,
+            stations,
+            recipes,
         }
     }
 
-    fn index_of(makes: Made) -> usize {
-        RECIPES
-            .iter()
-            .position(|recipe| recipe.makes == makes)
-            .unwrap()
+    impl Kinds {
+        fn station(&self, name: &str) -> Station {
+            self.stations.named(name).unwrap()
+        }
+
+        fn made(&self, name: &str) -> Made {
+            Made {
+                kind: self.items.find(name).unwrap(),
+                count: 1,
+            }
+        }
+
+        fn index_of(&self, makes: Made) -> usize {
+            self.recipes
+                .iter()
+                .position(|recipe| recipe.makes == makes)
+                .unwrap()
+        }
+    }
+
+    /// Reading checks that every recipe names a station and kinds of item there are.
+    #[test]
+    fn every_recipe_names_a_station_and_items_there_are() {
+        assert!(kinds().recipes.iter().count() > 0);
     }
 
     #[test]
     fn a_queue_finishes_in_order_and_carries_time_over() {
-        let iron = index_of(Made::one("Iron"));
-        let seconds = RECIPES[iron].seconds;
+        let kinds = kinds();
+        let recipes = &kinds.recipes;
+        let iron = kinds.index_of(kinds.made("Iron"));
+        let seconds = recipes[iron].seconds;
         let mut works = Works::default();
         works.queue.extend([iron, iron, iron]);
-        assert_eq!(works.advance(seconds * 0.5), 0);
-        assert!((works.through() - 0.5).abs() < 1e-5);
-        assert_eq!(works.advance(seconds * 1.75), 2);
+        assert_eq!(works.advance(seconds * 0.5, recipes), 0);
+        assert!((works.through(recipes) - 0.5).abs() < 1e-5);
+        assert_eq!(works.advance(seconds * 1.75, recipes), 2);
         assert_eq!(works.done, [iron, iron]);
-        assert!((works.through() - 0.25).abs() < 1e-4);
-        assert_eq!(works.advance(seconds * 10.0), 1);
+        assert!((works.through(recipes) - 0.25).abs() < 1e-4);
+        assert_eq!(works.advance(seconds * 10.0, recipes), 1);
         assert!(works.queue.is_empty());
-        assert_eq!(works.through(), 0.0);
+        assert_eq!(works.through(recipes), 0.0);
     }
 
     #[test]
     fn the_forge_waits_for_a_smith_and_the_smelter_works_alone() {
+        let kinds = kinds();
+        let (forge_kind, smelter) = (kinds.station("Forge"), kinds.station("Smelter"));
+        assert!(kinds.stations.works_alone(smelter) && !kinds.stations.works_alone(forge_kind));
         let mut world = World::new();
+        world.insert_resource(kinds.stations);
         let forge = Vec3::new(0.0, 2000.0, 0.0);
         let built = world
             .spawn((Transform::from_translation(forge), Works::default()))
@@ -548,9 +622,8 @@ mod tests {
                 .run_system_once(move |staff: Staff| staff.works(built, kind))
                 .unwrap()
         };
-        assert!(!staffed(&mut world, station("Forge")));
-        assert!(staffed(&mut world, station("Smelter")));
-        assert!(station("Smelter").works_alone() && !station("Forge").works_alone());
+        assert!(!staffed(&mut world, forge_kind));
+        assert!(staffed(&mut world, smelter));
         // A smith following you is not at work; one working beside the forge is.
         let smith = world
             .spawn(Person::new(
@@ -559,28 +632,32 @@ mod tests {
                 Some("smith"),
             ))
             .id();
-        assert!(!staffed(&mut world, station("Forge")));
+        assert!(!staffed(&mut world, forge_kind));
         world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 1.8);
-        assert!(staffed(&mut world, station("Forge")));
+        assert!(staffed(&mut world, forge_kind));
         // Someone at work at another forge far off does not work this one.
         world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 50.0);
-        assert!(!staffed(&mut world, station("Forge")));
+        assert!(!staffed(&mut world, forge_kind));
     }
 
     #[test]
     fn the_workbench_has_tabs_and_the_smelter_none() {
-        let items = Items::default();
-        assert_eq!(
-            families(station("Workbench"), &items),
-            [Family::Tools, Family::Clothing]
-        );
-        assert_eq!(families(station("Smelter"), &items).len(), 1);
+        let kinds = kinds();
+        let families = |name| kinds.recipes.families(kinds.station(name), &kinds.items);
+        assert_eq!(families("Workbench"), [Family::Tools, Family::Clothing]);
+        assert_eq!(families("Smelter").len(), 1);
     }
 
     #[test]
     fn a_saved_name_finds_its_recipe_at_its_own_station() {
-        let iron = recipe_named(station("Smelter"), "Iron").unwrap();
-        assert_eq!(RECIPES[iron].makes, Made::one("Iron"));
-        assert_eq!(recipe_named(station("Forge"), "Iron"), None);
+        let kinds = kinds();
+        let named = |station, name| {
+            kinds
+                .recipes
+                .named(kinds.station(station), name, &kinds.items)
+        };
+        let iron = named("Smelter", "Iron").unwrap();
+        assert_eq!(kinds.recipes[iron].makes, kinds.made("Iron"));
+        assert_eq!(named("Forge", "Iron"), None);
     }
 }

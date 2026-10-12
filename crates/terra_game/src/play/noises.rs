@@ -5,7 +5,7 @@
 //! Anything that walks gets `Footsteps` and is heard stepping, whatever it is.
 
 use super::build_menu::BuildMenu;
-use super::crafting::{Station, Works};
+use super::crafting::{Stations, Works};
 use super::creatures::{Bitten, Creature, Species, State};
 use super::death::WentDown;
 use super::flora::Growth;
@@ -277,13 +277,14 @@ fn building_heard(
 fn stations_heard(
     time: Res<Time>,
     stations: Query<(Entity, &Prop, &Works, &GlobalTransform)>,
+    kinds: Res<Stations>,
     mut was: Local<HashMap<Entity, (f32, usize, f32)>>,
     mut noise: MessageWriter<Noise>,
 ) {
     // Each stroke of work, as often as the station says, or of no use to hear.
-    let every = |station: Station| station.strokes().map_or(0.6, |(_, every)| every);
+    let every = |station| kinds.strokes(station).map_or(0.6, |(_, every)| every);
     for (entity, prop, works, at) in &stations {
-        let Some(station) = prop.item.station() else {
+        let Some(station) = prop.item.station else {
             continue;
         };
         let (progress, made, beat) =

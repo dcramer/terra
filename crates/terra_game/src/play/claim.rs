@@ -6,6 +6,7 @@
 //! While the hammer is in hand, its edge is drawn on the ground.
 
 use super::bag::Told;
+use super::catalogue::{Builds, ClaimRule};
 use super::interact::{Interactable, Interacted};
 use super::inventory::{Belongings, Cost, describe};
 use super::props::{PlacedBy, Prop};
@@ -15,25 +16,19 @@ use crate::build::{Site, frame_at};
 use crate::planet::Planet;
 use bevy::prelude::*;
 
-/// How far across a claim is at each step (D104).
-const ACROSS_M: [f32; 3] = [40.0, 80.0, 160.0];
-/// What growing a claim to the next step costs.
-const GROW: [Cost; 2] = [
-    &[("Wood", 10), ("Stone", 10)],
-    &[("Wood", 20), ("Stone", 20), ("Iron", 4)],
-];
-
-/// A player's claim, if they have placed one.
+/// A player's claim, if they have placed one: its stone, how many times it has grown, and
+/// how far across that makes it (`ClaimRule`, in `assets/data/builds.ron`).
 #[derive(Component, Default)]
 pub struct Claim {
     /// The claim stone, and where it stands.
     pub stone: Option<(Entity, Vec3)>,
     step: usize,
+    across_m: f32,
 }
 
 impl Claim {
     pub fn across_m(&self) -> f32 {
-        ACROSS_M[self.step]
+        self.across_m
     }
 
     /// Whether a point on the planet is inside the claim.
@@ -48,13 +43,15 @@ impl Claim {
         self.step
     }
 
-    pub fn set_step(&mut self, step: usize) {
-        self.step = step.min(ACROSS_M.len() - 1);
+    /// Grown so many times, as far as the rule lets it.
+    pub fn set_step(&mut self, step: usize, rule: &ClaimRule) {
+        self.step = step.min(rule.across_m.len() - 1);
+        self.across_m = rule.across_m[self.step];
     }
 
     /// What growing it costs, if it can grow.
-    pub fn next(&self) -> Option<Cost> {
-        GROW.get(self.step).copied()
+    pub fn next<'a>(&self, rule: &'a ClaimRule) -> Option<&'a Cost> {
+        rule.grow.get(self.step).map(Vec::as_slice)
     }
 }
 
@@ -108,6 +105,7 @@ fn track(
     placed: Query<(Entity, &Prop, &Transform, Option<&PlacedBy>), Added<Prop>>,
     mut removed: RemovedComponents<Prop>,
     ours: Option<Single<Entity, IsLocalPlayer>>,
+    builds: Res<Builds>,
     mut claims: Query<&mut Claim>,
 ) {
     for (entity, prop, at, by) in &placed {
@@ -119,6 +117,7 @@ fn track(
         let owner = by.map(|by| by.0).or(ours.as_deref().copied());
         if let Some(mut claim) = owner.and_then(|owner| claims.get_mut(owner).ok()) {
             claim.stone = Some((entity, at.translation));
+            claim.set_step(0, &builds.claim);
             info!("Claimed the land around {}.", at.translation);
         }
     }
@@ -136,9 +135,11 @@ fn track(
 fn grow(
     mut interacted: MessageReader<Interacted>,
     mut claims: Query<&mut Claim>,
+    builds: Res<Builds>,
     mut belongings: Belongings,
     mut told: MessageWriter<Told>,
 ) {
+    let rule = &builds.claim;
     for used in interacted.read() {
         let Some(stone) = used.on(Interactable::ClaimStone) else {
             continue;
@@ -150,16 +151,18 @@ fn grow(
         };
         let said = if claim.stone.map(|(own, _)| own) != Some(stone) {
             "That is not your claim stone".to_string()
-        } else if let Some(cost) = claim.next() {
+        } else if let Some(cost) = claim.next(rule) {
             if let Some((kind, more)) = inventory.missing(cost, 1) {
+                let items = inventory.items();
                 format!(
                     "Growing your claim takes {}: you need {more} more {}",
-                    describe(cost, 1),
-                    inventory.items().name(kind)
+                    describe(items, cost, 1),
+                    items.name(kind)
                 )
             } else {
                 inventory.pay(cost, 1);
-                claim.step += 1;
+                let step = claim.step + 1;
+                claim.set_step(step, rule);
                 format!("Your claim now reaches {} metres across", claim.across_m())
             }
         } else {
@@ -204,29 +207,27 @@ fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn growing_costs_kinds_of_item_there_are() {
-        let items = super::super::inventory::Items::default();
-        for (name, _) in GROW.iter().copied().flatten() {
-            assert!(items.find(name).is_some(), "{name} is not a kind of item");
-        }
-    }
+    use crate::play::crafting::Stations;
+    use crate::play::inventory::Items;
 
     #[test]
     fn a_claim_covers_what_is_within_half_its_width_and_grows() {
+        let builds = Builds::read(&Items::default(), &Stations::read());
+        let rule = &builds.claim;
         let centre = Vec3::new(0.0, 2000.0, 0.0);
         let mut claim = Claim::default();
         assert!(!claim.covers(centre), "no stone, no claim");
         claim.stone = Some((Entity::PLACEHOLDER, centre));
-        assert!(claim.covers(centre + Vec3::X * 19.0));
-        assert!(!claim.covers(centre + Vec3::X * 21.0));
+        claim.set_step(0, rule);
+        let half = rule.across_m[0] * 0.5;
+        assert!(claim.covers(centre + Vec3::X * (half - 1.0)));
+        assert!(!claim.covers(centre + Vec3::X * (half + 1.0)));
         // Height does not matter, only distance across the ground.
         assert!(claim.covers(centre + Vec3::Y * 50.0));
-        assert!(claim.next().is_some());
-        claim.step = 1;
-        assert!(claim.covers(centre + Vec3::Z * 39.0));
-        claim.step = 2;
-        assert_eq!(claim.next(), None);
+        assert!(claim.next(rule).is_some());
+        claim.set_step(1, rule);
+        assert!(claim.covers(centre + Vec3::Z * (half + 1.0)));
+        claim.set_step(rule.across_m.len() - 1, rule);
+        assert_eq!(claim.next(rule), None);
     }
 }

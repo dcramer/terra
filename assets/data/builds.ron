@@ -9,6 +9,8 @@
 //            not counted in cells, so prices do not change if the grid does: floor by
 //            every three square metres, however a room comes to have it; interior wall by
 //            every metre and a half; a window by the metre; a door each.
+// claim      how far across a claim is at each step, and what growing it to the next
+//            step costs (D94, D104)
 // parts      in the order the build menu lists them within each tab. Each is in a tab
 //            (Hidden ones are not in the menu) and is one of:
 //              Items    things stood on a floor or the ground, each with its model in
@@ -28,6 +30,13 @@
         wall: [("Wood", 1)],
         window: [("Wood", 1), ("Fibre", 1)],
         door: [("Wood", 2)],
+    ),
+    claim: (
+        across_m: [40.0, 80.0, 160.0],
+        grow: [
+            [("Wood", 10), ("Stone", 10)],
+            [("Wood", 20), ("Stone", 20), ("Iron", 4)],
+        ],
     ),
     parts: [
         (name: "Claim stone", tab: Claim, kind: Items([

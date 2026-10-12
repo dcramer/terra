@@ -20,13 +20,14 @@ use terra_items::{
     Refused, Size,
 };
 
-/// What one of something costs: so many of each kind of item, by name.
-pub type Cost = &'static [(&'static str, u32)];
+/// What one of something costs: so many of each kind of item. A data file names the items;
+/// they are resolved to kinds as it is read (`Items::cost`).
+pub type Cost = [(ItemKind, u32)];
 
 /// A cost as a player would read it: "2 Wood, 3 Fibre".
-pub fn describe(cost: Cost, times: u32) -> String {
+pub fn describe(items: &Items, cost: &Cost, times: u32) -> String {
     cost.iter()
-        .map(|&(name, each)| format!("{} {name}", each * times))
+        .map(|&(kind, each)| format!("{} {}", each * times, items.name(kind)))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -65,26 +66,18 @@ fn slot_named(name: &str) -> GearSlot {
         .unwrap_or_else(|| panic!("assets/data/items.ron: there is no slot called {name}"))
 }
 
-/// What a recipe makes: so many of a kind of item, by name.
+/// What a recipe makes: so many of a kind of item.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Made {
-    pub item: &'static str,
+    pub kind: ItemKind,
     pub count: u32,
 }
 
 impl Made {
-    pub const fn one(item: &'static str) -> Self {
-        Self { item, count: 1 }
-    }
-
-    pub const fn many(item: &'static str, count: u32) -> Self {
-        Self { item, count }
-    }
-
-    pub fn name(self) -> String {
+    pub fn name(self, items: &Items) -> String {
         match self.count {
-            1 => self.item.to_string(),
-            count => format!("{count} {}", self.item),
+            1 => items.name(self.kind).to_string(),
+            count => format!("{count} {}", items.name(self.kind)),
         }
     }
 }
@@ -202,7 +195,21 @@ impl Items {
 
     /// The kinds of item something made is, and how many.
     fn made(&self, made: Made) -> (ItemKind, u32) {
-        (self.kind(made.item), made.count)
+        (made.kind, made.count)
+    }
+
+    /// The kind a data file names, or the reason it cannot be read.
+    pub fn named(&self, name: &str, file: &str) -> ItemKind {
+        self.find(name)
+            .unwrap_or_else(|| panic!("{file}: there is no kind of item called {name}"))
+    }
+
+    /// A cost a data file gives by item names, as kinds.
+    pub fn cost(&self, named: &[(String, u32)], file: &str) -> Vec<(ItemKind, u32)> {
+        named
+            .iter()
+            .map(|(name, count)| (self.named(name, file), *count))
+            .collect()
     }
 
     /// What a kind's icon is baked from (D129): a tool's held look, gear's look (on the
@@ -231,9 +238,9 @@ impl Items {
         self.ids.make(kind)
     }
 
-    fn wanted(&self, cost: Cost, times: u32) -> Vec<(ItemKind, u32)> {
+    fn wanted(&self, cost: &Cost, times: u32) -> Vec<(ItemKind, u32)> {
         cost.iter()
-            .map(|&(name, each)| (self.kind(name), each * times))
+            .map(|&(kind, each)| (kind, each * times))
             .collect()
     }
 }
@@ -402,7 +409,7 @@ pub fn missing(
     items: &Items,
     grid: &Grid,
     gear: &Equipment,
-    cost: Cost,
+    cost: &Cost,
     times: u32,
 ) -> Option<(ItemKind, u32)> {
     items
@@ -424,7 +431,7 @@ pub fn pay(
     grid: &mut Grid,
     bar: &mut ActionBar,
     gear: &mut Equipment,
-    cost: Cost,
+    cost: &Cost,
     times: u32,
 ) -> bool {
     spend(grid, bar, gear, &items.wanted(cost, times))
@@ -490,7 +497,7 @@ fn receive_kind(
 }
 
 /// Whether what a cost so many times over is made of would all fit in the backpack.
-pub fn room_for(items: &Items, grid: &Grid, cost: Cost, times: u32) -> bool {
+pub fn room_for(items: &Items, grid: &Grid, cost: &Cost, times: u32) -> bool {
     let mut trial = grid.clone();
     let mut id = u64::MAX;
     items.wanted(cost, times).into_iter().all(|(kind, count)| {
@@ -741,11 +748,11 @@ impl Inventory<'_, '_> {
         self.backpack().count(kind) + self.gear().stacked(kind)
     }
 
-    pub fn missing(&self, cost: Cost, times: u32) -> Option<(ItemKind, u32)> {
+    pub fn missing(&self, cost: &Cost, times: u32) -> Option<(ItemKind, u32)> {
         missing(self.items, self.backpack(), self.gear(), cost, times)
     }
 
-    pub fn room_for(&self, cost: Cost, times: u32) -> bool {
+    pub fn room_for(&self, cost: &Cost, times: u32) -> bool {
         room_for(self.items, self.backpack(), cost, times)
     }
 
@@ -844,7 +851,7 @@ impl Inventory<'_, '_> {
         )
     }
 
-    pub fn pay(&mut self, cost: Cost, times: u32) -> bool {
+    pub fn pay(&mut self, cost: &Cost, times: u32) -> bool {
         pay(
             self.items,
             &mut self.backpack.0,
@@ -857,7 +864,7 @@ impl Inventory<'_, '_> {
 
     /// Gives back what a cost so many times over is made of, if all of it fits. Returns
     /// whether it did.
-    pub fn refund(&mut self, cost: Cost, times: u32) {
+    pub fn refund(&mut self, cost: &Cost, times: u32) {
         for (kind, count) in self.items.wanted(cost, times) {
             self.give(kind, count);
         }
@@ -943,7 +950,24 @@ mod tests {
         assert_eq!(protection(&items, &gear), 0.0);
     }
 
-    const COUCH: Cost = &[("Wood", 2), ("Hide", 3)];
+    /// A cost, by item names.
+    fn cost(items: &Items, named: &[(&str, u32)]) -> Vec<(ItemKind, u32)> {
+        named
+            .iter()
+            .map(|&(name, count)| (items.kind(name), count))
+            .collect()
+    }
+
+    fn couch(items: &Items) -> Vec<(ItemKind, u32)> {
+        cost(items, &[("Wood", 2), ("Hide", 3)])
+    }
+
+    fn made(items: &Items, name: &str, count: u32) -> Made {
+        Made {
+            kind: items.kind(name),
+            count,
+        }
+    }
 
     #[test]
     fn the_starting_kit_has_both_tools_on_the_bar_and_room_to_spare() {
@@ -968,7 +992,8 @@ mod tests {
         let mut items = Items::default();
         let (Backpack(mut grid), Gear(gear), _) = starting_kit(&mut items);
         give_named(&mut items, &mut grid, "Wood", 5);
-        assert_eq!(missing(&items, &grid, &gear, &[("Wood", 2)], 1), None);
+        let wood = cost(&items, &[("Wood", 2)]);
+        assert_eq!(missing(&items, &grid, &gear, &wood, 1), None);
     }
 
     #[test]
@@ -978,18 +1003,32 @@ mod tests {
         give_named(&mut items, &mut grid, "Wood", 4);
         give_named(&mut items, &mut grid, "Hide", 3);
         let count = |grid: &Grid, name| grid.count(items.kind(name));
-        assert!(pay(&items, &mut grid, &mut bar, &mut gear, COUCH, 1));
+        assert!(pay(
+            &items,
+            &mut grid,
+            &mut bar,
+            &mut gear,
+            &couch(&items),
+            1
+        ));
         assert_eq!(count(&grid, "Wood"), 2);
         assert_eq!(count(&grid, "Hide"), 0);
         assert_eq!(
-            missing(&items, &grid, &gear, COUCH, 1),
+            missing(&items, &grid, &gear, &couch(&items), 1),
             Some((items.kind("Hide"), 3)),
             "all the hide is spent"
         );
         let before = grid.clone();
-        assert!(!pay(&items, &mut grid, &mut bar, &mut gear, COUCH, 1));
+        assert!(!pay(
+            &items,
+            &mut grid,
+            &mut bar,
+            &mut gear,
+            &couch(&items),
+            1
+        ));
         assert_eq!(grid, before);
-        assert_eq!(describe(COUCH, 2), "4 Wood, 6 Hide");
+        assert_eq!(describe(&items, &couch(&items), 2), "4 Wood, 6 Hide");
     }
 
     #[test]
@@ -1001,10 +1040,10 @@ mod tests {
                 .iter()
                 .map(|placed| placed.size.w as u32 * placed.size.h as u32)
                 .sum::<u32>();
-        assert!(room_for(&items, &grid, COUCH, 1));
+        assert!(room_for(&items, &grid, &couch(&items), 1));
         assert_eq!(give_named(&mut items, &mut grid, "Wood", free + 5), free);
         assert!(grid.space_for(Size::ONE).is_none());
-        assert!(!room_for(&items, &grid, COUCH, 1));
+        assert!(!room_for(&items, &grid, &couch(&items), 1));
         assert_eq!(give_named(&mut items, &mut grid, "Wood", 1), 0);
     }
 
@@ -1046,12 +1085,10 @@ mod tests {
     fn what_is_made_goes_in_the_backpack_and_a_tool_on_the_bar() {
         let mut items = Items::default();
         let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
-        assert!(receive(
-            &mut items,
-            &mut grid,
-            &mut bar,
-            Made::one("Iron axe")
-        ));
+        assert!({
+            let made = made(&items, "Iron axe", 1);
+            receive(&mut items, &mut grid, &mut bar, made)
+        });
         assert_eq!(grid.count(items.kind("Iron axe")), 1);
         assert_eq!(
             bar.get(items.start.tools.len())
@@ -1068,7 +1105,10 @@ mod tests {
         let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
         give_named(&mut items, &mut grid, "Ore", 100);
         let before = grid.clone();
-        assert!(!receive(&mut items, &mut grid, &mut bar, Made::one("Iron")));
+        assert!(!{
+            let made = made(&items, "Iron", 1);
+            receive(&mut items, &mut grid, &mut bar, made)
+        });
         assert_eq!(grid, before);
     }
 
@@ -1080,12 +1120,10 @@ mod tests {
         grid.insert(&items.catalogue, quiver, None).unwrap();
         let cells = grid.len();
         assert_eq!(give_named(&mut items, &mut grid, "Arrow", 6), 6);
-        assert!(receive(
-            &mut items,
-            &mut grid,
-            &mut bar,
-            Made::many("Arrow", 4)
-        ));
+        assert!({
+            let made = made(&items, "Arrow", 4);
+            receive(&mut items, &mut grid, &mut bar, made)
+        });
         assert_eq!(grid.len(), cells, "they fill no cells of their own");
         assert_eq!(grid.count(items.kind("Arrow")), 10);
         assert!(pay(
@@ -1093,7 +1131,7 @@ mod tests {
             &mut grid,
             &mut bar,
             &mut gear,
-            &[("Arrow", 1)],
+            &cost(&items, &[("Arrow", 1)]),
             1
         ));
         assert_eq!(grid.count(items.kind("Arrow")), 9);
@@ -1101,13 +1139,16 @@ mod tests {
         wear(&items, &mut grid, &mut gear, quiver.id).unwrap();
         give_named(&mut items, &mut grid, "Arrow", 2);
         assert_eq!(gear.stacked(items.kind("Arrow")), 9);
-        assert_eq!(missing(&items, &grid, &gear, &[("Arrow", 11)], 1), None);
+        assert_eq!(
+            missing(&items, &grid, &gear, &cost(&items, &[("Arrow", 11)]), 1),
+            None
+        );
         assert!(pay(
             &items,
             &mut grid,
             &mut bar,
             &mut gear,
-            &[("Arrow", 10)],
+            &cost(&items, &[("Arrow", 10)]),
             1
         ));
         assert_eq!(gear.stacked(items.kind("Arrow")), 0);
@@ -1116,20 +1157,20 @@ mod tests {
 
     #[test]
     fn paying_takes_all_or_nothing() {
-        const AXE: Cost = &[("Wood", 2), ("Iron", 3)];
+        let axe = cost(&Items::default(), &[("Wood", 2), ("Iron", 3)]);
         let mut items = Items::default();
         let (Backpack(mut grid), Gear(mut gear), Bar(mut bar)) = starting_kit(&mut items);
         give_named(&mut items, &mut grid, "Wood", 2);
         give_named(&mut items, &mut grid, "Iron", 2);
         let before = grid.clone();
         assert_eq!(
-            missing(&items, &grid, &gear, AXE, 1),
+            missing(&items, &grid, &gear, &axe, 1),
             Some((items.kind("Iron"), 1))
         );
-        assert!(!pay(&items, &mut grid, &mut bar, &mut gear, AXE, 1));
+        assert!(!pay(&items, &mut grid, &mut bar, &mut gear, &axe, 1));
         assert_eq!(grid, before);
         give_named(&mut items, &mut grid, "Iron", 1);
-        assert!(pay(&items, &mut grid, &mut bar, &mut gear, AXE, 1));
+        assert!(pay(&items, &mut grid, &mut bar, &mut gear, &axe, 1));
         assert_eq!(grid.count(items.kind("Iron")), 0);
     }
 

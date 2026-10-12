@@ -7,7 +7,7 @@
 //! a thing carry `Ambient`, and are heard only within earshot, so a world can hold any
 //! number of them.
 
-use super::crafting::{Fire, Station, Works};
+use super::crafting::{Fire, Stations, Works};
 use super::creatures::Lair;
 use super::noise::{Cue, Noise};
 use super::props::Prop;
@@ -168,12 +168,17 @@ fn shore_distance(planet: &Planet, here: Vec3) -> Option<f32> {
 fn mark_sources(
     mut commands: Commands,
     stations: Query<(Entity, &Prop), (With<Works>, Without<Ambient>)>,
+    kinds: Res<Stations>,
     lair: Option<Res<Lair>>,
     village: Option<Res<Village>>,
     mut marked: Local<(bool, bool)>,
 ) {
     for (entity, prop) in &stations {
-        let level = match prop.item.station().and_then(Station::fire) {
+        let level = match prop
+            .item
+            .station
+            .and_then(|station| kinds.get(station).fire)
+        {
             Some(Fire::Always) => CAMPFIRE,
             // Lit only while they work (`stoke`).
             Some(Fire::WhileWorking) => 0.0,
@@ -204,9 +209,13 @@ fn mark_sources(
 
 /// A station whose fire burns while it works, such as a forge or a smelter, burns while it
 /// works.
-fn stoke(mut fires: Query<(&Prop, &Works, &mut Ambient)>) {
+fn stoke(kinds: Res<Stations>, mut fires: Query<(&Prop, &Works, &mut Ambient)>) {
     for (prop, works, mut ambient) in &mut fires {
-        if prop.item.station().and_then(Station::fire) == Some(Fire::WhileWorking) {
+        let fire = prop
+            .item
+            .station
+            .and_then(|station| kinds.get(station).fire);
+        if fire == Some(Fire::WhileWorking) {
             let level = if works.queue.is_empty() { 0.0 } else { LIT };
             if ambient.level != level {
                 ambient.level = level;

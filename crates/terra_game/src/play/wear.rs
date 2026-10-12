@@ -10,7 +10,7 @@
 use super::IsLocalPlayer;
 use super::bag::Notice;
 use super::claim::Claim;
-use super::crafting::{RECIPES, Station};
+use super::crafting::{Crafts, Station};
 use super::inventory::{Belongings, Broke, InventoryScreen, Items};
 use super::props::Prop;
 use bevy::prelude::*;
@@ -19,20 +19,6 @@ use terra_items::ItemKind;
 pub fn plugin(app: &mut App) {
     app.add_message::<Broke>()
         .add_systems(Update, (burn, tell, mend).chain());
-}
-
-/// The station that mends a kind of thing: the one its kind says, or else the one that
-/// makes it, if it wears at all.
-pub fn mended_at(items: &Items, kind: ItemKind) -> Option<Station> {
-    let def = items.def(kind);
-    def.lasts?;
-    if let Some(station) = &def.mended_at {
-        return Station::named(station);
-    }
-    RECIPES
-        .iter()
-        .find(|recipe| recipe.makes.item == def.name)
-        .map(|recipe| recipe.station)
 }
 
 /// A torch in hand burns down, a use for each second.
@@ -54,6 +40,7 @@ fn burn(time: Res<Time>, mut belongings: Belongings, mut burnt: Local<f32>) {
 /// Says when something has broken, and where to mend it.
 fn tell(
     items: Res<Items>,
+    crafts: Crafts,
     mut broke: MessageReader<Broke>,
     ours: Option<Single<Entity, IsLocalPlayer>>,
     mut notice: ResMut<Notice>,
@@ -70,10 +57,10 @@ fn tell(
         } else {
             "broke"
         };
-        notice.say(match mended_at(items, kind) {
+        notice.say(match crafts.mended_at(items, kind) {
             Some(station) => format!(
                 "Your {name} {verb}: mend it at a {}",
-                station.name().to_lowercase()
+                crafts.stations.name(station).to_lowercase()
             ),
             None => format!("Your {name} {verb}"),
         });
@@ -85,6 +72,7 @@ fn mend(
     screen: Res<InventoryScreen>,
     claim: Single<&Claim, IsLocalPlayer>,
     stations: Query<&Transform, With<Prop>>,
+    crafts: Crafts,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
     mut was_at: Local<Option<Entity>>,
@@ -110,7 +98,7 @@ fn mend(
         .items()
         .catalogue
         .iter()
-        .map(|(kind, _)| (kind, mended_at(belongings.items(), kind)))
+        .map(|(kind, _)| (kind, crafts.mended_at(belongings.items(), kind)))
         .collect();
     let mended = belongings.mend(|kind| {
         menders
@@ -124,33 +112,42 @@ fn mend(
         .iter()
         .map(|&kind| belongings.items().name(kind).to_lowercase())
         .collect();
-    info!("Mended {} at the {}.", names.join(", "), station.name());
+    let name = crafts.stations.name(station);
+    info!("Mended {} at the {name}.", names.join(", "));
     notice.say(format!(
         "Mended your {} at the {}",
         names.join(" and "),
-        station.name().to_lowercase()
+        name.to_lowercase()
     ));
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::play::crafting::{Recipes, Stations, mended_at};
+    use crate::play::inventory::Items;
 
     #[test]
     fn each_thing_is_mended_where_it_is_made() {
         let items = Items::default();
-        let at = |name| mended_at(&items, items.kind(name));
-        assert_eq!(at("Stone axe"), Station::named("Workbench"));
-        assert_eq!(at("Iron axe"), Station::named("Forge"));
-        assert_eq!(at("Torch"), Station::named("Campfire"));
-        assert_eq!(at("Hammer"), Station::named("Workbench"));
-        assert_eq!(at("Leather coat"), Station::named("Workbench"));
+        let stations = Stations::read();
+        let recipes = Recipes::read(&stations, &items);
+        let at = |name| mended_at(&items, &stations, &recipes, items.kind(name));
+        let station = |name| stations.named(name);
+        assert_eq!(at("Stone axe"), station("Workbench"));
+        assert_eq!(at("Iron axe"), station("Forge"));
+        assert_eq!(at("Torch"), station("Campfire"));
+        assert_eq!(at("Hammer"), station("Workbench"));
+        assert_eq!(at("Leather coat"), station("Workbench"));
         // Every thing that wears can be mended somewhere.
         for kind in items
             .kinds()
             .filter(|&kind| items.def(kind).lasts.is_some())
         {
-            assert!(mended_at(&items, kind).is_some(), "{}", items.name(kind));
+            assert!(
+                mended_at(&items, &stations, &recipes, kind).is_some(),
+                "{}",
+                items.name(kind)
+            );
         }
     }
 }

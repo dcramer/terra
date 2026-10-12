@@ -4,10 +4,10 @@ use super::*;
 use crate::build::Site;
 use crate::planet::Planet;
 use crate::play::View;
-use crate::play::catalogue::{self, Kind};
+use crate::play::catalogue::{self, Builds, Kind};
 use crate::play::claim::Claim;
 use crate::play::flora::Obstacles;
-use crate::play::inventory::{Belongings, Cost};
+use crate::play::inventory::Belongings;
 use crate::play::props::{self, Blocked, Models, Prop, Standing};
 use crate::shell::Options;
 use terra_build::{CELL_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, cells};
@@ -17,6 +17,7 @@ pub(super) fn aim(
     site: Res<Site>,
     options: Res<Options>,
     models: Res<Models>,
+    builds: Res<Builds>,
     obstacles: Res<Obstacles>,
     props: Query<(Entity, &Prop, &Transform, &Visibility)>,
     mut players: Query<(&Transform, &View, &Intent, &mut Builder), With<Player>>,
@@ -73,7 +74,7 @@ pub(super) fn aim(
         // something to see.
         let spot = || {
             let half = builder
-                .item()
+                .item(&builds)
                 .and_then(|item| models.of(item))
                 .map_or(Vec3::splat(0.3), |model| model.half);
             let boxed = |at: Vec3, lift: f32, indoors: bool| Standing {
@@ -222,7 +223,7 @@ pub(super) fn aim(
             })
         };
         let mut run = Vec::new();
-        builder.target = match builder.picked().kind {
+        builder.target = match &builder.picked(&builds).kind {
             Kind::Reshape => outside_wall.map_or(Target::Nothing, |hit| Target::Wall(hit.face)),
             // A window or a door goes in an outside wall or an interior one alike.
             Kind::Window(shapes) => opening_on(shapes[builder.variant()].1, &mut run),
@@ -271,7 +272,7 @@ pub(super) fn aim(
                 on_base
                     .or(ground.map(|ground| ground.point))
                     .filter(|point| within(*point, STRUCTURE_REACH_M))
-                    .zip(builder.room())
+                    .zip(builder.room(&builds))
                     .map_or(Target::Nothing, |(point, size)| {
                         // Centred on the place aimed at.
                         let local = to_base.transform_point3(point);
@@ -359,6 +360,7 @@ pub(super) fn aim(
 /// Works out what the thing aimed at would cost to build, and whether it can be paid.
 pub(super) fn afford(
     site: Res<Site>,
+    builds: Res<Builds>,
     props: Query<&Prop>,
     mut belongings: Belongings,
     mut players: Query<(Entity, &Claim, &mut Builder), With<Player>>,
@@ -372,8 +374,8 @@ pub(super) fn afford(
         }
         // Nothing is built or taken apart outside your claim (D94), except the claim stone
         // that makes one; and there is one claim each.
-        let placing_claim = matches!(builder.picked().kind, Kind::Items(_))
-            && builder.item().is_some_and(|item| item.claims)
+        let placing_claim = matches!(builder.picked(&builds).kind, Kind::Items(_))
+            && builder.item(&builds).is_some_and(|item| item.claims)
             && !builder.is_carrying();
         let on_planet =
             target_point(&builder.target, &props).map(|point| site.frame.transform_point(point));
@@ -395,7 +397,7 @@ pub(super) fn afford(
             .run
             .iter()
             .any(|&cell| site.base.filling(cell) == Some(Panel::Solid));
-        let price: Option<(Cost, u32)> = match (&builder.picked().kind, builder.target) {
+        let price: Option<Price> = match (&builder.picked(&builds).kind, builder.target) {
             (
                 Kind::Room(_),
                 Target::Ground {
@@ -410,10 +412,10 @@ pub(super) fn afford(
                     .flat_map(|i| (0..tiles.y).map(move |j| IVec3::new(i, 0, j)))
                     .filter(|&step| !site.base.contains(corner + step))
                     .count();
-                Some((catalogue::floor(), catalogue::floor_units(new_cells)))
+                Some((builds.floor().to_vec(), catalogue::floor_units(new_cells)))
             }
             (Kind::Reshape, Target::Wall(face)) if !builder.pull => Some((
-                catalogue::floor(),
+                builds.floor().to_vec(),
                 catalogue::floor_units(site.base.wall(face).len()),
             )),
             (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
@@ -422,21 +424,23 @@ pub(super) fn afford(
                     .iter()
                     .filter(|&&cell| site.base.partition(cell).is_none())
                     .count();
-                (new_cells > 0).then(|| (catalogue::wall(), catalogue::wall_units(new_cells)))
+                (new_cells > 0).then(|| (builds.wall().to_vec(), catalogue::wall_units(new_cells)))
             }
             (Kind::Window(_), Target::Wall(_) | Target::Edge { .. }) if cuts => Some((
-                catalogue::window(),
+                builds.window().to_vec(),
                 catalogue::window_units(builder.run.len()),
             )),
             (Kind::Door, Target::Wall(_) | Target::Edge { .. }) if cuts => {
-                Some((catalogue::door(), 1))
+                Some((builds.door().to_vec(), 1))
             }
             (Kind::Items(_), Target::Spot { blocked: None, .. }) => {
-                builder.item().map(|item| (item.cost, 1))
+                builder.item(&builds).map(|item| (item.cost.clone(), 1))
             }
             _ => None,
         };
-        builder.short = price.and_then(|(cost, times)| belongings.missing(cost, times));
+        builder.short = price
+            .as_ref()
+            .and_then(|(cost, times)| belongings.missing(cost, *times));
         builder.price = price;
     }
 }

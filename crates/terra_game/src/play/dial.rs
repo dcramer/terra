@@ -6,7 +6,9 @@
 
 use super::IsLocalPlayer;
 use super::build_menu::BuildMenu;
+use super::catalogue::Builds;
 use super::controls::{Action, Controls, Settings};
+use super::crafting::Crafts;
 use super::flora::Growth;
 use super::harvest::{self, Cutting};
 use super::interact::Focus;
@@ -255,6 +257,7 @@ pub fn steer(
     mut belongings: Belongings,
     menu: Res<OptionsMenu>,
     build_menu: Res<BuildMenu>,
+    builds: Res<Builds>,
     mut dial: ResMut<Dial>,
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
@@ -283,7 +286,7 @@ pub fn steer(
         }
         return;
     }
-    let count = builder.picked().variants().min(MOST_KINDS);
+    let count = builder.picked(&builds).variants().min(MOST_KINDS);
     dial.held_for += time.delta_secs();
     dial.pointer = (dial.pointer + motion.delta).clamp_length_max(RING);
     dial.pointed = (count > 1 && dial.pointer.length() > DEAD_ZONE).then(|| {
@@ -297,11 +300,11 @@ pub fn steer(
     }
     let part = builder.part;
     match dial.pointed {
-        Some(kind) => builder.choose_variant(part, kind),
+        Some(kind) => builder.choose_variant(part, kind, &builds),
         None if dial.held_for < TAP_SECONDS && count > 1 => {
             let back = controls.held(Action::Sprint);
             let next = (builder.variant_of(part) + if back { count - 1 } else { 1 }) % count;
-            builder.choose_variant(part, next);
+            builder.choose_variant(part, next, &builds);
         }
         None => {}
     }
@@ -319,6 +322,7 @@ fn draw(
     digging: Single<&super::dig::Digging, IsLocalPlayer>,
     growth: Query<&Growth>,
     options: Res<Options>,
+    (crafts, builds): (Crafts, Res<Builds>),
     cursor: Single<&CursorOptions>,
     mut root: Single<&mut Visibility, (With<DialRoot>, Without<Hud>)>,
     mut hud: Query<&mut Visibility, With<Hud>>,
@@ -340,7 +344,7 @@ fn draw(
         }
     };
     // A tap should not flash the wheel up, nor should a part with one kind.
-    let count = builder.picked().variants().min(MOST_KINDS);
+    let count = builder.picked(&builds).variants().min(MOST_KINDS);
     let wanted = if dial.open
         && count > 1
         && (dial.held_for > TAP_SECONDS * 0.5 || dial.pointed.is_some())
@@ -388,7 +392,7 @@ fn draw(
             background.0 = colour;
         }
     }
-    let part = builder.picked();
+    let part = builder.picked(&builds);
     for (label, mut text) in &mut texts.p4() {
         let name = part
             .variant_name(label.0.min(count.saturating_sub(1)))
@@ -400,14 +404,14 @@ fn draw(
         &mut texts.p0(),
         match dial.pointed.and_then(|kind| part.variant_name(kind)) {
             Some(kind) => format!("{}\n\n{kind}", part.name),
-            None => part.name.to_string(),
+            None => part.name.clone(),
         },
     );
 
     let holding = belongings.holding();
     let items = belongings.items();
     let hammer = belongings.tool_in_hand().is_some_and(|tool| tool.builds);
-    let part = builder.picked();
+    let part = builder.picked(&builds);
     set(
         &mut texts.p1(),
         match (holding, part.variant_name(builder.variant())) {
@@ -440,11 +444,11 @@ fn draw(
             format!("{}  leave the station", settings.key(Action::Interact))
         } else if inventory.open {
             format!("{}  close the inventory", settings.key(Action::Inventory))
-        } else if dial.open && builder.picked().variants() > 1 {
+        } else if dial.open && builder.picked(&builds).variants() > 1 {
             "Move the mouse to a kind and let go".to_string()
         } else {
             let doing = match holding {
-                Some(_) if hammer => tool::prompt(&builder, &settings, items),
+                Some(_) if hammer => tool::prompt(&builder, &builds, &settings, items),
                 // A pickaxe on bare ground digs it.
                 Some(_) if cutting.target.is_none() && digging.target.is_some() => {
                     match digging.progress() {
@@ -462,10 +466,10 @@ fn draw(
                     None => String::new(),
                 },
                 None if let Some(kind) = belongings.broken_in_hand() => {
-                    match super::wear::mended_at(items, kind) {
+                    match crafts.mended_at(items, kind) {
                         Some(station) => format!(
                             "Broken: mend it at a {} in your claim",
-                            station.name().to_lowercase()
+                            crafts.stations.name(station).to_lowercase()
                         ),
                         None => "Broken".to_string(),
                     }
@@ -479,7 +483,7 @@ fn draw(
                 Some(what) => format!(
                     "{}  {}      {doing}",
                     settings.key(Action::Interact),
-                    what.verb()
+                    what.verb(&crafts.stations)
                 ),
                 None => doing,
             }

@@ -8,10 +8,10 @@
 //! `--save <file>`, so a script does the same on every machine; `--fresh` starts over.
 
 use super::bag::Notice;
-use super::catalogue;
+use super::catalogue::Builds;
 use super::claim::Claim;
 use super::controls::Settings;
-use super::crafting::{self, RECIPES, Works};
+use super::crafting::{Recipes, Works};
 use super::daylight::Clock;
 use super::inventory::{self, Backpack, Bar, Gear, Items, SLOTS};
 use super::people::{Doing, Person};
@@ -179,6 +179,7 @@ fn load(
     options: Res<crate::shell::Options>,
     mut planet: ResMut<Planet>,
     models: Res<Models>,
+    (builds, recipes): (Res<Builds>, Res<Recipes>),
     mut site: ResMut<Site>,
     mut items: ResMut<Items>,
     mut view: Single<&mut View, IsLocalPlayer>,
@@ -259,25 +260,25 @@ fn load(
         commands.entity(entity).despawn();
     }
     for prop in &save.props {
-        if let Some(item) = catalogue::item_from(&prop.file)
+        if let Some(item) = builds.item_from(&prop.file)
             && let Some(entity) = props::place(
                 &mut commands,
                 &models,
                 &site,
                 &planet,
-                item,
+                &item,
                 Vec3::from(prop.at),
                 prop.lift,
                 prop.turn,
                 prop.indoors,
             )
-            && let Some(station) = item.station()
+            && let Some(station) = item.station
         {
             // A station takes up its queue where it left off.
             let named = |names: &[String]| -> Vec<usize> {
                 names
                     .iter()
-                    .filter_map(|name| crafting::recipe_named(station, name))
+                    .filter_map(|name| recipes.named(station, name, &items))
                     .collect()
             };
             commands.entity(entity).insert(Works::resumed(
@@ -375,11 +376,15 @@ fn load(
     info!("Loaded the saved game from {}.", path.0.display());
 }
 
-fn restore_claim(mut waiting: ResMut<Waiting>, mut claim: Single<&mut Claim, IsLocalPlayer>) {
+fn restore_claim(
+    builds: Res<Builds>,
+    mut waiting: ResMut<Waiting>,
+    mut claim: Single<&mut Claim, IsLocalPlayer>,
+) {
     if let Some(step) = waiting.claim_step
         && claim.stone.is_some()
     {
-        claim.set_step(step);
+        claim.set_step(step, &builds.claim);
         waiting.claim_step = None;
     }
 }
@@ -427,6 +432,7 @@ fn autosave(
     site: Res<Site>,
     claim: Single<&Claim, IsLocalPlayer>,
     items: Res<Items>,
+    recipes: Res<Recipes>,
     view: Single<&View, IsLocalPlayer>,
     props: Query<(&Prop, Option<&Works>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
@@ -445,7 +451,7 @@ fn autosave(
         &planet,
         &site,
         &claim,
-        &items,
+        (&items, &recipes),
         &view,
         &props,
         &people,
@@ -466,6 +472,7 @@ fn save_on_exit(
     site: Res<Site>,
     claim: Single<&Claim, IsLocalPlayer>,
     items: Res<Items>,
+    recipes: Res<Recipes>,
     view: Single<&View, IsLocalPlayer>,
     props: Query<(&Prop, Option<&Works>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
@@ -477,7 +484,7 @@ fn save_on_exit(
             &planet,
             &site,
             &claim,
-            &items,
+            (&items, &recipes),
             &view,
             &props,
             &people,
@@ -501,7 +508,7 @@ fn gather(
     planet: &Planet,
     site: &Site,
     claim: &Claim,
-    items: &Items,
+    (items, recipes): (&Items, &Recipes),
     view: &View,
     props: &Query<(&Prop, Option<&Works>), Without<Theirs>>,
     people: &Query<(&Person, &Transform), Without<Player>>,
@@ -564,7 +571,9 @@ fn gather(
             .iter()
             .map(|(prop, works)| {
                 let names = |indices: &mut dyn Iterator<Item = &usize>| {
-                    indices.map(|&index| RECIPES[index].makes.name()).collect()
+                    indices
+                        .map(|&index| recipes[index].makes.name(items))
+                        .collect()
                 };
                 SavedProp {
                     file: prop.item.file.to_string(),

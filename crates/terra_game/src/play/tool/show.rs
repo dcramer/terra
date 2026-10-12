@@ -3,7 +3,7 @@
 use super::*;
 use crate::build::Site;
 use crate::planet::Planet;
-use crate::play::catalogue::Kind;
+use crate::play::catalogue::{Builds, Kind};
 use crate::play::props::{self, Blocked, Models, Prop};
 use bevy::{asset::RenderAssetUsages, render::render_resource::PrimitiveTopology};
 use terra_build::{Base, CELL_M, DOOR_HEIGHT_M, Face, Panel, STOREY_M};
@@ -52,13 +52,14 @@ pub(super) fn highlight(
     site: Res<Site>,
     planet: Res<Planet>,
     models: Res<Models>,
+    builds: Res<Builds>,
     props: Query<(&Prop, &Transform)>,
     builder: Single<&Builder, IsLocalPlayer>,
     mut drawn: ResMut<BuilderLook>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut gizmos: Gizmos,
 ) {
-    let kind = &builder.picked().kind;
+    let kind = &builder.picked(&builds).kind;
     let refused = matches!(
         builder.target,
         Target::Ground { fits: false, .. }
@@ -229,7 +230,7 @@ pub(super) fn highlight(
     }
 
     let ghost = drawn.ghost;
-    match (builder.item(), builder.target) {
+    match (builder.item(&builds), builder.target) {
         (
             Some(item),
             Target::Spot {

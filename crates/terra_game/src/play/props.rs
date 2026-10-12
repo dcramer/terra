@@ -5,7 +5,7 @@
 //! reshaped so that an item is no longer indoors, or now stands in a wall, the item is
 //! hidden.
 
-use super::catalogue::{self, Item, Light};
+use super::catalogue::{Builds, Item, Light};
 use super::flora::Obstacles;
 use super::interact::{CanInteract, Interactable};
 use super::models::{Part, read_model, shaped};
@@ -15,6 +15,7 @@ use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, mesh::Indices,
     platform::collections::HashMap, prelude::*, render::render_resource::PrimitiveTopology,
 };
+use std::sync::Arc;
 use terra_build::CELL_M;
 
 /// Bright enough to show beside daylight, which is what the camera is exposed for.
@@ -31,7 +32,7 @@ pub struct Theirs;
 /// An item that has been placed.
 #[derive(Component)]
 pub struct Prop {
-    pub item: &'static Item,
+    pub item: Arc<Item>,
     /// Where it was put, in the base's own space.
     pub at: Vec3,
     pub indoors: bool,
@@ -70,7 +71,7 @@ pub struct Model {
 /// The model for every item in the catalogue.
 #[derive(Resource)]
 pub struct Models {
-    models: HashMap<&'static str, Model>,
+    models: HashMap<String, Model>,
     lit: Handle<StandardMaterial>,
     glowing: Handle<StandardMaterial>,
 }
@@ -82,7 +83,7 @@ impl Models {
     }
 
     pub fn of(&self, item: &Item) -> Option<&Model> {
-        self.models.get(item.file)
+        self.models.get(&item.file)
     }
 }
 
@@ -171,18 +172,19 @@ fn build(parts: &[Part], size: f32, meshes: &mut Assets<Mesh>) -> Model {
 
 fn load(
     mut commands: Commands,
+    builds: Res<Builds>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let mut models = HashMap::default();
-    for item in catalogue::items() {
+    for item in builds.items() {
         let parts = match item.file.strip_prefix("shaped:") {
             Some(name) => shaped(name).ok_or(format!("There is no shaped model called {name}.")),
             None => read_model(&format!("props/{}.glb", item.file)),
         };
         match parts {
             Ok(parts) => {
-                models.insert(item.file, build(&parts, item.size, &mut meshes));
+                models.insert(item.file.clone(), build(&parts, item.size, &mut meshes));
             }
             Err(problem) => error!("Could not read a model. {problem}"),
         }
@@ -213,7 +215,7 @@ pub fn place(
     models: &Models,
     site: &Site,
     planet: &Planet,
-    item: &'static Item,
+    item: &Arc<Item>,
     at: Vec3,
     lift: f32,
     turn_degrees: f32,
@@ -221,9 +223,9 @@ pub fn place(
 ) -> Option<Entity> {
     let model = models.of(item)?;
     let mut prop = commands.spawn((
-        Name::new(item.name),
+        Name::new(item.name.clone()),
         Prop {
-            item,
+            item: item.clone(),
             at,
             indoors,
             lift,
@@ -234,7 +236,7 @@ pub fn place(
         Visibility::default(),
         Settling(0.0),
     ));
-    if let Some(station) = item.station() {
+    if let Some(station) = item.station {
         prop.insert(CanInteract(Interactable::Station(station)));
     } else if item.claims {
         prop.insert(CanInteract(Interactable::ClaimStone));
@@ -606,10 +608,14 @@ pub fn push_out<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::play::crafting::Stations;
+    use crate::play::inventory::Items;
 
     fn box_at_origin() -> (Prop, Transform, Visibility) {
         let prop = Prop {
-            item: catalogue::item_from("Bookshelf").unwrap(),
+            item: Builds::read(&Items::default(), &Stations::read())
+                .item_from("Bookshelf")
+                .unwrap(),
             at: Vec3::ZERO,
             indoors: false,
             lift: 0.0,

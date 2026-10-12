@@ -1,7 +1,7 @@
 //! What the builder says it would do, and its keys.
 
 use super::*;
-use crate::play::catalogue::Kind;
+use crate::play::catalogue::{Builds, Kind};
 use crate::play::controls::{Action, Settings, capitalised};
 use crate::play::inventory::{self};
 use crate::play::props::Blocked;
@@ -9,7 +9,12 @@ use crate::shell::Options;
 use bevy::window::{CursorGrabMode, CursorOptions};
 
 /// What each button would do right now, for the prompt under the aiming mark.
-pub fn prompt(builder: &Builder, settings: &Settings, items: &inventory::Items) -> String {
+pub fn prompt(
+    builder: &Builder,
+    builds: &Builds,
+    settings: &Settings,
+    items: &inventory::Items,
+) -> String {
     if builder.stowed {
         return format!(
             "{}  build menu",
@@ -34,7 +39,7 @@ pub fn prompt(builder: &Builder, settings: &Settings, items: &inventory::Items) 
     let hold = settings.hold(Action::Use);
     let tap = capitalised(settings.key(Action::Use));
     let next = settings.key(Action::NextKind);
-    let action = match (&builder.picked().kind, builder.target) {
+    let action = match (&builder.picked(builds).kind, builder.target) {
         (Kind::Reshape, Target::Wall(_)) if builder.pull => {
             format!("{hold}  pull the wall in      Scroll  push out instead")
         }
@@ -96,9 +101,12 @@ pub fn prompt(builder: &Builder, settings: &Settings, items: &inventory::Items) 
             settings.key(Action::TakeApart)
         ),
     };
-    match builder.price {
-        Some((cost, times)) if times > 0 => {
-            format!("{action}      Costs {}", inventory::describe(cost, times))
+    match &builder.price {
+        Some((cost, times)) if *times > 0 => {
+            format!(
+                "{action}      Costs {}",
+                inventory::describe(items, cost, *times)
+            )
         }
         _ => action,
     }

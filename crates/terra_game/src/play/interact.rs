@@ -6,7 +6,7 @@
 
 use super::Player;
 use super::controls::Action;
-use super::crafting::Station;
+use super::crafting::{Station, Stations};
 use super::intent::Intent;
 use super::tick::Sim;
 use bevy::prelude::*;
@@ -34,9 +34,9 @@ pub enum Interactable {
 impl Interactable {
     /// Where to aim at it, as a height above its foot, and how near the aiming mark has
     /// to pass to count as on it, both in metres.
-    fn target(self) -> (f32, f32) {
+    fn target(self, stations: &Stations) -> (f32, f32) {
         match self {
-            Interactable::Station(station) => station.aim(),
+            Interactable::Station(station) => stations.get(station).aim,
             Interactable::ClaimStone => (0.6, 0.8),
             Interactable::Bag => (0.2, 0.6),
             Interactable::Carcass => (0.4, 0.9),
@@ -46,9 +46,11 @@ impl Interactable {
     }
 
     /// What pressing the key does, for the prompt.
-    pub fn verb(self) -> String {
+    pub fn verb(self, stations: &Stations) -> String {
         match self {
-            Interactable::Station(station) => format!("use the {}", station.name().to_lowercase()),
+            Interactable::Station(station) => {
+                format!("use the {}", stations.name(station).to_lowercase())
+            }
             Interactable::ClaimStone => "the claim stone".to_string(),
             Interactable::Bag => "pick up what lies here".to_string(),
             Interactable::Carcass => "butcher it".to_string(),
@@ -100,6 +102,7 @@ pub fn plugin(app: &mut App) {
 fn focus(
     mut players: Query<(Entity, &Transform, &Intent, &mut Focus), With<Player>>,
     things: Query<(Entity, &CanInteract, &GlobalTransform)>,
+    stations: Res<Stations>,
     mut interacted: MessageWriter<Interacted>,
 ) {
     for (player, at, intent, mut focus) in &mut players {
@@ -114,7 +117,7 @@ fn focus(
         let aimed = things
             .iter()
             .filter_map(|(entity, can, at)| {
-                let (height, radius) = can.0.target();
+                let (height, radius) = can.0.target(&stations);
                 let middle = at.translation() + at.translation().normalize() * height;
                 let along = (middle - eye).dot(looking);
                 let off = (eye + looking * along).distance(middle);

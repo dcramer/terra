@@ -12,7 +12,7 @@ use super::bag::Told;
 use super::bodies::Body;
 use super::catalogue::Rest;
 use super::claim::Claim;
-use super::crafting::Station;
+use super::crafting::Stations;
 use super::creatures::Creature;
 use super::interact::{CanInteract, Interactable, Interacted};
 use super::props::Prop;
@@ -375,6 +375,7 @@ fn follow(
 fn settle(
     claims: Query<&Claim>,
     props: Query<(&Prop, &Transform)>,
+    stations: Res<Stations>,
     mut people: Query<(&mut Person, &Transform), Without<Prop>>,
     mut told: MessageWriter<Told>,
 ) {
@@ -397,15 +398,19 @@ fn settle(
         };
         let worked = props
             .iter()
-            .filter_map(|(prop, there)| Some((prop.item.station()?, there.translation)))
-            .find(|(station, there)| station.worked_by() == Some(trade) && claim.covers(*there));
-        let wanted = Station::all().find(|station| station.worked_by() == Some(trade));
+            .filter_map(|(prop, there)| Some((prop.item.station?, there.translation)))
+            .find(|&(station, there)| {
+                stations.worked_by(station) == Some(trade) && claim.covers(there)
+            });
+        let wanted = stations
+            .all()
+            .find(|&station| stations.worked_by(station) == Some(trade));
         match (worked, wanted) {
             (Some((station, at)), _) => {
                 let up = at.normalize();
                 let spot = at + up.any_orthonormal_vector() * 1.8;
                 person.doing = Doing::Working(spot);
-                let station = station.name().to_lowercase();
+                let station = stations.name(station).to_lowercase();
                 info!("{} took up the {station}.", person.name);
                 say(format!("{} takes up the {station}", person.name));
             }
@@ -414,7 +419,7 @@ fn settle(
                 say(format!(
                     "{}: \"Build a {} here and I'll work it.\"",
                     person.name,
-                    station.name().to_lowercase()
+                    stations.name(station).to_lowercase()
                 ));
             }
             _ => {}

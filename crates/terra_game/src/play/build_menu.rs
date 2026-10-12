@@ -8,10 +8,10 @@
 //!   Backspace          put the hammer's part away
 
 use super::IsLocalPlayer;
-use super::catalogue::{self, Kind, PARTS, Tab};
+use super::catalogue::{Builds, Kind, Tab};
 use super::controls::{Action, Settings};
 use super::grab_mouse;
-use super::inventory::{Belongings, InventoryScreen, describe};
+use super::inventory::{Belongings, InventoryScreen, Items, describe};
 use super::options::OptionsMenu;
 use super::tiles::{self, PICKED, PLAIN, TILE};
 use super::tool::{self, Builder};
@@ -36,9 +36,10 @@ pub struct BuildMenu {
 }
 
 impl BuildMenu {
-    fn parts(&self) -> Vec<usize> {
+    fn parts(&self, builds: &Builds) -> Vec<usize> {
         let tab = Tab::SHOWN[self.tab];
-        PARTS
+        builds
+            .parts()
             .iter()
             .enumerate()
             .filter(|(_, part)| part.tab == tab)
@@ -146,6 +147,7 @@ fn toggle(
     screen: Res<InventoryScreen>,
     mut belongings: Belongings,
     window: Single<(&Window, &mut CursorOptions)>,
+    builds: Res<Builds>,
     mut menu: ResMut<BuildMenu>,
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
@@ -175,10 +177,13 @@ fn toggle(
         builder.cancel = true;
     } else {
         let part = builder.part;
-        if let Some(tab) = Tab::SHOWN.iter().position(|&tab| tab == PARTS[part].tab) {
+        if let Some(tab) = Tab::SHOWN
+            .iter()
+            .position(|&tab| tab == builds.part(part).tab)
+        {
             menu.tab = tab;
             menu.cursor = menu
-                .parts()
+                .parts(&builds)
                 .iter()
                 .position(|&each| each == part)
                 .unwrap_or(0);
@@ -194,6 +199,7 @@ fn toggle(
 fn navigate(
     keys: Res<ButtonInput<KeyCode>>,
     window: Single<(&Window, &mut CursorOptions)>,
+    builds: Res<Builds>,
     mut menu: ResMut<BuildMenu>,
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
@@ -214,13 +220,13 @@ fn navigate(
         menu.cursor = 0;
         menu.stale = true;
     }
-    let count = menu.parts().len();
+    let count = menu.parts(&builds).len();
     menu.cursor = tiles::step(&keys, menu.cursor, count, COLUMNS);
     let (window, mut cursor) = window.into_inner();
     if keys.just_pressed(KeyCode::Enter)
-        && let Some(&part) = menu.parts().get(menu.cursor)
+        && let Some(&part) = menu.parts(&builds).get(menu.cursor)
     {
-        pick(&mut menu, &mut builder, part);
+        pick(&mut menu, &mut builder, &builds, part);
         grab_mouse(&mut cursor, window.focused);
     }
     if keys.just_pressed(KeyCode::Backspace) {
@@ -230,14 +236,14 @@ fn navigate(
     }
 }
 
-fn pick(menu: &mut BuildMenu, builder: &mut Builder, part: usize) {
-    builder.pick(part);
+fn pick(menu: &mut BuildMenu, builder: &mut Builder, builds: &Builds, part: usize) {
+    builder.pick(part, builds);
     menu.recent.retain(|&each| each != part);
     menu.recent.insert(0, part);
     menu.recent.truncate(RECENT);
     menu.open = false;
     menu.stale = true;
-    info!("Picked {} from the build menu.", PARTS[part].name);
+    info!("Picked {} from the build menu.", builds.part(part).name);
 }
 
 /// A click on a tile picks it; on a tab, shows that tab.
@@ -245,6 +251,7 @@ fn click(
     tiles: Query<(&Interaction, &Tile), Changed<Interaction>>,
     tabs: Query<(&Interaction, &TabButton), Changed<Interaction>>,
     window: Single<(&Window, &mut CursorOptions)>,
+    builds: Res<Builds>,
     mut menu: ResMut<BuildMenu>,
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
@@ -263,21 +270,21 @@ fn click(
         .find(|(interaction, _)| **interaction == Interaction::Pressed)
         .map(|(_, tile)| tile.part);
     if let Some(part) = picked {
-        pick(&mut menu, &mut builder, part);
+        pick(&mut menu, &mut builder, &builds, part);
         let (window, mut cursor) = window.into_inner();
         grab_mouse(&mut cursor, window.focused);
     }
 }
 
 /// What a part costs, as a tile says it.
-fn cost_of(part: usize, variant: usize) -> String {
-    let wall = |cost| describe(cost, 1);
-    match PARTS[part].kind {
-        Kind::Items(items) => describe(items[variant.min(items.len() - 1)].cost, 1),
-        Kind::Room(_) | Kind::Reshape => format!("{} per 3 m² of floor", wall(catalogue::floor())),
-        Kind::Wall(_) => format!("{} per 1.5 m", wall(catalogue::wall())),
-        Kind::Window(_) => format!("{} per metre", wall(catalogue::window())),
-        Kind::Door => wall(catalogue::door()),
+fn cost_of(builds: &Builds, items: &Items, part: usize, variant: usize) -> String {
+    let wall = |cost| describe(items, cost, 1);
+    match &builds.part(part).kind {
+        Kind::Items(each) => wall(&each[variant.min(each.len() - 1)].cost),
+        Kind::Room(_) | Kind::Reshape => format!("{} per 3 m² of floor", wall(builds.floor())),
+        Kind::Wall(_) => format!("{} per 1.5 m", wall(builds.wall())),
+        Kind::Window(_) => format!("{} per metre", wall(builds.window())),
+        Kind::Door => wall(builds.door()),
         Kind::Remove | Kind::Move => String::new(),
     }
 }
@@ -288,6 +295,8 @@ fn lay_out(
     builder: Single<&Builder, IsLocalPlayer>,
     grid: Single<Entity, With<Grid>>,
     recent: Single<Entity, With<Recent>>,
+    builds: Res<Builds>,
+    items: Res<Items>,
     mut menu: ResMut<BuildMenu>,
 ) {
     if !menu.open || !menu.stale {
@@ -295,24 +304,27 @@ fn lay_out(
     }
     menu.stale = false;
     let line = |part: usize| {
-        let variants = PARTS[part].variants();
+        let variants = builds.part(part).variants();
         let kinds = if variants > 1 {
             format!("{variants} kinds   ")
         } else {
             String::new()
         };
-        format!("{kinds}{}", cost_of(part, builder.variant_of(part)))
+        format!(
+            "{kinds}{}",
+            cost_of(&builds, &items, part, builder.variant_of(part))
+        )
     };
     commands
         .entity(*grid)
         .despawn_children()
         .with_children(|grid| {
-            for part in menu.parts() {
+            for part in menu.parts(&builds) {
                 let tile = Tile {
                     part,
                     recent: false,
                 };
-                tiles::tile(grid, tile, PARTS[part].name, Text::new(line(part)));
+                tiles::tile(grid, tile, &builds.part(part).name, Text::new(line(part)));
             }
         });
     commands
@@ -321,7 +333,7 @@ fn lay_out(
         .with_children(|row| {
             for &part in &menu.recent {
                 let tile = Tile { part, recent: true };
-                tiles::tile(row, tile, PARTS[part].name, Text::new(line(part)));
+                tiles::tile(row, tile, &builds.part(part).name, Text::new(line(part)));
             }
         });
 }
@@ -330,6 +342,7 @@ fn lay_out(
 #[allow(clippy::type_complexity)]
 fn draw(
     menu: Res<BuildMenu>,
+    builds: Res<Builds>,
     builder: Single<&Builder, IsLocalPlayer>,
     mut belongings: Belongings,
     mut panel: Single<&mut Visibility, With<Panel>>,
@@ -352,16 +365,16 @@ fn draw(
             if tab.0 == menu.tab { PICKED } else { PLAIN },
         );
     }
-    let cursor_part = menu.parts().get(menu.cursor).copied();
+    let cursor_part = menu.parts(&builds).get(menu.cursor).copied();
     for (tile, interaction, mut border, mut background) in &mut tiles {
         let pointed =
             *interaction != Interaction::None || (!tile.recent && Some(tile.part) == cursor_part);
         tiles::outline(&mut border, pointed);
         // Greyed when its current kind cannot be paid for.
-        let short = match PARTS[tile.part].kind {
+        let short = match &builds.part(tile.part).kind {
             Kind::Items(items) => {
                 let item = &items[builder.variant_of(tile.part).min(items.len() - 1)];
-                belongings.missing(item.cost, 1).is_some()
+                belongings.missing(&item.cost, 1).is_some()
             }
             _ => false,
         };

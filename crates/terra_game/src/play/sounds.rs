@@ -10,6 +10,7 @@
 //! can check that walking made steps and cutting made strikes.
 
 use super::controls::Settings;
+use super::crafting::Stations;
 use super::inventory::Cut;
 use super::noise::{Cue, Feet, Noise};
 use crate::audio::{
@@ -37,7 +38,7 @@ enum Like {
     Nothing,
 }
 
-fn sounds_like(cue: Cue) -> Like {
+fn sounds_like(cue: Cue, stations: &Stations) -> Like {
     use Like::{Clips, Made, Nothing};
     match cue {
         Cue::Step(Feet::Grass) => Clips("step.grass"),
@@ -61,10 +62,13 @@ fn sounds_like(cue: Cue) -> Like {
         Cue::TakenApart => Clips("taken_apart"),
         // Work at a station is heard in strokes, as its kind says; fires are heard as they
         // burn (soundscape.rs), not in strokes.
-        Cue::Working(station) => match station.strokes() {
-            Some((sound, _)) => Clips(sound),
-            None => Nothing,
-        },
+        Cue::Working(station) => {
+            let named = stations.strokes(station).map(|(sound, _)| sound);
+            match CLIPS.iter().find(|clips| Some(clips.name) == named) {
+                Some(clips) => Clips(clips.name),
+                None => Nothing,
+            }
+        }
         Cue::Made => Clips("made"),
         Cue::Snort => Made("snort", Sound::Snort, 0.38, 5.0),
         Cue::Hiss => Made("hiss", Sound::Hiss, 0.44, 5.0),
@@ -427,6 +431,7 @@ fn hear(
     mut commands: Commands,
     mut noises: MessageReader<Noise>,
     mix: Res<Mix>,
+    stations: Res<Stations>,
     ear: Query<&GlobalTransform, With<MainCamera>>,
     bank: Option<ResMut<Bank>>,
     synths: Option<ResMut<Assets<Synth>>>,
@@ -436,7 +441,7 @@ fn hear(
     let ear = ear.single().ok().map(GlobalTransform::translation);
     let (mut bank, mut synths) = (bank, synths);
     for noise in noises.read() {
-        let (name, reach_m) = match sounds_like(noise.cue) {
+        let (name, reach_m) = match sounds_like(noise.cue, &stations) {
             Like::Clips(name) => (name, reach_of(name)),
             Like::Made(name, _, _, reach_m) => (name, reach_m),
             Like::Nothing => continue,
@@ -448,7 +453,7 @@ fn hear(
             continue;
         }
         heard.count(name);
-        match sounds_like(noise.cue) {
+        match sounds_like(noise.cue, &stations) {
             Like::Clips(name) => {
                 if let Some(bank) = bank.as_mut() {
                     bank.play(&mut commands, &mix, name, noise.at);
@@ -507,7 +512,6 @@ fn report(options: Res<Options>, mut exits: MessageReader<AppExit>, heard: Res<H
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::crafting::Station;
     use bevy::asset::io::file::FileAssetReader;
 
     #[test]
@@ -550,11 +554,13 @@ mod tests {
             Cue::Open,
             Cue::Close,
         ];
-        let worked = Station::all()
-            .filter(|station| station.strokes().is_some())
+        let stations = Stations::read();
+        let worked = stations
+            .all()
+            .filter(|&station| stations.strokes(station).is_some())
             .map(Cue::Working);
         for cue in cues.into_iter().chain(worked) {
-            let Like::Clips(name) = sounds_like(cue) else {
+            let Like::Clips(name) = sounds_like(cue, &stations) else {
                 panic!("{cue:?} should be recorded clips");
             };
             assert!(
@@ -619,7 +625,7 @@ mod loudness {
     #[test]
     fn every_sound_made_in_code_sits_in_its_place_in_the_mix() {
         for cue in [Cue::Step(Feet::Water), Cue::Swing, Cue::Snort, Cue::Hiss] {
-            let Like::Made(name, sound, level, _) = sounds_like(cue) else {
+            let Like::Made(name, sound, level, _) = sounds_like(cue, &Stations::read()) else {
                 panic!("{cue:?} should be made in code");
             };
             let (samples, _) = render(sound, 3, 2.0);

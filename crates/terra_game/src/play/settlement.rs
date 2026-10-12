@@ -9,7 +9,7 @@
 //! the villagers', not the player's. The people go about their day where they stand.
 
 use super::bag::Told;
-use super::catalogue;
+use super::catalogue::Builds;
 use super::creatures::Lair;
 use super::daylight::{Clock, SkyPath};
 use super::flora::ClearAround;
@@ -130,6 +130,7 @@ fn found(
     lair: Res<Lair>,
     look: Res<BuildLook>,
     models: Res<Models>,
+    builds: Res<Builds>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut arrive: MessageWriter<Arrive>,
     mut clear: MessageWriter<ClearAround>,
@@ -181,7 +182,7 @@ fn found(
 
     // The well and the stall, placed as a player places an item, but the villagers'.
     for (file, item_east, item_south, turn) in ITEMS {
-        let Some(item) = catalogue::item_from(file) else {
+        let Some(item) = builds.item_from(file) else {
             error!("The village wants {file}, which is not in the catalogue.");
             continue;
         };
@@ -191,7 +192,7 @@ fn found(
             &models,
             &site,
             &planet,
-            item,
+            &item,
             at.with_y(0.0),
             0.0,
             turn,

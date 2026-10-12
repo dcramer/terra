@@ -25,6 +25,7 @@ mod combat;
 mod controls;
 mod crafting;
 mod creatures;
+mod data;
 mod daylight;
 mod death;
 mod dial;
@@ -207,6 +208,7 @@ struct View {
 pub fn plugin(app: &mut App) {
     // A player needs something to build on, and takes over from the build keys.
     build::plugin(app);
+    data::plugin(app);
     scene::plugin(app);
     daylight::plugin(app);
     torchlight::plugin(app);
@@ -746,11 +748,12 @@ fn zoom(
     controls: Controls,
     scroll: Res<AccumulatedMouseScroll>,
     builder: Single<&tool::Builder, IsLocalPlayer>,
+    builds: Res<catalogue::Builds>,
     screen: Res<inventory::InventoryScreen>,
     mut zoom: ResMut<Zoom>,
 ) {
     let dt = time.delta_secs();
-    let wheel = if builder.wants_wheel() || screen.open {
+    let wheel = if builder.wants_wheel(&builds) || screen.open {
         0.0
     } else {
         match scroll.unit {

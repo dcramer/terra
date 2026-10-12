@@ -217,8 +217,7 @@ fn draw_wear(
 }
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Items>()
-        .init_resource::<ItemIcons>()
+    app.init_resource::<ItemIcons>()
         .init_resource::<InventoryScreen>()
         .init_resource::<Notice>()
         .add_message::<Told>()

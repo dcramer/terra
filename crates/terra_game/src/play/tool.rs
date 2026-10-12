@@ -29,10 +29,10 @@
 //! would move, the outline of a window, the footprint of a room, or a ghost of the item
 //! where it would stand.
 
-use super::catalogue::{self, Item, Kind, PARTS, Part};
+use super::catalogue::{Builds, Item, Kind, Part};
 use super::controls::Action;
 use super::intent::Intent;
-use super::inventory::{Belongings, Cost};
+use super::inventory::Belongings;
 use super::props::{Blocked, Prop};
 use super::tick::Sim;
 use super::work::Hold;
@@ -41,6 +41,7 @@ use bevy::{
     light::{NotShadowCaster, NotShadowReceiver},
     prelude::*,
 };
+use std::sync::Arc;
 use terra_build::{BuildOp, CELL_M, Face, cells};
 use terra_items::ItemKind;
 
@@ -109,9 +110,12 @@ pub enum Target {
     Prop(Entity),
 }
 
+/// What something costs, and how many times over.
+type Price = (Vec<(ItemKind, u32)>, u32);
+
 /// An item picked up in move mode, and where it came from in case it is put back.
 struct Carried {
-    item: &'static Item,
+    item: Arc<Item>,
     at: Vec3,
     lift: f32,
     turn: f32,
@@ -124,11 +128,11 @@ enum Job {
     /// Changes to the base, with what they cost or give back.
     Structure {
         ops: Vec<BuildOp>,
-        pay: Option<(Cost, u32)>,
-        refund: Option<(Cost, u32)>,
+        pay: Option<Price>,
+        refund: Option<Price>,
     },
     Place {
-        item: &'static Item,
+        item: Arc<Item>,
         at: Vec3,
         lift: f32,
         turn: f32,
@@ -153,7 +157,8 @@ pub struct Builder {
     pub part: usize,
     /// Nothing is in hand: the tool does nothing until a part is picked.
     pub stowed: bool,
-    /// The variant last used of each part.
+    /// The variant last used of each part, by its place in the catalogue; one not here
+    /// is the first.
     variants: Vec<usize>,
     /// How far the next item is turned, in degrees.
     turn: f32,
@@ -185,7 +190,7 @@ pub struct Builder {
     /// Set by a tap of the right mouse button: put away, or put back.
     pub cancel: bool,
     /// What building the thing aimed at would cost, and how many times over.
-    price: Option<(Cost, u32)>,
+    price: Option<Price>,
     /// What there is not enough of to pay that, and how many more are needed.
     short: Option<(ItemKind, u32)>,
     /// Why the claim forbids building here, if it does (D94).
@@ -198,7 +203,7 @@ impl Default for Builder {
         Self {
             part: 0,
             stowed: true,
-            variants: vec![0; PARTS.len()],
+            variants: Vec::new(),
             turn: 0.0,
             room_turned: false,
             wall_turned: false,
@@ -239,21 +244,24 @@ pub struct BuilderLook {
 }
 
 impl Builder {
-    pub fn picked(&self) -> &'static Part {
-        &PARTS[self.part]
+    pub fn picked<'a>(&self, builds: &'a Builds) -> &'a Part {
+        builds.part(self.part)
     }
 
     pub fn variant(&self) -> usize {
-        self.variants[self.part]
+        self.variant_of(self.part)
     }
 
     /// Which kind of a part is chosen.
     pub fn variant_of(&self, part: usize) -> usize {
-        self.variants[part]
+        self.variants.get(part).copied().unwrap_or(0)
     }
 
-    pub fn choose_variant(&mut self, part: usize, variant: usize) {
-        if variant < PARTS[part].variants() {
+    pub fn choose_variant(&mut self, part: usize, variant: usize, builds: &Builds) {
+        if variant < builds.part(part).variants() {
+            if self.variants.len() <= part {
+                self.variants.resize(part + 1, 0);
+            }
             self.variants[part] = variant;
         }
     }
@@ -263,8 +271,8 @@ impl Builder {
         self.work.is_some()
     }
 
-    pub fn pick(&mut self, part: usize) {
-        self.part = part.min(PARTS.len() - 1);
+    pub fn pick(&mut self, part: usize, builds: &Builds) {
+        self.part = part.min(builds.parts().len() - 1);
         self.stowed = false;
         self.before_mode = None;
     }
@@ -275,11 +283,11 @@ impl Builder {
 
     /// Whether the mouse wheel turns what is in hand, rather than moving the camera: while
     /// a part is out that the wheel turns or switches.
-    pub fn wants_wheel(&self) -> bool {
+    pub fn wants_wheel(&self, builds: &Builds) -> bool {
         !self.stowed
-            && (self.item().is_some()
-                || self.room().is_some()
-                || matches!(self.picked().kind, Kind::Wall(_) | Kind::Reshape))
+            && (self.item(builds).is_some()
+                || self.room(builds).is_some()
+                || matches!(self.picked(builds).kind, Kind::Wall(_) | Kind::Reshape))
     }
 
     /// How far through building or taking apart the builder is, from 0 to 1, and whether
@@ -305,17 +313,17 @@ impl Builder {
     }
 
     /// The item that would be placed: the one being carried, or the picked part's.
-    fn item(&self) -> Option<&'static Item> {
-        match (&self.carrying, &self.picked().kind) {
-            (Some(carried), _) => Some(carried.item),
+    fn item<'a>(&'a self, builds: &'a Builds) -> Option<&'a Arc<Item>> {
+        match (&self.carrying, &self.picked(builds).kind) {
+            (Some(carried), _) => Some(&carried.item),
             (None, Kind::Items(items)) => Some(&items[self.variant()]),
             _ => None,
         }
     }
 
     /// The footprint of the room that would be built, in cells.
-    fn room(&self) -> Option<IVec2> {
-        match self.picked().kind {
+    fn room(&self, builds: &Builds) -> Option<IVec2> {
+        match &self.picked(builds).kind {
             Kind::Room(shapes) => {
                 let [east, south] = shapes[self.variant()].metres.map(cells);
                 Some(if self.room_turned {
@@ -407,6 +415,7 @@ fn setup(
 /// Reads the keys and the wheel: switching modes, cycling variants, and turning what is
 /// in hand. The builder only answers while it is the tool in hand.
 fn choose(
+    builds: Res<Builds>,
     mut belongings: Belongings,
     mut players: Query<(Entity, &Intent, &mut Builder), With<Player>>,
 ) {
@@ -429,10 +438,10 @@ fn choose(
         }
         if !builder.is_carrying() {
             if intent.pressed(Action::TakeApart) {
-                builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Remove)));
+                builder.toggle(builds.part_of(|kind| matches!(kind, Kind::Remove)));
             }
             if intent.pressed(Action::MoveItems) {
-                builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Move)));
+                builder.toggle(builds.part_of(|kind| matches!(kind, Kind::Move)));
             }
         }
         builder.snapping = builder.snap != intent.held(Action::OffGrid);
@@ -451,18 +460,18 @@ fn choose(
         builder.wheel = intent.wheel + intent.pressed(Action::TurnRight) as i32
             - intent.pressed(Action::TurnLeft) as i32;
         if builder.wheel != 0 {
-            if builder.item().is_some() {
+            if builder.item(&builds).is_some() {
                 let step = if builder.snapping {
                     GRID_TURN
                 } else {
                     FREE_TURN
                 };
                 builder.turn = (builder.turn + step * builder.wheel as f32).rem_euclid(360.0);
-            } else if builder.room().is_some() {
+            } else if builder.room(&builds).is_some() {
                 builder.room_turned = !builder.room_turned;
-            } else if matches!(builder.picked().kind, Kind::Wall(_)) {
+            } else if matches!(builder.picked(&builds).kind, Kind::Wall(_)) {
                 builder.wall_turned = !builder.wall_turned;
-            } else if matches!(builder.picked().kind, Kind::Reshape) {
+            } else if matches!(builder.picked(&builds).kind, Kind::Reshape) {
                 builder.pull = !builder.pull;
             }
         }
