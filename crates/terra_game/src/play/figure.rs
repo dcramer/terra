@@ -5,8 +5,8 @@
 //! A base body has no hair or clothes of its own; those are parts still to come (D111,
 //! D112).
 
-use super::Player;
 use super::held::Grip;
+use super::{Downed, Motion, Player, Stance};
 use crate::character::{CARRIED_IN, Carrying};
 use crate::loading::Loading;
 use bevy::{prelude::*, world_serialization::WorldInstanceReady};
@@ -187,7 +187,7 @@ fn dress(
 /// Picks the animation that fits what the player is doing, and blends into it.
 fn animate(
     moves: Option<Res<Moves>>,
-    player: Single<&Player>,
+    player: Single<(&Motion, &Stance, Has<Downed>), With<Player>>,
     mut figures: Query<(
         &mut AnimationPlayer,
         &mut AnimationTransitions,
@@ -196,24 +196,25 @@ fn animate(
     mut hands: Query<&mut Carrying, With<Grip>>,
 ) {
     let Some(moves) = moves else { return };
-    let speed = player.velocity.length();
-    let doing = if player.down.is_some() {
+    let (motion, stance, downed) = *player;
+    let speed = motion.velocity.length();
+    let doing = if downed {
         Doing::Down
-    } else if player.dodging > 0.0 {
+    } else if stance.dodging > 0.0 {
         Doing::Roll
-    } else if player.flinch > 0.0 {
+    } else if stance.flinch > 0.0 {
         Doing::Flinch
-    } else if player.attacking > 0.0 {
+    } else if stance.attacking > 0.0 {
         Doing::Attack
-    } else if player.guarding {
+    } else if stance.guarding {
         Doing::Guard
-    } else if player.airborne > 0.12 {
+    } else if motion.airborne > 0.12 {
         Doing::Fall
     } else if speed > 5.6 {
         Doing::Sprint
     } else if speed > 0.5 {
         Doing::Jog
-    } else if player.since_acting < 0.9 {
+    } else if stance.since_acting < 0.9 {
         Doing::Use
     } else {
         Doing::Idle

@@ -16,7 +16,7 @@ use super::options::OptionsMenu;
 use super::people::Person;
 use super::props::Prop;
 use super::tool::Builder;
-use super::{Player, View};
+use super::{Downed, Motion, Player, Stance, View};
 use crate::planet::Planet;
 use bevy::{platform::collections::HashMap, prelude::*};
 
@@ -103,7 +103,7 @@ fn step(
     mut walkers: Query<(
         &GlobalTransform,
         &mut Footsteps,
-        Option<&Player>,
+        Option<(&Motion, Has<Downed>)>,
         Option<&Creature>,
     )>,
     mut noise: MessageWriter<Noise>,
@@ -117,7 +117,7 @@ fn step(
             .map_or(0.0, |last| (here - last).reject_from(up).length());
         feet.last = Some(here);
         // Off the ground, or carried somewhere at once (loading, waking at a bed).
-        let grounded = player.is_none_or(|player| player.on_ground && player.down.is_none())
+        let grounded = player.is_none_or(|(motion, downed)| motion.on_ground && !downed)
             && creature.is_none_or(Creature::alive);
         if !grounded || moved > 4.0 {
             feet.walked = 0.0;
@@ -130,7 +130,7 @@ fn step(
         }
         feet.walked -= stride;
         let surface = match (feet.walker, player) {
-            (Walker::Player, Some(player)) if player.indoors => Feet::Wood,
+            (Walker::Player, Some((motion, _))) if motion.indoors => Feet::Wood,
             (Walker::Player | Walker::Person, _) if planet.under_sea(here) => Feet::Water,
             (Walker::Player | Walker::Person, _) => Feet::Grass,
             (Walker::Deer, _) => Feet::Hoof,
@@ -188,19 +188,19 @@ fn creatures_heard(
 
 /// The player's swings, hurts and falls.
 fn player_heard(
-    player: Single<(&Player, &GlobalTransform)>,
+    player: Single<(&Stance, &GlobalTransform), With<Player>>,
     mut bitten: MessageReader<Bitten>,
     mut went_down: MessageReader<WentDown>,
     mut swinging: Local<f32>,
     mut noise: MessageWriter<Noise>,
 ) {
-    let (player, at) = *player;
+    let (stance, at) = *player;
     let chest = at.translation() + at.translation().normalize_or(Vec3::Y) * 1.2;
     // A swing sets the figure's attack going again.
-    if player.attacking > *swinging + 0.2 {
+    if stance.attacking > *swinging + 0.2 {
         noise.write(Noise::at(Cue::Swing, chest));
     }
-    *swinging = player.attacking;
+    *swinging = stance.attacking;
     for _ in bitten.read() {
         noise.write(Noise::at(Cue::Hurt, chest));
     }

@@ -106,8 +106,15 @@ const STEEPEST: f32 = 1.2;
 const STEP_UP_M: f32 = 0.7;
 const STRIDE_M: f32 = 0.4;
 
+/// Someone playing. What they are doing is in the components beside this one: how they
+/// move (`Motion`), what their hands and feet are up to (`Stance`), and whether they are
+/// down (`Downed`), along with what they carry, know and feel.
 #[derive(Component)]
-struct Player {
+struct Player;
+
+/// How a body moves over the planet.
+#[derive(Component)]
+struct Motion {
     /// Speed over the ground, as a direction and metres a second.
     velocity: Vec3,
     /// Speed away from the planet's centre, in metres a second.
@@ -118,10 +125,27 @@ struct Player {
     indoors: bool,
     /// The level direction the figure faces.
     facing: Vec3,
+}
+
+impl Motion {
+    fn facing(facing: Vec3) -> Self {
+        Self {
+            velocity: Vec3::ZERO,
+            rising: 0.0,
+            on_ground: false,
+            airborne: 0.0,
+            indoors: false,
+            facing,
+        }
+    }
+}
+
+/// What a player's hands and feet are doing besides walking: using a tool, swinging,
+/// rolling, flinching from a blow, or guarding.
+#[derive(Component)]
+struct Stance {
     /// Seconds since the tool was last used.
     since_acting: f32,
-    /// How long the player has lain where they fell, while they are down.
-    down: Option<f32>,
     /// Seconds left of a swing, a roll, and a flinch from a blow, for the figure.
     attacking: f32,
     dodging: f32,
@@ -130,6 +154,25 @@ struct Player {
     dodge_direction: Vec3,
     /// Holding a guard up.
     guarding: bool,
+}
+
+impl Default for Stance {
+    fn default() -> Self {
+        Self {
+            since_acting: f32::MAX,
+            attacking: 0.0,
+            dodging: 0.0,
+            flinch: 0.0,
+            dodge_direction: Vec3::ZERO,
+            guarding: false,
+        }
+    }
+}
+
+/// Lying where they fell, and for how long so far. Taken away when they wake.
+#[derive(Component)]
+struct Downed {
+    lying_s: f32,
 }
 
 /// Where the player is looking.
@@ -251,21 +294,9 @@ fn spawn(
     });
     commands.spawn((
         Name::new("Player"),
-        Player {
-            velocity: Vec3::ZERO,
-            rising: 0.0,
-            on_ground: false,
-            airborne: 0.0,
-            indoors: false,
-            facing: toward_door,
-            since_acting: f32::MAX,
-            down: None,
-            attacking: 0.0,
-            dodging: 0.0,
-            flinch: 0.0,
-            dodge_direction: Vec3::ZERO,
-            guarding: false,
-        },
+        Player,
+        Motion::facing(toward_door),
+        Stance::default(),
         {
             // For testing, --give can also set how the body starts.
             let mut body = vitals::Vitals::default();
@@ -305,7 +336,7 @@ fn warp(
     site: Res<Site>,
     planet: Res<Planet>,
     mut view: ResMut<View>,
-    player: Single<(&mut Transform, &mut Player)>,
+    player: Single<(&mut Transform, &mut Motion), With<Player>>,
 ) {
     let scripted = options
         .warps
@@ -315,15 +346,15 @@ fn warp(
     let Some((at, facing)) = scripted.or_else(|| asked.warp.take()) else {
         return;
     };
-    let (mut transform, mut player) = player.into_inner();
+    let (mut transform, mut motion) = player.into_inner();
     let place = |(east, south): (f32, f32)| site.frame.transform_point(Vec3::new(east, 0.0, south));
     let feet = planet.ground_at(place(at));
     let up = feet.normalize();
     let ahead = facing.map_or(view.forward, |facing| place(facing) - feet);
     let facing = ahead.reject_from(up).normalize_or(view.forward);
     transform.translation = feet;
-    player.velocity = Vec3::ZERO;
-    player.facing = facing;
+    motion.velocity = Vec3::ZERO;
+    motion.facing = facing;
     view.forward = facing;
     info!("Warped to {:.1} m east and {:.1} m south.", at.0, at.1);
 }
@@ -443,12 +474,21 @@ fn walk(
     obstacles: Res<flora::Obstacles>,
     items: Query<(&props::Prop, &Transform, &Visibility), Without<Player>>,
     others: Query<(&bodies::Body, &Transform), Without<Player>>,
-    player: Single<(&mut Transform, &mut Player, &mut vitals::Vitals)>,
+    player: Single<
+        (
+            &mut Transform,
+            &mut Motion,
+            &mut Stance,
+            &mut vitals::Vitals,
+            Has<Downed>,
+        ),
+        With<Player>,
+    >,
 ) {
-    let (mut transform, mut player, mut vitals) = player.into_inner();
+    let (mut transform, mut motion, mut stance, mut vitals, downed) = player.into_inner();
     // Lying where you fell, you do not move.
-    if player.down.is_some() {
-        player.velocity = Vec3::ZERO;
+    if downed {
+        motion.velocity = Vec3::ZERO;
         return;
     }
     let walker = Walker::default();
@@ -462,24 +502,24 @@ fn walk(
         + right * (held(Action::Right) - held(Action::Left)))
     .normalize_or_zero();
     // A roll carries you a short way fast, clear of blows; a guard slows you.
-    player.attacking = (player.attacking - dt).max(0.0);
-    player.flinch = (player.flinch - dt).max(0.0);
-    player.dodging = (player.dodging - dt).max(0.0);
-    if player.dodging == 0.0
-        && player.on_ground
+    stance.attacking = (stance.attacking - dt).max(0.0);
+    stance.flinch = (stance.flinch - dt).max(0.0);
+    stance.dodging = (stance.dodging - dt).max(0.0);
+    if stance.dodging == 0.0
+        && motion.on_ground
         && controls.went_down(Action::Dodge)
         && vitals.spend(DODGE_STAMINA)
     {
-        player.dodging = DODGE_S;
-        player.dodge_direction = if wish == Vec3::ZERO {
+        stance.dodging = DODGE_S;
+        stance.dodge_direction = if wish == Vec3::ZERO {
             -view.forward
         } else {
             wish
         };
     }
-    let top_speed = if player.dodging > 0.0 {
+    let top_speed = if stance.dodging > 0.0 {
         DODGE_SPEED
-    } else if player.guarding {
+    } else if stance.guarding {
         JOG_SPEED * 0.5
     } else if controls.held(Action::Sprint) && vitals.can_sprint() {
         SPRINT_SPEED
@@ -487,14 +527,14 @@ fn walk(
         JOG_SPEED
     };
     // Ease into and out of a run rather than starting and stopping dead.
-    let ease = 1.0 - libm::expf(-dt * if player.on_ground { 11.0 } else { 2.5 });
-    let wish = if player.dodging > 0.0 {
-        player.dodge_direction
+    let ease = 1.0 - libm::expf(-dt * if motion.on_ground { 11.0 } else { 2.5 });
+    let wish = if stance.dodging > 0.0 {
+        stance.dodge_direction
     } else {
         wish
     };
-    player.velocity = player.velocity.lerp(wish * top_speed, ease).reject_from(up);
-    let mut target = feet + player.velocity * dt;
+    motion.velocity = motion.velocity.lerp(wish * top_speed, ease).reject_from(up);
+    let mut target = feet + motion.velocity * dt;
     // Furniture and kit are solid. Walls come after, so they have the last word.
     target = props::push_out(target, walker.radius, items.iter());
     // Creatures and people take up room.
@@ -556,11 +596,11 @@ fn walk(
         target = feet;
     }
 
-    player.rising -= GRAVITY * dt;
-    if player.on_ground && controls.went_down(Action::Jump) && vitals.spend(JUMP_STAMINA) {
-        player.rising = JUMP_SPEED;
+    motion.rising -= GRAVITY * dt;
+    if motion.on_ground && controls.went_down(Action::Jump) && vitals.spend(JUMP_STAMINA) {
+        motion.rising = JUMP_SPEED;
     }
-    target += up * player.rising * dt;
+    target += up * motion.rising * dt;
 
     // What holds the player up: indoors, the base's floor; outdoors, whichever is higher of
     // the ground and anything the base offers there, such as its steps or a roof.
@@ -581,29 +621,29 @@ fn walk(
         Some(surface) => surface.max(ground),
         None => ground,
     };
-    player.on_ground = target.length() <= held_at + 0.02 && player.rising <= 0.0;
-    if player.on_ground {
+    motion.on_ground = target.length() <= held_at + 0.02 && motion.rising <= 0.0;
+    if motion.on_ground {
         target = target.normalize() * held_at;
-        player.rising = 0.0;
-        player.airborne = 0.0;
+        motion.rising = 0.0;
+        motion.airborne = 0.0;
     } else {
-        player.airborne += dt;
+        motion.airborne += dt;
     }
     // A ceiling stops a jump.
     if let Some(ceiling) = site.base.ceiling(before)
-        && player.rising > 0.0
+        && motion.rising > 0.0
         && to_base.transform_point3(target).y + walker.height > ceiling
     {
         target = from_base.transform_point3(Vec3::new(local.x, ceiling - walker.height, local.z));
-        player.rising = 0.0;
+        motion.rising = 0.0;
     }
 
     let indoors = site
         .base
         .ceiling(to_base.transform_point3(target))
         .is_some();
-    if indoors != player.indoors {
-        player.indoors = indoors;
+    if indoors != motion.indoors {
+        motion.indoors = indoors;
         info!(
             "Player is now {}.",
             if indoors {
@@ -617,27 +657,27 @@ fn walk(
     // What was actually covered, which is less than what was asked when something is in
     // the way. The figure's stride follows this.
     let up = target.normalize();
-    player.velocity = ((target - feet) / dt.max(1e-4)).reject_from(up);
+    motion.velocity = ((target - feet) / dt.max(1e-4)).reject_from(up);
     // Turn to face the way the figure is going, or the way it is working.
-    player.since_acting += dt;
-    let toward = if player.since_acting < 0.8 {
+    stance.since_acting += dt;
+    let toward = if stance.since_acting < 0.8 {
         view.forward
     } else {
         wish
     };
     let turn = 1.0 - libm::expf(-dt * 12.0);
     // Turning right round has no shorter way to go, so it is given one.
-    let about_face = toward != Vec3::ZERO && player.facing.dot(toward) < -0.98;
+    let about_face = toward != Vec3::ZERO && motion.facing.dot(toward) < -0.98;
     let from = if about_face {
-        player.facing + player.facing.cross(up) * 0.3
+        motion.facing + motion.facing.cross(up) * 0.3
     } else {
-        player.facing
+        motion.facing
     };
-    player.facing = from
+    motion.facing = from
         .lerp(toward, if toward == Vec3::ZERO { 0.0 } else { turn })
         .reject_from(up)
         .normalize_or(view.forward);
-    *transform = Transform::from_translation(target).looking_to(player.facing, up);
+    *transform = Transform::from_translation(target).looking_to(motion.facing, up);
 }
 
 /// The eye, and the direction it looks, for the player's view.

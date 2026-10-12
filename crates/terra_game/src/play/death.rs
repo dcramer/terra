@@ -11,7 +11,7 @@ use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::inventory::Belongings;
 use super::props::Prop;
 use super::vitals::{Effort, Vitals};
-use super::{Player, View};
+use super::{Downed, Motion, Player, Stance, View};
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_items::Grid;
@@ -46,17 +46,15 @@ pub fn plugin(app: &mut App) {
 
 /// Moves the body on by a moment, and lays it down when health runs out.
 fn live(
+    mut commands: Commands,
     time: Res<Time>,
-    player: Single<(&mut Vitals, &mut Player)>,
+    player: Single<(Entity, &mut Vitals, &Motion, &Stance), (With<Player>, Without<Downed>)>,
     mut went_down: MessageWriter<WentDown>,
 ) {
-    let (mut vitals, mut player) = player.into_inner();
-    if player.down.is_some() {
-        return;
-    }
+    let (entity, mut vitals, motion, stance) = player.into_inner();
     let dt = time.delta_secs().min(0.1);
-    let speed = player.velocity.length();
-    let effort = if player.since_acting < 0.3 {
+    let speed = motion.velocity.length();
+    let effort = if stance.since_acting < 0.3 {
         Effort::Working
     } else if speed > 5.6 {
         Effort::Sprinting
@@ -66,7 +64,7 @@ fn live(
         Effort::Resting
     };
     if vitals.tick(dt, effort) {
-        player.down = Some(0.0);
+        commands.entity(entity).insert(Downed { lying_s: 0.0 });
         went_down.write(WentDown);
     }
 }
@@ -80,16 +78,25 @@ fn fall(
     claim: Res<Claim>,
     planet: Res<Planet>,
     beds: Query<(&Prop, &Transform), Without<Player>>,
-    player: Single<(&mut Transform, &mut Player, &mut Vitals)>,
+    player: Single<
+        (
+            Entity,
+            &mut Transform,
+            &mut Motion,
+            &mut Downed,
+            &mut Vitals,
+        ),
+        With<Player>,
+    >,
     mut view: ResMut<View>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let (mut transform, mut player, mut vitals) = player.into_inner();
-    let Some(lying) = player.down else { return };
-    if lying == 0.0 {
+    let (entity, mut transform, mut motion, mut downed, mut vitals) = player.into_inner();
+    // Just fallen: the bag drops once, however long the clock stands still.
+    if downed.is_added() {
         let bag = belongings.empty_into_bag();
         if !bag.is_empty() {
             let at = transform.translation;
@@ -107,15 +114,15 @@ fn fall(
                     perceptual_roughness: 0.9,
                     ..default()
                 })),
-                Transform::from_translation(at + up * 0.2).looking_to(player.facing, up),
+                Transform::from_translation(at + up * 0.2).looking_to(motion.facing, up),
             ));
         }
         notice.say("You have fallen. What you carried lies where you fell");
         info!("The player went down at {}.", transform.translation);
     }
-    let lying = lying + time.delta_secs();
+    let lying = downed.lying_s + time.delta_secs();
     if lying < DOWN_S {
-        player.down = Some(lying);
+        downed.lying_s = lying;
         return;
     }
 
@@ -143,9 +150,9 @@ fn fall(
     let feet = up * planet.ground_at(at).length().max(at.length());
     *transform = Transform::from_translation(feet).looking_to(facing, up);
     view.forward = facing;
-    player.down = None;
-    player.velocity = Vec3::ZERO;
-    player.rising = 0.0;
+    commands.entity(entity).remove::<Downed>();
+    motion.velocity = Vec3::ZERO;
+    motion.rising = 0.0;
     *vitals = Vitals::default();
     notice.say(if bed.is_some() {
         "You wake in your bed"

@@ -19,7 +19,7 @@
 //! Places are in metres east and south of the start, as the command-line options take them.
 
 use super::{
-    Player, View,
+    Downed, Motion, Player, View,
     creatures::Creature,
     inventory::{self, Backpack, Bar, Gear, Items, Raw},
     people::Person,
@@ -255,8 +255,15 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         }
     };
     let place = |[east, south]: [f32; 2]| [number(east), number(south)];
-    let mut players =
-        world.query_filtered::<(&Transform, &Player, &Vitals, &Backpack, &Gear, &Bar), ()>();
+    let mut players = world.query_filtered::<(
+        &Transform,
+        &Motion,
+        Has<Downed>,
+        &Vitals,
+        &Backpack,
+        &Gear,
+        &Bar,
+    ), With<Player>>();
     let mut creatures = world.query::<(&Creature, &GlobalTransform)>();
     let mut people = world.query_filtered::<(&Name, &GlobalTransform), With<Person>>();
     let site = world
@@ -264,7 +271,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         .ok_or_else(|| refused("no site yet"))?
         .frame;
     let forward = world.resource::<View>().forward;
-    let (transform, player, body, backpack, gear, bar) = players
+    let (transform, motion, downed, body, backpack, gear, bar) = players
         .single(world)
         .map_err(|_| refused("no player yet"))?;
     let items = world.resource::<Items>();
@@ -332,9 +339,9 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
     Ok(json!({
         "at": place(here),
         "facing": place([ahead[0] - here[0], ahead[1] - here[1]]),
-        "on_ground": player.on_ground,
-        "indoors": player.indoors,
-        "down": player.down.is_some(),
+        "on_ground": motion.on_ground,
+        "indoors": motion.indoors,
+        "down": downed,
         "health": number(body.health),
         "stamina": number(body.stamina),
         "fed": number(body.fed),

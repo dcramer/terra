@@ -8,13 +8,13 @@
 //! Behaviour is a few small states per creature, run in full for every one; at this
 //! scale that is cheap. Detail by distance comes when there are many (creatures.md).
 
-use super::Player;
 use super::bag::Notice;
 use super::bodies::Body;
 use super::flora::ClearAround;
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::inventory::{Belongings, Raw, Tool};
 use super::skills::{Did, ONCE, Skill};
+use super::{Downed, Player};
 use crate::build::Site;
 use crate::loading::Loading;
 use crate::planet::Planet;
@@ -386,15 +386,15 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
 /// Decides what each creature does next.
 fn think(
     time: Res<Time>,
-    player: Single<(&Transform, &Player)>,
+    player: Single<(&Transform, Has<Downed>), With<Player>>,
     mut creatures: Query<(&mut Creature, &Transform), Without<Player>>,
     mut bitten: MessageWriter<Bitten>,
     mut dice: ResMut<Dice>,
 ) {
     let dt = time.delta_secs().min(0.1);
-    let (player_at, player) = player.into_inner();
+    let (player_at, downed) = player.into_inner();
     let target = player_at.translation;
-    let player_up = player.down.is_none();
+    let player_up = !downed;
     for (mut creature, at) in &mut creatures {
         let here = at.translation;
         let apart = (target - here).reject_from(here.normalize()).length();

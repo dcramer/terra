@@ -4,7 +4,6 @@
 //! tool's material decides what it can work (D96): a stone axe will not fell a great
 //! tree.
 
-use super::Player;
 use super::bag::Notice;
 use super::combat::Swing;
 use super::controls::{Action, Controls, Settings};
@@ -13,6 +12,7 @@ use super::flora::{Growth, Obstacles};
 use super::inventory::{Belongings, Cut, Cuttable, InventoryScreen, Tool};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::work::Hold;
+use super::{Player, Stance};
 use crate::planet::MainCamera;
 use bevy::prelude::*;
 
@@ -88,7 +88,7 @@ fn cut(
         ),
         (Without<Player>, Without<Felled>),
     >,
-    player: Single<(&Transform, &mut Player), Without<Growth>>,
+    player: Single<(&Transform, &mut Stance), (With<Player>, Without<Growth>)>,
     mut cutting: ResMut<Cutting>,
     screen: Res<InventoryScreen>,
     mut belongings: Belongings,
@@ -99,7 +99,7 @@ fn cut(
     mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
 ) {
-    let (player_at, mut player) = player.into_inner();
+    let (player_at, mut stance) = player.into_inner();
     let feet = player_at.translation;
     cutting.target = None;
     let tool = belongings.holding().filter(|_| !screen.open && !dial.open);
@@ -200,7 +200,7 @@ fn cut(
     ));
     let finished = hold.advance(time.delta_secs());
     cutting.held = Some((entity, hold));
-    player.since_acting = 0.0;
+    stance.since_acting = 0.0;
     let Ok((_, _, mut transform, _, shaken)) = growth.get_mut(entity) else {
         return;
     };

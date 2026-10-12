@@ -7,12 +7,12 @@
 //! a thing carry `Ambient`, and are heard only within earshot, so a world can hold any
 //! number of them.
 
-use super::Player;
 use super::crafting::{Station, Works};
 use super::creatures::Lair;
 use super::noise::{Cue, Noise};
 use super::props::Prop;
 use super::settlement::Village;
+use super::{Motion, Player};
 use crate::audio::{
     self, Bus, Fade, Mix, Voice,
     synth::{Sound, Synth},
@@ -105,7 +105,7 @@ fn follow_place(
     time: Res<Time>,
     planet: Res<Planet>,
     lair: Option<Res<Lair>>,
-    player: Single<(&Player, &GlobalTransform)>,
+    player: Single<(&Motion, &GlobalTransform), With<Player>>,
     layers: Query<(Entity, &Layer, &Voice)>,
     mut wait: Local<f32>,
 ) {
@@ -114,9 +114,9 @@ fn follow_place(
         return;
     }
     *wait = LOOK_EVERY_S;
-    let (player, at) = *player;
+    let (motion, at) = *player;
     let here = at.translation();
-    let outdoors = !player.indoors;
+    let outdoors = !motion.indoors;
     let lair_m = lair.map_or(f32::MAX, |lair| lair.0.distance(here));
     let shore_m = shore_distance(&planet, here);
     for (entity, layer, voice) in &layers {

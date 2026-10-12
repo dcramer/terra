@@ -16,7 +16,7 @@ use super::inventory::{Belongings, InventoryScreen, Raw, Tool};
 use super::models::bake;
 use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
-use super::{Player, View};
+use super::{Downed, Player, Stance, View};
 use crate::build::Site;
 use crate::planet::MainCamera;
 use crate::planet::Planet;
@@ -113,13 +113,13 @@ fn draw(
     planet: Res<Planet>,
     creatures: Query<(&Creature, &Transform, &Body), Without<Player>>,
     camera: Single<&Transform, (With<MainCamera>, Without<Player>)>,
-    player: Single<(&Transform, &mut Player)>,
+    player: Single<(&Transform, &mut Stance, Has<Downed>), With<Player>>,
     mut belongings: Belongings,
     mut drawing: ResMut<Drawing>,
     mut notice: ResMut<Notice>,
 ) {
-    let (at, mut player) = player.into_inner();
-    let ready = belongings.holding() == Some(Tool::Bow) && !screen.open && player.down.is_none();
+    let (at, mut stance, downed) = player.into_inner();
+    let ready = belongings.holding() == Some(Tool::Bow) && !screen.open && !downed;
     if !ready {
         drawing.held = None;
         return;
@@ -127,7 +127,7 @@ fn draw(
     if controls.held(Action::Use) {
         let held = drawing.held.unwrap_or(0.0) + time.delta_secs();
         drawing.held = Some(held.min(FULL_DRAW_S));
-        player.since_acting = 0.0;
+        stance.since_acting = 0.0;
         return;
     }
     let Some(held) = drawing.held.take() else {
@@ -178,7 +178,7 @@ fn draw(
         Transform::from_translation(from)
             .with_rotation(Quat::from_rotation_arc(Vec3::Y, direction)),
     ));
-    player.attacking = 0.4;
+    stance.attacking = 0.4;
     info!("Loosed an arrow at {:.0}% draw.", pull * 100.0);
     belongings.wear_in_hand(1);
 }

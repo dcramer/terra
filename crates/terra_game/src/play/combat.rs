@@ -13,7 +13,7 @@ use super::creatures::{self, Bitten, Creature, Species};
 use super::inventory::{Belongings, InventoryScreen, Tool};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::vitals::Vitals;
-use super::{Player, View};
+use super::{Downed, Player, Stance, View};
 use bevy::prelude::*;
 
 /// What a swing costs in stamina.
@@ -81,7 +81,7 @@ fn swing(
     screen: Res<InventoryScreen>,
     view: Res<View>,
     mut belongings: Belongings,
-    player: Single<(&Transform, &mut Player, &mut Vitals, &Skills)>,
+    player: Single<(&Transform, &mut Stance, &mut Vitals, &Skills, Has<Downed>), With<Player>>,
     mut creatures: Query<(Entity, &mut Creature, &Transform), Without<Player>>,
     mut swung: ResMut<Swing>,
     mut did: MessageWriter<Did>,
@@ -89,14 +89,14 @@ fn swing(
     mut notice: ResMut<Notice>,
 ) {
     swung.since += time.delta_secs();
-    let (player_at, mut player, mut vitals, skills) = player.into_inner();
+    let (player_at, mut stance, mut vitals, skills, downed) = player.into_inner();
     let Some(tool) = belongings
         .holding()
         .filter(|tool| !matches!(tool, Tool::Hammer | Tool::Bow))
     else {
         return;
     };
-    if screen.open || player.down.is_some() || !controls.went_down(Action::Use) {
+    if screen.open || downed || !controls.went_down(Action::Use) {
         return;
     }
     if swung.since < SWING_EVERY_S {
@@ -131,8 +131,8 @@ fn swing(
     };
     let blow = damage * strength * skills.speed(Skill::Fighting);
     swung.since = 0.0;
-    player.since_acting = 0.0;
-    player.attacking = 0.6;
+    stance.since_acting = 0.0;
+    stance.attacking = 0.6;
     // Where the blade meets it: its side toward the player, at about its middle.
     let at = there + (feet - there).reject_from(up).normalize_or_zero() * 0.3 + up * 0.5;
     strike(
@@ -182,10 +182,15 @@ pub fn strike(
 }
 
 /// Holding the build menu's button without the hammer in hand guards.
-fn guard(controls: Controls, belongings: Belongings, mut player: Single<&mut Player>) {
+fn guard(
+    controls: Controls,
+    belongings: Belongings,
+    player: Single<(&mut Stance, Has<Downed>), With<Player>>,
+) {
+    let (mut stance, downed) = player.into_inner();
     let holding = belongings.holding();
-    player.guarding = holding.is_some_and(|tool| tool != Tool::Hammer)
-        && player.down.is_none()
+    stance.guarding = holding.is_some_and(|tool| tool != Tool::Hammer)
+        && !downed
         && controls.held(Action::BuildMenu);
 }
 
@@ -193,17 +198,17 @@ fn guard(controls: Controls, belongings: Belongings, mut player: Single<&mut Pla
 fn take_blows(
     mut bitten: MessageReader<Bitten>,
     mut belongings: Belongings,
-    player: Single<(&mut Player, &mut Vitals)>,
+    player: Single<(&mut Stance, &mut Vitals, Has<Downed>), With<Player>>,
     mut hurt: MessageWriter<Hurt>,
 ) {
-    let (mut player, mut vitals) = player.into_inner();
+    let (mut stance, mut vitals, downed) = player.into_inner();
     for &Bitten(damage) in bitten.read() {
-        if player.down.is_some() || player.dodging > 0.0 {
+        if downed || stance.dodging > 0.0 {
             continue;
         }
         // Leather takes some of it.
         let damage = damage * (1.0 - belongings.protection());
-        let taken = if player.guarding && vitals.spend(GUARD_STAMINA) {
+        let taken = if stance.guarding && vitals.spend(GUARD_STAMINA) {
             damage * GUARDED
         } else {
             damage
@@ -212,7 +217,7 @@ fn take_blows(
         hurt.write(Hurt(taken));
         // What is worn takes the blow too, and wears.
         belongings.wear_worn(1);
-        player.flinch = 0.35;
+        stance.flinch = 0.35;
         info!("Bitten for {taken:.0}; health {:.0}.", vitals.health);
     }
 }

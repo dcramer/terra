@@ -4,7 +4,6 @@
 use super::*;
 use crate::build::Site;
 use crate::planet::Planet;
-use crate::play::Player;
 use crate::play::bag::Notice;
 use crate::play::catalogue::{self, Kind};
 use crate::play::controls::{Action, Controls};
@@ -14,6 +13,7 @@ use crate::play::noise::{Cue, Noise};
 use crate::play::props::{self, Models, Prop};
 use crate::play::skills::{Did, ONCE, Skill};
 use crate::play::work::Hold;
+use crate::play::{Player, Stance};
 use terra_build::{BuildOp, Face, Panel};
 
 /// Starts, carries on and finishes building and taking apart. Both take a moment: the
@@ -32,10 +32,10 @@ pub(super) fn act(
     mut site: ResMut<Site>,
     mut did: MessageWriter<Did>,
     mut noise: MessageWriter<Noise>,
-    player: Single<(&Transform, &mut Player)>,
+    player: Single<(&Transform, &mut Stance), With<Player>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    let (player_at, mut player) = player.into_inner();
+    let (player_at, mut stance) = player.into_inner();
     let player_at = player_at.translation;
     // A tap of the right button: stop what is being done; or put back what was picked
     // up; or put the part away.
@@ -74,7 +74,7 @@ pub(super) fn act(
         if !held || !stayed || !in_hand {
             return;
         }
-        player.since_acting = 0.0;
+        stance.since_acting = 0.0;
         if !work.hold.advance(time.delta_secs()) {
             builder.work = Some(work);
             return;
@@ -197,7 +197,7 @@ pub(super) fn act(
                     indoors: prop.indoors,
                 });
                 commands.entity(entity).despawn();
-                player.since_acting = 0.0;
+                stance.since_acting = 0.0;
             }
             return;
         }
@@ -223,7 +223,7 @@ pub(super) fn act(
                     indoors,
                 );
                 info!("Placed a {} at {at}, {lift} up.", carried.item.name);
-                player.since_acting = 0.0;
+                stance.since_acting = 0.0;
             }
             return;
         }

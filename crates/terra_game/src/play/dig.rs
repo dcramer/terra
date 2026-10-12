@@ -7,7 +7,6 @@
 //! when the pickaxe meets the ground itself. Digging works anywhere for now; that the
 //! world heals outside a claim (D94) comes later.
 
-use super::Player;
 use super::bag::Notice;
 use super::controls::{Action, Controls};
 use super::dial::Dial;
@@ -15,6 +14,7 @@ use super::harvest::Cutting;
 use super::inventory::{Belongings, Cut, InventoryScreen, Raw};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::work::Hold;
+use super::{Player, Stance};
 use crate::planet::MainCamera;
 use crate::planet::Planet;
 use bevy::prelude::*;
@@ -69,7 +69,7 @@ fn dig(
     screen: Res<InventoryScreen>,
     cutting: Res<Cutting>,
     camera: Single<&GlobalTransform, With<MainCamera>>,
-    player: Single<(&Transform, &mut Player)>,
+    player: Single<(&Transform, &mut Stance), With<Player>>,
     skills: Single<&Skills, With<Player>>,
     mut planet: ResMut<Planet>,
     mut belongings: Belongings,
@@ -79,7 +79,7 @@ fn dig(
     mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
 ) {
-    let (player_at, mut player) = player.into_inner();
+    let (player_at, mut stance) = player.into_inner();
     let feet = player_at.translation;
     digging.target = None;
     let pickaxe = belongings
@@ -139,7 +139,7 @@ fn dig(
         .get_or_insert((hit.point, Hold::new(DIG_SECONDS / speed.max(0.01))));
     let finished = hold.advance(time.delta_secs());
     digging.held = Some((at, hold));
-    player.since_acting = 0.0;
+    stance.since_acting = 0.0;
     if !finished {
         return;
     }
