@@ -26,7 +26,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [items.md](items.md) | Items and containers: equipment, backpack, action bar and storage, on a Subnautica baseline, and how they work in code. |
 | [characters.md](characters.md) | How bodies, clothing, armour and weapons are made so every item fits every body without fitting each by hand (D128). Questions for the developers. |
 | [character-system-plan.md](character-system-plan.md) | The character system from scratch: the base body asset, bodies as shapes, gear made once, the game's side, tools, order of work and risks. |
-| [construction.md](construction.md) | Draft: what the developers want from building, a proposed shape for it, and open questions. |
+| [construction.md](construction.md) | Draft for the developers: the baseline building system, everything players will expect from Enshrouded, Rust, Ark, Subnautica 2 and The Forest, the controls, what is built, and open questions. |
 | [progression.md](progression.md) | Draft: player skills, the research system, and how things are unlocked. Mostly open questions. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
 | [planet-sim.md](planet-sim.md) | Parked with terraforming: the planetary simulation, cells, fields, how local feeds global. |

@@ -1,108 +1,198 @@
 # Construction
 
-Status: a draft for the developers to correct. It collects what they said on 2026-10-10 while playing the sandbox's `play` experiment, and proposes a shape for the system that would deliver it. The sandbox already does some of this; where it does not is listed under "The gap".
+Status: the baseline building system, as a draft for the developers to read and correct before more of it is built. Asked for on 2026-10-12: "a baseline building system that implements the whole of it… so I'm not constantly saying you forgot this". It gathers everything the developers have said about building, everything players of the games we draw on will reach for ([research/building-systems-prior-art.md](../research/building-systems-prior-art.md)), and what is built. Each item says whether it is decided (with its D number), leaning, proposed by me, or open. Nothing proposed here is built on until the developers have read it.
 
 ## What the developers want
 
 In their words, shortened.
 
 - **The basis is a voxel grid, as Enshrouded's** (D48, 2026-10-11), with Subnautica 2's shaped rooms as the easier way in. Earlier: Subnautica 2, blended with Rust, Ark and other advanced building games.
-- **Enshrouded is a role model** for building and voxels, and for other mechanics (named 2026-10-10): "a ton of stuff we really might like to model off of". Building in voxels is fine; the terrain stays smooth voxels (2026-10-11). See [research/enshrouded.md](../research/enshrouded.md).
-- **You pick the part you want to build, and can cycle its variants**, from "the little dial building menus we see in things like Rust and Subnautica".
-- **Rooms are plain boxes.** No lights or fittings come with one.
-- **A room placed across another extends it** to the combined shape.
-- **Walls are a simple part**, indoors only. Not interior rooms, just walls. **Doors and windows are their own parts**, cut into an interior wall the same as an outside one.
-- **Furniture and kit are buildable items.**
-- **Everything has a collision box**, used for placing things as well as for walking (D53).
-- **A grid things snap to**, which can be switched off. New rooms snap to rooms already there.
-- **Only a foundation may go into the ground.** Anything else that would clip shows red and cannot be built. (Said with "I think".) Since voxel terrain, a room set into the ground cuts it away instead, no deeper than its own height (D131, Leaning).
-- **Trees and rocks are cleared first.** A room cannot be placed where they stand; the player fells or breaks them (D131, Leaning).
+- **Enshrouded is a role model** for building and voxels: "a ton of stuff we really might like to model off of". Building in voxels is fine; the terrain stays smooth voxels. See [research/enshrouded.md](../research/enshrouded.md).
+- **The Forest's building is an inspiration** (D85, 2026-10-12): "a nice building system, the way you get logs/etc is nice for larger projects (vs sticks or something akin to that)".
+- **Keep the prior art in mind for the controls too**: Enshrouded, Rust, Ark, Subnautica 2 (2026-10-12).
+- **You pick the part you want to build, and can cycle its variants**, from "the little dial building menus we see in things like Rust and Subnautica". **A build menu like Subnautica's** (D67): you equip the building tool and it brings up what you have unlocked (D68).
+- **Rooms are plain boxes**, with no lights or fittings. **A room placed across another extends it** to the combined shape.
+- **Walls are a simple part**, indoors only. **Doors and windows are their own parts**, cut into any wall.
+- **Furniture and kit are buildable items.** Everything built in the world, a village's houses included, is made of the same parts (D108); stations are the only prefabs.
+- **Everything has a collision box**, used for placing as well as walking (D53).
+- **A grid things snap to**, which can be switched off. New rooms snap to rooms already there. One square grid for everything, "a little flexible": in some games each cell is huge, "so you have no freedom to build". Half a metre for now (D57).
+- **What is placed can be moved up and down**, not only turned, except what must stand on the ground (2026-10-11).
+- **Only a foundation may go into the ground** ("I think"); since voxel terrain, a room set into the ground cuts it away instead (D131, Leaning). **Trees and rocks are cleared first** (D131, Leaning).
 - **Details morph.** "Corners become rounded on the outside and inside, but when two segments are next to each other they're flat."
-- **It must be really easy to extend**: new buildables, and properties like that morphing applying to anything related. "We might let you build a round room, or connectors, or different materials for rooms, and they should be able to change their look based on what they're connected to."
-- **One square grid for everything**, though you might not see all of it all the time. Buildings join through connectors that can face any way, "more like Subnautica". The grid should be "a little flexible": in some games each cell is huge, "so you have no freedom to build".
-- **Some buildables are a fixed size.** A round building probably cannot be freely resized, and is reached through a connector, "which maybe auto-builds if you connect it to another room". It is on the same grid as everything else: "it just wouldn't fill 100% of the cells".
-- **A build menu like Subnautica's** (D67): you equip the building tool and it brings up a menu of the buildables you have unlocked. (Earlier the same day this was "a B menu".)
-- **Building, taking apart and cutting take time.** You click and hold to complete the task, as other games do. Building animates the thing in, destroying animates it out, and cutting has an animation or a progress bar. How long depends on the task, and there will likely be different cutting tools, such as an axe or a pickaxe.
-- **Building costs things you carry.** "I think it's likely what we'll want is for you to have the raw items, which allow you to build anything that you might have the capabilities to build." With an inventory, and an action bar you put items on to use them (D55).
+- **It must be really easy to extend**: "We might let you build a round room, or connectors, or different materials for rooms, and they should be able to change their look based on what they're connected to."
+- **Some buildables are a fixed size**: a round room probably cannot be freely resized, and is reached through a connector, "which maybe auto-builds if you connect it to another room".
+- **Building, taking apart and cutting take time**: click and hold, animated in and out.
+- **Building costs things you carry**: "you have the raw items, which allow you to build anything that you might have the capabilities to build" (D55).
+- **What does not fit in the inventory drops to the ground** (2026-10-12).
+- **You build only inside a claim** (D94, Leaning), which starts small and grows (D104).
+
+## The baseline
+
+Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The Forest will reach for, and where ours stands. This is the list to check the system against, so nothing is forgotten.
+
+| Capability | Prior art | Ours |
+|---|---|---|
+| A tool that builds, and a menu of what you can build | All | Built: the hammer and the build menu (D67) |
+| A variant wheel for the thing in hand | Rust, Subnautica | Built: hold R |
+| A ghost before you commit, allowed or refused, saying why | All | Built; what blocks it is outlined, but not through walls, as Subnautica 2's is |
+| Rotate | All | Built: wheel, or Z and C |
+| Snap to a grid, with a switch to go free | Enshrouded, Ark, Valheim | Built: X, and hold Alt |
+| Raise and lower, and nudge | Enshrouded, Ark Ascended | Missing; asked for |
+| Place in a line or an area: drawn walls, floors, rooms | The Forest, Sons of the Forest, Subnautica 2 | Rooms are boxes, grown across one another; walls and fences are not drawn |
+| Pick another of what you look at | 7 Days to Die | Built: middle mouse |
+| Move what is placed | Subnautica 2 | Built for items, not rooms or walls |
+| Take apart, giving back everything | Enshrouded, Subnautica, Valheim | Built; what does not fit drops at your feet |
+| Undo for a short while | Enshrouded, Rust | Missing |
+| Repair | Rust, Valheim, The Forest | Missing: nothing built takes damage yet |
+| Change a piece's material in place | Rust, 7 Days to Die | Missing: no materials yet |
+| Plans that cost nothing and are filled as materials go in | The Forest, Ark Ascended | Missing; proposed below |
+| Building from storage nearby, not only the pack | Subnautica 2, Valheim | Missing; open |
+| Carrying big materials by hand | The Forest | Missing; proposed below |
+| A base level with the ground where it is begun | Ark Ascended's heights | Built: the base's grid is set where its claim stone goes |
+| Building on slopes | All, differently | Built: rooms cut into the ground (D131) and stand on foundations below |
+| Floors above, and stairs | All | Storeys exist in the model; stairs and building upward are missing |
+| Roofs | All | Generated with the hull; nothing to place by hand |
+| Doors that open, close and lock | All | Doorways only |
+| Fences, gates, palisades | Ark, The Forest, Rust | Missing |
+| Stability | Rust, Valheim, Sons of the Forest | None; open |
+| A claim with an area, an owner and who else may build | Enshrouded, Rust, Valheim | Area and owner built; nobody else can be allowed yet |
+| Upkeep or decay | Rust, Ark | None; open |
+| Saved layouts placed again | Ark Ascended (2026), mods elsewhere | Missing; the village is one (D108) |
+| A camera for building | Enshrouded (2025) | The zoom only |
+| Stations and furniture placed as items | All | Built |
+
+## Controls
+
+Proposed, to react to: one keymap for everything above, on mouse and keyboard, after what the prior art agrees on. Every key can be changed in the options (D116) but the wheel and the numbers. Rows in bold are new.
+
+| Action | Ours | Built | Prior art |
+|---|---|---|---|
+| Take the hammer in hand | Its bar slot (1 by default) | Yes | A tool in every game |
+| Build menu | Tap right mouse, or B | Yes | Subnautica's right mouse; Enshrouded's Tab |
+| Variant of the thing in hand | Hold R for the wheel; tap R for the next | Yes | Rust's wheel |
+| Build | Hold left mouse, or E | Yes | Left mouse everywhere |
+| Put the part away; put back what is carried | Tap right mouse | Yes | Subnautica |
+| Rotate | Wheel; Z and C | Yes | Valheim's wheel; Enshrouded's R |
+| **Raise and lower** | **Shift and the wheel: half a metre a notch on the grid, a tenth off it; Page Up and Page Down** | No | Enshrouded's Q and the wheel; Ark Ascended |
+| **Material** | **Ctrl and the wheel** | No | Enshrouded's Ctrl and the wheel |
+| Grid on and off | X | Yes | Enshrouded's X |
+| Off the grid while held | Hold Alt | Yes | Valheim's Shift |
+| Pick another of what you look at | Middle mouse, or V | Yes | 7 Days to Die |
+| Take apart | Q for the mode, then hold left mouse | Yes | Enshrouded's right mouse; Valheim's middle mouse |
+| Move | G for the mode, then click to pick up and put down | Items only | Subnautica 2's F |
+| **Undo the last thing built or taken apart** | **Ctrl and Z, within a minute, giving back what it cost** | No | Enshrouded's Y; Rust's window |
+| **Repair** | **With nothing picked, aim at something damaged and hold left mouse** | No | Rust's and Valheim's hammer |
+| **Make a plan instead of building** | **Hold Shift as you place** | No | The Forest's blueprints; Ark Ascended's planning mode |
+| Camera nearer and further | Wheel when nothing in hand turns; = and - | Yes | Enshrouded's first-person building camera (2025) |
+
+Three conflicts to know about: the wheel turns, zooms, raises (with Shift) and changes material (with Ctrl); Q is our take-apart but Enshrouded's nudge; right mouse is our menu but Enshrouded's remove. I would keep ours, which follow Subnautica (D67), and add only the bold rows.
+
+## Getting materials to the build
+
+Proposed, after The Forest: the developers' "the way you get logs is nice for larger projects".
+
+- **Small materials go in the pack**, as now: stone, fibre, hide, iron. What does not fit drops at your feet (built).
+- **Big materials are carried, not packed.** A felled tree gives logs that lie where it fell. You carry one or two on your shoulder, slowly, with nothing else in your hands. A big build becomes a project you can see: trees down, logs dragged home, walls rising. It gives a second player a job.
+- **Sleds and carts** carry a dozen; **log piles** at the build hold them. Recruits carry for you (D90), as Sons of the Forest's companion does.
+- **Where fun beats realism** (D122): within your claim, building draws on piles and storage nearby, as Subnautica 2's builder draws on lockers in range. So each log is carried home once, not to every wall.
+
+Open: whether to do this, and which materials are carried. It changes gathering (D96) and the inventory (D84) as much as building.
+
+## Plans
+
+Proposed, after The Forest's blueprints and Ark Ascended's planning mode.
+
+- **A plan costs nothing.** Place a ghost of anything, as many as you like, in your claim. It shows what it still needs.
+- **It is built as materials go in.** Bring them, or have them in storage nearby, and hold the build key: each part rises in turn. The finished thing is the same as one built at once.
+- **Anyone allowed in the claim can fill it**, and recruits can fill it for you.
+- **Taking a plan down gives back everything that went in.** Changing your mind costs nothing, which is The Forest's complaint answered.
+- **A plan is how a whole base is tried out before paying for it**, and how a layout's cost is seen at once.
+
+## Placing
+
+- **The grid** is half a metre (D57; see [The grid](#the-grid)). Things snap to it and turn in eighths; off it, they turn freely.
+- **A base stands level where its claim stone is put** (built, 2026-10-12): its grid is set there, level with the ground at the stone. Every room of a base shares its floor height and stands on a foundation where the ground falls away (built). Proposed: rooms may also be placed a storey down, for terraces down a slope and cellars.
+- **Into the ground**: a room cuts the ground away where it stands, no deeper than its own height (D131, Leaning). Trees and rocks must be cleared first (D131, Leaning); small plants clear themselves.
+- **Up and down**: anything placed can be raised and lowered (asked for), on the grid in half-metre steps. What must stand on something says so: a chair on a floor, a station on the ground.
+- **What may not overlap**: an item may not go into another item or a wall (built); a room may not go over a placed thing, such as the claim stone (not yet checked).
+- **What the ghost says**: blue when it can go, red when not, with one line saying why and what it costs; what is in the way outlined, through walls too (proposed, after Subnautica 2's first update).
+
+## The parts
+
+The baseline catalogue. Everything is an entry in a list (D56), drawn by what it is next to.
+
+| Part | Status |
+|---|---|
+| Room: a box of any size on the grid, grown across others, walls, floor and roof generated | Built |
+| Interior wall, window, door, pushing a wall out or in | Built; doors do not open |
+| A storey up, and stairs or a ladder to it | Missing; the model has storeys |
+| Roof shapes beyond flat | Missing; open |
+| Foundations, and posts for building out over a drop | Foundations generated; posts missing |
+| Fence, wall, gate and palisade, drawn as a line | Missing; needed once bases are attacked (D90) |
+| Door that opens, closes and locks | Missing |
+| Stations: workbench, smelter, forge, campfire | Built |
+| Furniture, storage, lights | Built |
+| Claim stone | Built |
+| Fixed buildables, ports and connectors (round rooms) | Missing; see [The grid](#the-grid) |
+| Blocks and brushes on the voxel grid (D48) | Missing; the engine work below |
+
+## Changing what is built
+
+- **Taking apart** gives back everything it cost (built); what does not fit drops at your feet (built).
+- **Undo**: the last thing built or taken apart, within a minute (proposed).
+- **Moving**: items now (built); rooms and walls as a whole later (open).
+- **Repair**: once bases take damage (D90), the hammer mends what it built, for a little of its cost (proposed). Tools and gear already wear and are mended at stations (D99).
+- **Material**: changing a part's material in place, paying the difference (proposed; material is a property, not a different part, below).
+
+## Stability
+
+Open. Rust, Valheim and Sons of the Forest make structures hold themselves up; Enshrouded and Subnautica do not; Ark does but hides its rules, which players complain about. I recommend none for the MVP. If it comes, it is shown only while building, as Valheim's colours, and a part that holds others up cannot be taken out from under them.
 
 ## Enshrouded as the base?
 
-From the developers, 2026-10-11: Enshrouded's building might be the better base concept than Subnautica 2's. It is a little more advanced, and maybe we can improve on it. Later the same day they agreed with the improvements below and settled the basis (D48): **a voxel grid, as Enshrouded's**. "Subnautica 2 is just easier, but as long as the basis is almost like this voxel grid we could have flexibility in time." So shaped rooms can come first, as the easy way in, written as blocks on the grid.
+From the developers, 2026-10-11: Enshrouded's building might be the better base concept than Subnautica 2's. Later the same day they settled the basis (D48): **a voxel grid, as Enshrouded's**. "Subnautica 2 is just easier, but as long as the basis is almost like this voxel grid we could have flexibility in time." So shaped rooms come first, as the easy way in, written as blocks on the grid.
 
-What Enshrouded's does, from [research/enshrouded.md](../research/enshrouded.md) (second-hand, not checked in the game): buildings are made of small voxel blocks in a material, placed one at a time or as ready-made pieces (walls, floors, stairs, roofs); pieces join seamlessly and different materials blend where they meet; cutting an opening styles its edges to suit; the ground can be dug, filled and flattened; and you build only within the radius of an altar you have placed.
-
-Compared with the shaped rooms built so far (D48, the sandbox's `play` experiment):
+What Enshrouded's does, from [research/enshrouded.md](../research/enshrouded.md): buildings of small voxel blocks in a material, placed one at a time or as ready-made pieces; pieces join seamlessly and materials blend where they meet; cutting an opening styles its edges; the ground can be dug, filled and flattened; you build only within an altar's radius.
 
 | | Shaped rooms (Subnautica 2) | Voxel blocks (Enshrouded) |
 |---|---|---|
 | What you place | A room, a wall, an opening | A block, or a ready-made piece of many blocks |
 | Freedom | Boxes on a grid, resized | Any shape, down to one block |
 | Speed for big things | Fast: a room in one go | Slower, unless ready-made pieces are used |
-| Details that suit their neighbours | Written per part, case by case | Natural: blocks join and blend by what is next to them |
-| A new material or shape | New code per kind of part | A new kind of block, or a new ready-made piece |
+| Details that suit their neighbours | Written per part | Natural: blocks join and blend |
+| A new material or shape | New code per kind of part | A new kind of block, or a new piece |
 
-The table's fourth and fifth rows are two things the developers asked for above: details that morph by what they touch, and a system that is really easy to extend. Voxel building gives both by its nature.
+**Where we improve on it**, agreed by the developers on 2026-10-11: shape rooms, then carve them; bases that matter, held, defended and lived in (D90); built on a round world, each base on its own square grid (D57); building together (D52); strength, perhaps.
 
-**Where we improve on it.** Agreed by the developers on 2026-10-11:
-
-1. **Shape rooms, then carve them.** Keep Subnautica 2's speed: draw a room and its walls, floor and roof are filled in as blocks. Then work any of it by hand, block by block. The fastest start and the most freedom.
-2. **Bases that matter.** As far as I know, Enshrouded's bases are never attacked. Ours are held, defended and lived in (D90): rooms can have a purpose, recruits work and sleep in them, and walls and gates are tested.
-3. **Built on a round world.** Each base keeps its own square grid, level to the ground where it stands (D57), so blocks are square to the base, not to the planet.
-4. **Building together.** Settlements many players build, if the world calls for them (D52).
-5. **Strength, perhaps.** Whether a structure must hold itself up is open; Enshrouded, as far as I know, does not ask it.
-
-**Technically** (mine; D9): structures stay separate from the terrain's smooth ground, but a base can be a voxel volume of its own: blocks on the base's grid, meshed and drawn by their own rules, blended with the ground where they meet. A held area the size of Enshrouded's (160 metres on a side) is 320 blocks across, about 33 million cells if it were all stored, so only the chunks that have something built in them are kept. That keeps the terrain's levels of detail and its edits untouched, and every block placed or carved is still an operation (D21). The sandbox's room tiles in `terra_build` would become one way of writing blocks, or be replaced. With the basis settled, this is the next technical step; it gets its own technical design before it is built.
+**Technically** (mine; D9): structures stay separate from the terrain's smooth ground, but a base can be a voxel volume of its own: blocks on the base's grid, meshed by their own rules, blended with the ground where they meet. Only the chunks with something built in them are kept, and every block placed or carved is an operation (D21). The room tiles in `terra_build` become one way of writing blocks. This gets its own technical design before it is built.
 
 ## Claims
 
-From the developers, 2026-10-11 (D94, Leaning): building will likely need a claim system, because we do not want the world randomly destroyed everywhere, nor to manage it.
+From the developers (D94, Leaning; D104): you build within areas you claim, so the world is not randomly destroyed everywhere, nor managed by anyone. Built: a claim stone, 40 metres across, grown to 80 and 160 for a price; nothing can be built outside one; the base is begun at it.
 
 Proposed, to react to:
 
-- **You build only inside a claim.** A claim is an area you set up by placing something, as an altar does in Enshrouded (160 metres on a side once upgraded). It is the held ground of [game design 001](proposals/game-design-001/README.md#why-explore-and-why-settle-in-more-than-one-place): building, crafting stations and a safe rest happen there.
-- **Outside claims, the world heals.** You can still dig and gather anywhere, since that is how resources are found (D43), but what you change outside a claim grows back after a while. Enshrouded reportedly rolls back changes outside its build zones after about half an hour (unchecked). Trees regrowing and holes refilling also answers whether a thousand players strip a world bare ([multiplayer.md](multiplayer.md)).
-- **Claims belong to someone.** A player or a group; others build there only if allowed. There is no player against player (D2), so nobody can take apart what is in someone else's claim.
-- **Claims are limited**: how many a player holds and how big they grow, perhaps by rank or by what is built at the centre.
-- **Claims need keeping up.** An abandoned claim, its owner long gone, fades and its ground heals, so a persistent world does not fill with dead bases. Soulmask's lit bonfire, which stops structures decaying, is one model.
-- **Claims are what the world attacks** (D90): what pools and forms around a claim is what its defenders hold back.
+- **Outside claims, the world heals.** You can dig and gather anywhere (D43), but what you change outside a claim grows back after a while, as Enshrouded's does after about half an hour.
+- **Claims belong to someone**, a player or a group; others build there only if allowed, as Rust's tool cupboard lists who may. There is no player against player (D2).
+- **Doors and storage obey the claim**: its owner and those allowed open them, as Valheim's ward does.
+- **Claims are limited**: how many a player holds and how big they grow. Ark has none, and its shared servers fill with pillars put up only to block land: the warning for a thousand players.
+- **Claims need keeping up**: a claim long abandoned fades and its ground heals, so a persistent world does not fill with dead bases. Rust's daily upkeep tax is disliked; a lit hearth, as Soulmask's bonfire, is gentler.
+- **Claims are what the world attacks** (D90).
 
-**Technically** (mine): claims keep the world's stored state in proportion to what players hold, not to everything they ever touched. The world is computed from the seed, and only changes are kept (D47); with edits outside claims expiring, those changes live almost entirely inside claims. That is what makes a persistent world for a thousand players affordable to keep, send and save (D52). A claim is a handful of numbers, and a change outside one carries the time it heals.
+**Technically** (mine): claims keep the world's stored state in proportion to what players hold, not to everything they ever touched (D47, D52).
 
 ## The shape proposed
 
-Four ideas. Each is a proposal until the developers say otherwise.
+Four ideas (D56, Leaning).
 
-**1. A buildable is one entry in a list.** It says what it is called, where it sits on the dial, what variants it has, what it costs, where it may go, and how it is drawn. Adding a couch, a connector or a round room is adding an entry. Nothing else in the game has to know the new thing exists.
+1. **A buildable is one entry in a list**: its name, place in the menu, variants, cost, where it may go and how it is drawn. Adding a couch, a connector or a round room is adding an entry.
+2. **Where a thing may go is a rule the entry names**: on open ground or across a room; on a wall; on the edge between two indoor tiles; on a floor, the ground, or another item. When a rule refuses, the thing shows red and the game says why.
+3. **A thing's look comes from what it is next to**: walls in a line are flat with a seam; outside corners round outward, inside corners inward; a wall ending against nothing is capped. Written once for walls, it applies to anything that is a wall.
+4. **Material is a property, not a different buildable.** A room in stone is the same room with a different skin and cost. Changing it in place is changing that property.
 
-**2. Where a thing may go is a rule the entry names, not code written for it.** A handful of rules cover everything asked for so far:
-
-| Rule | Used by |
-|---|---|
-| On open ground or across a room, floor clear of the terrain | Rooms |
-| On a wall, outside or interior | Windows, doors |
-| On the edge between two indoor tiles | Interior walls |
-| On a floor, on the ground, on top of or beside another item | Furniture and kit |
-
-When a rule refuses, the game shows the thing in red and says why. New rules will be needed (on a ceiling, between two buildings) but far fewer than new buildables.
-
-**3. A thing's look comes from what it is next to.** Every structural piece is drawn by first asking what its neighbours are, then choosing shapes to suit. The corner rule the developers described is one case:
-
-| Where two wall segments meet | Drawn as |
-|---|---|
-| In a straight line | Flat, with a seam |
-| At an outside corner | Rounded outward |
-| At an inside corner | Rounded inward |
-| Where a wall ends against nothing | Capped |
-
-The rule is written once for "walls" and applies to anything that says it is a wall: a room's hull, an interior wall, a connector's side, a wall of another material. A new buildable gets the morphing by saying what it is, not by reimplementing it.
-
-**4. Material is a property, not a different buildable.** A room in another material is the same room with a different skin, and possibly a different cost. Skins are also entries in a list.
-
-Underneath, the base stays what `terra_build` already has: a set of tiles, the walls and openings on their faces and edges, and a list of the operations that made it, so it can be saved and sent to other players (D21). Items would join that list.
+Underneath, the base stays a set of tiles, the walls and openings on them, and the list of operations that made it, so it can be saved and sent (D21). A saved layout is that list, placed again; a village is one (D108).
 
 ## The test of "really easy to extend"
-
-If the system is right, these are each small:
 
 | To add | It should take |
 |---|---|
@@ -110,89 +200,63 @@ If the system is right, these are each small:
 | A window shape | One entry. True today. |
 | A material for rooms | One skin entry |
 | A new structural part on the grid, such as a connector | One entry, its rule, and its shapes |
-| A new kind of morphing, such as a different roof edge | One rule, applied to everything of that kind |
+| A new kind of morphing, such as a roof edge | One rule, applied to everything of that kind |
 
 ## The gap
 
-What the sandbox does today, measured against the above.
-
-- **Items are already entries in a list.** Structural parts are not: rooms, walls and openings are written into `terra_build` and into the builder tool case by case.
-- **Looks already follow neighbours in three places**: a post where a wall turns and a seam where it continues; a parapet where the roof begins and a line where a storey continues; a foundation ledge only on outside edges. But it is written as special cases, and nothing is rounded.
-- **No materials.**
-- **Timing is a stand-in.** Jobs are held down and animated, but how long each takes is derived from its cost by one rule, and there is one cutting tool.
-- **Cost is a stand-in.** The sandbox has five raw items, a cost for every buildable, a full refund on taking apart, and a cutter tool to gather more. None of the numbers or names were designed, and there is no notion yet of what a player is capable of building.
-- **No fixed-size buildables, ports or connectors**, and nothing is placed on a wall. See "The grid".
-- **No build menu**, only the dial.
-
-## Open questions
-
-1. **Answered: the grid is half a metre**, changeable later, and it is the smallest thing that can be placed. See "The grid" below.
-2. **What gets rounded?** The upright corners of walls only, or the roof's edge and the foot of the wall too? How round?
-3. **What is a material a property of**: a whole room, a wall, or a tile?
-4. **What does "capable of building" mean?** The build menu shows what you have "unlocked". By finding blueprints, scanning things, a research tree, tools carried?
-5. **What does taking something apart give back?** Everything, as in Subnautica, or less?
-6. **Do bases have needs**, as in Subnautica: power, air, hull strength? Rooms being plain boxes suggests lights at least need power from somewhere.
-7. **Upper storeys.** Stairs or ladders as buildables, and whether rooms can be stacked from the dial.
-8. **Who may change what** in co-op (also question 16 in [player.md](player.md)). Proposed: the owner of a claim, and whom they allow (D94).
-12. **Claims.** What makes one, how big, how many per player, and what keeps one alive? Does what you dig outside a claim heal, and how fast?
-9. Answered: **buildings may be made of voxels.** The developers said on 2026-10-11 they are fine with building in voxels, as long as the terrain stays smooth voxels (D9). Whether Enshrouded's system is the base is still open (D48).
-10. Answered: **shaped rooms on top.** Draw a room and it is filled in as blocks, then carve it (D48).
-11. **Must structures hold themselves up?** On the agreed list as "perhaps".
+What is built, against all of the above: see [The baseline](#the-baseline). In short, the parts and placing are there; missing are height, undo, plans, carried materials, building upward, doors that work, defences, repair, materials, permissions, and the voxel blocks themselves.
 
 ## The grid
 
-What the developers said settles the first open question's main fork: one square grid, not free shapes. What follows is a proposal for what that means.
+**One step for everything: half a metre** (D57). A wall moves by it, a room is sized in it, a window or door is a run of its cells, an item snaps to it: "the smallest placeable kind of thing". The developers also want the grid to show on a wall when something is placed there; nothing hangs on a wall yet.
 
-**One step for everything: half a metre.** Decided by the developers, as "something we can change later", and built: it is one constant in `terra_build`. A wall moves by it, a room is sized in it, a window or door is a run of its cells of any width anywhere along a wall, and an item snaps to it. It is "the smallest placeable kind of thing". The developers also want the same grid to appear on a wall when something is placed there, which is not built: nothing hangs on a wall yet.
+**Three sizes, from the player's side** (with the voxel grid as the basis, D48): the **block**, half a metre, as Enshrouded's; the **brush**, how much one action places or carves, in several sizes as Enshrouded's 1, 2 and 4 metre pieces; and **what is seen**, where blending, bevels and rounded corners stop it looking like a grid.
 
-**Three sizes, from the player's side** (2026-10-11, with the voxel grid as the basis, D48):
-
-1. **The block**: the smallest thing the grid holds, half a metre today. Enshrouded's voxels are half-metre cubes too, from notes the developers shared ([research/enshrouded.md](../research/enshrouded.md)). So ours matches. Halving it means eight times the blocks for the same building, in memory, meshing and what is sent, so it is cheap to change now and dear once saved bases and ready-made pieces are measured in it. Settle it after building with it in the voxel prototype, before content exists.
-2. **The brush**: how much one action places or carves. Several brush sizes over one fine grid keep big work fast and detail possible; Enshrouded's hammer steps through 1, 2 and 4 metre foundations and walls over its half-metre voxels.
-3. **What is seen**: blending, bevels and rounded corners are what stop voxel building looking like a grid. That is meshing, separate from the block size.
-
-**Two kinds of structural buildable.**
-
-| Kind | Size | Joins others by |
-|---|---|---|
-| Free-form | Any number of steps, resized by pushing walls, extended by building across it | Sharing a wall, as rooms do now |
-| Fixed | One footprint, as designed: a round room, an observatory, a dock. It sits on the same grid and claims a block of cells, but its shape need not fill them: a round room leaves the corners of its block empty. | Its ports only |
-
-**Ports and connectors.** A fixed buildable has ports: places on its outside, each facing one way, including up and down. Two ports that face each other one step apart join directly. A port that faces a free-form room's wall cuts its own doorway there. A port that faces something further off is joined by a connector, a corridor one step wide, and the proposal is that the game builds the shortest straight one itself when you place the fixed buildable in line with something to join. Connectors are also a buildable in their own right.
+**Two kinds of structural buildable**: free-form ones, of any size, resized by pushing walls and extended by building across them; and fixed ones, one footprint as designed (a round room, a dock), joined to others only by **ports**. Two ports facing each other join; a port facing a free-form wall cuts its own doorway; one facing something further off is joined by a **connector**, which the game builds itself when a fixed buildable is placed in line with something. Not built.
 
 **You see the grid only near what you are placing**, as now.
 
-Fixed buildables, ports and connectors are not built.
-
 ## The build menu
 
-The developers want it like Subnautica's: you equip the building tool, and it brings up a build menu of what you have unlocked (D67, D68). On 2026-10-11 they added: the dial is not the build menu, since there are too many things for a wheel, though a wheel is useful for choosing among the variants of one thing.
+As the developers want it (D67, D68): with the hammer in hand, tap the build menu key, and a panel of tabs shows what you can build, each tile with a picture, its name and its cost, greyed if you cannot pay and absent if you have not learned it. Click one, or use the arrows and Enter. The variant wheel (hold R) chooses among the variants of the thing in hand. Taking apart and moving are modes on their own keys, not entries. The last few things built sit at the top. The world never pauses. Built, with pictures drawn from each thing's model.
 
-Proposed, to react to:
-
-**Two steps: choose a thing, then its variant.**
-
-| Step | What you see | How |
-|---|---|---|
-| The menu: what to build | A panel of tabs, each a grid of tiles: a picture, a name, what it costs. Greyed if you cannot pay; absent if you have not learned it (D68, D92). | With the hammer in hand, tap the build menu key (right mouse or B). The pointer is freed; click a tile, or use the arrow keys and Enter. The menu closes and the thing is in hand. |
-| The wheel: which variant | A small dial of that thing's variants only: room sizes, window shapes, chair styles. | Hold R. Let go on one, or tap R to step to the next, as now. |
-
-**Tabs**, first pass, after Subnautica's and Enshrouded's: Claim; Structure (rooms, walls, floors, stairs); Openings (windows, doors); Crafting (stations); Furniture; Storage; Light and fire. With the voxel grid (D48), a Blocks tab and brush sizes join them.
-
-**Not in the menu**: taking apart and moving are things the hammer does to what is already built, on their own keys (Q and G), not entries in a list.
-
-**Quick picks**: the last few things built sit along the top of the menu, so building ten of the same wall does not mean finding it ten times.
-
-**Pictures**: each tile's picture is drawn once, from the thing's own model, when the game starts. Until then, names and costs.
-
-Settled with the developers on 2026-10-11: the world never pauses, and the keys stand. Built in the sandbox's `play` experiment, with names and costs on the tiles; pictures are to come.
+Tabs: Claim; Structure; Openings; Crafting; Furniture; Storage; Light and fire. Proposed: Defence, once there are fences and gates; Blocks and brushes, with the voxel grid (D48).
 
 ## One system for everything built
 
-Said by the developers on 2026-10-11 (D108): everything built in the world, by anyone, is made of the same parts and components as what a player builds. A village's houses are rooms, walls, roofs and doors from the build catalogue, put up by the same operations, not models dropped in whole. A well is a buildable thing too, a prop or station rather than a room. You may not be able to build everything you see; some of it may have to be learned or unlocked first (D68), which is open.
+D108: everything built in the world, by anyone, is made of the same parts as what a player builds. A village's houses are rooms, walls, roofs and doors from the build catalogue, put up by the same operations. A well is a buildable thing, a station rather than a room. The test of a building system is that a settlement can be described in it; if something in a village cannot be, the catalogue grows.
 
-So the test of a building system is that a settlement can be described in it. The sandbox's village is: its houses are put up by the same operations as a player's rooms. If something in a village cannot be, the catalogue grows, rather than the village keeping a special case.
+## Proposed order
+
+For the developers to reorder. Each step is small enough to play and judge.
+
+1. **Placing, finished**: raise and lower, undo, the room-over-a-placed-thing check, what blocks a ghost shown through walls, and the controls above.
+2. **Upward**: a storey on a room, stairs and ladders, rooms a storey down.
+3. **Doors and defences**: doors that open and lock by the claim; fences, walls and gates drawn as a line.
+4. **Plans**: free ghosts filled as materials go in, from the pack or storage in the claim.
+5. **Carried materials**, if the developers want them: logs on the shoulder, piles, a sled.
+6. **Damage and repair**, with the first attacks on a base (D90).
+7. **Materials**, and changing them in place.
+8. **Voxel blocks and brushes** (D48), with shaped rooms written as blocks: the engine track, with its own technical design.
+
+## Open questions
+
+For the developers. Each has my recommendation.
+
+1. **Plans**: does placing something you cannot afford make a plan that fills as materials go in, or are plans a mode of their own? Recommend a mode (hold Shift), so a red ghost still means "you cannot".
+2. **Carried materials**: should logs and other big materials be carried by hand, as The Forest's, rather than packed? Recommend yes for logs and large stone, with storage in the claim paying for building so each log is carried once.
+3. **Building from storage**: within a claim, does building draw on storage nearby? Recommend yes.
+4. **Stability**: none, or shown only while building? Recommend none for the MVP.
+5. **Taking apart**: always a full refund, or only for a while after building? Recommend always, as now; Rust's window exists because of raiding, which we do not have (D2).
+6. **Rooms a storey down**, for slopes and cellars? Recommend yes.
+7. **What gets rounded**: the upright corners of walls only, or the roof's edge and the foot of the wall too?
+8. **What is a material a property of**: a whole room, a wall, or a tile?
+9. **What "capable of building" means** (D68): blueprints found, things scanned, a research tree, skill?
+10. **Do bases have needs**, as Subnautica's: power, light, warmth?
+11. **Who may change what** in co-op? Recommend the claim's owner and whom they allow (D94).
+12. **Claims**: how many per player, what keeps one alive, how fast the world heals outside them?
+13. **Upkeep**: does a base decay if left? Recommend only an abandoned claim, slowly, never one in use.
 
 ## What is built
 
-The sandbox's `play` experiment: see its [README](../crates/terra_sandbox/README.md). What Subnautica 2 does, as far as it could be confirmed, and how the sandbox's controls map to it, is in [research/subnautica-2-building.md](../research/subnautica-2-building.md).
+The `play` experiment: see the game's [README](../crates/terra_game/README.md). Subnautica 2's controls and how ours map to them are in [research/subnautica-2-building.md](../research/subnautica-2-building.md); all five games are compared in [research/building-systems-prior-art.md](../research/building-systems-prior-art.md).

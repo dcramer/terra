@@ -31,6 +31,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [agents-and-blender.md](agents-and-blender.md) | What is the current outside advice on agents in Blender, with skeletons and generated models, and are our playbooks current? |
 | [character-pipeline-audit.md](character-pipeline-audit.md) | Across the character pipeline, what is done as the industry does it, what is a bug, and what is duct tape? |
 | [ecs-audit.md](ecs-audit.md) | Does the game's code keep to our ECS rule and to many of everything, and is ECS the right model for a thousand players? |
+| [building-systems-prior-art.md](building-systems-prior-art.md) | How do the building systems of Enshrouded, Rust, Ark, Subnautica and The Forest work, from keys to claims, so ours misses nothing players expect? |
 
 ## Adding a note
 
