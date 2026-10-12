@@ -100,12 +100,14 @@ The base is checked with the rig checks until it passes, once.
 | Command | Does | Cost |
 |---|---|---|
 | `body base` | Builds the base from its design and our skeleton; rig checks | free, once |
-| `body morph NAME SHEET` | A new parameter from a design of the base person: model, registration, morph, checks on every item | 55 credits |
-| `body new NAME SHEET` | Design model, parameters estimated, skin painted, checks | 35 to 45 credits |
-| `gear new ITEM --kind skin --coverage chest_sleeveless --concept IMAGE` | Piece made once on the base, morphs copied, painted, checked on every template | 20 to 55 credits |
-| `gear new ITEM --kind rigid --socket back --concept IMAGE` | Model fitted to its socket, checked | 55 credits |
+| `body morph NAME SHEET` | A new parameter from a design of the base person: model, registration, morph, checks on every item | a model |
+| `body new NAME SHEET` | Design model, parameters estimated, skin painted, checks | a model and a texture |
+| `gear new ITEM --kind skin --coverage chest_sleeveless --concept IMAGE` | Piece made once on the base, morphs copied, painted, checked on every template | a texture, or a model |
+| `gear new ITEM --kind rigid --socket back --concept IMAGE` | Model fitted to its socket, checked | a model |
 | `body check`, `gear check` | Every check on everything | free |
 | Workbench | Any template in any outfit through any clip | free |
+
+Costs are the Tripo commands each runs; [tools/tripo/README.md](../tools/tripo/README.md) lists their credits.
 
 They live in `tools/characters/` (D133): TypeScript to drive, Blender for imports, posing and baking, Rust for what the game shares.
 

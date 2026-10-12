@@ -1,8 +1,8 @@
 // Tripo Studio's private backend, so our tools spend the subscription's credits, not the API's.
 //
 // Not a public API: these are the requests studio.tripo3d.ai makes, captured from the web app
-// and read from its JavaScript bundle (research/tripo-studio-api.md). Expect it to break when
-// Tripo changes the site; re-capture and fix the request here.
+// and read from its JavaScript. Tripo changes them when it ships the app; MAINTAINING.md says
+// how to see what the app sends now.
 //
 // The login is TRIPO_STUDIO_COOKIE: the ory_kratos_session cookie of a signed-in browser, or
 // the whole `cookie` header of any request the web app makes to api.tripo3d.ai. It lasts about
@@ -25,6 +25,8 @@ const BROWSER = {
 };
 // What progress reports for an operation that will never finish.
 const FAILED = ["failed", "error", "banned", "cancelled", "expired", "partial"];
+// Charges that were, or will be, taken; the rest were given back.
+const CHARGED = ["fulfilled", "pending"];
 // Requests that only read or check, so a hiccup (a 502, a dropped connection) can be tried
 // again. Anything that starts an operation is sent once: sending it again could pay twice.
 const READS = [
@@ -44,6 +46,24 @@ export class StudioError extends Error {}
 export type Place = { bucket: string; key: string };
 export type ImageRef = Place & { image_source: "upload" | "generate"; image_audit_result: string };
 type Reply = { code?: number; message?: string; data?: any; tokenized?: string };
+
+// A project: its latest model and the operation that made it (or the one asked for).
+export type Project = {
+  id: string;
+  project_name?: string;
+  model_url: string;
+  operator: Operator;
+  running_operator?: { operator_id: string; type?: string } | null;
+};
+export type Operator = {
+  operator_id: string;
+  model_version?: string;
+  rigging?: { status: string; type: string };
+  retarget?: Retarget[];
+  // What has been done to the model: is_textured, is_hd_textured, is_rigged, is_nexus_mesh…
+  [flag: `is_${string}`]: boolean | undefined;
+};
+export type Retarget = { name: string; status: string; operator_id: string; motion_asset_id?: string };
 
 export function log(message: string): void {
   console.error(message);
@@ -73,6 +93,9 @@ export class Studio {
   csrf: string;
   jwt = "";
   expires = 0;
+  // What this run has started that may be charged for, not yet counted by charged().
+  unbilled = new Set<string>();
+  since = Date.now();
 
   constructor(cookie = env("TRIPO_STUDIO_COOKIE")) {
     cookie = cookie.trim();
@@ -223,14 +246,39 @@ export class Studio {
 
   // Projects: a model and the operations done to it.
 
-  // Starts an operation (POST /v2/studio/operation/<name>); returns its receipt.
-  async operate(name: string, body: unknown): Promise<any> {
-    const receipt = await this.call("POST", `/v2/studio/operation/${name}`, body);
-    return Array.isArray(receipt) ? receipt[0] : receipt; // batch and variant requests answer with several
+  // Starts work: an operation by name (POST /v2/studio/operation/<name>), or another endpoint
+  // by its path. Returns the receipt, and keeps its ids to find what it was charged.
+  async start(name: string, body: unknown): Promise<any> {
+    const receipt = await this.call("POST", name.startsWith("/") ? name : `/v2/studio/operation/${name}`, body);
+    this.bill(receipt.operator_id, receipt.task_id, receipt.asset_id, ...(receipt.variations ?? []).map((v: any) => v.operator_id));
+    return receipt;
+  }
+
+  // Notes ids Tripo may charge under: an operation's, or a motion's once it is made.
+  bill(...ids: (string | undefined)[]): void {
+    for (const id of ids) if (id) this.unbilled.add(id);
+  }
+
+  // What Tripo charged for the work started since the last call, read from its own history,
+  // so it is exact even while other runs spend from the same account.
+  async charged(): Promise<number> {
+    let total = 0;
+    for (let page = 1; this.unbilled.size && page <= 5; page++) {
+      const data = await this.call("GET", "/v2/studio/txn/records", undefined, { page_num: page, page_size: 100 });
+      const records: any[] = data.records ?? [];
+      for (const r of records) {
+        if (r.txn_type === "charge" && CHARGED.includes(r.status) && this.unbilled.has(r.operator_id)) total += Number(r.amount) || 0;
+      }
+      // Newest first: stop at charges from before this run began.
+      const oldest = Date.parse(records.at(-1)?.create_time ?? "");
+      if (!data.have_more || oldest < this.since - 600_000) break;
+    }
+    this.unbilled.clear();
+    return total;
   }
 
   // A project's detail, at one operation's result when given, else at its latest.
-  async project(projectId: string, operator?: string): Promise<any> {
+  async project(projectId: string, operator?: string): Promise<Project> {
     return this.call("GET", `/v2/studio/project/detail/v3/${projectId}`, undefined, operator ? { operator_id: operator } : undefined);
   }
 }

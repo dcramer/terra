@@ -319,3 +319,13 @@ test("project steps: unanimate, cancel, restore, fork and rename", async () => {
   assert.deepEqual((await run(["fork", PID])).studio.operations, [["save_as_new", { operator_id: "head", project_id: PID }]]);
   assert.deepEqual((await run(["rename", PID, "a crate"])).studio.operations, [["update_name", { name: "a crate", project_id: PID }]]);
 });
+
+test("credits: what Tripo charged for this run's operations, not other runs'", async () => {
+  const now = new Date().toISOString();
+  const charge = (operator_id: string, amount: number, status = "fulfilled") => ({ operator_id, amount, status, txn_type: "charge", create_time: now });
+  const { printed } = await run(["model", "ref.png", "--model", "p2", ...out("m.glb")], (s) => {
+    // op1 made the model, op2 textured it; another run's charge lands between them.
+    s.charges = [charge("op2", 20, "pending"), charge("someone-else", 55), charge("op1", 100), charge("op1", 5, "cancelled")];
+  });
+  assert.equal(printed[0].credits, 120);
+});

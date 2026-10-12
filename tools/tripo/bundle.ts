@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import * as versions from "./versions.ts";
 
 const CDN = "https://tripo-webapp-assets.tripo3d.ai/studio-prod/_nuxt";
 const HERE = import.meta.dirname;
@@ -55,15 +56,26 @@ export function versionEnums(js: string): string[][] {
   return found;
 }
 
-// The endpoints and versions this CLI sends, read from its own source.
-export function ours(source: string): { endpoints: Set<string>; versions: Set<string> } {
+// What this CLI sends from versions.ts: every model version, image model, skeleton and format.
+export function ourNames(): Set<string> {
+  return new Set(Object.values(versions).flatMap((v) => (typeof v === "string" ? [v] : Array.isArray(v) ? v : Object.values(v))));
+}
+
+// The endpoints this CLI calls, read from its source: paths written out, and operations named
+// where they are started.
+export function ourEndpoints(source: string): Set<string> {
   const endpoints = new Set<string>();
   for (const m of source.matchAll(/\/v2\/studio\/[A-Za-z0-9_/]+/g)) endpoints.add(m[0].replace(/\/$/, ""));
-  // Operations named where they are started, and the prefix they are started under.
-  for (const m of source.matchAll(/(?:operate\(|operation\(client, a, pid, |endpoint = )"([a-z_]+)"/g)) endpoints.add(`/v2/studio/operation/${m[1]}`);
+  for (const m of source.matchAll(/(?:start\(|apply\(client, a, pid, |endpoint = )"([a-z_/]+)"/g)) endpoints.add(`/v2/studio/operation/${m[1]}`);
   endpoints.delete("/v2/studio/operation");
-  const versions = new Set([...source.matchAll(/"((?:[A-Za-z]+-)?v\d+\.\d+-\d{8})"/g)].map((m) => m[1]));
-  return { endpoints, versions };
+  return endpoints;
+}
+
+// The CLI's own source, without its tests and this file.
+function source(dir = HERE): string {
+  return readdirSync(dir, { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? [source(join(dir, e.name))] : e.name.endsWith(".ts") && !e.name.endsWith(".test.ts") && e.name !== "bundle.ts" ? [readFileSync(join(dir, e.name), "utf8")] : []))
+    .join("\n");
 }
 
 async function main(): Promise<void> {
@@ -94,21 +106,23 @@ async function main(): Promise<void> {
   const appEndpoints = new Set(js.flatMap(({ s }) => [...s.matchAll(/\/v2\/studio\/[A-Za-z0-9_/]+/g)].map((m) => m[0].replace(/\/$/, ""))));
   const enums = js.flatMap(({ s }) => versionEnums(s));
   const appVersions = new Set(enums.flat().filter((v) => VERSION.test(v)));
-  const cli = ours(["tripo.ts", "studio.ts"].map((f) => readFileSync(join(HERE, f), "utf8")).join("\n"));
+  const cli = { endpoints: ourEndpoints(source()), names: ourNames() };
+  // A name the app still sends is written in its code as a string.
+  const quoted = new Set(js.flatMap(({ s }) => [...s.matchAll(/[`"]([^`"\n]{1,60})[`"]/g)].map((m) => m[1])));
   // Endpoints built from a prefix in the app (`uv_edit/${action}`) count as present.
   const inApp = (e: string) => appEndpoints.has(e) || [...appEndpoints].some((a) => e.startsWith(`${a}/`));
   const stale = [...cli.endpoints].filter((e) => !inApp(e));
-  const staleVersions = [...cli.versions].filter((v) => !appVersions.has(v));
+  const staleNames = [...cli.names].filter((v) => !(appVersions.has(v) || quoted.has(v)));
 
   console.log(`build ${build.id}, ${new Date(build.timestamp).toISOString()}: ${files.length} scripts in ${dir}\n`);
   console.log("Model versions the app knows, by enum:");
   for (const e of enums) console.log(`  ${e.join("  ")}`);
-  console.log(`\nVersions we send that the app no longer has: ${staleVersions.join(", ") || "none"}`);
+  console.log(`\nVersions and names we send that the app no longer has: ${staleNames.join(", ") || "none"}`);
   console.log(`Endpoints we call that the app no longer has: ${stale.join(", ") || "none"}`);
   const unused = [...appEndpoints].filter((e) => ![...cli.endpoints].some((c) => c === e || c.startsWith(`${e}/`))).sort();
   console.log(`\nEndpoints the app has that we do not call (${unused.length}):`);
   for (const e of unused) console.log(`  ${e}`);
-  if (stale.length || staleVersions.length) process.exitCode = 1;
+  if (stale.length || staleNames.length) process.exitCode = 1;
 }
 
 if (import.meta.main) await main();

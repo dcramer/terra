@@ -9,7 +9,7 @@ From a design to a model that plays every animation in the game, with Tripo doin
 
 Everything runs from the repository root under WSL, with the Windows Blender (`tools/blender/run.sh`, which finds it) for the steps that must run inside Blender, and the Tripo CLI (`tools/tripo/tripo.ts`, the `tripo` skill) for everything Tripo does, logged in with `TRIPO_STUDIO_COOKIE` in `.env`. Check it first with `node tools/tripo/tripo.ts balance`.
 
-Costs per character, on the Studio subscription: design sheets are free (100 images a month), the model about 55 credits, the rig 20.
+Costs per character, on the Studio subscription: design sheets are free (100 images a month); the model and the rig cost what [tools/tripo/README.md](../../../tools/tripo/README.md) lists.
 
 ## 1. Design sheet (a person approves it)
 
@@ -87,7 +87,7 @@ A piece is made on the base (below), into `tools/characters/out/gear/base-male/`
 **Clothing and armour that bend with the body** (chest, legs, gloves, feet) are made on the base body, so nothing is set per character:
 
 1. Draw that base's own sheet wearing it (free): `--ref` the base's approved sheet, and say "the same person, in exactly the same T-pose ... now also wearing <the piece>". Check it kept the person and the pose.
-2. Make the dressed model (55 credits): crop the front view as `make_character.sh` does, then `tripo.ts model`. Keep the sheet, front view and model as source art in `art/gear/dressed-<body>-<item>/` (`sheet.png`, `front.png`, `model.glb`) and commit them.
+2. Make the dressed model (a `model`'s credits): crop the front view as `make_character.sh` does, then `tripo.ts model`. Keep the sheet, front view and model as source art in `art/gear/dressed-<body>-<item>/` (`sheet.png`, `front.png`, `model.glb`) and commit them.
 3. Build the piece from the base body:
 
 ```bash
@@ -128,7 +128,7 @@ tools/characters/make_morph.sh heavy "the man is much heavier, overweight with a
 
 The first run only draws the sheet (free) into `art/characters/base-male/morphs/heavy/` and stops. Look at it: it must be the same person in the same T-pose, front view on the left third; redraw (delete `sheet.png`) until it is. Run the same command again. It:
 1. crops the front view;
-2. makes Tripo's model (55 credits);
+2. makes Tripo's model (a `model`'s credits);
 3. registers the base onto it (`morph.py`);
 4. exports the body (`export_character.py`);
 5. carries every worn look onto it (`carry_gear.py`);
@@ -144,7 +144,7 @@ tools/characters/make_morph.sh female --design tools/characters/out/base-female-
 tools/characters/paint_skin.sh female art/characters/base-female/front.png
 ```
 
-`paint_skin.sh` has Tripo paint the template's own skin on the base's mesh in its shape, from the design's front view (20 credits). It keeps the painting as `morphs/female/skin.glb` and bakes it onto the base's layout. A build morph keeps the base's skin and needs no painting.
+`paint_skin.sh` has Tripo paint the template's own skin on the base's mesh in its shape, from the design's front view (a `texture`'s credits). It keeps the painting as `morphs/female/skin.glb` and bakes it onto the base's layout. A build morph keeps the base's skin and needs no painting.
 
 **Read the output:**
 

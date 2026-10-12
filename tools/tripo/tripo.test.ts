@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { presignPut } from "./studio.ts";
-import { ours, versionEnums } from "./bundle.ts";
-import { chargesIn, gltfOf, projectIdOf, slug, textureSize, triangles } from "./tripo.ts";
+import { ourEndpoints, ourNames, versionEnums } from "./bundle.ts";
+import { projectIdOf, slug } from "./cli.ts";
+import { gltfOf, triangles } from "./glb.ts";
+import { chargesIn } from "./spending.ts";
+import { textureSize } from "./steps.ts";
 
 test("signs an upload as the client that worked against Tripo's bucket did", () => {
   const url = presignPut("tripo-data", "tripo-studio/20261012/5e0c347f-eaa0/input.png", "us-west-2", "ASIAEXAMPLE", "secret/key+x", "tok/en+==", new Date("2026-10-11T22:45:56Z"));
@@ -69,9 +72,13 @@ test("finds the app's model-version enums in minified code", () => {
   assert.deepEqual(versionEnums(js), [["v1.0-20240301", "v3.0-20260909"], ["Nexus-v2.0-20260801", "Tripo H3.1"]]);
 });
 
-test("reads the endpoints and versions the CLI sends from its source", () => {
-  const src = 'client.call("POST", "/v2/studio/progress", x); client.operate("export", b); endpoint = "text_to_model"; `/v2/studio/operation/${name}`; { model_version: "v3.0-20250812" }';
-  const { endpoints, versions } = ours(src);
-  assert.deepEqual([...endpoints].sort(), ["/v2/studio/operation/export", "/v2/studio/operation/text_to_model", "/v2/studio/progress"]);
-  assert.deepEqual([...versions], ["v3.0-20250812"]);
+test("reads the endpoints the CLI calls from its source", () => {
+  const src = 'client.call("POST", "/v2/studio/progress", x); client.start("export", b); apply(client, a, pid, "remesh", body); endpoint = "text_to_model"; `/v2/studio/operation/${name}`';
+  assert.deepEqual([...ourEndpoints(src)].sort(), ["/v2/studio/operation/export", "/v2/studio/operation/remesh", "/v2/studio/operation/text_to_model", "/v2/studio/progress"]);
+});
+
+test("takes the names the CLI sends from versions.ts", () => {
+  const names = ourNames();
+  for (const name of ["v3.1-20260211", "v3.0-20260909", "gemini_3.1_flash_image_preview", "unreal", "gltf"]) assert.ok(names.has(name), name);
+  assert.ok(!names.has("h3.1"), "our own names for them are not sent");
 });

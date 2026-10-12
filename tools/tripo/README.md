@@ -55,7 +55,7 @@ Every command that makes or changes a model prints one line of JSON with the `pr
 | `rename PROJECT NAME` | Renames a project | free |
 | `report [--all]` | Notes the account's spending for the token stats; every command does this too | |
 
-Credits are from Tripo's price list in the app's own code, checked against the wallet where a run says so; Tripo can change them.
+Credits are from Tripo's price list in the app's own code, checked against what runs were charged; Tripo can change them. This table is the one place they are written down; the skills and docs point here.
 
 `model` options, defaulting to what the app does: `--model` picks the generator: `h3.1` (the default, the best quality), `h3.0`, `h2.5`, or Smart Mesh `p1` (35) and `p2` (100), which make cleaner low-poly meshes and are textured in a second step as the app does (20 more). `--geometry detailed` (h3.1), `--texture-quality detailed` (4K) and `--pbr` are on unless turned down (`--geometry standard`, `--texture-quality standard`, `--no-pbr`). `--faces` (10,000, or 5,000 for Smart Mesh), `--quad` (on for p2; `--no-quad`), `--no-texture`, `--parts`, `--variations 2|4` (p2: several models from one input, each its own project), `--public`.
 
@@ -69,12 +69,25 @@ The app's Auto Rig is Tripo's V3 rig, and `rig` sends what it does. A humanoid (
 
 `download` gives Studio's meshopt-compressed GLB, which some tools cannot open; `export --format glb` gives a plain one.
 
-A project runs one operation at a time, so a command on a project that is busy waits for what is running, then starts. A command stopped with Ctrl-C leaves its operation running on Studio; the next command on that project waits for it. The `credits` a command prints are read from the balance before and after, so they are off when two runs overlap.
+A project runs one operation at a time, so a command on a project that is busy waits for what is running, then starts. A command stopped with Ctrl-C leaves its operation running on Studio; the next command on that project waits for it. The `credits` a command prints are what Tripo charged for the operations it started, read from the account's own history, so they are exact even when other runs spend at the same time.
 
 ## Credits in the token stats
 
 The [token stats](../token-stats/README.md) count Tripo's credits beside Claude's tokens, priced at what they cost on our plan. After every command the CLI reads the account's own charge history and notes each charge once, by its operation, in the ledger `report.mjs` sends from (`~/.local/state/terra-token-stats/spends.jsonl`), so work done by hand in the web app counts too, the next time anyone on that account runs the CLI. `report --all` notes the whole history. It needs nothing beyond the token stats' own setup; without it, the ledger simply waits.
 
+## The code
+
+| File | What it holds |
+|---|---|
+| `tripo.ts` | The command line: runs one command |
+| `commands/` | The commands, by what they do: `make.ts` (image, views, model, import), `edit.ts` (texture to Mesh Edit), `rig.ts` (rig, animate), `project.ts` (the account, a project's history, export) |
+| `steps.ts` | What commands share: waiting on a project, running an operation and saving its result, texturing, animating, exporting |
+| `studio.ts` | Studio's backend: login, requests, uploads, waiting, what a run was charged |
+| `versions.ts` | Every model version and name the app sends |
+| `cli.ts`, `glb.ts`, `spending.ts` | Arguments and help; reading a GLB; noting spending for the token stats |
+| `bundle.ts` | Compares the CLI with the app's own code ([MAINTAINING.md](MAINTAINING.md)) |
+| `requests.test.ts` | What every command sends, against a fake Studio, as the app sends it |
+
 ## When it breaks
 
-This is not a public API: it makes the requests the web app makes, and Tripo can change them without notice. When a command fails where it used to work, or to check the CLI still matches the app, see [MAINTAINING.md](MAINTAINING.md): `bundle.ts` reads the app's own code and reports what changed. Fix the request in `tripo.ts` (the requests) or `studio.ts` (login, uploads, waiting). `node --test` in this folder runs the tests that need no Tripo.
+This is not a public API: it makes the requests the web app makes, and Tripo can change them without notice. When a command fails where it used to work, or to check the CLI still matches the app, see [MAINTAINING.md](MAINTAINING.md): `bundle.ts` reads the app's own code and reports what changed, and it says where in the code to fix it. `node --test` in this folder runs the tests that need no Tripo.

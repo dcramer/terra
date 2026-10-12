@@ -56,11 +56,11 @@ When the code cannot settle a question, for example what a reply looks like, cap
 
 ## What to change when the app changes
 
-1. Fix the request in `tripo.ts` (bodies, defaults, commands) or `studio.ts` (login, uploads, waiting).
+1. Fix it where it lives: a version or name in `versions.ts`, a request's body or default in its command under `commands/`, a shared step in `steps.ts`, login, uploads or waiting in `studio.ts`. Change `requests.test.ts` to expect what the app sends now; it fails until the command sends it.
 2. If it was a default that changed, change ours to match, unless it is listed under "Where we differ on purpose" below.
 3. Run the command live once, free commands first, and look at what it made. A check that only reads code is not done.
 4. Update the README's table, its credits and this file's "Last checked".
-5. Run `node --test` in this folder, and note anything new learned about the backend in the research note.
+5. Run `node --test` in this folder (`cargo xtask check` runs it too), and note anything new learned about the backend in the research note.
 
 ### Where we differ on purpose
 
