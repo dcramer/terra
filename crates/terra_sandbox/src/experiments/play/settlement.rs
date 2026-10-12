@@ -65,9 +65,11 @@ const HOUSES: [House; 4] = [
 
 /// An item from the catalogue the village has: what it is, where it stands from the
 /// middle in metres east and south, and how many degrees it is turned.
-const ITEMS: [(&str, f32, f32, f32); 2] = [
+const ITEMS: [(&str, f32, f32, f32); 3] = [
     ("../village/Well", 0.0, 0.0, 0.0),
     ("../village/MarketStand_1", 6.0, 4.0, -60.0),
+    // Ilse's stool.
+    ("Stool", -3.5, 2.5, 0.0),
 ];
 
 /// The operations that put a house up, in its own space: the door in the wall along

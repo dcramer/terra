@@ -9,6 +9,7 @@
 use super::Player;
 use super::bag::Notice;
 use super::bodies::Body;
+use super::catalogue;
 use super::claim::Claim;
 use super::crafting::{SmithAtHand, Station};
 use super::creatures::{Creature, Species};
@@ -132,6 +133,7 @@ pub fn plugin(app: &mut App) {
                 follow,
                 settle,
                 animate,
+                sit,
             )
                 .chain(),
         );
@@ -414,6 +416,50 @@ fn settle(
             }
             None => {}
         }
+    }
+}
+
+/// How far from a seat someone told to sit looks for it.
+const SEAT_REACH_M: f32 = 1.5;
+/// How far above a seat's top the hips rest.
+const HIPS_ABOVE_SEAT_M: f32 = 0.08;
+
+/// Puts whoever is sitting on the nearest seat: wherever their sitting pose puts their
+/// hips, they are moved so the hips rest on its top. Someone with no seat near sits
+/// where they are.
+fn sit(
+    seats: Query<(&Prop, &GlobalTransform)>,
+    joints: Query<&GlobalTransform, Without<Prop>>,
+    children: Query<&Children>,
+    names: Query<&Name>,
+    mut people: Query<(Entity, &Person, &mut Transform)>,
+) {
+    for (entity, person, mut at) in &mut people {
+        if person.doing != Doing::Sitting {
+            continue;
+        }
+        let Some(seat_top) = seats
+            .iter()
+            .filter(|(prop, _)| catalogue::is_seat(prop.item))
+            .map(|(prop, seat)| seat.transform_point(Vec3::Y * prop.half.y * 2.0))
+            .filter(|top| top.distance(at.translation) < SEAT_REACH_M)
+            .min_by(|a, b| {
+                a.distance(at.translation)
+                    .total_cmp(&b.distance(at.translation))
+            })
+        else {
+            continue;
+        };
+        let Some(hips) = character::find(entity, "DEF-hips", &children, &names)
+            .and_then(|hips| joints.get(hips).ok())
+        else {
+            continue;
+        };
+        let (Ok(body), up) = (joints.get(entity), seat_top.normalize()) else {
+            continue;
+        };
+        let wanted = seat_top + up * HIPS_ABOVE_SEAT_M;
+        at.translation = body.translation() + (wanted - hips.translation());
     }
 }
 

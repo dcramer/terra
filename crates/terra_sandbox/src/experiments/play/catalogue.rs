@@ -404,6 +404,11 @@ pub fn item_from(file: &str) -> Option<&'static Item> {
     items().find(|item| item.file == file)
 }
 
+/// Whether an item is something to sit on: one of the seats.
+pub fn is_seat(wanted: &Item) -> bool {
+    place_of(wanted).is_some_and(|(part, _)| PARTS[part].name == "Seat")
+}
+
 /// The part and variant that an item is, for picking "another of those".
 pub fn place_of(wanted: &Item) -> Option<(usize, usize)> {
     PARTS
