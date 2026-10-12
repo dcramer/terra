@@ -39,9 +39,9 @@ Neither is what shipped games do. Their bodies are a small number of parameters 
 
 | Part | What it is | From |
 |---|---|---|
-| Mesh | One human body, all quads, in our T-pose, with eyes | MakeHuman's mesh (CC0), posed once onto our mannequin's bone directions |
+| Mesh | One human body in our T-pose, its seams welded | Our own: the base male Tripo made from its approved sheet (`art/characters/base-male/`), cleaned once (its topology rebuilt evenly if morphs or deformation need it) |
 | Skeleton | Ours (the Quaternius mannequin, forearm twist bones), so all our clips play | `figure.gltf` |
-| Skin weights | Made for this mesh, on our bones | MakeHuman's weights (CC0), fixed on the base until the rig checks pass |
+| Skin weights | Made for this mesh, on our bones | Tripo's rig converted onto our bones (as now; it passes the rig checks), fixed on the base if a check fails |
 | Patches | 1,024 patches a garment can hide | Cut once |
 | Sockets | Hands, head, back, belt | Rules on the skeleton and skin, as now |
 
@@ -63,8 +63,8 @@ The base is checked with the rig checks until it passes, once.
   - estimate the parameters that bring the base closest to the model: its pose matched, then proportions, build and head solved by least squares;
   - Tripo paints the base's layout in those proportions from the design's front view.
   
-  Nothing is copied vertex by vertex, so no crease or face of the generated model can come through. Tried on our two bodies: these shapes alone came within about 1 to 1.5 cm of the models, and Tripo's paint on our mesh looked like them, faces included.
-- **Our first parameters come from MakeHuman's own shapes** (CC0 data): build, height and proportion targets, and head and face targets. They are turned into our parameters once, when the base is built.
+  A design is never copied vertex by vertex into a body, so no crease of the generated model comes through. Tried on 2026-10-12: Tripo's paint on a mesh we gave it, from a design's front view, looked like the design, face included.
+- **The parameters themselves are made once each, from designs of the base person**: the same sheet redrawn heavier, thinner, stronger, as a woman, with another head. Tripo makes each into a model, and the base's mesh is registered onto it (its pose matched, then drawn smoothly onto the model's skin, the hands kept as the base's). What moved is kept as a morph, so every morph is the same base mesh. Bone proportions are measured from the skeletons. A new morph is a new parameter for every body and is copied onto every item by the tool.
 
 ## 3. Gear, made once on the base
 
@@ -99,7 +99,8 @@ The base is checked with the rig checks until it passes, once.
 
 | Command | Does | Cost |
 |---|---|---|
-| `body base` | Builds the base and its parameters from MakeHuman's data and our skeleton; rig checks | free, once |
+| `body base` | Builds the base from its design and our skeleton; rig checks | free, once |
+| `body morph NAME SHEET` | A new parameter from a design of the base person: model, registration, morph, checks on every item | 25 credits |
 | `body new NAME SHEET` | Design model, parameters estimated, skin painted, checks | 35 to 45 credits |
 | `gear new ITEM --kind skin --coverage chest_sleeveless --concept IMAGE` | Piece made once on the base, morphs copied, painted, checked on every template | 10 to 25 credits |
 | `gear new ITEM --kind rigid --socket back --concept IMAGE` | Model fitted to its socket, checked | 25 credits |
@@ -124,7 +125,8 @@ They live in `tools/characters/` (D133): TypeScript to drive, Blender for import
 
 | Risk | How we would know | If it happens |
 |---|---|---|
-| MakeHuman's weights deform badly in our clips | The rig checks on the base | Fix on the base, once; corrective morphs at elbows and knees |
+| The base's weights deform badly at some morph | The rig checks at each morph's limit | Fix on the base, once; corrective morphs at elbows and knees |
+| Registering the base onto a design fails somewhere (hands, face) | The fit's error and a look | Keep the base's own there; a design closer to the base's pose and proportions |
 | A few parameters cannot reach a design | The parameter fit's error and a look | Add a parameter to everyone (a new bone scale or morph), never a one-off mesh |
 | One base for both sexes makes gear sit wrong on one | `gear_check` on both | Two bases, gear moved from one to the other by the binding, with a per-item exception flag |
 | Rigid parts bend with build morphs | `gear_check` and a look | Mark rigid parts to ride one bone |

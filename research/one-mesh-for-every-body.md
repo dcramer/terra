@@ -4,6 +4,8 @@
 
 The first approach, each piece made on each base body from a dressed model of that body (D128 as it stood), works. Every piece passed the clipping check on both bodies (see [docs/characters.md](../docs/characters.md)). But the cost grows as items × bodies: each new piece needs a dressed Tripo model per body, and a new body needs every piece made again. This note surveys how shipped games and open tools avoid that. It is read, not tried; the spike that tries it is linked at the end.
 
+> **Since:** on 2026-10-12 the developers chose morphs on a base body of our own and ruled out MakeHuman. What follows on MakeHuman is kept as what was found; see [modern-character-variety.md](modern-character-variety.md) and [docs/character-system-plan.md](../docs/character-system-plan.md).
+
 ## Answer
 
 **All bodies share one mesh, and a garment is bound to that mesh once.** Every body, and every template of it, is the same mesh with the same vertices, order and texture layout, moved by stored shapes (morph targets). A garment records, once, where each of its vertices sits on that mesh. Placed on any body, it moves as that body's surface does. A new item is then one model made once, and a new body is one fit of the shared mesh. That costs items + bodies, not items × bodies.

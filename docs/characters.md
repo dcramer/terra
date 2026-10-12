@@ -6,9 +6,9 @@ How bodies, clothing, armour, packs and weapons are made so that **every item fi
 
 Games that do this well don't fit items to characters. They fix a few contracts that every asset follows, and the fitting falls out of them:
 
-- **One mesh for every body.** Every body is the same mesh, with the same vertices in the same order and the same texture layout, moved by stored shapes. Male, female, each creator template (D111) and any later customisation are shapes of it, not separate models. The mesh is MakeHuman's (CC0), which comes with the shapes, a skeleton placed from the mesh and a clothing format.
-- **One skeleton, placed by the body.** Every body has our skeleton (D115), its joints placed from that body's own shape, and every animation plays on every body.
-- **Gear is made once, on the shared mesh.** A garment is bound to the mesh once, and on any body it moves as that body's surface does. That is how The Sims, BodySlide and MetaHuman fit one garment to every body.
+- **One base body, and every body is a few parameters on it.** Proportions are bone scales; build, sex and head are a few morphs of the same mesh. Male, female, each creator template (D111) and any later customisation are settings of those, not separate models.
+- **One skeleton.** Every body has our skeleton (D115), its proportions from its parameters, and every animation plays on every body.
+- **Gear is made once, on the base.** It rides the skeleton, so proportions come free, and it carries the base's morphs, copied by a tool. That is how Starfield, Red Dead Redemption 2, Final Fantasy XIV and Bannerlord fit one item to every body.
 - **The body hides what is covered.** The body is divided into patches; each item says which it covers, and those are not drawn while it is worn. The patches are the same on every body, because the mesh is.
 - **Rigid things hang on named points with fixed axes.** Every body has the same sockets, placed for that body. A sword or a helmet is made once to the socket's convention and fits every body.
 - **Generated art supplies the look, not the shape's structure.** Tripo makes a body's look; that body becomes a shape of the shared mesh with its texture copied onto the shared layout. Tripo makes a garment's look once, as the base body wearing it; that look is baked onto the garment.
@@ -17,10 +17,11 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 
 ### Bodies
 
-- **One base body, made once and checked**: one mesh in our T-pose (from MakeHuman's CC0 mesh), our skeleton, skin weights made for it, the skin patches and the socket rules. It passes the rig checks before anything uses it.
+- **One base body, made once and checked**: one mesh in our T-pose (our own base male, made by Tripo from its sheet), our skeleton, skin weights made for it, the skin patches and the socket rules. It passes the rig checks before anything uses it.
 - **A body is a few parameters on it**, as in modern games ([research](../research/modern-character-variety.md)): proportions as bone scales (height, limb length, shoulders, hips, head), build as a few soft morphs (heavy, muscular, thin, chest, belly), the head as blends of head shapes, and a painted skin, tinted. Sex is a morph or a second base; the spike decides.
 - **A template (D111) is a preset of those numbers and a skin**; sliders later are the same numbers, clamped to what every item passes at; an NPC is a template with small offsets from its seed.
-- **A template from a design**: Tripo makes the design's model, as now; the parameters that bring the base closest to it are estimated, and Tripo paints the base's layout in those proportions. Nothing is copied vertex by vertex from a generated body.
+- **A template from a design**: Tripo makes the design's model, as now; the parameters that bring the base closest to it are estimated, and Tripo paints the base's layout in those proportions.
+- **The morphs themselves are made once each from designs of the base person** (heavier, thinner, stronger, a woman, another head): the base's mesh is registered onto each design's model and what moved is kept as a morph.
 - **Sockets**, the same names and axes on every body: hands, head, back, belt.
 - Hair is a separate part, bound to the head like gear (D112).
 
@@ -52,16 +53,9 @@ No layers (one piece per slot), but pieces from different slots overlap: a pack'
 
 ## In the game
 
-- **A character's appearance is data**: a template, its tints, what it wears. A few bytes, saved and sent as they are; an NPC's comes from a seed.
-- **The body is built when a character appears or changes what it wears**, not every frame: the shape's vertices, its joints and each piece fitted to it. The fitted meshes are cached by appearance and item, so a village of people in the same jerkin share one.
-- **The fitting is our own Rust**, in a crate that does not depend on Bevy, used by the offline tools and the game alike. It is reimplemented from MakeHuman's formats and the papers, not copied: MakeHuman's code is GPL.
-- **Bevy only draws and animates**: an ordinary skinned mesh per body and per piece, sharing one skeleton.
-
-## Building it, in order
-
-1. **Spike:** does the shared mesh, fitted to our two Tripo bodies, look as good as they do, and does one jerkin made once pass the clipping check on both and on a heavier shape? Offline, in Blender, through the existing pipeline.
-2. **The fitting crate** and the game building bodies from it, replacing a file per body per item.
-3. **The tools** in `tools/characters/` and the playbook, so adding a body or a piece is one command each.
+- **A character's appearance is data**: its parameters, skin and tints, hairstyle and what it wears. A few bytes, saved and sent as they are; an NPC's comes from a seed.
+- **Bevy draws and animates**: one skinned mesh for the body and one per worn piece, sharing the skeleton; proportions are each body's joint rest positions and scales; build morphs are one set of weights the body and its pieces share. No mesh is built per character, so a crowd in the same jerkin draws one mesh.
+- A small Rust crate without Bevy turns appearance data into those joint positions, scales and morph weights. The build plan is [character-system-plan.md](character-system-plan.md).
 
 ## Checks, so a person isn't the test
 
