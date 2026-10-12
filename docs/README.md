@@ -20,6 +20,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | Doc | What it covers |
 |---|---|
 | [worlds.md](worlds.md) | The worlds: themes, cultures, terrain, caverns, water, foliage, gravity, the starter planet, portals between them. |
+| [biomes.md](biomes.md) | Draft: how a world fills with life, from grass to canopy: goals, how placement and drawing could work on voxel terrain, open questions. |
 | [gameplay.md](gameplay.md) | Core loops, survival needs, hostile life, bases and defence; terraforming phases, parked. Older than game design 001, whose loops would replace these if adopted. |
 | [survival.md](survival.md) | Draft: the survival attributes (health, stamina, oxygen, hunger, thirst) and how they vary by world. |
 | [player.md](player.md) | Draft: the player's body, tools, equipment, backpack and action bar, acting on the world, building. Open questions for the developers. |

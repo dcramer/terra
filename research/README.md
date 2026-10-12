@@ -32,6 +32,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [character-pipeline-audit.md](character-pipeline-audit.md) | Across the character pipeline, what is done as the industry does it, what is a bug, and what is duct tape? |
 | [ecs-audit.md](ecs-audit.md) | Does the game's code keep to our ECS rule and to many of everything, and is ECS the right model for a thousand players? |
 | [building-systems-prior-art.md](building-systems-prior-art.md) | How do the building systems of Enshrouded, Rust, Ark, Subnautica and The Forest work, from keys to claims, so ours misses nothing players expect? |
+| [procedural-vegetation.md](procedural-vegetation.md) | How do shipped games place and draw vegetation over large procedural terrain so it reads full and organic, and what does Bevy give us toward it? |
 
 ## Adding a note
 
