@@ -7,7 +7,7 @@ hammer painted models/held/hammer.glb 72b96af943a049bf -
 hide painted - - -
 iron painted - - -
 iron_axe painted models/held/iron_axe.glb f2b26d24513e2b9b -
-iron_pickaxe painted models/held/iron_pickaxe.glb 2a664eeda2fa5603 -
+iron_pickaxe painted models/held/iron_pickaxe.glb e922e2e105634538 -
 knife painted models/held/knife.glb fdb7acba51e094c1 -
 large_pack painted models/gear/large_pack.glb 0552b76af007ad5c -
 leather_cap painted models/gear/leather_cap.glb 7fa4c7d079d2bfec -
@@ -19,6 +19,6 @@ small_pack painted models/gear/small_pack.glb 38337125097d012f -
 spear painted models/held/spear.glb 9dd22f7a5b0d1c13 -
 stone painted - - -
 stone_axe painted models/held/stone_axe.glb ff834e6b0ad4b8d2 -
-stone_pickaxe painted models/held/stone_pickaxe.glb 531ef911e12e5fb0 -
-torch painted models/held/torch.glb dbad5bc332eefeb5 -
+stone_pickaxe painted models/held/stone_pickaxe.glb 19c448aced0eeebd -
+torch painted models/held/torch.glb 7ffec0d583f34647 -
 wood painted - - -

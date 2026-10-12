@@ -1,5 +1,5 @@
 """Makes a generated prop ours: welded, cut to a triangle budget, one palette colour per face
-read from its texture, squared up, at its size, checked, and rendered in the game's light beside the
+read from its texture, levelled and squared up, at its size, checked, and rendered in the game's light beside the
 figure for scale.
 
     tools/blender/run.sh tools/props/refine.py MODEL OUT.glb SHEET.png SIZE BUDGET TURN ROLE...
@@ -8,7 +8,7 @@ MODEL is Tripo's textured model (facing +X, as Studio keeps them); OUT the file 
 loads; SIZE its longest side in metres; BUDGET the triangles it may have; TURN degrees about
 the up axis after it is turned to face the standard way; then the palette roles its faces may
 take, each named in look.PALETTE, or as ROLE=r,g,b to match it to that sRGB colour in the
-texture instead of its own. Each face gets the role nearest its texture's colour there,
+texture instead of its own; and --flat for a thing that lies flat, such as a rug. Each face gets the role nearest its texture's colour there,
 then nearly flat regions and stray faces are evened out, so colours sit in broad areas as in
 the concept. Materials are named by role: the game colours a prop by those names (props.rs),
 and a part called Fire glows. Run by props.ts, which reads these from art/props/<prop>/prop.json.
@@ -30,13 +30,36 @@ from mathutils import Matrix, Vector
 
 import look
 
-src, out, sheet, size, budget, turn, *given = look.args()
+# --flat: a thing that lies flat, such as a rug, laid on its plane and pressed thin.
+args = look.args()
+flat = "--flat" in args
+src, out, sheet, size, budget, turn, *given = [a for a in args if a != "--flat"]
 size, budget, turn = float(size), int(budget), float(turn)
 # ROLE, or ROLE=r,g,b for a role that the texture paints in another colour than its own.
 roles = [role.split("=")[0] for role in given]
 palette = np.array(
     [[float(c) for c in role.split("=")[1].split(",")] if "=" in role else look.PALETTE[role] for role in given]
 )
+# The most a model's feet may lean, in degrees, for level() to stand it straight.
+LEVEL_MAX = 8.0
+# How thick a flat thing is pressed, in metres.
+FLAT_M = 0.02
+# How much lightness counts against hue and saturation when a face's colour is matched: a
+# texture's painted light and shade change lightness far more than hue, so matching by raw
+# RGB turns a shaded blue blanket into dark wood.
+LIGHTNESS_WEIGHT = 0.5
+
+
+def lab(srgb):
+    """CIE L*a*b* of sRGB colours (rows), lightness scaled by LIGHTNESS_WEIGHT."""
+    c = np.asarray(srgb, dtype=np.float64)
+    c = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    xyz = c @ np.array([[0.4124, 0.2126, 0.0193], [0.3576, 0.7152, 0.1192], [0.1805, 0.0722, 0.9505]])
+    xyz = xyz / np.array([0.9505, 1.0, 1.089])
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    return np.stack([(116 * f[..., 1] - 16) * LIGHTNESS_WEIGHT, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])], axis=-1)
+
+
 # The sun, relative to each camera, so no view on the sheet is all shadow.
 SUN_YAW, SUN_PITCH = 40.0, 45.0
 
@@ -105,6 +128,7 @@ def reduce(ob):
 def paint(ob):
     """Each face takes the palette role nearest its texture's colour."""
     me = ob.data
+    palette_lab = lab(palette)
     textures = [texture_of(m) for m in me.materials]
     uv = me.uv_layers.active.data if me.uv_layers else None
     picked = []
@@ -121,8 +145,8 @@ def paint(ob):
         xs = np.clip((samples[:, 0] % 1.0) * (w - 1), 0, w - 1).astype(int)
         ys = np.clip((samples[:, 1] % 1.0) * (h - 1), 0, h - 1).astype(int)
         # An 8-bit sRGB texture's pixels come back as stored, already sRGB, as the palette is.
-        colour = tex[ys, xs, :3].mean(axis=0)
-        picked.append(int(np.argmin(((palette - colour) ** 2).sum(axis=1))))
+        colour = lab(tex[ys, xs, :3].mean(axis=0))
+        picked.append(int(np.argmin(((palette_lab - colour) ** 2).sum(axis=1))))
     me.materials.clear()
     for role in roles:
         me.materials.append(look.material(role))
@@ -203,6 +227,69 @@ def squaring(me):
     return min(range(-45, 46), key=lambda degrees: (round(footprint(degrees), 6), abs(degrees)))
 
 
+def split_finely(ob, cuts=4):
+    """Cuts every face into smaller ones, so a pattern painted across a few large faces,
+    such as a rug's border, can be followed face by face."""
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=cuts, use_grid_fill=True)
+    bm.to_mesh(ob.data)
+    bm.free()
+
+
+def merge_colours(ob):
+    """Joins neighbouring faces of one colour lying in one plane, undoing split_finely
+    wherever the colour does not change."""
+    select_only(ob)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.dissolve_limited(angle_limit=math.radians(5), delimit={"MATERIAL"})
+    bpy.ops.mesh.quads_convert_to_tris()
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def lay_flat(me):
+    """Turns the model so the plane it best fits is level, then presses it thin: a rug the
+    generator modelled tilted or curled lies flat. place() sets how thin, at its size."""
+    pts = np.array([v.co for v in me.vertices])
+    centred = pts - pts.mean(axis=0)
+    _, vectors = np.linalg.eigh(centred.T @ centred)
+    normal = Vector(vectors[:, 0])
+    if normal.z < 0:
+        normal = -normal
+    me.transform(normal.rotation_difference(Vector((0, 0, 1))).to_matrix().to_4x4())
+    zs = [v.co.z for v in me.vertices]
+    me.transform(Matrix.Diagonal((1, 1, 0.01 / max(max(zs) - min(zs), 1e-6), 1)))
+
+
+def level(me):
+    """Stands the model level: the lowest point in each quarter of its footprint is where it
+    rests, as a chair on its four legs, and a model a little askew on those is turned until
+    they are level. Leaves alone anything leaning more than LEVEL_MAX, which is not a tilt
+    to correct but its shape."""
+    pts = np.array([v.co for v in me.vertices])
+    middle = (pts.min(axis=0) + pts.max(axis=0)) / 2
+    feet = []
+    for east in (False, True):
+        for north in (False, True):
+            quarter = pts[((pts[:, 0] > middle[0]) == east) & ((pts[:, 1] > middle[1]) == north)]
+            if len(quarter):
+                feet.append(quarter[np.argmin(quarter[:, 2])])
+    feet = np.array(feet)
+    # Only what rests on its corners, as furniture does: a tool standing on the end of its
+    # handle has nothing low in most quarters, and is left as it is.
+    resting = feet[:, 2] - pts[:, 2].min() < (pts[:, 2].max() - pts[:, 2].min()) * 0.15
+    if len(feet) < 3 or not resting.all():
+        return 0.0
+    # The plane z = a x + b y + c through the feet.
+    (a, b, _), *_ = np.linalg.lstsq(np.c_[feet[:, :2], np.ones(len(feet))], feet[:, 2], rcond=None)
+    normal = Vector((-a, -b, 1.0)).normalized()
+    lean = math.degrees(normal.angle(Vector((0, 0, 1))))
+    if 0.2 < lean <= LEVEL_MAX:
+        me.transform(normal.rotation_difference(Vector((0, 0, 1))).to_matrix().to_4x4())
+    return lean
+
+
 def place(ob):
     """Squared up, facing the standard way (Studio's +X front to glTF's +Z, Blender's -Y),
     turned by TURN, its longest side SIZE, standing on the origin."""
@@ -211,6 +298,9 @@ def place(ob):
     pts = np.array([v.co for v in me.vertices])
     lo, hi = pts.min(axis=0), pts.max(axis=0)
     me.transform(Matrix.Scale(size / float((hi - lo).max()), 4))
+    if flat:
+        zs = [v.co.z for v in me.vertices]
+        me.transform(Matrix.Diagonal((1, 1, FLAT_M / max(max(zs) - min(zs), 1e-6), 1)))
     pts = np.array([v.co for v in me.vertices])
     lo, hi = pts.min(axis=0), pts.max(axis=0)
     me.transform(Matrix.Translation(Vector(((lo[0] + hi[0]) / -2, (lo[1] + hi[1]) / -2, -lo[2]))))
@@ -312,12 +402,22 @@ ob = load()
 ob.name = os.path.splitext(os.path.basename(out))[0]
 weld(ob.data)
 reduce(ob)
+if flat:
+    split_finely(ob)
 paint(ob)
-flatten_regions(ob.data)
+# A flat thing is one plane, so evening out its planes would leave it one colour.
+if not flat:
+    flatten_regions(ob.data)
 despeckle(ob.data)
+if flat:
+    merge_colours(ob)
+    lay_flat(ob.data)
+else:
+    leaned = level(ob.data)
 place(ob)
 bpy.context.view_layer.update()
 report = checks(ob)
+report["leaned_degrees"] = 0.0 if flat else round(leaned, 1)
 select_only(ob)
 bpy.ops.export_scene.gltf(filepath=look.path(out), export_format="GLB", use_selection=True)
 look.stage()

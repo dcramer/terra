@@ -20,10 +20,12 @@ const BLENDER = join(ROOT, "tools", "blender", "run.sh");
 // What every concept is drawn like (art/README.md).
 const STYLE = join(ROOT, "art", "style", "mood-medieval-town.png");
 
-// The concept's brief: one subject alone, so the generator models nothing else, in clear parts
+// The concept's brief: fantasy, not true medieval (docs/art.md); one subject alone, so the generator models nothing else, in clear parts
 // of one colour each, so every face can be given a palette colour.
 const BRIEF = (subject: string) =>
-  `A single ${subject}, as a prop for a stylised 3D survival game, in the style of the reference. ` +
+  `A single ${subject}, as a prop for a stylised 3D fantasy survival game, in the style of the reference. ` +
+  `Fantasy rather than historical: hand-made, with a touch of carved ornament and gently curving, organic ` +
+  `shapes, never fussy. ` +
   `Three-quarter view from a little above, the whole object in frame and centred, on a plain light ` +
   `grey background; nothing else in the picture, no ground, no cast shadow, no text. Chunky, ` +
   `readable, hand-made forms at true life size, built from clean separate parts, each part one ` +
@@ -38,6 +40,9 @@ const USAGE = `usage: node tools/props/props.ts <step> [PROP …] [--again]
             face one palette colour, at its size; writes assets/models/props/<file>.glb (or
             the folder its "into" names) and a sheet in tools/props/out/<prop>.png
   all       the three in turn, each skipped where art/props already has its result
+  fronts    every model in assets/models/props, tools and village seen from straight in
+            front, on one sheet, tools/props/out/fronts.png: each should face the viewer,
+            stand level and rest on the ground line (free)
 
   PROP …    the props, by folder name in art/props; every prop if none are named
   --again   make a concept or model even if art/props already has one`;
@@ -64,6 +69,9 @@ export type Prop = {
   turn?: number;
   // Tripo's face limit for the generated model, before it is cut to the budget.
   faces?: number;
+  // It lies flat, as a rug does: laid on the plane it best fits and pressed thin, since a
+  // generator models such things tilted or curled.
+  flat?: boolean;
 };
 
 export function readProp(text: string, name: string): Prop {
@@ -81,7 +89,7 @@ export function readProp(text: string, name: string): Prop {
 /** The arguments refine.py takes for a prop. */
 export function refineArgs(prop: Prop, model: string, out: string, sheet: string): string[] {
   const roles = prop.roles.map((role) => (prop.match?.[role] ? `${role}=${prop.match[role].join(",")}` : role));
-  return [model, out, sheet, String(prop.size), String(prop.budget), String(prop.turn ?? 0), ...roles];
+  return [model, out, sheet, String(prop.size), String(prop.budget), String(prop.turn ?? 0), ...roles, ...(prop.flat ? ["--flat"] : [])];
 }
 
 function run(command: string, args: string[]) {
@@ -121,13 +129,27 @@ function refine(name: string, prop: Prop) {
   run(BLENDER, [join(HERE, "refine.py"), ...refineArgs(prop, here(glb), here(out), here(join(OUT, `${name}.png`)))]);
 }
 
+/** Every prop, tool and village model from the front, labelled, on one sheet. */
+function fronts() {
+  const folders = ["props", "tools", "village"].map((folder) => join(ROOT, "assets", "models", folder));
+  const models = folders.flatMap((folder) => readdirSync(folder).filter((f) => f.endsWith(".glb")).sort().map((f) => join(folder, f)));
+  const dir = join(OUT, "fronts");
+  mkdirSync(dir, { recursive: true });
+  run(BLENDER, [join(HERE, "fronts.py"), relative(ROOT, dir), ...models.map((m) => relative(ROOT, m))]);
+  const pictures = models.map((m) => join(dir, m.split("/").pop()!.replace(/\.glb$/, ".png")));
+  const sheet = join(OUT, "fronts.png");
+  run("montage", ["-label", "%t", "-pointsize", "16", ...pictures, "-tile", "6x", "-geometry", "+3+3", sheet]);
+  console.log(`Look at ${relative(ROOT, sheet)}: every model should face you, stand level and rest on the ground.`);
+}
+
 function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { again: { type: "boolean" }, help: { type: "boolean", short: "h" } } });
   const [step, ...named] = positionals;
-  if (values.help || !step || !["concept", "model", "refine", "all"].includes(step)) {
+  if (values.help || !step || !["concept", "model", "refine", "all", "fronts"].includes(step)) {
     console.log(USAGE);
     process.exit(values.help ? 0 : 2);
   }
+  if (step === "fronts") return fronts();
   const names = named.length ? named : readdirSync(ART).filter((n) => existsSync(join(ART, n, "prop.json"))).sort();
   for (const name of names) {
     const file = join(ART, name, "prop.json");

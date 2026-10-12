@@ -98,6 +98,8 @@ struct ItemFile {
     claims: bool,
     #[serde(default)]
     rest: Option<Rest>,
+    #[serde(default)]
+    seat: Option<f32>,
 }
 
 impl Builds {
@@ -119,6 +121,7 @@ impl Builds {
             light: item.light,
             claims: item.claims,
             rest: item.rest,
+            seat: item.seat,
         };
         let parts = file
             .parts
@@ -283,6 +286,9 @@ pub struct Item {
     pub claims: bool,
     /// What someone can rest on it for, if anything: sitting, or sleeping and waking.
     pub rest: Option<Rest>,
+    /// How high its seat is, in metres, where that is below its top, as a chair's is
+    /// below its back; someone sits on its top otherwise.
+    pub seat: Option<f32>,
 }
 
 /// What something is to rest on.

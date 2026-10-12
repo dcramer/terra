@@ -468,7 +468,10 @@ fn sit(
                 let Some(top) = seats
                     .iter()
                     .filter(|(prop, _)| prop.item.rest == Some(Rest::Sit))
-                    .map(|(prop, seat)| seat.transform_point(Vec3::Y * prop.half.y * 2.0))
+                    .map(|(prop, seat)| {
+                        let high = prop.item.seat.unwrap_or(prop.half.y * 2.0);
+                        seat.transform_point(Vec3::Y * high)
+                    })
                     .filter(|top| top.distance(at.translation) < SEAT_REACH_M)
                     .min_by(|a, b| {
                         a.distance(at.translation)

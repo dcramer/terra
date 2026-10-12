@@ -96,29 +96,15 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (flicker, keep_clear, settle));
 }
 
-/// Our colour for a part of a prop, as it should look on screen, and whether it glows.
+/// Our colour for a part of a prop, as it should look on screen, and whether it glows. A
+/// part named for a palette role (`tools/props`) has that role's colour in its file; the
+/// free models' wood is given ours.
 fn colour_of(part: &Part) -> (Color, bool) {
     let name = part.material.split('.').next().unwrap_or("");
     let colour = match name {
-        "White" | "Main" => Color::srgb(0.9, 0.87, 0.8),
-        "Wood" | "Brown" => Color::srgb(0.56, 0.39, 0.25),
-        "Wood_Light" | "LightWood" => Color::srgb(0.74, 0.56, 0.37),
-        "Wood_Dark" | "DarkWood" => Color::srgb(0.37, 0.26, 0.19),
-        "Grey" | "LightGrey" | "Metal" | "LightMetal" => Color::srgb(0.62, 0.63, 0.66),
-        "DarkGrey" => Color::srgb(0.3, 0.31, 0.36),
-        "Black" => Color::srgb(0.14, 0.14, 0.17),
-        "Red" => Color::srgb(0.84, 0.27, 0.2),
-        "DarkRed" => Color::srgb(0.62, 0.2, 0.17),
-        "Orange" | "Accent" => Color::srgb(0.9, 0.46, 0.17),
-        "DarkAccent" => Color::srgb(0.62, 0.31, 0.13),
-        "LightOrange" => Color::srgb(0.95, 0.66, 0.36),
-        "Couch_Blue" => Color::srgb(0.2, 0.45, 0.56),
-        "Cushin" => Color::srgb(0.82, 0.74, 0.62),
-        "Kitchen" => Color::srgb(0.3, 0.5, 0.5),
-        "KitchenTop" => Color::srgb(0.84, 0.81, 0.75),
-        "Plant_Green" => Color::srgb(0.42, 0.6, 0.26),
-        "DarkGreen" => Color::srgb(0.27, 0.46, 0.25),
-        "Light" | "Fire" => return (Color::srgb(1.0, 0.72, 0.35), true),
+        "Wood" => Color::srgb(0.56, 0.39, 0.25),
+        "LightWood" => Color::srgb(0.74, 0.56, 0.37),
+        "Fire" => return (Color::srgb(1.0, 0.72, 0.35), true),
         _ => part.colour,
     };
     (colour, false)

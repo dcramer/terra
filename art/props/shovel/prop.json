@@ -1,0 +1,11 @@
+{
+  "subject": "wooden spade standing upright: a long straight wooden handle with a T grip, and a flat wooden blade shod with an iron edge",
+  "file": "Spade",
+  "size": 1.3,
+  "budget": 600,
+  "roles": [
+    "Wood",
+    "WoodDark",
+    "MetalDark"
+  ]
+}

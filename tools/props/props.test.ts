@@ -20,6 +20,12 @@ test("passes refine.py its arguments in order, turned 0 if not given", () => {
   assert.deepEqual(args, ["m.glb", "o.glb", "s.png", "2.6", "2500", "0", "Rock", "Fire"]);
 });
 
+test("tells refine.py a flat thing is flat", () => {
+  const prop = readProp(forge, "forge");
+  prop.flat = true;
+  assert.equal(refineArgs(prop, "m", "o", "s").at(-1), "--flat");
+});
+
 test("gives refine.py the texture's colour for a role matched by another", () => {
   const prop = readProp(forge, "forge");
   prop.match = { Fire: [0.68, 0.24, 0.17] };

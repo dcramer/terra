@@ -6,14 +6,7 @@
   "budget": 600,
   "roles": [
     "Wood",
-    "Metal",
-    "Leather"
-  ],
-  "match": {
-    "Leather": [
-      0.3,
-      0.18,
-      0.13
-    ]
-  }
+    "WoodDark",
+    "Metal"
+  ]
 }

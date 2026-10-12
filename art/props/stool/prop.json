@@ -1,0 +1,11 @@
+{
+  "subject": "three-legged wooden stool with a thick round seat, splayed legs pegged through it",
+  "file": "Stool",
+  "size": 0.5,
+  "budget": 600,
+  "roles": [
+    "Wood",
+    "WoodDark",
+    "WoodLight"
+  ]
+}

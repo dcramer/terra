@@ -14,6 +14,8 @@ Simple shapes, flat colour, and light doing nearly all the work. The world looks
 6. **Small, dense life.** Where things grow, they grow as many small flat-coloured pieces: ferns, grass, flowers. Lushness comes from quantity, not detail.
 7. **A lens.** A little bloom, gentle colour grading, and sometimes blur in the distance. It should feel photographed, not rendered.
 
+From the developers, 2026-10-12: the style is more fantasy than medieval, given the lore ([vision.md](vision.md)), so things need not be historically true. Props are drawn that way (`tools/props`): hand-made, with a touch of carved ornament and organic curves.
+
 ## Life-sized
 
 The world is at real-world scale (D110, Decided). A broadleaf tree stands 15 to 25 metres, a pine taller; boulders range from knee-high to bigger than a house; hills rise tens of metres and mountains hundreds. The player should feel small against the land, which is also what makes haze and layered distance work. Stylised shapes do not mean small things: a model is simplified, never shrunk.

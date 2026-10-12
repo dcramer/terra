@@ -20,7 +20,7 @@ Each prop is a folder in [art/props](../../art/props), named as you like, holdin
 }
 ```
 
-`subject` finishes the concept's brief, "A single …". `file` is its name in `assets/models/props`, as `assets/data/builds.ron` names it, and `size` its longest side in metres, as there. `budget` is the triangles it may have. `roles` are the palette colours its faces may take, named in [tools/characters/look.py](../characters/look.py)'s `PALETTE`; give only the ones the concept shows, since every face takes the nearest of them. A face coloured `Fire` glows in the game. Optional: `turn`, degrees about the up axis if its front comes out facing the wrong way; `faces`, Tripo's face limit (5,000); and `into`, another folder of `assets/models` to write it to. A tool's model goes `into` `tools`, standing on the end of its handle, with its parts as `Wood` and `Metal`: [fit_held.py](../characters/fit_held.py) makes the look held in the hand from it, colouring the metal for a stone or an iron head.
+`subject` finishes the concept's brief, "A single …". `file` is its name in `assets/models/props`, as `assets/data/builds.ron` names it, and `size` its longest side in metres, as there. `budget` is the triangles it may have. `roles` are the palette colours its faces may take, named in [tools/characters/look.py](../characters/look.py)'s `PALETTE`; give only the ones the concept shows, since every face takes the nearest of them. A face coloured `Fire` glows in the game. Optional: `flat: true` for a thing that lies flat, such as a rug, which generators model tilted or curled: it is laid on the plane it best fits and pressed to 2 cm; `turn`, degrees about the up axis if its front comes out facing the wrong way; `faces`, Tripo's face limit (5,000); and `into`, another folder of `assets/models` to write it to. A tool's model goes `into` `tools`, standing on the end of its handle, with its parts as `Wood` and `Metal`: [fit_held.py](../characters/fit_held.py) makes the look held in the hand from it, colouring the metal for a stone or an iron head.
 
 ## Making one
 
@@ -32,7 +32,13 @@ node tools/props/props.ts model forge     # about 45 Studio credits: views, then
 node tools/props/props.ts refine forge    # free: assets/models/props/Forge.glb, and a sheet
 ```
 
-A prop's front is wherever Tripo left it; `refine` squares the model up first, turning it by the smallest angle that gives it the tightest footprint, so a model set askew, such as a pickaxe with its head at 45 degrees, lies along the axes. Where a colour comes out wrong because the texture paints a part in another shade than its role's, such as a forge's dull red coals that should be `Fire`, `match` gives the texture's sRGB colour for that role: `"match": {"Fire": [0.68, 0.24, 0.17]}`. To see what the texture really paints, sample it in Blender before guessing.
+Every model the game loads stands the same way by default: facing glTF's front (+Z), level, its foot at the origin. `refine` makes a generated model so: Tripo's front, which is the concept's, is turned to +Z; a model resting on its corners a few degrees askew is levelled on them (`leaned_degrees` in the checks says by how much, and a lean over 8 degrees is left as its shape); and it is squared up, turned by the smallest angle that gives it the tightest footprint, so a model set askew, such as a pickaxe with its head at 45 degrees, lies along the axes. `turn` in `prop.json` corrects one whose front still comes out wrong. To check every model at once:
+
+```bash
+node tools/props/props.ts fronts   # tools/props/out/fronts.png: every prop, tool and village model from the front
+```
+
+Each should face you, stand level and rest on the ground line. Where a colour comes out wrong because the texture paints a part in another shade than its role's, such as a forge's dull red coals that should be `Fire`, `match` gives the texture's sRGB colour for that role: `"match": {"Fire": [0.68, 0.24, 0.17]}`. To see what the texture really paints, sample it in Blender before guessing. Colours are matched in Lab with lightness counting half, so a part's hue decides its role more than how the texture shaded it.
 
 `all` runs the three in turn, skipping a concept or model `art/props` already has (`--again` remakes it). With no props named, a step does every prop. Look at the concept before spending on a model, and at the sheet, `tools/props/out/<prop>.png`, before calling it done: four views in the game's light, with the figure beside it for scale. `out/<prop>.json` beside it has the checks: triangles, size, loose parts, and how much of it each colour covers.
 
@@ -58,3 +64,4 @@ Every item in `builds.ron` says how tall a real one stands (`height`, lowest and
 |---|---|
 | `props.ts` | The steps above |
 | `refine.py` | The clean-up, inside Blender |
+| `fronts.py` | Each model from the front, for the `fronts` sheet |
