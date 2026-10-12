@@ -52,15 +52,14 @@ Every slot that holds an item shows a picture of it: the bar, the backpack, the 
 
 **How they are made** (D129, Leaning, technical): the game draws each picture from the item's own look, in its tint and state, through one fixed camera and light rig, the first time it is shown, and keeps it. Nobody paints a picture, so a new item, colour or variant has one as soon as it has a look (D127), and the picture is always the real thing (D93). A look can say how it sits in a slot, as it says how it is carried; most need nothing. The workbench can write every item's picture to a sheet to check them.
 
-**What they look like** (D130, Open), for the developers:
+**What they look like** (D130, Open). The developers said on 2026-10-12 that ideally they match the art style. Drawing them from the looks gives most of that: the same models and painted materials as the world, so when the art direction moves (D14), the pictures move with it. The rest is the rig, which should be the world's own: a warm key light and a cool sky fill (art.md), the same grading and bloom, and no outline, since the world has none. If that does not read at 64 pixels, a stronger rim light comes before an outline. Still for the developers:
 
 1. **Angle**: a three-quarter view from above, or flat side-on, as many survival games lay tools?
-2. **Background**: none, so the slot shows through, or a plate or vignette behind each?
-3. **Edge**: the world has no outlines (art.md), but a 64-pixel picture may need a thin dark silhouette to read. Allowed here?
-4. **Light**: one rig for every picture, or the light of the realm the item comes from?
-5. **Clothing**: drawn as worn with no body in it, folded, or on a mannequin?
+2. **Background**: none, so the slot shows through, or a painted plate in the style behind each?
+3. **Light**: one rig for every picture, or the light of the realm the item comes from?
+4. **Clothing**: drawn as worn with no body in it, folded, or on a mannequin?
 
-Recommended: three-quarter from above, no background, a soft rim light with a thin silhouette edge, the painted look's own materials, and clothing as worn. Best settled by looking at a sheet of our items drawn each way.
+Recommended: three-quarter from above, no background, one rig with the world's warm and cool light, and clothing as worn. Best settled by looking at a sheet of our items drawn each way.
 
 ## In the game's model
 

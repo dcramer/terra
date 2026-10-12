@@ -34,7 +34,7 @@ An image model is still useful for the **style**: drawing a few pictures by hand
 ## Limits
 
 - Nothing was built or measured. How many pictures a frame can draw on an integrated GPU, and how big the atlas should be, are unknown.
-- Whether our painted look (D110's mood board, style C) survives at 64 pixels without an outline or a stronger light is untested; the world has no outlines (art.md), and a picture may need one.
+- Whether our painted look (D110's mood board, style C) survives at 64 pixels without an outline or a stronger light is untested; the world has no outlines (art.md), and the developers want the pictures in the same style (D130), so a stronger rim light is the first thing to try if they do not read.
 - The Tarkov icon cache is known from players clearing it and from a fan tool that reads it, not from its developers.
 - Pictures for things that are not models, such as a skill or an effect, are not covered.
 
