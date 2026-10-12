@@ -46,7 +46,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Rotate | All | Built: wheel, or Z and C |
 | Snap to a grid, with a switch to go free | Enshrouded, Ark, Valheim | Built: X, and hold Alt |
 | Raise and lower, and nudge | Enshrouded, Ark Ascended | Raise and lower built; rooms by the storey, down too |
-| Place in a line or an area: drawn walls, floors, rooms | The Forest, Sons of the Forest, Subnautica 2 | Rooms are boxes, grown across one another; walls and fences are not drawn |
+| Place in a line or an area: drawn walls, floors, rooms | The Forest, Sons of the Forest, Subnautica 2 | Built: rooms drawn as rectangles, interior walls as lines; fences missing |
 | Pick another of what you look at | 7 Days to Die | Built: middle mouse |
 | Move what is placed | Subnautica 2 | Built for items, not rooms or walls |
 | Take apart, giving back everything | Enshrouded, Subnautica, Valheim | Built; what does not fit drops at your feet |
@@ -99,8 +99,8 @@ Agreed by the developers on 2026-10-12 (D144: "generally speaking your plans fee
 | Wheel, or Z and C | Turn: a quarter turn for structures; an eighth for items on the grid; 15 degrees off it | Yes |
 | Shift and wheel, or Page Up and Page Down | Raise and lower: half a metre a notch on the grid, a tenth off it, up to three metres; rooms a storey at a time, two down to two up (D143). Stations and the claim stone stay on the ground | Yes |
 | Ctrl and wheel | The kind of construction (D139) or material. Ctrl also rolls (D97), so while a part is picked it should not; to settle when there are kinds | No |
-| Click left mouse | Lay it: a plan, for a structure; for an item, hold instead | No: holding builds a room whole today |
-| Press, drag and let go | Draw it: a wall or fence along the line dragged; a room or floor over the rectangle dragged. A plain click lays the variant's own size | No |
+| Click left mouse | Lay it: a plan, for a structure; for an item, hold instead | For rooms and interior walls, laid as a ghost that stays; holding on it builds it whole, as there are no plans yet |
+| Press, drag and let go | Draw it: a wall or fence along the line dragged; a room or floor over the rectangle dragged. A plain click lays the variant's own size | For rooms and interior walls |
 | Hold left mouse (items) | Build the item there, spending its cost | Yes |
 | Tap right mouse | Put the part away (or, carrying something in move mode, put it back) | Yes |
 
@@ -200,9 +200,19 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 **Drawing a plan.** Asked about on 2026-10-12: "how would dragging to draw work exactly? … say it's a stone wall, we'll need the stone to look modular". Proposed:
 
 - **A wall or fence is drawn as a line.** Press where it starts, drag, let go where it ends. The start snaps to a join (the end of a wall already there) or the grid; the line runs along the base's grid, in its four directions only for now (D146), a grid step (half a metre) at a time, so every wall is a whole number of steps long. While dragging, the plan is shown already split into its parts, with its length and what it needs: "4.5 m stone wall: 54 stones, 12 in reach". Shift and the wheel, while dragging, set how high, a course or a storey at a time.
-- **A room or floor is drawn as a rectangle**: press at one corner, drag to the other. A room's plan is its floor, its four walls and its roof, each split into parts.
+- **A room or floor is drawn as a rectangle**: press at one corner, drag to the other. A room's plan is its floor, its four walls and its roof, each split into parts (and, by D152, laid as those, not as a room).
 - **Drawing on from a wall's end continues it**, and closing a loop of walls offers to make it a room.
 - **A plain click lays the variant's own size**, as now: a 4.5 metre wall, a 3 by 3 metre room.
+
+**Walls, not rooms** (D152, Leaning). The developers, 2026-10-12: "maybe we should get rid of 'rooms' and only allow walls? … a room should be N walls anyways, it's a shortcut … it's weird to place blueprints of rooms". Proposed:
+
+- **The parts are walls, floors and roofs**, and later foundations and stairs. A room is not a thing that is built; it is what walls, a floor and a roof enclose.
+- **The room in the build menu is a shortcut**: a rectangle drawn with it lays its walls and its floor as plans, each its own, as if drawn one by one. Closing a loop of walls drawn by hand offers the same floor.
+- **A roof is laid over what is enclosed**, offered when the walls close, or drawn as a rectangle like a floor.
+- **Indoors is worked out**: inside walls and under a roof, by the grid. It is what shelters from weather and lets interior things go in.
+- **Into the ground**: a wall or floor laid where the ground is high cuts it away, as rooms do now (D131); a cellar is the ground dug out, then walled.
+
+Technically (mine): `terra_build` keeps a base as rooms of cells with a hull round them, and interior walls as edges between cells. It would become floor cells, wall edges and roof cells, with the inside worked out from them; the interior walls are most of the way there. Best done with plans (step 2 of the [order](#proposed-order)), since a plan is a wall at a time. Until then the room tool builds a room as it does, and drawing it carries over unchanged as the shortcut.
 
 **How a material is split into parts, so it looks built and not tiled.** Each kind of construction is a small kit of pieces sized to the grid, and a rule for laying them, as real masonry and carpentry have:
 
@@ -370,7 +380,7 @@ D108: everything built in the world, by anyone, is made of the same parts as wha
 For the developers to reorder. Each step is small enough to play and judge.
 
 1. **The controls, locked, and placing finished**: the keys above, raise and lower, undo, drawing, the room-over-a-placed-thing check, what blocks a ghost shown through walls, and snapping as [Snapping and feel](#snapping-and-feel) says. These hold whatever comes after.
-2. **Plans, then constructing** (D139): rooms and walls laid as plans, built part by part from the pack and from storage in the claim (D141); doors and windows carved out and fitted.
+2. **Plans, then constructing** (D139), with walls, floors and roofs as the parts rather than rooms (D152): rooms and walls laid as plans, built part by part from the pack and from storage in the claim (D141); doors and windows carved out and fitted.
 3. **Large materials** (D140): logs that lie where trees fall, carried on the shoulder; a log pile to keep them, later unlocked.
 4. **Downward and upward**: rooms underground (D143), a storey up, stairs and ladders.
 5. **Doors and defences**: doors that open and lock by the claim; fences, walls and gates drawn as a line.
@@ -382,6 +392,8 @@ For the developers to reorder. Each step is small enough to play and judge.
 ## Open questions
 
 For the developers. Each has my recommendation.
+
+Raised on 2026-10-12, Leaning: walls, floors and roofs instead of rooms, a room being a shortcut that lays them (D152).
 
 Answered on 2026-10-12: structures are planned, then constructed, a blueprint showing its parts, which can be small and depend on the kind of construction (D139); big materials are carried, with better transport later (D140); building draws on storage, with special storage for big materials later (D141); no stability in the MVP, but later (D142); rooms can be underground (D143). A kind's pieces are kit models, parts of the blueprint, not made first and placed; walls in four directions for now; carving later (D146).
 

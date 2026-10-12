@@ -13,7 +13,7 @@ use crate::play::skills::{Did, ONCE, Skill};
 use crate::play::told::Told;
 use crate::play::work::Hold;
 use crate::play::{IsLocalPlayer, Stance};
-use terra_build::{BuildOp, Face, Panel};
+use terra_build::{BuildOp, Face, Panel, Side};
 
 /// Starts, carries on and finishes building and taking apart. Both take a moment: the
 /// button is held until the job is done, and letting go early leaves nothing done.
@@ -41,6 +41,11 @@ pub(super) fn act(
         // up; or put the part away.
         if std::mem::take(&mut builder.cancel) {
             if builder.work.take().is_some() {
+                continue;
+            }
+            if builder.is_drawing() {
+                builder.drag = None;
+                builder.laid = None;
                 continue;
             }
             match builder.carrying.take() {
@@ -157,6 +162,7 @@ pub(super) fn act(
                         }
                     }
                     if site.apply_all(&ops, &mut commands, &planet, &mut meshes) {
+                        builder.laid = None;
                         let cue = if refund.is_some() {
                             Cue::TakenApart
                         } else {
@@ -257,7 +263,56 @@ pub(super) fn act(
             builder.turn = prop.turn;
             continue;
         }
-        if !click || builder.must_release {
+        // A wall or room is drawn: pressed, dragged and let go of, it is laid where it was
+        // drawn; clicked, it is laid at its own size where the view is. Held still on what
+        // is laid, it is built: a click lays, work builds (D144).
+        let mut begin = click && !builder.must_release;
+        if builder.draws(&builds) {
+            if begin {
+                builder.drag = builder.point.map(|(point, level)| Drag {
+                    from: point,
+                    to: point,
+                    level,
+                    moved: false,
+                    still_s: 0.0,
+                });
+                begin = false;
+            } else if let Some(mut drag) = builder.drag.take() {
+                if !held {
+                    let (from, to, level) = match laid_as(builder.target, &builder.run) {
+                        _ if drag.moved => (drag.from, drag.to, drag.level),
+                        // A click on what is already laid leaves it as it is.
+                        _ if builder.laid.is_some() => continue,
+                        Some(shape) => shape,
+                        None => continue,
+                    };
+                    builder.laid = Some(Drawn {
+                        from,
+                        to,
+                        level,
+                        part: builder.part,
+                        variant: builder.variant(),
+                    });
+                    info!(
+                        "Laid a {} from {from} to {to}, in cells.",
+                        builder.picked(&builds).name
+                    );
+                    noise.write(Noise::at(Cue::Click, player_at));
+                } else {
+                    // Held still long enough on what is laid, it builds, once. The drag
+                    // is kept, so if building cannot begin, moving on still draws.
+                    let was = drag.still_s;
+                    if !drag.moved {
+                        drag.still_s += time.delta_secs();
+                    }
+                    begin = was < HOLD_TO_BUILD_S
+                        && drag.still_s >= HOLD_TO_BUILD_S
+                        && builder.laid.is_some_and(|laid| laid.near(drag.from));
+                    builder.drag = Some(drag);
+                }
+            }
+        }
+        if !begin {
             continue;
         }
 
@@ -461,6 +516,7 @@ pub(super) fn act(
                 Err(_) => continue,
             },
         };
+        builder.drag = None;
         builder.work = Some(Work {
             job,
             hold: Hold::new(seconds),
@@ -540,4 +596,32 @@ fn from_start(site: &Site, at: Vec3) -> Vec3 {
         .compute_affine()
         .inverse()
         .transform_point3(world)
+}
+
+/// The two points of the grid a room or wall shown at its own size would be drawn between,
+/// and its floor, so a click can lay it.
+fn laid_as(target: Target, run: &[Face]) -> Option<(IVec2, IVec2, i32)> {
+    match target {
+        Target::Ground { corner, tiles, .. } => {
+            let from = IVec2::new(corner.x, corner.z);
+            Some((from, from + tiles, corner.y))
+        }
+        Target::Edge { .. } => {
+            let (first, last) = (run.first()?.tile(), run.last()?.tile());
+            Some(if run[0].side == Side::South {
+                (
+                    IVec2::new(first.x, first.z + 1),
+                    IVec2::new(last.x + 1, first.z + 1),
+                    first.y,
+                )
+            } else {
+                (
+                    IVec2::new(first.x + 1, first.z),
+                    IVec2::new(first.x + 1, last.z + 1),
+                    first.y,
+                )
+            })
+        }
+        _ => None,
+    }
 }

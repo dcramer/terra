@@ -173,7 +173,7 @@ fn toggle(
     if menu.open {
         menu.open = false;
         grab_mouse(&mut cursor, window.focused);
-    } else if builder.is_carrying() {
+    } else if builder.is_carrying() || builder.is_drawing() {
         builder.cancel = true;
     } else {
         let part = builder.part;

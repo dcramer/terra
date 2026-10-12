@@ -73,6 +73,18 @@ pub(super) fn aim(
             continue;
         }
 
+        // What was drawn with another part, or another variant, is let go of.
+        let (part, variant) = (builder.part, builder.variant());
+        if builder
+            .laid
+            .is_some_and(|laid| laid.part != part || laid.variant != variant)
+        {
+            builder.laid = None;
+        }
+        if !builder.draws(&builds) {
+            builder.drag = None;
+            builder.point = None;
+        }
         // Where an item would stand. On top of an item the view is on, or flush against its
         // side; else the floor, or flush against a wall; else the ground outside. If none of
         // that is within reach, a few steps in front of the player, so there is always
@@ -233,6 +245,21 @@ pub(super) fn aim(
                 }
             })
         };
+        // The point of the grid a wall or room is drawn to, followed by what is being
+        // dragged out.
+        let draw_to = |builder: &mut Builder, at: Vec3, level: i32| {
+            let held = builder
+                .drag
+                .map(|drag| drag.to)
+                .or(builder.point.map(|(point, _)| point));
+            let point = stick(held, Vec2::new(at.x, at.z) / CELL_M);
+            builder.point = Some((point, level));
+            if let Some(drag) = builder.drag.as_mut() {
+                drag.to = point;
+                drag.moved |= point != drag.from;
+            }
+            builder.drawn()
+        };
         let mut run = Vec::new();
         builder.target = match &builder.picked(&builds).kind {
             Kind::Reshape => outside_wall.map_or(Target::Nothing, |hit| Target::Wall(hit.face)),
@@ -240,35 +267,58 @@ pub(super) fn aim(
             Kind::Window(shapes) => opening_on(shapes[builder.variant()].1, &mut run),
             Kind::Door => opening_on(DOOR_WIDTH_M, &mut run),
             Kind::Wall(lengths) => {
-                // On the grid line nearest the floor the view is on; or, looking at no
-                // floor, a couple of steps ahead. The wheel turns it.
+                // On the grid line nearest the floor the view is on; else where the view
+                // meets the floor of the player's storey, through a roof seen from above
+                // (hidden while they are inside); or, looking at no floor, a couple of
+                // steps ahead. The wheel turns it.
+                let feet = to_base.transform_point3(player.translation);
+                let floor_m = (feet.y / STOREY_M).round() * STOREY_M;
+                let through_roof = || {
+                    let along = (floor_m - local_origin.y) / local_direction.y;
+                    let at = local_origin + local_direction * along;
+                    (local_direction.y < -0.01
+                        && within(site.frame.transform_point(at), STRUCTURE_REACH_M))
+                    .then_some(at)
+                };
                 let on_floor = hull
                     .filter(|hit| !hit.partition && hit.face.side == Side::Down)
                     .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M))
-                    .map(|hit| met(hit.distance).with_y(hit.face.tile[1] as f32 * STOREY_M + 0.01))
+                    .map(|hit| met(hit.distance).with_y(hit.face.tile[1] as f32 * STOREY_M))
+                    .or_else(through_roof)
                     .unwrap_or_else(|| {
-                        let feet = to_base.transform_point3(player.translation);
                         let forward = to_base
                             .transform_vector3(view.forward)
                             .with_y(0.0)
                             .normalize_or_zero();
-                        let storey = (feet.y / STOREY_M).round();
-                        (feet + forward * 2.0).with_y(storey * STOREY_M + 0.01)
-                    });
-                let cell = (on_floor / CELL_M).floor().as_ivec3();
-                let across = on_floor / CELL_M - cell.as_vec3();
-                // A wall stands on the east or south side of a cell.
-                let face = if builder.wall_turned {
-                    Face::new(cell - IVec3::X * i32::from(across.x < 0.5), Side::East)
-                } else {
-                    Face::new(cell - IVec3::Z * i32::from(across.z < 0.5), Side::South)
+                        (feet + forward * 2.0).with_y(floor_m)
+                    })
+                    + Vec3::Y * 0.01;
+                let level = (on_floor.y / STOREY_M).floor() as i32;
+                let face = match draw_to(&mut builder, on_floor, level) {
+                    // Drawn by dragging, or laid: from one point of the grid to another.
+                    Some((from, to, level)) => {
+                        run = drawn_wall(from, to, level);
+                        run[run.len() / 2]
+                    }
+                    // The variant's own length, centred where the view is.
+                    None => {
+                        let cell = (on_floor / CELL_M).floor().as_ivec3();
+                        let across = on_floor / CELL_M - cell.as_vec3();
+                        // A wall stands on the east or south side of a cell.
+                        let face = if builder.wall_turned {
+                            Face::new(cell - IVec3::X * i32::from(across.x < 0.5), Side::East)
+                        } else {
+                            Face::new(cell - IVec3::Z * i32::from(across.z < 0.5), Side::South)
+                        };
+                        let count = cells(lengths[builder.variant()].1);
+                        let along = face.side.along();
+                        let first = face.tile() - along * ((count - 1) / 2);
+                        run = (0..count)
+                            .map(|step| Face::new(first + along * step, face.side))
+                            .collect();
+                        face
+                    }
                 };
-                let count = cells(lengths[builder.variant()].1);
-                let along = face.side.along();
-                let first = face.tile() - along * ((count - 1) / 2);
-                run = (0..count)
-                    .map(|step| Face::new(first + along * step, face.side))
-                    .collect();
                 Target::Edge {
                     face,
                     fits: run.iter().all(|&cell| site.base.can_partition(cell)),
@@ -287,32 +337,44 @@ pub(super) fn aim(
                 let feet = to_base.transform_point3(player.translation);
                 let on_level = || {
                     let flat = local_direction.with_y(0.0).normalize_or_zero();
-                    let reached = if local_direction.y < -0.01 {
-                        let along = (floor_m - local_origin.y) / local_direction.y;
-                        local_origin + local_direction * along
-                    } else {
-                        feet + flat * STRUCTURE_REACH_M
+                    // On the level, over the small bumps of the ground; where the ground
+                    // is well above or below it, as on a hillside, where the view meets
+                    // the ground, so the room is under the aim.
+                    let along = (floor_m - local_origin.y) / local_direction.y;
+                    let on_ground = ground.map(|ground| to_base.transform_point3(ground.point));
+                    let reached = match on_ground {
+                        _ if local_direction.y < -0.01
+                            && along > 0.0
+                            && on_ground
+                                .is_none_or(|point| (point.y - floor_m).abs() < LEVEL_BUMPS_M) =>
+                        {
+                            local_origin + local_direction * along
+                        }
+                        Some(point) => point,
+                        None => feet + flat * STRUCTURE_REACH_M,
                     };
                     let out = (reached - feet).with_y(0.0);
                     feet.with_y(0.0) + out.clamp_length_max(STRUCTURE_REACH_M - 1.0)
                 };
                 let aimed = on_base.unwrap_or_else(on_level);
+                let storey = builder.storey;
+                let drawn = draw_to(&mut builder, aimed, storey);
                 builder.room(&builds).map_or(Target::Nothing, |size| {
-                    // Centred on the place aimed at, sticking to where it last snapped
-                    // until the aim has moved well off it.
-                    let raw = Vec2::new(
-                        aimed.x / CELL_M - size.x as f32 * 0.5,
-                        aimed.z / CELL_M - size.y as f32 * 0.5,
-                    );
-                    let snapped = match builder.held_corner {
-                        Some(held)
-                            if (raw - held.as_vec2()).abs().max_element() < ROOM_STICK_CELLS =>
-                        {
-                            held
+                    let (snapped, size) = match drawn {
+                        // Drawn by dragging, or laid: the rectangle between two corners.
+                        Some((from, to, _)) => drawn_room(from, to),
+                        // The variant's own size, centred on the place aimed at, sticking
+                        // to where it last snapped until the aim has moved well off it.
+                        None => {
+                            let raw = Vec2::new(
+                                aimed.x / CELL_M - size.x as f32 * 0.5,
+                                aimed.z / CELL_M - size.y as f32 * 0.5,
+                            );
+                            let snapped = stick(builder.held_corner, raw);
+                            builder.held_corner = Some(snapped);
+                            (snapped, size)
                         }
-                        _ => raw.round().as_ivec2(),
                     };
-                    builder.held_corner = Some(snapped);
                     // On the storey chosen: the base's floor, or above or below it (D143).
                     let corner = IVec3::new(snapped.x, builder.storey, snapped.y);
                     // Set into the ground, a room cuts the ground away where it stands,

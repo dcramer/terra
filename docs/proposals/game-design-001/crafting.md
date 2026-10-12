@@ -69,6 +69,25 @@ Settled with the developers on 2026-10-11 (D109), after Enshrouded.
 
 F at the station opens it, F or Esc leaves; click a tile, or use the arrows and Enter. The world does not pause. The build menu and the station screens share one look and one set of controls in the code.
 
+## Expanding a station
+
+Asked for by the developers on 2026-10-12 (D151, Open): stations should be expandable, perhaps by slots, either Valheim's way, where an upgrade counts if it stands within a radius of the station, or Soulmask's, as the developers describe it, where a station has placeholder slots for its expansions. What they want different from both: **no fixed item for each expansion**; there should probably be variations, though they are not sure.
+
+The two ways, as they would play here:
+
+| | Within a radius (Valheim) | Slots on the station (Soulmask) |
+|---|---|---|
+| Placing | Anywhere near the station, so a workshop is laid out as you like | On marked places on the station, shown as ghosts, so there is no doubt it counts |
+| Fits our building | Well: free placing, the grid, items on items (D144) | Needs sockets on every station model |
+| Reads as real | A smithy is a forge with its tools around it | A bellows really is fixed to a forge |
+| Which station it belongs to | Can be unclear with two stations close together | Always clear |
+
+**Proposed: an expansion is a role, not an item.** A station names the roles it can use, such as the forge's bellows, quench trough, grindstone and tool rack, and anything built for a role fills it. Each role has variations: different looks, materials and makers, many found in other realms (D87), as Terraria's furniture is (D85), so two smithies look different. Stronger variations may do more, such as an iron anvil letting the forge make what a stone one cannot.
+
+**Proposed: where by the role.** What is part of the station attaches to it, on a slot (a bellows on a forge, a vice on a bench); what is part of the workshop stands within a few metres (a tool rack, a grindstone). Each is then placed in the way that reads as real, and a slot is shown only when an expansion that fits it is in hand.
+
+**What an expansion does**: lets the station make more (D68, D92), makes it work faster, or lets it mend and make better things (D99), the role saying which. Shown on the station's screen: what fills each role and what an empty role would add.
+
 ## Learning what to make
 
 Proposed, replacing research as a tree of technology (D68): you learn a thing by finding what it is made of, as in Valheim; from people, recruits and cultures (D86); and by skill (D88), as a better smith knows more. Nothing is listed until you have learned it (D92).
@@ -85,3 +104,4 @@ In the tech demo, proposed numbers: felling, breaking or cutting one thing, digg
 2. **Quality**: does skill make better things (a master smith's sword is better than a novice's)?
 3. **Stations moving**: can a station be packed up and moved, or is it built in place?
 4. **Recipes**: can a player teach another, or must each learn for themselves?
+5. **Expanding a station** (D151): roles filled by any of several variations, attached or nearby by the role, as proposed above? Do variations differ only in look, or also in what they do?

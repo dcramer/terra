@@ -11,6 +11,8 @@
 //!   Tap right mouse    put the part away, or put back what you picked up
 //!   Hold left click    build, or take apart: it takes a moment, and letting go
 //!                      early leaves nothing done                         (or E)
+//!   Drag left mouse    draw a room or an interior wall; let go and it stays laid,
+//!                      a click laying its own size; hold on it to build it
 //!   Left click         pick an item up and put it down, in move mode
 //!   Scroll wheel       turn an item, a room or a wall; switch a wall between
 //!                      pushing out and pulling in                        (or Z and C)
@@ -42,7 +44,7 @@ use bevy::{
     prelude::*,
 };
 use std::sync::Arc;
-use terra_build::{BuildOp, CELL_M, Face, cells};
+use terra_build::{BuildOp, CELL_M, Face, Side, cells};
 use terra_items::ItemKind;
 
 mod act;
@@ -75,6 +77,14 @@ const UNDO_S: f32 = 60.0;
 const FREE_RAISE_M: f32 = 0.1;
 /// How high an item can be raised above where it would stand.
 const HIGHEST_RAISE_M: f32 = 3.0;
+/// How far the ground can be above or below a room's level for the room to be aimed on
+/// the level rather than where the view meets the ground.
+const LEVEL_BUMPS_M: f32 = 0.75;
+/// How long the button is held on a wall or room laid, without drawing, before it is built.
+const HOLD_TO_BUILD_S: f32 = 0.4;
+/// The least a drawn room measures across, in cells, so a drag along a line still makes
+/// a room that can be stood in.
+const LEAST_ROOM_CELLS: i32 = 2;
 /// How many storeys down and up from the base's floor a room can be placed (D143).
 const STOREYS: std::ops::RangeInclusive<i32> = -2..=2;
 const BUILD_COLOUR: Color = Color::srgb(0.35, 0.9, 1.0);
@@ -121,6 +131,15 @@ pub enum Target {
     Prop(Entity),
 }
 
+/// The point of the grid nearest `raw`, in cells, keeping to `held` until the aim has moved
+/// well off it, so it never flickers between two.
+fn stick(held: Option<IVec2>, raw: Vec2) -> IVec2 {
+    match held {
+        Some(held) if (raw - held.as_vec2()).abs().max_element() < ROOM_STICK_CELLS => held,
+        _ => raw.round().as_ivec2(),
+    }
+}
+
 /// What something costs, and how many times over.
 type Price = (Vec<(ItemKind, u32)>, u32);
 
@@ -131,6 +150,80 @@ struct Carried {
     lift: f32,
     turn: f32,
     indoors: bool,
+}
+
+/// A wall or room drawn between two points of the grid, east and south in cells, waiting
+/// to be built (D144). A room is the rectangle between them; a wall runs from the first
+/// toward the second, along whichever direction is further.
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Drawn {
+    from: IVec2,
+    to: IVec2,
+    /// The floor a wall stands on, in storeys. A room goes on the storey chosen.
+    level: i32,
+    /// The part and variant it was drawn with: picking another lets it go.
+    part: usize,
+    variant: usize,
+}
+
+impl Drawn {
+    /// Whether a point of the grid is on what is drawn, or a cell from it.
+    fn near(&self, point: IVec2) -> bool {
+        let (low, high) = (self.from.min(self.to), self.from.max(self.to));
+        point.cmpge(low - 1).all() && point.cmple(high + 1).all()
+    }
+}
+
+/// The button is down on a wall or room: drawing it if the aim has moved, building what
+/// is laid if it is held still for long enough.
+#[derive(Clone, Copy, Debug)]
+struct Drag {
+    from: IVec2,
+    to: IVec2,
+    level: i32,
+    /// Whether the aim has moved off where it began: then it is drawing, even if it comes
+    /// back.
+    moved: bool,
+    /// How long it has been held without drawing, in seconds.
+    still_s: f32,
+}
+
+/// The room between two corners on the grid, as its lowest corner and its size in cells,
+/// at least `LEAST_ROOM_CELLS` across in the direction it was drawn.
+fn drawn_room(from: IVec2, to: IVec2) -> (IVec2, IVec2) {
+    let reach = |from: i32, to: i32| {
+        let toward = if to < from { -1 } else { 1 };
+        let to = if (to - from).abs() < LEAST_ROOM_CELLS {
+            from + toward * LEAST_ROOM_CELLS
+        } else {
+            to
+        };
+        (from.min(to), (to - from).abs())
+    };
+    let (x, east) = reach(from.x, to.x);
+    let (z, south) = reach(from.y, to.y);
+    (IVec2::new(x, z), IVec2::new(east, south))
+}
+
+/// The wall cells of a wall drawn from one point of the grid toward another, along the
+/// grid's four directions only (D146): east and west, or north and south, whichever the
+/// drag went further. At least a cell long.
+fn drawn_wall(from: IVec2, to: IVec2, level: i32) -> Vec<Face> {
+    let step = to - from;
+    let (side, length) = if step.x.abs() >= step.y.abs() {
+        (Side::South, step.x)
+    } else {
+        (Side::East, step.y)
+    };
+    let length = if length == 0 { 1 } else { length };
+    let first = length.min(0);
+    (first..first + length.abs())
+        .map(|i| match side {
+            // A wall on the south side of a cell stands on the grid line along its south.
+            Side::South => Face::new(IVec3::new(from.x + i, level, from.y - 1), side),
+            _ => Face::new(IVec3::new(from.x - 1, level, from.y + i), side),
+        })
+        .collect()
 }
 
 /// What is being built or taken apart while the button is held. Everything needed to
@@ -203,6 +296,13 @@ pub struct Builder {
     /// The corner the room in hand last snapped to, east and south in cells, which it
     /// keeps until the aim has moved well off it, so it never flickers between two.
     held_corner: Option<IVec2>,
+    /// The point of the grid a wall or room would be drawn from, and its floor, if one is
+    /// picked.
+    point: Option<(IVec2, i32)>,
+    /// A wall or room being drawn, or pressed on.
+    drag: Option<Drag>,
+    /// A wall or room drawn, or clicked, and waiting to be built.
+    laid: Option<Drawn>,
     /// Whether the next room is turned a quarter circle.
     room_turned: bool,
     /// Whether the next interior wall runs north and south instead of east and west.
@@ -252,6 +352,9 @@ impl Default for Builder {
             raise: 0.0,
             storey: 0,
             held_corner: None,
+            point: None,
+            drag: None,
+            laid: None,
             room_turned: false,
             wall_turned: false,
             run: Vec::new(),
@@ -327,6 +430,26 @@ impl Builder {
 
     pub fn is_carrying(&self) -> bool {
         self.carrying.is_some()
+    }
+
+    /// Whether a wall or room is drawn, or being drawn, which a tap of the right button
+    /// lets go of.
+    pub fn is_drawing(&self) -> bool {
+        self.drag.is_some() || self.laid.is_some()
+    }
+
+    /// What is drawn and should be shown: what is being dragged out, else what was laid.
+    fn drawn(&self) -> Option<(IVec2, IVec2, i32)> {
+        match (self.drag, self.laid) {
+            (Some(drag), _) if drag.moved => Some((drag.from, drag.to, drag.level)),
+            (_, Some(laid)) => Some((laid.from, laid.to, laid.level)),
+            _ => None,
+        }
+    }
+
+    /// Whether the picked part is drawn by dragging: a room or a wall.
+    fn draws(&self, builds: &Builds) -> bool {
+        matches!(self.picked(builds).kind, Kind::Room(_) | Kind::Wall(_))
     }
 
     /// Whether the mouse wheel turns what is in hand, rather than moving the camera: while
@@ -480,6 +603,8 @@ fn choose(
             builder.stowed = true;
             builder.before_mode = None;
             builder.work = None;
+            builder.drag = None;
+            builder.laid = None;
             continue;
         }
         // Nothing about the job changes while it is being done.
@@ -579,4 +704,70 @@ fn target_point(target: &Target, props: &Query<&Prop>) -> Option<Vec3> {
 /// station, or a claim stone.
 pub fn grounded(item: &Item) -> bool {
     item.station.is_some() || item.claims
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_room_is_the_rectangle_between_its_corners_whichever_way_it_is_drawn() {
+        let room = (IVec2::new(-2, 1), IVec2::new(6, 4));
+        assert_eq!(drawn_room(IVec2::new(-2, 1), IVec2::new(4, 5)), room);
+        assert_eq!(drawn_room(IVec2::new(4, 5), IVec2::new(-2, 1)), room);
+        assert_eq!(drawn_room(IVec2::new(4, 1), IVec2::new(-2, 5)), room);
+    }
+
+    #[test]
+    fn a_room_drawn_along_a_line_is_wide_enough_to_stand_in() {
+        let (corner, size) = drawn_room(IVec2::new(0, 0), IVec2::new(6, 0));
+        assert_eq!(
+            (corner, size),
+            (IVec2::new(0, 0), IVec2::new(6, LEAST_ROOM_CELLS))
+        );
+        let (corner, size) = drawn_room(IVec2::new(0, 0), IVec2::new(-1, -6));
+        assert_eq!(corner, IVec2::new(-LEAST_ROOM_CELLS, -6));
+        assert_eq!(size, IVec2::new(LEAST_ROOM_CELLS, 6));
+    }
+
+    #[test]
+    fn a_wall_runs_along_the_grid_the_way_it_was_drawn_furthest() {
+        // East: the south sides of the cells north of the line z = 2.
+        let east = drawn_wall(IVec2::new(1, 2), IVec2::new(4, 3), 0);
+        let cells: Vec<_> = east.iter().map(|face| face.tile()).collect();
+        assert_eq!(
+            cells,
+            [
+                IVec3::new(1, 0, 1),
+                IVec3::new(2, 0, 1),
+                IVec3::new(3, 0, 1)
+            ]
+        );
+        assert!(east.iter().all(|face| face.side == Side::South));
+        // North, backwards along the line x = 1, on the storey above.
+        let north = drawn_wall(IVec2::new(1, 2), IVec2::new(0, 0), 1);
+        let cells: Vec<_> = north.iter().map(|face| face.tile()).collect();
+        assert_eq!(cells, [IVec3::new(0, 1, 0), IVec3::new(0, 1, 1)]);
+        assert!(north.iter().all(|face| face.side == Side::East));
+    }
+
+    #[test]
+    fn what_is_laid_is_near_the_points_on_it_and_a_cell_round() {
+        let laid = Drawn {
+            from: IVec2::new(4, 2),
+            to: IVec2::new(0, 6),
+            level: 0,
+            part: 0,
+            variant: 0,
+        };
+        assert!(laid.near(IVec2::new(2, 4)));
+        assert!(laid.near(IVec2::new(-1, 7)));
+        assert!(!laid.near(IVec2::new(-2, 4)));
+        assert!(!laid.near(IVec2::new(2, 8)));
+    }
+
+    #[test]
+    fn a_wall_drawn_back_to_where_it_began_is_a_cell_long() {
+        assert_eq!(drawn_wall(IVec2::new(3, 3), IVec2::new(3, 3), 0).len(), 1);
+    }
 }
