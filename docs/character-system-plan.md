@@ -84,6 +84,15 @@ Each phase ends when its checks pass in the build, and a person has looked at th
 | **6. Crowds** | Animation rate by importance; per-character merge and atlas if phase 1's budget needs it; LOD meshes; NPC looks from a seed | The crowd budget is met on the integrated GPU |
 | **7. Bevy 0.20** | Shaders in WESL; skinning override re-done | Every check passes and the sheets match the 0.19 ones |
 
+## Changing Bevy
+
+We are not bound by Bevy's limits (D184):
+- **Extend first:** our own systems, components, material extensions and render steps.
+- **Replace** a plugin or shader when a measurement says Bevy's won't do. We already replaced the skinning shader.
+- **Fork** a crate only as a last resort, kept small and written down.
+
+The likeliest replacement is computing joint matrices once per skeleton rather than per skinned mesh, if phase 1's crowd measurement asks for it. Before that come trimming garment skins and merging each character's parts.
+
 ## What could go wrong
 
 | Risk | How we would know | If it happens |
