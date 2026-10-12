@@ -129,12 +129,11 @@ pub(super) fn highlight(
     ) || builder.short.is_some()
         || builder.unclaimed.is_some()
         || (matches!(kind, Kind::Window(_) | Kind::Door)
-            && matches!(builder.target, Target::Wall(_) | Target::Edge { .. })
+            && matches!(builder.target, Target::Edge { .. })
             && builder.run.is_empty());
-    let pulling = matches!(kind, Kind::Reshape) && builder.pull;
     let look = match (kind, builder.target) {
         (Kind::Move, Target::Prop(_)) => 1,
-        _ if refused || pulling => 2,
+        _ if refused => 2,
         (Kind::Remove, _) => 2,
         (Kind::Window(_) | Kind::Door | Kind::Move, _) => 1,
         _ => 0,
@@ -163,23 +162,20 @@ pub(super) fn highlight(
 
     // The rectangles to cover with film, in the base's own space.
     let quads: Vec<[Vec3; 4]> = match (kind, builder.target) {
-        (Kind::Reshape, Target::Wall(face)) => bounds(&site.base.wall(face)).into_iter().collect(),
         // A window or door that will not fit: the cell aimed at, in red.
-        (Kind::Window(_) | Kind::Door, Target::Wall(face) | Target::Edge { face, .. })
-            if builder.run.is_empty() =>
-        {
+        (Kind::Window(_) | Kind::Door, Target::Edge { face, .. }) if builder.run.is_empty() => {
             vec![Base::corners(face)]
         }
-        (Kind::Window(shapes), Target::Wall(_) | Target::Edge { .. }) => {
+        (Kind::Window(shapes), Target::Edge { .. }) => {
             opening(&builder.run, shapes[builder.variant()].2)
                 .into_iter()
                 .collect()
         }
-        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) => {
+        (Kind::Door, Target::Edge { .. }) => {
             opening(&builder.run, Panel::Door).into_iter().collect()
         }
-        // An opening to close, or a stretch of interior wall to build or take away.
-        (Kind::Remove, Target::Wall(_) | Target::Edge { open: true, .. }) => builder
+        // An opening to close, or a stretch of wall to build or take away.
+        (Kind::Remove, Target::Edge { open: true, .. }) => builder
             .run
             .first()
             .and_then(|&cell| site.base.filling(cell))

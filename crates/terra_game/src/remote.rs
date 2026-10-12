@@ -357,6 +357,8 @@ struct Held {
     key: KeyCode,
     wait: u32,
     left: u32,
+    /// Whether it has been held down for a frame already.
+    down: bool,
 }
 
 #[derive(Deserialize)]
@@ -376,6 +378,7 @@ fn press(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         key: code,
         wait: after,
         left: frames,
+        down: false,
     });
     Ok(json!({ "key": key, "after": after, "frames": frames }))
 }
@@ -391,7 +394,9 @@ fn unpress(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
 
 /// Holds down what a script pressed, after the real keyboard is read and, in a scripted
 /// run, after its own presses, and lets each key up once its frames are done, unless
-/// another press is holding it.
+/// another press is holding it. A key is newly pressed only on its first frame: an
+/// unattended run lets every key up each frame before this, so without saying so a key
+/// held down would be pressed again every frame.
 fn press_keys(mut pressed: ResMut<Pressed>, mut keys: ResMut<ButtonInput<KeyCode>>) {
     let mut done = Vec::new();
     pressed.0.retain_mut(|held| {
@@ -399,6 +404,10 @@ fn press_keys(mut pressed: ResMut<Pressed>, mut keys: ResMut<ButtonInput<KeyCode
             held.wait -= 1;
         } else if held.left > 0 {
             keys.press(held.key);
+            if held.down {
+                keys.clear_just_pressed(held.key);
+            }
+            held.down = true;
             held.left -= 1;
         } else {
             done.push(held.key);

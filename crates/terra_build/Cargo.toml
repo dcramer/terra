@@ -1,6 +1,6 @@
 [package]
 name = "terra_build"
-description = "Construction: bases shaped room by room, with the hull, windows and doors generated from the shape."
+description = "Construction: walls, floors and roofs on a grid, and the rooms they close in."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,8 +1,8 @@
 //! The things people put in and around a place they live: furniture, stations, a well.
 //!
 //! Every one is an item from the builder's catalogue, placed the way a player places one
-//! (D108), whoever placed it. An item is solid: its box stops a walker. If the base is
-//! reshaped so that an item is no longer indoors, or now stands in a wall, the item is
+//! (D108), whoever placed it. An item is solid: its box stops a walker. If the base
+//! changes so that an item is no longer indoors, or now stands in a wall, the item is
 //! hidden.
 
 use super::catalogue::{Builds, Item, Light};
@@ -442,7 +442,7 @@ impl Standing {
                 let here = IVec3::new(x, storey, z);
                 let wall = |side| {
                     site.base
-                        .partition(terra_build::Face::new(here, side))
+                        .filling(terra_build::Face::new(here, side))
                         .is_some()
                 };
                 (x < high.x && wall(terra_build::Side::East))
@@ -526,7 +526,7 @@ pub fn blocked<'a>(
             !site.covers(site.frame.transform_point(at), 0.05)
         }
     });
-    if !placed || standing.indoors && standing.crosses_a_wall(site) {
+    if !placed || standing.crosses_a_wall(site) {
         return Some(Blocked::Structure);
     }
     if !standing.is_solid() {

@@ -24,6 +24,8 @@ const FLOOR_CLEARANCE_M: f32 = 0.12;
 /// The foundation stands this far out from the walls, and reaches this far into the ground.
 const FOUNDATION_LEDGE_M: f32 = 0.14;
 const FOUNDATION_DEPTH_M: f32 = 0.7;
+/// Half the width of the footing under a wall that stands on the ground.
+const WALL_FOOTING_HALF_M: f32 = 0.16;
 /// Steps run this far out for every metre they have to climb.
 const RAMP_RUN_PER_RISE: f32 = 2.4;
 /// Steps are this much wider than the doorway they lead to.
@@ -226,7 +228,7 @@ impl Build {
                 let tile = ((local + Vec3::new(*dx, 0.0, *dz)) / CELL_M)
                     .floor()
                     .as_ivec3();
-                self.base.contains(tile.with_y(0))
+                self.base.contains(tile.with_y(0)) || self.base.has_floor(tile.with_y(0))
             })
         }) || self.ramps.iter().any(|ramp| {
             let offset = local - ramp.top;
@@ -363,7 +365,7 @@ fn example() -> Vec<BuildOp> {
                 Side::East | Side::West => IVec3::new(inside, storey, along),
                 _ => IVec3::new(along, storey, inside),
             };
-            ops.push(BuildOp::SetPanel(Face::new(cell, side), panel));
+            ops.push(BuildOp::SetWall(Face::new(cell, side), Some(panel)));
         }
     };
     cut(Side::South, 3.0, -3.0, 6.0, 0, Panel::WINDOW);
@@ -714,12 +716,12 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
     show(site.structure, to_mesh(&mesh.structure));
     show(site.glass, to_mesh(&mesh.glass));
 
-    // A foundation under every ground-floor tile, down into the ground, standing a
-    // little proud of the walls.
+    // A foundation under every ground-floor cell with a floor, down into the ground,
+    // standing a little proud of the walls.
     let mut foundation = Blocks::default();
-    for (tile, _) in site.base.tiles().filter(|(tile, _)| tile.y == 0) {
+    for tile in site.base.floors().filter(|tile| tile.y == 0) {
         let ledge = |step: IVec3| {
-            if site.base.contains(tile + step) {
+            if site.base.has_floor(tile + step) {
                 0.0
             } else {
                 FOUNDATION_LEDGE_M
@@ -740,26 +742,44 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
         .fold(0.0, f32::max);
         foundation.block(min.with_y(-gap - FOUNDATION_DEPTH_M), max.with_y(-0.004));
     }
+    // A footing under every ground-floor wall with no floor beside it, as a free-standing
+    // wall's, down into the ground.
+    for (face, _) in site.base.walls().filter(|(face, _)| face.tile[1] == 0) {
+        let beyond = face.tile() + face.side.offset();
+        if site.base.has_floor(face.tile()) || site.base.has_floor(beyond) {
+            continue;
+        }
+        let [low, right, ..] = Base::corners(face);
+        let across = face.side.offset().as_vec3() * WALL_FOOTING_HALF_M;
+        let (min, max) = (low.min(right) - across, low.max(right) + across);
+        let gap = [min, max, low, right]
+            .map(|at| planet.distance(site.frame.transform_point(at.with_y(0.0))))
+            .into_iter()
+            .fold(0.0, f32::max);
+        foundation.block(min.with_y(-gap - FOUNDATION_DEPTH_M), max.with_y(0.02));
+    }
     show(site.foundation, foundation.into_mesh());
 
-    // Steps from every ground-floor door down to the ground.
+    // Steps from every ground-floor door in an outside wall down to the ground.
     site.ramps.clear();
     let mut steps = Blocks::default();
     // One flight for each doorway, however many cells wide it is.
     let doorways: Vec<Vec<Face>> = site
         .base
-        .hull()
-        .filter(|&face| face.tile[1] == 0 && site.base.panel(face) == Panel::Door)
-        .map(|face| site.base.run(face))
-        .filter(|run| run.first().is_some_and(|first| first.tile[1] == 0))
+        .walls()
+        .filter(|&(face, panel)| face.tile[1] == 0 && panel == Panel::Door)
+        .map(|(face, _)| site.base.run(face))
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();
     for doorway in &doorways {
         let (first, last) = (doorway[0], doorway[doorway.len() - 1]);
+        let Some(outward) = site.base.outward(first) else {
+            continue;
+        };
         let (near, far) = (Base::corners(first)[0], Base::corners(last)[1]);
         let top = (near + far) * 0.5;
-        let outward = first.side.offset().as_vec3();
+        let outward = outward.as_vec3();
         // Long enough for the climb, measured where the steps start and where they end.
         let rise_here = planet.distance(site.frame.transform_point(top)).max(0.0);
         let length = (rise_here * RAMP_RUN_PER_RISE).clamp(1.2, 16.0);
@@ -806,36 +826,20 @@ fn edit(
     let direction = to_base.transform_vector3(*camera.forward()).normalize();
     let aimed = site.base.raycast(origin, direction, REACH_M);
 
-    // Show what a key press would act on: the whole wall faintly, the one tile brightly.
+    // Show what a key press would act on: the wall cell aimed at.
     if let Some(hit) = aimed {
-        let outline = |gizmos: &mut Gizmos, face: Face, colour: Color| {
-            let corners = Base::corners(face).map(|corner| site.frame.transform_point(corner));
-            gizmos.linestrip(
-                [corners[0], corners[1], corners[2], corners[3], corners[0]],
-                colour,
-            );
-        };
-        for face in site.base.wall(hit.face) {
-            outline(&mut gizmos, face, Color::srgba(1.0, 1.0, 1.0, 0.35));
-        }
-        outline(&mut gizmos, hit.face, Color::srgb(1.0, 0.85, 0.2));
+        let corners = Base::corners(hit.face).map(|corner| site.frame.transform_point(corner));
+        gizmos.linestrip(
+            [corners[0], corners[1], corners[2], corners[3], corners[0]],
+            Color::srgb(1.0, 0.85, 0.2),
+        );
     }
 
-    let op = if let Some(hit) = aimed {
-        if keys.just_pressed(KeyCode::KeyG) {
-            Some(BuildOp::Grow(hit.face))
-        } else if keys.just_pressed(KeyCode::KeyH) {
-            Some(BuildOp::Shrink(hit.face))
-        } else if keys.just_pressed(KeyCode::KeyV) {
-            Some(BuildOp::SetPanel(
-                hit.face,
-                site.base.panel(hit.face).next(),
-            ))
-        } else {
-            None
-        }
+    let op = if let Some(hit) = aimed.filter(|hit| hit.wall) {
+        keys.just_pressed(KeyCode::KeyV)
+            .then(|| BuildOp::SetWall(hit.face, Some(site.base.panel(hit.face).next())))
     } else if keys.just_pressed(KeyCode::KeyB) {
-        // A new room, three tiles square, on the ground being looked at.
+        // A new room, three cells square, on the ground being looked at.
         planet
             .raycast(camera.translation(), *camera.forward(), REACH_M)
             .map(|ground| {
@@ -861,14 +865,14 @@ fn edit(
 fn update_readout(site: Res<Site>, mut readout: Single<&mut Text, With<Readout>>) {
     let windows = site
         .base
-        .hull()
-        .filter(|&face| matches!(site.base.panel(face), Panel::Window { .. }))
+        .walls()
+        .filter(|(_, panel)| matches!(panel, Panel::Window { .. }))
         .count();
     readout.0 = format!(
-        "Base: {} tiles, {} hull faces, {} window tiles, {} operations\n\
-         Aim with the + mark. G grow wall, H shrink wall, V window or door, B new room on open ground.",
+        "Base: {} cells in rooms, {} wall cells, {} window cells, {} operations\n\
+         Aim with the + mark. V window or door, B new room on open ground.",
         site.base.tile_count(),
-        site.base.hull().count(),
+        site.base.walls().count(),
         windows,
         site.operations.len()
     );

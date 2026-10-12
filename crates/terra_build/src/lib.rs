@@ -1,21 +1,19 @@
-//! Construction: bases you shape instead of assemble.
+//! Construction: walls, floors and roofs on a grid (D152; docs/structures.md).
 //!
-//! Inspired by Subnautica 2's builder (research/subnautica-2-building.md); the design it
-//! is growing toward is docs/construction.md. There are no room modules. A base is the
-//! set of grid cells that are inside it, each remembering which room it was added as. The
-//! player grows and shrinks a room by pushing and pulling one of its walls, and
-//! everything else follows from the shape:
+//! A base is what stands in it, and nothing is placed whole:
 //!
-//! - **The hull is generated.** Wherever inside meets outside there is a wall, floor or
-//!   roof. Nobody places one.
-//! - **Rooms that touch open into each other**, with no connector piece.
-//! - **Windows and doors are a property of a wall cell.** A window or door is as wide as
-//!   the run of cells it was cut in, so it can be any width and stand anywhere along a
-//!   wall, a cell at a time.
+//! - **A wall stands on an edge** between two cells, a storey high. What fills it, solid,
+//!   a window or a doorway, is a property of the wall cell, so an opening can be any
+//!   width and stand anywhere along a wall, a cell at a time.
+//! - **A floor lies at the foot of a cell, a roof over it.**
+//! - **Rooms are worked out**, storey by storey: the cells that walls close in on every
+//!   side. Nobody places a room.
+//! - **The room tool is a shortcut** ([`BuildOp::AddRoom`]): walls round a block of cells,
+//!   a floor under it and a roof over it. Where it meets a room already there, the two open
+//!   into one another.
 //!
 //! Everything is on one square grid of [`CELL_M`]. That is the smallest thing that can be
-//! placed, and the step a wall moves by. A cell is a column of that size and one storey,
-//! [`STOREY_M`], tall.
+//! placed. A cell is a column of that size and one storey, [`STOREY_M`], tall.
 //!
 //! Everything a player does is a [`BuildOp`], so a base can be sent to other players and
 //! saved as the list of operations that made it (D21).
@@ -29,7 +27,7 @@ mod walk;
 pub use mesh::{BaseMesh, Surface};
 pub use walk::Walker;
 
-use glam::{IVec3, Vec3};
+use glam::{IVec2, IVec3, Vec3, Vec3Swizzles};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The grid: the width and depth of one cell, in metres. Everything else here is given in
@@ -42,12 +40,12 @@ pub const DOOR_WIDTH_M: f32 = 1.5;
 /// Height of a door's opening, in metres.
 pub const DOOR_HEIGHT_M: f32 = 2.2;
 
-/// One of the six directions a tile faces.
 /// How many cells a length in metres is: the nearest whole number, and at least one.
 pub fn cells(metres: f32) -> i32 {
     ((metres / CELL_M).round() as i32).max(1)
 }
 
+/// One of the six directions a cell faces.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
@@ -102,7 +100,7 @@ impl Side {
     }
 }
 
-/// One side of one tile.
+/// One side of one cell.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
@@ -165,151 +163,307 @@ impl Panel {
 /// Something a player did to a base.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BuildOp {
-    /// Add a block of tiles: a new room, or more of an existing one.
+    /// Stand a wall on the edge on this side of a cell, change what fills it, or take it
+    /// away with `None`.
+    SetWall(Face, Option<Panel>),
+    /// Lay a floor at the foot of every cell of a block, or take them away.
+    SetFloor {
+        min: [i32; 3],
+        max: [i32; 3],
+        laid: bool,
+    },
+    /// Lay a roof over every cell of a block, or take them away.
+    SetRoof {
+        min: [i32; 3],
+        max: [i32; 3],
+        laid: bool,
+    },
+    /// The room tool's shortcut: walls round a block of cells on each of its storeys, and
+    /// a floor and a roof on each. Where it meets rooms already there on the same storey,
+    /// the walls between are taken away, so they open into one another and a room drawn
+    /// across another extends it.
     AddRoom { min: [i32; 3], max: [i32; 3] },
-    /// Push the whole wall containing this face outward by one tile.
-    Grow(Face),
-    /// Pull the whole wall containing this face inward by one tile.
-    Shrink(Face),
-    /// Change what fills a wall tile.
-    SetPanel(Face, Panel),
-    /// Stand an interior wall on the edge between two tiles that are both inside, or
-    /// take it away again.
-    SetPartition(Face, Option<Panel>),
 }
 
-/// A base: the tiles inside it, which room each belongs to, and what fills each wall
-/// tile that is not solid.
+/// A base: its walls, floors and roofs, and the rooms they close in.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Base {
-    /// Each tile inside the base, and the room it was added as.
-    tiles: BTreeMap<[i32; 3], u32>,
-    panels: BTreeMap<Face, Panel>,
-    /// Interior walls, each on the east or south side of a tile.
-    partitions: BTreeMap<Face, Panel>,
-    rooms_added: u32,
+    /// Each wall, named from the cell on its west or north, and what fills it.
+    walls: BTreeMap<Face, Panel>,
+    /// The cells with a floor at their foot.
+    floors: BTreeSet<[i32; 3]>,
+    /// The cells with a roof over them.
+    roofs: BTreeSet<[i32; 3]>,
+    /// Worked out from the walls: every cell they close in, and which room it is in.
+    rooms: BTreeMap<[i32; 3], u32>,
 }
 
 /// Where a ray met a base.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BuildHit {
+    /// A wall, named from the cell on its west or north; or the floor (`Down`) or roof
+    /// (`Up`) of a cell.
     pub face: Face,
     /// Distance along the ray, in metres.
     pub distance: f32,
-    /// Whether what was met is an interior wall, not the hull.
-    pub partition: bool,
+    /// Whether what was met is a wall, not a floor or roof.
+    pub wall: bool,
 }
+
+const LEVEL: [Side; 4] = [Side::East, Side::West, Side::South, Side::North];
 
 impl Base {
     pub fn is_empty(&self) -> bool {
-        self.tiles.is_empty()
+        self.walls.is_empty() && self.floors.is_empty() && self.roofs.is_empty()
     }
 
+    /// How many cells are in rooms.
     pub fn tile_count(&self) -> usize {
-        self.tiles.len()
+        self.rooms.len()
     }
 
+    /// Whether a cell is in a room: closed in by walls on its storey.
     pub fn contains(&self, tile: IVec3) -> bool {
-        self.tiles.contains_key(&tile.to_array())
+        self.rooms.contains_key(&tile.to_array())
     }
 
-    /// Every tile inside the base and the room it belongs to, in a fixed order.
+    /// Every cell in a room and the room it is in, in a fixed order.
     pub fn tiles(&self) -> impl Iterator<Item = (IVec3, u32)> + '_ {
-        self.tiles
+        self.rooms
             .iter()
             .map(|(&tile, &room)| (IVec3::from_array(tile), room))
     }
 
-    /// Which room a tile belongs to, if it is inside the base.
+    /// Which room a cell is in, if it is in one.
     pub fn room(&self, tile: IVec3) -> Option<u32> {
-        self.tiles.get(&tile.to_array()).copied()
+        self.rooms.get(&tile.to_array()).copied()
+    }
+
+    /// Whether a cell has a floor at its foot.
+    pub fn has_floor(&self, tile: IVec3) -> bool {
+        self.floors.contains(&tile.to_array())
+    }
+
+    /// Whether a cell has a roof over it.
+    pub fn has_roof(&self, tile: IVec3) -> bool {
+        self.roofs.contains(&tile.to_array())
+    }
+
+    /// Every cell with a floor, in a fixed order.
+    pub fn floors(&self) -> impl Iterator<Item = IVec3> + '_ {
+        self.floors.iter().map(|&tile| IVec3::from_array(tile))
+    }
+
+    /// Every cell with a roof, in a fixed order.
+    pub fn roofs(&self) -> impl Iterator<Item = IVec3> + '_ {
+        self.roofs.iter().map(|&tile| IVec3::from_array(tile))
+    }
+
+    /// Every wall, named from the cell on its west or north, in a fixed order.
+    pub fn walls(&self) -> impl Iterator<Item = (Face, Panel)> + '_ {
+        self.walls.iter().map(|(&face, &panel)| (face, panel))
     }
 
     /// Applies an operation. Returns whether it changed anything.
     pub fn apply(&mut self, op: BuildOp) -> bool {
         let changed = match op {
+            BuildOp::SetWall(face, panel) => self.set_wall(face, panel),
+            BuildOp::SetFloor { min, max, laid } => {
+                Self::set_cells(&mut self.floors, min, max, laid)
+            }
+            BuildOp::SetRoof { min, max, laid } => Self::set_cells(&mut self.roofs, min, max, laid),
             BuildOp::AddRoom { min, max } => {
                 self.add_room(IVec3::from_array(min), IVec3::from_array(max))
             }
-            BuildOp::Grow(face) => self.grow(face),
-            BuildOp::Shrink(face) => self.shrink(face),
-            BuildOp::SetPanel(face, panel) => self.set_panel(face, panel),
-            BuildOp::SetPartition(face, panel) => self.set_partition(face, panel),
         };
-        // A window on a wall that no longer exists means nothing.
-        let stale: Vec<Face> = self
-            .panels
-            .keys()
-            .copied()
-            .filter(|&face| !self.is_hull(face))
-            .collect();
-        for face in stale {
-            self.panels.remove(&face);
+        if changed {
+            self.find_rooms();
         }
-        // An interior wall with outdoors on one side is the hull's job.
-        let stale: Vec<Face> = self
-            .partitions
-            .keys()
-            .copied()
-            .filter(|&face| !self.can_partition(face))
-            .collect();
-        for face in stale {
-            self.partitions.remove(&face);
+        changed
+    }
+
+    fn set_wall(&mut self, face: Face, panel: Option<Panel>) -> bool {
+        if !face.side.is_wall() {
+            return false;
+        }
+        let edge = Self::edge(face);
+        match panel {
+            Some(panel) => self.walls.insert(edge, panel) != Some(panel),
+            None => self.walls.remove(&edge).is_some(),
+        }
+    }
+
+    fn set_cells(cells: &mut BTreeSet<[i32; 3]>, min: [i32; 3], max: [i32; 3], laid: bool) -> bool {
+        let mut changed = false;
+        for x in min[0]..=max[0] {
+            for y in min[1]..=max[1] {
+                for z in min[2]..=max[2] {
+                    changed |= if laid {
+                        cells.insert([x, y, z])
+                    } else {
+                        cells.remove(&[x, y, z])
+                    };
+                }
+            }
         }
         changed
     }
 
     fn add_room(&mut self, min: IVec3, max: IVec3) -> bool {
-        let before = self.tiles.len();
-        // A block that overlaps a room is more of that room: the two become one shape,
-        // with walls that move together. A block that overlaps nothing is a new room.
-        let overlapped = self
-            .tiles
-            .iter()
-            .filter(|(tile, _)| (0..3).all(|axis| (min[axis]..=max[axis]).contains(&tile[axis])))
-            .map(|(_, &room)| room)
-            .min();
-        let room = overlapped.unwrap_or(self.rooms_added);
+        let before = (self.walls.clone(), self.floors.clone(), self.roofs.clone());
+        // Rooms as they were, so what this block meets is judged before it changes them.
+        let was = self.rooms.clone();
+        let was_room = |tile: IVec3| was.contains_key(&tile.to_array());
+        let inside = |tile: IVec3| tile.cmpge(min).all() && tile.cmple(max).all();
         for x in min.x..=max.x {
             for y in min.y..=max.y {
                 for z in min.z..=max.z {
-                    // A tile already inside the base stays with the room that has it.
-                    self.tiles.entry([x, y, z]).or_insert(room);
+                    let cell = IVec3::new(x, y, z);
+                    for side in LEVEL {
+                        let next = cell + side.offset();
+                        let face = Face::new(cell, side);
+                        let between_rooms = was_room(cell) && was_room(next);
+                        if inside(next) || was_room(next) {
+                            // Within the block, or where it meets a room already there:
+                            // open, but for a wall that already stood between two rooms.
+                            if !between_rooms {
+                                self.set_wall(face, None);
+                            }
+                        } else if self.filling(face).is_none() {
+                            self.set_wall(face, Some(Panel::Solid));
+                        }
+                    }
+                    // A floor and a roof on every storey of it: where a storey stands on
+                    // another, the roof below is the ceiling under the floor above.
+                    self.floors.insert(cell.to_array());
+                    self.roofs.insert(cell.to_array());
                 }
             }
         }
-        let changed = self.tiles.len() != before;
-        if changed && overlapped.is_none() {
-            self.rooms_added += 1;
-        }
-        changed
+        before != (self.walls.clone(), self.floors.clone(), self.roofs.clone())
     }
 
-    /// What fills a wall cell, whether it is part of the hull or an interior wall. `None`
-    /// where there is no wall.
+    /// Works out the rooms: on each storey, the cells that cannot be reached from beyond
+    /// the walls without passing through one, grouped by which reach each other.
+    fn find_rooms(&mut self) {
+        let mut rooms = BTreeMap::new();
+        let mut storeys: BTreeMap<i32, (IVec2, IVec2)> = BTreeMap::new();
+        for face in self.walls.keys() {
+            let tile = face.tile();
+            let beyond = tile + face.side.offset();
+            let (low, high) = (tile.min(beyond).xz(), tile.max(beyond).xz());
+            storeys
+                .entry(tile.y)
+                .and_modify(|(lo, hi)| {
+                    *lo = lo.min(low);
+                    *hi = hi.max(high);
+                })
+                .or_insert((low, high));
+        }
+        let mut next_room = 0;
+        for (y, (low, high)) in storeys {
+            // One cell wider all round, so the open air surrounds everything.
+            let (low, high) = (low - IVec2::ONE, high + IVec2::ONE);
+            let within = |cell: IVec2| cell.cmpge(low).all() && cell.cmple(high).all();
+            let open = |cell: IVec2, side: Side| {
+                let tile = IVec3::new(cell.x, y, cell.y);
+                self.filling(Face::new(tile, side)).is_none()
+            };
+            let step = |cell: IVec2, side: Side| {
+                let offset = side.offset();
+                cell + IVec2::new(offset.x, offset.z)
+            };
+            let mut reached = BTreeSet::new();
+            let mut frontier: Vec<IVec2> = Vec::new();
+            for x in low.x..=high.x {
+                for z in low.y..=high.y {
+                    let cell = IVec2::new(x, z);
+                    if x == low.x || x == high.x || z == low.y || z == high.y {
+                        reached.insert(cell.to_array());
+                        frontier.push(cell);
+                    }
+                }
+            }
+            while let Some(cell) = frontier.pop() {
+                for side in LEVEL {
+                    let next = step(cell, side);
+                    if within(next) && open(cell, side) && reached.insert(next.to_array()) {
+                        frontier.push(next);
+                    }
+                }
+            }
+            // What the open air never reached is closed in: each group of it a room.
+            for x in low.x..=high.x {
+                for z in low.y..=high.y {
+                    let start = IVec2::new(x, z);
+                    if !reached.insert(start.to_array()) {
+                        continue;
+                    }
+                    let mut frontier = vec![start];
+                    while let Some(cell) = frontier.pop() {
+                        rooms.insert([cell.x, y, cell.y], next_room);
+                        for side in LEVEL {
+                            let next = step(cell, side);
+                            if open(cell, side) && reached.insert(next.to_array()) {
+                                frontier.push(next);
+                            }
+                        }
+                    }
+                    next_room += 1;
+                }
+            }
+        }
+        self.rooms = rooms;
+    }
+
+    /// What fills a wall, seen from either side. `None` where there is no wall, and for
+    /// floors and roofs.
     pub fn filling(&self, face: Face) -> Option<Panel> {
-        if self.is_hull(face) {
-            Some(self.panel(face))
-        } else {
-            self.partition(face)
+        if !face.side.is_wall() {
+            return None;
         }
+        self.walls.get(&Self::edge(face)).copied()
     }
 
-    /// The window or doorway a wall cell is part of: every cell in a row with it, on the
-    /// same storey, that has the same filling. In order along the wall. Just the cell
-    /// itself if it is solid, and nothing if there is no wall there.
+    /// What fills a wall, or solid where there is none.
+    pub fn panel(&self, face: Face) -> Panel {
+        self.filling(face).unwrap_or(Panel::Solid)
+    }
+
+    /// Whether a wall is an outside wall: a room on one side of it and not the other.
+    pub fn exterior(&self, face: Face) -> bool {
+        self.filling(face).is_some()
+            && self.contains(face.tile()) != self.contains(face.tile() + face.side.offset())
+    }
+
+    /// The way out through an outside wall, from its room toward the open. `None` if it is
+    /// not an outside wall.
+    pub fn outward(&self, face: Face) -> Option<IVec3> {
+        if !self.exterior(face) {
+            return None;
+        }
+        let offset = face.side.offset();
+        Some(if self.contains(face.tile()) {
+            offset
+        } else {
+            -offset
+        })
+    }
+
+    /// The window or doorway a wall cell is part of: every cell in a line with it, on the
+    /// same storey, that has the same filling, in order along the wall and named from
+    /// their west or north. Just the cell itself if it is solid, and nothing if there is
+    /// no wall there.
     pub fn run(&self, face: Face) -> Vec<Face> {
         let Some(panel) = self.filling(face) else {
             return Vec::new();
         };
+        let face = Self::edge(face);
         if panel == Panel::Solid {
             return vec![face];
         }
-        let along = face.side.across()[0];
-        let same = |cell: IVec3| {
-            let next = Face::new(cell, face.side);
-            self.is_hull(next) == self.is_hull(face) && self.filling(next) == Some(panel)
-        };
+        let along = face.side.along();
+        let same = |cell: IVec3| self.filling(Face::new(cell, face.side)) == Some(panel);
         let mut first = face.tile();
         while same(first - along) {
             first -= along;
@@ -323,9 +477,9 @@ impl Base {
         found
     }
 
-    /// The same edge between two tiles, named from whichever tile has it on its east or
-    /// south side.
-    fn edge(face: Face) -> Face {
+    /// The same edge between two cells, named from whichever has it on its east or south
+    /// side. Floors and roofs are left as they are.
+    pub fn edge(face: Face) -> Face {
         match face.side {
             Side::West => Face::new(face.tile() + IVec3::NEG_X, Side::East),
             Side::North => Face::new(face.tile() + IVec3::NEG_Z, Side::South),
@@ -333,124 +487,36 @@ impl Base {
         }
     }
 
-    /// Whether an interior wall could stand on a face: an upright one with a tile of the
-    /// base on both sides.
-    pub fn can_partition(&self, face: Face) -> bool {
-        face.side.is_wall()
-            && self.contains(face.tile())
-            && self.contains(face.tile() + face.side.offset())
-    }
-
-    /// The interior wall on a face, if there is one, seen from either side.
-    pub fn partition(&self, face: Face) -> Option<Panel> {
-        self.partitions.get(&Self::edge(face)).copied()
-    }
-
-    /// Every interior wall, each named from the tile on its west or north, in a fixed
-    /// order.
-    pub fn partitions(&self) -> impl Iterator<Item = (Face, Panel)> + '_ {
-        self.partitions.iter().map(|(&face, &panel)| (face, panel))
-    }
-
-    fn set_partition(&mut self, face: Face, panel: Option<Panel>) -> bool {
-        if !self.can_partition(face) || self.partition(face) == panel {
-            return false;
-        }
-        match panel {
-            Some(panel) => self.partitions.insert(Self::edge(face), panel),
-            None => self.partitions.remove(&Self::edge(face)),
-        };
-        true
-    }
-
-    /// Whether a face is part of the hull: inside on one side, outside on the other.
-    pub fn is_hull(&self, face: Face) -> bool {
-        self.contains(face.tile()) && !self.contains(face.tile() + face.side.offset())
-    }
-
-    /// Every face of the hull, in a fixed order.
-    pub fn hull(&self) -> impl Iterator<Item = Face> + '_ {
-        self.tiles
-            .keys()
-            .flat_map(|&tile| Side::ALL.map(|side| Face { tile, side }))
-            .filter(|&face| self.is_hull(face))
-    }
-
-    /// What fills a hull face. Floors and roofs are always solid.
-    pub fn panel(&self, face: Face) -> Panel {
-        self.panels.get(&face).copied().unwrap_or(Panel::Solid)
-    }
-
-    fn set_panel(&mut self, face: Face, panel: Panel) -> bool {
-        if !face.side.is_wall() || !self.is_hull(face) || self.panel(face) == panel {
-            return false;
-        }
-        if panel == Panel::Solid {
-            self.panels.remove(&face);
-        } else {
-            self.panels.insert(face, panel);
-        }
-        true
-    }
-
-    /// The wall a face belongs to: every hull face of the same room, in the same plane
-    /// and facing the same way, reachable from it without leaving the plane. Pushing or
-    /// pulling a wall therefore resizes one room and leaves its neighbours alone.
-    pub fn wall(&self, face: Face) -> Vec<Face> {
-        if !self.is_hull(face) {
-            return Vec::new();
-        }
-        let room = self.room(face.tile());
-        let mut found = BTreeSet::from([face]);
-        let mut frontier = vec![face];
-        while let Some(current) = frontier.pop() {
-            for step in face.side.across() {
-                for direction in [step, -step] {
-                    let next = Face::new(current.tile() + direction, face.side);
-                    if self.is_hull(next) && self.room(next.tile()) == room && found.insert(next) {
-                        frontier.push(next);
-                    }
-                }
-            }
-        }
-        found.into_iter().collect()
-    }
-
-    fn grow(&mut self, face: Face) -> bool {
-        let wall = self.wall(face);
-        let Some(room) = self.room(face.tile()) else {
-            return false;
-        };
-        for part in &wall {
-            self.tiles
-                .insert((part.tile() + face.side.offset()).to_array(), room);
-        }
-        !wall.is_empty()
-    }
-
-    fn shrink(&mut self, face: Face) -> bool {
-        let wall = self.wall(face);
-        // Never shrink a base away to nothing.
-        if wall.is_empty() || wall.len() >= self.tiles.len() {
-            return false;
-        }
-        for part in &wall {
-            self.tiles.remove(&part.tile);
-        }
-        true
-    }
-
-    /// The first hull face or interior wall a ray meets, from either side, if any. `origin` and
+    /// The first wall, floor or roof a ray meets, from either side, if any. `origin` and
     /// `direction` are in the base's own space, in metres; `direction` is unit length.
     pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f32) -> Option<BuildHit> {
         let size = Vec3::new(CELL_M, STOREY_M, CELL_M);
-        let hull = self.hull().map(|face| (face, false));
-        let interior = self.partitions.keys().map(|&face| (face, true));
-        hull.chain(interior)
-            .filter_map(|(face, partition)| {
+        let walls = self.walls.keys().map(|&face| (face, true));
+        let floors = self.floors.iter().map(|&tile| {
+            (
+                Face {
+                    tile,
+                    side: Side::Down,
+                },
+                false,
+            )
+        });
+        let roofs = self.roofs.iter().map(|&tile| {
+            (
+                Face {
+                    tile,
+                    side: Side::Up,
+                },
+                false,
+            )
+        });
+        walls
+            .chain(floors)
+            .chain(roofs)
+            .filter_map(|(face, wall)| {
                 let normal = face.side.offset().as_vec3();
                 let low = face.tile().as_vec3() * size;
-                // A point on the face's plane: the tile's far corner on positive sides.
+                // A point on the face's plane: the cell's far corner on positive sides.
                 let on_plane = low + normal.max(Vec3::ZERO) * size;
                 let approach = direction.dot(normal);
                 if approach.abs() < 1e-6 {
@@ -468,7 +534,7 @@ impl Base {
                 inside.then_some(BuildHit {
                     face,
                     distance,
-                    partition,
+                    wall,
                 })
             })
             .min_by(|a, b| a.distance.total_cmp(&b.distance))
@@ -489,6 +555,7 @@ impl Base {
 mod tests {
     use super::*;
 
+    /// A room three cells square, by the shortcut.
     fn room() -> Base {
         let mut base = Base::default();
         assert!(base.apply(BuildOp::AddRoom {
@@ -498,116 +565,135 @@ mod tests {
         base
     }
 
-    fn east_wall(base: &Base) -> Face {
-        base.hull().find(|face| face.side == Side::East).unwrap()
-    }
-
     #[test]
-    fn the_hull_is_wherever_inside_meets_outside() {
+    fn the_room_tool_lays_walls_round_a_floor_and_a_roof() {
         let base = room();
+        assert_eq!(base.walls().count(), 12);
+        assert_eq!(base.floors().count(), 9);
+        assert_eq!(base.roofs().count(), 9);
         assert_eq!(base.tile_count(), 9);
-        // A 3 by 3 room: 9 floor, 9 roof, 4 walls of 3.
-        assert_eq!(base.hull().count(), 9 + 9 + 12);
-        assert_eq!(base.hull().filter(|face| face.side.is_wall()).count(), 12);
-        // Nothing between two tiles of the same room.
-        assert!(!base.is_hull(Face::new(IVec3::new(0, 0, 0), Side::East)));
+        // Nothing between two cells of the room.
+        assert_eq!(
+            base.filling(Face::new(IVec3::new(0, 0, 0), Side::East)),
+            None
+        );
+        assert!(base.exterior(Face::new(IVec3::new(2, 0, 1), Side::East)));
     }
 
     #[test]
-    fn growing_pushes_a_whole_wall_out_and_shrinking_pulls_it_back() {
+    fn walls_drawn_round_cells_close_them_into_a_room_and_a_gap_opens_it() {
+        let mut base = Base::default();
+        // Four walls round a block two cells by one, drawn one cell at a time.
+        let walls = [
+            Face::new(IVec3::new(0, 0, 0), Side::North),
+            Face::new(IVec3::new(1, 0, 0), Side::North),
+            Face::new(IVec3::new(0, 0, 0), Side::South),
+            Face::new(IVec3::new(1, 0, 0), Side::South),
+            Face::new(IVec3::new(0, 0, 0), Side::West),
+            Face::new(IVec3::new(1, 0, 0), Side::East),
+        ];
+        for face in walls {
+            base.apply(BuildOp::SetWall(face, Some(Panel::Solid)));
+        }
+        assert_eq!(base.tile_count(), 2);
+        assert_eq!(base.room(IVec3::ZERO), base.room(IVec3::X));
+        // A doorway still closes it in; a gap does not.
+        base.apply(BuildOp::SetWall(walls[0], Some(Panel::Door)));
+        assert_eq!(base.tile_count(), 2);
+        base.apply(BuildOp::SetWall(walls[0], None));
+        assert_eq!(base.tile_count(), 0);
+    }
+
+    #[test]
+    fn a_wall_across_a_room_makes_two() {
         let mut base = room();
-        let original = base.clone();
-        let wall = east_wall(&base);
-        assert_eq!(base.wall(wall).len(), 3);
-
-        assert!(base.apply(BuildOp::Grow(wall)));
-        assert_eq!(base.tile_count(), 12);
-        let moved = east_wall(&base);
-        assert_eq!(moved.tile[0], 3);
-
-        assert!(base.apply(BuildOp::Shrink(moved)));
-        assert_eq!(base, original);
+        for z in 0..3 {
+            base.apply(BuildOp::SetWall(
+                Face::new(IVec3::new(0, 0, z), Side::East),
+                Some(Panel::Solid),
+            ));
+        }
+        assert_eq!(base.tile_count(), 9);
+        assert_ne!(base.room(IVec3::ZERO), base.room(IVec3::new(2, 0, 0)));
+        assert!(!base.exterior(Face::new(IVec3::new(0, 0, 1), Side::East)));
     }
 
     #[test]
-    fn rooms_that_touch_become_one_space() {
+    fn rooms_that_touch_open_into_each_other() {
         let mut base = room();
         base.apply(BuildOp::AddRoom {
             min: [3, 0, 1],
             max: [5, 0, 1],
         });
-        // The corridor's tile shares a side with the room, so there is no wall between.
-        assert!(!base.is_hull(Face::new(IVec3::new(2, 0, 1), Side::East)));
-        // The room's east wall is now two separate stretches, either side of the corridor.
+        // The corridor meets the room, so there is no wall between.
         assert_eq!(
-            base.wall(Face::new(IVec3::new(2, 0, 0), Side::East)).len(),
-            1
+            base.filling(Face::new(IVec3::new(2, 0, 1), Side::East)),
+            None
         );
-        assert_eq!(
-            base.wall(Face::new(IVec3::new(2, 0, 2), Side::East)).len(),
-            1
-        );
-    }
-
-    #[test]
-    fn pushing_a_wall_resizes_one_room_and_leaves_its_neighbour_alone() {
-        // Two rooms side by side whose south walls line up.
-        let mut base = room();
-        base.apply(BuildOp::AddRoom {
-            min: [3, 0, 0],
-            max: [5, 0, 2],
-        });
-        assert_eq!(base.room(IVec3::new(0, 0, 0)), Some(0));
-        assert_eq!(base.room(IVec3::new(3, 0, 0)), Some(1));
-
-        let south = Face::new(IVec3::new(1, 0, 2), Side::South);
-        assert_eq!(
-            base.wall(south).len(),
-            3,
-            "only the first room's part of the line"
-        );
-        base.apply(BuildOp::Grow(south));
-        assert!(base.contains(IVec3::new(1, 0, 3)));
         assert!(
-            !base.contains(IVec3::new(4, 0, 3)),
-            "the neighbour did not grow"
+            base.filling(Face::new(IVec3::new(2, 0, 0), Side::East))
+                .is_some()
         );
-        assert_eq!(
-            base.room(IVec3::new(1, 0, 3)),
-            Some(0),
-            "new tiles join the room that grew"
-        );
+        assert_eq!(base.room(IVec3::new(5, 0, 1)), base.room(IVec3::ZERO));
     }
 
     #[test]
-    fn a_base_cannot_be_shrunk_to_nothing() {
-        let mut base = Base::default();
-        base.apply(BuildOp::AddRoom {
-            min: [0, 0, 0],
-            max: [0, 0, 0],
-        });
-        let wall = east_wall(&base);
-        assert!(!base.apply(BuildOp::Shrink(wall)));
-        assert_eq!(base.tile_count(), 1);
-    }
-
-    #[test]
-    fn windows_belong_to_wall_tiles_and_vanish_with_them() {
+    fn a_room_drawn_across_another_extends_it() {
         let mut base = room();
-        let wall = east_wall(&base);
-        assert!(base.apply(BuildOp::SetPanel(wall, Panel::WINDOW)));
-        assert_eq!(base.panel(wall), Panel::WINDOW);
-        // Setting it again changes nothing; floors cannot have windows.
-        assert!(!base.apply(BuildOp::SetPanel(wall, Panel::WINDOW)));
-        assert!(!base.apply(BuildOp::SetPanel(
-            Face::new(IVec3::ZERO, Side::Down),
-            Panel::WINDOW
-        )));
+        // Half over the first room, half beyond its east wall.
+        assert!(base.apply(BuildOp::AddRoom {
+            min: [2, 0, 1],
+            max: [4, 0, 3],
+        }));
+        assert_eq!(base.room(IVec3::new(4, 0, 3)), base.room(IVec3::ZERO));
+        // The old east wall where the new block crosses it is gone.
+        assert_eq!(
+            base.filling(Face::new(IVec3::new(2, 0, 1), Side::South)),
+            None
+        );
+        // A block wholly inside changes nothing, and a block apart is its own room.
+        assert!(!base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [1, 0, 1],
+        }));
+        assert!(base.apply(BuildOp::AddRoom {
+            min: [8, 0, 0],
+            max: [9, 0, 1],
+        }));
+        assert_ne!(base.room(IVec3::new(8, 0, 0)), base.room(IVec3::ZERO));
+    }
 
-        // Growing the wall moves the hull, so the old window's tile is no longer a wall.
-        base.apply(BuildOp::Grow(wall));
-        assert_eq!(base.panel(wall), Panel::Solid);
-        assert!(base.hull().all(|face| base.panel(face) == Panel::Solid));
+    #[test]
+    fn a_room_drawn_on_top_of_another_stands_on_it() {
+        let mut base = room();
+        base.apply(BuildOp::AddRoom {
+            min: [0, 1, 0],
+            max: [1, 1, 1],
+        });
+        // The roof below is the ceiling under the floor above.
+        assert!(base.has_roof(IVec3::ZERO));
+        assert!(base.has_floor(IVec3::Y));
+        assert!(base.has_roof(IVec3::Y));
+        assert!(base.contains(IVec3::Y));
+    }
+
+    #[test]
+    fn openings_fill_wall_cells_and_go_with_them() {
+        let mut base = room();
+        let wall = Face::new(IVec3::new(2, 0, 1), Side::East);
+        assert!(base.apply(BuildOp::SetWall(wall, Some(Panel::WINDOW))));
+        assert_eq!(base.panel(wall), Panel::WINDOW);
+        // The same from the other side, and setting it again changes nothing.
+        let other_side = Face::new(IVec3::new(3, 0, 1), Side::West);
+        assert_eq!(base.panel(other_side), Panel::WINDOW);
+        assert!(!base.apply(BuildOp::SetWall(other_side, Some(Panel::WINDOW))));
+        // Floors and roofs take no walls.
+        assert!(!base.apply(BuildOp::SetWall(
+            Face::new(IVec3::ZERO, Side::Down),
+            Some(Panel::WINDOW)
+        )));
+        assert!(base.apply(BuildOp::SetWall(wall, None)));
+        assert_eq!(base.filling(wall), None);
     }
 
     #[test]
@@ -626,7 +712,7 @@ mod tests {
     #[test]
     fn a_ray_finds_the_wall_it_points_at_from_either_side() {
         let base = room();
-        // From outside, east of the room, looking west at the middle tile.
+        // From outside, east of the room, looking west at the middle cell.
         let t = CELL_M;
         let from_outside = base
             .raycast(Vec3::new(t * 10.0, 1.5, t * 1.5), Vec3::NEG_X, 100.0)
@@ -635,12 +721,19 @@ mod tests {
             from_outside.face,
             Face::new(IVec3::new(2, 0, 1), Side::East)
         );
+        assert!(from_outside.wall);
         assert!((from_outside.distance - t * 7.0).abs() < 1e-4);
         // From inside the room, looking east at the same wall.
         let from_inside = base
             .raycast(Vec3::new(t * 1.5, 1.5, t * 1.5), Vec3::X, 100.0)
             .unwrap();
         assert_eq!(from_inside.face, from_outside.face);
+        // Looking down from inside, the floor.
+        let down = base
+            .raycast(Vec3::new(t * 1.5, 1.5, t * 1.5), Vec3::NEG_Y, 100.0)
+            .unwrap();
+        assert_eq!(down.face, Face::new(IVec3::new(1, 0, 1), Side::Down));
+        assert!(!down.wall);
         // Looking away from the base finds nothing.
         assert!(
             base.raycast(Vec3::new(t * 10.0, 1.5, t * 1.5), Vec3::X, 100.0)
@@ -655,14 +748,18 @@ mod tests {
                 min: [0, 0, 0],
                 max: [2, 0, 2],
             },
-            BuildOp::Grow(Face::new(IVec3::new(2, 0, 1), Side::East)),
-            BuildOp::SetPanel(
-                Face::new(IVec3::new(3, 0, 1), Side::East),
-                Panel::TALL_WINDOW,
+            BuildOp::SetWall(
+                Face::new(IVec3::new(2, 0, 1), Side::East),
+                Some(Panel::TALL_WINDOW),
             ),
             BuildOp::AddRoom {
                 min: [0, 1, 0],
                 max: [1, 1, 1],
+            },
+            BuildOp::SetFloor {
+                min: [5, 0, 5],
+                max: [6, 0, 6],
+                laid: true,
             },
         ];
         let build = || {
@@ -677,77 +774,21 @@ mod tests {
     }
 
     #[test]
-    fn a_room_built_across_another_becomes_part_of_it() {
-        let mut base = room();
-        let before = base.room(IVec3::new(0, 0, 0));
-        // Half over the first room, half beyond its east wall.
-        assert!(base.apply(BuildOp::AddRoom {
-            min: [2, 0, 1],
-            max: [4, 0, 3],
-        }));
-        assert_eq!(base.room(IVec3::new(4, 0, 3)), before);
-        // One room, so its whole north wall moves together where it is in one line.
-        let north = base.wall(Face::new(IVec3::new(0, 0, 0), Side::North));
-        assert_eq!(north.len(), 3);
-        // A block wholly inside changes nothing, and a block apart is its own room.
-        assert!(!base.apply(BuildOp::AddRoom {
-            min: [0, 0, 0],
-            max: [1, 0, 1],
-        }));
-        assert!(base.apply(BuildOp::AddRoom {
-            min: [8, 0, 0],
-            max: [9, 0, 1],
-        }));
-        assert_ne!(base.room(IVec3::new(8, 0, 0)), before);
-    }
-
-    #[test]
-    fn interior_walls_stand_only_between_two_tiles_of_the_base() {
-        let mut base = room();
-        let inside = Face::new(IVec3::new(0, 0, 1), Side::East);
-        let same_from_the_other_side = Face::new(IVec3::new(1, 0, 1), Side::West);
-        let on_the_hull = Face::new(IVec3::new(2, 0, 1), Side::East);
-        assert!(!base.apply(BuildOp::SetPartition(on_the_hull, Some(Panel::Solid))));
-        assert!(base.apply(BuildOp::SetPartition(inside, Some(Panel::Solid))));
-        assert_eq!(base.partition(same_from_the_other_side), Some(Panel::Solid));
-        assert_eq!(base.partitions().count(), 1);
-        // The same wall again changes nothing; a doorway in it does.
-        assert!(!base.apply(BuildOp::SetPartition(
-            same_from_the_other_side,
-            Some(Panel::Solid)
-        )));
-        assert!(base.apply(BuildOp::SetPartition(
-            same_from_the_other_side,
-            Some(Panel::Door)
-        )));
-        assert_eq!(base.partitions().count(), 1);
-
-        // A ray across the room meets it, and says it is not the hull.
-        let hit = base
-            .raycast(Vec3::new(CELL_M * 0.25, 1.0, CELL_M * 1.5), Vec3::X, 50.0)
-            .unwrap();
-        assert!(hit.partition && (hit.distance - CELL_M * 0.75).abs() < 1e-4);
-
-        // Pull the east wall in twice and the tiles beside it go, and the wall with them.
-        let east = Face::new(IVec3::new(2, 0, 1), Side::East);
-        assert!(base.apply(BuildOp::Shrink(east)));
-        assert_eq!(base.partitions().count(), 1);
-        assert!(base.apply(BuildOp::Shrink(Face::new(IVec3::new(1, 0, 1), Side::East))));
-        assert_eq!(base.partitions().count(), 0);
-        assert!(!base.apply(BuildOp::SetPartition(inside, None)));
-    }
-
-    #[test]
     fn neighbouring_cells_with_the_same_opening_are_one_run() {
         let mut base = room();
         let south = |x: i32| Face::new(IVec3::new(x, 0, 2), Side::South);
-        base.apply(BuildOp::SetPanel(south(0), Panel::Door));
-        base.apply(BuildOp::SetPanel(south(1), Panel::Door));
-        base.apply(BuildOp::SetPanel(south(2), Panel::WINDOW));
+        base.apply(BuildOp::SetWall(south(0), Some(Panel::Door)));
+        base.apply(BuildOp::SetWall(south(1), Some(Panel::Door)));
+        base.apply(BuildOp::SetWall(south(2), Some(Panel::WINDOW)));
         assert_eq!(base.run(south(1)), vec![south(0), south(1)]);
         assert_eq!(base.run(south(2)), vec![south(2)]);
+        // Named from either side, the same run.
+        assert_eq!(
+            base.run(Face::new(IVec3::new(1, 0, 3), Side::North)),
+            vec![south(0), south(1)]
+        );
         // A solid cell is a run of one, and where there is no wall there is no run.
-        let north = Face::new(IVec3::new(1, 0, 0), Side::North);
+        let north = Face::new(IVec3::new(1, 0, -1), Side::South);
         assert_eq!(base.run(north), vec![north]);
         assert!(
             base.run(Face::new(IVec3::new(1, 0, 1), Side::East))
@@ -755,5 +796,14 @@ mod tests {
         );
         assert_eq!(cells(CELL_M * 3.0), 3);
         assert_eq!(cells(0.0), 1);
+    }
+
+    #[test]
+    fn the_way_out_of_an_outside_wall_points_away_from_its_room() {
+        let base = room();
+        let east = Face::new(IVec3::new(2, 0, 1), Side::East);
+        assert_eq!(base.outward(east), Some(IVec3::X));
+        let north = Face::new(IVec3::new(1, 0, -1), Side::South);
+        assert_eq!(base.outward(north), Some(IVec3::NEG_Z));
     }
 }

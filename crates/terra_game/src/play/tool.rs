@@ -99,10 +99,8 @@ pub struct Acting;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Target {
     Nothing,
-    /// A tile of the outside wall.
-    Wall(Face),
-    /// The edge between two tiles, where an interior wall stands or could; whether one
-    /// may stand there; and whether the wall there has a window or door in it.
+    /// The edge between two cells, where a wall stands or could; whether one may stand
+    /// there; and whether the wall there has a window or door in it.
     Edge {
         face: Face,
         fits: bool,
@@ -326,8 +324,6 @@ pub struct Builder {
     done: Option<Done>,
     /// Set when something is finished: the button has to come up before the next.
     must_release: bool,
-    /// Whether reshaping pulls a wall in instead of pushing it out.
-    pull: bool,
     /// An item shrunk because it is being taken apart, to be put right if that stops.
     shrinking: Option<Entity>,
     /// Set by a tap of the right mouse button: put away, or put back.
@@ -367,7 +363,6 @@ impl Default for Builder {
             work: None,
             done: None,
             must_release: false,
-            pull: false,
             shrinking: None,
             cancel: false,
             price: None,
@@ -458,7 +453,7 @@ impl Builder {
         !self.stowed
             && (self.item(builds).is_some()
                 || self.room(builds).is_some()
-                || matches!(self.picked(builds).kind, Kind::Wall(_) | Kind::Reshape))
+                || matches!(self.picked(builds).kind, Kind::Wall(_)))
     }
 
     /// How far through building or taking apart the builder is, from 0 to 1, and whether
@@ -630,7 +625,7 @@ fn choose(
             continue;
         }
         // Shift and the wheel, or Page Up and Page Down, raise and lower what is placed: an
-        // item by a grid step or a tenth of a metre, a room by a storey (D144).
+        // item by a grid step or a tenth of a metre, a wall or room by a storey (D144).
         let lifting = intent.held(Action::Sprint);
         let height = if lifting { intent.wheel } else { 0 } + intent.pressed(Action::Raise) as i32
             - intent.pressed(Action::Lower) as i32;
@@ -647,7 +642,7 @@ fn choose(
                     builder.raise =
                         (builder.raise + step * height as f32).clamp(0.0, HIGHEST_RAISE_M);
                 }
-            } else if builder.room(&builds).is_some() {
+            } else if builder.draws(&builds) {
                 builder.storey = (builder.storey + height).clamp(*STOREYS.start(), *STOREYS.end());
             }
         }
@@ -669,8 +664,6 @@ fn choose(
                 builder.room_turned = !builder.room_turned;
             } else if matches!(builder.picked(&builds).kind, Kind::Wall(_)) {
                 builder.wall_turned = !builder.wall_turned;
-            } else if matches!(builder.picked(&builds).kind, Kind::Reshape) {
-                builder.pull = !builder.pull;
             }
         }
     }
@@ -689,7 +682,7 @@ fn target_point(target: &Target, props: &Query<&Prop>) -> Option<Vec3> {
     };
     match *target {
         Target::Nothing => None,
-        Target::Wall(face) | Target::Edge { face, .. } => Some(tile(face.tile)),
+        Target::Edge { face, .. } => Some(tile(face.tile)),
         Target::Ground { corner, tiles, .. } => Some(Vec3::new(
             (corner.x as f32 + tiles.x as f32 * 0.5) * CELL_M,
             corner.y as f32 * terra_build::STOREY_M,

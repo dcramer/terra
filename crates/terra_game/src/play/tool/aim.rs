@@ -47,14 +47,11 @@ pub(super) fn aim(
         let local_origin = to_base.transform_point3(origin);
         let local_direction = to_base.transform_vector3(direction).normalize();
         let within = |point: Vec3, reach: f32| point.distance(player.translation) <= reach;
-        // The first of the base's walls, floors and roofs the view meets, interior walls
-        // included; the ground; and the first item.
+        // The first of the base's walls, floors and roofs the view meets; the ground; and
+        // the first item.
         let hull = site.base.raycast(local_origin, local_direction, 200.0);
         let ground = planet.raycast(origin, direction, 200.0);
         let met = |distance: f32| local_origin + local_direction * distance;
-        let outside_wall = hull
-            .filter(|hit| !hit.partition && hit.face.side.is_wall())
-            .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M));
         let limit = hull.map_or(f32::MAX, |hit| hit.distance + 0.05);
         let item = props
             .iter()
@@ -157,7 +154,8 @@ pub(super) fn aim(
                             .with_y(hit.face.tile[1]);
                         let indoors = site.base.contains(tile);
                         let along = on_grid(touched);
-                        let gap = if hit.partition { 0.08 } else { 0.02 };
+                        // Clear of the wall's thickness.
+                        let gap = 0.1;
                         let against = boxed(touched, 0.0, indoors).reach_toward(out) + gap;
                         let at = along + out * (touched - along).dot(out) + toward_viewer * against;
                         Some((at.with_y(if indoors { floor } else { 0.0 }), 0.0, indoors))
@@ -208,42 +206,61 @@ pub(super) fn aim(
 
         let edge = |face: Face| Target::Edge {
             face,
-            fits: site.base.can_partition(face),
+            fits: true,
             open: site
                 .base
-                .partition(face)
+                .filling(face)
                 .is_some_and(|panel| panel != Panel::Solid),
         };
         // So many cells of one wall, centred on one of them. Empty if the wall does not run
-        // that far, or changes from outside wall to interior on the way.
+        // that far.
         let stretch = |face: Face, count: i32| -> Vec<Face> {
             let along = face.side.along();
             let first = face.tile() - along * ((count - 1) / 2);
             let covered: Vec<Face> = (0..count)
                 .map(|step| Face::new(first + along * step, face.side))
                 .collect();
-            let outside = site.base.is_hull(face);
-            if covered.iter().all(|&cell| {
-                site.base.is_hull(cell) == outside && site.base.filling(cell).is_some()
-            }) {
+            if covered
+                .iter()
+                .all(|&cell| site.base.filling(cell).is_some())
+            {
                 covered
             } else {
                 Vec::new()
             }
         };
-        // Any upright wall the view is on, outside or interior, within reach.
+        // Any wall the view is on, within reach.
         let any_wall = hull
-            .filter(|hit| hit.face.side.is_wall())
+            .filter(|hit| hit.wall)
             .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M));
         let opening_on = |width_m: f32, run: &mut Vec<Face>| {
             any_wall.map_or(Target::Nothing, |hit| {
                 *run = stretch(hit.face, cells(width_m));
-                if hit.partition {
-                    edge(hit.face)
-                } else {
-                    Target::Wall(hit.face)
-                }
+                edge(hit.face)
             })
+        };
+        // Where the view meets the level of a storey, over the small bumps of the ground;
+        // where the ground is well above or below it, as on a hillside, where the view
+        // meets the ground, so what is placed is under the aim; and out of reach, at the
+        // edge of reach along the view (D144). Walls and rooms are aimed so, so they do not
+        // jump as the view crosses grass and stones.
+        let feet = to_base.transform_point3(player.translation);
+        let on_level = |floor_m: f32| {
+            let flat = local_direction.with_y(0.0).normalize_or_zero();
+            let along = (floor_m - local_origin.y) / local_direction.y;
+            let on_ground = ground.map(|ground| to_base.transform_point3(ground.point));
+            let reached = match on_ground {
+                _ if local_direction.y < -0.01
+                    && along > 0.0
+                    && on_ground.is_none_or(|point| (point.y - floor_m).abs() < LEVEL_BUMPS_M) =>
+                {
+                    local_origin + local_direction * along
+                }
+                Some(point) => point,
+                None => feet + flat * STRUCTURE_REACH_M,
+            };
+            let out = (reached - feet).with_y(0.0);
+            feet.with_y(floor_m) + out.clamp_length_max(STRUCTURE_REACH_M - 1.0)
         };
         // The point of the grid a wall or room is drawn to, followed by what is being
         // dragged out.
@@ -262,38 +279,20 @@ pub(super) fn aim(
         };
         let mut run = Vec::new();
         builder.target = match &builder.picked(&builds).kind {
-            Kind::Reshape => outside_wall.map_or(Target::Nothing, |hit| Target::Wall(hit.face)),
             // A window or a door goes in an outside wall or an interior one alike.
             Kind::Window(shapes) => opening_on(shapes[builder.variant()].1, &mut run),
             Kind::Door => opening_on(DOOR_WIDTH_M, &mut run),
             Kind::Wall(lengths) => {
-                // On the grid line nearest the floor the view is on; else where the view
-                // meets the floor of the player's storey, through a roof seen from above
-                // (hidden while they are inside); or, looking at no floor, a couple of
-                // steps ahead. The wheel turns it.
-                let feet = to_base.transform_point3(player.translation);
-                let floor_m = (feet.y / STOREY_M).round() * STOREY_M;
-                let through_roof = || {
-                    let along = (floor_m - local_origin.y) / local_direction.y;
-                    let at = local_origin + local_direction * along;
-                    (local_direction.y < -0.01
-                        && within(site.frame.transform_point(at), STRUCTURE_REACH_M))
-                    .then_some(at)
-                };
-                let on_floor = hull
-                    .filter(|hit| !hit.partition && hit.face.side == Side::Down)
+                // On the grid line nearest the floor the view is on, on its storey; else
+                // on the level of the storey chosen, through a roof seen from above
+                // (hidden while the player is inside). The wheel turns it.
+                let (on_floor, level) = hull
+                    .filter(|hit| !hit.wall && hit.face.side == Side::Down)
                     .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M))
-                    .map(|hit| met(hit.distance).with_y(hit.face.tile[1] as f32 * STOREY_M))
-                    .or_else(through_roof)
+                    .map(|hit| (met(hit.distance), hit.face.tile[1]))
                     .unwrap_or_else(|| {
-                        let forward = to_base
-                            .transform_vector3(view.forward)
-                            .with_y(0.0)
-                            .normalize_or_zero();
-                        (feet + forward * 2.0).with_y(floor_m)
-                    })
-                    + Vec3::Y * 0.01;
-                let level = (on_floor.y / STOREY_M).floor() as i32;
+                        (on_level(builder.storey as f32 * STOREY_M), builder.storey)
+                    });
                 let face = match draw_to(&mut builder, on_floor, level) {
                     // Drawn by dragging, or laid: from one point of the grid to another.
                     Some((from, to, level)) => {
@@ -321,42 +320,18 @@ pub(super) fn aim(
                 };
                 Target::Edge {
                     face,
-                    fits: run.iter().all(|&cell| site.base.can_partition(cell)),
+                    fits: true,
                     open: false,
                 }
             }
             Kind::Room(_) => {
                 // Across a room already there, which it then extends; else on the level of
-                // the storey chosen, not on the bumps of the ground, so it does not jump as
-                // the view crosses grass and stones; and out of reach, it waits at the
-                // edge of reach along the view (D144).
+                // the storey chosen.
                 let on_base = hull
                     .filter(|hit| ground.is_none_or(|ground| hit.distance < ground.distance))
                     .map(|hit| met(hit.distance).with_y(0.0));
                 let floor_m = builder.storey as f32 * STOREY_M;
-                let feet = to_base.transform_point3(player.translation);
-                let on_level = || {
-                    let flat = local_direction.with_y(0.0).normalize_or_zero();
-                    // On the level, over the small bumps of the ground; where the ground
-                    // is well above or below it, as on a hillside, where the view meets
-                    // the ground, so the room is under the aim.
-                    let along = (floor_m - local_origin.y) / local_direction.y;
-                    let on_ground = ground.map(|ground| to_base.transform_point3(ground.point));
-                    let reached = match on_ground {
-                        _ if local_direction.y < -0.01
-                            && along > 0.0
-                            && on_ground
-                                .is_none_or(|point| (point.y - floor_m).abs() < LEVEL_BUMPS_M) =>
-                        {
-                            local_origin + local_direction * along
-                        }
-                        Some(point) => point,
-                        None => feet + flat * STRUCTURE_REACH_M,
-                    };
-                    let out = (reached - feet).with_y(0.0);
-                    feet.with_y(0.0) + out.clamp_length_max(STRUCTURE_REACH_M - 1.0)
-                };
-                let aimed = on_base.unwrap_or_else(on_level);
+                let aimed = on_base.unwrap_or_else(|| on_level(floor_m).with_y(0.0));
                 let storey = builder.storey;
                 let drawn = draw_to(&mut builder, aimed, storey);
                 builder.room(&builds).map_or(Target::Nothing, |size| {
@@ -436,9 +411,9 @@ pub(super) fn aim(
             Kind::Items(_) => spot(),
             Kind::Move if builder.is_carrying() => spot(),
             Kind::Move => item.map_or(Target::Nothing, |(entity, ..)| Target::Prop(entity)),
-            Kind::Remove => match (item, hull, outside_wall) {
-                (Some((entity, ..)), _, _) => Target::Prop(entity),
-                (None, Some(hit), _) if hit.partition => {
+            Kind::Remove => match (item, hull) {
+                (Some((entity, ..)), _) => Target::Prop(entity),
+                (None, Some(hit)) if hit.wall => {
                     let target = edge(hit.face);
                     run = if matches!(target, Target::Edge { open: true, .. }) {
                         // The window or doorway in it.
@@ -447,8 +422,7 @@ pub(super) fn aim(
                         // The whole straight stretch of plain wall.
                         let along = hit.face.side.along();
                         let plain = |cell: IVec3| {
-                            site.base.partition(Face::new(cell, hit.face.side))
-                                == Some(Panel::Solid)
+                            site.base.filling(Face::new(cell, hit.face.side)) == Some(Panel::Solid)
                         };
                         let mut first = hit.face.tile();
                         while plain(first - along) {
@@ -462,10 +436,6 @@ pub(super) fn aim(
                         found
                     };
                     target
-                }
-                (None, _, Some(hit)) if site.base.panel(hit.face) != Panel::Solid => {
-                    run = site.base.run(hit.face);
-                    Target::Wall(hit.face)
                 }
                 _ => Target::Nothing,
             },
@@ -531,25 +501,19 @@ pub(super) fn afford(
                     .count();
                 Some((builds.floor().to_vec(), catalogue::floor_units(new_cells)))
             }
-            (Kind::Reshape, Target::Wall(face)) if !builder.pull => Some((
-                builds.floor().to_vec(),
-                catalogue::floor_units(site.base.wall(face).len()),
-            )),
             (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
                 let new_cells = builder
                     .run
                     .iter()
-                    .filter(|&&cell| site.base.partition(cell).is_none())
+                    .filter(|&&cell| site.base.filling(cell).is_none())
                     .count();
                 (new_cells > 0).then(|| (builds.wall().to_vec(), catalogue::wall_units(new_cells)))
             }
-            (Kind::Window(_), Target::Wall(_) | Target::Edge { .. }) if cuts => Some((
+            (Kind::Window(_), Target::Edge { .. }) if cuts => Some((
                 builds.window().to_vec(),
                 catalogue::window_units(builder.run.len()),
             )),
-            (Kind::Door, Target::Wall(_) | Target::Edge { .. }) if cuts => {
-                Some((builds.door().to_vec(), 1))
-            }
+            (Kind::Door, Target::Edge { .. }) if cuts => Some((builds.door().to_vec(), 1)),
             (Kind::Items(_), Target::Spot { blocked: None, .. }) => {
                 builder.item(&builds).map(|item| (item.cost.clone(), 1))
             }

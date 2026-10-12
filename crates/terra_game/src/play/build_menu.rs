@@ -281,7 +281,7 @@ fn cost_of(builds: &Builds, items: &Items, part: usize, variant: usize) -> Strin
     let wall = |cost| describe(items, cost, 1);
     match &builds.part(part).kind {
         Kind::Items(each) => wall(&each[variant.min(each.len() - 1)].cost),
-        Kind::Room(_) | Kind::Reshape => format!("{} per 3 m² of floor", wall(builds.floor())),
+        Kind::Room(_) => format!("{} per 3 m² of floor", wall(builds.floor())),
         Kind::Wall(_) => format!("{} per 1.5 m", wall(builds.wall())),
         Kind::Window(_) => format!("{} per metre", wall(builds.window())),
         Kind::Door => wall(builds.door()),

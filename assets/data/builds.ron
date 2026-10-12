@@ -24,10 +24,10 @@
 //                       lower than the top, as a chair's below its back, says how high
 //                       (seat, metres).
 //              Room     rooms, by footprint in metres east by south
-//              Wall     lengths of interior wall, in metres
+//              Wall     lengths of wall, in metres, drawn by dragging or laid at a length
 //              Window   windows, by width in metres, and the glass's sill above the floor
 //                       and top below the ceiling, in metres
-//              Reshape, Door, Remove, Move   the hammer's other work
+//              Door, Remove, Move   the hammer's other work
 (
     structure: (
         floor: [("Wood", 1)],
@@ -61,7 +61,6 @@
             (name: "6 by 6 m", metres: (6.0, 6.0)),
             (name: "Corridor, 1.5 by 4.5 m", metres: (1.5, 4.5)),
         ])),
-        (name: "Reshape", tab: Structure, kind: Reshape),
         (name: "Wall", tab: Structure, kind: Wall([("3 m", 3.0), ("1.5 m", 1.5), ("0.5 m", 0.5)])),
         (name: "Window", tab: Openings, kind: Window([
             ("1.5 m", 1.5, (0.9, 0.5)),

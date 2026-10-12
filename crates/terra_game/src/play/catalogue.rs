@@ -71,7 +71,6 @@ struct PartFile {
 #[derive(Deserialize)]
 enum KindFile {
     Room(Vec<RoomShape>),
-    Reshape,
     Wall(Vec<(String, f32)>),
     Window(Vec<(String, f32, (f32, f32))>),
     Door,
@@ -131,7 +130,6 @@ impl Builds {
                 tab: part.tab,
                 kind: match part.kind {
                     KindFile::Room(shapes) => Kind::Room(shapes),
-                    KindFile::Reshape => Kind::Reshape,
                     KindFile::Wall(lengths) => Kind::Wall(lengths),
                     KindFile::Window(windows) => Kind::Window(
                         windows
@@ -177,7 +175,7 @@ impl Builds {
         &self.floor
     }
 
-    /// What interior wall costs, paid by `wall_units`.
+    /// What wall costs, paid by `wall_units`.
     pub fn wall(&self) -> &Cost {
         &self.wall
     }
@@ -317,11 +315,8 @@ pub struct RoomShape {
 
 pub enum Kind {
     Room(Vec<RoomShape>),
-    /// Push and pull the walls of what is already built.
-    Reshape,
-    /// A stretch of plain interior wall, so many metres long, on the grid between cells
-    /// of the base. Windows and doors are cut in it with their own parts, as they are in
-    /// an outside wall.
+    /// A stretch of plain wall, so many metres long unless drawn, on the grid between
+    /// cells. Windows and doors are cut in it with their own parts.
     Wall(Vec<(String, f32)>),
     /// A window so many metres wide.
     Window(Vec<(String, f32, Panel)>),
@@ -387,7 +382,7 @@ impl Part {
             Kind::Window(shapes) => shapes.len(),
             Kind::Wall(lengths) => lengths.len(),
             Kind::Items(items) => items.len(),
-            Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => 1,
+            Kind::Door | Kind::Remove | Kind::Move => 1,
         }
     }
 
@@ -398,7 +393,7 @@ impl Part {
             Kind::Window(shapes) => Some(&shapes[variant].0),
             Kind::Wall(lengths) => Some(&lengths[variant].0),
             Kind::Items(items) => Some(&items[variant].name),
-            Kind::Reshape | Kind::Door | Kind::Remove | Kind::Move => None,
+            Kind::Door | Kind::Remove | Kind::Move => None,
         }
     }
 }

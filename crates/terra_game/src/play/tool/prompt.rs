@@ -64,28 +64,22 @@ pub fn prompt(
         }
     };
     let action = match (&builder.picked(builds).kind, builder.target) {
-        (Kind::Reshape, Target::Wall(_)) if builder.pull => {
-            format!("{hold}  pull the wall in      Scroll  push out instead")
-        }
-        (Kind::Reshape, Target::Wall(_)) => {
-            format!("{hold}  push the wall out      Scroll  pull in instead")
-        }
-        (Kind::Window(_) | Kind::Door, Target::Wall(_) | Target::Edge { .. })
-            if builder.run.is_empty() =>
-        {
+        (Kind::Window(_) | Kind::Door, Target::Edge { .. }) if builder.run.is_empty() => {
             "The wall is not wide enough here".to_string()
         }
-        (Kind::Window(_), Target::Wall(_) | Target::Edge { .. }) => {
+        (Kind::Window(_), Target::Edge { .. }) => {
             format!("{hold}  cut this window      {next}  size")
         }
-        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) => format!("{hold}  cut a door"),
-        (Kind::Reshape, _) => "Aim at an outside wall".to_string(),
-        (Kind::Window(_) | Kind::Door, _) => "Aim at a wall, outside or interior".to_string(),
-        (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
-            drawn("wall", format!("Scroll  turn      {next}  length"))
-        }
-        (Kind::Wall(_), Target::Edge { fits: false, .. }) => "Walls go indoors".to_string(),
-        (Kind::Wall(_), _) => "Aim at a floor indoors".to_string(),
+        (Kind::Door, Target::Edge { .. }) => format!("{hold}  cut a door"),
+        (Kind::Window(_) | Kind::Door, _) => "Aim at a wall".to_string(),
+        (Kind::Wall(_), Target::Edge { .. }) => drawn(
+            "wall",
+            format!(
+                "Scroll  turn      Shift Scroll  storey{}      {next}  length",
+                storey(builder.storey)
+            ),
+        ),
+        (Kind::Wall(_), _) => "Aim at the ground or a floor".to_string(),
         (Kind::Room(_), Target::Ground { fits: false, .. }) => {
             "The ground is too high here: a room cuts into it no deeper than its roof".to_string()
         }
@@ -130,9 +124,8 @@ pub fn prompt(
         (Kind::Remove, Target::Prop(_)) => format!("{hold}  take this apart"),
         (Kind::Remove, Target::Edge { open: true, .. }) => format!("{hold}  close this opening"),
         (Kind::Remove, Target::Edge { .. }) => format!("{hold}  take this wall away"),
-        (Kind::Remove, Target::Wall(_)) => format!("{hold}  close this opening"),
         (Kind::Remove, _) => format!(
-            "Aim at an item, an interior wall, a window or a door      {}  done",
+            "Aim at an item, a wall, a window or a door      {}  done",
             settings.key(Action::TakeApart)
         ),
     };

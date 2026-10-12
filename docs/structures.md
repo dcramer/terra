@@ -20,16 +20,19 @@ How walls, floors and roofs work in code, for the building the developers agreed
 
 Shared state, in `terra_build`, with no Bevy (the rule in AGENTS.md).
 
-**A base holds parts.** Each is one thing the player drew, with an id that never changes:
+**What stands is kept by the grid** (built, step 1):
 
-| Part | What it is |
+| | Kept as |
 |---|---|
-| Wall | A line on the grid from one point to another, on a storey, a height, a kind of construction, and its openings (doors and windows, each a run of cells) |
-| Floor | A rectangle of cells on a storey, in a kind |
-| Roof | One or more rectangular sections, each a style (hip, gable, lean-to, flat), at one pitch, in a covering |
-| Stairs, foundations | Later, the same way |
+| Walls | Each edge between two cells that has one, with what fills it: solid, a window or a doorway. A wall drawn is a line of these. |
+| Floors | Each cell with a floor at its foot |
+| Roofs | Each cell with a roof over it; flat for now, styles and sections in step 2 |
 
-**What is done to it is operations**: lay a part, change or remove a part that has nothing in it yet, put a piece in, take one out, cut or close an opening. A base is saved and sent as its parts and which pieces are in (D21).
+So walls meet, cross and join by sharing edges and grid points, with nothing to reconcile.
+
+**What is planned is parts** (step 3): each wall, floor or roof section the player lays, with an id that never changes, its kind of construction, and which of its pieces are in. When a part is finished, its edges and cells join what stands.
+
+**What is done is operations** (D21): set a wall on an edge or take it away, lay or take away floors and roofs over a block, the room shortcut (walls round a block, a floor and a roof, opening into rooms it meets); with plans, lay a part, put a piece in, take one out. A base is saved and sent as its operations. Saves from before are read: a room becomes its walls, floor and roof; a room's wall pushed or pulled is left out.
 
 **Everything else is worked out from the parts**, by pure functions, so every machine gets the same answer and only the parts travel:
 
@@ -100,7 +103,7 @@ The base today is rooms of cells with a generated hull (`terra_build`). It is re
 
 Each step is played and checked by script before the next (D69):
 
-1. **The model**: walls, floors and roofs as parts, buildings and indoors, plain box meshes as today; rooms converted; built whole, as now. The game keeps working throughout.
+1. **The model** (built, 2026-10-12): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; rooms in saves converted; built whole, as before. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
 2. **Roofs**: the height field, the four styles, the roof tool.
 3. **Plans and constructing** (D139): parts laid as plans; pieces put in one by one, from the pack and storage (D141).
 4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement.

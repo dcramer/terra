@@ -36,7 +36,7 @@ The tech demo of the MVP's loop (docs/prototypes.md): a meadow by a lake, a litt
 | Hold R | The wheel of kinds of what the hammer has: room sizes, window shapes, chair styles. Move the mouse to one and let go. A tap of R steps to the next kind; with Shift, the one before. |
 | Hold left click | Build, take apart, or cut. It takes a moment; let go early and nothing is done. E does the same. |
 | Left click | In move mode, pick an item up and put it down |
-| Scroll wheel | Turn an item, a room or a wall; switch a wall between pushing out and pulling in. Z and C do the same. |
+| Scroll wheel | Turn an item, a room or a wall. Z and C do the same. |
 | Q | Take-apart mode, and back |
 | G | Move mode, and back |
 | X | The grid on and off |
@@ -85,18 +85,19 @@ Building, taking apart and cutting all take time. You hold the button, a bar und
 
 How long each takes follows from the thing: what it costs to build, and how tough it is to cut. A tool can be quicker or slower at cutting each sort of thing, or unable to cut it at all, as `Tool::cuts` in `inventory.rs` says.
 
-Building starts from a part. Pick one from the dial, cycle through its variants, and aim. What would be built is shown before you commit: the outline of a room, the cut of a window, the wall a push would move, or a ghost of the item where it would stand. It is red where it cannot go.
+Building starts from a part. Pick one from the dial, cycle through its variants, and aim. What would be built is shown before you commit: the outline of a room or wall, the cut of a window, or a ghost of the item where it would stand. It is red where it cannot go.
+
+A base is walls, floors and roofs (D152). Walls stand on the edges between cells, inside and out; a room is whatever walls close in, worked out as they change. The room part is a shortcut that lays walls round a rectangle, with a floor and a roof. Rooms and walls are drawn by pressing, dragging and letting go, or clicked to lay at their own size; holding on what is laid builds it.
 
 ![The dial of parts](../../docs/images/outpost-dial-2026-10-10.png)
 
 | Part | Variants | What holding left click does |
 |---|---|---|
-| Room | Four sizes, in metres; the wheel turns it | Builds a room on the ground you aim at. Aimed across a room already there, it extends that room to the combined shape. |
-| Reshape | | Pushes the wall you aim at out by one step of the grid, or pulls it in; the wheel switches between the two |
-| Wall | Three lengths; the wheel turns it | Builds a stretch of plain interior wall on the grid line nearest where you aim. Indoors only. |
-| Window | Four sizes | Cuts a window that wide in the wall you aim at, outside or interior, centred where you aim |
-| Door | | Cuts a door in the wall you aim at, outside or interior |
-| Remove (Q) | | Takes away the item, closes the window or door, or takes away an interior wall that has neither |
+| Room | Four sizes, in metres; the wheel turns it | Builds walls round the rectangle laid, with a floor and a roof. Laid across a room already there, it extends that room to the combined shape. |
+| Wall | Three lengths; the wheel turns it | Builds a stretch of plain wall on the grid line laid, inside or out |
+| Window | Four sizes | Cuts a window that wide in the wall you aim at, centred where you aim |
+| Door | | Cuts a door in the wall you aim at |
+| Remove (Q) | | Takes away the item, closes the window or door, or takes away a stretch of wall that has neither |
 | Move (F) | | A click, not a hold: picks an item up, then puts it down |
 | Seat, Table, Bed, Storage, Kitchen, Decor, Kit, Fire | Twenty-seven items between them | Stands the item on the floor or ground you aim at |
 
@@ -111,7 +112,7 @@ With the grid on, items land on half-metre steps and turn in eighths of a circle
 
 A room is a plain box: lamps and everything else in it are items you place.
 
-Everything is on one grid of half a metre, set by one constant in `terra_build`. A wall moves by it, a window or door can be any number of its cells wide and stand anywhere along a wall, and a new room lines up with the rooms already there because they share it. Prices are by measure (floor by area, walls and windows by length), so they do not change if the grid does. A room's foundation may go into the ground, but the room itself may not: where the ground is higher than its floor, the outline is red and it cannot be built.
+Everything is on one grid of half a metre, set by one constant in `terra_build`. A window or door can be any number of its cells wide and stand anywhere along a wall, and a new room lines up with the rooms already there because they share it. Prices are by measure (floor by area, walls and windows by length), so they do not change if the grid does. A room's foundation may go into the ground, but the room itself may not: where the ground is higher than its floor, the outline is red and it cannot be built.
 
 ![An interior wall, about to have a window cut in it](../../docs/images/outpost-wall-2026-10-10.png)
 
@@ -170,4 +171,4 @@ cargo run -p terra_sandbox -- --experiment play --vantage -52,14,74,-69,0,52 --s
 cargo run -p terra_sandbox -- --experiment look --experiment build
 ```
 
-A base you shape, inspired by Subnautica 2. It stands on the most level ground near the start, on a foundation, with steps up to its door. Aim with the mark in the middle of the view: G pushes the wall you are looking at out by a tile, H pulls it in, V cycles the tile through solid, three sizes of window and a door, and B adds a room on open ground. The rules live in `terra_build`; what it does and does not do is in [research/subnautica-2-building.md](../../research/subnautica-2-building.md).
+A base of walls, floors and roofs (D152). It stands on the most level ground near the start, on a foundation, with steps up to its door. Aim with the mark in the middle of the view: V cycles the wall cell you are looking at through solid, three sizes of window and a door, and B adds a room on open ground. The rules live in `terra_build`; the design is [docs/structures.md](../../docs/structures.md).

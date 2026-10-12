@@ -1,12 +1,12 @@
-//! Turning a base's shape into triangles.
+//! Turning a base's walls, floors and roofs into triangles.
 //!
-//! The shape is tiles; what makes it read as a building is the trim, and the trim is
-//! chosen by what each piece is next to. A wall gets a post where it turns a corner and a
-//! seam where it carries on; a parapet where the roof begins and a plain line where
-//! another storey starts. Openings get frames, and windows a sill.
+//! What makes them read as a building is the trim, chosen by what each piece is next to
+//! (D56). A wall gets a post where it ends or turns a corner and none where it carries
+//! on; a band at its foot on the side that is outdoors; a parapet where a roof meets it
+//! and a plain line where another storey starts. Openings get frames, and windows a sill.
 //!
-//! A room is a plain box. Lamps, roof fittings and anything else that is a thing in its
-//! own right is for a player to build, not part of the room.
+//! These are plain boxes, for now: each kind of construction laying its own pieces comes
+//! later (docs/structures.md).
 
 use crate::{Base, CELL_M, DOOR_HEIGHT_M, Face, Panel, STOREY_M, Side};
 use glam::{IVec3, Vec3};
@@ -29,11 +29,12 @@ const GLASS: [f32; 3] = [0.55, 0.8, 0.9];
 const BAND_HEIGHT_M: f32 = 0.5;
 /// The floor's two shades alternate in squares this size.
 const FLOOR_SQUARE_M: f32 = 3.0;
-/// Outside walls have a seam this often, and long windows a mullion.
-const SEAM_EVERY_M: f32 = 3.0;
+/// Long windows have a mullion this often.
 const MULLION_EVERY_M: f32 = 1.5;
-/// Half the thickness of an interior wall.
-const PARTITION_HALF_M: f32 = 0.06;
+/// Half the thickness of a wall.
+const WALL_HALF_M: f32 = 0.08;
+/// Half the width of a post where walls end or turn.
+const POST_HALF_M: f32 = 0.15;
 /// How far the parapet rises above the roof it surrounds.
 const PARAPET_RISE_M: f32 = 0.32;
 
@@ -86,56 +87,48 @@ impl Rect {
 
 pub(crate) fn build(base: &Base) -> BaseMesh {
     let mut mesh = BaseMesh::default();
-    for face in base.hull() {
+    for (face, panel) in base.walls() {
         let frame = Frame::of(face);
-        let (outside, inside) = match face.side {
-            Side::Up => (ROOF, CEILING),
-            Side::Down => (UNDERSIDE, floor_colour(face.tile())),
-            _ => (HULL, INNER_WALL),
-        };
-        let hole = opening_in(base.panel(face), &frame);
-        for solid in around(frame.whole(), hole) {
-            mesh.structure
-                .quad(frame.corners(solid, false), frame.normal, outside);
-            mesh.structure
-                .quad(frame.corners(solid, true), -frame.normal, inside);
-        }
-        if face.side.is_wall() {
-            wall_trim(&mut mesh, base, &frame, face);
-            opening_trim(&mut mesh, base, &frame, face, hole);
-        }
-    }
-    // Interior walls: a slab with some thickness, so it reads as a wall from both sides,
-    // with the same openings an outside wall can have.
-    for (face, panel) in base.partitions() {
-        let frame = Frame::of(face);
+        // Each side of a wall is coloured by whether it faces into a room.
+        let front = side_colour(base.contains(face.tile() + face.side.offset()));
+        let back = side_colour(base.contains(face.tile()));
         let hole = opening_in(panel, &frame);
         for solid in around(frame.whole(), hole) {
-            frame.block(
-                &mut mesh.structure,
-                solid,
-                -PARTITION_HALF_M,
-                PARTITION_HALF_M,
-                INNER_WALL,
-            );
+            frame.slab(&mut mesh.structure, solid, front, back);
         }
-        opening_trim(&mut mesh, base, &frame, face, hole);
+        wall_trim(&mut mesh, base, &frame, face, panel);
+        opening_trim(&mut mesh, base, &frame, face, panel, hole);
     }
-    // Where one cell sits on another there is a floor between them: the ceiling of the
-    // lower storey and the floor of the upper one.
-    for (tile, _) in base.tiles() {
-        if base.contains(tile + IVec3::Y) {
-            let frame = Frame::of(Face::new(tile, Side::Up));
-            mesh.structure.quad(
-                frame.corners(frame.whole(), false),
-                frame.normal,
-                floor_colour(tile + IVec3::Y),
-            );
+    posts(&mut mesh, base);
+    for tile in base.floors() {
+        let frame = Frame::of(Face::new(tile, Side::Down));
+        mesh.structure.quad(
+            frame.corners(frame.whole(), true),
+            -frame.normal,
+            floor_colour(tile),
+        );
+        // Its underside, unless a roof below is there to be seen instead.
+        if !base.has_roof(tile - IVec3::Y) {
             mesh.structure
-                .quad(frame.corners(frame.whole(), true), -frame.normal, CEILING);
+                .quad(frame.corners(frame.whole(), false), frame.normal, UNDERSIDE);
         }
+    }
+    for tile in base.roofs() {
+        let frame = Frame::of(Face::new(tile, Side::Up));
+        // Its top, unless a floor above is there to be seen instead.
+        if !base.has_floor(tile + IVec3::Y) {
+            mesh.structure
+                .quad(frame.corners(frame.whole(), false), frame.normal, ROOF);
+        }
+        mesh.structure
+            .quad(frame.corners(frame.whole(), true), -frame.normal, CEILING);
     }
     mesh
+}
+
+/// The colour of one side of a wall: inside a room, or outdoors.
+fn side_colour(indoors: bool) -> [f32; 3] {
+    if indoors { INNER_WALL } else { HULL }
 }
 
 /// The part of a wall cell that a window or door leaves open: its full width, and as
@@ -187,111 +180,163 @@ fn floor_colour(tile: IVec3) -> [f32; 3] {
 }
 
 /// Whether a distance along a wall falls on one of the lines a rhythm of `every` metres
-/// makes. Seams and mullions are spaced this way, so they do not depend on the grid.
+/// makes. Mullions are spaced this way, so they do not depend on the grid.
 fn on_rhythm(along: f32, every: f32) -> bool {
     ((along / every).round() * every - along).abs() < 1e-3
 }
 
-/// Everything fixed to the outside of one cell of an outside wall. What goes on it is
-/// chosen by what is beside it: a post where the wall turns a corner, a seam where it
-/// carries on, a parapet where the roof begins and a line where another storey starts.
-fn wall_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face) {
-    let (width, height) = (frame.width, frame.height);
-    let along = frame.right.as_ivec3();
-    let continues = |step: IVec3| base.is_hull(Face::new(face.tile() + step, face.side));
-    let solid = |step: IVec3| base.panel(Face::new(face.tile() + step, face.side)) == Panel::Solid;
-
-    // The coloured band at the wall's foot, with a dark line over it, broken by a door.
-    // Starting a hair above the floor, so that on an upper storey its underside is not
-    // exactly where the ceiling below is.
-    if base.panel(face) != Panel::Door {
-        let band = Rect {
-            left: 0.0,
-            right: width,
-            bottom: 0.004,
-            top: BAND_HEIGHT_M,
-        };
-        frame.block(&mut mesh.structure, band, 0.0, 0.05, BAND);
-        let line = Rect {
-            bottom: BAND_HEIGHT_M,
-            top: BAND_HEIGHT_M + 0.05,
-            ..band
-        };
-        frame.block(&mut mesh.structure, line, 0.0, 0.065, DARK);
+/// How far from the wall's middle a block on one side of it reaches: `from` to `to`
+/// metres out from its face, in front (`1.0`) or behind (`-1.0`).
+fn out_from(sign: f32, from: f32, to: f32) -> (f32, f32) {
+    let (near, far) = (WALL_HALF_M + from, WALL_HALF_M + to);
+    if sign > 0.0 {
+        (near, far)
+    } else {
+        (-far, -near)
     }
+}
 
-    // A post where the wall turns a corner. Where it carries on, a seam every so often,
-    // but not through a window or a door.
-    for (edge, step) in [(0.0, -along), (width, along)] {
-        if !continues(step) {
-            let post = Rect {
-                left: edge - 0.1,
-                right: edge + 0.1,
+/// Everything fixed to one cell of a wall, chosen by what is beside it: a band at its foot
+/// on a side that is outdoors, a line where another storey starts above, and a parapet
+/// where a roof meets it.
+fn wall_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, panel: Panel) {
+    let (width, height) = (frame.width, frame.height);
+    let tile = face.tile();
+    let beyond = tile + face.side.offset();
+    // Front is the side the face's normal points to, the cell beyond; back is its own.
+    let outdoors = [(1.0, !base.contains(beyond)), (-1.0, !base.contains(tile))];
+
+    // The coloured band at the foot of an outdoor side, with a dark line over it, broken
+    // by a door. Starting a hair above the floor, so that on an upper storey its
+    // underside is not exactly where the ceiling below is.
+    if panel != Panel::Door {
+        for (sign, _) in outdoors.iter().filter(|(_, out)| *out) {
+            let band = Rect {
+                left: 0.0,
+                right: width,
                 bottom: 0.004,
-                top: height,
+                top: BAND_HEIGHT_M,
             };
-            frame.block(&mut mesh.structure, post, 0.0, 0.09, POST);
-        } else if edge > 0.0
-            && solid(IVec3::ZERO)
-            && solid(step)
-            && on_rhythm(frame.along(edge), SEAM_EVERY_M)
-        {
-            let seam = Rect {
-                left: edge - 0.012,
-                right: edge + 0.012,
-                bottom: BAND_HEIGHT_M + 0.05,
-                top: height - 0.14,
+            let (back, front) = out_from(*sign, 0.0, 0.05);
+            frame.block(&mut mesh.structure, band, back, front, BAND);
+            let line = Rect {
+                bottom: BAND_HEIGHT_M,
+                top: BAND_HEIGHT_M + 0.05,
+                ..band
             };
-            frame.block(&mut mesh.structure, seam, 0.0, 0.012, DARK);
+            let (back, front) = out_from(*sign, 0.0, 0.065);
+            frame.block(&mut mesh.structure, line, back, front, DARK);
         }
     }
 
-    // A parapet round the roof, or a line where the next storey starts.
-    if base.contains(face.tile() + IVec3::Y) {
+    // A line where the wall carries on up another storey; else a cap on its top, and
+    // where a roof meets it, a parapet over the roof and a fascia under its edge.
+    if base
+        .filling(Face::new(tile + IVec3::Y, face.side))
+        .is_some()
+    {
         let line = Rect {
             left: 0.0,
             right: width,
             bottom: height - 0.05,
             top: height + 0.05,
         };
-        frame.block(&mut mesh.structure, line, 0.0, 0.04, DARK);
-    } else {
-        // In two pieces, so that the part below the roof stays outside the room. It
-        // reaches past the end of the wall only where the wall ends.
-        let reach = |step: IVec3| if continues(step) { 0.0 } else { 0.12 };
-        let fascia = Rect {
-            left: -reach(-along),
-            right: width + reach(along),
-            bottom: height - 0.14,
-            top: height,
-        };
-        frame.block(&mut mesh.structure, fascia, 0.0, 0.12, PARAPET);
-        let rail = Rect {
-            bottom: height,
-            top: height + PARAPET_RISE_M,
-            ..fascia
-        };
-        frame.block(&mut mesh.structure, rail, -0.1, 0.12, PARAPET);
+        frame.block(
+            &mut mesh.structure,
+            line,
+            -WALL_HALF_M - 0.04,
+            WALL_HALF_M + 0.04,
+            DARK,
+        );
+        return;
+    }
+    let roofed = base.has_roof(tile) || base.has_roof(beyond);
+    let cap = Rect {
+        left: 0.0,
+        right: width,
+        bottom: height,
+        top: height + if roofed { PARAPET_RISE_M } else { 0.06 },
+    };
+    frame.block(
+        &mut mesh.structure,
+        cap,
+        -WALL_HALF_M - 0.03,
+        WALL_HALF_M + 0.03,
+        PARAPET,
+    );
+    if roofed {
+        for (sign, _) in outdoors.iter().filter(|(_, out)| *out) {
+            let fascia = Rect {
+                bottom: height - 0.14,
+                top: height,
+                ..cap
+            };
+            let (back, front) = out_from(*sign, 0.0, 0.12);
+            frame.block(&mut mesh.structure, fascia, back, front, PARAPET);
+        }
     }
 }
 
-/// The frame and glass of one cell of a window or doorway, in an outside wall or an
-/// interior one. A run of cells is one opening: each cell brings its own stretch of head
-/// and sill, and only the cells at the ends bring the uprights.
-fn opening_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, hole: Option<Rect>) {
+/// A post at every corner of a wall's storey where walls end, turn or meet, and none
+/// where one wall carries straight on.
+fn posts(mesh: &mut BaseMesh, base: &Base) {
+    // The grid points at each end of every wall cell, with their storey.
+    let mut points = std::collections::BTreeSet::new();
+    for (face, _) in base.walls() {
+        let tile = face.tile();
+        let ends = match face.side {
+            Side::East => [tile + IVec3::X, tile + IVec3::X + IVec3::Z],
+            _ => [tile + IVec3::Z, tile + IVec3::X + IVec3::Z],
+        };
+        points.extend(ends.map(|point| point.to_array()));
+    }
+    for point in points {
+        let point = IVec3::from_array(point);
+        let has = |cell: IVec3, side: Side| base.filling(Face::new(cell, side)).is_some();
+        let east = has(point - IVec3::Z, Side::South);
+        let west = has(point - IVec3::X - IVec3::Z, Side::South);
+        let south = has(point - IVec3::X, Side::East);
+        let north = has(point - IVec3::X - IVec3::Z, Side::East);
+        let straight = (east && west && !south && !north) || (south && north && !east && !west);
+        if straight {
+            continue;
+        }
+        let low = point.as_vec3() * Vec3::new(CELL_M, STOREY_M, CELL_M);
+        let frame = Frame {
+            origin: low + Vec3::new(0.0, 0.004, POST_HALF_M),
+            right: Vec3::NEG_Z,
+            up: Vec3::Y,
+            normal: Vec3::X,
+            width: POST_HALF_M * 2.0,
+            height: STOREY_M - 0.004,
+        };
+        frame.block(
+            &mut mesh.structure,
+            frame.whole(),
+            -POST_HALF_M,
+            POST_HALF_M,
+            POST,
+        );
+    }
+}
+
+/// The frame and glass of one cell of a window or doorway. A run of cells is one
+/// opening: each cell brings its own stretch of head and sill, and only the cells at the
+/// ends bring the uprights. A wall is seen from both sides, so its frame stands out both
+/// ways.
+fn opening_trim(
+    mesh: &mut BaseMesh,
+    base: &Base,
+    frame: &Frame,
+    face: Face,
+    panel: Panel,
+    hole: Option<Rect>,
+) {
     let Some(hole) = hole else { return };
-    let Some(panel) = base.filling(face) else {
-        return;
-    };
     let along = frame.right.as_ivec3();
-    let on_hull = base.is_hull(face);
-    let same = |step: IVec3| {
-        let next = Face::new(face.tile() + step, face.side);
-        base.is_hull(next) == on_hull && base.filling(next) == Some(panel)
-    };
+    let same = |step: IVec3| base.filling(Face::new(face.tile() + step, face.side)) == Some(panel);
     let (starts, ends) = (!same(-along), !same(along));
-    // An interior wall is seen from both sides, so its frame stands out both ways.
-    let (back, front) = if on_hull { (-0.09, 0.07) } else { (-0.1, 0.1) };
+    let (back, front) = (-WALL_HALF_M - 0.04, WALL_HALF_M + 0.04);
     let member = if panel == Panel::Door { 0.09 } else { 0.06 };
     let mut bar = |rect: Rect, colour: [f32; 3]| {
         if !rect.is_empty() {
@@ -345,7 +390,7 @@ fn opening_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, hol
                 &mut mesh.structure,
                 mullion,
                 back + 0.03,
-                front - 0.02,
+                front - 0.03,
                 DARK,
             );
         }
@@ -354,7 +399,7 @@ fn opening_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, hol
             top: hole.bottom,
             ..hole
         };
-        frame.block(&mut mesh.structure, sill, back - 0.03, front + 0.08, POST);
+        frame.block(&mut mesh.structure, sill, back - 0.05, front + 0.05, POST);
     }
 }
 
@@ -461,6 +506,48 @@ impl Frame {
         }
     }
 
+    /// A wall's slab over a rectangle of this face, `WALL_HALF_M` either side of it: its
+    /// front in one colour, its back in another, its edges, seen at openings, in the
+    /// front's.
+    fn slab(&self, surface: &mut Surface, rect: Rect, front: [f32; 3], back: [f32; 3]) {
+        let at = |x: f32, y: f32, depth: f32| {
+            self.origin + self.right * x + self.up * y + self.normal * depth
+        };
+        let (l, r, b, t) = (rect.left, rect.right, rect.bottom, rect.top);
+        let (k, f) = (-WALL_HALF_M, WALL_HALF_M);
+        surface.quad(
+            [at(l, b, f), at(r, b, f), at(r, t, f), at(l, t, f)],
+            self.normal,
+            front,
+        );
+        surface.quad(
+            [at(r, b, k), at(l, b, k), at(l, t, k), at(r, t, k)],
+            -self.normal,
+            back,
+        );
+        let edges = [
+            (
+                [at(l, b, k), at(l, b, f), at(l, t, f), at(l, t, k)],
+                -self.right,
+            ),
+            (
+                [at(r, b, f), at(r, b, k), at(r, t, k), at(r, t, f)],
+                self.right,
+            ),
+            (
+                [at(l, t, f), at(r, t, f), at(r, t, k), at(l, t, k)],
+                self.up,
+            ),
+            (
+                [at(l, b, k), at(r, b, k), at(r, b, f), at(l, b, f)],
+                -self.up,
+            ),
+        ];
+        for (corners, normal) in edges {
+            surface.quad(corners, normal, front);
+        }
+    }
+
     /// The corners of a rectangle on this face, ordered for whichever side is looking.
     fn corners(&self, rect: Rect, from_inside: bool) -> [Vec3; 4] {
         let at = |x: f32, y: f32| self.origin + self.right * x + self.up * y;
@@ -501,15 +588,15 @@ mod tests {
     fn every_triangle_faces_the_way_its_normal_says() {
         let mut base = room();
         for z in 2..6 {
-            base.apply(BuildOp::SetPanel(east(z), Panel::WINDOW));
+            base.apply(BuildOp::SetWall(east(z), Some(Panel::WINDOW)));
         }
         for x in 3..6 {
-            base.apply(BuildOp::SetPanel(
+            base.apply(BuildOp::SetWall(
                 Face::new(IVec3::new(x, 0, cells(6.0) - 1), Side::South),
-                Panel::Door,
+                Some(Panel::Door),
             ));
         }
-        base.apply(BuildOp::SetPartition(
+        base.apply(BuildOp::SetWall(
             Face::new(IVec3::new(4, 0, 4), Side::East),
             Some(Panel::TALL_WINDOW),
         ));
@@ -538,12 +625,12 @@ mod tests {
         let plain = base.mesh();
         assert_eq!(plain.glass.triangle_count(), 0);
 
-        base.apply(BuildOp::SetPanel(east(4), Panel::WINDOW));
+        base.apply(BuildOp::SetWall(east(4), Some(Panel::WINDOW)));
         let one = base.mesh();
         assert_eq!(one.glass.triangle_count(), 2);
         // A second cell beside it adds its glass, head and sill, but takes away an
         // upright from each of the two cells where they now meet.
-        base.apply(BuildOp::SetPanel(east(5), Panel::WINDOW));
+        base.apply(BuildOp::SetWall(east(5), Some(Panel::WINDOW)));
         let two = base.mesh();
         assert_eq!(two.glass.triangle_count(), 4);
         let added_by_first = one.structure.triangle_count() - plain.structure.triangle_count();
@@ -551,7 +638,7 @@ mod tests {
         assert!(added_by_second < added_by_first);
 
         // A door is an opening with no glass.
-        base.apply(BuildOp::SetPanel(east(8), Panel::Door));
+        base.apply(BuildOp::SetWall(east(8), Some(Panel::Door)));
         assert_eq!(base.mesh().glass.triangle_count(), 4);
     }
 
@@ -575,16 +662,14 @@ mod tests {
     }
 
     #[test]
-    fn an_interior_wall_is_drawn_with_its_opening() {
+    fn a_wall_across_a_room_is_drawn_with_its_opening() {
         let mut base = room();
         let plain = base.mesh().structure.triangle_count();
         let wall = Face::new(IVec3::new(2, 0, 2), Side::East);
-        base.apply(BuildOp::SetPartition(wall, Some(Panel::Solid)));
-        // One slab: six sides, two triangles each.
-        assert_eq!(base.mesh().structure.triangle_count(), plain + 12);
-        base.apply(BuildOp::SetPartition(wall, Some(Panel::WINDOW)));
+        base.apply(BuildOp::SetWall(wall, Some(Panel::Solid)));
+        assert!(base.mesh().structure.triangle_count() > plain);
+        base.apply(BuildOp::SetWall(wall, Some(Panel::WINDOW)));
         assert_eq!(base.mesh().glass.triangle_count(), 2);
-        assert!(base.mesh().structure.triangle_count() > plain + 12);
     }
 
     #[test]
@@ -592,9 +677,9 @@ mod tests {
         // Trim stands a little proud of the walls.
         let mesh = room().mesh();
         for p in &mesh.structure.positions {
-            assert!(p.x >= -0.2 && p.x <= 6.0 + 0.2);
+            assert!(p.x >= -0.3 && p.x <= 6.0 + 0.3);
             assert!(p.y >= -1e-4 && p.y <= STOREY_M + 0.4);
-            assert!(p.z >= -0.2 && p.z <= 6.0 + 0.2);
+            assert!(p.z >= -0.3 && p.z <= 6.0 + 0.3);
         }
     }
 

@@ -387,16 +387,10 @@ pub(super) fn act(
                 Some(Panel::Door) => Some((builds.door().to_vec(), 1)),
                 _ => None,
             };
-        // Fills every cell of the run, in an outside wall or an interior one.
+        // Fills every cell of the run.
         let fill = |run: &[Face], panel: Panel| -> Vec<BuildOp> {
             run.iter()
-                .map(|&cell| {
-                    if site.base.is_hull(cell) {
-                        BuildOp::SetPanel(cell, panel)
-                    } else {
-                        BuildOp::SetPartition(cell, Some(panel))
-                    }
-                })
+                .map(|&cell| BuildOp::SetWall(cell, Some(panel)))
                 .collect()
         };
         let building = |ops: Vec<BuildOp>| Job::Structure {
@@ -410,19 +404,11 @@ pub(super) fn act(
             refund,
         };
         let (job, removing) = match (&builder.picked(&builds).kind, builder.target) {
-            (Kind::Reshape, Target::Wall(face)) if !builder.pull && can_pay => {
-                (building(vec![BuildOp::Grow(face)]), false)
-            }
-            (Kind::Reshape, Target::Wall(face)) if builder.pull => {
-                let floor = catalogue::floor_units(site.base.wall(face).len());
-                let refund = Some((builds.floor().to_vec(), floor));
-                (unbuilding(vec![BuildOp::Shrink(face)], refund), true)
-            }
-            (Kind::Window(shapes), Target::Wall(_) | Target::Edge { .. }) if can_pay => (
+            (Kind::Window(shapes), Target::Edge { .. }) if can_pay => (
                 building(fill(&builder.run, shapes[builder.variant()].2)),
                 false,
             ),
-            (Kind::Door, Target::Wall(_) | Target::Edge { .. }) if can_pay => {
+            (Kind::Door, Target::Edge { .. }) if can_pay => {
                 (building(fill(&builder.run, Panel::Door)), false)
             }
             // A wall is built where there is none, and leaves alone what is already there.
@@ -431,14 +417,14 @@ pub(super) fn act(
                     builder
                         .run
                         .iter()
-                        .filter(|&&cell| site.base.partition(cell).is_none())
-                        .map(|&cell| BuildOp::SetPartition(cell, Some(Panel::Solid)))
+                        .filter(|&&cell| site.base.filling(cell).is_none())
+                        .map(|&cell| BuildOp::SetWall(cell, Some(Panel::Solid)))
                         .collect(),
                 ),
                 false,
             ),
-            // An opening is closed first; a plain interior wall is taken away.
-            (Kind::Remove, Target::Wall(_) | Target::Edge { open: true, .. }) => (
+            // An opening is closed first; a plain wall is taken away.
+            (Kind::Remove, Target::Edge { open: true, .. }) => (
                 unbuilding(
                     fill(&builder.run, Panel::Solid),
                     opening_worth(&builder.run),
@@ -450,7 +436,7 @@ pub(super) fn act(
                     builder
                         .run
                         .iter()
-                        .map(|&cell| BuildOp::SetPartition(cell, None))
+                        .map(|&cell| BuildOp::SetWall(cell, None))
                         .collect(),
                     Some((
                         builds.wall().to_vec(),

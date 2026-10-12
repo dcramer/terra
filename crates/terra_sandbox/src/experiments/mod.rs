@@ -27,7 +27,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "build",
-        about: "Construction: a base you shape. G and H push and pull a wall, V cycles windows and doors, B adds a room.",
+        about: "Construction: a base of walls, floors and roofs. V cycles a wall cell through windows and doors, B adds a room.",
         add: terra_game::build::plugin,
     },
     Experiment {
@@ -39,7 +39,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "play",
-        about: "A player on the ground with a builder tool: walk, jump, go indoors, and reshape the base.",
+        about: "A player on the ground with a builder tool: walk, jump, go indoors, and build.",
         add: terra_game::play::plugin,
     },
     Experiment {

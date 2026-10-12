@@ -90,20 +90,20 @@ fn house(house: &House) -> Vec<BuildOp> {
     }
     // A door a metre and a half wide, and a window in each end wall.
     for x in -1..2 {
-        ops.push(BuildOp::SetPanel(
+        ops.push(BuildOp::SetWall(
             Face::new(IVec3::new(x, 0, -1), Side::South),
-            Panel::Door,
+            Some(Panel::Door),
         ));
     }
     let middle = -deep / 2;
     for z in middle - 1..middle + 1 {
-        ops.push(BuildOp::SetPanel(
+        ops.push(BuildOp::SetWall(
             Face::new(IVec3::new(half - 1, 0, z), Side::East),
-            Panel::WINDOW,
+            Some(Panel::WINDOW),
         ));
-        ops.push(BuildOp::SetPanel(
+        ops.push(BuildOp::SetWall(
             Face::new(IVec3::new(-half, 0, z), Side::West),
-            Panel::WINDOW,
+            Some(Panel::WINDOW),
         ));
     }
     ops

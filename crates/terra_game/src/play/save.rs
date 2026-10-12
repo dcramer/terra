@@ -25,7 +25,7 @@ use crate::shell::Options;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use terra_build::BuildOp;
+use terra_build::{BuildOp, Face, Panel};
 use terra_core::{MaterialId, Operation};
 use terra_items::{ActionBar, Cell, Equipment, ItemId};
 
@@ -37,7 +37,7 @@ const EVERY_S: f32 = 30.0;
 struct SaveFile {
     version: u32,
     player: SavedPlayer,
-    base: Vec<BuildOp>,
+    base: Vec<SavedOp>,
     /// Where the base stands: the place and turn of its grid, begun at its claim stone.
     #[serde(default)]
     frame: Option<([f32; 3], [f32; 4])>,
@@ -50,6 +50,66 @@ struct SaveFile {
     /// The hour of the day.
     #[serde(default)]
     hour: Option<f32>,
+}
+
+/// One change to the base, as saved: a [`BuildOp`], or one of the room operations saves
+/// held before walls, floors and roofs (D152), which are read and turned into those and
+/// never written.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
+enum SavedOp {
+    SetWall(Face, Option<Panel>),
+    SetFloor {
+        min: [i32; 3],
+        max: [i32; 3],
+        laid: bool,
+    },
+    SetRoof {
+        min: [i32; 3],
+        max: [i32; 3],
+        laid: bool,
+    },
+    AddRoom {
+        min: [i32; 3],
+        max: [i32; 3],
+    },
+    /// What filled a cell of a room's outside wall.
+    SetPanel(Face, Panel),
+    /// A wall inside a room.
+    SetPartition(Face, Option<Panel>),
+    /// A room's wall pushed out or pulled in: there is no way to say which walls that
+    /// meant without the old rooms, so these are left out.
+    Grow(Face),
+    Shrink(Face),
+}
+
+impl From<BuildOp> for SavedOp {
+    fn from(op: BuildOp) -> Self {
+        match op {
+            BuildOp::SetWall(face, panel) => SavedOp::SetWall(face, panel),
+            BuildOp::SetFloor { min, max, laid } => SavedOp::SetFloor { min, max, laid },
+            BuildOp::SetRoof { min, max, laid } => SavedOp::SetRoof { min, max, laid },
+            BuildOp::AddRoom { min, max } => SavedOp::AddRoom { min, max },
+        }
+    }
+}
+
+impl SavedOp {
+    /// The operation to apply now, if there is one.
+    fn now(self) -> Option<BuildOp> {
+        Some(match self {
+            SavedOp::SetWall(face, panel) | SavedOp::SetPartition(face, panel) => {
+                BuildOp::SetWall(face, panel)
+            }
+            SavedOp::SetPanel(face, panel) => BuildOp::SetWall(face, Some(panel)),
+            SavedOp::SetFloor { min, max, laid } => BuildOp::SetFloor { min, max, laid },
+            SavedOp::SetRoof { min, max, laid } => BuildOp::SetRoof { min, max, laid },
+            SavedOp::AddRoom { min, max } => BuildOp::AddRoom { min, max },
+            SavedOp::Grow(_) | SavedOp::Shrink(_) => {
+                warn!("A saved room's wall was pushed or pulled; that change is left out.");
+                return None;
+            }
+        })
+    }
 }
 
 /// One change to the ground: a sphere dug out, or filled with a material, or a box dug
@@ -258,7 +318,8 @@ fn load(
             Transform::from_translation(Vec3::from(at)).with_rotation(Quat::from_array(turn));
         site.move_to(frame, &mut commands, &planet, &mut meshes);
     }
-    site.replace_with(&save.base, &mut commands, &planet, &mut meshes);
+    let base: Vec<BuildOp> = save.base.iter().filter_map(|op| op.now()).collect();
+    site.replace_with(&base, &mut commands, &planet, &mut meshes);
     for entity in &placed {
         commands.entity(entity).despawn();
     }
@@ -574,7 +635,7 @@ fn gather(
             bar: bar_slots,
             picked: bar.0.picked(),
         },
-        base: site.operations.clone(),
+        base: site.operations.iter().map(|&op| op.into()).collect(),
         frame: Some((
             site.frame.translation.into(),
             site.frame.rotation.to_array(),
@@ -683,6 +744,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_base_saved_as_rooms_is_read_as_walls_floors_and_roofs() {
+        // As saves held it before D152: a room, a door in its outside wall, a wall inside
+        // it, and a wall pushed out.
+        let text = "[
+            AddRoom(min: (0, 0, 0), max: (3, 0, 3)),
+            SetPanel((tile: (1, 0, 3), side: South), Door),
+            SetPartition((tile: (1, 0, 0), side: East), Some(Solid)),
+            Grow((tile: (3, 0, 1), side: East)),
+        ]";
+        let saved: Vec<SavedOp> = ron::from_str(text).unwrap();
+        let ops: Vec<BuildOp> = saved.iter().filter_map(|op| op.now()).collect();
+        assert_eq!(ops.len(), 3);
+        let mut base = terra_build::Base::default();
+        for op in ops {
+            base.apply(op);
+        }
+        let face = |x, z, side| Face::new(IVec3::new(x, 0, z), side);
+        assert_eq!(
+            base.filling(face(1, 3, terra_build::Side::South)),
+            Some(Panel::Door)
+        );
+        assert_eq!(
+            base.filling(face(1, 0, terra_build::Side::East)),
+            Some(Panel::Solid)
+        );
+        assert_eq!(base.floors().count(), 16);
+        // What is written is the operations of now.
+        let written = ron::to_string(&SavedOp::from(BuildOp::SetWall(
+            face(0, 0, terra_build::Side::East),
+            None,
+        )))
+        .unwrap();
+        assert!(written.starts_with("SetWall"), "{written}");
+    }
+
+    #[test]
     fn a_save_reads_back_as_it_was_written() {
         let save = SaveFile {
             version: VERSION,
@@ -706,7 +803,7 @@ mod tests {
                 bar: vec![Some(0), None],
                 picked: 0,
             },
-            base: vec![BuildOp::AddRoom {
+            base: vec![SavedOp::AddRoom {
                 min: [0, 0, 0],
                 max: [2, 0, 2],
             }],

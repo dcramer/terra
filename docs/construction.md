@@ -46,7 +46,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Rotate | All | Built: wheel, or Z and C |
 | Snap to a grid, with a switch to go free | Enshrouded, Ark, Valheim | Built: X, and hold Alt |
 | Raise and lower, and nudge | Enshrouded, Ark Ascended | Raise and lower built; rooms by the storey, down too |
-| Place in a line or an area: drawn walls, floors, rooms | The Forest, Sons of the Forest, Subnautica 2 | Built: rooms drawn as rectangles, interior walls as lines; fences missing |
+| Place in a line or an area: drawn walls, floors, rooms | The Forest, Sons of the Forest, Subnautica 2 | Built: rooms drawn as rectangles, walls as lines inside or out |
 | Pick another of what you look at | 7 Days to Die | Built: middle mouse |
 | Move what is placed | Subnautica 2 | Built for items, not rooms or walls |
 | Take apart, giving back everything | Enshrouded, Subnautica, Valheim | Built; what does not fit drops at your feet |
@@ -99,8 +99,8 @@ Agreed by the developers on 2026-10-12 (D144: "generally speaking your plans fee
 | Wheel, or Z and C | Turn: a quarter turn for structures; an eighth for items on the grid; 15 degrees off it | Yes |
 | Shift and wheel, or Page Up and Page Down | Raise and lower: half a metre a notch on the grid, a tenth off it, up to three metres; rooms a storey at a time, two down to two up (D143). Stations and the claim stone stay on the ground | Yes |
 | Ctrl and wheel | The kind of construction (D139) or material. Ctrl also rolls (D97), so while a part is picked it should not; to settle when there are kinds | No |
-| Click left mouse | Lay it: a plan, for a structure; for an item, hold instead | For rooms and interior walls, laid as a ghost that stays; holding on it builds it whole, as there are no plans yet |
-| Press, drag and let go | Draw it: a wall or fence along the line dragged; a room or floor over the rectangle dragged. A plain click lays the variant's own size | For rooms and interior walls |
+| Click left mouse | Lay it: a plan, for a structure; for an item, hold instead | For rooms and walls, laid as a ghost that stays; holding on it builds it whole, as there are no plans yet |
+| Press, drag and let go | Draw it: a wall or fence along the line dragged; a room or floor over the rectangle dragged. A plain click lays the variant's own size | For rooms and walls |
 | Hold left mouse (items) | Build the item there, spending its cost | Yes |
 | Tap right mouse | Put the part away (or, carrying something in move mode, put it back) | Yes |
 
@@ -221,7 +221,7 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 
 Technically (mine): worked out from the grid when a part is built or taken away, not every frame (D127): the parts that touch, flood-filled into buildings; the cells inside each, flood-filled from its floor, are a room unless they reach the open air. Each building is then an entity with its rooms, which weather, warmth and stations read.
 
-The technical design is [structures.md](structures.md) (D160). Before it: `terra_build` keeps a base as rooms of cells with a hull round them, and interior walls as edges between cells. It would become floor cells, wall edges and roof cells, with the inside worked out from them; the interior walls are most of the way there. Best done with plans (step 2 of the [order](#proposed-order)), since a plan is a wall at a time. Until then the room tool builds a room as it does, and drawing it carries over unchanged as the shortcut.
+The technical design is [structures.md](structures.md) (D160). Built, 2026-10-12: a base is walls on the edges between cells and floors and roofs on cells, with rooms worked out from the walls; the room tool is the shortcut, and walls are drawn inside or out.
 
 **How a material is split into parts, so it looks built and not tiled.** Each kind of construction is a small kit of pieces sized to the grid, and a rule for laying them, as real masonry and carpentry have:
 

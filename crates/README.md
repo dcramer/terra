@@ -8,7 +8,7 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists; parked with terraforming (D60) |
 | `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits | No | Terrain A1 built: the field, edits, harvest, meshing and the tree of chunks. The sandbox draws and digs it (A2). Brief: [docs/terrain.md](../docs/terrain.md) |
 | `terra_core` | The shared contracts (ground, water, chunk mesh, operations) and a stand-in planet | No | Exists |
-| `terra_build` | Construction: bases shaped room by room, with the hull, windows and doors generated | No | Exists, as an experiment |
+| `terra_build` | Construction: walls, floors and roofs on a grid, the rooms they close in, windows and doors (docs/structures.md) | No | Exists |
 | `terra_items` | Items and containers: kinds, the backpack grid, equipment, the action bar. Brief: [docs/items.md](../docs/items.md) | No | Exists |
 | `terra_net` | Network messages and transport | No | Track D |
 | `terra_game` | The game in Bevy: the world on screen, the player, items, building, creatures, people, sound, saving, and the shell every build runs under | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |

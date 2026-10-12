@@ -41,23 +41,26 @@ impl Base {
     /// nothing there, in which case the ground decides.
     pub fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
         let column = tile_at(point);
-        self.tiles()
-            .filter(|(tile, _)| tile.x == column.x && tile.z == column.z)
-            .flat_map(|(tile, _)| {
-                // A tile's floor, and its roof when nothing is built on top.
-                let floor = tile.y as f32 * STOREY_M;
-                let roof = (!self.contains(tile + IVec3::Y)).then_some(floor + STOREY_M);
-                [Some(floor), roof]
-            })
-            .flatten()
+        let in_column = |tile: &IVec3| tile.x == column.x && tile.z == column.z;
+        let floors = self
+            .floors()
+            .filter(in_column)
+            .map(|tile| tile.y as f32 * STOREY_M);
+        let roofs = self
+            .roofs()
+            .filter(in_column)
+            .map(|tile| (tile.y + 1) as f32 * STOREY_M);
+        floors
+            .chain(roofs)
             .filter(|&surface| surface <= point.y + walker.step_up)
             .max_by(|a, b| a.total_cmp(b))
     }
 
-    /// The height of the ceiling over a point inside the base, if it is inside.
+    /// The height of the ceiling over a point, if a roof or the floor of the storey above
+    /// is over it.
     pub fn ceiling(&self, point: Vec3) -> Option<f32> {
         let tile = tile_at(point);
-        self.contains(tile)
+        (self.has_roof(tile) || self.has_floor(tile + IVec3::Y))
             .then_some((tile.y + 1) as f32 * STOREY_M)
     }
 
@@ -103,29 +106,11 @@ impl Base {
         at
     }
 
-    /// Whether stepping out of `tile` through `side` is stopped by the hull or by an
-    /// interior wall.
+    /// Whether stepping out of `tile` through `side` is stopped by a wall.
     fn blocks(&self, tile: IVec3, side: Side, at: Vec3, walker: &Walker) -> bool {
-        let beyond = tile + side.offset();
-        // The hull face between the two tiles belongs to whichever of them is inside.
-        let (face, panel) = match (self.contains(tile), self.contains(beyond)) {
-            (true, false) => {
-                let face = Face::new(tile, side);
-                (face, self.panel(face))
-            }
-            (false, true) => {
-                let face = Face::new(beyond, opposite(side));
-                (face, self.panel(face))
-            }
-            // Both inside: only an interior wall can be in the way.
-            (true, true) => {
-                let face = Face::new(tile, side);
-                match self.partition(face) {
-                    Some(panel) => (face, panel),
-                    None => return false,
-                }
-            }
-            (false, false) => return false,
+        let face = Face::new(tile, side);
+        let Some(panel) = self.filling(face) else {
+            return false;
         };
         if panel != Panel::Door {
             return true;
@@ -134,17 +119,6 @@ impl Base {
         // between its sides is settled by asking about the cells either side of them.
         let floor = face.tile[1] as f32 * STOREY_M;
         at.y + walker.height > floor + DOOR_HEIGHT_M + walker.step_up
-    }
-}
-
-fn opposite(side: Side) -> Side {
-    match side {
-        Side::East => Side::West,
-        Side::West => Side::East,
-        Side::South => Side::North,
-        Side::North => Side::South,
-        Side::Up => Side::Down,
-        Side::Down => Side::Up,
     }
 }
 
@@ -164,15 +138,15 @@ mod tests {
             max: [far, 0, far],
         });
         for x in cells(4.0)..cells(5.5) {
-            base.apply(BuildOp::SetPanel(
+            base.apply(BuildOp::SetWall(
                 Face::new(IVec3::new(x, 0, far), Side::South),
-                Panel::Door,
+                Some(Panel::Door),
             ));
         }
         for z in cells(3.0)..cells(6.0) {
-            base.apply(BuildOp::SetPanel(
+            base.apply(BuildOp::SetWall(
                 Face::new(IVec3::new(far, 0, z), Side::East),
-                Panel::WINDOW,
+                Some(Panel::WINDOW),
             ));
         }
         base
@@ -207,9 +181,9 @@ mod tests {
         let mut base = room();
         let far = cells(9.0) - 1;
         // One cell of doorway in the north wall.
-        base.apply(BuildOp::SetPanel(
+        base.apply(BuildOp::SetWall(
             Face::new(IVec3::new(cells(4.5), 0, 0), Side::North),
-            Panel::Door,
+            Some(Panel::Door),
         ));
         let at = Vec3::new(4.5 + CELL_M * 0.5, 0.0, 4.5);
         let stopped = stroll(&base, at, Vec3::new(at.x, 0.0, -6.0));
@@ -270,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn there_is_a_ceiling_only_indoors() {
+    fn there_is_a_ceiling_only_under_a_roof() {
         let base = room();
         assert_eq!(base.ceiling(Vec3::new(4.5, 0.0, 4.5)), Some(3.0));
         assert_eq!(base.ceiling(Vec3::new(4.5, 0.0, 14.0)), None);
@@ -293,12 +267,12 @@ mod tests {
         let (west, east) = (Vec3::new(1.5, 0.0, 4.75), Vec3::new(4.5, 0.0, 4.75));
         assert!((stroll(&base, west, east).x - east.x).abs() < 0.01);
         for z in 0..cells(9.0) {
-            base.apply(BuildOp::SetPartition(wall(z), Some(Panel::Solid)));
+            base.apply(BuildOp::SetWall(wall(z), Some(Panel::Solid)));
         }
         assert!(stroll(&base, west, east).x < 3.0);
         assert!(stroll(&base, east, west).x > 3.0);
         for z in cells(4.0)..cells(5.5) {
-            base.apply(BuildOp::SetPartition(wall(z), Some(Panel::Door)));
+            base.apply(BuildOp::SetWall(wall(z), Some(Panel::Door)));
         }
         assert!((stroll(&base, west, east).x - east.x).abs() < 0.01);
     }
