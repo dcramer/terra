@@ -173,7 +173,7 @@ pub(super) fn aim(
                 .iter()
                 .filter(|(_, _, _, visibility)| **visibility != Visibility::Hidden)
                 .map(|(entity, prop, _, _)| (entity, prop)),
-            &obstacles.0,
+            &obstacles,
         )
         .or(wet.then_some(Blocked::Water));
         Target::Spot {
@@ -297,7 +297,9 @@ pub(super) fn aim(
                     // Trees and rocks are cleared by the player first, not by the room.
                     let low = corner.as_vec3() * CELL_M;
                     let high = (corner + IVec3::new(size.x, 0, size.y)).as_vec3() * CELL_M;
-                    let clear = !obstacles.0.iter().any(|&(at, radius)| {
+                    let middle = site.frame.transform_point((low + high) * 0.5);
+                    let reach = (high - low).length() * 0.5 + STOREY_M * 2.0;
+                    let clear = !obstacles.near(middle, reach).any(|(at, radius)| {
                         let local = to_base.transform_point3(at);
                         let nearest = local.with_y(0.0).clamp(low, high);
                         nearest.distance(local.with_y(0.0)) < radius

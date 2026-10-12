@@ -6,6 +6,7 @@
 //! hidden.
 
 use super::catalogue::{self, Item, Light};
+use super::flora::Obstacles;
 use super::interact::{CanInteract, Interactable};
 use super::models::{Part, read_model, shaped};
 use crate::build::Site;
@@ -469,7 +470,7 @@ pub fn blocked<'a>(
     site: &Site,
     standing: &Standing,
     others: impl Iterator<Item = (Entity, &'a Prop)>,
-    obstacles: &[(Vec3, f32)],
+    obstacles: &Obstacles,
 ) -> Option<Blocked> {
     let placed = standing.corners().iter().all(|corner| {
         let at = Vec3::new(corner.x, 0.0, corner.y);
@@ -493,10 +494,13 @@ pub fn blocked<'a>(
         return Some(Blocked::Item(entity));
     }
     let to_base = site.frame.compute_affine().inverse();
+    let middle = site.frame.transform_point(standing.at);
     (!standing.indoors
-        && obstacles.iter().any(|&(at, radius)| {
-            standing.meets_circle(to_base.transform_point3(at).with_y(0.0), radius)
-        }))
+        && obstacles
+            .near(middle, standing.half.length())
+            .any(|(at, radius)| {
+                standing.meets_circle(to_base.transform_point3(at).with_y(0.0), radius)
+            }))
     .then_some(Blocked::Nature)
 }
 

@@ -515,7 +515,7 @@ fn walk(
     );
     target = from_base.transform_point3(walked);
     // Trees and boulders push the player round them.
-    for &(at, radius) in &obstacles.0 {
+    for (at, radius) in obstacles.near(target, walker.radius) {
         let apart = (target - at).reject_from(up);
         let reach = radius + walker.radius;
         if apart.length_squared() < reach * reach && (target - at).dot(up).abs() < 3.0 {

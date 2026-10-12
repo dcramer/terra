@@ -2,14 +2,16 @@
 //! other or in a tree. Each is a circle on the ground; where two overlap, both are pushed
 //! apart, the lighter further. Trees and rocks do not move.
 //!
-//! The player is not pushed here: its own walk stops it at others' bodies (see `push_out`),
-//! so the camera never sees it shoved after it has moved. Others are pushed off it instead.
+//! Players are not pushed here: their own walk stops them at others' bodies (see
+//! `push_out`), so the camera never sees one shoved after it has moved. Others are pushed
+//! off them instead.
 //!
 //! A stand-in until creatures walk on voxels with a real character controller (D53).
 
 use super::Player;
 use super::flora::Obstacles;
 use crate::planet::Planet;
+use crate::spatial::SpatialHash;
 use bevy::{prelude::*, transform::TransformSystems};
 use terra_build::Walker;
 
@@ -71,21 +73,34 @@ pub fn push_out<'a>(
     at
 }
 
-/// Moves overlapping bodies apart, and out of trees, rocks and the player, then puts them
-/// back on the ground.
+/// Moves overlapping bodies apart, and out of trees, rocks and players, then puts them
+/// back on the ground. Each body is compared only with those filed near it, so the cost
+/// grows with how crowded a place is, not with how many bodies there are (D127).
 fn keep_apart(
     planet: Res<Planet>,
     obstacles: Res<Obstacles>,
-    player: Single<&Transform, With<Player>>,
+    players: Query<&Transform, With<Player>>,
     mut bodies: Query<(&Body, &mut Transform), Without<Player>>,
+    mut filed: Local<SpatialHash<usize>>,
+    mut standing: Local<SpatialHash<()>>,
 ) {
     let mut all: Vec<_> = bodies.iter_mut().collect();
+    let widest = all.iter().map(|(body, _)| body.radius).fold(0.0, f32::max);
+    filed.clear();
+    filed.extend(
+        all.iter()
+            .enumerate()
+            .map(|(index, (_, transform))| (transform.translation, index)),
+    );
     let mut moved = vec![Vec3::ZERO; all.len()];
     for i in 0..all.len() {
-        for j in i + 1..all.len() {
-            let (a, b) = (*all[i].0, *all[j].0);
-            let (here, there) = (all[i].1.translation, all[j].1.translation);
-            let up = here.normalize();
+        let (a, here) = (*all[i].0, all[i].1.translation);
+        let up = here.normalize();
+        for &(there, j) in filed.near(here, a.radius + widest) {
+            if j <= i {
+                continue;
+            }
+            let b = *all[j].0;
             let apart = (here - there).reject_from(up);
             let reach = a.radius + b.radius;
             if apart.length_squared() >= reach * reach {
@@ -99,7 +114,9 @@ fn keep_apart(
             moved[j] -= away * overlap * share_b;
         }
     }
-    let you = player.translation;
+    let walker = Walker::default().radius;
+    standing.clear();
+    standing.extend(players.iter().map(|player| (player.translation, ())));
     for (index, (body, transform)) in all.iter_mut().enumerate() {
         if body.weight == 0.0 {
             continue;
@@ -107,14 +124,16 @@ fn keep_apart(
         let start = transform.translation + moved[index];
         let mut at = start;
         let up = start.normalize();
-        // Off the player, who does not give way here, and out of trees and rocks.
-        let solid = std::iter::once((you, Walker::default().radius)).chain(
-            obstacles
-                .0
-                .iter()
-                .filter(|(place, _)| (start - *place).dot(up).abs() < 3.0)
-                .copied(),
-        );
+        // Off players, who do not give way here, and out of trees and rocks.
+        let reach = body.radius + walker;
+        let solid = standing
+            .near(start, reach)
+            .map(|&(place, ())| (place, walker))
+            .chain(
+                obstacles
+                    .near(start, body.radius)
+                    .filter(|(place, _)| (start - *place).dot(up).abs() < 3.0),
+            );
         for (place, radius) in solid {
             let apart = (at - place).reject_from(up);
             let reach = radius + body.radius;

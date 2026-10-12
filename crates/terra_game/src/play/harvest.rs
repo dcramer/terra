@@ -234,7 +234,7 @@ fn cut(
         ));
     }
     if let Some(stood) = obstacle {
-        obstacles.0.retain(|(at, _)| *at != stood);
+        obstacles.remove(stood);
     }
     info!("Cut something for {given} {}.", raw.name());
     did.write(Did(skill_for(cut.what), ONCE));

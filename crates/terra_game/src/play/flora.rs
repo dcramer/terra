@@ -11,6 +11,7 @@ use super::models::{Part, read_model};
 use super::scene::SUN_DIRECTION;
 use crate::build::Site;
 use crate::planet::{Planet, Tweaks};
+use crate::spatial::SpatialHash;
 use bevy::{
     asset::RenderAssetUsages,
     light::NotShadowCaster,
@@ -57,8 +58,45 @@ const GREAT_TREE_M: f32 = 13.0;
 /// How many of the bigger rocks hold ore.
 const ORE_SHARE: f32 = 0.18;
 
-#[derive(Resource, Default)]
-pub struct Obstacles(pub Vec<(Vec3, f32)>);
+/// Trees and rocks that stop a walker: where each stands and how far round it, filed by
+/// place so a walker asks only about those near it.
+#[derive(Resource)]
+pub struct Obstacles {
+    solid: SpatialHash<f32>,
+    widest_m: f32,
+}
+
+impl Default for Obstacles {
+    fn default() -> Self {
+        Self {
+            solid: SpatialHash::default(),
+            widest_m: 0.0,
+        }
+    }
+}
+
+impl Obstacles {
+    pub fn add(&mut self, at: Vec3, radius: f32) {
+        self.widest_m = self.widest_m.max(radius);
+        self.solid.insert(at, radius);
+    }
+
+    /// Takes away what stands at a point, as when a tree is felled.
+    pub fn remove(&mut self, at: Vec3) {
+        self.solid.remove(at, |_| true);
+    }
+
+    /// Those that a body reaching so far from a point might touch, and how far round each is.
+    pub fn near(&self, at: Vec3, reach: f32) -> impl Iterator<Item = (Vec3, f32)> + '_ {
+        self.solid
+            .near(at, reach + self.widest_m)
+            .map(|&(point, radius)| (point, radius))
+    }
+
+    pub fn len(&self) -> usize {
+        self.solid.len()
+    }
+}
 
 /// A plant or rock, and how close a base may come before it is cleared away.
 #[derive(Component)]
@@ -581,7 +619,9 @@ fn plant(
             Some((point, 0.5)),
         );
     }
-    obstacles.0.extend(solid_things);
+    for (at, radius) in solid_things {
+        obstacles.add(at, radius);
+    }
 
     let mut meadow = Meadow {
         ground,
@@ -616,7 +656,7 @@ fn plant(
         .sum();
     info!(
         "Planted {planted} trees, rocks and plants ({} of them solid), and {blades} blades of grass.",
-        obstacles.0.len()
+        obstacles.len()
     );
     for (square, mesh) in grown {
         let mut entity = commands.spawn((
@@ -777,7 +817,7 @@ fn follow_digs(
         if *visibility != Visibility::Hidden && near(foot, 0.5) && planet.dug(foot) {
             *visibility = Visibility::Hidden;
             if let Some(stood) = growth.obstacle {
-                obstacles.0.retain(|(point, _)| *point != stood);
+                obstacles.remove(stood);
             }
         }
     }
@@ -807,7 +847,7 @@ fn clear_around(
                 *visibility = Visibility::Hidden;
                 // Only the plant's own obstacle goes; whatever was set down stays solid.
                 if let Some(stood) = growth.obstacle {
-                    obstacles.0.retain(|(point, _)| *point != stood);
+                    obstacles.remove(stood);
                 }
             }
         }
