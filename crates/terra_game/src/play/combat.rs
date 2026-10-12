@@ -33,6 +33,8 @@ pub fn weapon(tool: Tool) -> (f32, f32) {
         Tool::IronPickaxe => (11.0, 2.3),
         Tool::StonePickaxe => (7.0, 2.3),
         Tool::Knife => (6.0, 1.9),
+        // A burning torch is a poor club, but it is one.
+        Tool::Torch => (5.0, 1.9),
         // The bow shoots instead (`archery`); the hammer builds.
         Tool::Hammer | Tool::Bow => (0.0, 0.0),
     }

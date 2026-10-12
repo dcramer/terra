@@ -95,6 +95,13 @@ const fn recipe(station: Station, cost: Cost, makes: Made, seconds: f32) -> Reci
 /// leather at the workbench, then iron from the smelter and iron tools at the forge
 /// (docs/prototypes.md).
 pub const RECIPES: &[Recipe] = &[
+    // Fibre bound round a stick and lit at the fire.
+    recipe(
+        Station::Campfire,
+        &[(Raw::Wood, 1), (Raw::Fibre, 1)],
+        Made::Tool(Tool::Torch),
+        2.0,
+    ),
     recipe(
         Station::Workbench,
         &[(Raw::Wood, 2), (Raw::Stone, 2)],

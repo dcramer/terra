@@ -9,10 +9,10 @@ hand, positive raises it. Body-independent: a hand socket is the same on every b
 Its materials are named by role (Wood, Metal, Trim, String), so a colour given for a role
 reaches every part of it: here, a stone or iron head; in the game, a tint (character.rs).
 
-    tools/blender/run.sh tools/characters/fit_held.py hammer stone_axe iron_axe knife spear bow stone_pickaxe iron_pickaxe
+    tools/blender/run.sh tools/characters/fit_held.py hammer stone_axe iron_axe knife spear bow stone_pickaxe iron_pickaxe torch
 
 Reads the free tool models in assets/models/tools (THIRD_PARTY.md), or
-builds a pickaxe from a few faceted pieces, since no free one exists; writes
+builds a pickaxe or a torch from a few faceted pieces, since no free one exists; writes
 assets/models/held/<item>.glb, the item named as in the game's catalogue
 in lower case with `_` for spaces. Each item's numbers are in TOOLS.
 """
@@ -45,6 +45,8 @@ TOOLS = {
     "bow": ("Bow_Wooden.glb", 1.2, 0.6, None, -30),
     "stone_pickaxe": ("pickaxe", 0.72, 0.08, STONE, -45),
     "iron_pickaxe": ("pickaxe", 0.72, 0.08, IRON, -45),
+    # Carried upright, its burning head up; the flame is the game's (torchlight.rs).
+    "torch": ("torch", 0.55, 0.1, None, 35),
 }
 
 
@@ -80,6 +82,26 @@ def pickaxe(head):
     return [ob for ob, _ in parts]
 
 
+def torch():
+    """A stick, and a head of fibre bound round it, charred at the top."""
+    wood = material("Wood", (0.44, 0.3, 0.19))
+    cloth = material("Cloth", (0.5, 0.42, 0.28))
+    char = material("Char", (0.12, 0.09, 0.07))
+    parts = []
+    bpy.ops.mesh.primitive_cylinder_add(vertices=6, radius=0.018, depth=1.0, location=(0, 0, 0.5))
+    bpy.context.object.scale = (1.0, 1.0, 1.0)
+    parts.append((bpy.context.object, wood))
+    # The binding: two bands, the upper one wider, and a charred cap.
+    for z, radius, depth in ((0.8, 0.034, 0.1), (0.9, 0.042, 0.1)):
+        bpy.ops.mesh.primitive_cylinder_add(vertices=7, radius=radius, depth=depth, location=(0, 0, z))
+        parts.append((bpy.context.object, cloth))
+    bpy.ops.mesh.primitive_cone_add(vertices=7, radius1=0.042, radius2=0.025, depth=0.06, location=(0, 0, 0.98))
+    parts.append((bpy.context.object, char))
+    for ob, mat in parts:
+        ob.data.materials.append(mat)
+    return [ob for ob, _ in parts]
+
+
 def one(objects, name):
     """The objects as one mesh, with their transforms applied."""
     bpy.ops.object.select_all(action="DESELECT")
@@ -100,6 +122,8 @@ for item in look.args():
     look.reset()
     if source == "pickaxe":
         objects = pickaxe(head)
+    elif source == "torch":
+        objects = torch()
     else:
         bpy.ops.import_scene.gltf(filepath=os.path.join(ASSETS, "tools", source))
         objects = [o for o in bpy.context.scene.objects if o.type == "MESH"]

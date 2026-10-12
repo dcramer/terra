@@ -30,6 +30,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc`, `enter`, `backspace`, `equal`, `minus` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
 | `--save <file>` | In the play experiment: keep the saved game in this file. Scripted runs save and load only when given one. |
 | `--fresh` | In the play experiment: start over, throwing away the saved game |
+| `--time <hour>` | In the play experiment: set the clock to an hour of the day, 0 to 24, such as 22 for night |
 | `--at <east,south>` | In the play experiment: start the player so many metres east and south of the start, for testing. The log says where the deer, the spiders, the village and each person are. |
 | `--face <east,south>` | In the play experiment: start facing that spot, for testing. |
 | `--warp <east,south:east,south@frame>` | In the play experiment: on that frame, move the player to the first spot, facing the second, for testing. Repeatable. |

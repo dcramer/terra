@@ -4,9 +4,9 @@
 //! with each item filling its cells. Items show their icon, baked by `cargo xtask icons`
 //! (D129), or their name if they have none yet.
 //!
-//!   1 to 6        pick a slot of the action bar; whatever it points at is in hand
+//!   1 to 8        pick a slot of the action bar; whatever it points at is in hand
 //!   Tab           open and close the inventory (I does the same; either can be changed)
-//!   In the inventory, point at a tool and press 1 to 6 to put it in that slot; click
+//!   In the inventory, point at a tool and press 1 to 8 to put it in that slot; click
 //!   gear in the backpack to wear it, and click a slot of the sheet to take it off.
 
 use super::Player;
@@ -38,6 +38,8 @@ const NUMBERS: [KeyCode; BAR_SLOTS] = [
     KeyCode::Digit4,
     KeyCode::Digit5,
     KeyCode::Digit6,
+    KeyCode::Digit7,
+    KeyCode::Digit8,
 ];
 /// The size of one cell of the backpack on screen.
 const CELL_PX: f32 = 48.0;
@@ -337,7 +339,7 @@ fn setup(mut commands: Commands) {
                     panel.spawn((About, Text::new(" "), small.clone(), dim));
                     panel.spawn((
                         Text::new(
-                            "Point at a tool and press 1 to 6 to put it on the bar. Click gear \
+                            "Point at a tool and press 1 to 8 to put it on the bar. Click gear \
                              to wear it, and a slot of the equipment to take it off. The \
                              builder spends raw items and taking a thing apart gives them \
                              back, if there is room; your tools gather more.",

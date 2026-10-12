@@ -15,6 +15,7 @@ knife: a knife, a steel blade with a serrated back and a wooden grip
 spear: a spear, a long wooden shaft with a small pointed tip
 stone_axe: a stone axe, a wooden handle with a pale stone head
 stone_pickaxe: a stone pickaxe, a wooden handle with a pale stone pick head
+torch: a torch, a wooden stick with fibre bound round its head, charred black at the top
 
 # Worn
 small_pack: a small leather backpack with straps and pockets

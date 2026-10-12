@@ -445,7 +445,7 @@ fn draw(
                 }
                 Some(tool) => harvest::prompt(tool, &cutting, &growth, &settings),
                 None => format!(
-                    "1 to 6  pick a tool      {}  inventory",
+                    "1 to 8  pick a tool      {}  inventory",
                     settings.key(Action::Inventory)
                 ),
             };

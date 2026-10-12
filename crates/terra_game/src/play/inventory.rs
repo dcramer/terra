@@ -129,10 +129,12 @@ pub enum Tool {
     Spear,
     /// A weapon at range, shooting arrows from the backpack.
     Bow,
+    /// Light to see by at night, burning while it is in hand.
+    Torch,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 8] = [
+    pub const ALL: [Tool; 9] = [
         Tool::Hammer,
         Tool::StoneAxe,
         Tool::StonePickaxe,
@@ -141,6 +143,7 @@ impl Tool {
         Tool::IronPickaxe,
         Tool::Spear,
         Tool::Bow,
+        Tool::Torch,
     ];
 
     pub fn name(self) -> &'static str {
@@ -153,6 +156,7 @@ impl Tool {
             Tool::IronPickaxe => "Iron pickaxe",
             Tool::Spear => "Spear",
             Tool::Bow => "Bow",
+            Tool::Torch => "Torch",
         }
     }
 
@@ -193,11 +197,13 @@ impl Tool {
             Tool::IronPickaxe => "Breaks rock and ore quickly",
             Tool::Spear => "A hunting spear: hits hardest and reaches furthest",
             Tool::Bow => "Shoots arrows: hold to draw, let go to loose",
+            Tool::Torch => "Lights the way at night while it is in hand",
         }
     }
 }
 
-pub const BAR_SLOTS: usize = 6;
+/// How many slots the bar has: eight, as Valheim's has. A placeholder (D84).
+pub const BAR_SLOTS: usize = 8;
 
 /// The slots of the character sheet. Which slots there are is open (D64); a pack, what
 /// is worn on the head and body, and a belt for a quiver (D118).
@@ -339,12 +345,14 @@ const BARE: Size = Size { w: 5, h: 4 };
 /// taken from the world (the MVP in docs/prototypes.md).
 const STARTING: [(Raw, u32); 0] = [];
 
-/// The tools a player starts with, in the order they go on the bar.
-const STARTING_TOOLS: [Tool; 4] = [
+/// The tools a player starts with, in the order they go on the bar. A torch among them,
+/// so the first night can be got through before a campfire makes more.
+const STARTING_TOOLS: [Tool; 5] = [
     Tool::Hammer,
     Tool::StoneAxe,
     Tool::StonePickaxe,
     Tool::Knife,
+    Tool::Torch,
 ];
 
 /// Every kind of item in the demo, and which is which.
@@ -1070,7 +1078,7 @@ mod tests {
         ));
         assert_eq!(grid.count(items.tool_kind(Tool::IronAxe)), 1);
         assert_eq!(
-            bar.get(4)
+            bar.get(STARTING_TOOLS.len())
                 .and_then(|id| grid.get(id))
                 .map(|placed| placed.item.kind),
             Some(items.tool_kind(Tool::IronAxe)),

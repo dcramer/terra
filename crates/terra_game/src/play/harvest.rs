@@ -311,6 +311,7 @@ pub fn prompt(
             Tool::StonePickaxe | Tool::IronPickaxe => "Aim at a rock nearby".to_string(),
             Tool::Knife => "Aim at a bush or plant nearby".to_string(),
             Tool::Hammer => String::new(),
+            Tool::Torch => "Lights the way while it is in hand".to_string(),
             Tool::Spear => format!(
                 "{}  swing at a creature in front of you",
                 settings.key(Action::Use)

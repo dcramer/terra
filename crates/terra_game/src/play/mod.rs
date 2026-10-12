@@ -56,6 +56,7 @@ mod soundscape;
 mod station_screen;
 mod tiles;
 mod tool;
+mod torchlight;
 mod vitals;
 mod work;
 mod worn;
@@ -144,6 +145,7 @@ pub fn plugin(app: &mut App) {
     build::plugin(app);
     scene::plugin(app);
     daylight::plugin(app);
+    torchlight::plugin(app);
     flora::plugin(app);
     props::plugin(app);
     figure::plugin(app);

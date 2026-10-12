@@ -293,7 +293,7 @@ export async function aim(at: [number, number], up?: number) {
 
 /// Takes a tool in hand by its name, trying each slot of the bar in turn.
 export async function hold(tool: string) {
-  for (let slot = 0; slot <= 6; slot++) {
+  for (let slot = 0; slot <= 8; slot++) {
     if (slot > 0) await press(String(slot));
     const held = await waitUntil(`slot ${slot} in hand`, state, (now) => now.holding === tool, 0.5).catch(() => undefined);
     if (held) return;

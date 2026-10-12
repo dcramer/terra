@@ -96,7 +96,7 @@ As of 2026-10-11.
 
 | Part | State |
 |---|---|
-| One small world, day and night | Voxel terrain, dug with the pickaxe for stone and ore, saved. Day and night: the sun crosses the sky in half an hour, then moonlight and stars; the time is saved, and `--time` sets it for a script. Night is only dark so far (D134); a torch is to come |
+| One small world, day and night | Voxel terrain, dug with the pickaxe for stone and ore, saved. Day and night: the sun crosses the sky in half an hour, then moonlight and stars; the time is saved, and `--time` sets it for a script. Night is only dark so far (D134). A torch, as the developers asked: one to start with, more from a campfire; in hand it lights the ground round you |
 | Gathering with separate tools (D96) | Built |
 | Crafting at stations, timed and queued (D109) | Built: workbench, smelter, forge, campfire |
 | A claim, upgradable (D94, D104) | Built |
