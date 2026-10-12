@@ -155,8 +155,9 @@ async function play() {
     "rescue",
     async () => {
       await game.give("spear", "leather_coat", "leather_cap", "health:100", "stamina:100", "fed:80");
-      await game.warp([58, -58], [70, -60]);
+      // Spear in hand before walking in among them.
       await game.hold("Spear");
+      await game.warp([58, -58], [70, -60]);
       // Swing every half second until no spider is left alive near.
       await game.press(...Array.from({ length: 240 }, (_, i) => `e@${i * 30}`));
       await game.waitFor("Killed a Spider", { timeout: 120 });

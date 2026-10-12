@@ -294,8 +294,17 @@ export async function aim(at: [number, number], up?: number) {
   await waitFor("Aimed at", { timeout: 15, unless: "Could not aim" });
 }
 
-/// Takes a tool in hand by its name, trying each slot of the bar in turn.
+/// Takes a tool in hand by its name: the slot of the bar it is on, if the game says, or
+/// else each slot in turn.
 export async function hold(tool: string) {
+  const now = await state();
+  if (now.holding === tool) return;
+  const slot = (now.bar as (string | null)[] | undefined)?.indexOf(tool) ?? -1;
+  if (slot >= 0) {
+    await press(String(slot + 1));
+    const held = await waitUntil(`the ${tool} in hand`, state, (now) => now.holding === tool, 2).catch(() => undefined);
+    if (held) return;
+  }
   for (let slot = 0; slot <= 8; slot++) {
     if (slot > 0) await press(String(slot));
     const held = await waitUntil(`slot ${slot} in hand`, state, (now) => now.holding === tool, 0.5).catch(() => undefined);

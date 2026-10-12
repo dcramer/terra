@@ -2,7 +2,7 @@
 //! (D69), so a test reads what is true instead of guessing it from the screen or the log:
 //!
 //! - `play.state`: where the player is and faces, their body, what they hold, carry and
-//!   wear, and the creatures and people near them.
+//!   wear, what is on each slot of the bar, and the creatures and people near them.
 //! - `play.warp {at, facing?}`: moves the player, as `--warp` does, on the next frame.
 //! - `play.give {item, count?}`: adds to what the player carries, or sets their body, as
 //!   `--give` does, on the next frame.
@@ -350,6 +350,15 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
                 .map(number),
         })),
         "carrying": carrying,
+        // What each slot of the bar points at, so a script can pick a tool in one press.
+        "bar": (0..bar.0.len())
+            .map(|slot| {
+                bar.0
+                    .get(slot)
+                    .and_then(|id| backpack.0.get(id))
+                    .map(|placed| items.name(placed.item.kind))
+            })
+            .collect::<Vec<_>>(),
         "wearing": wearing,
         "near": around.into_iter().map(|(_, _, each)| each).collect::<Vec<_>>(),
     }))

@@ -533,7 +533,15 @@ pub fn bare_backpack() -> Grid {
 /// How much of a blow everything worn takes together, out of one, never all of it.
 pub fn protection(items: &Items, gear: &Equipment) -> f32 {
     gear.iter()
-        .filter_map(|(_, worn)| items.apparel(worn?.kind))
+        .filter_map(|(_, worn)| worn)
+        // Broken, it protects no more (D99).
+        .filter(|item| {
+            items
+                .catalogue
+                .get(item.kind)
+                .is_ok_and(|def| !item.broken(def))
+        })
+        .filter_map(|item| items.apparel(item.kind))
         .map(Apparel::protection)
         .sum::<f32>()
         .min(0.8)
@@ -1071,6 +1079,20 @@ impl Belongings<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn broken_leather_protects_no_more() {
+        let mut items = Items::default();
+        let (Backpack(mut grid), Gear(mut gear), _) = starting_kit(&mut items);
+        let coat = items.make(items.apparel_kind(Apparel::LeatherCoat));
+        grid.insert(&items.catalogue, coat, None).unwrap();
+        wear(&items, &mut grid, &mut gear, coat.id).unwrap();
+        let whole = protection(&items, &gear);
+        assert!(whole > 0.0);
+        let body = SLOTS[2].0;
+        gear.wear(&items.catalogue, body, u16::MAX).unwrap();
+        assert_eq!(protection(&items, &gear), 0.0);
+    }
 
     const COUCH: Cost = &[(Raw::Wood, 2), (Raw::Hide, 3)];
 
