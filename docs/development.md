@@ -84,10 +84,10 @@ For making and cleaning up models ([research/ai-models-for-art.md](../research/a
 
 - **Scripts, headless.** `spike/model_bakeoff/run.sh <script.py>` runs a script in the Windows Blender from WSL. Repeatable, and nothing has to be open.
 - **A live session, through MCP.** Blender's official [MCP server](https://www.blender.org/lab/mcp-server/) lets an agent work in the Blender you have open, so you can watch it and change things by hand. It runs any code it is sent, so keep it to your own machine. Setting it up under WSL:
-  1. In Blender, install the add-on from that page and start its server in the add-on's preferences. It listens on `localhost:9876`.
+  1. In Blender, install the add-on from that page and start its server in the add-on's preferences. It won't start unless Preferences → System → Network → Allow Online Access is on, even for localhost. It listens on `localhost:9876`.
   2. WSL's default networking cannot reach Windows' `localhost`, so run the MCP server on Windows with Blender's own Python. Clone `https://projects.blender.org/lab/blender_mcp.git` into `%USERPROFILE%\.blender-mcp\src`, then install it with `python.exe -m pip install --target %USERPROFILE%\.blender-mcp\lib %USERPROFILE%\.blender-mcp\src\mcp`, using the `python.exe` under Blender's `5.x\python\bin`.
   3. Add a launcher, `%USERPROFILE%\.blender-mcp\run.py`, that puts `lib`, `lib\win32` and `lib\win32\lib` on `sys.path`, calls `os.add_dll_directory` on `lib\pywin32_system32` (a `--target` install skips pywin32's own set-up), and runs `blmcp.main()`.
-  4. Register it: `claude mcp add blender -s user -- "<Blender's python.exe>" '<path to run.py>'`. Claude Code picks it up in its next session.
+  4. Register it: `claude mcp add blender -s user -- "<Blender's python.exe>" '<path to run.py>'`. Claude Code picks it up in its next session. The `blender` skill has how agents use it.
 
 ### Tripo
 
