@@ -114,7 +114,7 @@ Each step is played and checked by script before the next (D69):
 1. **The model** (built, 2026-10-12): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; rooms in saves converted; built whole, as before. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
 2. **Roofs** (a first version, 2026-10-12): the height field, the four styles, laid over a room by a click or drawn as a rectangle, gable ends closed with wall. Not yet: eaves, trims, the covering's pieces, valleys where sections meet walls, an automatic hip over any footprint.
 3. **Plans and constructing** (D139): parts laid as plans; pieces put in one by one, from the pack and storage (D141).
-4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement.
+4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement. Logs first, as [kits.md](kits.md) proposes (D177, D178).
 5. **The art of the kits**, by the developers' art pipeline: about ten to fifteen pieces a material, a few versions each.
 
 ## Where the risk is

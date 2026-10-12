@@ -43,6 +43,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [character-system-plan.md](character-system-plan.md) | The character system from scratch: the base body asset, bodies as shapes, gear made once, the game's side, tools, order of work and risks. |
 | [construction.md](construction.md) | Draft for the developers: the baseline building system, everything players will expect from Enshrouded, Rust, Ark, Subnautica 2 and The Forest, the controls, what is built, and open questions. |
 | [structures.md](structures.md) | The technical design for walls, floors and roofs: parts as shared state, walls laid from kits by rule, roofs as a height field, buildings and indoors, drawing many buildings, and the order of work. |
+| [kits.md](kits.md) | Draft for the developers: how each kind of construction looks and is drawn, planned, going up and built, with logs first: corners, joins and openings. |
 | [progression.md](progression.md) | Draft: player skills, the research system, and how things are unlocked. Mostly open questions. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
 | [planet-sim.md](planet-sim.md) | Parked with terraforming: the planetary simulation, cells, fields, how local feeds global. |

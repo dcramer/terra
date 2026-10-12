@@ -228,7 +228,7 @@ The technical design is [structures.md](structures.md) (D160). Built, 2026-10-12
 | Kind | Pieces | Laid |
 |---|---|---|
 | Cut stone | A block a metre long and half a metre high and deep; a half block; a corner block; a sill and a lintel for openings; a capstone | In courses half a metre high, each course offset half a block from the one under it (a running bond), half blocks at the ends of every other course, corner blocks interlocking where two walls meet |
-| Logs | Logs as long as the wall, up to the longest a tree gives (say four metres), notched at the ends | Stacked, a log a course; longer walls splice at a post; corners interlock, the logs of one wall alternating with the other's |
+| Logs | Logs as long as the wall, up to the longest a tree gives (say four metres), notched at the ends | Stacked, a log a course; longer walls join end to end, staggered, and walls meeting in line under a post; corners interlock, the logs of one wall alternating with the other's ([kits.md](kits.md)) |
 | Planks | Posts, rails, planks | Posts at the ends and as evenly as fits within a metre and a half; planks between them |
 | Wattle and daub | Stakes, woven panels, daub | Stakes every half metre, panels between, daub over |
 
