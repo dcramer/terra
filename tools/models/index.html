@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model viewer</title>
+<style>
+  :root { --bg: #16181d; --panel: #1f2229; --line: #2e323b; --text: #d8dae0; --dim: #8a8f9a; --accent: #e8a24a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
+  body { display: grid; grid-template-columns: 260px 1fr 300px; height: 100vh; }
+  aside { background: var(--panel); overflow: auto; padding: 10px; border-right: 1px solid var(--line); }
+  aside#info { border-right: 0; border-left: 1px solid var(--line); }
+  input[type=search] { width: 100%; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 14px 0 4px; }
+  .model { display: flex; gap: 6px; align-items: center; padding: 2px 4px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+  .model:hover { background: var(--line); }
+  .model.on { color: var(--accent); }
+  .model small { color: var(--dim); margin-left: auto; }
+  main { position: relative; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #bar { position: absolute; top: 8px; left: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+  #bar button, #bar select, #bar label { background: rgba(31,34,41,.9); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; font: inherit; }
+  #bar button.on { color: var(--accent); border-color: var(--accent); }
+  #hint { position: absolute; bottom: 8px; left: 8px; right: 8px; color: var(--dim); background: rgba(22,24,29,.8); padding: 4px 8px; border-radius: 4px; }
+  .card { border: 1px solid var(--line); border-radius: 4px; padding: 8px; margin-bottom: 8px; }
+  .card b { display: block; margin-bottom: 4px; word-break: break-all; }
+  .row { display: flex; justify-content: space-between; gap: 8px; }
+  .row span:first-child { color: var(--dim); }
+  .warn { color: #ef7d6b; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .clip { cursor: pointer; text-decoration: underline dotted; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<aside id="list">
+  <input type="search" id="filter" placeholder="Filter models">
+  <div id="models"></div>
+</aside>
+<main>
+  <canvas id="view"></canvas>
+  <div id="bar">
+    <button data-view="front" title="From the front, glTF +Z">Front</button>
+    <button data-view="side">Side</button>
+    <button data-view="top">Top</button>
+    <button data-view="three">¾</button>
+    <select id="shading" title="How surfaces are drawn">
+      <option value="file">File colours</option>
+      <option value="materials">By material</option>
+      <option value="normals">Normals</option>
+    </select>
+    <button id="wire">Wireframe</button>
+    <button id="figure" class="on" title="The 1.8 m figure, for scale">Figure</button>
+  </div>
+  <div id="hint">Click a model to show it; shift-click to add it beside. Drag to orbit, scroll to zoom. Arrows mark each model's front (+Z). The address always opens this view.</div>
+</main>
+<aside id="info"></aside>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+
+// The game's light (tools/characters/look.py): a warm sun, shadows lit by a cool sky.
+const SKY = 0x9eadff, GROUND = 0xb3a88f, SUN = 0xffe6c2;
+// The gap between models side by side, and the figure that stands beside them.
+const GAP_M = 0.6, FIGURE = "assets/models/character/figure.gltf";
+
+const canvas = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.AgXToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x2a2e36);
+scene.add(new THREE.HemisphereLight(SKY, GROUND, 1.4));
+const sun = new THREE.DirectionalLight(SUN, 3.2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun, sun.target);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(60, 64), new THREE.MeshStandardMaterial({ color: 0x8a8578, roughness: 1 }));
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+// Metre squares, and tenths faintly near the middle.
+const grid = new THREE.GridHelper(40, 40, 0x5b5f68, 0x5b5f68);
+grid.position.y = 0.001;
+const fine = new THREE.GridHelper(4, 40, 0x6f7380, 0x6f7380);
+fine.material.opacity = 0.25; fine.material.transparent = true; fine.position.y = 0.002;
+scene.add(grid, fine);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 500);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const shown = []; // { path, root, gltf, mixer, info, changed }
+// What is shown is in the address, so a link opens the same view:
+// ?m=assets/models/props/Forge.glb,assets/models/props/Chair.glb&view=front&shading=materials&wire=1&figure=0
+const query = new URLSearchParams(location.search);
+let all = [], figure = null, wire = query.get("wire") === "1", shading = query.get("shading") ?? "file", view = query.get("view") ?? "three";
+
+function remember() {
+  const q = new URLSearchParams();
+  if (shown.length) q.set("m", shown.map((s) => s.path).join(","));
+  if (view !== "three") q.set("view", view);
+  if (shading !== "file") q.set("shading", shading);
+  if (wire) q.set("wire", "1");
+  if (figure && !figure.visible) q.set("figure", "0");
+  history.replaceState(null, "", "?" + q.toString().replaceAll("%2F", "/").replaceAll("%2C", ","));
+}
+
+function fileUrl(path) { return "/files/" + path.split("/").map(encodeURIComponent).join("/"); }
+
+async function load(path) {
+  const gltf = await loader.loadAsync(fileUrl(path) + "?t=" + Date.now());
+  const root = gltf.scene;
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; o.userData.material = o.material; } });
+  return { gltf, root };
+}
+
+/** What a script or a person wants to know about a model, as the file has it. */
+function measure(root) {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  let triangles = 0;
+  const materials = new Map();
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const index = o.geometry.index;
+    const count = (index ? index.count : o.geometry.attributes.position.count) / 3;
+    triangles += count;
+    for (const m of [].concat(o.userData.material)) {
+      const had = materials.get(m.name) ?? { triangles: 0, colour: m.color ? "#" + m.color.getHexString() : "#888", textured: !!m.map };
+      had.triangles += count;
+      materials.set(m.name, had);
+    }
+  });
+  return {
+    size: [size.x, size.y, size.z].map((v) => +v.toFixed(3)),
+    bottom: +box.min.y.toFixed(3),
+    centre: [+((box.min.x + box.max.x) / 2).toFixed(3), +((box.min.z + box.max.z) / 2).toFixed(3)],
+    triangles: Math.round(triangles),
+    materials: [...materials].map(([name, m]) => ({ name, ...m })),
+  };
+}
+
+function frontArrow(width, depth) {
+  const length = Math.max(0.4, width * 0.4);
+  const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0.02, depth / 2 + 0.05), length, 0xffa02a, length * 0.35, length * 0.25);
+  arrow.userData.helper = true;
+  return arrow;
+}
+
+/** Stands the models in a row along x, each with its foot where the file puts it, the figure first. */
+function layout() {
+  let x = 0;
+  const items = [...(figure && figure.visible ? [{ root: figure, width: 0.6 }] : []), ...shown.map((s) => ({ root: s.holder, width: s.info.size[0] }))];
+  const total = items.reduce((sum, i) => sum + i.width + GAP_M, -GAP_M);
+  x = -total / 2;
+  for (const item of items) {
+    item.root.position.x = x + item.width / 2;
+    x += item.width + GAP_M;
+  }
+}
+
+function frame(wanted = view) {
+  view = wanted;
+  const box = new THREE.Box3();
+  for (const s of shown) box.expandByObject(s.holder);
+  if (figure?.visible) box.expandByObject(figure);
+  if (box.isEmpty()) box.set(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 2, 1));
+  const centre = box.getCenter(new THREE.Vector3());
+  const radius = box.getSize(new THREE.Vector3()).length() / 2;
+  const distance = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05;
+  const towards = { front: [0, 0.15, 1], side: [1, 0.15, 0], top: [0, 1, 0.001], three: [0.7, 0.45, 1] }[view] ?? [0.7, 0.45, 1];
+  camera.position.copy(centre).add(new THREE.Vector3(...towards).normalize().multiplyScalar(distance));
+  controls.target.copy(centre);
+  sun.position.copy(centre).add(new THREE.Vector3(3, 6, 4).multiplyScalar(Math.max(1, radius)));
+  sun.target.position.copy(centre);
+  const s = sun.shadow.camera;
+  s.left = s.bottom = -radius * 1.5; s.right = s.top = radius * 1.5; s.far = radius * 20; s.updateProjectionMatrix();
+  remember();
+}
+
+function applyShading() {
+  let hue = 0;
+  const byName = new Map();
+  for (const s of shown) s.root.traverse((o) => {
+    if (!o.isMesh) return;
+    const original = o.userData.material;
+    if (shading === "file") o.material = original;
+    else if (shading === "normals") o.material = new THREE.MeshNormalMaterial({ flatShading: true });
+    else o.material = [].concat(original).map((m) => {
+      if (!byName.has(m.name)) byName.set(m.name, new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL((hue++ * 0.618) % 1, 0.65, 0.55), roughness: 0.8 }));
+      return byName.get(m.name);
+    }).reduce((a, m, _, arr) => (arr.length === 1 ? m : arr), null);
+    for (const m of [].concat(o.material)) m.wireframe = wire;
+  });
+  remember();
+}
+
+function renderInfo() {
+  const info = document.getElementById("info");
+  info.innerHTML = shown.length ? "" : '<p style="color:var(--dim)">Nothing shown. Pick a model on the left.</p>';
+  for (const s of shown) {
+    const i = s.info;
+    const card = document.createElement("div");
+    card.className = "card";
+    const off = (v) => Math.abs(v) > 0.02;
+    card.innerHTML = `<b>${s.path}</b>
+      <div class="row"><span>Size (w × h × d)</span><span>${i.size.map((v) => v.toFixed(2)).join(" × ")} m</span></div>
+      <div class="row"><span>Triangles</span><span>${i.triangles.toLocaleString()}</span></div>
+      <div class="row ${off(i.bottom) ? "warn" : ""}"><span>Lowest point</span><span>${i.bottom.toFixed(3)} m</span></div>
+      <div class="row ${off(i.centre[0]) || off(i.centre[1]) ? "warn" : ""}"><span>Centre (x, z)</span><span>${i.centre.join(", ")}</span></div>
+      <h2>Materials</h2>${i.materials.map((m) => `<div class="row"><span><i class="swatch" style="background:${m.colour}"></i>${m.name || "(unnamed)"}${m.textured ? " · texture" : ""}</span><span>${Math.round(m.triangles)}</span></div>`).join("")}
+      ${s.gltf.animations.length ? `<h2>Animations</h2>${s.gltf.animations.map((a, n) => `<div class="row"><span class="clip" data-clip="${n}">${a.name}</span><span>${a.duration.toFixed(2)} s</span></div>`).join("")}` : ""}`;
+    card.querySelectorAll(".clip").forEach((el) => el.onclick = () => play(s, +el.dataset.clip));
+    info.append(card);
+  }
+}
+
+function play(s, n) {
+  s.mixer ??= new THREE.AnimationMixer(s.root);
+  s.mixer.stopAllAction();
+  s.mixer.clipAction(s.gltf.animations[n]).play();
+}
+
+async function show(paths, keepView = false) {
+  for (const s of shown.splice(0)) scene.remove(s.holder);
+  for (const path of paths) {
+    try {
+      const { gltf, root } = await load(path);
+      const holder = new THREE.Group();
+      holder.add(root);
+      const info = measure(root);
+      holder.add(frontArrow(info.size[0], info.size[2]));
+      scene.add(holder);
+      const listed = all.find((m) => m.path === path);
+      shown.push({ path, root, holder, gltf, info, changed: listed?.changed });
+    } catch (error) {
+      console.error(path, error);
+    }
+  }
+  layout();
+  applyShading();
+  renderInfo();
+  if (!keepView) frame();
+  remember();
+  renderList();
+}
+
+function renderList() {
+  const filter = document.getElementById("filter").value.toLowerCase();
+  const box = document.getElementById("models");
+  box.innerHTML = "";
+  let group = "";
+  for (const m of all) {
+    if (filter && !m.path.toLowerCase().includes(filter)) continue;
+    const folder = m.path.slice(0, m.path.lastIndexOf("/"));
+    if (folder !== group) {
+      group = folder;
+      const h = document.createElement("h2");
+      h.textContent = folder;
+      box.append(h);
+    }
+    const row = document.createElement("div");
+    row.className = "model" + (shown.some((s) => s.path === m.path) ? " on" : "");
+    row.innerHTML = `<span>${m.path.slice(folder.length + 1)}</span><small>${(m.bytes / 1024).toFixed(0)} KB</small>`;
+    row.onclick = (event) => {
+      const current = shown.map((s) => s.path);
+      if (event.shiftKey || event.metaKey || event.ctrlKey) {
+        show(current.includes(m.path) ? current.filter((p) => p !== m.path) : [...current, m.path]);
+      } else show([m.path]);
+    };
+    box.append(row);
+  }
+}
+
+// A model changed on disk, as the prop pipeline rewrites one, is loaded again.
+async function poll() {
+  try {
+    all = await (await fetch("/api/models")).json();
+    const stale = shown.some((s) => all.find((m) => m.path === s.path)?.changed !== s.changed);
+    if (stale) await show(shown.map((s) => s.path), true);
+  } catch {}
+  setTimeout(poll, 2000);
+}
+
+function resize() {
+  const { clientWidth: w, clientHeight: h } = canvas.parentElement;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  for (const s of shown) s.mixer?.update(dt);
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+document.getElementById("filter").oninput = renderList;
+document.querySelectorAll("[data-view]").forEach((b) => b.onclick = () => frame(b.dataset.view));
+document.getElementById("shading").value = shading;
+document.getElementById("wire").classList.toggle("on", wire);
+document.getElementById("shading").onchange = (e) => { shading = e.target.value; applyShading(); };
+document.getElementById("wire").onclick = (e) => { wire = !wire; e.target.classList.toggle("on", wire); applyShading(); };
+document.getElementById("figure").onclick = (e) => {
+  if (!figure) return;
+  figure.visible = !figure.visible;
+  e.target.classList.toggle("on", figure.visible);
+  layout(); frame();
+};
+
+// For scripts driving the page (agent-browser, Playwright): show models, read what was measured.
+window.viewer = {
+  show: (paths) => show(paths),
+  view: (name) => frame(name),
+  measured: () => shown.map((s) => ({ path: s.path, ...s.info })),
+};
+
+resize();
+all = await (await fetch("/api/models")).json();
+try {
+  figure = (await load(FIGURE)).root;
+  figure.visible = query.get("figure") !== "0";
+  document.getElementById("figure").classList.toggle("on", figure.visible);
+  scene.add(figure);
+} catch (error) { console.error("figure", error); }
+const wanted = query.get("m");
+await show(wanted ? wanted.split(",").filter(Boolean) : []);
+document.body.dataset.ready = "true";
+poll();
+</script>
+</body>
+</html>
