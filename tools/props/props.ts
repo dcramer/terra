@@ -17,19 +17,26 @@ const OUT = join(HERE, "out");
 const ART = join(ROOT, "art", "props");
 const TRIPO = join(ROOT, "tools", "tripo", "tripo.ts");
 const BLENDER = join(ROOT, "tools", "blender", "run.sh");
-// What every concept is drawn like (art/README.md).
-const STYLE = join(ROOT, "art", "style", "mood-medieval-town.png");
+// The style guide, whose concept paragraph ends every concept's prompt (D14).
+const GUIDE = join(ROOT, "docs", "art-style.md");
+// An approved image in the style, given as a reference once there is one (docs/art-style.md,
+// "Where the pipeline stands"). Until then the paragraph alone sets the style.
+const REFERENCE = join(ROOT, "art", "style", "reference.png");
 
-// The concept's brief: fantasy, not true medieval (docs/art.md); one subject alone, so the generator models nothing else, in clear parts
-// of one colour each, so every face can be given a palette colour.
-const BRIEF = (subject: string) =>
-  `A single ${subject}, as a prop for a stylised 3D fantasy survival game, in the style of the reference. ` +
-  `Fantasy rather than historical: hand-made, with a touch of carved ornament and gently curving, organic ` +
-  `shapes, never fussy. ` +
-  `Three-quarter view from a little above, the whole object in frame and centred, on a plain light ` +
-  `grey background; nothing else in the picture, no ground, no cast shadow, no text. Chunky, ` +
-  `readable, hand-made forms at true life size, built from clean separate parts, each part one ` +
-  `clear material and colour; hand-painted look with soft even light.`;
+/** The style guide's concept paragraph: the quoted block under "The concept prompt", which
+ * every concept ends with word for word, so that all are drawn alike. */
+export function stylePrompt(guide: string): string {
+  const section = guide.split(/^## The concept prompt$/m)[1]?.split(/^## /m)[0] ?? "";
+  const quote = section.split("\n").find((line) => line.startsWith("> "));
+  if (!quote) throw new Error("docs/art-style.md has no quoted paragraph under \"The concept prompt\"");
+  return quote.slice(2).trim();
+}
+
+/** A concept's prompt: what the thing is, from its prop.json, then the guide's paragraph.
+ * The subject says what it is and is made of, never how it is drawn. */
+export function conceptPrompt(subject: string, guide: string): string {
+  return `A single ${subject}. ${stylePrompt(guide)}`;
+}
 
 const USAGE = `usage: node tools/props/props.ts <step> [PROP …] [--again]
 
@@ -101,8 +108,9 @@ function run(command: string, args: string[]) {
 function concept(name: string, prop: Prop, again: boolean) {
   const image = join(ART, name, "concept.png");
   if (existsSync(image) && !again) return console.log(`${name}: has a concept`);
-  const prompt = BRIEF(prop.subject);
-  run("node", [TRIPO, "image", prompt, "--ref", STYLE, "--aspect", "1:1", "-o", image]);
+  const prompt = conceptPrompt(prop.subject, readFileSync(GUIDE, "utf8"));
+  const reference = existsSync(REFERENCE) ? ["--ref", REFERENCE] : [];
+  run("node", [TRIPO, "image", prompt, ...reference, "--aspect", "1:1", "-o", image]);
   writeFileSync(join(ART, name, "concept.prompt.txt"), `${prompt}\n`);
 }
 
