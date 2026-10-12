@@ -25,6 +25,11 @@ In their words, shortened.
 - **Building costs things you carry**: "you have the raw items, which allow you to build anything that you might have the capabilities to build" (D55).
 - **What does not fit in the inventory drops to the ground** (2026-10-12).
 - **You build only inside a claim** (D94, Leaning), which starts small and grows (D104).
+- **Structures are planned, then constructed** (D139, Leaning, 2026-10-12): "for structures, you place a blueprint/plan of it, and then you have to actually construct it somehow… it makes it more realistic. So each wall you'd have to do that, and then doors are like carve outs so it can be slightly diff? Same with windows? We'll wanna think this through."
+- **Large structures take large materials, carried** (D140, Leaning): "you probably need large materials and can carry them? And later in the game maybe you unlock ways to transport them more efficiently."
+- **Building draws on storage** (D141): "building from storage absolutely, but large items probably will need a special storage? And that probably would be unlocked later game (some of this)."
+- **No stability in the MVP, but wanted later** (D142).
+- **Rooms can be underground** (D143): "yes you can have underground rooms".
 
 ## The baseline
 
@@ -45,16 +50,16 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Undo for a short while | Enshrouded, Rust | Missing |
 | Repair | Rust, Valheim, The Forest | Missing: nothing built takes damage yet |
 | Change a piece's material in place | Rust, 7 Days to Die | Missing: no materials yet |
-| Plans that cost nothing and are filled as materials go in | The Forest, Ark Ascended | Missing; proposed below |
-| Building from storage nearby, not only the pack | Subnautica 2, Valheim | Missing; open |
-| Carrying big materials by hand | The Forest | Missing; proposed below |
+| Plans that cost nothing, then constructed part by part | The Forest, Ark Ascended | Missing; the direction (D139, Leaning) |
+| Building from storage nearby, not only the pack | Subnautica 2, Valheim | Missing; decided (D141) |
+| Carrying big materials by hand, better transport later | The Forest | Missing; the direction (D140, Leaning) |
 | A base level with the ground where it is begun | Ark Ascended's heights | Built: the base's grid is set where its claim stone goes |
 | Building on slopes | All, differently | Built: rooms cut into the ground (D131) and stand on foundations below |
 | Floors above, and stairs | All | Storeys exist in the model; stairs and building upward are missing |
 | Roofs | All | Generated with the hull; nothing to place by hand |
 | Doors that open, close and lock | All | Doorways only |
 | Fences, gates, palisades | Ark, The Forest, Rust | Missing |
-| Stability | Rust, Valheim, Sons of the Forest | None; open |
+| Stability | Rust, Valheim, Sons of the Forest | None in the MVP (D142); wanted later |
 | A claim with an area, an owner and who else may build | Enshrouded, Rust, Valheim | Area and owner built; nobody else can be allowed yet |
 | Upkeep or decay | Rust, Ark | None; open |
 | Saved layouts placed again | Ark Ascended (2026), mods elsewhere | Missing; the village is one (D108) |
@@ -70,7 +75,7 @@ Proposed, to react to: one keymap for everything above, on mouse and keyboard, a
 | Take the hammer in hand | Its bar slot (1 by default) | Yes | A tool in every game |
 | Build menu | Tap right mouse, or B | Yes | Subnautica's right mouse; Enshrouded's Tab |
 | Variant of the thing in hand | Hold R for the wheel; tap R for the next | Yes | Rust's wheel |
-| Build | Hold left mouse, or E | Yes | Left mouse everywhere |
+| Lay a plan; build a part of one | Click left mouse to lay a plan; hold it, or E, at a part to construct it | Holding builds a whole room at once today | The Forest's E at a blueprint |
 | Put the part away; put back what is carried | Tap right mouse | Yes | Subnautica |
 | Rotate | Wheel; Z and C | Yes | Valheim's wheel; Enshrouded's R |
 | **Raise and lower** | **Shift and the wheel: half a metre a notch on the grid, a tenth off it; Page Up and Page Down** | No | Enshrouded's Q and the wheel; Ark Ascended |
@@ -82,36 +87,56 @@ Proposed, to react to: one keymap for everything above, on mouse and keyboard, a
 | Move | G for the mode, then click to pick up and put down | Items only | Subnautica 2's F |
 | **Undo the last thing built or taken apart** | **Ctrl and Z, within a minute, giving back what it cost** | No | Enshrouded's Y; Rust's window |
 | **Repair** | **With nothing picked, aim at something damaged and hold left mouse** | No | Rust's and Valheim's hammer |
-| **Make a plan instead of building** | **Hold Shift as you place** | No | The Forest's blueprints; Ark Ascended's planning mode |
 | Camera nearer and further | Wheel when nothing in hand turns; = and - | Yes | Enshrouded's first-person building camera (2025) |
 
 Three conflicts to know about: the wheel turns, zooms, raises (with Shift) and changes material (with Ctrl); Q is our take-apart but Enshrouded's nudge; right mouse is our menu but Enshrouded's remove. I would keep ours, which follow Subnautica (D67), and add only the bold rows.
 
-## Getting materials to the build
+## Planned, then constructed
 
-Proposed, after The Forest: the developers' "the way you get logs is nice for larger projects".
+The developers' direction (D139, Leaning): a structure is first laid out as a plan, and then actually constructed, part by part. What follows is my working-through of it, to react to; nothing here is settled.
 
-- **Small materials go in the pack**, as now: stone, fibre, hide, iron. What does not fit drops at your feet (built).
-- **Big materials are carried, not packed.** A felled tree gives logs that lie where it fell. You carry one or two on your shoulder, slowly, with nothing else in your hands. A big build becomes a project you can see: trees down, logs dragged home, walls rising. It gives a second player a job.
-- **Sleds and carts** carry a dozen; **log piles** at the build hold them. Recruits carry for you (D90), as Sons of the Forest's companion does.
-- **Where fun beats realism** (D122): within your claim, building draws on piles and storage nearby, as Subnautica 2's builder draws on lockers in range. So each log is carried home once, not to every wall.
+**Laying a plan.** Everything structural that the build menu places, a room, a wall, a floor, a fence, goes down as a plan: a pale ghost in the claim that costs nothing and blocks nothing yet. Lay as many as you like; move them, resize them, take them away for free. A plan shows, part by part, what it needs. This is also how a whole base is tried out, and its full cost seen, before anything is gathered (The Forest, Ark Ascended's planning mode).
 
-Open: whether to do this, and which materials are carried. It changes gathering (D96) and the inventory (D84) as much as building.
+**Constructing it.** A plan is made of parts, and each part is built on its own: stand at it with the hammer and the materials it needs, in your pack or in storage nearby (D141), and hold the build key; the part rises, and its materials are spent. A room plan's parts are:
 
-## Plans
+| Part | Proposed size | Needs first |
+|---|---|---|
+| Foundation and floor | A square of the grid, 1.5 metres a side | Nothing |
+| Wall panel | A run of wall 1.5 metres long, a storey high, between posts | The floor under it |
+| Roof | A square, 1.5 metres a side | The walls round it |
 
-Proposed, after The Forest's blueprints and Ark Ascended's planning mode.
+So a 4.5 by 4.5 metre room is nine floor squares, twelve wall panels and nine roof squares, and you see it go up: floor first, walls rising panel by panel, the roof last. The order is what makes sense physically, not a stability check (D142): you cannot raise a wall with no floor under it, or roof a room with no walls.
 
-- **A plan costs nothing.** Place a ghost of anything, as many as you like, in your claim. It shows what it still needs.
-- **It is built as materials go in.** Bring them, or have them in storage nearby, and hold the build key: each part rises in turn. The finished thing is the same as one built at once.
-- **Anyone allowed in the claim can fill it**, and recruits can fill it for you.
-- **Taking a plan down gives back everything that went in.** Changing your mind costs nothing, which is The Forest's complaint answered.
-- **A plan is how a whole base is tried out before paying for it**, and how a layout's cost is seen at once.
+**Doors and windows are carved out** (the developers' "carve outs, so it can be slightly different"):
+
+- **On a plan**, an opening is planned into the wall: the panels it crosses need less material, since the opening's cells are left out, and gain a frame to build.
+- **In a finished wall**, an opening is cut: it takes work with a tool, gives back the material of what was cut away, and leaves a frame to build.
+- **The door or the glass is its own item**, made at a station and fitted into the frame. A doorway without a door is just a gap; a window frame without glass is open to the weather.
+
+**Small things are not planned.** Furniture, storage, lights and stations are placed whole, as now: they are made, then set down. Open whether stations should be constructed too, being large.
+
+**Taking down.** A constructed part comes down to its plan, giving back its materials (or dropping them at your feet if they do not fit). A plan with nothing built is removed for free. Undo works on both.
+
+**Who constructs.** Anyone allowed in the claim (D94), and recruits who work at the base (D90), as Sons of the Forest's companion finishes blueprints. A claim-wide list of what all its plans still need, as The Forest's counter, tells a group what to go and get.
+
+**On the voxel grid** (D48): constructing a part writes its blocks; a plan is blocks not yet written. Carving an opening is removing blocks. The parts above are how the brush is sized for structures.
+
+## Large materials and carrying
+
+The developers' direction (D140, Leaning; D141):
+
+- **Big structures take big materials.** Logs for walls and posts, cut stone blocks for stone walls, beams for roofs. Small materials (fibre, nails, hide) still go in the pack.
+- **Big materials are carried, not packed.** A felled tree gives logs that lie where it fell. You carry one on your shoulder, slowly, or two with effort, with nothing else in your hands, as The Forest does. A big building becomes a project you can see: trees down, logs dragged home, walls rising. A second player has a job.
+- **Later, better ways to move them** are unlocked (D68): a sled, then a cart, then perhaps a beast of burden (D100's mounts), each carrying more.
+- **Building draws on storage** (D141, decided): within the claim, constructing a part takes what it needs from storage nearby, not only from the pack.
+- **Big materials need their own storage**, unlocked later (D141, Leaning): a log pile or a stone yard, which holds what a chest cannot. Before it, big materials lie on the ground where you drop them, near the build, and building takes from what lies within reach.
+
+Open: which materials are big; how many a player carries; whether a log is cut into planks or beams first (Sons of the Forest cuts them with the axe; a sawpit or sawbench is the station version).
 
 ## Placing
 
 - **The grid** is half a metre (D57; see [The grid](#the-grid)). Things snap to it and turn in eighths; off it, they turn freely.
-- **A base stands level where its claim stone is put** (built, 2026-10-12): its grid is set there, level with the ground at the stone. Every room of a base shares its floor height and stands on a foundation where the ground falls away (built). Proposed: rooms may also be placed a storey down, for terraces down a slope and cellars.
+- **A base stands level where its claim stone is put** (built, 2026-10-12): its grid is set there, level with the ground at the stone. Every room of a base shares its floor height and stands on a foundation where the ground falls away (built). **Rooms can be underground** (D143): a room may be placed a storey or more down, cutting the ground away, for cellars and for terraces down a slope.
 - **Into the ground**: a room cuts the ground away where it stands, no deeper than its own height (D131, Leaning). Trees and rocks must be cleared first (D131, Leaning); small plants clear themselves.
 - **Up and down**: anything placed can be raised and lowered (asked for), on the grid in half-metre steps. What must stand on something says so: a chair on a floor, a station on the ground.
 - **What may not overlap**: an item may not go into another item or a wall (built); a room may not go over a placed thing, such as the claim stone (not yet checked).
@@ -146,7 +171,7 @@ The baseline catalogue. Everything is an entry in a list (D56), drawn by what it
 
 ## Stability
 
-Open. Rust, Valheim and Sons of the Forest make structures hold themselves up; Enshrouded and Subnautica do not; Ark does but hides its rules, which players complain about. I recommend none for the MVP. If it comes, it is shown only while building, as Valheim's colours, and a part that holds others up cannot be taken out from under them.
+None in the MVP, and wanted later (D142). Rust, Valheim and Sons of the Forest make structures hold themselves up; Enshrouded and Subnautica do not; Ark does but hides its rules, which players complain about. When it comes: shown only while building, as Valheim's colours; a part that holds others up cannot be taken out from under them, as Sons of the Forest's; and constructing in order (floor, walls, roof) already reads as physical without it.
 
 ## Enshrouded as the base?
 
@@ -204,7 +229,7 @@ Underneath, the base stays a set of tiles, the walls and openings on them, and t
 
 ## The gap
 
-What is built, against all of the above: see [The baseline](#the-baseline). In short, the parts and placing are there; missing are height, undo, plans, carried materials, building upward, doors that work, defences, repair, materials, permissions, and the voxel blocks themselves.
+What is built, against all of the above: see [The baseline](#the-baseline). In short, the parts and placing are there; missing are height, undo, plans and constructing part by part, big carried materials, building up and down, doors that work, defences, repair, materials, permissions, and the voxel blocks themselves.
 
 ## The grid
 
@@ -230,32 +255,36 @@ D108: everything built in the world, by anyone, is made of the same parts as wha
 
 For the developers to reorder. Each step is small enough to play and judge.
 
-1. **Placing, finished**: raise and lower, undo, the room-over-a-placed-thing check, what blocks a ghost shown through walls, and the controls above.
-2. **Upward**: a storey on a room, stairs and ladders, rooms a storey down.
-3. **Doors and defences**: doors that open and lock by the claim; fences, walls and gates drawn as a line.
-4. **Plans**: free ghosts filled as materials go in, from the pack or storage in the claim.
-5. **Carried materials**, if the developers want them: logs on the shoulder, piles, a sled.
+1. **Placing, finished**: raise and lower, undo, the room-over-a-placed-thing check, what blocks a ghost shown through walls, and the controls above. These hold whatever comes after.
+2. **Plans, then constructing** (D139): rooms and walls laid as plans, built part by part from the pack and from storage in the claim (D141); doors and windows carved out and fitted.
+3. **Large materials** (D140): logs that lie where trees fall, carried on the shoulder; a log pile to keep them, later unlocked.
+4. **Downward and upward**: rooms underground (D143), a storey up, stairs and ladders.
+5. **Doors and defences**: doors that open and lock by the claim; fences, walls and gates drawn as a line.
 6. **Damage and repair**, with the first attacks on a base (D90).
-7. **Materials**, and changing them in place.
-8. **Voxel blocks and brushes** (D48), with shaped rooms written as blocks: the engine track, with its own technical design.
+7. **Materials**, and changing them in place; better transport, unlocked (D140).
+8. **Voxel blocks and brushes** (D48), with plans and parts written as blocks: the engine track, with its own technical design.
+9. **Stability**, after the MVP (D142).
 
 ## Open questions
 
 For the developers. Each has my recommendation.
 
-1. **Plans**: does placing something you cannot afford make a plan that fills as materials go in, or are plans a mode of their own? Recommend a mode (hold Shift), so a red ghost still means "you cannot".
-2. **Carried materials**: should logs and other big materials be carried by hand, as The Forest's, rather than packed? Recommend yes for logs and large stone, with storage in the claim paying for building so each log is carried once.
-3. **Building from storage**: within a claim, does building draw on storage nearby? Recommend yes.
-4. **Stability**: none, or shown only while building? Recommend none for the MVP.
-5. **Taking apart**: always a full refund, or only for a while after building? Recommend always, as now; Rust's window exists because of raiding, which we do not have (D2).
-6. **Rooms a storey down**, for slopes and cellars? Recommend yes.
-7. **What gets rounded**: the upright corners of walls only, or the roof's edge and the foot of the wall too?
-8. **What is a material a property of**: a whole room, a wall, or a tile?
-9. **What "capable of building" means** (D68): blueprints found, things scanned, a research tree, skill?
-10. **Do bases have needs**, as Subnautica's: power, light, warmth?
-11. **Who may change what** in co-op? Recommend the claim's owner and whom they allow (D94).
-12. **Claims**: how many per player, what keeps one alive, how fast the world heals outside them?
-13. **Upkeep**: does a base decay if left? Recommend only an abandoned claim, slowly, never one in use.
+Answered on 2026-10-12: structures are planned, then constructed (D139); big materials are carried, with better transport later (D140); building draws on storage, with special storage for big materials later (D141); no stability in the MVP, but later (D142); rooms can be underground (D143).
+
+1. **What is a part?** Proposed above: floor squares and wall panels of 1.5 metres, roof squares. Smaller is more work and more realistic; Sons of the Forest goes down to a single log. Recommend 1.5 metres to start.
+2. **Must parts go up in order**, floor, then walls, then roof? Recommend yes.
+3. **Are stations constructed too**, being large, or placed whole like furniture? Recommend placed whole for now.
+4. **Cutting an opening in a finished wall**: with which tool, and does it give back what was cut? Recommend the axe for wood, the pickaxe for stone, giving it back.
+5. **Which materials are big**, and how many does a player carry? Recommend logs and cut stone; one comfortably, two at a walk.
+6. **Is a log cut into beams or planks first**, by the axe or at a station? Recommend at a sawbench, so a wall panel takes planks and a post takes a log.
+7. **Taking apart**: always a full refund? Recommend yes, as now; Rust's window exists because of raiding, which we do not have (D2).
+8. **What gets rounded**: the upright corners of walls only, or the roof's edge and the foot of the wall too?
+9. **What is a material a property of**: a whole room, a wall panel, or a block?
+10. **What "capable of building" means** (D68): blueprints found, things scanned, a research tree, skill?
+11. **Do bases have needs**, as Subnautica's: power, light, warmth?
+12. **Who may change what** in co-op? Recommend the claim's owner and whom they allow (D94).
+13. **Claims**: how many per player, what keeps one alive, how fast the world heals outside them?
+14. **Upkeep**: does a base decay if left? Recommend only an abandoned claim, slowly, never one in use.
 
 ## What is built
 
