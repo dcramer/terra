@@ -35,7 +35,9 @@ LIMITS = {
     "through_share": 0.02,   # share of the watched skin allowed through, in any frame
 }
 
-body_path, items = look.args()[0], look.args()[1:]
+body_path, items = look.args()[0], [a for a in look.args()[1:] if a != "--explain"]
+# With --explain, say where the first few points of skin found through a piece at rest are.
+explain = "--explain" in look.args()
 body_name = os.path.splitext(os.path.basename(body_path))[0]
 
 look.reset()
@@ -51,6 +53,8 @@ for pb in arm.pose.bones:
 ad = arm.animation_data or arm.animation_data_create()
 for track in list(ad.nla_tracks):
     ad.nla_tracks.remove(track)
+# The importer leaves an animation active, which would pose the body for the first look.
+ad.action = None
 bpy.context.view_layer.update()
 
 
@@ -77,13 +81,23 @@ def tree(ob):
     return BVHTree.FromPolygons(verts, faces)
 
 
+body_faces = [tuple(p.vertices) for p in body.data.polygons]
+
+
 def through(pts, nrm, bvh, which):
-    """Which of `which` have the look's surface just beneath them, before any above."""
+    """Which of `which` have the look's surface just beneath them, inside the body: an inward
+    ray meets the look before any look above, and before it leaves the body again (through an
+    ear, it would meet a cap above the ear, which is not skin through the cap)."""
+    flesh = BVHTree.FromPolygons(pts, body_faces)
     out = []
     for i in which:
-        below = bvh.ray_cast(pts[i] - nrm[i] * 0.001, -nrm[i], LIMITS["depth_m"])
+        start = pts[i] - nrm[i] * 0.001
+        below = bvh.ray_cast(start, -nrm[i], LIMITS["depth_m"])
         above = bvh.ray_cast(pts[i] + nrm[i] * 0.001, nrm[i], LIMITS["depth_m"])
-        out.append(below[0] is not None and (above[0] is None or below[3] < above[3]))
+        leaves = flesh.ray_cast(start - nrm[i] * 0.001, -nrm[i], LIMITS["depth_m"])
+        out.append(below[0] is not None
+                   and (above[0] is None or below[3] < above[3])
+                   and (leaves[0] is None or below[3] < leaves[3]))
     return np.array(out)
 
 
@@ -127,6 +141,18 @@ for item in items:
     watch = [i for i in range(len(pts)) if patch_of.get(i) not in covers
              and bvh.find_nearest(pts[i], LIMITS["near_m"])[0] is not None]
     at_rest = float(np.mean(through(pts, nrm, bvh, watch))) if watch else 0.0
+    if explain:
+        lo = [min(c) for c in zip(*[piece.matrix_world @ v.co for v in piece.data.vertices])]
+        hi = [max(c) for c in zip(*[piece.matrix_world @ v.co for v in piece.data.vertices])]
+        print("PLACED", item, "on", socket, "at", tuple(round(c, 3) for c in (sockets[socket].matrix_world.translation if socket else (0, 0, 0))),
+              "spans", tuple(round(c, 2) for c in lo), "to", tuple(round(c, 2) for c in hi),
+              "body top", round(max(p.z for p in pts), 3))
+    if explain and watch:
+        hits = through(pts, nrm, bvh, watch)
+        for i in np.array(watch)[hits][:12]:
+            below = bvh.ray_cast(pts[i] - nrm[i] * 0.001, -nrm[i], LIMITS["depth_m"])
+            print("THROUGH", item, bone_of[i], "at", tuple(round(c, 3) for c in pts[i]), "normal", tuple(round(c, 2) for c in nrm[i]),
+                  "piece beneath by", round(below[3], 4), "its face points", tuple(round(c, 2) for c in below[1]))
     report = {"item": item, "body": body_name, "watched": len(watch), "at_rest": round(at_rest, 3), "clips": {}}
     ok = at_rest <= LIMITS["through_share"]
     for name in CLIPS:

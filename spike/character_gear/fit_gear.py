@@ -27,6 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
 sys.path.insert(0, HERE)
 
+import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
@@ -136,15 +137,26 @@ def push_out(ob, offset):
 
 
 def fit_back(ob, height):
-    """On the upper back, the pack's own back panel just off the skin. Tripo models its
+    """On the back, as a pack is worn: its top level with the top of the shoulders, which this
+    body measures for itself, and its own back panel just off the skin. Tripo models its
     shoulder straps as stiff loops standing out from that panel, so the panel is found from
     where most of the pack is, and the straps are laid onto the back and shoulders."""
     scale_to(ob, height)
     at = sockets["socket.back"].matrix_world.translation
+    shoulders = max(p.z for p in region({"DEF-shoulder.L", "DEF-shoulder.R"}))
     lo, hi = box(points(ob))
     middle = sorted(p.y for p in points(ob) if abs(p.x - (lo.x + hi.x) / 2) < (hi.x - lo.x) * 0.3)
     panel = middle[len(middle) * 3 // 10]
-    move(ob, Matrix.Translation(Vector((-(lo.x + hi.x) / 2, at.y + 0.02 - panel, at.z - 0.06 - (lo.z + hi.z) / 2))))
+    move(ob, Matrix.Translation(Vector((-(lo.x + hi.x) / 2, at.y + 0.02 - panel, shoulders - hi.z))))
+    # The straps' faces are large; refine them so, laid on the skin, they follow the shoulder
+    # rather than cut across its curve.
+    near = {v.index for v in ob.data.vertices if (ob.matrix_world @ v.co).y < at.y + 0.015}
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    edges = [e for e in bm.edges if all(v.index in near for v in e.verts)]
+    bmesh.ops.subdivide_edges(bm, edges=edges, cuts=2, use_grid_fill=True)
+    bm.to_mesh(ob.data)
+    bm.free()
     straps = ob.vertex_groups.new(name="Straps")
     straps.add([v.index for v in ob.data.vertices if (ob.matrix_world @ v.co).y < at.y + 0.015], 1.0, "REPLACE")
     lay = ob.modifiers.new("Straps", "SHRINKWRAP")
@@ -156,11 +168,51 @@ def fit_back(ob, height):
     apply(ob, lay)
     ob.vertex_groups.remove(ob.vertex_groups["Straps"])
     push_out(ob, 0.01)
-    return "socket.back"
+    # The pack rides the upper back; what lies on the skin (its straps, its panel) bends with
+    # the skin under it, as straps do, so the shoulders move under them without coming through.
+    skin_weights(ob, near=0.03, rest="DEF-spine.003")
+    return None
+
+
+def skin_weights(ob, near, rest):
+    """Binds a piece to the skeleton: vertices within `near` of the skin take the body's
+    weights there, fading to the bone `rest` alone further out."""
+    from mathutils.bvhtree import BVHTree
+    for g in body.vertex_groups:
+        ob.vertex_groups.new(name=g.name)
+    dt = ob.modifiers.new("Weights", "DATA_TRANSFER")
+    dt.object = body
+    dt.use_vert_data = True
+    dt.data_types_verts = {"VGROUP_WEIGHTS"}
+    dt.vert_mapping = "POLYINTERP_NEAREST"
+    dt.layers_vgroup_select_src = "ALL"
+    dt.layers_vgroup_select_dst = "NAME"
+    apply(ob, dt)
+    skin = BVHTree.FromObject(body, bpy.context.evaluated_depsgraph_get())
+    rider = ob.vertex_groups[rest]
+    for v in ob.data.vertices:
+        p = body.matrix_world.inverted() @ (ob.matrix_world @ v.co)
+        hit = skin.find_nearest(p)
+        d = (p - hit[0]).length if hit[0] is not None else near * 3
+        keep = max(0.0, min(1.0, 1.0 - (d - near) / near))
+        for g in v.groups:
+            g.weight *= keep
+        rider.add([v.index], 1.0 - keep, "ADD")
+    select(ob)
+    bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
+    bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
+    bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    ob.parent = arm
+    ob.matrix_parent_inverse = arm.matrix_world.inverted()
+    ob.modifiers.new("Armature", "ARMATURE").object = arm
 
 
 def fit_head(ob):
-    """Over the top of the head, a little wider than the skull."""
+    """Over the top of the head, a little wider than the crown. A rigid cap cuts into the head
+    above the ears, where the head is wider than the crown (gear_check.py); sizing it to its
+    rim instead made that worse. A cap should be made on the head as clothing is
+    (shell_garment.py), which is not done yet."""
     head = region({"DEF-head"})
     top = max(p.z for p in head)
     crown = [p for p in head if p.z > top - 0.09]
@@ -171,17 +223,22 @@ def fit_head(ob):
     g_lo, g_hi = box(points(ob))
     centre = (lo + hi) / 2
     move(ob, Matrix.Translation(Vector((centre.x - (g_lo.x + g_hi.x) / 2, centre.y - (g_lo.y + g_hi.y) / 2, top + 0.012 - g_hi.z))))
-    push_out(ob, 0.006)
+    push_out(ob, 0.012)
     return "socket.head"
 
 
 def fit_belt(ob, height):
-    """Hanging at the right hip, its top tipped back a little, its inner side on the skin."""
+    """Hanging from the belt behind the right hip, clear of the hand as the arm swings: its
+    side against the back of the hip, its top tipped back a little, its mouth at the belt."""
     scale_to(ob, height)
-    move(ob, Matrix.Rotation(math.radians(-15), 4, "X"))
+    move(ob, Matrix.Rotation(math.radians(-20), 4, "X"))
     at = sockets["socket.belt.R"].matrix_world.translation
+    across = at.x * 0.55
+    waist = [p for p in region({"DEF-hips", "DEF-spine.001", "DEF-thigh.R"})
+             if abs(p.z - at.z) < 0.06 and abs(p.x - across) < 0.05]
+    back = max(p.y for p in waist)
     lo, hi = box(points(ob))
-    move(ob, Matrix.Translation(Vector((at.x - 0.01 - hi.x, at.y + 0.05 - (lo.y + hi.y) / 2, at.z - 0.42 - lo.z))))
+    move(ob, Matrix.Translation(Vector((across - (lo.x + hi.x) / 2, back + 0.005 - lo.y, at.z - 0.45 * (hi.z - lo.z) - lo.z))))
     push_out(ob, 0.01)
     return "socket.belt.R"
 

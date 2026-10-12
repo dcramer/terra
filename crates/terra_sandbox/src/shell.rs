@@ -42,6 +42,8 @@ usage: terra_sandbox [options]
   --remote-port <port>  listen on this port instead, so several runs can be driven apart
   --steady              advance the game a sixtieth of a second every frame, however
                         fast frames are drawn, as scripted runs do
+  --remote-token <text> what this run answers sandbox.whoami with, so a script knows it is
+                        talking to the run it started
   --settle <frames>     frames to run before capturing or measuring (default 120)
   --model <path>        in the workbench: a model to load, under assets/; repeatable,
                         to stand several side by side
@@ -107,6 +109,7 @@ pub struct Options {
     pub remote_port: u16,
     /// Advance the game by a fixed step every frame, as scripted runs do.
     pub steady: bool,
+    pub remote_token: String,
     /// No readout on screen.
     pub clean: bool,
     /// No sound, and sound under WSL, where it is off unless asked for.
@@ -167,6 +170,7 @@ impl Options {
             remote: false,
             remote_port: 15702,
             steady: false,
+            remote_token: String::new(),
             clean: false,
             mute: false,
             sound: false,
@@ -196,6 +200,7 @@ impl Options {
                 "--list" => options.list = true,
                 "--bench" => options.bench = true,
                 "--remote" => options.remote = true,
+                "--remote-token" => options.remote_token = value("--remote-token")?,
                 "--remote-port" => {
                     options.remote = true;
                     options.remote_port = value("--remote-port")?

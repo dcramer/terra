@@ -56,7 +56,16 @@ An item that fails a check isn't used until it passes.
 
 ## Against what we have, 2026-10-12
 
-Built: the bodies, their skeleton with twist bones, sockets, held looks, tints, one look per item per body, and a body that hides its skin under what it wears, by 256 patches its shader collapses (`patches.py`, `body_mask.wgsl`). The leather jerkin is made on each body (`shell_garment.py`), from that body's own surface with its own weights, and bakes its look from a dressed model; on both bodies, skin comes through it in under 2.5% of the watched skin in everyday clips, and up to about 5% in a crouch or roll, at the armholes and the hem (`gear_check.py`). The pack, cap and quiver are still models fitted at their sockets with numbers per item; their socket rules, and pieces that hang loose (a coat's skirt, a cloak), are not built.
+Built: the bodies, their skeleton with twist bones, sockets, held looks, tints, one look per item per body, and a body that hides its skin under what it wears, by 256 patches its shader collapses (`patches.py`, `body_mask.wgsl`). Every piece is checked on every body through our clips (`gear_check.py`, the share of nearby skin that comes through it):
+
+| Piece | How it is made | Male | Female |
+|---|---|---|---|
+| Leather jerkin | On each body (`shell_garment.py`) | at most 1% in any clip | at most 1.1% |
+| Quiver | At the belt socket, behind the hip | 0% | 0% |
+| Packs | At the back, top at the shoulders, straps bending with the skin | about 5%, at the shoulders under the straps | about 6-8% |
+| Leather cap | At the head socket | 7%, above the ears | 8% |
+
+The jerkin and quiver pass. The pack's straps and the cap still clip: both are generated objects fitted by rules, and the fix is the jerkin's, made on the body: the cap from the head's own surface, the straps from the shoulders', with the pack's bag kept rigid. Not built yet, nor pieces that hang loose (a coat's skirt, a cloak).
 
 ## Settled by the developers, 2026-10-12
 

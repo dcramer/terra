@@ -10,11 +10,14 @@ import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 const ROOT = resolve(import.meta.dirname, "../..");
-// The sandbox this checkout started listens on its own port, kept here, so commands never
-// reach a sandbox another session is driving. TERRA_REMOTE_PORT overrides it.
+// The sandbox this checkout started listens on a port of its own and answers sandbox.whoami
+// with a token of its own, both kept here, so commands never reach a sandbox another session
+// is driving, even one that takes the same port. TERRA_REMOTE_PORT overrides the port.
 const PORT_FILE = resolve(ROOT, "shots/remote.port");
 const FIRST_PORT = 15702;
-let port = Number(process.env.TERRA_REMOTE_PORT) || (existsSync(PORT_FILE) ? Number(readFileSync(PORT_FILE, "utf8")) : FIRST_PORT);
+const saved = existsSync(PORT_FILE) ? readFileSync(PORT_FILE, "utf8").trim().split(" ") : [];
+let port = Number(process.env.TERRA_REMOTE_PORT) || Number(saved[0]) || FIRST_PORT;
+let token = process.env.TERRA_REMOTE_PORT ? undefined : saved[1];
 const url = () => `http://127.0.0.1:${port}`;
 const onWsl = (() => {
   try {
@@ -31,7 +34,19 @@ type Reply = { result?: unknown; error?: { code: number; message: string } };
 // directly; whichever answers is the one used.
 let through: "direct" | "windows" | undefined;
 
+// Whether the sandbox answering is the one this checkout started.
+async function ours(): Promise<boolean> {
+  if (!token) return true;
+  const answer = (await raw("sandbox.whoami")) as { token?: string } | undefined;
+  return answer?.token === token;
+}
+
 async function call(method: string, params?: unknown): Promise<unknown> {
+  if (!(await ours())) throw new Error(`the sandbox on port ${port} is not the one this checkout started; start one with \`start\``);
+  return raw(method, params);
+}
+
+async function raw(method: string, params?: unknown): Promise<unknown> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
   const reply = await send(body);
   if (reply.error) throw new Error(`${method}: ${reply.error.message}`);
@@ -119,19 +134,22 @@ const COMMANDS: Record<string, Command> = {
     help: "start a sandbox listening, in the background, and wait until it answers; its log goes to shots/remote.log. The game moves a sixtieth of a second a frame, however fast frames are drawn, unless --real-time",
     options: { windows: { type: "boolean", help: "on Windows' GPU (cargo xtask win), from WSL" }, "real-time": { type: "boolean", help: "let the game's clock follow the real one" } },
     run: async ({ values, positionals }) => {
-      // A port nothing answers on: another session's sandbox may be on the first.
-      for (port = FIRST_PORT; port < FIRST_PORT + 50; port++) {
+      // A random port nothing answers on, well away from the usual one other runs use, and a
+      // token to know this run by.
+      for (let tries = 0; tries < 20; tries++) {
+        port = 20000 + Math.floor(Math.random() * 40000);
         through = undefined;
         try {
-          await call("rpc.discover");
+          await raw("rpc.discover");
         } catch {
           break;
         }
       }
       through = undefined;
+      token = Math.random().toString(36).slice(2);
       mkdirSync(dirname(PORT_FILE), { recursive: true });
-      writeFileSync(PORT_FILE, String(port));
-      const args = ["--remote-port", String(port), ...(values["real-time"] ? [] : ["--steady"]), ...positionals];
+      writeFileSync(PORT_FILE, `${port} ${token}`);
+      const args = ["--remote-port", String(port), "--remote-token", token, ...(values["real-time"] ? [] : ["--steady"]), ...positionals];
       writeMark(0);
       const command = values.windows
         ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", "--copy", `remote-${port}`, "--", ...args]]
@@ -140,13 +158,16 @@ const COMMANDS: Record<string, Command> = {
       const log = openSync(resolve(ROOT, "shots/remote.log"), "w");
       spawn(command[0] as string, command[1] as string[], { cwd: ROOT, detached: true, stdio: ["ignore", log, log] }).unref();
       for (let i = 0; i < 600; i++) {
+        let mine: boolean;
         try {
-          await call("rpc.discover");
-          console.log(`ready on port ${port}`);
-          return;
+          mine = await ours();
         } catch {
           await sleep(1000);
+          continue;
         }
+        if (!mine) throw new Error(`another sandbox answered on port ${port}; run start again`);
+        console.log(`ready on port ${port}`);
+        return;
       }
       throw new Error("the sandbox did not answer within ten minutes; see shots/remote.log");
     },

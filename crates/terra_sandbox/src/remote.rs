@@ -21,6 +21,8 @@
 //!   numbered `since`, only lines containing some text if asked (`record`).
 //! - `sandbox.shot {path}`: saves a screenshot; the reply comes before the file does.
 //! - `sandbox.quit`: closes the sandbox.
+//! - `sandbox.whoami`: the token it was started with (`--remote-token`), so a script can
+//!   tell the run it started from another session's on the same port.
 //!
 //! An experiment adds its own methods with [`method`].
 
@@ -70,6 +72,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.said", said);
     method(app, "sandbox.shot", shot);
     method(app, "sandbox.quit", quit);
+    method(app, "sandbox.whoami", whoami);
     info!("remote: listening on localhost:{port}");
 }
 
@@ -445,4 +448,8 @@ fn shot(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 fn quit(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
     world.write_message(AppExit::Success);
     Ok(json!("closing"))
+}
+
+fn whoami(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
+    Ok(json!({ "token": world.resource::<Options>().remote_token }))
 }
