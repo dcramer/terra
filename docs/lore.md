@@ -139,7 +139,7 @@ From the developers, 2026-10-12: **no single long threat.** What threatens a rea
   - A few lieutenants recur across realms, so they become people you know.
 - **What they are not:** a fixed story. They are a faction like any other (D95), with places, aims and standing, run by the same systems, and what you do to them sticks.
 
-**The first is the Opened** (chosen by the developers, 2026-10-12). **And there may be more than one** (2026-10-12): organisations are generated (below), with the Opened as the hand-made anchor.
+**All of them are generated from a set of parts** (2026-10-12), and there may be many. **The Opened are the worked example** the parts are built from and checked against: what the generator should be able to make (chosen by the developers, 2026-10-12).
 
 **Name and creed: the three that were proposed.** The developers asked for inspiration from the books (2026-10-12). The books have cults that serve something vast beyond the world, working rituals that set off monster surges and weaken the world for it. Taking that pattern, never its names or story:
 
@@ -156,7 +156,7 @@ From the developers, 2026-10-12: **no single long threat.** What threatens a rea
 
 Its members could also be the only people who carry essences that harm innocents, as the books ban some.
 
-**More organisations, generated.** The Opened are written by hand. Others are made by the generator from the same parts, so a realm or a stretch of realms can have its own:
+**How organisations are generated.** Every organisation is made from these parts, so a realm or a stretch of realms can have its own. The Opened are one result of them: a patron beyond the world; waking pools and feeding surges; many realms; an order with ranks.
 
 | Part | Choices |
 |---|---|
@@ -173,5 +173,5 @@ Its members could also be the only people who carry essences that harm innocents
 ## Open: for the developers
 
 1. Answered: **gods** exist, realm-bound, kept simple for now (D156). **Beings of the astral** are in the lore only (D157). **Coming back from death** is the hearth (D171). **The long threat** varies by realm, with a dangerous organisation across them (D172).
-2. Answered: **the Opened** are the first organisation, and there may be more, generated (D172).
+2. Answered: organisations are **all generated from parts**, and **the Opened** are the example they are built from (D172).
 3. **Names.** Our own words, plain English: [naming.md](naming.md) (D158).
