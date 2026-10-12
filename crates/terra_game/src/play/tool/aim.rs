@@ -271,81 +271,100 @@ pub(super) fn aim(
                 }
             }
             Kind::Room(_) => {
-                // On open ground, or across a room already there, which it then extends.
+                // Across a room already there, which it then extends; else on the level of
+                // the storey chosen, not on the bumps of the ground, so it does not jump as
+                // the view crosses grass and stones; and out of reach, it waits at the
+                // edge of reach along the view (D144).
                 let on_base = hull
                     .filter(|hit| ground.is_none_or(|ground| hit.distance < ground.distance))
-                    .map(|hit| site.frame.transform_point(met(hit.distance).with_y(0.0)));
-                on_base
-                    .or(ground.map(|ground| ground.point))
-                    .filter(|point| within(*point, STRUCTURE_REACH_M))
-                    .zip(builder.room(&builds))
-                    .map_or(Target::Nothing, |(point, size)| {
-                        // Centred on the place aimed at.
-                        let local = to_base.transform_point3(point);
-                        // On the storey chosen: the base's floor, or above or below it (D143).
-                        let corner = IVec3::new(
-                            (local.x / CELL_M - size.x as f32 * 0.5).round() as i32,
-                            builder.storey,
-                            (local.z / CELL_M - size.y as f32 * 0.5).round() as i32,
-                        );
-                        let floor_m = builder.storey as f32 * STOREY_M;
-                        // Set into the ground, a room cuts the ground away where it stands,
-                        // but on the base's floor or above, not deeper than its own height.
-                        // Below the floor it is a cellar, wholly underground. Checked every
-                        // metre or so.
-                        let every = cells(1.0).max(1) as usize;
-                        let fits = builder.storey < 0
-                            || (0..=size.x).step_by(every).chain([size.x]).all(|i| {
-                                (0..=size.y).step_by(every).chain([size.y]).all(|j| {
-                                    let at =
-                                        (corner.with_y(0) + IVec3::new(i, 0, j)).as_vec3() * CELL_M;
-                                    let at_roof = at + Vec3::Y * (floor_m + STOREY_M);
-                                    planet.distance(site.frame.transform_point(at_roof)) > 0.02
-                                })
-                            });
-                        // Trees and rocks are cleared by the player first, not by the room.
-                        let low = corner.with_y(0).as_vec3() * CELL_M;
-                        let high =
-                            (corner.with_y(0) + IVec3::new(size.x, 0, size.y)).as_vec3() * CELL_M;
-                        let middle = site.frame.transform_point((low + high) * 0.5);
-                        let reach = (high - low).length() * 0.5 + STOREY_M * 2.0;
-                        let clear = !obstacles.near(middle, reach).any(|(at, radius)| {
-                            let local = to_base.transform_point3(at);
-                            let nearest = local.with_y(0.0).clamp(low, high);
-                            nearest.distance(local.with_y(0.0)) < radius
-                                && local.y > -STOREY_M
-                                && local.y < STOREY_M * 2.0
-                        });
-                        // Nor is anything set down outdoors where it would stand, such as the
-                        // claim stone: it is moved or taken apart first.
-                        let footprint = Standing {
-                            at: (low + high) * 0.5,
-                            lift: -100.0,
-                            turn: 0.0,
-                            half: ((high - low) * 0.5).with_y(200.0),
-                            indoors: false,
-                        };
-                        let item = props
-                            .iter()
-                            .filter(|(_, prop, _, visibility)| {
-                                **visibility != Visibility::Hidden
-                                    && !prop.indoors
-                                    && prop.is_solid()
-                            })
-                            .find(|(_, prop, ..)| footprint.overlaps(&Standing::of(prop)))
-                            .map(|(entity, ..)| entity);
-                        let adds = (0..size.x).any(|i| {
-                            (0..size.y).any(|j| !site.base.contains(corner + IVec3::new(i, 0, j)))
-                        });
-                        Target::Ground {
-                            corner,
-                            tiles: size,
-                            fits,
-                            adds,
-                            clear,
-                            item,
+                    .map(|hit| met(hit.distance).with_y(0.0));
+                let floor_m = builder.storey as f32 * STOREY_M;
+                let feet = to_base.transform_point3(player.translation);
+                let on_level = || {
+                    let flat = local_direction.with_y(0.0).normalize_or_zero();
+                    let reached = if local_direction.y < -0.01 {
+                        let along = (floor_m - local_origin.y) / local_direction.y;
+                        local_origin + local_direction * along
+                    } else {
+                        feet + flat * STRUCTURE_REACH_M
+                    };
+                    let out = (reached - feet).with_y(0.0);
+                    feet.with_y(0.0) + out.clamp_length_max(STRUCTURE_REACH_M - 1.0)
+                };
+                let aimed = on_base.unwrap_or_else(on_level);
+                builder.room(&builds).map_or(Target::Nothing, |size| {
+                    // Centred on the place aimed at, sticking to where it last snapped
+                    // until the aim has moved well off it.
+                    let raw = Vec2::new(
+                        aimed.x / CELL_M - size.x as f32 * 0.5,
+                        aimed.z / CELL_M - size.y as f32 * 0.5,
+                    );
+                    let snapped = match builder.held_corner {
+                        Some(held)
+                            if (raw - held.as_vec2()).abs().max_element() < ROOM_STICK_CELLS =>
+                        {
+                            held
                         }
-                    })
+                        _ => raw.round().as_ivec2(),
+                    };
+                    builder.held_corner = Some(snapped);
+                    // On the storey chosen: the base's floor, or above or below it (D143).
+                    let corner = IVec3::new(snapped.x, builder.storey, snapped.y);
+                    // Set into the ground, a room cuts the ground away where it stands,
+                    // but on the base's floor or above, not deeper than its own height.
+                    // Below the floor it is a cellar, wholly underground. Checked every
+                    // metre or so.
+                    let every = cells(1.0).max(1) as usize;
+                    let fits = builder.storey < 0
+                        || (0..=size.x).step_by(every).chain([size.x]).all(|i| {
+                            (0..=size.y).step_by(every).chain([size.y]).all(|j| {
+                                let at =
+                                    (corner.with_y(0) + IVec3::new(i, 0, j)).as_vec3() * CELL_M;
+                                let at_roof = at + Vec3::Y * (floor_m + STOREY_M);
+                                planet.distance(site.frame.transform_point(at_roof)) > 0.02
+                            })
+                        });
+                    // Trees and rocks are cleared by the player first, not by the room.
+                    let low = corner.with_y(0).as_vec3() * CELL_M;
+                    let high =
+                        (corner.with_y(0) + IVec3::new(size.x, 0, size.y)).as_vec3() * CELL_M;
+                    let middle = site.frame.transform_point((low + high) * 0.5);
+                    let reach = (high - low).length() * 0.5 + STOREY_M * 2.0;
+                    let clear = !obstacles.near(middle, reach).any(|(at, radius)| {
+                        let local = to_base.transform_point3(at);
+                        let nearest = local.with_y(0.0).clamp(low, high);
+                        nearest.distance(local.with_y(0.0)) < radius
+                            && local.y > -STOREY_M
+                            && local.y < STOREY_M * 2.0
+                    });
+                    // Nor is anything set down outdoors where it would stand, such as the
+                    // claim stone: it is moved or taken apart first.
+                    let footprint = Standing {
+                        at: (low + high) * 0.5,
+                        lift: -100.0,
+                        turn: 0.0,
+                        half: ((high - low) * 0.5).with_y(200.0),
+                        indoors: false,
+                    };
+                    let item = props
+                        .iter()
+                        .filter(|(_, prop, _, visibility)| {
+                            **visibility != Visibility::Hidden && !prop.indoors && prop.is_solid()
+                        })
+                        .find(|(_, prop, ..)| footprint.overlaps(&Standing::of(prop)))
+                        .map(|(entity, ..)| entity);
+                    let adds = (0..size.x).any(|i| {
+                        (0..size.y).any(|j| !site.base.contains(corner + IVec3::new(i, 0, j)))
+                    });
+                    Target::Ground {
+                        corner,
+                        tiles: size,
+                        fits,
+                        adds,
+                        clear,
+                        item,
+                    }
+                })
             }
             Kind::Items(_) => spot(),
             Kind::Move if builder.is_carrying() => spot(),

@@ -67,6 +67,8 @@ const GRID_M: f32 = 0.5;
 /// How far one notch of the wheel turns an item, on the grid and off it, in degrees.
 const GRID_TURN: f32 = 45.0;
 const FREE_TURN: f32 = 15.0;
+/// How far, in cells, the aim must move from where a room snapped before it moves on.
+const ROOM_STICK_CELLS: f32 = 0.8;
 /// How long after building or taking something apart it can be undone, in seconds.
 const UNDO_S: f32 = 60.0;
 /// How far one notch raises or lowers an item off the grid; on it, a grid step.
@@ -196,6 +198,9 @@ pub struct Builder {
     /// How many storeys above the base's floor the next room is, below it if negative
     /// (D143).
     storey: i32,
+    /// The corner the room in hand last snapped to, east and south in cells, which it
+    /// keeps until the aim has moved well off it, so it never flickers between two.
+    held_corner: Option<IVec2>,
     /// Whether the next room is turned a quarter circle.
     room_turned: bool,
     /// Whether the next interior wall runs north and south instead of east and west.
@@ -243,6 +248,7 @@ impl Default for Builder {
             turn: 0.0,
             raise: 0.0,
             storey: 0,
+            held_corner: None,
             room_turned: false,
             wall_turned: false,
             run: Vec::new(),

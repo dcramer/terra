@@ -159,10 +159,10 @@ Right mouse is our build menu, as Subnautica's (D67), where Enshrouded's right m
 What makes placing feel good is mostly that the ghost goes where you meant without a fight. Proposed:
 
 1. **What it snaps to, in order.** First the joins of what is already built or planned, within reach of the aim: the end of a wall, the edge of a floor or room, a frame in a wall, a socket on a fixed buildable. Then the base's grid (D57). Then, for items, the surface under the aim: floor, ground, a table's top, a wall. With the grid off, or Alt held, only surfaces.
-2. **It sticks.** Once snapped, the ghost stays put until the aim has moved well off that spot, so it never flickers between two places. Moving on to the next spot along a wall is a short, clean step.
+2. **It sticks.** Once snapped, the ghost stays put until the aim has moved well off that spot, so it never flickers between two places. Moving on to the next spot along a wall is a short, clean step. (Built for rooms.)
 3. **It glides.** The ghost slides to each new place in a few hundredths of a second instead of jumping, but the outline of where it will land is always exactly where it will land.
-4. **Structures aim on a level.** A room or wall is aimed on the base's floor at the height chosen, not on the bumps of the ground under the aim, so it does not jump as the view crosses grass and stones. Items aim at what is under the view.
-5. **Out of reach, it waits.** Aimed beyond reach, the ghost stays at the edge of reach along the aim, dimmed, instead of vanishing.
+4. **Structures aim on a level.** A room or wall is aimed on the base's floor at the height chosen, not on the bumps of the ground under the aim, so it does not jump as the view crosses grass and stones. Items aim at what is under the view. (Built for rooms.)
+5. **Out of reach, it waits.** Aimed beyond reach, the ghost stays at the edge of reach along the aim, dimmed, instead of vanishing. (Built for rooms, not yet dimmed.)
 6. **It faces sensibly.** A wall, door or window faces the player; an item faces back toward them the first time, and remembers its turn after.
 7. **It shows what it is doing.** The grid shows only around the ghost, fading out a few metres off. The join it snapped to lights up. Lines appear when it lines up with an edge already built. A small arrow marks its front. Off the floor, a line drops to what is under it and the height is shown.
 8. **It says no plainly.** Red, one line saying why, and what is in the way outlined, behind walls too. Blue otherwise, with its cost and what is in reach.
