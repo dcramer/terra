@@ -43,7 +43,7 @@ Every command that makes or changes a model prints one line of JSON with the `pr
 | `segment PROJECT` | Splits the model into parts | 40 |
 | `fill PROJECT [--ai]` | Closes the holes segmenting leaves, or rebuilds hidden parts | free |
 | `uv PROJECT` | Unwraps the UVs again (Smart UV) | 20 (free during a trial) |
-| `rig PROJECT [--skeleton …]` | Auto-rig, with fingers. `mixamo` (default, 65 joints), `actorcore`, `unreal`, `unity` and `vrm` name the bones for that target; `tripo` is Tripo's own rig (78 joints, `BoneRoot`, `Hip`, `L_Thigh`…), which our skeleton converter takes | 20 |
+| `rig PROJECT [--skeleton …]` | Auto-rig, with fingers, by Tripo's current (V3) rigger. `unreal` (default), `mixamo` (65 joints), `actorcore`, `unity` and `vrm` name the bones for that target; `tripo` is Tripo's older V1 rig (78 joints, `BoneRoot`, `Hip`, `L_Thigh`…). Only `unreal` weights its twist bones (upper arm, forearm, thigh, calf); V1's and `actorcore`'s twist and share bones move nothing, and `mixamo` and `unity` have none on the limbs | 20 |
 | `animate PROJECT NAME … [--prompt TEXT]` | Puts preset animations (`walk`, `run`, `idle`, `jump`, …) or ones made from a description on a rigged model, and exports them in one GLB or FBX | presets free, `--prompt` 20 |
 | `export PROJECT --format glb\|fbx\|obj\|stl\|usdz\|3mf` | Exports in a format; `--animations` to include animations, `--texture-size`. OBJ comes zipped with its textures | free |
 | `download PROJECT` | The model as Studio stores it | free |

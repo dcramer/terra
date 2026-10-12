@@ -26,9 +26,11 @@ const IMAGE_MODELS: Record<string, string> = {
   midjourney: "midjourney",
 };
 const VIEWS = ["front", "left", "back", "right"]; // the order Studio uses everywhere
-// Rig skeletons. "tripo" is Tripo's own V1 rig (BoneRoot, Hip, L_Thigh…), which our skeleton
-// converter expects (tools/characters); the others are V3 rigs whose bones are named for
-// that target. Both come with fingers.
+// Rig skeletons. All but "tripo" are the V3 rig, its bones named for that target; "tripo" is
+// Tripo's own older V1 rig (BoneRoot, Hip, L_Thigh…). Both come with fingers. "unreal" is the
+// default: checked on our base body (2026-10-12), it is the only one whose twist bones carry
+// skin (upper arm, forearm, thigh, calf). V1 and "actorcore" have twist and share bones that
+// move nothing, and "mixamo" and "unity" have none on the limbs.
 const SKELETONS = ["mixamo", "actorcore", "unreal", "unity", "vrm", "tripo"];
 const RIG_V1 = "v1.0-20240301";
 const RIG_V3 = "v3.0-20260909";
@@ -143,9 +145,9 @@ const COMMANDS: Record<string, Command> = {
   },
   uv: { usage: "uv PROJECT", help: "unwrap a model's UVs again (Smart UV)", options: out, run: uv },
   rig: {
-    usage: "rig PROJECT [--skeleton mixamo]",
+    usage: "rig PROJECT [--skeleton unreal]",
     help: "rig a model with Tripo's auto-rig",
-    options: { skeleton: { type: "string", default: "mixamo", choices: SKELETONS, help: "whose bone names to use" }, ...out },
+    options: { skeleton: { type: "string", default: "unreal", choices: SKELETONS, help: "whose bone names to use" }, ...out },
     run: rig,
   },
   animate: {
