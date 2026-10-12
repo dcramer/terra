@@ -103,24 +103,28 @@ Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 
 ## Checking it
 
-The yard (structures.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall and a small cabin with a door, windows and a gable roof, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71):
+The yard (structures.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a door, windows and a gable roof, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71):
 
 ```bash
 cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet --time 16 --vantage 13,9,-6,13,0.5,-26.5 --shot out/corners.png
 ```
 
-`--walls logs` lays every build's walls in logs, the player's own too. The kit's file is read again when it is saved, so the look can be tuned with the sheet running. Tests in `terra_build` check the layout without a picture: the courses fill the storey, walls either way never share a course, corners run past and free ends are flush, a door cuts the courses it crosses and is framed, long walls stagger their seams, and gables shorten toward the ridge.
+Everything built is laid in logs by default, the player's own building and the village's houses too; `--walls plain` lays it plain. The kit's file is read again when it is saved, so the look can be tuned with the sheet running. Tests in `terra_build` check the layout without a picture: the courses fill the storey, walls either way never share a course, corners run past and free ends are flush, a door cuts the courses it crosses and is framed, long walls stagger their seams, and gables shorten toward the ridge.
 
 ![The kit sheet's corners and T's: built, going up, and as a blueprint](images/log-kit-sheet-2026-10-12.png)
 
 ## On cubes (D181)
 
-Structures are strictly on the voxel grid: a wall is a row of half-metre cubes (structures.md). Nothing above changes in how logs look; the layout reads runs of log cubes instead of walls on edges:
+Structures are strictly on the voxel grid: a wall is a row of half-metre cubes (structures.md). Nothing above changes in how logs look; the layout reads the cubes (built 2026-10-12):
 
-- **A wall is a straight run of log cubes one thick**, its logs centred in it, perhaps thickened to 0.4 m to fill more of the cube.
-- **Corners, T's and crosses** are where runs meet, and **free ends** where a run stops, as above.
-- **Carving a cube** cuts the two courses through it, which end at the hole; on the axis whose courses sit half a course up, the hole snaps to whole logs. An opening is any hole, framed in boards; doors and windows are holes of a default size.
-- **Mixing kinds** is per cube: log cubes over stone cubes are a cabin on a stone footing.
+- **A wall is a straight run of log cubes**, its logs centred in it, two courses to a cube.
+- **Corners, T's and crosses** are cubes with runs both ways, and **free ends** where a run stops, as above. Logs run past a corner only into the open air, never into a room.
+- **Carving a cube** cuts the courses through it, which end at the hole; on the axis whose courses sit half a course up, the hole takes whole logs. Any shape of hole is framed along its own edges: jambs up its sides, a head reaching into the log over it, a sill under it unless it is at the wall's foot, as a doorway is. Doors and windows are holes of a default size.
+- **A column of cubes alone is a post**: an upright log.
+- **Floors and flat roofs** of log cubes are drawn as slabs in the kit's colours, until floors have a kit of their own.
+- **Mixing kinds** is per cube: log cubes over stone cubes are a cabin on a stone footing, once there is a stone kit.
+
+![A wall with a cross carved out of it, a cube at a time, and a window slot](images/log-carved-2026-10-12.png)
 
 ## What it costs
 
@@ -137,4 +141,4 @@ Built 2026-10-12:
 
 ![A log cabin from the kit sheet, late in the day](images/log-cabin-2026-10-12.png)
 
-**Not yet:** posts as parts, and the late corner, which need parts with their own history (step 3); a kind for each wall, so log and stone can mix (D179); saddle notches cut into the logs, rather than logs meeting; roofs, floors and the foundation in the kit's materials; eaves over the walls (D175); doors in the frames.
+**Not yet:** the late corner, which needs parts with their own history (step 3); a second kit, so log and stone can mix (D179); a tool for carving cubes by hand, though the operation is there and the sheet shows it; saddle notches cut into the logs, rather than logs meeting; roofs and floors with kits of their own; eaves over the walls (D175); doors in the frames.

@@ -10,7 +10,7 @@ use crate::play::flora::Obstacles;
 use crate::play::inventory::Belongings;
 use crate::play::props::{self, Blocked, Models, Prop, Standing};
 use crate::shell::Options;
-use terra_build::{CELL_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, cells};
+use terra_build::{CELL_M, DOOR_WIDTH_M, Panel, STOREY_M, Side, cells};
 
 pub(super) fn aim(
     planet: Res<Planet>,
@@ -154,8 +154,8 @@ pub(super) fn aim(
                             .with_y(hit.face.tile[1]);
                         let indoors = site.base.contains(tile);
                         let along = on_grid(touched);
-                        // Clear of the wall's thickness.
-                        let gap = 0.07;
+                        // Clear of the wall's face.
+                        let gap = 0.02;
                         let against = boxed(touched, 0.0, indoors).reach_toward(out) + gap;
                         let at = along + out * (touched - along).dot(out) + toward_viewer * against;
                         Some((at.with_y(if indoors { floor } else { 0.0 }), 0.0, indoors))
@@ -204,26 +204,21 @@ pub(super) fn aim(
             }
         };
 
-        let edge = |face: Face| Target::Edge {
-            face,
+        let wall_at = |tile: IVec3| Target::Wall {
+            tile,
             fits: true,
             open: site
                 .base
-                .filling(face)
+                .filling(tile)
                 .is_some_and(|panel| panel != Panel::Solid),
         };
-        // So many cells of one wall, centred on one of them. Empty if the wall does not run
+        // So many tiles of one wall, centred on one of them. Empty if the wall does not run
         // that far.
-        let stretch = |face: Face, count: i32| -> Vec<Face> {
-            let along = face.side.along();
-            let first = face.tile() - along * ((count - 1) / 2);
-            let covered: Vec<Face> = (0..count)
-                .map(|step| Face::new(first + along * step, face.side))
-                .collect();
-            if covered
-                .iter()
-                .all(|&cell| site.base.filling(cell).is_some())
-            {
+        let stretch = |tile: IVec3, count: i32| -> Vec<IVec3> {
+            let along = site.base.along(tile);
+            let first = tile - along * ((count - 1) / 2);
+            let covered: Vec<IVec3> = (0..count).map(|step| first + along * step).collect();
+            if covered.iter().all(|&at| site.base.filling(at).is_some()) {
                 covered
             } else {
                 Vec::new()
@@ -233,10 +228,10 @@ pub(super) fn aim(
         let any_wall = hull
             .filter(|hit| hit.wall)
             .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M));
-        let opening_on = |width_m: f32, run: &mut Vec<Face>| {
+        let opening_on = |width_m: f32, run: &mut Vec<IVec3>| {
             any_wall.map_or(Target::Nothing, |hit| {
-                *run = stretch(hit.face, cells(width_m));
-                edge(hit.face)
+                *run = stretch(hit.face.tile(), cells(width_m));
+                wall_at(hit.face.tile())
             })
         };
         // Where the view meets the level of a storey, over the small bumps of the ground;
@@ -293,33 +288,30 @@ pub(super) fn aim(
                     .unwrap_or_else(|| {
                         (on_level(builder.storey as f32 * STOREY_M), builder.storey)
                     });
-                let face = match draw_to(&mut builder, on_floor, level) {
-                    // Drawn by dragging, or laid: from one point of the grid to another.
+                // Drawn from tile to tile: the tile under the aim is the one nearest it.
+                let half_tile = Vec3::new(CELL_M, 0.0, CELL_M) * 0.5;
+                let tile = match draw_to(&mut builder, on_floor - half_tile, level) {
+                    // Drawn by dragging, or laid: from one tile to another.
                     Some((from, to, level)) => {
                         run = drawn_wall(from, to, level);
                         run[run.len() / 2]
                     }
                     // The variant's own length, centred where the view is.
                     None => {
-                        let cell = (on_floor / CELL_M).floor().as_ivec3();
-                        let across = on_floor / CELL_M - cell.as_vec3();
-                        // A wall stands on the east or south side of a cell.
-                        let face = if builder.wall_turned {
-                            Face::new(cell - IVec3::X * i32::from(across.x < 0.5), Side::East)
+                        let tile = (on_floor / CELL_M).floor().as_ivec3().with_y(level);
+                        let along = if builder.wall_turned {
+                            IVec3::Z
                         } else {
-                            Face::new(cell - IVec3::Z * i32::from(across.z < 0.5), Side::South)
+                            IVec3::X
                         };
                         let count = cells(lengths[builder.variant()].1);
-                        let along = face.side.along();
-                        let first = face.tile() - along * ((count - 1) / 2);
-                        run = (0..count)
-                            .map(|step| Face::new(first + along * step, face.side))
-                            .collect();
-                        face
+                        let first = tile - along * ((count - 1) / 2);
+                        run = (0..count).map(|step| first + along * step).collect();
+                        tile
                     }
                 };
-                Target::Edge {
-                    face,
+                Target::Wall {
+                    tile,
                     fits: true,
                     open: false,
                 }
@@ -356,7 +348,8 @@ pub(super) fn aim(
                                 .fold((IVec2::MAX, IVec2::MIN), |(lo, hi), c| {
                                     (lo.min(c), hi.max(c))
                                 });
-                            (low, high - low + IVec2::ONE)
+                            // Over its walls too, which are a tile thick (D181).
+                            (low - IVec2::ONE, high - low + IVec2::splat(3))
                         }
                         // The variant's own size, centred on the place aimed at, sticking
                         // to where it last snapped until the aim has moved well off it.
@@ -418,7 +411,8 @@ pub(super) fn aim(
                         })
                         .find(|(_, prop, ..)| footprint.overlaps(&Standing::of(prop)))
                         .map(|(entity, ..)| entity);
-                    // A room adds where there is no room yet; a roof, where there is no roof.
+                    // A room adds where there is no room or wall yet; a roof, where there is
+                    // no roof.
                     let adds = (0..size.x).any(|i| {
                         (0..size.y).any(|j| {
                             let cell = corner + IVec3::new(i, 0, j);
@@ -430,7 +424,7 @@ pub(super) fn aim(
                                     cell,
                                 )
                             } else {
-                                !site.base.contains(cell)
+                                !site.base.contains(cell) && site.base.filling(cell).is_none()
                             }
                         })
                     });
@@ -450,23 +444,22 @@ pub(super) fn aim(
             Kind::Remove => match (item, hull) {
                 (Some((entity, ..)), _) => Target::Prop(entity),
                 (None, Some(hit)) if hit.wall => {
-                    let target = edge(hit.face);
-                    run = if matches!(target, Target::Edge { open: true, .. }) {
+                    let tile = hit.face.tile();
+                    let target = wall_at(tile);
+                    run = if matches!(target, Target::Wall { open: true, .. }) {
                         // The window or doorway in it.
-                        site.base.run(hit.face)
+                        site.base.run(tile)
                     } else {
                         // The whole straight stretch of plain wall.
-                        let along = hit.face.side.along();
-                        let plain = |cell: IVec3| {
-                            site.base.filling(Face::new(cell, hit.face.side)) == Some(Panel::Solid)
-                        };
-                        let mut first = hit.face.tile();
+                        let along = site.base.along(tile);
+                        let plain = |at: IVec3| site.base.filling(at) == Some(Panel::Solid);
+                        let mut first = tile;
                         while plain(first - along) {
                             first -= along;
                         }
                         let mut found = Vec::new();
                         while plain(first) {
-                            found.push(Face::new(first, hit.face.side));
+                            found.push(first);
                             first += along;
                         }
                         found
@@ -546,13 +539,13 @@ pub(super) fn afford(
                                 cell,
                             )
                         } else {
-                            !site.base.contains(cell)
+                            !site.base.contains(cell) && site.base.filling(cell).is_none()
                         }
                     })
                     .count();
                 Some((builds.floor().to_vec(), catalogue::floor_units(new_cells)))
             }
-            (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
+            (Kind::Wall(_), Target::Wall { fits: true, .. }) => {
                 let new_cells = builder
                     .run
                     .iter()
@@ -560,11 +553,11 @@ pub(super) fn afford(
                     .count();
                 (new_cells > 0).then(|| (builds.wall().to_vec(), catalogue::wall_units(new_cells)))
             }
-            (Kind::Window(_), Target::Edge { .. }) if cuts => Some((
+            (Kind::Window(_), Target::Wall { .. }) if cuts => Some((
                 builds.window().to_vec(),
                 catalogue::window_units(builder.run.len()),
             )),
-            (Kind::Door, Target::Edge { .. }) if cuts => Some((builds.door().to_vec(), 1)),
+            (Kind::Door, Target::Wall { .. }) if cuts => Some((builds.door().to_vec(), 1)),
             (Kind::Items(_), Target::Spot { blocked: None, .. }) => {
                 builder.item(&builds).map(|item| (item.cost.clone(), 1))
             }

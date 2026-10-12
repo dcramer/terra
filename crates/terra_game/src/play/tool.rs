@@ -44,7 +44,7 @@ use bevy::{
     prelude::*,
 };
 use std::sync::Arc;
-use terra_build::{BuildOp, CELL_M, Face, Side, cells};
+use terra_build::{BuildOp, CELL_M, cells};
 use terra_items::ItemKind;
 
 mod act;
@@ -83,8 +83,8 @@ const LEVEL_BUMPS_M: f32 = 0.75;
 /// How long the button is held on a wall or room laid, without drawing, before it is built.
 const HOLD_TO_BUILD_S: f32 = 0.4;
 /// The least a drawn room measures across, in cells, so a drag along a line still makes
-/// a room that can be stood in.
-const LEAST_ROOM_CELLS: i32 = 2;
+/// a room that can be stood in: a metre inside its walls, which are a cube thick (D181).
+const LEAST_ROOM_CELLS: i32 = 4;
 /// How many storeys down and up from the base's floor a room can be placed (D143).
 const STOREYS: std::ops::RangeInclusive<i32> = -2..=2;
 const BUILD_COLOUR: Color = Color::srgb(0.35, 0.9, 1.0);
@@ -99,10 +99,10 @@ pub struct Acting;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Target {
     Nothing,
-    /// The edge between two cells, where a wall stands or could; whether one may stand
-    /// there; and whether the wall there has a window or door in it.
-    Edge {
-        face: Face,
+    /// A wall tile, where a wall stands or could (D181); whether one may stand there;
+    /// and whether the wall there has a window or door in it.
+    Wall {
+        tile: IVec3,
         fits: bool,
         open: bool,
     },
@@ -203,23 +203,20 @@ fn drawn_room(from: IVec2, to: IVec2) -> (IVec2, IVec2) {
     (IVec2::new(x, z), IVec2::new(east, south))
 }
 
-/// The wall cells of a wall drawn from one point of the grid toward another, along the
-/// grid's four directions only (D146): east and west, or north and south, whichever the
-/// drag went further. At least a cell long.
-fn drawn_wall(from: IVec2, to: IVec2, level: i32) -> Vec<Face> {
+/// The wall tiles of a wall drawn from one tile toward another, along the grid's four
+/// directions only (D146): east and west, or north and south, whichever the drag went
+/// further. Both ends included, so it is at least a tile long.
+fn drawn_wall(from: IVec2, to: IVec2, level: i32) -> Vec<IVec3> {
     let step = to - from;
-    let (side, length) = if step.x.abs() >= step.y.abs() {
-        (Side::South, step.x)
+    let (along, length) = if step.x.abs() >= step.y.abs() {
+        (IVec2::new(step.x.signum(), 0), step.x.abs())
     } else {
-        (Side::East, step.y)
+        (IVec2::new(0, step.y.signum()), step.y.abs())
     };
-    let length = if length == 0 { 1 } else { length };
-    let first = length.min(0);
-    (first..first + length.abs())
-        .map(|i| match side {
-            // A wall on the south side of a cell stands on the grid line along its south.
-            Side::South => Face::new(IVec3::new(from.x + i, level, from.y - 1), side),
-            _ => Face::new(IVec3::new(from.x - 1, level, from.y + i), side),
+    (0..=length)
+        .map(|i| {
+            let at = from + along * i;
+            IVec3::new(at.x, level, at.y)
         })
         .collect()
 }
@@ -306,7 +303,7 @@ pub struct Builder {
     /// Whether the next interior wall runs north and south instead of east and west.
     wall_turned: bool,
     /// The wall cells the thing aimed at would change. Empty when it would not fit.
-    run: Vec<Face>,
+    run: Vec<IVec3>,
     /// Whether items snap to the grid and turn in eighths.
     pub snap: bool,
     /// The same, right now: holding Alt does the opposite of the setting.
@@ -687,7 +684,7 @@ fn target_point(target: &Target, props: &Query<&Prop>) -> Option<Vec3> {
     };
     match *target {
         Target::Nothing => None,
-        Target::Edge { face, .. } => Some(tile(face.tile)),
+        Target::Wall { tile: at, .. } => Some(tile(at.to_array())),
         Target::Ground { corner, tiles, .. } => Some(Vec3::new(
             (corner.x as f32 + tiles.x as f32 * 0.5) * CELL_M,
             corner.y as f32 * terra_build::STOREY_M,
@@ -730,23 +727,27 @@ mod tests {
 
     #[test]
     fn a_wall_runs_along_the_grid_the_way_it_was_drawn_furthest() {
-        // East: the south sides of the cells north of the line z = 2.
+        // East, from tile to tile.
         let east = drawn_wall(IVec2::new(1, 2), IVec2::new(4, 3), 0);
-        let cells: Vec<_> = east.iter().map(|face| face.tile()).collect();
         assert_eq!(
-            cells,
+            east,
             [
-                IVec3::new(1, 0, 1),
-                IVec3::new(2, 0, 1),
-                IVec3::new(3, 0, 1)
+                IVec3::new(1, 0, 2),
+                IVec3::new(2, 0, 2),
+                IVec3::new(3, 0, 2),
+                IVec3::new(4, 0, 2)
             ]
         );
-        assert!(east.iter().all(|face| face.side == Side::South));
-        // North, backwards along the line x = 1, on the storey above.
+        // North, backwards, on the storey above.
         let north = drawn_wall(IVec2::new(1, 2), IVec2::new(0, 0), 1);
-        let cells: Vec<_> = north.iter().map(|face| face.tile()).collect();
-        assert_eq!(cells, [IVec3::new(0, 1, 0), IVec3::new(0, 1, 1)]);
-        assert!(north.iter().all(|face| face.side == Side::East));
+        assert_eq!(
+            north,
+            [
+                IVec3::new(1, 1, 2),
+                IVec3::new(1, 1, 1),
+                IVec3::new(1, 1, 0)
+            ]
+        );
     }
 
     #[test]
@@ -765,7 +766,7 @@ mod tests {
     }
 
     #[test]
-    fn a_wall_drawn_back_to_where_it_began_is_a_cell_long() {
+    fn a_wall_drawn_back_to_where_it_began_is_a_tile_long() {
         assert_eq!(drawn_wall(IVec2::new(3, 3), IVec2::new(3, 3), 0).len(), 1);
     }
 }

@@ -221,7 +221,7 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 
 Technically (mine): worked out from the grid when a part is built or taken away, not every frame (D127): the parts that touch, flood-filled into buildings; the cells inside each, flood-filled from its floor, are a room unless they reach the open air. Each building is then an entity with its rooms, which weather, warmth and stations read.
 
-The technical design is [structures.md](structures.md) (D160). Built, 2026-10-12: a base is walls on the edges between cells and floors and roofs on cells, with rooms worked out from the walls; the room tool is the shortcut, and walls are drawn inside or out.
+The technical design is [structures.md](structures.md) (D160). Built, 2026-10-12: a base is half-metre cubes (D181), walls rows of them, floors and flat roofs layers, with rooms worked out from the walls; the room tool is the shortcut, walls are drawn inside or out, and doors and windows are cubes cut open or glazed.
 
 **How a material is split into parts, so it looks built and not tiled.** Each kind of construction is a small kit of pieces sized to the grid, and a rule for laying them, as real masonry and carpentry have:
 

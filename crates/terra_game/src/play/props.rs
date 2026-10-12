@@ -424,8 +424,8 @@ impl Standing {
         self.half.y * 2.0 > STEP_OVER_M
     }
 
-    /// Whether an interior wall runs through the box's foot, near enough: whether one
-    /// stands between any two cells that the foot's outline covers.
+    /// Whether a wall runs through the box's foot, near enough: whether any tile its
+    /// outline covers is a wall (D181).
     fn crosses_a_wall(&self, site: &Site) -> bool {
         let corners = self.corners();
         let low = corners
@@ -438,16 +438,7 @@ impl Standing {
         let (low, high) = (cell(low + 0.02), cell(high - 0.02));
         let storey = (self.at.y / terra_build::STOREY_M).round() as i32;
         (low.x..=high.x).any(|x| {
-            (low.y..=high.y).any(|z| {
-                let here = IVec3::new(x, storey, z);
-                let wall = |side| {
-                    site.base
-                        .filling(terra_build::Face::new(here, side))
-                        .is_some()
-                };
-                (x < high.x && wall(terra_build::Side::East))
-                    || (z < high.y && wall(terra_build::Side::South))
-            })
+            (low.y..=high.y).any(|z| site.base.filling(IVec3::new(x, storey, z)).is_some())
         })
     }
 

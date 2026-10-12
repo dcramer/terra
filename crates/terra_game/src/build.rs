@@ -1,9 +1,10 @@
 //! Construction: a base you shape, drawn from the rules in `terra_build`.
 //!
-//! Point the middle of the view at the base. G pushes the wall you are looking at
-//! outward by a tile and H pulls it in. V cycles the tile you are looking at through
-//! solid, window, wide window, tall window and door. Point at open ground and B adds a
-//! room there.
+//! Everything built is half-metre cubes (D181), drawn plain or by its kind's kit
+//! (docs/kits.md): walls of logs as logs.
+//!
+//! Point the middle of the view at the base. V cycles the wall you are looking at through
+//! solid, window, tall window and door. Point at open ground and B adds a room there.
 //!
 //! The base starts as a small example, built through the same operations the keys use.
 //!
@@ -18,7 +19,7 @@ use bevy::{
 use std::sync::Arc;
 use std::time::SystemTime;
 use terra_build::logs::{self, LogKit};
-use terra_build::{Base, BuildOp, CELL_M, Face, Panel, STOREY_M, Side, Surface, Walker};
+use terra_build::{Base, BuildOp, CELL_M, Kind, Panel, STOREY_M, Side, Surface, Walker};
 use terra_core::Operation;
 
 mod sheet;
@@ -107,8 +108,10 @@ pub(super) struct BuildLook {
     /// A plan's pieces not yet in, and the next one.
     ghost: Handle<StandardMaterial>,
     next: Handle<StandardMaterial>,
-    /// The log kit new builds' walls are laid in, if any (`--walls logs`).
+    /// The log kit, which draws the cubes of its kind as logs.
     pub logs: Option<Arc<LogKit>>,
+    /// The kind of construction walls, floors and roofs are laid in (`--walls`).
+    pub laying: Kind,
 }
 
 /// The log kit's file, `assets/data/kits/logs.ron`, read again when it is saved so a log
@@ -419,22 +422,24 @@ impl Build {
 
 /// The example base: two rooms joined by a corridor, a small upper storey, windows on
 /// every side and a door. Written in metres, so it is the same base whatever the grid.
-fn example() -> Vec<BuildOp> {
-    // A block of cells from one corner in metres to the other, on a storey.
+fn example(kind: Kind) -> Vec<BuildOp> {
+    // A block of tiles from one outside corner in metres to the other, on a storey. Rooms
+    // that meet share the row of tiles between them, so they open into one another.
     let room = |west: f32, east: f32, north: f32, south: f32, storey: i32| BuildOp::AddRoom {
         min: [cells_from(west), storey, cells_from(north)],
         max: [cells_from(east) - 1, storey, cells_from(south) - 1],
+        kind,
     };
     let mut ops = vec![
         room(-6.0, 9.0, -6.0, 3.0, 0),
-        room(9.0, 15.0, -3.0, 0.0, 0),
+        room(8.5, 15.5, -3.0, 0.0, 0),
         room(15.0, 21.0, -6.0, 3.0, 0),
         room(-3.0, 3.0, -6.0, 0.0, 1),
     ];
     // An opening in a wall: which way the wall faces, where the wall is, and the stretch
     // of it to open, all in metres.
     let mut cut = |side: Side, wall_at: f32, from: f32, to: f32, storey: i32, panel: Panel| {
-        // The cell just inside the wall.
+        // The tile of the wall, just inside its outer face.
         let inside = match side {
             Side::East | Side::South => cells_from(wall_at) - 1,
             _ => cells_from(wall_at),
@@ -444,7 +449,11 @@ fn example() -> Vec<BuildOp> {
                 Side::East | Side::West => IVec3::new(inside, storey, along),
                 _ => IVec3::new(along, storey, inside),
             };
-            ops.push(BuildOp::SetWall(Face::new(cell, side), Some(panel)));
+            ops.push(BuildOp::SetWall {
+                tile: cell.to_array(),
+                panel: Some(panel),
+                kind,
+            });
         }
     };
     cut(Side::South, 3.0, -3.0, 6.0, 0, Panel::WINDOW);
@@ -694,7 +703,7 @@ fn setup(
     // player starts with nothing built, on the same spot. On the yard, the flat test
     // level, the base's grid is laid at the start itself, facing east.
     let mut example_base = Base::default();
-    for op in example() {
+    for op in example(Kind::PLAIN) {
         example_base.apply(op);
     }
     let frame = if options.yard() {
@@ -738,10 +747,15 @@ fn setup(
             alpha_mode: AlphaMode::Blend,
             ..default()
         }),
-        logs: (options.walls.as_deref() == Some("logs"))
-            .then(read_kit)
-            .flatten()
-            .map(Arc::new),
+        logs: read_kit().map(Arc::new),
+        laying: Kind::PLAIN,
+    };
+    let look = BuildLook {
+        laying: match (options.walls.as_deref(), &look.logs) {
+            (Some("plain"), _) | (_, None) => Kind::PLAIN,
+            (_, Some(kit)) => kit.kind(),
+        },
+        ..look
     };
     commands.insert_resource(KitFile {
         modified: modified(),
@@ -751,7 +765,7 @@ fn setup(
     let operations = if driven.is_some() {
         Vec::new()
     } else {
-        example()
+        example(look.laying)
     };
     build.replace_with(&operations, &mut commands, &planet, &mut meshes);
     commands.insert_resource(look);
@@ -826,7 +840,7 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
             let (mesh, layout) = site.base.mesh_with_logs(kit);
             (mesh, draw_pieces(&layout.pieces, kit, site.shown))
         }
-        None => (site.base.mesh(), [None, None, None]),
+        None => (site.base.mesh(|_| None), [None, None, None]),
     };
     let [placed, ghost, next] = pieces;
     show(site.structure, to_mesh(&mesh.structure));
@@ -863,15 +877,15 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
     }
     // A footing under every ground-floor wall with no floor beside it, as a free-standing
     // wall's, down into the ground.
-    for (face, _) in site.base.walls().filter(|(face, _)| face.tile[1] == 0) {
-        let beyond = face.tile() + face.side.offset();
-        if site.base.has_floor(face.tile()) || site.base.has_floor(beyond) {
+    for (tile, _) in site.base.walls().filter(|(tile, _)| tile.y == 0) {
+        if site.base.has_floor(tile) {
             continue;
         }
-        let [low, right, ..] = Base::corners(face);
-        let across = face.side.offset().as_vec3() * WALL_FOOTING_HALF_M;
-        let (min, max) = (low.min(right) - across, low.max(right) + across);
-        let gap = [min, max, low, right]
+        let middle = (tile.with_y(0).as_vec3() + Vec3::new(0.5, 0.0, 0.5)) * CELL_M;
+        let half = Vec3::new(CELL_M * 0.5, 0.0, CELL_M * 0.5);
+        let reach = Vec3::new(WALL_FOOTING_HALF_M, 0.0, WALL_FOOTING_HALF_M) - half;
+        let (min, max) = (middle - half - reach.max(Vec3::ZERO), middle + half);
+        let gap = [min, max, middle.with_x(min.x), middle.with_z(max.z)]
             .map(|at| planet.distance(site.frame.transform_point(at.with_y(0.0))))
             .into_iter()
             .fold(0.0, f32::max);
@@ -883,22 +897,33 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
     site.ramps.clear();
     let mut steps = Blocks::default();
     // One flight for each doorway, however many cells wide it is.
-    let doorways: Vec<Vec<Face>> = site
+    let doorways: Vec<Vec<[i32; 3]>> = site
         .base
         .walls()
-        .filter(|&(face, panel)| face.tile[1] == 0 && panel == Panel::Door)
-        .map(|(face, _)| site.base.run(face))
+        .filter(|&(tile, panel)| tile.y == 0 && panel == Panel::Door)
+        .map(|(tile, _)| {
+            let run = site.base.run(tile);
+            run.iter().map(|tile| tile.to_array()).collect()
+        })
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();
     for doorway in &doorways {
-        let (first, last) = (doorway[0], doorway[doorway.len() - 1]);
+        let (first, last) = (
+            IVec3::from_array(doorway[0]),
+            IVec3::from_array(doorway[doorway.len() - 1]),
+        );
         let Some(outward) = site.base.outward(first) else {
             continue;
         };
-        let (near, far) = (Base::corners(first)[0], Base::corners(last)[1]);
-        let top = (near + far) * 0.5;
         let outward = outward.as_vec3();
+        // The foot of the doorway's outer face, from one side to the other.
+        let foot = |tile: IVec3| {
+            (tile.with_y(0).as_vec3() + Vec3::new(0.5, 0.0, 0.5) + outward * 0.5) * CELL_M
+        };
+        let along = (last - first).as_vec3().normalize_or_zero() * CELL_M * 0.5;
+        let (near, far) = (foot(first) - along, foot(last) + along);
+        let top = (near + far) * 0.5;
         // Long enough for the climb, measured where the steps start and where they end.
         let rise_here = planet.distance(site.frame.transform_point(top)).max(0.0);
         let length = (rise_here * RAMP_RUN_PER_RISE).clamp(1.2, 16.0);
@@ -1004,6 +1029,7 @@ fn edit(
     camera: Single<&GlobalTransform, With<MainCamera>>,
     planet: Res<Planet>,
     mut site: ResMut<Site>,
+    look: Res<BuildLook>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut gizmos: Gizmos,
 ) {
@@ -1016,7 +1042,10 @@ fn edit(
 
     // Show what a key press would act on: the wall cell aimed at.
     if let Some(hit) = aimed {
-        let corners = Base::corners(hit.face).map(|corner| site.frame.transform_point(corner));
+        let corners = site
+            .base
+            .corners(hit.face.tile())
+            .map(|corner| site.frame.transform_point(corner));
         gizmos.linestrip(
             [corners[0], corners[1], corners[2], corners[3], corners[0]],
             Color::srgb(1.0, 0.85, 0.2),
@@ -1024,8 +1053,14 @@ fn edit(
     }
 
     let op = if let Some(hit) = aimed.filter(|hit| hit.wall) {
-        keys.just_pressed(KeyCode::KeyV)
-            .then(|| BuildOp::SetWall(hit.face, Some(site.base.panel(hit.face).next())))
+        keys.just_pressed(KeyCode::KeyV).then(|| {
+            let tile = hit.face.tile();
+            BuildOp::SetWall {
+                tile: tile.to_array(),
+                panel: Some(site.base.panel(tile).next()),
+                kind: site.base.kind(tile).unwrap_or(look.laying),
+            }
+        })
     } else if keys.just_pressed(KeyCode::KeyB) {
         // A new room, three cells square, on the ground being looked at.
         planet
@@ -1037,8 +1072,9 @@ fn edit(
                     (local.z / CELL_M).floor() as i32,
                 );
                 BuildOp::AddRoom {
-                    min: [x - 1, 0, z - 1],
-                    max: [x + 1, 0, z + 1],
+                    min: [x - 2, 0, z - 2],
+                    max: [x + 2, 0, z + 2],
+                    kind: look.laying,
                 }
             })
     } else {

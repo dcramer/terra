@@ -20,7 +20,7 @@ use super::told::Told;
 use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use bevy::prelude::*;
-use terra_build::{Base, BuildOp, CELL_M, Face, Panel, Side};
+use terra_build::{Base, BuildOp, CELL_M, Kind, Panel};
 
 /// A house: where the middle of its door stands from the village's middle, in metres
 /// east and south, and how wide and deep it is. Its door faces the well.
@@ -73,38 +73,36 @@ const ITEMS: [(&str, f32, f32, f32); 3] = [
     ("Stool", -3.5, 2.5, 0.0),
 ];
 
-/// The operations that put a house up, in its own space: the door in the wall along
-/// z = 0, facing +Z, and the house behind it, its middle on x = 0.
-fn house(house: &House) -> Vec<BuildOp> {
+/// The operations that put a house up in a kind of construction, in its own space: the
+/// door in the wall along z = 0, facing +Z, and the house behind it, its middle on x = 0.
+fn house(house: &House, kind: Kind) -> Vec<BuildOp> {
     let cells = |metres: f32| (metres / CELL_M).round() as i32;
     let (half, deep) = (cells(house.wide * 0.5), cells(house.deep));
     let mut ops = vec![BuildOp::AddRoom {
         min: [-half, 0, -deep],
         max: [half - 1, 0, -1],
+        kind,
     }];
     if house.upstairs {
         ops.push(BuildOp::AddRoom {
             min: [-half, 1, -deep],
             max: [half - 1, 1, -cells(1.5)],
+            kind,
         });
     }
-    // A door a metre and a half wide, and a window in each end wall.
-    for x in -1..2 {
-        ops.push(BuildOp::SetWall(
-            Face::new(IVec3::new(x, 0, -1), Side::South),
-            Some(Panel::Door),
-        ));
+    let wall = |x: i32, z: i32, panel: Panel| BuildOp::SetWall {
+        tile: [x, 0, z],
+        panel: Some(panel),
+        kind,
+    };
+    // A door a metre wide, and a window in each end wall.
+    for x in -1..1 {
+        ops.push(wall(x, -1, Panel::Door));
     }
     let middle = -deep / 2;
     for z in middle - 1..middle + 1 {
-        ops.push(BuildOp::SetWall(
-            Face::new(IVec3::new(half - 1, 0, z), Side::East),
-            Some(Panel::WINDOW),
-        ));
-        ops.push(BuildOp::SetWall(
-            Face::new(IVec3::new(-half, 0, z), Side::West),
-            Some(Panel::WINDOW),
-        ));
+        ops.push(wall(half - 1, z, Panel::WINDOW));
+        ops.push(wall(-half, z, Panel::WINDOW));
     }
     ops
 }
@@ -160,7 +158,7 @@ fn found(
         let door = planet.ground_at(middle + east * plan.east + south * plan.south);
         let up = door.normalize();
         let away = (door - middle).reject_from(up).normalize_or(south);
-        let ops = house(plan);
+        let ops = house(plan, look.laying);
         let mut shape = Base::default();
         for &op in &ops {
             shape.apply(op);

@@ -3,7 +3,8 @@
 // runs. Sizes are in metres; colours as they appear on screen (sRGB), from the palette's
 // wood roles where they have one (tools/characters/look.py).
 //
-// diameter    how thick a log is, and so the wall (D175: 0.3)
+// id          the kind of construction it lays, the number its cubes carry (D181)
+// diameter    how thick a log is, in a wall a cube thick (D175, D181)
 // course      how far apart the courses are; it must divide the 3 m storey
 // overhang    how far a log runs past the wall it crosses at a corner
 // longest     the longest wall one log spans, as long as a tree gives (D174)
@@ -16,6 +17,7 @@
 // chinking    whether there is daub between the courses
 // frame       how wide the boards round an opening are
 (
+    id: 1,
     diameter: 0.3,
     course: 0.25,
     overhang: 0.25,

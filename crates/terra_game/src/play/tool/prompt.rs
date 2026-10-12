@@ -64,15 +64,15 @@ pub fn prompt(
         }
     };
     let action = match (&builder.picked(builds).kind, builder.target) {
-        (Kind::Window(_) | Kind::Door, Target::Edge { .. }) if builder.run.is_empty() => {
+        (Kind::Window(_) | Kind::Door, Target::Wall { .. }) if builder.run.is_empty() => {
             "The wall is not wide enough here".to_string()
         }
-        (Kind::Window(_), Target::Edge { .. }) => {
+        (Kind::Window(_), Target::Wall { .. }) => {
             format!("{hold}  cut this window      {next}  size")
         }
-        (Kind::Door, Target::Edge { .. }) => format!("{hold}  cut a door"),
+        (Kind::Door, Target::Wall { .. }) => format!("{hold}  cut a door"),
         (Kind::Window(_) | Kind::Door, _) => "Aim at a wall".to_string(),
-        (Kind::Wall(_), Target::Edge { .. }) => drawn(
+        (Kind::Wall(_), Target::Wall { .. }) => drawn(
             "wall",
             format!(
                 "Scroll  turn      Shift Scroll  storey{}      {next}  length",
@@ -133,8 +133,8 @@ pub fn prompt(
             settings.key(Action::MoveItems)
         ),
         (Kind::Remove, Target::Prop(_)) => format!("{hold}  take this apart"),
-        (Kind::Remove, Target::Edge { open: true, .. }) => format!("{hold}  close this opening"),
-        (Kind::Remove, Target::Edge { .. }) => format!("{hold}  take this wall away"),
+        (Kind::Remove, Target::Wall { open: true, .. }) => format!("{hold}  close this opening"),
+        (Kind::Remove, Target::Wall { .. }) => format!("{hold}  take this wall away"),
         (Kind::Remove, _) => format!(
             "Aim at an item, a wall, a window or a door      {}  done",
             settings.key(Action::TakeApart)

@@ -13,7 +13,7 @@ use crate::play::skills::{Did, ONCE, Skill};
 use crate::play::told::Told;
 use crate::play::work::Hold;
 use crate::play::{IsLocalPlayer, Stance};
-use terra_build::{BuildOp, Face, Panel, RoofSection, Side};
+use terra_build::{BuildOp, Panel, RoofSection};
 
 /// Starts, carries on and finishes building and taking apart. Both take a moment: the
 /// button is held until the job is done, and letting go early leaves nothing done.
@@ -22,7 +22,7 @@ pub(super) fn act(
     time: Res<Time>,
     mut planet: ResMut<Planet>,
     models: Res<Models>,
-    builds: Res<Builds>,
+    (builds, look): (Res<Builds>, Res<crate::build::BuildLook>),
     options: Res<crate::shell::Options>,
     props: Query<&Prop>,
     mut players: Query<(Entity, &Transform, &Intent, &mut Builder, &mut Stance), With<Player>>,
@@ -157,7 +157,7 @@ pub(super) fn act(
                     let before = site.operations.clone();
                     // A room set into the ground cuts the ground away where it stands.
                     for op in &ops {
-                        if let BuildOp::AddRoom { min, max } = *op {
+                        if let BuildOp::AddRoom { min, max, .. } = *op {
                             let cut = site.cut_for_room(IVec3::from(min), IVec3::from(max));
                             planet.apply(&cut);
                         }
@@ -382,17 +382,21 @@ pub(super) fn act(
         let pay = builder.price.clone();
         // What closing a window or doorway gives back.
         let opening_worth =
-            |run: &[Face]| match run.first().and_then(|&cell| site.base.filling(cell)) {
+            |run: &[IVec3]| match run.first().and_then(|&tile| site.base.filling(tile)) {
                 Some(Panel::Window { .. }) => {
                     Some((builds.window().to_vec(), catalogue::window_units(run.len())))
                 }
                 Some(Panel::Door) => Some((builds.door().to_vec(), 1)),
                 _ => None,
             };
-        // Fills every cell of the run.
-        let fill = |run: &[Face], panel: Panel| -> Vec<BuildOp> {
+        // Fills every tile of the run, keeping its kind.
+        let fill = |run: &[IVec3], panel: Panel| -> Vec<BuildOp> {
             run.iter()
-                .map(|&cell| BuildOp::SetWall(cell, Some(panel)))
+                .map(|&tile| BuildOp::SetWall {
+                    tile: tile.to_array(),
+                    panel: Some(panel),
+                    kind: site.base.kind(tile).unwrap_or(look.laying),
+                })
                 .collect()
         };
         let building = |ops: Vec<BuildOp>| Job::Structure {
@@ -406,39 +410,47 @@ pub(super) fn act(
             refund,
         };
         let (job, removing) = match (&builder.picked(&builds).kind, builder.target) {
-            (Kind::Window(shapes), Target::Edge { .. }) if can_pay => (
+            (Kind::Window(shapes), Target::Wall { .. }) if can_pay => (
                 building(fill(&builder.run, shapes[builder.variant()].2)),
                 false,
             ),
-            (Kind::Door, Target::Edge { .. }) if can_pay => {
+            (Kind::Door, Target::Wall { .. }) if can_pay => {
                 (building(fill(&builder.run, Panel::Door)), false)
             }
             // A wall is built where there is none, and leaves alone what is already there.
-            (Kind::Wall(_), Target::Edge { fits: true, .. }) if can_pay => (
+            (Kind::Wall(_), Target::Wall { fits: true, .. }) if can_pay => (
                 building(
                     builder
                         .run
                         .iter()
-                        .filter(|&&cell| site.base.filling(cell).is_none())
-                        .map(|&cell| BuildOp::SetWall(cell, Some(Panel::Solid)))
+                        .filter(|&&tile| site.base.filling(tile).is_none())
+                        .map(|&tile| BuildOp::SetWall {
+                            tile: tile.to_array(),
+                            panel: Some(Panel::Solid),
+                            kind: look.laying,
+                        })
                         .collect(),
                 ),
                 false,
             ),
             // An opening is closed first; a plain wall is taken away.
-            (Kind::Remove, Target::Edge { open: true, .. }) => (
+            (Kind::Remove, Target::Wall { open: true, .. }) => (
                 unbuilding(
                     fill(&builder.run, Panel::Solid),
                     opening_worth(&builder.run),
                 ),
                 true,
             ),
-            (Kind::Remove, Target::Edge { .. }) => (
+            (Kind::Remove, Target::Wall { .. }) => (
                 unbuilding(
                     builder
                         .run
                         .iter()
-                        .map(|&cell| BuildOp::SetWall(cell, None))
+                        .map(|&tile| BuildOp::SetWall {
+                            tile: tile.to_array(),
+                            panel: None,
+                            kind: look.laying,
+                        })
                         .collect(),
                     Some((
                         builds.wall().to_vec(),
@@ -461,6 +473,7 @@ pub(super) fn act(
                 building(vec![BuildOp::AddRoom {
                     min: corner.to_array(),
                     max: (corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1)).to_array(),
+                    kind: look.laying,
                 }]),
                 false,
             ),
@@ -491,6 +504,7 @@ pub(super) fn act(
                         min,
                         max,
                         laid: true,
+                        kind: look.laying,
                     },
                 };
                 (building(vec![op]), false)
@@ -619,29 +633,21 @@ fn from_start(site: &Site, at: Vec3) -> Vec3 {
         .transform_point3(world)
 }
 
-/// The two points of the grid a room or wall shown at its own size would be drawn between,
-/// and its floor, so a click can lay it.
-fn laid_as(target: Target, run: &[Face]) -> Option<(IVec2, IVec2, i32)> {
+/// The two points of the grid a room, or the two tiles a wall, shown at its own size
+/// would be drawn between, and its floor, so a click can lay it.
+fn laid_as(target: Target, run: &[IVec3]) -> Option<(IVec2, IVec2, i32)> {
     match target {
         Target::Ground { corner, tiles, .. } => {
             let from = IVec2::new(corner.x, corner.z);
             Some((from, from + tiles, corner.y))
         }
-        Target::Edge { .. } => {
-            let (first, last) = (run.first()?.tile(), run.last()?.tile());
-            Some(if run[0].side == Side::South {
-                (
-                    IVec2::new(first.x, first.z + 1),
-                    IVec2::new(last.x + 1, first.z + 1),
-                    first.y,
-                )
-            } else {
-                (
-                    IVec2::new(first.x + 1, first.z),
-                    IVec2::new(first.x + 1, last.z + 1),
-                    first.y,
-                )
-            })
+        Target::Wall { .. } => {
+            let (first, last) = (run.first()?, run.last()?);
+            Some((
+                IVec2::new(first.x, first.z),
+                IVec2::new(last.x, last.z),
+                first.y,
+            ))
         }
         _ => None,
     }

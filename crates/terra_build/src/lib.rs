@@ -1,25 +1,30 @@
-//! Construction: walls, floors and roofs on a grid (D152; docs/structures.md).
+//! Construction: everything built is half-metre cubes on a base's grid (D48, D181;
+//! docs/structures.md).
 //!
-//! A base is what stands in it, and nothing is placed whole:
-//!
-//! - **A wall stands on an edge** between two cells, a storey high. What fills it, solid,
-//!   a window or a doorway, is a property of the wall cell, so an opening can be any
-//!   width and stand anywhere along a wall, a cell at a time.
-//! - **A floor lies at the foot of a cell, a roof over it.**
-//! - **Rooms are worked out**, storey by storey: the cells that walls close in on every
-//!   side. Nobody places a room.
-//! - **The room tool is a shortcut** ([`BuildOp::AddRoom`]): walls round a block of cells,
-//!   a floor under it and a roof over it. Where it meets a room already there, the two open
-//!   into one another.
-//!
-//! Everything is on one square grid of [`CELL_M`]. That is the smallest thing that can be
-//! placed. A cell is a column of that size and one storey, [`STOREY_M`], tall.
+//! - **A cube is air or a kind of construction** ([`Kind`]): logs, stone, planks. What
+//!   fills it ([`Fill`]) is solid, glass, or open: an opening cut in a wall, part of the
+//!   wall still, which lets a walker through.
+//! - **A wall is a row of cubes**, a storey high unless built otherwise; a post is a
+//!   column of them, a floor a layer. So walls meet, cross, are carved and mix kinds by
+//!   sharing cubes.
+//! - **A storey is six cubes, three metres.** Its floor is the layer of cubes just under
+//!   it, so a floor's top is the storey's height, and the layer at the top of its walls is
+//!   the next storey's floor, or a flat roof. A cell of a storey, a *tile*, is a column of
+//!   six cubes.
+//! - **Rooms are worked out**, storey by storey: the tiles that wall tiles close in on
+//!   every side. A wall tile is a column with cubes in it below its top layer.
+//! - **Pitched roofs are the one thing not cubes**: surfaces over the tiles they cover
+//!   ([`RoofSection`]).
+//! - **Shortcuts** lay cubes as a player means them: a wall tile as a panel says, solid
+//!   or with a window or doorway of a default size ([`BuildOp::SetWall`]); a floor or
+//!   flat roof over a block; and the room tool, walls round a footprint with a floor
+//!   inside and a roof over it.
 //!
 //! Everything a player does is a [`BuildOp`], so a base can be sent to other players and
 //! saved as the list of operations that made it (D21).
 //!
-//! Coordinates are local to the base: cells on an integer grid, X and Z along the floor
-//! and Y up, counted in storeys.
+//! Coordinates are local to the base: X and Z along the floor and Y up. Cubes are counted
+//! in cubes all three ways; tiles count X and Z in cubes and Y in storeys.
 
 pub mod logs;
 mod mesh;
@@ -28,22 +33,39 @@ mod walk;
 pub use mesh::{BaseMesh, Surface};
 pub use walk::Walker;
 
-use glam::{IVec2, IVec3, Vec3, Vec3Swizzles};
+use glam::{IVec2, IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// The grid: the width and depth of one cell, in metres. Everything else here is given in
-/// metres and turned into cells with [`cells`], so this is the one number to change.
+/// The grid: the size of one cube, in metres. Everything else here is given in metres and
+/// turned into cubes with [`cells`], so this is the one number to change.
 pub const CELL_M: f32 = 0.5;
 /// Height of one storey, in metres.
 pub const STOREY_M: f32 = 3.0;
-/// Width of a door's opening, in metres.
-pub const DOOR_WIDTH_M: f32 = 1.5;
+/// Height of one storey, in cubes.
+pub const STOREY_CUBES: i32 = 6;
+/// Width of a door's opening by default, in metres.
+pub const DOOR_WIDTH_M: f32 = 1.0;
 /// Height of a door's opening, in metres.
-pub const DOOR_HEIGHT_M: f32 = 2.2;
+pub const DOOR_HEIGHT_M: f32 = 2.0;
 
 /// How many cells a length in metres is: the nearest whole number, and at least one.
 pub fn cells(metres: f32) -> i32 {
     ((metres / CELL_M).round() as i32).max(1)
+}
+
+/// The layer of cubes a storey's walls start on.
+pub fn wall_layer(storey: i32) -> i32 {
+    storey * STOREY_CUBES
+}
+
+/// The layer of cubes a storey's floor is, just under its walls' foot.
+pub fn floor_layer(storey: i32) -> i32 {
+    wall_layer(storey) - 1
+}
+
+/// The storey whose walls a layer of cubes is part of.
+pub fn storey_of(layer: i32) -> i32 {
+    layer.div_euclid(STOREY_CUBES)
 }
 
 /// One of the six directions a cell faces.
@@ -81,27 +103,24 @@ impl Side {
         }
     }
 
+    fn of(direction: IVec3) -> Side {
+        match direction.to_array() {
+            [1, _, _] => Side::East,
+            [-1, _, _] => Side::West,
+            [_, _, 1] => Side::South,
+            [_, _, -1] => Side::North,
+            [_, 1, _] => Side::Up,
+            _ => Side::Down,
+        }
+    }
+
     /// Whether this is a wall, as opposed to a floor or roof.
     pub fn is_wall(self) -> bool {
         !matches!(self, Side::Up | Side::Down)
     }
-
-    /// The level direction a wall facing this way runs in.
-    pub fn along(self) -> IVec3 {
-        self.across()[0]
-    }
-
-    /// The two directions that run along a surface facing this way.
-    fn across(self) -> [IVec3; 2] {
-        match self {
-            Side::East | Side::West => [IVec3::Z, IVec3::Y],
-            Side::South | Side::North => [IVec3::X, IVec3::Y],
-            Side::Up | Side::Down => [IVec3::X, IVec3::Z],
-        }
-    }
 }
 
-/// One side of one cell.
+/// One side of one tile.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
@@ -123,31 +142,71 @@ impl Face {
     }
 }
 
-/// What fills a wall cell.
+/// A kind of construction, as the game's kits number them (`assets/data/kits/`): the one
+/// numbered 0 is drawn plain.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct Kind(pub u16);
+
+impl Kind {
+    pub const PLAIN: Kind = Kind(0);
+}
+
+/// What fills a cube that is not air.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Fill {
+    Solid,
+    /// A window's glass: it stops a walker and lets light through.
+    Glass,
+    /// An opening cut in a wall: part of the wall still, so the room stays closed in, but
+    /// a walker goes through it.
+    Open,
+}
+
+/// A cube of a kind of construction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Cube {
+    pub kind: Kind,
+    pub fill: Fill,
+}
+
+/// What fills a wall tile, as the shortcut lays it and as it is read back.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Panel {
     Solid,
-    /// Glass, from `sill` metres above the floor to `top` metres below the ceiling, the
-    /// full width of the cell. Neighbouring cells with the same glass are one window.
+    /// Glass from `sill` metres above the floor to `top` metres below the ceiling.
+    /// Neighbouring tiles with the same glass are one window.
     Window {
         sill: f32,
         top: f32,
     },
-    /// An opening to walk through, the full width of the cell. Neighbouring cells are
-    /// one doorway; a walker needs more than one.
+    /// An opening to walk through, a door's height. Neighbouring tiles are one doorway;
+    /// a walker needs more than one.
     Door,
 }
 
 impl Panel {
-    /// A window at about eye level.
+    /// A window by default (D175, D181): a sill at a metre, a head at two, level with the
+    /// doors.
     pub const WINDOW: Panel = Panel::Window {
-        sill: 0.9,
-        top: 0.5,
+        sill: 1.0,
+        top: 1.0,
     };
-    /// Glass from just above the floor to just under the roof.
+    /// Glass from half a metre over the floor to half a metre under the ceiling.
     pub const TALL_WINDOW: Panel = Panel::Window {
-        sill: 0.2,
-        top: 0.2,
+        sill: 0.5,
+        top: 0.5,
     };
 
     /// The next kind in the order a player cycles through.
@@ -157,6 +216,17 @@ impl Panel {
             p if p == Panel::WINDOW => Panel::TALL_WINDOW,
             Panel::Window { .. } => Panel::Door,
             Panel::Door => Panel::Solid,
+        }
+    }
+
+    /// What it puts in the cube so many layers up a wall tile.
+    pub fn fill(self, layer: i32) -> Fill {
+        let (bottom, top) = (layer as f32 * CELL_M, (layer + 1) as f32 * CELL_M);
+        let within = |from: f32, to: f32| bottom >= from - 1e-3 && top <= to + 1e-3;
+        match self {
+            Panel::Door if within(0.0, DOOR_HEIGHT_M) => Fill::Open,
+            Panel::Window { sill, top: below } if within(sill, STOREY_M - below) => Fill::Glass,
+            _ => Fill::Solid,
         }
     }
 }
@@ -172,12 +242,12 @@ pub enum RoofStyle {
     LeanTo,
 }
 
-/// A pitched roof over a block of cells on one storey, resting on the top of its walls.
+/// A pitched roof over a block of tiles on one storey, resting on the top of its walls.
 /// Where sections overlap, the roof is the highest of them at each point, so a gable
 /// meeting a hip makes its own valley.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RoofSection {
-    /// The cells it covers; both on its storey.
+    /// The tiles it covers; both on its storey.
     pub min: [i32; 3],
     pub max: [i32; 3],
     pub style: RoofStyle,
@@ -216,7 +286,7 @@ impl RoofSection {
         self.min[1]
     }
 
-    /// Whether it is over a cell.
+    /// Whether it is over a tile.
     pub fn covers(&self, tile: IVec3) -> bool {
         tile.y == self.min[1]
             && (self.min[0]..=self.max[0]).contains(&tile.x)
@@ -227,51 +297,68 @@ impl RoofSection {
 /// Something a player did to a base.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BuildOp {
-    /// Stand a wall on the edge on this side of a cell, change what fills it, or take it
-    /// away with `None`.
-    SetWall(Face, Option<Panel>),
-    /// Lay a floor at the foot of every cell of a block, or take them away.
+    /// Fill every cube of a block, counted in cubes, or empty them with `None`.
+    Fill {
+        min: [i32; 3],
+        max: [i32; 3],
+        cube: Option<Cube>,
+    },
+    /// Stand a wall on a tile in a kind, as a panel says, or take it away with `None`. Its
+    /// cubes are the tile's column; the top one too, unless a floor or roof is there.
+    SetWall {
+        tile: [i32; 3],
+        panel: Option<Panel>,
+        kind: Kind,
+    },
+    /// Lay a floor under every tile of a block, or take them away.
     SetFloor {
         min: [i32; 3],
         max: [i32; 3],
         laid: bool,
+        kind: Kind,
     },
-    /// Lay a roof over every cell of a block, or take them away.
+    /// Lay a flat roof over every tile of a block, or take them away.
     SetRoof {
         min: [i32; 3],
         max: [i32; 3],
         laid: bool,
+        kind: Kind,
     },
-    /// Put a pitched roof over a block of cells. It takes the place of any flat roof
+    /// Put a pitched roof over a block of tiles. It takes the place of any flat roof
     /// there.
     AddRoof(RoofSection),
-    /// The room tool's shortcut: walls round a block of cells on each of its storeys, and
-    /// a floor and a roof on each. Where it meets rooms already there on the same storey,
-    /// the walls between are taken away, so they open into one another and a room drawn
-    /// across another extends it.
-    AddRoom { min: [i32; 3], max: [i32; 3] },
+    /// The room tool's shortcut, over a footprint of tiles on each of its storeys: walls
+    /// round its edge, a floor inside and a flat roof over it. Where it meets rooms
+    /// already there on the same storey, the walls between are taken away, so they open
+    /// into one another and a room drawn across another extends it.
+    AddRoom {
+        min: [i32; 3],
+        max: [i32; 3],
+        kind: Kind,
+    },
 }
 
-/// A base: its walls, floors and roofs, and the rooms they close in.
+/// A base: its cubes and pitched roofs, and what is worked out from them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Base {
-    /// Each wall, named from the cell on its west or north, and what fills it.
-    walls: BTreeMap<Face, Panel>,
-    /// The cells with a floor at their foot.
-    floors: BTreeSet<[i32; 3]>,
-    /// The cells with a flat roof over them.
-    roofs: BTreeSet<[i32; 3]>,
+    cubes: BTreeMap<[i32; 3], Cube>,
     /// The pitched roofs, in the order they were put up.
     sections: Vec<RoofSection>,
-    /// Worked out from the walls: every cell they close in, and which room it is in.
+    /// Worked out from the cubes: each wall tile and what fills it.
+    walls: BTreeMap<[i32; 3], Panel>,
+    /// Each column of cubes, by where it stands, and its layers.
+    columns: BTreeMap<[i32; 2], BTreeSet<i32>>,
+    /// Every tile the walls close in, and which room it is in.
     rooms: BTreeMap<[i32; 3], u32>,
 }
 
 /// Where a ray met a base.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BuildHit {
-    /// A wall, named from the cell on its west or north; or the floor (`Down`) or roof
-    /// (`Up`) of a cell.
+    /// The cube met, counted in cubes.
+    pub cube: IVec3,
+    /// A wall tile met on a side; or the tile whose floor (`Down`, met from above) or roof
+    /// (`Up`, met from below) was met.
     pub face: Face,
     /// Distance along the ray, in metres.
     pub distance: f32,
@@ -283,45 +370,61 @@ const LEVEL: [Side; 4] = [Side::East, Side::West, Side::South, Side::North];
 
 impl Base {
     pub fn is_empty(&self) -> bool {
-        self.walls.is_empty()
-            && self.floors.is_empty()
-            && self.roofs.is_empty()
-            && self.sections.is_empty()
+        self.cubes.is_empty() && self.sections.is_empty()
     }
 
-    /// How many cells are in rooms.
+    /// The cube at a place, counted in cubes, if it is not air.
+    pub fn cube(&self, at: IVec3) -> Option<Cube> {
+        self.cubes.get(&at.to_array()).copied()
+    }
+
+    /// Every cube that is not air, in a fixed order.
+    pub fn cubes(&self) -> impl Iterator<Item = (IVec3, Cube)> + '_ {
+        self.cubes
+            .iter()
+            .map(|(&at, &cube)| (IVec3::from_array(at), cube))
+    }
+
+    /// Whether a cube is part of a wall, rather than a floor or roof: its tile is a wall
+    /// tile.
+    pub fn in_wall(&self, at: IVec3) -> bool {
+        self.walls.contains_key(&[at.x, storey_of(at.y), at.z])
+    }
+
+    /// How many tiles are in rooms.
     pub fn tile_count(&self) -> usize {
         self.rooms.len()
     }
 
-    /// Whether a cell is in a room: closed in by walls on its storey.
+    /// Whether a tile is in a room: closed in by walls on its storey.
     pub fn contains(&self, tile: IVec3) -> bool {
         self.rooms.contains_key(&tile.to_array())
     }
 
-    /// Every cell in a room and the room it is in, in a fixed order.
+    /// Every tile in a room and the room it is in, in a fixed order.
     pub fn tiles(&self) -> impl Iterator<Item = (IVec3, u32)> + '_ {
         self.rooms
             .iter()
             .map(|(&tile, &room)| (IVec3::from_array(tile), room))
     }
 
-    /// Which room a cell is in, if it is in one.
+    /// Which room a tile is in, if it is in one.
     pub fn room(&self, tile: IVec3) -> Option<u32> {
         self.rooms.get(&tile.to_array()).copied()
     }
 
-    /// Whether a cell has a floor at its foot.
+    /// Whether a tile has a floor under it.
     pub fn has_floor(&self, tile: IVec3) -> bool {
-        self.floors.contains(&tile.to_array())
+        self.solid(IVec3::new(tile.x, floor_layer(tile.y), tile.z))
     }
 
-    /// Whether a cell has a flat roof over it.
+    /// Whether a tile that is not a wall has a flat roof over it, or a floor of the
+    /// storey above.
     pub fn has_roof(&self, tile: IVec3) -> bool {
-        self.roofs.contains(&tile.to_array())
+        !self.walls.contains_key(&tile.to_array()) && self.has_floor(tile + IVec3::Y)
     }
 
-    /// Whether a cell has any roof over it, flat or pitched.
+    /// Whether a tile has any roof over it, flat or pitched.
     pub fn covered(&self, tile: IVec3) -> bool {
         self.has_roof(tile) || self.sections.iter().any(|section| section.covers(tile))
     }
@@ -341,136 +444,216 @@ impl Base {
             .max_by(|a, b| a.total_cmp(b))
     }
 
-    /// Every cell with a floor, in a fixed order.
+    /// Every tile with a floor under it that is not the top of a wall below, in a fixed
+    /// order: a flat roof is the floor of the storey over it.
     pub fn floors(&self) -> impl Iterator<Item = IVec3> + '_ {
-        self.floors.iter().map(|&tile| IVec3::from_array(tile))
+        self.cubes
+            .keys()
+            .filter(|at| (at[1] + 1).rem_euclid(STOREY_CUBES) == 0)
+            .map(|&[x, layer, z]| IVec3::new(x, storey_of(layer + 1), z))
+            .filter(|tile| !self.walls.contains_key(&(*tile - IVec3::Y).to_array()))
     }
 
-    /// Every cell with a roof, in a fixed order.
-    pub fn roofs(&self) -> impl Iterator<Item = IVec3> + '_ {
-        self.roofs.iter().map(|&tile| IVec3::from_array(tile))
+    /// Every wall tile and what fills it, in a fixed order.
+    pub fn walls(&self) -> impl Iterator<Item = (IVec3, Panel)> + '_ {
+        self.walls
+            .iter()
+            .map(|(&tile, &panel)| (IVec3::from_array(tile), panel))
     }
 
-    /// Every wall, named from the cell on its west or north, in a fixed order.
-    pub fn walls(&self) -> impl Iterator<Item = (Face, Panel)> + '_ {
-        self.walls.iter().map(|(&face, &panel)| (face, panel))
+    /// The layers of the cubes standing at a place, counted in cubes along the floor.
+    pub fn column(&self, x: i32, z: i32) -> impl Iterator<Item = i32> + '_ {
+        self.columns.get(&[x, z]).into_iter().flatten().copied()
+    }
+
+    fn solid(&self, at: IVec3) -> bool {
+        self.cube(at).is_some_and(|cube| cube.fill != Fill::Open)
     }
 
     /// Applies an operation. Returns whether it changed anything.
     pub fn apply(&mut self, op: BuildOp) -> bool {
-        let changed = match op {
-            BuildOp::SetWall(face, panel) => self.set_wall(face, panel),
-            BuildOp::SetFloor { min, max, laid } => {
-                Self::set_cells(&mut self.floors, min, max, laid)
-            }
-            BuildOp::SetRoof { min, max, laid } => Self::set_cells(&mut self.roofs, min, max, laid),
-            BuildOp::AddRoof(section) => {
-                // It takes the place of a flat roof under it.
-                Self::set_cells(&mut self.roofs, section.min, section.max, false);
-                if self.sections.contains(&section) {
-                    false
-                } else {
-                    self.sections.push(section);
-                    true
-                }
-            }
-            BuildOp::AddRoom { min, max } => {
-                self.add_room(IVec3::from_array(min), IVec3::from_array(max))
-            }
-        };
-        if changed {
-            self.find_rooms();
-        }
-        changed
-    }
-
-    fn set_wall(&mut self, face: Face, panel: Option<Panel>) -> bool {
-        if !face.side.is_wall() {
-            return false;
-        }
-        let edge = Self::edge(face);
-        match panel {
-            Some(panel) => self.walls.insert(edge, panel) != Some(panel),
-            None => self.walls.remove(&edge).is_some(),
-        }
-    }
-
-    fn set_cells(cells: &mut BTreeSet<[i32; 3]>, min: [i32; 3], max: [i32; 3], laid: bool) -> bool {
+        let before = self.cubes.clone();
         let mut changed = false;
-        for x in min[0]..=max[0] {
-            for y in min[1]..=max[1] {
-                for z in min[2]..=max[2] {
-                    changed |= if laid {
-                        cells.insert([x, y, z])
-                    } else {
-                        cells.remove(&[x, y, z])
-                    };
+        match op {
+            BuildOp::Fill { min, max, cube } => {
+                for_block(min, max, |at| self.set(at, cube));
+            }
+            BuildOp::SetWall { tile, panel, kind } => {
+                self.set_wall(IVec3::from_array(tile), panel, kind);
+            }
+            BuildOp::SetFloor {
+                min,
+                max,
+                laid,
+                kind,
+            } => {
+                let cube = laid.then_some(Cube {
+                    kind,
+                    fill: Fill::Solid,
+                });
+                for_block(min, max, |[x, storey, z]| {
+                    self.set([x, floor_layer(storey), z], cube)
+                });
+            }
+            BuildOp::SetRoof {
+                min,
+                max,
+                laid,
+                kind,
+            } => {
+                let cube = laid.then_some(Cube {
+                    kind,
+                    fill: Fill::Solid,
+                });
+                for_block(min, max, |[x, storey, z]| {
+                    self.set([x, floor_layer(storey + 1), z], cube)
+                });
+            }
+            BuildOp::AddRoof(section) => {
+                // It takes the place of a flat roof under it, but not of the walls' tops.
+                for_block(section.min, section.max, |[x, storey, z]| {
+                    if !self.walls.contains_key(&[x, storey, z]) {
+                        self.set([x, floor_layer(storey + 1), z], None);
+                    }
+                });
+                if !self.sections.contains(&section) {
+                    self.sections.push(section);
+                    changed = true;
                 }
             }
+            BuildOp::AddRoom { min, max, kind } => {
+                self.add_room(IVec3::from_array(min), IVec3::from_array(max), kind)
+            }
+        }
+        changed |= self.cubes != before;
+        if changed {
+            self.work_out();
         }
         changed
     }
 
-    fn add_room(&mut self, min: IVec3, max: IVec3) -> bool {
-        let before = (self.walls.clone(), self.floors.clone(), self.roofs.clone());
-        // Rooms as they were, so what this block meets is judged before it changes them.
+    fn set(&mut self, at: [i32; 3], cube: Option<Cube>) {
+        match cube {
+            Some(cube) => self.cubes.insert(at, cube),
+            None => self.cubes.remove(&at),
+        };
+    }
+
+    /// A wall tile's cubes as a panel says, or none. The top layer is left to a floor or
+    /// roof there.
+    fn set_wall(&mut self, tile: IVec3, panel: Option<Panel>, kind: Kind) {
+        let base = wall_layer(tile.y);
+        for step in 0..STOREY_CUBES {
+            let at = [tile.x, base + step, tile.z];
+            let top = step == STOREY_CUBES - 1;
+            let cube = panel.map(|panel| Cube {
+                kind,
+                fill: panel.fill(step),
+            });
+            // The top is the wall's, unless a floor or roof is laid there and the wall is
+            // only being changed.
+            if top && self.cubes.contains_key(&at) && !self.walls.contains_key(&tile.to_array()) {
+                continue;
+            }
+            self.set(at, cube);
+        }
+        self.work_out();
+    }
+
+    fn add_room(&mut self, min: IVec3, max: IVec3, kind: Kind) {
         let was = self.rooms.clone();
         let was_room = |tile: IVec3| was.contains_key(&tile.to_array());
-        let inside = |tile: IVec3| tile.cmpge(min).all() && tile.cmple(max).all();
-        for x in min.x..=max.x {
-            for y in min.y..=max.y {
+        let edge =
+            |tile: IVec3| tile.x == min.x || tile.x == max.x || tile.z == min.z || tile.z == max.z;
+        let inside = |tile: IVec3| tile.cmpge(min).all() && tile.cmple(max).all() && !edge(tile);
+        let solid = Cube {
+            kind,
+            fill: Fill::Solid,
+        };
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
                 for z in min.z..=max.z {
-                    let cell = IVec3::new(x, y, z);
-                    for side in LEVEL {
-                        let next = cell + side.offset();
-                        let face = Face::new(cell, side);
-                        let between_rooms = was_room(cell) && was_room(next);
-                        if inside(next) || was_room(next) {
-                            // Within the block, or where it meets a room already there:
-                            // open, but for a wall that already stood between two rooms.
-                            if !between_rooms {
-                                self.set_wall(face, None);
-                            }
-                        } else if self.filling(face).is_none() {
-                            self.set_wall(face, Some(Panel::Solid));
-                        }
+                    let tile = IVec3::new(x, y, z);
+                    let wall = self.walls.contains_key(&tile.to_array());
+                    // A floor under all of it, the walls too, unless the top of a wall
+                    // below is there.
+                    if !self.cubes.contains_key(&[x, floor_layer(y), z]) {
+                        self.set([x, floor_layer(y), z], Some(solid));
                     }
-                    // A floor and a roof on every storey of it: where a storey stands on
-                    // another, the roof below is the ceiling under the floor above.
-                    self.floors.insert(cell.to_array());
-                    self.roofs.insert(cell.to_array());
+                    if inside(tile) {
+                        // Inside: open, but for a wall that already stood between two rooms.
+                        let between_rooms = wall
+                            && LEVEL.iter().any(|side| {
+                                was_room(tile + side.offset()) && was_room(tile - side.offset())
+                            });
+                        if wall && !between_rooms {
+                            self.set_wall(tile, None, kind);
+                        }
+                        self.set([x, floor_layer(y + 1), z], Some(solid));
+                    } else if was_room(tile) {
+                        // Across a room already there: it is extended, not walled.
+                    } else if wall {
+                        // A wall already there between this room and another opens.
+                        let opens = LEVEL.iter().any(|side| {
+                            inside(tile + side.offset()) && was_room(tile - side.offset())
+                        });
+                        if opens {
+                            self.set_wall(tile, None, kind);
+                        }
+                    } else {
+                        self.set_wall(tile, Some(Panel::Solid), kind);
+                    }
                 }
             }
         }
-        before != (self.walls.clone(), self.floors.clone(), self.roofs.clone())
     }
 
-    /// Works out the rooms: on each storey, the cells that cannot be reached from beyond
+    /// Works out the wall tiles, the columns and the rooms from the cubes.
+    fn work_out(&mut self) {
+        self.columns.clear();
+        for &[x, layer, z] in self.cubes.keys() {
+            self.columns.entry([x, z]).or_default().insert(layer);
+        }
+        // A wall tile has cubes below its top layer.
+        let mut tiles: BTreeMap<[i32; 3], Vec<Option<Fill>>> = BTreeMap::new();
+        for (&[x, layer, z], cube) in &self.cubes {
+            let storey = storey_of(layer);
+            let step = layer - wall_layer(storey);
+            if step < STOREY_CUBES - 1 {
+                tiles
+                    .entry([x, storey, z])
+                    .or_insert_with(|| vec![None; STOREY_CUBES as usize])[step as usize] =
+                    Some(cube.fill);
+            }
+        }
+        self.walls = tiles
+            .into_iter()
+            .map(|(tile, fills)| (tile, panel_of(&fills)))
+            .collect();
+        self.find_rooms();
+    }
+
+    /// Works out the rooms: on each storey, the tiles that cannot be reached from beyond
     /// the walls without passing through one, grouped by which reach each other.
     fn find_rooms(&mut self) {
         let mut rooms = BTreeMap::new();
         let mut storeys: BTreeMap<i32, (IVec2, IVec2)> = BTreeMap::new();
-        for face in self.walls.keys() {
-            let tile = face.tile();
-            let beyond = tile + face.side.offset();
-            let (low, high) = (tile.min(beyond).xz(), tile.max(beyond).xz());
+        for &[x, y, z] in self.walls.keys() {
+            let at = IVec2::new(x, z);
             storeys
-                .entry(tile.y)
+                .entry(y)
                 .and_modify(|(lo, hi)| {
-                    *lo = lo.min(low);
-                    *hi = hi.max(high);
+                    *lo = lo.min(at);
+                    *hi = hi.max(at);
                 })
-                .or_insert((low, high));
+                .or_insert((at, at));
         }
         let mut next_room = 0;
         for (y, (low, high)) in storeys {
-            // One cell wider all round, so the open air surrounds everything.
+            // One tile wider all round, so the open air surrounds everything.
             let (low, high) = (low - IVec2::ONE, high + IVec2::ONE);
             let within = |cell: IVec2| cell.cmpge(low).all() && cell.cmple(high).all();
-            let open = |cell: IVec2, side: Side| {
-                let tile = IVec3::new(cell.x, y, cell.y);
-                self.filling(Face::new(tile, side)).is_none()
-            };
+            let open = |cell: IVec2| !self.walls.contains_key(&[cell.x, y, cell.y]);
             let step = |cell: IVec2, side: Side| {
                 let offset = side.offset();
                 cell + IVec2::new(offset.x, offset.z)
@@ -489,16 +672,17 @@ impl Base {
             while let Some(cell) = frontier.pop() {
                 for side in LEVEL {
                     let next = step(cell, side);
-                    if within(next) && open(cell, side) && reached.insert(next.to_array()) {
+                    if within(next) && open(next) && reached.insert(next.to_array()) {
                         frontier.push(next);
                     }
                 }
             }
-            // What the open air never reached is closed in: each group of it a room.
+            // What the open air never reached, and is not wall, is closed in: each group
+            // of it a room.
             for x in low.x..=high.x {
                 for z in low.y..=high.y {
                     let start = IVec2::new(x, z);
-                    if !reached.insert(start.to_array()) {
+                    if !open(start) || !reached.insert(start.to_array()) {
                         continue;
                     }
                     let mut frontier = vec![start];
@@ -506,7 +690,7 @@ impl Base {
                         rooms.insert([cell.x, y, cell.y], next_room);
                         for side in LEVEL {
                             let next = step(cell, side);
-                            if open(cell, side) && reached.insert(next.to_array()) {
+                            if open(next) && reached.insert(next.to_array()) {
                                 frontier.push(next);
                             }
                         }
@@ -518,162 +702,248 @@ impl Base {
         self.rooms = rooms;
     }
 
-    /// What fills a wall, seen from either side. `None` where there is no wall, and for
-    /// floors and roofs.
-    pub fn filling(&self, face: Face) -> Option<Panel> {
-        if !face.side.is_wall() {
-            return None;
-        }
-        self.walls.get(&Self::edge(face)).copied()
+    /// What fills a wall tile. `None` where there is no wall.
+    pub fn filling(&self, tile: IVec3) -> Option<Panel> {
+        self.walls.get(&tile.to_array()).copied()
     }
 
-    /// What fills a wall, or solid where there is none.
-    pub fn panel(&self, face: Face) -> Panel {
-        self.filling(face).unwrap_or(Panel::Solid)
+    /// What fills a wall tile, or solid where there is none.
+    pub fn panel(&self, tile: IVec3) -> Panel {
+        self.filling(tile).unwrap_or(Panel::Solid)
     }
 
-    /// Whether a wall is an outside wall: a room on one side of it and not the other.
-    pub fn exterior(&self, face: Face) -> bool {
-        self.filling(face).is_some()
-            && self.contains(face.tile()) != self.contains(face.tile() + face.side.offset())
+    /// The kind of a wall tile: of its lowest cube.
+    pub fn kind(&self, tile: IVec3) -> Option<Kind> {
+        let base = wall_layer(tile.y);
+        (base..base + STOREY_CUBES)
+            .find_map(|layer| self.cube(IVec3::new(tile.x, layer, tile.z)))
+            .map(|cube| cube.kind)
     }
 
-    /// The way out through an outside wall, from its room toward the open. `None` if it is
-    /// not an outside wall.
-    pub fn outward(&self, face: Face) -> Option<IVec3> {
-        if !self.exterior(face) {
-            return None;
-        }
-        let offset = face.side.offset();
-        Some(if self.contains(face.tile()) {
-            offset
+    /// The way a wall tile's wall runs along the floor: east and west where it has wall
+    /// either side that way, else north and south where it has, else east and west.
+    pub fn along(&self, tile: IVec3) -> IVec3 {
+        let wall = |step: IVec3| self.walls.contains_key(&(tile + step).to_array());
+        if wall(IVec3::X) || wall(IVec3::NEG_X) {
+            IVec3::X
+        } else if wall(IVec3::Z) || wall(IVec3::NEG_Z) {
+            IVec3::Z
         } else {
-            -offset
-        })
+            IVec3::X
+        }
     }
 
-    /// The window or doorway a wall cell is part of: every cell in a line with it, on the
-    /// same storey, that has the same filling, in order along the wall and named from
-    /// their west or north. Just the cell itself if it is solid, and nothing if there is
-    /// no wall there.
-    pub fn run(&self, face: Face) -> Vec<Face> {
-        let Some(panel) = self.filling(face) else {
+    /// Whether a wall tile is an outside wall: a room on one side of it and open air on
+    /// another.
+    pub fn exterior(&self, tile: IVec3) -> bool {
+        self.outward(tile).is_some()
+    }
+
+    /// The way out through an outside wall tile, from its room toward the open. `None` if
+    /// it is not an outside wall.
+    pub fn outward(&self, tile: IVec3) -> Option<IVec3> {
+        self.filling(tile)?;
+        let open = |at: IVec3| !self.contains(at) && self.filling(at).is_none();
+        LEVEL
+            .iter()
+            .map(|side| side.offset())
+            .find(|&out| self.contains(tile - out) && open(tile + out))
+    }
+
+    /// The window or doorway a wall tile is part of: every tile in a line with it, along
+    /// its wall, that has the same filling, in order. Just the tile itself if it is solid,
+    /// and nothing if there is no wall there.
+    pub fn run(&self, tile: IVec3) -> Vec<IVec3> {
+        let Some(panel) = self.filling(tile) else {
             return Vec::new();
         };
-        let face = Self::edge(face);
         if panel == Panel::Solid {
-            return vec![face];
+            return vec![tile];
         }
-        let along = face.side.along();
-        let same = |cell: IVec3| self.filling(Face::new(cell, face.side)) == Some(panel);
-        let mut first = face.tile();
+        let along = self.along(tile);
+        let same = |at: IVec3| self.filling(at) == Some(panel);
+        let mut first = tile;
         while same(first - along) {
             first -= along;
         }
         let mut found = Vec::new();
-        let mut cell = first;
-        while same(cell) {
-            found.push(Face::new(cell, face.side));
-            cell += along;
+        let mut at = first;
+        while same(at) {
+            found.push(at);
+            at += along;
         }
         found
     }
 
-    /// The same edge between two cells, named from whichever has it on its east or south
-    /// side. Floors and roofs are left as they are.
-    pub fn edge(face: Face) -> Face {
-        match face.side {
-            Side::West => Face::new(face.tile() + IVec3::NEG_X, Side::East),
-            Side::North => Face::new(face.tile() + IVec3::NEG_Z, Side::South),
-            _ => face,
-        }
-    }
-
-    /// The first wall, floor or roof a ray meets, from either side, if any. `origin` and
-    /// `direction` are in the base's own space, in metres; `direction` is unit length.
+    /// The first cube a ray meets, from any side, if any; openings are passed through.
+    /// `origin` and `direction` are in the base's own space, in metres; `direction` is
+    /// unit length.
     pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f32) -> Option<BuildHit> {
-        let size = Vec3::new(CELL_M, STOREY_M, CELL_M);
-        let walls = self.walls.keys().map(|&face| (face, true));
-        let floors = self.floors.iter().map(|&tile| {
-            (
-                Face {
-                    tile,
-                    side: Side::Down,
-                },
-                false,
-            )
-        });
-        let roofs = self.roofs.iter().map(|&tile| {
-            (
-                Face {
-                    tile,
-                    side: Side::Up,
-                },
-                false,
-            )
-        });
-        walls
-            .chain(floors)
-            .chain(roofs)
-            .filter_map(|(face, wall)| {
-                let normal = face.side.offset().as_vec3();
-                let low = face.tile().as_vec3() * size;
-                // A point on the face's plane: the cell's far corner on positive sides.
-                let on_plane = low + normal.max(Vec3::ZERO) * size;
-                let approach = direction.dot(normal);
-                if approach.abs() < 1e-6 {
-                    return None;
-                }
-                let distance = (on_plane - origin).dot(normal) / approach;
-                if distance <= 0.0 || distance > max_distance {
-                    return None;
-                }
-                let point = origin + direction * distance;
-                let inside = (0..3).all(|axis| {
-                    normal[axis] != 0.0
-                        || (point[axis] >= low[axis] && point[axis] <= low[axis] + size[axis])
-                });
-                inside.then_some(BuildHit {
+        self.cubes
+            .iter()
+            .filter(|(_, cube)| cube.fill != Fill::Open)
+            .filter_map(|(&at, _)| {
+                let at = IVec3::from_array(at);
+                let low = at.as_vec3() * CELL_M;
+                let (distance, normal) =
+                    ray_box(origin, direction, low, low + Vec3::splat(CELL_M))?;
+                (distance <= max_distance).then_some((at, distance, normal))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(cube, distance, normal)| {
+                let wall = self.in_wall(cube);
+                let face = if wall {
+                    Face::new(
+                        IVec3::new(cube.x, storey_of(cube.y), cube.z),
+                        Side::of(normal),
+                    )
+                } else if normal.y >= 0 {
+                    Face::new(
+                        IVec3::new(cube.x, storey_of(cube.y + 1), cube.z),
+                        if normal.y > 0 {
+                            Side::Down
+                        } else {
+                            Side::of(normal)
+                        },
+                    )
+                } else {
+                    Face::new(
+                        IVec3::new(cube.x, storey_of(cube.y + 1) - 1, cube.z),
+                        Side::Up,
+                    )
+                };
+                BuildHit {
+                    cube,
                     face,
                     distance,
                     wall,
-                })
+                }
             })
-            .min_by(|a, b| a.distance.total_cmp(&b.distance))
     }
 
-    /// The four corners of a face, in the base's own space, in metres.
-    pub fn corners(face: Face) -> [Vec3; 4] {
-        mesh::corners(face)
+    /// The rectangle up the middle of a wall tile, along the way its wall runs, in the
+    /// base's own space: low-left, low-right, high-right, high-left as seen from the side
+    /// it faces, south or east.
+    pub fn corners(&self, tile: IVec3) -> [Vec3; 4] {
+        corners(tile, self.along(tile))
     }
 
-    /// The base as triangles, ready to draw.
-    pub fn mesh(&self) -> BaseMesh {
-        mesh::build(self, None)
+    /// The base as triangles, ready to draw: walls of a kind with a kit are left to the
+    /// kit, which `kit` says.
+    pub fn mesh(&self, kit: impl Fn(Kind) -> Option<mesh::KitLook>) -> BaseMesh {
+        mesh::build(self, kit)
     }
 
-    /// The base with its walls laid as logs: its floors, roofs and gable ends as
-    /// triangles, and the walls' pieces, in the order they go in, to draw as they stand.
+    /// The base with its log walls laid as logs: everything else as triangles, and the
+    /// logs, in the order they go in, to draw as they stand.
     pub fn mesh_with_logs(&self, kit: &logs::LogKit) -> (BaseMesh, logs::Layout) {
-        let mut mesh = mesh::build(self, Some((kit.colours.board, kit.colours.roof)));
-        let layout = logs::lay(self, kit);
-        mesh.glass.positions.extend(&layout.glass.positions);
-        mesh.glass.normals.extend(&layout.glass.normals);
-        mesh.glass.colours.extend(&layout.glass.colours);
-        (mesh, layout)
+        let mesh = mesh::build(self, |kind| {
+            (kind == kit.kind()).then_some(mesh::KitLook {
+                gable: kit.colours.board,
+                floor: kit.colours.light,
+                roof: kit.colours.roof,
+                side: kit.colours.dark,
+            })
+        });
+        (mesh, logs::lay(self, kit))
     }
+}
+
+pub use mesh::KitLook;
+
+/// The rectangle up the middle of a wall tile running along `along`, in the base's own
+/// space: low-left, low-right, high-right, high-left as seen from the south or east.
+pub fn corners(tile: IVec3, along: IVec3) -> [Vec3; 4] {
+    let low = Vec3::new(
+        tile.x as f32,
+        tile.y as f32 * STOREY_CUBES as f32,
+        tile.z as f32,
+    ) * CELL_M;
+    let middle = low + Vec3::new(CELL_M, 0.0, CELL_M) * 0.5;
+    let (from, right) = if along == IVec3::X {
+        (Vec3::new(low.x, low.y, middle.z), Vec3::X)
+    } else {
+        (Vec3::new(middle.x, low.y, low.z + CELL_M), Vec3::NEG_Z)
+    };
+    let up = Vec3::Y * STOREY_M;
+    [
+        from,
+        from + right * CELL_M,
+        from + right * CELL_M + up,
+        from + up,
+    ]
+}
+
+/// What a wall tile's cubes, from its foot up, read as.
+fn panel_of(fills: &[Option<Fill>]) -> Panel {
+    let layers = |fill: Fill| -> Vec<i32> {
+        (0..fills.len() as i32)
+            .filter(|&i| fills[i as usize] == Some(fill))
+            .collect()
+    };
+    let (open, glass) = (layers(Fill::Open), layers(Fill::Glass));
+    if !open.is_empty() && open[0] == 0 {
+        return Panel::Door;
+    }
+    match (glass.first(), glass.last()) {
+        (Some(&first), Some(&last)) => Panel::Window {
+            sill: first as f32 * CELL_M,
+            top: STOREY_M - (last + 1) as f32 * CELL_M,
+        },
+        _ => Panel::Solid,
+    }
+}
+
+fn for_block(min: [i32; 3], max: [i32; 3], mut each: impl FnMut([i32; 3])) {
+    for x in min[0]..=max[0] {
+        for y in min[1]..=max[1] {
+            for z in min[2]..=max[2] {
+                each([x, y, z]);
+            }
+        }
+    }
+}
+
+/// Where a ray enters a box, and the side of the box it enters by, if it does.
+fn ray_box(origin: Vec3, direction: Vec3, low: Vec3, high: Vec3) -> Option<(f32, IVec3)> {
+    let mut near = f32::MIN;
+    let mut far = f32::MAX;
+    let mut normal = IVec3::ZERO;
+    for axis in 0..3 {
+        if direction[axis].abs() < 1e-9 {
+            if origin[axis] < low[axis] || origin[axis] > high[axis] {
+                return None;
+            }
+            continue;
+        }
+        let (a, b) = (
+            (low[axis] - origin[axis]) / direction[axis],
+            (high[axis] - origin[axis]) / direction[axis],
+        );
+        let (enter, leave) = (a.min(b), a.max(b));
+        if enter > near {
+            near = enter;
+            normal = IVec3::ZERO;
+            normal[axis] = if direction[axis] > 0.0 { -1 } else { 1 };
+        }
+        far = far.min(leave);
+    }
+    (near <= far && near > 0.0).then_some((near, normal))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// A room three cells square, by the shortcut.
+    const LOGS: Kind = Kind(1);
+
+    /// A room four tiles by three outside, two by one inside, by the shortcut.
     fn room() -> Base {
         let mut base = Base::default();
         assert!(base.apply(BuildOp::AddRoom {
             min: [0, 0, 0],
-            max: [2, 0, 2]
+            max: [3, 0, 2],
+            kind: LOGS,
         }));
         base
     }
@@ -681,99 +951,122 @@ mod tests {
     #[test]
     fn the_room_tool_lays_walls_round_a_floor_and_a_roof() {
         let base = room();
-        assert_eq!(base.walls().count(), 12);
-        assert_eq!(base.floors().count(), 9);
-        assert_eq!(base.roofs().count(), 9);
-        assert_eq!(base.tile_count(), 9);
-        // Nothing between two cells of the room.
+        assert_eq!(base.walls().count(), 10);
+        assert_eq!(base.tile_count(), 2);
+        assert!(base.contains(IVec3::new(1, 0, 1)) && base.contains(IVec3::new(2, 0, 1)));
+        // A floor under all twelve tiles, and the roof over the two inside, which would be
+        // the floor of a storey over them.
+        assert_eq!(base.floors().count(), 14);
+        assert!(base.has_roof(IVec3::new(1, 0, 1)) && !base.has_roof(IVec3::new(0, 0, 0)));
+        // A wall is six cubes high, on the floor, the layer under it.
         assert_eq!(
-            base.filling(Face::new(IVec3::new(0, 0, 0), Side::East)),
-            None
+            base.column(0, 0).collect::<Vec<_>>(),
+            vec![-1, 0, 1, 2, 3, 4, 5]
         );
-        assert!(base.exterior(Face::new(IVec3::new(2, 0, 1), Side::East)));
+        assert_eq!(base.column(1, 1).collect::<Vec<_>>(), vec![-1, 5]);
+        assert!(base.exterior(IVec3::new(1, 0, 2)));
+        assert_eq!(base.outward(IVec3::new(1, 0, 2)), Some(IVec3::Z));
+        assert_eq!(base.kind(IVec3::new(0, 0, 0)), Some(LOGS));
     }
 
     #[test]
-    fn walls_drawn_round_cells_close_them_into_a_room_and_a_gap_opens_it() {
-        let mut base = Base::default();
-        // Four walls round a block two cells by one, drawn one cell at a time.
-        let walls = [
-            Face::new(IVec3::new(0, 0, 0), Side::North),
-            Face::new(IVec3::new(1, 0, 0), Side::North),
-            Face::new(IVec3::new(0, 0, 0), Side::South),
-            Face::new(IVec3::new(1, 0, 0), Side::South),
-            Face::new(IVec3::new(0, 0, 0), Side::West),
-            Face::new(IVec3::new(1, 0, 0), Side::East),
-        ];
-        for face in walls {
-            base.apply(BuildOp::SetWall(face, Some(Panel::Solid)));
-        }
+    fn a_doorway_still_closes_a_room_in_and_a_gap_does_not() {
+        let mut base = room();
+        let door = IVec3::new(1, 0, 2);
+        base.apply(BuildOp::SetWall {
+            tile: door.to_array(),
+            panel: Some(Panel::Door),
+            kind: LOGS,
+        });
+        assert_eq!(base.filling(door), Some(Panel::Door));
         assert_eq!(base.tile_count(), 2);
-        assert_eq!(base.room(IVec3::ZERO), base.room(IVec3::X));
-        // A doorway still closes it in; a gap does not.
-        base.apply(BuildOp::SetWall(walls[0], Some(Panel::Door)));
-        assert_eq!(base.tile_count(), 2);
-        base.apply(BuildOp::SetWall(walls[0], None));
+        // Its cubes up to two metres are open, and the rest still wall.
+        assert_eq!(base.cube(IVec3::new(1, 3, 2)).unwrap().fill, Fill::Open);
+        assert_eq!(base.cube(IVec3::new(1, 4, 2)).unwrap().fill, Fill::Solid);
+        base.apply(BuildOp::SetWall {
+            tile: door.to_array(),
+            panel: None,
+            kind: LOGS,
+        });
         assert_eq!(base.tile_count(), 0);
     }
 
     #[test]
-    fn a_wall_across_a_room_makes_two() {
+    fn a_window_is_glass_between_its_sill_and_head_and_reads_back() {
         let mut base = room();
-        for z in 0..3 {
-            base.apply(BuildOp::SetWall(
-                Face::new(IVec3::new(0, 0, z), Side::East),
-                Some(Panel::Solid),
-            ));
-        }
-        assert_eq!(base.tile_count(), 9);
-        assert_ne!(base.room(IVec3::ZERO), base.room(IVec3::new(2, 0, 0)));
-        assert!(!base.exterior(Face::new(IVec3::new(0, 0, 1), Side::East)));
+        let tile = IVec3::new(0, 0, 1);
+        base.apply(BuildOp::SetWall {
+            tile: tile.to_array(),
+            panel: Some(Panel::WINDOW),
+            kind: LOGS,
+        });
+        assert_eq!(base.filling(tile), Some(Panel::WINDOW));
+        let fills: Vec<Fill> = (0..6)
+            .map(|layer| base.cube(IVec3::new(0, layer, 1)).unwrap().fill)
+            .collect();
+        assert_eq!(
+            fills,
+            [
+                Fill::Solid,
+                Fill::Solid,
+                Fill::Glass,
+                Fill::Glass,
+                Fill::Solid,
+                Fill::Solid
+            ]
+        );
+    }
+
+    #[test]
+    fn cubes_carved_out_of_a_wall_are_an_opening_of_any_shape() {
+        let mut base = room();
+        // One cube, a metre up, opened.
+        base.apply(BuildOp::Fill {
+            min: [0, 2, 1],
+            max: [0, 2, 1],
+            cube: Some(Cube {
+                kind: LOGS,
+                fill: Fill::Open,
+            }),
+        });
+        assert!(base.filling(IVec3::new(0, 0, 1)).is_some());
+        assert_eq!(base.tile_count(), 2);
     }
 
     #[test]
     fn rooms_that_touch_open_into_each_other() {
         let mut base = room();
+        // Another sharing the east wall: the wall between is taken away.
         base.apply(BuildOp::AddRoom {
-            min: [3, 0, 1],
-            max: [5, 0, 1],
+            min: [3, 0, 0],
+            max: [6, 0, 2],
+            kind: LOGS,
         });
-        // The corridor meets the room, so there is no wall between.
+        assert_eq!(base.filling(IVec3::new(3, 0, 1)), None);
         assert_eq!(
-            base.filling(Face::new(IVec3::new(2, 0, 1), Side::East)),
-            None
+            base.room(IVec3::new(1, 0, 1)),
+            base.room(IVec3::new(5, 0, 1))
         );
-        assert!(
-            base.filling(Face::new(IVec3::new(2, 0, 0), Side::East))
-                .is_some()
-        );
-        assert_eq!(base.room(IVec3::new(5, 0, 1)), base.room(IVec3::ZERO));
     }
 
     #[test]
-    fn a_room_drawn_across_another_extends_it() {
-        let mut base = room();
-        // Half over the first room, half beyond its east wall.
-        assert!(base.apply(BuildOp::AddRoom {
-            min: [2, 0, 1],
-            max: [4, 0, 3],
-        }));
-        assert_eq!(base.room(IVec3::new(4, 0, 3)), base.room(IVec3::ZERO));
-        // The old east wall where the new block crosses it is gone.
-        assert_eq!(
-            base.filling(Face::new(IVec3::new(2, 0, 1), Side::South)),
-            None
-        );
-        // A block wholly inside changes nothing, and a block apart is its own room.
-        assert!(!base.apply(BuildOp::AddRoom {
+    fn a_wall_across_a_room_makes_two() {
+        let mut base = Base::default();
+        base.apply(BuildOp::AddRoom {
             min: [0, 0, 0],
-            max: [1, 0, 1],
-        }));
-        assert!(base.apply(BuildOp::AddRoom {
-            min: [8, 0, 0],
-            max: [9, 0, 1],
-        }));
-        assert_ne!(base.room(IVec3::new(8, 0, 0)), base.room(IVec3::ZERO));
+            max: [6, 0, 3],
+            kind: LOGS,
+        });
+        let rooms = |base: &Base| base.tiles().map(|(_, r)| r).collect::<BTreeSet<_>>().len();
+        assert_eq!(rooms(&base), 1);
+        for z in 1..3 {
+            base.apply(BuildOp::SetWall {
+                tile: [3, 0, z],
+                panel: Some(Panel::Solid),
+                kind: LOGS,
+            });
+        }
+        assert_eq!(rooms(&base), 2);
     }
 
     #[test]
@@ -781,77 +1074,38 @@ mod tests {
         let mut base = room();
         base.apply(BuildOp::AddRoom {
             min: [0, 1, 0],
-            max: [1, 1, 1],
+            max: [3, 1, 2],
+            kind: LOGS,
         });
-        // The roof below is the ceiling under the floor above.
-        assert!(base.has_roof(IVec3::ZERO));
-        assert!(base.has_floor(IVec3::Y));
-        assert!(base.has_roof(IVec3::Y));
-        assert!(base.contains(IVec3::Y));
+        assert!(base.contains(IVec3::new(1, 1, 1)));
+        // The roof below is the floor above: one layer of cubes.
+        assert!(base.has_roof(IVec3::new(1, 0, 1)) && base.has_floor(IVec3::new(1, 1, 1)));
+        assert_eq!(base.column(0, 0).count(), 13);
     }
 
     #[test]
-    fn openings_fill_wall_cells_and_go_with_them() {
+    fn a_ray_finds_the_wall_it_points_at_and_passes_through_a_doorway() {
         let mut base = room();
-        let wall = Face::new(IVec3::new(2, 0, 1), Side::East);
-        assert!(base.apply(BuildOp::SetWall(wall, Some(Panel::WINDOW))));
-        assert_eq!(base.panel(wall), Panel::WINDOW);
-        // The same from the other side, and setting it again changes nothing.
-        let other_side = Face::new(IVec3::new(3, 0, 1), Side::West);
-        assert_eq!(base.panel(other_side), Panel::WINDOW);
-        assert!(!base.apply(BuildOp::SetWall(other_side, Some(Panel::WINDOW))));
-        // Floors and roofs take no walls.
-        assert!(!base.apply(BuildOp::SetWall(
-            Face::new(IVec3::ZERO, Side::Down),
-            Some(Panel::WINDOW)
-        )));
-        assert!(base.apply(BuildOp::SetWall(wall, None)));
-        assert_eq!(base.filling(wall), None);
-    }
-
-    #[test]
-    fn cycling_a_panel_comes_back_round() {
-        let mut panel = Panel::Solid;
-        let mut seen = vec![panel];
-        for _ in 0..4 {
-            panel = panel.next();
-            seen.push(panel);
-        }
-        assert_eq!(seen.first(), seen.last());
-        assert_eq!(seen[1], Panel::WINDOW);
-        assert_eq!(seen[3], Panel::Door);
-    }
-
-    #[test]
-    fn a_ray_finds_the_wall_it_points_at_from_either_side() {
-        let base = room();
-        // From outside, east of the room, looking west at the middle cell.
-        let t = CELL_M;
-        let from_outside = base
-            .raycast(Vec3::new(t * 10.0, 1.5, t * 1.5), Vec3::NEG_X, 100.0)
+        let hit = base
+            .raycast(Vec3::new(1.25, 1.0, 5.0), Vec3::NEG_Z, 20.0)
             .unwrap();
-        assert_eq!(
-            from_outside.face,
-            Face::new(IVec3::new(2, 0, 1), Side::East)
-        );
-        assert!(from_outside.wall);
-        assert!((from_outside.distance - t * 7.0).abs() < 1e-4);
-        // From inside the room, looking east at the same wall.
-        let from_inside = base
-            .raycast(Vec3::new(t * 1.5, 1.5, t * 1.5), Vec3::X, 100.0)
+        assert!(hit.wall);
+        assert_eq!(hit.face, Face::new(IVec3::new(2, 0, 2), Side::South));
+        assert!((hit.distance - 3.5).abs() < 1e-4);
+        base.apply(BuildOp::SetWall {
+            tile: [2, 0, 2],
+            panel: Some(Panel::Door),
+            kind: LOGS,
+        });
+        let hit = base
+            .raycast(Vec3::new(1.25, 1.0, 5.0), Vec3::NEG_Z, 20.0)
             .unwrap();
-        assert_eq!(from_inside.face, from_outside.face);
-        // Looking down from inside, the floor.
-        let down = base
-            .raycast(Vec3::new(t * 1.5, 1.5, t * 1.5), Vec3::NEG_Y, 100.0)
+        assert_eq!(hit.face.tile(), IVec3::new(2, 0, 0));
+        // Looking down at a floor.
+        let hit = base
+            .raycast(Vec3::new(0.75, 2.0, 0.75), Vec3::NEG_Y, 20.0)
             .unwrap();
-        assert_eq!(down.face, Face::new(IVec3::new(1, 0, 1), Side::Down));
-        assert!(!down.wall);
-        // Looking away from the base finds nothing.
-        assert!(
-            base.raycast(Vec3::new(t * 10.0, 1.5, t * 1.5), Vec3::X, 100.0)
-                .is_none()
-        );
+        assert_eq!(hit.face, Face::new(IVec3::new(1, 0, 1), Side::Down));
     }
 
     #[test]
@@ -859,20 +1113,13 @@ mod tests {
         let ops = [
             BuildOp::AddRoom {
                 min: [0, 0, 0],
-                max: [2, 0, 2],
+                max: [5, 0, 4],
+                kind: LOGS,
             },
-            BuildOp::SetWall(
-                Face::new(IVec3::new(2, 0, 1), Side::East),
-                Some(Panel::TALL_WINDOW),
-            ),
-            BuildOp::AddRoom {
-                min: [0, 1, 0],
-                max: [1, 1, 1],
-            },
-            BuildOp::SetFloor {
-                min: [5, 0, 5],
-                max: [6, 0, 6],
-                laid: true,
+            BuildOp::SetWall {
+                tile: [2, 0, 4],
+                panel: Some(Panel::Door),
+                kind: LOGS,
             },
         ];
         let build = || {
@@ -883,30 +1130,26 @@ mod tests {
             base
         };
         assert_eq!(build(), build());
-        assert_eq!(build().mesh(), build().mesh());
     }
 
     #[test]
-    fn neighbouring_cells_with_the_same_opening_are_one_run() {
+    fn neighbouring_tiles_with_the_same_opening_are_one_run() {
         let mut base = room();
-        let south = |x: i32| Face::new(IVec3::new(x, 0, 2), Side::South);
-        base.apply(BuildOp::SetWall(south(0), Some(Panel::Door)));
-        base.apply(BuildOp::SetWall(south(1), Some(Panel::Door)));
-        base.apply(BuildOp::SetWall(south(2), Some(Panel::WINDOW)));
-        assert_eq!(base.run(south(1)), vec![south(0), south(1)]);
-        assert_eq!(base.run(south(2)), vec![south(2)]);
-        // Named from either side, the same run.
+        for x in 1..3 {
+            base.apply(BuildOp::SetWall {
+                tile: [x, 0, 2],
+                panel: Some(Panel::WINDOW),
+                kind: LOGS,
+            });
+        }
         assert_eq!(
-            base.run(Face::new(IVec3::new(1, 0, 3), Side::North)),
-            vec![south(0), south(1)]
+            base.run(IVec3::new(2, 0, 2)),
+            vec![IVec3::new(1, 0, 2), IVec3::new(2, 0, 2)]
         );
-        // A solid cell is a run of one, and where there is no wall there is no run.
-        let north = Face::new(IVec3::new(1, 0, -1), Side::South);
-        assert_eq!(base.run(north), vec![north]);
-        assert!(
-            base.run(Face::new(IVec3::new(1, 0, 1), Side::East))
-                .is_empty()
-        );
+        assert_eq!(base.along(IVec3::new(2, 0, 2)), IVec3::X);
+        assert_eq!(base.along(IVec3::new(0, 0, 1)), IVec3::Z);
+        assert_eq!(base.run(IVec3::new(0, 0, 1)), vec![IVec3::new(0, 0, 1)]);
+        assert!(base.run(IVec3::new(1, 0, 1)).is_empty());
         assert_eq!(cells(CELL_M * 3.0), 3);
         assert_eq!(cells(0.0), 1);
     }
@@ -921,17 +1164,12 @@ mod tests {
             pitch: 0.5,
         };
         let at = |x: f32, z: f32| glam::Vec2::new(x, z);
-        // Four metres by two: a hip rises half a metre to its ridge, a metre in.
         let hip = section(RoofStyle::Hip, true);
         assert_eq!(hip.rise(at(0.0, 1.0)), Some(0.0));
         assert_eq!(hip.rise(at(2.0, 1.0)), Some(0.5));
-        assert_eq!(hip.rise(at(0.5, 1.0)), Some(0.25));
         assert_eq!(hip.rise(at(5.0, 1.0)), None);
-        // A gable with its ridge east and west is as high at its end as in its middle.
         let gable = section(RoofStyle::Gable, true);
         assert_eq!(gable.rise(at(0.0, 1.0)), Some(0.5));
-        assert_eq!(gable.rise(at(2.0, 0.5)), Some(0.25));
-        // A lean-to rises across the whole of it.
         let lean = section(RoofStyle::LeanTo, true);
         assert_eq!(lean.rise(at(1.0, 2.0)), Some(1.0));
     }
@@ -941,32 +1179,15 @@ mod tests {
         let mut base = room();
         assert!(base.apply(BuildOp::AddRoof(RoofSection {
             min: [0, 0, 0],
-            max: [2, 0, 2],
+            max: [3, 0, 2],
             style: RoofStyle::Hip,
             along_x: true,
             pitch: 0.7,
         })));
-        assert_eq!(base.roofs().count(), 0);
+        assert!(!base.has_roof(IVec3::new(1, 0, 1)));
         assert!(base.covered(IVec3::new(1, 0, 1)));
         assert!(!base.covered(IVec3::new(1, 1, 1)));
-        // Where two sections overlap, the higher.
-        base.apply(BuildOp::AddRoof(RoofSection {
-            min: [0, 0, 1],
-            max: [5, 0, 1],
-            style: RoofStyle::Gable,
-            along_x: true,
-            pitch: 0.7,
-        }));
-        let middle = glam::Vec2::new(0.25, 0.75);
-        assert!((base.roof_rise(0, middle).unwrap() - 0.25 * 0.7).abs() < 1e-5);
-    }
-
-    #[test]
-    fn the_way_out_of_an_outside_wall_points_away_from_its_room() {
-        let base = room();
-        let east = Face::new(IVec3::new(2, 0, 1), Side::East);
-        assert_eq!(base.outward(east), Some(IVec3::X));
-        let north = Face::new(IVec3::new(1, 0, -1), Side::South);
-        assert_eq!(base.outward(north), Some(IVec3::NEG_Z));
+        // The walls keep their tops.
+        assert_eq!(base.column(0, 0).count(), 7);
     }
 }

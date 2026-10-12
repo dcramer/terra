@@ -23,12 +23,14 @@
 //                       (rest: Sit, or Sleep to wake in after going down). A seat
 //                       lower than the top, as a chair's below its back, says how high
 //                       (seat, metres).
-//              Room     rooms, by footprint in metres east by south
+//              Room     rooms, by footprint in metres east by south, outside their
+//                       walls, which are half a metre thick (D181)
 //              Roof     roofs: a style (Hip, Gable, LeanTo, or None for flat) and how far it
 //                       rises for each metre it runs
 //              Wall     lengths of wall, in metres, drawn by dragging or laid at a length
 //              Window   windows, by width in metres, and the glass's sill above the floor
-//                       and top below the ceiling, in metres
+//                       and top below the ceiling, in metres: whole cubes, half a metre
+//                       each (D181)
 //              Door, Remove, Move   the hammer's other work
 (
     structure: (
@@ -58,10 +60,10 @@
             (name: "Forge", file: "Forge", size: 2.6, height: (2.0, 3.5), cost: [("Wood", 4), ("Stone", 8)], station: "Forge"),
         ])),
         (name: "Room", tab: Structure, kind: Room([
-            (name: "4.5 by 4.5 m", metres: (4.5, 4.5)),
-            (name: "3 by 3 m", metres: (3.0, 3.0)),
-            (name: "6 by 6 m", metres: (6.0, 6.0)),
-            (name: "Corridor, 1.5 by 4.5 m", metres: (1.5, 4.5)),
+            (name: "5 by 5 m", metres: (5.0, 5.0)),
+            (name: "3.5 by 3.5 m", metres: (3.5, 3.5)),
+            (name: "7 by 7 m", metres: (7.0, 7.0)),
+            (name: "Corridor, 2 by 5 m", metres: (2.0, 5.0)),
         ])),
         (name: "Roof", tab: Structure, kind: Roof([
             (name: "Gable", style: Some(Gable), pitch: 0.7),
@@ -71,10 +73,10 @@
         ])),
         (name: "Wall", tab: Structure, kind: Wall([("3 m", 3.0), ("1.5 m", 1.5), ("0.5 m", 0.5)])),
         (name: "Window", tab: Openings, kind: Window([
-            ("1.5 m", 1.5, (0.9, 0.5)),
-            ("3 m", 3.0, (0.9, 0.5)),
-            ("0.5 m", 0.5, (0.9, 0.5)),
-            ("Tall, 1.5 m", 1.5, (0.2, 0.2)),
+            ("1.5 m", 1.5, (1.0, 1.0)),
+            ("3 m", 3.0, (1.0, 1.0)),
+            ("0.5 m", 0.5, (1.0, 1.0)),
+            ("Tall, 1.5 m", 1.5, (0.5, 0.5)),
         ])),
         (name: "Door", tab: Openings, kind: Door),
         // Seen in the world but not yet buildable: a village's well and stall. How they

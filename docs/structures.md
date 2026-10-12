@@ -20,7 +20,7 @@ How walls, floors and roofs work in code, for the building the developers agreed
 
 Shared state, in `terra_build`, with no Bevy (the rule in AGENTS.md).
 
-**What stands is cubes** (D181): every half-metre cube of a base's grid is air or a kind of construction (logs, stone, planks, wattle and daub). This is strictly the voxel grid of D48. Step 1 was built with walls on the edges between cells and is to be rebuilt on cubes.
+**What stands is cubes** (D181): every half-metre cube of a base's grid is air or a kind of construction (logs, stone, planks, wattle and daub). This is strictly the voxel grid of D48. Step 1 was built with walls on the edges between cells, and rebuilt on cubes the same day.
 
 | | As cubes |
 |---|---|
@@ -115,7 +115,7 @@ On the yard, a flat test level: `cargo xtask yard`, or `--level yard` on the pla
 
 Each step is played and checked by script before the next (D69):
 
-1. **The model** (built, 2026-10-12, on edges; to be rebuilt on cubes, D181): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; rooms in saves converted; built whole, as before. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
+1. **The model** (built, 2026-10-12, on edges, then rebuilt on cubes, D181): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; rooms in saves converted; built whole, as before. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
 2. **Roofs** (a first version, 2026-10-12): the height field, the four styles, laid over a room by a click or drawn as a rectangle, gable ends closed with wall. Not yet: eaves, trims, the covering's pieces, valleys where sections meet walls, an automatic hip over any footprint.
 3. **Plans and constructing** (D139): parts laid as plans; pieces put in one by one, from the pack and storage (D141).
 4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement. Logs first ([kits.md](kits.md), D177, D178): the stacked pattern, logs made in code, the three states and a kit sheet on the yard, built 2026-10-12.

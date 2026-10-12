@@ -1,23 +1,27 @@
-//! Log walls (docs/kits.md, D177, D178): each wall laid as logs by the stacked pattern, and
-//! each log made from the kit's numbers and a seed, so it looks hewn and grown rather
-//! than turned.
+//! Log walls (docs/kits.md, D177, D178): each wall of log cubes laid as logs by the stacked
+//! pattern, and each log made from the kit's numbers and a seed, so it looks hewn and
+//! grown rather than turned.
 //!
-//! **The layout** is worked out from the grid's walls alone. A wall is every wall edge in
-//! a line on one storey, unbroken. Walls running east and west lay whole courses; walls
-//! running north and south lie half a course higher, with a split log at the foot and on
-//! top, so where two meet their logs interlock without either knowing of the other. Each
-//! end of a wall is cut flush, or, where another wall crosses it and the open air lies
-//! beyond, runs past as a notched corner. Openings cut the courses they cross, which end
-//! at a frame. The pieces come out in the order they go in: from the bottom up.
+//! **The layout** is worked out from the cubes alone (D181). A row of cubes running east
+//! and west lays whole courses, two to a cube; a row running north and south lies half a
+//! course higher, with a split log at its foot and on top, so where two meet their logs
+//! interlock without either knowing of the other. A cube with rows both ways is a corner,
+//! a T or a cross, and its logs run past it into the open air; a row ending with nothing
+//! across it is cut flush. Openings, cubes cut open or glazed, cut the courses through
+//! them, which end at a frame of boards. A cube with nothing beside it either way is a
+//! post. Under a pitched roof the courses carry on up, shortening to the ridge. The
+//! pieces come out in the order they go in: from the bottom up.
 //!
 //! **A log** is a lathe of rings along its length, each ring an uneven polygon, tapered,
 //! bent and turned a little, with knots now and then and axe-cut ends showing their
 //! grain. Every face takes one of the kit's colours.
 
+#[cfg(test)]
+use crate::DOOR_HEIGHT_M;
 use crate::mesh::ROOF_THICK_M;
-use crate::{Base, CELL_M, DOOR_HEIGHT_M, Face, Panel, STOREY_M, Side, Surface};
+use crate::{Base, CELL_M, Fill, Kind, STOREY_CUBES, STOREY_M, Surface, storey_of, wall_layer};
 use glam::{IVec3, Vec3};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::f32::consts::TAU;
 
 /// A kind of log wall: its sizes, how much each log varies, and its colours, from a file
@@ -26,7 +30,9 @@ use std::f32::consts::TAU;
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LogKit {
-    /// How thick a log is, and so the wall.
+    /// The kind of construction it lays (D181): the number the cubes it lays carry.
+    pub id: u16,
+    /// How thick a log is.
     pub diameter: f32,
     /// How far apart the courses are; less than the diameter, as logs are scribed to sit
     /// into one another. Must divide the storey.
@@ -84,6 +90,7 @@ impl Default for LogKit {
     /// Pine, as `assets/data/kits/logs.ron` has it; for tests.
     fn default() -> Self {
         LogKit {
+            id: 1,
             diameter: 0.3,
             course: 0.25,
             overhang: 0.25,
@@ -117,6 +124,11 @@ impl LogKit {
     pub fn courses(&self) -> (i32, bool) {
         let count = (STOREY_M / self.course).round();
         (count as i32, (count * self.course - STOREY_M).abs() < 1e-3)
+    }
+
+    /// The kind of construction it lays.
+    pub fn kind(&self) -> Kind {
+        Kind(self.id)
     }
 
     fn radius(&self) -> f32 {
@@ -164,36 +176,27 @@ impl Piece {
     }
 }
 
-/// A base's walls as pieces, and the glass in their windows.
+/// A base's log walls as pieces.
 #[derive(Clone, Debug, Default)]
 pub struct Layout {
     /// In the order they go in.
     pub pieces: Vec<Piece>,
-    pub glass: Surface,
 }
 
 /// Which way a wall runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Axis {
-    /// East and west: walls on the south side of cells.
+    /// East and west: its logs lie along X.
     X,
-    /// North and south: walls on the east side of cells.
+    /// North and south: its logs lie along Z, half a course higher.
     Z,
 }
 
 impl Axis {
-    fn along(self) -> Vec3 {
+    fn step(self) -> IVec3 {
         match self {
-            Axis::X => Vec3::X,
-            Axis::Z => Vec3::Z,
-        }
-    }
-
-    /// The wall cell at a place along a line: the edge from grid point `at` to `at + 1`.
-    fn face(self, line: i32, at: i32, storey: i32) -> Face {
-        match self {
-            Axis::X => Face::new(IVec3::new(at, storey, line - 1), Side::South),
-            Axis::Z => Face::new(IVec3::new(line - 1, storey, at), Side::East),
+            Axis::X => IVec3::X,
+            Axis::Z => IVec3::Z,
         }
     }
 
@@ -203,44 +206,148 @@ impl Axis {
             Axis::Z => Axis::X,
         }
     }
-}
 
-/// A gap a wall's courses are cut round, in metres along the wall and up from its storey.
-struct Opening {
-    start: f32,
-    end: f32,
-    bottom: f32,
-    top: f32,
-    window: bool,
-}
-
-/// Lays every wall of a base as logs.
-pub fn lay(base: &Base, kit: &LogKit) -> Layout {
-    // Every wall cell, by the line it is on, in order along it.
-    let mut lines: BTreeMap<(i32, Axis, i32), BTreeMap<i32, Panel>> = BTreeMap::new();
-    for (face, panel) in base.walls() {
-        let tile = face.tile();
-        let (axis, line, at) = match face.side {
-            Side::South => (Axis::X, tile.z + 1, tile.x),
-            _ => (Axis::Z, tile.x + 1, tile.z),
-        };
-        lines
-            .entry((tile.y, axis, line))
-            .or_default()
-            .insert(at, panel);
-    }
-    let mut layout = Layout::default();
-    for ((storey, axis, line), cells) in lines {
-        let mut run: Vec<(i32, Panel)> = Vec::new();
-        for (at, panel) in cells {
-            if run.last().is_some_and(|&(last, _)| last + 1 != at) {
-                wall(base, kit, storey, axis, line, &run, &mut layout);
-                run.clear();
-            }
-            run.push((at, panel));
+    /// The cube so far along a row, on a layer.
+    fn cube(self, row: i32, along: i32, layer: i32) -> IVec3 {
+        match self {
+            Axis::X => IVec3::new(along, layer, row),
+            Axis::Z => IVec3::new(row, layer, along),
         }
-        wall(base, kit, storey, axis, line, &run, &mut layout);
     }
+
+    /// A point so far along the middle of a row, at a height, in metres.
+    fn point(self, row: i32, along: f32, height: f32) -> Vec3 {
+        let middle = (row as f32 + 0.5) * CELL_M;
+        match self {
+            Axis::X => Vec3::new(along, height, middle),
+            Axis::Z => Vec3::new(middle, height, along),
+        }
+    }
+
+    /// The height of a course's middle: the walls one way lie half a course above the
+    /// other's.
+    fn centre(self, kit: &LogKit, course: i32) -> f32 {
+        match self {
+            Axis::X => kit.course * (course as f32 + 0.5),
+            Axis::Z => kit.course * course as f32,
+        }
+    }
+}
+
+/// What a course of logs is at one cube of a row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Spot {
+    Log(Split),
+    /// Cut by an opening: framed.
+    Hole,
+    Nothing,
+}
+
+/// The cubes of a base a kit lays, and which way each runs.
+struct Walls<'a> {
+    base: &'a Base,
+    kind: Kind,
+}
+
+impl Walls<'_> {
+    /// A cube of the kit's kind that is part of a wall.
+    fn ours(&self, at: IVec3) -> Option<Fill> {
+        self.base
+            .cube(at)
+            .filter(|cube| cube.kind == self.kind && self.base.in_wall(at))
+            .map(|cube| cube.fill)
+    }
+
+    /// Whether a cube of ours runs along an axis: it has another of ours either side.
+    fn runs(&self, at: IVec3, axis: Axis) -> bool {
+        self.ours(at).is_some()
+            && (self.ours(at + axis.step()).is_some() || self.ours(at - axis.step()).is_some())
+    }
+
+    /// What a course is at a cube of a row: a log where the cubes it lies in are solid and
+    /// run its way, split where it is at the foot or top of them, cut where one is open.
+    fn spot(&self, kit: &LogKit, axis: Axis, row: i32, along: i32, course: i32) -> Spot {
+        let centre = axis.centre(kit, course);
+        let half = kit.course * 0.5;
+        let layer = |height: f32| (height / CELL_M).floor() as i32;
+        let (low, high) = (layer(centre - half + 1e-4), layer(centre + half - 1e-4));
+        let state = |layer: i32| {
+            let at = axis.cube(row, along, layer);
+            if !self.runs(at, axis) {
+                return None;
+            }
+            self.ours(at)
+        };
+        match (state(low), state(high)) {
+            _ if low == high => match state(low) {
+                Some(Fill::Solid) => Spot::Log(Split::Whole),
+                Some(_) => Spot::Hole,
+                None => Spot::Nothing,
+            },
+            (Some(Fill::Solid), Some(Fill::Solid)) => Spot::Log(Split::Whole),
+            (None, Some(Fill::Solid)) => Spot::Log(Split::Top),
+            (Some(Fill::Solid), None) => Spot::Log(Split::Bottom),
+            (None, None) => Spot::Nothing,
+            _ => Spot::Hole,
+        }
+    }
+
+    /// Whether the open air is beyond a cube, so a log may run past into it.
+    fn open_beyond(&self, at: IVec3) -> bool {
+        self.base.cube(at).is_none()
+            && !self
+                .base
+                .contains(IVec3::new(at.x, crate::storey_of(at.y), at.z))
+    }
+}
+
+/// Lays every wall of a base in the kit's kind as logs.
+pub fn lay(base: &Base, kit: &LogKit) -> Layout {
+    let walls = Walls {
+        base,
+        kind: kit.kind(),
+    };
+    let ours: Vec<IVec3> = base
+        .cubes()
+        .map(|(at, _)| at)
+        .filter(|&at| walls.ours(at).is_some())
+        .collect();
+    let mut layout = Layout::default();
+    if ours.is_empty() {
+        return layout;
+    }
+    for axis in [Axis::X, Axis::Z] {
+        // Each row of cubes running this way, with how far along it and how high its
+        // cubes go.
+        let mut rows: BTreeMap<i32, (i32, i32, i32, i32)> = BTreeMap::new();
+        for &at in ours.iter().filter(|&&at| walls.runs(at, axis)) {
+            let (row, along) = match axis {
+                Axis::X => (at.z, at.x),
+                Axis::Z => (at.x, at.z),
+            };
+            let entry = rows.entry(row).or_insert((along, along, at.y, at.y));
+            *entry = (
+                entry.0.min(along),
+                entry.1.max(along),
+                entry.2.min(at.y),
+                entry.3.max(at.y),
+            );
+        }
+        for (row, (first, last, lowest, highest)) in rows {
+            courses(
+                &walls,
+                kit,
+                axis,
+                row,
+                (first, last),
+                (lowest, highest),
+                &mut layout,
+            );
+            frames(&walls, kit, axis, row, &mut layout);
+            gables(&walls, kit, axis, row, (first, last), &mut layout);
+        }
+    }
+    posts(&walls, &ours, &mut layout);
     // Bottom up, keeping walls together within a course.
     layout.pieces.sort_by(|a, b| {
         (a.bottom() * 100.0)
@@ -250,266 +357,294 @@ pub fn lay(base: &Base, kit: &LogKit) -> Layout {
     layout
 }
 
-/// One unbroken wall: its cells in order along its line, from grid point `run[0].0`.
-fn wall(
-    base: &Base,
+/// The courses of one row, each split into logs where it runs unbroken.
+fn courses(
+    walls: &Walls,
     kit: &LogKit,
-    storey: i32,
     axis: Axis,
-    line: i32,
-    run: &[(i32, Panel)],
+    row: i32,
+    (first, last): (i32, i32),
+    (lowest, highest): (i32, i32),
     layout: &mut Layout,
 ) {
-    let (Some(&(first, _)), Some(&(last, _))) = (run.first(), run.last()) else {
-        return;
-    };
-    let radius = kit.radius();
-    let floor = storey as f32 * STOREY_M;
-    let along = axis.along();
-    // The wall's middle line, as a point at a distance along it and a height.
-    let line_m = line as f32 * CELL_M;
-    let at = |distance: f32, height: f32| match axis {
-        Axis::X => Vec3::new(distance, height, line_m),
-        Axis::Z => Vec3::new(line_m, height, distance),
-    };
-
-    // How far past each end its logs reach: notched corners where a wall crosses and the
-    // open air is beyond, flush otherwise.
-    let crossed = |point: i32| {
-        let other = axis.other();
-        [line - 1, line]
-            .into_iter()
-            .any(|cell| base.filling(other.face(point, cell, storey)).is_some())
-    };
-    let open_beyond = |cell: i32| {
-        let face = axis.face(line, cell, storey);
-        let tile = face.tile();
-        !base.contains(tile) && !base.contains(tile + face.side.offset())
-    };
-    let start_point = first;
-    let end_point = last + 1;
-    let start_corner = crossed(start_point) && open_beyond(start_point - 1);
-    let end_corner = crossed(end_point) && open_beyond(end_point);
-
-    let openings = openings(run);
-    let (courses, _) = kit.courses();
-    let low_courses = axis == Axis::Z;
-    for course in 0..=courses {
-        // Walls one way lie half a course above the other's, split at foot and top.
-        let (centre, split) = match (low_courses, course) {
-            (false, c) if c == courses => break,
-            (false, c) => (kit.course * (c as f32 + 0.5), Split::Whole),
-            (true, 0) => (0.0, Split::Top),
-            (true, c) if c == courses => (STOREY_M, Split::Bottom),
-            (true, c) => (kit.course * c as f32, Split::Whole),
-        };
-        let (low, high) = match split {
-            Split::Whole => (centre - radius * 0.9, centre + radius * 0.9),
-            Split::Top => (centre, centre + radius * 0.9),
-            Split::Bottom => (centre - radius * 0.9, centre),
-        };
-        let seed = hash(&[storey as u32, axis as u32, line as u32, course as u32]);
-        let ragged = |end: u32| (unit(hash(&[seed, end])) - 0.5) * 2.0 * kit.ragged;
-        let reach = |corner: bool, end: u32| {
-            if corner {
-                radius + kit.overhang + ragged(end)
-            } else {
-                radius
+    let per_cube = (CELL_M / kit.course).round() as i32;
+    for course in lowest * per_cube - 1..=(highest + 1) * per_cube + 1 {
+        let spots: Vec<Spot> = (first..=last)
+            .map(|along| walls.spot(kit, axis, row, along, course))
+            .collect();
+        let centre = axis.centre(kit, course);
+        let seed = hash(&[axis as u32, row as u32, course as u32]);
+        let mut index = 0;
+        while index < spots.len() {
+            let Spot::Log(split) = spots[index] else {
+                index += 1;
+                continue;
+            };
+            let start = index;
+            while index + 1 < spots.len() && spots[index + 1] == spots[start] {
+                index += 1;
             }
-        };
-        let start = start_point as f32 * CELL_M - reach(start_corner, 0);
-        let end = end_point as f32 * CELL_M + reach(end_corner, 1);
-
-        // The course, less what openings cut from it.
-        let mut stretches = vec![(start, end)];
-        for opening in openings.iter().filter(|o| o.bottom < high && o.top > low) {
-            let (cut_start, cut_end) = (opening.start - kit.frame, opening.end + kit.frame);
-            stretches = stretches
-                .into_iter()
-                .flat_map(|(a, b)| {
-                    let mut kept = Vec::new();
-                    if cut_start > a {
-                        kept.push((a, cut_start.min(b)));
+            let (low, high) = (first + start as i32, first + index as i32);
+            index += 1;
+            // How each end finishes: cut at an opening's frame, run past a corner into the
+            // open air, or flush with the cube.
+            let layer = ((centre + 1e-3) / CELL_M).floor() as i32;
+            let reach = |end: i32, outward: i32, which: u32| -> f32 {
+                let beyond = end + outward;
+                let next = if (first..=last).contains(&beyond) {
+                    spots[(beyond - first) as usize]
+                } else {
+                    Spot::Nothing
+                };
+                let cube = axis.cube(row, end, layer.max(layer_of_split(centre, split)));
+                let corner = walls.runs(cube, axis.other());
+                let open = walls.open_beyond(axis.cube(row, beyond, cube.y));
+                match next {
+                    Spot::Hole => -kit.frame,
+                    Spot::Nothing if corner && open => {
+                        let ragged = (unit(hash(&[seed, end as u32, which])) - 0.5) * 2.0;
+                        kit.overhang + ragged * kit.ragged
                     }
-                    if cut_end < b {
-                        kept.push((cut_end.max(a), b));
-                    }
-                    kept
-                })
-                .filter(|(a, b)| b - a > 0.05)
-                .collect();
-        }
-        // Daub between this course and the one under it, along the wall itself.
-        let daub = kit.chinking && split != Split::Top && course > 0;
-        let (wall_start, wall_end) = (
-            start_point as f32 * CELL_M - radius * 0.5,
-            end_point as f32 * CELL_M + radius * 0.5,
-        );
-        for (a, b) in stretches {
-            for (index, (a, b)) in joined(
-                a,
-                b,
-                kit.longest + 2.0 * (radius + kit.overhang + kit.ragged),
-                course,
-            )
-            .into_iter()
-            .enumerate()
-            {
-                let chinking = daub.then(|| (wall_start.max(a) - a, wall_end.min(b) - a));
+                    _ => 0.0,
+                }
+            };
+            let from = low as f32 * CELL_M - reach(low, -1, 0);
+            let to = (high + 1) as f32 * CELL_M + reach(high, 1, 1);
+            // Daub between this course and the one under it, along the wall itself.
+            let below = walls.spot(kit, axis, row, low, course - 1);
+            let daub = kit.chinking && split != Split::Top && matches!(below, Spot::Log(_));
+            let (wall_from, wall_to) = (low as f32 * CELL_M, (high + 1) as f32 * CELL_M);
+            let limit = kit.longest + 2.0 * (kit.overhang + kit.ragged);
+            for (part, (a, b)) in joined(from, to, limit, course).into_iter().enumerate() {
+                let chinking = daub.then(|| (wall_from.max(a) - a, wall_to.min(b) - a));
                 layout.pieces.push(Piece::Log {
-                    from: at(a, floor + centre),
-                    to: at(b, floor + centre),
+                    from: axis.point(row, a, centre),
+                    to: axis.point(row, b, centre),
                     split,
-                    seed: hash(&[seed, index as u32, (a * 100.0) as i32 as u32]),
+                    seed: hash(&[seed, part as u32, (a * 100.0) as i32 as u32]),
                     chinking: chinking.filter(|(near, far)| far > near),
                 });
             }
         }
     }
+}
 
-    // Under a pitched roof, courses carry on up, each log as long as fits under it, so
-    // they shorten toward the ridge as a gable's do.
-    let rise = |distance: f32| {
-        let point = at(distance, 0.0);
-        base.roof_rise(storey, glam::Vec2::new(point.x, point.z))
-            .map(|rise| rise - ROOF_THICK_M)
-    };
-    let (wall_from, wall_to) = (start_point as f32 * CELL_M, end_point as f32 * CELL_M);
-    for step in 0.. {
-        let centre = STOREY_M + kit.course * (step as f32 + 0.5);
-        let needed = centre - STOREY_M + radius * 0.9;
-        let mut spans: Vec<(f32, f32)> = Vec::new();
-        let mut open: Option<f32> = None;
-        let samples = ((wall_to - wall_from) / GABLE_STEP_M).round() as i32;
-        for sample in 0..=samples {
-            let distance = wall_from + sample as f32 * GABLE_STEP_M;
-            let fits = rise(distance).is_some_and(|rise| rise >= needed);
-            match (fits, open) {
-                (true, None) => open = Some(distance),
-                (false, Some(from)) => {
-                    spans.push((from, distance - GABLE_STEP_M));
-                    open = None;
-                }
-                _ => {}
-            }
-        }
-        if let Some(from) = open {
-            spans.push((from, wall_to));
-        }
-        spans.retain(|(a, b)| b - a > 0.15);
-        if spans.is_empty() {
-            break;
-        }
-        let seed = hash(&[storey as u32, axis as u32, line as u32, 100 + step as u32]);
-        for (index, (a, b)) in spans.into_iter().enumerate() {
-            layout.pieces.push(Piece::Log {
-                from: at(a, floor + centre),
-                to: at(b, floor + centre),
-                split: Split::Whole,
-                seed: hash(&[seed, index as u32]),
-                chinking: kit.chinking.then_some((0.0, b - a)),
-            });
+/// The layer a split log's cubes are on: the one its kept half lies in.
+fn layer_of_split(centre: f32, split: Split) -> i32 {
+    let layer = |height: f32| (height / CELL_M).floor() as i32;
+    match split {
+        Split::Top => layer(centre + 1e-3),
+        Split::Bottom => layer(centre - 1e-3),
+        Split::Whole => layer(centre + 1e-3),
+    }
+}
+
+/// A frame of boards round every opening in a row, of whatever shape: a board along each
+/// edge where an open or glass cube meets the wall, edges in a line one board. Up the
+/// sides they are jambs; over the top a head, reaching up into the first log above; under
+/// it a sill, unless the opening is at the foot of its wall, as a doorway is.
+fn frames(walls: &Walls, kit: &LogKit, axis: Axis, row: i32, layout: &mut Layout) {
+    let mut holes: BTreeSet<(i32, i32)> = BTreeSet::new();
+    for (at, cube) in walls.base.cubes() {
+        let (on_row, along) = match axis {
+            Axis::X => (at.z, at.x),
+            Axis::Z => (at.x, at.z),
+        };
+        if on_row == row && cube.fill != Fill::Solid && walls.runs(at, axis) {
+            holes.insert((along, at.y));
         }
     }
-
-    // A frame round each opening, and the glass in a window.
-    let depth = Vec3::Y.cross(along) * (radius + 0.02);
-    let course_centres: Vec<f32> = (0..=courses)
-        .map(|c| {
-            if low_courses {
-                kit.course * c as f32
-            } else {
-                kit.course * (c as f32 + 0.5)
-            }
-        })
-        .collect();
-    for opening in &openings {
-        // The head reaches up into the first log over the opening; a sill down into the
-        // first under it.
-        let head = course_centres
+    let solid =
+        |along: i32, layer: i32| walls.ours(axis.cube(row, along, layer)) == Some(Fill::Solid);
+    let per_cube = (CELL_M / kit.course).round() as i32;
+    let depth = kit.radius() + 0.02;
+    let across = match axis {
+        Axis::X => Vec3::Z,
+        Axis::Z => Vec3::X,
+    };
+    let mut board = |a: f32, b: f32, bottom: f32, top: f32, proud: f32| {
+        let (low, high) = (axis.point(row, a, bottom), axis.point(row, b, top));
+        let out = across * (depth + proud);
+        layout.pieces.push(Piece::Board {
+            min: (low - out).min(high + out),
+            max: (low - out).max(high + out),
+        });
+    };
+    // Up each side: a jamb along every run of hole cubes with wall beside them.
+    for outward in [-1, 1] {
+        let edges: BTreeSet<(i32, i32)> = holes
             .iter()
             .copied()
-            .find(|&c| c - radius * 0.9 >= opening.top)
-            .unwrap_or(STOREY_M)
-            .max(opening.top + 0.08);
-        let foot = if opening.window {
-            course_centres
-                .iter()
-                .copied()
-                .rev()
-                .find(|&c| c + radius * 0.9 <= opening.bottom)
-                .unwrap_or(0.0)
-                .min(opening.bottom - 0.06)
-        } else {
-            opening.bottom
-        };
-        let (start, end) = (opening.start, opening.end);
-        let mut board = |a: f32, b: f32, bottom: f32, top: f32, proud: f32| {
-            let low = at(a, floor + bottom) - depth - depth.normalize() * proud;
-            let high = at(b, floor + top) + depth + depth.normalize() * proud;
-            layout.pieces.push(Piece::Board {
-                min: low.min(high),
-                max: low.max(high),
-            });
-        };
-        board(start - kit.frame, start, foot, head, 0.0);
-        board(end, end + kit.frame, foot, head, 0.0);
-        board(start - kit.frame, end + kit.frame, opening.top, head, 0.01);
-        if opening.window {
-            board(
-                start - kit.frame,
-                end + kit.frame,
-                foot,
-                opening.bottom,
-                0.03,
+            .filter(|&(along, layer)| solid(along + outward, layer))
+            .collect();
+        for (along, low, high) in runs_of(&edges, |(along, layer)| (along, layer)) {
+            let face = (along + i32::from(outward > 0)) as f32 * CELL_M;
+            let (a, b) = if outward > 0 {
+                (face, face + kit.frame)
+            } else {
+                (face - kit.frame, face)
+            };
+            board(a, b, low as f32 * CELL_M, (high + 1) as f32 * CELL_M, 0.0);
+        }
+    }
+    // Over the top and under the bottom: a head and a sill along every run of hole cubes
+    // with wall over or under them.
+    for upward in [1, -1] {
+        let edges: BTreeSet<(i32, i32)> = holes
+            .iter()
+            .copied()
+            .filter(|&(along, layer)| solid(along, layer + upward))
+            .collect();
+        for (layer, low, high) in runs_of(&edges, |(along, layer)| (layer, along)) {
+            let (a, b) = (
+                low as f32 * CELL_M - kit.frame,
+                (high + 1) as f32 * CELL_M + kit.frame,
             );
-            let corners = [
-                at(start, floor + opening.bottom),
-                at(end, floor + opening.bottom),
-                at(end, floor + opening.top),
-                at(start, floor + opening.top),
-            ];
-            let normal = along.cross(Vec3::Y);
-            layout
-                .glass
-                .positions
-                .extend([0, 1, 2, 0, 2, 3].map(|i| corners[i]));
-            layout.glass.normals.extend([normal; 6]);
-            layout.glass.colours.extend([[0.55, 0.8, 0.9]; 6]);
+            let near = layer * per_cube;
+            if upward > 0 {
+                let edge = (layer + 1) as f32 * CELL_M;
+                // Up to the middle of the first course wholly above it.
+                let head = (near - 2..near + 2 * per_cube + 2)
+                    .map(|course| axis.centre(kit, course))
+                    .find(|&centre| centre - kit.course * 0.5 >= edge - 1e-3)
+                    .map_or(edge + 0.1, |centre| centre.max(edge + 0.06));
+                board(a, b, edge, head, 0.01);
+            } else {
+                let edge = layer as f32 * CELL_M;
+                let foot = (near - 2 * per_cube - 2..near + 2)
+                    .rev()
+                    .map(|course| axis.centre(kit, course))
+                    .find(|&centre| centre + kit.course * 0.5 <= edge + 1e-3)
+                    .map_or(edge - 0.1, |centre| centre.min(edge - 0.06));
+                board(a, b, foot, edge, 0.03);
+            }
         }
     }
 }
 
-/// The openings along a wall, in metres along its line, from its cells in order.
-fn openings(run: &[(i32, Panel)]) -> Vec<Opening> {
-    let mut found: Vec<Opening> = Vec::new();
-    let mut previous: Option<(i32, Panel)> = None;
-    for &(at, panel) in run {
-        let (bottom, top, window) = match panel {
-            Panel::Solid => {
-                previous = None;
-                continue;
-            }
-            Panel::Door => (0.0, DOOR_HEIGHT_M, false),
-            Panel::Window { sill, top } => (sill, STOREY_M - top, true),
-        };
-        let start = at as f32 * CELL_M;
-        let end = start + CELL_M;
-        match (previous, found.last_mut()) {
-            (Some((last, last_panel)), Some(opening)) if last + 1 == at && last_panel == panel => {
-                opening.end = end;
-            }
-            _ => found.push(Opening {
-                start,
-                end,
-                bottom,
-                top,
-                window,
-            }),
+/// Runs of cells in a line: grouped by the first of what `key` gives, consecutive in the
+/// second, as the line, the first and the last.
+fn runs_of(
+    cells: &BTreeSet<(i32, i32)>,
+    key: impl Fn((i32, i32)) -> (i32, i32),
+) -> Vec<(i32, i32, i32)> {
+    let keyed: BTreeSet<(i32, i32)> = cells.iter().map(|&cell| key(cell)).collect();
+    let mut found: Vec<(i32, i32, i32)> = Vec::new();
+    for (line, at) in keyed {
+        match found.last_mut() {
+            Some((last_line, _, high)) if *last_line == line && *high + 1 == at => *high = at,
+            _ => found.push((line, at, at)),
         }
-        previous = Some((at, panel));
     }
     found
+}
+
+/// Under a pitched roof, a row's courses carry on up, each log as long as fits under it,
+/// so they shorten toward the ridge as a gable's do.
+fn gables(
+    walls: &Walls,
+    kit: &LogKit,
+    axis: Axis,
+    row: i32,
+    (first, last): (i32, i32),
+    layout: &mut Layout,
+) {
+    let radius = kit.radius();
+    // Each storey whose walls' top layer this row reaches.
+    let tops: BTreeSet<i32> = walls
+        .base
+        .cubes()
+        .map(|(at, _)| at)
+        .filter(|&at| {
+            let on_row = match axis {
+                Axis::X => at.z,
+                Axis::Z => at.x,
+            };
+            on_row == row
+                && at.y - wall_layer(storey_of(at.y)) == STOREY_CUBES - 1
+                && walls.runs(at, axis)
+        })
+        .map(|at| storey_of(at.y))
+        .collect();
+    for storey in tops {
+        let eaves = (storey + 1) as f32 * STOREY_M;
+        let rise = |distance: f32| {
+            let point = axis.point(row, distance, 0.0);
+            walls
+                .base
+                .roof_rise(storey, glam::Vec2::new(point.x, point.z))
+                .map(|rise| rise - ROOF_THICK_M)
+        };
+        let (from, to) = (first as f32 * CELL_M, (last + 1) as f32 * CELL_M);
+        for step in 0.. {
+            let centre = kit.course * (step as f32 + 0.5);
+            let needed = centre + radius * 0.9;
+            let mut spans: Vec<(f32, f32)> = Vec::new();
+            let mut open: Option<f32> = None;
+            let samples = ((to - from) / GABLE_STEP_M).round() as i32;
+            for sample in 0..=samples {
+                let distance = from + sample as f32 * GABLE_STEP_M;
+                let fits = rise(distance).is_some_and(|rise| rise >= needed);
+                match (fits, open) {
+                    (true, None) => open = Some(distance),
+                    (false, Some(start)) => {
+                        spans.push((start, distance - GABLE_STEP_M));
+                        open = None;
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(start) = open {
+                spans.push((start, to));
+            }
+            spans.retain(|(a, b)| b - a > 0.15);
+            if spans.is_empty() {
+                break;
+            }
+            let seed = hash(&[axis as u32, row as u32, storey as u32, 100 + step as u32]);
+            for (index, (a, b)) in spans.into_iter().enumerate() {
+                layout.pieces.push(Piece::Log {
+                    from: axis.point(row, a, eaves + centre),
+                    to: axis.point(row, b, eaves + centre),
+                    split: Split::Whole,
+                    seed: hash(&[seed, index as u32]),
+                    chinking: kit.chinking.then_some((0.0, b - a)),
+                });
+            }
+        }
+    }
+}
+
+/// A cube of ours with none beside it either way is a post: an upright log up each
+/// stack of them.
+fn posts(walls: &Walls, ours: &[IVec3], layout: &mut Layout) {
+    let alone = |at: IVec3| {
+        walls.ours(at) == Some(Fill::Solid) && !walls.runs(at, Axis::X) && !walls.runs(at, Axis::Z)
+    };
+    for &at in ours {
+        // From the bottom of each stack.
+        if !alone(at) || alone(at - IVec3::Y) {
+            continue;
+        }
+        let mut top = at;
+        while alone(top + IVec3::Y) {
+            top += IVec3::Y;
+        }
+        let middle = |layer: i32| {
+            Vec3::new(
+                (at.x as f32 + 0.5) * CELL_M,
+                layer as f32 * CELL_M,
+                (at.z as f32 + 0.5) * CELL_M,
+            )
+        };
+        layout.pieces.push(Piece::Log {
+            from: middle(at.y),
+            to: middle(top.y + 1),
+            split: Split::Whole,
+            seed: hash(&[at.x as u32, at.y as u32, at.z as u32, 7]),
+            chinking: None,
+        });
+    }
 }
 
 /// A stretch of a course in logs no longer than `longest`, the joins staggered from one
@@ -522,7 +657,11 @@ fn joined(start: f32, end: f32, longest: f32, course: i32) -> Vec<(f32, f32)> {
     let count = (length / longest).ceil();
     let each = length / count;
     // Every other course moves its joins along by half a log, with a short log at each end.
-    let shift = if course % 2 == 1 { each * 0.5 } else { 0.0 };
+    let shift = if course.rem_euclid(2) == 1 {
+        each * 0.5
+    } else {
+        0.0
+    };
     let mut cuts = vec![start];
     let mut at = start + if shift > 0.0 { shift } else { each };
     while at < end - 0.3 {
@@ -937,15 +1076,31 @@ impl Random {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::BuildOp;
+    use crate::{BuildOp, Cube, Panel, RoofSection, RoofStyle};
 
+    fn kit() -> LogKit {
+        LogKit::default()
+    }
+
+    /// A cabin four metres by three outside.
     fn cabin() -> Base {
         let mut base = Base::default();
         base.apply(BuildOp::AddRoom {
             min: [0, 0, 0],
             max: [7, 0, 5],
+            kind: kit().kind(),
         });
         base
+    }
+
+    fn wall(base: &mut Base, tiles: impl IntoIterator<Item = [i32; 3]>, panel: Panel) {
+        for tile in tiles {
+            base.apply(BuildOp::SetWall {
+                tile,
+                panel: Some(panel),
+                kind: kit().kind(),
+            });
+        }
     }
 
     fn logs(layout: &Layout) -> Vec<(Vec3, Vec3, Split)> {
@@ -961,35 +1116,41 @@ mod tests {
             .collect()
     }
 
+    fn boards(layout: &Layout) -> usize {
+        layout
+            .pieces
+            .iter()
+            .filter(|p| matches!(p, Piece::Board { .. }))
+            .count()
+    }
+
     #[test]
     fn the_kit_fills_a_storey_with_whole_courses() {
-        assert_eq!(LogKit::default().courses(), (12, true));
+        assert_eq!(kit().courses(), (12, true));
     }
 
     #[test]
     fn a_room_has_a_dozen_logs_a_wall_a_side_and_its_corners_run_past() {
-        let kit = LogKit::default();
-        let layout = lay(&cabin(), &kit);
+        let layout = lay(&cabin(), &kit());
         let logs = logs(&layout);
         // Walls running east and west lay 12 courses; the others 11 and a split log at
         // the foot and on top.
-        assert_eq!(logs.len(), 2 * 12 + 2 * 13);
+        assert_eq!(logs.len(), 2 * 12 + 2 * 13, "{logs:?}");
         assert_eq!(logs.iter().filter(|l| l.2 != Split::Whole).count(), 4);
-        // The south wall, 4 m long from x = 0 to 4, runs past both corners.
+        // The south wall, the row of cubes from z = 2.5 to 3, runs past both corners.
         let south: Vec<_> = logs
             .iter()
-            .filter(|(from, to, _)| from.z == 3.0 && to.z == 3.0)
+            .filter(|(from, to, _)| from.z == 2.75 && to.z == 2.75)
             .collect();
         assert_eq!(south.len(), 12);
         for (from, to, _) in south {
-            assert!(from.x < -0.3 && to.x > 4.3, "{from} {to}");
+            assert!(from.x < -0.2 && to.x > 4.2, "{from} {to}");
         }
     }
 
     #[test]
     fn walls_either_way_never_share_a_course() {
-        let kit = LogKit::default();
-        let logs = logs(&lay(&cabin(), &kit));
+        let logs = logs(&lay(&cabin(), &kit()));
         let height = |run_x: bool| -> Vec<i32> {
             logs.iter()
                 .filter(|(from, to, _)| (from.z == to.z) == run_x)
@@ -1003,15 +1164,12 @@ mod tests {
     #[test]
     fn a_free_end_is_cut_flush() {
         let mut base = Base::default();
-        for x in 0..4 {
-            base.apply(BuildOp::SetWall(
-                Face::new(IVec3::new(x, 0, 0), Side::South),
-                Some(Panel::Solid),
-            ));
-        }
-        let kit = LogKit::default();
-        for (from, to, _) in logs(&lay(&base, &kit)) {
-            assert!((from.x + 0.15).abs() < 1e-4 && (to.x - 2.15).abs() < 1e-4);
+        wall(&mut base, (0..4).map(|x| [x, 0, 0]), Panel::Solid);
+        for (from, to, _) in logs(&lay(&base, &kit())) {
+            assert!(
+                from.x.abs() < 1e-4 && (to.x - 2.0).abs() < 1e-4,
+                "{from} {to}"
+            );
         }
     }
 
@@ -1019,22 +1177,17 @@ mod tests {
     fn a_door_cuts_the_courses_it_crosses_and_is_framed() {
         let mut base = cabin();
         // A door a metre wide in the south wall.
-        for x in 3..5 {
-            base.apply(BuildOp::SetWall(
-                Face::new(IVec3::new(x, 0, 5), Side::South),
-                Some(Panel::Door),
-            ));
-        }
-        let kit = LogKit::default();
+        wall(&mut base, [[3, 0, 5], [4, 0, 5]], Panel::Door);
+        let kit = kit();
         let layout = lay(&base, &kit);
         let south: Vec<_> = logs(&layout)
             .into_iter()
-            .filter(|(from, to, _)| from.z == 3.0 && to.z == 3.0)
+            .filter(|(from, to, _)| from.z == 2.75 && to.z == 2.75)
             .collect();
         // Every course the door crosses is two logs, ending at the jambs.
         let crossed = south
             .iter()
-            .filter(|(from, _, _)| from.y < DOOR_HEIGHT_M + 0.13)
+            .filter(|(from, _, _)| from.y < DOOR_HEIGHT_M)
             .count();
         let whole = south.len() - crossed;
         assert_eq!(crossed % 2, 0);
@@ -1043,31 +1196,50 @@ mod tests {
             let clear = to.x <= 1.5 - kit.frame + 1e-4 || from.x >= 2.5 + kit.frame - 1e-4;
             assert!(clear || from.y > DOOR_HEIGHT_M, "{from} {to}");
         }
-        assert_eq!(
-            layout
-                .pieces
+        // Two jambs and a head; a doorway needs no sill.
+        assert_eq!(boards(&layout), 3);
+    }
+
+    #[test]
+    fn a_window_has_a_sill_and_a_cube_carved_out_is_framed_too() {
+        let mut base = cabin();
+        wall(&mut base, [[0, 0, 2]], Panel::WINDOW);
+        assert_eq!(boards(&lay(&base, &kit())), 4);
+        // One cube a metre and a half up the north wall, carved out.
+        base.apply(BuildOp::Fill {
+            min: [3, 3, 0],
+            max: [3, 3, 0],
+            cube: Some(Cube {
+                kind: kit().kind(),
+                fill: Fill::Open,
+            }),
+        });
+        let layout = lay(&base, &kit());
+        assert_eq!(boards(&layout), 8);
+        // The two courses through it are cut, so the north wall has two more logs.
+        let north = |layout: &Layout| {
+            logs(layout)
                 .iter()
-                .filter(|p| matches!(p, Piece::Board { .. }))
-                .count(),
-            3
-        );
+                .filter(|(from, to, _)| from.z == 0.25 && to.z == 0.25)
+                .count()
+        };
+        assert_eq!(north(&layout), 14);
     }
 
     #[test]
     fn a_gable_end_is_logs_that_shorten_toward_the_ridge() {
         let mut base = cabin();
-        base.apply(BuildOp::AddRoof(crate::RoofSection {
+        base.apply(BuildOp::AddRoof(RoofSection {
             min: [0, 0, 0],
             max: [7, 0, 5],
-            style: crate::RoofStyle::Gable,
+            style: RoofStyle::Gable,
             along_x: true,
             pitch: 0.7,
         }));
-        let kit = LogKit::default();
-        // The west gable, on the line x = 0, above the walls.
-        let gable: Vec<_> = logs(&lay(&base, &kit))
+        // The west gable, on the row of cubes along x = 0, above the walls.
+        let gable: Vec<_> = logs(&lay(&base, &kit()))
             .into_iter()
-            .filter(|(from, to, _)| from.x == 0.0 && to.x == 0.0 && from.y > STOREY_M)
+            .filter(|(from, to, _)| from.x == 0.25 && to.x == 0.25 && from.y > STOREY_M)
             .map(|(from, to, _)| (from.y, from.distance(to)))
             .collect();
         assert!(gable.len() >= 3, "{gable:?}");
@@ -1083,15 +1255,10 @@ mod tests {
     #[test]
     fn a_long_wall_is_joined_with_the_seams_staggered() {
         let mut base = Base::default();
-        for x in 0..20 {
-            base.apply(BuildOp::SetWall(
-                Face::new(IVec3::new(x, 0, 0), Side::South),
-                Some(Panel::Solid),
-            ));
-        }
-        let kit = LogKit::default();
+        wall(&mut base, (0..20).map(|x| [x, 0, 0]), Panel::Solid);
+        let kit = kit();
         let logs = logs(&lay(&base, &kit));
-        let limit = kit.longest + kit.diameter + 2.0 * (kit.overhang + kit.ragged);
+        let limit = kit.longest + 2.0 * (kit.overhang + kit.ragged);
         assert!(
             logs.iter()
                 .all(|(from, to, _)| from.distance(*to) <= limit + 1e-4)
@@ -1108,8 +1275,23 @@ mod tests {
     }
 
     #[test]
+    fn a_column_of_cubes_alone_is_a_post() {
+        let mut base = Base::default();
+        wall(&mut base, [[0, 0, 0]], Panel::Solid);
+        let logs = logs(&lay(&base, &kit()));
+        assert_eq!(
+            logs,
+            vec![(
+                Vec3::new(0.25, 0.0, 0.25),
+                Vec3::new(0.25, 3.0, 0.25),
+                Split::Whole
+            )]
+        );
+    }
+
+    #[test]
     fn logs_are_the_same_on_every_machine_and_differ_from_one_another() {
-        let kit = LogKit::default();
+        let kit = kit();
         let layout = lay(&cabin(), &kit);
         let drawn = |piece: &Piece| {
             let mut surface = Surface::default();

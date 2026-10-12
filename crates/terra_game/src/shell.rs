@@ -110,7 +110,8 @@ usage: terra_sandbox [options]
   --warp <east,south:east,south@frame>
                         on that frame, move the play experiment's player to the first
                         spot, facing the second, for testing (repeatable)
-  --walls logs          lay every build's walls in logs (docs/kits.md)
+  --walls plain         lay walls, floors and roofs plain rather than in logs, the
+                        first kit (docs/kits.md)
   --kit-sheet           on the yard, lay one of each way log walls meet, built, going
                         up and as a blueprint, to look at (docs/kits.md)
   --vantage <x,y,z,x,y,z>
@@ -189,7 +190,8 @@ pub struct Options {
     pub fresh: bool,
     /// Which level the play experiment is on: the world, or a test level.
     pub level: Level,
-    /// What every build's walls are laid in, if not plain: `logs` (docs/kits.md).
+    /// What walls, floors and roofs are laid in: `logs`, the default, or `plain`
+    /// (docs/kits.md).
     pub walls: Option<String>,
     /// On the yard: lay one of each way log walls meet, in each state (docs/kits.md).
     pub kit_sheet: bool,
@@ -350,8 +352,8 @@ impl Options {
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--walls" => {
                     options.walls = match value("--walls")?.as_str() {
-                        "logs" => Some("logs".to_string()),
-                        other => return Err(format!("--walls is logs, not `{other}`")),
+                        kind @ ("logs" | "plain") => Some(kind.to_string()),
+                        other => return Err(format!("--walls is logs or plain, not `{other}`")),
                     }
                 }
                 "--kit-sheet" => options.kit_sheet = true,

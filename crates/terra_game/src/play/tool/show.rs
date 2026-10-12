@@ -8,16 +8,26 @@ use crate::play::props::{self, Blocked, Models, Prop};
 use bevy::{
     asset::RenderAssetUsages, ecs::system::SystemParam, render::render_resource::PrimitiveTopology,
 };
-use terra_build::{Base, CELL_M, DOOR_HEIGHT_M, Face, Panel, STOREY_M};
+use terra_build::{Base, CELL_M, DOOR_HEIGHT_M, Panel, STOREY_M};
 
-/// The rectangle a stretch of wall cells covers, in the base's own space: low-left,
-/// low-right, high-right, high-left, as seen from the side the wall faces.
-pub(super) fn bounds(run: &[Face]) -> Option<[Vec3; 4]> {
-    let [origin, right, _, above] = Base::corners(*run.first()?);
+/// The rectangle up the middle of a stretch of wall tiles, in the base's own space:
+/// low-left, low-right, high-right, high-left, as seen from the side the wall faces. Along
+/// the way the stretch runs, or for one tile the way its wall does.
+pub(super) fn bounds(base: &Base, run: &[IVec3]) -> Option<[Vec3; 4]> {
+    let (first, last) = (*run.first()?, *run.last()?);
+    let along = if first == last {
+        base.along(first)
+    } else {
+        (last - first).signum().abs()
+    };
+    let [origin, right, _, above] = terra_build::corners(first, along);
     let across = (right - origin).normalize();
     let up = (above - origin).normalize();
     let (mut low, mut high) = (Vec2::MAX, Vec2::MIN);
-    for corner in run.iter().flat_map(|&cell| Base::corners(cell)) {
+    for corner in run
+        .iter()
+        .flat_map(|&tile| terra_build::corners(tile, along))
+    {
         let at = Vec2::new((corner - origin).dot(across), (corner - origin).dot(up));
         low = low.min(at);
         high = high.max(at);
@@ -31,9 +41,9 @@ pub(super) fn bounds(run: &[Face]) -> Option<[Vec3; 4]> {
     ])
 }
 
-/// The outline of the window or doorway a stretch of wall cells would be cut as.
-pub(super) fn opening(run: &[Face], panel: Panel) -> Option<[Vec3; 4]> {
-    let [low_left, low_right, _, high_left] = bounds(run)?;
+/// The outline of the window or doorway a stretch of wall tiles would be cut as.
+pub(super) fn opening(base: &Base, run: &[IVec3], panel: Panel) -> Option<[Vec3; 4]> {
+    let [low_left, low_right, _, high_left] = bounds(base, run)?;
     let up = (high_left - low_left).normalize();
     let (bottom, top) = match panel {
         Panel::Solid => return None,
@@ -121,7 +131,7 @@ pub(super) fn highlight(
             | Target::Ground { adds: false, .. }
             | Target::Ground { clear: false, .. }
             | Target::Ground { item: Some(_), .. }
-            | Target::Edge { fits: false, .. }
+            | Target::Wall { fits: false, .. }
             | Target::Spot {
                 blocked: Some(_),
                 ..
@@ -129,7 +139,7 @@ pub(super) fn highlight(
     ) || builder.short.is_some()
         || builder.unclaimed.is_some()
         || (matches!(kind, Kind::Window(_) | Kind::Door)
-            && matches!(builder.target, Target::Edge { .. })
+            && matches!(builder.target, Target::Wall { .. })
             && builder.run.is_empty());
     let look = match (kind, builder.target) {
         (Kind::Move, Target::Prop(_)) => 1,
@@ -163,26 +173,26 @@ pub(super) fn highlight(
     // The rectangles to cover with film, in the base's own space.
     let quads: Vec<[Vec3; 4]> = match (kind, builder.target) {
         // A window or door that will not fit: the cell aimed at, in red.
-        (Kind::Window(_) | Kind::Door, Target::Edge { face, .. }) if builder.run.is_empty() => {
-            vec![Base::corners(face)]
+        (Kind::Window(_) | Kind::Door, Target::Wall { tile, .. }) if builder.run.is_empty() => {
+            vec![site.base.corners(tile)]
         }
-        (Kind::Window(shapes), Target::Edge { .. }) => {
-            opening(&builder.run, shapes[builder.variant()].2)
+        (Kind::Window(shapes), Target::Wall { .. }) => {
+            opening(&site.base, &builder.run, shapes[builder.variant()].2)
                 .into_iter()
                 .collect()
         }
-        (Kind::Door, Target::Edge { .. }) => {
-            opening(&builder.run, Panel::Door).into_iter().collect()
-        }
+        (Kind::Door, Target::Wall { .. }) => opening(&site.base, &builder.run, Panel::Door)
+            .into_iter()
+            .collect(),
         // An opening to close, or a stretch of wall to build or take away.
-        (Kind::Remove, Target::Edge { open: true, .. }) => builder
+        (Kind::Remove, Target::Wall { open: true, .. }) => builder
             .run
             .first()
             .and_then(|&cell| site.base.filling(cell))
-            .and_then(|panel| opening(&builder.run, panel))
+            .and_then(|panel| opening(&site.base, &builder.run, panel))
             .into_iter()
             .collect(),
-        (_, Target::Edge { .. }) => bounds(&builder.run).into_iter().collect(),
+        (_, Target::Wall { .. }) => bounds(&site.base, &builder.run).into_iter().collect(),
         (_, Target::Ground { corner, tiles, .. }) => {
             // Its storey's floor, above or below the base's (D143). A roof, from the top
             // of its storey's walls as high as it would rise.
