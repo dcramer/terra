@@ -39,7 +39,7 @@ This overview gives the idea, what drives the world, and the principles. Each sy
 | Essences, abilities and ranks | [essences.md](essences.md) | After the books: a few essences and a confluence, abilities that improve by use, ranks as the spine |
 | Resources, tools and crafting | [crafting.md](crafting.md) | Materials by region and rank, one tool to a job, stations in claims run by recruits, wear and repair (open) |
 | People | [people.md](people.md) | Settlements with days, quests as what people say, recruits, trade |
-| Your tribe | [tribe.md](tribe.md) | The people of a claim, players and recruits (D166); recruits work on their own however the simulation makes sense (D161, D162): not a colony sim; carrying to builds, taking their own gear, defending the claim |
+| Your tribe | [tribe.md](tribe.md) | A tribe of players and recruits, its claims its outposts (D166); recruits work on their own however the simulation makes sense (D161, D162): not a colony sim; carrying to builds, taking their own gear, defending the claim |
 | Survival | [survival.md](survival.md) | Needs that reward more than punish, day and night, weather, death and coming back |
 | Your character | [character.md](your-character.md) | No class, getting around big round worlds, what is on screen and what is not |
 | The arc | [arc.md](arc.md) | The fiction, the first hour without a tutorial, the long game by rank and the spread, playing together |

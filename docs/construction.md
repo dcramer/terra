@@ -355,7 +355,7 @@ From the developers (D94, Leaning; D104): you build within areas you claim, so t
 Proposed, to react to:
 
 - **Outside claims, the world heals.** You can dig and gather anywhere (D43), but what you change outside a claim grows back after a while, as Enshrouded's does after about half an hour.
-- **Claims belong to a tribe**, its players and recruits (D166, [tribe.md](tribe.md#whose-tribe)); others build there only if allowed, as Rust's tool cupboard lists who may. There is no player against player (D2).
+- **Claims belong to a tribe**, its players and recruits (D166, [tribe.md](tribe.md#tribes-and-outposts)); others build there only if allowed, as Rust's tool cupboard lists who may. There is no player against player (D2).
 - **Doors and storage obey the claim**: its owner and those allowed open them, as Valheim's ward does.
 - **Claims are limited**: how many a player holds and how big they grow. Ark has none, and its shared servers fill with pillars put up only to block land: the warning for a thousand players.
 - **Claims need keeping up**: a claim long abandoned fades and its ground heals, so a persistent world does not fill with dead bases. Rust's daily upkeep tax is disliked; a lit hearth, as Soulmask's bonfire, is gentler.

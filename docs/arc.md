@@ -32,7 +32,7 @@ Without tutorials or markers (D92), the start has to teach by its shape.
 ## Playing together
 
 - **A few friends** share claims, quests and kills; the small case (D51).
-- **Tribes** hold claims together: the players and recruits of a claim share its stations, stores and travel, and players can be recruited into one (D166, [tribe.md](tribe.md#whose-tribe)).
+- **Tribes** hold claims together, each claim an outpost: a tribe's players share all its outposts, and its recruits each live at one. Players can be recruited into a tribe, and are in one at a time (D166, [tribe.md](tribe.md#tribes-and-outposts)).
 - **Many players at once** is where this world earns a thousand: a surge on a city, a frontier pushed back by everyone near it, a great monster that needs a crowd. What the server can carry decides how many (D52).
 
 ## Questions

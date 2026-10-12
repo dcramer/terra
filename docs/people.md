@@ -8,7 +8,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 - Recruits come mostly by rescue, or as something like a reward for helping their settlement (D90). Hostile settlements may hold prisoners you can rescue; players do not capture or keep prisoners (D95).
 - Quests may exist, but no tracked quest log and no journal (D92).
 - **Recruits have their own progression** (D123, 2026-10-11): at least those who join you grow, with a progression system of their own. Whether other people do is open.
-- **Recruits live in your tribe and work on their own** (D161, D162, 2026-10-12): stations, hauling and carrying to builds, however the simulation makes sense, without micromanaging; not a colony sim. They can die. A tribe is the people of a claim, players included (D166). What they do once they have joined is in [tribe.md](tribe.md).
+- **Recruits live in your tribe and work on their own** (D161, D162, 2026-10-12): stations, hauling and carrying to builds, however the simulation makes sense, without micromanaging; not a colony sim. They can die. A tribe is its players and recruits, holding claims as outposts; each recruit lives at one (D166). What they do once they have joined is in [tribe.md](tribe.md).
 
 ## Based on
 
