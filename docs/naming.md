@@ -24,9 +24,9 @@ The docs already talk this way: pooling places, surges, magic as the world's wea
 **The rules for a shared word:**
 1. **It says what the thing does, as water would.** A crossing between realms is where the gap runs shallow, so it is a ford.
 2. **Plain, old English:** short words of one or two syllables, which can be joined into compounds, as wellspring or deepcraft. No Latin or Greek coinages, and nothing that sounds like science.
-3. **Never a term the books coined,** and never a near copy of one. Common words the books also use, such as essence, monster, magic and mana, are free to use.
+3. **Never a term the books coined,** and never a near copy of one. Common words the books also use, such as essence, monster, magic and mana, are free to use. **One exception, by the developers' choice: the rank names are the books' own** (D159).
 4. **Readable in play:** order and size are obvious without a manual. Rank names say at a glance which is bigger.
-5. **One word, one meaning.** A word used for magic is not also a material, a place or a season. Spring is a season, so it can't be a rank, and iron is a metal.
+5. **One word, one meaning.** A word used for magic is not also a place or a season. The ranks are metals and a gem (D159), so a rank is always said with "rank" (an iron-rank monster, a bronze-rank portal), and the metal alone always means the material.
 
 **The words, proposed:**
 
@@ -36,8 +36,8 @@ The docs already talk this way: pooling places, surges, magic as the world's wea
 | Personal reserve (D102) | mana | **mana** on screen; "your well" in the lore | Common in games, so free; the well is what you draw from |
 | Where magic gathers | pooling place | **a pool** | Already ours |
 | Monsters spilling out | surge | **a surge** | Already ours |
-| Those without magic in them | normal, unranked | **still** (still water) | People and beasts the flow doesn't move |
-| The ranks, low to high | iron, bronze, silver, gold, diamond (the books' ladder) | **Stream, River, Lake, Sea, Ocean** | Order is obvious by size, no metal is confused with a material, and they are ours |
+| Those without magic in them | normal, unranked | **normal rank**, and in the lore **still** (still water) | People and beasts the flow doesn't move |
+| The ranks, low to high | iron, bronze, silver, gold, diamond | **iron, bronze, silver, gold, diamond**, as in the books (D159) | The developers' choice |
 | A few essences joining into one more | confluence (the books' term) | **the wellspring** | What springs up from the three, yours alone |
 | A person's felt power | presence | **presence**, and in the lore "pressure", as the weight of deep water | Already ours |
 | The gap between realms | (the books': astral) | **the Deep** | What lies under everything, without form |
@@ -47,7 +47,6 @@ The docs already talk this way: pooling places, surges, magic as the world's wea
 | A realm's gods, as a kind of thing (D156) | gods | **gods**, and in the lore **tides** | Powers that move a whole realm's water |
 | Beings of the Deep itself, in lore only (D157) | (the books': great astral beings) | **the currents** | What moves in the Deep between realms |
 
-The ranks are the biggest change, so the developers may keep a metal ladder if it reads better. The rule only asks that it not be the books' ladder.
 
 ## The tongues of peoples
 
@@ -109,5 +108,5 @@ What the generator writes, beyond names, follows one chain, so every realm's sto
 ## Open
 
 1. **Is water the right metaphor?** The alternative: no metaphor, plain words only, with less flavour and less to generate from.
-2. **The rank names:** Stream to Ocean, or another ladder.
+2. Answered: **the rank names** are the books' own: iron, bronze, silver, gold, diamond (D159).
 3. **Which working terms change in the docs** once agreed. Until then the docs keep the working terms, and this table is the map between them.
