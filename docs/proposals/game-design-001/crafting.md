@@ -71,7 +71,7 @@ F at the station opens it, F or Esc leaves; click a tile, or use the arrows and 
 
 ## Expanding a station
 
-Asked for by the developers on 2026-10-12 (D151, Open): stations should be expandable, perhaps by slots, either Valheim's way, where an upgrade counts if it stands within a radius of the station, or Soulmask's, as the developers describe it, where a station has placeholder slots for its expansions. What they want different from both: **no fixed item for each expansion**; there should probably be variations, though they are not sure.
+Asked for by the developers on 2026-10-12 (D151, Open): stations should be expandable, perhaps by slots, either Valheim's way, where an upgrade counts if it stands within a radius of the station, or Soulmask's, as the developers describe it, where a station has placeholder slots for its expansions. What they want different from both: **no fixed item for each expansion**; there should probably be variations, though they are not sure. Then (D151, Leaning): "crafting stations will vary in capabilities when they expand/upgrade, and we want things to visually look different but also organic … it might unlock new craftables, improve capacity or other attributes".
 
 The two ways, as they would play here:
 
@@ -86,7 +86,24 @@ The two ways, as they would play here:
 
 **Proposed: where by the role.** What is part of the station attaches to it, on a slot (a bellows on a forge, a vice on a bench); what is part of the workshop stands within a few metres (a tool rack, a grindstone). Each is then placed in the way that reads as real, and a slot is shown only when an expansion that fits it is in hand.
 
-**What an expansion does**: lets the station make more (D68, D92), makes it work faster, or lets it mend and make better things (D99), the role saying which. Shown on the station's screen: what fills each role and what an empty role would add.
+**What an expansion does, by its variation** (the developers' direction): each variation says, as data (D136), what it adds to its station, so two forges expanded differently can do different things:
+
+| Adds | Such as |
+|---|---|
+| New things to make | An iron anvil opens iron tools a stone one cannot (D68, D92) |
+| Capacity | A longer queue, a bigger batch, more fuel or stock held |
+| Speed | A bellows makes the forge work faster |
+| Quality and reach | Better things made, or higher tiers mended (D99) |
+| Other attributes | Less fuel used, a recruit working it better (D90) |
+
+Shown on the station's screen: what fills each role, what it adds, and what an empty role would add.
+
+**Looking organic** (the developers' direction), proposed:
+
+- **No visible slots or sockets.** A role's place is shown only while placing an expansion; once in, it looks set there by hand, with a little turn and offset of its own.
+- **The station grows with what is added.** Its own model changes with what it has: soot on the forge's hood once a bellows works it, tools hung on the bench once a rack is by it, wear where it is used most.
+- **Variations differ in form, not only colour**: a stone quench trough and a barrel one are different shapes, and those found in other realms look of their realm.
+- **A workshop reads as a whole**: the expansions that stand nearby are where a worker would want them, and recruits use them where they stand (D90).
 
 ## Learning what to make
 
@@ -104,4 +121,4 @@ In the tech demo, proposed numbers: felling, breaking or cutting one thing, digg
 2. **Quality**: does skill make better things (a master smith's sword is better than a novice's)?
 3. **Stations moving**: can a station be packed up and moved, or is it built in place?
 4. **Recipes**: can a player teach another, or must each learn for themselves?
-5. **Expanding a station** (D151): roles filled by any of several variations, attached or nearby by the role, as proposed above? Do variations differ only in look, or also in what they do?
+5. **Expanding a station** (D151): roles filled by any of several variations, attached or nearby by the role, as proposed above? Answered in part: variations differ in what they do as well as how they look, and look organic.
