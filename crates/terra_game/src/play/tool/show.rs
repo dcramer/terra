@@ -184,9 +184,25 @@ pub(super) fn highlight(
             .collect(),
         (_, Target::Edge { .. }) => bounds(&builder.run).into_iter().collect(),
         (_, Target::Ground { corner, tiles, .. }) => {
-            // Its storey's floor, above or below the base's (D143).
-            let low = (corner.with_y(0).as_vec3() * CELL_M).with_y(corner.y as f32 * STOREY_M);
-            let high = low + Vec3::new(tiles.x as f32 * CELL_M, STOREY_M, tiles.y as f32 * CELL_M);
+            // Its storey's floor, above or below the base's (D143). A roof, from the top
+            // of its storey's walls as high as it would rise.
+            let (bottom, height) = match kind {
+                Kind::Roof(shapes) => {
+                    let shape = &shapes[builder.variant()];
+                    let across = tiles.min_element() as f32 * CELL_M;
+                    let rise = match shape.style {
+                        Some(terra_build::RoofStyle::LeanTo) => {
+                            tiles.max_element() as f32 * CELL_M * shape.pitch
+                        }
+                        Some(_) => across * 0.5 * shape.pitch,
+                        None => 0.0,
+                    };
+                    ((corner.y + 1) as f32 * STOREY_M, rise.max(0.1))
+                }
+                _ => (corner.y as f32 * STOREY_M, STOREY_M),
+            };
+            let low = (corner.with_y(0).as_vec3() * CELL_M).with_y(bottom);
+            let high = low + Vec3::new(tiles.x as f32 * CELL_M, height, tiles.y as f32 * CELL_M);
             let at = |x: bool, y: bool, z: bool| {
                 Vec3::new(
                     if x { high.x } else { low.x },

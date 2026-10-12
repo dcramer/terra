@@ -50,8 +50,14 @@ impl Base {
             .roofs()
             .filter(in_column)
             .map(|tile| (tile.y + 1) as f32 * STOREY_M);
+        // A pitched roof is stood on where it is.
+        let pitched = self.sections().iter().filter_map(|section| {
+            let rise = section.rise(glam::Vec2::new(point.x, point.z))?;
+            Some((section.storey() + 1) as f32 * STOREY_M + rise)
+        });
         floors
             .chain(roofs)
+            .chain(pitched)
             .filter(|&surface| surface <= point.y + walker.step_up)
             .max_by(|a, b| a.total_cmp(b))
     }
@@ -60,7 +66,7 @@ impl Base {
     /// is over it.
     pub fn ceiling(&self, point: Vec3) -> Option<f32> {
         let tile = tile_at(point);
-        (self.has_roof(tile) || self.has_floor(tile + IVec3::Y))
+        (self.covered(tile) || self.has_floor(tile + IVec3::Y))
             .then_some((tile.y + 1) as f32 * STOREY_M)
     }
 

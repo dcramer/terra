@@ -100,6 +100,17 @@ pub fn prompt(
             ),
         ),
         (Kind::Room(_), _) => "Aim at the ground, or across a room to extend it".to_string(),
+        (Kind::Roof(_), Target::Ground { adds: false, .. }) => {
+            "That is all roofed already".to_string()
+        }
+        (Kind::Roof(_), Target::Ground { .. }) => drawn(
+            "roof",
+            format!(
+                "Scroll  turn      Shift Scroll  storey{}      {next}  kind",
+                storey(builder.storey)
+            ),
+        ),
+        (Kind::Roof(_), _) => "Aim into a room, or draw over walls".to_string(),
         (Kind::Items(_) | Kind::Move, Target::Spot { blocked, .. }) => match blocked {
             None if builder.is_carrying() => format!(
                 "{tap}  put it down      Scroll  turn      Shift Scroll  raise{}      {}  put it back",

@@ -32,11 +32,11 @@ const FLOOR_SQUARE_M: f32 = 3.0;
 /// Long windows have a mullion this often.
 const MULLION_EVERY_M: f32 = 1.5;
 /// Half the thickness of a wall.
-const WALL_HALF_M: f32 = 0.08;
+const WALL_HALF_M: f32 = 0.05;
 /// Half the width of a post where walls end or turn.
-const POST_HALF_M: f32 = 0.15;
+const POST_HALF_M: f32 = 0.08;
 /// How far the parapet rises above the roof it surrounds.
-const PARAPET_RISE_M: f32 = 0.32;
+const PARAPET_RISE_M: f32 = 0.2;
 
 /// Triangles with flat faces: three entries per triangle, no shared corners.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -49,6 +49,27 @@ pub struct Surface {
 impl Surface {
     pub fn triangle_count(&self) -> usize {
         self.positions.len() / 3
+    }
+
+    /// A triangle seen from the side its normal points to, wound counter-clockwise from
+    /// there.
+    fn triangle(&mut self, corners: [Vec3; 3], normal: Vec3, colour: [f32; 3]) {
+        self.positions.extend(corners);
+        self.normals.extend([normal; 3]);
+        self.colours.extend([colour; 3]);
+    }
+
+    /// A flat, convex shape seen from the side its normal points to, its corners in order
+    /// counter-clockwise from there. Corners that meet, as a gable's do at its foot, are
+    /// left out.
+    fn polygon(&mut self, corners: &[Vec3], normal: Vec3, colour: [f32; 3]) {
+        let first = corners[0];
+        for pair in corners[1..].windows(2) {
+            let area = (pair[0] - first).cross(pair[1] - first).length();
+            if area > 1e-6 {
+                self.triangle([first, pair[0], pair[1]], normal, colour);
+            }
+        }
     }
 
     /// A rectangle seen from the side its normal points to. Corners go low-left,
@@ -123,7 +144,55 @@ pub(crate) fn build(base: &Base) -> BaseMesh {
         mesh.structure
             .quad(frame.corners(frame.whole(), true), -frame.normal, CEILING);
     }
+    pitched_roofs(&mut mesh, base);
     mesh
+}
+
+/// How finely a pitched roof is sampled, in metres: a quarter of a cell, on which every
+/// ridge, hip and valley of a roof over walls in four directions falls, or on its
+/// diagonals (research/procedural-buildings.md).
+const ROOF_STEP_M: f32 = CELL_M * 0.5;
+/// How thick a pitched roof is.
+const ROOF_THICK_M: f32 = 0.1;
+
+/// Every pitched roof, as its height above the walls sampled on a fine lattice: each small
+/// square in four triangles from its middle, so the faces are as flat as the roof. Its top
+/// is roof and its underside ceiling.
+fn pitched_roofs(mesh: &mut BaseMesh, base: &Base) {
+    let mut squares = std::collections::BTreeSet::new();
+    for section in base.sections() {
+        let per = (CELL_M / ROOF_STEP_M).round() as i32;
+        for x in section.min[0] * per..(section.max[0] + 1) * per {
+            for z in section.min[2] * per..(section.max[2] + 1) * per {
+                squares.insert([x, section.storey(), z]);
+            }
+        }
+    }
+    for [x, storey, z] in squares {
+        let eaves = (storey + 1) as f32 * STOREY_M;
+        let at = |dx: f32, dz: f32| {
+            let along =
+                glam::Vec2::new((x as f32 + dx) * ROOF_STEP_M, (z as f32 + dz) * ROOF_STEP_M);
+            let rise = base.roof_rise(storey, along).unwrap_or(0.0);
+            Vec3::new(along.x, eaves + rise, along.y)
+        };
+        let middle = at(0.5, 0.5);
+        let corners = [at(0.0, 0.0), at(1.0, 0.0), at(1.0, 1.0), at(0.0, 1.0)];
+        for i in 0..4 {
+            let (a, b) = (corners[i], corners[(i + 1) % 4]);
+            let normal = (a - middle).cross(b - middle).normalize_or_zero();
+            // Wound so that its top faces up.
+            let (a, b, normal) = if normal.y < 0.0 {
+                (b, a, -normal)
+            } else {
+                (a, b, normal)
+            };
+            mesh.structure.triangle([middle, a, b], normal, ROOF);
+            let down = Vec3::Y * ROOF_THICK_M;
+            mesh.structure
+                .triangle([middle - down, b - down, a - down], -normal, CEILING);
+        }
+    }
 }
 
 /// The colour of one side of a wall: inside a room, or outdoors.
@@ -217,17 +286,20 @@ fn wall_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, panel:
                 bottom: 0.004,
                 top: BAND_HEIGHT_M,
             };
-            let (back, front) = out_from(*sign, 0.0, 0.05);
+            let (back, front) = out_from(*sign, 0.0, 0.02);
             frame.block(&mut mesh.structure, band, back, front, BAND);
             let line = Rect {
                 bottom: BAND_HEIGHT_M,
                 top: BAND_HEIGHT_M + 0.05,
                 ..band
             };
-            let (back, front) = out_from(*sign, 0.0, 0.065);
+            let (back, front) = out_from(*sign, 0.0, 0.03);
             frame.block(&mut mesh.structure, line, back, front, DARK);
         }
     }
+
+    // Up to a pitched roof over it: a gable end, or a wall inside up to the slope.
+    gable(mesh, base, frame, face);
 
     // A line where the wall carries on up another storey; else a cap on its top, and
     // where a roof meets it, a parapet over the roof and a fascia under its edge.
@@ -244,8 +316,8 @@ fn wall_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, panel:
         frame.block(
             &mut mesh.structure,
             line,
-            -WALL_HALF_M - 0.04,
-            WALL_HALF_M + 0.04,
+            -WALL_HALF_M - 0.02,
+            WALL_HALF_M + 0.02,
             DARK,
         );
         return;
@@ -260,8 +332,8 @@ fn wall_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, panel:
     frame.block(
         &mut mesh.structure,
         cap,
-        -WALL_HALF_M - 0.03,
-        WALL_HALF_M + 0.03,
+        -WALL_HALF_M - 0.015,
+        WALL_HALF_M + 0.015,
         PARAPET,
     );
     if roofed {
@@ -271,9 +343,60 @@ fn wall_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, panel:
                 top: height,
                 ..cap
             };
-            let (back, front) = out_from(*sign, 0.0, 0.12);
+            let (back, front) = out_from(*sign, 0.0, 0.05);
             frame.block(&mut mesh.structure, fascia, back, front, PARAPET);
         }
+    }
+}
+
+/// The wall carried up to a pitched roof over it, as far as the roof's underside, so a
+/// gable end is closed and a wall inside meets the slope. In two pieces along the cell,
+/// so a ridge over its middle is followed.
+fn gable(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face) {
+    let storey = face.tile[1];
+    let rise = |across: f32| {
+        let at = frame.origin + frame.right * across;
+        base.roof_rise(storey, glam::Vec2::new(at.x, at.z))
+            .map(|rise| (rise - ROOF_THICK_M).max(0.0))
+    };
+    let half = frame.width * 0.5;
+    let (Some(start), Some(middle), Some(end)) = (rise(0.0), rise(half), rise(frame.width)) else {
+        return;
+    };
+    let colour = side_colour(base.contains(face.tile() + face.side.offset()));
+    let behind = side_colour(base.contains(face.tile()));
+    let height = frame.height;
+    let at = |across: f32, up: f32, depth: f32| {
+        frame.origin + frame.right * across + frame.up * up + frame.normal * depth
+    };
+    for (left, right, rise_left, rise_right) in
+        [(0.0, half, start, middle), (half, frame.width, middle, end)]
+    {
+        if rise_left.max(rise_right) < 0.01 {
+            continue;
+        }
+        let (k, f) = (-WALL_HALF_M, WALL_HALF_M);
+        let (top_left, top_right) = (height + rise_left, height + rise_right);
+        mesh.structure.polygon(
+            &[
+                at(left, height, f),
+                at(right, height, f),
+                at(right, top_right, f),
+                at(left, top_left, f),
+            ],
+            frame.normal,
+            colour,
+        );
+        mesh.structure.polygon(
+            &[
+                at(right, height, k),
+                at(left, height, k),
+                at(left, top_left, k),
+                at(right, top_right, k),
+            ],
+            -frame.normal,
+            behind,
+        );
     }
 }
 
@@ -336,7 +459,7 @@ fn opening_trim(
     let along = frame.right.as_ivec3();
     let same = |step: IVec3| base.filling(Face::new(face.tile() + step, face.side)) == Some(panel);
     let (starts, ends) = (!same(-along), !same(along));
-    let (back, front) = (-WALL_HALF_M - 0.04, WALL_HALF_M + 0.04);
+    let (back, front) = (-WALL_HALF_M - 0.025, WALL_HALF_M + 0.025);
     let member = if panel == Panel::Door { 0.09 } else { 0.06 };
     let mut bar = |rect: Rect, colour: [f32; 3]| {
         if !rect.is_empty() {
@@ -567,7 +690,7 @@ impl Frame {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Base, BuildOp, Face, Panel, STOREY_M, Side, cells};
+    use crate::{Base, BuildOp, Face, Panel, RoofSection, RoofStyle, STOREY_M, Side, cells};
     use glam::IVec3;
 
     /// A room six metres square.
@@ -604,6 +727,15 @@ mod tests {
             min: [0, 1, 0],
             max: [3, 1, 3],
         });
+        for (style, along_x) in [(RoofStyle::Gable, true), (RoofStyle::Hip, false)] {
+            base.apply(BuildOp::AddRoof(RoofSection {
+                min: [0, 1, 0],
+                max: [3, 1, 3],
+                style,
+                along_x,
+                pitch: 0.7,
+            }));
+        }
         let mesh = base.mesh();
         for surface in [&mesh.structure, &mesh.glass] {
             assert!(surface.triangle_count() > 0);
@@ -681,6 +813,42 @@ mod tests {
             assert!(p.y >= -1e-4 && p.y <= STOREY_M + 0.4);
             assert!(p.z >= -0.3 && p.z <= 6.0 + 0.3);
         }
+    }
+
+    #[test]
+    fn a_gable_roof_closes_its_ends_and_a_hip_does_not_need_to() {
+        let roofed = |style| {
+            let mut base = room();
+            base.apply(BuildOp::AddRoof(RoofSection {
+                min: [0, 0, 0],
+                max: [cells(6.0) - 1, 0, cells(6.0) - 1],
+                style,
+                along_x: true,
+                pitch: 0.7,
+            }));
+            base.mesh()
+        };
+        let highest = |mesh: &crate::BaseMesh| {
+            mesh.structure
+                .positions
+                .iter()
+                .map(|p| p.y)
+                .fold(f32::MIN, f32::max)
+        };
+        // Six metres across: three to the ridge, at 0.7 rise a metre.
+        assert!((highest(&roofed(RoofStyle::Hip)) - (STOREY_M + 2.1)).abs() < 0.05);
+        // The gable's ends are walled up to the roof; the hip's walls stop at the eaves.
+        let wall_quads_above_eaves = |mesh: &crate::BaseMesh| {
+            mesh.structure
+                .positions
+                .chunks(3)
+                .zip(mesh.structure.normals.chunks(3))
+                .filter(|(_, n)| n[0].y.abs() < 0.01)
+                .filter(|(p, _)| p.iter().any(|p| p.y > STOREY_M + 0.5))
+                .count()
+        };
+        assert!(wall_quads_above_eaves(&roofed(RoofStyle::Gable)) > 0);
+        assert_eq!(wall_quads_above_eaves(&roofed(RoofStyle::Hip)), 0);
     }
 
     #[test]

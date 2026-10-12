@@ -444,7 +444,10 @@ impl Builder {
 
     /// Whether the picked part is drawn by dragging: a room or a wall.
     fn draws(&self, builds: &Builds) -> bool {
-        matches!(self.picked(builds).kind, Kind::Room(_) | Kind::Wall(_))
+        matches!(
+            self.picked(builds).kind,
+            Kind::Room(_) | Kind::Roof(_) | Kind::Wall(_)
+        )
     }
 
     /// Whether the mouse wheel turns what is in hand, rather than moving the camera: while
@@ -487,9 +490,11 @@ impl Builder {
         }
     }
 
-    /// The footprint of the room that would be built, in cells.
+    /// The footprint of the room or roof that would be built, in cells: a roof's, where it
+    /// is not over a room, three metres square.
     fn room(&self, builds: &Builds) -> Option<IVec2> {
         match &self.picked(builds).kind {
+            Kind::Roof(_) => Some(IVec2::splat(cells(3.0))),
             Kind::Room(shapes) => {
                 let [east, south] = shapes[self.variant()].metres.map(cells);
                 Some(if self.room_turned {

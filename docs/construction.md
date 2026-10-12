@@ -398,6 +398,27 @@ What is built, against all of the above: see [The baseline](#the-baseline). In s
 
 **You see the grid only near what you are placing**, as now.
 
+## Sizes
+
+What each part should measure (D175, Leaning: proposed 2026-10-12, when the developers asked for the expectation to be written down). Realistic but fun (D122): the sizes real buildings have, rounded to the half-metre grid where a part is placed by it, so a player who knows a house can reason about ours. Everything is scaled to a person 1.8 metres tall, whose body is 0.6 metres across (a walker's radius of 0.3). Items have their own measured sizes and checked heights, in [`builds.ron`](../assets/data/builds.ron).
+
+| Part | Now | Real buildings | Expected |
+|---|---|---|---|
+| Grid cell | 0.5 m | | 0.5 m (D57) |
+| Storey, floor to floor | 3.0 m | 2.7 to 3.2 m; rooms 2.4 to 2.7 m high inside | 3.0 m |
+| Wall, thick | 0.10 m, every wall | Wattle and daub 0.1 to 0.15; planks on a frame 0.1 to 0.15; logs 0.2 to 0.3; stone 0.4 to 0.6 | By kind of construction, from its kit (D146): wattle and planks 0.15, logs 0.3, cut stone 0.5 (a block deep). Centred on the grid line, so a thick wall takes from the rooms either side |
+| Post at a wall's end or corner | 0.16 m square | 0.1 to 0.2 m | As the wall's kind: a squared timber, a log end, a corner block |
+| Door, the opening | 1.5 m wide, 2.2 m high | About 0.8 to 1.0 m by 2.0 to 2.1 m | **1.0 m by 2.1 m**: two cells, wide enough for a person with a margin. Wider doors, 1.5 and 2 m, for barns and gates |
+| Window | 0.5, 1.5 and 3 m wide; sill 0.9 m, head 2.5 m; a tall one 0.2 to 2.8 m | Sill 0.8 to 1.0 m; head level with the doors' | Widths by the cell; sill 0.9 m, **head 2.1 m, level with the doors**; tall windows to the floor |
+| Floor, thick | Drawn flat | 0.1 to 0.3 m with its joists | 0.2 m, so a floor between storeys reads as one |
+| Roof | Pitch 0.7 rise a metre (35°), a lean-to 0.4 (22°); 0.1 m thick; no overhang | Thatch 45° and up, shingles and slates 30 to 45°, a lean-to 15 to 25° | Pitch by covering: thatch steep, slate and shingles 35°; **eaves overhanging the walls by 0.3 to 0.5 m**, with a fascia |
+| Ceiling, inside | 3.0 m to the roof or floor above | 2.4 to 2.7 m | 2.8 m: the storey less the floor above |
+| Steps | 0.17 m a step | 0.15 to 0.2 m a step, 0.25 to 0.3 m a tread | As now; stairs between storeys (step 4) the same |
+| Foundation | 0.14 m proud of the walls, into the ground | | As now |
+| Room drawn, smallest | 1 m | A corridor 0.9 to 1.2 m; a small room 2 to 3 m | 1 m, as now |
+
+Changing a size later is changing a number in the kit or the grid's constants, not the code; the doors and windows that do not match yet are the first change when kits come (step 4 of [structures.md](structures.md)).
+
 ## The build menu
 
 As the developers want it (D67, D68): with the hammer in hand, tap the build menu key, and a panel of tabs shows what you can build, each tile with a picture, its name and its cost, greyed if you cannot pay and absent if you have not learned it. Click one, or use the arrows and Enter. The variant wheel (hold R) chooses among the variants of the thing in hand. Taking apart and moving are modes on their own keys, not entries. The last few things built sit at the top. The world never pauses. Built, with pictures drawn from each thing's model.

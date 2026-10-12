@@ -25,7 +25,7 @@ use crate::shell::Options;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use terra_build::{BuildOp, Face, Panel};
+use terra_build::{BuildOp, Face, Panel, RoofSection};
 use terra_core::{MaterialId, Operation};
 use terra_items::{ActionBar, Cell, Equipment, ItemId};
 
@@ -72,6 +72,7 @@ enum SavedOp {
         min: [i32; 3],
         max: [i32; 3],
     },
+    AddRoof(RoofSection),
     /// What filled a cell of a room's outside wall.
     SetPanel(Face, Panel),
     /// A wall inside a room.
@@ -89,6 +90,7 @@ impl From<BuildOp> for SavedOp {
             BuildOp::SetFloor { min, max, laid } => SavedOp::SetFloor { min, max, laid },
             BuildOp::SetRoof { min, max, laid } => SavedOp::SetRoof { min, max, laid },
             BuildOp::AddRoom { min, max } => SavedOp::AddRoom { min, max },
+            BuildOp::AddRoof(section) => SavedOp::AddRoof(section),
         }
     }
 }
@@ -104,6 +106,7 @@ impl SavedOp {
             SavedOp::SetFloor { min, max, laid } => BuildOp::SetFloor { min, max, laid },
             SavedOp::SetRoof { min, max, laid } => BuildOp::SetRoof { min, max, laid },
             SavedOp::AddRoom { min, max } => BuildOp::AddRoom { min, max },
+            SavedOp::AddRoof(section) => BuildOp::AddRoof(section),
             SavedOp::Grow(_) | SavedOp::Shrink(_) => {
                 warn!("A saved room's wall was pushed or pulled; that change is left out.");
                 return None;

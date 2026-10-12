@@ -13,7 +13,7 @@ use crate::play::skills::{Did, ONCE, Skill};
 use crate::play::told::Told;
 use crate::play::work::Hold;
 use crate::play::{IsLocalPlayer, Stance};
-use terra_build::{BuildOp, Face, Panel, Side};
+use terra_build::{BuildOp, Face, Panel, RoofSection, Side};
 
 /// Starts, carries on and finishes building and taking apart. Both take a moment: the
 /// button is held until the job is done, and letting go early leaves nothing done.
@@ -462,6 +462,37 @@ pub(super) fn act(
                 }]),
                 false,
             ),
+            (
+                Kind::Roof(shapes),
+                Target::Ground {
+                    corner,
+                    tiles,
+                    adds: true,
+                    ..
+                },
+            ) if can_pay => {
+                let (min, max) = (
+                    corner.to_array(),
+                    (corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1)).to_array(),
+                );
+                let shape = &shapes[builder.variant()];
+                let op = match shape.style {
+                    // A gable's ridge runs along its longer side, unless turned.
+                    Some(style) => BuildOp::AddRoof(RoofSection {
+                        min,
+                        max,
+                        style,
+                        along_x: (tiles.x >= tiles.y) != builder.room_turned,
+                        pitch: shape.pitch,
+                    }),
+                    None => BuildOp::SetRoof {
+                        min,
+                        max,
+                        laid: true,
+                    },
+                };
+                (building(vec![op]), false)
+            }
             (
                 Kind::Items(items),
                 Target::Spot {

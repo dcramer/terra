@@ -155,7 +155,7 @@ pub(super) fn aim(
                         let indoors = site.base.contains(tile);
                         let along = on_grid(touched);
                         // Clear of the wall's thickness.
-                        let gap = 0.1;
+                        let gap = 0.07;
                         let against = boxed(touched, 0.0, indoors).reach_toward(out) + gap;
                         let at = along + out * (touched - along).dot(out) + toward_viewer * against;
                         Some((at.with_y(if indoors { floor } else { 0.0 }), 0.0, indoors))
@@ -324,9 +324,10 @@ pub(super) fn aim(
                     open: false,
                 }
             }
-            Kind::Room(_) => {
-                // Across a room already there, which it then extends; else on the level of
-                // the storey chosen.
+            Kind::Room(_) | Kind::Roof(_) => {
+                let roof = matches!(builder.picked(&builds).kind, Kind::Roof(_));
+                // Across a room already there, which it then extends or roofs; else on the
+                // level of the storey chosen.
                 let on_base = hull
                     .filter(|hit| ground.is_none_or(|ground| hit.distance < ground.distance))
                     .map(|hit| met(hit.distance).with_y(0.0));
@@ -338,6 +339,25 @@ pub(super) fn aim(
                     let (snapped, size) = match drawn {
                         // Drawn by dragging, or laid: the rectangle between two corners.
                         Some((from, to, _)) => drawn_room(from, to),
+                        // A roof over the whole of the room aimed into.
+                        None if roof
+                            && site.base.contains(
+                                (aimed / CELL_M).floor().as_ivec3().with_y(builder.storey),
+                            ) =>
+                        {
+                            let tile = (aimed / CELL_M).floor().as_ivec3().with_y(builder.storey);
+                            let room = site.base.room(tile);
+                            let cells = site
+                                .base
+                                .tiles()
+                                .filter(|&(_, each)| Some(each) == room)
+                                .map(|(cell, _)| IVec2::new(cell.x, cell.z));
+                            let (low, high) = cells
+                                .fold((IVec2::MAX, IVec2::MIN), |(lo, hi), c| {
+                                    (lo.min(c), hi.max(c))
+                                });
+                            (low, high - low + IVec2::ONE)
+                        }
                         // The variant's own size, centred on the place aimed at, sticking
                         // to where it last snapped until the aim has moved well off it.
                         None => {
@@ -357,7 +377,8 @@ pub(super) fn aim(
                     // Below the floor it is a cellar, wholly underground. Checked every
                     // metre or so.
                     let every = cells(1.0).max(1) as usize;
-                    let fits = builder.storey < 0
+                    let fits = roof
+                        || builder.storey < 0
                         || (0..=size.x).step_by(every).chain([size.x]).all(|i| {
                             (0..=size.y).step_by(every).chain([size.y]).all(|j| {
                                 let at =
@@ -372,13 +393,14 @@ pub(super) fn aim(
                         (corner.with_y(0) + IVec3::new(size.x, 0, size.y)).as_vec3() * CELL_M;
                     let middle = site.frame.transform_point((low + high) * 0.5);
                     let reach = (high - low).length() * 0.5 + STOREY_M * 2.0;
-                    let clear = !obstacles.near(middle, reach).any(|(at, radius)| {
-                        let local = to_base.transform_point3(at);
-                        let nearest = local.with_y(0.0).clamp(low, high);
-                        nearest.distance(local.with_y(0.0)) < radius
-                            && local.y > -STOREY_M
-                            && local.y < STOREY_M * 2.0
-                    });
+                    let clear = roof
+                        || !obstacles.near(middle, reach).any(|(at, radius)| {
+                            let local = to_base.transform_point3(at);
+                            let nearest = local.with_y(0.0).clamp(low, high);
+                            nearest.distance(local.with_y(0.0)) < radius
+                                && local.y > -STOREY_M
+                                && local.y < STOREY_M * 2.0
+                        });
                     // Nor is anything set down outdoors where it would stand, such as the
                     // claim stone: it is moved or taken apart first.
                     let footprint = Standing {
@@ -390,13 +412,27 @@ pub(super) fn aim(
                     };
                     let item = props
                         .iter()
+                        .filter(|_| !roof)
                         .filter(|(_, prop, _, visibility)| {
                             **visibility != Visibility::Hidden && !prop.indoors && prop.is_solid()
                         })
                         .find(|(_, prop, ..)| footprint.overlaps(&Standing::of(prop)))
                         .map(|(entity, ..)| entity);
+                    // A room adds where there is no room yet; a roof, where there is no roof.
                     let adds = (0..size.x).any(|i| {
-                        (0..size.y).any(|j| !site.base.contains(corner + IVec3::new(i, 0, j)))
+                        (0..size.y).any(|j| {
+                            let cell = corner + IVec3::new(i, 0, j);
+                            if roof {
+                                roofs_anew(
+                                    &site.base,
+                                    &builder.picked(&builds).kind,
+                                    builder.variant(),
+                                    cell,
+                                )
+                            } else {
+                                !site.base.contains(cell)
+                            }
+                        })
                     });
                     Target::Ground {
                         corner,
@@ -486,7 +522,7 @@ pub(super) fn afford(
             .any(|&cell| site.base.filling(cell) == Some(Panel::Solid));
         let price: Option<Price> = match (&builder.picked(&builds).kind, builder.target) {
             (
-                Kind::Room(_),
+                Kind::Room(_) | Kind::Roof(_),
                 Target::Ground {
                     corner,
                     tiles,
@@ -497,7 +533,19 @@ pub(super) fn afford(
             ) => {
                 let new_cells = (0..tiles.x)
                     .flat_map(|i| (0..tiles.y).map(move |j| IVec3::new(i, 0, j)))
-                    .filter(|&step| !site.base.contains(corner + step))
+                    .filter(|&step| {
+                        let cell = corner + step;
+                        if matches!(builder.picked(&builds).kind, Kind::Roof(_)) {
+                            roofs_anew(
+                                &site.base,
+                                &builder.picked(&builds).kind,
+                                builder.variant(),
+                                cell,
+                            )
+                        } else {
+                            !site.base.contains(cell)
+                        }
+                    })
                     .count();
                 Some((builds.floor().to_vec(), catalogue::floor_units(new_cells)))
             }
@@ -523,5 +571,15 @@ pub(super) fn afford(
             .as_ref()
             .and_then(|(cost, times)| belongings.missing(cost, *times));
         builder.price = price;
+    }
+}
+
+/// Whether a roof of this kind would roof a cell anew: a pitched one where no pitched roof
+/// is yet, taking the place of a flat one; a flat one where there is no roof at all.
+fn roofs_anew(base: &terra_build::Base, kind: &Kind, variant: usize, cell: IVec3) -> bool {
+    let pitched = base.sections().iter().any(|section| section.covers(cell));
+    match kind {
+        Kind::Roof(shapes) if shapes[variant].style.is_some() => !pitched,
+        _ => !base.covered(cell),
     }
 }

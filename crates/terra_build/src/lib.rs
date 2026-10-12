@@ -160,6 +160,69 @@ impl Panel {
     }
 }
 
+/// How a pitched roof slopes (docs/structures.md, roofs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum RoofStyle {
+    /// Sloping up from every side to a ridge or a point.
+    Hip,
+    /// Sloping up from two sides to a ridge, with upright gable ends.
+    Gable,
+    /// One slope, up from one side to the other.
+    LeanTo,
+}
+
+/// A pitched roof over a block of cells on one storey, resting on the top of its walls.
+/// Where sections overlap, the roof is the highest of them at each point, so a gable
+/// meeting a hip makes its own valley.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RoofSection {
+    /// The cells it covers; both on its storey.
+    pub min: [i32; 3],
+    pub max: [i32; 3],
+    pub style: RoofStyle,
+    /// For a gable, whether its ridge runs east and west; for a lean-to, whether its high
+    /// side runs east and west, rising to the south.
+    pub along_x: bool,
+    /// How far it rises for each metre it runs.
+    pub pitch: f32,
+}
+
+impl RoofSection {
+    /// How far above the tops of its walls it is at a point, in metres east and south in
+    /// the base's own space, if it is over that point.
+    pub fn rise(&self, at: glam::Vec2) -> Option<f32> {
+        let low = glam::Vec2::new(self.min[0] as f32, self.min[2] as f32) * CELL_M;
+        let high = glam::Vec2::new((self.max[0] + 1) as f32, (self.max[2] + 1) as f32) * CELL_M;
+        const EDGE: f32 = 1e-4;
+        if at.cmplt(low - EDGE).any() || at.cmpgt(high + EDGE).any() {
+            return None;
+        }
+        let (west, east) = ((at.x - low.x).max(0.0), (high.x - at.x).max(0.0));
+        let (north, south) = ((at.y - low.y).max(0.0), (high.y - at.y).max(0.0));
+        let run = match (self.style, self.along_x) {
+            // As far as the nearest side, so every face is flat and every hip a diagonal.
+            (RoofStyle::Hip, _) => west.min(east).min(north).min(south),
+            (RoofStyle::Gable, true) => north.min(south),
+            (RoofStyle::Gable, false) => west.min(east),
+            (RoofStyle::LeanTo, true) => north,
+            (RoofStyle::LeanTo, false) => west,
+        };
+        Some(run * self.pitch)
+    }
+
+    /// The storey whose walls it rests on.
+    pub fn storey(&self) -> i32 {
+        self.min[1]
+    }
+
+    /// Whether it is over a cell.
+    pub fn covers(&self, tile: IVec3) -> bool {
+        tile.y == self.min[1]
+            && (self.min[0]..=self.max[0]).contains(&tile.x)
+            && (self.min[2]..=self.max[2]).contains(&tile.z)
+    }
+}
+
 /// Something a player did to a base.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BuildOp {
@@ -178,6 +241,9 @@ pub enum BuildOp {
         max: [i32; 3],
         laid: bool,
     },
+    /// Put a pitched roof over a block of cells. It takes the place of any flat roof
+    /// there.
+    AddRoof(RoofSection),
     /// The room tool's shortcut: walls round a block of cells on each of its storeys, and
     /// a floor and a roof on each. Where it meets rooms already there on the same storey,
     /// the walls between are taken away, so they open into one another and a room drawn
@@ -192,8 +258,10 @@ pub struct Base {
     walls: BTreeMap<Face, Panel>,
     /// The cells with a floor at their foot.
     floors: BTreeSet<[i32; 3]>,
-    /// The cells with a roof over them.
+    /// The cells with a flat roof over them.
     roofs: BTreeSet<[i32; 3]>,
+    /// The pitched roofs, in the order they were put up.
+    sections: Vec<RoofSection>,
     /// Worked out from the walls: every cell they close in, and which room it is in.
     rooms: BTreeMap<[i32; 3], u32>,
 }
@@ -214,7 +282,10 @@ const LEVEL: [Side; 4] = [Side::East, Side::West, Side::South, Side::North];
 
 impl Base {
     pub fn is_empty(&self) -> bool {
-        self.walls.is_empty() && self.floors.is_empty() && self.roofs.is_empty()
+        self.walls.is_empty()
+            && self.floors.is_empty()
+            && self.roofs.is_empty()
+            && self.sections.is_empty()
     }
 
     /// How many cells are in rooms.
@@ -244,9 +315,29 @@ impl Base {
         self.floors.contains(&tile.to_array())
     }
 
-    /// Whether a cell has a roof over it.
+    /// Whether a cell has a flat roof over it.
     pub fn has_roof(&self, tile: IVec3) -> bool {
         self.roofs.contains(&tile.to_array())
+    }
+
+    /// Whether a cell has any roof over it, flat or pitched.
+    pub fn covered(&self, tile: IVec3) -> bool {
+        self.has_roof(tile) || self.sections.iter().any(|section| section.covers(tile))
+    }
+
+    /// The pitched roofs, in the order they were put up.
+    pub fn sections(&self) -> &[RoofSection] {
+        &self.sections
+    }
+
+    /// How far above the tops of a storey's walls its pitched roof is at a point, in
+    /// metres east and south in the base's own space: the highest section over it.
+    pub fn roof_rise(&self, storey: i32, at: glam::Vec2) -> Option<f32> {
+        self.sections
+            .iter()
+            .filter(|section| section.storey() == storey)
+            .filter_map(|section| section.rise(at))
+            .max_by(|a, b| a.total_cmp(b))
     }
 
     /// Every cell with a floor, in a fixed order.
@@ -272,6 +363,16 @@ impl Base {
                 Self::set_cells(&mut self.floors, min, max, laid)
             }
             BuildOp::SetRoof { min, max, laid } => Self::set_cells(&mut self.roofs, min, max, laid),
+            BuildOp::AddRoof(section) => {
+                // It takes the place of a flat roof under it.
+                Self::set_cells(&mut self.roofs, section.min, section.max, false);
+                if self.sections.contains(&section) {
+                    false
+                } else {
+                    self.sections.push(section);
+                    true
+                }
+            }
             BuildOp::AddRoom { min, max } => {
                 self.add_room(IVec3::from_array(min), IVec3::from_array(max))
             }
@@ -796,6 +897,56 @@ mod tests {
         );
         assert_eq!(cells(CELL_M * 3.0), 3);
         assert_eq!(cells(0.0), 1);
+    }
+
+    #[test]
+    fn a_hip_roof_rises_to_its_middle_and_a_gable_to_its_ridge() {
+        let section = |style, along_x| RoofSection {
+            min: [0, 0, 0],
+            max: [7, 0, 3],
+            style,
+            along_x,
+            pitch: 0.5,
+        };
+        let at = |x: f32, z: f32| glam::Vec2::new(x, z);
+        // Four metres by two: a hip rises half a metre to its ridge, a metre in.
+        let hip = section(RoofStyle::Hip, true);
+        assert_eq!(hip.rise(at(0.0, 1.0)), Some(0.0));
+        assert_eq!(hip.rise(at(2.0, 1.0)), Some(0.5));
+        assert_eq!(hip.rise(at(0.5, 1.0)), Some(0.25));
+        assert_eq!(hip.rise(at(5.0, 1.0)), None);
+        // A gable with its ridge east and west is as high at its end as in its middle.
+        let gable = section(RoofStyle::Gable, true);
+        assert_eq!(gable.rise(at(0.0, 1.0)), Some(0.5));
+        assert_eq!(gable.rise(at(2.0, 0.5)), Some(0.25));
+        // A lean-to rises across the whole of it.
+        let lean = section(RoofStyle::LeanTo, true);
+        assert_eq!(lean.rise(at(1.0, 2.0)), Some(1.0));
+    }
+
+    #[test]
+    fn a_pitched_roof_takes_the_place_of_a_flat_one_and_covers_the_room() {
+        let mut base = room();
+        assert!(base.apply(BuildOp::AddRoof(RoofSection {
+            min: [0, 0, 0],
+            max: [2, 0, 2],
+            style: RoofStyle::Hip,
+            along_x: true,
+            pitch: 0.7,
+        })));
+        assert_eq!(base.roofs().count(), 0);
+        assert!(base.covered(IVec3::new(1, 0, 1)));
+        assert!(!base.covered(IVec3::new(1, 1, 1)));
+        // Where two sections overlap, the higher.
+        base.apply(BuildOp::AddRoof(RoofSection {
+            min: [0, 0, 1],
+            max: [5, 0, 1],
+            style: RoofStyle::Gable,
+            along_x: true,
+            pitch: 0.7,
+        }));
+        let middle = glam::Vec2::new(0.25, 0.75);
+        assert!((base.roof_rise(0, middle).unwrap() - 0.25 * 0.7).abs() < 1e-5);
     }
 
     #[test]

@@ -71,6 +71,7 @@ struct PartFile {
 #[derive(Deserialize)]
 enum KindFile {
     Room(Vec<RoomShape>),
+    Roof(Vec<RoofShape>),
     Wall(Vec<(String, f32)>),
     Window(Vec<(String, f32, (f32, f32))>),
     Door,
@@ -130,6 +131,7 @@ impl Builds {
                 tab: part.tab,
                 kind: match part.kind {
                     KindFile::Room(shapes) => Kind::Room(shapes),
+                    KindFile::Roof(shapes) => Kind::Roof(shapes),
                     KindFile::Wall(lengths) => Kind::Wall(lengths),
                     KindFile::Window(windows) => Kind::Window(
                         windows
@@ -313,8 +315,21 @@ pub struct RoomShape {
     pub metres: [f32; 2],
 }
 
+/// A kind of roof: pitched in a style, rising so much for each metre it runs, or flat.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoofShape {
+    pub name: String,
+    /// `None` for a flat roof.
+    pub style: Option<terra_build::RoofStyle>,
+    #[serde(default)]
+    pub pitch: f32,
+}
+
 pub enum Kind {
     Room(Vec<RoomShape>),
+    /// A roof over a rectangle, drawn or over a room, resting on the walls of a storey.
+    Roof(Vec<RoofShape>),
     /// A stretch of plain wall, so many metres long unless drawn, on the grid between
     /// cells. Windows and doors are cut in it with their own parts.
     Wall(Vec<(String, f32)>),
@@ -379,6 +394,7 @@ impl Part {
     pub fn variants(&self) -> usize {
         match &self.kind {
             Kind::Room(shapes) => shapes.len(),
+            Kind::Roof(shapes) => shapes.len(),
             Kind::Window(shapes) => shapes.len(),
             Kind::Wall(lengths) => lengths.len(),
             Kind::Items(items) => items.len(),
@@ -390,6 +406,7 @@ impl Part {
     pub fn variant_name(&self, variant: usize) -> Option<&str> {
         match &self.kind {
             Kind::Room(shapes) => Some(&shapes[variant].name),
+            Kind::Roof(shapes) => Some(&shapes[variant].name),
             Kind::Window(shapes) => Some(&shapes[variant].0),
             Kind::Wall(lengths) => Some(&lengths[variant].0),
             Kind::Items(items) => Some(&items[variant].name),

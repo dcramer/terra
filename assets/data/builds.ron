@@ -24,6 +24,8 @@
 //                       lower than the top, as a chair's below its back, says how high
 //                       (seat, metres).
 //              Room     rooms, by footprint in metres east by south
+//              Roof     roofs: a style (Hip, Gable, LeanTo, or None for flat) and how far it
+//                       rises for each metre it runs
 //              Wall     lengths of wall, in metres, drawn by dragging or laid at a length
 //              Window   windows, by width in metres, and the glass's sill above the floor
 //                       and top below the ceiling, in metres
@@ -60,6 +62,12 @@
             (name: "3 by 3 m", metres: (3.0, 3.0)),
             (name: "6 by 6 m", metres: (6.0, 6.0)),
             (name: "Corridor, 1.5 by 4.5 m", metres: (1.5, 4.5)),
+        ])),
+        (name: "Roof", tab: Structure, kind: Roof([
+            (name: "Gable", style: Some(Gable), pitch: 0.7),
+            (name: "Hip", style: Some(Hip), pitch: 0.7),
+            (name: "Lean-to", style: Some(LeanTo), pitch: 0.4),
+            (name: "Flat", style: None),
         ])),
         (name: "Wall", tab: Structure, kind: Wall([("3 m", 3.0), ("1.5 m", 1.5), ("0.5 m", 0.5)])),
         (name: "Window", tab: Openings, kind: Window([

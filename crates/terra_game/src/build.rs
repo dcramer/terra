@@ -25,7 +25,7 @@ const FLOOR_CLEARANCE_M: f32 = 0.12;
 const FOUNDATION_LEDGE_M: f32 = 0.14;
 const FOUNDATION_DEPTH_M: f32 = 0.7;
 /// Half the width of the footing under a wall that stands on the ground.
-const WALL_FOOTING_HALF_M: f32 = 0.16;
+const WALL_FOOTING_HALF_M: f32 = 0.1;
 /// Steps run this far out for every metre they have to climb.
 const RAMP_RUN_PER_RISE: f32 = 2.4;
 /// Steps are this much wider than the doorway they lead to.
