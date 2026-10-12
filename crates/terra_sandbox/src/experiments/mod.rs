@@ -49,7 +49,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "icons",
-        about: "The icon baker (D129): renders every item from its look into assets/icons, then exits; --sheet <prefix> also lays them out; --model <path> previews a look. Run as cargo xtask icons.",
+        about: "The icon baker (D129): renders every item from its look into assets/icons, then exits; --sheet <prefix> also lays them out, --renders <folder> keeps the renders. Run as cargo xtask icons.",
         add: icons::plugin,
     },
     Experiment {

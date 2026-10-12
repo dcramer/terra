@@ -1,15 +1,13 @@
 //! The icon baker (D129): renders every item in the catalogue from its look with the icon
-//! renderer (`terra_game::icons`), in the house style (D130), and writes `assets/icons/<item>.png`,
-//! the item's cells times `PX_PER_CELL`, and `assets/icons/manifest.txt`, saying what each
-//! was rendered from. An icon painted by `tools/icons/paint.ts` is kept, never replaced by
-//! its render. Items whose look does not exist yet are listed and skipped; icons for items
-//! no longer in the catalogue are removed. `--renders <folder>` writes every render there
-//! too, for the painter. Run it as `cargo xtask icons`. The
-//! playbook is `.claude/skills/item-icons/SKILL.md`.
+//! renderer (`terra_game::icons`), in the house style (D130), and writes
+//! `assets/icons/<item>.png`, the item's cells times `PX_PER_CELL`, and
+//! `assets/icons/manifest.txt`, saying what each was rendered from. An icon painted by
+//! `tools/icons/paint.ts` is kept, never replaced by its render. Items whose look does not
+//! exist yet are listed and skipped; icons for items no longer in the catalogue are
+//! removed. Run it as `cargo xtask icons`. The playbook is `.claude/skills/item-icons/SKILL.md`.
 //!
-//! `--model <path>` renders only the looks named, one cell square, and writes nothing to
-//! the assets: a preview of a look before it is an item. `--sheet <prefix>` also lays the
-//! icons out on empty slots and saves `<prefix>.png` at the size rendered and
+//! `--renders <folder>` also writes every render there, for the painter. `--sheet <prefix>`
+//! also lays the icons out on empty slots and saves `<prefix>.png` at the size rendered and
 //! `<prefix>-half.png` at half, a backpack cell on a plain display. Then it exits.
 
 use std::path::{Path, PathBuf};
@@ -33,9 +31,9 @@ const GAP: [f32; 3] = [0.05, 0.06, 0.08];
 /// Slots across the sheet.
 const COLUMNS: usize = 8;
 
-/// One icon to render: the item it is for, if it is baked, and what it is rendered from.
+/// One icon to render: the item it is for, and what it is rendered from.
 struct Wanted {
-    item: Option<String>,
+    item: String,
     icon: Icon,
 }
 
@@ -73,29 +71,15 @@ fn catalogue() -> (Vec<(String, Icon)>, Vec<String>) {
     (found, missing)
 }
 
-fn ask(options: Res<Options>, mut baking: ResMut<Baking>, mut icons: ResMut<Icons>) {
-    baking.wanted = if options.models.is_empty() {
-        let (found, missing) = catalogue();
-        if !missing.is_empty() {
-            println!("ICONS no look yet, shown by name: {}", missing.join(", "));
-        }
-        found
-            .into_iter()
-            .map(|(item, icon)| Wanted {
-                item: Some(item),
-                icon,
-            })
-            .collect()
-    } else {
-        options
-            .models
-            .iter()
-            .map(|look| Wanted {
-                item: None,
-                icon: Icon::new(look.clone(), (1, 1)),
-            })
-            .collect()
-    };
+fn ask(mut baking: ResMut<Baking>, mut icons: ResMut<Icons>) {
+    let (found, missing) = catalogue();
+    if !missing.is_empty() {
+        println!("ICONS no look yet, shown by name: {}", missing.join(", "));
+    }
+    baking.wanted = found
+        .into_iter()
+        .map(|(item, icon)| Wanted { item, icon })
+        .collect();
     for wanted in &baking.wanted {
         icons.want(&wanted.icon);
     }
@@ -121,9 +105,7 @@ fn finish(
     if failed > 0 {
         error!("icons: {failed} could not be rendered; the log above says why");
     }
-    if options.models.is_empty() {
-        bake(&rendered);
-    }
+    bake(&rendered);
     if let Some(folder) = &options.renders {
         write_renders(&rendered, folder);
     }
@@ -161,7 +143,7 @@ fn bake(rendered: &[(&Wanted, &[u8])]) {
         .cloned()
         .collect();
     for (wanted, rgba) in rendered {
-        let Some(item) = &wanted.item else { continue };
+        let item = &wanted.item;
         if lines.iter().any(|baked| &baked.item == item) {
             continue;
         }
@@ -204,13 +186,7 @@ fn bake(rendered: &[(&Wanted, &[u8])]) {
 /// Writes every render, item or not, into `folder`, for painting.
 fn write_renders(rendered: &[(&Wanted, &[u8])], folder: &Path) {
     for (wanted, rgba) in rendered {
-        let name = wanted.item.clone().unwrap_or_else(|| {
-            Path::new(&wanted.icon.look)
-                .file_stem()
-                .map_or("look".to_string(), |stem| {
-                    stem.to_string_lossy().into_owned()
-                })
-        });
+        let name = &wanted.item;
         let (w, h) = wanted.icon.cells;
         let size = (u32::from(w) * PX_PER_CELL, u32::from(h) * PX_PER_CELL);
         save(rgba.to_vec(), size, &folder.join(format!("{name}.png")));

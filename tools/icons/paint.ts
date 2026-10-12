@@ -6,7 +6,7 @@
 // Node 22.18 or later, which runs TypeScript directly; no dependencies beyond ImageMagick.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -204,6 +204,14 @@ async function main(argv: string[]) {
   if (spawnSync("convert", ["-version"]).status !== 0) throw new Error("needs ImageMagick: sudo apt install imagemagick");
   const notes = parseNotes(readFileSync(join(HERE, "icons.txt"), "utf8"));
   const work = mkdtempSync(join(tmpdir(), "terra-icons-"));
+  try {
+    await paintAll(values, positionals, notes, work);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+async function paintAll(values: Record<string, unknown>, positionals: string[], notes: Notes, work: string) {
   let renders = values.renders as string | undefined;
   if (!renders) {
     renders = join(work, "renders");

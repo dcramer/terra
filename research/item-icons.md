@@ -33,7 +33,7 @@ An image model is still useful for the **style**: drawing a few icons by hand or
 
 ## Afterwards
 
-The developers doubted rendering icons in play, and on reflection the evidence above supports them: rendering in play is the exception (Tarkov, for gun builds too many to bake; Minecraft's blocks), and the usual way is to render or paint icons during development and ship them as files. Terra now bakes them (D129): the same rendering from each look, run by `cargo xtask icons`.
+The developers doubted rendering icons in play, and on reflection the evidence above supports them: rendering in play is the exception (Tarkov, for gun builds too many to bake; Minecraft's blocks), and the usual way is to render or paint icons during development and ship them as files. Terra now bakes them (D129). Asked next whether games with many generated items render their icons, they mostly do not: they author an icon per base kind and show variation on top of it (rarity frames, palette swaps, badges), as Diablo, Path of Exile, Borderlands and No Man's Sky do, from memory rather than checked against their developers' accounts. So each kind's icon is now painted by an image model from its render, which keeps the framing alike, with the mood board as the style reference; tested on four items, painted icons read clearly better at slot size than renders (D130, `tools/icons`).
 
 ## Limits
 

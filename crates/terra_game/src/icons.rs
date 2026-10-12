@@ -32,8 +32,6 @@ use bevy::{
     world_serialization::{WorldAsset, WorldAssetRoot, WorldInstanceReady},
 };
 
-use crate::character::Tint;
-
 /// The style's version: raise it whenever the rig changes, so every icon baked before is
 /// stale and the check asks for them to be baked again.
 pub const STYLE: u32 = 1;
@@ -129,12 +127,10 @@ const SHADERS_READY_FRAMES: u32 = 2;
 /// ...or after this many frames whatever else is compiling, so a busy world cannot stall it.
 const MOST_DRAW_FRAMES: u32 = 120;
 
-/// What an icon shows: a look, how it is coloured, and the cells its item fills, which
-/// set the icon's shape.
-#[derive(Clone, Debug, PartialEq)]
+/// What an icon shows: a look, and the cells its item fills, which set the icon's shape.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Icon {
     pub look: String,
-    pub tint: Tint,
     pub cells: (u8, u8),
 }
 
@@ -142,26 +138,7 @@ impl Icon {
     pub fn new(look: impl Into<String>, cells: (u8, u8)) -> Self {
         Icon {
             look: look.into(),
-            tint: Tint::default(),
             cells: (cells.0.max(1), cells.1.max(1)),
-        }
-    }
-
-    fn key(&self) -> Key {
-        Key {
-            look: self.look.clone(),
-            tint: self
-                .tint
-                .0
-                .iter()
-                .map(|(role, colour)| {
-                    (
-                        role.clone(),
-                        colour.to_linear().to_f32_array().map(f32::to_bits),
-                    )
-                })
-                .collect(),
-            cells: self.cells,
         }
     }
 
@@ -171,18 +148,11 @@ impl Icon {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct Key {
-    look: String,
-    tint: Vec<(String, [u32; 4])>,
-    cells: (u8, u8),
-}
-
 /// Every icon asked for: rendered, as RGBA `cells` times `PX_PER_CELL` on a side, or on
 /// its way, or failed (its look did not load or had nothing to draw).
 #[derive(Resource, Default)]
 pub struct Icons {
-    made: HashMap<Key, Option<Vec<u8>>>,
+    made: HashMap<Icon, Option<Vec<u8>>>,
     queue: VecDeque<Icon>,
     drawing: Option<Drawing>,
 }
@@ -190,7 +160,7 @@ pub struct Icons {
 impl Icons {
     /// Asks for an icon, if it has not been asked for already.
     pub fn want(&mut self, icon: &Icon) {
-        if let std::collections::hash_map::Entry::Vacant(entry) = self.made.entry(icon.key()) {
+        if let std::collections::hash_map::Entry::Vacant(entry) = self.made.entry(icon.clone()) {
             entry.insert(None);
             self.queue.push_back(icon.clone());
         }
@@ -198,7 +168,7 @@ impl Icons {
 
     /// The icon as RGBA, once it is rendered.
     pub fn get(&self, icon: &Icon) -> Option<&[u8]> {
-        self.made.get(&icon.key())?.as_deref()
+        self.made.get(&icon.clone())?.as_deref()
     }
 
     /// Whether every icon asked for is made or given up on.
@@ -339,7 +309,6 @@ fn draw(
             .spawn((
                 Name::new(format!("Icon of {}", subject.look)),
                 WorldAssetRoot(scene.clone()),
-                subject.tint.clone(),
                 Transform::IDENTITY,
             ))
             .observe(
@@ -371,7 +340,7 @@ fn draw(
         warn!("icons: {} did not load: {error}", drawing.subject.look);
         let drawing = icons.drawing.take().expect("drawing");
         commands.entity(drawing.look).despawn();
-        icons.made.insert(drawing.subject.key(), None);
+        icons.made.insert(drawing.subject.clone(), None);
         return;
     }
     if !ready.contains(drawing.look) {
@@ -389,7 +358,7 @@ fn draw(
             warn!("icons: {} has nothing to draw", drawing.subject.look);
             let drawing = icons.drawing.take().expect("drawing");
             commands.entity(drawing.look).despawn();
-            icons.made.insert(drawing.subject.key(), None);
+            icons.made.insert(drawing.subject.clone(), None);
             return;
         }
         let (w, h) = drawing.subject.cells;
@@ -452,7 +421,7 @@ fn draw(
                         return;
                     };
                     drawing.copied = true;
-                    let key = drawing.subject.key();
+                    let icon = drawing.subject.clone();
                     let copy = match captured.image.clone().try_into_dynamic() {
                         Ok(icon) => Some(icon.to_rgba8().into_raw()),
                         Err(error) => {
@@ -460,7 +429,7 @@ fn draw(
                             None
                         }
                     };
-                    icons.made.insert(key, copy);
+                    icons.made.insert(icon, copy);
                 },
             );
         }
@@ -634,18 +603,15 @@ mod tests {
     }
 
     #[test]
-    fn a_icon_is_asked_for_once() {
+    fn an_icon_is_asked_for_once() {
         let mut icons = Icons::default();
         let axe = Icon::new("models/held/stone_axe.glb", (2, 1));
         icons.want(&axe);
         icons.want(&axe);
         assert_eq!(icons.queue.len(), 1);
         assert!(icons.get(&axe).is_none());
-        // Another tint or shape is another icon.
-        let mut dyed = axe.clone();
-        dyed.tint = Tint(vec![("Wood".into(), Color::BLACK)]);
-        icons.want(&dyed);
+        // Another shape is another icon.
         icons.want(&Icon::new("models/held/stone_axe.glb", (1, 1)));
-        assert_eq!(icons.queue.len(), 3);
+        assert_eq!(icons.queue.len(), 2);
     }
 }
