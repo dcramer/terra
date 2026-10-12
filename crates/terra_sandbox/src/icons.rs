@@ -37,9 +37,57 @@ use crate::character::Tint;
 /// The style's version: raise it whenever the rig changes, so every icon baked before is
 /// stale and the check asks for them to be baked again.
 pub const STYLE: u32 = 1;
-/// Where the manifest of baked icons is, under `assets/`: a line per item, `<item> <look>
-/// <fingerprint of the look> <style>`.
+/// Where the manifest of icons is, under `assets/`: a line per item, `<item> <source>
+/// <look> <fingerprint of the look> <style>`, the source `rendered` or `painted`
+/// (`tools/icons/paint.ts`). A painted icon of an item with no look has `-` for its look
+/// and fingerprint; a painted icon has `-` for the render's style.
 pub const MANIFEST: &str = "icons/manifest.txt";
+
+/// A line of the manifest: where an item's icon came from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Baked {
+    pub item: String,
+    pub painted: bool,
+    pub look: Option<String>,
+    pub fingerprint: Option<u64>,
+    pub style: Option<u32>,
+}
+
+impl Baked {
+    pub fn parse(line: &str) -> Option<Baked> {
+        let mut words = line.split_whitespace();
+        let item = words.next()?.to_string();
+        let painted = match words.next()? {
+            "painted" => true,
+            "rendered" => false,
+            _ => return None,
+        };
+        let dash = |word: &str| (word != "-").then(|| word.to_string());
+        let look = dash(words.next()?);
+        let fingerprint = dash(words.next()?).and_then(|hex| u64::from_str_radix(&hex, 16).ok());
+        let style = dash(words.next()?).and_then(|style| style.parse().ok());
+        Some(Baked {
+            item,
+            painted,
+            look,
+            fingerprint,
+            style,
+        })
+    }
+
+    pub fn line(&self) -> String {
+        format!(
+            "{} {} {} {} {}",
+            self.item,
+            if self.painted { "painted" } else { "rendered" },
+            self.look.as_deref().unwrap_or("-"),
+            self.fingerprint
+                .map_or("-".to_string(), |hash| format!("{hash:016x}")),
+            self.style
+                .map_or("-".to_string(), |style| style.to_string()),
+        )
+    }
+}
 
 /// Where an item's baked icon is, under `assets/`, by its id (`character::item_id`).
 pub fn file(item: &str) -> String {
@@ -516,6 +564,34 @@ fn shining(light: &IconLight, camera: &Transform) -> Transform {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_fingerprint_is_fnv1a_as_the_painter_computes_it() {
+        // The same values tools/icons/paint.test.ts checks.
+        assert_eq!(fingerprint(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fingerprint(b"a"), 0xaf63_dc4c_8601_ec8c);
+    }
+
+    #[test]
+    fn a_manifest_line_reads_back() {
+        let rendered = Baked {
+            item: "stone_axe".into(),
+            painted: false,
+            look: Some("models/held/stone_axe.glb".into()),
+            fingerprint: Some(0xff83_4e6b_0ad4_b8d2),
+            style: Some(1),
+        };
+        assert_eq!(Baked::parse(&rendered.line()), Some(rendered.clone()));
+        let stone = Baked {
+            item: "stone".into(),
+            painted: true,
+            look: None,
+            fingerprint: None,
+            style: None,
+        };
+        assert_eq!(stone.line(), "stone painted - - -");
+        assert_eq!(Baked::parse(&stone.line()), Some(stone));
+    }
 
     #[test]
     fn a_frame_sees_every_corner_in_its_shape() {

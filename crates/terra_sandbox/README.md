@@ -268,7 +268,7 @@ Models on a plain floor in the game's own light and renderer, playing animations
 cargo xtask icons --sheet shots/icons/all
 ```
 
-The icon baker (D129): renders every item in the catalogue from its own look in the house style (D130) with the icon renderer (`src/icons.rs`), writes `assets/icons/<item>.png` sized to the item's cells and `assets/icons/manifest.txt`, lists items with no look yet, and exits; `--sheet` also saves the icons laid out on empty slots, at 96 and 48 pixels a cell. `--model <path>` previews looks one cell square without writing to the assets. The play experiment loads the baked files. A test fails when an icon is stale. How to make, check and fix icons is in `.claude/skills/item-icons/SKILL.md`.
+The icon baker (D129): renders every item in the catalogue from its own look in the house style (D130) with the icon renderer (`src/icons.rs`), writes `assets/icons/<item>.png` sized to the item's cells and `assets/icons/manifest.txt`, lists items with no look yet, and exits; `--sheet` also saves the icons laid out on empty slots, at 96 and 48 pixels a cell. `--model <path>` previews looks one cell square without writing to the assets. Icons painted by `tools/icons/paint.ts` are kept, never replaced by renders; `--renders <folder>` writes every render there too, for the painter. The play experiment loads the files. A test fails when an icon is stale. How to make, check and fix icons is in `.claude/skills/item-icons/SKILL.md`.
 
 ## Adding an experiment
 

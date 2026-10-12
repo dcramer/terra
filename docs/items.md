@@ -48,49 +48,34 @@ Picking something up puts it in the first place it fits, scanning from the top l
 
 ## Item icons
 
-Every slot that holds an item shows its icon: the bar, the backpack and the equipment slots so far, and storage and the station screens when they show items. An item with no look yet, such as a raw material, shows its name. Research in [research/item-icons.md](../research/item-icons.md); how to check or fix one in [the item-icons playbook](../.claude/skills/item-icons/SKILL.md).
+Every slot that holds an item shows its icon: the bar, the backpack and the equipment slots so far, and storage and the station screens when they show items. Icons are image files in `assets/icons`, loaded by the game; an item with none shows its name. How to make, check and fix them is in [the item-icons playbook](../.claude/skills/item-icons/SKILL.md); research in [research/item-icons.md](../research/item-icons.md).
 
-**How they are made** (D129, Decided, technical): the industry's usual pipeline. Icons are image files baked during development and shipped with the other art; the game only loads them. `cargo xtask icons` renders every item in the catalogue from its own look, in the house style, into `assets/icons/<item>.png`, sized to the cells the item fills (96 pixels a cell), and writes `assets/icons/manifest.txt`, saying which look and style each was rendered from. A test fails when a look or the style has changed since its icon was baked, so a stale icon cannot be committed. Nobody paints an icon, so a new item has one as soon as it has a look (D127), and the icon is the real thing (D93). The renderer is `crates/terra_sandbox/src/icons.rs` and the baker is the sandbox's `icons` experiment; nothing in either names an item. Not built: icons for an item's colour variants (a mask baked with each icon, saying which parts take which colour, for the screen to tint) and for its state, such as broken; both wait until items carry them.
+**How they are made** (D129, technical). As games with many generated items do it: an icon is authored per kind of item, and variation is shown on top of it rather than redrawn.
 
-**Which look**: a tool's held look, gear's look on the wearer's body, and for anything else, such as a material, the item's own look, `models/items/<item>.glb`: the thing on its own as it lies, life size, facing +Z, its materials named by role. The same look would show an item dropped in the world. No material has one yet (stone, wood, fibre, hide, ore, iron, meat, berries, cooked meat, arrows), so they show their names.
+1. **Rendered**: `cargo xtask icons` renders every item from its own look in one fixed house style, sized to the cells it fills (96 pixels a cell). The render is the fallback icon and the underdrawing.
+2. **Painted**: `tools/icons/paint.ts` has the image model repaint the render in the art style, with the mood board's painted workbench and a few approved icons as references, cuts it out and fits it to the item's cells. Items with no look yet, such as materials, are painted from a line describing them in `tools/icons/icons.txt`. A person approves each on a review sheet.
+3. **Checked**: `assets/icons/manifest.txt` records the look and style each icon came from, and a test fails when a look has changed since its icon was made. The baker never replaces a painted icon.
 
-**Proposed next: painted icons, drawn with each model** (D130, Leaning). Games with many generated items do not give each one a rendered icon: they make an authored icon per base kind, drawn to read at slot size, and show variation on top of it systematically, as rarity frames, palette swaps and badges, with a 3D view for a close look (Diablo, Path of Exile, Borderlands, Starbound, No Man's Sky; Tarkov and Minecraft, which render, are the exceptions). For Terra:
+Not built: variants shown on top of an icon (a palette shift for a dyed item, a frame or badge for quality or state), until items carry them.
 
-- **An icon is drawn for each kind when its model is made**, by the image model, from two references: the baked render, so every icon has the same angle, framing and shape as its model, and a style anchor (the mood board's painted look, then a few approved icons), so icons do not drift. Cut out of a flat background, fitted to the item's cells, saved as `assets/icons/<item>.png`, and approved on the sheet by a person.
-- **Kinds with no model, such as materials, are drawn from a description** with the same anchors.
-- **The rendered icon stays as the underdrawing and the fallback**, so no item is ever without one.
-- **Variants are shown systematically, not redrawn**: a palette shift of the drawn icon for a dyed or recoloured item, a frame or badge for quality or state, a count for a container.
+**Which look**: a tool's held look, gear's look on the player's body, and for anything else the item's own look, `models/items/<item>.glb`: the thing on its own as it lies, life size, facing +Z. No item has one of those yet.
 
-Tested on 2026-10-12 with four items, rendered above and painted below, at 96 and 48 pixels a cell. The painted ones read clearly better at slot size, the style held across all four, and stone needed no model. One catch: the painted stone axe has a cord binding its model lacks, so a painted icon can drift from its model and needs the person's check.
+**What they look like** (D130, Leaning): painted, in the mood board's style: hand-painted surfaces, chunky readable forms, slightly exaggerated proportions, a bold silhouette, warm light from the upper left, no background. Composed by the render: held things lie along the icon's diagonal, square on, working end up and to the right; everything else faces the front, seen from 15 degrees above, worn things as worn with no body in them.
 
-![Rendered (top) and painted (bottom) icons, at 96 pixels a cell](images/item-icons-painted-2026-10-12.png)
+Every icon on 2026-10-12, renders above and paintings below (materials have no render), at 96 pixels a cell and at 48, a backpack cell's size:
 
-![The same at 48 pixels, the size of a backpack cell](images/item-icons-painted-half-2026-10-12.png)
+![Every item's render and painted icon, at 96 pixels a cell](images/item-icons.png)
 
-Not built: the drawing step in the baker or a tool, keeping the baker from replacing a drawn icon, and the staleness check for drawn icons. The house style below is what renders, and the underdrawings, look like.
+![The same at 48 pixels a cell](images/item-icons-half.png)
 
-**How renders look** (D130): the game's art style, by drawing the looks in the world's own light.
+![In play: icons in the equipment slots, the backpack and the bar](images/item-icons-in-play.png)
 
-- **Held things** lie corner to corner, square on, broad side to the front, working end up and to the right.
-- **Worn things** face the front, seen from 15 degrees above, as worn, with no body in them.
-- **One rig for every icon**: the play scene's warm sun from above and to the left, its blue shade, and a cool light from behind that picks the shape out of the slot. The play camera's grading. No outline and no background: the slot shows through.
-- **Framed by the look's bounds** and the item's cells, without perspective, with a little room round it. A held thing lies along its icon's diagonal, so a tool two cells wide lies flatter.
+How it was chosen, on 2026-10-12. The developers wanted icons in the art style and left the rest to me. Every look was rendered five ways (three-quarter or square on, with or without an edge light, on a plate of the sky's colours, in a darker realm's light); square on with the edge light read best and the plate was ruled out. Icons were first rendered in play, then baked during development, the usual way. Asked whether rendering is what others do: games with many generated items author an icon per kind, and only render per item where the combinations are the point (Tarkov, Minecraft). Painting four items from their renders read clearly better at slot size than the renders and held one style; the full set followed. What still holds from the comparison:
 
-![Every baked icon, at 96 pixels a cell](images/item-icons.png)
+![The five render styles compared, a row per way](images/item-icons-compared-2026-10-12.png)
 
-![The same at 48 pixels, a backpack cell on a plain display](images/item-icons-half.png)
-
-![In play: icons in the equipment slots, the backpack and the bar; stone has no look yet and shows its name](images/item-icons-in-play.png)
-
-The sheet is the baker's (`cargo xtask icons --sheet docs/images/item-icons`), each icon at its own shape. How it was chosen: on 2026-10-12 every look was drawn five ways, a row each: three-quarter from above; the same with the edge light; square on with it; on a plate of the sky's colours; in a darker realm's light. The last three columns are tinted. The developers ruled out the plate and left the rest to me.
-
-![The five ways compared, a row per way](images/item-icons-compared-2026-10-12.png)
-
-What that showed, and still holds:
-
-- **The darker realm's light lost detail** at 64 pixels, so icons keep one rig whatever realm an item is from.
-- **Long, thin things are small in a square**: the bow, the spear, the quiver. Baked icons are framed to their item's cells.
-- **Some items are hard to tell apart**, such as the stone and iron axes. That is their models' colours, to fix in the looks, not the icons.
+- **A realm's own light loses detail** at slot size, so renders keep one rig.
+- **A painting can drift from its look**: an early stone axe gained a cord binding its model lacks. The reviewer checks each against its render.
 
 ## In the game's model
 

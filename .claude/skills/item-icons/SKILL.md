@@ -1,29 +1,30 @@
 ---
 name: item-icons
-description: Make, check or fix item icons (what the action bar, backpack, equipment slots, storage and station screens show for an item) in Terra's house style. Use when adding an item or changing its look (a held tool or weapon, a worn thing, or an item's own look such as a material), when the icons test fails, when asked about item icons, or when an icon looks wrong or is missing.
+description: Make, check or fix item icons (what the action bar, backpack, equipment slots, storage and station screens show for an item) in Terra's painted style. Use when adding an item or changing its look (a held tool or weapon, a worn thing, or a material), when the icons test fails, when asked about item icons, or when an icon looks wrong or is missing.
 ---
 
 # Item icons
 
-Icons follow the industry's usual pipeline (D129): image files baked during development, committed with the other art, loaded by the game. Nobody draws one. `cargo xtask icons` renders every item in the catalogue from its own look, in one house style (D130), so every icon matches the rest and matches the thing itself.
+Icons are image files in `assets/icons`, committed with the other art and loaded by the game; an item with none shows its name. They are made in two steps (D129, D130):
 
-Consistency comes from three things:
+1. **Rendered** from the item's look by `cargo xtask icons`, in one fixed house style. The render is the fallback icon and the underdrawing for painting: it fixes the shape, angle and framing so every icon is composed alike.
+2. **Painted** by `tools/icons/paint.ts`, which has the image model repaint the render in the art style, with a style reference and approved icons as references so icons keep to one style. A person approves the result on a review sheet.
 
-1. **One rig, in code**: `crates/terra_sandbox/src/icons.rs`. Nothing in it names an item; never tune it for one.
-2. **Looks that follow the contracts** in [docs/characters.md](../../../docs/characters.md#the-contracts). An icon that looks wrong almost always means a look that breaks one.
-3. **The staleness test.** `assets/icons/manifest.txt` records the look and style each icon came from; `every_icon_is_baked_from_its_current_look` (run by `cargo xtask check`) fails when a look or the style has changed since. A stale icon cannot be committed.
+This follows how games with many generated items do it: an authored icon per kind, with variation (colour, quality, state) shown on top of it rather than redrawn.
 
-## Bake
+## Adding an item, or changing its look
 
-After adding an item or changing a look, from the repository root:
+From the repository root:
 
-```bash
-cargo xtask icons --sheet shots/icons/all
-```
+1. **Make its look**, if it has one (below), following the contracts in [docs/characters.md](../../../docs/characters.md#the-contracts).
+2. **Describe it** in `tools/icons/icons.txt`: one line, `<item>: <what it is>`, saying what the look shows and nothing more. An item with no look is painted from this line alone.
+3. **Paint it**: `node tools/icons/paint.ts <item>`. It bakes the renders first, paints, writes the icon, records it in `assets/icons/manifest.txt` as painted, and saves `shots/icons/review.png` (renders above, paintings below) and `review-half.png` (a backpack cell's size). About a minute for a few items; up to 100 images a month are free.
+4. **Review** both sheets. Paint again any that fail the checks below; each run is a new roll.
+5. **Commit** `assets/icons` with the look and the description. `cargo xtask check` must pass.
 
-It writes `assets/icons/<item>.png` for every item whose look exists, sized to its cells (96 pixels a cell), rewrites the manifest, removes icons of items no longer in the catalogue, lists the items with no look yet, and exits; about a minute on the CPU under WSL. Look at the sheet, then commit `assets/icons` with the look.
+`node tools/icons/paint.ts --unpainted` paints every described item that has no painted icon yet.
 
-## Which look an item's icon comes from
+## Which look an item is rendered from
 
 | The item | Its look |
 |---|---|
@@ -31,74 +32,44 @@ It writes `assets/icons/<item>.png` for every item whose look exists, sized to i
 | Gear | `models/gear/base-male/<item>.glb` (the player's body) |
 | Anything else, such as a material | `models/items/<item>.glb`: the thing on its own, as it lies, life size, facing +Z |
 
-`<item>` is the catalogue name in lower case with `_` for spaces (`character::item_id`): "Cooked meat" is `cooked_meat`. An item with no look has no icon and shows its name; the baker lists them. To give it an icon, add the look and bake; no code changes.
+`<item>` is the catalogue name in lower case with `_` for spaces (`character::item_id`): "Cooked meat" is `cooked_meat`. Items with no look yet are listed when baking.
 
-## The house style
+## Checks
+
+**Automatic.** The manifest records the look and render style each icon came from. `every_icon_is_made_from_its_current_look` (run by `cargo xtask check`) fails when a look has changed since its icon was rendered or painted, or the render style since it was rendered: bake (`cargo xtask icons`) or paint it again, and commit.
+
+**By eye, on the review sheet.** A good icon:
+
+- **Reads on the half-size sheet**: you can say what it is without its name.
+- **Matches its render**: the same thing, with nothing added. The painter is told not to add detail, but it can (an early stone axe gained a cord binding); paint again if so.
+- **Keeps to the others' style**: the same painted finish, light from the upper left, a bold silhouette.
+- **Is not mistaken for its neighbours**, such as a stone axe for an iron one. If two items look alike, it is their looks or descriptions, which is design: say so.
+- Is cleanly cut out: no magenta fringe, nothing missing at the edges.
+
+## The render style
 
 - **Held things** lie along the icon's diagonal, square on, broad side to the front, working end up and to the right.
 - **Everything else** faces the front, seen from 15 degrees above; worn things as worn, with no body in them.
-- **One rig**: the play scene's warm sun from above and to the left, its blue shade, a cool light from behind on the edges, the play camera's grading. No outline, no background, no perspective.
-- **Framed** by the look's bounds and the item's cells, with a little room.
+- **One rig**: the play scene's warm sun from above and to the left, its blue shade, a cool light from behind on the edges, the play camera's grading. No outline, no background, no perspective. Framed by the look's bounds and the item's cells, 96 pixels a cell.
 
-The style is the developers' (D130). To change it: ask them, change the constants at the top of `icons.rs`, raise `STYLE` there so every icon is stale, bake, redraw the docs' sheet (below), and record it in `docs/decisions.md`.
-
-## Check an icon
-
-Read the sheet at half size (`shots/icons/all-half.png`, 48 pixels a cell, a backpack cell on a plain display). A good icon:
-
-- **Reads at 48 pixels**: you can say what it is without its name.
-- **Is not mistaken for its neighbours**, such as a stone axe for an iron one.
-- **Sits like the rest**: a held thing's working end up and to the right, showing its broad side; anything else from the front.
-- Is not cut off, and is not a sliver in an empty slot.
-
-To preview a look that is not an item yet, without touching the assets:
-
-```bash
-cargo xtask icons --model models/items/<item>.glb --sheet shots/icons/<item>
-```
-
-To see icons in play (slow on the CPU; a few minutes):
-
-```bash
-cargo run -p terra_sandbox -- --experiment play --fresh --give <item>:1 --press i@150 --settle 260 --clean --shot shots/icons/play.png
-```
-
-## When it looks wrong, fix the look
+It is in `crates/terra_sandbox/src/icons.rs`; nothing in it names an item, so never tune it for one. A look that renders wrong breaks a contract:
 
 | What you see | What is wrong |
 |---|---|
-| The item's name instead of an icon | It has no look, or it was not baked: bake, and the list says which looks are missing |
-| The icons test fails | A look or the style changed since the icons were baked: bake and commit `assets/icons` |
 | A held thing's working end down or to the left | Its handle does not run along +Y from the grip at the origin toward the working end |
 | A worn thing or an item seen from behind or the side | It does not face +Z |
 | Much darker or duller than the rest | Its materials' colours or texture, beside the other looks' |
-| Two items look alike | Their shapes or colours, which is design: say so, don't patch the icon |
 
-If a look truly needs to sit differently in its slot, don't add a number for one item in code (D127). Propose an entry in the look's glTF extras, as its carry tilt is, read by the rig for every look, and record it.
+If a look truly needs to sit differently in its slot, don't add a number for one item in code (D127): propose an entry in the look's glTF extras, as its carry tilt is, read by the rig for every look, and record it.
+
+## The painted style
+
+The style reference is `tools/icons/style/painted-workbench.jpg`, from the mood board; the anchors (`@anchors` in `icons.txt`) are approved icons given as references too. The prompt is in `paint.ts`. Changing the style is the developers' call (D130): ask, change the reference, anchors or prompt, paint everything again (name every item), and record it in `docs/decisions.md`. Changing the render style also means raising `STYLE` in `icons.rs`.
 
 ## Keep the docs' sheet current
 
-When icons change, redraw the sheet [docs/items.md](../../../docs/items.md#item-icons) shows:
-
-```bash
-cargo xtask icons --sheet docs/images/item-icons
-```
-
-## Painted icons (proposed, D130 Leaning)
-
-The proposal is to paint each kind's icon when its model is made, with the render as the underdrawing ([items.md](../../../docs/items.md#item-icons)). Until the developers settle it and a tool does it, this is how the 2026-10-12 test was made, by hand:
-
-1. Put the baked icon on grey, four times its size: `convert assets/icons/<item>.png -resize 400% -background "#9a9a9a" -flatten <item>-ref.png`.
-2. Paint it with the image model (free), the render first and a style reference last; the test used the mood board's painted workbench (`web/c-painted-workbench.jpg` in the Terra Style Directions artifact). `--aspect 16:9` for an item two cells wide, `1:1` for one cell square:
-
-   ```bash
-   node tools/tripo/tripo.ts image "A game inventory icon of <what it is>. Keep the exact shape, angle and framing of the first reference image: <how it lies>, filling the frame. Painted in the art style of the last reference image: hand-painted surfaces with visible brush strokes and painted highlights, chunky readable forms, slightly exaggerated proportions and a bold clear silhouette that reads at a small size, warm light from the upper left. A single object only, no text, no border, no frame, no cast shadow, on a solid flat pure magenta (#FF00FF) background." --ref <item>-ref.png --ref <style>.jpg --aspect 16:9 -o <item>-painted.png
-   ```
-
-   For a kind with no model, describe it instead and give another item's render as the framing reference.
-3. Cut it out and fit it to its cells (here two by one, 96 pixels a cell): `convert <item>-painted.png -fuzz 30% -transparent "#FF00FF" -channel A -morphology Erode Disk:1.5 -blur 0x0.6 +channel -trim +repage -resize 167x83 -background none -gravity center -extent 192x96 <item>.png`.
-4. Check it beside the others at 48 pixels a cell, and against its model: the test's stone axe gained a cord binding its model does not have.
+When icons change, redraw the sheet [docs/items.md](../../../docs/items.md#item-icons) shows: `cargo xtask icons --renders <dir>`, then `node tools/icons/paint.ts --review <every item> --renders <dir>`, and copy `shots/icons/review*.png` into `docs/images` as `item-icons*.png`.
 
 ## Not built yet
 
-Icons for colour variants (a mask baked with each icon, saying which parts take which colour, for the screen to tint) and for an item's state, such as broken; both wait until items carry them. Icons in storage and the station screens. Looks for materials.
+Variants shown on top of an icon (a palette shift for a dyed item, a frame or badge for quality or state), which wait until items carry them; icons in storage and the station screens.

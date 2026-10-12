@@ -447,6 +447,14 @@ fn doctor() -> bool {
         );
     }
 
+    println!("\nArt tools");
+    report.item(
+        "ImageMagick, for painting item icons (tools/icons)",
+        output("convert", &["-version"]).is_some(),
+        false,
+        "sudo apt install imagemagick (or brew install imagemagick)",
+    );
+
     println!();
     if report.missing_required {
         println!("Some required items are missing. Fix them and run `cargo xtask doctor` again.");

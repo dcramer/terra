@@ -1,8 +1,10 @@
 //! The icon baker (D129): renders every item in the catalogue from its look with the icon
 //! renderer (`crate::icons`), in the house style (D130), and writes `assets/icons/<item>.png`,
 //! the item's cells times `PX_PER_CELL`, and `assets/icons/manifest.txt`, saying what each
-//! was rendered from. Items whose look does not exist yet are listed and skipped; icons for
-//! items no longer in the catalogue are removed. Run it as `cargo xtask icons`. The
+//! was rendered from. An icon painted by `tools/icons/paint.ts` is kept, never replaced by
+//! its render. Items whose look does not exist yet are listed and skipped; icons for items
+//! no longer in the catalogue are removed. `--renders <folder>` writes every render there
+//! too, for the painter. Run it as `cargo xtask icons`. The
 //! playbook is `.claude/skills/item-icons/SKILL.md`.
 //!
 //! `--model <path>` renders only the looks named, one cell square, and writes nothing to
@@ -20,7 +22,7 @@ use bevy::{
 
 use super::play::inventory::Items;
 use crate::{
-    icons::{self, Icon, Icons, PX_PER_CELL},
+    icons::{self, Baked, Icon, Icons, PX_PER_CELL},
     shell::Options,
 };
 
@@ -122,6 +124,9 @@ fn finish(
     if options.models.is_empty() {
         bake(&rendered);
     }
+    if let Some(folder) = &options.renders {
+        write_renders(&rendered, folder);
+    }
     if let Some(prefix) = &options.sheet {
         sheet(&rendered, prefix);
     }
@@ -132,42 +137,83 @@ fn finish(
     });
 }
 
-/// Writes each item's icon, removes icons of items no longer baked, and writes the
-/// manifest.
+/// The manifest as it stands.
+fn manifest() -> Vec<Baked> {
+    std::fs::read_to_string(assets().join(icons::MANIFEST))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(Baked::parse)
+        .collect()
+}
+
+/// Writes each item's rendered icon, unless it has a painted one, which is kept as it is
+/// even if its look has changed (the test then asks for it to be painted again); removes
+/// icons of items no longer in the catalogue; and writes the manifest.
 fn bake(rendered: &[(&Wanted, &[u8])]) {
     let folder = assets().join("icons");
     std::fs::create_dir_all(&folder).ok();
-    let mut lines = Vec::new();
+    let before = manifest();
+    let (found, missing) = catalogue();
+    let items: Vec<&String> = found.iter().map(|(item, _)| item).chain(&missing).collect();
+    let mut lines: Vec<Baked> = before
+        .iter()
+        .filter(|baked| baked.painted && items.contains(&&baked.item))
+        .cloned()
+        .collect();
     for (wanted, rgba) in rendered {
         let Some(item) = &wanted.item else { continue };
+        if lines.iter().any(|baked| &baked.item == item) {
+            continue;
+        }
         let (w, h) = wanted.icon.cells;
         let size = (u32::from(w) * PX_PER_CELL, u32::from(h) * PX_PER_CELL);
         save(rgba.to_vec(), size, &assets().join(icons::file(item)));
         let look = std::fs::read(assets().join(&wanted.icon.look)).unwrap_or_default();
-        lines.push(format!(
-            "{item} {} {:016x} {}",
-            wanted.icon.look,
-            icons::fingerprint(&look),
-            icons::STYLE
-        ));
+        lines.push(Baked {
+            item: item.clone(),
+            painted: false,
+            look: Some(wanted.icon.look.clone()),
+            fingerprint: Some(icons::fingerprint(&look)),
+            style: Some(icons::STYLE),
+        });
     }
-    lines.sort();
-    let baked: Vec<String> = lines
-        .iter()
-        .filter_map(|line| line.split(' ').next())
-        .map(|item| format!("{item}.png"))
-        .collect();
+    lines.sort_by(|a, b| a.item.cmp(&b.item));
     for old in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
         let name = old.file_name().to_string_lossy().into_owned();
-        if name.ends_with(".png") && !baked.contains(&name) {
+        let Some(item) = name.strip_suffix(".png") else {
+            continue;
+        };
+        if !lines.iter().any(|baked| baked.item == item) {
             std::fs::remove_file(old.path()).ok();
             println!("ICONS removed {name}");
         }
     }
+    let text: String = lines.iter().map(|baked| baked.line() + "\n").collect();
     let manifest = assets().join(icons::MANIFEST);
-    match std::fs::write(&manifest, lines.join("\n") + "\n") {
-        Ok(()) => println!("ICONS baked {} into {}", lines.len(), folder.display()),
+    match std::fs::write(&manifest, text) {
+        Ok(()) => println!(
+            "ICONS {} rendered, {} painted, in {}",
+            lines.iter().filter(|baked| !baked.painted).count(),
+            lines.iter().filter(|baked| baked.painted).count(),
+            folder.display()
+        ),
         Err(error) => error!("icons: could not write {}: {error}", manifest.display()),
+    }
+}
+
+/// Writes every render, item or not, into `folder`, for painting.
+fn write_renders(rendered: &[(&Wanted, &[u8])], folder: &Path) {
+    for (wanted, rgba) in rendered {
+        let name = wanted.item.clone().unwrap_or_else(|| {
+            Path::new(&wanted.icon.look)
+                .file_stem()
+                .map_or("look".to_string(), |stem| {
+                    stem.to_string_lossy().into_owned()
+                })
+        });
+        let (w, h) = wanted.icon.cells;
+        let size = (u32::from(w) * PX_PER_CELL, u32::from(h) * PX_PER_CELL);
+        save(rgba.to_vec(), size, &folder.join(format!("{name}.png")));
     }
 }
 
@@ -303,36 +349,36 @@ mod tests {
         assert_eq!(out, vec![0.25, 0.25, 0.25, 0.25]);
     }
 
-    /// Every item whose look exists has an icon baked from that look as it is now, in the
-    /// style as it is now. When this fails, run `cargo xtask icons` and commit the icons.
+    /// Every item whose look exists has an icon made from that look as it is now: rendered
+    /// in the style as it is now, or painted from it. Every icon in the manifest exists.
+    /// When this fails, run `cargo xtask icons` (or paint again, `tools/icons`) and commit
+    /// the icons.
     #[test]
-    fn every_icon_is_baked_from_its_current_look() {
-        let manifest = std::fs::read_to_string(assets().join(icons::MANIFEST)).unwrap_or_default();
-        let baked: Vec<Vec<&str>> = manifest
-            .lines()
-            .map(|line| line.split(' ').collect())
-            .collect();
+    fn every_icon_is_made_from_its_current_look() {
+        let baked = manifest();
         let (found, _) = catalogue();
         let mut stale = Vec::new();
         for (item, icon) in &found {
             let look = std::fs::read(assets().join(&icon.look)).unwrap_or_default();
-            let expected = [
-                item.clone(),
-                icon.look.clone(),
-                format!("{:016x}", icons::fingerprint(&look)),
-                icons::STYLE.to_string(),
-            ];
-            let fresh = baked
-                .iter()
-                .any(|line| line[..] == expected.each_ref().map(String::as_str))
-                && assets().join(icons::file(item)).exists();
+            let fresh = baked.iter().any(|line| {
+                &line.item == item
+                    && line.look.as_ref() == Some(&icon.look)
+                    && line.fingerprint == Some(icons::fingerprint(&look))
+                    && (line.painted || line.style == Some(icons::STYLE))
+            });
             if !fresh {
-                stale.push(item.as_str());
+                stale.push(item.clone());
+            }
+        }
+        for line in &baked {
+            if !assets().join(icons::file(&line.item)).exists() {
+                stale.push(line.item.clone());
             }
         }
         assert!(
             stale.is_empty(),
-            "icons missing or stale for {stale:?}: run `cargo xtask icons` and commit assets/icons"
+            "icons missing or stale for {stale:?}: run `cargo xtask icons`, or paint them again \
+             (tools/icons), and commit assets/icons"
         );
     }
 }

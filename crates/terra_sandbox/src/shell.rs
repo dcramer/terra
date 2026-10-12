@@ -58,6 +58,8 @@ usage: terra_sandbox [options]
   --focus <name>        in the workbench: look closely at a part, such as socket.hand.R
   --sheet <prefix>      in the workbench: capture each clip, save one picture of it per
                         clip as <prefix>-<clip>.png, then exit
+  --renders <folder>    in the icon baker: also write every item's render here, for
+                        painting (tools/icons)
   --sides <degrees,…>   in the workbench sheet: directions to look from, round from the
                         front (default 30,120,210,300)
   --moments <fraction,…>
@@ -147,6 +149,7 @@ pub struct Options {
     pub moments: Vec<f32>,
     pub anims: Vec<String>,
     pub sheet: Option<PathBuf>,
+    pub renders: Option<PathBuf>,
 }
 
 /// A jump in a scripted run: on `frame`, stand `at` a spot facing `facing`, each in metres
@@ -196,6 +199,7 @@ impl Options {
             moments: Vec::new(),
             anims: Vec::new(),
             sheet: None,
+            renders: None,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -246,6 +250,7 @@ impl Options {
                 "--moments" => options.moments = numbers("--moments", &value("--moments")?)?,
                 "--anim" => options.anims.push(value("--anim")?),
                 "--sheet" => options.sheet = Some(PathBuf::from(value("--sheet")?)),
+                "--renders" => options.renders = Some(PathBuf::from(value("--renders")?)),
                 "--radius" => {
                     options.radius_m = value("--radius")?
                         .parse()

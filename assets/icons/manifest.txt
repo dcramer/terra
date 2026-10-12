@@ -1,13 +1,23 @@
-bow models/held/bow.glb 5158e7b9be852413 1
-hammer models/held/hammer.glb 72b96af943a049bf 1
-iron_axe models/held/iron_axe.glb f2b26d24513e2b9b 1
-iron_pickaxe models/held/iron_pickaxe.glb ccf739af6e22b24f 1
-knife models/held/knife.glb fdb7acba51e094c1 1
-large_pack models/gear/base-male/large_pack.glb 9246f6c655bfd932 1
-leather_cap models/gear/base-male/leather_cap.glb c731fc611dba5711 1
-leather_coat models/gear/base-male/leather_coat.glb 637794e151e560e3 1
-quiver models/gear/base-male/quiver.glb 38b1508a1f067d04 1
-small_pack models/gear/base-male/small_pack.glb b14d749641e52bb7 1
-spear models/held/spear.glb 9dd22f7a5b0d1c13 1
-stone_axe models/held/stone_axe.glb ff834e6b0ad4b8d2 1
-stone_pickaxe models/held/stone_pickaxe.glb 78eb4a9940ebfff2 1
+arrow painted - - -
+berries painted - - -
+bow painted models/held/bow.glb 5158e7b9be852413 -
+cooked_meat painted - - -
+fibre painted - - -
+hammer painted models/held/hammer.glb 72b96af943a049bf -
+hide painted - - -
+iron painted - - -
+iron_axe painted models/held/iron_axe.glb f2b26d24513e2b9b -
+iron_pickaxe painted models/held/iron_pickaxe.glb ccf739af6e22b24f -
+knife painted models/held/knife.glb fdb7acba51e094c1 -
+large_pack painted models/gear/base-male/large_pack.glb 0a11f640af9901b2 -
+leather_cap painted models/gear/base-male/leather_cap.glb e07151b6ece38c45 -
+leather_coat painted models/gear/base-male/leather_coat.glb 1bbf61aab88b7c50 -
+meat painted - - -
+ore painted - - -
+quiver painted models/gear/base-male/quiver.glb 07cb7eefffe6763e -
+small_pack painted models/gear/base-male/small_pack.glb db9c10303da5f17e -
+spear painted models/held/spear.glb 9dd22f7a5b0d1c13 -
+stone painted - - -
+stone_axe painted models/held/stone_axe.glb ff834e6b0ad4b8d2 -
+stone_pickaxe painted models/held/stone_pickaxe.glb 78eb4a9940ebfff2 -
+wood painted - - -

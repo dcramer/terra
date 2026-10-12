@@ -1,0 +1,36 @@
+# What each item is, for painting its icon (paint.ts): `<item>: <what it is>`, the item by its id
+# (`character::item_id`). Say what its look shows and nothing more, so the painting matches it.
+# `@style` is the style reference, under tools/icons; `@anchors` are painted icons, once approved,
+# given as references too so new icons keep to them.
+
+@style style/painted-workbench.jpg
+@anchors stone_axe leather_cap stone
+
+# Tools and weapons
+bow: a wooden recurve bow with a thin string
+hammer: a hammer with a turned wooden handle and a pale block head
+iron_axe: an iron axe, a wooden handle with a grey iron head
+iron_pickaxe: an iron pickaxe, a wooden handle with a grey iron pick head
+knife: a knife, a steel blade with a serrated back and a wooden grip
+spear: a spear, a long wooden shaft with a small pointed tip
+stone_axe: a stone axe, a wooden handle with a pale stone head
+stone_pickaxe: a stone pickaxe, a wooden handle with a pale stone pick head
+
+# Worn
+small_pack: a small leather backpack with straps and pockets
+large_pack: a large leather backpack with straps and pockets
+leather_cap: a rounded cap of stitched leather
+leather_coat: a sleeveless leather jerkin laced at the front, with a belt
+quiver: a leather quiver holding a few arrows
+
+# Materials and food, which have no look yet
+wood: a few short split logs of wood
+stone: one fist-sized rough grey stone
+fibre: a bundle of pale plant fibre tied with a twist of the same
+hide: a folded animal hide, fur side out
+ore: a lump of rusty red-brown iron ore
+iron: a bar of iron, a small ingot
+meat: a raw cut of red meat
+berries: a small handful of red berries
+cooked_meat: a roasted cut of meat, browned
+arrow: one arrow with a stone tip and feather fletching
