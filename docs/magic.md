@@ -157,13 +157,13 @@ When you use a stone on an essence, the server draws a power from that essence's
 
 1. **The stone's kind:** strongly toward what it pulls. A rarer stone pulls harder, but anything is possible.
 2. **Your other essences:** candidates sharing tags with them are likelier, so a character comes out coherent. Absorbing all three before awakening any gives the best fit, as in the books, which is a choice players can make.
-3. **What you already have:**
-   - kinds you lack are likelier, so no one ends with five passives;
+3. **The powers you already have** (decided, 2026-10-12): the developers' answer to how a character's history shapes its draws.
+   - Candidates that combine with your powers are likelier: sharing their tags, or building on their mechanics. A power that marks makes powers that hit the marked likelier, as Hades' boons open the way to their duos.
+   - Kinds you lack are likelier, so no one ends with five passives;
    - kinds you have many of are less likely;
    - some kinds are one to a person (an aura, a perception) or one to an essence (a summon, a familiar).
-4. **What you know:** someone who knows ritual magic draws more ritual-like powers, and a practised swordsman more blade strikes. Your skills and books shape your powers.
-5. **What you have been doing:** proposed, our addition, still open ([below](#habits-shaping-the-draw)). Powers would follow habits, which is the lore's "who you are".
-6. **Where you are:** a little toward the leaning of the realm you awaken in. Awakening a stone in a death realm leans a little toward death.
+4. **Your skills and what you know** (decided, 2026-10-12): someone who knows ritual magic draws more ritual-like powers, and a practised swordsman more blade strikes. Your skills (D88) and books shape your powers, which is the lore's "who you are".
+5. **Where you are:** a little toward the leaning of the realm you awaken in. Awakening a stone in a death realm leans a little toward death.
 
 The draw is made once, by the server (D51), and kept: it is a change to you, stored like any other.
 
@@ -454,21 +454,6 @@ Decided (D168): kept as components, and named as the books name them: **quintess
 
   They are the reagents of the old school, by essence.
 
-## Habits shaping the draw
-
-Open. In plain terms, a habit is **what you have been doing a lot of lately**: fighting up close or from a distance, sneaking, healing friends, fighting alone or with others. The idea is that when you awaken a power, the draw leans a little toward powers that suit those habits, so a player who sneaks a lot is a little likelier to awaken a power for hiding. How it would work:
-
-- **The server already sees what you do** (D51). It keeps a running tally over your recent play, perhaps the last ten hours, in a few kinds:
-  - harm dealt close, at range, and by powers;
-  - healing and guarding others;
-  - time unseen;
-  - fighting alone and in a group;
-  - building and making.
-- **The tally becomes a profile:** shares of each kind, adding up to one.
-- **When you draw, each candidate's weight is multiplied** by how well its tags match the profile, by at most half again. A player who has been stalking is a little likelier to draw a hiding power, never certain.
-- **Nothing is shown.** You notice it only as powers that suit how you play (D93).
-- **Why it might be worth it:** characters fit their players without a menu. **Why not:** it is hidden, and a player who wants to change direction is pulled back toward old habits. A middle way is to count only the last few hours, so changing how you play changes the draw quickly.
-
 ## Essences in the starting realm
 
 Procedural, like every realm. There is no fixed list: the starting realm's essences come from its generated magic like any other's. One rule for it, proposed: the generator makes sure that near the start, every family is reachable among the commons (weapons, elements, beasts and body), so a first character can go any way. Its stronger pools hold the rarer essences of its own leaning.
@@ -476,7 +461,7 @@ Procedural, like every realm. There is no fixed list: the starting realm's essen
 ## Open questions
 
 1. Answered: **attributes** are kept (D164). **Monster cores** are kept (D165). **No fast travel between claims** (D72). **The starting realm's essences** come from its generation, with the rule above. **Old-school touches** follow the books: chanted spells, components used up, backlash.
-2. **Habits shaping the draw,** as worked out above: in or out?
+2. Answered: **no separate tally of habits.** What tilts a draw is what you already have, your powers and your skills (2026-10-12).
 3. Answered: **money is magic,** as in the books (D167).
 4. Answered: **fragments of essences** are components (D168).
 5. Answered: **their names** are the books': spirit coins and quintessence (2026-10-12).
