@@ -16,7 +16,7 @@ From the developers, 2026-10-11 (D98): use the books' system as the baseline and
 
 ## Three layers
 
-From the developers on 2026-10-11 (D124): in the books, not everything comes from essences; some magic, such as astral magic, is a technique you learn and study, and so are combat styles, learned from books and practice. So there are three ways to grow, not two. As with everything here, the developers will invent their own, drawing on literature and games (D125).
+From the developers on 2026-10-11 (D124): in the books, not everything comes from essences; some magic, such as astral magic, is a technique you learn and study, and so are combat styles, learned from books and practice. So there are three ways to grow, not two. The books' mechanics can be used; which disciplines and styles there are, we invent, drawing on literature and games (D125).
 
 | | Skills | Studied techniques | Essences |
 |---|---|---|---|
