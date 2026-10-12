@@ -28,6 +28,7 @@
 //!
 //! An experiment adds its own methods with [`method`].
 
+use crate::loading::Screen;
 use crate::planet::MainCamera;
 use crate::record::Record;
 use crate::shell::{self, Options};
@@ -425,6 +426,7 @@ fn status(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "frame": world.resource::<FrameCount>().0,
         "seconds": time.elapsed_secs_f64(),
         "paused": time.is_paused(),
+        "loading": *world.resource::<State<Screen>>().get() == Screen::Loading,
         "stepping": world.resource::<Steps>().left,
         "next_line": next,
     }))

@@ -17,6 +17,7 @@ use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::props::Prop;
 use crate::build::Site;
 use crate::character;
+use crate::loading::Loading;
 use crate::planet::Planet;
 use bevy::{
     prelude::*,
@@ -139,14 +140,18 @@ pub fn plugin(app: &mut App) {
         );
 }
 
-fn load(mut commands: Commands, assets: Res<AssetServer>) {
+fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
     commands.insert_resource(Figures(
         BODIES
             .into_iter()
-            .map(|body| Figure {
-                body,
-                model: assets.load(format!("models/character/{body}.glb")),
-                ready: None,
+            .map(|body| {
+                let model = assets.load(format!("models/character/{body}.glb"));
+                loading.wait_for(&model);
+                Figure {
+                    body,
+                    model,
+                    ready: None,
+                }
             })
             .collect(),
     ));

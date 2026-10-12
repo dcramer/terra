@@ -16,6 +16,7 @@ pub mod build;
 pub mod character;
 pub mod debug;
 pub mod icons;
+pub mod loading;
 pub mod planet;
 pub mod play;
 pub mod record;

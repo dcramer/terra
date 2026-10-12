@@ -1,7 +1,11 @@
 //! The parts every experiment gets for free: the window, overlays, inspectors, and the
 //! scripted modes that let a run be checked without anyone watching.
 
-use crate::{audio, debug, record};
+use crate::{
+    audio, debug,
+    loading::{self, Screen},
+    record,
+};
 use bevy::{
     audio::AudioPlugin,
     camera_controller::free_camera::FreeCameraPlugin,
@@ -44,7 +48,9 @@ usage: terra_sandbox [options]
                         fast frames are drawn, as scripted runs do
   --remote-token <text> what this run answers sandbox.whoami with, so a script knows it is
                         talking to the run it started
-  --settle <frames>     frames to run before capturing or measuring (default 120)
+  --settle <frames>     frames to run before capturing or measuring, counted from when
+                        loading is done (default 120)
+  --loading             keep the loading screen up, to look at it
   --model <path>        in the workbench: a model to load, under assets/; repeatable,
                         to stand several side by side
   --anim <clip>         in the workbench: a clip to play; repeatable
@@ -97,8 +103,8 @@ const QUIET: &str = "\
 bevy_render=warn,bevy_pbr=warn,bevy_winit=warn,bevy_egui=warn,bevy_diagnostic=warn,\
 sctk_adwaita=off";
 
-/// Frames to wait before measuring or capturing by default, so shaders have compiled and
-/// the scene has finished loading.
+/// Frames to wait after loading before measuring or capturing by default, so the camera
+/// and anything that eases in have settled.
 const SETTLE_FRAMES: u32 = 120;
 const BENCH_FRAMES: usize = 600;
 
@@ -118,6 +124,8 @@ pub struct Options {
     pub remote_token: String,
     /// No readout on screen.
     pub clean: bool,
+    /// Keep the loading screen up, to look at it.
+    pub hold_loading: bool,
     /// No sound, and sound under WSL, where it is off unless asked for.
     pub mute: bool,
     pub sound: bool,
@@ -183,6 +191,7 @@ impl Options {
             steady: false,
             remote_token: String::new(),
             clean: false,
+            hold_loading: false,
             mute: false,
             sound: false,
             presses: Vec::new(),
@@ -223,6 +232,7 @@ impl Options {
                 }
                 "--steady" => options.steady = true,
                 "--clean" => options.clean = true,
+                "--loading" => options.hold_loading = true,
                 "--mute" => options.mute = true,
                 "--sound" => options.sound = true,
                 "--fresh" => options.fresh = true,
@@ -497,6 +507,7 @@ impl Plugin for ShellPlugin {
                 engine.disable::<AudioPlugin>()
             })
             .add_plugins((
+                loading::plugin,
                 audio::plugin(sound),
                 FreeCameraPlugin,
                 EguiPlugin::default(),
@@ -520,6 +531,7 @@ impl Plugin for ShellPlugin {
 /// would steer the run.
 fn scripted_presses(
     options: Res<Options>,
+    screen: Res<State<Screen>>,
     mut frame: ResMut<ScriptFrame>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
@@ -529,11 +541,15 @@ fn scripted_presses(
     if !options.scripted() {
         return;
     }
-    frame.0 += 1;
     keys.reset_all();
     mouse.reset_all();
     motion.delta = Vec2::ZERO;
     scroll.delta = Vec2::ZERO;
+    // A script's frames are counted from when loading is done, however long that took.
+    if !counting(&options, &screen) {
+        return;
+    }
+    frame.0 += 1;
     for &(key, down, up) in &options.presses {
         if (down..up).contains(&frame.0) {
             keys.press(key);
@@ -548,6 +564,7 @@ fn scripted_presses(
 fn scripted_run(
     mut commands: Commands,
     options: Res<Options>,
+    screen: Res<State<Screen>>,
     adapter: Res<RenderAdapterInfo>,
     mut frame: Local<u32>,
     mut frame_ms: Local<Vec<f32>>,
@@ -562,6 +579,9 @@ fn scripted_run(
     let real_ms = last_frame
         .replace(now)
         .map(|last| (now - last).as_secs_f32() * 1000.0);
+    if !counting(&options, &screen) {
+        return;
+    }
     *frame += 1;
     let settle = options.settle_frames;
     if *frame <= settle {
@@ -602,6 +622,12 @@ fn scripted_run(
             exit.write(AppExit::Success);
         }
     }
+}
+
+/// Whether a scripted run's frames are being counted: once loading is done, or while the
+/// loading screen is held up to be looked at.
+pub fn counting(options: &Options, screen: &State<Screen>) -> bool {
+    *screen.get() == Screen::Playing || options.hold_loading
 }
 
 /// Whether this is Linux under Windows.

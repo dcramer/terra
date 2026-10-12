@@ -14,6 +14,7 @@
 
 use std::collections::{HashMap, VecDeque};
 
+use crate::loading::Shaders;
 use bevy::{
     asset::LoadState,
     camera::{RenderTarget, ScalingMode, primitives::Aabb, visibility::RenderLayers},
@@ -22,8 +23,7 @@ use bevy::{
     post_process::bloom::Bloom,
     prelude::*,
     render::{
-        ExtractSchedule, MainWorld, RenderApp,
-        render_resource::{PipelineCache, TextureFormat, TextureUsages},
+        render_resource::{TextureFormat, TextureUsages},
         view::{
             ColorGrading, ColorGradingGlobal, ColorGradingSection,
             screenshot::{Screenshot, ScreenshotCaptured},
@@ -207,22 +207,8 @@ struct Ready;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Icons>()
-        .init_resource::<ShadersReady>()
         .add_systems(Startup, setup)
         .add_systems(Update, draw);
-    // Only the render world knows whether shaders are compiling; it says so as it extracts.
-    app.sub_app_mut(RenderApp)
-        .add_systems(ExtractSchedule, shaders_ready);
-}
-
-/// Whether no shader was compiling when the last frame was extracted.
-#[derive(Resource, Default)]
-struct ShadersReady(bool);
-
-fn shaders_ready(mut main_world: ResMut<MainWorld>, pipelines: Res<PipelineCache>) {
-    if let Some(mut ready) = main_world.get_resource_mut::<ShadersReady>() {
-        ready.0 = pipelines.waiting_pipelines().next().is_none();
-    }
 }
 
 fn setup(mut commands: Commands) {
@@ -297,7 +283,7 @@ fn draw(
     children: Query<&Children>,
     bounds: Query<(&Aabb, &GlobalTransform)>,
     mut lights: Query<(&mut Transform, &IconLight)>,
-    shaders: Res<ShadersReady>,
+    shaders: Res<Shaders>,
 ) {
     let icons = icons.into_inner();
     let Some(drawing) = icons.drawing.as_mut() else {
@@ -399,7 +385,7 @@ fn draw(
         drawing.frames = 0;
         return;
     }
-    drawing.shaders_ready_for = if shaders.0 {
+    drawing.shaders_ready_for = if shaders.idle() {
         drawing.shaders_ready_for + 1
     } else {
         0

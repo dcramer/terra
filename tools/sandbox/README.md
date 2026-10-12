@@ -40,7 +40,7 @@ r said                                   # everything said since the last action
 | `pause`, `resume` | Stop and start the game's clock, animations included |
 | `step FRAMES` | Stop the clock, let it run that many frames, stop it again, and wait until it has |
 | `press KEY[@AFTER][:FRAMES] …` | Hold keys, named as `--press` names them, for so many frames (one if not given), starting so many frames from now (none if not given): `e`, `w:60`, `f@40`, `e@90:80`. A sequence of keys goes in one command, timed against the game's frames rather than the script's |
-| `status` | The frame, the game's time, whether the clock is stopped, and the next line's number |
+| `status` | The frame, the game's time, whether the clock is stopped, whether the loading screen is up, and the next line's number |
 | `said [--containing TEXT] [--all] [--from LINE]` | What the run has said since the mark, with the frame of each |
 | `wait TEXT [--timeout s]` | Wait until the run says something containing TEXT since the mark; on timeout, show what it said instead and fail |
 | `mark` | Start `said` and `wait` from now |

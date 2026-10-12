@@ -118,6 +118,9 @@ export async function start(sandboxArgs: string[], { windows, realTime, copy }: 
         continue;
       }
       if (!mine) throw new Error(`another sandbox answered on port ${port}; start again`);
+      // The clock is held while the loading screen is up, so nothing a script does means
+      // anything until it has gone.
+      await waitUntil("the loading screen to go", status, (now) => !now.loading, 300);
       return port;
     }
     if (!ended) throw new Error("the sandbox did not answer within ten minutes; see shots/remote.log");
@@ -178,7 +181,7 @@ export const writeMark = (line: number) => {
   writeFileSync(MARK, String(line));
 };
 
-export type Status = { frame: number; seconds: number; paused: boolean; stepping: number; next_line: number };
+export type Status = { frame: number; seconds: number; paused: boolean; loading: boolean; stepping: number; next_line: number };
 export type Line = { line: number; frame: number; level: string; source: string; text: string };
 
 export const status = async () => (await call("sandbox.status")) as Status;

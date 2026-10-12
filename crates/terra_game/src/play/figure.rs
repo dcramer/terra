@@ -8,6 +8,7 @@
 use super::Player;
 use super::held::Grip;
 use crate::character::{CARRIED_IN, Carrying};
+use crate::loading::Loading;
 use bevy::{prelude::*, world_serialization::WorldInstanceReady};
 use std::time::Duration;
 
@@ -79,10 +80,10 @@ pub fn plugin(app: &mut App) {
     );
 }
 
-fn load(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.insert_resource(FigureModel(
-        assets.load(format!("models/character/{BODY}.glb")),
-    ));
+fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
+    let model = assets.load(format!("models/character/{BODY}.glb"));
+    loading.wait_for(&model);
+    commands.insert_resource(FigureModel(model));
 }
 
 /// Once the model has loaded, stands it on the player.

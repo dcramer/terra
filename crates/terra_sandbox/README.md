@@ -26,7 +26,8 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--mute` | No sound. Scripted runs are always silent, and print what they would have played: `SANDBOX heard: step.grass 4` |
 | `--sound` | Sound under WSL, where it is off by default because WSL usually has no sound device |
 | `--bench` | Measure frame times with vsync off, print them, then exit |
-| `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
+| `--settle <frames>` | Frames to run before capturing or measuring, 120 by default, counted from when the loading screen goes. A script's `--press` and `--warp` frames are counted from then too. |
+| `--loading` | Keep the loading screen up, to look at it (D135) |
 | `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc`, `enter`, `backspace`, `equal`, `minus` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
 | `--save <file>` | In the play experiment: keep the saved game in this file. Scripted runs save and load only when given one. |
 | `--fresh` | In the play experiment: start over, throwing away the saved game |

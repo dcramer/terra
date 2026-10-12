@@ -16,6 +16,7 @@ use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::inventory::{Belongings, Raw, Tool};
 use super::skills::{Did, ONCE, Skill};
 use crate::build::Site;
+use crate::loading::Loading;
 use crate::planet::Planet;
 use bevy::{
     prelude::*,
@@ -185,10 +186,14 @@ pub fn plugin(app: &mut App) {
 #[derive(Resource)]
 struct Populated;
 
-fn load(mut commands: Commands, assets: Res<AssetServer>) {
+fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
     commands.insert_resource(Kinds {
         models: [Species::Deer, Species::Spider]
-            .map(|species| (species, assets.load(kind(species).model)))
+            .map(|species| {
+                let model = assets.load(kind(species).model);
+                loading.wait_for(&model);
+                (species, model)
+            })
             .to_vec(),
         ready: Vec::new(),
     });

@@ -59,11 +59,15 @@ pub fn capture(
     names: Query<&Name>,
     globals: Query<&GlobalTransform>,
     mut frames: Local<u32>,
+    screen: Res<State<terra_game::loading::Screen>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let (Some(bench), Some(prefix)) = (bench, options.sheet.as_ref()) else {
         return;
     };
+    if !terra_game::shell::counting(&options, &screen) {
+        return;
+    }
     *frames += 1;
     if *frames < options.settle_frames || !bench.ready() || sheet.waiting {
         return;
