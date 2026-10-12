@@ -18,8 +18,8 @@ Read from the tree at `ff0c37f` (519 tracked files) and from the top-level layou
 | `spike/planet_test`, `spike/sim_rust`, `demo/`, `prototypes/sim_toy` | Godot builds kept as reference until Rust passes the same checks (D12) | Four Godot or GDExtension projects in three places | Scattered. `prototypes/` holds one thing, and "prototype" in `docs/prototypes.md` means a milestone build, not this. |
 | `tools/` | Team tooling outside the game (D121) | Four TypeScript or shell tools, each with a README | Fine. `token-stats` is `.mjs`/`.js`, not TypeScript. |
 | `xtask/` | Repository tasks | That | Fine. |
-| `docs/` | Decisions and design | That, plus `proposals/` and `images/` (18 MB of screenshots, several cited only from `research/`) | Mostly fine. Images sit with the wrong owner. |
-| `research/` | Dated findings | That | Fine. Borrows its pictures from `docs/images`. |
+| `docs/` | Decisions and design | That, plus `proposals/` and `images/` (18 MB of screenshots; one cited only from `research/`, one cited nowhere) | Fine. |
+| `research/` | Dated findings | That | Fine. Shares a few pictures with `docs/`. |
 | `.claude/skills` | Agent playbooks | Four skills | Fine in place; two of them route through `spike/`. |
 
 The pattern behind most of it: things started as spikes or experiments, became load-bearing, and were never moved. The sandbox grew the game; the spikes grew the pipeline; the spikes' scratch folder grew the source art.
@@ -83,7 +83,14 @@ Each is its own commit and passes `cargo xtask check`.
 3. **Source art in.** `art/characters/<name>/` holds the approved sheet and Tripo's rigged body; the checker's baseline is regenerated from `assets/` or committed beside the tool. Needs the developers (below).
 4. **The game out of the sandbox.** `experiments/play` and the parts of the shell every build has (frame readout, logs, remote, recording) become `terra_game`; the sandbox depends on it. D46 is rewritten to match.
 5. **Godot in one place.** `demo/`, `prototypes/sim_toy`, `spike/planet_test`, `spike/sim_rust`, the root spike README and `demo.patch` go to one folder, or are deleted (below). `prototypes/` goes away.
-6. **Small ones.** `loop.sh` becomes `cargo xtask loop` (it has real logic, D121); `terra_voxel`'s benchmark becomes a Cargo example; research images move to `research/images/`; `token-stats` moves to TypeScript.
+6. **Small ones.** `loop.sh` becomes `cargo xtask loop` (it has real logic, D121); the research-only picture moves to `research/images/`; `token-stats` moves to TypeScript. `terra_voxel`'s benchmark stays a `main.rs`: a library with a benchmark binary is ordinary Cargo, and `cargo xtask win` runs a package's own binary.
+
+## Where the moves stand
+
+2026-10-12, as agreed by the developers (D133), who also had the Godot builds deleted rather than gathered.
+
+- Done: the Godot builds and finished spikes deleted (5); source art copied into `art/` (3, the pipeline still reads its scratch folder); the research picture moved (6).
+- Waiting: moves 1, 2 and 4, and `loop.sh`, touch files other sessions were changing at the time (the character pipeline, the icons, the shell and remote, `loop.sh` itself), so they wait for that work to land rather than force each session through a rebase across renamed folders.
 
 ## Questions for the developers
 

@@ -22,7 +22,7 @@ A plain crate, `terra_build`, and a sandbox experiment that draws it:
 cargo run -p terra_sandbox -- --experiment look --experiment build
 ```
 
-![An example base: two rooms, a corridor, an upper storey, a run of joined windows and a door](../docs/images/build-test-2026-10-10.png)
+![An example base: two rooms, a corridor, an upper storey, a run of joined windows and a door](images/build-test-2026-10-10.png)
 
 The model:
 
