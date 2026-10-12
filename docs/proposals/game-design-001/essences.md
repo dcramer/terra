@@ -16,11 +16,11 @@ From the developers, 2026-10-11 (D98): use the books' system as the baseline and
 
 ## Three layers
 
-From the developers on 2026-10-11 (D124): in the books, not everything comes from essences; some magic, such as astral magic, is a technique you learn and study, and so are combat styles, learned from books and practice. So there are three ways to grow, not two. The books' mechanics can be used; which disciplines and styles there are, we invent, drawing on literature and games (D125).
+From the developers on 2026-10-11 (D124): **magic and special abilities come from essences; everything else comes from other sources**, some from just doing it, some from books. In the books, not everything comes from essences; some magic, such as astral magic, is a technique you learn and study, and so are combat styles, learned from books and practice. So there are three ways to grow, not two. The books' mechanics can be used; which disciplines and styles there are, we invent, drawing on literature and games (D125).
 
 | | Skills | Studied techniques | Essences |
 |---|---|---|---|
-| What | What you can do with your hands: swim, climb, chop, smith, a weapon | Disciplines anyone can learn: magic such as astral magic, and combat styles | Powers: what makes you more than a person |
+| What | What you can do with your hands: swim, climb, chop, smith, a weapon | Techniques anyone can learn: combat styles, and disciplines of working with magic such as astral magic, which are craft and knowledge, not powers of your own | Powers: magic and special abilities, what makes you more than a person |
 | How you get one | By doing it (D88) | By study: from a teacher, a text or a ruin that shows it (D92), then practice | By finding and absorbing an essence |
 | How many | Many, small | A few disciplines, each deep | A few, large |
 | How it grows | By doing it more | By studying and working it, through ranks | Abilities by use, through ranks |
@@ -42,6 +42,20 @@ Asked by the developers on 2026-10-11: can skills rank up iron, bronze and so on
 - **Separate ladders.** Essences make your rank as a person, which decides what you can survive (D98); skills decide what you can make and do. A gold-rank crafter can be an iron-rank fighter.
 - **Recommended: skills may run ahead of your own rank**, so a crafter or gatherer has a whole game of their own. Open: the books might say a person's rank caps what their hands can do.
 - **Grinding, but never a chore** (D122): every step should feel like progress. Repetition for its own sake is where the grind games lose people.
+
+## Crossing to the next rank
+
+From the developers on 2026-10-11, unsure (D126, Leaning): you may often need a way to advance to the next rank, such as a book or someone to help you unlock it.
+
+Proposed, Open: **steps within a rank come from doing; crossing to the next rank needs a key**, one of:
+
+| Key | What it is | Why it is good for the game |
+|---|---|---|
+| **A book** | Found, bought or taken from a ruin: the next rank of a style, a discipline or a craft | A reason to explore (D91) and to bring things home |
+| **A teacher** | Someone who already stands at that rank: a villager, a recruit, a master in another realm | People matter: helping a settlement or rescuing someone can open your next rank (D90, D123) |
+| **A feat** | Something done once at the edge of what you can do: working a higher-rank material, a hard kill | Earned by daring, not by a list |
+
+Which keys a skill takes would differ: a craft might take a teacher or a feat, a style a book or a teacher. The rank-up is the milestone the steps lead to, so it should feel like an event, not a number ticking over. It also keeps the grind from being only repetition (D122): you can practise to the edge of a rank, but crossing it sends you out into the world.
 
 ## How essences would work
 
@@ -65,3 +79,4 @@ The books' fighters spend mana on abilities. From the developers (D102): **there
 6. **Skills on the rank ladder**, as proposed above, and **may a skill run ahead of your own rank**?
 7. **Which grinding games are the reference** for many skills: RuneScape, Ultima Online, Wurm Online, Star Wars Galaxies, the Elder Scrolls games, or others?
 8. **Studied techniques**: which disciplines and styles, how they are learned, and whether they rank on the same ladder?
+9. **Crossing a rank**: does it need a key, and which: a book, a teacher, a feat?
