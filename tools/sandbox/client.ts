@@ -73,12 +73,13 @@ export const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms))
 
 /// `copy` names the Windows copy the run goes in, which is also where it keeps files given
 /// by a relative path, such as a save: a script that restarts a run to load its save keeps
-/// the same copy.
-export type Start = { windows?: boolean; realTime?: boolean; copy?: string };
+/// the same copy. `foreground` lets a person use the window too; otherwise the run stays
+/// out of their way (`--background`).
+export type Start = { windows?: boolean; realTime?: boolean; foreground?: boolean; copy?: string };
 
 /// Starts a sandbox listening, in the background, on a port nothing else answers on and with
 /// a token to know it by, and waits until it answers. Its log goes to shots/remote.log.
-export async function start(sandboxArgs: string[], { windows, realTime, copy }: Start = {}) {
+export async function start(sandboxArgs: string[], { windows, realTime, foreground, copy }: Start = {}) {
   for (let tries = 0; tries < 20; tries++) {
     // A random port away from the usual one other runs use, below the dynamic range, where
     // Windows reserves blocks of ports for Hyper-V and WSL and a run would start without a
@@ -95,7 +96,7 @@ export async function start(sandboxArgs: string[], { windows, realTime, copy }: 
   token = Math.random().toString(36).slice(2);
   mkdirSync(dirname(PORT_FILE), { recursive: true });
   writeFileSync(PORT_FILE, `${port} ${token}`);
-  const args = ["--remote-port", String(port), "--remote-token", token, ...(realTime ? [] : ["--steady"]), ...sandboxArgs];
+  const args = ["--remote-port", String(port), "--remote-token", token, ...(realTime ? [] : ["--steady"]), ...(foreground ? [] : ["--background"]), ...sandboxArgs];
   writeMark(0);
   const command = windows
     ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", "--copy", copy ?? `remote-${port}`, "--", ...args]]

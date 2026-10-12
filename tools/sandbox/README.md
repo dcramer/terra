@@ -28,11 +28,11 @@ r wait "An arrow hit" --timeout 20       # or fail, showing what was said instea
 r said                                   # everything said since the last action
 ```
 
-`start` runs the sandbox in the background on a port nothing else answers on, records the port in `shots/remote.port`, and waits until it answers; every other command talks only to that port, so commands never reach a sandbox another session is driving (`TERRA_REMOTE_PORT` overrides it); anything after `--` goes to the sandbox, and `--windows` runs it on the Windows GPU from WSL (`cargo xtask win`), which is much faster than WSL's CPU renderer. Its log is `shots/remote.log`. A sandbox started by hand with `--remote` works the same. `start` also passes `--steady`, so the game moves a sixtieth of a second every frame however fast frames are drawn, as scripted runs do: a key held for 60 frames is a second of play on any machine. `--real-time` leaves the clock alone.
+`start` runs the sandbox in the background on a port nothing else answers on, records the port in `shots/remote.port`, and waits until it answers; every other command talks only to that port, so commands never reach a sandbox another session is driving (`TERRA_REMOTE_PORT` overrides it); anything after `--` goes to the sandbox, and `--windows` runs it on the Windows GPU from WSL (`cargo xtask win`), which is much faster than WSL's CPU renderer. Its log is `shots/remote.log`. A sandbox started by hand with `--remote` works the same. `start` also passes `--steady`, so the game moves a sixtieth of a second every frame however fast frames are drawn, as scripted runs do: a key held for 60 frames is a second of play on any machine. `--real-time` leaves the clock alone. It passes `--background` too, so the run stays out of the way of whoever is at the machine: its window opens behind the others without taking focus, never takes the mouse, ignores the real keyboard and mouse, and is silent; only the script drives it. `--foreground` gives a normal window, to play alongside the script.
 
 | Command | What it does |
 |---|---|
-| `start [--windows] [-- options]` | Start a sandbox listening, and wait for it |
+| `start [--windows] [--real-time] [--foreground] [-- options]` | Start a sandbox listening, and wait for it |
 | `stop` | Close it |
 | `find NAME` | Entities whose name contains NAME: id, where they are, their local transform |
 | `place NAME [--translation x,y,z] [--rotation x,y,z] [--scale s]` | Set the local transform of the entity called exactly NAME |

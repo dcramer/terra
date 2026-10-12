@@ -21,7 +21,7 @@ use bevy::{
         view::screenshot::{Screenshot, save_to_disk},
     },
     time::TimeUpdateStrategy,
-    window::PresentMode,
+    window::{CursorGrabMode, CursorOptions, PresentMode, WindowLevel},
     winit::{UpdateMode, WinitSettings},
 };
 use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
@@ -44,6 +44,9 @@ usage: terra_sandbox [options]
   --remote              let a script drive this run over Bevy's remote protocol, on
                         localhost:15702 (tools/sandbox/remote.ts)
   --remote-port <port>  listen on this port instead, so several runs can be driven apart
+  --background          stay out of the way: open behind other windows without taking
+                        focus, never take the mouse, ignore the real keyboard and
+                        mouse, and stay silent; for runs a script drives
   --steady              advance the game a sixtieth of a second every frame, however
                         fast frames are drawn, as scripted runs do
   --remote-token <text> what this run answers sandbox.whoami with, so a script knows it is
@@ -128,6 +131,8 @@ pub struct Options {
     pub remote_port: u16,
     /// Advance the game by a fixed step every frame, as scripted runs do.
     pub steady: bool,
+    /// Stay out of the way of the person at the machine, as scripted runs do.
+    pub background: bool,
     pub remote_token: String,
     /// No readout on screen.
     pub clean: bool,
@@ -203,6 +208,7 @@ impl Options {
             remote: false,
             remote_port: 15702,
             steady: false,
+            background: false,
             remote_token: String::new(),
             clean: false,
             hold_loading: false,
@@ -248,6 +254,7 @@ impl Options {
                         .map_err(|_| "--remote-port needs a port number".to_string())?;
                 }
                 "--steady" => options.steady = true,
+                "--background" => options.background = true,
                 "--clean" => options.clean = true,
                 "--loading" => options.hold_loading = true,
                 "--mute" => options.mute = true,
@@ -339,12 +346,18 @@ impl Options {
         self.shot.is_some() || self.bench || self.sheet.is_some()
     }
 
-    /// Whether anything is heard. A scripted run is silent, so it neither plays sounds
+    /// Whether this run belongs to a script rather than a person, so it keeps out of the
+    /// way: a scripted run, or one a script drives (`--background`).
+    pub fn unattended(&self) -> bool {
+        self.scripted() || self.background
+    }
+
+    /// Whether anything is heard. An unattended run is silent, so it neither plays sounds
     /// over whatever the person at the machine is doing nor needs a sound device. WSL
     /// usually has no sound device, and its sound library fills the log saying so, so
     /// sound is off there unless asked for.
     pub fn sound_on(&self) -> bool {
-        !self.scripted() && !self.mute && (self.sound || !on_wsl())
+        !self.unattended() && !self.mute && (self.sound || !on_wsl())
     }
 }
 
@@ -480,9 +493,14 @@ impl Plugin for ShellPlugin {
         let readout = !options.clean;
         let window = Window {
             title: "Terra sandbox".into(),
-            // A scripted run needs nobody's attention, and should not take the keyboard
-            // away from whatever is in front.
-            focused: !options.scripted(),
+            // An unattended run needs nobody's attention, and should not take the keyboard
+            // away from whatever is in front, nor sit on top of it.
+            focused: !options.unattended(),
+            window_level: if options.unattended() {
+                WindowLevel::AlwaysOnBottom
+            } else {
+                WindowLevel::Normal
+            },
             resolution: (1600u32, 900u32).into(),
             // Vsync hides how long a frame really takes, so benchmarks turn it off.
             present_mode: if options.bench {
@@ -492,9 +510,9 @@ impl Plugin for ShellPlugin {
             },
             ..default()
         };
-        if options.scripted() {
+        if options.unattended() {
             // Its window does not take focus, and a window out of focus is normally only
-            // drawn sixty times a second. A scripted run is drawn as fast as it will go.
+            // drawn sixty times a second. An unattended run is drawn as fast as it will go.
             app.insert_resource(WinitSettings {
                 focused_mode: UpdateMode::Continuous,
                 unfocused_mode: UpdateMode::Continuous,
@@ -541,14 +559,15 @@ impl Plugin for ShellPlugin {
                 WorldInspectorPlugin::new().run_if(input_toggle_active(false, KeyCode::F1)),
             )
             .add_systems(PreUpdate, scripted_presses.after(InputSystems))
-            .add_systems(Update, scripted_run);
+            .add_systems(Update, scripted_run)
+            .add_systems(PostUpdate, keep_the_mouse_free);
         if self.0.remote {
             crate::remote::plugin(app);
         }
     }
 }
 
-/// In a scripted run, the keyboard and mouse are whatever the script says and nothing
+/// In an unattended run, the keyboard and mouse are whatever the script says and nothing
 /// else. The window is a real one, so without this, anything typed while it has focus
 /// would steer the run.
 fn scripted_presses(
@@ -560,13 +579,17 @@ fn scripted_presses(
     mut motion: ResMut<AccumulatedMouseMotion>,
     mut scroll: ResMut<AccumulatedMouseScroll>,
 ) {
-    if !options.scripted() {
+    if !options.unattended() {
         return;
     }
     keys.reset_all();
     mouse.reset_all();
     motion.delta = Vec2::ZERO;
     scroll.delta = Vec2::ZERO;
+    // A run driven live presses its keys over the remote protocol, after this.
+    if !options.scripted() {
+        return;
+    }
     // A script's frames are counted from when loading is done, however long that took.
     if !counting(&options, &screen) {
         return;
@@ -580,6 +603,17 @@ fn scripted_presses(
                 keys.clear_just_pressed(key);
             }
         }
+    }
+}
+
+/// An unattended run never takes the mouse, whatever an experiment asks for: in play a
+/// held mouse is fenced in and put back in the middle of the window every frame, which
+/// would take the pointer from the person at the machine. Runs after experiments ask, so
+/// the window is only ever told to let go.
+fn keep_the_mouse_free(options: Res<Options>, mut cursor: Single<&mut CursorOptions>) {
+    if options.unattended() && cursor.grab_mode != CursorGrabMode::None {
+        cursor.grab_mode = CursorGrabMode::None;
+        cursor.visible = true;
     }
 }
 
@@ -679,6 +713,7 @@ mod tests {
             "--moments",
             "0.25,0.75",
             "--remote",
+            "--background",
         ])
         .unwrap();
         assert_eq!(options.models, ["a.glb", "b.glb"]);
@@ -686,6 +721,7 @@ mod tests {
         assert_eq!(options.sides, [30.0, 120.0]);
         assert_eq!(options.moments, [0.25, 0.75]);
         assert!(options.remote);
+        assert!(options.unattended() && !options.scripted() && !options.sound_on());
         assert!(parse(&["--sides", "front"]).is_err());
     }
 

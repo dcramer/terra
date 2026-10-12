@@ -38,6 +38,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--give <item>:<count>` | In the play experiment: carry something extra, for testing: a raw item such as `stone:10`, a tool such as `spear:1` (put on the bar), clothing such as `leather_coat:1` (worn), or `health`, `fed` or `stamina` at a value out of 100. Added to a loaded save too, so scripted runs can follow on from each other. Repeatable. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
 | `--remote` | Let a script drive the run over Bevy's remote protocol, on `localhost:15702`: [tools/sandbox](../../tools/sandbox/README.md) |
+| `--background` | Stay out of the way of whoever is at the machine, as scripted runs do: the window opens behind the others without taking focus, never takes the mouse, ignores the real keyboard and mouse, and is silent. `tools/sandbox` passes it by default |
 | `--steady` | Advance the game a sixtieth of a second every frame, however fast frames are drawn, as scripted runs do. `tools/sandbox` passes it by default |
 | `--model <path>` | In the workbench: a model to look at, a `.glb` or `.gltf` under `assets/`. Repeatable: models stand side by side doing the same thing |
 | `--anim <clip>` | In the workbench: an animation to play. Repeatable; the first plays when looking by hand |

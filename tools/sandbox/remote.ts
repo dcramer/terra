@@ -27,9 +27,9 @@ type Command = { usage: string; help: string; options?: Record<string, { type: "
 const COMMANDS: Record<string, Command> = {
   start: {
     usage: "start [--windows] [-- sandbox options]",
-    help: "start a sandbox listening, in the background, and wait until it answers; its log goes to shots/remote.log. The game moves a sixtieth of a second a frame, however fast frames are drawn, unless --real-time",
-    options: { windows: { type: "boolean", help: "on Windows' GPU (cargo xtask win), from WSL" }, "real-time": { type: "boolean", help: "let the game's clock follow the real one" } },
-    run: async ({ values, positionals }) => console.log(`ready on port ${await sandbox.start(positionals, { windows: values.windows, realTime: values["real-time"] })}`),
+    help: "start a sandbox listening, in the background, and wait until it answers; its log goes to shots/remote.log. The game moves a sixtieth of a second a frame, however fast frames are drawn, unless --real-time. The window opens behind the others, never takes focus or the mouse, ignores the real keyboard and mouse, and is silent, unless --foreground",
+    options: { windows: { type: "boolean", help: "on Windows' GPU (cargo xtask win), from WSL" }, "real-time": { type: "boolean", help: "let the game's clock follow the real one" }, foreground: { type: "boolean", help: "a normal window a person can use alongside the script" } },
+    run: async ({ values, positionals }) => console.log(`ready on port ${await sandbox.start(positionals, { windows: values.windows, realTime: values["real-time"], foreground: values.foreground })}`),
   },
   stop: { usage: "stop", help: "close the sandbox, which saves as it closes, and wait until it has gone", run: () => sandbox.stop() },
   call: {
