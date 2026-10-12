@@ -43,7 +43,7 @@ The result: a base becomes a green patch that spreads, visible from orbit.
 
 ## First draft
 
-A first draft of these rules is implemented in [prototypes/sim_toy](../prototypes/sim_toy), with three machines: a heater (local), a gas generator (global) and a seeder (local). The rules and numbers there are for tuning, not a specification.
+A first draft of these rules was implemented in `prototypes/sim_toy` (deleted on 2026-10-12, in git history), with three machines: a heater (local), a gas generator (global) and a seeder (local). The rules and numbers there are for tuning, not a specification.
 
 ## Constraints on the implementation
 

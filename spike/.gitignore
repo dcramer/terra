@@ -1,7 +1,0 @@
-bin/
-solar_system_demo/
-planet_test/logs/
-planet_test/.godot/
-planet_test/ext/
-planet_test/shots/
-sim_rust/target/

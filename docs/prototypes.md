@@ -2,7 +2,7 @@
 
 Small builds, each answering one question, with criteria written before it starts.
 
-Builds 1 and 2 and the tech demo below were made on Godot before the move to Rust (D11). They stay as working references. The Rust milestones at the end are what comes next.
+Builds 1 and 2 and the tech demo below were made on Godot before the move to Rust (D11). They were deleted on 2026-10-12 and are in git history; their numbers are in [research/godot-spike.md](../research/godot-spike.md). The Rust milestones at the end are what comes next.
 
 ## 1. Tech spike
 
@@ -29,7 +29,7 @@ Also record, without a pass bar: how it behaves at 2 km and 20 km radius, and wh
 
 Build: the coarse cell simulation on a globe with no game around it. Place heaters, gas generators and seeders; watch values spread; fast-forward.
 
-**Status, 2026-10-04:** built, in [prototypes/sim_toy](../prototypes/sim_toy). The rules are a first draft. It runs and its tests pass; whether it meets the bar below is for the developers to judge by playing it.
+**Status, 2026-10-04:** built, in `prototypes/sim_toy`, since deleted (2026-10-12; in git history). The rules are a first draft. It runs and its tests pass; whether it meets the bar below is for the developers to judge by playing it.
 
 Pass when:
 
@@ -49,7 +49,7 @@ Pass when both developers would buy the game in one of the screenshots.
 
 ## Tech demo
 
-Added 2026-10-04 at the developers' request, ahead of the beauty corner: the first build that joins the pieces into something playable. It is in [demo](../demo). You can walk a voxel planet in first person, dig, place the three machines, watch the simulation change sea, ground and sky, and fly to orbit.
+Added 2026-10-04 at the developers' request, ahead of the beauty corner: the first build that joins the pieces into something playable. It was in `demo/`, deleted on 2026-10-12 and in git history. You could walk a voxel planet in first person, dig, place the three machines, watch the simulation change sea, ground and sky, and fly to orbit.
 
 It is not a prototype of the game's design: there is no survival, no co-op and no art in it.
 
@@ -72,7 +72,7 @@ A working plan, still to be determined. The engine would be built as a foundatio
 | B2 | Stand-in world | A walkable stand-in planet, with sky and sea | A scripted walk and a fast camera pass over the planet have no frame over 16 ms on the RTX 5090. The scripted checks pass. (Was the transition to orbit and back, dropped with space, D4.) |
 | C1 | Things on the ground | Scattering on the stand-in planet, with procedural rocks | 100 thousand instances within 150 m cost no more than they did in the Godot load test. Removing one is an operation. |
 | D1 | Networking | Two peers in one process share ordered operations and snapshots | Both end in the same state. A peer that joins late catches up. No window needed. |
-| M | All | Real terrain replaces the stand-in | Everything the Godot demo does, at frame rates at least as good on both GPUs. The Godot build is retired here. |
+| M | All | Real terrain replaces the stand-in | Everything the Godot demo did, at frame rates at least as good on both GPUs. |
 
 **Status, 2026-10-10:** F1 is done, apart from the simulation snapshot contract, which waits for the simulation's rules. The toolkit's pinned outputs pass on Linux, on macOS, natively on Windows, and on the Windows build we cross-compile from WSL.
 

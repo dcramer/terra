@@ -2,7 +2,7 @@
 
 2026-10-06. Question: do Bevy and the `transvoxel` crate build and run from our machines, how long do builds take, and what does meshing cost?
 
-A throwaway app in [spike/rust_stack](../spike/rust_stack) built a small planet from 512 independently meshed blocks with Bevy 0.19 and `transvoxel`.
+A throwaway app in `spike/rust_stack` (deleted on 2026-10-12, in git history at `14edab1`) built a small planet from 512 independently meshed blocks with Bevy 0.19 and `transvoxel`.
 
 | Measurement | Result |
 |---|---|

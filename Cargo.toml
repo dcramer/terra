@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "xtask"]
-# The Godot-era prototypes and throwaway spikes keep their own manifests.
-exclude = ["prototypes", "spike"]
+# Throwaway spikes keep their own manifests.
+exclude = ["spike"]
 
 [workspace.package]
 version = "0.1.0"

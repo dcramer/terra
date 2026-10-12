@@ -65,7 +65,7 @@ A few small contracts are agreed in code before the tracks start. They live in `
 | C: things on the ground | 7, 8 | Needs only the toolkit and a ground query, so it also starts on the stand-in. |
 | D: networking | 9 | A plain crate tested with two peers in one process. Touches nothing else. |
 
-Each track lives in its own crates, so people and agents working in parallel do not collide. Tracks A and B meet when real terrain replaces the stand-in; that is the point the Godot demo is matched and retired.
+Each track lives in its own crates, so people and agents working in parallel do not collide. Tracks A and B meet when real terrain replaces the stand-in; that is the point the Godot demo's numbers are matched.
 
 ## What waits for design
 

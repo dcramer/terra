@@ -117,9 +117,9 @@ The workspace, the pinned compiler and the checks exist (see [development.md](de
 | Bevy's UI and animation are younger than Godot's | Neither is needed before the terrain and co-op milestones; reassess then |
 | Performance differs between the Windows build we cross-compile and a native one | Measure every benchmark on Windows, not only Linux; switch to the MSVC toolchain if the gap matters |
 
-## What happens to the Godot build
+## What happened to the Godot build
 
-`demo/`, `spike/` and `prototypes/sim_toy/` stay as they are until the Rust build passes the same checks. They are the reference for behaviour and the source of the numbers to beat. `terra_sim` moves into the new workspace unchanged.
+`terra_sim` moved into the workspace unchanged. The rest was deleted on 2026-10-12 (D12); its numbers, in [research/godot-spike.md](../research/godot-spike.md), are still the ones to beat, and its code is in git history.
 
 ## Sources
 

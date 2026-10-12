@@ -1,8 +1,0 @@
-[configuration]
-entry_symbol = "gdext_rust_init"
-compatibility_minimum = 4.2
-
-[libraries]
-linux.x86_64 = "res://bin/libterra_sim_godot.so"
-windows.x86_64 = "res://bin/terra_sim_godot.dll"
-macos = "res://bin/libterra_sim_godot.dylib"

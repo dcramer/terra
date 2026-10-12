@@ -87,8 +87,6 @@ What the developers want in the game. **None of it is built yet.** A few pieces 
 | [docs](docs) | Decisions and design docs. Start with [docs/decisions.md](docs/decisions.md). |
 | [research](research) | What we looked into and found, one dated note per question. |
 | [crates](crates) | The Rust workspace, including the [sandbox](crates/terra_sandbox) where experiments run. |
-| [demo](demo) | An earlier playable demo on Godot, kept as a reference. |
-| [prototypes](prototypes) | A globe for watching the planet simulation, on Godot. |
 | [spike](spike) | Throwaway experiments. |
 
 To play the tech demo, on the real GPU whatever the machine:

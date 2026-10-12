@@ -2,7 +2,7 @@
 
 A record, not the current plan. From 2026-10-04 to 2026-10-05 the project was built on Godot 4 with the Voxel Tools module. On 2026-10-06 the developers chose to build everything in Rust instead; the current plan is in [tech.md](../docs/tech.md).
 
-This is kept because its measurements are the bar the Rust build has to meet, and because the Godot build in `demo/` and `spike/` stays as a working reference until the Rust build replaces it.
+This is kept because its measurements are the bar the Rust build has to meet, The Godot build itself was deleted on 2026-10-12 and is in git history, last at commit `14edab1`.
 
 ## Engine evaluation
 
@@ -40,7 +40,7 @@ What would reopen it:
 
 ### Spike findings, 2026-10-04
 
-First pass only: get the stock demo running on the Windows developer's machine. See [spike/README.md](../spike/README.md).
+First pass only: get the stock demo running on the Windows developer's machine. The patched demo and its notes were in `spike/` (git history).
 
 - The Voxel Tools 1.7 editor build (Godot 4.7.2) runs headless in WSL and imports the demo. An agent can build-check the project with no GUI.
 - WSL has no hardware Vulkan, only a software renderer. Visual runs need the Windows build, launched from WSL, which used the RTX 5090.
@@ -55,7 +55,7 @@ The hang and the crash are yellow flags for the module's robustness, not a verdi
 
 ### Spike findings by question, 2026-10-04
 
-Tests live in [spike/planet_test](../spike/planet_test). They run headless on a bare 200 m planet, so they check voxel data, not visuals.
+The tests were in `spike/planet_test` (git history). They run headless on a bare 200 m planet, so they check voxel data, not visuals.
 
 **1. Co-op digging: passed.** A host, a client that digs, and a client that joins late all ended with byte-identical voxel data. The host is authoritative and sends each dig as an operation (centre and radius); every peer generates the same planet and applies the same operations. The module's missing multiplayer support for this terrain type did not matter, because we never send voxel data.
 
@@ -135,7 +135,7 @@ Handing one field from Rust to the engine each tick costs 0.07 to 0.23 ms. GDScr
 
 ### Tech demo, 2026-10-04
 
-The playable demo in [demo](../demo) joins voxel terrain, the Rust simulation and a first-person player.
+The playable demo, in `demo/` until 2026-10-12, joined voxel terrain, the Rust simulation and a first-person player.
 
 - The voxel ground and the simulation's ground agree to within 1.2 m, because the terrain graph is generated from the simulation's own terrain shape.
 - Automated checks pass on Linux and Windows: a player dropped from 20 m lands on the ground, walks at the expected speed, and can dig and refill.

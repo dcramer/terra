@@ -1,6 +1,5 @@
 # Build output and engine caches. Folder-specific ignores live next to the folders.
 target/
-.godot/
 __pycache__/
 *.log
 shots/

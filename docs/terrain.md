@@ -33,10 +33,10 @@ Everything is in planet-local coordinates, in metres, with the planet's centre a
 
 ## Done when
 
-Where it stands, 2026-10-11: A1 is built in `terra_voxel`, the field, edits, harvest, meshing and the tree of chunks around viewers, and meets every criterion below but one: no cracks (tested at fine and coarse seams), edits, harvest, and speed (3.1 ms a chunk on Linux, 3.5 on Windows; [research/terrain-meshing.md](../research/terrain-meshing.md)). Not yet: matching Voxel Tools, which needs Godot on a machine. Next is A2, drawing it in the sandbox.
+Where it stands, 2026-10-11: A1 is built in `terra_voxel`, the field, edits, harvest, meshing and the tree of chunks around viewers, and meets every criterion below but one: no cracks (tested at fine and coarse seams), edits, harvest, and speed (3.1 ms a chunk on Linux, 3.5 on Windows; [research/terrain-meshing.md](../research/terrain-meshing.md)). Not yet: matching Voxel Tools, which needs Godot and the reference build from git history on a machine. Next is A2, drawing it in the sandbox.
 
 - `cargo xtask check` passes, with no GPU.
-- **It matches the original.** On the same density function, voxel values and meshes agree with Voxel Tools within a stated tolerance. The Godot build in `spike/planet_test` runs headless and is the reference.
+- **It matches the original.** On the same density function, voxel values and meshes agree with Voxel Tools within a stated tolerance. The reference is the headless Godot build that was in `spike/planet_test`, deleted on 2026-10-12 and still in git history.
 - **No cracks.** A test finds no open edges between chunks at different detail levels.
 - **Edits behave.** Digging then filling restores the ground. The same operations in the same order give the same voxels.
 - **Harvest adds up.** The volume reported for a dig matches the volume that disappeared, split correctly between materials.

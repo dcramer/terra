@@ -1,6 +1,6 @@
 # Repository layout
 
-2026-10-11. Question: where should each kind of thing in this repository live (game code, developer tools, the asset pipeline, source art, runtime assets, docs, research, experiments), what do the folders we have actually hold, and what do other projects and the games industry call these things?
+2026-10-12. Question: where should each kind of thing in this repository live (game code, developer tools, the asset pipeline, source art, runtime assets, docs, research, experiments), what do the folders we have actually hold, and what do other projects and the games industry call these things?
 
 Read from the tree at `ff0c37f` (519 tracked files) and from the top-level layouts of Veloren, Bevy, Fish Folk's Jumpy and rust-analyzer, fetched the same day. The prior art for engines (Unreal, Valve's Source, Unity) is from general knowledge, not checked.
 

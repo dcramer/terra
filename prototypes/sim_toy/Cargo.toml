@@ -1,7 +1,0 @@
-[workspace]
-resolver = "2"
-# The simulation itself now lives in the main workspace at crates/terra_sim.
-members = ["ext"]
-
-[profile.release]
-opt-level = 3
