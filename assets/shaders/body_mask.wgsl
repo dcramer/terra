@@ -26,9 +26,10 @@ struct BodyMask {
 @group(#{MATERIAL_BIND_GROUP}) @binding(100)
 var<uniform> mask: BodyMask;
 
-fn is_hidden(patch: u32) -> bool {
-    let word = mask.hidden[patch / 128u][(patch / 32u) % 4u];
-    return (word & (1u << (patch % 32u))) != 0u;
+// `patch` is a reserved word in WGSL, so the patch is `which`.
+fn is_hidden(which: u32) -> bool {
+    let word = mask.hidden[which / 128u][(which / 32u) % 4u];
+    return (word & (1u << (which % 32u))) != 0u;
 }
 
 #ifdef MORPH_TARGETS
