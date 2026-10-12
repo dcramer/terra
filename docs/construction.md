@@ -69,28 +69,102 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 
 ## Controls
 
-Proposed, to react to: one keymap for everything above, on mouse and keyboard, after what the prior art agrees on. Every key can be changed in the options (D116) but the wheel and the numbers. Rows in bold are new.
+Proposed, to be locked down by the developers (2026-10-12: "make sure you've got the controls locked down too for how building will work"). One scheme for everything in this document, on mouse and keyboard, after what the prior art agrees on, keeping what is built where it already works. Every key can be changed in the options (D116) but the wheel and the numbers. A gamepad scheme comes later and follows the same states.
 
-| Action | Ours | Built | Prior art |
-|---|---|---|---|
-| Take the hammer in hand | Its bar slot (1 by default) | Yes | A tool in every game |
-| Build menu | Tap right mouse, or B | Yes | Subnautica's right mouse; Enshrouded's Tab |
-| Variant of the thing in hand | Hold R for the wheel; tap R for the next | Yes | Rust's wheel |
-| Lay a plan; build a part of one | Click left mouse to lay a plan; hold it, or E, at a part to construct it | Holding builds a whole room at once today | The Forest's E at a blueprint |
-| Put the part away; put back what is carried | Tap right mouse | Yes | Subnautica |
-| Rotate | Wheel; Z and C | Yes | Valheim's wheel; Enshrouded's R |
-| **Raise and lower** | **Shift and the wheel: half a metre a notch on the grid, a tenth off it; Page Up and Page Down** | No | Enshrouded's Q and the wheel; Ark Ascended |
-| **Material** | **Ctrl and the wheel** | No | Enshrouded's Ctrl and the wheel |
-| Grid on and off | X | Yes | Enshrouded's X |
-| Off the grid while held | Hold Alt | Yes | Valheim's Shift |
-| Pick another of what you look at | Middle mouse, or V | Yes | 7 Days to Die |
-| Take apart | Q for the mode, then hold left mouse | Yes | Enshrouded's right mouse; Valheim's middle mouse |
-| Move | G for the mode, then click to pick up and put down | Items only | Subnautica 2's F |
-| **Undo the last thing built or taken apart** | **Ctrl and Z, within a minute, giving back what it cost** | No | Enshrouded's Y; Rust's window |
-| **Repair** | **With nothing picked, aim at something damaged and hold left mouse** | No | Rust's and Valheim's hammer |
-| Camera nearer and further | Wheel when nothing in hand turns; = and - | Yes | Enshrouded's first-person building camera (2025) |
+**The rule underneath: click lays, hold builds.** A click puts down a plan (D139), which costs nothing and can be undone at once. Holding the button does work that spends materials: putting in parts, building an item, taking apart, repairing. So a misclick never costs anything, and nothing is spent without holding.
 
-Three conflicts to know about: the wheel turns, zooms, raises (with Shift) and changes material (with Ctrl); Q is our take-apart but Enshrouded's nudge; right mouse is our menu but Enshrouded's remove. I would keep ours, which follow Subnautica (D67), and add only the bold rows.
+### Always, with the hammer in hand
+
+| Input | Does | Built |
+|---|---|---|
+| B, or tap right mouse | Open or close the build menu. In it: click a tile, or 1 to 7 for a tab, the arrows and Enter; Escape or right mouse closes | Yes |
+| Hold R | The wheel of the picked part's variants: move the mouse to one and let go. Tap R for the next, Shift and R for the one before | Yes |
+| Backspace | Put the part away: the hammer in hand with nothing picked | Yes |
+| X | Grid on or off | Yes |
+| Hold Alt | The other of the grid's settings, while held | Yes |
+| Middle mouse, or V | Pick another of what the view is on: its part, variant, turn, height and material | Part only |
+| Q | Take-apart mode, and back | Yes |
+| G | Move mode, and back | Yes |
+| Ctrl and Z | Undo the last thing laid, built or taken apart, within a minute, giving back what it cost | No |
+| = and - | Camera nearer and further; the wheel does it only when nothing in hand turns | Yes |
+| F | Use what the view is on: open a door, work a station, grow the claim | Yes, but doors |
+
+### Placing: a part picked
+
+| Input | Does | Built |
+|---|---|---|
+| Aim | The ghost follows, snapped (see [Snapping](#snapping-and-feel)) | Yes |
+| Wheel, or Z and C | Turn: a quarter turn for structures; an eighth for items on the grid; 5 degrees off it | Yes |
+| Shift and wheel, or Page Up and Page Down | Raise and lower: half a metre a notch on the grid, a tenth off it; rooms a storey at a time, down as well as up (D143) | No |
+| Ctrl and wheel | The kind of construction (D139) or material | No |
+| Click left mouse | Lay it: a plan, for a structure; for an item, hold instead | No: holding builds a room whole today |
+| Press, drag and let go | Draw it: a wall or fence along the line dragged; a room or floor over the rectangle dragged. A plain click lays the variant's own size | No |
+| Hold left mouse (items) | Build the item there, spending its cost | Yes |
+| Tap right mouse | Put the part away (or, carrying something in move mode, put it back) | Yes |
+
+After a placement the same part, variant, turn and height stay in hand, so the next goes down at once.
+
+### At a plan
+
+| Input | Does | Built |
+|---|---|---|
+| Aim at a plan | Its next part is outlined, and the prompt says what it is, what it needs and how many are within reach: "Log: 3 of 12. 9 more needed, 4 in reach" | No |
+| Hold left mouse | Put in the next part, and the next, for as long as it is held and the materials last, from the pack or storage in the claim (D141) | No |
+| Q, then hold left mouse | Take the plan away, and everything put into it comes back | No |
+
+### Taking apart (Q)
+
+| Input | Does | Built |
+|---|---|---|
+| Aim | What would come away is outlined: an item, a part of a structure (the last put in, so it comes down in the reverse order), or a whole plan | Items and rooms |
+| Hold left mouse | Take it apart, giving back what it cost; what does not fit drops at your feet | Yes |
+| Shift and hold left mouse | Take apart the whole of it: a wall, or a room, part after part | No |
+
+### Moving (G)
+
+| Input | Does | Built |
+|---|---|---|
+| Click an item | Pick it up; it follows the aim like a part being placed, and turns and rises the same way | Yes, but rising |
+| Click | Put it down | Yes |
+| Tap right mouse | Put it back where it was | Yes |
+| Click a plan | Pick the whole plan up and move it, while nothing has been put into it | No |
+
+What is constructed stays where it is built; to move a wall, take it apart and lay it again.
+
+### Repairing
+
+With the hammer in hand and nothing picked, aim at something damaged: its damage shows, and holding left mouse mends it for a little of its cost (D90; not built, since nothing takes damage yet).
+
+### To lock down
+
+The calls for the developers, each recommended as written above:
+
+1. **Click lays, hold builds**: a click puts down a plan for free; holding spends materials (putting in parts, building an item, taking apart, repairing).
+2. **Drawing**: press, drag and let go to lay a wall or fence along a line, or a room or floor over a rectangle.
+3. **Height on Shift and the wheel**, with Page Up and Page Down; **the kind of construction on Ctrl and the wheel**.
+4. **Undo on Ctrl and Z**, within a minute.
+5. **Right mouse stays the build menu** and **Q stays take-apart**, as Subnautica, not Enshrouded.
+6. **F opens and closes doors**, as it uses everything else.
+7. **Constructed things are not moved**, only plans and items; a wall is taken apart and laid again.
+
+### Where ours differs from the prior art
+
+Right mouse is our build menu, as Subnautica's (D67), where Enshrouded's right mouse takes apart; Q is our take-apart mode, where Enshrouded's Q nudges. Keeping ours is recommended: they follow the game the developers named for the menu, and they are built.
+
+## Snapping and feel
+
+What makes placing feel good is mostly that the ghost goes where you meant without a fight. Proposed:
+
+1. **What it snaps to, in order.** First the joins of what is already built or planned, within reach of the aim: the end of a wall, the edge of a floor or room, a frame in a wall, a socket on a fixed buildable. Then the base's grid (D57). Then, for items, the surface under the aim: floor, ground, a table's top, a wall. With the grid off, or Alt held, only surfaces.
+2. **It sticks.** Once snapped, the ghost stays put until the aim has moved well off that spot, so it never flickers between two places. Moving on to the next spot along a wall is a short, clean step.
+3. **It glides.** The ghost slides to each new place in a few hundredths of a second instead of jumping, but the outline of where it will land is always exactly where it will land.
+4. **Structures aim on a level.** A room or wall is aimed on the base's floor at the height chosen, not on the bumps of the ground under the aim, so it does not jump as the view crosses grass and stones. Items aim at what is under the view.
+5. **Out of reach, it waits.** Aimed beyond reach, the ghost stays at the edge of reach along the aim, dimmed, instead of vanishing.
+6. **It faces sensibly.** A wall, door or window faces the player; an item faces back toward them the first time, and remembers its turn after.
+7. **It shows what it is doing.** The grid shows only around the ghost, fading out a few metres off. The join it snapped to lights up. Lines appear when it lines up with an edge already built. A small arrow marks its front. Off the floor, a line drops to what is under it and the height is shown.
+8. **It says no plainly.** Red, one line saying why, and what is in the way outlined, behind walls too. Blue otherwise, with its cost and what is in reach.
+9. **It sounds right.** A soft tick as it snaps to a new place, a different one when it turns, and the thud of laying a plan or putting in a part.
+10. **The hand is steady.** Every value above, how sticky, how fast the glide, how far the grid shows, is tuned by playing, and kept as data so it can be changed without code.
 
 ## Planned, then constructed
 
