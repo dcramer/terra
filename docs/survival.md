@@ -16,13 +16,13 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 
 | Need | Met by | When it is low |
 |---|---|---|
-| Hunger | Food: hunted, fished, gathered, farmed, cooked | Health and stamina recover slowly and their limits shrink; in the end, starving kills (D101) |
-| Thirst | Water: springs, rivers, wells, a waterskin | The same, faster |
+| Hunger | Food: hunted, fished, gathered, farmed, cooked | Health and stamina recover slowly and their limits shrink, and you are weaker; once the gauge is empty, health wears away slowly, over a few days, until starving kills (D101). Proposed: about three days, an hour and a half of play |
+| Thirst | Water: springs, rivers, wells, a waterskin | The same, faster: proposed about two days |
 | Breath | Air: only under water (D74) | Health falls fast |
 | Warmth | Fire, shelter, clothing, work | Body temperature (D153): too cold raises hunger and stamina costs, too hot raises thirst and stamina costs, and far out of bounds either wears health down ([climate](climate.md#body-temperature)) |
 | Rest | A bed in a claim | Proposed: rested, you recover faster for a while |
 
-**Food is essential** (D101): it is what keeps you from dying; going without makes you weaker, and then kills you. **Good food may also give buffs**, as in Valheim and Enshrouded; whether, and what they are, the developers will decide later.
+**Food is essential** (D101): it is what keeps you from dying; going without makes you weaker, and then kills you, slowly, over days, so it is a hard mistake to make. Recruits starve the same way ([tribe.md](tribe.md#needs)). **Good food may also give buffs**, as in Valheim and Enshrouded; whether, and what they are, the developers will decide later.
 
 ## Rhythms
 
