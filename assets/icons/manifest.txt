@@ -20,5 +20,5 @@ spear painted models/held/spear.glb 9dd22f7a5b0d1c13 -
 stone painted - - -
 stone_axe painted models/held/stone_axe.glb ff834e6b0ad4b8d2 -
 stone_pickaxe painted models/held/stone_pickaxe.glb 78eb4a9940ebfff2 -
-torch rendered models/held/torch.glb 1e7a66a5bb6ffc00 1
+torch painted models/held/torch.glb 1e7a66a5bb6ffc00 -
 wood painted - - -
