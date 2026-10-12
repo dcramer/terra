@@ -37,6 +37,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [recruits-at-the-base.md](recruits-at-the-base.md) | How do shipped games handle recruits who live and work at your base, and which work without the player managing each one? |
 | [web-build.md](web-build.md) | Can the sandbox's tools run in a web browser on the game's own renderer, opened and controlled by a link? |
 | [hwfwm-magic.md](hwfwm-magic.md) | How do the magic mechanics of *He Who Fights With Monsters* work (essences, awakening stones, abilities, ranks, skill books, other magic), so we can design our own? |
+| [planning-mode-cameras.md](planning-mode-cameras.md) | Which games give building, and planning in particular, a camera other than the character's, and what does each choice cost in a persistent multiplayer world? |
 
 ## Adding a note
 
