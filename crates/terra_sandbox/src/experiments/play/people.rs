@@ -1,6 +1,7 @@
 //! People (game design 001, people.md): figures in the world who are not the player.
 //!
-//! They share the player's figure in their own colours. Each has a role and a few
+//! Each stands on a base body, as the player does, and wears an outfit of their own
+//! (`character::Outfit`, shown by `worn`). Each has a role and a few
 //! states: a prisoner kneels bound until freed, then follows you; a smith who follows you
 //! settles at a forge in your claim and works it (D90); villagers go about their day
 //! and say what is going on when you speak to them (D92), from `settlement`.
@@ -13,6 +14,7 @@ use super::crafting::{SmithAtHand, Station};
 use super::creatures::{Creature, Species};
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::props::Prop;
+use crate::character;
 use crate::experiments::build::Site;
 use crate::planet::Planet;
 use bevy::{
@@ -21,7 +23,8 @@ use bevy::{
 };
 use std::time::Duration;
 
-const MODEL: &str = "models/character/figure.gltf";
+/// The base bodies people may have (`character::Body`), by the name their gear is fitted under.
+const BODIES: [&str; 2] = ["base-male", "base-female"];
 const BLEND: Duration = Duration::from_millis(220);
 /// How close the spiders may be while a prisoner is freed.
 const GUARDED_M: f32 = 16.0;
@@ -69,9 +72,12 @@ impl Person {
     }
 }
 
-/// The figure's model and the animations people use.
+/// Each base body's model and the animations people use, once loaded.
 #[derive(Resource)]
+struct Figures(Vec<Figure>);
+
 struct Figure {
+    body: &'static str,
     model: Handle<Gltf>,
     ready: Option<(Handle<WorldAsset>, Handle<AnimationGraph>, Clips)>,
 }
@@ -94,7 +100,8 @@ struct Animates {
     playing: Option<AnimationNodeIndex>,
 }
 
-/// Asks for a person to be stood in the world, in a colour of their own.
+/// Asks for a person to be stood in the world, on a base body (one of `BODIES`), wearing
+/// items by id (`character::item_id`).
 #[derive(Message, Clone, Copy)]
 pub struct Arrive {
     pub name: &'static str,
@@ -102,7 +109,8 @@ pub struct Arrive {
     pub facing: Vec3,
     pub doing: Doing,
     pub smith: bool,
-    pub colour: Color,
+    pub body: &'static str,
+    pub wears: &'static [&'static str],
     pub interact: Option<Interactable>,
     pub says: Option<&'static str>,
 }
@@ -125,27 +133,44 @@ pub fn plugin(app: &mut App) {
 }
 
 fn load(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.insert_resource(Figure {
-        model: assets.load(MODEL),
-        ready: None,
-    });
+    commands.insert_resource(Figures(
+        BODIES
+            .into_iter()
+            .map(|body| Figure {
+                body,
+                model: assets.load(format!("models/character/{body}.glb")),
+                ready: None,
+            })
+            .collect(),
+    ));
 }
 
 fn prepare(
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
-    mut figure: ResMut<Figure>,
+    mut figures: ResMut<Figures>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
-    if figure.ready.is_some() || !assets.is_loaded_with_dependencies(&figure.model) {
-        return;
+    for figure in &mut figures.0 {
+        if figure.ready.is_some() || !assets.is_loaded_with_dependencies(&figure.model) {
+            continue;
+        }
+        let Some(gltf) = gltfs.get(&figure.model) else {
+            continue;
+        };
+        let Some(scene) = gltf.default_scene.clone() else {
+            continue;
+        };
+        figure.ready = Some(prepared(gltf, scene, &mut graphs));
     }
-    let Some(gltf) = gltfs.get(&figure.model) else {
-        return;
-    };
-    let Some(scene) = gltf.default_scene.clone() else {
-        return;
-    };
+}
+
+/// A body's scene, and the clips people use built into a graph.
+fn prepared(
+    gltf: &Gltf,
+    scene: Handle<WorldAsset>,
+    graphs: &mut Assets<AnimationGraph>,
+) -> (Handle<WorldAsset>, Handle<AnimationGraph>, Clips) {
     let clip = |name: &str| gltf.named_animations[name].clone();
     let (graph, nodes) = AnimationGraph::from_clips([
         clip("Idle_Loop"),
@@ -155,7 +180,7 @@ fn prepare(
         clip("Sitting_Idle_Loop"),
         clip("Fixing_Kneeling"),
     ]);
-    figure.ready = Some((
+    (
         scene,
         graphs.add(graph),
         Clips {
@@ -166,24 +191,32 @@ fn prepare(
             sit: nodes[4],
             work: nodes[5],
         },
-    ));
+    )
 }
 
-/// Stands each person asked for in the world, once the figure is ready.
+/// Stands each person asked for in the world, once their body is ready.
 fn arrive(
     mut commands: Commands,
-    figure: Res<Figure>,
+    figures: Res<Figures>,
     planet: Res<Planet>,
     site: Res<Site>,
     mut asked: MessageReader<Arrive>,
     mut waiting: Local<Vec<Arrive>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     waiting.extend(asked.read().copied());
-    let Some((scene, graph, clips)) = &figure.ready else {
-        return;
-    };
+    let mut later = Vec::new();
     for arrival in waiting.drain(..) {
+        let Some(figure) = figures.0.iter().find(|figure| figure.body == arrival.body) else {
+            warn!(
+                "{} has a body there is no model of: {}",
+                arrival.name, arrival.body
+            );
+            continue;
+        };
+        let Some((scene, graph, clips)) = &figure.ready else {
+            later.push(arrival);
+            continue;
+        };
         let feet = planet.ground_at(arrival.at);
         let up = feet.normalize();
         // Where, in the terms --at and --face take, so a scripted run can go to them.
@@ -205,6 +238,7 @@ fn arrive(
             },
             Transform::from_translation(feet).looking_to(facing, up),
             Visibility::default(),
+            character::Outfit(arrival.wears.iter().map(|item| item.to_string()).collect()),
         ));
         if let Some(what) = arrival.interact {
             person.insert(CanInteract(what));
@@ -216,13 +250,9 @@ fn arrive(
         });
         let person = person.id();
         let (graph, clips) = (graph.clone(), *clips);
-        let clothes = materials.add(StandardMaterial {
-            base_color: arrival.colour,
-            perceptual_roughness: 0.8,
-            ..default()
-        });
         commands
             .spawn((
+                character::Body { name: figure.body },
                 WorldAssetRoot(scene.clone()),
                 // The model faces +Z; things here face -Z.
                 Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
@@ -232,9 +262,7 @@ fn arrive(
                 move |ready: On<WorldInstanceReady>,
                       mut commands: Commands,
                       children: Query<&Children>,
-                      players: Query<(), With<AnimationPlayer>>,
-                      looks: Query<&MeshMaterial3d<StandardMaterial>>,
-                      materials: Res<Assets<StandardMaterial>>| {
+                      players: Query<(), With<AnimationPlayer>>| {
                     for child in children.iter_descendants(ready.entity) {
                         if players.contains(child) {
                             commands.entity(child).insert((
@@ -247,21 +275,11 @@ fn arrive(
                                 },
                             ));
                         }
-                        // The pale body takes their colour; the dark joints stay.
-                        let pale = looks
-                            .get(child)
-                            .ok()
-                            .and_then(|look| materials.get(&look.0))
-                            .is_some_and(|look| look.base_color.to_srgba().red > 0.5);
-                        if pale {
-                            commands
-                                .entity(child)
-                                .insert(MeshMaterial3d(clothes.clone()));
-                        }
                     }
                 },
             );
     }
+    *waiting = later;
 }
 
 /// F at a prisoner frees them, once the spiders guarding them are dead.

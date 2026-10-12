@@ -73,6 +73,12 @@ pub struct Body {
     pub name: &'static str,
 }
 
+/// What a character wears, by item id (`item_id`): the looks its body shows (`worn` in the
+/// play experiment). The player's follows its equipment; anyone else's is set by whatever
+/// stands them in the world.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct Outfit(pub Vec<String>);
+
 /// A body whose model has loaded, so its sockets exist.
 #[derive(Component)]
 pub struct BodyReady;

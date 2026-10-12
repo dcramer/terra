@@ -22,7 +22,7 @@ r stop
 | `stop` | Close it |
 | `find NAME` | Entities whose name contains NAME: id, where they are, their local transform |
 | `place NAME [--translation x,y,z] [--rotation x,y,z] [--scale s]` | Set the local transform of the entity called exactly NAME |
-| `look NAME\|x,y,z [--distance m] [--around degrees] [--height m]` | Hold the camera on an entity, following it, or a point; `around` is from the model's front |
+| `look NAME\|x,y,z [--distance m] [--around degrees] [--height m] [--aim m]` | Hold the camera on an entity, following it, or a point; `around` is from the model's front, `aim` how far above it to look (a person's position is their feet) |
 | `release` | Let the camera go |
 | `pause`, `resume` | Stop and start the game's clock, animations included |
 | `pose CLIP [FRACTION]` | In the workbench: hold every model that far through a clip given with `--anim`, or play it |
@@ -35,4 +35,4 @@ Changes made this way last only as long as the run. When a value is right, put i
 
 The sandbox listens on `localhost:15702`. Under WSL, a sandbox running on Windows is on Windows' own localhost, which WSL cannot reach, so the client sends through Windows' `curl.exe` there, and writes screenshots through WSL's share so they land where you asked. The remote protocol can change anything in the running world, so it only listens on localhost and only when started with `--remote`.
 
-To add a method, see `crates/terra_sandbox/src/remote.rs`: an experiment registers its own with `remote::method`, as the workbench does with `workbench.pose`.
+To add a method, see `crates/terra_sandbox/src/remote.rs`: an experiment registers its own with `remote::method`, as the workbench does with `workbench.pose`. An experiment that moves its camera in `PostUpdate` orders that `.before(remote::CameraHold)`, so a held camera wins and what it sees is not culled from the old view.

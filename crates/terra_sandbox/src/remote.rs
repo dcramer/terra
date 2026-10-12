@@ -7,8 +7,9 @@
 //! - `sandbox.find {name}`: entities whose name contains `name`, with where they are.
 //! - `sandbox.place {name, translation?, rotation?, scale?}`: sets the local transform of
 //!   the entity called exactly `name`; rotation in degrees about X, Y, then Z.
-//! - `sandbox.look {at, distance?, around?, height?}`: holds the camera on an entity by
-//!   name, or a point, following it; `around` is degrees round from the model's front.
+//! - `sandbox.look {at, distance?, around?, height?, aim?}`: holds the camera on an entity
+//!   by name, or a point, following it; `around` is degrees round from the model's front,
+//!   `aim` how far above it to look, as at a person's chest rather than their feet.
 //!   `sandbox.release` lets the camera go.
 //! - `sandbox.pause {paused}`: stops or restarts the game's clock, animations included.
 //! - `sandbox.shot {path}`: saves a screenshot; the reply comes before the file does.
@@ -35,7 +36,8 @@ const LOOK_DISTANCE_M: f32 = 2.5;
 pub fn plugin(app: &mut App) {
     app.add_plugins((RemotePlugin::default(), RemoteHttpPlugin::default()))
         .init_resource::<HeldCamera>()
-        .add_systems(PostUpdate, hold_camera.before(TransformSystems::Propagate));
+        .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
+        .add_systems(PostUpdate, hold_camera.in_set(CameraHold));
     method(app, "sandbox.find", find);
     method(app, "sandbox.place", place);
     method(app, "sandbox.look", look);
@@ -45,6 +47,12 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.quit", quit);
     info!("remote: listening on localhost:15702");
 }
+
+/// Where a held camera is placed: after an experiment places its own camera, before
+/// transforms are worked out, so the view and what it culls agree. An experiment that moves
+/// its camera in `PostUpdate` does so `.before(CameraHold)`.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct CameraHold;
 
 /// Adds a remote method, if the remote protocol is on.
 pub fn method<M>(
@@ -158,6 +166,7 @@ struct HeldCamera(Option<Hold>);
 
 struct Hold {
     at: Aim,
+    aim: f32,
     distance: f32,
     around: f32,
     height: f32,
@@ -178,6 +187,7 @@ enum At {
 #[derive(Deserialize)]
 struct Look {
     at: At,
+    aim: Option<f32>,
     distance: Option<f32>,
     around: Option<f32>,
     height: Option<f32>,
@@ -186,18 +196,20 @@ struct Look {
 fn look(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Look {
         at,
+        aim,
         distance,
         around,
         height,
     } = parse_some(params)?;
-    let aim = match at {
+    let target = match at {
         At::Name(name) => Aim::Entity(
             named(world, &name).ok_or_else(|| refused(format!("nothing called {name}")))?,
         ),
         At::Point(point) => Aim::Point(Vec3::from_array(point)),
     };
     world.resource_mut::<HeldCamera>().0 = Some(Hold {
-        at: aim,
+        at: target,
+        aim: aim.unwrap_or(0.0),
         distance: distance.unwrap_or(LOOK_DISTANCE_M),
         around: around.unwrap_or(30.0),
         height: height.unwrap_or(0.3),
@@ -237,6 +249,7 @@ fn hold_camera(
     };
     // The planet's centre is the origin, so up is away from it.
     let up = target.normalize_or(Vec3::Y);
+    let target = target + up * hold.aim;
     let front = front
         .map(|front| front.reject_from(up))
         .filter(|front| front.length() > 1e-3)

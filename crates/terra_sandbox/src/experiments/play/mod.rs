@@ -180,7 +180,12 @@ pub fn plugin(app: &mut App) {
                 .chain()
                 .before(tool::Acting),
         )
-        .add_systems(PostUpdate, follow.before(TransformSystems::Propagate));
+        .add_systems(
+            PostUpdate,
+            follow
+                .before(TransformSystems::Propagate)
+                .before(crate::remote::CameraHold),
+        );
 }
 
 fn spawn(

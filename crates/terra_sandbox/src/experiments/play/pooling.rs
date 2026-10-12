@@ -114,7 +114,8 @@ fn mark(
         facing: (middle - edge).reject_from(up),
         doing: Doing::Bound,
         smith: true,
-        colour: Color::srgb(0.45, 0.32, 0.22),
+        body: "base-male",
+        wears: &["leather_coat"],
         interact: Some(Interactable::Prisoner),
         says: None,
     });
