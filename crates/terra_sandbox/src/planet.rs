@@ -81,17 +81,40 @@ impl Planet {
     /// above as well as below, as in a hole that has been dug.
     pub fn ground_at(&self, point: Vec3) -> Vec3 {
         let up = point.normalize_or(Vec3::Y);
-        let mut at = point;
-        // Step along the way up by how far the ground is; on undug ground that lands in one
-        // step, and a few more settle it in a hole.
-        for _ in 0..12 {
-            let distance = self.ground.distance(at);
+        let inside = self.ground.distance(point) < 0.0;
+        // Out of the ground the surface is looked for below; in it, above. Each step is as
+        // long as the ground is far, which on undug ground lands on it at once, and at
+        // least a few centimetres, so the side of a hole is not crawled along.
+        let toward = if inside { up } else { -up };
+        let (mut near, mut far) = (point, point);
+        for _ in 0..64 {
+            let distance = self.ground.distance(far);
             if distance.abs() < 0.002 {
+                return far;
+            }
+            if (distance < 0.0) != inside {
                 break;
             }
-            at -= up * distance;
+            near = far;
+            far += toward * distance.abs().max(0.05);
         }
-        at
+        // The surface lies between the last step on this side and the first past it.
+        for _ in 0..16 {
+            let middle = (near + far) * 0.5;
+            if (self.ground.distance(middle) < 0.0) == inside {
+                near = middle;
+            } else {
+                far = middle;
+            }
+        }
+        (near + far) * 0.5
+    }
+
+    /// Whether the ground at a point has been dug or filled, rather than lying where it was
+    /// generated: nothing that grew there stands on it any more.
+    pub fn dug(&self, point: Vec3) -> bool {
+        let up = point.normalize_or(Vec3::Y);
+        (self.ground_at(point).length() - self.surface(up).length()).abs() > 0.15
     }
 
     /// Whether the ground at a point is under the sea.
@@ -496,5 +519,41 @@ mod tests {
             floor.distance(ground)
         );
         assert!(planet.distance(ground) > 1.9);
+        assert!(planet.dug(ground));
+        assert!(!planet.dug(planet.surface((ground + Vec3::X * 20.0).normalize())));
+    }
+
+    /// A pit dug on a slant, as a pickaxe aimed ahead and down digs it, and the ground
+    /// found beside it is never above where the ground was before.
+    #[test]
+    fn beside_a_slanting_pit_the_ground_is_where_it_is() {
+        let mut planet = planet();
+        let start = planet.start();
+        let up = start.normalize();
+        let ahead = up.any_orthonormal_vector();
+        let side = up.cross(ahead);
+        for step in 0..5 {
+            let centre = start + ahead * (step as f32 * 0.6) - up * (0.2 + step as f32 * 0.7);
+            planet.apply(&Operation::Dig {
+                centre,
+                radius: 0.7,
+            });
+        }
+        for along in 0..20 {
+            for across in 0..10 {
+                let place =
+                    start + ahead * (along as f32 * 0.2 - 1.0) + side * (across as f32 * 0.1);
+                for height in [-0.4, 0.0, 0.5] {
+                    let found = planet.ground_at(place + up * height);
+                    let before = planet.surface(found.normalize()).length();
+                    assert!(
+                        found.length() <= before + 0.01,
+                        "{} above {before}",
+                        found.length()
+                    );
+                    assert!(planet.distance(found).abs() < 0.01);
+                }
+            }
+        }
     }
 }

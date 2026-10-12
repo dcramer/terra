@@ -86,6 +86,11 @@ const CAMERA_BACK_M: f32 = 4.6;
 const HEAD_M: f32 = 1.62;
 /// The player can wade this deep and no deeper.
 const WADE_DEPTH_M: f32 = 0.7;
+/// The steepest ground the player walks up, as rise over run (about 50 degrees).
+const STEEPEST: f32 = 1.2;
+/// The highest ledge the player steps onto, and how far on it is looked for.
+const STEP_UP_M: f32 = 0.7;
+const STRIDE_M: f32 = 0.4;
 
 #[derive(Component)]
 struct Player {
@@ -377,6 +382,18 @@ fn look(
         .normalize_or(up.any_orthonormal_vector());
 }
 
+/// Whether walking from the feet to a place is stopped by a wall: ground rising there
+/// more steeply than the player walks up, and still too high to step onto a stride on.
+/// `ground` says how far from the centre the ground is at a place.
+fn walled(feet: Vec3, target: Vec3, ground: impl Fn(Vec3) -> f32) -> bool {
+    let up = feet.normalize();
+    let across = (target - feet).reject_from(up);
+    let rise = ground(target) - feet.length();
+    let steep = rise > 0.05 && rise > across.length() * STEEPEST;
+    let beyond = feet + across.normalize_or_zero() * STRIDE_M;
+    steep && ground(beyond) - feet.length() > STEP_UP_M
+}
+
 fn walk(
     time: Res<Time>,
     controls: Controls,
@@ -473,6 +490,12 @@ fn walk(
     if ground_ahead < planet.sea_radius_m() - WADE_DEPTH_M
         && ground_ahead < planet.ground_at(feet).length()
     {
+        target = feet;
+    }
+    // Ground rising too steeply is a wall, as the side of a dug hole is: it stops the
+    // player rather than lifting them up it. A jump can clear a low one; hills are walked
+    // up as before.
+    if walled(feet, target, |at| planet.ground_at(at).length()) {
         target = feet;
     }
 
@@ -613,4 +636,24 @@ fn follow(
         at = at.normalize() * ground;
     }
     **camera = Transform::from_translation(at).looking_to(looking, up);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_hill_and_a_ledge_are_walked_up_and_a_wall_is_not() {
+        let feet = Vec3::Y * 2000.0;
+        let stride = feet + Vec3::X * 0.07;
+        // Ground rising one in three.
+        let hill = |at: Vec3| 2000.0 + at.x / 3.0;
+        assert!(!walled(feet, stride, hill));
+        // A ledge a little ahead, low and then high.
+        let ledge = |height: f32| move |at: Vec3| 2000.0 + if at.x > 0.05 { height } else { 0.0 };
+        assert!(!walled(feet, stride, ledge(0.3)));
+        assert!(walled(feet, stride, ledge(1.5)));
+        // Going down is never stopped.
+        assert!(!walled(feet, stride, ledge(-2.0)));
+    }
 }

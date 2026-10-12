@@ -111,7 +111,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Obstacles>()
         .add_systems(PostStartup, plant)
         .add_message::<ClearAround>()
-        .add_systems(Update, (make_way, clear_around));
+        .add_systems(Update, (make_way, clear_around, follow_digs));
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -661,7 +661,11 @@ fn grass_square(meadow: &Meadow, planet: &Planet, site: &Site, i: i32, j: i32) -
             let root = meadow.ground.ground(planet, at.x, at.y);
             let ground_normal = planet.normal(root);
             let cover = planet.cover(root, ground_normal);
-            if luck > smoothstep(0.3, 0.7, cover.grass) * thinning || site.covers(root, 0.25) {
+            // Nothing grows on ground that has been dug or filled.
+            if luck > smoothstep(0.3, 0.7, cover.grass) * thinning
+                || site.covers(root, 0.25)
+                || planet.dug(root)
+            {
                 continue;
             }
             let up = root.normalize();
@@ -732,6 +736,55 @@ fn make_way(
         let centre = (Vec2::new(i as f32, j as f32) + 0.5) * GRASS_SQUARE_M;
         let point = meadow.ground.ground(&planet, centre.x, centre.y);
         if !site.covers(point, GRASS_SQUARE_M) {
+            continue;
+        }
+        match grass_square(&meadow, &planet, &site, i, j) {
+            Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
+            None => commands.entity(entity).remove::<Mesh3d>(),
+        };
+    }
+}
+
+/// Where the ground has been dug or filled, what grew on it goes: the plants, rocks and
+/// trees whose foot is no longer on the ground, with what they blocked, and the grass
+/// over it, whose squares are grown again. The digs of a loaded game are followed the
+/// same way, once the plants have grown.
+fn follow_digs(
+    mut commands: Commands,
+    planet: Res<Planet>,
+    site: Res<Site>,
+    meadow: Option<Res<Meadow>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut obstacles: ResMut<Obstacles>,
+    mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
+    mut seen: Local<usize>,
+) {
+    let Some(meadow) = meadow else { return };
+    let count = planet.voxels().edit_count();
+    if count == *seen {
+        return;
+    }
+    let edits: Vec<(Vec3, f32)> = planet.voxels().edits_since(*seen).collect();
+    *seen = count;
+    let near = |point: Vec3, margin: f32| {
+        let up = point.normalize();
+        edits
+            .iter()
+            .any(|&(centre, reach)| (point - centre).reject_from(up).length() < reach + margin)
+    };
+    for (growth, transform, mut visibility) in &mut growth {
+        let foot = transform.translation;
+        if *visibility != Visibility::Hidden && near(foot, 0.5) && planet.dug(foot) {
+            *visibility = Visibility::Hidden;
+            if let Some(stood) = growth.obstacle {
+                obstacles.0.retain(|(point, _)| *point != stood);
+            }
+        }
+    }
+    for (&(i, j), &entity) in &meadow.squares {
+        let centre = (Vec2::new(i as f32, j as f32) + 0.5) * GRASS_SQUARE_M;
+        let point = meadow.ground.ground(&planet, centre.x, centre.y);
+        if !near(point, GRASS_SQUARE_M * 0.71) {
             continue;
         }
         match grass_square(&meadow, &planet, &site, i, j) {
