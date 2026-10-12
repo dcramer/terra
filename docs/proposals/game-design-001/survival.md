@@ -26,7 +26,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 ## Rhythms
 
-- **Day and night.** Night is darker, colder and more dangerous: more monsters, and stranger ones ([creatures.md](creatures.md)). Light matters: torches, fires, lit claims.
+- **Day and night.** Night is darker, colder and more dangerous: more monsters, and stranger ones ([creatures.md](creatures.md)). Light matters: torches, fires, lit claims. Proposed (D134): a whole day lasts half an hour of play, as Valheim's and Enshrouded's do, a little more day than night; night dark enough that a fire or torch matters, never so dark you cannot see the ground. In the tech demo, night is only dark for now.
 - **Weather** (D78): rain soaks and chills, storms ground you, heat drains thirst. Each world its own.
 - **Seasons**, perhaps: animals move, plants change, food is stored for lean times.
 

@@ -25,6 +25,7 @@ mod combat;
 mod controls;
 mod crafting;
 mod creatures;
+mod daylight;
 mod death;
 mod dial;
 mod dig;
@@ -142,6 +143,7 @@ pub fn plugin(app: &mut App) {
     // A player needs something to build on, and takes over from the build keys.
     build::plugin(app);
     scene::plugin(app);
+    daylight::plugin(app);
     flora::plugin(app);
     props::plugin(app);
     figure::plugin(app);

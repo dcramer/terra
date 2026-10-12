@@ -24,13 +24,13 @@ const SUN_DIRECTION: Vec3 = Vec3::new(0.62, 0.42, 0.5);
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(SkyPlugin)
-        .insert_resource(Sky {
-            horizon: HORIZON,
-            zenith: ZENITH,
-            glow: Color::srgb(1.0, 0.82, 0.6),
-            cloudiness: 0.5,
-            brightness: 2.6,
-        })
+        .insert_resource(Sky::by_day(
+            HORIZON,
+            ZENITH,
+            Color::srgb(1.0, 0.82, 0.6),
+            0.5,
+            2.6,
+        ))
         // Shadows are lit by the sky, so they come out cool against the warm sun.
         .insert_resource(GlobalAmbientLight {
             color: Color::srgb(0.62, 0.68, 1.0),

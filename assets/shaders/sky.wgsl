@@ -1,5 +1,6 @@
 // The sky: a soft gradient from the horizon up, clouds lit by the sun, a glow around the
-// sun, thinning to black as the camera climbs out of the air.
+// sun, thinning to black as the camera climbs out of the air. At night, stars that turn
+// with the sky, and a moon opposite the sun.
 
 #import bevy_pbr::{
     forward_io::VertexOutput,
@@ -15,6 +16,9 @@ struct Sky {
     radius_m: f32,
     cloudiness: f32,
     brightness: f32,
+    night: f32,
+    spin_axis: vec3<f32>,
+    spin: f32,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
@@ -41,6 +45,28 @@ fn noise(p: vec3<f32>) -> f32 {
 fn billow(p: vec3<f32>) -> f32 {
     return noise(p) * 0.5 + noise(p * 2.1 + 7.0) * 0.27 + noise(p * 4.3 + 19.0) * 0.15
         + noise(p * 8.9 + 5.0) * 0.08;
+}
+
+// A direction turned about an axis, the other way from how the sky has turned, so the
+// stars keep their places on it.
+fn unspun(direction: vec3<f32>) -> vec3<f32> {
+    let axis = normalize(sky.spin_axis);
+    let c = cos(-sky.spin);
+    let s = sin(-sky.spin);
+    return direction * c + cross(axis, direction) * s + axis * dot(axis, direction) * (1.0 - c);
+}
+
+// Stars: a few cells of a fine grid over the sky hold one, brighter or dimmer.
+fn stars(direction: vec3<f32>) -> f32 {
+    let p = unspun(direction) * 220.0;
+    let cell = floor(p);
+    let chance = hash(cell);
+    if chance < 0.985 {
+        return 0.0;
+    }
+    let centre = cell + 0.5 + (vec3<f32>(hash(cell + 3.1), hash(cell + 7.7), hash(cell + 1.9)) - 0.5) * 0.6;
+    let near = 1.0 - smoothstep(0.08, 0.32, length(p - centre));
+    return near * (0.35 + (chance - 0.985) / 0.015 * 0.65);
 }
 
 @fragment
@@ -70,12 +96,25 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let toward = billow(p + (sun - up * dot(sun, up)) * 0.12);
     let lit = clamp((body - toward) * 4.0 + 0.55, 0.0, 1.0);
     let shade = mix(sky.zenith.rgb * 0.75 + sky.horizon.rgb * 0.25, sky.horizon.rgb, 0.35);
-    let bright = mix(vec3<f32>(1.0, 0.97, 0.94), sky.glow.rgb, 0.55) * 1.25;
+    // By night the clouds are only grey shapes against the stars.
+    let bright = mix(vec3<f32>(1.0, 0.97, 0.94), sky.glow.rgb, 0.55) * 1.25
+        * (1.0 - 0.9 * sky.night);
     let cloud_colour = mix(shade, bright, lit * (0.55 + 0.45 * pow(toward_sun, 2.0)));
     colour = mix(colour, cloud_colour, cloud * 0.9);
 
     // The sun itself.
     colour += sky.glow.rgb * (pow(toward_sun, 40.0) * 0.5 + smoothstep(0.9994, 0.9998, toward_sun) * 30.0);
+
+    // At night, the stars where no cloud hides them, fading toward the horizon's haze,
+    // and the moon opposite the sun with a faint halo.
+    if sky.night > 0.0 {
+        let clear = (1.0 - cloud) * smoothstep(0.0, 0.25, lift);
+        colour += vec3<f32>(0.85, 0.9, 1.0) * stars(direction) * clear * sky.night * 0.6;
+        let toward_moon = max(dot(direction, -sun), 0.0);
+        let disc = smoothstep(0.99955, 0.9998, toward_moon);
+        let halo = pow(toward_moon, 60.0) * 0.12;
+        colour += vec3<f32>(0.8, 0.85, 0.95) * (disc * 1.2 + halo) * sky.night * (1.0 - cloud * 0.7);
+    }
 
     let altitude = max(length(eye) - sky.radius_m, 0.0);
     return vec4<f32>(colour * sky.brightness * exp(-altitude / 700.0), 1.0);

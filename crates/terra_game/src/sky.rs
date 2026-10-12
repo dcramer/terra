@@ -23,6 +23,34 @@ pub struct Sky {
     /// The camera is exposed for sunlit ground, which is far brighter than a colour on a
     /// screen; this lifts the sky to sit with it.
     pub brightness: f32,
+    /// How far into the night it is, from 0 by day to 1 in full dark: the stars and the
+    /// moon, which stands opposite the sun.
+    pub night: f32,
+    /// How the stars have turned with the sky: about which axis, and how far, in radians.
+    pub spin_axis: Vec3,
+    pub spin: f32,
+}
+
+impl Sky {
+    /// A sky for daytime: no stars, and the sky not turned.
+    pub fn by_day(
+        horizon: Color,
+        zenith: Color,
+        glow: Color,
+        cloudiness: f32,
+        brightness: f32,
+    ) -> Self {
+        Self {
+            horizon,
+            zenith,
+            glow,
+            cloudiness,
+            brightness,
+            night: 0.0,
+            spin_axis: Vec3::Y,
+            spin: 0.0,
+        }
+    }
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -41,6 +69,12 @@ struct SkyMaterial {
     cloudiness: f32,
     #[uniform(0)]
     brightness: f32,
+    #[uniform(0)]
+    night: f32,
+    #[uniform(0)]
+    spin_axis: Vec3,
+    #[uniform(0)]
+    spin: f32,
 }
 
 impl Material for SkyMaterial {
@@ -59,6 +93,9 @@ impl SkyMaterial {
             radius_m: planet.radius_m(),
             cloudiness: sky.cloudiness,
             brightness: sky.brightness,
+            night: sky.night,
+            spin_axis: sky.spin_axis.normalize_or(Vec3::Y),
+            spin: sky.spin,
         }
     }
 }

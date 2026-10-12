@@ -78,6 +78,8 @@ usage: terra_sandbox [options]
   --trace <file.jsonl>  write the play experiment's whole state every frame, one line of
                         JSON each, to compare two runs (tools/sandbox/diverge.ts)
   --fresh               start the play experiment over, throwing away its saved game
+  --time <hour>         set the play experiment's clock to an hour of the day, 0 to 24,
+                        such as 22 for night, for testing
   --at <east,south>     start the play experiment's player so many metres east and south
                         of the start, for testing
   --face <east,south>   start the play experiment's player facing that spot, for testing
@@ -131,6 +133,8 @@ pub struct Options {
     pub trace: Option<PathBuf>,
     /// Start over, throwing away any saved game.
     pub fresh: bool,
+    /// The hour of the day the play experiment's clock is set to, if not its own.
+    pub time: Option<f32>,
     /// Where the play experiment's player starts, east and south of the start in metres.
     pub start_at: Option<(f32, f32)>,
     /// What the play experiment's player starts facing, east and south of the start.
@@ -188,6 +192,7 @@ impl Options {
             trace: None,
             fresh: false,
             start_at: None,
+            time: None,
             start_facing: None,
             warps: Vec::new(),
             models: Vec::new(),
@@ -221,6 +226,17 @@ impl Options {
                 "--mute" => options.mute = true,
                 "--sound" => options.sound = true,
                 "--fresh" => options.fresh = true,
+                "--time" => {
+                    let text = value("--time")?;
+                    let hour = text
+                        .parse::<f32>()
+                        .ok()
+                        .filter(|hour| (0.0..=24.0).contains(hour))
+                        .ok_or_else(|| {
+                            format!("--time wants an hour from 0 to 24, like 22, not `{text}`")
+                        })?;
+                    options.time = Some(hour);
+                }
                 "--at" => options.start_at = Some(east_south("--at", &value("--at")?)?),
                 "--face" => options.start_facing = Some(east_south("--face", &value("--face")?)?),
                 "--warp" => {

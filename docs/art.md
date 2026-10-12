@@ -106,7 +106,7 @@ What it does not have, and the reference does:
 | Faceted, flat-shaded surfaces | A shader lights each triangle as one plane | Working on the ground and on generated shapes |
 | Warm sun, cool shadow | Light colours and a sky-coloured fill light | Working |
 | Haze and layered distance | Distance fog tinted toward the horizon | Working |
-| Sky | A gradient shader with soft clouds | Working; no day and night |
+| Sky | A gradient shader with soft clouds | Working, with day and night: the sun crosses it, then stars and a moon; the light, shade and haze follow how high the sun is |
 | Bloom and grading | Camera effects built into Bevy | Working |
 | Blur in the distance | A camera effect built into Bevy | Not tried; needs care in first person |
 | Elegant shapes | Free and bought low-polygon packs, read for shape and given our colours in code; generators for rocks and plants | Working with free packs in the outpost scene (D54); generators started |

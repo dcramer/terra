@@ -12,6 +12,7 @@ use super::catalogue;
 use super::claim::Claim;
 use super::controls::Settings;
 use super::crafting::{self, RECIPES, SmithAtHand, Works};
+use super::daylight::Clock;
 use super::inventory::{self, Backpack, Bar, Gear, Items, SLOTS};
 use super::people::{Doing, Person};
 use super::props::{self, Models, Prop, Theirs};
@@ -43,6 +44,9 @@ struct SaveFile {
     /// How the ground has been dug and filled, in order (D21).
     #[serde(default)]
     ground: Vec<SavedEdit>,
+    /// The hour of the day.
+    #[serde(default)]
+    hour: Option<f32>,
 }
 
 /// One change to the ground: a sphere dug out, or filled with a material, or a box dug
@@ -162,6 +166,7 @@ fn choose_path(mut commands: Commands, options: Res<Options>) {
 fn load(
     mut commands: Commands,
     path: Option<Res<SavePath>>,
+    mut clock: ResMut<Clock>,
     options: Res<crate::shell::Options>,
     mut planet: ResMut<Planet>,
     models: Res<Models>,
@@ -204,6 +209,11 @@ fn load(
     }
     let (mut transform, mut vitals, mut skills, mut backpack, mut gear, mut bar) =
         player.into_inner();
+
+    // The time of day, unless a scripted run set it.
+    if let (Some(hour), None) = (save.hour, options.time) {
+        clock.hour = hour;
+    }
 
     // The ground as it was dug and filled, replayed in order (D21).
     if planet.operations().is_empty() && !save.ground.is_empty() {
@@ -387,6 +397,7 @@ fn restore_people(
 /// Writes the game down every half minute and on F5.
 #[allow(clippy::too_many_arguments)]
 fn autosave(
+    clock: Res<Clock>,
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     path: Res<SavePath>,
@@ -408,6 +419,7 @@ fn autosave(
     }
     *since = 0.0;
     let save = gather(
+        &clock,
         &planet,
         &site,
         &claim,
@@ -425,6 +437,7 @@ fn autosave(
 /// Writes the game down as it closes.
 #[allow(clippy::too_many_arguments)]
 fn save_on_exit(
+    clock: Res<Clock>,
     mut exits: MessageReader<AppExit>,
     path: Res<SavePath>,
     planet: Res<Planet>,
@@ -438,6 +451,7 @@ fn save_on_exit(
 ) {
     if exits.read().next().is_some() {
         let save = gather(
+            &clock,
             &planet,
             &site,
             &claim,
@@ -461,6 +475,7 @@ type PlayerParts<'a> = (
 );
 
 fn gather(
+    clock: &Clock,
     planet: &Planet,
     site: &Site,
     claim: &Claim,
@@ -533,6 +548,7 @@ fn gather(
             })
             .collect(),
         claim_step: claim.step(),
+        hour: Some(clock.hour),
         ground: planet
             .operations()
             .into_iter()
@@ -651,6 +667,7 @@ mod tests {
                 done: vec!["Iron".to_string()],
             }],
             claim_step: 1,
+            hour: Some(21.5),
             ground: vec![
                 SavedEdit {
                     centre: [1.0, 2000.0, 2.0],

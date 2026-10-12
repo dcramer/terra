@@ -11,11 +11,11 @@
 use super::bag::Notice;
 use super::catalogue;
 use super::creatures::Lair;
+use super::daylight::{Clock, SkyPath};
 use super::flora::ClearAround;
 use super::interact::{Focus, Focusing, Interactable};
 use super::people::{Arrive, Doing, Dyed, Person};
 use super::props::{self, Models, Theirs};
-use super::scene::SUN_DIRECTION;
 use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use bevy::prelude::*;
@@ -281,26 +281,30 @@ fn found(
     );
 }
 
-/// Which way a place lies from another, as someone there would say it: by the sun.
-fn by_the_sun(from: Vec3, to: Vec3) -> &'static str {
+/// Which way a place lies from another, as someone there would say it: by the sun, or at
+/// night by the moon, wherever it is in the sky just now.
+fn by_the_sky(from: Vec3, to: Vec3, toward_sky: Vec3, by_night: bool) -> String {
     let up = from.normalize();
     let way = (to - from).reject_from(up).normalize_or_zero();
-    let sun = SUN_DIRECTION.reject_from(up).normalize_or_zero();
-    let toward = way.dot(sun);
-    let side = way.dot(up.cross(sun));
+    let light = toward_sky.reject_from(up).normalize_or_zero();
+    let body = if by_night { "moon" } else { "sun" };
+    let toward = way.dot(light);
+    let side = way.dot(up.cross(light));
     if toward > 0.6 {
-        "toward the low sun"
+        format!("toward the {body}")
     } else if toward < -0.6 {
-        "with the sun at your back"
+        format!("with the {body} at your back")
     } else if side > 0.0 {
-        "with the sun on your right"
+        format!("with the {body} on your right")
     } else {
-        "with the sun on your left"
+        format!("with the {body} on your left")
     }
 }
 
 /// F at someone in the village: they say what they know.
 fn talk(
+    clock: Res<Clock>,
+    sky: Option<Res<SkyPath>>,
     focus: Res<Focus>,
     village: Res<Village>,
     lair: Res<Lair>,
@@ -326,7 +330,19 @@ fn talk(
         Some(Doing::Bound) | None => format!(
             "{}: \"Spiders took Bren, our smith. They nest where the light comes out of the ground, {}. You'll see the glow.\"",
             person.name,
-            by_the_sun(village.0, lair.0)
+            match sky {
+                Some(sky) => {
+                    let sun = sky.sun(clock.hour);
+                    let by_night = sky.height(clock.hour) < 0.0;
+                    by_the_sky(
+                        village.0,
+                        lair.0,
+                        if by_night { -sun } else { sun },
+                        by_night,
+                    )
+                }
+                None => "past the trees".to_string(),
+            }
         ),
         Some(Doing::Following) => format!(
             "{}: \"You found Bren! Take them somewhere safe; they'll work a forge for you.\"",

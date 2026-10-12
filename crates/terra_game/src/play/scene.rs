@@ -21,13 +21,13 @@ const ZENITH: Color = Color::srgb(0.24, 0.46, 0.84);
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(SkyPlugin)
-        .insert_resource(Sky {
-            horizon: HORIZON,
-            zenith: ZENITH,
-            glow: Color::srgb(1.0, 0.74, 0.46),
-            cloudiness: 0.55,
-            brightness: 2.4,
-        })
+        .insert_resource(Sky::by_day(
+            HORIZON,
+            ZENITH,
+            Color::srgb(1.0, 0.74, 0.46),
+            0.55,
+            2.4,
+        ))
         // Shade is lit by the sky, so it comes out cool against the warm sun.
         .insert_resource(GlobalAmbientLight {
             color: Color::srgb(0.66, 0.76, 1.0),
