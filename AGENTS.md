@@ -4,6 +4,8 @@ A multiplayer survival sandbox across many procedural worlds, reached through po
 
 **Core tenet: realistic but fun** (D122). Things work as they would in the world, so players can reason about them: arrows ride in a quiver on your belt, and what you know you found out by looking (D93). Where realism would only be a chore, fun wins.
 
+**Core tenet: hundreds of variants, not millions** (D182). Almost everything is modular and procedural, but thematic: made from parts by rules, as Borderlands makes guns and No Man's Sky makes planets, with a theme (a realm, a maker, a people) deciding which parts and rules apply. Aim for hundreds or thousands of variants of a kind that a player can tell apart and care about, not millions of low-value near-copies made only to be infinite. When you design a generator, say how many distinct variants it makes and what tells them apart.
+
 Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in `docs/tech.md`, the parts and build order are in `docs/engine.md`, and the checkpoints are in `docs/prototypes.md`.
 
 | Folder | What it is |
@@ -42,7 +44,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 
 ## Working in the Rust workspace
 
-- **Assume many of everything** (D127). The game is procedurally generated, so there will be a large quantity of every kind of object: items, gear, creatures, characters, props, places. Build every system to perform with many of each and many kinds, change only what changed rather than recomputing every frame, and make a new kind of thing data (a file, a catalogue entry) rather than code. Nothing is written for one particular object; if code names a specific item, ask whether it should be data.
+- **Assume many of everything** (D127). The game is procedurally generated, so there will be a large quantity of every kind of object: items, gear, creatures, characters, props, places. Build every system to perform with many of each and many kinds, change only what changed rather than recomputing every frame, and make a new kind of thing data (a file, a catalogue entry) rather than code. Nothing is written for one particular object; if code names a specific item, ask whether it should be data. Many is for the code to cope with; how many is worth making is D182.
 
 - **`cargo xtask check` must pass before you commit.** It runs formatting, lints, tests and the dependency rule below. CI runs the same command on Linux and macOS.
 - **`cargo xtask doctor`** tells you what a machine is missing.

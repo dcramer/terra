@@ -132,6 +132,8 @@ Proposed, for how quests and finding things then work:
 
 **Realistic but fun** (D122, from the developers): the core tenet. Things work as they would in the world, so players can reason about them; where realism would only be a chore, fun wins.
 
+**Hundreds of variants, not millions** (D182, from the developers): a core tenet. Almost everything is modular and procedural, but thematic, as Borderlands' guns and No Man's Sky's planets are: made from parts by rules, with a theme (a realm, a maker, a people) shaping each. Hundreds or thousands of variants of a kind that each matter, not infinite low-value ones made to be numerous.
+
 **Rich systems, little on screen** (D93, from the developers): the game is rich with systems but somewhat realistic; you do not get a magic display of every piece of information, though some compromises keep it fun. Proposed compromises, to react to:
 
 - **On screen**: what your body would feel or you would see at a glance: health, stamina, hunger and thirst as you would sense them; what is in your hands; the action bar.

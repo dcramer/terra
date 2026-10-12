@@ -44,7 +44,7 @@ Named before the developers' list, mostly for the earlier direction of terraform
 | Game | We take | We leave |
 |---|---|---|
 | Planet Crafter | Phased terraforming; the world visibly transforming (parked, D60) | Handcrafted map; numbers that only go up; life as decoration |
-| No Man's Sky | Procedural everything; a palette per planet | Infinite universe; shallow planets; space |
+| No Man's Sky | Procedural everything; a palette per planet | Infinite universe; shallow planets; space; variety for its own sake (D182) |
 | Minecraft | Dig and build anywhere | Blocky cubes; flat world |
 | Vintage Story | Survival systems with some depth | The punishing difficulty |
 | Space Engineers | Voxel planets with separately built structures | Engineering-grade physics; space |
@@ -64,6 +64,7 @@ Slightly harder than Planet Crafter, far gentler than Vintage Story (D3): challe
 - PvP.
 - Photorealism.
 - Handcrafted maps.
+- Infinite variety for its own sake: hundreds or thousands of variants that matter, not millions (D182).
 - A creature editor.
 
 ## Constraints
