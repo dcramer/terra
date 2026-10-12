@@ -78,7 +78,7 @@ usage: terra_sandbox [options]
   --moments <fraction,…>
                         in the workbench sheet: how far through each clip to look
                         (default 0.4)
-  --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace, equal, minus or an arrow
+  --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace, equal, minus, pageup, pagedown or an arrow
                         (left, right, up, down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --give <item>:<count> start the play experiment carrying something extra, for
@@ -383,7 +383,7 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
 }
 
 /// The keys a script can press, in words.
-pub const KEYS: &str = "a letter, digit, F1 to F12, esc, enter, backspace, equal, minus or an arrow (left, right, up, down)";
+pub const KEYS: &str = "a letter, digit, F1 to F12, esc, enter, backspace, equal, minus, pageup, pagedown or an arrow (left, right, up, down)";
 
 /// A key a script can press, by name: one of [`KEYS`].
 pub fn parse_key(key: &str) -> Option<KeyCode> {
@@ -456,6 +456,8 @@ pub fn parse_key(key: &str) -> Option<KeyCode> {
         None if key.eq_ignore_ascii_case("down") => KeyCode::ArrowDown,
         None if key.eq_ignore_ascii_case("equal") => KeyCode::Equal,
         None if key.eq_ignore_ascii_case("minus") => KeyCode::Minus,
+        None if key.eq_ignore_ascii_case("pageup") => KeyCode::PageUp,
+        None if key.eq_ignore_ascii_case("pagedown") => KeyCode::PageDown,
         None => {
             let symbol = key
                 .chars()

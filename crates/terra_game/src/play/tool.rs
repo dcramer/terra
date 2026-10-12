@@ -67,6 +67,12 @@ const GRID_M: f32 = 0.5;
 /// How far one notch of the wheel turns an item, on the grid and off it, in degrees.
 const GRID_TURN: f32 = 45.0;
 const FREE_TURN: f32 = 15.0;
+/// How far one notch raises or lowers an item off the grid; on it, a grid step.
+const FREE_RAISE_M: f32 = 0.1;
+/// How high an item can be raised above where it would stand.
+const HIGHEST_RAISE_M: f32 = 3.0;
+/// How many storeys down and up from the base's floor a room can be placed (D143).
+const STOREYS: std::ops::RangeInclusive<i32> = -2..=2;
 const BUILD_COLOUR: Color = Color::srgb(0.35, 0.9, 1.0);
 const OPENING_COLOUR: Color = Color::srgb(1.0, 0.78, 0.25);
 const REFUSED_COLOUR: Color = Color::srgb(1.0, 0.35, 0.3);
@@ -162,6 +168,11 @@ pub struct Builder {
     variants: Vec<usize>,
     /// How far the next item is turned, in degrees.
     turn: f32,
+    /// How far above where it would stand the next item is raised, in metres.
+    raise: f32,
+    /// How many storeys above the base's floor the next room is, below it if negative
+    /// (D143).
+    storey: i32,
     /// Whether the next room is turned a quarter circle.
     room_turned: bool,
     /// Whether the next interior wall runs north and south instead of east and west.
@@ -205,6 +216,8 @@ impl Default for Builder {
             stowed: true,
             variants: Vec::new(),
             turn: 0.0,
+            raise: 0.0,
+            storey: 0,
             room_turned: false,
             wall_turned: false,
             run: Vec::new(),
@@ -454,10 +467,33 @@ fn choose(
         if builder.stowed {
             continue;
         }
+        // Shift and the wheel, or Page Up and Page Down, raise and lower what is placed: an
+        // item by a grid step or a tenth of a metre, a room by a storey (D144).
+        let lifting = intent.held(Action::Sprint);
+        let height = if lifting { intent.wheel } else { 0 } + intent.pressed(Action::Raise) as i32
+            - intent.pressed(Action::Lower) as i32;
+        if height != 0 {
+            if let Some(item) = builder.item(&builds) {
+                if grounded(item) {
+                    builder.raise = 0.0;
+                } else {
+                    let step = if builder.snapping {
+                        GRID_M
+                    } else {
+                        FREE_RAISE_M
+                    };
+                    builder.raise =
+                        (builder.raise + step * height as f32).clamp(0.0, HIGHEST_RAISE_M);
+                }
+            } else if builder.room(&builds).is_some() {
+                builder.storey = (builder.storey + height).clamp(*STOREYS.start(), *STOREYS.end());
+            }
+        }
         // Kinds are chosen on the wheel, or stepped through with a tap of R (`dial`).
         // One notch at a time, however the wheel reports it. Turning left and right (Z and C)
         // stand in for the wheel.
-        builder.wheel = intent.wheel + intent.pressed(Action::TurnRight) as i32
+        builder.wheel = if lifting { 0 } else { intent.wheel }
+            + intent.pressed(Action::TurnRight) as i32
             - intent.pressed(Action::TurnLeft) as i32;
         if builder.wheel != 0 {
             if builder.item(&builds).is_some() {
@@ -494,10 +530,16 @@ fn target_point(target: &Target, props: &Query<&Prop>) -> Option<Vec3> {
         Target::Wall(face) | Target::Edge { face, .. } => Some(tile(face.tile)),
         Target::Ground { corner, tiles, .. } => Some(Vec3::new(
             (corner.x as f32 + tiles.x as f32 * 0.5) * CELL_M,
-            0.0,
+            corner.y as f32 * terra_build::STOREY_M,
             (corner.z as f32 + tiles.y as f32 * 0.5) * CELL_M,
         )),
         Target::Spot { at, .. } => Some(at.with_y(0.0)),
         Target::Prop(entity) => props.get(entity).ok().map(|prop| prop.at.with_y(0.0)),
     }
+}
+
+/// Whether an item must stand on the ground or a floor, and cannot be raised off it: a
+/// station, or a claim stone.
+pub fn grounded(item: &Item) -> bool {
+    item.station.is_some() || item.claims
 }

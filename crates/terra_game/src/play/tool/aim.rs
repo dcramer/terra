@@ -163,6 +163,12 @@ pub(super) fn aim(
                 .or(in_base)
                 .filter(|(at, ..)| within(site.frame.transform_point(*at), ITEM_REACH_M))
                 .unwrap_or_else(ahead);
+            // Raised as far as the player has asked, unless it must stand where it is.
+            let lift = lift
+                + builder
+                    .item(&builds)
+                    .filter(|item| !super::grounded(item))
+                    .map_or(0.0, |_| builder.raise);
             let world = site.frame.transform_point(at);
             let wet = !indoors && planet.under_sea(world);
             let blocked = props::blocked(
@@ -276,25 +282,31 @@ pub(super) fn aim(
                     .map_or(Target::Nothing, |(point, size)| {
                         // Centred on the place aimed at.
                         let local = to_base.transform_point3(point);
+                        // On the storey chosen: the base's floor, or above or below it (D143).
                         let corner = IVec3::new(
                             (local.x / CELL_M - size.x as f32 * 0.5).round() as i32,
-                            0,
+                            builder.storey,
                             (local.z / CELL_M - size.y as f32 * 0.5).round() as i32,
                         );
-                        // The room's floor is the base's floor. Set into the ground, it
-                        // cuts the ground away where it stands, but not deeper than its own
-                        // height. Checked every metre or so.
+                        let floor_m = builder.storey as f32 * STOREY_M;
+                        // Set into the ground, a room cuts the ground away where it stands,
+                        // but on the base's floor or above, not deeper than its own height.
+                        // Below the floor it is a cellar, wholly underground. Checked every
+                        // metre or so.
                         let every = cells(1.0).max(1) as usize;
-                        let fits = (0..=size.x).step_by(every).chain([size.x]).all(|i| {
-                            (0..=size.y).step_by(every).chain([size.y]).all(|j| {
-                                let on_floor = (corner + IVec3::new(i, 0, j)).as_vec3() * CELL_M;
-                                let at_roof = on_floor + Vec3::Y * STOREY_M;
-                                planet.distance(site.frame.transform_point(at_roof)) > 0.02
-                            })
-                        });
+                        let fits = builder.storey < 0
+                            || (0..=size.x).step_by(every).chain([size.x]).all(|i| {
+                                (0..=size.y).step_by(every).chain([size.y]).all(|j| {
+                                    let at =
+                                        (corner.with_y(0) + IVec3::new(i, 0, j)).as_vec3() * CELL_M;
+                                    let at_roof = at + Vec3::Y * (floor_m + STOREY_M);
+                                    planet.distance(site.frame.transform_point(at_roof)) > 0.02
+                                })
+                            });
                         // Trees and rocks are cleared by the player first, not by the room.
-                        let low = corner.as_vec3() * CELL_M;
-                        let high = (corner + IVec3::new(size.x, 0, size.y)).as_vec3() * CELL_M;
+                        let low = corner.with_y(0).as_vec3() * CELL_M;
+                        let high =
+                            (corner.with_y(0) + IVec3::new(size.x, 0, size.y)).as_vec3() * CELL_M;
                         let middle = site.frame.transform_point((low + high) * 0.5);
                         let reach = (high - low).length() * 0.5 + STOREY_M * 2.0;
                         let clear = !obstacles.near(middle, reach).any(|(at, radius)| {

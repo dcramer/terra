@@ -132,7 +132,8 @@ pub(super) fn highlight(
             .collect(),
         (_, Target::Edge { .. }) => bounds(&builder.run).into_iter().collect(),
         (_, Target::Ground { corner, tiles, .. }) => {
-            let low = corner.as_vec3() * CELL_M;
+            // Its storey's floor, above or below the base's (D143).
+            let low = (corner.with_y(0).as_vec3() * CELL_M).with_y(corner.y as f32 * STOREY_M);
             let high = low + Vec3::new(tiles.x as f32 * CELL_M, STOREY_M, tiles.y as f32 * CELL_M);
             let at = |x: bool, y: bool, z: bool| {
                 Vec3::new(

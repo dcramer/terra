@@ -56,10 +56,13 @@ pub enum Action {
     /// Bring the camera nearer or take it further, as the mouse wheel does.
     ZoomIn,
     ZoomOut,
+    /// Raise or lower what is being placed, as Shift and the wheel do.
+    Raise,
+    Lower,
 }
 
 impl Action {
-    pub const ALL: [Action; 27] = [
+    pub const ALL: [Action; 29] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -87,6 +90,8 @@ impl Action {
         Action::Map,
         Action::ZoomIn,
         Action::ZoomOut,
+        Action::Raise,
+        Action::Lower,
     ];
 
     /// What the options menu calls it.
@@ -119,6 +124,8 @@ impl Action {
             Action::Map => "Map",
             Action::ZoomIn => "Camera nearer",
             Action::ZoomOut => "Camera further",
+            Action::Raise => "Raise what you place",
+            Action::Lower => "Lower what you place",
         }
     }
 
@@ -152,6 +159,8 @@ impl Action {
             Action::Map => "map",
             Action::ZoomIn => "zoom_in",
             Action::ZoomOut => "zoom_out",
+            Action::Raise => "raise",
+            Action::Lower => "lower",
         }
     }
 
@@ -186,6 +195,8 @@ impl Action {
             Action::Map => (Key(KeyCode::KeyM), None),
             Action::ZoomIn => (Key(KeyCode::Equal), None),
             Action::ZoomOut => (Key(KeyCode::Minus), None),
+            Action::Raise => (Key(KeyCode::PageUp), None),
+            Action::Lower => (Key(KeyCode::PageDown), None),
         };
         [Some(first), second]
     }

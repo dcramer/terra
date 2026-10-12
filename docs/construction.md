@@ -45,7 +45,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | A ghost before you commit, allowed or refused, saying why | All | Built; what blocks it is outlined, but not through walls, as Subnautica 2's is |
 | Rotate | All | Built: wheel, or Z and C |
 | Snap to a grid, with a switch to go free | Enshrouded, Ark, Valheim | Built: X, and hold Alt |
-| Raise and lower, and nudge | Enshrouded, Ark Ascended | Missing; asked for |
+| Raise and lower, and nudge | Enshrouded, Ark Ascended | Raise and lower built; rooms by the storey, down too |
 | Place in a line or an area: drawn walls, floors, rooms | The Forest, Sons of the Forest, Subnautica 2 | Rooms are boxes, grown across one another; walls and fences are not drawn |
 | Pick another of what you look at | 7 Days to Die | Built: middle mouse |
 | Move what is placed | Subnautica 2 | Built for items, not rooms or walls |
@@ -58,7 +58,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Carrying big materials by hand, better transport later | The Forest | Missing; the direction (D140, Leaning) |
 | A base level with the ground where it is begun | Ark Ascended's heights | Built: the base's grid is set where its claim stone goes |
 | Building on slopes | All, differently | Built: rooms cut into the ground (D131) and stand on foundations below |
-| Floors above, and stairs | All | Storeys exist in the model; stairs and building upward are missing |
+| Floors above and below, and stairs | All | Rooms on storeys above and below the base's floor built; stairs missing |
 | Roofs | All | Generated with the hull; nothing to place by hand |
 | Doors that open, close and lock | All | Doorways only |
 | Fences, gates, palisades | Ark, The Forest, Rust | Missing |
@@ -96,8 +96,8 @@ Agreed by the developers on 2026-10-12 (D144: "generally speaking your plans fee
 | Input | Does | Built |
 |---|---|---|
 | Aim | The ghost follows, snapped (see [Snapping](#snapping-and-feel)) | Yes |
-| Wheel, or Z and C | Turn: a quarter turn for structures; an eighth for items on the grid; 5 degrees off it | Yes |
-| Shift and wheel, or Page Up and Page Down | Raise and lower: half a metre a notch on the grid, a tenth off it; rooms a storey at a time, down as well as up (D143) | No |
+| Wheel, or Z and C | Turn: a quarter turn for structures; an eighth for items on the grid; 15 degrees off it | Yes |
+| Shift and wheel, or Page Up and Page Down | Raise and lower: half a metre a notch on the grid, a tenth off it, up to three metres; rooms a storey at a time, two down to two up (D143). Stations and the claim stone stay on the ground | Yes |
 | Ctrl and wheel | The kind of construction (D139) or material | No |
 | Click left mouse | Lay it: a plan, for a structure; for an item, hold instead | No: holding builds a room whole today |
 | Press, drag and let go | Draw it: a wall or fence along the line dragged; a room or floor over the rectangle dragged. A plain click lays the variant's own size | No |

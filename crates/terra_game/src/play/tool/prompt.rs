@@ -71,16 +71,21 @@ pub fn prompt(
         (Kind::Room(_), Target::Ground { adds: false, .. }) => {
             "That is all indoors already".to_string()
         }
-        (Kind::Room(_), Target::Ground { .. }) => {
-            format!("{hold}  build this room      Scroll  turn      {next}  size")
-        }
+        (Kind::Room(_), Target::Ground { .. }) => format!(
+            "{hold}  build this room      Scroll  turn      Shift Scroll  storey{}      {next}  size",
+            storey(builder.storey)
+        ),
         (Kind::Room(_), _) => "Aim at the ground, or across a room to extend it".to_string(),
         (Kind::Items(_) | Kind::Move, Target::Spot { blocked, .. }) => match blocked {
             None if builder.is_carrying() => format!(
-                "{tap}  put it down      Scroll  turn      {}  put it back",
+                "{tap}  put it down      Scroll  turn      Shift Scroll  raise{}      {}  put it back",
+                raised(builder.raise),
                 capitalised(settings.key(Action::BuildMenu))
             ),
-            None => format!("{hold}  build      Scroll  turn      {next}  next kind"),
+            None => format!(
+                "{hold}  build      Scroll  turn      Shift Scroll  raise{}      {next}  next kind",
+                raised(builder.raise)
+            ),
             Some(Blocked::Structure) => "It would stick through a wall".to_string(),
             Some(Blocked::Item(_)) => "The outlined item is in the way".to_string(),
             Some(Blocked::Nature) => "A tree or a boulder is in the way".to_string(),
@@ -109,6 +114,24 @@ pub fn prompt(
             )
         }
         _ => action,
+    }
+}
+
+/// How high an item is raised, if it is, to follow its key: " (0.5 m up)".
+fn raised(raise: f32) -> String {
+    if raise > 0.0 {
+        format!(" ({raise:.1} m up)")
+    } else {
+        String::new()
+    }
+}
+
+/// Which storey a room goes on, if not the base's floor: " (1 down)".
+fn storey(storey: i32) -> String {
+    match storey {
+        0 => String::new(),
+        up if up > 0 => format!(" ({up} up)"),
+        down => format!(" ({} down)", -down),
     }
 }
 
