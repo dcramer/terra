@@ -1,0 +1,11 @@
+{
+  "subject": "small log cabin window, half a metre wide and one metre tall: a dark timber frame holding two closed wooden shutters of vertical weathered planks with a crossbar",
+  "file": "Window",
+  "size": 1.0,
+  "budget": 400,
+  "roles": [
+    "Wood",
+    "WoodDark"
+  ],
+  "into": "kits"
+}

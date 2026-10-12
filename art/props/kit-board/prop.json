@@ -1,0 +1,10 @@
+{
+  "subject": "single squared timber board, one metre long, twelve centimetres wide and eight centimetres thick, dark weathered wood, the plain frame board round a log cabin's door",
+  "file": "Board",
+  "size": 1.0,
+  "budget": 60,
+  "roles": [
+    "WoodDark"
+  ],
+  "into": "kits"
+}
