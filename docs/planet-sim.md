@@ -56,3 +56,20 @@ A first draft of these rules was implemented in `prototypes/sim_toy` (deleted on
 - Cell count and shape. The starting guess was a few thousand cells on a subdivided icosahedron; with the simulation in Rust, 40 thousand cells (about 35 m each on a 2 km planet) costs under half a millisecond a tick, so resolution can be chosen for gameplay.
 - Tick rate. Day and night exist (D134), and seasons (D149).
 - Whether values can regress.
+
+## Terraforming phases
+
+Moved here from the earlier gameplay page when the game's design was adopted (D89).
+
+Parked (D60): probably no terraforming. Kept for reference. Draft names and order. Phases are gated by global values; what a region looks like is set by its local values. See [planet-sim.md](planet-sim.md).
+
+The developers floated a **terraform rating** for each such planet (D79, Leaning): one measure of how far along it is, whose top might mean the air is breathable. It could be what those global values add up to, and what the phases and the weather (D78) follow.
+
+| Phase | The planet | What threatens you |
+|---|---|---|
+| Dead | Airless, frozen or scorched, irradiated | Suffocation, cold, radiation |
+| Thawing | Pressure and heat rising, ice melting | Storms, floods, unstable ground |
+| Wet | Standing water, rain | Weather; first microbial hazards |
+| Green | Flora spreading | Hostile plants overrunning machines and bases |
+| Swarming | Insects | Swarms |
+| Wild | Animals | Predators |

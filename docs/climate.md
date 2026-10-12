@@ -113,7 +113,7 @@ Since weather is worked out from the seed and the time, what is coming is alread
 
 Technical, Leaning, and nothing is built until the design is agreed:
 
-- **Weather is a function of the world's seed and its time.** Fronts are noise moving across the planet. Every client works out the same weather from the clock, so the server sends nothing but the time. Shared by a thousand players (D52), it costs nothing.
+- **Weather is a function of the world's seed and its time.** Fronts are noise moving across the realm's world. Every client works out the same weather from the clock, so the server sends nothing but the time. Shared by a thousand players (D52), it costs nothing.
 - **Ground state is integrated from recent weather** at coarse resolution, again with nothing stored:
   - snow depth;
   - wetness;

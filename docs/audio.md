@@ -4,7 +4,7 @@ Status: a first version is built in the sandbox's `play` experiment (D113, D114)
 
 ## What we are after
 
-From game design 001 ([character.md](proposals/game-design-001/character.md)): **sound carries information**. A monster's call, a settlement's bell, rain coming, a predator behind you. **Music sparse, and from the world where it can be.** That fits a game with little on screen (D93): the ear tells you what the screen does not.
+From game design 001 ([character.md](your-character.md)): **sound carries information**. A monster's call, a settlement's bell, rain coming, a predator behind you. **Music sparse, and from the world where it can be.** That fits a game with little on screen (D93): the ear tells you what the screen does not.
 
 ## How it is put together
 

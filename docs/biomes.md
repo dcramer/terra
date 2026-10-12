@@ -41,7 +41,7 @@ Proposed, and reshaped by the developers' answers of 2026-10-12. Each goal says 
 5. **As thick as a real forest, and still playable.** As dense as Sons of the Forest's: "more realistic, and that's our goal" (2026-10-12, D122). In deep woods you can't see far. You can still walk through the understorey, see between the nearest trunks, and find clearings to build in (D131).
 6. **Life-sized** (D110). Trees stand 15 to 35 m, and boulders reach more than a person's height. Detail scales with the world, not with the object.
 7. **Alive.** Everything moves in the wind, grass and bushes give way as you pass, and dug or built ground clears. What is cut grows back, and you see it grow rather than find it whole again (D150).
-8. **Every world its own, by rules.** Nobody writes a list of biomes. Each planet's come from its theme and seed (D8, D17, D59), so two temperate planets still grow different forests. A gothic realm's dead trees and roots, or a techno realm's growth, are new rules and data, not new code.
+8. **Every world its own, by rules.** Nobody writes a list of biomes. Each realm's come from its theme and seed (D8, D17, D59), so two temperate realms still grow different forests. A gothic realm's dead trees and roots, or a techno realm's growth, are new rules and data, not new code.
 9. **Interactive at scale.** Likely every plant can be harvested, perhaps not some grass (D43). The server keeps nothing per plant but what players changed (D47, D52).
 10. **Fast.** 60 fps on the mid-range target, checked on the integrated GPU too (D25).
 11. **Seasons** (D149). Leaves turn and fall, snow comes and goes, and grass browns and greens again. They change play as well as the look: cold, food, growth.
@@ -88,7 +88,7 @@ Only objects cost the server anything, and only when changed. Cover is most of w
 Everything is a function of the seed and the place, worked out wherever someone is (D41, D47). From the bottom up:
 
 1. **The land**, from the terrain: height, slope, which way the ground faces, the soil (the voxel material), and nearness to water.
-2. **The climate**, from the theme: temperature and wetness across the planet, with noise.
+2. **The climate**, from the realm's theme and the season ([climate.md](climate.md)): temperature and wetness across its world, with noise.
 3. **Biome weights.** At every point, how much of each biome there is, blended smoothly so there are no lines. A biome is data: the kinds in each layer and how dense each is against the fields.
 4. **Layer by layer, top down.** The canopy first. Then the layers below read what is above them:
    - shade and root space under trees;
@@ -151,7 +151,7 @@ Proposed, technical. The standard way to classify climate is by temperature and 
 - **Each species has a niche:** the temperature, wetness, shade and soil it tolerates, and how strongly it competes.
 - **The climate fields say what each place offers.** The species that fit there grow, the strongest most.
 - **A biome is what emerges,** named afterwards for maps and talk, never listed. A theme sets the ranges of the fields (a frozen realm is cold everywhere) and the families of species it draws from.
-- **Species are generated too.** A species is the parameters of a generator (height, form, bark, leaf colour), drawn by the seed within its family. The starter planet's pine is one point in that space, and another planet's is a neighbour. This asks for trees and plants as generators, with Tripo models as parts and variants rather than as whole species (D127).
+- **Species are generated too.** A species is the parameters of a generator (height, form, bark, leaf colour), drawn by the seed within its family. The starting realm's pine is one point in that space, and another realm's is a neighbour. This asks for trees and plants as generators, with Tripo models as parts and variants rather than as whole species (D127).
 
 ### Regrowth
 
@@ -208,7 +208,7 @@ A stretch goal, and feasible at moderate cost, because it reuses cover and regro
 4. **Content:**
    - a tree generator, with leaves as a layer (cards and clumps compared);
    - species with niches;
-   - a second planet's theme, to prove its forests come from rules alone.
+   - a second realm's theme, to prove its forests come from rules alone.
 5. **Time:** regrowth by stages and seasons.
 6. **Worn paths.**
 

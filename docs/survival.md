@@ -1,43 +1,56 @@
-# Survival
+# Survival: needs, rhythms and death
 
-The tech demo is prototyping [game design 001](proposals/game-design-001/survival.md) (D89, Leaning), whose survival has food and death but no oxygen tanks or terraforming; until it is adopted, this page stands.
+Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of truth on 2026-10-12, D89). Each item is as settled as the decision it cites; the rest is a proposal for the developers to react to. It replaced the earlier survival page, whose oxygen tanks and terraforming are gone (D89, D60).
 
-Status: the developers said on 2026-10-10 that there are survival-coupled attributes, that they may vary per world, and which ones to start with. How each works is a proposal below. Nothing is built.
+## What the developers have said
 
-## The attributes
+- Survival attributes: health, stamina, oxygen, hunger, thirst (D61). Oxygen is used up under water (D74). No oxygen tanks or science fiction for now (D89).
+- A sandbox with some survival in it; part of survival is establishing and holding bases and outposts (D90).
+- No fail state (D18). What you carry drops when you die, and dropped items decay after a while (D84).
 
-From the developers: **health, stamina, oxygen, hunger, thirst**, and possibly more later.
+## Based on
 
-| Attribute | Goes down when | Comes back with | When it runs out |
-|---|---|---|---|
-| Health | You are hurt: falls, cold, heat, poison, creatures | Rest, food, medicine | You are down (see D18: no fail state) |
-| Stamina | You sprint, jump, swing a tool, swim | Resting a moment | You cannot sprint, swim hard or work hard |
-| Oxygen | Always, where the air cannot be breathed: under water, and on planets with thin or no air | Breathable air, the space suit's tank, a base with air | Health falls fast |
-| Hunger | Slowly, all the time; faster when working | Food | Health falls slowly |
-| Thirst | A little faster than hunger | Water | Health falls |
+**Valheim** and **Enshrouded** for survival that rewards rather than punishes: food that makes you stronger, rest that restores you, cold and dark that you prepare for.
 
-The rates and refills are placeholders, written to have something to react to.
+## Needs
 
-## Oxygen
+| Need | Met by | When it is low |
+|---|---|---|
+| Hunger | Food: hunted, fished, gathered, farmed, cooked | Health and stamina recover slowly and their limits shrink; in the end, starving kills (D101) |
+| Thirst | Water: springs, rivers, wells, a waterskin | The same, faster |
+| Breath | Air: only under water (D74) | Health falls fast |
+| Warmth | Fire, shelter, clothing, work | Body temperature (D153): too cold raises hunger and stamina costs, too hot raises thirst and stamina costs, and far out of bounds either wears health down ([climate](climate.md#body-temperature)) |
+| Rest | A bed in a claim | Proposed: rested, you recover faster for a while |
 
-From the developers: being under water uses up oxygen, in the same way as being on a planet with little or no atmosphere (D74). So oxygen is one rule, "is the air here breathable, and how much", that water, thin air and vacuum all answer. A space suit, made of parts such as a suit and an oxygen tank (D64), is how you carry air with you; a bigger tank lasts longer.
+**Food is essential** (D101): it is what keeps you from dying; going without makes you weaker, and then kills you. **Good food may also give buffs**, as in Valheim and Enshrouded; whether, and what they are, the developers will decide later.
 
-## How they vary by world
+## Rhythms
 
-An attribute is one rule plus numbers, and a planet's theme sets the numbers ([worlds.md](worlds.md)). On the starter planet the air is good, so oxygen never falls outdoors. On an airless planet it falls everywhere outside a base. A hot planet might make thirst fall faster; a heavy one might make stamina fall faster. Adding an attribute later should be adding one rule, which every planet then sets numbers for.
+- **Day and night.** Night is darker, colder and more dangerous: more monsters, and stranger ones ([creatures.md](creatures.md)). Light matters: torches, fires, lit claims. Proposed (D134): a whole day lasts half an hour of play, as Valheim's and Enshrouded's do, a little more day than night; night dark enough that a fire or torch matters, never so dark you cannot see the ground. In the tech demo, night is only dark for now.
+- **Weather** (D78): rain soaks and chills, storms ground you, heat drains thirst. Each world its own.
+- **Seasons** (D149): temperature, daylight and precipitation swing over a year and everything responds; winter on the starter world is a real challenge to prepare for ([climate](climate.md)).
 
-## How it fits what was already written
+## Death
 
-[gameplay.md](gameplay.md) has every survival need follow one arc: carried by hand, then solved by a machine at your base, then, on a planet you terraform, solved by the planet itself. The first two steps still hold; the last is parked with terraforming (D60). The older list of needs there (oxygen, water, food, temperature, radiation) maps onto the attributes: water is thirst, food is hunger, and temperature and radiation are things about a place that wear down health.
+- **No fail state** (D18). You come back.
+- **Where**: proposed, at the bed you last slept in, in a claim; failing that, the nearest friendly settlement.
+- **What you lose**: your pack drops where you fell and decays after a while (D84); what you wear stays on you.
+- **A little progress**, from the developers (D101): death should have some consequence, perhaps skill or experience lost. Proposed, after Valheim: some progress toward the next step of your skills is lost, never a step already reached, a rank, an essence or an ability. It stings without undoing what you built, and keeps "always getting better" true over time.
 
-## In the game's model
+## Questions
 
-Each attribute is a component on whoever has it: the player, and later creatures. What changes them is a system that reads where you are (the air, the temperature) and what you are doing. The server decides them, since a thousand players cannot be trusted to report their own health (D51, D52).
+1. Answered: **starving can kill**; food is essential (D101).
+2. Later: **food buffs** may exist; whether and what is for later (D101).
+3. Answered: **seasons**, yes (D149).
+4. Answered in part: **death's cost** is the pack and a little skill or experience (D101). How much, and from which skills, is open.
+5. Answered: **body temperature** is probably its own attribute (D153).
 
-## Open questions
+## How the attributes work
 
-1. **What happens at zero?** D18 says no fail state. Is "down" a respawn at base, a loss of what you carry, or something gentler?
-2. **How hard is it?** D3 sets the tone between Planet Crafter and Vintage Story. On the starter planet, does hunger matter at all?
-3. **Is stamina a survival attribute or a movement one?** It refills in seconds, unlike the others.
-4. **Which come next?** Body temperature, probably, as its own attribute (D153, [climate](climate.md#body-temperature)). Radiation is open.
-5. **Are they shown as meters**, as in Subnautica, or worked into the world?
+From the earlier page, still true (D61): health, stamina, hunger, thirst and breath, with body temperature probably joining them (D153).
+
+- **Breath is the one rule for air:** under water you use it up (D74). There are no oxygen tanks or thin-air worlds for now (D89).
+- **Each attribute is one rule plus numbers,** and a realm's theme sets the numbers (D59). A hot realm makes thirst rise faster, and a cold one makes warmth matter more. Adding an attribute is adding one rule, which every realm then sets numbers for.
+- **In the game's model,** each attribute is a component on whoever has it: the player, and later creatures. A system that reads where you are and what you are doing changes it. The server decides them, since a thousand players cannot be trusted to report their own health (D51, D52).
+- **What weather and seasons do to them** is in [climate.md](climate.md).
+

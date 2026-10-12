@@ -1,6 +1,6 @@
 # Your character: body, movement and what is on screen
 
-Part of [game design 001](README.md). A proposal for the developers to react to; nothing here is decided unless it cites a decision.
+Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of truth on 2026-10-12, D89). Each item is as settled as the decision it cites; the rest is a proposal for the developers to react to.
 
 ## What the developers have said
 
@@ -12,7 +12,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 - **No class at the start.** What you become comes from what you practise (D88) and what essences you take ([essences.md](essences.md)).
 - **Creation is the look**: body, face, hair, voice.
-- **Where you come from** is open (premise question 8 in the [README](README.md#questions-for-the-developers)): a newcomer to the frontier, or someone born there.
+- **Where you come from** is open (premise question 8 in the [README](gameplay.md#questions-for-the-developers)): a newcomer to the frontier, or someone born there.
 
 ## Getting around
 

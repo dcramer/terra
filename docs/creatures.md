@@ -1,6 +1,6 @@
 # Creatures: wildlife and monsters
 
-Part of [game design 001](README.md). A proposal for the developers to react to; nothing here is decided unless it cites a decision.
+Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of truth on 2026-10-12, D89). Each item is as settled as the decision it cites; the rest is a proposal for the developers to react to.
 
 ## What the developers have said
 
@@ -9,7 +9,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 ## Based on
 
-**Kenshi** and **Valheim** for animals that live their own lives and react to you. **He Who Fights With Monsters**, as I recall it, for monsters that form where magic pools ([README](README.md#what-makes-it-go-magic-as-the-worlds-weather)).
+**Kenshi** and **Valheim** for animals that live their own lives and react to you. The lore, after *He Who Fights With Monsters*'s world-building, for monsters that form where magic pools ([lore.md](lore.md#monsters)).
 
 ## Wildlife
 

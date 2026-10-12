@@ -1,11 +1,11 @@
 # Settings: how any theme works
 
-A proposal for game design 001: one way for any realm's theme to work, medieval, machine, wild, gothic or another, so that each feels like itself, none is better than the others, a new one is data rather than new code, and dozens of generated realms still fit one lore. The developers called it roughly on point on 2026-10-11 (D116, Leaning); their answers are folded in below.
+Part of the game's design ([gameplay.md](gameplay.md), D89): one way for any realm's theme to work, medieval, machine, wild, gothic or another, so that each feels like itself, none is better than the others, a new one is data rather than new code, and dozens of generated realms still fit one lore. The developers called it roughly on point on 2026-10-11 (D116, Leaning); their answers are folded in below.
 
 ## What the developers have said
 
 - Realms may differ in setting, "like fantasy or primitive or futuristic", shown in their cultures, which may teach different things and from which you may recruit (D86, Leaning).
-- The art target is the four-world mood board: a medieval town, a techno-punk street, fantasy wilds and a gothic graveyard, in one look ([art.md](../../art.md)).
+- The art target is the four-world mood board: a medieval town, a techno-punk street, fantasy wilds and a gothic graveyard, in one look ([art.md](art.md)).
 - On 2026-10-11, about a technological realm: no machine guns; advanced but on theme with magic, and not superior. Whether its makers are gone or still at work could be either. What matters is **ways to make different kinds of themes work, as the visual design goals do.**
 - Also on 2026-10-11: there may be **dozens of generated realms**, so what is needed is **techniques that make each one fit the lore**, not a handful of hand-made worlds.
 - Later the same day, reacting to this proposal: **roughly on point.** Some realms have **more magic or less**. A theme's **weapons should differ, as swords differ from staves: not better or worse, different ways to play.** **Loot**, procedural loot included, may become part of the game, though not a large part. **Mixing settings** within a realm, yes, carefully, as an advanced feature for later. The cosmology's premise and an ancient people who built everywhere are left to the generator: "this is procedural". Each setting's speciality is undecided.
@@ -13,7 +13,7 @@ A proposal for game design 001: one way for any realm's theme to work, medieval,
 
 ## The idea: roles, as the art has palette roles
 
-The art makes many realms from the same models by giving every part a **palette role** (wood, stone, cloth, metal, accent, glow) that each realm fills with its own colours, under one material and one light ([research](../../../research/ai-models-for-art.md#the-bake-off-second-round-style)). The same model is a medieval cart, a gothic hearse or a brass machine by what fills its roles.
+The art makes many realms from the same models by giving every part a **palette role** (wood, stone, cloth, metal, accent, glow) that each realm fills with its own colours, under one material and one light ([research](../research/ai-models-for-art.md#the-bake-off-second-round-style)). The same model is a medieval cart, a gothic hearse or a brass machine by what fills its roles.
 
 Proposed: **design works the same way.** The game defines a fixed set of **gameplay roles**: a way of using magic, a place where it pools, a culture, materials, stations, weapons, a speciality. A setting is data that fills each role with its own thing. Systems are written once against the roles (D59: a new world is a new theme, not new code).
 

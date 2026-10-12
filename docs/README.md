@@ -12,18 +12,28 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 
 | Doc | What it covers |
 |---|---|
-| [vision.md](vision.md) | Pitch, pillars, our inspirations (Kenshi, Enshrouded, Subnautica 2, *He Who Fights With Monsters*, Soulmask, Red Dead Redemption 2), non-goals. |
-| [proposals](proposals/README.md) | Numbered proposals, each one candidate. So far one for the whole game: [game design 001, a living world](proposals/game-design-001/README.md) (working name), in the spirit of Kenshi, Enshrouded and *He Who Fights With Monsters*, with a proposal for each system: combat, creatures, essences, crafting, people, survival, character and the arc. |
+| [vision.md](vision.md) | Pitch, pillars, tone, our inspirations, non-goals. |
+| [gameplay.md](gameplay.md) | **The game's design, and the source of truth for it** (D89): a living world, after Enshrouded and *He Who Fights With Monsters*; what goes on in the realms, the loops, factions and settlements, holding ground, no hand-holding. Links a page per system, below. |
+| [lore.md](lore.md) | The foundational lore: how the universe works, from *He Who Fights With Monsters*'s world-building, written in our own words. The basis for every system. |
+| [proposals](proposals/README.md) | Numbered proposals, each one candidate. Game design 001 was adopted on 2026-10-12 and is now gameplay.md and its system pages. |
 
 **Parts of the game**
 
 | Doc | What it covers |
 |---|---|
-| [worlds.md](worlds.md) | The worlds: themes, cultures, terrain, caverns, water, foliage, gravity, the starter planet, portals between them. |
+| [worlds.md](worlds.md) | The realms as places: themes, terrain, caverns, water, size, gravity, the starting realm, portals between them. |
 | [biomes.md](biomes.md) | Draft: how a world fills with life, from grass to canopy: goals, how placement and drawing could work on voxel terrain, open questions. |
 | [climate.md](climate.md) | Draft: seasons and weather as swings in temperature, daylight and precipitation that bodies, ground, plants and creatures respond to; the year's length. |
-| [gameplay.md](gameplay.md) | Core loops, survival needs, hostile life, bases and defence; terraforming phases, parked. Older than game design 001, whose loops would replace these if adopted. |
-| [survival.md](survival.md) | Draft: the survival attributes (health, stamina, oxygen, hunger, thirst) and how they vary by world. |
+| [survival.md](survival.md) | Needs, rhythms and death: hunger, thirst, warmth, breath, rest; day and night; coming back. |
+| [combat.md](combat.md) | Real time on stamina, after Enshrouded; weapon skills by doing; abilities from essences; rank decides more than skill. |
+| [creatures.md](creatures.md) | Wildlife with routines and a food chain; monsters that form where magic pools. |
+| [essences.md](essences.md) | Essences, abilities and ranks; skills, studied techniques and powers as three ways to grow; mana. |
+| [crafting.md](crafting.md) | Resources by region and rank, tools, stations run by recruits, learning what to make. |
+| [people.md](people.md) | Settlements with days, quests as what people say, recruits, trade. |
+| [your-character.md](your-character.md) | No class, getting around big round realms, what is on screen and what is not. |
+| [arc.md](arc.md) | The start without a tutorial, the long game by rank, playing together. |
+| [settings.md](settings.md) | How any realm's theme works: gameplay roles every setting fills, rank the only power axis. |
+| [techno-realm.md](techno-realm.md) | One setting worked through: a realm of machines that run on magic, without guns. |
 | [player.md](player.md) | Draft: the player's body, tools, equipment, backpack and action bar, acting on the world, building. Open questions for the developers. |
 | [items.md](items.md) | Items and containers: equipment, backpack, action bar and storage, on a Subnautica baseline, and how they work in code. |
 | [characters.md](characters.md) | How bodies, clothing, armour and weapons are made so every item fits every body without fitting each by hand (D128). Questions for the developers. |

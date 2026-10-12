@@ -42,7 +42,7 @@ Picking something up puts it in the first place it fits, scanning from the top l
 ## Items
 
 - **A kind of item is an entry in a list**, as buildables are (D56): its name, its size in cells, and which equipment slot it goes in, if any. Adding an item is adding an entry, in [`assets/data/items.ron`](../assets/data/items.ron) (D136), which also says what it does in hand or worn; no code names an item. A planet's theme names which kinds are found there (D59); planets get no item code of their own.
-- **Items wear** (D99): tools, weapons and armour carry their condition, as one-of-a-kind items with state of their own; a broken one stops working but is kept, and is repaired at a station ([crafting.md](proposals/game-design-001/crafting.md#wear-and-repair)). In `terra_items`, an item carries how worn it is and a kind how much it lasts; wearing and mending are changes like any other, so the server can check them.
+- **Items wear** (D99): tools, weapons and armour carry their condition, as one-of-a-kind items with state of their own; a broken one stops working but is kept, and is repaired at a station ([crafting.md](crafting.md#wear-and-repair)). In `terra_items`, an item carries how worn it is and a kind how much it lasts; wearing and mending are changes like any other, so the server can check them.
 - **Every item has an identity**, so the action bar can point at it and the server can say which one moved.
 - **Where raw items come from**: harvesting returns a yield in cubic metres, objects or square metres (D45). A table in data turns a yield into items. What the raw items are is design and still open (D43, D55).
 

@@ -1,6 +1,6 @@
 # Essences, abilities and ranks
 
-Part of [game design 001](README.md). A proposal for the developers to react to; nothing here is decided unless it cites a decision.
+Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of truth on 2026-10-12, D89). Each item is as settled as the decision it cites; the rest is a proposal for the developers to react to.
 
 ## What the developers have said
 
@@ -10,7 +10,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 ## Based on
 
-**He Who Fights With Monsters.** What I could confirm: a person absorbs essences, each giving abilities themed on it; three essences together produce a fourth, the confluence, from their combination. As I recall, unchecked: abilities and people climb ranks (iron, bronze, silver, gold, diamond), and each step changes what an ability does, not only its strength.
+**He Who Fights With Monsters**, as world-building, not content: the fundamentals are written out in our own words in [lore.md](lore.md#essences-and-powers), and every essence and ability is ours (D125). What I could confirm of the books: a person absorbs essences, each giving abilities themed on it; three essences together produce a fourth, the confluence, from their combination. As I recall, unchecked: abilities and people climb ranks (iron, bronze, silver, gold, diamond), and each step changes what an ability does, not only its strength.
 
 From the developers, 2026-10-11 (D98): use the books' system as the baseline and a guide, and tweak it where the game needs.
 

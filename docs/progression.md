@@ -1,6 +1,6 @@
 # Progression: skills, research and unlocks
 
-The tech demo is prototyping [game design 001](proposals/game-design-001/crafting.md#learning-what-to-make) (D89, Leaning), which proposes learning a thing by finding it rather than a research tree; until it is adopted, this page stands.
+Part of the game's design ([gameplay.md](gameplay.md), D89). You grow in three ways, set out in [essences.md](essences.md#three-layers): skills by doing, techniques by study, and powers from essences, all on the rank ladder. What you can make is unlocked by research (D68), which the design proposes be learning by finding rather than a tree of technology ([crafting.md](crafting.md#learning-what-to-make)), with realms opening new things as Terraria's zones do (D85).
 
 Status: the developers said on 2026-10-10 that the player has skills that grow (D88), and that there is a research system that unlocks more technology and more things to craft, and that they are not yet sure how you actually research or unlock new nodes. Everything below the first section is a proposal. Nothing is built.
 
@@ -58,6 +58,6 @@ To react to, not to choose from:
 
 1. **How is something researched?** Scanning, spending, time at a machine, the planet's progress, or a mix?
 2. **Per player, per group, or per server?**
-3. **Does research differ by planet?** Does a new planet open new nodes (D17, D59)? Leaning: finding a different culture on a planet might unlock different things (D86).
+3. **Does research differ by realm?** Does a new realm open new things (D17, D59)? Leaning: finding a different culture in a realm might unlock different things (D86).
 4. **Can anything be lost** once unlocked?
-5. **How does it pace the game?** Is the starter planet the first tier?
+5. **How does it pace the game?** Is the starting realm the first tier, and do ranks (essences.md) pace the rest?

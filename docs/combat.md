@@ -1,6 +1,6 @@
 # Combat
 
-Part of [game design 001](README.md). A proposal for the developers to react to; nothing here is decided unless it cites a decision.
+Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of truth on 2026-10-12, D89). Each item is as settled as the decision it cites; the rest is a proposal for the developers to react to.
 
 ## What the developers have said
 

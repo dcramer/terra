@@ -1,6 +1,6 @@
 # Resources, tools and crafting
 
-Part of [game design 001](README.md). A proposal for the developers to react to; nothing here is decided unless it cites a decision.
+Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of truth on 2026-10-12, D89). Each item is as settled as the decision it cites; the rest is a proposal for the developers to react to.
 
 ## What the developers have said
 
@@ -31,7 +31,7 @@ One tool to a job, carried on the action bar (D66):
 | Pickaxe | Rock, ore |
 | Shovel | Earth, sand, digging and filling ground |
 | Knife or sickle | Plants, fibres, hides |
-| Hammer | Building and repair ([construction.md](../../construction.md)) |
+| Hammer | Building and repair ([construction.md](construction.md)) |
 | Rod, net, bow | Fish, game |
 
 **A tool's material decides what it can work**: a stone pickaxe will not break iron ore. Better tools are made from what the last tool let you reach, which is the Valheim ladder.

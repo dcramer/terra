@@ -86,7 +86,7 @@ Every checkpoint reports frame times from the real play loop, not only from scri
 
 Proposed 2026-10-11, for the developers to edit. Being built as the tech demo, the sandbox's play experiment: `cargo xtask play` plays it, `cargo xtask loop` plays its loop by script and checks every step. Where it stands is below.
 
-**Question:** is the core loop of [game design 001](proposals/game-design-001/README.md) fun, with almost nothing else around it? It is a prototype of that proposal (D89), built to answer this question before the proposal is adopted or anything is spent on scale.
+**Question:** is the core loop of [game design 001](gameplay.md) fun, with almost nothing else around it? It is a prototype of that proposal (D89), built to answer this question before the proposal is adopted or anything is spent on scale.
 
 If the loop is not fun with one monster and one settlement, more content will not fix it.
 

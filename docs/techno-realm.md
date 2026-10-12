@@ -1,6 +1,6 @@
 # A realm of machines
 
-A proposal for game design 001: how a realm can feel technologically advanced without guns, without science fiction, and without being better than magic. Open, for the developers to react to; nothing here is built or decided. It is one setting worked through under the general frame in [settings.md](settings.md), where every realm's theme fills the same roles.
+Part of the game's design ([gameplay.md](gameplay.md), D89), as a proposal: how a realm can feel technologically advanced without guns, without science fiction, and without being better than magic. Open, for the developers to react to; nothing here is built or decided. It is one setting worked through under the general frame in [settings.md](settings.md), where every realm's theme fills the same roles.
 
 ## What the developers have said
 
@@ -67,7 +67,7 @@ A hold that uses all three is stronger than one that uses one, which is a reason
 | System | What changes |
 |---|---|
 | Crafting ([crafting.md](crafting.md)) | New stations and recipes from the realm; cores as an ingredient; the smelter and campfire's way of working on their own (D109) is where machines start. |
-| Building ([construction.md](../../construction.md)) | Machines are stations and props, single models placed from the catalogue like any other (D108). Rails, chutes and lifts are parts of a build. |
+| Building ([construction.md](construction.md)) | Machines are stations and props, single models placed from the catalogue like any other (D108). Rails, chutes and lifts are parts of a build. |
 | Combat ([combat.md](combat.md)) | Unchanged at its centre: melee, a bow, abilities. Turrets and constructs fight beside you at their cores' rank. |
 | People ([people.md](people.md)) | Recruits stay worth more than constructs: they do skilled work, teach, and talk. |
 | Your gear | Machines you carry work in every realm, as all gear does; machines you build stay in the claim where they stand. |

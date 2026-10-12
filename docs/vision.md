@@ -2,30 +2,26 @@
 
 ## Pitch
 
-Draft, rewritten on 2026-10-10 when the developers dropped space and, probably, terraforming.
+Draft, rewritten on 2026-10-12 when the developers adopted the game's design ([gameplay.md](gameplay.md), D89).
 
-Players survive and build across many very different worlds, realms reached through portals or something like them (D72, D87), starting on one that is easy to live on. Each world has its own land, life, cultures and dangers (D59, D86). You grow as you go: many skills that you gain by doing things and improve by doing them more (D88). Worlds are in [worlds.md](worlds.md); surviving them is in [survival.md](survival.md).
+**The world goes on whether or not you are there, and you join in.** A sandbox with survival and RPG in it, closer to Enshrouded, across many realms reached through portals (D17, D72, D87). Magic pools and makes monsters, animals roam and hunt, settlements trade, grow and get attacked, and what players do changes where it goes next. You grow by doing, by study and by the essences you find, climbing ranks (D88, D124), and you hold ground with bases, outposts and the people you recruit (D90). The universe works on lore taken from *He Who Fights With Monsters* as world-building, in our own words ([lore.md](lore.md), D125).
 
-The earlier pitch, of dead planets terraformed into living ones, is parked with terraforming (D60).
-
-**Under review (D89):** the developers are considering a shift toward a living world closer to Enshrouded, with *He Who Fights With Monsters* as a core basis; see [game design 001](proposals/game-design-001/README.md).
+The earlier pitches, of dead planets terraformed into living ones and of surviving across a dozen planets, are gone (D60, D17).
 
 ## Pillars
-
-The tech demo is prototyping [game design 001](proposals/game-design-001/README.md) (D89, Leaning), which would revise pillar 4; until it is adopted, these stand.
 
 Draft. A feature that serves none of these is cut.
 
 1. **The world is the main character.** Persistent worlds, each unlike the others, that visibly change because of you.
 2. **Always getting better.** Many skills, gained by doing and improved by doing more, so there is always a sense of progression (D88). (Replaces "dead to alive", parked with terraforming, D60.)
 3. **Hold your ground.** Survival means establishing bases and outposts and keeping them, with recruited people to help defend them (D90).
-4. **Local action, global consequence.** You change a place; places add up to a planet.
+4. **The world goes on, and you change where it goes.** Monsters gather and surge, settlements rise and fall, whether or not you are there; what you do, and what you leave undone, sticks (D95).
 5. **Find your own way.** The game does not hold your hand. There may be quests, but no tracked quest log pointing you where to go and no journal: you are told, you look, you find (D92). The world is rich with systems, but you learn them by looking and doing, not from a display of every number (D93).
 6. **Seamless, and together.** No loading screens within a world. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
 
 ## Our inspirations
 
-Named by the developers on 2026-10-11 as the games and books we draw on (D85), with Red Dead Redemption 2, The Forest, Terraria, Dune: Awakening and Sons of the Forest added on 2026-10-12. What we take is design and systems; a game's look is a separate question, answered by the art direction ([art.md](art.md), D14). Each design should be based on games we know we enjoy; how these combine for [game design 001](proposals/game-design-001/README.md) is in [research/reference-games.md](../research/reference-games.md).
+Named by the developers on 2026-10-11 as the games and books we draw on (D85), with Red Dead Redemption 2, The Forest, Terraria, Dune: Awakening and Sons of the Forest added on 2026-10-12. What we take is design and systems; a game's look is a separate question, answered by the art direction ([art.md](art.md), D14). Each design should be based on games we know we enjoy; how these combine for the game's design is in [research/reference-games.md](../research/reference-games.md).
 
 | Inspiration | We take | We leave |
 |---|---|---|
@@ -60,7 +56,7 @@ Astroneer is deliberately not on this list (D15). It shows the tech is achievabl
 
 ## Tone
 
-Slightly harder than Planet Crafter, well short of Vintage Story. Threats are real but are solved by building, not by reflexes. No fail state.
+Slightly harder than Planet Crafter, far gentler than Vintage Story (D3): challenging, with goals rather than punishment (D62). Threats are real, met by fighting, by building and by holding ground with recruits (D90). No fail state (D18).
 
 ## Non-goals
 

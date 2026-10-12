@@ -55,11 +55,11 @@ There is no space (D4). Worlds are reached probably by portals or something simi
 
 ## Tools
 
-From the developers, 2026-10-11 (D96): no science-fiction toolset, and no single tool that harvests everything. Each job has its own tool: an axe, a pickaxe, a shovel, a knife, a hammer for building. The proposal under game design 001 is in [crafting.md](proposals/game-design-001/crafting.md#tools); the earlier set here (an excavator, a harvester, a scanner) is withdrawn. The sandbox's single cutter is a stand-in.
+From the developers, 2026-10-11 (D96): no science-fiction toolset, and no single tool that harvests everything. Each job has its own tool: an axe, a pickaxe, a shovel, a knife, a hammer for building. The proposal under game design 001 is in [crafting.md](crafting.md#tools); the earlier set here (an excavator, a harvester, a scanner) is withdrawn. The sandbox's single cutter is a stand-in.
 
 7. Answered: **one multitool or separate tools?** Separate tools (D96).
 8. Answered: **is digging the same tool as harvesting?** No: a shovel digs, a pickaxe breaks rock, an axe fells trees (D96).
-9. **Do tools run down?** Open: whether items wear and need repair. Recommended in [crafting.md](proposals/game-design-001/crafting.md#wear-and-repair).
+9. **Do tools run down?** Open: whether items wear and need repair. Recommended in [crafting.md](crafting.md#wear-and-repair).
 10. **Do tools improve?** Proposed: a tool's material decides what it can work, so better tools open new resources.
 
 ## Acting on the world
@@ -103,7 +103,7 @@ Answered on 2026-10-10 by D84:
 
 ## The map
 
-There will be a map (D76). What it shows and how far it reaches are not yet decided. It must not hold your hand (D92): no quest markers pointing the way. It shows only where you have been, and for now where you are (D76); proposed, also what you mark ([game design 001](proposals/game-design-001/README.md#no-hand-holding)).
+There will be a map (D76). What it shows and how far it reaches are not yet decided. It must not hold your hand (D92): no quest markers pointing the way. It shows only where you have been, and for now where you are (D76); proposed, also what you mark ([game design 001](gameplay.md#no-hand-holding)).
 
 Open:
 

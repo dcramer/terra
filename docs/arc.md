@@ -1,6 +1,6 @@
 # The arc: the start, the long game, and playing together
 
-Part of [game design 001](README.md). A proposal for the developers to react to; nothing here is decided unless it cites a decision.
+Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of truth on 2026-10-12, D89). Each item is as settled as the decision it cites; the rest is a proposal for the developers to react to.
 
 ## What the developers have said
 
@@ -10,7 +10,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 ## The fiction
 
-Open, and the developers' to write. What it has to answer: what the realms are and why portals join them; what magic is and why it pools; whether there are gods, as there are in the books; and, for premise B, what is spreading and why. My suggestion: say little and let players find it, in ruins, in what people believe, and in what the portals lead to.
+The fundamentals are in [lore.md](lore.md): what magic is and why it pools, where monsters and essences come from, ranks, and what the realms are and why portals join them, from the books' world-building in our own words (D125). Still open: whether there are gods, and, for premise B, what is spreading and why. My suggestion: say little and let players find it, in ruins, in what people believe, and in what the portals lead to.
 
 ## The first hour
 
@@ -32,7 +32,7 @@ Without tutorials or markers (D92), the start has to teach by its shape.
 ## Playing together
 
 - **A few friends** share claims, quests and kills; the small case (D51).
-- **Groups** hold claims together and share stations, recruits and travel ([construction.md](../../construction.md#claims)).
+- **Groups** hold claims together and share stations, recruits and travel ([construction.md](construction.md#claims)).
 - **Many players at once** is where this world earns a thousand: a surge on a city, a frontier pushed back by everyone near it, a great monster that needs a crowd. What the server can carry decides how many (D52).
 
 ## Questions

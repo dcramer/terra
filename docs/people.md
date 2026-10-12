@@ -1,6 +1,6 @@
 # People: NPCs, quests, recruits and trade
 
-Part of [game design 001](README.md). A proposal for the developers to react to; nothing here is decided unless it cites a decision.
+Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of truth on 2026-10-12, D89). Each item is as settled as the decision it cites; the rest is a proposal for the developers to react to.
 
 ## What the developers have said
 
@@ -15,7 +15,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 ## Life in a settlement
 
-- **People have days**: work, eat, sleep, gather, keep watch. A settlement's needs ([README](README.md#factions-and-settlements-after-kenshi)) show in what they do and say.
+- **People have days**: work, eat, sleep, gather, keep watch. A settlement's needs ([README](gameplay.md#factions-and-settlements-after-kenshi)) show in what they do and say.
 - **Travellers** go between settlements: traders, patrols, pilgrims, refugees. You meet them on roads.
 
 ## Talking, and quests

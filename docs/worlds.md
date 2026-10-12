@@ -1,4 +1,6 @@
-# Worlds
+# Worlds: the realms as places
+
+**The worlds are realms** (D17, D87, D89): as many as the generator makes, with no fixed number, each a whole round world reached by portals. They are not a set of a dozen planets, which was the plan before space was dropped. Where this page says "planet", it means one realm's round world. How realms work as places in the lore is in [lore.md](lore.md#realms-and-the-ways-between), and how their themes are made in [settings.md](settings.md).
 
 Status: the developers set out on 2026-10-10 what the planets are to be. What they said is below, as they said it, then what follows from it and what is still open. Nothing in this doc is built except a single stand-in planet in the sandbox.
 
@@ -56,7 +58,7 @@ How the candidates feel, for a player jogging at the sandbox's 4.3 m/s and a cra
 | **30 km** | **189 km** | **12 hours** | **31 minutes** | **319 m** | **11,300 km²** |
 | 60 km (Space Engineers' Earth-like planet, as commonly cited) | 377 km | 24 hours | an hour | 452 m | 45,200 km² |
 
-**Proposal: about 30 km for the starter planet, and 10 to 50 km for the rest, set by each planet's theme** (D13, Leaning until it is walked). At 30 km, walking round takes half a day; flying round takes half an hour; the horizon from the ground is a few hundred metres, so the planet feels like a world and not a ball, and from a hilltop or the air the curve shows. A dozen such planets are around a hundred thousand square kilometres, which a thousand players will not fill (D52).
+**Proposal: about 30 km for the starter planet, and 10 to 50 km for the rest, set by each planet's theme** (D13, Leaning until it is walked). At 30 km, walking round takes half a day; flying round takes half an hour; the horizon from the ground is a few hundred metres, so the planet feels like a world and not a ball, and from a hilltop or the air the curve shows. Realms of this size, with no limit on how many, are far more ground than a thousand players will fill (D52).
 
 What makes a planet that size affordable:
 
@@ -81,7 +83,7 @@ Open:
 
 Said later the same day, with "maybe" and "idk": a planet's setting shows in the **cultures, or tribes, found there**. Finding a different culture might unlock different things, and you might recruit people from it. The art style stays the same across the whole game; what changes from culture to culture is the exact models and details, made by the procedural generation and the theme. Your gear is your gear: what you carry goes with you from planet to planet.
 
-How any setting can work, after the developers asked on 2026-10-11 for themes that work as the art's four-world mood board does, is proposed in [settings](proposals/game-design-001/settings.md) (Open): every setting fills the same gameplay roles, as models fill palette roles, and rank is the only power axis. A "futuristic" one, advanced without guns and not superior to magic, is worked through in [a realm of machines](proposals/game-design-001/techno-realm.md).
+How any setting can work, after the developers asked on 2026-10-11 for themes that work as the art's four-world mood board does, is proposed in [settings](settings.md) (Open): every setting fills the same gameplay roles, as models fill palette roles, and rank is the only power axis. A "futuristic" one, advanced without guns and not superior to magic, is worked through in [a realm of machines](techno-realm.md).
 
 So a setting proposed as data would name its cultures, and a culture its models, its colours within the one art style, what it can teach you, and who in it might join you.
 
