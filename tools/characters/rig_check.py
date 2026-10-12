@@ -105,6 +105,7 @@ bones = {b.name: b for b in arm.data.bones}
 mw = body.matrix_world
 height = max((mw @ v.co).z for v in body.data.vertices) - min((mw @ v.co).z for v in body.data.vertices)
 unweighted = over = bad_sum = far = 0
+far_at = {}
 main_bone = []
 for v in body.data.vertices:
     ws = [(groups[g.group], g.weight) for g in v.groups if g.weight > 0.001 and groups.get(g.group) in bones]
@@ -120,12 +121,14 @@ for v in body.data.vertices:
     p = arm.matrix_world.inverted() @ (mw @ v.co)
     q, t = intersect_point_line(p, b.head_local, b.tail_local)
     q = b.head_local if t < 0 else b.tail_local if t > 1 else q
-    far += ((arm.matrix_world.to_3x3() @ (p - q)).length / height) > LIMITS["reach"]
+    if (arm.matrix_world.to_3x3() @ (p - q)).length / height > LIMITS["reach"]:
+        far += 1
+        far_at[name] = far_at.get(name, 0) + 1
 n = len(body.data.vertices)
 report["weights"] = {"vertices": n, "unweighted": unweighted, "over_4_bones": over, "not_summing_to_1": bad_sum}
 ok["weights"] = unweighted == 0 and over == 0
 report["weights"]["note"] = "sums are normalised on export" if bad_sum else ""
-report["reach"] = {"far_share": round(far / n, 4)}
+report["reach"] = {"far_share": round(far / n, 4), "at": dict(sorted(far_at.items(), key=lambda t: -t[1])[:4])}
 ok["reach"] = far / n <= LIMITS["reach_fail_share"]
 
 # Seams: the copies of a vertex at one position must move together.

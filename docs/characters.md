@@ -1,6 +1,6 @@
 # Characters and what they wear
 
-How bodies, clothing, armour, packs and weapons are made so that **every item fits every body without being fitted to each one by hand**. Many of everything (D127): a new item is made once and works on every character, and a new body works with every item already made. The cost grows with items plus bodies, never items times bodies. Current thinking (D112, D128, Leaning); the research behind it is [research/one-mesh-for-every-body.md](../research/one-mesh-for-every-body.md) and [research/character-creators.md](../research/character-creators.md).
+How bodies, clothing, armour, packs and weapons are made so that **every item fits every body without being fitted to each one by hand**. Many of everything (D127): a new item is made once and works on every character, and a new body works with every item already made. The cost grows with items plus bodies, never items times bodies. Current thinking (D112, D128, Leaning); the build plan is [character-system-plan.md](character-system-plan.md); the research behind it is [research/one-mesh-for-every-body.md](../research/one-mesh-for-every-body.md) and [research/character-creators.md](../research/character-creators.md).
 
 ## The idea
 
@@ -17,11 +17,11 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 
 ### Bodies
 
-- **The shared mesh:** MakeHuman's body (hm08), 13,380 vertices, all quads, without its helpers. Its shapes are our templates. Its own targets (gender, weight, muscle, height, proportions) are there if customisation grows.
-- **Our skeleton** (the Quaternius one, plus forearm twist bones) in a T-pose, its joints placed from the mesh for each shape. Clips carry rotations, and the hips' height scaled to the body, so they play on any proportions.
-- **A new body** (a template, D111) is made by Tripo from its sheet, as now, then fitted: the shared mesh's own shapes first, then a smooth residual, and its texture baked onto the shared layout. The result is one more shape and one texture, and works with every item already made.
-- **Sockets**, the same names and axes on every body, placed from each body's own joints and skin: hands, head, back, belt.
-- **Patches** (1024), cut once on the shared mesh.
+- **One base body asset, made once and checked**, the single source of truth: a mesh in our T-pose with its texture layout, our skeleton, skin weights made for that mesh, the skin patches, and the rules that place joints and sockets on the skin. It starts from MakeHuman's mesh (CC0, clean all-quad topology), posed into our T-pose; its weights start from MakeHuman's and are fixed on the base until the rig checks pass. Nothing about it is taken from a generated body.
+- **A body is only a shape of the base**: new positions for the same vertices. Its weights and patches are the base's; its joints and sockets are found on its own skin by the base's rules, so a taller or heavier body gets its own skeleton. Every animation plays on it, since clips carry rotations and the hips' height is scaled to the body.
+- **A new body (a template, D111) from a design**: Tripo makes the design's model from its sheet, as now. Its pose is matched by turning the base's bones, its shape fitted (the base's own shapes first, a smooth residual after, the face by face shapes only so eyes and mouth stay made to move), and the result turned back into the T-pose. Tripo then paints the base's layout from the design's front view. A design gives a shape and a skin, nothing else.
+- **Customisation** is mixing shapes, the same thing as a template.
+- **Sockets**, the same names and axes on every body: hands, head, back, belt.
 - Hair is a separate part, bound to the head like gear (D112).
 
 ### Clothing and armour (they bend with the body)

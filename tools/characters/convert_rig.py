@@ -94,6 +94,10 @@ bottom = min((body.matrix_world @ v.co).z for v in body.data.vertices)
 s = height / (top - bottom)
 turn = Matrix.Rotation(-math.pi / 2, 4, "Z") @ Matrix.Scale(s, 4) @ Matrix.Translation((0, 0, -bottom))
 joints = {b.name: turn @ (t_arm.matrix_world @ b.head_local) for b in t_arm.data.bones}
+if "DEF-hips" in joints:
+    # Already on our bones (the shared mesh's bodies): only the directions and twist to do.
+    MAP, JOINT = {}, {b: b for b in joints if b.startswith("DEF-")}
+    joints["Hip"] = joints["DEF-hips"]
 # The body, in world space under the same transform, unparented.
 mw = body.matrix_world.copy()
 body.parent = None
@@ -148,7 +152,9 @@ groups = {g.index: g.name for g in body.vertex_groups}
 for v in body.data.vertices:
     acc = {}
     for g in v.groups:
-        ours = MAP.get(groups.get(g.group))
+        theirs = groups.get(g.group)
+        # Weights already on our bones (the shared mesh's own) keep their names.
+        ours = MAP.get(theirs) or (theirs if theirs and theirs.startswith("DEF-") else None)
         if ours and g.weight > 0:
             acc[ours] = acc.get(ours, 0.0) + g.weight
     weights[v.index] = acc
