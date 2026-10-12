@@ -90,7 +90,7 @@ When the code cannot settle a question, for example what a reply looks like, cap
   - `import` keeps UVs only when the file has them.
   - `uv` waits for an unwrap already running.
 - **Added from the app:** `model --variations` (P2), `edit` (Mesh Edit), `unanimate`, `cancel`, `restore`, `fork`, `rename`, `delete`, and `show` now lists the project's steps.
-- **Run live, and working:** `show`, `animate`, `unanimate`, `rename`, `fork`, `restore`, `image` (with and without a reference), `import`, `rig` with V3 Mixamo and with `--type other` (a wolf, rigged as a quadruped), `model` at the new defaults (charged 55, as the README says), `model --model p2 --variations 2`, `edit`, `cancel` (nothing charged, no step left), and `export` of a rigged model.
+- **Run live, and working:** `show`, `animate`, `unanimate`, `rename`, `fork`, `restore`, `image` (with and without a reference), `import`, `rig` with V3 Mixamo and with `--type other` (a wolf, rigged as a quadruped), `model` at the new defaults (charged 55, as the README says), `model --model p2 --variations 2`, `edit`, `cancel` (nothing charged, no step left), `export` of a rigged model, and `delete`.
 - **Found by running:**
   - `export` left a rigged model's skeleton out; the app keeps it (`with_animation` is true for any rigged model), and so does the CLI now.
   - Studio keeps a quad Smart Mesh as FBX, which the CLI had saved under a `.glb` name and could not read parts from. It now saves it as `.fbx`, and reads parts and faces through a GLB export. An export faces the standard glTF way while Studio keeps models facing +X, which our character tools turn themselves, so results stay as Studio keeps them.
