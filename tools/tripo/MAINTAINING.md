@@ -70,6 +70,15 @@ When the code cannot settle a question, for example what a reply looks like, cap
 - `rig` defaults to the `unreal` skeleton where the app defaults to `mixamo`: on our base body it is the only one whose twist bones carry skin.
 - `--skeleton tripo` sends the V1 rig (`v1.0-20240301`), which the app no longer offers. Our character converter reads its bone names and `unreal`'s, and on the same body V1 passed our rig check where V3's `mixamo` and `unreal` rigs pinched at the knees (2026-10-12; research/tripo-studio-api.md). Check again when Tripo ships a new rig: `bundle.ts` lists the rig enum.
 
+### Not yet standard: which way models face
+
+Results are saved as Studio keeps them, facing +X, where glTF's standard is +Z forward and +Y up (as our skeleton faces). They should be standard; they are not yet because the character tools (`tools/characters`) turn every Tripo model 90° themselves and the art in `art/` was made that way, so the CLI and those change together, in one commit. Worked out and checked on 2026-10-12, to do then:
+
+1. **CLI:** save every result through `exportFile(…, "glb", rigged, [], false, textureSize(op))` in `steps.ts`'s `finish`, which faces +Z (`export_orientation: "-y"`, the only value the app sends), plain, with the skeleton if rigged; leave `download` as Studio's own file. Give `import` `transform_matrix: [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1]` (column-major: +Z to +X about +Y) instead of the identity. A standard GLB imported with it and exported came back joint for joint as it went in; with the identity it came back turned 90°.
+2. **Character tools:** drop the turn about Z in `convert_rig.py`, `morph.py`, `rig_base.py`, `shell_garment.py` and `paint_skin.py` (both ways), add 90 to each piece's turn in `fit_gear.py`'s `PIECES`, and correct the note in `compare.py`.
+3. **Art:** re-save the 14 Tripo files in `art/` standard through Studio itself: import each as it is (identity matrix), export it as GLB at its own texture size (one is 4096) with its skeleton, delete the project. A round trip like that kept vertices, triangles, texture and skeleton exactly.
+4. **Check:** `build_bodies.sh` before and after; the game's character files should match to rounding.
+
 ## Last checked
 
 2026-10-12, against build `d87d2926-d393-4b74-a71f-390dba757862`.
