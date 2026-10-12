@@ -68,6 +68,9 @@ pub fn prompt(
         (Kind::Room(_), Target::Ground { clear: false, .. }) => {
             "Trees or rocks are in the way: clear them first".to_string()
         }
+        (Kind::Room(_), Target::Ground { item: Some(_), .. }) => {
+            "The outlined item is in the way: move it or take it apart first".to_string()
+        }
         (Kind::Room(_), Target::Ground { adds: false, .. }) => {
             "That is all indoors already".to_string()
         }

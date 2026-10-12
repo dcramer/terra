@@ -413,7 +413,7 @@ impl Standing {
     }
 
     /// Whether two boxes share space. Boxes that only touch do not.
-    fn overlaps(&self, other: &Standing) -> bool {
+    pub fn overlaps(&self, other: &Standing) -> bool {
         const TOUCHING: f32 = 0.03;
         let (low, high) = (self.lift, self.lift + self.half.y * 2.0);
         let (other_low, other_high) = (other.lift, other.lift + other.half.y * 2.0);

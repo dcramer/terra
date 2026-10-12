@@ -59,10 +59,12 @@ pub enum Action {
     /// Raise or lower what is being placed, as Shift and the wheel do.
     Raise,
     Lower,
+    /// Undo the last thing built, laid or taken apart, within a while.
+    Undo,
 }
 
 impl Action {
-    pub const ALL: [Action; 29] = [
+    pub const ALL: [Action; 30] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -92,6 +94,7 @@ impl Action {
         Action::ZoomOut,
         Action::Raise,
         Action::Lower,
+        Action::Undo,
     ];
 
     /// What the options menu calls it.
@@ -126,6 +129,7 @@ impl Action {
             Action::ZoomOut => "Camera further",
             Action::Raise => "Raise what you place",
             Action::Lower => "Lower what you place",
+            Action::Undo => "Undo the last thing built",
         }
     }
 
@@ -161,6 +165,7 @@ impl Action {
             Action::ZoomOut => "zoom_out",
             Action::Raise => "raise",
             Action::Lower => "lower",
+            Action::Undo => "undo",
         }
     }
 
@@ -197,6 +202,8 @@ impl Action {
             Action::ZoomOut => (Key(KeyCode::Minus), None),
             Action::Raise => (Key(KeyCode::PageUp), None),
             Action::Lower => (Key(KeyCode::PageDown), None),
+            // Enshrouded's key. Ctrl and Z would roll, Ctrl being the roll.
+            Action::Undo => (Key(KeyCode::KeyY), None),
         };
         [Some(first), second]
     }

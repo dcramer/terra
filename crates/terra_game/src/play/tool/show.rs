@@ -65,6 +65,7 @@ pub(super) fn highlight(
         Target::Ground { fits: false, .. }
             | Target::Ground { adds: false, .. }
             | Target::Ground { clear: false, .. }
+            | Target::Ground { item: Some(_), .. }
             | Target::Edge { fits: false, .. }
             | Target::Spot {
                 blocked: Some(_),
@@ -307,6 +308,18 @@ pub(super) fn highlight(
             if let Some(Blocked::Item(other)) = blocked
                 && let Ok((prop, transform)) = props.get(other)
             {
+                boxed(&mut gizmos, prop.half, transform, REFUSED_COLOUR);
+            }
+        }
+        // A room cannot go over something set down where it would stand.
+        (
+            _,
+            Target::Ground {
+                item: Some(other), ..
+            },
+        ) => {
+            commands.entity(ghost).insert(Visibility::Hidden);
+            if let Ok((prop, transform)) = props.get(other) {
                 boxed(&mut gizmos, prop.half, transform, REFUSED_COLOUR);
             }
         }

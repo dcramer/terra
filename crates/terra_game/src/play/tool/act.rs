@@ -63,6 +63,67 @@ pub(super) fn act(
             }
             continue;
         }
+        // Undo the last thing built or taken apart, within a while (D144).
+        if intent.starts(Action::Undo)
+            && builder.work.is_none()
+            && belongings.tool_in_hand().is_some_and(|tool| tool.builds)
+        {
+            let said = match builder.done.take() {
+                Some(done) if time.elapsed_secs() - done.at_s <= UNDO_S => match done.what {
+                    Undoable::Structure {
+                        before,
+                        paid,
+                        refunded,
+                    } => {
+                        // What taking it apart gave back is taken again first.
+                        if let Some((cost, times)) = &refunded
+                            && !belongings.pay(cost, *times)
+                        {
+                            "You no longer have what taking it apart gave back"
+                        } else {
+                            site.replace_with(&before, &mut commands, &planet, &mut meshes);
+                            if let Some((cost, times)) = &paid {
+                                belongings.refund(cost, *times);
+                            }
+                            "Undone"
+                        }
+                    }
+                    Undoable::Placed(entity) => match props.get(entity) {
+                        Ok(prop) => {
+                            belongings.refund(&prop.item.cost, 1);
+                            commands.entity(entity).despawn();
+                            "Undone"
+                        }
+                        Err(_) => "It is gone already",
+                    },
+                    Undoable::TakenAway(was) => {
+                        if belongings.pay(&was.item.cost, 1) {
+                            if let Some(placed) = props::place(
+                                &mut commands,
+                                &models,
+                                &site,
+                                &planet,
+                                &was.item,
+                                was.at,
+                                was.lift,
+                                was.turn,
+                                was.indoors,
+                            ) {
+                                commands.entity(placed).insert(PlacedBy(player));
+                            }
+                            "Undone"
+                        } else {
+                            "You no longer have what taking it apart gave back"
+                        }
+                    }
+                },
+                Some(_) => "Too long ago to undo",
+                None => "Nothing to undo",
+            };
+            info!("Undo: {said}.");
+            told.write(Told::new(player, said));
+            continue;
+        }
         let held = intent.held(Action::Use);
         let click = intent.pressed(Action::Use);
         if !held {
@@ -87,6 +148,7 @@ pub(super) fn act(
             let work_at = player_at + player_at.normalize_or(Vec3::Y);
             match work.job {
                 Job::Structure { ops, pay, refund } => {
+                    let before = site.operations.clone();
                     // A room set into the ground cuts the ground away where it stands.
                     for op in &ops {
                         if let BuildOp::AddRoom { min, max } = *op {
@@ -105,12 +167,20 @@ pub(super) fn act(
                             did.write(Did(belongings.player(), Skill::Building, ONCE));
                             belongings.wear_in_hand(1);
                         }
-                        if let Some((cost, times)) = refund {
-                            belongings.refund(&cost, times);
+                        if let Some((cost, times)) = &refund {
+                            belongings.refund(cost, *times);
                         }
-                        if let Some((cost, times)) = pay {
-                            belongings.pay(&cost, times);
+                        if let Some((cost, times)) = &pay {
+                            belongings.pay(cost, *times);
                         }
+                        builder.done = Some(Done {
+                            what: Undoable::Structure {
+                                before,
+                                paid: pay,
+                                refunded: refund,
+                            },
+                            at_s: time.elapsed_secs(),
+                        });
                     }
                 }
                 Job::Place {
@@ -135,6 +205,10 @@ pub(super) fn act(
                             indoors,
                         ) {
                             commands.entity(placed).insert(PlacedBy(player));
+                            builder.done = Some(Done {
+                                what: Undoable::Placed(placed),
+                                at_s: time.elapsed_secs(),
+                            });
                         }
                         info!(
                             "Placed a {} at {}, {lift} up.",
@@ -151,6 +225,16 @@ pub(super) fn act(
                         // What does not fit in the backpack drops at the player's feet.
                         belongings.refund(&prop.item.cost, 1);
                         info!("Removed a {}.", prop.item.name);
+                        builder.done = Some(Done {
+                            what: Undoable::TakenAway(Carried {
+                                item: prop.item.clone(),
+                                at: prop.at,
+                                lift: prop.lift,
+                                turn: prop.turn,
+                                indoors: prop.indoors,
+                            }),
+                            at_s: time.elapsed_secs(),
+                        });
                         noise.write(Noise::at(Cue::TakenApart, work_at));
                         commands.entity(entity).despawn();
                     }
@@ -328,6 +412,7 @@ pub(super) fn act(
                     fits: true,
                     adds: true,
                     clear: true,
+                    item: None,
                 },
             ) if can_pay => (
                 building(vec![BuildOp::AddRoom {

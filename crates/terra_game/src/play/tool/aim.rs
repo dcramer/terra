@@ -316,6 +316,24 @@ pub(super) fn aim(
                                 && local.y > -STOREY_M
                                 && local.y < STOREY_M * 2.0
                         });
+                        // Nor is anything set down outdoors where it would stand, such as the
+                        // claim stone: it is moved or taken apart first.
+                        let footprint = Standing {
+                            at: (low + high) * 0.5,
+                            lift: -100.0,
+                            turn: 0.0,
+                            half: ((high - low) * 0.5).with_y(200.0),
+                            indoors: false,
+                        };
+                        let item = props
+                            .iter()
+                            .filter(|(_, prop, _, visibility)| {
+                                **visibility != Visibility::Hidden
+                                    && !prop.indoors
+                                    && prop.is_solid()
+                            })
+                            .find(|(_, prop, ..)| footprint.overlaps(&Standing::of(prop)))
+                            .map(|(entity, ..)| entity);
                         let adds = (0..size.x).any(|i| {
                             (0..size.y).any(|j| !site.base.contains(corner + IVec3::new(i, 0, j)))
                         });
@@ -325,6 +343,7 @@ pub(super) fn aim(
                             fits,
                             adds,
                             clear,
+                            item,
                         }
                     })
             }

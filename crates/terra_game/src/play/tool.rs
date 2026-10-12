@@ -67,6 +67,8 @@ const GRID_M: f32 = 0.5;
 /// How far one notch of the wheel turns an item, on the grid and off it, in degrees.
 const GRID_TURN: f32 = 45.0;
 const FREE_TURN: f32 = 15.0;
+/// How long after building or taking something apart it can be undone, in seconds.
+const UNDO_S: f32 = 60.0;
 /// How far one notch raises or lowers an item off the grid; on it, a grid step.
 const FREE_RAISE_M: f32 = 0.1;
 /// How high an item can be raised above where it would stand.
@@ -95,14 +97,15 @@ pub enum Target {
         open: bool,
     },
     /// Where a room would go: its lowest tile, its size in tiles, whether the ground is
-    /// low enough for it to be cut into, whether it would add anything, and whether the
-    /// place is clear of trees and rocks.
+    /// low enough for it to be cut into, whether it would add anything, whether the place
+    /// is clear of trees and rocks, and an item set down where it would stand, if any.
     Ground {
         corner: IVec3,
         tiles: IVec2,
         fits: bool,
         adds: bool,
         clear: bool,
+        item: Option<Entity>,
     },
     /// Somewhere an item could stand, in the base's own space, how far above the floor
     /// or ground, and what is in the way if anything.
@@ -145,6 +148,26 @@ enum Job {
         indoors: bool,
     },
     TakeAway(Entity),
+}
+
+/// The last thing a player built or took apart, which they can undo for a while.
+struct Done {
+    what: Undoable,
+    /// When it was done, in seconds of the game's clock.
+    at_s: f32,
+}
+
+enum Undoable {
+    /// The base changed: how it was before, and what was paid or given back for it.
+    Structure {
+        before: Vec<BuildOp>,
+        paid: Option<Price>,
+        refunded: Option<Price>,
+    },
+    /// An item built where it stands.
+    Placed(Entity),
+    /// An item taken apart: what it was and where it stood.
+    TakenAway(Carried),
 }
 
 struct Work {
@@ -192,6 +215,8 @@ pub struct Builder {
     carrying: Option<Carried>,
     /// What is being built or taken apart right now.
     work: Option<Work>,
+    /// The last thing built or taken apart, to undo.
+    done: Option<Done>,
     /// Set when something is finished: the button has to come up before the next.
     must_release: bool,
     /// Whether reshaping pulls a wall in instead of pushing it out.
@@ -228,6 +253,7 @@ impl Default for Builder {
             before_mode: None,
             carrying: None,
             work: None,
+            done: None,
             must_release: false,
             pull: false,
             shrinking: None,
