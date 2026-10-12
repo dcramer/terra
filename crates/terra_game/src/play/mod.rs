@@ -827,6 +827,20 @@ fn follow(
     **camera = Transform::from_translation(at).looking_to(looking, up);
 }
 
+/// A world with what the play systems read and write that is not of any one entity: the
+/// kinds of item, and the messages about what players carry and are told. For tests.
+#[cfg(test)]
+fn test_world() -> World {
+    let mut world = World::new();
+    world.init_resource::<inventory::Items>();
+    world.init_resource::<Messages<inventory::Gained>>();
+    world.init_resource::<Messages<inventory::Broke>>();
+    world.init_resource::<Messages<inventory::Spilled>>();
+    world.init_resource::<Messages<bag::Told>>();
+    world.init_resource::<Messages<interact::Interacted>>();
+    world
+}
+
 /// A player standing at a place, with what the world's systems read of one, for tests
 /// that put several in one world.
 #[cfg(test)]

@@ -10,10 +10,10 @@
 //! Behaviour is a few small states per creature, run in full for every one; at this
 //! scale that is cheap. Detail by distance comes when there are many (creatures.md).
 
-use super::bag::Notice;
+use super::bag::Told;
 use super::bodies::Body;
 use super::flora::ClearAround;
-use super::interact::{CanInteract, Focus, Focusing, Interactable};
+use super::interact::{CanInteract, Focusing, Interactable, Interacted};
 use super::inventory::Belongings;
 use super::skills::{Did, ONCE};
 pub use super::species::Species;
@@ -583,27 +583,31 @@ pub fn fallen(commands: &mut Commands, entity: Entity, creature: &mut Creature) 
 /// kind gives.
 fn butcher(
     mut commands: Commands,
-    focus: Res<Focus>,
+    mut interacted: MessageReader<Interacted>,
     mut belongings: Belongings,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
     mut did: MessageWriter<Did>,
     bodies: Query<(Entity, &Creature)>,
 ) {
-    let Some(mut belongings) = belongings.mine() else {
-        return;
-    };
-    if focus.used(Interactable::Carcass)
-        && let Some(entity) = focus.entity
-        && let Ok((_, creature)) = bodies.get(entity)
-        && let Some(carcass) = &creature.species.def().carcass
-    {
-        let items = belongings.items();
+    for used in interacted.read() {
+        let Some(entity) = used.on(Interactable::Carcass) else {
+            continue;
+        };
+        let (Ok((_, creature)), Some(mut inventory)) =
+            (bodies.get(entity), belongings.of(used.player))
+        else {
+            continue;
+        };
+        let Some(carcass) = &creature.species.def().carcass else {
+            continue;
+        };
+        let items = inventory.items();
         let cuts = |kind| {
             items
                 .tool(kind)
                 .is_some_and(|tool| tool.cuts(carcass.needs).is_some())
         };
-        let carries = belongings
+        let carries = inventory
             .backpack()
             .iter()
             .any(|placed| cuts(placed.item.kind));
@@ -612,29 +616,30 @@ fn butcher(
             let needed = items
                 .kinds()
                 .find(|&kind| cuts(kind))
-                .map_or("tool", |kind| items.name(kind));
-            notice.say(format!(
-                "You need a {} to butcher it",
-                needed.to_lowercase()
+                .map_or("tool", |kind| items.name(kind))
+                .to_lowercase();
+            told.write(Told::new(
+                used.player,
+                format!("You need a {needed} to butcher it"),
             ));
-        } else {
-            let gives: Vec<_> = carcass
-                .gives
-                .iter()
-                .map(|(name, count)| (items.kind(name), *count))
-                .collect();
-            let given: Vec<String> = gives
-                .into_iter()
-                .map(|(kind, count)| {
-                    let given = belongings.give(kind, count);
-                    format!("{given} {}", belongings.items().name(kind))
-                })
-                .collect();
-            info!("Butchered it for {}.", given.join(", "));
-            notice.say("Butchered it");
-            did.write(Did(belongings.player(), carcass.needs.skill(), ONCE));
-            commands.entity(entity).despawn();
+            continue;
         }
+        let gives: Vec<_> = carcass
+            .gives
+            .iter()
+            .map(|(name, count)| (items.kind(name), *count))
+            .collect();
+        let given: Vec<String> = gives
+            .into_iter()
+            .map(|(kind, count)| {
+                let given = inventory.give(kind, count);
+                format!("{given} {}", inventory.items().name(kind))
+            })
+            .collect();
+        info!("Butchered it for {}.", given.join(", "));
+        told.write(Told::new(used.player, "Butchered it"));
+        did.write(Did(used.player, carcass.needs.skill(), ONCE));
+        commands.entity(entity).despawn();
     }
     // Bodies left long enough are gone.
     for (entity, creature) in &bodies {

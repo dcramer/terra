@@ -10,8 +10,10 @@
 //! Enshrouded's rescued survivors run its stations; until one is, it says so. Who works
 //! where is read from the people themselves (`Staff`), so there is nothing to keep in step.
 
-use super::bag::Notice;
+use super::bag::{Notice, Told};
+use super::controls::Action;
 use super::grab_mouse;
+use super::intent::Intent;
 use super::interact::{Focus, Focusing, Interactable, REACH_M};
 use super::inventory::{Belongings, Cost, Inventory, InventoryScreen, Items, Made};
 pub use super::kinds::Family;
@@ -304,11 +306,12 @@ fn within_reach(player: Vec3, prop: &Prop, at: Vec3) -> bool {
 
 /// The interact key at a station opens its screen; again closes it.
 fn open(
-    focus: Res<Focus>,
+    player: Single<(&Intent, &Focus), IsLocalPlayer>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut screen: ResMut<InventoryScreen>,
 ) {
-    if !focus.pressed {
+    let (intent, focus) = *player;
+    if !intent.pressed(Action::Interact) {
         return;
     }
     let (window, mut cursor) = window.into_inner();
@@ -367,41 +370,54 @@ fn work(
     }
 }
 
-/// What a station has made goes to the player: from a worked station at once, since they
-/// are there; from one that works alone when they open it.
+/// What a station has made goes to a player: from a worked station at once, to whoever is
+/// working it; from one that works alone when they open it.
 fn hand_over(
     screen: Res<InventoryScreen>,
-    player: Single<&Transform, IsLocalPlayer>,
+    ours: Option<Single<Entity, IsLocalPlayer>>,
+    players: Query<(Entity, &Transform), (With<Player>, Without<Works>)>,
     mut stations: Query<(Entity, &Prop, &Transform, &mut Works)>,
     mut belongings: Belongings,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
     mut did: MessageWriter<Did>,
 ) {
-    let Some(mut belongings) = belongings.mine() else {
-        return;
-    };
+    let ours = ours.map(|player| *player);
     for (entity, prop, at, mut works) in &mut stations {
         let Some(station) = prop.item.station() else {
             continue;
         };
-        // A worked station hands over to whoever is working it, so only to this machine's
-        // player while they are there; one that works alone, when they open it.
-        let at_it = if station.works_alone() {
-            screen.at.is_some_and(|(open, _)| open == entity)
-        } else {
-            within_reach(player.translation, prop, at.translation)
-        };
-        if works.done.is_empty() || !at_it {
+        if works.done.is_empty() {
             continue;
         }
+        // A worked station hands over to the nearest player working it; one that works
+        // alone, to this machine's player when they open it.
+        let to = if station.works_alone() {
+            ours.filter(|_| screen.at.is_some_and(|(open, _)| open == entity))
+        } else {
+            players
+                .iter()
+                .filter(|(_, them)| within_reach(them.translation, prop, at.translation))
+                .min_by(|a, b| {
+                    let apart = |them: &Transform| them.translation.distance(at.translation);
+                    apart(a.1).total_cmp(&apart(b.1))
+                })
+                .map(|(player, _)| player)
+        };
+        let Some(mut inventory) = to.and_then(|player| belongings.of(player)) else {
+            continue;
+        };
+        let player = inventory.player();
         while let Some(&first) = works.done.first() {
             let made = RECIPES[first].makes;
-            if !belongings.receive(made) {
+            if !inventory.receive(made) {
                 if !works.told_full {
-                    notice.say(format!(
-                        "No room in your backpack: the {} waits in the {}",
-                        made.name(),
-                        station.name().to_lowercase()
+                    told.write(Told::new(
+                        player,
+                        format!(
+                            "No room in your backpack: the {} waits in the {}",
+                            made.name(),
+                            station.name().to_lowercase()
+                        ),
                     ));
                     works.told_full = true;
                 }
@@ -409,9 +425,9 @@ fn hand_over(
             }
             works.done.remove(0);
             works.told_full = false;
-            did.write(Did(belongings.player(), Skill::Crafting, ONCE));
+            did.write(Did(player, Skill::Crafting, ONCE));
             info!("Made {}.", made.name());
-            notice.say(format!("Made {}", made.name()));
+            told.write(Told::new(player, format!("Made {}", made.name())));
         }
     }
 }

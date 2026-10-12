@@ -1,17 +1,14 @@
 //! What the interact key would act on: the thing under the aiming mark, if it is within
 //! reach. You use what you look at, not whatever happens to be nearest. One system
-//! decides what that is each frame, and each feature acts only on its own kind of thing,
-//! so two never answer the same key.
+//! decides what that is each frame for every player (`Focus`) and sends their use of it
+//! (`Interacted`); each feature acts only on its own kind of thing, so two never answer
+//! the same key.
 
-use super::IsLocalPlayer;
-use super::controls::{Action, Settings};
+use super::Player;
+use super::controls::Action;
 use super::crafting::Station;
-use super::options::OptionsMenu;
-use crate::planet::MainCamera;
-use bevy::{
-    prelude::*,
-    window::{CursorGrabMode, CursorOptions},
-};
+use super::intent::Intent;
+use bevy::prelude::*;
 
 /// How far from you something can be and still be used.
 pub const REACH_M: f32 = 3.5;
@@ -64,18 +61,26 @@ impl Interactable {
 #[derive(Component, Clone, Copy)]
 pub struct CanInteract(pub Interactable);
 
-/// The nearest thing within reach, and whether the key went down for it this frame.
-#[derive(Resource, Default)]
+/// What a player's aiming mark is on, within their reach, if anything they can use.
+#[derive(Component, Default)]
 pub struct Focus {
     pub entity: Option<Entity>,
     pub what: Option<Interactable>,
-    pub pressed: bool,
 }
 
-impl Focus {
-    /// Whether the key went down on this kind of thing.
-    pub fn used(&self, what: Interactable) -> bool {
-        self.pressed && self.what == Some(what)
+/// A player used the interact key on something: each feature answers its own kind of
+/// thing, for whoever used it.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Interacted {
+    pub player: Entity,
+    pub target: Entity,
+    pub what: Interactable,
+}
+
+impl Interacted {
+    /// The thing, if this was a use of that kind of thing.
+    pub fn on(&self, what: Interactable) -> Option<Entity> {
+        (self.what == what).then_some(self.target)
     }
 }
 
@@ -84,45 +89,55 @@ impl Focus {
 pub struct Focusing;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Focus>()
+    app.register_required_components::<Player, Focus>()
+        .add_message::<Interacted>()
         .add_systems(Update, focus.in_set(Focusing));
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Finds what each player aims at within reach, and sends their use of it.
 fn focus(
-    keys: Res<ButtonInput<KeyCode>>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    settings: Res<Settings>,
-    menu: Res<OptionsMenu>,
-    cursor: Single<&CursorOptions>,
-    camera: Single<&GlobalTransform, With<MainCamera>>,
-    player: Single<&Transform, IsLocalPlayer>,
+    mut players: Query<(Entity, &Transform, &Intent, &mut Focus), With<Player>>,
     things: Query<(Entity, &CanInteract, &GlobalTransform)>,
-    mut focus: ResMut<Focus>,
+    mut interacted: MessageWriter<Interacted>,
 ) {
-    let feet = player.translation;
-    let eye = camera.translation();
-    let looking = *camera.forward();
-    // The thing within reach that the aiming mark passes closest to. It may pass a little
-    // wide, since the camera looks over a shoulder and so sees things close by from the
-    // side; it is still aiming, not whatever happens to be nearest.
-    let aimed = things
-        .iter()
-        .filter_map(|(entity, can, at)| {
-            let (height, radius) = can.0.target();
-            let middle = at.translation() + at.translation().normalize() * height;
-            let along = (middle - eye).dot(looking);
-            let off = (eye + looking * along).distance(middle);
-            let near = middle.distance(feet) - radius < REACH_M;
-            (along > 0.0 && off < radius + AIM_SLACK_M && near).then_some((
-                entity,
-                can.0,
-                off - radius,
-            ))
-        })
-        .min_by(|a, b| a.2.total_cmp(&b.2));
-    focus.entity = aimed.map(|(entity, ..)| entity);
-    focus.what = aimed.map(|(_, what, _)| what);
-    let captured = cursor.grab_mode != CursorGrabMode::None;
-    focus.pressed = !menu.open && settings.went_down(Action::Interact, &keys, &mouse, captured);
+    for (player, at, intent, mut focus) in &mut players {
+        let feet = at.translation;
+        let Some(aim) = intent.aim else {
+            continue;
+        };
+        let (eye, looking) = (aim.origin, *aim.direction);
+        // The thing within reach that the aiming mark passes closest to. It may pass a
+        // little wide, since the camera looks over a shoulder and so sees things close by
+        // from the side; it is still aiming, not whatever happens to be nearest.
+        let aimed = things
+            .iter()
+            .filter_map(|(entity, can, at)| {
+                let (height, radius) = can.0.target();
+                let middle = at.translation() + at.translation().normalize() * height;
+                let along = (middle - eye).dot(looking);
+                let off = (eye + looking * along).distance(middle);
+                let near = middle.distance(feet) - radius < REACH_M;
+                (along > 0.0 && off < radius + AIM_SLACK_M && near).then_some((
+                    entity,
+                    can.0,
+                    off - radius,
+                ))
+            })
+            .min_by(|a, b| a.2.total_cmp(&b.2));
+        let (entity, what) = (
+            aimed.map(|(entity, ..)| entity),
+            aimed.map(|(_, what, _)| what),
+        );
+        if focus.entity != entity || focus.what != what {
+            focus.entity = entity;
+            focus.what = what;
+        }
+        if let (true, Some((target, what, _))) = (intent.pressed(Action::Interact), aimed) {
+            interacted.write(Interacted {
+                player,
+                target,
+                what,
+            });
+        }
+    }
 }

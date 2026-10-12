@@ -30,14 +30,13 @@
 //! where it would stand.
 
 use super::catalogue::{self, Item, Kind, PARTS, Part};
-use super::controls::{Action, Controls};
-use super::dial::Dial;
-use super::inventory::{Belongings, Cost, InventoryScreen};
+use super::controls::Action;
+use super::intent::Intent;
+use super::inventory::{Belongings, Cost};
 use super::props::{Blocked, Prop};
 use super::work::Hold;
 use super::{IsLocalPlayer, Player};
 use bevy::{
-    input::mouse::AccumulatedMouseScroll,
     light::{NotShadowCaster, NotShadowReceiver},
     prelude::*,
 };
@@ -408,67 +407,64 @@ fn setup(
 /// Reads the keys and the wheel: switching modes, cycling variants, and turning what is
 /// in hand. The builder only answers while it is the tool in hand.
 fn choose(
-    controls: Controls,
-    scroll: Res<AccumulatedMouseScroll>,
-    dial: Res<Dial>,
-    screen: Res<InventoryScreen>,
     mut belongings: Belongings,
-    mut builder: Single<&mut Builder, IsLocalPlayer>,
+    mut players: Query<(Entity, &Intent, &mut Builder), With<Player>>,
 ) {
-    let Some(belongings) = belongings.mine() else {
-        return;
-    };
-    builder.wheel = 0;
-    if screen.open || !belongings.tool_in_hand().is_some_and(|tool| tool.builds) {
-        // Put back anything being carried, and put the part away.
-        builder.cancel = builder.is_carrying();
-        builder.stowed = true;
-        builder.before_mode = None;
-        builder.work = None;
-        return;
-    }
-    // Nothing about the job changes while it is being done.
-    if dial.open || builder.work.is_some() {
-        return;
-    }
-    if !builder.is_carrying() {
-        if controls.went_down(Action::TakeApart) {
-            builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Remove)));
+    for (player, intent, mut builder) in &mut players {
+        let Some(belongings) = belongings.of(player) else {
+            continue;
+        };
+        builder.wheel = 0;
+        if intent.busy || !belongings.tool_in_hand().is_some_and(|tool| tool.builds) {
+            // Put back anything being carried, and put the part away.
+            builder.cancel = builder.is_carrying();
+            builder.stowed = true;
+            builder.before_mode = None;
+            builder.work = None;
+            continue;
         }
-        if controls.went_down(Action::MoveItems) {
-            builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Move)));
+        // Nothing about the job changes while it is being done.
+        if intent.choosing || builder.work.is_some() {
+            continue;
         }
-    }
-    builder.snapping = builder.snap != controls.held(Action::OffGrid);
-    if controls.went_down(Action::Grid) {
-        builder.snap = !builder.snap;
-        if builder.snap {
-            builder.turn = (builder.turn / GRID_TURN).round() * GRID_TURN % 360.0;
+        if !builder.is_carrying() {
+            if intent.pressed(Action::TakeApart) {
+                builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Remove)));
+            }
+            if intent.pressed(Action::MoveItems) {
+                builder.toggle(catalogue::part_of(|kind| matches!(kind, Kind::Move)));
+            }
         }
-    }
-    if builder.stowed {
-        return;
-    }
-    // Kinds are chosen on the wheel, or stepped through with a tap of R (`dial`).
-    // One notch at a time, however the wheel reports it. Turning left and right (Z and C)
-    // stand in for the wheel.
-    let notch = |amount: f32| (amount > 0.0) as i32 - (amount < 0.0) as i32;
-    builder.wheel = notch(scroll.delta.y) + controls.went_down(Action::TurnRight) as i32
-        - controls.went_down(Action::TurnLeft) as i32;
-    if builder.wheel != 0 {
-        if builder.item().is_some() {
-            let step = if builder.snapping {
-                GRID_TURN
-            } else {
-                FREE_TURN
-            };
-            builder.turn = (builder.turn + step * builder.wheel as f32).rem_euclid(360.0);
-        } else if builder.room().is_some() {
-            builder.room_turned = !builder.room_turned;
-        } else if matches!(builder.picked().kind, Kind::Wall(_)) {
-            builder.wall_turned = !builder.wall_turned;
-        } else if matches!(builder.picked().kind, Kind::Reshape) {
-            builder.pull = !builder.pull;
+        builder.snapping = builder.snap != intent.held(Action::OffGrid);
+        if intent.pressed(Action::Grid) {
+            builder.snap = !builder.snap;
+            if builder.snap {
+                builder.turn = (builder.turn / GRID_TURN).round() * GRID_TURN % 360.0;
+            }
+        }
+        if builder.stowed {
+            continue;
+        }
+        // Kinds are chosen on the wheel, or stepped through with a tap of R (`dial`).
+        // One notch at a time, however the wheel reports it. Turning left and right (Z and C)
+        // stand in for the wheel.
+        builder.wheel = intent.wheel + intent.pressed(Action::TurnRight) as i32
+            - intent.pressed(Action::TurnLeft) as i32;
+        if builder.wheel != 0 {
+            if builder.item().is_some() {
+                let step = if builder.snapping {
+                    GRID_TURN
+                } else {
+                    FREE_TURN
+                };
+                builder.turn = (builder.turn + step * builder.wheel as f32).rem_euclid(360.0);
+            } else if builder.room().is_some() {
+                builder.room_turned = !builder.room_turned;
+            } else if matches!(builder.picked().kind, Kind::Wall(_)) {
+                builder.wall_turned = !builder.wall_turned;
+            } else if matches!(builder.picked().kind, Kind::Reshape) {
+                builder.pull = !builder.pull;
+            }
         }
     }
 }

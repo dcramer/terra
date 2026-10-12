@@ -313,7 +313,7 @@ fn draw(
     settings: Res<Settings>,
     builder: Single<&Builder, IsLocalPlayer>,
     inventory: Res<InventoryScreen>,
-    focus: Res<Focus>,
+    focus: Single<&Focus, IsLocalPlayer>,
     mut belongings: Belongings,
     cutting: Single<&Cutting, IsLocalPlayer>,
     digging: Single<&super::dig::Digging, IsLocalPlayer>,

@@ -5,11 +5,11 @@
 //!
 //! While the hammer is in hand, its edge is drawn on the ground.
 
-use super::bag::Notice;
-use super::interact::{Focus, Focusing, Interactable};
+use super::bag::Told;
+use super::interact::{Focusing, Interactable, Interacted};
 use super::inventory::{Belongings, Cost, describe};
-use super::props::Prop;
-use super::{IsLocalPlayer, LocalPlayer, Player};
+use super::props::{PlacedBy, Prop};
+use super::{IsLocalPlayer, Player};
 use crate::build::{Site, frame_at};
 use crate::planet::Planet;
 use bevy::prelude::*;
@@ -106,19 +106,25 @@ fn settle(
 /// Notices a claim stone being placed or taken away. Stones are placed by this machine's
 /// player, with the hammer or as a saved game is put back, so a new one is theirs.
 fn track(
-    placed: Query<(Entity, &Prop, &Transform), Added<Prop>>,
+    placed: Query<(Entity, &Prop, &Transform, Option<&PlacedBy>), Added<Prop>>,
     mut removed: RemovedComponents<Prop>,
-    mut ours: Single<&mut Claim, IsLocalPlayer>,
-    mut claims: Query<&mut Claim, Without<LocalPlayer>>,
+    ours: Option<Single<Entity, IsLocalPlayer>>,
+    mut claims: Query<&mut Claim>,
 ) {
-    for (entity, prop, at) in &placed {
-        if prop.item.claims {
-            ours.stone = Some((entity, at.translation));
+    for (entity, prop, at, by) in &placed {
+        if !prop.item.claims {
+            continue;
+        }
+        // Whoever placed it; a saved game's stones are this machine's player's, whose
+        // game it is.
+        let owner = by.map(|by| by.0).or(ours.as_deref().copied());
+        if let Some(mut claim) = owner.and_then(|owner| claims.get_mut(owner).ok()) {
+            claim.stone = Some((entity, at.translation));
             info!("Claimed the land around {}.", at.translation);
         }
     }
     for entity in removed.read() {
-        for mut claim in std::iter::once(ours.reborrow()).chain(claims.iter_mut()) {
+        for mut claim in &mut claims {
             if claim.stone.is_some_and(|(stone, _)| stone == entity) {
                 *claim = Claim::default();
                 info!("A claim is given up.");
@@ -129,38 +135,42 @@ fn track(
 
 /// Grows the claim when the player pays at its stone.
 fn grow(
-    focus: Res<Focus>,
-    mut claim: Single<&mut Claim, IsLocalPlayer>,
+    mut interacted: MessageReader<Interacted>,
+    mut claims: Query<&mut Claim>,
     mut belongings: Belongings,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
 ) {
-    let Some(mut belongings) = belongings.mine() else {
-        return;
-    };
-    if !focus.used(Interactable::ClaimStone) {
-        return;
+    for used in interacted.read() {
+        let Some(stone) = used.on(Interactable::ClaimStone) else {
+            continue;
+        };
+        let (Ok(mut claim), Some(mut inventory)) =
+            (claims.get_mut(used.player), belongings.of(used.player))
+        else {
+            continue;
+        };
+        let said = if claim.stone.map(|(own, _)| own) != Some(stone) {
+            "That is not your claim stone".to_string()
+        } else if let Some(cost) = claim.next() {
+            if let Some((kind, more)) = inventory.missing(cost, 1) {
+                format!(
+                    "Growing your claim takes {}: you need {more} more {}",
+                    describe(cost, 1),
+                    inventory.items().name(kind)
+                )
+            } else {
+                inventory.pay(cost, 1);
+                claim.step += 1;
+                format!("Your claim now reaches {} metres across", claim.across_m())
+            }
+        } else {
+            format!(
+                "Your claim is as large as it grows, {} metres across",
+                claim.across_m()
+            )
+        };
+        told.write(Told::new(used.player, said));
     }
-    let Some(cost) = claim.next() else {
-        notice.say(format!(
-            "Your claim is as large as it grows, {} metres across",
-            claim.across_m()
-        ));
-        return;
-    };
-    if let Some((kind, more)) = belongings.missing(cost, 1) {
-        notice.say(format!(
-            "Growing your claim takes {}: you need {more} more {}",
-            describe(cost, 1),
-            belongings.items().name(kind)
-        ));
-        return;
-    }
-    belongings.pay(cost, 1);
-    claim.step += 1;
-    notice.say(format!(
-        "Your claim now reaches {} metres across",
-        claim.across_m()
-    ));
 }
 
 /// Draws the claim's edge on the ground while the hammer is in hand.

@@ -8,12 +8,12 @@
 //! and the well and stall are catalogue items, placed as a player places one. They are
 //! the villagers', not the player's. The people go about their day where they stand.
 
-use super::bag::Notice;
+use super::bag::Told;
 use super::catalogue;
 use super::creatures::Lair;
 use super::daylight::{Clock, SkyPath};
 use super::flora::ClearAround;
-use super::interact::{Focus, Focusing, Interactable};
+use super::interact::{Focusing, Interactable, Interacted};
 use super::people::{Arrive, Doing, Dyed, Person};
 use super::props::{self, Models, Theirs};
 use crate::build::{self, Build, BuildLook, Built, Site};
@@ -305,53 +305,55 @@ fn by_the_sky(from: Vec3, to: Vec3, toward_sky: Vec3, by_night: bool) -> String 
 fn talk(
     clock: Res<Clock>,
     sky: Option<Res<SkyPath>>,
-    focus: Res<Focus>,
+    mut interacted: MessageReader<Interacted>,
     village: Res<Village>,
     lair: Res<Lair>,
     people: Query<&Person>,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
 ) {
-    if !focus.used(Interactable::Talk) {
-        return;
-    }
-    let Some(person) = focus.entity.and_then(|entity| people.get(entity).ok()) else {
-        return;
-    };
-    if let Some(line) = person.says {
-        notice.say(line);
-        return;
-    }
-    // The elder speaks of the smith.
-    let smith = people
-        .iter()
-        .find(|person| person.trade == Some("smith"))
-        .map(|smith| smith.doing);
-    let line = match smith {
-        Some(Doing::Bound) | None => format!(
-            "{}: \"Spiders took Bren, our smith. They nest where the light comes out of the ground, {}. You'll see the glow.\"",
-            person.name,
-            match sky {
-                Some(sky) => {
-                    let sun = sky.sun(clock.hour);
-                    let by_night = sky.height(clock.hour) < 0.0;
-                    by_the_sky(
-                        village.0,
-                        lair.0,
-                        if by_night { -sun } else { sun },
-                        by_night,
-                    )
+    for used in interacted.read() {
+        let Some(person) = used
+            .on(Interactable::Talk)
+            .and_then(|entity| people.get(entity).ok())
+        else {
+            continue;
+        };
+        if let Some(line) = person.says {
+            told.write(Told::new(used.player, line));
+            continue;
+        }
+        // The elder speaks of the smith.
+        let smith = people
+            .iter()
+            .find(|person| person.trade == Some("smith"))
+            .map(|smith| smith.doing);
+        let line = match smith {
+            Some(Doing::Bound) | None => format!(
+                "{}: \"Spiders took Bren, our smith. They nest where the light comes out of the ground, {}. You'll see the glow.\"",
+                person.name,
+                match &sky {
+                    Some(sky) => {
+                        let sun = sky.sun(clock.hour);
+                        let by_night = sky.height(clock.hour) < 0.0;
+                        by_the_sky(
+                            village.0,
+                            lair.0,
+                            if by_night { -sun } else { sun },
+                            by_night,
+                        )
+                    }
+                    None => "past the trees".to_string(),
                 }
-                None => "past the trees".to_string(),
-            }
-        ),
-        Some(Doing::Following(_)) => format!(
-            "{}: \"You found Bren! Take them somewhere safe; they'll work a forge for you.\"",
-            person.name
-        ),
-        Some(_) => format!(
-            "{}: \"Bren's working your forge, I hear. You've done right by us.\"",
-            person.name
-        ),
-    };
-    notice.say(line);
+            ),
+            Some(Doing::Following(_)) => format!(
+                "{}: \"You found Bren! Take them somewhere safe; they'll work a forge for you.\"",
+                person.name
+            ),
+            Some(_) => format!(
+                "{}: \"Bren's working your forge, I hear. You've done right by us.\"",
+                person.name
+            ),
+        };
+        told.write(Told::new(used.player, line));
+    }
 }

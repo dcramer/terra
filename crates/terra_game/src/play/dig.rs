@@ -120,7 +120,7 @@ fn dig(
         digging.target = None;
         let pickaxe = belongings
             .tool_in_hand()
-            .filter(|tool| tool.works(Cut::Rock) && !intent.busy)
+            .filter(|tool| tool.works(Cut::Rock) && intent.free())
             .cloned();
         // Something to cut in the way is cut, not dug round.
         let (Some(pickaxe), None) = (pickaxe, cutting.target) else {

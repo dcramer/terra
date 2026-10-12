@@ -25,9 +25,11 @@ pub struct Intent {
     pub wheel: i32,
     /// Where they aim: from the eye they see by, through the aiming mark.
     pub aim: Option<Ray3d>,
-    /// Their hands are on a screen or a menu, such as the inventory or the dial, not on
-    /// the world.
+    /// Their hands are on a screen, such as the inventory, a station's or the options,
+    /// not on the world.
     pub busy: bool,
+    /// They are choosing what to build, on the dial or in the build menu.
+    pub choosing: bool,
 }
 
 impl Intent {
@@ -45,14 +47,19 @@ impl Intent {
         self.pressed & Self::bit(action) != 0
     }
 
+    /// Whether their hands are on the world, not on a screen or choosing.
+    pub fn free(&self) -> bool {
+        !self.busy && !self.choosing
+    }
+
     /// Whether they hold an action down with their hands on the world.
     pub fn working(&self, action: Action) -> bool {
-        !self.busy && self.held(action)
+        self.free() && self.held(action)
     }
 
     /// Whether they pressed an action with their hands on the world.
     pub fn starts(&self, action: Action) -> bool {
-        !self.busy && self.pressed(action)
+        self.free() && self.pressed(action)
     }
 
     /// Holds an action down, and presses it if it was not held, as a key does.
@@ -81,7 +88,8 @@ pub fn read(
     mut intent: Single<&mut Intent, IsLocalPlayer>,
 ) {
     let mut now = Intent {
-        busy: screen.open || build_menu.open || menu.open || dial.open,
+        busy: screen.open || menu.open,
+        choosing: dial.open || build_menu.open,
         aim: Some(Ray3d::new(camera.translation(), camera.forward())),
         // One notch at a time, however the wheel reports it.
         wheel: (scroll.delta.y > 0.0) as i32 - (scroll.delta.y < 0.0) as i32,
@@ -113,6 +121,9 @@ mod tests {
         assert!(!intent.held(Action::Jump));
         intent.busy = true;
         assert!(!intent.working(Action::Use) && !intent.starts(Action::Use));
+        intent.busy = false;
+        intent.choosing = true;
+        assert!(!intent.working(Action::Use) && intent.held(Action::Use));
         // Every action has a bit of its own.
         assert!(Action::ALL.len() <= 64);
     }

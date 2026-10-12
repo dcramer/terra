@@ -108,7 +108,7 @@ fn cut(
         };
         let feet = player_at.translation;
         cutting.target = None;
-        let tool = belongings.tool_in_hand().cloned().filter(|_| !intent.busy);
+        let tool = belongings.tool_in_hand().cloned().filter(|_| intent.free());
         // Aimed at: anything the tool in hand is the kind of tool for, whether or not its
         // material is up to it, so the prompt can say why it will not cut.
         let works = |cut: &Cuttable| tool.as_ref().is_some_and(|tool| tool.works(cut.what));

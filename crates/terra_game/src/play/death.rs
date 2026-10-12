@@ -5,10 +5,10 @@
 //!
 //! Death also costs a little skill progress (D101); that is in `skills`.
 
-use super::bag::Notice;
+use super::bag::{Notice, Told};
 use super::catalogue::Rest;
 use super::claim::Claim;
-use super::interact::{CanInteract, Focus, Focusing, Interactable};
+use super::interact::{CanInteract, Focusing, Interactable, Interacted};
 use super::inventory::{self, Backpack, Belongings, Items};
 use super::props::Prop;
 use super::vitals::{Effort, Vitals};
@@ -204,30 +204,27 @@ fn fall(
 /// F at a bag takes back what fits from it; an emptied bag is gone.
 fn recover(
     mut commands: Commands,
-    focus: Res<Focus>,
+    mut interacted: MessageReader<Interacted>,
     mut bags: Query<&mut DroppedBag>,
     mut belongings: Belongings,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
 ) {
-    let Some(mut belongings) = belongings.mine() else {
-        return;
-    };
-    if !focus.used(Interactable::Bag) {
-        return;
-    }
-    let Some(entity) = focus.entity else { return };
-    let Ok(mut bag) = bags.get_mut(entity) else {
-        return;
-    };
-    let taken = belongings.take_from(&mut bag.grid);
-    if bag.grid.is_empty() {
-        commands.entity(entity).despawn();
-        notice.say(format!("Picked up everything ({taken} things)"));
-    } else {
-        notice.say(format!(
-            "Picked up {taken} things; {} would not fit",
-            bag.grid.len()
-        ));
+    for used in interacted.read() {
+        let Some(entity) = used.on(Interactable::Bag) else {
+            continue;
+        };
+        let (Ok(mut bag), Some(mut inventory)) = (bags.get_mut(entity), belongings.of(used.player))
+        else {
+            continue;
+        };
+        let taken = inventory.take_from(&mut bag.grid);
+        let said = if bag.grid.is_empty() {
+            commands.entity(entity).despawn();
+            format!("Picked up everything ({taken} things)")
+        } else {
+            format!("Picked up {taken} things; {} would not fit", bag.grid.len())
+        };
+        told.write(Told::new(used.player, said));
     }
 }
 
@@ -246,6 +243,34 @@ mod tests {
     use super::*;
     use crate::play::test_player;
     use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn a_bag_goes_to_whoever_takes_it_back() {
+        use crate::play::inventory::give;
+        let mut world = crate::play::test_world();
+        let ground = Vec3::Y * 2000.0;
+        let watches = test_player(&mut world, ground);
+        let takes = test_player(&mut world, ground + Vec3::X);
+        let mut grid = Grid::new(4, 4);
+        world.resource_scope(|_, mut items: Mut<Items>| {
+            let wood = items.kind("Wood");
+            give(&mut items, &mut grid, wood, 3);
+        });
+        let bag = world.spawn(DroppedBag { grid, age: 0.0 }).id();
+        world.write_message(Interacted {
+            player: takes,
+            target: bag,
+            what: Interactable::Bag,
+        });
+        world.run_system_once(recover).unwrap();
+        let wood = world.resource::<Items>().kind("Wood");
+        let carried = |world: &World, player| world.get::<Backpack>(player).unwrap().0.count(wood);
+        assert_eq!(carried(&world, takes), 3);
+        assert_eq!(carried(&world, watches), 0);
+        let told: Vec<_> = world.resource_mut::<Messages<Told>>().drain().collect();
+        assert_eq!(told.len(), 1);
+        assert_eq!(told[0].player, takes);
+    }
 
     #[test]
     fn only_the_player_whose_health_runs_out_goes_down() {

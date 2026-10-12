@@ -204,6 +204,10 @@ fn load(
 /// Stands an item in the world. `at` is in the base's own space; outdoors only its east
 /// and south count, and the item is stood on the ground there. Returns nothing if the
 /// item's model is missing.
+/// Who put something where it stands, when a player did.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct PlacedBy(pub Entity);
+
 pub fn place(
     commands: &mut Commands,
     models: &Models,

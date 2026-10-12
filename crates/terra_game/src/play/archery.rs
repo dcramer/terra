@@ -138,7 +138,7 @@ fn draw(
             .tool_in_hand()
             .and_then(|tool| tool.shoots.as_deref())
             .map(|name| belongings.items().kind(name));
-        let (Some(ammo), false, false) = (ammo, intent.busy, downed) else {
+        let (Some(ammo), false, false) = (ammo, !intent.free(), downed) else {
             drawing.held = None;
             continue;
         };

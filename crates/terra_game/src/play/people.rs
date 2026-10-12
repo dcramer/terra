@@ -7,15 +7,15 @@
 //! settles at a forge in your claim and works it (D90); villagers go about their day
 //! and say what is going on when you speak to them (D92), from `settlement`.
 
-use super::bag::Notice;
+use super::Player;
+use super::bag::Told;
 use super::bodies::Body;
 use super::catalogue::Rest;
 use super::claim::Claim;
 use super::crafting::Station;
 use super::creatures::Creature;
-use super::interact::{CanInteract, Focus, Focusing, Interactable};
+use super::interact::{CanInteract, Focusing, Interactable, Interacted};
 use super::props::Prop;
-use super::{IsLocalPlayer, LocalPlayer, Player};
 use crate::build::Site;
 use crate::loading::Loading;
 use crate::planet::Planet;
@@ -296,38 +296,39 @@ fn arrive(
 /// F at a prisoner frees them, once the spiders guarding them are dead.
 fn free(
     mut commands: Commands,
-    focus: Res<Focus>,
+    mut interacted: MessageReader<Interacted>,
     creatures: Query<(&Creature, &Transform)>,
     mut people: Query<(&mut Person, &Transform), Without<Creature>>,
-    player: Single<Entity, IsLocalPlayer>,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
 ) {
-    if !focus.used(Interactable::Prisoner) {
-        return;
+    for used in interacted.read() {
+        let Some(entity) = used.on(Interactable::Prisoner) else {
+            continue;
+        };
+        let Ok((mut person, at)) = people.get_mut(entity) else {
+            continue;
+        };
+        let guarded = creatures.iter().any(|(creature, there)| {
+            creature.species.hostile()
+                && creature.alive()
+                && there.translation.distance(at.translation) < GUARDED_M
+        });
+        if guarded {
+            told.write(Told::new(used.player, "Not while the spiders are near"));
+            continue;
+        }
+        person.doing = Doing::Following(used.player);
+        commands.entity(entity).remove::<CanInteract>();
+        info!("Freed {}.", person.name);
+        let said = match person.trade {
+            Some(trade) => format!(
+                "{}: \"Thank you. I'm the {trade} from the village. I'll come with you.\"",
+                person.name
+            ),
+            None => format!("{}: \"Thank you. I'll come with you.\"", person.name),
+        };
+        told.write(Told::new(used.player, said));
     }
-    let Some(entity) = focus.entity else { return };
-    let Ok((mut person, at)) = people.get_mut(entity) else {
-        return;
-    };
-    let guarded = creatures.iter().any(|(creature, there)| {
-        creature.species.hostile()
-            && creature.alive()
-            && there.translation.distance(at.translation) < GUARDED_M
-    });
-    if guarded {
-        notice.say("Not while the spiders are near");
-        return;
-    }
-    person.doing = Doing::Following(*player);
-    commands.entity(entity).remove::<CanInteract>();
-    info!("Freed {}.", person.name);
-    notice.say(match person.trade {
-        Some(trade) => format!(
-            "{}: \"Thank you. I'm the {trade} from the village. I'll come with you.\"",
-            person.name
-        ),
-        None => format!("{}: \"Thank you. I'll come with you.\"", person.name),
-    });
 }
 
 /// Followers keep up with the player they follow, walking when near and jogging when behind.
@@ -378,16 +379,16 @@ fn follow(
 /// Someone with a trade who has followed a player into their claim settles at a station in
 /// it that their trade works, such as a smith at a forge, and works it.
 fn settle(
-    claims: Query<(&Claim, Has<LocalPlayer>)>,
+    claims: Query<&Claim>,
     props: Query<(&Prop, &Transform)>,
     mut people: Query<(&mut Person, &Transform), Without<Prop>>,
-    mut notice: ResMut<Notice>,
+    mut told: MessageWriter<Told>,
 ) {
     for (mut person, at) in &mut people {
         let Doing::Following(leader) = person.doing else {
             continue;
         };
-        let Ok((claim, ours)) = claims.get(leader) else {
+        let Ok(claim) = claims.get(leader) else {
             continue;
         };
         let Some(trade) = person.trade else {
@@ -396,11 +397,9 @@ fn settle(
         if !claim.covers(at.translation) {
             continue;
         }
-        // Only what happens to this machine's own player is said on its screen.
+        // Said to the player they follow.
         let mut say = |text: String| {
-            if ours {
-                notice.say(text);
-            }
+            told.write(Told::new(leader, text));
         };
         let worked = props
             .iter()
