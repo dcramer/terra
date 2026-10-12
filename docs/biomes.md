@@ -1,6 +1,6 @@
 # Biomes: how a world fills with life
 
-Status: Open. A draft for the developers, 2026-10-12, written after they named Sons of the Forest's world design as an inspiration (D85): "beautiful, full, looks organic". Nothing here is decided. It proposes goals to agree, then how the technology could reach them on procedural voxel terrain. How shipped games do it is surveyed in [research/procedural-vegetation.md](../research/procedural-vegetation.md).
+Status: Open, partly answered (D148). A draft for the developers, 2026-10-12, written after they named Sons of the Forest's world design as an inspiration (D85): "beautiful, full, looks organic". The same day they answered its first questions: forests as dense as Sons of the Forest's, plants that grow back (D150), seasons (D149), worn paths as a goal if it can be done, and biomes made by rules, not chosen. It proposes goals, then how the technology could reach them on procedural voxel terrain. How shipped games do it is surveyed in [research/procedural-vegetation.md](../research/procedural-vegetation.md).
 
 What this covers: everything that grows or lies on the ground, from grass to the canopy, plus deadfall and rocks. The industry calls it vegetation and procedural placement, or set dressing when done by hand. Creatures, settlements and ruins are placed by the same machinery later, but they're not covered here.
 
@@ -19,7 +19,7 @@ What this covers: everything that grows or lies on the ground, from grass to the
 
 ## Goals
 
-Proposed, for the developers to change. Each goal says what it means on screen, so it can be checked.
+Proposed, and reshaped by the developers' answers of 2026-10-12. Each goal says what it means on screen, so it can be checked.
 
 1. **Full.** Close to the player in a living place, no ground is bare unless the bareness means something: a path, rock, sand, a dug hole, a camp. Ground cover is continuous, and its density near the camera matters most.
 2. **Layered, as a real forest is.** Five storeys of growth:
@@ -38,16 +38,18 @@ Proposed, for the developers to change. Each goal says what it means on screen, 
 
    The check: no screenshot shows a grid, a repeat, or a hard line where one rule stops.
 4. **Varied at every scale.** At the scale of a region, different biomes. At the scale of a stand, a grove of birch among pines, a clearing, a bog. At the scale of a patch, a ring of mushrooms or a bed of ferns by a log. A few minutes' walk always passes something new.
-5. **Playable.** Full doesn't mean impassable. You can walk through the understorey, see between trunks, and find clearings to build in (D131). How thick a forest may be is a question below.
+5. **As thick as a real forest, and still playable.** As dense as Sons of the Forest's: "more realistic, and that's our goal" (2026-10-12, D122). In deep woods you can't see far. You can still walk through the understorey, see between the nearest trunks, and find clearings to build in (D131).
 6. **Life-sized** (D110). Trees stand 15 to 35 m, and boulders reach more than a person's height. Detail scales with the world, not with the object.
-7. **Alive.** Everything moves in the wind, grass and bushes give way as you pass, and dug or built ground clears. Whether cut things grow back is open (D43).
-8. **Every world its own.** A biome is data in a planet's theme (D59). A gothic realm's dead trees and roots, or a techno realm's growth, are new data, not new code.
-9. **Interactive at scale.** Every tree can be felled, and the server keeps nothing per plant but what players changed (D47, D52).
+7. **Alive.** Everything moves in the wind, grass and bushes give way as you pass, and dug or built ground clears. What is cut grows back, and you see it grow rather than find it whole again (D150).
+8. **Every world its own, by rules.** Nobody writes a list of biomes. Each planet's come from its theme and seed (D8, D17, D59), so two temperate planets still grow different forests. A gothic realm's dead trees and roots, or a techno realm's growth, are new rules and data, not new code.
+9. **Interactive at scale.** Likely every plant can be harvested, perhaps not some grass (D43). The server keeps nothing per plant but what players changed (D47, D52).
 10. **Fast.** 60 fps on the mid-range target, checked on the integrated GPU too (D25).
+11. **Seasons** (D149). Leaves turn and fall, snow comes and goes, and grass browns and greens again.
+12. **Paths worn by use.** A stretch goal: where players and creatures walk often, the grass wears into a path, and it grows over again when no one does.
 
 **Not goals:**
 
-- Photographic detail. The look stays stylised (D14).
+- Photographic detail, while the look is stylised (D14). The developers' "realistic" of 2026-10-12 is recorded here for the forest's density; whether it also means the look is asked below.
 - Anything placed by hand. Any number of worlds (D17) means every place comes from rules.
 
 ## How shipped games do it
@@ -137,7 +139,53 @@ Bevy 0.20 (out 2026-10-08) adds mesh shaders, which its notes suggest for grass;
 - **Trees** are the hardest, and the weakest area for generated models. Trees made by code, with rules for trunk and branches (as SpeedTree does), would give many variations per species, at life size, in our painted look. Each species would be parameters, not models.
 - **Rocks, logs, stumps, mushrooms and the like** suit Tripo. The pipeline already makes them.
 - **Ferns, grass and flowers** are few triangles and many copies. Small generators or simple models are enough.
-- **Whether leaves are flat cards or solid painted clumps** is part of the look, so it belongs with D14.
+- **Leaves as flat cards or solid painted clumps** is open: the developers have no view yet. Cards are what realistic forests use (SpeedTree, and very likely Sons of the Forest); clumps suit a painted look. Proposed: a tree generator grows a branch skeleton, and leaves are a layer on it in either form, so both can be rendered side by side on the vantage sheet and chosen by eye. Leaves as a layer also give bare winter trees (D149).
+
+### Biomes from rules, not a list
+
+Proposed, technical. The standard way to classify climate is by temperature and wetness (Whittaker's biome diagram); Minecraft's generation picks biomes from noise fields for temperature, humidity and more. We can go one step further, as Far Cry 5's species "fight for the ground":
+
+- **Each species has a niche:** the temperature, wetness, shade and soil it tolerates, and how strongly it competes.
+- **The climate fields say what each place offers.** The species that fit there grow, the strongest most.
+- **A biome is what emerges,** named afterwards for maps and talk, never listed. A theme sets the ranges of the fields (a frozen realm is cold everywhere) and the families of species it draws from.
+- **Species are generated too.** A species is the parameters of a generator (height, form, bark, leaf colour), drawn by the seed within its family. The starter planet's pine is one point in that space, and another planet's is a neighbour. This asks for trees and plants as generators, with Tripo models as parts and variants rather than as whole species (D127).
+
+### Regrowth
+
+That things grow back is decided (D150); how is open. Proposed, to react to:
+
+- **In stages, from time alone.** A cut leaves a stump, and the stored change records when it happened. The plant's stage (stump, sapling, young, grown) is worked out from the time since, the species' growth rate and the season. Nothing ticks. When the plant is grown again its change is forgotten, so the world's stored state shrinks back on its own (D47, D52).
+- **Seen to grow, never popping.** A stage changes only while no player can see the plant. You never watch a tree jump, but come back after a while and the clearing has saplings, later young trees. Shipped games do the same out of sight: Rust refills resources away from players, and The Forest regrows trees while you sleep.
+- **At each kind's own pace:** grass in hours, bushes in days, great trees much longer.
+- **Removing the stump stops it,** as in The Forest. That gives a way to clear land for good.
+- **Inside a claim,** perhaps nothing grows back unless planted, as the world heals outside claims (D94).
+
+### Seasons
+
+That there are seasons is decided (D149); how is open. Proposed:
+
+- **One year clock per world,** from the server's time: one number every player shares.
+- **What it changes, mostly as data per kind:**
+  - colour through the year;
+  - deciduous canopies thinning to bare branches;
+  - leaf litter in autumn;
+  - snow on the ground and on surfaces facing up;
+  - grass browning;
+  - flowers in their months;
+  - growth only in the growing season, which slows regrowth in winter.
+- **The planet is round,** so realistically the two hemispheres have opposite seasons and the equator barely changes (D122). That is variety for free: walk south to find summer.
+- **What it costs:** mostly shader parameters and colour tables. Snow needs a ground channel, and bare winter trees need leaves as a separable layer.
+
+### Worn paths
+
+A stretch goal, and feasible at moderate cost, because it reuses cover and regrowth:
+
+- **The server counts footfall** on a coarse grid, about a metre, wherever players and creatures walk. It already knows where everyone is, so this costs no network. Only walked cells exist.
+- **Wear thins the cover, then bares the ground** into a path, through a ground channel.
+- **Regrowth fades it** when unused, so what is stored is only what was walked recently.
+- **Paths change slowly,** so they are sent rarely and in batches, like other world changes.
+- **Creatures wear game trails, and settlements generate paths between their places,** so the world has paths before any player arrives.
+- **The hard parts:** keeping paths readable lines rather than muddy blobs, by thresholds and smoothing; and the volume of footfall from a thousand players, which the coarse grid and decay bound.
 
 ### How we'd know (D69)
 
@@ -157,16 +205,34 @@ Bevy 0.20 (out 2026-10-08) adds mesh shaders, which its notes suggest for grass;
 1. **Placement everywhere.** Rules and biomes as data, with objects streamed in cells around every player instead of planted once at the start. Measured.
 2. **Cover on the terrain**, and the new ground channels.
 3. **The far forest:** impostors and draw distance.
-4. **Content:** a tree generator, more kinds per layer, and a second biome to prove a biome is only data.
+4. **Content:**
+   - a tree generator, with leaves as a layer (cards and clumps compared);
+   - species with niches;
+   - a second planet's theme, to prove its forests come from rules alone.
+5. **Time:** regrowth by stages and seasons.
+6. **Worn paths.**
 
 Each step is judged on the vantage sheet.
 
 ## Open questions for the developers
 
-1. **How thick is a forest?** As dense as Sons of the Forest, where you can't see far, or thinner and easier to cross?
-2. **Is every plant harvestable,** or only trees, bushes and some herbs (D43)?
-3. **Does what is cut grow back,** and how fast? Outside claims the world heals (D94); does a felled forest?
-4. **Seasons?** Sons of the Forest has them: snow falls and melts, and leaves turn. They change the look the most, and cost the most.
-5. **Do players wear paths** that stay?
-6. **Which biomes on the starter planet?** Proposed to react to: temperate forest, meadow, shore, wetland, and alpine.
-7. **Flat-card leaves or solid clumps?** This is part of the look (D14).
+Answered on 2026-10-12:
+
+- **Density:** as Sons of the Forest's.
+- **Harvesting:** likely every plant, perhaps not some grass (D43).
+- **Regrowth:** yes, at least by time passed, and perhaps seen to grow rather than coming back whole (D150).
+- **Seasons:** yes (D149).
+- **Worn paths:** "would be amazing as a goal", if it can be done.
+- **Biomes:** made procedurally, not chosen.
+- **Leaves:** no view yet.
+
+Still open:
+
+1. **Realistic in look too?** "Sons of the Forest is more realistic, and that's our goal" is recorded for density. If it also means the art direction, D14 changes, and so does what we ask of the art pipeline.
+2. **Which grass can't be harvested?** Proposed: short ground cover can't be, and tall grass and reeds can, giving fibre.
+3. **Regrowth's rules:** how fast for each kind, whether removing a stump stops it, and whether anything regrows inside a claim.
+4. **Seasons' rules:**
+   - how long a year is, against a half-hour day (D134);
+   - whether the hemispheres are opposite;
+   - whether seasons change play (cold, food, what grows) or only the look.
+5. **Cards or clumps** for leaves, chosen by eye from a side-by-side once a tree generator exists.

@@ -54,5 +54,5 @@ A first draft of these rules was implemented in `prototypes/sim_toy` (deleted on
 ## Open questions
 
 - Cell count and shape. The starting guess was a few thousand cells on a subdivided icosahedron; with the simulation in Rust, 40 thousand cells (about 35 m each on a 2 km planet) costs under half a millisecond a tick, so resolution can be chosen for gameplay.
-- Tick rate, and whether day/night and seasons exist.
+- Tick rate. Day and night exist (D134), and seasons (D149).
 - Whether values can regress.
