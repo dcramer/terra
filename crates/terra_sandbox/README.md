@@ -27,7 +27,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--sound` | Sound under WSL, where it is off by default because WSL usually has no sound device |
 | `--bench` | Measure frame times with vsync off, print them, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default |
-| `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
+| `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc`, `enter`, `backspace`, `equal`, `minus` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
 | `--save <file>` | In the play experiment: keep the saved game in this file. Scripted runs save and load only when given one. |
 | `--fresh` | In the play experiment: start over, throwing away the saved game |
 | `--at <east,south>` | In the play experiment: start the player so many metres east and south of the start, for testing. The log says where the deer, the spiders, the village and each person are. |
@@ -89,6 +89,7 @@ The tech demo of the MVP's loop (docs/prototypes.md): a meadow by a lake, a litt
 | Click | Capture the mouse |
 | Esc | The options menu, which gives the mouse back. Esc again returns to the game. |
 | Mouse | Look. The arrow keys do the same. |
+| Scroll wheel | Bring the camera nearer or take it further, from 1.4 to 9 metres behind you. = and - do the same. While the hammer has a part out that the wheel turns, the wheel turns it instead. |
 | W A S D, Shift, Space | Move, sprint, jump |
 | 1 to 6 | Pick a slot of the action bar. What is in it is the tool in hand. |
 | Tab | Open and close the inventory. I does the same. |

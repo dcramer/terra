@@ -112,7 +112,7 @@ As of 2026-10-11.
 | A local server (D51) | Missing |
 | Saving and loading | Built |
 | Feel: swing animations for the axe and pickaxe, a better harvesting experience, a small notice of what you gained when you harvest or pick something up, hit effects when damage lands, and the like | Asked for by the developers on 2026-10-11. Built: what you gained, listed at the right as it comes in; a blow sprays blood or ichor and jolts what it struck; being hurt reddens the edges of the view and shakes it. Swing animations are under way separately |
-| Camera: zoom in and out with the mouse wheel, later all the way to first person | Missing; asked for by the developers on 2026-10-11. The wheel turns a part in the build tool today, so the two need sharing out |
+| Camera: zoom in and out with the mouse wheel, later all the way to first person | Asked for by the developers on 2026-10-11. Built: the wheel, or = and -, from 1.4 to 9 m behind; while the hammer has a part out that the wheel turns, it turns that instead. First person is to come |
 | Building: move what is being placed up and down, not only turn it, except what must stand on the ground | Missing; asked for by the developers on 2026-10-11 |
 | Done when: a developer plays it, an agent drives it, save and reload, frame times | The agent's run passes; the developers' play-test, frame times on the integrated GPU, and a save-and-reload check in the script are to do |
 

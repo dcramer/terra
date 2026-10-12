@@ -63,7 +63,7 @@ use crate::planet::Planet;
 use crate::shell::Options;
 use bevy::{
     camera_controller::free_camera::FreeCamera,
-    input::mouse::AccumulatedMouseMotion,
+    input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
@@ -84,7 +84,14 @@ const DODGE_SPEED: f32 = 8.5;
 const LOOK_SPEED: f32 = 0.0025;
 /// How fast the arrow keys turn the view, in radians a second.
 const KEY_LOOK_SPEED: f32 = 1.6;
+/// How far behind the player the camera sits at the start, and how near and far the
+/// wheel takes it.
 const CAMERA_BACK_M: f32 = 4.6;
+const NEAREST_M: f32 = 1.4;
+const FURTHEST_M: f32 = 9.0;
+/// How far one notch of the wheel moves the camera, and holding a zoom key a second.
+const ZOOM_NOTCH_M: f32 = 0.6;
+const ZOOM_KEY_M_S: f32 = 5.0;
 const HEAD_M: f32 = 1.62;
 /// The player can wade this deep and no deeper.
 const WADE_DEPTH_M: f32 = 0.7;
@@ -170,6 +177,7 @@ pub fn plugin(app: &mut App) {
     soundscape::plugin(app);
     music::plugin(app);
     app.insert_resource(DrivenByPlayer)
+        .init_resource::<Zoom>()
         .add_systems(PostStartup, spawn)
         .add_systems(
             Update,
@@ -179,6 +187,7 @@ pub fn plugin(app: &mut App) {
                 dial::steer,
                 warp,
                 look,
+                zoom,
                 walk,
             )
                 .chain()
@@ -629,9 +638,59 @@ fn eye(player: &Transform, view: &View) -> (Vec3, Vec3) {
 
 /// Third person: behind and a little to the side of the figure, pulled in when a wall of
 /// the base would otherwise come between the camera and the player.
+/// How far behind the player the camera is, and where the wheel is taking it.
+#[derive(Resource)]
+struct Zoom {
+    now: f32,
+    wanted: f32,
+}
+
+impl Default for Zoom {
+    fn default() -> Self {
+        Self {
+            now: CAMERA_BACK_M,
+            wanted: CAMERA_BACK_M,
+        }
+    }
+}
+
+/// Where the camera is wanted after so much asked of the wheel and keys.
+fn zoomed(wanted: f32, closer_m: f32) -> f32 {
+    (wanted - closer_m).clamp(NEAREST_M, FURTHEST_M)
+}
+
+/// The mouse wheel, or the zoom keys, bring the camera nearer or take it further, unless
+/// the wheel is turning a part in the builder. It eases to where it is wanted.
+fn zoom(
+    time: Res<Time>,
+    controls: Controls,
+    scroll: Res<AccumulatedMouseScroll>,
+    builder: Res<tool::Builder>,
+    screen: Res<inventory::InventoryScreen>,
+    mut zoom: ResMut<Zoom>,
+) {
+    let dt = time.delta_secs();
+    let wheel = if builder.wants_wheel() || screen.open {
+        0.0
+    } else {
+        match scroll.unit {
+            MouseScrollUnit::Line => scroll.delta.y * ZOOM_NOTCH_M,
+            MouseScrollUnit::Pixel => scroll.delta.y * 0.01,
+        }
+    };
+    let keys = (f32::from(controls.held(Action::ZoomIn))
+        - f32::from(controls.held(Action::ZoomOut)))
+        * ZOOM_KEY_M_S
+        * dt;
+    zoom.wanted = zoomed(zoom.wanted, wheel + keys);
+    let ease = 1.0 - libm::expf(-dt * 12.0);
+    zoom.now += (zoom.wanted - zoom.now) * ease;
+}
+
 fn follow(
     player: Single<&Transform, (With<Player>, Without<Camera3d>)>,
     view: Res<View>,
+    zoom: Res<Zoom>,
     site: Res<Site>,
     builds: Query<&build::Built>,
     planet: Res<Planet>,
@@ -670,18 +729,18 @@ fn follow(
                 .raycast(
                     to_base.transform_point3(pivot),
                     to_base.transform_vector3(back).normalize(),
-                    CAMERA_BACK_M,
+                    zoom.now,
                 )
                 .map(|hit| hit.distance)
         })
         // The ground behind comes in front of the camera too, such as a pit's wall.
         .chain(
             planet
-                .raycast(pivot, back, CAMERA_BACK_M)
+                .raycast(pivot, back, zoom.now)
                 .map(|hit| hit.distance),
         )
         .map(|distance| (distance - 0.25).max(0.3))
-        .fold(CAMERA_BACK_M, f32::min);
+        .fold(zoom.now, f32::min);
     let mut at = pivot + back * blocked;
     // Keep the camera out of the ground.
     let ground = planet.ground_at(at).length() + 0.35;
@@ -708,6 +767,13 @@ mod tests {
         assert!(walled(feet, stride, ledge(1.5)));
         // Going down is never stopped.
         assert!(!walled(feet, stride, ledge(-2.0)));
+    }
+
+    #[test]
+    fn the_camera_comes_no_nearer_or_further_than_it_may() {
+        assert_eq!(zoomed(CAMERA_BACK_M, 1.0), CAMERA_BACK_M - 1.0);
+        assert_eq!(zoomed(CAMERA_BACK_M, 100.0), NEAREST_M);
+        assert_eq!(zoomed(CAMERA_BACK_M, -100.0), FURTHEST_M);
     }
 
     #[test]

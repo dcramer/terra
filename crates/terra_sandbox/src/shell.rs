@@ -58,7 +58,7 @@ usage: terra_sandbox [options]
   --moments <fraction,…>
                         in the workbench sheet: how far through each clip to look
                         (default 0.4)
-  --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace or an arrow
+  --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace, equal, minus or an arrow
                         (left, right, up, down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --give <item>:<count> start the play experiment carrying something extra, for
@@ -320,7 +320,7 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
     ];
     let problem = || {
         format!(
-            "--press wants a letter, digit, F1 to F12, esc, enter, backspace or an arrow (left, right, up, down) and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
+            "--press wants a letter, digit, F1 to F12, esc, enter, backspace, equal, minus or an arrow (left, right, up, down) and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
         )
     };
     let (key, frames) = text.split_once('@').ok_or_else(problem)?;
@@ -363,6 +363,8 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
         None if key.eq_ignore_ascii_case("right") => KeyCode::ArrowRight,
         None if key.eq_ignore_ascii_case("up") => KeyCode::ArrowUp,
         None if key.eq_ignore_ascii_case("down") => KeyCode::ArrowDown,
+        None if key.eq_ignore_ascii_case("equal") => KeyCode::Equal,
+        None if key.eq_ignore_ascii_case("minus") => KeyCode::Minus,
         None => {
             let symbol = key
                 .chars()

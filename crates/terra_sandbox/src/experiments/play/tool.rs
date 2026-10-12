@@ -235,6 +235,15 @@ impl Builder {
         self.carrying.is_some()
     }
 
+    /// Whether the mouse wheel turns what is in hand, rather than moving the camera: while
+    /// a part is out that the wheel turns or switches.
+    pub fn wants_wheel(&self) -> bool {
+        !self.stowed
+            && (self.item().is_some()
+                || self.room().is_some()
+                || matches!(self.picked().kind, Kind::Wall(_) | Kind::Reshape))
+    }
+
     /// How far through building or taking apart the builder is, from 0 to 1, and whether
     /// it is taking apart.
     pub fn progress(&self) -> Option<(f32, bool)> {

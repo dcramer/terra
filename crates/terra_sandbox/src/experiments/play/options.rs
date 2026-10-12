@@ -347,8 +347,8 @@ fn setup(mut commands: Commands) {
                                         Text::new(
                                             "Kept as they are: Esc for this menu, 1 to 6 for \
                                              the tool bar, 1 to 0 for the parts of the build \
-                                             menu, the mouse wheel to turn, and F1 to F3 for \
-                                             developer tools.",
+                                             menu, the mouse wheel to zoom or turn, and F1 to \
+                                             F3 for developer tools.",
                                         ),
                                         small.clone(),
                                         TextColor(DIM),

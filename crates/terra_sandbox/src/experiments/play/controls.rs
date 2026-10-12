@@ -53,10 +53,13 @@ pub enum Action {
     Dodge,
     /// Open and close the map.
     Map,
+    /// Bring the camera nearer or take it further, as the mouse wheel does.
+    ZoomIn,
+    ZoomOut,
 }
 
 impl Action {
-    pub const ALL: [Action; 25] = [
+    pub const ALL: [Action; 27] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -82,6 +85,8 @@ impl Action {
         Action::Eat,
         Action::Dodge,
         Action::Map,
+        Action::ZoomIn,
+        Action::ZoomOut,
     ];
 
     /// What the options menu calls it.
@@ -112,6 +117,8 @@ impl Action {
             Action::Eat => "Eat",
             Action::Dodge => "Roll",
             Action::Map => "Map",
+            Action::ZoomIn => "Camera nearer",
+            Action::ZoomOut => "Camera further",
         }
     }
 
@@ -143,6 +150,8 @@ impl Action {
             Action::Eat => "eat",
             Action::Dodge => "dodge",
             Action::Map => "map",
+            Action::ZoomIn => "zoom_in",
+            Action::ZoomOut => "zoom_out",
         }
     }
 
@@ -175,6 +184,8 @@ impl Action {
             Action::Eat => (Key(KeyCode::KeyH), None),
             Action::Dodge => (Key(KeyCode::ControlLeft), None),
             Action::Map => (Key(KeyCode::KeyM), None),
+            Action::ZoomIn => (Key(KeyCode::Equal), None),
+            Action::ZoomOut => (Key(KeyCode::Minus), None),
         };
         [Some(first), second]
     }
