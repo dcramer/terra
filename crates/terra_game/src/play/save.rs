@@ -18,7 +18,7 @@ use super::props::{self, Models, Prop, Theirs};
 use super::skills::{Skill, Skills};
 use super::vitals::Vitals;
 use super::{Player, View};
-use crate::experiments::build::Site;
+use crate::build::Site;
 use crate::planet::Planet;
 use crate::shell::Options;
 use bevy::prelude::*;

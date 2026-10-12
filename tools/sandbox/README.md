@@ -63,11 +63,11 @@ The commands are also a module, [client.ts](client.ts), for scripts that test th
 
 ## What the run said, and the mark
 
-Everything the log keeps is also kept in memory, numbered, with the frame it was said on (`crates/terra_sandbox/src/record.rs`), so a script can ask what happened instead of counting frames. Every on-screen notice is logged, as are kills, gains, things made and much else, so most checks need no new code: act, then `wait` for the words.
+Everything the log keeps is also kept in memory, numbered, with the frame it was said on (`crates/terra_game/src/record.rs`), so a script can ask what happened instead of counting frames. Every on-screen notice is logged, as are kills, gains, things made and much else, so most checks need no new code: act, then `wait` for the words.
 
 The client keeps a mark in `shots/remote.mark`: the first line not yet looked at. Commands that act (`press`, `step`, `warp`, `give`) move it to now before acting, so `wait` and `said` see only what followed; `wait` moves it past what it found, so waiting twice for the same words waits for them twice. When `wait` times out it prints what was said instead, which is usually the reason.
 
-When a check needs a fact the log does not say, add it to `play.state` (`crates/terra_sandbox/src/experiments/play/probe.rs`) rather than parsing the screen: one place that answers what is true, read the same way by every test.
+When a check needs a fact the log does not say, add it to `play.state` (`crates/terra_game/src/play/probe.rs`) rather than parsing the screen: one place that answers what is true, read the same way by every test.
 
 Changes made this way last only as long as the run. When a value is right, put it where it belongs (a socket's place goes in `tools/characters/export_character.py`), and check it with a workbench sheet.
 
@@ -75,4 +75,4 @@ Changes made this way last only as long as the run. When a value is right, put i
 
 The sandbox listens on `localhost:15702`, or the port `--remote-port` gives. Under WSL, a sandbox running on Windows is on Windows' own localhost, which WSL cannot reach, so the client sends through Windows' `curl.exe` there, and writes screenshots through WSL's share so they land where you asked. The remote protocol can change anything in the running world, so it only listens on localhost and only when started with `--remote`.
 
-To add a method, see `crates/terra_sandbox/src/remote.rs`: an experiment registers its own with `remote::method`, as the workbench does with `workbench.pose` and play with `play.state`. A method that changes the game asks for it and lets the system that already does the same for the command line do it on the next frame, as `play.warp` does with `--warp`, so the two cannot drift apart; it logs what it did, so the client can wait for that. An experiment that moves its camera in `PostUpdate` orders that `.before(remote::CameraHold)`, so a held camera wins and what it sees is not culled from the old view.
+To add a method, see `crates/terra_game/src/remote.rs`: an experiment registers its own with `remote::method`, as the workbench does with `workbench.pose` and play with `play.state`. A method that changes the game asks for it and lets the system that already does the same for the command line do it on the next frame, as `play.warp` does with `--warp`, so the two cannot drift apart; it logs what it did, so the client can wait for that. An experiment that moves its camera in `PostUpdate` orders that `.before(remote::CameraHold)`, so a held camera wins and what it sees is not culled from the old view.

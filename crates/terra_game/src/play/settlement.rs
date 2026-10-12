@@ -16,7 +16,7 @@ use super::interact::{Focus, Focusing, Interactable};
 use super::people::{Arrive, Doing, Dyed, Person};
 use super::props::{self, Models, Theirs};
 use super::scene::SUN_DIRECTION;
-use crate::experiments::build::{self, Build, BuildLook, Built, Site};
+use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_build::{Base, BuildOp, CELL_M, Face, Panel, Side};

@@ -23,7 +23,7 @@ use super::{
     people::Person,
     vitals::Vitals,
 };
-use crate::experiments::build::Site;
+use crate::build::Site;
 use crate::planet::{MainCamera, Planet};
 use crate::remote::{method, refused};
 use bevy::{

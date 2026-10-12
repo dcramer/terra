@@ -1,5 +1,5 @@
 //! The icon baker (D129): renders every item in the catalogue from its look with the icon
-//! renderer (`crate::icons`), in the house style (D130), and writes `assets/icons/<item>.png`,
+//! renderer (`terra_game::icons`), in the house style (D130), and writes `assets/icons/<item>.png`,
 //! the item's cells times `PX_PER_CELL`, and `assets/icons/manifest.txt`, saying what each
 //! was rendered from. An icon painted by `tools/icons/paint.ts` is kept, never replaced by
 //! its render. Items whose look does not exist yet are listed and skipped; icons for items
@@ -20,8 +20,8 @@ use bevy::{
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 
-use super::play::inventory::Items;
-use crate::{
+use terra_game::play::inventory::Items;
+use terra_game::{
     icons::{self, Baked, Icon, Icons, PX_PER_CELL},
     shell::Options,
 };

@@ -1,16 +1,16 @@
 //! What the builder is aimed at, and what it would cost there.
 
 use super::*;
-use crate::experiments::build::Site;
-use crate::experiments::play::catalogue::{self, Kind};
-use crate::experiments::play::claim::Claim;
-use crate::experiments::play::dial::Dial;
-use crate::experiments::play::flora::Obstacles;
-use crate::experiments::play::inventory::{Belongings, Cost};
-use crate::experiments::play::props::{self, Blocked, Models, Prop, Standing};
-use crate::experiments::play::{Player, View};
+use crate::build::Site;
 use crate::planet::MainCamera;
 use crate::planet::Planet;
+use crate::play::catalogue::{self, Kind};
+use crate::play::claim::Claim;
+use crate::play::dial::Dial;
+use crate::play::flora::Obstacles;
+use crate::play::inventory::{Belongings, Cost};
+use crate::play::props::{self, Blocked, Models, Prop, Standing};
+use crate::play::{Player, View};
 use crate::shell::Options;
 use terra_build::{CELL_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, cells};
 

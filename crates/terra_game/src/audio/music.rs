@@ -115,7 +115,7 @@ impl Echo {
 pub fn play(phrase: Phrase, mut dice: Dice) -> impl Iterator<Item = f32> + Send {
     // Lay the notes out before anything sounds: when, how high, how hard.
     let count =
-        phrase.notes.0 + (dice.next() % (phrase.notes.1 - phrase.notes.0 + 1) as u64) as u32;
+        phrase.notes.0 + (dice.roll() % (phrase.notes.1 - phrase.notes.0 + 1) as u64) as u32;
     let degrees = phrase.scale.len() as i32;
     let lowest = phrase.register.0 * degrees;
     let highest = phrase.register.1 * degrees;
@@ -123,7 +123,7 @@ pub fn play(phrase: Phrase, mut dice: Dice) -> impl Iterator<Item = f32> + Send 
     let mut notes: Vec<(usize, f32, f32)> = (0..count)
         .map(|_| {
             // Mostly small steps, now and then a leap.
-            let leap = match dice.next() % 6 {
+            let leap = match dice.roll() % 6 {
                 0 => 3,
                 1 => -3,
                 2 | 3 => 1,

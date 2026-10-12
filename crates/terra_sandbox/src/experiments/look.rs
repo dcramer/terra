@@ -7,15 +7,15 @@
 //! foliage that make the reference what it is are not something a shader provides.
 
 use super::scatter::placements;
-use crate::planet::MainCamera;
-use crate::planet::{Planet, Tweaks};
-use crate::sky::{Sky, SkyPlugin};
 use bevy::{
     mesh::VertexAttributeValues,
     post_process::bloom::Bloom,
     prelude::*,
     render::view::{ColorGrading, ColorGradingGlobal},
 };
+use terra_game::planet::MainCamera;
+use terra_game::planet::{Planet, Tweaks};
+use terra_game::sky::{Sky, SkyPlugin};
 use terra_gen::{Noise, Seed};
 
 const HORIZON: Color = Color::srgb(0.98, 0.84, 0.74);

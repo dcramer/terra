@@ -3,8 +3,8 @@
 //! sides, top to bottom; columns are the moments, left to right; side by side models
 //! share each picture. Then the sandbox exits.
 
-use crate::planet::MainCamera;
 use std::path::PathBuf;
+use terra_game::planet::MainCamera;
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -16,7 +16,7 @@ use bevy::{
 };
 
 use super::{Bench, pose, view};
-use crate::shell::Options;
+use terra_game::shell::Options;
 
 /// Directions to look from, in degrees round from the front, and fractions of a clip,
 /// unless `--sides` and `--moments` say otherwise.
@@ -53,7 +53,7 @@ pub fn capture(
     options: Res<Options>,
     mut sheet: ResMut<Sheet>,
     mut players: Query<&mut AnimationPlayer>,
-    mut hands: Query<&mut crate::character::Carrying>,
+    mut hands: Query<&mut terra_game::character::Carrying>,
     mut camera: Query<&mut Transform, With<MainCamera>>,
     children: Query<&Children>,
     names: Query<&Name>,

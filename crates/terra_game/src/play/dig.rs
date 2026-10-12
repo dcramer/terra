@@ -181,7 +181,7 @@ fn dig(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::experiments::play::inventory::Tool;
+    use crate::play::inventory::Tool;
 
     #[test]
     fn what_is_dug_makes_items_and_keeps_the_rest() {

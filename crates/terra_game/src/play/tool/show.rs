@@ -1,10 +1,10 @@
 //! Showing what the builder would do before it is done: outlines, footprints and ghosts.
 
 use super::*;
-use crate::experiments::build::Site;
-use crate::experiments::play::catalogue::Kind;
-use crate::experiments::play::props::{self, Blocked, Models, Prop};
+use crate::build::Site;
 use crate::planet::Planet;
+use crate::play::catalogue::Kind;
+use crate::play::props::{self, Blocked, Models, Prop};
 use bevy::{asset::RenderAssetUsages, render::render_resource::PrimitiveTopology};
 use terra_build::{Base, CELL_M, DOOR_HEIGHT_M, Face, Panel, STOREY_M};
 

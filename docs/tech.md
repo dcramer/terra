@@ -42,7 +42,8 @@ One Cargo workspace. The rule that shapes it: **anything that must be the same f
 | `terra_voxel` | Terrain: the density field, the tree of chunks at different detail levels, meshing, edits | No |
 | `terra_core` | The shared game state and the operations that change it | No |
 | `terra_net` | Network messages and the transport wrapper | No |
-| `terra_game` | The Bevy application: drawing, input, the player, UI, audio | Yes |
+| `terra_game` | The game in Bevy: drawing, input, the player, UI, audio, and the shell every build runs under | Yes |
+| `terra_sandbox` | A test environment on top of the game: it launches it, with testbeds and developer tools | Yes |
 
 Why this split:
 

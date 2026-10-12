@@ -1,10 +1,10 @@
 //! What the builder says it would do, and its keys.
 
 use super::*;
-use crate::experiments::play::catalogue::Kind;
-use crate::experiments::play::controls::{Action, Settings, capitalised};
-use crate::experiments::play::inventory::{self};
-use crate::experiments::play::props::Blocked;
+use crate::play::catalogue::Kind;
+use crate::play::controls::{Action, Settings, capitalised};
+use crate::play::inventory::{self};
+use crate::play::props::Blocked;
 use crate::shell::Options;
 use bevy::window::{CursorGrabMode, CursorOptions};
 

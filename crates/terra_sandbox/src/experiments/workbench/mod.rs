@@ -14,7 +14,6 @@
 
 mod sheet;
 
-use crate::planet::MainCamera;
 use bevy::{
     asset::RecursiveDependencyLoadState,
     gltf::{Gltf, GltfAssetLabel},
@@ -24,8 +23,9 @@ use bevy::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use terra_game::planet::MainCamera;
 
-use crate::{character, planet::Planet, remote, shell::Options};
+use terra_game::{character, planet::Planet, remote, shell::Options};
 
 /// How far apart models stand, side by side.
 const SPACING_M: f32 = 1.2;

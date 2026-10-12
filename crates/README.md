@@ -11,8 +11,8 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_build` | Construction: bases shaped room by room, with the hull, windows and doors generated | No | Exists, as an experiment |
 | `terra_items` | Items and containers: kinds, the backpack grid, equipment, the action bar. Brief: [docs/items.md](../docs/items.md) | No | Exists |
 | `terra_net` | Network messages and transport | No | Track D |
-| `terra_sandbox` | A test environment: window, stand-in planet, free camera, live tweaks, experiments | Yes | Exists. [README](terra_sandbox/README.md) |
-| `terra_game` | The Bevy application: drawing, input, player, UI, audio | Yes | Track B |
+| `terra_game` | The game in Bevy: the world on screen, the player, items, building, creatures, people, sound, saving, and the shell every build runs under | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
+| `terra_sandbox` | A test environment on top of the game: it launches it, and holds testbeds and developer tools such as the workbench and the icon baker | Yes | Exists. [README](terra_sandbox/README.md) |
 
 Crates are created when their track starts, not before. The tracks are in [docs/engine.md](../docs/engine.md).
 

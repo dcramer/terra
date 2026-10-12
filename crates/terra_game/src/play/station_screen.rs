@@ -482,7 +482,7 @@ fn draw(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::experiments::play::crafting::Family;
+    use crate::play::crafting::Family;
 
     #[test]
     fn a_tab_shows_only_its_family() {

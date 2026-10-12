@@ -1,0 +1,27 @@
+[package]
+name = "terra_game"
+description = "The game in Bevy: the world on screen, the player, what they carry and build, creatures, people, sound, saving, and the harness every build runs under."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# `bevy_remote`: the remote protocol, so a script can drive a running build (`--remote`).
+bevy = { workspace = true, features = ["bevy_remote"] }
+bevy-inspector-egui.workspace = true
+libm.workspace = true
+ron.workspace = true
+serde.workspace = true
+# Remote methods take and give JSON; already built for Bevy's remote protocol.
+serde_json = "1"
+# The version Bevy itself reads models with, used here to read model shapes directly.
+gltf = { version = "1.4", default-features = false, features = ["utils"] }
+terra_build.workspace = true
+terra_core.workspace = true
+terra_gen.workspace = true
+terra_items.workspace = true
+terra_voxel.workspace = true
+
+[lints]
+workspace = true

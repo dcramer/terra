@@ -5551,6 +5551,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_game"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-inspector-egui",
+ "gltf",
+ "libm",
+ "ron",
+ "serde",
+ "serde_json",
+ "terra_build",
+ "terra_core",
+ "terra_gen",
+ "terra_items",
+ "terra_voxel",
+]
+
+[[package]]
 name = "terra_gen"
 version = "0.1.0"
 dependencies = [
@@ -5569,17 +5587,12 @@ name = "terra_sandbox"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "bevy-inspector-egui",
- "gltf",
  "libm",
- "ron",
  "serde",
  "serde_json",
- "terra_build",
  "terra_core",
+ "terra_game",
  "terra_gen",
- "terra_items",
- "terra_voxel",
 ]
 
 [[package]]

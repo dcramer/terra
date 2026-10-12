@@ -90,7 +90,8 @@ Each is its own commit and passes `cargo xtask check`.
 2026-10-12, as agreed by the developers (D133), who also had the Godot builds deleted rather than gathered.
 
 - Done: the Godot builds and finished spikes deleted (5); source art copied into `art/` (3, the pipeline still reads its scratch folder); the research picture moved (6).
-- Waiting: moves 1, 2 and 4, and `loop.sh`, touch files other sessions were changing at the time (the character pipeline, the icons, the shell and remote, `loop.sh` itself), so they wait for that work to land rather than force each session through a rebase across renamed folders.
+- Then, at the developers' word, without waiting for other sessions working in the same files: assets to the root (1), the pipeline to `tools/characters` (2, rebuilding the male body gave an identical file), and the game into `terra_game` (4).
+- Left: `loop.sh`, which another session is turning into `cargo xtask loop`; `token-stats` in TypeScript, since it runs after every turn for everyone and is not a layout question.
 
 ## Questions for the developers
 

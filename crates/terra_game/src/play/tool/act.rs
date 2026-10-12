@@ -2,18 +2,18 @@
 //! the work on the thing itself.
 
 use super::*;
-use crate::experiments::build::Site;
-use crate::experiments::play::Player;
-use crate::experiments::play::bag::Notice;
-use crate::experiments::play::catalogue::{self, Kind};
-use crate::experiments::play::controls::{Action, Controls};
-use crate::experiments::play::dial::Dial;
-use crate::experiments::play::inventory::{Belongings, Cost, Tool};
-use crate::experiments::play::noise::{Cue, Noise};
-use crate::experiments::play::props::{self, Models, Prop};
-use crate::experiments::play::skills::{Did, ONCE, Skill};
-use crate::experiments::play::work::Hold;
+use crate::build::Site;
 use crate::planet::Planet;
+use crate::play::Player;
+use crate::play::bag::Notice;
+use crate::play::catalogue::{self, Kind};
+use crate::play::controls::{Action, Controls};
+use crate::play::dial::Dial;
+use crate::play::inventory::{Belongings, Cost, Tool};
+use crate::play::noise::{Cue, Noise};
+use crate::play::props::{self, Models, Prop};
+use crate::play::skills::{Did, ONCE, Skill};
+use crate::play::work::Hold;
 use terra_build::{BuildOp, Face, Panel};
 
 /// Starts, carries on and finishes building and taking apart. Both take a moment: the

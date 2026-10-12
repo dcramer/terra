@@ -142,7 +142,7 @@ impl Dice {
         Dice(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1)
     }
 
-    pub fn next(&mut self) -> u64 {
+    pub fn roll(&mut self) -> u64 {
         // xorshift64*
         self.0 ^= self.0 >> 12;
         self.0 ^= self.0 << 25;
@@ -152,7 +152,7 @@ impl Dice {
 
     /// From 0 up to 1.
     pub fn unit(&mut self) -> f32 {
-        (self.next() >> 40) as f32 / (1u64 << 24) as f32
+        (self.roll() >> 40) as f32 / (1u64 << 24) as f32
     }
 
     pub fn range(&mut self, low: f32, high: f32) -> f32 {
@@ -331,10 +331,10 @@ fn birds(mut dice: Dice) -> impl Iterator<Item = f32> + Send {
 /// Lays out the notes of one bird's call.
 fn call(dice: &mut Dice, notes: &mut Vec<(f32, f32, f32, f32)>) {
     let mut at = 0.0;
-    match dice.next() % 3 {
+    match dice.roll() % 3 {
         // Rising tweets.
         0 => {
-            for _ in 0..(2 + dice.next() % 4) {
+            for _ in 0..(2 + dice.roll() % 4) {
                 let low = dice.range(2400.0, 3200.0);
                 notes.push((at, 0.07, low, low + dice.range(900.0, 1600.0)));
                 at += dice.range(0.1, 0.16);
@@ -343,7 +343,7 @@ fn call(dice: &mut Dice, notes: &mut Vec<(f32, f32, f32, f32)>) {
         // A falling trill.
         1 => {
             let mut high = dice.range(4200.0, 5200.0);
-            for _ in 0..(5 + dice.next() % 5) {
+            for _ in 0..(5 + dice.roll() % 5) {
                 notes.push((at, 0.035, high, high - 500.0));
                 high -= 120.0;
                 at += 0.05;
@@ -377,7 +377,7 @@ fn water(mut dice: Dice) -> impl Iterator<Item = f32> + Send {
                 (into, lasts, pitch) = (0.0, dice.range(0.25, 0.55), dice.range(380.0, 750.0));
                 (loud, pan) = (dice.range(0.4, 1.0), dice.range(-0.7, 0.7));
                 next = dice.range(0.8, 2.8);
-                let count = 1 + (dice.next() % 3) as usize;
+                let count = 1 + (dice.roll() % 3) as usize;
                 for (i, drop) in drops.iter_mut().enumerate() {
                     *drop = if i < count {
                         (

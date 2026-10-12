@@ -12,6 +12,7 @@ publish = false
 
 [workspace.dependencies]
 terra_build = { path = "crates/terra_build" }
+terra_game = { path = "crates/terra_game" }
 terra_core = { path = "crates/terra_core" }
 terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }

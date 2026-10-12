@@ -11,19 +11,10 @@
 // types are normal here.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
-mod audio;
-mod character;
-mod debug;
 mod experiments;
-mod icons;
-mod planet;
-mod record;
-mod remote;
-mod shell;
-mod sky;
-mod terrain;
 
 use bevy::prelude::*;
+use terra_game::{character, planet, shell, terrain};
 
 fn main() -> AppExit {
     let options = match shell::Options::from_args(std::env::args().skip(1)) {

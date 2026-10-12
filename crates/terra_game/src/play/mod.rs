@@ -35,7 +35,7 @@ mod harvest;
 pub(crate) mod held;
 mod hits;
 mod interact;
-pub(crate) mod inventory;
+pub mod inventory;
 mod map;
 mod models;
 mod music;

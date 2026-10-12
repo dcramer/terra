@@ -12,14 +12,14 @@
 //! - **Interaction needs no per-tree object.** Finding the tree you are pointing at is a
 //!   search through the few cells around that point.
 
-use crate::planet::MainCamera;
-use crate::planet::{FACES, Planet};
 use bevy::{
     asset::RenderAssetUsages, platform::collections::HashMap, prelude::*,
     render::render_resource::PrimitiveTopology,
 };
 use std::time::Instant;
 use terra_core::{Harvested, KindId, ObjectId, Operation, Yield};
+use terra_game::planet::MainCamera;
+use terra_game::planet::{FACES, Planet};
 use terra_gen::{Rng, Seed};
 
 /// Cells along each edge of each of the planet's six faces.

@@ -5,11 +5,9 @@
 
 use bevy::prelude::*;
 
-mod build;
 mod forest;
 mod icons;
 mod look;
-mod play;
 mod scatter;
 mod workbench;
 
@@ -30,7 +28,7 @@ pub const ALL: &[Experiment] = &[
     Experiment {
         name: "build",
         about: "Construction: a base you shape. G and H push and pull a wall, V cycles windows and doors, B adds a room.",
-        add: build::plugin,
+        add: terra_game::build::plugin,
     },
     Experiment {
         name: "forest",
@@ -42,7 +40,7 @@ pub const ALL: &[Experiment] = &[
     Experiment {
         name: "play",
         about: "A player on the ground with a builder tool: walk, jump, go indoors, and reshape the base.",
-        add: play::plugin,
+        add: terra_game::play::plugin,
     },
     Experiment {
         name: "workbench",

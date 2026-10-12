@@ -4,9 +4,9 @@
 //! number, and removing one is an operation that could be sent to another player or
 //! saved. Nothing about a rock is stored until it is removed.
 
-use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_core::{Harvested, KindId, ObjectId, Operation, Yield};
+use terra_game::planet::Planet;
 use terra_gen::Seed;
 
 const ROCKS: u64 = 2000;
