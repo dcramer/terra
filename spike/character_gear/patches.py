@@ -1,6 +1,6 @@
 """Body patches: small pieces of a body's skin that what is worn can hide (docs/characters.md, D128).
 
-The export divides each body into PATCHES patches, a few centimetres each, by clustering its
+The export divides each body into PATCHES patches, about two centimetres each, by clustering its
 faces by place and facing, and writes each face's patch into the body's second set of texture
 coordinates (u = patch + 0.5). The body stays one mesh. A worn look lists the patches it
 covers in its glTF extras (`fit_gear.py` works them out), and the game's body shader collapses
@@ -11,8 +11,9 @@ Patches are faces, so a vertex on a border is split there, keeping its weights: 
 import bpy
 import numpy as np
 
-# How many patches a body has: what the game's mask holds (256 bits).
-PATCHES = 256
+# How many patches a body has: what the game's mask holds (1024 bits). Finer patches leave a
+# thinner strip of skin unhidden at a garment's edge, where a patch is only partly under it.
+PATCHES = 1024
 LAYER = "patch"
 
 
@@ -26,8 +27,15 @@ def mark(body, seed=7):
     points = np.hstack([centres, normals * 0.04])
     rng = np.random.default_rng(seed)
     centroids = points[rng.choice(len(points), PATCHES, replace=False)]
+    def nearest_of(points, centroids):
+        out = np.empty(len(points), dtype=int)
+        for start in range(0, len(points), 4096):
+            chunk = points[start:start + 4096]
+            out[start:start + 4096] = np.argmin(((chunk[:, None, :] - centroids[None, :, :]) ** 2).sum(-1), axis=1)
+        return out
+
     for _ in range(12):
-        nearest = np.argmin(((points[:, None, :] - centroids[None, :, :]) ** 2).sum(-1), axis=1)
+        nearest = nearest_of(points, centroids)
         for k in range(PATCHES):
             members = points[nearest == k]
             if len(members):

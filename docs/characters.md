@@ -27,6 +27,10 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 - It takes the base's skin weights and morph targets, so it bends and changes build with the body.
 - **It says what it covers and how deep it sits**: the regions whose skin lies inside it, worked out by the script, and a layer (under, over, outer), in its glTF extras. A coat over a shirt hides the shirt's covered parts as it hides skin.
 
+### Heights off the skin
+
+No layers (one piece per slot), but pieces from different slots overlap: a pack's straps cross the chest piece. Each slot has a height off the skin it stays within, so they stack without fitting every pair: chest pieces within 1.8 cm above the waist, where straps cross them (below it, a hem may stand out further); what crosses them, such as straps, solid from the skin to 2.2 cm, so it rests on bare skin and shows over a coat alike.
+
 ### Rigid worn things (helmets, packs, quivers, belt pouches)
 
 - **Made once, in its socket's space**, by a rule for that socket: a helmet's inner crown at the origin, a pack's back panel on the socket's plane, a quiver's belt loop at the origin. Scaled from the body's own measure at that socket (head width, back width) when fitted to each base. No numbers per item beyond which socket.
@@ -56,16 +60,18 @@ An item that fails a check isn't used until it passes.
 
 ## Against what we have, 2026-10-12
 
-Built: the bodies, their skeleton with twist bones, sockets, held looks, tints, one look per item per body, and a body that hides its skin under what it wears, by 256 patches its shader collapses (`patches.py`, `body_mask.wgsl`). Every piece is checked on every body through our clips (`gear_check.py`, the share of nearby skin that comes through it):
+Built: the bodies, their skeleton with twist bones, sockets, held looks, tints, one look per item per body, and a body that hides its skin under what it wears, by 1024 patches of about two centimetres its shader collapses (`patches.py`, `body_mask.wgsl`). Every piece is checked on every body through our clips (`gear_check.py`, the share of nearby skin that comes through it, at most 2%):
 
 | Piece | How it is made | Male | Female |
 |---|---|---|---|
-| Leather jerkin | On each body (`shell_garment.py`) | at most 1% in any clip | at most 1.1% |
+| Leather jerkin | On each body (`shell_garment.py`) | at most 1.6% (rolling) | at most 2% (crouching) |
+| Leather cap | On each body (`shell_garment.py`, `head_cap`) | 0.6% | 0.4% |
+| Packs | Bag at the back, top at the shoulders; straps made from the skin (`bands.py`) | at most 1.5% | at most 0.4% |
 | Quiver | At the belt socket, behind the hip | 0% | 0% |
-| Packs | At the back, top at the shoulders, straps bending with the skin | about 5%, at the shoulders under the straps | about 6-8% |
-| Leather cap | On each body (`shell_garment.py`, `head_cap`) | 1% | 0.3% |
 
-The jerkin, cap and quiver pass. The pack's straps still clip: a generated object fitted by rules; the fix is the jerkin's, the straps made from the shoulders' own surface, with the pack's bag kept rigid. A cap fitted as a rigid object cut into the head above the ears (7-8%); made on the head, it does not. Not built yet, nor pieces that hang loose (a coat's skirt, a cloak).
+All pass. What comes through is at the hips in a roll or crouch, where the jerkin's hem meets a bending thigh. With 256 patches the strip of skin at a hem, under patches only partly covered and so still drawn, came through at 3%; finer patches made it thin enough. Making the hem flare out instead made it worse. A cap fitted as a rigid object cut into the head above the ears (7-8%); made on the head, it does not. A pack's straps fitted as part of a generated model clipped at the shoulders (5-8%); made from the skin, they do not.
+
+Still open: the edges of a made-on-body piece (armholes, neck) look ragged, where the bake catches the dressed model's own rim. Not built yet: pieces that hang loose (a coat's skirt, a cloak), and a third body to show the rules hold beyond the two they were made with.
 
 ## Settled by the developers, 2026-10-12
 

@@ -18,9 +18,9 @@
 #import bevy_pbr::forward_io::{Vertex, VertexOutput}
 #endif
 
-// Field order must match BodyMask in character.rs: 256 bits, one per patch.
+// Field order must match BodyMask in character.rs: 1024 bits, one per patch.
 struct BodyMask {
-    hidden: array<vec4<u32>, 2>,
+    hidden: array<vec4<u32>, 8>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100)

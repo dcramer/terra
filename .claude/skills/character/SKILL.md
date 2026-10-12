@@ -102,7 +102,7 @@ The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveles
 spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../assets/models/character/base-male.glb small_pack large_pack leather_cap quiver
 ```
 
-Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front. Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does.
+Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. A pack keeps only its bag from the model: its straps are made from the body's own skin (`bands.py`), along a route of rays cast from the body's joints, so they bend as the shoulders do and fit any body. Keep to the heights off the skin in `docs/characters.md`: a chest piece within 1.8 cm above the waist, straps solid from the skin to 2.2 cm, so a pack and a jerkin from different makers still stack. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front. Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does.
 
 **Check every piece on every body**, by numbers first:
 

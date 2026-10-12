@@ -32,6 +32,7 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
+import bands
 import look
 import patches
 
@@ -136,11 +137,21 @@ def push_out(ob, offset):
     apply(ob, mod)
 
 
+# Heights off the skin, by slot (docs/characters.md): chest pieces stay within CHEST_M
+# (shell_garment.py's BULK_M); what is worn over them, a pack's straps, reaches past it.
+CHEST_M = 0.018
+OVER_CHEST_M = 0.022
+
+
 def fit_back(ob, height):
-    """On the back, as a pack is worn: its top level with the top of the shoulders, which this
-    body measures for itself, and its own back panel just off the skin. Tripo models its
-    shoulder straps as stiff loops standing out from that panel, so the panel is found from
-    where most of the pack is, and the straps are laid onto the back and shoulders."""
+    """A pack as it is worn: its bag riding the upper back, its straps made on the body.
+
+    The bag's top is level with the top of the shoulders, which this body measures for itself,
+    its back panel just off the skin. Tripo models shoulder straps as stiff loops standing out
+    of the panel; they are cut away, and straps are made as bands of the body's own surface
+    (bands.py) from the bag's top corners over the shoulders, down the chest, under the arms
+    and back to the bag's lower corners, so they bend as the shoulders do and cannot clip.
+    The bag rides the upper spine whole."""
     scale_to(ob, height)
     at = sockets["socket.back"].matrix_world.translation
     shoulders = max(p.z for p in region({"DEF-shoulder.L", "DEF-shoulder.R"}))
@@ -148,29 +159,48 @@ def fit_back(ob, height):
     middle = sorted(p.y for p in points(ob) if abs(p.x - (lo.x + hi.x) / 2) < (hi.x - lo.x) * 0.3)
     panel = middle[len(middle) * 3 // 10]
     move(ob, Matrix.Translation(Vector((-(lo.x + hi.x) / 2, at.y + 0.02 - panel, shoulders - hi.z))))
-    # The straps' faces are large; refine them so, laid on the skin, they follow the shoulder
-    # rather than cut across its curve.
-    near = {v.index for v in ob.data.vertices if (ob.matrix_world @ v.co).y < at.y + 0.015}
+    # The loops: whatever stands in front of the panel, toward the body.
+    front = at.y + 0.015
     bm = bmesh.new()
     bm.from_mesh(ob.data)
-    edges = [e for e in bm.edges if all(v.index in near for v in e.verts)]
-    bmesh.ops.subdivide_edges(bm, edges=edges, cuts=2, use_grid_fill=True)
+    loops = [f for f in bm.faces if any((ob.matrix_world @ v.co).y < front for v in f.verts)]
+    bmesh.ops.delete(bm, geom=loops, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     bm.to_mesh(ob.data)
     bm.free()
-    straps = ob.vertex_groups.new(name="Straps")
-    straps.add([v.index for v in ob.data.vertices if (ob.matrix_world @ v.co).y < at.y + 0.015], 1.0, "REPLACE")
-    lay = ob.modifiers.new("Straps", "SHRINKWRAP")
-    lay.target = body
-    lay.wrap_method = "NEAREST_SURFACEPOINT"
-    lay.wrap_mode = "ABOVE_SURFACE"
-    lay.offset = 0.012
-    lay.vertex_group = "Straps"
-    apply(ob, lay)
-    ob.vertex_groups.remove(ob.vertex_groups["Straps"])
     push_out(ob, 0.01)
-    # The pack rides the upper back; what lies on the skin (its straps, its panel) bends with
-    # the skin under it, as straps do, so the shoulders move under them without coming through.
-    skin_weights(ob, near=0.03, rest="DEF-spine.003")
+    lo, hi = box(points(ob))
+    rider = ob.vertex_groups.new(name="DEF-spine.003")
+    rider.add([v.index for v in ob.data.vertices], 1.0, "REPLACE")
+    # The straps, from this body's own joints and the bag's corners.
+    chest = joint("DEF-spine.003").z
+    leather = bpy.data.materials.new("Leather")
+    leather.use_nodes = True
+    leather.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = look.linear((0.42, 0.27, 0.16)) + (1.0,)
+    leather.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.8
+    straps = []
+    for side in (1, -1):
+        reach = abs(joint(f"DEF-upper_arm.{'L' if side > 0 else 'R'}").x)
+        x = side * reach
+        route = [
+            ((0.45 * x, 1.0, hi.z - 0.03), (0, -1, 0)),          # the bag's top corner, in from behind
+            ((0.7 * x, 0.0, shoulders + 0.5), (0, 0, -1)),       # down onto the top of the shoulder
+            ((0.6 * x, -1.0, chest + 0.02), (0, 1, 0)),          # in onto the chest
+            ((0.85 * x, -1.0, chest - 0.1), (0, 1, 0)),
+            ((3.0 * x, 0.0, chest - 0.13), (-side, 0, 0)),       # in onto the side, under the arm
+            ((0.6 * x, 1.0, lo.z + 0.06), (0, -1, 0)),           # the bag's lower corner, in from behind
+        ]
+        # Solid from just off the skin to above the thickest chest piece (OVER_CHEST_M).
+        straps.append(bands.band(body, route, width=0.045, offset=OVER_CHEST_M, inner=0.006,
+                                 name=f"strap.{side}", material=leather))
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in [ob] + straps:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.join()
+    ob.parent = arm
+    ob.matrix_parent_inverse = arm.matrix_world.inverted()
+    ob.modifiers.new("Armature", "ARMATURE").object = arm
     return None
 
 

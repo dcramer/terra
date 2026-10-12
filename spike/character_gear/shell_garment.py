@@ -47,6 +47,8 @@ SPECK = 0.03           # marked or unmarked islands smaller than this share of t
 WHOLE = 0.3            # marked islands smaller than this share of the largest are not the piece
 OFFSET_M = 0.008       # how far out from the skin the piece sits
 BULK_M = 0.03          # the most it follows the dressed surface standing off
+CROSSED_M = 0.018      # and above the waist, where straps cross the chest, a chest piece's height
+                       # off the skin, which they clear (fit_gear.py, docs/characters.md)
 MATCH_M = 0.03         # skin this close lines the dressed model up
 TEXTURE = 1024
 COVERED = 1.0          # a patch wholly under the piece is hidden; part-covered ones stay, or a band of skin vanishes below a hem or rim
@@ -258,8 +260,10 @@ for i, p in enumerate(skin_pts):
 kd.balance()
 origin = [kd.find(p)[1] for p in piece_pts]
 inv = mw.inverted()
+waist = joint("DEF-spine.001").z
 for v, i in zip(piece.data.vertices, origin):
-    out = min(max(OFFSET_M, stand[i] + 0.004), BULK_M)
+    most = CROSSED_M if skin_pts[i].z > waist else BULK_M
+    out = min(max(OFFSET_M, stand[i] + 0.004), most)
     v.co = inv @ (skin_pts[i] + skin_nrm[i] * out)
 piece.data.update()
 # 4. Weights: the vertex groups came with the copy of the body, so each vertex keeps its own.

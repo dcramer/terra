@@ -117,28 +117,34 @@ struct Tinted(HashMap<(AssetId<StandardMaterial>, [u32; 4]), Handle<StandardMate
 /// A body's material: the standard one, collapsing the patches of skin its mask hides.
 pub type BodyMaterial = ExtendedMaterial<StandardMaterial, BodyMask>;
 
-/// Which of a body's 256 patches are hidden, one bit each. Field order must match
+/// How many patches a body is divided into (`spike/character_gear/patches.py`).
+pub const PATCHES: u32 = 1024;
+
+/// Which of a body's patches are hidden, one bit each. Field order must match
 /// body_mask.wgsl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Copy, Default, PartialEq)]
 pub struct BodyMask {
     #[uniform(100)]
-    hidden: [UVec4; 2],
+    hidden: [UVec4; 8],
 }
 
 impl BodyMask {
     /// The mask hiding these patches.
     pub fn hiding(patches: impl IntoIterator<Item = u32>) -> Self {
-        let mut hidden = [UVec4::ZERO; 2];
-        for patch in patches.into_iter().filter(|patch| *patch < 256) {
+        let mut hidden = [UVec4::ZERO; 8];
+        for patch in patches.into_iter().filter(|patch| *patch < PATCHES) {
             let word = &mut hidden[(patch / 128) as usize][((patch / 32) % 4) as usize];
             *word |= 1 << (patch % 32);
         }
         BodyMask { hidden }
     }
 
-    fn key(&self) -> [u32; 8] {
-        let [a, b] = self.hidden;
-        [a.x, a.y, a.z, a.w, b.x, b.y, b.z, b.w]
+    fn key(&self) -> [u32; 32] {
+        let mut key = [0; 32];
+        for (i, word) in self.hidden.iter().enumerate() {
+            key[i * 4..i * 4 + 4].copy_from_slice(&word.to_array());
+        }
+        key
     }
 }
 
@@ -165,7 +171,7 @@ struct Skin {
 
 /// Body materials, shared: one per original material and mask.
 #[derive(Resource, Default)]
-struct BodyMaterials(HashMap<(AssetId<StandardMaterial>, [u32; 8]), Handle<BodyMaterial>>);
+struct BodyMaterials(HashMap<(AssetId<StandardMaterial>, [u32; 32]), Handle<BodyMaterial>>);
 
 /// A body whose model has loaded, so its sockets exist.
 #[derive(Component)]
@@ -531,8 +537,10 @@ mod tests {
 
     #[test]
     fn a_mask_sets_one_bit_per_patch() {
-        let mask = BodyMask::hiding([0, 33, 255]);
-        assert_eq!(mask.key(), [1, 2, 0, 0, 0, 0, 0, 1 << 31]);
+        let mask = BodyMask::hiding([0, 33, 1023]);
+        let key = mask.key();
+        assert_eq!((key[0], key[1], key[31]), (1, 2, 1 << 31));
+        assert_eq!(key[2..31].iter().sum::<u32>(), 0);
     }
 
     #[test]
