@@ -1,6 +1,6 @@
 ---
 name: blender
-description: Work in Blender for Terra, live in the developer's open Blender through its MCP server (mcp__blender__* tools) or headless through spike/model_bakeoff/run.sh. Use when asked to open, inspect, clean up, fit, render or export a model or .blend in Blender, or when a Blender MCP call fails.
+description: Work in Blender for Terra, headless through tools/blender/run.sh or live in the developer's open Blender through its MCP server (mcp__blender__* tools). Use when asked to open, inspect, clean up, fit, render or export a model or .blend in Blender, or when a Blender MCP call fails.
 ---
 
 # Blender
@@ -9,14 +9,14 @@ Blender is for cleaning up, fitting, rigging, rendering and exporting models, no
 
 ## Which way
 
-- **Headless script**, the default: `spike/model_bakeoff/run.sh <script.py> [args]`, with the script path relative to `spike/model_bakeoff/`. Use it for anything repeatable or part of a pipeline. The script is the record, so commit it next to what uses it.
+- **Headless**, the default: `tools/blender/run.sh <script.py> [--open file.blend] [args]` ([README](../../../tools/blender/README.md)). Use it for anything repeatable. A script worth keeping lives with what uses it, not in a spike someone else's work depends on.
 - **Live, through MCP**, when the developer has Blender open and wants to watch, try things, or have you inspect what they have. Code sent this way is gone afterwards, so once something works, put it in a script.
 
 ## Live through MCP
 
 - **The MCP server and Blender run on Windows.** Every path you give them is a Windows path: `wslpath -w <path>` (`\\wsl.localhost\Ubuntu\...`). Read what they write back through the WSL path.
 - **"Cannot connect to Blender at localhost:9876"** means the add-on's server isn't running. `claude mcp` showing "Connected" only means the bridge is up. Ask the developer to open Blender and press Start in the MCP add-on's preferences. The add-on also needs Preferences → System → Network → Allow Online Access turned on, even for localhost. Check it from WSL with `powershell.exe Test-NetConnection localhost -Port 9876`.
-- **The `*_for_cli` tools time out** in this setup (2026-10-11), even on an empty file, while `run.sh` takes seconds. Use `run.sh` for headless work.
+- **The `*_for_cli` tools time out** in this setup (2026-10-11), even on an empty file. Use `tools/blender/run.sh` instead, with `--open` for a `.blend`.
 - **It is the developer's scene.** Look before you change anything (`get_objects_summary`, `get_object_detail_summary`). Keep their names and collections, and ask before deleting or overwriting anything, including saving over their file.
 - **Prefer the specific tools to `execute_blender_code`.** In code, assign a dict to `result` to get data back.
 - **Check the API, don't recall it.** `search_api_docs` and `get_python_api_docs` match the running Blender (5.2). Blender 5 removed `scene.node_tree` for the compositor and `Action.fcurves` (actions are slotted), and deprecated `use_nodes`.
@@ -24,8 +24,6 @@ Blender is for cleaning up, fitting, rigging, rendering and exporting models, no
 
 ## Traps already found
 
-- **Environment variables don't reach the Windows Blender from WSL.** Pass options after `--` and read them with `look.args()` (`spike/model_bakeoff/look.py`).
-- **Scripts run from a `\\wsl.localhost` path can't import their neighbours.** Put the script's folder, and `spike/model_bakeoff/` for `look`, on `sys.path` explicitly.
 - **Blender's Python has numpy but no PIL.** Make contact sheets with ImageMagick in WSL. Python is allowed only inside Blender (D121).
 - **Operators fail quietly when headless.** Some cancel with no window (`quadriflow_remesh`), and some fail `poll()` without the right mode and context (`uv.smart_project` needs edit mode and a `temp_override`). Print every operator's return value, and print the counts that matter, such as vertices weighted. Bone heat weighting can fail with only a warning and still exit 0.
 - **Ask Blender what it sees before exporting.** Print each object's parent, modifiers and vertex groups. A mesh copied from an imported one keeps the importer's parenting, and the glTF exporter then writes no skin.
@@ -34,4 +32,4 @@ Blender is for cleaning up, fitting, rigging, rendering and exporting models, no
 - **Importing twice renames everything `.001`**: materials, objects and actions, so a file can end up exporting 52 clips instead of 26. Import once per session, or clear what is already there first.
 - **Tripo downloads are compressed in a way Bevy can't read.** An import and export through Blender fixes it. Tripo models sit centred on the origin, so ground them first.
 - **Prefer a number to a picture.** When renders keep going wrong, write a check that measures the problem (as `rig_check.py` does), rather than iterating by eye.
-- **Output models and renders are build output.** Write them under an ignored folder (`out/`, `shots/`), never commit them.
+- **Output models and renders are build output.** Write them under an ignored folder (`shots/`, `out/`), never commit them.

@@ -12,7 +12,7 @@ Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in 
 | `research/` | Findings, surveys and measurements, one dated note per question. |
 | `crates/` | The Rust workspace: the game's code. See `crates/README.md`. |
 | `xtask/` | Project tasks, run as `cargo xtask <task>`. |
-| `tools/` | Team tooling outside the game, such as [token stats](tools/token-stats/README.md), the [Tripo CLI](tools/tripo/README.md) and the [sandbox remote](tools/sandbox/README.md). |
+| `tools/` | Team tooling outside the game, such as [token stats](tools/token-stats/README.md), the [Tripo CLI](tools/tripo/README.md), the [sandbox remote](tools/sandbox/README.md) and the [Blender runner](tools/blender/README.md). |
 | `demo/` | The playable tech demo on Godot. A working reference until the Rust build replaces it. |
 | `prototypes/sim_toy/` | A globe for watching the planet simulation, on Godot. |
 | `spike/` | Throwaway experiments. |
@@ -36,7 +36,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - Technical decisions are yours to make: decide, record the reason in `docs/decisions.md`, and keep going. Design decisions belong to the developers: give a recommendation, mark it Open, and don't build on it.
 - When you investigate something, write it up as a dated note in `research/` and link it from `research/README.md`. Research informs decisions; it does not make them.
 - This is a public repository. Don't commit engine binaries, build output, logs, or anything personal.
-- Code is Rust or TypeScript (D121). The game and anything it shares is Rust; tooling outside it, such as scripts, CLIs and the Cloudflare worker, is TypeScript run by Node (22.18 or later runs `.ts` directly, so no build step and, where possible, no dependencies). Don't write new Python or other languages. The one exception is code that must run inside another program that only speaks Python, such as Blender scripts. Code nothing uses is deleted, not kept or ported.
+- Code is Rust or TypeScript (D121). The game and anything it shares is Rust; tooling outside it, such as scripts, CLIs and the Cloudflare worker, is TypeScript run by Node (22.18 or later runs `.ts` directly, so no build step and, where possible, no dependencies). A short shell script is fine for glue, such as launching a program or chaining commands; once it has real logic, write it in TypeScript or Rust. Don't write new Python or other languages. The one exception is code that must run inside another program that only speaks Python, such as Blender scripts. Code nothing uses is deleted, not kept or ported.
 - Work on `main`. There are no branches or pull requests: commit to `main` and push it.
 - Commit and push after every incremental change. Others work on this project too, and the goal is that everyone is up to date between changes. Before pushing, pull with rebase (`git pull --rebase`), resolve any conflicts, and run the checks again if anything came in. Never force-push `main`.
 

@@ -7,7 +7,7 @@ description: Make a game character for Terra (a base body, an NPC, a body templa
 
 From a design to a model that plays every animation in the game, with Tripo doing the hard parts and scripts doing the rest. Worked out on 2026-10-11 ([research](../../../research/ai-models-for-art.md#characters-made-and-rigged), D115). The male base body was made this way.
 
-Everything runs from the repository root under WSL, with the Windows Blender (`spike/model_bakeoff/run.sh` finds it) for the steps that must run inside Blender, and the Tripo CLI (`tools/tripo/tripo.ts`, the `tripo` skill) for everything Tripo does, logged in with `TRIPO_STUDIO_COOKIE` in `.env`. Check it first with `node tools/tripo/tripo.ts balance`.
+Everything runs from the repository root under WSL, with the Windows Blender (`spike/model_bakeoff/run.sh` runs a script through `tools/blender/run.sh`, which finds it) for the steps that must run inside Blender, and the Tripo CLI (`tools/tripo/tripo.ts`, the `tripo` skill) for everything Tripo does, logged in with `TRIPO_STUDIO_COOKIE` in `.env`. Check it first with `node tools/tripo/tripo.ts balance`.
 
 Costs per character, on the Studio subscription: design sheets are free (100 images a month), the model about 25 credits, the rig 20.
 
