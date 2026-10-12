@@ -84,7 +84,12 @@ The two ways, as they would play here:
 
 **Proposed: an expansion is a role, not an item.** A station names the roles it can use, such as the forge's bellows, quench trough, grindstone and tool rack, and anything built for a role fills it. Each role has variations: different looks, materials and makers, many found in other realms (D87), as Terraria's furniture is (D85), so two smithies look different. Stronger variations may do more, such as an iron anvil letting the forge make what a stone one cannot.
 
-**Proposed: where by the role.** What is part of the station attaches to it, on a slot (a bellows on a forge, a vice on a bench); what is part of the workshop stands within a few metres (a tool rack, a grindstone). Each is then placed in the way that reads as real, and a slot is shown only when an expansion that fits it is in hand.
+**Where an expansion goes.** The developers, 2026-10-12: they like Soulmask's way more, but it needs enough space round the station to extend it; Valheim's gives more freedom, so may be better, its one fault being that the radius was always too tight. Proposed, Valheim's way, with what they disliked fixed and some of Soulmask's clarity kept:
+
+- **Within a generous reach**, several metres, as data per station so it is tuned by playing; a whole workshop, not a ring round the bench. Shown as a circle on the ground while an expansion is in hand, and the expansion turns blue when it counts.
+- **Suggested places, not slots.** While one is in hand, ghosts show good spots by the station, where a bellows or a vice would naturally go; it snaps there if aimed near, and goes anywhere else in reach otherwise. So a cramped base still works, and a roomy one looks laid out.
+- **It serves every station it is in reach of** that can use its role, so two forges side by side share a grindstone, and there is never doubt which it belongs to.
+- **Indoors, the room counts too**: an expansion in the same enclosed room as its station counts wherever it is in that room, since that is a workshop (once indoors is worked out, D152).
 
 **What an expansion does, by its variation** (the developers' direction): each variation says, as data (D136), what it adds to its station, so two forges expanded differently can do different things:
 
