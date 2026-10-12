@@ -14,15 +14,19 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 
 From the developers, 2026-10-11 (D98): use the books' system as the baseline and a guide, and tweak it where the game needs.
 
-## Two layers
+## Three layers
 
-| | Skills | Essences |
-|---|---|---|
-| What | What you can do with your hands: swim, climb, chop, smith, a weapon | Powers: what makes you more than a person |
-| How you get one | By doing it (D88) | By finding and absorbing an essence |
-| How many | Many, small | A few, large |
-| How it grows | By doing it more | Abilities by use, through ranks |
-| What it says about you | What you have practised | Who you are |
+From the developers on 2026-10-11 (D124): in the books, not everything comes from essences; some magic, such as astral magic, is a technique you learn and study. So there are three ways to grow, not two.
+
+| | Skills | Studied magic | Essences |
+|---|---|---|---|
+| What | What you can do with your hands: swim, climb, chop, smith, a weapon | Techniques of magic anyone can learn: astral magic, and, as I recall from the books, ritual magic | Powers: what makes you more than a person |
+| How you get one | By doing it (D88) | By study: from a teacher, a text or a ruin that shows it (D92), then practice | By finding and absorbing an essence |
+| How many | Many, small | A few disciplines, each deep | A few, large |
+| How it grows | By doing it more | By studying and working it, through ranks | Abilities by use, through ranks |
+| What it says about you | What you have practised | What you have learned | Who you are |
+
+Proposed for studied magic, Open: it is slow and deliberate, done in places and with materials rather than in the heat of a fight: wards and circles, binding, opening and closing ways (D72), reading magic. It is the clearest home for the realms' learned lore ([settings.md](settings.md)): one realm's people may teach a discipline no one else knows. Recruits who know a discipline can practise it in your claims (D90, D123).
 
 ## Skills on the rank ladder
 
@@ -31,7 +35,7 @@ Asked by the developers on 2026-10-11: can skills rank up iron, bronze and so on
 - **Each skill climbs iron, bronze, silver, gold, diamond**, with many small steps inside a rank that come often, and a rank-up now and then as a milestone. That is the feel of the grinding games with many skills: always a step coming, sometimes a big one.
 - **A rank-up opens something**, not only bigger numbers: a technique, a kind of recipe, a move. As in the books, where a rank changes what an ability does.
 - **A skill's rank decides what rank of thing you can work.** An iron-rank smith cannot work silver-rank metal; an iron-rank miner chips at a bronze-rank vein slowly, if at all. Climbing a skill then has a place in the world to go to, the way level requirements pull a player along in RuneScape.
-- **Two ladders, not one.** Essences make your rank as a person, which decides what you can survive (D98); skills decide what you can make and do. A gold-rank crafter can be an iron-rank fighter.
+- **Separate ladders.** Essences make your rank as a person, which decides what you can survive (D98); skills decide what you can make and do. A gold-rank crafter can be an iron-rank fighter.
 - **Recommended: skills may run ahead of your own rank**, so a crafter or gatherer has a whole game of their own. Open: the books might say a person's rank caps what their hands can do.
 - **Grinding, but never a chore** (D122): every step should feel like progress. Repetition for its own sake is where the grind games lose people.
 
@@ -56,3 +60,4 @@ The books' fighters spend mana on abilities. From the developers (D102): **there
 5. **Skills and essences together**: does a high skill change what an ability does (a skilled archer's fire arrow)?
 6. **Skills on the rank ladder**, as proposed above, and **may a skill run ahead of your own rank**?
 7. **Which grinding games are the reference** for many skills: RuneScape, Ultima Online, Wurm Online, Star Wars Galaxies, the Elder Scrolls games, or others?
+8. **Studied magic**: which disciplines, how they are learned, and whether they rank on the same ladder?
