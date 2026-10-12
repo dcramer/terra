@@ -16,17 +16,21 @@ From the developers, 2026-10-11 (D98): use the books' system as the baseline and
 
 ## Three layers
 
-From the developers on 2026-10-11 (D124): in the books, not everything comes from essences; some magic, such as astral magic, is a technique you learn and study. So there are three ways to grow, not two.
+From the developers on 2026-10-11 (D124): in the books, not everything comes from essences; some magic, such as astral magic, is a technique you learn and study, and so are combat styles, learned from books and practice. So there are three ways to grow, not two. As with everything here, the developers will invent their own, drawing on literature and games (D125).
 
-| | Skills | Studied magic | Essences |
+| | Skills | Studied techniques | Essences |
 |---|---|---|---|
-| What | What you can do with your hands: swim, climb, chop, smith, a weapon | Techniques of magic anyone can learn: astral magic, and, as I recall from the books, ritual magic | Powers: what makes you more than a person |
+| What | What you can do with your hands: swim, climb, chop, smith, a weapon | Disciplines anyone can learn: magic such as astral magic, and combat styles | Powers: what makes you more than a person |
 | How you get one | By doing it (D88) | By study: from a teacher, a text or a ruin that shows it (D92), then practice | By finding and absorbing an essence |
 | How many | Many, small | A few disciplines, each deep | A few, large |
 | How it grows | By doing it more | By studying and working it, through ranks | Abilities by use, through ranks |
 | What it says about you | What you have practised | What you have learned | Who you are |
 
-Proposed for studied magic, Open: it is slow and deliberate, done in places and with materials rather than in the heat of a fight: wards and circles, binding, opening and closing ways (D72), reading magic. It is the clearest home for the realms' learned lore ([settings.md](settings.md)): one realm's people may teach a discipline no one else knows. Recruits who know a discipline can practise it in your claims (D90, D123).
+Proposed for studied techniques, Open:
+
+- **Studied magic** is slow and deliberate, done in places and with materials rather than in the heat of a fight: wards and circles, binding, opening and closing ways (D72), reading magic.
+- **A combat style** is a way to use a kind of weapon: its stances, combinations and timing. You learn its first form from a book or a teacher and the rest by practice, so a style shapes how a weapon skill (D88) plays rather than replacing it, and a style learned with one sword carries to another.
+- **Both are the clearest home for the realms' learned lore** ([settings.md](settings.md)): one realm's people may teach a discipline or style no one else knows. A book is something found, kept and carried, so learning fits finding (D68, D92). Recruits who know one can practise or teach it in your claims (D90, D123).
 
 ## Skills on the rank ladder
 
@@ -60,4 +64,4 @@ The books' fighters spend mana on abilities. From the developers (D102): **there
 5. **Skills and essences together**: does a high skill change what an ability does (a skilled archer's fire arrow)?
 6. **Skills on the rank ladder**, as proposed above, and **may a skill run ahead of your own rank**?
 7. **Which grinding games are the reference** for many skills: RuneScape, Ultima Online, Wurm Online, Star Wars Galaxies, the Elder Scrolls games, or others?
-8. **Studied magic**: which disciplines, how they are learned, and whether they rank on the same ladder?
+8. **Studied techniques**: which disciplines and styles, how they are learned, and whether they rank on the same ladder?

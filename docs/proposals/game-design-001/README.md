@@ -17,6 +17,8 @@ From 2026-10-11:
 
 ## Based on
 
+From the developers on 2026-10-11 (D125): **we invent our own systems, drawing heavily on literature and game design for inspiration.** No system is a copy of a book's or a game's.
+
 Open. The developers want each design based on a game they know they enjoy, so its core mechanics are known to be fun. A comparison of candidates is in [research/reference-games.md](../../../research/reference-games.md); its suggestion is **Enshrouded for how it plays, Soulmask for what you are doing**: Enshrouded's movement, fighting, building and rescued survivors, with Soulmask's recruits who work and defend, outposts at resources, and attacks provoked by your activity. Kenshi is the reference for a world that goes on without you.
 
 ## The idea in one line
