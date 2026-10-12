@@ -25,7 +25,7 @@ Draft. A feature that serves none of these is cut.
 
 ## Our inspirations
 
-Named by the developers on 2026-10-11 as the games and books we draw on (D85), with Red Dead Redemption 2, The Forest, Terraria and Dune: Awakening added on 2026-10-12. What we take is design and systems; a game's look is a separate question, answered by the art direction ([art.md](art.md), D14). Each design should be based on games we know we enjoy; how these combine for [game design 001](proposals/game-design-001/README.md) is in [research/reference-games.md](../research/reference-games.md).
+Named by the developers on 2026-10-11 as the games and books we draw on (D85), with Red Dead Redemption 2, The Forest, Terraria, Dune: Awakening and Sons of the Forest added on 2026-10-12. What we take is design and systems; a game's look is a separate question, answered by the art direction ([art.md](art.md), D14). Each design should be based on games we know we enjoy; how these combine for [game design 001](proposals/game-design-001/README.md) is in [research/reference-games.md](../research/reference-games.md).
 
 | Inspiration | We take | We leave |
 |---|---|---|
@@ -38,6 +38,7 @@ Named by the developers on 2026-10-11 as the games and books we draw on (D85), w
 | [Dune: Awakening](https://store.steampowered.com/app/1172710/Dune_Awakening/) | Great graphics, a cool atmosphere and good lore (named by the developers on 2026-10-12). Its building is only "ok": not the model for ours. | Its building. |
 | [Terraria](https://store.steampowered.com/app/105600/Terraria/) | Discovery and unlocking (named by the developers on 2026-10-12): you go to other zones, find new materials, and they unlock new kinds of things to craft and build, many only for how they look. Ours are realms (D87). See [progression.md](progression.md). | Not yet said. Its 2D view. |
 | [The Forest](https://store.steampowered.com/app/242760/The_Forest/) | Its building (named by the developers on 2026-10-12): a nice building system, and the way you get logs and the like for larger projects, rather than sticks or something like them. Big work feels physical. See the building design ([construction.md](construction.md)). | Not yet said. |
+| [Sons of the Forest](https://store.steampowered.com/app/1326470/Sons_Of_The_Forest/) | Its world design (named by the developers on 2026-10-12): beautiful, full, and organic. The land is thick with growth in layers, from ground cover through undergrowth to canopy, so it never reads as objects placed on bare ground. This is the gap our own scene tests showed: set dressing, ground cover and density ([art.md](art.md#where-we-are)). | Not yet said. Matching its photographic detail with generated assets is unlikely (see [research/ai-models-for-art.md](../research/ai-models-for-art.md)); its realism against our stylised direction is the art direction's question (D14). |
 
 ### Earlier references
 
