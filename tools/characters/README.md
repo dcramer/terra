@@ -8,7 +8,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 |---|---|
 | `make_character.sh NAME SHEET HEIGHT` | The whole body pipeline on Studio credits: keeps the sheet, its front view, Tripo's model and rig in `art/characters/NAME/`, then runs `finish_character.sh` |
 | `finish_character.sh NAME HEIGHT` | The free part, rerun for every body when it improves: convert, check, render, export |
-| `convert_rig.py` | Tripo's skeleton onto ours, with forearm twist bones (`twist.py`) |
+| `convert_rig.py` | Tripo's skeleton (its V1 rig, or V3 on `unreal`) onto ours, with forearm twist bones (`twist.py`) |
 | `rig_check.py` | Checks a rig against our skeleton and the mannequin, whose scores are `art/characters/rig-baseline.json` |
 | `rig_render.py` | A sheet of the body through our animations |
 | `export_character.py` | The body as the game loads it: skeleton, sockets, our clips re-sampled on it, skin patches (`patches.py`) |

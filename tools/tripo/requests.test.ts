@@ -253,16 +253,16 @@ test("edit: Mesh Edit on an untextured P2 model, the box clamped as the app does
   assert.deepEqual(textured.studio.operations, []);
 });
 
-test("a quad Smart Mesh, which Studio keeps as FBX, is saved and read as a GLB exported from it", async () => {
+test("a quad Smart Mesh, which Studio keeps as FBX, is read through a GLB export and saved as its FBX", async () => {
   const fbx = (s: FakeStudio) => {
     s.detail.model_url = "https://fake/output_mesh.fbx";
     s.detail.operator = { operator_id: "head", is_nexus_mesh: true };
   };
-  const { studio } = await run(["edit", PID, "--box", "0,0,0,1,1,1", ...out("e.glb")], fbx);
-  const names = studio.operations.map(([name]) => name);
-  assert.deepEqual(names, ["export", "local_edit", "export"], "read through an export, edited, saved through an export");
+  const { studio, printed } = await run(["edit", PID, "--box", "0,0,0,1,1,1", ...out("e.glb")], fbx);
+  assert.deepEqual(studio.operations.map(([name]) => name), ["export", "local_edit"], "read through an export, then edited");
+  assert.equal(studio.operations[0][1].format, "gltf");
   assert.equal(studio.operations[1][1].face_limit, 6, "a quad is one face");
-  assert.equal(studio.operations[2][1].format, "gltf");
+  assert.equal(printed[0].files[0].split("/").at(-1), "e.fbx");
 });
 
 test("rig: the V3 rig on the unreal skeleton by default", async () => {

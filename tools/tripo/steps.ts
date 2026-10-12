@@ -26,10 +26,13 @@ export async function apply(client: Studio, a: Args, pid: string, name: string, 
   await finish(client, pid, receipt.operator_id, output(a, pid, suffix));
 }
 
-// Saves the model an operation made and reports it, with what it was charged.
+// Saves the model an operation made, as Studio keeps it, and reports it with what it was
+// charged. A quad Smart Mesh is an FBX, so it is saved under that extension.
 export async function finish(client: Studio, pid: string, op: string | undefined, path: string): Promise<void> {
   const detail = await client.project(pid, op);
-  await saveGlb(client, detail, path);
+  const format = storedFormat(detail);
+  if (extname(path).slice(1).toLowerCase() !== format) path = `${path.slice(0, path.length - extname(path).length)}.${format}`;
+  await client.download(detail.model_url, path);
   report({ project: pid, operator: detail.operator.operator_id, credits: await client.charged(), files: [path] });
 }
 
@@ -38,7 +41,8 @@ export function storedFormat(detail: Project): string {
   return extname(new URL(detail.model_url).pathname).slice(1).toLowerCase() || "glb";
 }
 
-// A project's model as a GLB: Studio's own file when it is one, else exported as one (free).
+// A project's model as a GLB, to read: Studio's own file when it is one, else exported as one
+// (free). An export faces the standard glTF way, not as Studio keeps models, so it is only read.
 async function saveGlb(client: Studio, detail: Project, path: string): Promise<void> {
   if (storedFormat(detail) === "glb") await client.download(detail.model_url, path);
   else await exportFile(client, detail.id, path, "glb", Boolean(detail.operator.is_rigged), [], false, textureSize(detail.operator));

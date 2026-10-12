@@ -1,7 +1,9 @@
 """Converts a body rigged by Tripo's auto-rig onto our skeleton, so our animations play on it.
 
-Tripo rigs onto its own humanoid skeleton (78 bones, with twist and helper bones). Ours is
-the Quaternius one every sandbox animation is made for. This:
+Tripo's older V1 rig puts its own humanoid skeleton in (78 bones, with twist and helper
+bones); its V3 rig on the `unreal` skeleton names its 61 bones as Unreal's mannequin does,
+twist bones included. Both convert. Ours is the Quaternius one every sandbox animation is
+made for. This:
   1. turns Tripo's model to face -Y as ours does, scales it to `height`, and welds the
      vertices glTF split at texture seams,
   2. moves each of our joints to the matching Tripo joint, keeping our bones' directions
@@ -66,6 +68,29 @@ for s in ("L", "R"):
         for i in (1, 2, 3):
             JOINT[f"DEF-{ours}.0{i}.{s}"] = f"{s}_{tripo}{i}"
 
+# The same for V3's unreal skeleton. Its twist bones fold into the bone they twist; twist.py
+# adds our own.
+UNREAL_MAP = {
+    "root": "DEF-hips", "pelvis": "DEF-hips",
+    "spine_01": "DEF-spine.001", "spine_02": "DEF-spine.002", "spine_03": "DEF-spine.003",
+    "neck_01": "DEF-neck", "head": "DEF-head",
+}
+UNREAL_JOINT = {
+    "DEF-hips": "pelvis", "DEF-spine.001": "spine_01", "DEF-spine.002": "spine_02", "DEF-spine.003": "spine_03",
+    "DEF-neck": "neck_01", "DEF-head": "head",
+}
+for S, s in (("L", "l"), ("R", "r")):
+    for theirs, ours in (("clavicle", "shoulder"), ("upperarm", "upper_arm"), ("lowerarm", "forearm"), ("hand", "hand"),
+                         ("thigh", "thigh"), ("calf", "shin"), ("foot", "foot"), ("ball", "toe")):
+        UNREAL_MAP[f"{theirs}_{s}"] = f"DEF-{ours}.{S}"
+        UNREAL_JOINT[f"DEF-{ours}.{S}"] = f"{theirs}_{s}"
+    for theirs, ours in (("upperarm", "upper_arm"), ("lowerarm", "forearm"), ("thigh", "thigh"), ("calf", "shin")):
+        UNREAL_MAP[f"{theirs}_twist_01_{s}"] = f"DEF-{ours}.{S}"
+    for theirs, ours in (("thumb", "thumb"), ("index", "f_index"), ("middle", "f_middle"), ("ring", "f_ring"), ("pinky", "f_pinky")):
+        for i in (1, 2, 3):
+            UNREAL_MAP[f"{theirs}_0{i}_{s}"] = f"DEF-{ours}.0{i}.{S}"
+            UNREAL_JOINT[f"DEF-{ours}.0{i}.{S}"] = f"{theirs}_0{i}_{s}"
+
 src, name, height = (look.args() + ["", "", "1.8"])[:3]
 height = float(height)
 
@@ -98,6 +123,9 @@ if "DEF-hips" in joints:
     # Already on our bones (the shared mesh's bodies): only the directions and twist to do.
     MAP, JOINT = {}, {b: b for b in joints if b.startswith("DEF-")}
     joints["Hip"] = joints["DEF-hips"]
+elif "pelvis" in joints:
+    MAP, JOINT = UNREAL_MAP, UNREAL_JOINT
+    joints["Hip"] = joints["pelvis"]
 # The body, in world space under the same transform, unparented.
 mw = body.matrix_world.copy()
 body.parent = None

@@ -38,7 +38,7 @@ tools/characters/make_character.sh NAME tools/characters/out/NAME-sheet.png 1.80
 The last number is the character's height in metres (life size, D110). It:
 
 1. crops the front view (the left 44% of the sheet) and makes a textured model (`tripo.ts model`);
-2. rigs it with Tripo's auto-rig in Tripo's own skeleton (`tripo.ts rig --skeleton tripo`), the one the converter reads;
+2. rigs it with Tripo's auto-rig in Tripo's own skeleton (`tripo.ts rig --skeleton tripo`, the older V1 rig), which passed our rig check on the base body where the app's V3 rigs pinched at the knees (the converter also reads V3's `unreal`, to check that again);
 3. runs the rest, which is free and is `finish_character.sh NAME HEIGHT` on its own:
    - converts Tripo's skeleton onto ours (`convert_rig.py`): our joints move to Tripo's, our bones keep their directions, Tripo's weights are renamed onto our bones with its twist and helper bones folded in, then smoothed lightly; forearm twist bones are added (`twist.py`), and every vertex kept to four bones;
    - checks it (`rig_check.py`) and renders it moving (`rig_render.py`, to `tools/characters/out/NAME-sheet.png`);

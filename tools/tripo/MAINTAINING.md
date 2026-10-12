@@ -68,7 +68,7 @@ When the code cannot settle a question, for example what a reply looks like, cap
 - `image` makes one image, where the app makes four.
 - `export` gives GLB where the app offers FBX for a quad model, and an FBX in one file (`texture_packaging: embedded`, as the app's Blender, Max and Maya bridges send) rather than the panel's zip.
 - `rig` defaults to the `unreal` skeleton where the app defaults to `mixamo`: on our base body it is the only one whose twist bones carry skin.
-- `--skeleton tripo` sends the V1 rig (`v1.0-20240301`), which the app no longer offers. Our character converter reads its bone names, and on the same body V1 passed our rig check where V3's Mixamo rig pinched at the knees and elbows (2026-10-12). Check this again when Tripo ships a new rig (`bundle.ts` lists the rig enum), and once the converter reads `unreal`'s names.
+- `--skeleton tripo` sends the V1 rig (`v1.0-20240301`), which the app no longer offers. Our character converter reads its bone names and `unreal`'s, and on the same body V1 passed our rig check where V3's `mixamo` and `unreal` rigs pinched at the knees (2026-10-12; research/tripo-studio-api.md). Check again when Tripo ships a new rig: `bundle.ts` lists the rig enum.
 
 ## Last checked
 
@@ -93,7 +93,7 @@ When the code cannot settle a question, for example what a reply looks like, cap
 - **Run live, and working:** `show`, `animate`, `unanimate`, `rename`, `fork`, `restore`, `image` (with and without a reference), `import`, `rig` with V3 Mixamo and with `--type other` (a wolf, rigged as a quadruped), `model` at the new defaults (charged 55, as the README says), `model --model p2 --variations 2`, `edit`, `cancel` (nothing charged, no step left), and `export` of a rigged model.
 - **Found by running:**
   - `export` left a rigged model's skeleton out; the app keeps it (`with_animation` is true for any rigged model), and so does the CLI now.
-  - Studio keeps a quad Smart Mesh as FBX, which the CLI had saved under a `.glb` name and could not read parts from; it now exports a GLB from it, as it does for every result.
+  - Studio keeps a quad Smart Mesh as FBX, which the CLI had saved under a `.glb` name and could not read parts from. It now saves it as `.fbx`, and reads parts and faces through a GLB export. An export faces the standard glTF way while Studio keeps models facing +X, which our character tools turn themselves, so results stay as Studio keeps them.
   - P2 models and Mesh Edit were not charged on our plan this time, and the CLI reported 0 for them, which the balance confirmed.
 - **Not settled:** where `edit`'s box lands. Both runs remade their region almost unchanged, so the result does not show it; the app's viewer starts the box at the model's own bounds, which suggests the model's coordinates.
 - **Left out on purpose:**
