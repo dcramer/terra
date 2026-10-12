@@ -1,0 +1,25 @@
+{
+  "subject": "sugar maple tree in autumn: a straight trunk forking into upswept branches and a dense, rounded oval crown of five-pointed leaves turned red and orange; grey-brown bark in long plates",
+  "file": "Maple",
+  "into": "nature",
+  "size": 15,
+  "budget": 2500,
+  "roles": [
+    "Bark",
+    "WoodDark",
+    "Leaves",
+    "LeavesDark"
+  ],
+  "match": {
+    "Leaves": [
+      0.84,
+      0.48,
+      0.18
+    ],
+    "LeavesDark": [
+      0.66,
+      0.24,
+      0.16
+    ]
+  }
+}

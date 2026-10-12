@@ -1,0 +1,13 @@
+{
+  "subject": "ancient English yew tree: a short, massive, fluted and twisted trunk of several stems grown together, with flaking red-brown bark, under a dense, low, broad dome of dark green needles that reaches nearly to the ground",
+  "file": "Yew",
+  "into": "nature",
+  "size": 12,
+  "budget": 2500,
+  "roles": [
+    "Bark",
+    "WoodDark",
+    "Pine",
+    "LeavesDark"
+  ]
+}

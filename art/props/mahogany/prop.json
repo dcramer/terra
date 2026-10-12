@@ -1,0 +1,13 @@
+{
+  "subject": "big-leaf mahogany tree of the rainforest: a very tall, straight trunk with broad buttress roots flaring at its foot, reddish-brown scaly bark, and a high, wide, umbrella-shaped crown of glossy dark green leaves",
+  "file": "Mahogany",
+  "into": "nature",
+  "size": 26,
+  "budget": 2500,
+  "roles": [
+    "Bark",
+    "WoodDark",
+    "Leaves",
+    "LeavesDark"
+  ]
+}

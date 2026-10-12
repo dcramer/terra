@@ -1,0 +1,13 @@
+{
+  "subject": "weeping willow tree: a stout, slightly leaning trunk and a broad crown whose long thin branches hang straight down almost to the ground in curtains of narrow pale green leaves; furrowed grey-brown bark",
+  "file": "Willow",
+  "into": "nature",
+  "size": 12,
+  "budget": 2500,
+  "roles": [
+    "Bark",
+    "WoodDark",
+    "LeavesLight",
+    "Leaves"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "subject": "English oak tree, mature: a short, thick, gnarled trunk that splits low into heavy crooked limbs spreading wide; a broad, rounded, uneven crown of dark green lobed leaves in several clumps; rough, deeply furrowed grey-brown bark",
+  "file": "Oak",
+  "into": "nature",
+  "size": 16,
+  "budget": 2500,
+  "roles": [
+    "Bark",
+    "WoodDark",
+    "Leaves",
+    "LeavesDark",
+    "LeavesLight"
+  ]
+}

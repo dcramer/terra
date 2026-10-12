@@ -1,0 +1,20 @@
+{
+  "subject": "mature teak tree in full leaf: a tall, straight, stout trunk with pale grey-brown bark, branching in its upper third into a broad, rounded but open crown of very large, broad, oval leaves gathered in big loose clumps",
+  "file": "Teak",
+  "into": "nature",
+  "size": 22,
+  "budget": 2500,
+  "roles": [
+    "Bark",
+    "WoodDark",
+    "Leaves",
+    "LeavesDark"
+  ],
+  "match": {
+    "Bark": [
+      0.62,
+      0.56,
+      0.48
+    ]
+  }
+}
