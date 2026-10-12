@@ -14,7 +14,7 @@ export function page(summary) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Terra Token Stats</title>
-<meta name="description" content="What the Claude tokens and Tripo credits spent building Terra cost at list prices, per person.">
+<meta name="description" content="Terra is a multiplayer survival sandbox built by a small team with AI coding agents. This is what the Claude tokens and Tripo credits spent building it cost at list prices, per person.">
 <link rel="icon" href="data:image/svg+xml,${encodeURIComponent(ICON)}">
 <style>${CSS}</style>
 </head>
@@ -27,6 +27,7 @@ export function page(summary) {
   </div>
 </header>
 <main data-shape="${esc(shape(summary))}">
+  ${ABOUT}
   <section class="hero" aria-label="Everyone">
     <div class="big"${num(totals.cost, "cost", "usd")}>${money(totals.cost)}</div>
     <div class="label">at list prices, across ${users.length} ${users.length === 1 ? "person" : "people"}</div>
@@ -44,6 +45,15 @@ export function page(summary) {
 </body>
 </html>`;
 }
+
+// What the page is, for someone who arrives without knowing: the game, how it is
+// being built, and what the numbers below count.
+const REPO = "https://github.com/dcramer/terra";
+const ABOUT = `<section class="about" aria-label="About">
+    <p><strong>Terra</strong> is a multiplayer survival sandbox across many procedural worlds, built in Rust by a small team working with AI coding agents. It is in pre-production: there is no game to play yet.</p>
+    <p>This page counts what that AI work costs: every Claude token spent on the project and every Tripo credit spent making 3D models. Most of it runs on subscriptions, so this is what the work would cost at list prices, not what anyone paid.</p>
+    <p><a href="${REPO}">Follow along on GitHub</a></p>
+  </section>`;
 
 function card(u, peak, days) {
   const bars = u.daily.map((d) => `<div class="day"${tip(d)}>${stack(d, peak)}</div>`).join("");
@@ -248,6 +258,10 @@ header { position: relative; height: clamp(180px, 32vw, 300px); overflow: hidden
 h1 { margin: 0; font-size: clamp(36px, 7vw, 64px); font-weight: 600; letter-spacing: 0.02em; }
 .title p { margin: 0; color: var(--muted); font-size: clamp(14px, 2vw, 18px); }
 main { max-width: 960px; margin: 0 auto; padding: 24px 16px 8px; }
+.about { max-width: 600px; margin: 0 auto 28px; text-align: center; color: var(--muted); }
+.about p { margin: 0 0 10px; }
+.about strong { color: var(--ink); font-weight: 600; }
+.about a { color: var(--ink); font-weight: 600; text-decoration-color: var(--bar); text-underline-offset: 3px; }
 .hero { text-align: center; padding: 8px 0 24px; }
 .big { font-size: clamp(48px, 10vw, 84px); font-weight: 600; line-height: 1;
   font-variant-numeric: tabular-nums; }

@@ -46,3 +46,10 @@ test("stacks Tripo's cost on Claude's in a day's bar, rounding only the top", ()
   assert.equal(stack(day("d", 3, 1), 4), '<i class="claude" style="height:75.0%"></i><i class="tripo top" style="height:25.0%"></i>');
   assert.equal(stack(day("d", 4, 0), 4), '<i class="claude top" style="height:100.0%"></i><i class="tripo top" style="height:0.0%"></i>');
 });
+
+test("says what Terra is and what the numbers count, with a link to the project", () => {
+  const html = page(summary);
+  assert.match(html, /<section class="about"[^>]*>[\s\S]*<strong>Terra<\/strong> is a multiplayer survival sandbox/);
+  assert.match(html, /not what anyone paid/);
+  assert.match(html, /<a href="https:\/\/github\.com\/dcramer\/terra">/);
+});

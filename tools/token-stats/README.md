@@ -88,7 +88,7 @@ The worker sends its errors, and a sample of its traces, to the [`token-stats` p
 
 | Call | Body or query |
 |---|---|
-| `GET /` | The page: everyone's cost and tokens, models and services, and cost a day for 30 days |
+| `GET /` | The page: a few lines on what Terra is and what the numbers count, then everyone's cost and tokens, models and services, and cost a day for 30 days |
 | `GET /json` | The same as JSON |
 | `GET /ticker` | The cost and everyone's, to embed; `theme`: `light` or `dark` |
 | `GET /ticker/<name>` | One person's cost and tokens |
