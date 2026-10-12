@@ -6,7 +6,7 @@ Status: the developers set Subnautica as the baseline on 2026-10-10 (D84), "for 
 
 From 2026-10-10:
 
-- **An equipment grid, a character sheet** (D64): slots for what you wear and carry as gear, including the parts of a space suit such as a suit and an oxygen tank.
+- **An equipment grid, a character sheet** (D64): slots for what you wear and carry as gear: head, chest (covering the arms), gloves, legs, feet, back and belt, with more later, such as the parts of a space suit. Not every slot shows on the body. One piece per slot. Jewellery is open.
 - **The inventory is the backpack** (D65, Leaning): probably very small at the start, made bigger by a better backpack in the backpack slot.
 - **An action bar** (D66): you put items on it to use them; whatever is in the picked slot is in your hand.
 - **You carry raw items, and they let you build what you are able to build** (D55, Leaning).

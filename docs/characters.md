@@ -57,8 +57,8 @@ An item that fails a check isn't used until it passes.
 
 The bodies, sockets, twist bones, held looks, tints and per-body gear files are built. What clips and looks off today comes from not following the contracts above: nothing hides the body under clothing, so skin shows through the coat; and the gear was generated as objects on their own and placed by numbers set per item, which is why the pack sits low. The coat and cap would be remade on each body; the pack, quiver and held things would be refitted to their socket rules.
 
-## Questions for the developers
+## Settled by the developers, 2026-10-12
 
-- **Which equipment slots** there are (D64 leaves this open). The regions above suit head, torso, arms, hands, legs and feet, as Enshrouded has.
-- **Making each piece once per base body** costs a Tripo model per base (about 25 credits each, two bases today). The alternative, making it once and bending it onto the other base, saves credits but fits worse between bodies as different as ours.
-- **Layers:** is a shirt under a coat wanted, or one piece per slot as in Enshrouded? One per slot is simpler.
+- **Slots** (D64): head, chest (covering the arms), gloves, legs, feet, back and belt; more may come. Not every slot shows: a quiver on the belt does, not every belt item does. Jewellery is open (two rings and a necklace, or trinket slots), probably unseen.
+- **One piece per slot, no layers** for now. The layer contract above waits.
+- **Each piece is made on each base body**, with Studio credits.
