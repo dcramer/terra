@@ -53,6 +53,7 @@ mod tiles;
 mod tool;
 mod vitals;
 mod work;
+mod worn;
 
 use super::build::{self, DrivenByPlayer, Site};
 use crate::planet::Planet;
@@ -147,6 +148,7 @@ pub fn plugin(app: &mut App) {
     settlement::plugin(app);
     map::plugin(app);
     held::plugin(app);
+    worn::plugin(app);
     save::plugin(app);
     harvest::plugin(app);
     options::plugin(app);

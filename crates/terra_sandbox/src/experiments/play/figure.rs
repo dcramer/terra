@@ -50,6 +50,10 @@ impl Doing {
     }
 }
 
+/// The player's figure: the root of its model, which what is worn hangs from (`worn`).
+#[derive(Component)]
+pub struct PlayerFigure;
+
 /// The animations, as places in the figure's animation graph.
 #[derive(Resource)]
 struct Moves {
@@ -131,6 +135,7 @@ fn spawn(
     commands
         .spawn((
             Name::new("Figure"),
+            PlayerFigure,
             WorldAssetRoot(scene),
             // The model faces +Z; things here face -Z.
             Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),

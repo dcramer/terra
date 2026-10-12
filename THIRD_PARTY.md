@@ -35,6 +35,7 @@ Made by us with generators on paid plans, whose terms leave what they make with 
 | Where | Made with | How |
 |---|---|---|
 | `crates/terra_sandbox/assets/models/character/base-male.glb` | [Tripo](https://www.tripo3d.ai) (model and rig, on our Studio subscription; design sheet on its API), animated with the Quaternius clips above | `.claude/skills/character/SKILL.md` and `spike/character_gear/`; D115 |
+| `crates/terra_sandbox/assets/models/gear/` | Tripo (concept images and models, on our Studio subscription): a pack in two sizes, a cap, a coat and a quiver | Fitted to the base body by `spike/character_gear/fit_gear.py` |
 
 ## Sound
 

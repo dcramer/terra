@@ -75,6 +75,22 @@ It prints each model's clips, joints and sockets, saves one contact sheet per cl
 
 The export also gives the body its sockets, the points what is held and worn hangs from: `socket.hand.R` and `.L`, `socket.head`, `socket.back`, `socket.belt.R` and `.L`, placed from this body's own bones and skin. To check or adjust one, drive a running workbench live ([tools/sandbox](../../../tools/sandbox/README.md)): `look socket.hand.R`, `place socket.hand.R --rotation …`, `shot`. When a value is right, put it in `export_character.py`, which places sockets for every body.
 
+## 5. Gear
+
+What is worn is made like any model (the `tripo` skill: a concept image in the character's style, with the body's sheet and a mood board as references, then `model`), then fitted to the base body:
+
+```bash
+spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb pack-small cap coat quiver
+```
+
+Rigid pieces (a pack, a cap, a quiver) are placed against the body at their socket and saved in the socket's space; clothing that bends (a coat) is sized to the torso, pushed clear of the skin, given the body's weights and saved on its skeleton. Each piece's turn, size and fit are in `PIECES` at the top of the script: Tripo turns each model its own way, so render it from four sides first and set the turn that puts its front to the body's front. Check the result on the body in the workbench, through clips that move the arms and bend the body:
+
+```bash
+cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/base-male.glb --attach models/gear/coat.glb --attach models/gear/pack-small.glb@socket.back --anim Idle_Loop --anim Sword_Attack --sheet shots/wb/gear --clean --settle 60
+```
+
+Then add it to `worn.rs` in the play experiment and a row in `THIRD_PARTY.md`.
+
 ## Traps already found
 
 - Blender's glTF importer leaves the skeleton posed in the first frame of some animation. Clear every pose bone's transform before using its rest pose, or that pose becomes the rest pose.
