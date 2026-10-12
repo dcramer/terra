@@ -167,7 +167,7 @@ fn shore_distance(planet: &Planet, here: Vec3) -> Option<f32> {
 /// place where magic pools, and the settlement's bell.
 fn mark_sources(
     mut commands: Commands,
-    stations: Query<(Entity, &Prop), (With<Works>, Without<Ambient>)>,
+    stations: Query<(Entity, &Prop), Added<Works>>,
     kinds: Res<Stations>,
     lair: Option<Res<Lair>>,
     village: Option<Res<Village>>,

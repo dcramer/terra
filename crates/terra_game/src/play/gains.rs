@@ -146,19 +146,19 @@ fn draw(
 ) {
     for (LineText(index), mut text, mut colour, mut backing, mut visibility) in &mut lines {
         let line = feed.0.get(*index).filter(|_| options.vantage.is_none());
-        *visibility = if line.is_some() {
+        visibility.set_if_neq(if line.is_some() {
             Visibility::Inherited
         } else {
             Visibility::Hidden
-        };
+        });
         let Some(line) = line else { continue };
         let shown = format!("+{} {}", line.count, items.name(line.kind));
         if text.0 != shown {
             text.0 = shown;
         }
         let alpha = opacity(line.age);
-        colour.0 = Color::srgba(1.0, 0.95, 0.8, alpha);
-        backing.0 = Color::srgba(0.0, 0.0, 0.0, 0.45 * alpha);
+        colour.set_if_neq(TextColor(Color::srgba(1.0, 0.95, 0.8, alpha)));
+        backing.set_if_neq(BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45 * alpha)));
     }
 }
 

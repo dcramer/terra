@@ -378,8 +378,11 @@ fn draw(
             let angle = label.0 as f32 / count as f32 * std::f32::consts::TAU;
             let middle = Vec2::splat(DIAL_SIZE * 0.5)
                 + Vec2::new(libm::sinf(angle), -libm::cosf(angle)) * RING;
-            node.left = px(middle.x - LABEL.x * 0.5);
-            node.top = px(middle.y - LABEL.y * 0.5);
+            let (left, top) = (px(middle.x - LABEL.x * 0.5), px(middle.y - LABEL.y * 0.5));
+            if node.left != left || node.top != top {
+                node.left = left;
+                node.top = top;
+            }
         }
         let colour = if dial.pointed == Some(label.0) {
             POINTED

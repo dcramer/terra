@@ -589,12 +589,19 @@ impl ItemIcons {
 fn lay_out(
     mut commands: Commands,
     items: Res<Items>,
-    backpack: Single<Ref<Backpack>>,
+    screen: Res<InventoryScreen>,
+    backpack: Single<Ref<Backpack>, IsLocalPlayer>,
     area: Single<(Entity, &mut Node), With<GridArea>>,
     mut icons: ResMut<ItemIcons>,
     assets: Res<AssetServer>,
     mut drawn: Local<bool>,
 ) {
+    // Laid out when the screen opens, and again while it is open if the backpack changes;
+    // not while it is shut, though what is carried changes all the time.
+    if !screen.open {
+        *drawn = false;
+        return;
+    }
     if *drawn && !backpack.is_changed() {
         return;
     }

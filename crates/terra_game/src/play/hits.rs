@@ -262,10 +262,15 @@ fn fly(
     }
 }
 
-/// The shake runs down.
+/// The shake and the pain run down. Neither is touched once it has, so what draws them
+/// is not woken for nothing.
 fn settle(time: Res<Time>, mut shake: ResMut<Shake>, mut hurting: ResMut<Hurting>) {
-    shake.left = (shake.left - time.delta_secs()).max(0.0);
-    hurting.0 = (hurting.0 - time.delta_secs() / PAIN_S).max(0.0);
+    if shake.left > 0.0 {
+        shake.left = (shake.left - time.delta_secs()).max(0.0);
+    }
+    if hurting.0 > 0.0 {
+        hurting.0 = (hurting.0 - time.delta_secs() / PAIN_S).max(0.0);
+    }
 }
 
 fn redden(hurting: Res<Hurting>, mut pain: Single<&mut BackgroundGradient, With<Pain>>) {

@@ -28,6 +28,11 @@ pub(super) fn aim(
             continue;
         }
         builder.viewed = None;
+        // Not in hand, it aims at nothing, and looks for nothing to aim at.
+        if !builder.in_hand {
+            builder.target = Target::Nothing;
+            continue;
+        }
         // A fixed camera is for taking pictures, and an open dial is for choosing.
         if options.vantage.is_some() || intent.choosing {
             builder.target = Target::Nothing;

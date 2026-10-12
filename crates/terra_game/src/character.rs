@@ -304,7 +304,15 @@ fn tilt(
     for (mut held, mut transform, parent) in &mut held {
         let carried = hands.get(parent.parent()).is_ok_and(|hand| hand.0);
         let goal = if carried { held.carry_tilt } else { 0.0 };
-        held.now += (goal - held.now) * ease;
+        // Settled: left alone, so what hangs from it is not moved again for nothing.
+        if held.now == goal {
+            continue;
+        }
+        held.now = if (goal - held.now).abs() < 0.01 {
+            goal
+        } else {
+            held.now + (goal - held.now) * ease
+        };
         transform.rotation = Quat::from_rotation_x(held.now.to_radians());
     }
 }

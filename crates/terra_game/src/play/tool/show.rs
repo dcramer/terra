@@ -5,7 +5,9 @@ use crate::build::Site;
 use crate::planet::Planet;
 use crate::play::catalogue::{Builds, Kind};
 use crate::play::props::{self, Blocked, Models, Prop};
-use bevy::{asset::RenderAssetUsages, render::render_resource::PrimitiveTopology};
+use bevy::{
+    asset::RenderAssetUsages, ecs::system::SystemParam, render::render_resource::PrimitiveTopology,
+};
 use terra_build::{Base, CELL_M, DOOR_HEIGHT_M, Face, Panel, STOREY_M};
 
 /// The rectangle a stretch of wall cells covers, in the base's own space: low-left,
@@ -46,9 +48,62 @@ pub(super) fn opening(run: &[Face], panel: Panel) -> Option<[Vec3; 4]> {
     ])
 }
 
+/// The builder's own shapes (the ghost, the film over work, the item rising), changed
+/// only where they differ, so one left alone is not prepared again every frame.
+#[derive(SystemParam)]
+pub(super) struct Shapes<'w, 's> {
+    commands: Commands<'w, 's>,
+    #[allow(clippy::type_complexity)]
+    shapes: Query<
+        'w,
+        's,
+        (
+            Option<&'static Mesh3d>,
+            Option<&'static MeshMaterial3d<StandardMaterial>>,
+            &'static mut Transform,
+            &'static mut Visibility,
+        ),
+        Without<Prop>,
+    >,
+}
+
+impl Shapes<'_, '_> {
+    pub(super) fn hide(&mut self, entity: Entity) {
+        if let Ok((.., mut visibility)) = self.shapes.get_mut(entity) {
+            visibility.set_if_neq(Visibility::Hidden);
+        }
+    }
+
+    pub(super) fn show(
+        &mut self,
+        entity: Entity,
+        mesh: Handle<Mesh>,
+        material: Handle<StandardMaterial>,
+        at: Transform,
+    ) {
+        let Ok((had_mesh, had_material, mut transform, mut visibility)) =
+            self.shapes.get_mut(entity)
+        else {
+            return;
+        };
+        if had_mesh.map(|had| &had.0) != Some(&mesh) {
+            self.commands.entity(entity).insert(Mesh3d(mesh));
+        }
+        if had_material.map(|had| &had.0) != Some(&material) {
+            self.commands
+                .entity(entity)
+                .insert(MeshMaterial3d(material));
+        }
+        transform.set_if_neq(at);
+        visibility.set_if_neq(Visibility::Visible);
+    }
+}
+
 /// Shows what the tool would act on.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn highlight(
     mut commands: Commands,
+    mut shapes: Shapes,
     site: Res<Site>,
     planet: Res<Planet>,
     models: Res<Models>,
@@ -199,25 +254,18 @@ pub(super) fn highlight(
                 }
             }
             let normals = vec![Vec3::Y; positions.len()];
-            commands.entity(filling).insert((
-                Mesh3d(
-                    meshes.add(
-                        Mesh::new(
-                            PrimitiveTopology::TriangleList,
-                            RenderAssetUsages::RENDER_WORLD,
-                        )
-                        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-                        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals),
-                    ),
-                ),
-                MeshMaterial3d(drawn.ghost_looks[look].clone()),
-                site.frame,
-                Visibility::Visible,
-            ));
+            let mesh = meshes.add(
+                Mesh::new(
+                    PrimitiveTopology::TriangleList,
+                    RenderAssetUsages::RENDER_WORLD,
+                )
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals),
+            );
+            let material = drawn.ghost_looks[look].clone();
+            shapes.show(filling, mesh, material, site.frame);
         }
-        _ => {
-            commands.entity(filling).insert(Visibility::Hidden);
-        }
+        _ => shapes.hide(filling),
     }
 
     // Outlines are drawn afresh every frame; the film only when something changes.
@@ -297,12 +345,8 @@ pub(super) fn highlight(
             if let Some(model) = models.of(item) {
                 boxed(&mut gizmos, model.half, &stood, colour);
                 if let Some(mesh) = model.solid.clone() {
-                    commands.entity(ghost).insert((
-                        Mesh3d(mesh),
-                        MeshMaterial3d(drawn.ghost_looks[look].clone()),
-                        stood.with_translation(stood.translation + *stood.up() * 0.01),
-                        Visibility::Visible,
-                    ));
+                    let at = stood.with_translation(stood.translation + *stood.up() * 0.01);
+                    shapes.show(ghost, mesh, drawn.ghost_looks[look].clone(), at);
                 }
             }
             if let Some(Blocked::Item(other)) = blocked
@@ -318,14 +362,12 @@ pub(super) fn highlight(
                 item: Some(other), ..
             },
         ) => {
-            commands.entity(ghost).insert(Visibility::Hidden);
+            shapes.hide(ghost);
             if let Ok((prop, transform)) = props.get(other) {
                 boxed(&mut gizmos, prop.half, transform, REFUSED_COLOUR);
             }
         }
-        _ => {
-            commands.entity(ghost).insert(Visibility::Hidden);
-        }
+        _ => shapes.hide(ghost),
     }
 
     if drawn.shown == (quads.clone(), look) {

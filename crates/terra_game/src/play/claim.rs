@@ -175,12 +175,17 @@ fn grow(
     }
 }
 
-/// Draws the claim's edge on the ground while the hammer is in hand.
+/// The claim's edge as last laid on the ground, and for which claim and ground.
+type Edge = Option<((Vec3, f32, usize), Vec<Vec3>)>;
+
+/// Draws the claim's edge on the ground while the hammer is in hand. The edge is laid on
+/// the ground again only when the claim or the ground changes.
 fn show(
     claim: Single<&Claim, IsLocalPlayer>,
     planet: Res<Planet>,
     mut belongings: Belongings,
     mut gizmos: Gizmos,
+    mut edge: Local<Edge>,
 ) {
     let Some(belongings) = belongings.mine() else {
         return;
@@ -191,17 +196,25 @@ fn show(
     if !belongings.tool_in_hand().is_some_and(|tool| tool.builds) {
         return;
     }
-    let up = centre.normalize();
-    let east = up.any_orthonormal_vector();
-    let radius = claim.across_m() * 0.5;
-    let steps = 96;
-    let points = (0..=steps).map(|step| {
-        let turn = step as f32 / steps as f32 * std::f32::consts::TAU;
-        let out = Quat::from_axis_angle(up, turn) * east * radius;
-        let ground = planet.ground_at(centre + out);
-        ground + ground.normalize() * 0.15
-    });
-    gizmos.linestrip(points, Color::srgba(1.0, 0.78, 0.3, 0.8));
+    let laid_for = (centre, claim.across_m(), planet.voxels().edit_count());
+    if edge.as_ref().is_none_or(|(was, _)| *was != laid_for) {
+        let up = centre.normalize();
+        let east = up.any_orthonormal_vector();
+        let radius = claim.across_m() * 0.5;
+        let steps = 96;
+        let points = (0..=steps)
+            .map(|step| {
+                let turn = step as f32 / steps as f32 * std::f32::consts::TAU;
+                let out = Quat::from_axis_angle(up, turn) * east * radius;
+                let ground = planet.ground_at(centre + out);
+                ground + ground.normalize() * 0.15
+            })
+            .collect();
+        *edge = Some((laid_for, points));
+    }
+    if let Some((_, points)) = edge.as_ref() {
+        gizmos.linestrip(points.iter().copied(), Color::srgba(1.0, 0.78, 0.3, 0.8));
+    }
 }
 
 #[cfg(test)]

@@ -621,7 +621,9 @@ impl<'w> Belongings<'w, '_> {
         let (backpack, bar, gear) = self.carried.get_mut(player).ok()?;
         Some(Inventory {
             player,
-            items: &mut self.items,
+            // Only to give new items their identities, which is not a change to the kinds
+            // of item, so it does not mark them changed.
+            items: self.items.bypass_change_detection(),
             backpack,
             bar,
             gear,

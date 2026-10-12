@@ -68,10 +68,29 @@ All five were fixed on 2026-10-12, in separate commits, each passing `cargo xtas
 
 ## Left to do
 
-- **Change detection** is still little used. Systems such as the inventory screen and the held look compare against what they last drew rather than asking what changed.
+- **Polling that remains, all cheap.**
+  - The station screen recounts what each recipe needs every frame while it is open.
+  - The bag formats its labels every frame, though it writes them only when they differ.
+  - The ground's mesher looks over its chunks when nothing is pending.
+  - Each is a handful of strings or a short scan. None grows with the world.
 - **The ground's materials** (soil, stone, ore, sand) are still constants in `terra_voxel`, laid down by its generation rules. What digging each gives is data (`assets/data/ground.ron`); the materials themselves will move when per-planet ground is designed (D59).
 
 Flora, what digging gives, and the build catalogue were made data on 2026-10-12 too (`flora.ron`, `ground.ron`, `builds.ron`), growing the same world as before: 13,366 trees, rocks and plants, 4,588 of them solid.
+
+## Later on 2026-10-12
+
+The rest of the plan that came out of this audit was done the same day:
+- **Intent and the fixed tick:** each player acts on an `Intent` component (D137), and gameplay runs on a fixed tick with interpolation (D138).
+- **Registries:** every kind is a registry read from `assets/data`, reloaded when a file changes (D136).
+- **Simulation level of detail:** creatures are simulated by distance from the nearest player (D145).
+- **Change detection.** A survey found systems doing work every frame for nothing. These were fixed:
+  - **Ground material:** it was prepared again every frame, because the sun moving marked the tweaks changed. It is now written only when its own values differ.
+  - **Builder:** it raycast every tick without the hammer in hand, and re-inserted its ghost and film every frame.
+  - **Backpack grid:** it was rebuilt while the screen was shut.
+  - **Screen effects and markers:** the pain overlay was redrawn every frame. The map marks, the dial's labels and the gains feed were written without comparing first.
+  - **People:** a held item kept turning after it had settled, a sitting person searched every seat every frame, and the people's animation looked up last positions in a list.
+  - **Finding what changed:** the map rescanned every frame, the claim's edge was laid on the ground again every frame, and the shader count ran after loading.
+  - **Items:** `Belongings` marked the registry of items changed whenever anything read a player's things.
 
 ## Limits
 

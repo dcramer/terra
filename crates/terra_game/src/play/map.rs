@@ -37,11 +37,18 @@ struct Chart {
 
 /// Which pixels of the map a player has seen. You know the land you have been near (D93).
 #[derive(Component)]
-struct Explored(Vec<bool>);
+struct Explored {
+    seen: Vec<bool>,
+    /// The pixel they were last at: nothing new is seen until they leave it.
+    at: Option<(usize, usize)>,
+}
 
 impl Default for Explored {
     fn default() -> Self {
-        Self(vec![false; PIXELS * PIXELS])
+        Self {
+            seen: vec![false; PIXELS * PIXELS],
+            at: None,
+        }
     }
 }
 
@@ -192,12 +199,17 @@ fn explore(
 ) {
     let Some(chart) = chart else { return };
     for (at, mut explored, ours) in &mut players {
-        let newly = newly_seen(&site, at.translation, &explored.0);
+        let pixel = planet_to_pixel(&site, at.translation);
+        if pixel == explored.at {
+            continue;
+        }
+        explored.at = pixel;
+        let newly = newly_seen(&site, at.translation, &explored.seen);
         if newly.is_empty() {
             continue;
         }
         for &index in &newly {
-            explored.0[index] = true;
+            explored.seen[index] = true;
         }
         if !ours {
             continue;
@@ -253,28 +265,40 @@ fn toggle(
     }
 }
 
-/// Puts you and your claim where they are on the map.
+/// Puts you and your claim where they are on the map, while it is open.
 #[allow(clippy::type_complexity)]
 fn place_marks(
     site: Res<Site>,
+    chart: Option<Res<Chart>>,
     claim: Single<&Claim, IsLocalPlayer>,
     player: Single<&Transform, IsLocalPlayer>,
     mut you: Single<&mut Node, (With<You>, Without<Yours>)>,
     yours: Single<(&mut Node, &mut Visibility), (With<Yours>, Without<You>)>,
 ) {
+    if !chart.is_some_and(|chart| chart.open) {
+        return;
+    }
     let scale = SHOWN_PX / PIXELS as f32;
-    if let Some((x, y)) = planet_to_pixel(&site, player.translation) {
-        you.left = px(x as f32 * scale - 4.5);
-        you.top = px(y as f32 * scale - 4.5);
+    // Moved only when they move, so the screen is not laid out again for nothing.
+    let put = |node: &mut Mut<Node>, (x, y): (usize, usize), half: f32| {
+        let (left, top) = (px(x as f32 * scale - half), px(y as f32 * scale - half));
+        if node.left != left || node.top != top {
+            node.left = left;
+            node.top = top;
+        }
+    };
+    if let Some(pixel) = planet_to_pixel(&site, player.translation) {
+        put(&mut you, pixel, 4.5);
     }
     let (mut yours, mut shown) = yours.into_inner();
     match claim.stone.and_then(|(_, at)| planet_to_pixel(&site, at)) {
-        Some((x, y)) => {
-            yours.left = px(x as f32 * scale - 7.0);
-            yours.top = px(y as f32 * scale - 7.0);
-            *shown = Visibility::Inherited;
+        Some(pixel) => {
+            put(&mut yours, pixel, 7.0);
+            shown.set_if_neq(Visibility::Inherited);
         }
-        None => *shown = Visibility::Hidden,
+        None => {
+            shown.set_if_neq(Visibility::Hidden);
+        }
     }
 }
 

@@ -251,7 +251,7 @@ pub struct GroundLook(pub Handle<GroundMaterial>);
 type WaterMaterial = ExtendedMaterial<StandardMaterial, WaterExtension>;
 
 /// What the ground shader is told. Field order must match the struct in ground.wgsl.
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone, PartialEq)]
 pub struct GroundExtension {
     #[uniform(100)]
     radius_m: f32,
@@ -479,8 +479,18 @@ fn apply_tweaks(
         Visibility::Hidden
     };
 
-    for (_, material) in ground_materials.iter_mut() {
-        material.extension = GroundExtension::new(&planet, &tweaks);
+    // The ground changes only when its tweaks do, not with the sun, so it is left alone
+    // otherwise: a changed material is prepared again, and every chunk drawn with it.
+    let ground = GroundExtension::new(&planet, &tweaks);
+    let stale: Vec<_> = ground_materials
+        .iter()
+        .filter(|(_, material)| material.extension != ground)
+        .map(|(id, _)| id)
+        .collect();
+    for id in stale {
+        if let Some(mut material) = ground_materials.get_mut(id) {
+            material.extension = ground.clone();
+        }
     }
     for (_, material) in water_materials.iter_mut() {
         material.base.base_color = tweaks.sea_shallow;

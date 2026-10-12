@@ -99,6 +99,8 @@ struct Animates {
     person: Entity,
     clips: Clips,
     playing: Option<AnimationNodeIndex>,
+    /// Where the person stood last frame, to tell walking from standing.
+    was_at: Option<Vec3>,
 }
 
 /// Asks for a person to be stood in the world, on the base body shaped by a template
@@ -277,6 +279,7 @@ fn arrive(
                                     person,
                                     clips,
                                     playing: None,
+                                    was_at: None,
                                 },
                             ));
                         }
@@ -428,6 +431,13 @@ fn settle(
     }
 }
 
+/// Where someone sitting sits: the top of their seat, and their hips, which are put on it.
+#[derive(Component, Clone, Copy)]
+struct Seated {
+    top: Vec3,
+    hips: Entity,
+}
+
 /// How far from a seat someone told to sit looks for it.
 const SEAT_REACH_M: f32 = 1.5;
 /// How far above a seat's top the hips rest.
@@ -437,31 +447,46 @@ const HIPS_ABOVE_SEAT_M: f32 = 0.08;
 /// hips, they are moved so the hips rest on its top. Someone with no seat near sits
 /// where they are.
 fn sit(
+    mut commands: Commands,
     seats: Query<(&Prop, &GlobalTransform)>,
     joints: Query<&GlobalTransform, Without<Prop>>,
     children: Query<&Children>,
     names: Query<&Name>,
-    mut people: Query<(Entity, &Person, &mut Transform)>,
+    mut people: Query<(Entity, &Person, &mut Transform, Option<&Seated>)>,
 ) {
-    for (entity, person, mut at) in &mut people {
+    for (entity, person, mut at, seated) in &mut people {
         if person.doing != Doing::Sitting {
+            if seated.is_some() {
+                commands.entity(entity).remove::<Seated>();
+            }
             continue;
         }
-        let Some(seat_top) = seats
-            .iter()
-            .filter(|(prop, _)| prop.item.rest == Some(Rest::Sit))
-            .map(|(prop, seat)| seat.transform_point(Vec3::Y * prop.half.y * 2.0))
-            .filter(|top| top.distance(at.translation) < SEAT_REACH_M)
-            .min_by(|a, b| {
-                a.distance(at.translation)
-                    .total_cmp(&b.distance(at.translation))
-            })
-        else {
-            continue;
+        // The seat and the hips are found once, as they sit down.
+        let seated = match seated {
+            Some(seated) => *seated,
+            None => {
+                let Some(top) = seats
+                    .iter()
+                    .filter(|(prop, _)| prop.item.rest == Some(Rest::Sit))
+                    .map(|(prop, seat)| seat.transform_point(Vec3::Y * prop.half.y * 2.0))
+                    .filter(|top| top.distance(at.translation) < SEAT_REACH_M)
+                    .min_by(|a, b| {
+                        a.distance(at.translation)
+                            .total_cmp(&b.distance(at.translation))
+                    })
+                else {
+                    continue;
+                };
+                let Some(hips) = character::find(entity, "DEF-hips", &children, &names) else {
+                    continue;
+                };
+                let seated = Seated { top, hips };
+                commands.entity(entity).insert(seated);
+                seated
+            }
         };
-        let Some(hips) = character::find(entity, "DEF-hips", &children, &names)
-            .and_then(|hips| joints.get(hips).ok())
-        else {
+        let seat_top = seated.top;
+        let Ok(hips) = joints.get(seated.hips) else {
             continue;
         };
         let (Ok(body), up) = (joints.get(entity), seat_top.normalize()) else {
@@ -479,20 +504,13 @@ fn animate(
         &mut AnimationPlayer,
         &mut AnimationTransitions,
     )>,
-    mut last: Local<Vec<(Entity, Vec3)>>,
 ) {
-    let mut moved = Vec::new();
     for (mut animates, mut player, mut transitions) in &mut animators {
         let Ok((person, at)) = people.get(animates.person) else {
             continue;
         };
-        let before = last
-            .iter()
-            .find(|(entity, _)| *entity == animates.person)
-            .map(|(_, at)| *at)
-            .unwrap_or(at.translation);
-        moved.push((animates.person, at.translation));
-        let step = before.distance(at.translation);
+        let before = animates.was_at.replace(at.translation);
+        let step = before.map_or(0.0, |before| before.distance(at.translation));
         let clips = animates.clips;
         let wanted = match person.doing {
             Doing::Bound => clips.kneel,
@@ -508,5 +526,4 @@ fn animate(
         animates.playing = Some(wanted);
         transitions.play(&mut player, wanted, BLEND).repeat();
     }
-    *last = moved;
 }

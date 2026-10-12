@@ -473,7 +473,7 @@ pub(super) fn act(
 /// Shows work on the thing itself: an item being built grows inside its ghost, and one
 /// being taken apart shrinks. Either goes back to how it was if the work is dropped.
 pub(super) fn animate(
-    mut commands: Commands,
+    mut shapes: super::show::Shapes,
     site: Res<Site>,
     planet: Res<Planet>,
     models: Res<Models>,
@@ -511,16 +511,10 @@ pub(super) fn animate(
             let stood = props::standing(&site, &planet, at, lift + item.lift, turn, indoors);
             // Quick at first, easing to full size.
             let eased = 1.0 - (1.0 - done) * (1.0 - done);
-            commands.entity(rising).insert((
-                Mesh3d(mesh),
-                MeshMaterial3d(models.lit()),
-                stood.with_scale(Vec3::splat(0.2 + 0.8 * eased)),
-                Visibility::Visible,
-            ));
+            let at = stood.with_scale(Vec3::splat(0.2 + 0.8 * eased));
+            shapes.show(rising, mesh, models.lit(), at);
         }
-        None => {
-            commands.entity(rising).insert(Visibility::Hidden);
-        }
+        None => shapes.hide(rising),
     }
     if let Some(was) = builder.shrinking
         && taking.map(|(entity, _)| entity) != Some(was)

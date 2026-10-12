@@ -218,7 +218,14 @@ pub fn plugin(app: &mut App) {
         .add_systems(ExtractSchedule, (count_shaders, count_drawables));
 }
 
+/// Counted only while loading, which is all that reads it.
 fn count_shaders(mut main_world: ResMut<MainWorld>, pipelines: Res<PipelineCache>) {
+    let loading = main_world
+        .get_resource::<State<Screen>>()
+        .is_some_and(|screen| *screen.get() == Screen::Loading);
+    if !loading {
+        return;
+    }
     if let Some(mut shaders) = main_world.get_resource_mut::<Shaders>() {
         shaders.compiling = pipelines.waiting_pipelines().count();
         shaders.made = pipelines.pipelines().count() - shaders.compiling;

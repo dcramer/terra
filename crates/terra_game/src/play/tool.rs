@@ -188,6 +188,8 @@ pub struct Builder {
     pub part: usize,
     /// Nothing is in hand: the tool does nothing until a part is picked.
     pub stowed: bool,
+    /// Whether the builder is the tool in hand, with the hands free to use it.
+    in_hand: bool,
     /// The variant last used of each part, by its place in the catalogue; one not here
     /// is the first.
     variants: Vec<usize>,
@@ -244,6 +246,7 @@ impl Default for Builder {
         Self {
             part: 0,
             stowed: true,
+            in_hand: false,
             variants: Vec::new(),
             turn: 0.0,
             raise: 0.0,
@@ -469,7 +472,9 @@ fn choose(
             continue;
         };
         builder.wheel = 0;
-        if intent.busy || !belongings.tool_in_hand().is_some_and(|tool| tool.builds) {
+        let in_hand = !intent.busy && belongings.tool_in_hand().is_some_and(|tool| tool.builds);
+        builder.in_hand = in_hand;
+        if !in_hand {
             // Put back anything being carried, and put the part away.
             builder.cancel = builder.is_carrying();
             builder.stowed = true;
