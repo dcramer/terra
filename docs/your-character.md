@@ -20,7 +20,7 @@ Worlds are round planets large enough that walking round is ridiculous (D4, D13)
 
 - **On foot**: walk, sprint, jump, climb, swim, all on stamina. Climbing is a skill by doing (D88).
 - **No glider or grappling hook** for now; they can be added later if wanted.
-- **Faster**: fast travel between your claims, and portals and waystones you have found or built (D72); you may carry materials (D72).
+- **Faster**: no fast travel between claims (D72). Quick travel is by magic (deepcraft's markers, recall and gates, [magic.md](magic.md)), by portals found or built (D72), and by mounts; what you carry goes with you.
 - **Roads** worn by travellers between settlements ([people.md](people.md)).
 - **Mounts**: probably, by taming (D100, [creatures.md](creatures.md)). Boats: open.
 

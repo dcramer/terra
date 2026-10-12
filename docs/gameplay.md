@@ -149,13 +149,13 @@ Proposed, as levers that work together. The first three are the core; the rest a
 |---|---|---|
 | **Resources by region** | Materials belong to places: a kind of rock to one terrain, a wood to one forest, the best to deep caverns, far regions and higher ranks. Each world has its own (D59). | What you need next is somewhere you have not been. |
 | **Held ground** | You can build, craft at stations and rest safely only on ground you hold, around a base or outpost, as within the build area of Enshrouded's altars (160 metres on a side once upgraded). Held ground is where the magic is kept down. | To work somewhere, you have to settle there. |
-| **Outposts as the travel network** | Fast travel runs between places you hold, and portals and waystones you have found. Every outpost extends the network. | Settling is how the world gets smaller. |
+| **Travel is earned** | There is no fast travel between places you hold (D72). Quick travel comes from magic (deepcraft's markers, recall and gates, [magic.md](magic.md)), portals players build, and mounts. | Distance stays real; going far is a choice and a skill. |
 | **Carrying is limited** | The backpack is small and nothing stacks (D84), so hauling far is slow. An outpost by a resource lets you work it where it is. | A reason to settle near what you need, not haul it home. |
 | **People live in places** | Those you can rescue or help are in settlements spread through the wild, and cultures differ by region and world (D86). | The recruits you want are far away. |
 | **Magic sites** | Places where magic pools are dangerous, because monsters form there, and valuable, for what can be made or opened there. Holding one keeps it from surging and lets you use it. | Risk and reward drawn on the map. |
 | **The spread** (premise B) | Land nobody holds slowly falls to whatever is spreading. An outpost pushes it back around it. | Holding ground matters, and is visible on the map. |
 
-Answered on 2026-10-11: **you can fast travel carrying materials**, and portals may be something players build, as in Valheim (D72). So outposts are for working and holding places, not for avoiding hauls; the small backpack (D84) is what still makes it worth working a resource where it is. What follows was the reasoning before the answer.
+Answered on 2026-10-12: **there is no fast travel between claims**; quick travel comes from other systems, such as magic and built portals (D72). Answered before, on 2026-10-11: what you carry goes with you when you travel, and portals may be something players build, as in Valheim (D72). So outposts are for working and holding places, not for avoiding hauls; the small backpack (D84) is what still makes it worth working a resource where it is. What follows was the reasoning before the answer.
 
 The biggest single choice: **can you fast travel carrying materials?** If you can, as in Enshrouded, outposts are convenience and exploring is about finding things. If you cannot carry raw materials through, as in Valheim with ore, outposts near resources become necessary and moving goods between them becomes a game of its own: roads, carts, recruits who haul. My recommendation is a middle path: you travel with what you carry, but the backpack is small enough that working a resource where it is beats hauling it.
 
@@ -204,7 +204,7 @@ Creatures and people are the most expensive thing in the design: they walk on ro
 8. **Who are you?** A newcomer to the frontier, or someone born there? (Not someone from another world: C is ruled out.)
 9. Answered: **death.** No fail state (D18): it is a persistent sandbox. What you carry drops where you fell, and dropped items decay and disappear after a while (D84).
 10. **A thousand players.** In a living world, what do many players do together that a few cannot: defend a city, hold a frontier, answer a surge?
-11. Answered: **fast travel with materials.** Yes (D72).
+11. Answered: **fast travel with materials.** What you carry goes with you; but there is no fast travel between claims, only travel by magic, built portals and mounts (D72).
 12. **Held ground.** Is building and crafting allowed only on ground you hold, as in Enshrouded?
 13. **Can held ground be lost** when an outpost falls, and does the wild, or the spread, take it back?
 14. Answered: **no journal.** What to remember is up to the player (D92).

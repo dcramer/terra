@@ -1,6 +1,6 @@
 # Magic: essences, books and old-school spellcraft
 
-Part of the game's design ([gameplay.md](gameplay.md), D89). Status: Open, a proposal for the developers (D163), 2026-10-12. Each item is as settled as the decision it cites. It builds on the lore ([lore.md](lore.md)) and on [essences.md](essences.md), and gives the examples each system needs. How the books do it is in [research/hwfwm-magic.md](../research/hwfwm-magic.md). We take the mechanics, never the content (D125): every essence, ability, style and working here is ours.
+Part of the game's design ([gameplay.md](gameplay.md), D89). Status: Open, a proposal for the developers (D163), 2026-10-12, partly answered the same day: attributes and monster cores are kept (D164, D165), there is no fast travel between claims (D72), and the old-school touches follow the books. Each item is as settled as the decision it cites. It builds on the lore ([lore.md](lore.md)) and on [essences.md](essences.md), and gives the examples each system needs. How the books do it is in [research/hwfwm-magic.md](../research/hwfwm-magic.md). We take the mechanics, never the content (D125): every essence, ability, style and working here is ours.
 
 ## What the developers asked for
 
@@ -34,15 +34,15 @@ What made magic in Ultima Online, EverQuest, RuneScape, Morrowind and tabletop D
 | Old school | Ours |
 |---|---|
 | A spellbook you fill page by page | Your book: the character screen's pages of powers and workings, filled as you learn (D93) |
-| Reagents in your pack: pearls, roots, ash | Components: monster remnants, herbs, cores and dusts, named by each realm's role ([settings.md](settings.md)). Workings use them up |
-| Words of power, spoken as you cast | Every working has an incantation in the tongue of the people who wrote its book ([naming.md](naming.md)), spoken aloud. Two players' fire wards can sound different |
+| Reagents in your pack: pearls, roots, ash | Components, used up, as in the books: monster cores, fragments of essences, and other remnants and herbs a realm's role names ([settings.md](settings.md)) |
+| Words of power, spoken as you cast | Chanted spells, as in the books: some essence powers are chanted, a cast that can be broken off, stronger for it, and never quicker with rank. And the diagrams of crafts are written in the symbols of magic, whose structure is the same in every realm |
 | Spell circles, first to eighth | Workings by rank: iron workings to diamond |
 | Mark and Recall; Gate Travel | Deepcraft, below |
 | Scrolls and wands | Inscription, below |
 | Identify | Ritecraft's first working |
 | A wizard's familiar | Bindcraft, below |
 | Meditating to get mana back | Rest: mana returns faster sitting still, and Meditation is a skill by doing (D88) |
-| Fizzling | Backlash: a working above your rank, or broken off midway, fails and hurts |
+| Fizzling | Backlash, as in the books: a working a rank above you risks exhaustion, your attributes dropping a rank for a while, injury or death; two ranks above kills; and in thin magic a working is unreliable |
 | Schools of magic | The ideas of essences, and the crafts |
 
 ## Essences
@@ -54,6 +54,7 @@ From the lore and the books' mechanics (D98), with our own essences:
 - **Rarity:** common, uncommon, rare, epic, legendary. As in the books, rarity is relative to a place: a frozen pool mostly gives Frost and rarely something stranger. Where you hunt decides what you can become (D91).
 - **Where essences form:** in pools and in surges, and in monsters made there, so each realm's leaning decides what its pools give ([lore.md](lore.md#magic)).
 - **Absorbing one hurts,** and can only be done at rest, in safety. Proposed: also possible as a ritual (ritecraft), which is gentler.
+- **Each essence binds to one of your four attributes** when absorbed ([below](#attributes)).
 - **No essence is better than another.** They differ in how they play.
 
 ### Core essences
@@ -115,6 +116,25 @@ A confluence is worked out from the three essences' tags by a few rules, so play
 
 The usual result is the likeliest, not certain, as in the books' later volumes: a common recipe gives its confluence most of the time and sometimes a neighbour. Recipes become knowledge players share and argue about, which is the old-school feel of a game with secrets.
 
+## Attributes
+
+Kept, as in the books (D164): **Power, Speed, Spirit and Recovery.**
+
+- **Each essence binds to one of them** when you absorb it, usually the one its idea suits: Might to Power, Swift to Speed, Light to Spirit, Water to Recovery.
+- **Each attribute has its own rank and steps,** and **your rank is a function of your attributes.** You are silver when they are.
+- **They rise as the powers of the essences bound to them rise,** so how you use your powers shapes your body. Skills (D88) don't raise them; skills are what your hands know.
+- **What each does, proposed and tunable:**
+
+| Attribute | Raises |
+|---|---|
+| **Power** | Blows and throws, carrying (D55), breaking, the stamina pool |
+| **Speed** | Moving, striking, dodging, reacting |
+| **Spirit** | The mana pool (D102), the strength of powers, resisting magic, presence |
+| **Recovery** | The health pool, and how fast health, stamina and mana come back; resisting poison, sickness and cold or heat (D153) |
+
+- **A rank's gap shows in them:** a higher-rank attacker's attributes beat a lower-rank defender's resistance, which is why two ranks up is death ([combat.md](combat.md)).
+- **On the character screen** (D93), as the books show them.
+
 ## Awakening stones: drawing a power
 
 Proposed: the books' second kind of thing kept as it is, with its name to settle (D158 proposes "quickening stone"). A stone is found as essences are, in pools, surges and the remains of strong monsters. Each has a kind that pulls the draw its way:
@@ -140,7 +160,7 @@ When you use a stone on an essence, the server draws a power from that essence's
    - kinds you have many of are less likely;
    - some kinds are one to a person (an aura, a perception) or one to an essence (a summon, a familiar).
 4. **What you know:** a crafter of ritecraft draws more ritual-like powers, and a practised swordsman more blade strikes. Your skills and books shape your powers.
-5. **What you have been doing:** proposed, our addition. The game keeps a short record of how you play, such as stalking, healing others, fighting at range or in groups, and leans the draw toward it. Powers follow habits, which is the lore's "who you are".
+5. **What you have been doing:** proposed, our addition, still open ([below](#habits-shaping-the-draw)). Powers would follow habits, which is the lore's "who you are".
 6. **Where you are:** a little toward the leaning of the realm you awaken in. Awakening a stone in a death realm leans a little toward death.
 
 The draw is made once, by the server (D51), and kept: it is a change to you, stored like any other.
@@ -202,7 +222,12 @@ So there is a lot to draw from without writing each power by hand, a power is ge
 - **By use, under real pressure:** fighting, or using a power where it matters (D88). A power used only for practice barely grows.
 - **Capped at your own rank.** Your rank rises as your powers do ([essences.md](essences.md)).
 - **Crossing a rank may need a key** (D126).
-- **Monster cores can hurry it,** at the books' price: each one used makes practice count for less. Proposed, Open: worth having for the choice it gives. Hurry now, and pay later.
+- **Monster cores can hurry it** (D165), at the books' price:
+  - absorbing cores raises your least-advanced powers first;
+  - each core used makes practice count for less, until only cores work;
+  - leaning on them makes crossing past gold harder.
+
+  Hurry now, pay later. Cores are also what crafts burn as components, what calms a pool, and a trade good, so every monster killed is worth something.
 
 ## Skill books
 
@@ -233,7 +258,7 @@ The old-school spellbook lives here. A craft is a discipline of working with mag
 - **The first book of a craft teaches its iron workings.** Later books teach higher ones, and practice makes them surer and quicker.
 - **A working above your rank risks backlash:** a rank above hurts and may fail, and two above can kill, as in the books.
 - **Workings draw on the magic of the place,** so in a thin realm or a drained spot they are unreliable, and near a pool they are strong. Where you work matters.
-- **Spoken aloud:** each working's incantation is in the tongue of its book's people.
+- **Written in the symbols of magic:** a diagram's symbols have a structure that holds in every realm, as in the books. A book from another realm's people teaches the same structure in their hand.
 
 **Ritecraft: ritual magic.** Diagrams drawn in chalk, salt or ash, with candles and components, over minutes.
 
@@ -265,7 +290,7 @@ The old-school spellbook lives here. A craft is a discipline of working with mag
 | Gold | **Gate** (open a short-lived portal to a marker, for a party) |
 | Diamond | **Bridge** (a lasting portal between two of your claims) |
 
-Mark and Recall must sit with fast travel (D72), which already exists between claims. Proposed: Recall and Gate reach markers too, which needn't be claims, at a cost and with a long cast that can be broken.
+There is no fast travel between claims (D72, 2026-10-12): getting around quickly is the work of systems like this one, so deepcraft is the travel network. A marker can be anywhere, claim or not. Recall and Gate cost components and take a long cast that can be broken, so travel is earned and planned. Portals players build (D72) and mounts (D100) are the other ways.
 
 **Bindcraft: familiars and summons.**
 
@@ -311,11 +336,28 @@ Technical, mine:
 - A draw is a weighted choice the server makes and stores.
 - Nothing about powers is written per power, which is D127's rule.
 
+## Habits shaping the draw
+
+Open: the developers weren't sure how it would work. Concretely:
+
+- **The server already sees what you do** (D51). It keeps a running tally over your recent play, perhaps the last ten hours, in a few kinds:
+  - harm dealt close, at range, and by powers;
+  - healing and guarding others;
+  - time unseen;
+  - fighting alone and in a group;
+  - building and making.
+- **The tally becomes a profile:** shares of each kind, adding up to one.
+- **When you draw, each candidate's weight is multiplied** by how well its tags match the profile, by at most half again. A player who has been stalking is a little likelier to draw a hiding power, never certain.
+- **Nothing is shown.** You notice it only as powers that suit how you play (D93).
+- **Why it might be worth it:** characters fit their players without a menu. **Why not:** it is hidden, and a player who wants to change direction is pulled back toward old habits. A middle way is to count only the last few hours, so changing how you play changes the draw quickly.
+
+## Essences in the starting realm
+
+Procedural, like every realm. There is no fixed list: the starting realm's essences come from its generated magic like any other's. One rule for it, proposed: the generator makes sure that near the start, every family is reachable among the commons (weapons, elements, beasts and body), so a first character can go any way. Its stronger pools hold the rarer essences of its own leaning.
+
 ## Open questions
 
-1. **Attributes.** The books bind each essence to one of four attributes (Power, Speed, Spirit, Recovery), and rank comes from them. Do we want attributes at all, or let health, stamina, mana and skills carry it?
-2. **Monster cores** that hurry powers at a later cost: in or out?
-3. **Habits shaping draws** (point 5): in, or too hidden?
-4. **Is Mark and Recall too strong** beside fast travel between claims?
-5. **The core list:** which of these essences should the starting realm give, and which wait for others?
-6. **Old-school touches to keep or cut:** spoken incantations, reagents used up, fizzling.
+1. Answered: **attributes** are kept (D164). **Monster cores** are kept (D165). **No fast travel between claims** (D72). **The starting realm's essences** come from its generation, with the rule above. **Old-school touches** follow the books: chanted spells, components used up, backlash.
+2. **Habits shaping the draw,** as worked out above: in or out?
+3. **Magic as money?** In the books the currency is also raw magic, burned by rituals and items, and a coin above your rank lifts you briefly before exhausting you. Do we want that, or cores as the only stored magic?
+4. **Fragments of essences** (the books' quintessence) as ritual components: in, under a name of our own?
