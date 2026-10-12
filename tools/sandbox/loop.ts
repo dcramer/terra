@@ -12,12 +12,15 @@
 // shots/loop-<step>.png.
 //
 // Runs on the Windows GPU from WSL, and on this machine's own elsewhere; --here runs on
-// this machine under WSL too. Node 22.18 or later; no dependencies.
+// this machine under WSL too. --until STEP stops after that step. Node 22.18 or later; no dependencies.
 
 import * as game from "./client.ts";
 
 const SAVE = "loop.ron";
 const here = process.argv.includes("--here");
+// --until STEP stops after that step, to try one again without the rest.
+const until = process.argv[process.argv.indexOf("--until") + 1];
+class Done extends Error {}
 const windows = game.onWsl && !here;
 let failed = false;
 
@@ -32,11 +35,13 @@ async function step(name: string, act: () => Promise<void>, ...said: string[]) {
       console.log(`ok    ${name}: ${line.text}`);
     }
   } catch (error) {
+    if (error instanceof Done) throw error;
     console.log(`FAIL  ${name}: ${(error as Error).message}`);
     await game.shot(`shots/loop-${name}.png`).catch(() => {});
     failed = true;
     throw error;
   }
+  if (name === until) throw new Done();
 }
 
 const nearest = async (test: (near: game.Near) => boolean) => {
@@ -95,12 +100,15 @@ async function play() {
     async () => {
       await game.give("bow", "quiver", "arrow:6");
       await game.warp([-30, 33], [-45, 34]);
-      const deer = await nearest(alive("Deer"));
-      await game.warp([deer.at[0] + 15, deer.at[1]], deer.at);
       await game.hold("Bow");
       const since = await game.markNow();
       for (let arrow = 0; arrow < 6; arrow++) {
-        const target = await nearest(alive("Deer"));
+        // Within a sure shot of the nearest deer, but beyond where it would bolt.
+        let target = await nearest(alive("Deer"));
+        if (target.distance > 14) {
+          await game.warp([target.at[0] + 12, target.at[1]], target.at);
+          target = await nearest(alive("Deer"));
+        }
         await game.aim(target.at, 0.8);
         await game.press("e:60");
         await game.waitFor("Loosed an arrow", { timeout: 20 });
