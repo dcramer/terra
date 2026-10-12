@@ -197,6 +197,26 @@ So a log cabin's wall of 4.5 metres, a storey high, is about a dozen logs, put i
 
 Open: how many swings a part takes, and whether fixing is a separate step or the last swing of setting it.
 
+**Drawing a plan.** Asked about on 2026-10-12: "how would dragging to draw work exactly? … say it's a stone wall, we'll need the stone to look modular". Proposed:
+
+- **A wall or fence is drawn as a line.** Press where it starts, drag, let go where it ends. The start snaps to a join (the end of a wall already there) or the grid; the line runs along the base's grid, in its four directions, a grid step (half a metre) at a time, so every wall is a whole number of steps long. While dragging, the plan is shown already split into its parts, with its length and what it needs: "4.5 m stone wall: 54 stones, 12 in reach". Shift and the wheel, while dragging, set how high, a course or a storey at a time.
+- **A room or floor is drawn as a rectangle**: press at one corner, drag to the other. A room's plan is its floor, its four walls and its roof, each split into parts.
+- **Drawing on from a wall's end continues it**, and closing a loop of walls offers to make it a room.
+- **A plain click lays the variant's own size**, as now: a 4.5 metre wall, a 3 by 3 metre room.
+
+**How a material is split into parts, so it looks built and not tiled.** Each kind of construction is a small kit of pieces sized to the grid, and a rule for laying them, as real masonry and carpentry have:
+
+| Kind | Pieces | Laid |
+|---|---|---|
+| Cut stone | A block a metre long and half a metre high and deep; a half block; a corner block; a sill and a lintel for openings; a capstone | In courses half a metre high, each course offset half a block from the one under it (a running bond), half blocks at the ends of every other course, corner blocks interlocking where two walls meet |
+| Logs | Logs as long as the wall, up to the longest a tree gives (say four metres), notched at the ends | Stacked, a log a course; longer walls splice at a post; corners interlock, the logs of one wall alternating with the other's |
+| Planks | Posts, rails, planks | Posts at the ends and as evenly as fits within a metre and a half; planks between them |
+| Wattle and daub | Stakes, woven panels, daub | Stakes every half metre, panels between, daub over |
+
+Because every wall is a whole number of half metres, the kit always fits: a stone wall of 4.5 metres is four whole blocks and a half in one course, a half and four whole in the next. Corners and openings choose their own pieces by what they are next to, which is the morphing the developers asked for (D56). Each piece gets a little variety, a slightly different shape, turn or shade from a few made versions, so a long wall does not repeat.
+
+**What the pieces are made of.** Proposed: each piece is a model from its kind's kit, made once by script (as the pickaxe and torch are) with a few versions each, set on the base's grid. The grid is still the skeleton (D48, D57): it says where each piece is, what is inside and out, what blocks a walker, and what an opening cuts. The pieces are what is seen and what goes in one at a time. The other way, the grid's blocks drawn with a stone material, as Enshrouded's are, blends seamlessly but cannot show each stone going in; the two can meet later, the pieces sitting on the voxel volume where they join it.
+
 **Building in bulk.** Putting in parts one by one is the realistic way and must not become a chore: holding the build key keeps putting in the next part while you have the materials; a skilled builder (D88) puts them in faster; recruits put them in for you (D90). The Forest's later option to skip each part's animation is the lesson: show each part going in, quickly.
 
 **Doors and windows are carved out** (the developers' "carve outs, so it can be slightly different"):
@@ -365,6 +385,8 @@ Answered on 2026-10-12: structures are planned, then constructed, a blueprint sh
 
 1. **The kinds of construction**: which there are, and when each is learned (D68). Recommend wattle and daub, then logs, then planks, then stone for the MVP's first two.
 2. **Must parts go up in order**, what rests on something after it? Recommend yes.
+2a. **What a kind's pieces are**: kit models set on the grid, each seen going in (recommended), or the grid's blocks drawn in a material, as Enshrouded's (seamless, but no single stone goes in)?
+2b. **Walls in four directions only**, along the base's grid, or diagonals too? Recommend four for now: Enshrouded's players ask for diagonals and round walls, which need pieces of their own.
 3. **Are stations constructed too**, being large, or placed whole like furniture? Recommend placed whole for now.
 4. **Cutting an opening in a finished wall**: with which tool, and does it give back what was cut? Recommend the axe for wood, the pickaxe for stone, giving it back.
 5. **Which materials are big**, and how many does a player carry? Recommend logs and cut stone; one comfortably, two at a walk.
