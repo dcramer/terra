@@ -33,6 +33,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [ecs-audit.md](ecs-audit.md) | Does the game's code keep to our ECS rule and to many of everything, and is ECS the right model for a thousand players? |
 | [building-systems-prior-art.md](building-systems-prior-art.md) | How do the building systems of Enshrouded, Rust, Ark, Subnautica and The Forest work, from keys to claims, so ours misses nothing players expect? |
 | [procedural-vegetation.md](procedural-vegetation.md) | How do shipped games place and draw vegetation over large procedural terrain so it reads full and organic, and what does Bevy give us toward it? |
+| [procedural-buildings.md](procedural-buildings.md) | How do games turn a drawn plan into a detailed building (roofs over any footprint, walls from a kit, drawing many pieces, building piece by piece, indoors), and how hard is each for us? |
 
 ## Adding a note
 
