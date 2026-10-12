@@ -63,9 +63,9 @@ Built: the bodies, their skeleton with twist bones, sockets, held looks, tints, 
 | Leather jerkin | On each body (`shell_garment.py`) | at most 1% in any clip | at most 1.1% |
 | Quiver | At the belt socket, behind the hip | 0% | 0% |
 | Packs | At the back, top at the shoulders, straps bending with the skin | about 5%, at the shoulders under the straps | about 6-8% |
-| Leather cap | At the head socket | 7%, above the ears | 8% |
+| Leather cap | On each body (`shell_garment.py`, `head_cap`) | 1% | 0.3% |
 
-The jerkin and quiver pass. The pack's straps and the cap still clip: both are generated objects fitted by rules, and the fix is the jerkin's, made on the body: the cap from the head's own surface, the straps from the shoulders', with the pack's bag kept rigid. Not built yet, nor pieces that hang loose (a coat's skirt, a cloak).
+The jerkin, cap and quiver pass. The pack's straps still clip: a generated object fitted by rules; the fix is the jerkin's, the straps made from the shoulders' own surface, with the pack's bag kept rigid. A cap fitted as a rigid object cut into the head above the ears (7-8%); made on the head, it does not. Not built yet, nor pieces that hang loose (a coat's skirt, a cloak).
 
 ## Settled by the developers, 2026-10-12
 

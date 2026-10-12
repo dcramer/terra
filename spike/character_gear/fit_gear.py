@@ -8,9 +8,10 @@ pushed clear of the skin, given the body's skin weights, and saved on the same s
 the game binds it to the body's joints. Each piece reports how much of it rests on the body;
 less than its kind should means it floats.
 
-    spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb small_pack large_pack leather_cap quiver
+    spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb small_pack large_pack quiver
 
-Clothing that bends is made on the body instead, by shell_garment.py.
+Clothing, and anything worn close on the body such as a cap, is made on the body instead, by
+shell_garment.py.
 
 Reads out/tripo/gear-<model>.glb in the bake-off folder; writes
 crates/terra_sandbox/assets/models/gear/<body>/<item>.glb, the item named as in the game's
@@ -43,7 +44,6 @@ OUT = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "model
 PIECES = {
     "small_pack": ("pack", 90, "back", 0.23, "Pack"),
     "large_pack": ("pack", 90, "back", 0.31, "Pack"),
-    "leather_cap": ("cap", -90, "head", None, "Leather"),
     "quiver": ("quiver", 90, "belt", 0.4, "Leather"),
 }
 

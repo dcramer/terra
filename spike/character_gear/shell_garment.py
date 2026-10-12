@@ -49,7 +49,7 @@ OFFSET_M = 0.008       # how far out from the skin the piece sits
 BULK_M = 0.03          # the most it follows the dressed surface standing off
 MATCH_M = 0.03         # skin this close lines the dressed model up
 TEXTURE = 1024
-COVERED = 0.8          # a patch with this share of its skin under the piece is hidden
+COVERED = 1.0          # a patch wholly under the piece is hidden; part-covered ones stay, or a band of skin vanishes below a hem or rim
 # What each kind of piece covers: the bones whose skin it covers, and the heights of its
 # hems, as shares of the way from one joint to the next (0 at the first, 1 at the second):
 # a chest piece's hem from the hips joint toward the knee, a sleeve from the shoulder toward
@@ -62,6 +62,8 @@ COVERAGE = {
     "legs_long": {"bones": ("DEF-hips", "DEF-thigh", "DEF-shin"), "hem": None},
     "gloves": {"bones": ("DEF-hand", "DEF-f_", "DEF-thumb"), "hem": None},
     "feet": {"bones": ("DEF-foot", "DEF-toe"), "hem": None},
+    # A cap: the crown, down this share of the way from the top of the head to the neck.
+    "head_cap": {"bones": ("DEF-head",), "hem": None, "crown": 0.45},
 }
 
 body_path, dressed_path, item, role, coverage = (look.args() + ["Cloth", "chest_sleeveless"])[:5]
@@ -165,8 +167,13 @@ LIMBS = ("DEF-upper_arm", "DEF-forearm", "DEF-thigh", "DEF-shin", "DEF-hand", "D
 # A piece with a hem goes down as far as its hem, whatever moves the skin there.
 uncovered_limbs = tuple(b for b in LIMBS if not b.startswith(COVER["bones"])
                         and not (COVER["hem"] is not None and b == "DEF-thigh"))
+head_top = max(p.z for p in skin_pts)
+neck = joint("DEF-neck").z if "DEF-neck" in arm.data.bones else head_top - 0.3
+crown_z = head_top - (head_top - neck) * COVER["crown"] if COVER.get("crown") else -math.inf
 for i, v in enumerate(body.data.vertices):
     bone = main_bone(v)
+    if skin_pts[i].z < crown_z:
+        continue
     covered = bone.startswith(COVER["bones"]) or (COVER["hem"] is not None and bone.startswith("DEF-thigh") and skin_pts[i].z > hem_z)
     if not covered or (bone.startswith("DEF-hips") and skin_pts[i].z < hem_z):
         continue

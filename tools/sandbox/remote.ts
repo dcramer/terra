@@ -134,10 +134,12 @@ const COMMANDS: Record<string, Command> = {
     help: "start a sandbox listening, in the background, and wait until it answers; its log goes to shots/remote.log. The game moves a sixtieth of a second a frame, however fast frames are drawn, unless --real-time",
     options: { windows: { type: "boolean", help: "on Windows' GPU (cargo xtask win), from WSL" }, "real-time": { type: "boolean", help: "let the game's clock follow the real one" } },
     run: async ({ values, positionals }) => {
-      // A random port nothing answers on, well away from the usual one other runs use, and a
-      // token to know this run by.
+      // A random port nothing answers on, away from the usual one other runs use, and a token
+      // to know this run by.
       for (let tries = 0; tries < 20; tries++) {
-        port = 20000 + Math.floor(Math.random() * 40000);
+        // Below the dynamic range, where Windows reserves blocks of ports for Hyper-V and WSL
+        // and a run would start without a listener.
+        port = 20000 + Math.floor(Math.random() * 10000);
         through = undefined;
         try {
           await raw("rpc.discover");

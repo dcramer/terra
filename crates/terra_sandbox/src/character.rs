@@ -429,6 +429,29 @@ fn dye(colour: Color) -> Color {
     Color::linear_rgb(linear.red / most, linear.green / most, linear.blue / most)
 }
 
+/// A body's own joints by name, leaving out everything under the looks worn on it.
+fn body_joints<'a>(
+    body: Entity,
+    children: &Query<&Children>,
+    names: &'a Query<&Name>,
+    worn: &Query<&Worn>,
+) -> HashMap<&'a str, Entity> {
+    let mut joints = HashMap::new();
+    let mut stack: Vec<Entity> = children.get(body).map(|c| c.to_vec()).unwrap_or_default();
+    while let Some(each) = stack.pop() {
+        if worn.contains(each) {
+            continue;
+        }
+        if let Ok(name) = names.get(each) {
+            joints.entry(name.as_str()).or_insert(each);
+        }
+        if let Ok(more) = children.get(each) {
+            stack.extend(more.iter());
+        }
+    }
+    joints
+}
+
 /// Once a worn look has loaded: a skinned one's joints become the body's; a rigid one moves
 /// onto the socket it names.
 fn put_on(
@@ -462,11 +485,9 @@ fn put_on(
         }
         return;
     }
-    let joints: HashMap<&str, Entity> = children
-        .iter_descendants(*body)
-        .filter(|each| !own.contains(each))
-        .filter_map(|each| Some((names.get(each).ok()?.as_str(), each)))
-        .collect();
+    // The body's own joints: not those of any look worn on it, which carry a copy of the
+    // skeleton standing at rest.
+    let joints = body_joints(*body, &children, &names, &worn);
     for entity in &own {
         let Ok(mut skin) = skins.get_mut(*entity) else {
             continue;
