@@ -443,6 +443,14 @@ For the developers to reorder. Each step is small enough to play and judge.
 8. **Voxel blocks and brushes** (D48), with plans and parts written as blocks: the engine track, with its own technical design.
 9. **Stability**, after the MVP (D142).
 
+## Ideas for later
+
+Not built, and not to be until the developers say (2026-10-12: "keep it as an idea/improvement that we may make, but lets not build it yet").
+
+**A plan view from above** (D176). Survival games build from the character's camera, and where they offer another it is for laying out, bounded by the base or a distance ([research/planning-mode-cameras.md](../research/planning-mode-cameras.md)). The idea: Plan mode (D170) lifts the camera into a view over the claim, panned and turned like The Sims', with walls cut away, for drafting only; the character stays standing in the world, can be hurt, and damage drops the view back. Building, carrying and putting parts in stay in the character's view. Risks: a second, pointer-led set of controls; seeing what the character cannot; being hurt while looking away.
+
+**Heights, not storeys** (D176). With voxels (D48) and rooms of any height there are no fixed storeys, as the developers pointed out. The idea: what is seen and drawn on is a cutting plane, raised and lowered half a metre at a time and stopping at every floor there is, as an architect's section; above it is hidden. A wall has its own height, three metres unless dragged taller or shorter, as The Sims 4's walls do; a floor lies where the plane is; a roof rests on the walls under it. A storey becomes a default height, not a rule, and the same plane serves the character's camera too. `terra_build` would count height in half-metre blocks rather than three-metre storeys (docs/structures.md).
+
 ## Open questions
 
 For the developers. Each has my recommendation.
