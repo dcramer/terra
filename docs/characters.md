@@ -1,6 +1,6 @@
 # Characters and what they wear
 
-How bodies, clothing, armour, packs and weapons are made so that **every item fits every body without being fitted to each one by hand**. Many of everything (D127): a new item is made once and works on every character, and a new body works with every item already made. The cost grows with items plus bodies, never items times bodies. Current thinking (D112, D128, Leaning); the build plan is [character-system-plan.md](character-system-plan.md); the research behind it is [research/one-mesh-for-every-body.md](../research/one-mesh-for-every-body.md) and [research/character-creators.md](../research/character-creators.md).
+How bodies, clothing, armour, packs and weapons are made so that **every item fits every body without being fitted to each one by hand**. Many of everything (D127): a new item is made once and works on every character, and a new body works with every item already made. The cost grows with items plus bodies, never items times bodies. Current thinking (D112, D128, Leaning); the build plan is [character-system-plan.md](character-system-plan.md); the research behind it is [research/modern-character-variety.md](../research/modern-character-variety.md), [research/one-mesh-for-every-body.md](../research/one-mesh-for-every-body.md) and [research/character-creators.md](../research/character-creators.md).
 
 ## The idea
 
@@ -17,18 +17,20 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 
 ### Bodies
 
-- **One base body asset, made once and checked**, the single source of truth: a mesh in our T-pose with its texture layout, our skeleton, skin weights made for that mesh, the skin patches, and the rules that place joints and sockets on the skin. It starts from MakeHuman's mesh (CC0, clean all-quad topology), posed into our T-pose; its weights start from MakeHuman's and are fixed on the base until the rig checks pass. Nothing about it is taken from a generated body.
-- **A body is only a shape of the base**: new positions for the same vertices. Its weights and patches are the base's; its joints and sockets are found on its own skin by the base's rules, so a taller or heavier body gets its own skeleton. Every animation plays on it, since clips carry rotations and the hips' height is scaled to the body.
-- **A new body (a template, D111) from a design**: Tripo makes the design's model from its sheet, as now. Its pose is matched by turning the base's bones, its shape fitted (the base's own shapes first, a smooth residual after, the face by face shapes only so eyes and mouth stay made to move), and the result turned back into the T-pose. Tripo then paints the base's layout from the design's front view. A design gives a shape and a skin, nothing else.
-- **Customisation** is mixing shapes, the same thing as a template.
+- **One base body, made once and checked**: one mesh in our T-pose (from MakeHuman's CC0 mesh), our skeleton, skin weights made for it, the skin patches and the socket rules. It passes the rig checks before anything uses it.
+- **A body is a few parameters on it**, as in modern games ([research](../research/modern-character-variety.md)): proportions as bone scales (height, limb length, shoulders, hips, head), build as a few soft morphs (heavy, muscular, thin, chest, belly), the head as blends of head shapes, and a painted skin, tinted. Sex is a morph or a second base; the spike decides.
+- **A template (D111) is a preset of those numbers and a skin**; sliders later are the same numbers, clamped to what every item passes at; an NPC is a template with small offsets from its seed.
+- **A template from a design**: Tripo makes the design's model, as now; the parameters that bring the base closest to it are estimated, and Tripo paints the base's layout in those proportions. Nothing is copied vertex by vertex from a generated body.
 - **Sockets**, the same names and axes on every body: hands, head, back, belt.
 - Hair is a separate part, bound to the head like gear (D112).
 
 ### Clothing and armour (they bend with the body)
 
-- **Made once, on the base shape.** A piece is the shared mesh's faces it covers (said once per item as a coverage: which parts, where its hems fall), pushed out to its stand-off. Its colour and surface detail are baked from one Tripo model of the base wearing it. Its texture is on its own layout, so it is the same image on every body.
-- **On any body**, each vertex of the piece follows the body vertex it was made from, pushed out along that body's surface, and takes that vertex's skin weights. Parts made of their own geometry (a collar, a hood, plate) are bound to the nearest three body vertices, MakeHuman's way, and loose parts (a skirt, coat tails) to a smooth helper instead of the legs.
+- **Made once, on the base.** A skin garment is the base's faces it covers (said once per item as a coverage: which parts, where its hems fall), pushed out to its stand-off. A piece with its own geometry (a collar, a hood, plate) is bound to the nearest base surface; a loose one (a skirt, coat tails) to a smooth helper between the legs.
+- **It follows any body for free**: skinned to the shared skeleton, it takes the body's proportions, and it carries the body's build morphs, copied from the base by a tool. Parts marked rigid ride one bone instead. One mesh per item, shared by every wearer.
+- **Its colour is painted once**, on its own layout, so it is the same image on every body.
 - **It says what it covers**: the patches whose skin lies wholly inside it, in its glTF extras.
+- **An exception, not a rule**: an item that fails its check on one template gets that template's own model, as Final Fantasy XIV does.
 
 ### Heights off the skin
 
