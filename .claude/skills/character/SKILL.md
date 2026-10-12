@@ -1,6 +1,6 @@
 ---
 name: character
-description: Make a game character for Terra (a base body, an NPC, a body template) from a design sheet to a rigged, animated, checked model in the game: concept image, Tripo model and auto-rig on the Studio subscription, conversion onto our skeleton, the rig checker, export, and a look in the sandbox's workbench. Use when asked to make, generate, rig or fix a character or humanoid model.
+description: Make a game character for Terra (a base body, an NPC, a body template or morph) from a design sheet to a rigged, animated, checked model in the game: concept image, Tripo model and auto-rig on the Studio subscription, conversion onto our skeleton, the rig checker, export, and a look in the sandbox's workbench. Use when asked to make, generate, rig or fix a character or humanoid model.
 ---
 
 # Making a character
@@ -116,6 +116,51 @@ Then add a row for it to `THIRD_PARTY.md`.
 
 What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, and how far it tips when carried in its glTF extras (`carry_tilt`). `tools/characters/fit_held.py` makes them; each item's length, grip and tilt are in its `TOOLS`. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
 
+## 6. Body templates: morphs of the base
+
+Every body is the base body (`base-male`) with a few morphs, as modern games do it (D112, [research](../../../research/modern-character-variety.md)): build (heavy, thin, strong), sex (female), and later heads. A morph is a change of shape of the base's own mesh, so the base's skeleton, weights, texture layout and skin patches serve every body, and gear made on the base fits them all. Worked out on 2026-10-12 ([research/body-morphs.md](../../../research/body-morphs.md)).
+
+**Make a build morph** from a design of the base person:
+
+```bash
+tools/characters/make_morph.sh heavy "the man is much heavier, overweight with a big round belly, thick arms, thighs and neck, a fuller face"
+```
+
+The first run only draws the sheet (free) into `art/characters/base-male/morphs/heavy/` and stops. Look at it: it must be the same person in the same T-pose, front view on the left third; redraw (delete `sheet.png`) until it is. Run the same command again. It:
+1. crops the front view;
+2. makes Tripo's model (25 credits);
+3. registers the base onto it (`morph.py`);
+4. exports the body (`export_character.py`);
+5. carries every worn look onto it (`carry_gear.py`);
+6. checks them (`gear_check.py`).
+
+Each step is skipped when its source art is already kept, so rerunning costs nothing.
+
+**Make the female (or any other rigged body) a morph** of the base, its own skeleton giving its proportions:
+
+```bash
+tools/characters/make_morph.sh female --design assets/models/character/base-female.glb
+tools/characters/paint_skin.sh female art/characters/base-female/front.png
+```
+
+`paint_skin.sh` has Tripo paint the template's own skin on the base's mesh in its shape, from the design's front view (20 credits). It keeps the painting as `morphs/female/skin.glb` and bakes it onto the base's layout. A build morph keeps the base's skin and needs no painting.
+
+**Read the output:**
+
+- `MORPH ... fitted: mean 2.2 mm, 95% 4.5 mm, unmatched 5.2%`: the base's skin against the design's.
+  - Expect a few millimetres and under about 6% unmatched.
+  - Much worse means the design is not in the base's pose, or the model carries something besides the body.
+- `GEARCHECK` lines, one per worn look: as in section 5, each under 2%.
+- Then look: `tools/blender/run.sh tools/characters/compare.py out.png "assets/models/character/base-male.glb" "tools/characters/out/heavy-game.glb+tools/characters/out/heavy-leather_coat.glb"`. Use `+` to dress a body, `--clay` for shape alone.
+
+**What each step does, and why:**
+
+- **The pose comes first.** The base's own limbs are turned into the design's, its skin following by its weights. Without this, an arm a few degrees off becomes a change of shape.
+- **The shape is a pull smoothed over distance** (from 6 cm down to 1.5 cm), never over mesh steps, so no crease of the design's clothes comes through. The hands stay the base's: generated hands are worse.
+- **A build morph keeps the base's skeleton.** Placing joints from the skin round them let belly fat drag the hips and spine 9 to 12 cm. Height and limb length are bone proportions, made separately; a rigged design, such as the female, brings its own joints.
+- **The body keeps the base's patches**, so a garment's list of hidden patches means the same skin on every body.
+- **Gear is carried, not remade.** A part on the skin follows it vertex by vertex. A part that stands off (a pack's bag) moves as one piece, clearing the skin that moved out most beneath it.
+
 ## Traps already found
 
 - Blender's glTF importer leaves the skeleton posed in the first frame of some animation. Clear every pose bone's transform before using its rest pose, or that pose becomes the rest pose.
@@ -131,4 +176,7 @@ What is held is the same idea, without a body: one look per item, `models/held/<
 - Scripts that `cd` lose relative paths; resolve them first (`realpath`).
 - Current Blender keeps vertex group names on the mesh: a piece built on a new mesh loses them, and the exporter writes it without a skin. Build on a copy of the body's mesh.
 - A body file splits vertices at texture seams and patch borders; weld before working on its surface as one, or every patch looks like a separate speck.
+- A sheet drawn at 1,024 pixels and padded to 2,048 without scaling leaves a small figure in a pale box, and Tripo models the box. Both `make_character.sh` and `make_morph.sh` scale the front view and pad it with the sheet's own background.
+- A generated model can carry stray pieces (a slab of backdrop); `morph.py` keeps only its largest connected part, after joining points split at texture seams.
+- The clipping check counts skin inside a rigid piece's volume (a heavy back inside a pack's bag) though it cannot be seen; a rigid piece should hide the patches wholly under it.
 - In zsh, `r pose $c` passes "Idle_Loop 0.3" as one word; use `${=c}`.

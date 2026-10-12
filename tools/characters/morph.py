@@ -1,19 +1,34 @@
-"""Makes a body morph from a design of the base person (the spike's README).
+"""Makes a body morph: the base body reshaped into a design of the base person, kept as a
+change of shape of the base's own mesh (D112; how and why in research/body-morphs.md).
 
-    tools/blender/run.sh spike/body_morphs/morph.py assets/models/character/base-male.glb spike/body_morphs/out/heavy-model.glb heavy
+    tools/blender/run.sh tools/characters/morph.py BASE.glb DESIGN.glb NAME [--joints]
 
-1. The design's model is turned and scaled as the base stands (Tripo's models face +X and are
-   a unit tall).
-2. Pose: each limb of the base's own skeleton is turned about its joint to lie in the model's
-   limb, the base's skin following by its own weights, so pose and shape are not confused.
-3. Shape: the base's skin is drawn onto the model's, the pull smoothed over distance from
-   broad to about 1.5 cm, so it takes the body's form and none of its creases. The hands stay
-   the base's.
-4. Back to the T-pose by undoing the pose, so the difference from the base is a pure change of
-   shape: the morph. The joints move with the skin round them.
+BASE is the game's base body (assets/models/character/base-male.glb). DESIGN is either
+  - a Tripo model of a design of the base person (art/characters/base-male/morphs/NAME/model.glb):
+    it is turned to face -Y, scaled to the base's height, feet on the ground, centred, and only
+    its largest connected part is kept (a generated model can carry a slab of its backdrop); or
+  - a body already rigged on our skeleton (another base, such as base-female.glb): it stands as
+    the base does, and its own joints give the morph its proportions.
 
-Writes out/NAME.npz (the morph per vertex of the base, and its joints) and out/NAME.glb, the
-base reshaped and rigged at the morph's full weight, for tools/characters/export_character.py.
+Steps:
+  1. Pose. A generated design: each limb of the base's skeleton (shoulders, upper and lower
+     arms, thighs, shins, feet) is turned about its joint to lie in the design's limb, the
+     base's skin following by its own weights, so pose and shape are not confused. A rigged
+     design: the base's joints are moved onto the design's.
+  2. Shape. The base's skin is drawn onto the design's skin. Each pull is smoothed over
+     distance (a Gaussian of 6, 4, 2.5 and then 1.5 cm), never over mesh steps, so dense and
+     sparse parts fit alike and no crease of the design's clothes comes through. Skin with no
+     trustworthy match (too far, or facing away) is carried by its neighbours. The hands stay
+     the base's.
+  3. Back to the T-pose, by undoing the pose: the change is a pure change of shape.
+  4. Joints. A build morph keeps the base's skeleton, as Starfield's Heavy does: placing joints
+     from the skin round them let belly fat drag the hips and spine 9-12 cm. A rigged design
+     carries its own joints; --joints makes a generated one carry joints found from its skin.
+
+Prints the fit (MORPH lines: mean and 95th percentile distance from the design's skin, and the
+share of skin with no match). Writes tools/characters/out/NAME.npz, the morph per vertex of the
+base and its joint offsets, and tools/characters/out/NAME.glb, the base at the morph's full
+weight, rigged and without clips or sockets, for export_character.py.
 """
 
 import math
@@ -21,7 +36,7 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "characters"))
+sys.path.insert(0, HERE)
 
 import bpy
 import numpy as np
@@ -31,7 +46,7 @@ from mathutils.kdtree import KDTree
 
 import look
 
-OUT = os.path.join(HERE, "out")
+OUT = look.OUT
 base_path, design_path, name = look.args()[:3]
 look.reset()
 

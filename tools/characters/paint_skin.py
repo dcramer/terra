@@ -1,11 +1,13 @@
-"""A template's own skin, painted on the base's layout (the spike's README).
+"""A template's own skin, painted by Tripo on the base body's mesh in the template's shape and
+baked onto the base's texture layout (D112; research/body-morphs.md).
 
-    tools/blender/run.sh spike/body_morphs/skin.py out NAME      the morphed body, bare, facing +X, for Tripo
-    tools/blender/run.sh spike/body_morphs/skin.py in NAME       Tripo's painting baked onto it
+    tools/blender/run.sh tools/characters/paint_skin.py out NAME
+    tools/blender/run.sh tools/characters/paint_skin.py in NAME
 
-`out` writes out/NAME-bare.glb from out/NAME-game.glb. Tripo paints that (tripo.ts import, then
-texture from the design's front view); `in` bakes out/NAME-painted.glb onto the body's own
-layout and writes out/NAME-game.glb with it. Tripo returns its mesh a unit tall and centred.
+`out` writes tools/characters/out/NAME-bare.glb: the body of out/NAME-game.glb, bare, facing +X
+as Tripo's models do. Tripo then paints it from the design's front view (paint_skin.sh does
+both). `in` bakes out/NAME-painted.glb, which Tripo returns a unit tall and centred, back onto
+the body's own layout and writes out/NAME-game.glb with it.
 """
 
 import math
@@ -13,14 +15,14 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "characters"))
+sys.path.insert(0, HERE)
 
 import bpy
 from mathutils import Matrix, Vector
 
 import look
 
-OUT = os.path.join(HERE, "out")
+OUT = look.OUT
 step, name = look.args()[:2]
 look.reset()
 

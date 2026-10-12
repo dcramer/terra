@@ -1,15 +1,20 @@
-"""Carries a look made on the base onto a morph of it (the spike's README): each part of the
-look that follows the skin takes the morph of the skin under it, vertex by vertex; a part that
-stands off the body (a pack's bag) moves as one, by the morph of the skin it rests on.
+"""Carries a worn look made on the base body onto a morph of it, so gear is made once (D128;
+research/body-morphs.md).
 
-    tools/blender/run.sh spike/body_morphs/gear_morph.py BASE.glb MORPH.npz LOOK.glb OUT.glb
+    tools/blender/run.sh tools/characters/carry_gear.py BASE.glb MORPH.npz LOOK.glb OUT.glb
+
+Each part of the look (its connected pieces, joined across texture seams) that lies on the skin
+(median distance under 3.5 cm) takes the morph of the nearest skin, vertex by vertex: a jerkin,
+a cap, a pack's straps. A part that stands off the body (a pack's bag) moves as one piece, by
+the skin nearest it, and out far enough to keep its clearance over the skin that moved out most
+beneath it. The look keeps its skin weights, sockets and extras.
 """
 
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "characters"))
+sys.path.insert(0, HERE)
 
 import bpy
 import numpy as np

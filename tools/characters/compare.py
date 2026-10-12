@@ -1,9 +1,12 @@
-"""Bodies side by side at rest, from the front, the side, the back and close on the face.
+"""Bodies side by side at rest, from the front, the side, the back and close on the face, in
+the game's light, for a person to look at.
 
-    tools/blender/run.sh spike/body_morphs/compare.py OUT.png a.glb b.glb@90 ...
+    tools/blender/run.sh tools/characters/compare.py OUT.png [--clay] [--face] a.glb b.glb@90 c.glb+d.glb ...
 
-`@degrees` turns a model about Z first (a rig written facing +X takes @-90); a second
+`@degrees` turns a model about Z first (a model facing +X, as Tripo's do, takes @-90); a second
 `@metres` scales it to that height, feet on the ground (Tripo returns models a unit tall).
+`a.glb+b.glb` stands several files together: a body and what it wears. --clay draws them all
+in one plain material, to see shape alone; --face only the faces.
 """
 
 import math
@@ -11,7 +14,7 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "characters"))
+sys.path.insert(0, HERE)
 
 import bpy
 from mathutils import Matrix, Vector
@@ -77,7 +80,7 @@ for k, (side, z, scale) in enumerate(views):
     cam.data.ortho_scale = scale
     if k == 3 or only_face:
         scene.render.resolution_y = 512 if only_face else 320
-    path = os.path.join(HERE, "out", f"cmp-{k}.png")
+    path = os.path.join(look.OUT, f"compare-{k}.png")
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
     tiles.append(path)

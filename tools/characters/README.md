@@ -16,6 +16,11 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `shell_garment.py` | Clothing cut from the base body, from a model of that body wearing it (`art/gear/dressed-<body>-<item>/`) |
 | `fit_gear.py` | Rigid gear (a pack, a quiver) fitted to a body at its socket, from `art/gear/<item>/`; straps from the skin (`bands.py`) |
 | `gear_check.py` | How much skin comes through each worn piece, through our clips |
+| `make_morph.sh NAME "CHANGE"` or `NAME --design BODY.glb` | A morph of the base body end to end: design (free), model (25 credits), registration, export, gear carried and checked; skips what `art/` already keeps |
+| `morph.py` | Registers the base onto a design's model: pose by the base's skeleton, shape by a pull smoothed over distance, back to the T-pose; the morph |
+| `carry_gear.py` | A worn look made on the base carried onto a morph |
+| `paint_skin.sh NAME FRONT` | A template's own skin, painted by Tripo on the base's mesh in its shape (`paint_skin.py`), baked onto the base's layout |
+| `compare.py` | Bodies side by side, dressed with `a.glb+b.glb`, for a person to look at |
 | `fit_held.py` | The held look of each tool, from the free models in `assets/models/tools` |
 
 `look.py` holds what the scripts share: paths, our palette and light, and contact sheets.

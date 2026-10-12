@@ -1,6 +1,6 @@
 # Body morphs on our own base
 
-2026-10-12. Question: can build and sex morphs be made from Tripo designs of the base person, registered onto our base body's mesh, and does gear made once on the base pass its clipping check on every morph? Tried in [spike/body_morphs](../spike/body_morphs/README.md), following [docs/character-system-plan.md](../docs/character-system-plan.md).
+2026-10-12. Question: can build and sex morphs be made from Tripo designs of the base person, registered onto our base body's mesh, and does gear made once on the base pass its clipping check on every morph? Tried in a spike, now the tools `tools/characters/make_morph.sh` and `paint_skin.sh` (the `character` playbook, section 6), following [docs/character-system-plan.md](../docs/character-system-plan.md).
 
 ## Answer
 
