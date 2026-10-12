@@ -9,7 +9,7 @@ Any model that is not a character goes from a one-line description to the file t
 
 **The style guide is [docs/art-style.md](../../../docs/art-style.md) (D14).** It decides how anything looks: shapes, roles, budgets, the concept prompt and the checklist. Read it before deciding anything below, and judge every concept and model by it. Don't restate it or work around it; if it is silent or wrong for a case, say so to the developers.
 
-Not here: characters, bodies and gear (the `character` skill); item icons (`item-icons`); walls, floors and roofs, which are made in code from kits (D177); anything Tripo does outside this pipeline (`tripo`).
+Not here: characters, bodies and gear (the `character` skill); item icons (`item-icons`); anything Tripo does outside this pipeline (`tripo`). The pieces of a building kit (a log, a panel of shakes, a door) are made here like any prop, into `assets/models/kits`, from a concept of a whole building the developers approved; the game's layout code only places them ([docs/kits.md](../../../docs/kits.md), D177).
 
 ## 1. Decide what it is
 

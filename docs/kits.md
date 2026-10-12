@@ -17,14 +17,20 @@ So a corner looks the same in the blueprint as it does built, just ghosted. Noth
 
 ## How pieces are made (D177)
 
-**Logs are made in code, from the kit's numbers and a seed, not modelled one by one.** A log's length is set by the wall it is in, by its ends and by the openings in it, so no fixed set of models fits. A stretched model smears its ends and bark. A log is a lathe: rings of a dozen points along its length, each nudged by the seed, with a slight taper and bend, cut flat at the ends, where the end grain shows in its own colour. A split log is the same, cut along its middle. It is flat-shaded, in the art direction's simple shapes, finely cut (D14). It lives in `terra_build`, so it is tested without a GPU.
+**Every piece is a model from the art pipeline; code only arranges them** (revised 2026-10-12). Logs drawn by code from numbers broke the art direction (D14): their look was invented, not drawn to the style guide. Now a kit's look starts as a concept of a whole building drawn to the guide and approved by the developers, [art/props/log-cabin](../art/props/log-cabin/concept.png); each piece is modelled from a concept of its own, drawn the same way, by `tools/props` (Tripo, then a clean-up in Blender to palette roles). The layout (below) only places them: it repeats a piece, stretches a log along its length to fit its wall, cuts a piece by a plane where it must end, such as a split log or a shingle panel at a hip, and tiles panels over a roof. That is how shipped games build modular kits.
 
-- **Variety for free.** Every log has its own taper, bend, turn and shade, so a long wall never repeats. Builders lay the thick end of each log the opposite way to the one under it, and ours do too.
-- **One log everywhere.** The same code can draw the log a felled tree leaves (D174), the log on your shoulder (D140) and the log in the wall, so the log you carry is visibly the log you set.
-- **Authored art later, if needed.** If generated logs fall short of the art (step 5), a kit can name a modelled middle, to repeat along the log, and modelled ends instead. That is how shipped games draw fences, pipes and logs of any length (Unreal's spline meshes).
-- **Other kinds of construction** mix both. Stone blocks, posts and boards have fixed sizes, so they can be modelled pieces with a few versions each. Planks are cut to length like logs.
+The log kit's pieces, from the approved cabin:
 
-**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for logs), its sizes, how much each piece varies, its colours as palette roles (D14), and its frame pieces. A pine cabin and a dark-wood cabin are two files.
+| Piece | Laid as |
+|---|---|
+| A straight log, a few versions | Every course, corner end, gable log and purlin, stretched along its length to fit; cut along its middle for a split log |
+| A panel of shakes | Tiled over each face of a roof, cut at its edges, hips and valleys |
+| A ridge cap | Along each ridge and hip |
+| A timber board | Round every opening, stretched to its edges |
+| A door, a shuttered window | Set into openings of their size |
+| A footing of fieldstones | Under walls on the ground |
+
+**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for logs), its sizes, its pieces' models, and its colours as palette roles (D14). A pine cabin and a dark-wood cabin are two files.
 
 ## Drawing them
 

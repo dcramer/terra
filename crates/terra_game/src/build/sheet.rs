@@ -63,6 +63,23 @@ fn rows(kind: Kind) -> Vec<(&'static str, Vec<BuildOp>)> {
         }));
         ops
     };
+    // A room five metres by four under a roof of a style, with a door.
+    let roofed = |style: RoofStyle, along_x: bool| {
+        let mut ops = vec![BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            kind,
+        }];
+        ops.extend((4..=5).map(|x| wall([x, 0, 7], Panel::Door, kind)));
+        ops.push(BuildOp::AddRoof(RoofSection {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            style,
+            along_x,
+            pitch: if style == RoofStyle::LeanTo { 0.4 } else { 0.7 },
+        }));
+        ops
+    };
     // A wall with a hole carved in it, a cube at a time: a cross, and a slot.
     let carved = {
         let mut ops: Vec<BuildOp> = east_west(0, 9, 0, kind).collect();
@@ -107,6 +124,8 @@ fn rows(kind: Kind) -> Vec<(&'static str, Vec<BuildOp>)> {
         ),
         ("carved", carved),
         ("cabin", cabin),
+        ("hip roof", roofed(RoofStyle::Hip, true)),
+        ("lean-to", roofed(RoofStyle::LeanTo, true)),
     ]
 }
 
