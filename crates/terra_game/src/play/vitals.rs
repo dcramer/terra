@@ -239,7 +239,7 @@ fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::inventory::{Backpack, Broke, Gained, Items, give};
+    use crate::play::inventory::{Backpack, Broke, Gained, Items, Spilled, give};
     use crate::play::test_player;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -248,6 +248,7 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<Messages<Gained>>();
         world.init_resource::<Messages<Broke>>();
+        world.init_resource::<Messages<Spilled>>();
         world.init_resource::<Messages<Told>>();
         let ground = Vec3::Y * 2000.0;
         let hungry = |world: &mut World, at| {

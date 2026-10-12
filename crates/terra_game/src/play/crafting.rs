@@ -459,10 +459,8 @@ pub fn cancel(works: &mut Works, place: usize, belongings: &mut Inventory, notic
     let Some(&index) = works.queue.get(place) else {
         return;
     };
-    if !belongings.refund(RECIPES[index].cost, 1) {
-        notice.say("No room in your backpack for what it would give back");
-        return;
-    }
+    // What does not fit in the backpack drops at the player's feet.
+    belongings.refund(RECIPES[index].cost, 1);
     works.queue.remove(place);
     if place == 0 {
         works.progress = 0.0;

@@ -298,6 +298,7 @@ fn take_blows(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::play::inventory::Spilled;
     use crate::play::test_player;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -307,6 +308,7 @@ mod tests {
         world.init_resource::<Messages<Bitten>>();
         world.init_resource::<Messages<Hurt>>();
         world.init_resource::<Messages<Broke>>();
+        world.init_resource::<Messages<Spilled>>();
         let ground = Vec3::Y * 2000.0;
         let spared = test_player(&mut world, ground);
         let bitten = test_player(&mut world, ground + Vec3::X * 3.0);

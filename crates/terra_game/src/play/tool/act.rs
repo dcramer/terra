@@ -87,14 +87,6 @@ pub(super) fn act(
         let work_at = player_at + player_at.normalize_or(Vec3::Y);
         match work.job {
             Job::Structure { ops, pay, refund } => {
-                // As in Subnautica, nothing is taken apart if what it gives back would
-                // not fit in the backpack.
-                if let Some((cost, times)) = refund
-                    && !belongings.room_for(cost, times)
-                {
-                    notice.say("No room in your backpack for what that gives back");
-                    return;
-                }
                 // A room set into the ground cuts the ground away where it stands.
                 for op in &ops {
                     if let BuildOp::AddRoom { min, max } = *op {
@@ -154,13 +146,11 @@ pub(super) fn act(
             }
             Job::TakeAway(entity) => {
                 if let Ok(prop) = props.get(entity) {
-                    if belongings.refund(prop.item.cost, 1) {
-                        info!("Removed a {}.", prop.item.name);
-                        noise.write(Noise::at(Cue::TakenApart, work_at));
-                        commands.entity(entity).despawn();
-                    } else {
-                        notice.say("No room in your backpack for what that gives back");
-                    }
+                    // What does not fit in the backpack drops at the player's feet.
+                    belongings.refund(prop.item.cost, 1);
+                    info!("Removed a {}.", prop.item.name);
+                    noise.write(Noise::at(Cue::TakenApart, work_at));
+                    commands.entity(entity).despawn();
                 }
             }
         }

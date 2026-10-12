@@ -29,11 +29,18 @@ pub struct Arrival {
     pub facing: Vec3,
 }
 
-/// What someone carried, where they went down.
+/// Things lying on the ground to be picked up: what someone carried, where they went down,
+/// or what did not fit in their backpack (`pile`).
 #[derive(Component)]
 pub struct DroppedBag {
     pub grid: Grid,
     age: f32,
+}
+
+impl DroppedBag {
+    pub fn new(grid: Grid) -> Self {
+        Self { grid, age: 0.0 }
+    }
 }
 
 /// Sent when a player goes down, for whatever else has to answer it.
@@ -215,10 +222,10 @@ fn recover(
     let taken = belongings.take_from(&mut bag.grid);
     if bag.grid.is_empty() {
         commands.entity(entity).despawn();
-        notice.say(format!("Took back everything ({taken} things)"));
+        notice.say(format!("Picked up everything ({taken} things)"));
     } else {
         notice.say(format!(
-            "Took back {taken} things; {} would not fit",
+            "Picked up {taken} things; {} would not fit",
             bag.grid.len()
         ));
     }

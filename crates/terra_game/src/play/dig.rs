@@ -8,7 +8,6 @@
 //! when the pickaxe meets the ground itself. Digging works anywhere for now; that the
 //! world heals outside a claim (D94) comes later.
 
-use super::bag::Told;
 use super::controls::Action;
 use super::harvest::Cutting;
 use super::intent::Intent;
@@ -108,7 +107,6 @@ fn dig(
     >,
     mut planet: ResMut<Planet>,
     mut belongings: Belongings,
-    mut told: MessageWriter<Told>,
     mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
 ) {
@@ -209,12 +207,9 @@ fn dig(
                 continue;
             }
             let kind = belongings.items().kind(each.gives);
-            let given = belongings.give(kind, count);
-            // What does not fit stays in the spoil, to be taken when there is room.
-            *kept = rest + (count - given) as f32 * each.per_item_m3;
-            if given < count {
-                told.write(Told::new(player, "Your backpack is full"));
-            }
+            // What does not fit in the backpack drops at the player's feet (`pile`).
+            belongings.give(kind, count);
+            *kept = rest;
         }
         did.write(Did(player, Skill::Mining, ONCE));
         belongings.wear_in_hand(1);

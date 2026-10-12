@@ -52,7 +52,7 @@ impl Interactable {
         match self {
             Interactable::Station(station) => format!("use the {}", station.name().to_lowercase()),
             Interactable::ClaimStone => "the claim stone".to_string(),
-            Interactable::Bag => "take back your things".to_string(),
+            Interactable::Bag => "pick up what lies here".to_string(),
             Interactable::Carcass => "butcher it".to_string(),
             Interactable::Prisoner => "free them".to_string(),
             Interactable::Talk => "talk".to_string(),

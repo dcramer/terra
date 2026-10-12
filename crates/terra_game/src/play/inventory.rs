@@ -227,7 +227,7 @@ impl Items {
         Some(self.make(kind))
     }
 
-    fn make(&mut self, kind: ItemKind) -> Item {
+    pub fn make(&mut self, kind: ItemKind) -> Item {
         self.ids.make(kind)
     }
 
@@ -579,6 +579,16 @@ pub struct Belongings<'w, 's> {
     local: Query<'w, 's, Entity, IsLocalPlayer>,
     gained: MessageWriter<'w, Gained>,
     broke: MessageWriter<'w, Broke>,
+    spilled: MessageWriter<'w, Spilled>,
+}
+
+/// What was given to the player but did not fit: so many of a kind, which drop to the
+/// ground at their feet rather than being lost (`pile`).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Spilled {
+    pub player: Entity,
+    pub kind: ItemKind,
+    pub count: u32,
 }
 
 impl<'w> Belongings<'w, '_> {
@@ -602,6 +612,7 @@ impl<'w> Belongings<'w, '_> {
             gear,
             gained: &mut self.gained,
             broke: &mut self.broke,
+            spilled: &mut self.spilled,
         })
     }
 
@@ -622,6 +633,7 @@ pub struct Inventory<'a, 'w> {
     gear: Mut<'a, Gear>,
     gained: &'a mut MessageWriter<'w, Gained>,
     broke: &'a mut MessageWriter<'w, Broke>,
+    spilled: &'a mut MessageWriter<'w, Spilled>,
 }
 
 impl Inventory<'_, '_> {
@@ -845,14 +857,10 @@ impl Inventory<'_, '_> {
 
     /// Gives back what a cost so many times over is made of, if all of it fits. Returns
     /// whether it did.
-    pub fn refund(&mut self, cost: Cost, times: u32) -> bool {
-        if !self.room_for(cost, times) {
-            return false;
-        }
+    pub fn refund(&mut self, cost: Cost, times: u32) {
         for (kind, count) in self.items.wanted(cost, times) {
             self.give(kind, count);
         }
-        true
     }
 
     /// Puts so many of a kind of item where it goes, as many as fit: into what is worn that
@@ -861,6 +869,14 @@ impl Inventory<'_, '_> {
         let worn = self.gear.0.stow(kind, count);
         let given = worn + give(self.items, &mut self.backpack.0, kind, count - worn);
         self.tell(kind, given);
+        // What does not fit drops at the player's feet.
+        if given < count {
+            self.spilled.write(Spilled {
+                player: self.player,
+                kind,
+                count: count - given,
+            });
+        }
         given
     }
 

@@ -47,6 +47,7 @@ mod noise;
 mod noises;
 mod options;
 mod people;
+mod pile;
 mod pooling;
 mod probe;
 mod props;
@@ -207,6 +208,7 @@ pub fn plugin(app: &mut App) {
     daylight::plugin(app);
     torchlight::plugin(app);
     wear::plugin(app);
+    pile::plugin(app);
     zones::plugin(app);
     flora::plugin(app);
     props::plugin(app);

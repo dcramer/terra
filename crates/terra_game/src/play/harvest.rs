@@ -4,7 +4,6 @@
 //! tool's material decides what it can work (D96): a stone axe will not fell a great
 //! tree.
 
-use super::bag::Told;
 use super::combat::Swing;
 use super::controls::{Action, Settings};
 use super::flora::{Growth, Obstacles};
@@ -99,7 +98,6 @@ fn cut(
         (With<Player>, Without<Growth>),
     >,
     mut belongings: Belongings,
-    mut told: MessageWriter<Told>,
     mut obstacles: ResMut<Obstacles>,
     mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
@@ -229,26 +227,9 @@ fn cut(
 
         let (gives, count) = cut.gives;
         let kind = belongings.items().kind(gives);
-        // As in Subnautica, nothing is gathered into a full backpack. What does not fit is
-        // left behind.
-        if !belongings.room_for_one(kind) {
-            told.write(Told::new(player, "Your backpack is full"));
-            cutting.held = None;
-            transform.rotation = rest;
-            commands.entity(entity).remove::<Shaken>();
-            continue;
-        }
+        // What does not fit in the backpack drops at the player's feet (`pile`).
         let given = belongings.give(kind, count);
         belongings.wear_in_hand(1);
-        if given < count {
-            told.write(Told::new(
-                player,
-                format!(
-                    "Your backpack is full: {} {gives} left behind",
-                    count - given
-                ),
-            ));
-        }
         if let Some(stood) = obstacle {
             obstacles.remove(stood);
         }
