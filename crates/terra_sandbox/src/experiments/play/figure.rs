@@ -7,6 +7,7 @@
 
 use super::Player;
 use super::held::Grip;
+use crate::character::{CARRIED_IN, Carrying};
 use bevy::{prelude::*, world_serialization::WorldInstanceReady};
 use std::time::Duration;
 
@@ -29,6 +30,24 @@ enum Doing {
     Flinch,
     Roll,
     Guard,
+}
+
+impl Doing {
+    /// The clip that shows it.
+    fn clip(self) -> &'static str {
+        match self {
+            Doing::Idle => "Idle_Loop",
+            Doing::Jog => "Jog_Fwd_Loop",
+            Doing::Sprint => "Sprint_Loop",
+            Doing::Fall => "Jump_Loop",
+            Doing::Use => "Interact",
+            Doing::Down => "Death01",
+            Doing::Attack => "Sword_Attack",
+            Doing::Flinch => "Hit_Chest",
+            Doing::Roll => "Roll",
+            Doing::Guard => "Sword_Idle",
+        }
+    }
 }
 
 /// The animations, as places in the figure's animation graph.
@@ -78,18 +97,21 @@ fn spawn(
         return;
     };
     let clip = |name: &str| gltf.named_animations[name].clone();
-    let (graph, nodes) = AnimationGraph::from_clips([
-        clip("Idle_Loop"),
-        clip("Jog_Fwd_Loop"),
-        clip("Sprint_Loop"),
-        clip("Jump_Loop"),
-        clip("Interact"),
-        clip("Death01"),
-        clip("Sword_Attack"),
-        clip("Hit_Chest"),
-        clip("Roll"),
-        clip("Sword_Idle"),
-    ]);
+    let (graph, nodes) = AnimationGraph::from_clips(
+        [
+            Doing::Idle,
+            Doing::Jog,
+            Doing::Sprint,
+            Doing::Fall,
+            Doing::Use,
+            Doing::Down,
+            Doing::Attack,
+            Doing::Flinch,
+            Doing::Roll,
+            Doing::Guard,
+        ]
+        .map(|doing| clip(doing.clip())),
+    );
     commands.insert_resource(Moves {
         graph: graphs.add(graph),
         idle: nodes[0],
@@ -150,7 +172,7 @@ fn dress(
     // Whatever is in hand is held in the hand's socket (`held`).
     match crate::character::find(ready.entity, crate::character::HAND_R, &children, &names) {
         Some(hand) => {
-            commands.entity(hand).insert(Grip);
+            commands.entity(hand).insert((Grip, Carrying(true)));
         }
         None => warn!("The figure has no {}.", crate::character::HAND_R),
     }
@@ -165,6 +187,7 @@ fn animate(
         &mut AnimationTransitions,
         &mut Animated,
     )>,
+    mut hands: Query<&mut Carrying, With<Grip>>,
 ) {
     let Some(moves) = moves else { return };
     let speed = player.velocity.length();
@@ -194,6 +217,9 @@ fn animate(
             continue;
         }
         animated.0 = doing;
+        for mut hand in &mut hands {
+            hand.0 = CARRIED_IN.contains(&doing.clip());
+        }
         let node = match doing {
             Doing::Idle => moves.idle,
             Doing::Jog => moves.jog,

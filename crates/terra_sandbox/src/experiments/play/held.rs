@@ -7,6 +7,7 @@
 
 use super::inventory::{Belongings, Tool};
 use super::models::{Part, piece, read_model};
+use crate::character::Held;
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
@@ -48,6 +49,18 @@ fn about(tool: Tool) -> (Option<&'static str>, f32, f32) {
         Tool::Spear => (Some("tools/Spear.glb"), 1.8, 0.75),
         Tool::Bow => (Some("tools/Bow_Wooden.glb"), 1.2, 0.6),
         Tool::StonePickaxe | Tool::IronPickaxe => (None, 0.72, 0.08),
+    }
+}
+
+/// How a tool tips in a hanging hand when carried (`character::Held`): heads forward and
+/// down, a spear's point up. Found by looking at it in the workbench.
+pub fn carry_tilt(tool: Tool) -> f32 {
+    match tool {
+        Tool::Hammer | Tool::StoneAxe | Tool::IronAxe => -45.0,
+        Tool::StonePickaxe | Tool::IronPickaxe => -45.0,
+        Tool::Knife => -30.0,
+        Tool::Spear => 60.0,
+        Tool::Bow => -30.0,
     }
 }
 
@@ -218,6 +231,8 @@ fn show(
     };
     commands.spawn((
         Shown,
+        Name::new("Held tool"),
+        Held::new(carry_tilt(look.0)),
         Mesh3d(look.1.mesh.clone()),
         MeshMaterial3d(look.1.material.clone()),
         Transform::default(),

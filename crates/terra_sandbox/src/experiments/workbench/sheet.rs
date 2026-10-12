@@ -52,6 +52,7 @@ pub fn capture(
     options: Res<Options>,
     mut sheet: ResMut<Sheet>,
     mut players: Query<&mut AnimationPlayer>,
+    mut hands: Query<&mut crate::character::Carrying>,
     mut camera: Query<&mut Transform, With<Camera3d>>,
     children: Query<&Children>,
     names: Query<&Name>,
@@ -94,7 +95,7 @@ pub fn capture(
         moments[within % moments.len()],
     );
     if sheet.waited == 0 {
-        pose(&bench, clip, Some(moment), &mut players);
+        pose(&bench, clip, Some(moment), &mut players, &mut hands);
     }
     // Every frame, so a camera on a moving part follows it into the pose.
     if let Ok(mut transform) = camera.single_mut() {

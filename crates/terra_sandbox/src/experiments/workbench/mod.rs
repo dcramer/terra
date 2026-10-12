@@ -23,7 +23,7 @@ use bevy::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::play::held::{tool_material, tool_mesh, tool_named};
+use super::play::held::{carry_tilt, tool_material, tool_mesh, tool_named};
 use crate::{character, planet::Planet, remote, shell::Options};
 
 /// How far apart models stand, side by side.
@@ -289,17 +289,21 @@ fn dress(
 ) {
     if let Some(name) = &options.hold {
         let hand = character::find(root, character::HAND_R, children, names);
-        match (tool_named(name).and_then(tool_mesh), hand) {
-            (Some(mesh), Some(hand)) => {
+        let tool = tool_named(name);
+        match (tool.and_then(tool_mesh), tool, hand) {
+            (Some(mesh), Some(tool), Some(hand)) => {
+                commands.entity(hand).insert(character::Carrying::default());
                 commands.spawn((
+                    Name::new("Held tool"),
+                    character::Held::new(carry_tilt(tool)),
                     Mesh3d(meshes.add(mesh)),
                     MeshMaterial3d(materials.add(tool_material())),
                     Transform::default(),
                     ChildOf(hand),
                 ));
             }
-            (None, _) => warn!("workbench: no tool called {name}"),
-            (_, None) => warn!("workbench: the model has no {}", character::HAND_R),
+            (_, None, _) | (None, _, _) => warn!("workbench: no tool called {name}"),
+            (_, _, None) => warn!("workbench: the model has no {}", character::HAND_R),
         }
     }
     for attach in &options.attaches {
@@ -358,13 +362,18 @@ fn view(
     }
 }
 
-/// Holds every model at `fraction` of the way through `clip`, or plays it from the start.
+/// Holds every model at `fraction` of the way through `clip`, or plays it from the start,
+/// with anything in hand carried or used as that clip has it.
 fn pose(
     bench: &Bench,
     clip: &str,
     fraction: Option<f32>,
     players: &mut Query<&mut AnimationPlayer>,
+    hands: &mut Query<&mut character::Carrying>,
 ) {
+    for mut hand in hands.iter_mut() {
+        hand.0 = character::CARRIED_IN.contains(&clip);
+    }
     for (entity, node, length) in bench.playing(clip) {
         let Ok(mut player) = players.get_mut(entity) else {
             continue;
@@ -389,14 +398,17 @@ struct Pose {
 
 fn pose_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Pose { clip, fraction } = parse_some(params)?;
-    let mut state =
-        bevy::ecs::system::SystemState::<(Res<Bench>, Query<&mut AnimationPlayer>)>::new(world);
-    let (bench, mut players) = state.get_mut(world).map_err(remote::refused)?;
+    let mut state = bevy::ecs::system::SystemState::<(
+        Res<Bench>,
+        Query<&mut AnimationPlayer>,
+        Query<&mut character::Carrying>,
+    )>::new(world);
+    let (bench, mut players, mut hands) = state.get_mut(world).map_err(remote::refused)?;
     if bench.playing(&clip).next().is_none() {
         return Err(remote::refused(format!(
             "no model plays {clip}; the clips are those given with --anim"
         )));
     }
-    pose(&bench, &clip, fraction, &mut players);
+    pose(&bench, &clip, fraction, &mut players, &mut hands);
     Ok(json!({ "clip": clip, "fraction": fraction }))
 }
