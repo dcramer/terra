@@ -76,6 +76,13 @@ export type Prop = {
   turn?: number;
   // Tripo's face limit for the generated model, before it is cut to the budget.
   faces?: number;
+  // A building kit's piece laid along its length, such as a log or a board, which the game
+  // stretches to fit: its length along X, its thinnest side up, its middle on the origin.
+  along?: boolean;
+  // Tripo's generator: "p1", the low-poly Smart Mesh, by default; "h3.1", its most detailed,
+  // for a piece seen close and often, such as a building kit's, textured in detail so its
+  // colours are matched to roles more truly.
+  generator?: string;
   // It lies flat, as a rug does: laid on the plane it best fits and pressed thin, since a
   // generator models such things tilted or curled.
   flat?: boolean;
@@ -96,7 +103,17 @@ export function readProp(text: string, name: string): Prop {
 /** The arguments refine.py takes for a prop. */
 export function refineArgs(prop: Prop, model: string, out: string, sheet: string): string[] {
   const roles = prop.roles.map((role) => (prop.match?.[role] ? `${role}=${prop.match[role].join(",")}` : role));
-  return [model, out, sheet, String(prop.size), String(prop.budget), String(prop.turn ?? 0), ...roles, ...(prop.flat ? ["--flat"] : [])];
+  return [
+    model,
+    out,
+    sheet,
+    String(prop.size),
+    String(prop.budget),
+    String(prop.turn ?? 0),
+    ...roles,
+    ...(prop.flat ? ["--flat"] : []),
+    ...(prop.along ? ["--along"] : []),
+  ];
 }
 
 function run(command: string, args: string[]) {
@@ -124,7 +141,9 @@ function model(name: string, prop: Prop, again: boolean) {
   mkdirSync(OUT, { recursive: true });
   run("node", [TRIPO, "views", image, "-o", views]);
   const sides = ["front", "left", "back", "right"].map((side) => `${views}-${side}.jpeg`);
-  run("node", [TRIPO, "model", "--views", ...sides, "--model", "p1", "--faces", String(prop.faces ?? 5000), "--texture-quality", "standard", "-o", glb]);
+  const generator = prop.generator ?? "p1";
+  const quality = generator === "p1" ? "standard" : "detailed";
+  run("node", [TRIPO, "model", "--views", ...sides, "--model", generator, "--faces", String(prop.faces ?? 5000), "--texture-quality", quality, "-o", glb]);
 }
 
 function refine(name: string, prop: Prop) {

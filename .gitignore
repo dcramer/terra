@@ -9,3 +9,4 @@ shots/
 .env
 # The save game `cargo xtask loop` plays through.
 loop.ron
+spike/*/out/

@@ -31,9 +31,13 @@ from mathutils import Matrix, Vector
 import look
 
 # --flat: a thing that lies flat, such as a rug, laid on its plane and pressed thin.
+# --along: a building kit's piece laid along its length, such as a log or a board, which the
+# game stretches to fit (docs/kits.md): its length along X, its thinnest side up, its middle
+# on the origin.
 args = look.args()
 flat = "--flat" in args
-src, out, sheet, size, budget, turn, *given = [a for a in args if a != "--flat"]
+along = "--along" in args
+src, out, sheet, size, budget, turn, *given = [a for a in args if a not in ("--flat", "--along")]
 size, budget, turn = float(size), int(budget), float(turn)
 # ROLE, or ROLE=r,g,b for a role that the texture paints in another colour than its own.
 roles = [role.split("=")[0] for role in given]
@@ -81,8 +85,8 @@ def select_only(ob):
 
 
 def load():
-    """The model as one object with its transforms applied, without the generator's smoothed
-    normals, which would otherwise spoil flat shading here and in the game."""
+    """The model as one object with its transforms applied, without the generator's own
+    normals: they are made again by `smooth`, to the style guide's rule."""
     bpy.ops.import_scene.gltf(filepath=look.path(src))
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     for o in meshes:
@@ -102,6 +106,14 @@ def load():
     if ob.data.has_custom_normals:
         bpy.ops.mesh.customdata_custom_splitnormals_clear()
     return ob
+
+
+def smooth(ob, crease=50.0):
+    """Normals as the style guide says (docs/art-style.md, Light and surface): smooth across
+    a gentle curve, split where faces meet at more than `crease` degrees, so a round log
+    shades in a few clean bands and a board's edge stays crisp."""
+    select_only(ob)
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(crease), keep_sharp_edges=True)
 
 
 def weld(me):
@@ -290,6 +302,22 @@ def level(me):
     return lean
 
 
+def lay_along(me):
+    """A kit piece laid along its length: its axes of most and least spread turned to X and
+    up, so a log lies straight along X however it was generated, then its middle on the
+    origin and its length SIZE."""
+    pts = np.array([v.co for v in me.vertices])
+    centre = pts.mean(axis=0)
+    _, _, axes = np.linalg.svd(pts - centre, full_matrices=False)
+    length, _, thin = (Vector(axis) for axis in axes)
+    across = thin.cross(length)
+    turn_to = Matrix((length, across, thin)).to_4x4()
+    me.transform(turn_to @ Matrix.Translation(-Vector(centre)))
+    pts = np.array([v.co for v in me.vertices])
+    lo, hi = pts.min(axis=0), pts.max(axis=0)
+    me.transform(Matrix.Scale(size / float(hi[0] - lo[0]), 4) @ Matrix.Translation(-Vector((lo + hi) / 2)))
+
+
 def place(ob):
     """Squared up, facing the standard way (Studio's +X front to glTF's +Z, Blender's -Y),
     turned by TURN, its longest side SIZE, standing on the origin."""
@@ -412,12 +440,18 @@ despeckle(ob.data)
 if flat:
     merge_colours(ob)
     lay_flat(ob.data)
+elif along:
+    leaned = 0.0
 else:
     leaned = level(ob.data)
-place(ob)
+if along:
+    lay_along(ob.data)
+else:
+    place(ob)
+smooth(ob)
 bpy.context.view_layer.update()
 report = checks(ob)
-report["leaned_degrees"] = 0.0 if flat else round(leaned, 1)
+report["leaned_degrees"] = 0.0 if flat or along else round(leaned, 1)
 select_only(ob)
 bpy.ops.export_scene.gltf(filepath=look.path(out), export_format="GLB", use_selection=True)
 look.stage()

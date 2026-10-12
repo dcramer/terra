@@ -58,6 +58,10 @@ pub struct LogKit {
     pub chinking: bool,
     /// The boards round an opening: how wide and how far proud of the logs.
     pub frame: f32,
+    /// The model each log is drawn with (D177), an asset path, its length along X; until
+    /// the kit has one, logs are drawn in code.
+    #[serde(default)]
+    pub log_model: Option<String>,
     pub colours: LogColours,
 }
 
@@ -103,6 +107,7 @@ impl Default for LogKit {
             ragged: 0.04,
             chinking: true,
             frame: 0.08,
+            log_model: None,
             colours: LogColours {
                 wood: [0.62, 0.43, 0.26],
                 light: [0.74, 0.56, 0.37],

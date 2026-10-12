@@ -106,7 +106,6 @@ Check every model in the game's own light, beside a figure for scale (the workbe
 Not everything we have made yet follows this guide. Each gap is work to do, not an exception to the rules:
 
 - **No D reference image in the repository yet.** The concept prompt above is the reference. The D images are on the private style page; one approved D image should be saved as `art/style/reference.png`, which `props.ts` then gives as `--ref`. Until then, don't give `art/style/mood-medieval-town.png` as a reference: it is direction C.
-- **The prop clean-up flat-shades every face** (`tools/props/refine.py`). It must keep hard creases and smooth the curves instead.
 - **The game has no banded light yet.** It shades with Bevy's standard lighting, so models look softer in the game than in this guide.
 - **Characters and gear keep Tripo's painted textures**, and template skins are painted. They have not yet been moved to flat roles.
 - **Item icons are painted in direction C** (D130). They will be repainted once a D reference exists.

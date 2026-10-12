@@ -82,6 +82,5 @@ In one commit: `art/props/<name>/` (`prop.json`, `concept.png`, `concept.prompt.
 
 The style guide lists what does not yet follow it ("Where the pipeline stands"). The ones that touch this skill:
 
-- **`refine` flat-shades every face.** The guide wants normals split at creases and smooth across curves. Until `refine.py` does that, models come out faceted.
 - **No approved image in the style yet.** Concepts are drawn from the guide's paragraph alone. Once one is approved, put it at `art/style/reference.png` and `props.ts` gives it as a reference.
 - **Seeing a model in a second realm's palette** has no tool yet; the checklist asks for it.

@@ -22,6 +22,7 @@ use terra_build::logs::{self, LogKit};
 use terra_build::{Base, BuildOp, CELL_M, Kind, Panel, STOREY_M, Side, Surface, Walker};
 use terra_core::Operation;
 
+mod pieces;
 mod sheet;
 
 const REACH_M: f32 = 300.0;
@@ -68,6 +69,12 @@ pub(super) struct Build {
     pieces: Entity,
     ghost: Entity,
     next: Entity,
+    /// The kit's log model, once loaded, and the copies of it placed for each log.
+    log_model: Option<pieces::LogModel>,
+    log_entities: Vec<Entity>,
+    /// What pieces not yet in, and the next, are drawn in.
+    ghost_material: Handle<StandardMaterial>,
+    next_material: Handle<StandardMaterial>,
 }
 
 /// How far a build's pieces are in (D139, D177): built, or a plan with so much of it in,
@@ -112,6 +119,8 @@ pub(super) struct BuildLook {
     pub logs: Option<Arc<LogKit>>,
     /// The kind of construction walls, floors and roofs are laid in (`--walls`).
     pub laying: Kind,
+    /// The log kit's log model, once loaded.
+    log_model: Option<pieces::LogModel>,
 }
 
 /// The log kit's file, `assets/data/kits/logs.ron`, read again when it is saved so a log
@@ -170,7 +179,8 @@ pub fn plugin(app: &mut App) {
     let free = not(resource_exists::<DrivenByPlayer>);
     app.insert_resource(Added)
         .add_systems(Startup, setup)
-        .add_systems(Update, (reload_kit, sheet::lay))
+        .init_resource::<pieces::Loading>()
+        .add_systems(Update, (reload_kit, sheet::lay, pieces::load))
         .add_systems(
             Update,
             (
@@ -269,6 +279,10 @@ impl Build {
             pieces,
             ghost,
             next,
+            log_model: look.log_model.clone(),
+            log_entities: Vec::new(),
+            ghost_material: look.ghost.clone(),
+            next_material: look.next.clone(),
         }
     }
 
@@ -749,6 +763,7 @@ fn setup(
         }),
         logs: read_kit().map(Arc::new),
         laying: Kind::PLAIN,
+        log_model: None,
     };
     let look = BuildLook {
         laying: match (options.walls.as_deref(), &look.logs) {
@@ -829,18 +844,26 @@ fn to_mesh(surface: &Surface) -> Option<Mesh> {
 
 /// Rebuilds everything drawn for a build from its current shape.
 fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &mut Assets<Mesh>) {
+    let (mesh, pieces) = match site.logs.clone() {
+        Some(kit) => {
+            let (mesh, layout) = site.base.mesh_with_logs(&kit);
+            let modelled = site.log_model.is_some();
+            pieces::place(commands, site, &layout.pieces, &kit);
+            (
+                mesh,
+                draw_pieces(&layout.pieces, &kit, site.shown, modelled),
+            )
+        }
+        None => {
+            pieces::place(commands, site, &[], &LogKit::default());
+            (site.base.mesh(|_| None), [None, None, None])
+        }
+    };
     let mut show = |entity: Entity, mesh: Option<Mesh>| {
         match mesh {
             Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
             None => commands.entity(entity).remove::<Mesh3d>(),
         };
-    };
-    let (mesh, pieces) = match &site.logs {
-        Some(kit) => {
-            let (mesh, layout) = site.base.mesh_with_logs(kit);
-            (mesh, draw_pieces(&layout.pieces, kit, site.shown))
-        }
-        None => (site.base.mesh(|_| None), [None, None, None]),
     };
     let [placed, ghost, next] = pieces;
     show(site.structure, to_mesh(&mesh.structure));
@@ -946,7 +969,13 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
 const GHOST: [f32; 3] = [0.62, 0.84, 1.0];
 
 /// A kit's pieces as three meshes: those in, those still a ghost, and the next to go in.
-fn draw_pieces(pieces: &[logs::Piece], kit: &LogKit, shown: Shown) -> [Option<Mesh>; 3] {
+/// Logs are left out when a model draws them.
+fn draw_pieces(
+    pieces: &[logs::Piece],
+    kit: &LogKit,
+    shown: Shown,
+    modelled: bool,
+) -> [Option<Mesh>; 3] {
     let done = match shown {
         Shown::Built => pieces.len(),
         Shown::Plan(fraction) => {
@@ -965,6 +994,9 @@ fn draw_pieces(pieces: &[logs::Piece], kit: &LogKit, shown: Shown) -> [Option<Me
             &mut ghost
         };
         let from = surface.colours.len();
+        if modelled && matches!(piece, logs::Piece::Log { .. }) {
+            continue;
+        }
         logs::draw(piece, kit, surface);
         if index > done {
             let shade = if index % 2 == 0 { 1.0 } else { 0.86 };
