@@ -236,7 +236,7 @@ Because every wall is a whole number of half metres, the kit always fits: a ston
 
 **What the pieces are made of** (D146, decided 2026-10-12). Each piece is a model from its kind's kit, made once by script (as the pickaxe and torch are) with a few versions each, set on the base's grid. The pieces are parts of the blueprint picked in the build menu, never things made first at a station and then placed: the developers do not want to "build walls then place them". The grid is still the skeleton (D48, D57): it says where each piece is, what is inside and out, what blocks a walker, and what an opening cuts. The pieces are what is seen and what goes in one at a time.
 
-**Carving, later.** The developers may want to carve what is built, and agreed it can come later. Carving by the grid's half metre needs nothing new: it takes cells out of the skeleton and the kit lays itself again around the gap, a cut block becoming a half block, as doors and windows are cut now. Carving finer than the grid, chiselled or smoothed, needs the material drawn as voxels, Enshrouded's way; our ground already is (D48), so it would come as a kind of construction of its own, such as carved rock, where the pieces sit on the voxel volume where they meet it. Nothing about the kit stops either.
+**Carving.** The developers may want to carve what is built, and agreed it can come later. On cubes (D181) carving by the grid's half metre is only emptying cubes: the kit lays itself again around the gap, a cut block becoming a half block, a log course ending in cut ends. Doors and windows are cut the same way, at a default size. Carving finer than the grid, chiselled or smoothed, needs the material drawn as voxels, Enshrouded's way; our ground already is (D48), so it would come as a kind of construction of its own, such as carved rock, where the pieces sit on the voxel volume where they meet it. Nothing about the kit stops either.
 
 **Building in bulk.** Putting in parts one by one is the realistic way and must not become a chore: holding the build key keeps putting in the next part while you have the materials; a skilled builder (D88) puts them in faster; recruits put them in for you (D90). The Forest's later option to skip each part's animation is the lesson: show each part going in, quickly.
 
@@ -405,17 +405,17 @@ What each part should measure (D175, Leaning: proposed 2026-10-12, when the deve
 | Part | Now | Real buildings | Expected |
 |---|---|---|---|
 | Grid cell | 0.5 m | | 0.5 m (D57) |
-| Storey, floor to floor | 3.0 m | 2.7 to 3.2 m; rooms 2.4 to 2.7 m high inside | 3.0 m |
-| Wall, thick | 0.10 m, every wall | Wattle and daub 0.1 to 0.15; planks on a frame 0.1 to 0.15; logs 0.2 to 0.3; stone 0.4 to 0.6 | By kind of construction, from its kit (D146): wattle and planks 0.15, logs 0.3, cut stone 0.5 (a block deep). Centred on the grid line, so a thick wall takes from the rooms either side |
+| Storey, floor to floor | 3.0 m | 2.7 to 3.2 m; rooms 2.4 to 2.7 m high inside | 3.0 m, six cubes: the default height of a wall (D176, D181) |
+| Wall, thick | 0.10 m, every wall | Wattle and daub 0.1 to 0.15; planks on a frame 0.1 to 0.15; logs 0.2 to 0.3; stone 0.4 to 0.6 | **A cube, 0.5 m** (D181), with the kit's pieces centred in it (D146): wattle and planks 0.15, logs 0.3 to 0.4, cut stone the whole cube |
 | Post at a wall's end or corner | 0.16 m square | 0.1 to 0.2 m | As the wall's kind: a squared timber, a log end, a corner block |
-| Door, the opening | 1.5 m wide, 2.2 m high | About 0.8 to 1.0 m by 2.0 to 2.1 m | **1.0 m by 2.1 m**: two cells, wide enough for a person with a margin. Wider doors, 1.5 and 2 m, for barns and gates |
-| Window | 0.5, 1.5 and 3 m wide; sill 0.9 m, head 2.5 m; a tall one 0.2 to 2.8 m | Sill 0.8 to 1.0 m; head level with the doors' | Widths by the cell; sill 0.9 m, **head 2.1 m, level with the doors**; tall windows to the floor |
-| Floor, thick | Drawn flat | 0.1 to 0.3 m with its joists | 0.2 m, so a floor between storeys reads as one |
+| Door, the opening | 1.5 m wide, 2.2 m high | About 0.8 to 1.0 m by 2.0 to 2.1 m | **1.0 m by 2.0 m** by default: two cubes by four, wide enough for a person with a margin. Wider doors, 1.5 and 2 m, for barns and gates |
+| Window | 0.5, 1.5 and 3 m wide; sill 0.9 m, head 2.5 m; a tall one 0.2 to 2.8 m | Sill 0.8 to 1.0 m; head level with the doors' | By default **a sill at 1.0 m and a head at 2.0 m, level with the doors**, widths by the cube; any other size or shape carved (D181) |
+| Floor, thick | Drawn flat | 0.1 to 0.3 m with its joists | A cube, 0.5 m (D181): boards on top, joists below |
 | Roof | Pitch 0.7 rise a metre (35°), a lean-to 0.4 (22°); 0.1 m thick; no overhang | Thatch 45° and up, shingles and slates 30 to 45°, a lean-to 15 to 25° | Pitch by covering: thatch steep, slate and shingles 35°; **eaves overhanging the walls by 0.3 to 0.5 m**, with a fascia |
-| Ceiling, inside | 3.0 m to the roof or floor above | 2.4 to 2.7 m | 2.8 m: the storey less the floor above |
+| Ceiling, inside | 3.0 m to the roof or floor above | 2.4 to 2.7 m | 2.5 m: the storey less its floor cube |
 | Steps | 0.17 m a step | 0.15 to 0.2 m a step, 0.25 to 0.3 m a tread | As now; stairs between storeys (step 4) the same |
 | Foundation | 0.14 m proud of the walls, into the ground | | As now |
-| Room drawn, smallest | 1 m | A corridor 0.9 to 1.2 m; a small room 2 to 3 m | 1 m, as now |
+| Room drawn, smallest | 1 m | A corridor 0.9 to 1.2 m; a small room 2 to 3 m | 1 m inside, so 2 m drawn, with walls a cube thick |
 
 Changing a size later is changing a number in the kit or the grid's constants, not the code; the doors and windows that do not match yet are the first change when kits come (step 4 of [structures.md](structures.md)).
 

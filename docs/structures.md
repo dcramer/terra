@@ -20,25 +20,29 @@ How walls, floors and roofs work in code, for the building the developers agreed
 
 Shared state, in `terra_build`, with no Bevy (the rule in AGENTS.md).
 
-**What stands is kept by the grid** (built, step 1):
+**What stands is cubes** (D181): every half-metre cube of a base's grid is air or a kind of construction (logs, stone, planks, wattle and daub). This is strictly the voxel grid of D48. Step 1 was built with walls on the edges between cells and is to be rebuilt on cubes.
 
-| | Kept as |
+| | As cubes |
 |---|---|
-| Walls | Each edge between two cells that has one, with what fills it: solid, a window or a doorway. A wall drawn is a line of these. |
-| Floors | Each cell with a floor at its foot |
-| Roofs | Each cell with a roof over it; flat for now, styles and sections in step 2 |
+| Walls | A row of cubes one thick, as high as drawn: three metres, six cubes, unless dragged taller or shorter (D176) |
+| Openings | Cubes left empty in a wall, of any size and shape. The door tool's default is 1 m by 2 m, the window tool's a sill at 1 m and a head at 2 m, Enshrouded's way; anything else is carved. A fitted door, shutters or glass is a piece set into an opening it fits |
+| Posts | A column of cubes, alone or in a wall (D179) |
+| Floors | A layer of cubes, so a 3 m storey is a floor cube and 2.5 m clear above it |
+| Roofs | The one thing not cubes: a surface from the height field, over the cubes it covers, which count as covered |
 
-So walls meet, cross and join by sharing edges and grid points, with nothing to reconcile.
+So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to reconcile. Height is counted in cubes; a storey is only the default height of a wall.
+
+**A kit draws cubes** ([kits.md](kits.md)): it finds the runs of cubes of its kind and lays its pieces along them, its corners where runs meet and its cut ends where cubes are empty. A piece is as thick as its kind, logs 0.3 to 0.4 m and stone the whole cube, centred in the cube; what stops a walker is the cube.
 
 **What is planned is parts** (step 3): each wall, floor or roof section the player lays, with an id that never changes, its kind of construction, and which of its pieces are in. When a part is finished, its edges and cells join what stands.
 
-**What is done is operations** (D21): set a wall on an edge or take it away, lay or take away floors and roofs over a block, the room shortcut (walls round a block, a floor and a roof, opening into rooms it meets); with plans, lay a part, put a piece in, take one out. A base is saved and sent as its operations. Saves from before are read: a room becomes its walls, floor and roof; a room's wall pushed or pulled is left out.
+**What is done is operations** (D21): fill a block of cubes with a kind or empty it; a roof section; the room shortcut (a ring of wall cubes round a footprint, a floor under it and a roof over it, opening into rooms it meets); with plans, lay a part, put a piece in, take one out. A base is saved and sent as its operations. Saves from before are read: a room becomes its walls, floor and roof, and a wall on an edge becomes the cubes on its outside, so rooms keep their size inside; a room's wall pushed or pulled is left out.
 
 **Everything else is worked out from the parts**, by pure functions, so every machine gets the same answer and only the parts travel:
 
 - **The layout**: the pieces of each part, in the order they go in.
 - **Buildings**: parts that touch, grouped.
-- **Rooms and indoors**: per storey, the cells inside each building, flood-filled.
+- **Rooms and indoors**: the air cubes each building closes in, flood-filled.
 - **The roof's shape**: a height field over the grid.
 - **What stops a walker**: from walls, floors and roofs, as now from the hull.
 
@@ -91,7 +95,7 @@ On the Bevy side, in `terra_game`:
 ## Buildings and indoors
 
 - **Buildings**: parts that touch, by a flood fill over parts, when one is laid, finished or removed. Each building is an entity in the game with its rooms, so stations (D151) and weather (D78) read it.
-- **Rooms**: per storey, cells flood-filled within the building's walls; open doorways and windows let weather through, a shut door does not. A cell is covered if a roof's height field or a floor is over it.
+- **Rooms**: air cubes flood-filled within the building's walls; open doorways and windows let weather through, a shut door does not. A cell is covered if a roof's height field or a floor is over it.
 - **Indoors**: a room closed all round and covered. When it is not, the game knows which wall or roof is missing, to say so (D155).
 - **Natural shelter** under a cliff or in a cave is not a building, and is left to the weather's design.
 
@@ -111,7 +115,7 @@ On the yard, a flat test level: `cargo xtask yard`, or `--level yard` on the pla
 
 Each step is played and checked by script before the next (D69):
 
-1. **The model** (built, 2026-10-12): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; rooms in saves converted; built whole, as before. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
+1. **The model** (built, 2026-10-12, on edges; to be rebuilt on cubes, D181): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; rooms in saves converted; built whole, as before. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
 2. **Roofs** (a first version, 2026-10-12): the height field, the four styles, laid over a room by a click or drawn as a rectangle, gable ends closed with wall. Not yet: eaves, trims, the covering's pieces, valleys where sections meet walls, an automatic hip over any footprint.
 3. **Plans and constructing** (D139): parts laid as plans; pieces put in one by one, from the pack and storage (D141).
 4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement. Logs first ([kits.md](kits.md), D177, D178): the stacked pattern, logs made in code, the three states and a kit sheet on the yard, built 2026-10-12.

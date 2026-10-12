@@ -80,7 +80,7 @@ The last row is what freezing a wall's layout once a piece is in means (structur
 
 ## Posts anywhere (D179)
 
-Asked on 2026-10-12: "add a pillar to break up walls… arbitrarily? … giving folks some freedom is nice." Agreed: **a post is a part of its own, standing on a grid point**, the half-metre grid's snap points, as walls stand on edges and floors on cells. Pick *Post*, click any point, on a wall or in the open.
+Asked on 2026-10-12: "add a pillar to break up walls… arbitrarily? … giving folks some freedom is nice." Agreed: **a post is a part of its own, on the half-metre grid**: on cubes (D181), a column of cubes the kit draws as an upright log or timber. Pick *Post*, click any cube, in a wall or in the open.
 
 - **On a wall**, the wall's logs meet it as they meet the in-line post above: they stop at it, and the wall carries on beyond it. So a long wall broken by posts every few metres is something the player chooses, not something the kit forces.
 - **At a corner**, a post takes the place of the notched corner, with flush log ends against it. That gives a second corner look for free: the corner-post cabin, as built in Canada.
@@ -112,6 +112,15 @@ cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet --time 
 `--walls logs` lays every build's walls in logs, the player's own too. The kit's file is read again when it is saved, so the look can be tuned with the sheet running. Tests in `terra_build` check the layout without a picture: the courses fill the storey, walls either way never share a course, corners run past and free ends are flush, a door cuts the courses it crosses and is framed, long walls stagger their seams, and gables shorten toward the ridge.
 
 ![The kit sheet's corners and T's: built, going up, and as a blueprint](images/log-kit-sheet-2026-10-12.png)
+
+## On cubes (D181)
+
+Structures are strictly on the voxel grid: a wall is a row of half-metre cubes (structures.md). Nothing above changes in how logs look; the layout reads runs of log cubes instead of walls on edges:
+
+- **A wall is a straight run of log cubes one thick**, its logs centred in it, perhaps thickened to 0.4 m to fill more of the cube.
+- **Corners, T's and crosses** are where runs meet, and **free ends** where a run stops, as above.
+- **Carving a cube** cuts the two courses through it, which end at the hole; on the axis whose courses sit half a course up, the hole snaps to whole logs. An opening is any hole, framed in boards; doors and windows are holes of a default size.
+- **Mixing kinds** is per cube: log cubes over stone cubes are a cabin on a stone footing.
 
 ## What it costs
 
