@@ -89,12 +89,14 @@ Each is its own commit and passes `cargo xtask check`.
 
 2026-10-12, as agreed by the developers (D133), who also had the Godot builds deleted rather than gathered.
 
-- Done: the Godot builds and finished spikes deleted (5); source art copied into `art/` (3, the pipeline still reads its scratch folder); the research picture moved (6).
+- Done: the Godot builds and finished spikes deleted (5); source art copied into `art/` (3, which the pipeline reads since move 2); the research picture moved (6).
 - Then, at the developers' word, without waiting for other sessions working in the same files: assets to the root (1), the pipeline to `tools/characters` (2, rebuilding the male body gave an identical file), and the game into `terra_game` (4).
 - `loop.sh` became `cargo xtask loop` and `tools/sandbox/loop.ts`, in the QA work (D69).
 - Left: `token-stats` in TypeScript, since it runs after every turn for everyone and is not a layout question.
 
-## Questions for the developers
+## Questions for the developers, answered on 2026-10-12
+
+Source art went into plain git, as recommended; the Godot builds were deleted rather than gathered. The questions as they were asked:
 
 - **Source art in a public repository.** Commit approved sheets and Tripo's rigged bodies to `art/` in plain git, use Git LFS, or keep them outside git? Recommendation: plain git, only for inputs that cost credits to remake, and revisit LFS if `art/` passes a few hundred megabytes. LFS on a public GitHub repository charges bandwidth to us for every clone. The inputs are about 10 MB today, so plain git costs little. Whatever we choose, copy them out of the `llm-art-model-research` worktree before it is removed.
 - **The Godot builds.** D12 retires them once the Rust build passes the same checks. Keep them, gathered in `legacy/godot/`, until the terrain match in `docs/terrain.md` passes, or delete them now and rely on git history and `research/godot-spike.md`? Recommendation: gather them now, delete when that check passes.
