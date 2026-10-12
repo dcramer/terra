@@ -16,7 +16,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 
 | Need | Met by | When it is low |
 |---|---|---|
-| Hunger | Food: hunted, fished, gathered, farmed, cooked | Health and stamina recover slowly and their limits shrink, and you are weaker; once the gauge is empty, health wears away slowly, over a few days, until starving kills (D101). Proposed: about three days, an hour and a half of play |
+| Hunger | Food: hunted, fished, gathered, farmed, cooked | Health and stamina recover slowly and their limits shrink, and you are weaker; once the gauge is empty, health wears away slowly, over a few days, until starving kills: three in-game days, an hour and a half of play (D101) |
 | Thirst | Water: springs, rivers, wells, a waterskin | The same, faster: proposed about two days |
 | Breath | Air: only under water (D74) | Health falls fast |
 | Warmth | Fire, shelter, clothing, work | Body temperature (D153): too cold raises hunger and stamina costs, too hot raises thirst and stamina costs, and far out of bounds either wears health down ([climate](climate.md#body-temperature)) |

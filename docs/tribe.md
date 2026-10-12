@@ -113,7 +113,16 @@ The first proposal, staking out each building before the tribe touches it, suits
 
 **Plan mode might become a building mode of its own** (the developers, 2026-10-12, an idea): rather than drafting through your character's eyes, a separate view for designing, such as from above, or any camera that is not your character's, as The Sims and city builders do. Nothing is chosen.
 
-Still to think through, with the developers: whether Plan mode should do more than Build mode, such as laying whole rooms at once or copying a building; and whether drafts should be seen by the whole tribe or only by whoever drew them until they are made plans.
+**Plan mode gets tools for drafts** (D170, from the developers): copying, and other features, which are "extremely nice", since all it does is lay drafts, which cost nothing and change nothing in the world. Proposed, after what building games offer:
+
+- **Copy and paste** a building, or part of one: pick it up as drafts and lay it again elsewhere, turned as you like.
+- **Mirror** a draft, so a wing can match the other.
+- **Move a whole draft building** at once, or raise it a storey.
+- **Save a design** to lay again at any outpost, as Valheim's and Satisfactory's blueprints are saved (from memory, unchecked); perhaps shared with the tribe.
+- **Copy what is built**: pick up a finished building as drafts, to build another like it.
+- **See its cost** for the whole design, and what the outpost's stores already hold toward it.
+
+Still to think through, with the developers: whether drafts should be seen by the whole tribe or only by whoever drew them until they are made plans.
 
 ### Also
 
@@ -149,13 +158,13 @@ Proposed, for how:
   - The outpost runs out of food. Recruits say so, and the roster says so.
   - Those who can hunt, fish or gather go out for food on their own, before their other work.
   - Hungry, with the gauge empty, their attributes fall and they work slower and recover less, as you would.
-  - Health then wears away over a few days. Proposed: about three for hunger, about two for thirst, at half an hour of play to a day (D134).
+  - Health then wears away over a few days: three in-game days for hunger (D101), an hour and a half of play at half an hour to a day (D134). Proposed: about two for thirst.
 
   So a death from hunger means an outpost left without food for days, with everyone saying so.
-- **Food has a quality, and good food saves time.** The developers wondered, unsure, whether what recruits forage for themselves should be poor food, with cooked food better, so a fed outpost forages less. Proposed:
+- **Food has a quality, and good food saves time** (D169, from the developers): what recruits forage for themselves is poor food, and cooked food is better. It fills more hunger, and may give other boosts. So:
   - Foraged and raw food fills a little and soon wears off, so recruits living on it eat often and spend their days finding more.
   - Cooked meals fill more and last longer, so a recruit fed by a cook eats less often and works more.
-  - Good food giving more, such as buffs, is open for players and recruits alike (D101).
+  - Other boosts from good food, for players and recruits alike, are still to be chosen (D101).
 
   A cook is worth having: the outpost's work goes further, and nobody has to forage.
 - **Cold and heat slow work.** A forge-hand in winter without a coat works slower, as the developers said; a warm workshop is worth building.
@@ -254,6 +263,6 @@ Technical, mine:
 
 ## Questions for the developers
 
-1. Answered for now: **Plan and Build** (D170, Leaning), perhaps to revisit. Still open: should Plan mode do more, such as copying a building, and are drafts seen by the whole tribe?
-2. **Food quality**: foraged food poor and cooked food better, so a cook saves the outpost time?
-3. **How long starving takes**: about three days for hunger and two for thirst, an hour and a half and an hour of play, for players and recruits alike?
+1. Answered for now: **Plan and Build** (D170, Leaning), perhaps to revisit, with copying and other tools in Plan mode. Still open: are drafts seen by the whole tribe, or only by whoever drew them?
+2. Answered: **food quality**. Foraged food is poor; cooked fills more hunger and may give other boosts (D169).
+3. Answered in part: **starving takes three in-game days** (D101). Thirst proposed at two.
