@@ -1,70 +1,171 @@
-"""Forearm twist bones: without them, a forearm's turn in a clip all happens at the elbow, and
-the skin blended across the elbow pinches to a thin neck (plain skinning's "candy wrapper").
+"""Twist bones: a limb's roll about its own length spread along its skin, as engines do it for
+clips made without twist bones (Unreal's post-process twist bones, Unity's humanoid arm-twist
+setting, HumanIK's roll extraction; research/skin-deformation.md).
 
-A twist bone sits at the elbow, a child of the upper arm, and keeps aiming along the forearm
-(a damped track, which follows the bend but not the turn). The upper part of the forearm's
-skin moves to it, fading toward the wrist, so the turn spreads along the forearm as a real
-one does. Our animations never move it; Blender's constraint does, and the export bakes that
-into every clip, so the game plays it like any other bone.
+Quaternius's clips never roll the upper arm or thigh. The whole roll of an arm is in its
+forearm (up to 164 degrees against the upper arm, half an arm's turn) and of a leg in its
+shin (up to 107), measured on both libraries (2026-10-12). Skinned as it comes, the skin
+round the elbow or knee turns all of that at once and wrings shut. So, for every clip:
+  1. the roll of each segment in ROLL moves to the bone beyond it: the forearm only bends at
+     the elbow and the hand turns, as Unreal's mannequin keeps its pronation in the hand. Where
+     the hand ends up is unchanged: only which bone carries the turn.
+  2. each twist bone in TWIST turns by its share of the roll between its segment and the bone
+     beyond it, so the skin along the forearm turns from none at the elbow to all of it at the
+     wrist, in steps.
+Tripo's rig (convert_rig.py) brings one twist bone per segment, weighted, halfway along it.
 
-glTF keeps the bone and its weights but not the constraint, so every script that loads a
-character and plays it (the checker, the renders, the export) calls `drive` after loading.
+The game plays clips, so the turns are baked into every clip as it is sampled for a body
+(`bake`, by export_character.py and anything else that plays the libraries' clips on a body).
 """
 
+import math
+
 import bpy
-from mathutils.geometry import intersect_point_line
+from mathutils import Quaternion, Vector
 
-SIDES = ("L", "R")
-# How far down the forearm, from the elbow, the twist bone's share of the skin fades to none.
-FADE = 0.75
+SIDES = ("l", "r")
+# Segment -> the bone beyond it, which takes over the segment's roll.
+ROLL = (("lowerarm", "hand"), ("calf", "foot"))
+# Twist bone -> (its segment, the bone beyond, its share of the roll between them). Halfway
+# along, half the roll. The upper arm's and thigh's follow their bone: the clips never roll
+# those, and their roll would belong at the shoulder and hip, which ROLL does not move.
+TWIST = (
+    ("lowerarm_twist_01", "lowerarm", "hand", 0.5),
+    ("calf_twist_01", "calf", "foot", 0.5),
+    ("upperarm_twist_01", "upperarm", "lowerarm", 0.0),
+    ("thigh_twist_01", "thigh", "calf", 0.0),
+)
 
 
-def name(side):
-    return f"DEF-forearm.twist.{side}"
+def names():
+    """Every twist bone's name, with the segment it is on."""
+    return [(f"{t}_{s}", f"{seg}_{s}") for s in SIDES for t, seg, _, _ in TWIST]
 
 
-def add(arm, body):
-    """Adds the twist bones to `arm` and moves the upper forearm's weights onto them."""
+def add(arm, heads):
+    """Adds each twist bone at its head in `heads` (armature space), a child of its segment and
+    facing exactly as it does, so its own roll is the segment's."""
     bpy.ops.object.select_all(action="DESELECT")
     arm.select_set(True)
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode="EDIT")
-    eb = arm.data.edit_bones
-    for s in SIDES:
-        forearm = eb[f"DEF-forearm.{s}"]
-        bone = eb.new(name(s))
-        bone.head = forearm.head
-        bone.tail = forearm.head + (forearm.tail - forearm.head) * 0.5
-        bone.roll = forearm.roll
-        bone.parent = eb[f"DEF-upper_arm.{s}"]
-        bone.use_deform = True
+    eb = arm.edit_bones if hasattr(arm, "edit_bones") else arm.data.edit_bones
+    for name, seg in names():
+        if name not in heads or seg not in eb:
+            continue
+        main = eb[seg]
+        tb = eb.get(name) or eb.new(name)
+        tb.head = heads[name]
+        tb.tail = tb.head + (main.tail - main.head).normalized() * 0.05
+        tb.roll = main.roll
+        tb.parent = main
+        tb.use_connect = False
+        tb.use_deform = True
     bpy.ops.object.mode_set(mode="OBJECT")
-    drive(arm)
-    to_arm = arm.matrix_world.inverted() @ body.matrix_world
-    for s in SIDES:
-        forearm = arm.data.bones[f"DEF-forearm.{s}"]
-        group = body.vertex_groups.get(f"DEF-forearm.{s}")
-        if group is None:
-            continue
-        twist = body.vertex_groups.get(name(s)) or body.vertex_groups.new(name=name(s))
-        for v in body.data.vertices:
-            w = next((g.weight for g in v.groups if g.group == group.index), 0.0)
-            if w <= 0:
-                continue
-            _, t = intersect_point_line(to_arm @ v.co, forearm.head_local, forearm.tail_local)
-            share = max(0.0, min(1.0, 1.0 - t / FADE))
-            if share > 0:
-                group.add([v.index], w * (1 - share), "REPLACE")
-                twist.add([v.index], w * share, "REPLACE")
 
 
-def drive(arm):
-    """Gives each twist bone its constraint: aim along the forearm, turning with the bend only."""
-    for s in SIDES:
-        bone = arm.pose.bones.get(name(s))
-        if bone is None or any(c.type == "DAMPED_TRACK" for c in bone.constraints):
-            continue
-        track = bone.constraints.new("DAMPED_TRACK")
-        track.target = arm
-        track.subtarget = f"DEF-forearm.{s}"
-        track.head_tail = 1.0
+def axis(arm, seg, beyond, frame=None):
+    """The segment's line, from its joint to the next, in the rest frame of bone `frame` (by
+    default the segment's own). Blender's importer guesses each bone's axes, so a twist bone
+    exported facing as its segment may come back facing otherwise: each bone's own frame."""
+    b = arm.data.bones
+    return (b[frame or seg].matrix_local.to_3x3().inverted() @ (b[beyond].head_local - b[seg].head_local)).normalized()
+
+
+def split(q, a):
+    """`q` as swing times twist about `a` (q = swing @ twist); the twist's angle, in (-pi, pi]."""
+    v = Vector((q.x, q.y, q.z))
+    p = a * v.dot(a)
+    t = Quaternion((q.w, p.x, p.y, p.z))
+    if t.magnitude < 1e-9:
+        return q.copy(), Quaternion(), 0.0
+    t.normalize()
+    if t.w < 0:
+        t.negate()
+    angle = 2.0 * math.atan2(Vector((t.x, t.y, t.z)).dot(a), t.w)
+    return q @ t.inverted(), t, angle
+
+
+def unwrapped(angles):
+    """A clip's roll, frame by frame, as one continuous turn: each frame's angle (given the
+    short way round, in (-pi, pi]) moved by whole turns to follow the frame before, then the
+    whole clip by whole turns to keep its largest roll as small as can be. A roll past half a
+    turn is ambiguous in any one frame (188 degrees one way is 172 the other); the frames
+    around it are not, so no one frame decides which way the skin turns."""
+    out = []
+    for a in angles:
+        if out:
+            a += 2.0 * math.pi * round((out[-1] - a) / (2.0 * math.pi))
+        out.append(a)
+    if not out:
+        return out
+    shift = min((2.0 * math.pi * k for k in range(-3, 4)), key=lambda d: max(abs(a + d) for a in out))
+    return [a + shift for a in out]
+
+
+def rolled(arm, action):
+    """One clip on `arm` with each ROLL segment's roll moved to the bone beyond it: per frame,
+    the rotations of the segments and the bones beyond, and per TWIST pair (segment, bone
+    beyond) the roll between them, unwrapped over the clip; and the largest change, in
+    degrees, the move made to where any bone beyond ends up (none, but for rounding). The
+    twist bones need not exist."""
+    bones = arm.data.bones
+    pose = arm.pose.bones
+    rolls = [(f"{seg}_{s}", f"{to}_{s}") for s in SIDES for seg, to in ROLL if f"{seg}_{s}" in bones]
+    pairs = [(f"{seg}_{s}", f"{to}_{s}") for s in SIDES for _, seg, to, _ in TWIST if f"{seg}_{s}" in bones]
+    ad = arm.animation_data or arm.animation_data_create()
+    ad.action = action
+    if getattr(action, "slots", None) and len(action.slots):
+        ad.action_slot = action.slots[0]
+    start, end = (int(round(f)) for f in action.frame_range)
+    wanted = {n for pair in rolls + pairs for n in pair}
+    frames = []
+    for f in range(start, end + 1):
+        bpy.context.scene.frame_set(f)
+        frames.append((f, {n: pose[n].matrix_basis.to_quaternion() for n in wanted}))
+    angles = {pair: [] for pair in pairs}
+    moved = 0.0
+    for _, q in frames:
+        for seg, to in rolls:
+            swing, twist, _ = split(q[seg], axis(arm, seg, to))
+            # The beyond bone's rest, relative to the segment's: the twist expressed in it.
+            h = (bones[seg].matrix_local.to_3x3().inverted() @ bones[to].matrix_local.to_3x3()).to_quaternion()
+            before = q[seg] @ h @ q[to]
+            q[seg] = swing
+            q[to] = h.inverted() @ twist @ h @ q[to]
+            moved = max(moved, math.degrees(before.rotation_difference(q[seg] @ h @ q[to]).angle))
+        for seg, to in pairs:
+            h = (bones[seg].matrix_local.to_3x3().inverted() @ bones[to].matrix_local.to_3x3()).to_quaternion()
+            angles[(seg, to)].append(split(h @ q[to] @ h.inverted(), axis(arm, seg, to))[2])
+    return frames, rolls, {pair: unwrapped(a) for pair, a in angles.items()}, moved
+
+
+def bake(arm, actions):
+    """Moves each ROLL segment's roll to the bone beyond it and keys each twist bone's share,
+    every frame of each of `actions`, on `arm`."""
+    pose = arm.pose.bones
+    twists = [(f"{t}_{s}", f"{seg}_{s}", f"{to}_{s}", share) for s in SIDES for t, seg, to, share in TWIST
+              if f"{t}_{s}" in arm.data.bones]
+    if not twists:
+        return
+    ad = arm.animation_data or arm.animation_data_create()
+    keep = (ad.action, getattr(ad, "action_slot", None))
+    for action in actions:
+        # Everything is read before anything is keyed, so a key never changes what is read.
+        frames, rolls, turns, _ = rolled(arm, action)
+        for f, q in frames:
+            for pair in rolls:
+                for n in pair:
+                    pose[n].rotation_mode = "QUATERNION"
+                    pose[n].rotation_quaternion = q[n]
+                    pose[n].keyframe_insert("rotation_quaternion", frame=f, group=n)
+        for name, seg, to, share in twists:
+            pb = pose[name]
+            pb.rotation_mode = "QUATERNION"
+            a = axis(arm, seg, to, name)
+            for (f, _), angle in zip(frames, turns[(seg, to)]):
+                pb.rotation_quaternion = Quaternion(a, share * angle)
+                pb.keyframe_insert("rotation_quaternion", frame=f, group=name)
+    ad.action, slot = keep
+    if slot is not None:
+        ad.action_slot = slot

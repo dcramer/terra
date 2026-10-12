@@ -38,11 +38,11 @@ tools/characters/make_character.sh NAME tools/characters/out/NAME-sheet.png 1.80
 The last number is the character's height in metres (life size, D110). It:
 
 1. crops the front view (the left 44% of the sheet) and makes a textured model (`tripo.ts model`);
-2. rigs it with Tripo's auto-rig in Tripo's own skeleton (`tripo.ts rig --skeleton tripo`, the older V1 rig), which passed our rig check on the base body where the app's V3 rigs pinched at the knees (the converter also reads V3's `unreal`, to check that again);
+2. rigs it with Tripo's current auto-rig in its Unreal skeleton (`tripo.ts rig --skeleton unreal`, the default): the only one of Tripo's skeletons whose twist bones carry skin, with the bone names our clips use;
 3. runs the rest, which is free and is `finish_character.sh NAME HEIGHT` on its own:
-   - converts Tripo's skeleton onto ours (`convert_rig.py`): our joints move to Tripo's, our bones keep their directions, Tripo's weights are renamed onto our bones with its twist and helper bones folded in, then smoothed lightly; forearm twist bones are added (`twist.py`), and every vertex kept to four bones;
+   - converts Tripo's skeleton onto ours (`convert_rig.py`): our joints move to Tripo's, our bones keep their directions, Tripo's four twist bones a side are added, Tripo's weights are kept by name, smoothed lightly, and every vertex kept to four bones;
    - checks it (`rig_check.py`) and renders it moving (`rig_render.py`, to `tools/characters/out/NAME-sheet.png`);
-   - exports it as the game reads it (`export_character.py`, to `tools/characters/out/NAME-game.glb`): body, skeleton, sockets and all our animation clips in one file, every clip re-sampled on this character's skeleton with the twist bones baked in. That matters: Bevy sets each joint's whole position from the clip, so the mannequin's own clips would pull our moved joints back to the mannequin's.
+   - exports it as the game reads it (`export_character.py`, to `tools/characters/out/NAME-game.glb`): body, skeleton, sockets and all our animation clips in one file, every clip re-sampled on this character's skeleton, with the twist step baked in (`twist.py`, below). That matters: Bevy sets each joint's whole position from the clip, so the mannequin's own clips would pull our moved joints back to the mannequin's.
 
 **When the conversion, checker or export improves, run `finish_character.sh` again for every character** (`art/characters/` lists them, each with its `rigged.glb`), refit their gear (step 5), and check them in the workbench. It costs nothing; only `make_character.sh` spends credits.
 
@@ -50,19 +50,48 @@ Read the line starting `RIGCHECK`. It must say `"pass": true`. Then look at the 
 
 ## 3. When the checker fails
 
-The checker compares the rig with our skeleton and with the hand-rigged mannequin on the same animations. Its baseline, `art/characters/rig-baseline.json`, comes from running it on `figure.gltf` first.
+The checker compares the rig with our skeleton and with the hand-rigged mannequin on the same animations. Its baseline, `art/characters/rig-baseline.json`, comes from running it on the mannequin (`assets/models/character/mannequin.glb`) first. It skins as the game does, with dual quaternions.
 
 | Check | What failing means | What to do |
 |---|---|---|
-| `skeleton` | Bones missing or with the wrong parent | The conversion's bone map (`MAP`, `JOINT` in `convert_rig.py`) missed a Tripo bone; Tripo's skeleton may have changed |
+| `skeleton` | Bones missing or with the wrong parent | Tripo's bone names no longer match ours (`RENAME` in `convert_rig.py`); Tripo's skeleton may have changed, or the rig was made with another `--skeleton` |
 | `rest_pose` | A bone points a different way from ours | Never turn bones when fitting; move joints only. Our animations assume our directions |
 | `weights` | Unweighted vertices, or more than four bones on one | Re-run the conversion; Bevy reads only four |
 | `seams` | Copies of a vertex split at a texture seam have different weights, so the seam will open as the body moves | The weld in `convert_rig.py` was skipped or the threshold missed them |
 | `reach` | Vertices driven by a bone far from them (an arm stuck to the hip) | Usually the body was generated with limbs touching: redraw the sheet with more space between arms and body, legs apart |
-| `symmetry` | Left and right driven differently | Usually an asymmetric model; check the sheet, regenerate |
-| `motion` | Too many edges crush or stretch in some animation, compared with the mannequin, or a ring of skin round an elbow, knee or wrist shrinks by more than a fifth (`pinched`, `pinched_at`) | Edges: see `worst_places`; try `SMOOTH=4` on the conversion. A pinched elbow means a forearm's turn has nowhere to go: check the twist bones (`twist.py`) were added and are driven. Look at `rig_render`'s sheet before deciding: the limits were set by eye |
+| `symmetry` | A vertex and its mirror driven by different weights (more than a quarter apart) | Usually an asymmetric model; check the sheet, regenerate |
+| `motion` | Too many edges crush or stretch in some animation, compared with the mannequin, or a ring of skin round an elbow, knee or wrist shrinks by more than a fifth (`pinched`, `pinched_at`) | Edges: see `worst_places`; try `SMOOTH=4` on the conversion. A pinched elbow or wrist means a limb's roll has nowhere to go: check the body has its twist bones and the clips were baked (`twist.py`), and run `clip_check.py` on the clips. Look at `rig_render`'s sheet before deciding: the limits were set by eye |
 
-If Tripo's rig cannot be made to pass, `rig_base.py` rigs the same body with Blender's own weights instead (`tools/blender/run.sh tools/characters/rig_base.py art/characters/NAME/model.glb heat <name>`); it did a little worse but passes most checks.
+## Clips and twist
+
+The clips come from Quaternius's Universal Animation Library 1 and 2 (current versions, bought; `art/README.md`), on a skeleton with Unreal's bone names that Tripo's rig shares. `art/animation/clips.txt` lists the ones the game plays; `clips.py` cuts them into `assets/models/character/mannequin.glb`. To add a clip, add its name there, rerun `clips.py`, then `clip_check.py`, then `build_bodies.sh`.
+
+Those clips never roll the upper arm or thigh: an arm's whole roll is in the forearm (up to 164 degrees) and a leg's in the shin, and plain skinning wrings the skin shut where that roll happens. Engines fix it with twist bones, and so do we (`twist.py`, research/skin-deformation.md): as each clip is sampled for a body, the forearm's and shin's roll moves to the hand and foot, which end up exactly where they were, and the twist bone halfway along takes half the roll. The game skins weight-blended: dual quaternions, which keep a limb's volume across what is left and a knee's through a deep bend, but the linear blend round the hips, where dual quaternions bulge (`crates/terra_game/src/skinning.rs`; the rule is data, `assets/models/character/skinning.json`). Every tool that poses a body skins it the same way (`look.skin_as_game`). `clip_check.py` fails a clip that rolls the upper arm or thigh, or leaves too big a step for the skin.
+
+### When a limb twists or squeezes
+
+Measure first and change nothing until the measures say where the fault is. Each step is one command.
+
+1. **Is it the clip?**
+   - Run `tools/blender/run.sh tools/characters/clip_check.py [CLIP ...]`. A clip that rolls the upper arm or thigh, or leaves too big a step, fails here.
+   - `--trace` prints each frame's limb rolls and twist-bone shares.
+   - A new clip library or version goes through this before anything else.
+   - A third-party clip that misbehaves: check its author's current version and changelog first.
+2. **Where and when?**
+   - Run `tools/blender/run.sh tools/characters/deform_check.py tools/characters/out/NAME-game.glb [CLIP ...] --sheet=tools/characters/out/NAME-worst.png`.
+   - It gives every ring of skin's worst squeeze, and a picture of each bad one at its worst frame.
+   - `--linear` or `--dqs` measure one method throughout instead, to see what the blend does.
+3. **Look closer, or compare:** run `tools/blender/run.sh tools/characters/compare.py OUT.png --clay --pose=CLIP,FRACTION --focus=BONE,0.5 a.glb b.glb`. That shows bodies side by side at one moment, each on its own clip; it prints which. `body.glb+look.glb` puts gear on: a skinned look bound to the body, a rigid one on its socket.
+4. **In the game:**
+   - Use the workbench's `--anim CLIP --moments ... --focus BONE --sheet ...` on the body.
+   - With `--linear-skinning`, compare against Bevy's own skinning.
+   - The log says which skinning is in use, and how much of each mesh is dual quaternion (`skinning:`).
+   - `--joints` prints where the game puts each socket and which way it faces, to compare with the export's `SOCKETS`.
+5. **Fix at the cause:**
+   - A clip: replace it, or take the library's fixed version.
+   - The twist step: `twist.py`, then `clip_check.py`.
+   - Weights: the conversion.
+   - Never fix by eye from one render: a fix holds when the numbers and the pictures agree on the same frames.
 
 ## 4. Into the game
 
@@ -71,7 +100,7 @@ The game has one body, the base (`assets/models/character/base.glb`), and every 
 Add a row for it to `THIRD_PARTY.md` under "Made with AI". Then look at it in the game's own renderer with the workbench, on the Windows GPU (about a minute; WSL's CPU renderer takes far too long). Beside the mannequin, through the same clips, from two sides at four moments:
 
 ```bash
-cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/figure.gltf --model models/character/base.glb --anim Idle_Loop --anim Walk_Loop --anim Jog_Fwd_Loop --anim Sword_Attack --sides 30,100 --moments 0.1,0.35,0.6,0.85 --sheet shots/wb/NAME --clean --settle 60
+cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/mannequin.glb --model models/character/base.glb --anim Idle_Loop --anim Walk_Loop --anim Jog_Fwd_Loop --anim Sword_Attack --sides 30,100 --moments 0.1,0.35,0.6,0.85 --sheet shots/wb/NAME --clean --settle 60
 ```
 
 It prints each model's clips, joints and sockets, saves one contact sheet per clip, `shots/wb/NAME-<clip>.png` (rows are sides, columns moments), and exits; `xtask win` runs it in a copy under the Windows temp folder (`%TEMP%\terra\terra_sandbox-wb`), so the pictures are there. A model that fails to load says why and exits with an error. Look for limbs bending at the joints, no light lines or tears, nothing crushed at the shoulders and groin, feet on the floor, the face and hands intact, and how it moves beside the mannequin. Then a tool in hand, close up: `--model models/character/base.glb --hold stone_axe --focus socket.hand.R`. Then show the developers.
@@ -205,7 +234,11 @@ cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model mod
 - Tripo models face +X; ours face -Y. Every script turns them.
 - glTF splits a vertex wherever the texture has a seam. Weld the copies before touching weights (`convert_rig.py` does), or each copy gets different weights and the seams open into light lines as the body moves. The checker's `seams` check catches it.
 - Bevy needs its `jpeg` feature for Tripo's textures; without it the model fails to load.
-- Our skeleton has no twist bones, so without `twist.py` a forearm's turn all happens at the elbow and the skin there pinches to a thin neck in swings and reaches. glTF does not keep Blender's constraints, so every script that loads a character and plays it calls `twist.drive`.
+- Tripo's own (V1) rig and its `actorcore` skeleton have twist and share bones with no skin on them; the `unreal` skeleton's carry skin. Check with a weight count before trusting a rig's bones.
+- A third-party clip library may be a stale copy: our first was a 2025 mirror of Quaternius's, which missed his fix for the sword swing's elbow twist. Take it from the author, at the current version, and read the changelog.
+- glTF does not keep Blender's constraints, and the game plays clips: the twist step is baked into every clip by `export_character.py`, and any script that plays the mannequin's clips on a body bakes them too (`twist.bake`). A body file's clips are baked already.
+- Two files loaded in one Blender scene each bring their own copy of a clip, the second named `Name.001`: give each body its own (`compare.py` does), or one plays the other's.
+- A roll past half a turn is ambiguous in any one frame: unwrap it over the whole clip (`twist.unwrapped`), never from the first frame.
 - The edge check cannot see a pinch: a ring of skin shrinking changes no edge's length much. The `pinched` measure watches the rings at elbows, knees and wrists.
 - Scripts that `cd` lose relative paths; resolve them first (`realpath`).
 - Current Blender keeps vertex group names on the mesh: a piece built on a new mesh loses them, and the exporter writes it without a skin. Build on a copy of the body's mesh.

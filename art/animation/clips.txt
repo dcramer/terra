@@ -1,0 +1,28 @@
+# The clips the game plays, by name, from Quaternius's animation libraries (art/README.md).
+# tools/characters/clips.py cuts these from the libraries into the game's mannequin file;
+# every body is exported with them. A clip named in code must be listed here.
+Idle_Loop
+Idle_Talking_Loop
+Walk_Loop
+Jog_Fwd_Loop
+Sprint_Loop
+Crouch_Idle_Loop
+Crouch_Fwd_Loop
+Jump_Start
+Jump_Loop
+Jump_Land
+Roll
+Interact
+PickUp_Table
+Fixing_Kneeling
+Sitting_Enter
+Sitting_Exit
+Sitting_Idle_Loop
+Sitting_Talking_Loop
+Hit_Chest
+Hit_Head
+Death01
+Punch_Jab
+Punch_Cross
+Sword_Idle
+Sword_Attack

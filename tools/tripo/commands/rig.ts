@@ -66,7 +66,7 @@ export const rigging: Record<string, Command> = {
     usage: "rig PROJECT [--skeleton unreal] [--type humanoid|other]",
     help: "rig a model with Tripo's auto-rig",
     options: {
-      skeleton: { type: "string", default: "unreal", choices: SKELETONS, help: "a humanoid's bone names; tripo is the older V1 rig our character converter takes" },
+      skeleton: { type: "string", default: "unreal", choices: SKELETONS, help: "a humanoid's bone names; unreal is the one our characters use, tripo the older V1 rig" },
       type: { type: "string", default: "humanoid", choices: ["humanoid", "other"], help: "other rigs an animal or creature as Tripo reads its shape" },
       anyway: { type: "boolean", help: "rig a humanoid even when Tripo's check says it is not ready" },
       ...out,

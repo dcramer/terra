@@ -93,7 +93,6 @@ for v in body.data.vertices:
 W /= np.maximum(W.sum(axis=1, keepdims=True), 1e-9)
 amw = arm.matrix_world
 J = {b.name: np.array(amw @ b.head_local) for b in arm.data.bones}
-T = {b.name: np.array(amw @ b.tail_local) for b in arm.data.bones}
 parent = {b.name: (b.parent.name if b.parent else None) for b in arm.data.bones}
 order = sorted(J, key=lambda b: len(arm.data.bones[b].parent_recursive))
 children = {b: [c for c in J if parent[c] == b] for b in J}
@@ -239,7 +238,7 @@ def descendants(b):
     return out
 
 
-LIMBS = [f"DEF-{part}.{s}" for s in ("L", "R") for part in ("shoulder", "upper_arm", "forearm", "thigh", "shin", "foot")]
+LIMBS = [f"{part}_{s}" for s in ("l", "r") for part in ("clavicle", "upperarm", "lowerarm", "thigh", "calf", "foot")]
 for sweep in range(0 if DJ is not None else 3):
     for b in sorted(LIMBS, key=order.index):
         X = pose(V)
@@ -265,7 +264,7 @@ err = np.linalg.norm(C[ok] - X[ok], axis=1)
 print(f"MORPH {name} posed: mean {err.mean() * 100:.2f} cm, 95% {np.percentile(err, 95) * 100:.2f} cm")
 
 # 3. The shape, smoothed by distance, the hands kept.
-hand = sum(W[:, bi[b]] for b in bones if b.startswith(("DEF-hand", "DEF-thumb", "DEF-f_")))
+hand = sum(W[:, bi[b]] for b in bones if b.startswith(("hand_", "thumb_", "index_", "middle_", "ring_", "pinky_")))
 keep = smooth(np.clip(1.0 - hand, 0, 1)[:, None], 4)[:, 0]
 
 

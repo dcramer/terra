@@ -5,17 +5,21 @@
 #
 #   tools/characters/build_bodies.sh
 #
+#   0. the clips the game plays (art/animation/clips.txt) cut from the animation libraries
+#      into the mannequin file (clips.py), if the libraries are here, and checked (clip_check.py)
 #   1. the base body (base-male) from Tripo's rig: converted, checked, exported
 #   2. every worn look made on it: garments from the dressed models (shell_garment.py),
 #      rigid pieces at their sockets (fit_gear.py); into tools/characters/out/gear/base-male/
 #   3. every morph kept in art/characters/base-male/morphs/ (make_morph.sh), each body checked
-#      with every look on it; the female from her own rigged body
+#      with every look on it; the female from her own rigged body. The morphs are built at
+#      once, side by side, each to its own log, tools/characters/out/build-MORPH.log
 #   4. each template's own painted skin (paint_skin.sh, from the painting kept in art/)
 #   5. the game's files:
 #        assets/models/character/base.glb      the base with every morph and their offsets
 #        assets/models/character/skins/M.png   each template's skin
 #        assets/models/gear/<item>.glb         each look, with the same morphs
-# Read the RIGCHECK, MORPH and GEARCHECK lines it prints: every one must pass.
+# It ends with BUILD pass, or BUILD fail and the checks that failed (RIGCHECK, CLIPCHECK,
+# GEARCHECK); the full lines are in its output and the morphs' logs.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
@@ -34,6 +38,12 @@ rigged=("female base-female 1.70")
 # Templates with their own painted skin: morph and the design's front view.
 skins=("female art/characters/base-female/front.png")
 
+echo "== 0. the clips"
+if ls art/animation/library/*.glb >/dev/null 2>&1; then
+  $blender $here/clips.py | grep -E "CLIPS|Error|not in" || true
+fi
+$blender $here/clip_check.py | grep -E "^CLIPCHECK (pass|fail)|\"pass\": false|Error" | tee $out/build-clips.log || true
+
 echo "== 1. the base"
 $here/finish_character.sh $base 1.80
 
@@ -43,14 +53,21 @@ for g in "${garments[@]}"; do
   $blender $here/shell_garment.py "$out/$base-game.glb" "$dressed" "$item" "$role" "$coverage" | grep -E "^SHELL .*hides|EXPORTED|Error" || true
 done
 $blender $here/fit_gear.py "$out/$base-game.glb" "${rigid[@]}" | grep -E "^FIT|FITTED|Error" || true
-echo "== 3. the morphs"
+$blender $here/gear_check.py "$out/$base-game.glb" $out/gear/$base/*.glb | grep -E "^GEARCHECK|Error" | tee "$out/build-gear.log" || true
+echo "== 3. the morphs, side by side"
+morph_jobs=()
 for m in "${designed[@]}"; do
-  $here/make_morph.sh "$m" "(kept in art)"
+  $here/make_morph.sh "$m" "(kept in art)" > "$out/build-$m.log" 2>&1 &
+  morph_jobs+=("$m:$!")
 done
 for r in "${rigged[@]}"; do
   read -r m body height <<<"$r"
-  $here/finish_character.sh "$body" "$height" >/dev/null
-  $here/make_morph.sh "$m" --design "$out/$body-game.glb"
+  ( $here/finish_character.sh "$body" "$height" && $here/make_morph.sh "$m" --design "$out/$body-game.glb" ) > "$out/build-$m.log" 2>&1 &
+  morph_jobs+=("$m:$!")
+done
+for job in "${morph_jobs[@]}"; do
+  wait "${job#*:}" || echo "MORPH ${job%%:*} failed: see $out/build-${job%%:*}.log"
+  cat "$out/build-${job%%:*}.log"
 done
 echo "== 4. the skins"
 mkdir -p assets/models/character/skins
@@ -64,6 +81,13 @@ mkdir -p assets/models/gear
 morphs=$(printf "%s\n" "${designed[@]}" $(for r in "${rigged[@]}"; do echo "${r%% *}"; done) | sort | paste -sd, -)
 $blender $here/export_character.py "$out/$base.glb" assets/models/character/base.glb "--morphs=$morphs" | grep -E "MORPH|SOCKETS|EXPORTED|Error" || true
 for look in $out/gear/$base/*.glb; do
-  $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "assets/models/gear/$(basename "$look")" "--morphs=$morphs" | grep -E "CARRIED|Error" || true
+  $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "assets/models/gear/$(basename "$look")" "--morphs=$morphs" | grep -E "CARRIED|Error" &
 done
+wait
 echo "BUILT base.glb with morphs $morphs, $(ls $out/gear/$base/*.glb | wc -l) looks"
+# Every check's verdict, from this build's output and the morphs' logs.
+# The base's rig check, not a rigged design's (the female's own body is only the shape her
+# morph is fitted to; what ships is the base's skeleton and weights in her shape).
+failed=$( { cat "$out/build-clips.log" "$out/build-gear.log" "$out/rig-check-$base.json"; for m in "${designed[@]}"; do cat "$out/build-$m.log"; done; for r in "${rigged[@]}"; do cat "$out/build-${r%% *}.log"; done; } \
+  | grep -oE '^(CLIPCHECK|GEARCHECK) .*"pass": false|"file": "[^"]*", "pass": false|^CLIPCHECK fail|Error.*' | cut -c1-160 || true)
+if [[ -z "$failed" ]]; then echo "BUILD pass"; else echo "BUILD fail"; echo "$failed"; fi

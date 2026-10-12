@@ -5,10 +5,10 @@
 #
 # RIGGED defaults to art/characters/NAME/rigged.glb, as make_character.sh leaves it. Run it
 # again for every character whenever the conversion improves.
-#   1. convert the rig onto our skeleton, with forearm twist bones
+#   1. convert the rig onto our skeleton
 #   2. check it against our skeleton and the mannequin, and render it moving
 #   3. export it as the game loads it, with our clips re-sampled on its skeleton, and sockets
-# Writes tools/characters/out/NAME.glb, rig-check.json, NAME-sheet.png and NAME-game.glb.
+# Writes tools/characters/out/NAME.glb, rig-check-NAME.json, NAME-sheet.png and NAME-game.glb.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 name=$1 height=$2

@@ -27,14 +27,14 @@ import look
 import patches
 import twist
 
-FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
+# --clips=FILE: the clips from another mannequin file cut by clips.py, such as a set of the
+# libraries' hardest clips to check a body through; by default the game's.
+FIGURE = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--clips=")), look.FIGURE)
 src, dst = look.args()[:2]
 
 look.reset()
 bpy.ops.import_scene.gltf(filepath=look.path(src))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
-# The twist bones' constraints, which glTF does not keep; the export bakes them into every clip.
-twist.drive(arm)
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 for o in list(bpy.context.scene.objects):
     if o not in (arm, body):
@@ -89,9 +89,9 @@ def socket(name, bone, at, axes=None):
 
 sockets = []
 for s, side in (("R", -1), ("L", 1)):
-    hand = region({f"DEF-hand.{s}"})
-    knuckles = sum((joint(f"DEF-f_{f}.01.{s}") for f in ("index", "middle", "ring", "pinky")), Vector()) / 4
-    wrist = joint(f"DEF-hand.{s}")
+    hand = region({f"hand_{s.lower()}"})
+    knuckles = sum((joint(f"{f}_01_{s.lower()}") for f in ("index", "middle", "ring", "pinky")), Vector()) / 4
+    wrist = joint(f"hand_{s.lower()}")
     palm = min(p.z for p in hand)
     at = knuckles.lerp(wrist, 0.2)
     at.z = palm - 0.015
@@ -99,19 +99,19 @@ for s, side in (("R", -1), ("L", 1)):
     # glTF +X is up out of the back of the T-posed hand, +Y forward and +Z toward the wrist.
     # The left hand mirrors the right, so its +X comes out of the palm instead.
     axes = ((0, 0, 1), (-1, 0, 0), (0, -1, 0)) if s == "R" else ((0, 0, -1), (1, 0, 0), (0, -1, 0))
-    sockets.append(socket(f"socket.hand.{s}", f"DEF-hand.{s}", at, axes))
-head = region({"DEF-head"})
+    sockets.append(socket(f"socket.hand.{s}", f"hand_{s.lower()}", at, axes))
+head = region({"Head"})
 top = max(head, key=lambda p: p.z)
 centre = sum(head, Vector()) / len(head)
-sockets.append(socket("socket.head", "DEF-head", Vector((centre.x, centre.y, top.z))))
-chest = joint("DEF-spine.003")
-back = [p for p in region({"DEF-spine.002", "DEF-spine.003"}) if abs(p.x) < 0.08 and abs(p.z - chest.z) < 0.08]
-sockets.append(socket("socket.back", "DEF-spine.003", Vector((0, max(p.y for p in back), chest.z))))
-hips = joint("DEF-hips")
+sockets.append(socket("socket.head", "Head", Vector((centre.x, centre.y, top.z))))
+chest = joint("spine_03")
+back = [p for p in region({"spine_02", "spine_03"}) if abs(p.x) < 0.08 and abs(p.z - chest.z) < 0.08]
+sockets.append(socket("socket.back", "spine_03", Vector((0, max(p.y for p in back), chest.z))))
+hips = joint("pelvis")
 for s, side in (("R", -1), ("L", 1)):
-    waist = [p for p in region({"DEF-hips", "DEF-spine.001"}) if abs(p.z - (hips.z + 0.05)) < 0.03]
+    waist = [p for p in region({"pelvis", "spine_01"}) if abs(p.z - (hips.z + 0.05)) < 0.03]
     edge = max(waist, key=lambda p: side * p.x)
-    sockets.append(socket(f"socket.belt.{s}", "DEF-hips", Vector((edge.x, sum(p.y for p in waist) / len(waist), edge.z))))
+    sockets.append(socket(f"socket.belt.{s}", "pelvis", Vector((edge.x, sum(p.y for p in waist) / len(waist), edge.z))))
 print("SOCKETS", ", ".join(f"{e.name} {tuple(round(c, 3) for c in e.matrix_world.translation)}" for e in sockets))
 
 # The body's patches, which what is worn can hide (patches.py).
@@ -184,6 +184,8 @@ for o in list(bpy.data.objects):
     if o not in before:
         bpy.data.objects.remove(o)
 actions = [a for a in bpy.data.actions]
+# The limbs' roll moved to the hands and feet and spread over the twist bones (twist.py).
+twist.bake(arm, actions)
 # Each clip as a track on our skeleton, so the exporter samples all of them on it.
 ad = arm.animation_data or arm.animation_data_create()
 for a in actions:

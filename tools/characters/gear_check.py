@@ -28,7 +28,6 @@ from mathutils.bvhtree import BVHTree
 
 import look
 import patches
-import twist
 
 GEAR = look.GEAR_MADE
 CLIPS = ("Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Sword_Attack", "Crouch_Idle_Loop", "Roll")
@@ -51,7 +50,6 @@ look.reset()
 bpy.ops.import_scene.gltf(filepath=look.path(body_path))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
-twist.drive(arm)
 sockets = {o.name: o for o in bpy.context.scene.objects if o.name.startswith("socket.")}
 patch_of = patches.of(body) or {}
 actions = {a.name.split(".")[0]: a for a in bpy.data.actions}
@@ -148,12 +146,14 @@ def wear(item):
     for o in new:
         if o is not piece:
             bpy.data.objects.remove(o)
+    # The body and the piece skinned alike, as the game skins them.
+    look.skin_as_game()
     bpy.context.view_layer.update()
     return piece, covers, socket
 
 
 groups = {g.index: g.name for g in body.vertex_groups}
-bone_of = [groups.get(max(v.groups, key=lambda g: g.weight).group, "").replace("DEF-", "") if v.groups else ""
+bone_of = [groups.get(max(v.groups, key=lambda g: g.weight).group, "") if v.groups else ""
            for v in body.data.vertices]
 results = []
 for item in items:

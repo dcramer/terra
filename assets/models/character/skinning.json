@@ -1,0 +1,5 @@
+{
+  "about": "Weight-blended skinning, read by the game (crates/terra_game/src/skinning.rs) and the character tools (tools/characters/look.py) alike. A vertex is skinned with dual quaternions but for linear_gain times the weight of the joints in linear_joints, which it takes from the plain linear blend. See research/skin-deformation.md.",
+  "linear_joints": ["pelvis"],
+  "linear_gain": 2.0
+}

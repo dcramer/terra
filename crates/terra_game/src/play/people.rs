@@ -480,7 +480,7 @@ fn sit(
                 else {
                     continue;
                 };
-                let Some(hips) = character::find(entity, "DEF-hips", &children, &names) else {
+                let Some(hips) = character::find(entity, character::HIPS, &children, &names) else {
                     continue;
                 };
                 let seated = Seated { top, hips };

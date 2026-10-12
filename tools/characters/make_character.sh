@@ -5,7 +5,7 @@
 #
 # SHEET is an approved design sheet in a T-pose (front view on the left third). Steps:
 #   1. crop the front view, make a textured model on Studio
-#   2. rig it with Tripo's auto-rig on Studio
+#   2. rig it with Tripo's auto-rig on Studio, its Unreal skeleton
 # (credits for each: tools/tripo/README.md)
 #   3. the rest, free, with finish_character.sh: convert the rig onto our skeleton, check
 #      it, render it moving, and export it as the game loads it
@@ -24,5 +24,5 @@ convert "$art/sheet.png" -gravity West -crop 44%x100%+0+0 +repage -resize 2048x2
 tripo="$root/tools/tripo/tripo.ts"
 made=$(node "$tripo" model "$art/front.png" --faces 30000 -o "$art/model.glb")
 project=$(node -p 'JSON.parse(process.argv[1]).project' "$made")
-node "$tripo" rig "$project" --skeleton tripo -o "$art/rigged.glb"
+node "$tripo" rig "$project" --skeleton unreal -o "$art/rigged.glb"
 "$root/tools/characters/finish_character.sh" "$name" "$height" "$art/rigged.glb"

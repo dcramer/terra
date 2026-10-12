@@ -136,6 +136,23 @@ def push_out(ob, offset):
     apply(ob, mod)
 
 
+def pull_in(ob, direction, gap):
+    """Moves `ob` along `direction` (a unit vector, world space) until its nearest part, along
+    that line, is `gap` from the skin: a piece set against the body by contact, not by one
+    measured point of the skin, which may stand out (a fold, a flap) where the piece is not."""
+    inv = body.matrix_world.inverted()
+    d_local = (inv.to_3x3() @ direction).normalized()
+    best = None
+    for p in points(ob)[::3]:
+        hit, at, _, _ = body.ray_cast(inv @ p, d_local, distance=1.0)
+        if hit:
+            travel = ((body.matrix_world @ at) - p).length
+            best = travel if best is None else min(best, travel)
+    if best is not None:
+        move(ob, Matrix.Translation(direction * (best - gap)))
+    return best
+
+
 # Heights off the skin, by slot (docs/characters.md): chest pieces stay within CHEST_M
 # (shell_garment.py's BULK_M); what is worn over them, a pack's straps, reaches past it.
 CHEST_M = 0.018
@@ -153,7 +170,7 @@ def fit_back(ob, height):
     The bag rides the upper spine whole."""
     scale_to(ob, height)
     at = sockets["socket.back"].matrix_world.translation
-    shoulders = max(p.z for p in region({"DEF-shoulder.L", "DEF-shoulder.R"}))
+    shoulders = max(p.z for p in region({"clavicle_l", "clavicle_r"}))
     lo, hi = box(points(ob))
     middle = sorted(p.y for p in points(ob) if abs(p.x - (lo.x + hi.x) / 2) < (hi.x - lo.x) * 0.3)
     panel = middle[len(middle) * 3 // 10]
@@ -169,17 +186,17 @@ def fit_back(ob, height):
     bm.free()
     push_out(ob, 0.01)
     lo, hi = box(points(ob))
-    rider = ob.vertex_groups.new(name="DEF-spine.003")
+    rider = ob.vertex_groups.new(name="spine_03")
     rider.add([v.index for v in ob.data.vertices], 1.0, "REPLACE")
     # The straps, from this body's own joints and the bag's corners.
-    chest = joint("DEF-spine.003").z
+    chest = joint("spine_03").z
     leather = bpy.data.materials.new("Leather")
     leather.use_nodes = True
     leather.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = look.linear((0.42, 0.27, 0.16)) + (1.0,)
     leather.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.8
     straps = []
     for side in (1, -1):
-        reach = abs(joint(f"DEF-upper_arm.{'L' if side > 0 else 'R'}").x)
+        reach = abs(joint(f"upperarm_{'l' if side > 0 else 'r'}").x)
         x = side * reach
         route = [
             ((0.45 * x, 1.0, hi.z - 0.03), (0, -1, 0)),          # the bag's top corner, in from behind
@@ -242,7 +259,7 @@ def fit_head(ob):
     above the ears, where the head is wider than the crown (gear_check.py); sizing it to its
     rim instead made that worse. A cap should be made on the head as clothing is
     (shell_garment.py), which is not done yet."""
-    head = region({"DEF-head"})
+    head = region({"Head"})
     top = max(p.z for p in head)
     crown = [p for p in head if p.z > top - 0.09]
     lo, hi = box(crown)
@@ -258,16 +275,20 @@ def fit_head(ob):
 
 def fit_belt(ob, height):
     """Hanging from the belt behind the right hip, clear of the hand as the arm swings: its
-    side against the back of the hip, its top tipped back a little, its mouth at the belt."""
+    mouth at the belt against the back of the hip, its bottom angled back clear of the leg as
+    a hip quiver hangs (tipped the other way, its mouth stood off the body and only its foot
+    touched the seat)."""
     scale_to(ob, height)
-    move(ob, Matrix.Rotation(math.radians(-20), 4, "X"))
+    move(ob, Matrix.Rotation(math.radians(20), 4, "X"))
     at = sockets["socket.belt.R"].matrix_world.translation
     across = at.x * 0.55
-    waist = [p for p in region({"DEF-hips", "DEF-spine.001", "DEF-thigh.R"})
+    waist = [p for p in region({"pelvis", "spine_01", "thigh_r"})
              if abs(p.z - at.z) < 0.06 and abs(p.x - across) < 0.05]
     back = max(p.y for p in waist)
     lo, hi = box(points(ob))
     move(ob, Matrix.Translation(Vector((across - (lo.x + hi.x) / 2, back + 0.005 - lo.y, at.z - 0.45 * (hi.z - lo.z) - lo.z))))
+    # Then against the hip by contact: forward (the body faces -Y) until it rests 1 cm off.
+    pull_in(ob, Vector((0.0, -1.0, 0.0)), 0.01)
     push_out(ob, 0.01)
     return "socket.belt.R"
 
@@ -275,10 +296,10 @@ def fit_belt(ob, height):
 def fit_torso(ob):
     """Sized to the torso from the hips to the shoulders, pushed clear of the skin, given the
     body's weights and bound to its skeleton."""
-    hips = joint("DEF-hips")
-    torso = region({"DEF-hips", "DEF-spine.001", "DEF-spine.002", "DEF-spine.003", "DEF-shoulder.L", "DEF-shoulder.R", "DEF-neck"})
+    hips = joint("pelvis")
+    torso = region({"pelvis", "spine_01", "spine_02", "spine_03", "clavicle_l", "clavicle_r", "neck_01"})
     bottom = hips.z - 0.14
-    shoulders = max(p.z for p in region({"DEF-shoulder.L", "DEF-shoulder.R"}))
+    shoulders = max(p.z for p in region({"clavicle_l", "clavicle_r"}))
     lo, hi = box([p for p in torso if bottom <= p.z <= shoulders])
     lo.z, hi.z = bottom, shoulders + 0.02
     g_lo, g_hi = box(points(ob))
@@ -338,18 +359,23 @@ def covers(ob, reach=REACH_M):
 
 
 def contact(ob):
-    """The share of a piece's vertices within 3 cm of the skin: how much of it rests on the
-    body rather than floating off it."""
-    near = 0
+    """The share of a piece's vertices within 3 cm of the skin, how much of it rests on the
+    body rather than floating off it, and how near its nearest part comes."""
+    near, nearest = 0, float("inf")
     for p in points(ob):
         ok, hit, _, _ = body.closest_point_on_mesh(body.matrix_world.inverted() @ p)
-        near += ok and (body.matrix_world @ hit - p).length < 0.03
-    return near / max(len(ob.data.vertices), 1)
+        if ok:
+            d = (body.matrix_world @ hit - p).length
+            near += d < 0.03
+            nearest = min(nearest, d)
+    return near / max(len(ob.data.vertices), 1), nearest
 
 
 # The least share of a piece that should rest on the body, by how it is fitted; less means
-# it floats, as a pack placed by the tips of its straps did.
-TOUCHING = {"back": 0.08, "head": 0.3, "belt": 0.05, "torso": 0.4}
+# it floats, as a pack placed by the tips of its straps did. A piece hung from the belt is
+# long and hangs at an angle, touching in one place: it need only come within RESTS_M.
+TOUCHING = {"back": 0.08, "head": 0.3, "belt": 0.0, "torso": 0.4}
+RESTS_M = 0.02
 
 OUT = os.path.join(OUT, body_name)
 os.makedirs(OUT, exist_ok=True)
@@ -374,8 +400,10 @@ for name in names:
     hides = covers(ob, REACH_BACK_M if how == "back" else REACH_M) if how in ("torso", "head", "back") else []
     if hides:
         ob["covers"] = hides
-    touching = contact(ob)
-    print("FIT", name, f"touching {touching:.0%}", "ok" if touching >= TOUCHING[how] else f"FLOATING, under {TOUCHING[how]:.0%}")
+    touching, nearest = contact(ob)
+    rests = touching >= TOUCHING[how] and nearest <= RESTS_M
+    print("FIT", name, f"touching {touching:.0%}, nearest {nearest * 100:.1f} cm",
+          "ok" if rests else f"FLOATING: under {TOUCHING[how]:.0%} touching, or nothing within {RESTS_M * 100:.0f} cm")
     path = os.path.join(OUT, f"{name}.glb")
     if socket:
         # In the socket's own space: the game puts it on the socket as it is.

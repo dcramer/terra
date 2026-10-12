@@ -1,9 +1,9 @@
 {
-  "Idle_Loop": 0.0016,
-  "Walk_Loop": 0.0017,
-  "Jog_Fwd_Loop": 0.0045,
-  "Sword_Attack": 0.0127,
-  "Crouch_Idle_Loop": 0.0055,
-  "Punch_Cross": 0.003,
-  "Roll": 0.0102
+  "Idle_Loop": 0.0014,
+  "Walk_Loop": 0.0024,
+  "Jog_Fwd_Loop": 0.0078,
+  "Sword_Attack": 0.0109,
+  "Crouch_Idle_Loop": 0.0085,
+  "Punch_Cross": 0.0059,
+  "Roll": 0.0141
 }

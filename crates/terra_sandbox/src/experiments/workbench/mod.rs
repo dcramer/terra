@@ -316,8 +316,8 @@ fn spawn(
                             .collect::<Vec<_>>()
                     };
                     info!(
-                        "workbench: model {index}: {} DEF- joints, sockets {:?}",
-                        named("DEF-").len(),
+                        "workbench: model {index}: {} named nodes, sockets {:?}",
+                        named("").len(),
                         named("socket.")
                     );
                     dress(

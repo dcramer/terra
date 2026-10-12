@@ -17,7 +17,7 @@ from mathutils import Vector
 import look
 import twist
 
-FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
+FIGURE = look.FIGURE
 OUT = os.path.join(HERE, "out")
 src, name = look.args()[:2]
 ACTIONS = [a for a in (look.args()[2:] or ["Idle_Loop", "Walk_Loop", "Sword_Attack", "Crouch_Idle_Loop", "Roll"])]
@@ -25,7 +25,6 @@ ACTIONS = [a for a in (look.args()[2:] or ["Idle_Loop", "Walk_Loop", "Sword_Atta
 look.reset()
 bpy.ops.import_scene.gltf(filepath=look.path(src))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
-twist.drive(arm)
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 for o in list(bpy.context.scene.objects):
     if o not in (arm, body):
@@ -35,6 +34,8 @@ bpy.ops.import_scene.gltf(filepath=FIGURE)  # brings the animations
 for o in list(bpy.data.objects):
     if o not in before:
         bpy.data.objects.remove(o)
+twist.bake(arm, list(bpy.data.actions))
+look.skin_as_game()
 look.stage()
 scene = bpy.context.scene
 scene.render.resolution_x = scene.render.resolution_y = 380

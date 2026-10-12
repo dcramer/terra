@@ -33,6 +33,10 @@ use bevy::{
 };
 use std::collections::{HashMap, HashSet};
 
+/// The hips' joint on every body's skeleton (Unreal's names, as Quaternius's animation libraries
+/// use them: `tools/characters/clips.py`).
+pub const HIPS: &str = "pelvis";
+
 /// The right hand's socket: the middle of a closed fist, +Y along a held handle toward its
 /// working end, +Z toward the wrist. The others (`socket.head`, `socket.back`,
 /// `socket.belt.R` and `.L`) face as the body does.
@@ -206,15 +210,19 @@ pub fn item_look(item: &str) -> String {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(MaterialPlugin::<BodyMaterial>::default())
-        .init_resource::<Tinted>()
-        .init_resource::<BodyMaterials>()
-        .add_systems(Update, mask_bodies)
-        .add_observer(put_on)
-        .add_observer(body_ready)
-        .add_observer(held_ready)
-        .add_observer(tint)
-        .add_systems(Update, tilt);
+    // Bodies and what they wear skin with dual quaternions (`skinning`).
+    app.add_plugins((
+        MaterialPlugin::<BodyMaterial>::default(),
+        crate::skinning::plugin,
+    ))
+    .init_resource::<Tinted>()
+    .init_resource::<BodyMaterials>()
+    .add_systems(Update, mask_bodies)
+    .add_observer(put_on)
+    .add_observer(body_ready)
+    .add_observer(held_ready)
+    .add_observer(tint)
+    .add_systems(Update, tilt);
 }
 
 fn body_ready(

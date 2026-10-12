@@ -56,15 +56,15 @@ COVERED = 1.0          # a patch wholly under the piece is hidden; part-covered 
 # a chest piece's hem from the hips joint toward the knee, a sleeve from the shoulder toward
 # the elbow or wrist.
 COVERAGE = {
-    "chest_sleeveless": {"bones": ("DEF-spine", "DEF-shoulder", "DEF-hips"), "hem": 0.25},
-    "chest_short_sleeves": {"bones": ("DEF-spine", "DEF-shoulder", "DEF-hips", "DEF-upper_arm"), "hem": 0.25},
-    "chest_long_sleeves": {"bones": ("DEF-spine", "DEF-shoulder", "DEF-hips", "DEF-upper_arm", "DEF-forearm"), "hem": 0.25},
-    "legs_short": {"bones": ("DEF-hips", "DEF-thigh"), "hem": None},
-    "legs_long": {"bones": ("DEF-hips", "DEF-thigh", "DEF-shin"), "hem": None},
-    "gloves": {"bones": ("DEF-hand", "DEF-f_", "DEF-thumb"), "hem": None},
-    "feet": {"bones": ("DEF-foot", "DEF-toe"), "hem": None},
+    "chest_sleeveless": {"bones": ("spine_", "clavicle_", "pelvis"), "hem": 0.25},
+    "chest_short_sleeves": {"bones": ("spine_", "clavicle_", "pelvis", "upperarm_"), "hem": 0.25},
+    "chest_long_sleeves": {"bones": ("spine_", "clavicle_", "pelvis", "upperarm_", "lowerarm_"), "hem": 0.25},
+    "legs_short": {"bones": ("pelvis", "thigh_"), "hem": None},
+    "legs_long": {"bones": ("pelvis", "thigh_", "calf_"), "hem": None},
+    "gloves": {"bones": ("hand_", "index_", "middle_", "ring_", "pinky_", "thumb_"), "hem": None},
+    "feet": {"bones": ("foot_", "ball_"), "hem": None},
     # A cap: the crown, down this share of the way from the top of the head to the neck.
-    "head_cap": {"bones": ("DEF-head",), "hem": None, "crown": 0.45},
+    "head_cap": {"bones": ("Head",), "hem": None, "crown": 0.45},
 }
 
 body_path, dressed_path, item, role, coverage = (look.args() + ["Cloth", "chest_sleeveless"])[:5]
@@ -156,27 +156,27 @@ def joint(name):
     return arm.matrix_world @ arm.data.bones[name].head_local
 
 
-hips = joint("DEF-hips").z
-knee = (joint("DEF-shin.L").z + joint("DEF-shin.R").z) / 2
+hips = joint("pelvis").z
+knee = (joint("calf_l").z + joint("calf_r").z) / 2
 hem_z = hips - (hips - knee) * COVER["hem"] if COVER["hem"] is not None else -math.inf
 mark = np.zeros(len(skin_pts))
 stand = np.zeros(len(skin_pts))
 # Skin a limb the piece does not cover moves even this much is left out of it, so an armhole
 # or a hem stays clear of the arm or thigh as it moves.
 LIMB_SHARE = 0.15
-LIMBS = ("DEF-upper_arm", "DEF-forearm", "DEF-thigh", "DEF-shin", "DEF-hand", "DEF-foot", "DEF-head", "DEF-neck")
+LIMBS = ("upperarm_", "lowerarm_", "thigh_", "calf_", "hand_", "foot_", "Head", "neck_01")
 # A piece with a hem goes down as far as its hem, whatever moves the skin there.
 uncovered_limbs = tuple(b for b in LIMBS if not b.startswith(COVER["bones"])
-                        and not (COVER["hem"] is not None and b == "DEF-thigh"))
+                        and not (COVER["hem"] is not None and b == "thigh_"))
 head_top = max(p.z for p in skin_pts)
-neck = joint("DEF-neck").z if "DEF-neck" in arm.data.bones else head_top - 0.3
+neck = joint("neck_01").z if "neck_01" in arm.data.bones else head_top - 0.3
 crown_z = head_top - (head_top - neck) * COVER["crown"] if COVER.get("crown") else -math.inf
 for i, v in enumerate(body.data.vertices):
     bone = main_bone(v)
     if skin_pts[i].z < crown_z:
         continue
-    covered = bone.startswith(COVER["bones"]) or (COVER["hem"] is not None and bone.startswith("DEF-thigh") and skin_pts[i].z > hem_z)
-    if not covered or (bone.startswith("DEF-hips") and skin_pts[i].z < hem_z):
+    covered = bone.startswith(COVER["bones"]) or (COVER["hem"] is not None and bone.startswith("thigh_") and skin_pts[i].z > hem_z)
+    if not covered or (bone.startswith("pelvis") and skin_pts[i].z < hem_z):
         continue
     if any(groups.get(g.group, "").startswith(uncovered_limbs) and g.weight > LIMB_SHARE for g in v.groups):
         continue
@@ -259,7 +259,7 @@ for i, p in enumerate(skin_pts):
 kd.balance()
 origin = [kd.find(p)[1] for p in piece_pts]
 inv = mw.inverted()
-waist = joint("DEF-spine.001").z
+waist = joint("spine_01").z
 for v, i in zip(piece.data.vertices, origin):
     most = CROSSED_M if skin_pts[i].z > waist else BULK_M
     out = min(max(OFFSET_M, stand[i] + 0.004), most)

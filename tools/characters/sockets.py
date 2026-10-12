@@ -41,7 +41,7 @@ for path in args:
         bpy.context.scene.frame_set(round(start + (end - start) * pose[1]))
     bpy.context.view_layer.update()
     name = look.body_name(path)
-    for b in ("DEF-hips", "DEF-head", "DEF-hand.R", "DEF-foot.R"):
+    for b in ("pelvis", "Head", "hand_r", "foot_r"):
         p = arm.matrix_world @ arm.pose.bones[b].head
         print("SOCKETS", name, b, f"({p.x:.3f}, {p.y:.3f}, {p.z:.3f})")
     for o in bpy.context.scene.objects:

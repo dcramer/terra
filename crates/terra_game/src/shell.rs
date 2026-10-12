@@ -66,6 +66,8 @@ usage: terra_sandbox [options]
                         --give, such as leather_coat (repeatable)
   --template <name>     in the workbench: the template the next model's body is shaped
                         as, such as female or heavy (repeatable, in the models' order)
+  --linear-skinning     skin with Bevy's own linear blend instead of dual quaternions,
+                        to compare the two (crates/terra_game/src/skinning.rs)
   --joints              in the workbench: print where each model's joints and sockets
                         stand once shaped, to compare with the export's
   --attach <file>[@<socket>]
@@ -177,6 +179,8 @@ pub struct Options {
     /// In the workbench: the template each model's body is shaped as, in the order of the
     /// models (`appearance`); with `joints`, where its joints and sockets stand once shaped.
     pub templates: Vec<String>,
+    /// Skin with Bevy's linear blend rather than dual quaternions (`skinning`), to compare.
+    pub linear_skinning: bool,
     pub joints: bool,
     pub focus: Option<String>,
     pub sides: Vec<f32>,
@@ -236,6 +240,7 @@ impl Options {
             attaches: Vec::new(),
             wears: Vec::new(),
             templates: Vec::new(),
+            linear_skinning: false,
             joints: false,
             focus: None,
             sides: Vec::new(),
@@ -305,6 +310,7 @@ impl Options {
                 "--wear" => options.wears.push(value("--wear")?),
                 "--template" => options.templates.push(value("--template")?),
                 "--joints" => options.joints = true,
+                "--linear-skinning" => options.linear_skinning = true,
                 "--focus" => options.focus = Some(value("--focus")?),
                 "--sides" => options.sides = numbers("--sides", &value("--sides")?)?,
                 "--moments" => options.moments = numbers("--moments", &value("--moments")?)?,

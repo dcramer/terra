@@ -44,3 +44,4 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 - Say what was measured or read, and what was only inferred.
 - End with the limits: what the note does not show.
 - Link sources.
+| [skin-deformation.md](skin-deformation.md) | Why did characters' limbs knot and squeeze in our animations, and what makes them deform correctly through every clip? |

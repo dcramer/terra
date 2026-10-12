@@ -23,6 +23,7 @@ pub mod play;
 pub mod record;
 pub mod remote;
 pub mod shell;
+pub mod skinning;
 pub mod sky;
 pub mod spatial;
 pub mod terrain;

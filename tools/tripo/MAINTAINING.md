@@ -68,7 +68,7 @@ When the code cannot settle a question, for example what a reply looks like, cap
 - `image` makes one image, where the app makes four.
 - `export` gives GLB where the app offers FBX for a quad model, and an FBX in one file (`texture_packaging: embedded`, as the app's Blender, Max and Maya bridges send) rather than the panel's zip.
 - `rig` defaults to the `unreal` skeleton where the app defaults to `mixamo`: on our base body it is the only one whose twist bones carry skin.
-- `--skeleton tripo` sends the V1 rig (`v1.0-20240301`), which the app no longer offers. Our character converter reads its bone names and `unreal`'s, and on the same body V1 passed our rig check where V3's `mixamo` and `unreal` rigs pinched at the knees (2026-10-12; research/tripo-studio-api.md). Check again when Tripo ships a new rig: `bundle.ts` lists the rig enum.
+- `--skeleton tripo` sends the V1 rig (`v1.0-20240301`), which the app no longer offers. Our character pipeline uses `unreal` (research/skin-deformation.md): measured with plain skinning, V1 had pinched less at the knees, but with the game's skinning `unreal` passes our rig check and V1's twist bones carry no skin. Check again when Tripo ships a new rig: `bundle.ts` lists the rig enum.
 
 ### Not yet standard: which way models face
 

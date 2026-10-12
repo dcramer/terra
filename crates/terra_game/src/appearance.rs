@@ -532,7 +532,7 @@ fn report_joints(
                 };
                 each = parent.parent();
             }
-            affine.translation
+            affine
         };
         let shape = appearance
             .map(|a| format!("{:?}", a.morphs))
@@ -542,22 +542,29 @@ fn report_joints(
                 continue;
             };
             let wanted = name.starts_with("socket.")
-                || matches!(
-                    name.as_str(),
-                    "DEF-hips" | "DEF-head" | "DEF-hand.R" | "DEF-foot.R"
-                );
+                || matches!(name.as_str(), "pelvis" | "Head" | "hand_r" | "foot_r");
             if !wanted {
                 continue;
             }
-            let p = at(each);
+            let affine = at(each);
+            let p = affine.translation;
             // Blender's axes, as the export prints them: glTF's (x, y, z) is Blender's (x, -z, y).
+            // A socket's turn too, as where its own +Y and +Z point: what hangs on it hangs by
+            // both, so a turn wrong in either swings it round the socket.
+            let (y, z) = (affine.matrix3.y_axis, affine.matrix3.z_axis);
             info!(
-                "JOINTS {} {shape} {} ({:.3}, {:.3}, {:.3})",
+                "JOINTS {} {shape} {} ({:.3}, {:.3}, {:.3}) +Y ({:.2}, {:.2}, {:.2}) +Z ({:.2}, {:.2}, {:.2})",
                 label.map_or("body", |n| n.as_str()),
                 name.as_str(),
                 p.x,
                 -p.z,
-                p.y
+                p.y,
+                y.x,
+                -y.z,
+                y.y,
+                z.x,
+                -z.z,
+                z.y
             );
         }
     }
@@ -613,7 +620,7 @@ mod tests {
     #[test]
     fn morphs_mix_by_weight() {
         let offsets = parse_offsets(
-            r#"{"heavy": {"socket.back": [0.0, 0.0, -0.04]}, "female": {"socket.back": [0.0, -0.1, 0.0], "DEF-head": [0.0, -0.1, 0.0]}}"#,
+            r#"{"heavy": {"socket.back": [0.0, 0.0, -0.04]}, "female": {"socket.back": [0.0, -0.1, 0.0], "Head": [0.0, -0.1, 0.0]}}"#,
         )
         .unwrap();
         let appearance = Appearance {
@@ -622,7 +629,7 @@ mod tests {
         };
         let moved = mixed(&offsets, &appearance);
         assert!((moved["socket.back"] - Vec3::new(0.0, -0.1, -0.02)).length() < 1e-6);
-        assert!((moved["DEF-head"] - Vec3::new(0.0, -0.1, 0.0)).length() < 1e-6);
+        assert!((moved["Head"] - Vec3::new(0.0, -0.1, 0.0)).length() < 1e-6);
     }
 
     #[test]

@@ -17,6 +17,8 @@
 
 ## Rig and skin deformation: the cause of the twisting and squeezing
 
+**Superseded the same day by [skin-deformation.md](skin-deformation.md).** The measurements below were taken on a stale 2025 copy of the animation library and Tripo's old V1 rig. Its forearm figures used a ring measure since corrected. The fix is the current libraries, Tripo's V3 rig with its weighted twist bones, a twist step baked into the clips, and dual quaternion skinning.
+
 **Measured on the base body** (`deform_check.py`, through idle, walk, jog, sword swing, punch, crouch and roll):
 
 - **The middle of the right forearm squeezes 84% in the sword swing.** That's a ring of skin left at a sixth of its width: the candy wrapper.

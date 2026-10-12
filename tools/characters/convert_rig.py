@@ -1,18 +1,19 @@
 """Converts a body rigged by Tripo's auto-rig onto our skeleton, so our animations play on it.
 
-Tripo's older V1 rig puts its own humanoid skeleton in (78 bones, with twist and helper
-bones); its V3 rig on the `unreal` skeleton names its 61 bones as Unreal's mannequin does,
-twist bones included. Both convert. Ours is the Quaternius one every sandbox animation is
-made for. This:
+Tripo's current (V3) auto-rig, with its Unreal skeleton (`tripo.ts rig --skeleton unreal`, the
+default), names its bones as our skeleton does: ours is the one Quaternius's animation libraries
+are made on (`look.FIGURE`, cut by clips.py), which uses Unreal's names. Tripo adds one twist
+bone on each upper arm, forearm, thigh and calf, with skin on it; ours has none, and the clips
+never move them. This:
   1. turns Tripo's model to face -Y as ours does, scales it to `height`, and welds the
      vertices glTF split at texture seams,
   2. moves each of our joints to the matching Tripo joint, keeping our bones' directions
-     (the animations depend on them),
-  3. renames Tripo's weights to our bones, folding each helper bone into the bone it helps,
-  4. adds forearm twist bones (twist.py), keeps at most four bones a vertex, normalised,
-     and exports the mesh and skin only.
+     (the animations depend on them), and adds Tripo's twist bones, each facing as the bone
+     it twists (twist.py turns them),
+  3. keeps Tripo's weights, every bone's under its own name, at most four bones a vertex,
+     normalised, lightly smoothed, and exports the mesh and skin only.
 
-    tools/blender/run.sh tools/characters/convert_rig.py art/characters/base-male/rigged.glb base-male-tripo 1.80
+    tools/blender/run.sh tools/characters/convert_rig.py art/characters/base-male/rigged.glb base-male 1.80
 """
 
 import math
@@ -28,68 +29,11 @@ from mathutils import Matrix, Vector
 import look
 import twist
 
-FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
+FIGURE = look.FIGURE
 OUT = os.path.join(HERE, "out")
 
-# Tripo bone -> ours. Helper bones (twist, share, eyes) fold into the bone they help.
-MAP = {
-    "Hip": "DEF-hips", "Pelvis": "DEF-hips", "BoneRoot": "DEF-hips",
-    "Waist": "DEF-spine.001", "Spine01": "DEF-spine.002", "Spine02": "DEF-spine.003",
-    "NeckTwist01": "DEF-neck", "NeckTwist02": "DEF-neck",
-    "Head": "DEF-head", "FacialBone": "DEF-head", "L_Eye": "DEF-head", "R_Eye": "DEF-head",
-}
-for s in ("L", "R"):
-    MAP.update({
-        f"{s}_Clavicle": f"DEF-shoulder.{s}",
-        f"{s}_Upperarm": f"DEF-upper_arm.{s}", f"{s}_UpperarmTwist01": f"DEF-upper_arm.{s}", f"{s}_UpperarmTwist02": f"DEF-upper_arm.{s}",
-        f"{s}_Forearm": f"DEF-forearm.{s}", f"{s}_ForearmTwist01": f"DEF-forearm.{s}", f"{s}_ForearmTwist02": f"DEF-forearm.{s}",
-        f"{s}_ElbowShareBone": f"DEF-forearm.{s}",
-        f"{s}_Hand": f"DEF-hand.{s}",
-        f"{s}_Thigh": f"DEF-thigh.{s}", f"{s}_ThighTwist01": f"DEF-thigh.{s}", f"{s}_ThighTwist02": f"DEF-thigh.{s}",
-        f"{s}_Calf": f"DEF-shin.{s}", f"{s}_CalfTwist01": f"DEF-shin.{s}", f"{s}_CalfTwist02": f"DEF-shin.{s}",
-        f"{s}_KneeShareBone": f"DEF-shin.{s}",
-        f"{s}_Foot": f"DEF-foot.{s}", f"{s}_ToeBase": f"DEF-toe.{s}",
-    })
-    for tripo, ours in (("Thumb", "thumb"), ("Index", "f_index"), ("Mid", "f_middle"), ("Ring", "f_ring"), ("Pinky", "f_pinky")):
-        for i in (1, 2, 3):
-            MAP[f"{s}_{tripo}{i}"] = f"DEF-{ours}.0{i}.{s}"
-# Where each of our joints goes: the head of this Tripo bone.
-JOINT = {
-    "DEF-hips": "Hip", "DEF-spine.001": "Waist", "DEF-spine.002": "Spine01", "DEF-spine.003": "Spine02",
-    "DEF-neck": "NeckTwist01", "DEF-head": "Head",
-}
-for s in ("L", "R"):
-    JOINT.update({
-        f"DEF-shoulder.{s}": f"{s}_Clavicle", f"DEF-upper_arm.{s}": f"{s}_Upperarm", f"DEF-forearm.{s}": f"{s}_Forearm",
-        f"DEF-hand.{s}": f"{s}_Hand", f"DEF-thigh.{s}": f"{s}_Thigh", f"DEF-shin.{s}": f"{s}_Calf",
-        f"DEF-foot.{s}": f"{s}_Foot", f"DEF-toe.{s}": f"{s}_ToeBase",
-    })
-    for tripo, ours in (("Thumb", "thumb"), ("Index", "f_index"), ("Mid", "f_middle"), ("Ring", "f_ring"), ("Pinky", "f_pinky")):
-        for i in (1, 2, 3):
-            JOINT[f"DEF-{ours}.0{i}.{s}"] = f"{s}_{tripo}{i}"
-
-# The same for V3's unreal skeleton. Its twist bones fold into the bone they twist; twist.py
-# adds our own.
-UNREAL_MAP = {
-    "root": "DEF-hips", "pelvis": "DEF-hips",
-    "spine_01": "DEF-spine.001", "spine_02": "DEF-spine.002", "spine_03": "DEF-spine.003",
-    "neck_01": "DEF-neck", "head": "DEF-head",
-}
-UNREAL_JOINT = {
-    "DEF-hips": "pelvis", "DEF-spine.001": "spine_01", "DEF-spine.002": "spine_02", "DEF-spine.003": "spine_03",
-    "DEF-neck": "neck_01", "DEF-head": "head",
-}
-for S, s in (("L", "l"), ("R", "r")):
-    for theirs, ours in (("clavicle", "shoulder"), ("upperarm", "upper_arm"), ("lowerarm", "forearm"), ("hand", "hand"),
-                         ("thigh", "thigh"), ("calf", "shin"), ("foot", "foot"), ("ball", "toe")):
-        UNREAL_MAP[f"{theirs}_{s}"] = f"DEF-{ours}.{S}"
-        UNREAL_JOINT[f"DEF-{ours}.{S}"] = f"{theirs}_{s}"
-    for theirs, ours in (("upperarm", "upper_arm"), ("lowerarm", "forearm"), ("thigh", "thigh"), ("calf", "shin")):
-        UNREAL_MAP[f"{theirs}_twist_01_{s}"] = f"DEF-{ours}.{S}"
-    for theirs, ours in (("thumb", "thumb"), ("index", "f_index"), ("middle", "f_middle"), ("ring", "f_ring"), ("pinky", "f_pinky")):
-        for i in (1, 2, 3):
-            UNREAL_MAP[f"{theirs}_0{i}_{s}"] = f"DEF-{ours}.0{i}.{S}"
-            UNREAL_JOINT[f"DEF-{ours}.0{i}.{S}"] = f"{theirs}_0{i}_{s}"
+# Tripo's bones and ours share Unreal's names, but for the head's.
+RENAME = {"head": "Head"}
 
 src, name, height = (look.args() + ["", "", "1.8"])[:3]
 height = float(height)
@@ -119,13 +63,8 @@ bottom = min((body.matrix_world @ v.co).z for v in body.data.vertices)
 s = height / (top - bottom)
 turn = Matrix.Rotation(-math.pi / 2, 4, "Z") @ Matrix.Scale(s, 4) @ Matrix.Translation((0, 0, -bottom))
 joints = {b.name: turn @ (t_arm.matrix_world @ b.head_local) for b in t_arm.data.bones}
-if "DEF-hips" in joints:
-    # Already on our bones (the shared mesh's bodies): only the directions and twist to do.
-    MAP, JOINT = {}, {b: b for b in joints if b.startswith("DEF-")}
-    joints["Hip"] = joints["DEF-hips"]
-elif "pelvis" in joints:
-    MAP, JOINT = UNREAL_MAP, UNREAL_JOINT
-    joints["Hip"] = joints["pelvis"]
+# Our joint -> where it goes: the same bone of Tripo's.
+joints = {RENAME.get(n, n): p for n, p in joints.items()}
 # The body, in world space under the same transform, unparented.
 mw = body.matrix_world.copy()
 body.parent = None
@@ -154,8 +93,8 @@ for pb in arm.pose.bones:
 bpy.context.view_layer.update()
 # Scale the skeleton object so its hips sit at Tripo's hip height (kept as object scale, so
 # the animations' hip movements stay in the skeleton's own units).
-hips_now = (arm.matrix_world @ arm.data.bones["DEF-hips"].head_local).z
-k = joints["Hip"].z / hips_now
+hips_now = (arm.matrix_world @ arm.data.bones["pelvis"].head_local).z
+k = joints["pelvis"].z / hips_now
 arm.scale = [c * k for c in arm.scale]
 bpy.context.view_layer.update()
 to_local = arm.matrix_world.inverted()
@@ -165,24 +104,32 @@ eb = arm.data.edit_bones
 for b in eb:
     b.use_connect = False
 order = sorted(eb, key=lambda b: len(b.parent_recursive))
+moved = {}
 for b in order:
-    if b.name not in JOINT:
-        continue
     d = (b.tail - b.head)
-    new_head = to_local @ joints[JOINT[b.name]]
+    if b.name in joints:
+        new_head = to_local @ joints[b.name]
+    elif b.parent is not None and b.parent.name in moved:
+        # A bone Tripo's rig has not (a finger's or toe's end): it moves with its parent.
+        new_head = b.head + moved[b.parent.name]
+    else:
+        continue
+    moved[b.name] = new_head - b.head
     b.head = new_head
     b.tail = new_head + d
 bpy.ops.object.mode_set(mode="OBJECT")
+twist.add(arm, {n: to_local @ joints[n] for n, _ in twist.names() if n in joints})
 
-# 3. Weights renamed onto our bones, helpers folded in.
+# 3. Tripo's weights, by the same names on our bones.
 weights = {}
 groups = {g.index: g.name for g in body.vertex_groups}
 for v in body.data.vertices:
     acc = {}
     for g in v.groups:
         theirs = groups.get(g.group)
-        # Weights already on our bones (the shared mesh's own) keep their names.
-        ours = MAP.get(theirs) or (theirs if theirs and theirs.startswith("DEF-") else None)
+        ours = RENAME.get(theirs, theirs)
+        if ours not in arm.data.bones:
+            ours = None
         if ours and g.weight > 0:
             acc[ours] = acc.get(ours, 0.0) + g.weight
     weights[v.index] = acc
@@ -209,15 +156,6 @@ if SMOOTH:
     bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
     bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
     bpy.ops.object.mode_set(mode="OBJECT")
-
-# Twist bones at the elbows, so a forearm's turn does not pinch the elbow (twist.py); then
-# back to four bones a vertex, normalised.
-twist.add(arm, body)
-select_only(body)
-bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
-bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
-bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
-bpy.ops.object.mode_set(mode="OBJECT")
 
 # 4. Bind and export the mesh and skin.
 body.parent = arm

@@ -40,7 +40,7 @@ Neither is what shipped games do. Their bodies are a small number of parameters 
 | Part | What it is | From |
 |---|---|---|
 | Mesh | One human body in our T-pose, its seams welded | Our own: the base male Tripo made from its approved sheet (`art/characters/base-male/`), cleaned once (its topology rebuilt evenly if morphs or deformation need it) |
-| Skeleton | Ours (the Quaternius mannequin, forearm twist bones), so all our clips play | `figure.gltf` |
+| Skeleton | Ours: the one Quaternius's animation libraries use, Unreal's names, with Tripo's twist bones, so all our clips play (D115) | `mannequin.glb` (clips.py) |
 | Skin weights | Made for this mesh, on our bones | Tripo's rig converted onto our bones (as now; it passes the rig checks), fixed on the base if a check fails |
 | Patches | 1,024 patches a garment can hide | Cut once |
 | Sockets | Hands, head, back, belt | Rules on the skeleton and skin, as now |

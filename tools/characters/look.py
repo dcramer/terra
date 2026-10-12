@@ -5,12 +5,14 @@ the repository root. Paths given to a script are relative to that root. Blender 
 metres; the glTF exporter turns that into the game's Y-up.
 """
 
+import json
 import math
 import os
 import sys
 
 import bpy
 import numpy as np
+from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -23,7 +25,8 @@ GEAR_MADE = os.path.join(OUT, "gear")
 # The source art it reads (art/README.md), and the assets it writes for the game.
 ART = os.path.join(ROOT, "art")
 ASSETS = os.path.join(ROOT, "assets")
-FIGURE = os.path.join(ASSETS, "models", "character", "figure.gltf")
+# The mannequin and the clips the game plays, cut from the animation libraries (clips.py).
+FIGURE = os.path.join(ASSETS, "models", "character", "mannequin.glb")
 
 # The palette, in sRGB, from the sandbox's own recolouring (play/flora.rs and props.rs).
 # A model's materials must be named from this list; its colour comes from here, not the file.
@@ -107,6 +110,51 @@ def reset():
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
+# Weight-blended skinning, as the game does it (crates/terra_game/src/skinning.rs): dual
+# quaternions, which keep a limb's volume through a roll and a knee's or elbow's through a deep
+# bend, but for the skin the joints in `linear_joints` move: round the hips, across the wide
+# blend of seat and groin, dual quaternions bulge (the seat 8 cm through the floor mid-roll)
+# and the plain linear blend does better. One rule for the game and the tools, as data.
+with open(os.path.join(ASSETS, "models", "character", "skinning.json")) as _f:
+    _SKINNING = json.load(_f)
+LBS_BONES = tuple(_SKINNING["linear_joints"])
+LBS_GAIN = float(_SKINNING["linear_gain"])
+
+
+def dqs_share(weights):
+    """How much of a vertex is skinned with dual quaternions, from its weights by bone name."""
+    return max(0.0, 1.0 - LBS_GAIN * sum(w for name, w in weights.items() if name in LBS_BONES))
+
+
+def skin_as_game(linear=False, method=None):
+    """Skins every skinned mesh loaded as the game does: weight-blended, dual quaternions but
+    round the hips (`dqs_share`). `method` "linear" or "dqs"
+    skins all of it one way, to compare; `linear=True` is "linear". Call it after loading and
+    before posing anything to measure or look at."""
+    method = method or ("linear" if linear else "blended")
+    for o in bpy.data.objects:
+        arms = [m for m in o.modifiers if m.type == "ARMATURE"]
+        if not arms:
+            continue
+        first = arms[0]
+        for extra in arms[1:]:
+            o.modifiers.remove(extra)
+        first.use_deform_preserve_volume = method == "dqs"
+        if method != "blended":
+            continue
+        names = {g.index: g.name for g in o.vertex_groups}
+        group = o.vertex_groups.get("dqs_share") or o.vertex_groups.new(name="dqs_share")
+        for v in o.data.vertices:
+            share = dqs_share({names[g.group]: g.weight for g in v.groups if g.group in names})
+            group.add([v.index], share, "REPLACE")
+        # Blender's own weight blending: a second armature on the same input, mixed in by
+        # the group.
+        dq = o.modifiers.new("Armature DQS", "ARMATURE")
+        dq.object = first.object
+        dq.use_deform_preserve_volume = True
+        dq.use_multi_modifier = True
+        dq.vertex_group = group.name
+
 def material(name):
     """The palette material called `name`, made once."""
     if name not in PALETTE:
@@ -161,6 +209,48 @@ def stage():
     mat.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = linear(GROUND) + (1.0,)
     mat.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 1.0
     plane.data.materials.append(mat)
+
+
+def close_up(rig, bone, span, sides=(0, 90, 180, 270), size=400):
+    """Renders `rig`'s body close on `bone` (at its posed head), `span` metres across, once from
+    each of `sides` (degrees round from the front), with an orthographic camera so nothing
+    stands in front; any other body is hidden meanwhile. Returns the pictures' paths, named
+    for this process so two runs at once do not overwrite each other's."""
+    scene = bpy.context.scene
+    cam = bpy.data.objects.get("CloseCam") or bpy.data.objects.new("CloseCam", bpy.data.cameras.new("CloseCam"))
+    if cam.name not in scene.collection.objects:
+        scene.collection.objects.link(cam)
+    cam.data.type = "ORTHO"
+    cam.data.ortho_scale = span
+    scene.camera = cam
+    scene.render.resolution_x = scene.render.resolution_y = size
+    hidden = {o: o.hide_render for o in scene.objects if o.type == "MESH" and o.name != "Ground"}
+
+    def worn_by_rig(o):
+        # Skinned to it, or hung anywhere beneath it (on a socket, on a bone).
+        if o.find_armature() is rig:
+            return True
+        while o.parent is not None:
+            o = o.parent
+            if o is rig:
+                return True
+        return False
+
+    for o in hidden:
+        o.hide_render = not worn_by_rig(o)
+    at = rig.matrix_world @ rig.pose.bones[bone].head
+    paths = []
+    for side in sides:
+        a = math.radians(side)
+        cam.location = at + Vector((math.sin(a), -math.cos(a), 0)) * 6
+        cam.rotation_euler = (math.radians(90), 0, a)
+        path = os.path.join(OUT, f"close-{os.getpid()}-{len(paths)}-{bone}.png")
+        scene.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+        paths.append(path)
+    for o, h in hidden.items():
+        o.hide_render = h
+    return paths
 
 
 def stitch(tiles, path):
