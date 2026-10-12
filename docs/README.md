@@ -29,6 +29,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [combat.md](combat.md) | Real time on stamina, after Enshrouded; weapon skills by doing; abilities from essences; rank decides more than skill. |
 | [creatures.md](creatures.md) | Wildlife with routines and a food chain; monsters that form where magic pools. |
 | [essences.md](essences.md) | Essences, abilities and ranks; skills, studied techniques and powers as three ways to grow; mana. |
+| [magic.md](magic.md) | Magic as a whole, with examples: core essences, confluences by rule, awakening as a weighted draw of generated powers, combat styles and studied crafts from skill books, old-school spellcraft (reagents, words of power, Mark and Recall, scrolls and wands), and magic beyond these. |
 | [crafting.md](crafting.md) | Resources by region and rank, tools, stations run by recruits, learning what to make. |
 | [people.md](people.md) | Settlements with days, quests as what people say, recruits, trade. |
 | [tribe.md](tribe.md) | Your tribe: recruits who live in your claims and work, build and defend on their own, without being managed. |

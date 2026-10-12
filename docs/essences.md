@@ -59,6 +59,9 @@ Which keys a skill takes would differ: a craft might take a teacher or a feat, a
 
 ## How essences would work
 
+Worked out with examples in [magic.md](magic.md): core essences, confluences by rule, and awakening stones that draw each power.
+
+
 - **Essences are found**, mostly from monsters of their kind and from strong pooling places: fire from fire things, wing from fliers. What you can become depends on where you hunt, which is a reason to explore (D91).
 - **A few slots**, as in the books: three essences, and a confluence formed by the three together. The combination is the player's identity, chosen by what they absorb, with no class picked at the start.
 - **Each essence grants abilities**, which open over time and improve by use, keeping D88's rule.

@@ -35,6 +35,7 @@ This overview gives the idea, what drives the world, and the principles. Each sy
 |---|---|---|
 | Combat | [combat.md](combat.md) | Real time, on stamina, after Enshrouded; weapons as skills by doing; abilities from essences; rank decides more than skill |
 | Creatures | [creatures.md](creatures.md) | Wildlife with routines and a food chain; monsters that form where magic pools, kinds made by rule |
+| Magic | [magic.md](magic.md) | Open (D163): core essences, awakening as a weighted draw of generated powers, combat styles and crafts from skill books, old-school spellcraft |
 | Essences, abilities and ranks | [essences.md](essences.md) | After the books: a few essences and a confluence, abilities that improve by use, ranks as the spine |
 | Resources, tools and crafting | [crafting.md](crafting.md) | Materials by region and rank, one tool to a job, stations in claims run by recruits, wear and repair (open) |
 | People | [people.md](people.md) | Settlements with days, quests as what people say, recruits, trade |
