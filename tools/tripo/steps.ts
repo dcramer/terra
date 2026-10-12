@@ -3,10 +3,10 @@
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { type Args, output, report, stem } from "./cli.ts";
 import { gltfOf, meshNames } from "./glb.ts";
-import { type ImageRef, type Operator, type Studio, StudioError, log, sleep } from "./studio.ts";
+import { type ImageRef, type Operator, type Project, type Studio, StudioError, log, sleep } from "./studio.ts";
 import { DEFAULT, EXPORT_FORMATS } from "./versions.ts";
 
 // Waits out an operation already running on a project: Studio refuses another until it ends.
@@ -26,11 +26,22 @@ export async function apply(client: Studio, a: Args, pid: string, name: string, 
   await finish(client, pid, receipt.operator_id, output(a, pid, suffix));
 }
 
-// Downloads the model an operation made and reports it, with what it was charged.
+// Saves the model an operation made and reports it, with what it was charged.
 export async function finish(client: Studio, pid: string, op: string | undefined, path: string): Promise<void> {
   const detail = await client.project(pid, op);
-  await client.download(detail.model_url, path);
+  await saveGlb(client, detail, path);
   report({ project: pid, operator: detail.operator.operator_id, credits: await client.charged(), files: [path] });
+}
+
+// The format Studio keeps a model in: GLB, or FBX for a quad Smart Mesh.
+export function storedFormat(detail: Project): string {
+  return extname(new URL(detail.model_url).pathname).slice(1).toLowerCase() || "glb";
+}
+
+// A project's model as a GLB: Studio's own file when it is one, else exported as one (free).
+async function saveGlb(client: Studio, detail: Project, path: string): Promise<void> {
+  if (storedFormat(detail) === "glb") await client.download(detail.model_url, path);
+  else await exportFile(client, detail.id, path, "glb", Boolean(detail.operator.is_rigged), [], false, textureSize(detail.operator));
 }
 
 export async function textureModel(client: Studio, pid: string, source: Record<string, unknown>, quality: string, align: string, delight: boolean): Promise<string> {
@@ -79,7 +90,9 @@ export async function aiMotion(client: Studio, prompt: string, seconds: number):
   }
 }
 
-export async function exportFile(client: Studio, pid: string, path: string, format: string, animations: string[] = [], inPlace = false, textureSize = 2048, fbxFor = "blender"): Promise<string> {
+// Exports a project's model. A rigged model keeps its skeleton, as the app exports it, with
+// the animations given.
+export async function exportFile(client: Studio, pid: string, path: string, format: string, rigged: boolean, animations: string[] = [], inPlace = false, textureSize = 2048, fbxFor = "blender"): Promise<string> {
   const body = {
     animate_in_place: inPlace,
     animations,
@@ -98,7 +111,7 @@ export async function exportFile(client: Studio, pid: string, path: string, form
     // embedded, which gives one FBX, so we do for every other format.
     texture_packaging: format === "glb" || format === "obj" ? "zip" : "embedded",
     texture_size: textureSize,
-    with_animation: animations.length > 0,
+    with_animation: rigged || animations.length > 0,
   };
   const receipt = await client.start("export", body);
   let url = receipt.model_url;
@@ -118,7 +131,9 @@ export function textureSize(op: Operator | undefined): number {
 export async function modelGltf(client: Studio, pid: string): Promise<any> {
   const dir = mkdtempSync(join(tmpdir(), "tripo-"));
   try {
-    const doc = gltfOf(readFileSync(await client.download((await client.project(pid)).model_url, join(dir, "model.glb"))));
+    const path = join(dir, "model.glb");
+    await saveGlb(client, await client.project(pid), path);
+    const doc = gltfOf(readFileSync(path));
     if (!doc) throw new StudioError("the project's model is not a GLB; cannot read it");
     return doc;
   } finally {

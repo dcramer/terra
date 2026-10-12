@@ -2,7 +2,7 @@
 
 import { type Args, type Command, int, out, output, projectId } from "../cli.ts";
 import { triangles } from "../glb.ts";
-import { apply, finish, modelGltf, partNames, ready, textureModel, uploadViews } from "../steps.ts";
+import { apply, finish, modelGltf, partNames, ready, storedFormat, textureModel, uploadViews } from "../steps.ts";
 import { type Studio, StudioError, log } from "../studio.ts";
 import { COMPLETION, DEFAULT, SEGMENTATION, TEXTURE } from "../versions.ts";
 
@@ -88,7 +88,11 @@ async function edit(client: Studio, a: Args): Promise<void> {
   if (!op.is_nexus_mesh || op.is_textured || op.is_rigged || op.is_segmented || op.is_pbr) {
     throw new StudioError("Mesh Edit works on an untextured P2 Smart Mesh only (model --model p2 --no-texture)");
   }
-  const faces = a.values.faces ? int(a.values.faces, "--faces") : Math.min(triangles(await modelGltf(client, pid)), 50000);
+  // As the app: the model's own faces, at most 25,000 for a quad model, which Studio keeps as
+  // FBX, or 50,000 for a GLB. A quad is one face, two triangles in the GLB we read.
+  const quads = storedFormat(await client.project(pid)) === "fbx";
+  const own = triangles(await modelGltf(client, pid)) / (quads ? 2 : 1);
+  const faces = a.values.faces ? int(a.values.faces, "--faces") : Math.min(Math.round(own), quads ? 25000 : 50000);
   await apply(client, a, pid, "local_edit", { bbox: [lo, hi], face_limit: faces, project_id: pid, source_operator_id: op.operator_id }, "edited");
 }
 

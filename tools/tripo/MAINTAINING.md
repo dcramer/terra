@@ -89,9 +89,13 @@ When the code cannot settle a question, for example what a reply looks like, cap
   - Generated motions are refused on non-humanoid rigs before spending.
   - `import` keeps UVs only when the file has them.
   - `uv` waits for an unwrap already running.
-- **Added from the app:** `model --variations` (P2), `edit` (Mesh Edit), `unanimate`, `cancel`, `restore`, `fork`, `rename`, and `show` now lists the project's steps.
-- **Run live:** `show`, `animate`, `unanimate`, `rename`, `fork`, `restore`, `image` with a reference and no aspect, `import`, and `rig` with V3 Mixamo.
-- **Not run live yet, read from the app's code only:** `edit`, `cancel`, `rig --type other`, `model --variations`, and the new `model` defaults. Run each once when it is first needed, and move it to the list above.
+- **Added from the app:** `model --variations` (P2), `edit` (Mesh Edit), `unanimate`, `cancel`, `restore`, `fork`, `rename`, `delete`, and `show` now lists the project's steps.
+- **Run live, and working:** `show`, `animate`, `unanimate`, `rename`, `fork`, `restore`, `image` (with and without a reference), `import`, `rig` with V3 Mixamo and with `--type other` (a wolf, rigged as a quadruped), `model` at the new defaults (charged 55, as the README says), `model --model p2 --variations 2`, `edit`, `cancel` (nothing charged, no step left), and `export` of a rigged model.
+- **Found by running:**
+  - `export` left a rigged model's skeleton out; the app keeps it (`with_animation` is true for any rigged model), and so does the CLI now.
+  - Studio keeps a quad Smart Mesh as FBX, which the CLI had saved under a `.glb` name and could not read parts from; it now exports a GLB from it, as it does for every result.
+  - P2 models and Mesh Edit were not charged on our plan this time, and the CLI reported 0 for them, which the balance confirmed.
+- **Not settled:** where `edit`'s box lands. Both runs remade their region almost unchanged, so the result does not show it; the app's viewer starts the box at the model's own bounds, which suggests the model's coordinates.
 - **Left out on purpose:**
   - Magic Brush (`retexture_generate`), which needs a render of the app's viewport.
   - Hand-painted segmentation (`modification`) and the workspace's metadata (`meta_modification`).

@@ -43,16 +43,17 @@ Every command that makes or changes a model prints one line of JSON with the `pr
 | `segment PROJECT` | Splits the model into parts | 40 |
 | `fill PROJECT [--ai]` | Closes the holes segmenting leaves, or rebuilds hidden parts | free |
 | `uv PROJECT` | Unwraps the UVs again (Smart UV) | 20 (free during a trial) |
-| `edit PROJECT --box X0,Y0,Z0,X1,Y1,Z1` | Remakes what is inside a box on an untextured P2 Smart Mesh (Mesh Edit); the box is in the model's coordinates as `download` gives them, each -1 to 1 | 50 |
+| `edit PROJECT --box X0,Y0,Z0,X1,Y1,Z1` | Remakes what is inside a box on an untextured P2 Smart Mesh (Mesh Edit); the box is in the model's coordinates as `export` gives them (not yet confirmed; MAINTAINING.md), each -1 to 1 | 50 (free on our plan so far) |
 | `rig PROJECT [--skeleton …] [--type humanoid\|other]` | Auto-rig, with fingers; see Rigs below | 20 |
 | `animate PROJECT NAME … [--prompt TEXT]` | Puts preset animations (`walk`, `run`, `idle`, `jump`, …) or ones made from a description (humanoids only) on a rigged model, and exports them in one GLB or FBX | presets free, `--prompt` 20 |
 | `unanimate PROJECT NAME …` | Removes animations from a rigged model | free |
 | `export PROJECT --format glb\|fbx\|obj\|stl\|usdz\|3mf` | Exports in a format; `--animations` to include animations, `--texture-size` (default the model's own). OBJ comes zipped with its textures | free |
-| `download PROJECT` | The model as Studio stores it | free |
+| `download PROJECT` | The model as Studio keeps it | free |
 | `cancel PROJECT` | Cancels the operation running on a project | |
 | `restore PROJECT OPERATOR` | Rolls a project back to an earlier step, from `show`'s steps | free |
 | `fork PROJECT [OPERATOR]` | Copies a project, at its latest step or an earlier one, into a new project | 5 by the app's price list |
 | `rename PROJECT NAME` | Renames a project | free |
+| `delete PROJECT …` | Deletes projects for good | free |
 | `report [--all]` | Notes the account's spending for the token stats; every command does this too | |
 
 Credits are from Tripo's price list in the app's own code, checked against what runs were charged; Tripo can change them. This table is the one place they are written down; the skills and docs point here.
@@ -67,7 +68,7 @@ The app's Auto Rig is Tripo's V3 rig, and `rig` sends what it does. A humanoid (
 
 `--skeleton tripo` is the older V1 rig in Tripo's own skeleton (78 joints, `BoneRoot`, `Hip`, `L_Thigh`…), which the app no longer offers; its twist and share bones move nothing. Our character converter takes it (`tools/characters`), and on the same body it passed our rig check where V3's Mixamo rig pinched at the knees and elbows (2026-10-12), so the character pipeline keeps it for now.
 
-`download` gives Studio's meshopt-compressed GLB, which some tools cannot open; `export --format glb` gives a plain one.
+Every command saves its result as a plain GLB. `download` gives Studio's own file instead: a meshopt-compressed GLB, which some tools cannot open, or an FBX for a quad Smart Mesh. A rigged model exports with its skeleton, and with the animations asked for.
 
 A project runs one operation at a time, so a command on a project that is busy waits for what is running, then starts. A command stopped with Ctrl-C leaves its operation running on Studio; the next command on that project waits for it. The `credits` a command prints are what Tripo charged for the operations it started, read from the account's own history, so they are exact even when other runs spend at the same time.
 
@@ -80,7 +81,7 @@ The [token stats](../token-stats/README.md) count Tripo's credits beside Claude'
 | File | What it holds |
 |---|---|
 | `tripo.ts` | The command line: runs one command |
-| `commands/` | The commands, by what they do: `make.ts` (image, views, model, import), `edit.ts` (texture to Mesh Edit), `rig.ts` (rig, animate), `project.ts` (the account, a project's history, export) |
+| `commands/` | The commands, by what they do: `make.ts` (image, views, model, import), `edit.ts` (texture to Mesh Edit), `rig.ts` (rig, animate), `project.ts` (the account, a project's history, export, deleting) |
 | `steps.ts` | What commands share: waiting on a project, running an operation and saving its result, texturing, animating, exporting |
 | `studio.ts` | Studio's backend: login, requests, uploads, waiting, what a run was charged |
 | `versions.ts` | Every model version and name the app sends |

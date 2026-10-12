@@ -253,6 +253,18 @@ test("edit: Mesh Edit on an untextured P2 model, the box clamped as the app does
   assert.deepEqual(textured.studio.operations, []);
 });
 
+test("a quad Smart Mesh, which Studio keeps as FBX, is saved and read as a GLB exported from it", async () => {
+  const fbx = (s: FakeStudio) => {
+    s.detail.model_url = "https://fake/output_mesh.fbx";
+    s.detail.operator = { operator_id: "head", is_nexus_mesh: true };
+  };
+  const { studio } = await run(["edit", PID, "--box", "0,0,0,1,1,1", ...out("e.glb")], fbx);
+  const names = studio.operations.map(([name]) => name);
+  assert.deepEqual(names, ["export", "local_edit", "export"], "read through an export, edited, saved through an export");
+  assert.equal(studio.operations[1][1].face_limit, 6, "a quad is one face");
+  assert.equal(studio.operations[2][1].format, "gltf");
+});
+
 test("rig: the V3 rig on the unreal skeleton by default", async () => {
   const { studio } = await run(["rig", PID, ...out("r.glb")]);
   assert.deepEqual(studio.requests.find((r) => r.path.endsWith("pre_rig_check"))?.body, { model_version: "v3.0-20260909", project_id: PID });
@@ -306,9 +318,21 @@ test("export: at the model's own texture size, an FBX in one file", async () => 
   assert.equal(fbx.format, "fbx");
   assert.equal(fbx.texture_size, 1024);
   assert.equal(fbx.texture_packaging, "embedded");
+  assert.equal(fbx.with_animation, false, "an unrigged model has no skeleton to export");
 });
 
-test("project steps: unanimate, cancel, restore, fork and rename", async () => {
+test("export: a rigged model keeps its skeleton, with only the animations asked for", async () => {
+  const rigged = (s: FakeStudio) => {
+    s.detail.operator.is_rigged = true;
+    s.detail.operator.retarget = [{ name: "preset:biped:walk", status: "success", operator_id: "walk-op" }, { name: "preset:biped:run", status: "success", operator_id: "run-op" }];
+  };
+  const plain = (await run(["export", PID, ...out("x.glb")], rigged)).studio.operations[0][1];
+  assert.equal(plain.with_animation, true);
+  assert.deepEqual(plain.animations, []);
+  assert.deepEqual((await run(["export", PID, "--animations", "run", ...out("x.glb")], rigged)).studio.operations[0][1].animations, ["run-op"]);
+});
+
+test("project steps: unanimate, cancel, restore, fork, rename and delete", async () => {
   const withWalk = (s: FakeStudio) => (s.detail.operator.retarget = [{ name: "preset:biped:walk", status: "success", operator_id: "walk-op" }]);
   assert.deepEqual((await run(["unanimate", PID, "walk"], withWalk)).studio.operations, [
     ["remove_retarget", { model_operator_id: "head", project_id: PID, retarget_operator_id: "walk-op" }],
@@ -318,6 +342,9 @@ test("project steps: unanimate, cancel, restore, fork and rename", async () => {
   assert.deepEqual((await run(["restore", PID, "old-op", ...out("r.glb")])).studio.operations, [["restore", { operator_id: "old-op", project_id: PID }]]);
   assert.deepEqual((await run(["fork", PID])).studio.operations, [["save_as_new", { operator_id: "head", project_id: PID }]]);
   assert.deepEqual((await run(["rename", PID, "a crate"])).studio.operations, [["update_name", { name: "a crate", project_id: PID }]]);
+  const other = "66666666-7777-8888-9999-000000000000";
+  const deleted = await run(["delete", PID, `https://studio.tripo3d.ai/workspace/${other}`]);
+  assert.deepEqual(deleted.studio.requests.find((r) => r.method === "DELETE"), { method: "DELETE", path: "/v2/studio/assets", body: { project_ids: [PID, other] }, query: undefined });
 });
 
 test("credits: what Tripo charged for this run's operations, not other runs'", async () => {

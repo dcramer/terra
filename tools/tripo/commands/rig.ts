@@ -37,7 +37,7 @@ async function animate(client: Studio, a: Args): Promise<void> {
   for (const m of motions) ids.push(await retarget(client, pid, rigging.type, { animation: `preset:${rigging.type}:${m}` }));
   for (const p of prompts) ids.push(await retarget(client, pid, rigging.type, { motion: await aiMotion(client, p, int(v.seconds, "--seconds")) }));
   const size = v["texture-size"] ? int(v["texture-size"], "--texture-size") : textureSize((await client.project(pid)).operator);
-  const path = await exportFile(client, pid, output(a, pid, "animated", `.${v.format}`), v.format, ids, Boolean(v["in-place"]), size);
+  const path = await exportFile(client, pid, output(a, pid, "animated", `.${v.format}`), v.format, true, ids, Boolean(v["in-place"]), size);
   report({ project: pid, credits: await client.charged(), files: [path] });
 }
 

@@ -1,7 +1,7 @@
 // The account and its projects: what is there, a project's history, and its files.
 
-import { type Args, type Command, int, out, output, projectId, report } from "../cli.ts";
-import { finish, exportFile, ready, textureSize } from "../steps.ts";
+import { type Args, type Command, int, out, output, projectId, projectIdOf, report } from "../cli.ts";
+import { exportFile, finish, ready, storedFormat, textureSize } from "../steps.ts";
 import { noteSpending } from "../spending.ts";
 import { type Studio, StudioError } from "../studio.ts";
 import { EXPORT_FORMATS } from "../versions.ts";
@@ -52,14 +52,14 @@ async function exportModel(client: Studio, a: Args): Promise<void> {
   }
   const ext = v.format === "obj" ? ".zip" : `.${v.format}`; // OBJ comes zipped with its textures
   const size = v["texture-size"] ? int(v["texture-size"], "--texture-size") : textureSize(detail.operator);
-  const path = await exportFile(client, pid, output(a, pid, "export", ext), v.format, ids, Boolean(v["in-place"]), size, v["fbx-for"]);
+  const path = await exportFile(client, pid, output(a, pid, "export", ext), v.format, Boolean(detail.operator.is_rigged), ids, Boolean(v["in-place"]), size, v["fbx-for"]);
   report({ project: pid, credits: await client.charged(), files: [path] });
 }
 
 async function download(client: Studio, a: Args): Promise<void> {
   const pid = projectId(a);
   const detail = await client.project(pid);
-  const path = await client.download(detail.model_url, output(a, pid, "model"));
+  const path = await client.download(detail.model_url, output(a, pid, "model", `.${storedFormat(detail)}`));
   report({ project: pid, operator: detail.operator.operator_id, files: [path] });
 }
 
@@ -85,6 +85,14 @@ async function fork(client: Studio, a: Args): Promise<void> {
   const op = a.positionals[1] ?? (await client.project(pid)).operator.operator_id;
   const made = await client.start("save_as_new", { operator_id: op, project_id: pid });
   report({ project: made.project_id, from: pid, operator: op, credits: await client.charged() });
+}
+
+// Deletes projects for good, as the app's asset list does.
+async function remove(client: Studio, a: Args): Promise<void> {
+  if (!a.positionals.length) throw new StudioError("name the projects to delete");
+  const ids = a.positionals.map(projectIdOf);
+  await client.call("DELETE", "/v2/studio/assets", { project_ids: ids });
+  report({ deleted: ids });
 }
 
 async function rename(client: Studio, a: Args): Promise<void> {
@@ -120,7 +128,7 @@ export const projects: Record<string, Command> = {
   },
   download: {
     usage: "download PROJECT [-o out.glb]",
-    help: "download a project's model as Studio stores it (meshopt-compressed GLB)",
+    help: "download a project's model as Studio keeps it: a meshopt-compressed GLB, or FBX for a quad Smart Mesh",
     options: out,
     run: download,
   },
@@ -137,6 +145,7 @@ export const projects: Record<string, Command> = {
     run: fork,
   },
   rename: { usage: 'rename PROJECT "NAME"', help: "rename a project", free: true, run: rename },
+  delete: { usage: "delete PROJECT …", help: "delete projects for good", free: true, run: remove },
   report: {
     usage: "report [--all]",
     help: "note this account's Tripo spending for the token stats (every command does this too)",
