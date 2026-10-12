@@ -24,6 +24,17 @@ From the developers, 2026-10-11 (D98): use the books' system as the baseline and
 | How it grows | By doing it more | Abilities by use, through ranks |
 | What it says about you | What you have practised | Who you are |
 
+## Skills on the rank ladder
+
+Asked by the developers on 2026-10-11: can skills rank up iron, bronze and so on, after the plan? Proposed, Open: **yes, on the same ladder as everything else**, so monsters, places, portals, materials, essences and skills are all read one way.
+
+- **Each skill climbs iron, bronze, silver, gold, diamond**, with many small steps inside a rank that come often, and a rank-up now and then as a milestone. That is the feel of the grinding games with many skills: always a step coming, sometimes a big one.
+- **A rank-up opens something**, not only bigger numbers: a technique, a kind of recipe, a move. As in the books, where a rank changes what an ability does.
+- **A skill's rank decides what rank of thing you can work.** An iron-rank smith cannot work silver-rank metal; an iron-rank miner chips at a bronze-rank vein slowly, if at all. Climbing a skill then has a place in the world to go to, the way level requirements pull a player along in RuneScape.
+- **Two ladders, not one.** Essences make your rank as a person, which decides what you can survive (D98); skills decide what you can make and do. A gold-rank crafter can be an iron-rank fighter.
+- **Recommended: skills may run ahead of your own rank**, so a crafter or gatherer has a whole game of their own. Open: the books might say a person's rank caps what their hands can do.
+- **Grinding, but never a chore** (D122): every step should feel like progress. Repetition for its own sake is where the grind games lose people.
+
 ## How essences would work
 
 - **Essences are found**, mostly from monsters of their kind and from strong pooling places: fire from fire things, wing from fliers. What you can become depends on where you hunt, which is a reason to explore (D91).
@@ -43,3 +54,5 @@ The books' fighters spend mana on abilities. From the developers (D102): **there
 3. Answered: **mana and stamina** are both pools (D102).
 4. **What rank does a player start at**, and how long is a rank?
 5. **Skills and essences together**: does a high skill change what an ability does (a skilled archer's fire arrow)?
+6. **Skills on the rank ladder**, as proposed above, and **may a skill run ahead of your own rank**?
+7. **Which grinding games are the reference** for many skills: RuneScape, Ultima Online, Wurm Online, Star Wars Galaxies, the Elder Scrolls games, or others?

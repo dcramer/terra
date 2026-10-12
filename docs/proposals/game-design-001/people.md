@@ -7,6 +7,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 - There are NPCs (D70). Villages have things going on, and there are factions, discovered as you go (D95).
 - Recruits come mostly by rescue, or as something like a reward for helping their settlement (D90). Hostile settlements may hold prisoners you can rescue; players do not capture or keep prisoners (D95).
 - Quests may exist, but no tracked quest log and no journal (D92).
+- **Recruits have their own progression** (D123, 2026-10-11): at least those who join you grow, with a progression system of their own. Whether other people do is open.
 
 ## Based on
 
@@ -29,7 +30,7 @@ Part of [game design 001](README.md). A proposal for the developers to react to;
 - **Who**: people you rescued, or who chose to follow you for what you did for their settlement.
 - **Where**: they live in your claims (D94), and need a bed, food and safety.
 - **What they do**, by what they are good at: run a station ([crafting.md](crafting.md)), gather, farm, haul, guard (D90). Some might travel with you.
-- **What they become**: they improve at their work by doing it, as you do (D88).
+- **What they become** (D123): they improve at their work by doing it, as you do (D88). Proposed: on the same ladder as your skills ([essences.md](essences.md#skills-on-the-rank-ladder)), so a recruit has a rank in what they do, such as Bren a bronze-rank smith, and what they can make follows it. A recruit you bring along grows; one you rescue arrives with what they had already learned. Their skills read on their own sheet, like yours (D93).
 - **How many**: limited by what your claims can house and feed.
 
 ## Trade
