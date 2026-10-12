@@ -9,9 +9,13 @@
 //!   it made of?", and the planet generated from a seed that answers it.
 //! - [`planet`]: a generated planet with the edits made to it, which is what the game
 //!   digs, fills and walks on. Edits are kept as the operations themselves (D21).
+//! - [`mesh`]: the chunks the ground is drawn in, and meshing one with seams toward finer
+//!   neighbours (D32).
 
 pub mod field;
+pub mod mesh;
 pub mod planet;
 
 pub use field::{Field, GeneratedPlanet, Sample, material};
+pub use mesh::{CELLS, Sides, VOXEL_M, chunk_at, chunk_origin, chunk_size_m, mesh_chunk};
 pub use planet::VoxelPlanet;

@@ -5593,6 +5593,7 @@ name = "terra_voxel"
 version = "0.1.0"
 dependencies = [
  "glam",
+ "libm",
  "terra_core",
  "terra_gen",
  "transvoxel",

@@ -1,0 +1,370 @@
+//! Meshing a chunk: the surface of the ground within a cube, as triangles, with what it is
+//! made of at each vertex. Smooth, by the Transvoxel algorithm (the `transvoxel` crate,
+//! D32), so a chunk next to finer ones can be meshed with a transition face toward them
+//! and the two meet without cracks.
+//!
+//! Chunks are cubes on a grid per detail level: level 0 is the finest, with voxels of
+//! [`VOXEL_M`], and each level above is twice as coarse. Every chunk is [`CELLS`] voxels
+//! on a side, so a coarser chunk covers more ground with the same work.
+
+use crate::field::{Field, material};
+use glam::Vec3;
+use std::cell::RefCell;
+use terra_core::{ChunkId, ChunkMesh, MaterialId, MaterialWeights};
+use transvoxel::prelude::*;
+use transvoxel::structs::grid_point::GridPoint;
+use transvoxel::structs::vertex_index::VertexIndex;
+use transvoxel::structs::voxel_blocks::VoxelBlockRelayingToField;
+use transvoxel::traits::data_field::DataField;
+use transvoxel::traits::mesh_builder::MeshBuilder;
+
+/// Voxels along each side of a chunk.
+pub const CELLS: usize = 32;
+/// The side of a voxel at the finest level, in metres: half a metre, as Enshrouded's are
+/// and the build grid is (D48).
+pub const VOXEL_M: f32 = 0.5;
+
+/// The side of a chunk at a level, in metres.
+pub fn chunk_size_m(level: u8) -> f32 {
+    CELLS as f32 * VOXEL_M * (1u32 << level) as f32
+}
+
+/// The corner of a chunk with the lowest coordinates.
+pub fn chunk_origin(id: ChunkId) -> Vec3 {
+    id.coord.as_vec3() * chunk_size_m(id.level)
+}
+
+/// The chunk at a level that holds a point.
+pub fn chunk_at(point: Vec3, level: u8) -> ChunkId {
+    ChunkId {
+        level,
+        coord: (point / chunk_size_m(level)).floor().as_ivec3(),
+    }
+}
+
+/// The faces of a chunk that meet finer chunks, which it is meshed with a transition
+/// toward. One bit a face, in the order of [`Sides::ALL`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Sides(pub u8);
+
+impl Sides {
+    pub const LOW_X: Sides = Sides(1);
+    pub const HIGH_X: Sides = Sides(2);
+    pub const LOW_Y: Sides = Sides(4);
+    pub const HIGH_Y: Sides = Sides(8);
+    pub const LOW_Z: Sides = Sides(16);
+    pub const HIGH_Z: Sides = Sides(32);
+    pub const ALL: [Sides; 6] = [
+        Sides::LOW_X,
+        Sides::HIGH_X,
+        Sides::LOW_Y,
+        Sides::HIGH_Y,
+        Sides::LOW_Z,
+        Sides::HIGH_Z,
+    ];
+
+    pub fn none() -> Sides {
+        Sides(0)
+    }
+
+    pub fn contains(self, side: Sides) -> bool {
+        self.0 & side.0 == side.0
+    }
+
+    pub fn with(self, side: Sides) -> Sides {
+        Sides(self.0 | side.0)
+    }
+
+    /// Which way out of the chunk a single face looks, as a step between chunk coordinates.
+    pub fn outward(self) -> glam::IVec3 {
+        match self {
+            Sides::LOW_X => glam::IVec3::NEG_X,
+            Sides::HIGH_X => glam::IVec3::X,
+            Sides::LOW_Y => glam::IVec3::NEG_Y,
+            Sides::HIGH_Y => glam::IVec3::Y,
+            Sides::LOW_Z => glam::IVec3::NEG_Z,
+            _ => glam::IVec3::Z,
+        }
+    }
+
+    fn to_transvoxel(self) -> TransitionSides {
+        let mut sides = TransitionSide::none();
+        for (ours, theirs) in Sides::ALL.into_iter().zip([
+            TransitionSide::LowX,
+            TransitionSide::HighX,
+            TransitionSide::LowY,
+            TransitionSide::HighY,
+            TransitionSide::LowZ,
+            TransitionSide::HighZ,
+        ]) {
+            if self.contains(ours) {
+                sides |= theirs;
+            }
+        }
+        sides
+    }
+}
+
+/// A voxel as the mesher sees it: a density, positive inside the ground, and a material.
+#[derive(Clone, Copy, Debug, Default)]
+struct Voxel {
+    density: f32,
+    material: MaterialId,
+}
+
+impl transvoxel::traits::voxel_data::VoxelData for Voxel {
+    type Density = f32;
+
+    fn density(&self) -> f32 {
+        self.density
+    }
+}
+
+/// Collects what the mesher makes into the shared chunk mesh.
+#[derive(Default)]
+struct Builder {
+    mesh: ChunkMesh,
+}
+
+impl MeshBuilder<Voxel, f32> for Builder {
+    fn add_vertex_between(
+        &mut self,
+        a: GridPoint<Voxel, f32>,
+        b: GridPoint<Voxel, f32>,
+        toward_b: f32,
+    ) -> VertexIndex {
+        let at = |point: &GridPoint<Voxel, f32>| {
+            Vec3::new(point.position.x, point.position.y, point.position.z)
+        };
+        let gradient = |point: &GridPoint<Voxel, f32>| {
+            Vec3::new(point.gradient.0, point.gradient.1, point.gradient.2)
+        };
+        let position = at(&a).lerp(at(&b), toward_b);
+        // Density rises into the ground, so the surface faces down its gradient.
+        let normal = -gradient(&a).lerp(gradient(&b), toward_b);
+        // The vertex lies where the surface crosses between the two; it is made of
+        // whichever of them is in the ground.
+        let inside = if a.voxel_data.density() > 0.0 { &a } else { &b };
+        let made_of = match inside.voxel_data.material {
+            material::AIR => material::STONE,
+            other => other,
+        };
+        self.mesh.positions.push(position);
+        self.mesh.normals.push(normal.normalize_or(Vec3::Y));
+        self.mesh.materials.push(MaterialWeights::single(made_of));
+        VertexIndex(self.mesh.positions.len() - 1)
+    }
+
+    fn add_triangle(&mut self, a: VertexIndex, b: VertexIndex, c: VertexIndex) {
+        self.mesh
+            .indices
+            .extend([a.0 as u32, b.0 as u32, c.0 as u32]);
+    }
+}
+
+/// Meshes the ground within a chunk, with transition faces toward any sides that meet
+/// finer chunks. Empty if the surface does not pass through it.
+pub fn mesh_chunk<F: Field>(field: &F, id: ChunkId, finer: Sides) -> ChunkMesh {
+    let origin = chunk_origin(id);
+    let block = Block::new(
+        [origin.x, origin.y, origin.z],
+        chunk_size_m(id.level),
+        CELLS,
+    );
+    // Nearby voxels share work, such as the land's height, through one memo. What the
+    // ground is made of is only asked near the surface: nothing deeper or higher reaches a
+    // vertex.
+    let memo = RefCell::new(F::Memo::default());
+    let near = 2.0 * VOXEL_M * (1u32 << id.level) as f32;
+    let sample = |x: f32, y: f32, z: f32| {
+        let point = Vec3::new(x, y, z);
+        let memo = &mut *memo.borrow_mut();
+        let distance = field.distance_in(point, memo);
+        let material = if distance.abs() < near {
+            field.sample_in(point, memo).material
+        } else {
+            material::AIR
+        };
+        Voxel {
+            density: -distance,
+            material,
+        }
+    };
+    let relay: &dyn DataField<Voxel, f32> = &sample;
+    // The chunk's own voxels are read once each. A finer neighbour is only read where it
+    // meets this chunk, so it asks the field directly. (The crate's own cached path reads
+    // neighbours from the wrong block, which cracks seams, so this builds the view itself.)
+    let mut blocks = BlockStarView::new_simple(VoxelVecBlock::cache(&sample, block));
+    for side in finer.to_transvoxel() {
+        blocks = blocks.with_neighbour(
+            VoxelBlockRelayingToField {
+                field: relay,
+                block: block.high_res_neighbour_to(side),
+            },
+            side,
+        );
+    }
+    extract(&blocks, 0.0, Builder::default()).mesh
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{GeneratedPlanet, VoxelPlanet};
+    use glam::IVec3;
+    use std::collections::HashMap;
+    use terra_core::{Ground, Operation, PlanetSpec};
+    use terra_gen::Seed;
+
+    fn planet() -> VoxelPlanet<GeneratedPlanet> {
+        VoxelPlanet::new(GeneratedPlanet::new(
+            PlanetSpec {
+                seed: Seed(7),
+                radius_m: 2000.0,
+            },
+            150.0,
+            Some(-20.0),
+        ))
+    }
+
+    /// The point on the ground straight up from the centre.
+    fn top(planet: &VoxelPlanet<GeneratedPlanet>) -> Vec3 {
+        Vec3::Y * (2000.0 + planet.field().height_m(Vec3::Y))
+    }
+
+    #[test]
+    fn a_chunk_on_the_surface_has_a_sound_mesh_of_its_materials() {
+        let planet = planet();
+        let mesh = mesh_chunk(&planet, chunk_at(top(&planet), 0), Sides::none());
+        assert!(mesh.is_consistent());
+        assert!(
+            mesh.triangle_count() > 100,
+            "{} triangles",
+            mesh.triangle_count()
+        );
+        // The surface faces the way the ground does there.
+        let facing: Vec3 = mesh.normals.iter().copied().sum::<Vec3>().normalize();
+        assert!(facing.dot(planet.normal(top(&planet))) > 0.95);
+        let soil = MaterialWeights::single(material::SOIL);
+        assert!(mesh.materials.contains(&soil));
+        // Every vertex is on the ground.
+        assert!(
+            mesh.positions
+                .iter()
+                .all(|&point| planet.sample(point).distance.abs() < VOXEL_M)
+        );
+    }
+
+    #[test]
+    fn a_chunk_far_from_the_surface_is_empty() {
+        let planet = planet();
+        let above = chunk_at(top(&planet) + Vec3::Y * 200.0, 0);
+        assert_eq!(
+            mesh_chunk(&planet, above, Sides::none()).triangle_count(),
+            0
+        );
+    }
+
+    #[test]
+    fn a_dig_shows_in_the_mesh() {
+        let mut planet = planet();
+        let ground = top(&planet);
+        let id = chunk_at(ground, 0);
+        let untouched = planet.field().clone();
+        planet.apply(&Operation::Dig {
+            centre: ground,
+            radius: 3.0,
+        });
+        let after = mesh_chunk(&planet, id, Sides::none());
+        // Some of the surface is now where the ground was, deep under it.
+        let in_the_hole = after
+            .positions
+            .iter()
+            .filter(|&&point| untouched.sample(point).distance < -2.0)
+            .count();
+        assert!(in_the_hole > 10, "there is a hole");
+    }
+
+    /// Edges used by one triangle only, after joining vertices at the same place.
+    fn open_edges(meshes: &[ChunkMesh]) -> Vec<(Vec3, Vec3)> {
+        let key = |p: Vec3| (p * 1000.0).round().as_ivec3();
+        let mut count: HashMap<(IVec3, IVec3), (usize, Vec3, Vec3)> = HashMap::new();
+        for mesh in meshes {
+            for triangle in mesh.indices.chunks(3) {
+                for (i, j) in [(0, 1), (1, 2), (2, 0)] {
+                    let (a, b) = (
+                        mesh.positions[triangle[i] as usize],
+                        mesh.positions[triangle[j] as usize],
+                    );
+                    let (ka, kb) = (key(a), key(b));
+                    if ka == kb {
+                        continue;
+                    }
+                    let edge = if (ka.x, ka.y, ka.z) < (kb.x, kb.y, kb.z) {
+                        (ka, kb)
+                    } else {
+                        (kb, ka)
+                    };
+                    count.entry(edge).or_insert((0, a, b)).0 += 1;
+                }
+            }
+        }
+        count
+            .into_values()
+            .filter(|(n, ..)| *n == 1)
+            .map(|(_, a, b)| (a, b))
+            .collect()
+    }
+
+    #[test]
+    fn a_coarse_chunk_meets_finer_ones_without_cracks() {
+        let planet = planet();
+        let ground = top(&planet);
+        // A coarse chunk whose high-x face is the plane x = 0, holding the ground there,
+        // and the four finer chunks on the other side of that face.
+        let size = chunk_size_m(1);
+        let coarse = ChunkId {
+            level: 1,
+            coord: IVec3::new(-1, (ground.y / size).floor() as i32, -1),
+        };
+        let height = ground.y - coarse.coord.y as f32 * size;
+        assert!(
+            (6.0..size - 6.0).contains(&height),
+            "the ground is well inside the coarse chunk: {height} m up it"
+        );
+        let mut meshes = vec![mesh_chunk(&planet, coarse, Sides::HIGH_X)];
+        for (y, z) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            let fine = ChunkId {
+                level: 0,
+                coord: IVec3::new(0, coarse.coord.y * 2 + y, coarse.coord.z * 2 + z),
+            };
+            meshes.push(mesh_chunk(&planet, fine, Sides::none()));
+        }
+        // Open edges on the shared face, away from the region's own outer rim, are cracks.
+        let low = chunk_origin(coarse);
+        let inside_face = |p: Vec3| {
+            p.x.abs() < 1e-3
+                && p.y > low.y + 1e-3
+                && p.y < low.y + size - 1e-3
+                && p.z > low.z + 1e-3
+                && p.z < low.z + size - 1e-3
+        };
+        let cracks: Vec<_> = open_edges(&meshes)
+            .into_iter()
+            .filter(|&(a, b)| inside_face(a) && inside_face(b))
+            .collect();
+        assert!(
+            cracks.is_empty(),
+            "{} cracks, such as {:?}",
+            cracks.len(),
+            cracks.first()
+        );
+        // Without the transition face there would be cracks, so the test can see them.
+        meshes[0] = mesh_chunk(&planet, coarse, Sides::none());
+        let cracks = open_edges(&meshes)
+            .into_iter()
+            .filter(|&(a, b)| inside_face(a) && inside_face(b))
+            .count();
+        assert!(cracks > 0, "the test finds cracks when there are some");
+    }
+}

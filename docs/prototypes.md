@@ -111,6 +111,7 @@ As of 2026-10-11.
 | The map, only where you have been (D76) | Built |
 | A local server (D51) | Missing |
 | Saving and loading | Built |
+| Feel: swing animations for the axe and pickaxe, a better harvesting experience, a small notice of what you gained when you harvest or pick something up, hit effects when damage lands, and the like | Missing; asked for by the developers on 2026-10-11 |
 | Done when: a developer plays it, an agent drives it, save and reload, frame times | The agent's run passes; the developers' play-test, frame times on the integrated GPU, and a save-and-reload check in the script are to do |
 
 ### In it

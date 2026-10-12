@@ -89,15 +89,16 @@ impl<F: Field> VoxelPlanet<F> {
 
     /// The ground at a point, with every edit laid over the generated field in order.
     pub fn sample(&self, point: Vec3) -> Sample {
-        let mut sample = self.field.sample(point);
-        for edit in &self.edits {
+        self.sample_in(point, &mut F::Memo::default())
+    }
+
+    /// The edits that reach a point, in the order they were made.
+    fn edits_at(&self, point: Vec3) -> impl Iterator<Item = &Edit> {
+        self.edits.iter().filter(move |edit| {
             let (centre, radius) = edit.centre_and_radius();
             let reach = radius + EDIT_MARGIN_M;
-            if point.distance_squared(centre) <= reach * reach {
-                sample = edit.apply(point, sample);
-            }
-        }
-        sample
+            point.distance_squared(centre) <= reach * reach
+        })
     }
 
     /// Applies an operation to the ground and returns what it took out: for a dig, the
@@ -131,6 +132,7 @@ impl<F: Field> VoxelPlanet<F> {
     /// now, by its material.
     fn measure_dig(&self, centre: Vec3, radius: f32) -> Yield {
         let mut taken = Yield::default();
+        let mut memo = F::Memo::default();
         let cells = (radius / HARVEST_STEP_M).ceil() as i32;
         let cell_volume = HARVEST_STEP_M * HARVEST_STEP_M * HARVEST_STEP_M;
         for x in -cells..cells {
@@ -140,7 +142,7 @@ impl<F: Field> VoxelPlanet<F> {
                     if offset.length() > radius {
                         continue;
                     }
-                    let before = self.sample(centre + offset);
+                    let before = self.sample_in(centre + offset, &mut memo);
                     if before.solid() {
                         taken.add(Harvested::Material(before.material), cell_volume);
                     }
@@ -151,9 +153,32 @@ impl<F: Field> VoxelPlanet<F> {
     }
 }
 
+impl<F: Field> Field for VoxelPlanet<F> {
+    type Memo = F::Memo;
+
+    fn distance_in(&self, point: Vec3, memo: &mut F::Memo) -> f32 {
+        let mut distance = self.field.distance_in(point, memo);
+        for edit in self.edits_at(point) {
+            distance = match *edit {
+                Edit::Dig { centre, radius } => distance.max(radius - point.distance(centre)),
+                Edit::Fill { centre, radius, .. } => distance.min(point.distance(centre) - radius),
+            };
+        }
+        distance
+    }
+
+    fn sample_in(&self, point: Vec3, memo: &mut F::Memo) -> Sample {
+        let mut sample = self.field.sample_in(point, memo);
+        for edit in self.edits_at(point) {
+            sample = edit.apply(point, sample);
+        }
+        sample
+    }
+}
+
 impl<F: Field> Ground for VoxelPlanet<F> {
     fn distance(&self, point: Vec3) -> f32 {
-        self.sample(point).distance
+        self.distance_in(point, &mut F::Memo::default())
     }
 
     fn material(&self, point: Vec3) -> MaterialId {

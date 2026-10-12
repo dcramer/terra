@@ -1,6 +1,6 @@
 # Terrain: brief for `terra_voxel`
 
-Status: being built in `crates/terra_voxel` (the field, edits and harvest so far), and provisional like the rest of the engine plan ([engine.md](engine.md)). This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
+Status: being built in `crates/terra_voxel` (the field, edits, harvest and meshing so far), and provisional like the rest of the engine plan ([engine.md](engine.md)). This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
 
 ## What it is
 
@@ -32,6 +32,8 @@ A sketch to react to, not a specification.
 Everything is in planet-local coordinates, in metres, with the planet's centre at the origin.
 
 ## Done when
+
+Where it stands, 2026-10-11: met for no cracks, edits, harvest and speed (3.1 ms a chunk on Linux, 3.5 on Windows; [research/terrain-meshing.md](../research/terrain-meshing.md)). Not yet: matching Voxel Tools, which needs Godot on a machine; the tree of chunks around viewers.
 
 - `cargo xtask check` passes, with no GPU.
 - **It matches the original.** On the same density function, voxel values and meshes agree with Voxel Tools within a stated tolerance. The Godot build in `spike/planet_test` runs headless and is the reference.
