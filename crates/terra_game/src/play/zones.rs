@@ -4,7 +4,7 @@
 //! running. An arrow strikes the first it passes through; a swing, the one under the aim.
 
 use super::creatures::{Creature, Species};
-use super::species::Part;
+use super::species::{Bestiary, Part};
 use bevy::{ecs::system::SystemParam, prelude::*};
 
 /// A creature's zones: each joint they are round, which part it is, and how far round.
@@ -21,10 +21,11 @@ fn find(
     creatures: Query<(Entity, &Creature), Without<HitZones>>,
     children: Query<&Children>,
     names: Query<&Name>,
+    bestiary: Res<Bestiary>,
     mut told: Local<Vec<Species>>,
 ) {
     for (entity, creature) in &creatures {
-        let defs = &creature.species.def().zones;
+        let defs = &bestiary.get(creature.species).zones;
         if defs.is_empty() {
             continue;
         }
@@ -45,7 +46,7 @@ fn find(
                 told.push(creature.species);
                 info!(
                     "A {} has {} head, {} body and {} leg zones.",
-                    creature.species,
+                    bestiary.name(creature.species),
                     count(Part::Head),
                     count(Part::Body),
                     count(Part::Legs)

@@ -17,7 +17,7 @@ use super::inventory::Belongings;
 use super::models::bake;
 use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
-use super::species::Part;
+use super::species::{Bestiary, Part};
 use super::tick::{Sim, Smoothed};
 use super::zones::Zones;
 use super::{Downed, Player, Stance, View};
@@ -226,6 +226,7 @@ fn fly(
     mut did: MessageWriter<Did>,
     mut struck: MessageWriter<Struck>,
     mut told: MessageWriter<Told>,
+    bestiary: Res<Bestiary>,
     zones: Zones,
 ) {
     let dt = time.delta_secs().min(0.05);
@@ -269,6 +270,7 @@ fn fly(
             };
             let dealt = strike(
                 &mut commands,
+                &bestiary,
                 arrow.by,
                 hit_entity,
                 &mut creature,
@@ -284,7 +286,7 @@ fn fly(
             );
             info!(
                 "An arrow hit a {} in the {} for {dealt:.0}.",
-                creature.species,
+                bestiary.name(creature.species),
                 part.name()
             );
             if !creature.alive()

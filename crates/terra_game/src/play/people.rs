@@ -292,6 +292,7 @@ fn free(
     mut commands: Commands,
     mut interacted: MessageReader<Interacted>,
     creatures: Query<(&Creature, &Transform)>,
+    bestiary: Res<super::species::Bestiary>,
     mut people: Query<(&mut Person, &Transform), Without<Creature>>,
     mut told: MessageWriter<Told>,
 ) {
@@ -303,7 +304,7 @@ fn free(
             continue;
         };
         let guarded = creatures.iter().any(|(creature, there)| {
-            creature.species.hostile()
+            bestiary.hostile(creature.species)
                 && creature.alive()
                 && there.translation.distance(at.translation) < GUARDED_M
         });

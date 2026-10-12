@@ -36,8 +36,8 @@ pub fn describe(items: &Items, cost: &Cost, times: u32) -> String {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Cuttable {
     pub what: Cut,
-    /// So many of a kind of item, by name.
-    pub gives: (&'static str, u32),
+    /// So many of a kind of item.
+    pub gives: (ItemKind, u32),
     /// How long it takes with a tool of ordinary speed, in seconds.
     pub seconds: f32,
 }

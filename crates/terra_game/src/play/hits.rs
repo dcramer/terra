@@ -11,7 +11,7 @@
 
 use super::IsLocalPlayer;
 use super::combat::{Hurt, Struck};
-use super::species::Blood;
+use super::species::{Bestiary, Blood};
 use bevy::prelude::*;
 
 /// How long a drop of the spray lasts, and how many a blow throws, or a killing one.
@@ -137,6 +137,7 @@ fn spray(
     children: Query<&Children>,
     bodies: Query<&Transform, Without<Jolt>>,
     mut struck: MessageReader<Struck>,
+    bestiary: Res<Bestiary>,
     mut shake: ResMut<Shake>,
     mut state: Local<u32>,
 ) {
@@ -149,7 +150,7 @@ fn spray(
         let out = (camera.translation() - blow.at)
             .reject_from(up)
             .normalize_or(up);
-        let material = match blow.species.def().blood {
+        let material = match bestiary.get(blow.species).blood {
             Blood::Red => look.blood.clone(),
             Blood::Ichor => look.ichor.clone(),
         };

@@ -298,15 +298,17 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
 
     let near = |distance: f32| whole || distance < NEAR_M;
     let mut around = Vec::new();
+    let bestiary = world.resource::<super::species::Bestiary>();
     for (creature, at) in creatures.iter(world) {
+        let name = bestiary.name(creature.species);
         let distance = at.translation().distance(feet);
         if near(distance) {
             let home = east_south(&site, creature.home());
             around.push((
                 distance,
-                format!("{} {:.3} {:.3}", creature.species, home[0], home[1]),
+                format!("{name} {:.3} {:.3}", home[0], home[1]),
                 json!({
-                    "what": creature.species.name(),
+                    "what": name,
                     "at": place(east_south(&site, at.translation())),
                     "distance": number(distance),
                     "health": number(creature.health),

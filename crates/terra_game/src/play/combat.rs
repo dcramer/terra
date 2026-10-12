@@ -14,7 +14,7 @@ use super::intent::Intent;
 use super::inventory::{self, Belongings, Broke, Gear, Items};
 use super::kinds::ToolDef;
 use super::skills::{Did, ONCE, Skill, Skills};
-use super::species::Part;
+use super::species::{Bestiary, Part};
 use super::tick::Sim;
 use super::vitals::Vitals;
 use super::zones::Zones;
@@ -122,6 +122,7 @@ fn swing(
     mut did: MessageWriter<Did>,
     mut struck: MessageWriter<Struck>,
     mut told: MessageWriter<Told>,
+    bestiary: Res<Bestiary>,
     zones: Zones,
 ) {
     for (player, player_at, view, intent, skills, mut stance, mut vitals, mut swung, downed) in
@@ -187,6 +188,7 @@ fn swing(
         };
         strike(
             &mut commands,
+            &bestiary,
             player,
             entity,
             &mut creature,
@@ -211,6 +213,7 @@ fn swing(
 #[allow(clippy::too_many_arguments)]
 pub fn strike(
     commands: &mut Commands,
+    bestiary: &Bestiary,
     by: Entity,
     entity: Entity,
     creature: &mut Creature,
@@ -231,18 +234,18 @@ pub fn strike(
         critical: ambush || blow.part == Part::Head,
         killed: creature.health <= 0.0,
     });
+    let name = bestiary.name(creature.species);
     info!(
-        "Struck a {} in the {}{} for {dealt:.0}.",
-        creature.species,
+        "Struck a {name} in the {}{} for {dealt:.0}.",
         blow.part.name(),
         if ambush { ", unaware" } else { "" }
     );
     let skill = blow.skill;
     if creature.health <= 0.0 {
-        creatures::fallen(commands, entity, creature);
+        creatures::fallen(commands, bestiary, entity, creature);
         did.write(Did(by, skill, ONCE * 2.0));
-        info!("Killed a {}.", creature.species);
-        let name = creature.species.name().to_lowercase();
+        info!("Killed a {name}.");
+        let name = name.to_lowercase();
         told.write(Told::new(by, format!("The {name} falls")));
     }
     dealt

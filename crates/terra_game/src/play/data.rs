@@ -34,8 +34,14 @@ pub fn plugin(app: &mut bevy::prelude::App) {
     let stations = super::crafting::Stations::read();
     let recipes = super::crafting::Recipes::read(&stations, &items);
     let builds = super::catalogue::Builds::read(&items, &stations);
+    let bestiary = super::species::Bestiary::read(&items);
+    let flora = super::flora_kinds::Flora::read(&items);
+    let yields = super::dig::Yields::read(&items);
     app.insert_resource(items)
         .insert_resource(stations)
         .insert_resource(recipes)
-        .insert_resource(builds);
+        .insert_resource(builds)
+        .insert_resource(bestiary)
+        .insert_resource(flora)
+        .insert_resource(yields);
 }

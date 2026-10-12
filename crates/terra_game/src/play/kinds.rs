@@ -3,12 +3,11 @@
 //! Nothing else names an item; code asks what a kind can do, such as whether it builds or
 //! what it cuts.
 //!
-//! The file is built into the game, so every machine has the same kinds (D28).
+//! The file is read into a registry, `Items` (`inventory`, `data`).
 
+use super::data;
 use super::skills::Skill;
 use serde::Deserialize;
-
-const ITEMS: &str = include_str!("../../../../assets/data/items.ron");
 
 /// The file: every kind, and what a player starts with.
 #[derive(Deserialize, Debug)]
@@ -177,10 +176,9 @@ impl ItemDef {
     }
 }
 
-/// Reads the kinds. The file is built in and checked by the tests, so a mistake in it is a
-/// mistake in the build.
+/// Reads the kinds.
 pub fn read() -> ItemsFile {
-    ron::from_str(ITEMS).unwrap_or_else(|problem| panic!("assets/data/items.ron: {problem}"))
+    data::read("items.ron")
 }
 
 #[cfg(test)]

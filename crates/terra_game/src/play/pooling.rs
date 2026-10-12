@@ -6,10 +6,11 @@
 //! Nothing marks it on a map or a compass: you see the glow, or someone tells you where
 //! to look (D92).
 
-use super::creatures::{Creature, Form, Lair, Species};
+use super::creatures::{Creature, Form, Lair};
 use super::flora::ClearAround;
 use super::interact::Interactable;
 use super::people::{Arrive, Doing, Dyed};
+use super::species::Bestiary;
 use super::tick::Sim;
 use bevy::{light::NotShadowCaster, prelude::*};
 
@@ -146,6 +147,7 @@ fn form(
     time: Res<Time>,
     mut pool: ResMut<Pool>,
     creatures: Query<&Creature>,
+    bestiary: Res<Bestiary>,
     mut forming: MessageWriter<Form>,
 ) {
     let alive = |species| {
@@ -154,7 +156,9 @@ fn form(
             .filter(|creature| creature.species == species && creature.alive())
             .count()
     };
-    let short = Species::all().find(|&species| species.def().pools && alive(species) < KEEPS);
+    let short = bestiary
+        .all()
+        .find(|&species| bestiary.get(species).pools && alive(species) < KEEPS);
     let Some(species) = short else {
         pool.until_next = FORMS_EVERY_S;
         return;
@@ -165,7 +169,7 @@ fn form(
         forming.write(Form(species, pool.middle));
         info!(
             "A {} formed where the magic pools.",
-            species.name().to_lowercase()
+            bestiary.name(species).to_lowercase()
         );
     }
 }

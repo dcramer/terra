@@ -9,9 +9,10 @@
 //! world heals outside a claim (D94) comes later.
 
 use super::controls::Action;
+use super::data;
 use super::harvest::Cutting;
 use super::intent::Intent;
-use super::inventory::{Belongings, Cut};
+use super::inventory::{Belongings, Cut, Items};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::tick::Sim;
 use super::work::Hold;
@@ -19,9 +20,9 @@ use super::{LocalPlayer, Player, Stance};
 use crate::planet::Planet;
 use bevy::prelude::*;
 use serde::Deserialize;
-use std::sync::LazyLock;
 use terra_core::MaterialId;
 use terra_core::{Harvested, Operation};
+use terra_items::ItemKind;
 use terra_voxel::material;
 
 /// How far from the player the pickaxe reaches the ground.
@@ -30,34 +31,45 @@ const REACH_M: f32 = 4.0;
 const SCOOP_M: f32 = 0.7;
 /// How long a dig takes with a stone pickaxe at the start, in seconds.
 const DIG_SECONDS: f32 = 0.9;
-const GROUND: &str = include_str!("../../../../assets/data/ground.ron");
-
 /// What digging one material gives, as `assets/data/ground.ron` has it.
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-struct Yield {
-    material: &'static str,
-    gives: &'static str,
+struct YieldDef {
+    material: String,
+    gives: String,
     per_item_m3: f32,
 }
 
-/// What digging each material gives, built in so every machine has the same (D136).
-static YIELDS: LazyLock<Vec<(MaterialId, Yield)>> = LazyLock::new(|| {
-    let yields: Vec<Yield> =
-        ron::from_str(GROUND).unwrap_or_else(|problem| panic!("assets/data/ground.ron: {problem}"));
-    yields
-        .into_iter()
-        .map(|each| {
-            let material = material::named(each.material).unwrap_or_else(|| {
-                panic!(
-                    "assets/data/ground.ron: there is no material called {}",
-                    each.material
-                )
-            });
-            (material, each)
-        })
-        .collect()
-});
+/// What digging one material gives: so many cubic metres make one of a kind of item.
+struct Yield {
+    material: MaterialId,
+    name: String,
+    gives: ItemKind,
+    per_item_m3: f32,
+}
+
+/// What digging each material gives (`assets/data/ground.ron`), a registry (D136).
+#[derive(Resource)]
+pub struct Yields(Vec<Yield>);
+
+impl Yields {
+    pub fn read(items: &Items) -> Self {
+        const FILE: &str = "ground.ron";
+        let defs: Vec<YieldDef> = data::read(FILE);
+        Self(
+            defs.into_iter()
+                .map(|def| Yield {
+                    material: material::named(&def.material).unwrap_or_else(|| {
+                        panic!("{FILE}: there is no material called {}", def.material)
+                    }),
+                    gives: items.named(&def.gives, FILE),
+                    name: def.material,
+                    per_item_m3: def.per_item_m3,
+                })
+                .collect(),
+        )
+    }
+}
 
 /// Where the pickaxe meets the ground, and how far through digging there it is.
 #[derive(Component, Default)]
@@ -73,7 +85,7 @@ impl Digging {
 }
 
 /// What a player has dug but not yet made an item, by what it is made of: cubic metres of
-/// each material that gives anything, in the order `YIELDS` has them.
+/// each material that gives anything, in the order `Yields` has them.
 #[derive(Component, Default)]
 struct Spoil(Vec<f32>);
 
@@ -110,6 +122,7 @@ fn dig(
         With<Player>,
     >,
     mut planet: ResMut<Planet>,
+    yields: Res<Yields>,
     mut belongings: Belongings,
     mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
@@ -197,22 +210,18 @@ fn dig(
             radius: SCOOP_M,
         });
         // What it gives is shown as it comes in (`gains`).
-        spoil.0.resize(YIELDS.len(), 0.0);
+        spoil.0.resize(yields.0.len(), 0.0);
         let mut dug = Vec::new();
-        for ((material, each), kept) in YIELDS.iter().zip(spoil.0.iter_mut()) {
-            let amount = taken.amount(Harvested::Material(*material));
-            dug.push(format!(
-                "{amount:.2} m³ of {}",
-                each.material.to_lowercase()
-            ));
+        for (each, kept) in yields.0.iter().zip(spoil.0.iter_mut()) {
+            let amount = taken.amount(Harvested::Material(each.material));
+            dug.push(format!("{amount:.2} m³ of {}", each.name.to_lowercase()));
             *kept += amount;
             let (count, rest) = items_from(*kept, each.per_item_m3);
             if count == 0 {
                 continue;
             }
-            let kind = belongings.items().kind(each.gives);
             // What does not fit in the backpack drops at the player's feet (`pile`).
-            belongings.give(kind, count);
+            belongings.give(each.gives, count);
             *kept = rest;
         }
         did.write(Did(player, Skill::Mining, ONCE));
@@ -240,21 +249,11 @@ mod tests {
         assert_eq!(items_from(PER * 2.0, PER).0, 2);
     }
 
+    /// Reading checks that each material and what it gives are ones there are.
     #[test]
-    fn digging_stone_and_ore_gives_kinds_of_item_there_are() {
-        let items = Items::default();
-        assert!(
-            YIELDS
-                .iter()
-                .any(|(material, _)| *material == material::STONE)
-        );
-        for (_, each) in YIELDS.iter() {
-            assert!(
-                items.find(each.gives).is_some(),
-                "{} is not a kind of item",
-                each.gives
-            );
-        }
+    fn digging_stone_gives_something() {
+        let yields = Yields::read(&Items::default());
+        assert!(yields.0.iter().any(|each| each.material == material::STONE));
     }
 
     #[test]

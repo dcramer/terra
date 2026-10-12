@@ -3,15 +3,15 @@
 //! and what they sound like and leave behind. Nothing else names a creature; code asks
 //! what a kind is like, such as whether it is hostile or what butchering it gives.
 //!
-//! The file is built into the game, so every machine has the same kinds (D28).
+//! The file is read into a registry, `Bestiary` (`data`).
 
 use super::bodies::Body;
-use super::inventory::Cut;
+use super::data;
+use super::inventory::{Cut, Items};
 use super::noise::Feet;
+use bevy::prelude::Resource;
 use serde::Deserialize;
-use std::{fmt, sync::LazyLock};
-
-const CREATURES: &str = include_str!("../../../../assets/data/creatures.ron");
+use terra_items::ItemKind;
 
 /// A kind of creature, as the file has it. The file says what each part means.
 #[derive(Deserialize, Debug)]
@@ -33,7 +33,7 @@ pub struct SpeciesDef {
     pub voice: Voice,
     pub blood: Blood,
     #[serde(default)]
-    pub carcass: Option<Carcass>,
+    pub carcass: Option<CarcassDef>,
     pub lies_s: f32,
     /// Where on it a blow can land (D119): which of its model's joints are its head, body
     /// and legs, and how far round each a blow still counts.
@@ -127,108 +127,110 @@ pub enum Blood {
     Ichor,
 }
 
-/// What butchering a creature takes, and what it gives, by item name.
+/// What butchering a creature takes, and what it gives, as the file has it.
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct Carcass {
-    pub needs: Cut,
-    pub gives: Vec<(String, u32)>,
+pub struct CarcassDef {
+    needs: Cut,
+    gives: Vec<(String, u32)>,
 }
 
-static SPECIES: LazyLock<Vec<SpeciesDef>> = LazyLock::new(|| {
-    ron::from_str(CREATURES)
-        .unwrap_or_else(|problem| panic!("assets/data/creatures.ron: {problem}"))
-});
+/// What butchering a creature takes, and what it gives.
+#[derive(Debug)]
+pub struct Carcass {
+    pub needs: Cut,
+    pub gives: Vec<(ItemKind, u32)>,
+}
 
-/// A kind of creature: its place in `assets/data/creatures.ron`. It prints as its name.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+/// A kind of creature: its place in the `Bestiary`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Species(u8);
 
-impl Species {
+/// Every kind of creature (`assets/data/creatures.ron`), and what butchering each gives,
+/// by the kinds of item the registry of items knows.
+#[derive(Resource)]
+pub struct Bestiary {
+    kinds: Vec<SpeciesDef>,
+    carcasses: Vec<Option<Carcass>>,
+}
+
+impl Bestiary {
+    pub fn read(items: &Items) -> Self {
+        const FILE: &str = "creatures.ron";
+        let kinds: Vec<SpeciesDef> = data::read(FILE);
+        let carcasses = kinds
+            .iter()
+            .map(|kind| {
+                kind.carcass.as_ref().map(|carcass| Carcass {
+                    needs: carcass.needs,
+                    gives: items.cost(&carcass.gives, FILE),
+                })
+            })
+            .collect();
+        Self { kinds, carcasses }
+    }
+
     /// Every kind of creature.
-    pub fn all() -> impl Iterator<Item = Species> {
-        (0..SPECIES.len()).map(|index| Species(index as u8))
+    pub fn all(&self) -> impl Iterator<Item = Species> + use<> {
+        (0..self.kinds.len()).map(|index| Species(index as u8))
     }
 
     /// The kind of creature called a name. Only tests name one.
     #[cfg(test)]
-    pub fn named(name: &str) -> Option<Species> {
-        Species::all().find(|species| species.name() == name)
+    pub fn named(&self, name: &str) -> Option<Species> {
+        self.all().find(|&species| self.name(species) == name)
     }
 
-    pub fn def(self) -> &'static SpeciesDef {
-        &SPECIES[self.0 as usize]
+    pub fn get(&self, species: Species) -> &SpeciesDef {
+        &self.kinds[species.0 as usize]
     }
 
-    pub fn name(self) -> &'static str {
-        &self.def().name
+    pub fn name(&self, species: Species) -> &str {
+        &self.get(species).name
+    }
+
+    /// What butchering it takes and gives, if it can be butchered.
+    pub fn carcass(&self, species: Species) -> Option<&Carcass> {
+        self.carcasses[species.0 as usize].as_ref()
     }
 
     /// Whether it goes for players.
-    pub fn hostile(self) -> bool {
-        matches!(self.def().temper, Temper::Hostile { .. })
+    pub fn hostile(&self, species: Species) -> bool {
+        matches!(self.get(species).temper, Temper::Hostile { .. })
     }
 
     /// The room it takes up on the ground, and how hard it is to shove.
-    pub fn body(self) -> Body {
-        let BodyDef { radius, weight } = self.def().body;
+    pub fn body(&self, species: Species) -> Body {
+        let BodyDef { radius, weight } = self.get(species).body;
         Body::new(radius, weight)
-    }
-}
-
-impl fmt::Display for Species {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.name())
-    }
-}
-
-impl fmt::Debug for Species {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.name())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::inventory::Items;
 
+    /// Reading checks that what each kind gives is a kind of item there is.
     #[test]
-    fn a_kind_prints_as_its_name() {
-        let deer = Species::named("Deer").unwrap();
-        assert_eq!(format!("{deer} {deer:?}"), "Deer Deer");
-    }
-
-    #[test]
-    fn the_file_reads_and_what_it_names_exists() {
-        let items = Items::default();
-        assert!(Species::all().count() > 0);
-        for species in Species::all() {
-            assert_eq!(Species::named(species.name()), Some(species));
-            for (name, _) in species
-                .def()
-                .carcass
-                .iter()
-                .flat_map(|carcass| &carcass.gives)
-            {
-                assert!(
-                    items.find(name).is_some(),
-                    "{species} gives {name}, not a kind of item"
-                );
-            }
+    fn the_file_reads_and_names_each_kind_once() {
+        let bestiary = Bestiary::read(&Items::default());
+        assert!(bestiary.all().count() > 0);
+        for species in bestiary.all() {
+            assert_eq!(bestiary.named(bestiary.name(species)), Some(species));
         }
     }
 
     #[test]
     fn something_carried_can_butcher_whatever_leaves_a_carcass() {
         let items = Items::default();
-        for species in Species::all() {
-            if let Some(carcass) = &species.def().carcass {
+        let bestiary = Bestiary::read(&items);
+        for species in bestiary.all() {
+            if let Some(carcass) = bestiary.carcass(species) {
                 let can = items
                     .kinds()
                     .filter_map(|kind| items.tool(kind))
                     .any(|tool| tool.cuts(carcass.needs).is_some());
-                assert!(can, "nothing butchers a {species}");
+                assert!(can, "nothing butchers a {}", bestiary.name(species));
             }
         }
     }

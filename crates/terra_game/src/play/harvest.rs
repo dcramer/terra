@@ -8,7 +8,7 @@ use super::combat::Swing;
 use super::controls::{Action, Settings};
 use super::flora::{Growth, Obstacles};
 use super::intent::Intent;
-use super::inventory::{Belongings, Cuttable};
+use super::inventory::{Belongings, Cuttable, Items};
 use super::kinds::ToolDef;
 use super::skills::{Did, ONCE, Skills};
 use super::tick::Sim;
@@ -227,8 +227,8 @@ fn cut(
             continue;
         }
 
-        let (gives, count) = cut.gives;
-        let kind = belongings.items().kind(gives);
+        let (kind, count) = cut.gives;
+        let gives = belongings.items().name(kind).to_string();
         // What does not fit in the backpack drops at the player's feet (`pile`).
         let given = belongings.give(kind, count);
         belongings.wear_in_hand(1);
@@ -285,6 +285,7 @@ fn fall(
 /// What the tool in hand would do right now, for the prompt: a kind of tool called
 /// `name`, which does `tool`.
 pub fn prompt(
+    items: &Items,
     name: &str,
     tool: &ToolDef,
     cutting: &Cutting,
@@ -306,7 +307,7 @@ pub fn prompt(
             "{}  work this      Gives {} {}",
             settings.hold(Action::Use),
             cut.gives.1,
-            cut.gives.0
+            items.name(cut.gives.0)
         ),
         None => tool
             .hint(&settings.key(Action::Use), &settings.hold(Action::Use))

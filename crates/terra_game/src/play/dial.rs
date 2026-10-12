@@ -461,7 +461,7 @@ fn draw(
                 }
                 Some(tool) => match items.tool(tool) {
                     Some(does) => {
-                        harvest::prompt(items.name(tool), does, &cutting, &growth, &settings)
+                        harvest::prompt(items, items.name(tool), does, &cutting, &growth, &settings)
                     }
                     None => String::new(),
                 },

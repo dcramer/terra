@@ -6,7 +6,7 @@
 //! every run. Trees, rocks and plants are one entity each, sharing a mesh per model.
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
-use super::flora_kinds::{FloraDef, Grows, Sway, choose, kinds};
+use super::flora_kinds::{Flora, FloraDef, Grows, Sway};
 use super::inventory::Cuttable;
 use super::models::{Part, read_model};
 use super::scene::SUN_DIRECTION;
@@ -243,6 +243,7 @@ fn plant(
     planet: Res<Planet>,
     tweaks: Res<Tweaks>,
     site: Res<Site>,
+    flora: Res<Flora>,
     mut obstacles: ResMut<Obstacles>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
@@ -279,7 +280,8 @@ fn plant(
     });
 
     // Every kind's models, by its place in `assets/data/flora.ron`.
-    let models: Vec<Vec<Model>> = kinds()
+    let models: Vec<Vec<Model>> = flora
+        .kinds()
         .iter()
         .map(|kind| {
             kind.models
@@ -299,7 +301,7 @@ fn plant(
         return;
     }
     let size = |rng: &mut Rng, kind: usize| {
-        let (least, most) = kinds()[kind].size.unwrap_or((1.0, 1.0));
+        let (least, most) = flora.kinds()[kind].size.unwrap_or((1.0, 1.0));
         rng.range(least, most)
     };
 
@@ -367,7 +369,7 @@ fn plant(
             return;
         }
         let which = species.fbm(point / 150.0 + 9.0, 2, 2.0, 0.5) + rng.range(-0.12, 0.12);
-        let Some(kind) = choose(Grows::Trees, which, 0.0, 0.0, rng) else {
+        let Some(kind) = flora.choose(Grows::Trees, which, 0.0, 0.0, rng) else {
             return;
         };
         let tall = size(rng, kind);
@@ -375,7 +377,7 @@ fn plant(
         let scale = tall / model.height;
         let trunk = (point, (model.spread * scale).clamp(0.25, 0.6));
         // The tallest are great trees, which only an iron axe will fell (D96).
-        let wood = kinds()[kind].cuttable(tall);
+        let wood = flora.kinds()[kind].cuttable(tall);
         put(
             &model,
             standing(rng, point, 0.06, scale, 0.1),
@@ -395,13 +397,13 @@ fn plant(
         // Mostly small, now and then a boulder; a few of the bigger ones hold ore.
         let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
         // A few of the bigger ones hold ore; in the grass, most are mossy.
-        let Some(kind) = choose(Grows::Rocks, 0.0, cover.grass, size, rng) else {
+        let Some(kind) = flora.choose(Grows::Rocks, 0.0, cover.grass, size, rng) else {
             return;
         };
         let model = pick(rng, &models[kind]);
         let scale = size / model.height;
         let stops = (size > 0.9).then_some((point, model.spread * scale * 0.8));
-        let metal = kinds()[kind].cuttable(size);
+        let metal = flora.kinds()[kind].cuttable(size);
         put(
             &model,
             standing(rng, point, 0.5, scale, size * 0.22),
@@ -419,13 +421,13 @@ fn plant(
             return;
         }
         // Some bear berries, the first food to be found.
-        let Some(kind) = choose(Grows::Bushes, 0.0, cover.grass, 0.0, rng) else {
+        let Some(kind) = flora.choose(Grows::Bushes, 0.0, cover.grass, 0.0, rng) else {
             return;
         };
         let model = pick(rng, &models[kind]);
         let tall = size(rng, kind);
         let scale = tall / model.height;
-        let fibre = kinds()[kind].cuttable(tall);
+        let fibre = flora.kinds()[kind].cuttable(tall);
         put(
             &model,
             standing(rng, point, 0.1, scale, 0.05),
@@ -440,13 +442,13 @@ fn plant(
         if rng.unit() > 0.28 * cover.grass {
             return;
         }
-        let Some(kind) = choose(Grows::Plants, 0.0, cover.grass, 0.0, rng) else {
+        let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, rng) else {
             return;
         };
         let model = pick(rng, &models[kind]);
         let tall = size(rng, kind);
         let scale = tall / model.height;
-        let fibre = kinds()[kind].cuttable(tall);
+        let fibre = flora.kinds()[kind].cuttable(tall);
         put(
             &model,
             standing(rng, point, 0.15, scale, 0.02),
@@ -466,7 +468,7 @@ fn plant(
         if cover.grass < 0.5 {
             return;
         }
-        let Some(kind) = choose(Grows::Flowers, 0.0, cover.grass, 0.0, rng) else {
+        let Some(kind) = flora.choose(Grows::Flowers, 0.0, cover.grass, 0.0, rng) else {
             return;
         };
         let model = pick(rng, &models[kind]);
@@ -476,13 +478,14 @@ fn plant(
             &model,
             standing(rng, point, 0.15, scale, 0.02),
             0.5,
-            kinds()[kind].cuttable(tall),
+            flora.kinds()[kind].cuttable(tall),
             None,
         );
     });
 
     // What lies by the door, such as a stump and a log, as if the clearing had been cut.
-    let by_the_door = kinds()
+    let by_the_door = flora
+        .kinds()
         .iter()
         .enumerate()
         .filter_map(|(kind, def)| match def.grows {
@@ -497,7 +500,7 @@ fn plant(
             model,
             standing(&mut rng, point, 0.0, size / model.height, 0.03),
             1.0,
-            kinds()[kind].cuttable(size),
+            flora.kinds()[kind].cuttable(size),
             Some((point, 0.5)),
         );
     }

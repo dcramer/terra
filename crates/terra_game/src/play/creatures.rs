@@ -17,7 +17,7 @@ use super::interact::{CanInteract, Interactable, Interacted};
 use super::inventory::Belongings;
 use super::skills::{Did, ONCE};
 pub use super::species::Species;
-use super::species::{Lives, Temper};
+use super::species::{Bestiary, Lives, Temper};
 use super::tick::{Sim, Smoothed};
 use super::{Downed, Player};
 use crate::build::Site;
@@ -151,11 +151,17 @@ pub fn plugin(app: &mut App) {
 #[derive(Resource)]
 struct Populated;
 
-fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
+fn load(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    bestiary: Res<Bestiary>,
+    mut loading: ResMut<Loading>,
+) {
     commands.insert_resource(Kinds {
-        models: Species::all()
+        models: bestiary
+            .all()
             .map(|species| {
-                let model = assets.load(&species.def().model.0);
+                let model = assets.load(&bestiary.get(species).model.0);
                 loading.wait_for(&model);
                 (species, model)
             })
@@ -174,6 +180,7 @@ fn prepare(
     planet: Res<Planet>,
     mut clear: MessageWriter<ClearAround>,
     mut kinds: ResMut<Kinds>,
+    bestiary: Res<Bestiary>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     mut dice: ResMut<Dice>,
 ) {
@@ -188,10 +195,10 @@ fn prepare(
     for (species, model) in &kinds.models {
         let Some(gltf) = gltfs.get(model) else { return };
         let Some(scene) = gltf.default_scene.clone() else {
-            error!("{species} has no scene.");
+            error!("{} has no scene.", bestiary.name(*species));
             return;
         };
-        let about = &species.def().clips;
+        let about = &bestiary.get(*species).clips;
         let clip = |name: &str| gltf.named_animations.get(name).cloned();
         let names = [
             &about.idle,
@@ -206,7 +213,7 @@ fn prepare(
             .map(|name| clip(name))
             .collect::<Option<Vec<_>>>()
         else {
-            error!("{species} is missing an animation.");
+            error!("{} is missing an animation.", bestiary.name(*species));
             return;
         };
         let (graph, nodes) = AnimationGraph::from_clips(clips);
@@ -254,12 +261,13 @@ fn prepare(
     if let Some(lair) = lair {
         commands.insert_resource(Lair(lair));
     }
-    for species in Species::all() {
-        match (species.def().lives, herd, lair) {
+    for species in bestiary.all() {
+        let name = bestiary.name(species);
+        match (bestiary.get(species).lives, herd, lair) {
             (Lives::Herd(count), Some(home), _) => {
                 let at = local(home);
                 info!(
-                    "{species} graze {:.0} m east and {:.0} m south of the start.",
+                    "{name} graze {:.0} m east and {:.0} m south of the start.",
                     at.x, at.z
                 );
                 for _ in 0..count {
@@ -269,13 +277,19 @@ fn prepare(
                         Quat::from_axis_angle(up, dice.0.range(0.0, std::f32::consts::TAU))
                             * side
                             * dice.0.range(1.0, 7.0);
-                    spawn(&mut commands, &kinds, &planet, species, home + offset);
+                    spawn(
+                        &mut commands,
+                        (&kinds, &bestiary),
+                        &planet,
+                        species,
+                        home + offset,
+                    );
                 }
             }
             (Lives::Lair(count), _, Some(lair)) => {
                 let at = local(lair);
                 info!(
-                    "{species} nest {:.0} m east and {:.0} m south of the start.",
+                    "{name} nest {:.0} m east and {:.0} m south of the start.",
                     at.x, at.z
                 );
                 // One at the middle, the rest three metres out, a quarter turn apart.
@@ -285,7 +299,7 @@ fn prepare(
                     let up = lair.normalize();
                     spawn(
                         &mut commands,
-                        &kinds,
+                        (&kinds, &bestiary),
                         &planet,
                         species,
                         lair + out.reject_from(up),
@@ -302,26 +316,33 @@ fn prepare(
 fn form(
     mut commands: Commands,
     kinds: Res<Kinds>,
+    bestiary: Res<Bestiary>,
     planet: Res<Planet>,
     mut asked: MessageReader<Form>,
 ) {
     for &Form(species, at) in asked.read() {
-        spawn(&mut commands, &kinds, &planet, species, at);
+        spawn(&mut commands, (&kinds, &bestiary), &planet, species, at);
     }
 }
 
-fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Species, at: Vec3) {
+fn spawn(
+    commands: &mut Commands,
+    (kinds, bestiary): (&Kinds, &Bestiary),
+    planet: &Planet,
+    species: Species,
+    at: Vec3,
+) {
     let Some((_, scene, graph, clips)) = kinds.ready.iter().find(|(each, ..)| *each == species)
     else {
         return;
     };
-    let about = species.def();
+    let about = bestiary.get(species);
     let feet = planet.ground_at(at);
     let up = feet.normalize();
     let facing = up.any_orthonormal_vector();
     let creature = commands
         .spawn((
-            Name::new(species.name()),
+            Name::new(about.name.clone()),
             Creature {
                 species,
                 health: about.health,
@@ -331,7 +352,7 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
                 hurt: false,
                 quarry: None,
             },
-            species.body(),
+            bestiary.body(species),
             Transform::from_translation(feet).looking_to(facing, up),
             Visibility::default(),
         ))
@@ -372,6 +393,7 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
 /// Decides what each creature does next.
 fn think(
     time: Res<Time>,
+    bestiary: Res<Bestiary>,
     players: Query<(Entity, &Transform), (With<Player>, Without<Downed>)>,
     mut creatures: Query<(&mut Creature, &Transform), Without<Player>>,
     mut bitten: MessageWriter<Bitten>,
@@ -389,7 +411,8 @@ fn think(
         let player_up = quarry.is_some();
         let apart = apart.unwrap_or(f32::INFINITY);
         let from_home = (here - creature.home).length();
-        let temper = creature.species.def().temper;
+        let about = bestiary.get(creature.species);
+        let temper = about.temper;
         let next = match (temper, creature.state) {
             (_, State::Dead(lying)) => State::Dead(lying + dt),
             (Temper::Shy { .. }, State::Flee(left)) if left > 0.0 => State::Flee(left - dt),
@@ -455,7 +478,7 @@ fn think(
                 let roll = dice.0.unit();
                 if roll < 0.4 {
                     State::Idle(dice.0.range(2.0, 5.0))
-                } else if roll < 0.75 && creature.species.def().clips.eat.is_some() {
+                } else if roll < 0.75 && about.clips.eat.is_some() {
                     State::Graze(dice.0.range(3.0, 7.0))
                 } else {
                     let up = creature.home.normalize();
@@ -467,7 +490,7 @@ fn think(
                 }
             }
         };
-        if creature.species.hostile() && !matches!(next, State::Chase | State::Attack(_)) {
+        if bestiary.hostile(creature.species) && !matches!(next, State::Chase | State::Attack(_)) {
             creature.hurt = false;
         }
         creature.state = next;
@@ -488,6 +511,7 @@ fn nearest(awake: &SpatialHash<Entity>, here: Vec3) -> Option<(Entity, f32)> {
 /// Moves each creature over the ground by what it is doing.
 fn walk(
     time: Res<Time>,
+    bestiary: Res<Bestiary>,
     planet: Res<Planet>,
     players: Query<&Transform, With<Player>>,
     mut creatures: Query<(&mut Creature, &mut Transform), Without<Player>>,
@@ -496,7 +520,7 @@ fn walk(
     for (mut creature, mut at) in &mut creatures {
         let here = at.translation;
         let up = here.normalize();
-        let about = creature.species.def();
+        let about = bestiary.get(creature.species);
         let toward = |point: Vec3| (point - here).reject_from(up).normalize_or_zero();
         let quarry = creature
             .quarry
@@ -573,11 +597,16 @@ fn animate(
 
 /// Marks the dead: one whose kind leaves a carcass can be butchered; anything lies a
 /// while, then is gone.
-pub fn fallen(commands: &mut Commands, entity: Entity, creature: &mut Creature) {
+pub fn fallen(
+    commands: &mut Commands,
+    bestiary: &Bestiary,
+    entity: Entity,
+    creature: &mut Creature,
+) {
     creature.state = State::Dead(0.0);
     // The dead are walked over and round, not into.
     commands.entity(entity).remove::<Body>();
-    if creature.species.def().carcass.is_some() {
+    if bestiary.carcass(creature.species).is_some() {
         commands
             .entity(entity)
             .insert(CanInteract(Interactable::Carcass));
@@ -592,6 +621,7 @@ fn butcher(
     mut belongings: Belongings,
     mut told: MessageWriter<Told>,
     mut did: MessageWriter<Did>,
+    bestiary: Res<Bestiary>,
     bodies: Query<(Entity, &Creature)>,
 ) {
     for used in interacted.read() {
@@ -603,7 +633,7 @@ fn butcher(
         else {
             continue;
         };
-        let Some(carcass) = &creature.species.def().carcass else {
+        let Some(carcass) = bestiary.carcass(creature.species) else {
             continue;
         };
         let items = inventory.items();
@@ -629,14 +659,10 @@ fn butcher(
             ));
             continue;
         }
-        let gives: Vec<_> = carcass
+        let given: Vec<String> = carcass
             .gives
             .iter()
-            .map(|(name, count)| (items.kind(name), *count))
-            .collect();
-        let given: Vec<String> = gives
-            .into_iter()
-            .map(|(kind, count)| {
+            .map(|&(kind, count)| {
                 let given = inventory.give(kind, count);
                 format!("{given} {}", inventory.items().name(kind))
             })
@@ -649,7 +675,7 @@ fn butcher(
     // Bodies left long enough are gone.
     for (entity, creature) in &bodies {
         if let State::Dead(lying) = creature.state
-            && lying > creature.species.def().lies_s
+            && lying > bestiary.get(creature.species).lies_s
         {
             commands.entity(entity).despawn();
         }
@@ -665,7 +691,7 @@ mod tests {
     #[test]
     fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
         let mut creature = Creature {
-            species: Species::named("Deer").unwrap(),
+            species: Bestiary::read(&Default::default()).named("Deer").unwrap(),
             health: 10.0,
             state: State::Graze(1.0),
             home: Vec3::ZERO,
@@ -685,7 +711,7 @@ mod tests {
         world
             .spawn((
                 Creature {
-                    species: Species::named("Spider").unwrap(),
+                    species: world.resource::<Bestiary>().named("Spider").unwrap(),
                     health: 10.0,
                     state: State::Idle(1.0),
                     home: at,
@@ -703,6 +729,7 @@ mod tests {
         world.init_resource::<Time>();
         world.init_resource::<Messages<Bitten>>();
         world.insert_resource(Dice(Seed(1).derive("test").rng()));
+        world.insert_resource(Bestiary::read(&Default::default()));
         world
     }
 
