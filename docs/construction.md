@@ -308,7 +308,7 @@ None in the MVP, and wanted later (D142). Rust, Valheim and Sons of the Forest m
 
 ## Enshrouded or Subnautica: how placing works
 
-Open (D154). The developers, 2026-10-12, with walls, floors and roofs settled as the parts (D152): "the only question we have is how it should work. like enshrouded style, or subnautica style. i do like enshroudeds flexibility to design something truly interesting/unique/beautiful but i will admit its also a little overwhelming".
+Decided (D154): The Sims' way, below. The developers, 2026-10-12, with walls, floors and roofs settled as the parts (D152): "the only question we have is how it should work. like enshrouded style, or subnautica style. i do like enshroudeds flexibility to design something truly interesting/unique/beautiful but i will admit its also a little overwhelming".
 
 Earlier, on 2026-10-11: Enshrouded's building might be the better base concept than Subnautica 2's, and the basis was settled (D48): **a voxel grid, as Enshrouded's**. "Subnautica 2 is just easier, but as long as the basis is almost like this voxel grid we could have flexibility in time." What Enshrouded's does, from [research/enshrouded.md](../research/enshrouded.md): buildings of small voxel blocks in a material, placed one at a time or as ready-made pieces; pieces join seamlessly and materials blend where they meet; cutting an opening styles its edges; the ground can be dug, filled and flattened; you build only within an altar's radius.
 
@@ -322,7 +322,7 @@ Earlier, on 2026-10-11: Enshrouded's building might be the better base concept t
 
 **Why Enshrouded's overwhelms**, as far as we can tell: the player makes every detail by hand, from many shapes; roofs are built a piece at a time; nothing helps a beginner's house look good. Its freedom is in the shape of the building; its effort is in the detail.
 
-**Proposed: The Sims' way, with our materials.** You draw the shape of the building; the game makes the details. The developers find The Sims "not bad" (2026-10-12). Building a log cabin would go:
+**Agreed: The Sims' way, with our materials.** You draw the shape of the building; the game makes the details. The developers find The Sims "not bad" (2026-10-12). Building a log cabin would go:
 
 1. **Walls.** Pick *Wall*, log. Press and drag 6 m: a wall's blueprint, shown log by log. Drag on from its end, round three more sides; when the loop closes, the game offers a floor inside, a click to accept.
 2. **Roof.** Pick *Roof* and click inside the walls: a roof's blueprint covers what they enclose. The wheel picks its style (gable, hip, flat, lean-to), Shift and the wheel its pitch. Its rafters, ridge and gable ends are worked out.
@@ -426,7 +426,7 @@ For the developers to reorder. Each step is small enough to play and judge.
 
 For the developers. Each has my recommendation.
 
-Answered on 2026-10-12: blueprints are walls, floors and roofs, built up piece by piece, not rooms (D152). Open: how placing works, Enshrouded's way or Subnautica's; proposed, a middle way ([above](#enshrouded-or-subnautica-how-placing-works), D154).
+Answered on 2026-10-12: blueprints are walls, floors and roofs, built up piece by piece, not rooms (D152). Placing The Sims' way: the player draws, the game makes the details ([above](#enshrouded-or-subnautica-how-placing-works), D154).
 
 Answered on 2026-10-12: structures are planned, then constructed, a blueprint showing its parts, which can be small and depend on the kind of construction (D139); big materials are carried, with better transport later (D140); building draws on storage, with special storage for big materials later (D141); no stability in the MVP, but later (D142); rooms can be underground (D143). A kind's pieces are kit models, parts of the blueprint, not made first and placed; walls in four directions for now; carving later (D146).
 
