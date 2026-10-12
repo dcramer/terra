@@ -4,8 +4,8 @@ iron_axe models/held/iron_axe.glb f2b26d24513e2b9b 1
 iron_pickaxe models/held/iron_pickaxe.glb ccf739af6e22b24f 1
 knife models/held/knife.glb fdb7acba51e094c1 1
 large_pack models/gear/base-male/large_pack.glb 0a11f640af9901b2 1
-leather_cap models/gear/base-male/leather_cap.glb e07151b6ece38c45 1
-leather_coat models/gear/base-male/leather_coat.glb 1bbf61aab88b7c50 1
+leather_cap models/gear/base-male/leather_cap.glb 6796bc23a0513dca 1
+leather_coat models/gear/base-male/leather_coat.glb 3bd3b299e92ac427 1
 quiver models/gear/base-male/quiver.glb 07cb7eefffe6763e 1
 small_pack models/gear/base-male/small_pack.glb db9c10303da5f17e 1
 spear models/held/spear.glb 9dd22f7a5b0d1c13 1
