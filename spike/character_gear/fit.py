@@ -26,7 +26,7 @@ from mathutils.bvhtree import BVHTree
 
 import look
 
-FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
+FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
 GEAR = os.path.join(HERE, "..", "model_bakeoff", "out")
 OUT = os.path.join(HERE, "out")
 

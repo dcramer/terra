@@ -25,7 +25,7 @@ from mathutils import Matrix, Vector
 
 import look
 
-FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
+FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
 OUT = os.path.join(HERE, "out")
 body_path = os.path.join(look.HERE, look.args()[0])
 WEIGHT_SOURCE = (look.args() + ["heat"])[1]  # heat, or mannequin

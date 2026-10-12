@@ -21,7 +21,7 @@ After adding an item or changing a look, from the repository root:
 cargo xtask icons --sheet shots/icons/all
 ```
 
-It writes `crates/terra_sandbox/assets/icons/<item>.png` for every item whose look exists, sized to its cells (96 pixels a cell), rewrites the manifest, removes icons of items no longer in the catalogue, lists the items with no look yet, and exits; about a minute on the CPU under WSL. Look at the sheet, then commit `assets/icons` with the look.
+It writes `assets/icons/<item>.png` for every item whose look exists, sized to its cells (96 pixels a cell), rewrites the manifest, removes icons of items no longer in the catalogue, lists the items with no look yet, and exits; about a minute on the CPU under WSL. Look at the sheet, then commit `assets/icons` with the look.
 
 ## Which look an item's icon comes from
 

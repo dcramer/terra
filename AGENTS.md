@@ -10,6 +10,7 @@ Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in 
 |---|---|
 | `docs/` | Decisions and plans. Start here. |
 | `research/` | Findings, surveys and measurements, one dated note per question. |
+| `assets/` | Runtime assets every binary loads: models, sounds, shaders, icons. Cargo points Bevy here (`.cargo/config.toml`). |
 | `art/` | Source art: the approved sheets and generated models the asset pipeline makes the game's files from. See `art/README.md`. |
 | `crates/` | The Rust workspace: the game's code. See `crates/README.md`. |
 | `xtask/` | Project tasks, run as `cargo xtask <task>`. |

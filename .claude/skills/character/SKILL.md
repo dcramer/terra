@@ -67,7 +67,7 @@ If Tripo's rig cannot be made to pass, `rig_base.py` rigs the same body with Ble
 ## 4. Into the game
 
 ```bash
-cp spike/character_gear/out/NAME-game.glb crates/terra_sandbox/assets/models/character/NAME.glb
+cp spike/character_gear/out/NAME-game.glb assets/models/character/NAME.glb
 ```
 
 Add a row for it to `THIRD_PARTY.md` under "Made with AI". Then look at it in the game's own renderer with the workbench, on the Windows GPU (about a minute; WSL's CPU renderer takes far too long). Beside the mannequin, through the same clips, from two sides at four moments:
@@ -82,7 +82,7 @@ The export also gives the body its sockets, the points what is held and worn han
 
 ## 5. Gear
 
-The game has many items and several bodies (D127), so gear is data: every worn item has one look per base body, `crates/terra_sandbox/assets/models/gear/<body>/<item>.glb`, the item named as in the catalogue in lower case with `_` for spaces (`leather_coat`). The game finds it by that name and puts it on as the file says: a skinned look is bound to the body's skeleton; a rigid one names its socket in its glTF extras. No game code names an item, so adding gear is adding files.
+The game has many items and several bodies (D127), so gear is data: every worn item has one look per base body, `assets/models/gear/<body>/<item>.glb`, the item named as in the catalogue in lower case with `_` for spaces (`leather_coat`). The game finds it by that name and puts it on as the file says: a skinned look is bound to the body's skeleton; a rigid one names its socket in its glTF extras. No game code names an item, so adding gear is adding files.
 
 **Clothing and armour that bend with the body** (chest, legs, gloves, feet) are made on each base body, so nothing is set per character (D128):
 
@@ -91,7 +91,7 @@ The game has many items and several bodies (D127), so gear is data: every worn i
 3. Build the piece from the base body:
 
 ```bash
-spike/model_bakeoff/run.sh ../character_gear/shell_garment.py ../../crates/terra_sandbox/assets/models/character/base-male.glb out/tripo/dressed-male-coat.glb leather_coat Leather chest_sleeveless
+spike/model_bakeoff/run.sh ../character_gear/shell_garment.py ../../assets/models/character/base-male.glb out/tripo/dressed-male-coat.glb leather_coat Leather chest_sleeveless
 ```
 
 The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveless`, `chest_long_sleeves`, `legs_long`, `gloves`, `feet`...): which parts of the body it covers and where its hems fall. The piece is those faces of the base body, pushed out (and as far as the dressed model stands off, for bulk), keeping the body's own weights, so it moves as the skin under it does; its colour is baked from the dressed model. Do not try to cut the piece out of the dressed model by colour or distance: Tripo paints its dressed body a shade off ours and makes it a little thinner, and every such cut came out full of holes.
@@ -99,7 +99,7 @@ The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveles
 **Rigid worn things** (a pack, a cap, a quiver) are made as models on their own and fitted at their socket:
 
 ```bash
-spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb small_pack large_pack leather_cap quiver
+spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../assets/models/character/base-male.glb small_pack large_pack leather_cap quiver
 ```
 
 Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front. Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does.
@@ -107,7 +107,7 @@ Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. 
 **Check every piece on every body**, by numbers first:
 
 ```bash
-spike/model_bakeoff/run.sh ../character_gear/gear_check.py ../../crates/terra_sandbox/assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
+spike/model_bakeoff/run.sh ../character_gear/gear_check.py ../../assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
 ```
 
 It plays our clips and reports, per clip, the share of skin near each piece that comes through it (or that it sinks into), and `where` on the body. Then look, live, with the body hidden if need be ([tools/sandbox](../../../tools/sandbox/README.md)): a picture through the body hid a coat full of holes. Each piece also lists the patches of skin it covers, which the game does not draw under it (`patches.py`, `body_mask.wgsl`).

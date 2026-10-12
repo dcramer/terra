@@ -18,7 +18,7 @@ from mathutils import Vector
 import look
 import twist
 
-FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
+FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
 OUT = os.path.join(HERE, "out")
 src, name = look.args()[:2]
 ACTIONS = [a for a in (look.args()[2:] or ["Idle_Loop", "Walk_Loop", "Sword_Attack", "Crouch_Idle_Loop", "Roll"])]

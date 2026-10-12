@@ -482,7 +482,7 @@ impl ItemIcons {
             .or_insert_with(|| {
                 let def = items.catalogue.get(kind).ok()?;
                 let file = icons::file(&character::item_id(&def.name));
-                let baked = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                let baked = bevy::asset::io::file::FileAssetReader::get_base_path()
                     .join("assets")
                     .join(&file)
                     .exists();

@@ -1,2 +1,7 @@
 [alias]
 xtask = "run --quiet --package xtask --"
+
+[env]
+# Every binary loads its files from the one assets/ folder at the root (D133). A build run
+# outside Cargo, such as the Windows copy, finds assets/ next to itself instead.
+BEVY_ASSET_ROOT = { value = ".", relative = true }

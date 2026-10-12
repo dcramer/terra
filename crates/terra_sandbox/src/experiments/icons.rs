@@ -50,7 +50,7 @@ pub fn plugin(app: &mut App) {
 }
 
 fn assets() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")
+    bevy::asset::io::file::FileAssetReader::get_base_path().join("assets")
 }
 
 /// Every item in the catalogue whose look exists, with its id and what its icon is

@@ -500,11 +500,11 @@ fn report(options: Res<Options>, mut exits: MessageReader<AppExit>, heard: Res<H
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
+    use bevy::asset::io::file::FileAssetReader;
 
     #[test]
     fn every_clip_is_in_the_assets() {
-        let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let assets = FileAssetReader::get_base_path().join("assets");
         for clips in CLIPS {
             for path in clips.paths() {
                 assert!(
@@ -571,6 +571,7 @@ mod tests {
 mod loudness {
     use super::*;
     use crate::audio::synth::tests::{active_db, at_ear, render, within};
+    use bevy::asset::io::file::FileAssetReader;
     use bevy::audio::{AudioSource, Decodable};
 
     /// The band each kind of sound is heard in, in dBFS while it sounds.
@@ -585,8 +586,7 @@ mod loudness {
     }
 
     fn clip_db(file: &str) -> f32 {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join(format!("assets/sounds/{file}.ogg"));
+        let path = FileAssetReader::get_base_path().join(format!("assets/sounds/{file}.ogg"));
         let source = AudioSource {
             bytes: std::fs::read(path).unwrap().into(),
         };

@@ -8,7 +8,7 @@ does. That is skin poking through clothing, or a rigid look sunk into the body, 
 any mesh, single-sided or closed. Prints one GEARCHECK line of JSON per look; a look passes when,
 in every frame, no more than `through_share` of the skin it watches is through it.
 
-    spike/model_bakeoff/run.sh ../character_gear/gear_check.py ../../crates/terra_sandbox/assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
+    spike/model_bakeoff/run.sh ../character_gear/gear_check.py ../../assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
 """
 
 import json
@@ -27,7 +27,7 @@ import look
 import patches
 import twist
 
-GEAR = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "gear")
+GEAR = os.path.join(HERE, "..", "..", "assets", "models", "gear")
 CLIPS = ("Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Sword_Attack", "Crouch_Idle_Loop", "Roll")
 LIMITS = {
     "near_m": 0.06,          # skin this close to a look at rest is watched

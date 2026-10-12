@@ -15,7 +15,7 @@ from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
-FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
+FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
 
 # The palette, in sRGB, from the sandbox's own recolouring (play/flora.rs and props.rs).
 # A model's materials must be named from this list; its colour comes from here, not the file.

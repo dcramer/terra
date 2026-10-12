@@ -14,12 +14,12 @@ made by Tripo, as one outer surface. This:
      skin under it does, so skin cannot come through it in any pose;
   5. bakes the dressed model's colour onto it, and lists the patches of skin it hides.
 
-    spike/model_bakeoff/run.sh ../character_gear/shell_garment.py ../../crates/terra_sandbox/assets/models/character/base-male.glb out/tripo/dressed-male-coat.glb leather_coat Leather chest
+    spike/model_bakeoff/run.sh ../character_gear/shell_garment.py ../../assets/models/character/base-male.glb out/tripo/dressed-male-coat.glb leather_coat Leather chest
 
 The slot (D64) says where on the body the piece can be: a chest piece never reaches the thighs,
 whatever colour Tripo gave the dressed model's shorts.
 
-Writes crates/terra_sandbox/assets/models/gear/<body>/<item>.glb and prints SHELL lines.
+Writes assets/models/gear/<body>/<item>.glb and prints SHELL lines.
 """
 
 import math
@@ -39,7 +39,7 @@ from mathutils.bvhtree import BVHTree
 import look
 import patches
 
-OUT = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "gear")
+OUT = os.path.join(HERE, "..", "..", "assets", "models", "gear")
 LOOK_M = 0.06          # how far out and in from the skin to look for the dressed surface
 STANDS_OFF_M = 0.008   # dressed surface further out than this is the piece, whatever its colour
 SMOOTH_ROUNDS = 4      # rounds of smoothing the mark

@@ -36,7 +36,7 @@ from mathutils.geometry import intersect_point_line
 import look
 import twist
 
-FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
+FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
 OUT = os.path.join(HERE, "out")
 ACTIONS = ("Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Sword_Attack", "Crouch_Idle_Loop", "Punch_Cross", "Roll")
 # Thresholds: what a usable rig must meet.

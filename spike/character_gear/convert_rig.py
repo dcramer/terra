@@ -27,7 +27,7 @@ from mathutils import Matrix, Vector
 import look
 import twist
 
-FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
+FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
 OUT = os.path.join(HERE, "out")
 
 # Tripo bone -> ours. Helper bones (twist, share, eyes) fold into the bone they help.

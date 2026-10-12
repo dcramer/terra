@@ -24,7 +24,7 @@ import look
 import patches
 import twist
 
-FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
+FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
 src, dst = look.args()[:2]
 
 look.reset()

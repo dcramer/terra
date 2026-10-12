@@ -11,9 +11,9 @@ reaches every part of it: here, a stone or iron head; in the game, a tint (chara
 
     spike/model_bakeoff/run.sh ../character_gear/fit_held.py hammer stone_axe iron_axe knife spear bow stone_pickaxe iron_pickaxe
 
-Reads the free tool models in crates/terra_sandbox/assets/models/tools (THIRD_PARTY.md), or
+Reads the free tool models in assets/models/tools (THIRD_PARTY.md), or
 builds a pickaxe from a few faceted pieces, since no free one exists; writes
-crates/terra_sandbox/assets/models/held/<item>.glb, the item named as in the game's catalogue
+assets/models/held/<item>.glb, the item named as in the game's catalogue
 in lower case with `_` for spaces. Each item's numbers are in TOOLS.
 """
 
@@ -29,7 +29,7 @@ from mathutils import Matrix, Vector
 
 import look
 
-ASSETS = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models")
+ASSETS = os.path.join(HERE, "..", "..", "assets", "models")
 OUT = os.path.join(ASSETS, "held")
 STONE = (0.55, 0.53, 0.5)
 IRON = (0.38, 0.42, 0.48)

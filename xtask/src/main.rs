@@ -7,7 +7,7 @@
 //!            Windows build. Your game is saved between runs; `--fresh` starts over.
 //!            Anything else after it goes to the game, such as `--at 10,20`.
 //!   loop     Plays the demo's loop by script and checks every step happened (D69).
-//!   icons    Bakes every item's icon from its look (D129) into the sandbox's assets/icons.
+//!   icons    Bakes every item's icon from its look (D129) into assets/icons.
 //!            Anything after it goes to the baker, such as `--sheet shots/icons/all`.
 //!   win      Under WSL: builds a program for Windows and runs it there, on the real
 //!            GPU. `cargo xtask win -p <package> [--release] [--copy <name>] [-- program args]`
@@ -79,7 +79,7 @@ fn output(program: &str, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-/// Renders every item's icon and writes them into the sandbox's assets. It opens a window
+/// Renders every item's icon and writes them into assets/icons. It opens a window
 /// for the few seconds it takes; under WSL the CPU renderer is enough.
 fn icons(args: &[String]) -> bool {
     let mut all = vec!["run", "-p", "terra_sandbox", "--", "--experiment", "icons"];
@@ -197,12 +197,7 @@ fn win(args: &[String]) -> bool {
     let staged = std::fs::create_dir_all(&run_dir)
         .and_then(|()| std::fs::copy(&built, run_dir.join(&exe_name)).map(|_| ()))
         // A Bevy program looks for its assets next to itself.
-        .and_then(|()| {
-            copy_dir(
-                &root().join("crates").join(package).join("assets"),
-                &run_dir.join("assets"),
-            )
-        });
+        .and_then(|()| copy_dir(&root().join("assets"), &run_dir.join("assets")));
     if let Err(error) = staged {
         eprintln!(
             "Could not copy the program to {}: {error}",
