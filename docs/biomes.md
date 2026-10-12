@@ -44,7 +44,7 @@ Proposed, and reshaped by the developers' answers of 2026-10-12. Each goal says 
 8. **Every world its own, by rules.** Nobody writes a list of biomes. Each planet's come from its theme and seed (D8, D17, D59), so two temperate planets still grow different forests. A gothic realm's dead trees and roots, or a techno realm's growth, are new rules and data, not new code.
 9. **Interactive at scale.** Likely every plant can be harvested, perhaps not some grass (D43). The server keeps nothing per plant but what players changed (D47, D52).
 10. **Fast.** 60 fps on the mid-range target, checked on the integrated GPU too (D25).
-11. **Seasons** (D149). Leaves turn and fall, snow comes and goes, and grass browns and greens again.
+11. **Seasons** (D149). Leaves turn and fall, snow comes and goes, and grass browns and greens again. They change play as well as the look: cold, food, growth.
 12. **Paths worn by use.** A stretch goal: where players and creatures walk often, the grass wears into a path, and it grows over again when no one does.
 
 **Not goals:**
@@ -156,25 +156,58 @@ That things grow back is decided (D150); how is open. Proposed, to react to:
 
 - **In stages, from time alone.** A cut leaves a stump, and the stored change records when it happened. The plant's stage (stump, sapling, young, grown) is worked out from the time since, the species' growth rate and the season. Nothing ticks. When the plant is grown again its change is forgotten, so the world's stored state shrinks back on its own (D47, D52).
 - **Seen to grow, never popping.** A stage changes only while no player can see the plant. You never watch a tree jump, but come back after a while and the clearing has saplings, later young trees. Shipped games do the same out of sight: Rust refills resources away from players, and The Forest regrows trees while you sleep.
-- **At each kind's own pace:** grass in hours, bushes in days, great trees much longer.
+- **At each kind's own pace** (decided, D150): a growth rate per kind, as data. Grass takes hours, bushes days, and great trees much longer.
 - **Removing the stump stops it,** as in The Forest. That gives a way to clear land for good.
-- **Inside a claim,** perhaps nothing grows back unless planted, as the world heals outside claims (D94).
+- **Inside a claim, nothing grows back by default** (D150, to revisit). The world heals outside claims (D94), and inside them is the owner's.
 
 ### Seasons
 
-That there are seasons is decided (D149); how is open. Proposed:
+That there are seasons is decided, and that they change play, not only the look (D149). One season covers a whole world: the hemispheres are not opposite, which would be complex for little use (2026-10-12). Realms give the same variety instead: through a portal, another world may be in another season.
 
-- **One year clock per world,** from the server's time: one number every player shares.
-- **What it changes, mostly as data per kind:**
-  - colour through the year;
-  - deciduous canopies thinning to bare branches;
-  - leaf litter in autumn;
-  - snow on the ground and on surfaces facing up;
-  - grass browning;
-  - flowers in their months;
-  - growth only in the growing season, which slows regrowth in winter.
-- **The planet is round,** so realistically the two hemispheres have opposite seasons and the equator barely changes (D122). That is variety for free: walk south to find summer.
-- **What it costs:** mostly shader parameters and colour tables. Snow needs a ground channel, and bare winter trees need leaves as a separable layer.
+#### How long a year is
+
+Proposed, for the developers. How others do it:
+
+| Game | Year | Season | Real time |
+|---|---|---|---|
+| [Sons of the Forest](https://dotesports.com/indies/news/sons-of-the-forest-season-length-how-long-does-winter-last) | 20 days | 5 days by default; 10 on Long, 90 on Realistic | Paused when no one plays |
+| [Don't Starve Together](https://gamerempire.net/dont-starve-together-summer-winter-start-and-end-time/) | 70 days | 15 to 20 days | About 9 hours of 8-minute days, paused when the server is empty |
+| [Wurm Online](https://wurmpedia.com/index.php/Day), a persistent MMO | 336 days | | 42 real days; a day is 3 real hours |
+
+The difference that matters: those first two pause, and ours is a persistent world (D52), so its year passes in real time whether you play or not.
+
+What the length has to do:
+
+- **Long enough to prepare for and live through.** Autumn is for laying in food and wood, and winter must last long enough to test it.
+- **Short enough to meet.** A player who plays some evenings should meet every season within a few weeks.
+- **Not a whole number of real days or weeks,** so whoever plays on the same evening each week doesn't always find the same season.
+
+**Proposal: a year of 365 days, as a real one (D122).** At the half-hour day (D134), that is about 7.6 real days, so a season is about 45 real hours: one or two evenings for most players, a whole year in about a week, and drifting against the real week. It is a number per world in its theme, so a realm can have a long year, a short one, or none. Days could also lengthen in summer and shorten in winter around the half-hour, as real ones do. Tuned by playing.
+
+#### How seasons change play
+
+Proposed, to choose from; most build on survival (D61) and creatures:
+
+- **Cold.** Winter wears down health without warmth: clothing, fire and shelter matter.
+- **Food.** Berries and fruit come in summer and autumn and are scarce in winter. Laying food in and preserving it (drying, smoking) becomes a loop.
+- **Growth.** Plants and regrowth grow only in the growing season. Spring is when cut land greens again.
+- **Creatures.** They breed in spring, migrate or sleep through winter, and are bolder when hungry.
+- **The land.** Snow slows walking and shows tracks, which fits knowing by looking (D93). Lakes freeze and can be crossed, and rivers rise with the thaw.
+- **Seeing.** A bare winter wood can be seen through, and a summer one hides.
+- **Weather by season** (D78): summer storms, winter blizzards.
+
+#### What it changes in the look
+
+Mostly data per kind:
+
+- colour through the year;
+- deciduous canopies thinning to bare branches;
+- leaf litter in autumn;
+- snow on the ground and on surfaces facing up;
+- grass browning;
+- flowers in their months.
+
+It costs mostly shader parameters and colour tables. Snow needs a ground channel, and bare winter trees need leaves as a separable layer.
 
 ### Worn paths
 
@@ -221,7 +254,8 @@ Answered on 2026-10-12:
 - **Density:** as Sons of the Forest's.
 - **Harvesting:** likely every plant, perhaps not some grass (D43).
 - **Regrowth:** yes, at least by time passed, and perhaps seen to grow rather than coming back whole (D150).
-- **Seasons:** yes (D149).
+- **Seasons:** yes, changing play, one season per world (D149).
+- **Regrowth's pace:** by kind; nothing regrows in a claim by default (D150).
 - **Worn paths:** "would be amazing as a goal", if it can be done.
 - **Biomes:** made procedurally, not chosen.
 - **Leaves:** no view yet.
@@ -230,9 +264,7 @@ Still open:
 
 1. **Realistic in look too?** "Sons of the Forest is more realistic, and that's our goal" is recorded for density. If it also means the art direction, D14 changes, and so does what we ask of the art pipeline.
 2. **Which grass can't be harvested?** Proposed: short ground cover can't be, and tall grass and reeds can, giving fibre.
-3. **Regrowth's rules:** how fast for each kind, whether removing a stump stops it, and whether anything regrows inside a claim.
-4. **Seasons' rules:**
-   - how long a year is, against a half-hour day (D134);
-   - whether the hemispheres are opposite;
-   - whether seasons change play (cold, food, what grows) or only the look.
-5. **Cards or clumps** for leaves, chosen by eye from a side-by-side once a tree generator exists.
+3. **Whether removing a stump stops regrowth.**
+4. **How long a year is.** Proposed: 365 days, about 7.6 real days ([above](#how-long-a-year-is)).
+5. **Which of seasons' effects on play** we want ([above](#how-seasons-change-play)).
+6. **Cards or clumps** for leaves, chosen by eye from a side-by-side once a tree generator exists.
