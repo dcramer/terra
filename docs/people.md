@@ -37,7 +37,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 ## Trade
 
 - **Shops and traders** in settlements; travelling traders on the roads.
-- **Coin and barter.** In the books, as I recall (unchecked), monsters leave behind coin-like spirit coins that adventurers live on. Proposed: a currency that comes from monsters, so culling them is also a living ([creatures.md](creatures.md)).
+- **Coin and barter.** Money is magic itself, condensed and ranked, as in the books (D167): monsters leave it, so culling them is also a living, and it can be burned for power as well as spent ([magic.md](magic.md#money-that-is-magic)).
 - **Prices follow need**: iron is dear where there is none.
 
 ## What it asks of the engine
@@ -49,4 +49,4 @@ Technical, mine. People speak from what the world knows, so their lines are made
 1. Answered: **companions.** Recruits can travel and fight beside you, as a future to-do (D161).
 2. Answered: **recruits can die** (D161). How is proposed in [tribe.md](tribe.md#when-a-recruit-dies).
 3. **How deep is talk?** Short lines and requests, or real conversations?
-4. **Currency**: one coin across all worlds, or each world its own?
+4. Answered by the lore: **one currency** in every realm, since it is the same magic and the same ranks everywhere (D167).

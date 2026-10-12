@@ -336,9 +336,36 @@ Technical, mine:
 - A draw is a weighted choice the server makes and stores.
 - Nothing about powers is written per power, which is D127's rule.
 
+## Money that is magic
+
+Decided (D167): money works as in the books. The currency is magic itself, condensed, so it can be spent or burned.
+
+- **What it is:** magic condensed into small hard beads with a rank: iron, bronze, silver, gold, diamond. Its name is to choose (the books call theirs spirit coins; [naming.md](naming.md) proposes **pearls**, which form in pools as pearls form in water).
+- **Where it comes from:** monsters leave it, and it forms where magic pools thickly. Culling is a living ([people.md](people.md#trade)).
+- **What it buys:** everything settlements and traders sell. One rank's worth is many of the rank below.
+- **What it burns for:**
+  - **Fuel:** for workings, for magic items, and for a standing ward or a bridge kept running ([crafting.md](crafting.md)).
+  - **A surge of strength:** absorbing one above your rank lifts your attributes to its rank for a short while, enough to strike or survive what you couldn't. Then it leaves you exhausted, and the backlash is worse the higher the coin.
+  - **Components:** what some workings need, alongside cores and beads.
+- **The same in every realm,** because it is the same magic and the same ranks everywhere ([lore.md](lore.md)). This answers [people.md](people.md)'s question of one currency or many: one, by the lore.
+- **Why it suits us:** every purse is also a store of power, so spending is always a choice between buying, building and burning.
+
+## Fragments of essences
+
+Decided (D168): kept as components, as the books' quintessence, under a name of our own ([naming.md](naming.md) proposes **beads**: "a bead of Fire").
+
+- **What they are:** a small fragment of one essence's kind. Not an essence: they can't be absorbed, and many don't make one.
+- **Where they come from:** monsters and pools of that kind, more often than essences.
+- **What they are for:**
+  - workings that need an idea, such as a fire ward needing a bead of Fire;
+  - enchanting gear with a property of that kind;
+  - fuel for items of that kind.
+
+  They are the reagents of the old school, by essence.
+
 ## Habits shaping the draw
 
-Open: the developers weren't sure how it would work. Concretely:
+Open. In plain terms, a habit is **what you have been doing a lot of lately**: fighting up close or from a distance, sneaking, healing friends, fighting alone or with others. The idea is that when you awaken a power, the draw leans a little toward powers that suit those habits, so a player who sneaks a lot is a little likelier to awaken a power for hiding. How it would work:
 
 - **The server already sees what you do** (D51). It keeps a running tally over your recent play, perhaps the last ten hours, in a few kinds:
   - harm dealt close, at range, and by powers;
@@ -359,5 +386,6 @@ Procedural, like every realm. There is no fixed list: the starting realm's essen
 
 1. Answered: **attributes** are kept (D164). **Monster cores** are kept (D165). **No fast travel between claims** (D72). **The starting realm's essences** come from its generation, with the rule above. **Old-school touches** follow the books: chanted spells, components used up, backlash.
 2. **Habits shaping the draw,** as worked out above: in or out?
-3. **Magic as money?** In the books the currency is also raw magic, burned by rituals and items, and a coin above your rank lifts you briefly before exhausting you. Do we want that, or cores as the only stored magic?
-4. **Fragments of essences** (the books' quintessence) as ritual components: in, under a name of our own?
+3. Answered: **money is magic,** as in the books (D167).
+4. Answered: **fragments of essences** are components (D168).
+5. **Their names:** pearls and beads, or others ([naming.md](naming.md)).

@@ -44,6 +44,8 @@ The docs already talk this way: pooling places, surges, magic as the world's wea
 | A way between realms | portal | **portal** on screen; in the lore a **ford** where it is natural and a **bridge** where it was made | Ways open where the Deep runs shallow |
 | Studied magic of the Deep (D124) | astral magic (the books' term) | **deepcraft** | |
 | Other studied disciplines | (none yet) | **-craft**: wardcraft, ritecraft, bindcraft | One pattern for every discipline |
+| Money that is magic (D167) | spirit coins (the books' term) | **pearls**: an iron pearl, a gold pearl | Magic condensed in a pool, as a pearl forms in water |
+| Fragments of an essence (D168) | quintessence (the books' term) | **beads**: a bead of Fire | A drop of one kind, held |
 | A realm's gods, as a kind of thing (D156) | gods | **gods**, and in the lore **tides** | Powers that move a whole realm's water |
 | Beings of the Deep itself, in lore only (D157) | (the books': great astral beings) | **the currents** | What moves in the Deep between realms |
 
