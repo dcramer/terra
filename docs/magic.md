@@ -165,7 +165,24 @@ When you use a stone on an essence, the server draws a power from that essence's
 4. **Your skills and what you know** (decided, 2026-10-12): someone who knows ritual magic draws more ritual-like powers, and a practised swordsman more blade strikes. Your skills (D88) and books shape your powers, which is the lore's "who you are".
 5. **Where you are:** a little toward the leaning of the realm you awaken in. Awakening a stone in a death realm leans a little toward death.
 
-The draw is made once, by the server (D51), and kept: it is a change to you, stored like any other.
+The draw is made once, by the server (D51), and kept: it is a change to you, stored like any other. **There is no choosing among offers** (2026-10-12): you get the one power the draw gives, as in the books. Your only control is what you bring to it: which stone, on which essence, when, and what you already have and know.
+
+### Before you awaken: what is known
+
+From the developers, 2026-10-12: awakening is a ritual, and while doing it you see **"known information and known chances"**: what the world knows about this stone on this essence, for you. What is known and what isn't is ours to set. Proposed:
+
+| | What you see | How it comes to be known |
+|---|---|---|
+| **Always** | The essence's idea and the stone's pull, in plain words ("Ember: burning, moving fast, light"; "of the Bond: things that serve you") | Anyone who holds them can feel it |
+| **Always** | What can't happen: "you already have an aura", "this essence has its summon" | The limits are common knowledge |
+| **Broad chances** | The kinds of power, in words: likely, possible, unlikely, impossible | Anyone who does the ritual |
+| **Finer chances** | The families of mechanic, and kinds, in rough numbers: "about one in three it moves you" | Knowing ritual magic, at a rank: the better the ritualist, the finer the reading |
+| **What others found** | Powers this essence and stone have given before, as examples, and confluence recipes | Public knowledge: books, scholars in settlements, people you ask, and what players share among themselves |
+| **Never** | The power you will get, its twist, its ladder, its name | Unknown until it wakes. There are too many for anyone to list, and the draw is made at the ritual |
+
+- **Chances are true.** What is shown is the real weighting, rounded to what you can read, so learning ritual magic is worth something, and players can trust and compare readings.
+- **What tilts your draw shows in the reading, not as reasons.** You see that "moving fast" is likelier for you than for someone else, not that it's because of your Stride.
+- **Nothing to game by waiting.** The draw is seeded from the world, you, the essence's slot and the stone, so putting the ritual off or redoing a reading gives the same result. Choosing a different stone or a different essence is the real choice, as in the books.
 
 **At the moment you awaken, the power's whole ladder is made:** what it does at iron and what each rank adds up to diamond, as in the books. You can't reroll it.
 
@@ -483,6 +500,8 @@ Decided (D168): kept as components, and named as the books name them: **quintess
 Procedural, like every realm. There is no fixed list: the starting realm's essences come from its generated magic like any other's. One rule for it, proposed: the generator makes sure that near the start, every family is reachable among the commons (weapons, elements, beasts and body), so a first character can go any way. Its stronger pools hold the rarer essences of its own leaning.
 
 ## Open questions
+
+0. Answered: **no picking among offers.** One draw, as in the books, with known information and known chances shown at the ritual ([above](#before-you-awaken-what-is-known)); what is known is proposed there.
 
 1. Answered: **attributes** are kept (D164). **Monster cores** are kept (D165). **No fast travel between claims** (D72). **The starting realm's essences** come from its generation, with the rule above. **Old-school touches** follow the books: chanted spells, components used up, backlash.
 2. Answered: **no separate tally of habits.** What tilts a draw is what you already have, your powers and your skills (2026-10-12).
