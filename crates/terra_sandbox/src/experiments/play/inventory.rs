@@ -424,13 +424,6 @@ impl Items {
             .expect("all apparel has a kind")
     }
 
-    pub fn container(&self, kind: ItemKind) -> Option<Container> {
-        self.containers
-            .iter()
-            .find(|(_, each)| *each == kind)
-            .map(|(container, _)| *container)
-    }
-
     pub fn container_kind(&self, container: Container) -> ItemKind {
         self.containers
             .iter()

@@ -1,8 +1,13 @@
 //! What hangs on a character: things held and worn. A character's model carries sockets,
 //! named points on its skeleton placed for that body when it was exported
-//! (`spike/character_gear/export_character.py`); something rigid, a tool or a pack, is put
-//! on one. Clothing that bends with the body is a model skinned to the same skeleton,
-//! whose joints are swapped for the character's own once it has loaded.
+//! (`spike/character_gear/export_character.py`).
+//!
+//! What is worn has a look for each base body, fitted to it once
+//! (`spike/character_gear/fit_gear.py`) and found by name: `models/gear/<body>/<item>.glb`,
+//! the item named as in the catalogue (`item_id`). The file says how it goes on, so
+//! nothing here knows any one item: a look with a skin bends with the body, and its joints
+//! are swapped for the body's own; a rigid one names its socket in its glTF extras,
+//! `{"socket": "socket.back"}`, and is hung there.
 //!
 //! Something held is used at one angle and carried at another: swung, the grip holds it as
 //! a hand would to strike; walking or standing, it tips forward and down (`Held`).
@@ -11,6 +16,7 @@
 //! does in play.
 
 use bevy::{
+    gltf::GltfExtras,
     mesh::skinning::SkinnedMesh,
     prelude::*,
     world_serialization::{WorldAsset, WorldAssetRoot, WorldInstanceReady},
@@ -60,14 +66,48 @@ impl Held {
     }
 }
 
-/// Clothing that bends with `body`, a character's model: its joints become the body's.
+/// A character's model: the root of a base body, by the name its gear is fitted under. Its
+/// parent is the character, whose gear it wears.
 #[derive(Component)]
-pub struct Fitted {
+pub struct Body {
+    pub name: &'static str,
+}
+
+/// A body whose model has loaded, so its sockets exist.
+#[derive(Component)]
+pub struct BodyReady;
+
+/// A worn thing's look, on `body`, a character's model.
+#[derive(Component)]
+pub struct Worn {
     pub body: Entity,
 }
 
+/// An item's id in file names: its catalogue name in lower case, words joined by `_`,
+/// as `--give` writes it: "Leather coat" is `leather_coat`.
+pub fn item_id(name: &str) -> String {
+    name.to_lowercase().replace(' ', "_")
+}
+
+/// Where an item's look for a base body is.
+pub fn look(body: &str, item: &str) -> String {
+    format!("models/gear/{body}/{item}.glb")
+}
+
 pub fn plugin(app: &mut App) {
-    app.add_observer(fit).add_systems(Update, tilt);
+    app.add_observer(put_on)
+        .add_observer(body_ready)
+        .add_systems(Update, tilt);
+}
+
+fn body_ready(
+    ready: On<WorldInstanceReady>,
+    bodies: Query<(), With<Body>>,
+    mut commands: Commands,
+) {
+    if bodies.contains(ready.entity) {
+        commands.entity(ready.entity).insert(BodyReady);
+    }
 }
 
 /// Turns what is held toward its carried or used angle.
@@ -104,30 +144,52 @@ pub fn hang(commands: &mut Commands, model: Handle<WorldAsset>, to: Entity) -> E
         .id()
 }
 
-/// Puts clothing that bends on `body`, a character's model.
-pub fn dress(commands: &mut Commands, model: Handle<WorldAsset>, body: Entity) -> Entity {
+/// Puts a worn thing's look on `body`, a character's model; it goes where its file says
+/// once it has loaded (`put_on`). Returns the look's root.
+pub fn wear(commands: &mut Commands, model: Handle<WorldAsset>, body: Entity) -> Entity {
     commands
         .spawn((
             WorldAssetRoot(model),
             Transform::default(),
-            Fitted { body },
+            Worn { body },
             ChildOf(body),
         ))
         .id()
 }
 
-/// Once fitted clothing has loaded, moves its skin onto the body's skeleton.
-fn fit(
+/// The socket a rigid look names in its glTF extras.
+fn socket_in(extras: &GltfExtras) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(&extras.value).ok()?;
+    Some(value.get("socket")?.as_str()?.to_string())
+}
+
+/// Once a worn look has loaded: a skinned one's joints become the body's; a rigid one moves
+/// onto the socket it names.
+fn put_on(
     ready: On<WorldInstanceReady>,
-    fitted: Query<&Fitted>,
+    mut commands: Commands,
+    worn: Query<&Worn>,
     children: Query<&Children>,
     names: Query<&Name>,
+    extras: Query<&GltfExtras>,
     mut skins: Query<&mut SkinnedMesh>,
 ) {
-    let Ok(Fitted { body }) = fitted.get(ready.entity) else {
+    let Ok(Worn { body }) = worn.get(ready.entity) else {
         return;
     };
     let own: HashSet<Entity> = children.iter_descendants(ready.entity).collect();
+    if !own.iter().any(|each| skins.contains(*each)) {
+        let socket = own
+            .iter()
+            .find_map(|each| socket_in(extras.get(*each).ok()?));
+        match socket.and_then(|socket| Some((find(*body, &socket, &children, &names)?, socket))) {
+            Some((at, _)) => {
+                commands.entity(ready.entity).insert(ChildOf(at));
+            }
+            None => warn!("A worn look names no socket this body has."),
+        }
+        return;
+    }
     let joints: HashMap<&str, Entity> = children
         .iter_descendants(*body)
         .filter(|each| !own.contains(each))
@@ -145,10 +207,37 @@ fn fit(
             {
                 Some(theirs) => *joint = *theirs,
                 None => warn!(
-                    "Clothing has a joint the body lacks: {:?}",
+                    "A worn look has a joint the body lacks: {:?}",
                     names.get(*joint).ok()
                 ),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_look_is_found_by_body_and_item_name() {
+        assert_eq!(item_id("Leather coat"), "leather_coat");
+        assert_eq!(item_id("Quiver"), "quiver");
+        assert_eq!(
+            look("base-female", &item_id("Small pack")),
+            "models/gear/base-female/small_pack.glb"
+        );
+    }
+
+    #[test]
+    fn a_rigid_look_names_its_socket() {
+        let extras = GltfExtras {
+            value: r#"{"socket": "socket.back"}"#.to_string(),
+        };
+        assert_eq!(socket_in(&extras).as_deref(), Some("socket.back"));
+        let none = GltfExtras {
+            value: "{}".to_string(),
+        };
+        assert_eq!(socket_in(&none), None);
     }
 }

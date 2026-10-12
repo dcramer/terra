@@ -7,7 +7,8 @@ the Quaternius one every sandbox animation is made for. This:
   2. moves each of our joints to the matching Tripo joint, keeping our bones' directions
      (the animations depend on them),
   3. renames Tripo's weights to our bones, folding each helper bone into the bone it helps,
-  4. keeps at most four bones a vertex, normalised, and exports the mesh and skin only.
+  4. adds forearm twist bones (twist.py), keeps at most four bones a vertex, normalised,
+     and exports the mesh and skin only.
 
     spike/model_bakeoff/run.sh ../character_gear/convert_rig.py out/tripo/base-male-tpose-hd-rigged.glb base-male-tripo 1.80
 """
@@ -18,11 +19,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
+sys.path.insert(0, HERE)
 
 import bpy
 from mathutils import Matrix, Vector
 
 import look
+import twist
 
 FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
 OUT = os.path.join(HERE, "out")
@@ -173,6 +176,15 @@ if SMOOTH:
     bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
     bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
     bpy.ops.object.mode_set(mode="OBJECT")
+
+# Twist bones at the elbows, so a forearm's turn does not pinch the elbow (twist.py); then
+# back to four bones a vertex, normalised.
+twist.add(arm, body)
+select_only(body)
+bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
+bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
+bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
+bpy.ops.object.mode_set(mode="OBJECT")
 
 # 4. Bind and export the mesh and skin.
 body.parent = arm

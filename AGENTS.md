@@ -42,6 +42,8 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 
 ## Working in the Rust workspace
 
+- **Assume many of everything** (D127). The game is procedurally generated, so there will be a large quantity of every kind of object: items, gear, creatures, characters, props, places. Build every system to perform with many of each and many kinds, change only what changed rather than recomputing every frame, and make a new kind of thing data (a file, a catalogue entry) rather than code. Nothing is written for one particular object; if code names a specific item, ask whether it should be data.
+
 - **`cargo xtask check` must pass before you commit.** It runs formatting, lints, tests and the dependency rule below. CI runs the same command on Linux and macOS.
 - **`cargo xtask doctor`** tells you what a machine is missing.
 - **Model the game in ECS** (D58). Everything in a world is an entity, its state is components, and behaviour is systems. Use a resource only for what is truly one of a kind. Things that differ by planet (gravity, air, what grows) are data read by systems, not code written per planet.

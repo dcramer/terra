@@ -11,7 +11,9 @@ use crate::character::{CARRIED_IN, Carrying};
 use bevy::{prelude::*, world_serialization::WorldInstanceReady};
 use std::time::Duration;
 
-const MODEL: &str = "models/character/base-male.glb";
+/// The base body the player has, which is also the name its gear is fitted under
+/// (`character::look`).
+pub const BODY: &str = "base-male";
 /// How long one animation takes to give way to the next.
 const BLEND: Duration = Duration::from_millis(180);
 
@@ -50,10 +52,6 @@ impl Doing {
     }
 }
 
-/// The player's figure: the root of its model, which what is worn hangs from (`worn`).
-#[derive(Component)]
-pub struct PlayerFigure;
-
 /// The animations, as places in the figure's animation graph.
 #[derive(Resource)]
 struct Moves {
@@ -82,7 +80,9 @@ pub fn plugin(app: &mut App) {
 }
 
 fn load(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.insert_resource(FigureModel(assets.load(MODEL)));
+    commands.insert_resource(FigureModel(
+        assets.load(format!("models/character/{BODY}.glb")),
+    ));
 }
 
 /// Once the model has loaded, stands it on the player.
@@ -135,7 +135,7 @@ fn spawn(
     commands
         .spawn((
             Name::new("Figure"),
-            PlayerFigure,
+            crate::character::Body { name: BODY },
             WorldAssetRoot(scene),
             // The model faces +Z; things here face -Z.
             Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),

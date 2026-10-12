@@ -1,15 +1,20 @@
-"""Fits gear made with Tripo to a character, as the game wears it.
+"""Fits gear made with Tripo to a base body, as the game wears it: one look per item per base
+body, which the game finds by name and puts on as the file says (character.rs).
 
-Rigid pieces (a pack, a cap, a quiver) are placed against the body at a socket and saved in
-that socket's own space, so the game hangs them there with nothing to adjust. Clothing that
-bends (a coat) is fitted to the torso, pushed clear of the skin, given the body's skin
-weights, and saved on the same skeleton, so the game binds it to the body's joints.
+Rigid pieces (a pack, a cap, a quiver) are placed against the body at a socket, saved in that
+socket's own space, and name it in their glTF extras ({"socket": "socket.back"}), so the game
+hangs them there with nothing to adjust. Clothing that bends (a coat) is fitted to the torso,
+pushed clear of the skin, given the body's skin weights, and saved on the same skeleton, so
+the game binds it to the body's joints. Each piece reports how much of it rests on the body;
+less than its kind should means it floats.
 
-    spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb pack-small pack-large cap coat quiver
+    spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb small_pack large_pack leather_cap leather_coat quiver
 
 Reads out/tripo/gear-<model>.glb in the bake-off folder; writes
-crates/terra_sandbox/assets/models/gear/<name>.glb. Each piece's turn, size and place are in
-PIECES, found by looking at the models and then at the fitted result in the workbench.
+crates/terra_sandbox/assets/models/gear/<body>/<item>.glb, the item named as in the game's
+catalogue in lower case with `_` for spaces. Each piece's turn, size and fit are in PIECES,
+found by looking at the models and then at the fitted result in the workbench; run it for
+every base body.
 """
 
 import math
@@ -27,17 +32,18 @@ import look
 GEAR = os.path.join(HERE, "..", "model_bakeoff", "out", "tripo")
 OUT = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "gear")
 
-# name: (Tripo model, turn about Z in degrees so its front faces the body's front (-Y) and
-# its body side faces the body, how it is fitted, size in metres).
+# item: (Tripo model, turn about Z in degrees so its front faces the body's front (-Y) and
+# its body side faces the body, how it is fitted, size as a share of the body's height).
 PIECES = {
-    "pack-small": ("pack", 90, "back", 0.42),
-    "pack-large": ("pack", 90, "back", 0.55),
-    "cap": ("cap", -90, "head", None),
-    "coat": ("coat", -90, "torso", None),
-    "quiver": ("quiver", 90, "belt", 0.72),
+    "small_pack": ("pack", 90, "back", 0.23),
+    "large_pack": ("pack", 90, "back", 0.31),
+    "leather_cap": ("cap", -90, "head", None),
+    "leather_coat": ("coat", -90, "torso", None),
+    "quiver": ("quiver", 90, "belt", 0.4),
 }
 
 body_path, names = look.args()[0], look.args()[1:]
+body_name = os.path.splitext(os.path.basename(body_path))[0]
 
 look.reset()
 bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, body_path))
@@ -48,6 +54,7 @@ for pb in arm.pose.bones:
     pb.matrix_basis.identity()
 bpy.context.view_layer.update()
 sockets = {o.name: o for o in bpy.context.scene.objects if o.name.startswith("socket.")}
+height = max((body.matrix_world @ v.co).z for v in body.data.vertices)
 groups = {g.index: g.name for g in body.vertex_groups}
 
 
@@ -123,11 +130,25 @@ def push_out(ob, offset):
 
 
 def fit_back(ob, height):
-    """On the upper back, its body side just off the skin."""
+    """On the upper back, the pack's own back panel just off the skin. Tripo models its
+    shoulder straps as stiff loops standing out from that panel, so the panel is found from
+    where most of the pack is, and the straps are laid onto the back and shoulders."""
     scale_to(ob, height)
     at = sockets["socket.back"].matrix_world.translation
     lo, hi = box(points(ob))
-    move(ob, Matrix.Translation(Vector((-(lo.x + hi.x) / 2, at.y + 0.01 - lo.y, at.z - 0.06 - (lo.z + hi.z) / 2))))
+    middle = sorted(p.y for p in points(ob) if abs(p.x - (lo.x + hi.x) / 2) < (hi.x - lo.x) * 0.3)
+    panel = middle[len(middle) * 3 // 10]
+    move(ob, Matrix.Translation(Vector((-(lo.x + hi.x) / 2, at.y + 0.02 - panel, at.z - 0.06 - (lo.z + hi.z) / 2))))
+    straps = ob.vertex_groups.new(name="Straps")
+    straps.add([v.index for v in ob.data.vertices if (ob.matrix_world @ v.co).y < at.y + 0.015], 1.0, "REPLACE")
+    lay = ob.modifiers.new("Straps", "SHRINKWRAP")
+    lay.target = body
+    lay.wrap_method = "NEAREST_SURFACEPOINT"
+    lay.wrap_mode = "ABOVE_SURFACE"
+    lay.offset = 0.012
+    lay.vertex_group = "Straps"
+    apply(ob, lay)
+    ob.vertex_groups.remove(ob.vertex_groups["Straps"])
     push_out(ob, 0.01)
     return "socket.back"
 
@@ -195,9 +216,25 @@ def fit_torso(ob):
     return None
 
 
+def contact(ob):
+    """The share of a piece's vertices within 3 cm of the skin: how much of it rests on the
+    body rather than floating off it."""
+    near = 0
+    for p in points(ob):
+        ok, hit, _, _ = body.closest_point_on_mesh(body.matrix_world.inverted() @ p)
+        near += ok and (body.matrix_world @ hit - p).length < 0.03
+    return near / max(len(ob.data.vertices), 1)
+
+
+# The least share of a piece that should rest on the body, by how it is fitted; less means
+# it floats, as a pack placed by the tips of its straps did.
+TOUCHING = {"back": 0.08, "head": 0.3, "belt": 0.05, "torso": 0.4}
+
+OUT = os.path.join(OUT, body_name)
 os.makedirs(OUT, exist_ok=True)
 for name in names:
     model, turn, how, size = PIECES[name]
+    size = size * height if size else None
     ob = import_gear(model, turn)
     ob.name = name
     if how == "back":
@@ -208,12 +245,16 @@ for name in names:
         socket = fit_belt(ob, size)
     else:
         socket = fit_torso(ob)
+    touching = contact(ob)
+    print("FIT", name, f"touching {touching:.0%}", "ok" if touching >= TOUCHING[how] else f"FLOATING, under {TOUCHING[how]:.0%}")
     path = os.path.join(OUT, f"{name}.glb")
     if socket:
         # In the socket's own space: the game puts it on the socket as it is.
         move(ob, sockets[socket].matrix_world.inverted())
+        ob["socket"] = socket
         select(ob)
-        bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_animations=False)
+        bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_animations=False,
+                                  export_extras=True)
     else:
         select(ob, arm)
         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_animations=False,

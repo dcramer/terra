@@ -10,11 +10,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
+sys.path.insert(0, HERE)
 
 import bpy
 from mathutils import Vector
 
 import look
+import twist
 
 FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
 OUT = os.path.join(HERE, "out")
@@ -24,6 +26,7 @@ ACTIONS = [a for a in (look.args()[2:] or ["Idle_Loop", "Walk_Loop", "Sword_Atta
 look.reset()
 bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, src))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
+twist.drive(arm)
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 for o in list(bpy.context.scene.objects):
     if o not in (arm, body):

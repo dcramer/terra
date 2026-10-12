@@ -5,8 +5,9 @@
 //! `--model <path>` loads a .glb or .gltf under `assets/`; given more than once, the
 //! models stand side by side doing the same thing. `--anim <clip>` plays a clip
 //! (repeatable; the first plays when looking by hand). `--hold <tool>` puts a tool in the
-//! right hand, `--attach <file>[@<socket>]` hangs a model on a socket or, without one,
-//! fits clothing to the skeleton (`character`). `--focus <name>` looks closely at one
+//! right hand, `--wear <item>` puts on an item's look for each model's body, and
+//! `--attach <file>[@<socket>]` puts on any look, on a socket if given, otherwise as the file
+//! says (`character`). `--focus <name>` looks closely at one
 //! part. `--sheet <prefix>` saves a contact sheet per clip and exits (`sheet`). With
 //! `--remote`, `workbench.pose {clip, fraction}` holds every model at a moment of a clip.
 //! Clips, joints and sockets are printed when a model loads.
@@ -194,6 +195,10 @@ fn spawn(
             continue;
         };
         let offset = (index as f32 - (count - 1) as f32 * 0.5) * SPACING_M;
+        // The body's name, which its gear is fitted under (`character::look`).
+        let body = std::path::Path::new(path)
+            .file_stem()
+            .map_or(String::new(), |stem| stem.to_string_lossy().into_owned());
         let root = commands
             .spawn((
                 Name::new(format!("Workbench model {index}")),
@@ -230,6 +235,7 @@ fn spawn(
                     dress(
                         &mut commands,
                         ready.entity,
+                        &body,
                         &options,
                         &assets,
                         &children,
@@ -276,10 +282,11 @@ fn spawn(
     }
 }
 
-/// Puts what `--hold` and `--attach` ask for on a model once it has loaded.
+/// Puts what `--hold`, `--attach` and `--wear` ask for on a model once it has loaded.
 fn dress(
     commands: &mut Commands,
     root: Entity,
+    body: &str,
     options: &Options,
     assets: &AssetServer,
     children: &Query<&Children>,
@@ -320,9 +327,17 @@ fn dress(
                 None => warn!("workbench: the model has no {socket}"),
             },
             None => {
-                character::dress(commands, model, root);
+                character::wear(commands, model, root);
             }
         }
+    }
+    for item in &options.wears {
+        let file = character::look(body, item);
+        character::wear(
+            commands,
+            assets.load(GltfAssetLabel::Scene(0).from_asset(file)),
+            root,
+        );
     }
 }
 

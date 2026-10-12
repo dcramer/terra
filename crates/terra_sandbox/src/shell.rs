@@ -44,9 +44,11 @@ usage: terra_sandbox [options]
                         to stand several side by side
   --anim <clip>         in the workbench: a clip to play; repeatable
   --hold <tool>         in the workbench: a tool in the right hand, named as in --give
+  --wear <item>         in the workbench: an item's look for each model's body, named as
+                        in --give, such as leather_coat (repeatable)
   --attach <file>[@<socket>]
-                        in the workbench: a model on a socket, such as socket.back, or
-                        without one, clothing bound to the skeleton (repeatable)
+                        in the workbench: any look, on a socket such as socket.back, or
+                        without one as its file says (repeatable)
   --focus <name>        in the workbench: look closely at a part, such as socket.hand.R
   --sheet <prefix>      in the workbench: capture each clip, save one picture of it per
                         clip as <prefix>-<clip>.png, then exit
@@ -125,6 +127,7 @@ pub struct Options {
     pub models: Vec<String>,
     pub hold: Option<String>,
     pub attaches: Vec<String>,
+    pub wears: Vec<String>,
     pub focus: Option<String>,
     pub sides: Vec<f32>,
     pub moments: Vec<f32>,
@@ -169,6 +172,7 @@ impl Options {
             models: Vec::new(),
             hold: None,
             attaches: Vec::new(),
+            wears: Vec::new(),
             focus: None,
             sides: Vec::new(),
             moments: Vec::new(),
@@ -209,6 +213,7 @@ impl Options {
                 "--model" => options.models.push(value("--model")?),
                 "--hold" => options.hold = Some(value("--hold")?),
                 "--attach" => options.attaches.push(value("--attach")?),
+                "--wear" => options.wears.push(value("--wear")?),
                 "--focus" => options.focus = Some(value("--focus")?),
                 "--sides" => options.sides = numbers("--sides", &value("--sides")?)?,
                 "--moments" => options.moments = numbers("--moments", &value("--moments")?)?,

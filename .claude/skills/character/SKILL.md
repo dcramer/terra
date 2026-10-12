@@ -23,6 +23,8 @@ node tools/tripo/tripo.ts image "Character turnaround sheet for a stylised game 
 
 The reference is the medieval-town mood board (docs/art.md); any approved image in our style works.
 
+For a second body of a cast, such as the female base to match the male, give the first body's sheet as a second reference and say so ("the female base body to match the man in the second reference image ... wearing the same underclothes"), so the two share a style and their underclothes.
+
 Show it to the developers before spending anything else. To change a detail, redraw from the approved sheet (`--ref spike/model_bakeoff/out/tripo/NAME-sheet.png`) and say only what changes; it keeps the rest. **Always end in a T-pose**: a body generated with its arms down and moved into our T-pose crushes its shoulders in every animation.
 
 ## 2. Model, rig, convert, check
@@ -37,9 +39,12 @@ The last number is the character's height in metres (life size, D110). It:
 
 1. crops the front view (the left 44% of the sheet) and makes a textured model (`tripo.ts model`);
 2. rigs it with Tripo's auto-rig in Tripo's own skeleton (`tripo.ts rig --skeleton tripo`), the one the converter reads;
-3. converts Tripo's skeleton onto ours (`convert_rig.py`): our joints move to Tripo's, our bones keep their directions, Tripo's weights are renamed onto our bones with its twist and helper bones folded in, then smoothed lightly and kept to four bones a vertex;
-4. checks it (`rig_check.py`) and renders it moving (`rig_render.py`, to `spike/character_gear/out/NAME-sheet.png`);
-5. exports it as the game reads it (`export_character.py`, to `spike/character_gear/out/NAME-game.glb`): body, skeleton and all our animation clips in one file, every clip re-sampled on this character's skeleton. That matters: Bevy sets each joint's whole position from the clip, so the mannequin's own clips would pull our moved joints back to the mannequin's.
+3. runs the rest, which is free and is `finish_character.sh NAME HEIGHT` on its own:
+   - converts Tripo's skeleton onto ours (`convert_rig.py`): our joints move to Tripo's, our bones keep their directions, Tripo's weights are renamed onto our bones with its twist and helper bones folded in, then smoothed lightly; forearm twist bones are added (`twist.py`), and every vertex kept to four bones;
+   - checks it (`rig_check.py`) and renders it moving (`rig_render.py`, to `spike/character_gear/out/NAME-sheet.png`);
+   - exports it as the game reads it (`export_character.py`, to `spike/character_gear/out/NAME-game.glb`): body, skeleton, sockets and all our animation clips in one file, every clip re-sampled on this character's skeleton with the twist bones baked in. That matters: Bevy sets each joint's whole position from the clip, so the mannequin's own clips would pull our moved joints back to the mannequin's.
+
+**When the conversion, checker or export improves, run `finish_character.sh` again for every character** (`spike/character_gear/out/` lists them; the male's rig is `out/tripo/base-male-tpose-hd-rigged.glb`), refit their gear (step 5), and check them in the workbench. It costs nothing; only `make_character.sh` spends credits.
 
 Read the line starting `RIGCHECK`. It must say `"pass": true`. Then look at the render sheet.
 
@@ -55,7 +60,7 @@ The checker compares the rig with our skeleton and with the hand-rigged mannequi
 | `seams` | Copies of a vertex split at a texture seam have different weights, so the seam will open as the body moves | The weld in `convert_rig.py` was skipped or the threshold missed them |
 | `reach` | Vertices driven by a bone far from them (an arm stuck to the hip) | Usually the body was generated with limbs touching: redraw the sheet with more space between arms and body, legs apart |
 | `symmetry` | Left and right driven differently | Usually an asymmetric model; check the sheet, regenerate |
-| `motion` | Too many edges crush or stretch in some animation, compared with the mannequin | See `worst_places`. Try `SMOOTH=4` on the conversion; if still bad, look at `rig_render`'s sheet before deciding: the limit (3.5x the mannequin) was set by eye |
+| `motion` | Too many edges crush or stretch in some animation, compared with the mannequin, or a ring of skin round an elbow, knee or wrist shrinks by more than a fifth (`pinched`, `pinched_at`) | Edges: see `worst_places`; try `SMOOTH=4` on the conversion. A pinched elbow means a forearm's turn has nowhere to go: check the twist bones (`twist.py`) were added and are driven. Look at `rig_render`'s sheet before deciding: the limits were set by eye |
 
 If Tripo's rig cannot be made to pass, `rig_base.py` rigs the same body with Blender's own weights instead (`run.sh ../character_gear/rig_base.py <refined body> heat <name>`); it did a little worse but passes most checks.
 
@@ -77,19 +82,24 @@ The export also gives the body its sockets, the points what is held and worn han
 
 ## 5. Gear
 
-What is worn is made like any model (the `tripo` skill: a concept image in the character's style, with the body's sheet and a mood board as references, then `model`), then fitted to the base body:
+The game has many items and several bodies (D127), so gear is data: every worn item has one look per base body, `crates/terra_sandbox/assets/models/gear/<body>/<item>.glb`, the item named as in the catalogue in lower case with `_` for spaces (`leather_coat`). The game finds it by that name and puts it on as the file says: a skinned look is bound to the body's skeleton; a rigid one names its socket in its glTF extras. No game code names an item, so adding gear is adding files.
+
+A look is made like any model (the `tripo` skill: a concept image in the character's style, with the body's sheet and a mood board as references, then `model`), then fitted to every base body:
 
 ```bash
-spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb pack-small cap coat quiver
+spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-male.glb small_pack large_pack leather_cap leather_coat quiver
+spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../crates/terra_sandbox/assets/models/character/base-female.glb small_pack large_pack leather_cap leather_coat quiver
 ```
 
-Rigid pieces (a pack, a cap, a quiver) are placed against the body at their socket and saved in the socket's space; clothing that bends (a coat) is sized to the torso, pushed clear of the skin, given the body's weights and saved on its skeleton. Each piece's turn, size and fit are in `PIECES` at the top of the script: Tripo turns each model its own way, so render it from four sides first and set the turn that puts its front to the body's front. Check the result on the body in the workbench, through clips that move the arms and bend the body:
+Rigid pieces (a pack, a cap, a quiver) are placed against the body at their socket and saved in the socket's space; clothing that bends (a coat) is sized to the torso, pushed clear of the skin, given the body's weights and saved on its skeleton. Each piece's turn, size (a share of the body's height) and fit are in `PIECES` at the top of the script. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front.
+
+Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does, as a pack placed by the tips of its straps did. Then look at it on every body in the workbench, close, from the side, through clips that move the arms and bend the body; a sheet from the front hides a gap behind:
 
 ```bash
-cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/base-male.glb --attach models/gear/coat.glb --attach models/gear/pack-small.glb@socket.back --anim Idle_Loop --anim Sword_Attack --sheet shots/wb/gear --clean --settle 60
+cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/base-female.glb --model models/character/base-male.glb --wear leather_coat --wear small_pack --focus socket.back --anim Idle_Loop --anim Sword_Attack --sides 90,180,270 --moments 0.3,0.6 --sheet shots/wb/gear --clean --settle 60
 ```
 
-Then add it to `worn.rs` in the play experiment and a row in `THIRD_PARTY.md`.
+Then add a row for it to `THIRD_PARTY.md`.
 
 ## Traps already found
 
@@ -101,3 +111,6 @@ Then add it to `worn.rs` in the play experiment and a row in `THIRD_PARTY.md`.
 - Tripo models face +X; ours face -Y. Every script turns them.
 - glTF splits a vertex wherever the texture has a seam. Weld the copies before touching weights (`convert_rig.py` does), or each copy gets different weights and the seams open into light lines as the body moves. The checker's `seams` check catches it.
 - Bevy needs its `jpeg` feature for Tripo's textures; without it the model fails to load.
+- Our skeleton has no twist bones, so without `twist.py` a forearm's turn all happens at the elbow and the skin there pinches to a thin neck in swings and reaches. glTF does not keep Blender's constraints, so every script that loads a character and plays it calls `twist.drive`.
+- The edge check cannot see a pinch: a ring of skin shrinking changes no edge's length much. The `pinched` measure watches the rings at elbows, knees and wrists.
+- Scripts that `cd` lose relative paths; resolve them first (`realpath`).

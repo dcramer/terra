@@ -15,11 +15,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
+sys.path.insert(0, HERE)
 
 import bpy
 from mathutils import Matrix, Vector
 
 import look
+import twist
 
 FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
 src, dst = look.args()[:2]
@@ -27,6 +29,8 @@ src, dst = look.args()[:2]
 look.reset()
 bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, src))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
+# The twist bones' constraints, which glTF does not keep; the export bakes them into every clip.
+twist.drive(arm)
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 for o in list(bpy.context.scene.objects):
     if o not in (arm, body):

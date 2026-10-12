@@ -14,6 +14,9 @@ Checks:
   symmetry      a vertex and its mirror are driven by mirrored bones
   motion        through every animation: how many edges stretch or crush badly, whether
                 the feet stay at the ground when standing, and nothing sinks below it
+  pinch         through every animation: how much the ring of skin round each elbow, knee
+                and wrist shrinks, as an elbow does when a forearm's turn has nowhere to go
+                (twist.py)
 """
 
 import json
@@ -23,6 +26,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
+sys.path.insert(0, HERE)
 
 import bpy
 import numpy as np
@@ -30,6 +34,7 @@ from mathutils import Vector
 from mathutils.geometry import intersect_point_line
 
 import look
+import twist
 
 FIGURE = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "character", "figure.gltf")
 OUT = os.path.join(HERE, "out")
@@ -48,6 +53,7 @@ LIMITS = {
     "crush_ratio": 0.45,            # or shorter than this
     "bad_edge_share": 0.01,         # share of edges allowed to do either, in any frame
     "vs_mannequin": 3.5,            # or this many times the hand-rigged mannequin's share: set by eye on 2026-10-11, where a Tripo rig at 3.3x crouched cleanly
+    "pinch": 0.2,                   # how much a ring of skin round an elbow, knee or wrist may shrink, in any frame
     "foot_gap_m": 0.05,             # standing feet within this of the ground
     "sink_m": 0.06,                 # nothing below the ground by more than this
 }
@@ -78,6 +84,7 @@ for m in ref_meshes:
     bpy.data.objects.remove(m)
 
 arm, meshes = load(os.path.join(look.HERE, look.args()[0]))
+twist.drive(arm)
 body = max(meshes, key=lambda m: len(m.data.vertices))
 report, ok = {}, {}
 
@@ -171,6 +178,35 @@ hand = np.array([bool(main_bone[a] and any(k in main_bone[a] for k in ("f_", "th
 keep &= ~hand
 edges, rest_len = edges[keep], rest_len[keep]
 foot = [i for i, b in enumerate(main_bone) if b and ("foot" in b or "toe" in b)]
+# Rings of skin round the elbows, knees and wrists. A turn the skin cannot follow shrinks a
+# whole ring toward the joint (an elbow pinched to a neck); a bend only flattens one side, so
+# the ring's average radius holds. Pinching is that radius shrinking.
+RINGS = {}
+for s in ("L", "R"):
+    RINGS[f"elbow.{s}"] = (f"DEF-forearm.{s}", f"DEF-upper_arm.{s}", ("upper_arm", "forearm"))
+    RINGS[f"wrist.{s}"] = (f"DEF-hand.{s}", f"DEF-forearm.{s}", ("forearm", "hand"))
+    RINGS[f"knee.{s}"] = (f"DEF-shin.{s}", f"DEF-thigh.{s}", ("thigh", "shin"))
+
+
+def ring_radius(points):
+    return float(np.mean(np.linalg.norm(points - points.mean(axis=0), axis=1)))
+
+
+rings = {}
+mw_arm = arm.matrix_world
+for ring, (bone, above, parts) in RINGS.items():
+    if bone not in arm.data.bones:
+        continue
+    side = ring[-1]
+    centre = np.array(tuple(mw_arm @ arm.data.bones[bone].head_local))
+    along = np.array(tuple(mw_arm.to_3x3() @ (arm.data.bones[bone].head_local - arm.data.bones[above].head_local)))
+    along /= np.linalg.norm(along)
+    near = [i for i, b in enumerate(main_bone)
+            if b and b.endswith(f".{side}") and any(p in b for p in parts)
+            and abs(float((pts[i] - centre) @ along)) < 0.035 and np.linalg.norm(pts[i] - centre) < 0.15]
+    if len(near) > 12:
+        rings[ring] = (np.array(near), ring_radius(pts[near]))
+pinch = {}
 motion = {}
 worst_bad = 0.0
 where = {}
@@ -202,9 +238,11 @@ for name in ACTIONS:
         for e in np.nonzero(badmask)[0]:
             where[main_bone[edges[e][0]] or "none"] = where.get(main_bone[edges[e][0]] or "none", 0) + 1
         sink = max(sink, float(-cur[:, 2].min()))
-        if name in ("Idle_Loop",) and foot:
-            standing_gap = max(standing_gap, float(cur[foot, 2].min()))
-    motion[name] = {"worst_bad_edge_share": round(bad_max, 4)}
+        for ring, (near, rest) in rings.items():
+            thin = 1.0 - ring_radius(cur[near]) / rest
+            if thin > pinch.get(name, (0, ""))[0]:
+                pinch[name] = (thin, ring)
+    motion[name] = {"worst_bad_edge_share": round(bad_max, 4), "pinched": round(pinch.get(name, (0, ""))[0], 3), "pinched_at": pinch.get(name, (0, ""))[1]}
     worst_bad = max(worst_bad, bad_max)
 top = sorted(where.items(), key=lambda t: -t[1])[:6]
 report["motion"] = {"actions": motion, "worst_places": top, "sink_m": round(sink, 3), "standing_foot_gap_m": round(standing_gap, 3)}
@@ -216,7 +254,7 @@ moves_ok = True
 for a, v in motion.items():
     limit = max(LIMITS["bad_edge_share"] * 0.5, LIMITS["vs_mannequin"] * baseline[a]) if a in baseline else LIMITS["bad_edge_share"]
     v["limit"] = round(limit, 4)
-    v["ok"] = v["worst_bad_edge_share"] <= limit
+    v["ok"] = v["worst_bad_edge_share"] <= limit and v["pinched"] <= LIMITS["pinch"]
     moves_ok &= v["ok"]
 if look.args()[0].endswith("figure.gltf"):
     with open(baseline_path, "w") as f:
