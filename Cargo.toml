@@ -16,6 +16,7 @@ terra_core = { path = "crates/terra_core" }
 terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
 terra_sim = { path = "crates/terra_sim" }
+terra_voxel = { path = "crates/terra_voxel" }
 # The same version Bevy 0.19 uses, so vectors pass between our crates and Bevy unchanged.
 # `libm` routes its trigonometry through the portable maths library (D30).
 glam = { version = "0.32", features = ["libm"] }
@@ -27,6 +28,9 @@ libm = "0.2"
 # Already built for Bevy; used to save worlds and, later, to send operations (D21).
 serde = { version = "1", features = ["derive"] }
 ron = "0.12"
+# Smooth voxel meshing with seams between detail levels (D32). Apache-2.0, maintained,
+# and already proved in the toolchain spike (research/rust-stack-spike.md).
+transvoxel = "2.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

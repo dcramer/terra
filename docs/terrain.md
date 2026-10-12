@@ -1,6 +1,6 @@
 # Terrain: brief for `terra_voxel`
 
-Status: not started, and provisional like the rest of the engine plan ([engine.md](engine.md)). This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
+Status: being built in `crates/terra_voxel` (the field, edits and harvest so far), and provisional like the rest of the engine plan ([engine.md](engine.md)). This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
 
 ## What it is
 
@@ -65,6 +65,6 @@ Code ported from Voxel Tools keeps its MIT notice; see [THIRD_PARTY.md](../THIRD
 ## Open questions for whoever builds it
 
 - Which of Voxel Tools' two streaming schemes to follow. Our Godot tests used the older octree one; the clipbox one is newer.
-- How edited voxels are stored: the original uses 16-bit values in 16-cubed blocks.
+- Answered 2026-10-11: **how edited voxels are stored.** Not as voxels: edits are kept as the operations themselves and laid over the generated field whenever a point is asked about, as D21 already syncs and saves them. Deterministic and small; the cost grows with the number of edits near a point, so a spatial index, and later cached blocks, come when that shows. The original uses 16-bit values in 16-cubed blocks.
 - Whether the `transvoxel` crate's need to re-mesh on detail changes is acceptable (D32).
 - How materials are stored. The original packs four material indices and four weights into each voxel. The `transvoxel` crate lets a voxel carry extra data and hands both voxels to the mesh builder, so weights can be interpolated there.

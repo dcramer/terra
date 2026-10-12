@@ -1,0 +1,16 @@
+[package]
+name = "terra_voxel"
+description = "Terrain: shape and material everywhere, edits, chunks at several detail levels, and meshing."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+terra_core.workspace = true
+terra_gen.workspace = true
+transvoxel.workspace = true
+
+[lints]
+workspace = true
