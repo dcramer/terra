@@ -23,14 +23,14 @@ test("counts everyone without a user", () => {
 
 test("gives everyone a line with their cost", () => {
   const html = ticker(summary, null);
-  assert.match(html, /class="person" data-key="ana"><span class="name">ana<\/span><span class="amount" data-n="10">\$10\.00</);
-  assert.match(html, /class="person" data-key="ben"><span class="name">ben<\/span><span class="amount" data-n="20">\$20\.00</);
+  assert.match(html, /class="person" data-key="ana"><span class="icon"[^>]*>A<img src="https:\/\/unavatar\.io\/x\/ana\?fallback=false"[^>]*><\/span><span class="name">ana<\/span><span class="amount" data-n="10">\$10\.00</);
+  assert.match(html, /class="person" data-key="ben">.*?<span class="name">ben<\/span><span class="amount" data-n="20">\$20\.00</);
 });
 
 test("gives each service a line after the people", () => {
   const html = ticker(summary, null);
-  assert.match(html, /class="source claude" data-key="Claude">.*data-n="26">\$26\.00</);
-  assert.match(html, /class="source tripo" data-key="Tripo">.*data-n="4">\$4\.00</);
+  assert.match(html, /class="source" data-key="Claude">.*?unavatar\.io\/x\/claudeai.*?data-n="26">\$26\.00</);
+  assert.match(html, /class="source" data-key="Tripo">.*?unavatar\.io\/x\/tripoai.*?data-n="4">\$4\.00</);
   assert.ok(html.indexOf('data-key="ben"') < html.indexOf('data-key="Claude"'));
 });
 
@@ -47,6 +47,7 @@ test("counts one person's alone with a user", () => {
   assert.match(html, /data-user="ben"/);
   assert.match(html, /ben · <span class="tokens"/);
   assert.match(html, /data-theme="dark"/);
+  assert.match(html, /unavatar\.io\/x\/ben/);
   assert.doesNotMatch(html, /class="person"/);
   assert.doesNotMatch(html, /class="source/);
 });
