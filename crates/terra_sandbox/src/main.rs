@@ -46,7 +46,6 @@ fn main() -> AppExit {
         planet::plugin,
         terrain::plugin,
         character::plugin,
-        icons::plugin,
     ));
     for name in &options.experiments {
         let Some(experiment) = experiments::ALL.iter().find(|e| e.name == name) else {

@@ -50,7 +50,7 @@ Picking something up puts it in the first place it fits, scanning from the top l
 
 Every slot that holds an item shows its icon: the bar, the backpack and the equipment slots so far, and storage and the station screens when they show items. An item with no look yet, such as a raw material, shows its name. Research in [research/item-icons.md](../research/item-icons.md); how to check or fix one in [the item-icons playbook](../.claude/skills/item-icons/SKILL.md).
 
-**How they are made** (D129, Leaning, technical; built): the game renders each icon from the item's own look, in its tint, the first time a screen asks for it, and caches it, keyed by look, tint and the cells the item fills. Nobody paints an icon, so a new item, colour or variant has one as soon as it has a look (D127), and the icon is always the real thing (D93). Icons are rendered one at a time on a render layer of their own, by a camera made for each into an image the item's shape (96 pixels a cell), and kept once no shader is still compiling. The renderer is `crates/terra_sandbox/src/icons.rs`; nothing in it names an item. A look could say how it sits in a slot, as it says how it is carried; none needs to yet. State such as broken is not shown yet.
+**How they are made** (D129, Decided, technical): the industry's usual pipeline. Icons are image files baked during development and shipped with the other art; the game only loads them. `cargo xtask icons` renders every item in the catalogue from its own look, in the house style, into `assets/icons/<item>.png`, sized to the cells the item fills (96 pixels a cell), and writes `assets/icons/manifest.txt`, saying which look and style each was rendered from. A test fails when a look or the style has changed since its icon was baked, so a stale icon cannot be committed. Nobody paints an icon, so a new item has one as soon as it has a look (D127), and the icon is the real thing (D93). The renderer is `crates/terra_sandbox/src/icons.rs` and the baker is the sandbox's `icons` experiment; nothing in either names an item. Not built: icons for an item's colour variants (a mask baked with each icon, saying which parts take which colour, for the screen to tint) and for its state, such as broken; both wait until items carry them.
 
 **Which look**: a tool's held look, gear's look on the wearer's body, and for anything else, such as a material, the item's own look, `models/items/<item>.glb`: the thing on its own as it lies, life size, facing +Z, its materials named by role. The same look would show an item dropped in the world. No material has one yet (stone, wood, fibre, hide, ore, iron, meat, berries, cooked meat, arrows), so they show their names.
 
@@ -61,20 +61,20 @@ Every slot that holds an item shows its icon: the bar, the backpack and the equi
 - **One rig for every icon**: the play scene's warm sun from above and to the left, its blue shade, and a cool light from behind that picks the shape out of the slot. The play camera's grading. No outline and no background: the slot shows through.
 - **Framed by the look's bounds** and the item's cells, without perspective, with a little room round it. A held thing lies along its icon's diagonal, so a tool two cells wide lies flatter.
 
-![Every look in the house style, one cell each, at 96 pixels](images/item-icons.png)
+![Every baked icon, at 96 pixels a cell](images/item-icons.png)
 
 ![The same at 48 pixels, a backpack cell on a plain display](images/item-icons-half.png)
 
 ![In play: icons in the equipment slots, the backpack and the bar; stone has no look yet and shows its name](images/item-icons-in-play.png)
 
-The sandbox's `icons` experiment draws the sheet with the game's renderer. How it was chosen: on 2026-10-12 every look was drawn five ways, a row each: three-quarter from above; the same with the edge light; square on with it; on a plate of the sky's colours; in a darker realm's light. The last three columns are tinted. The developers ruled out the plate and left the rest to me.
+The sheet is the baker's (`cargo xtask icons --sheet docs/images/item-icons`), each icon at its own shape. How it was chosen: on 2026-10-12 every look was drawn five ways, a row each: three-quarter from above; the same with the edge light; square on with it; on a plate of the sky's colours; in a darker realm's light. The last three columns are tinted. The developers ruled out the plate and left the rest to me.
 
 ![The five ways compared, a row per way](images/item-icons-compared-2026-10-12.png)
 
 What that showed, and still holds:
 
 - **The darker realm's light lost detail** at 64 pixels, so icons keep one rig whatever realm an item is from.
-- **Long, thin things are small in a square**: the bow, the spear, the quiver. In play each icon is framed to its item's cells.
+- **Long, thin things are small in a square**: the bow, the spear, the quiver. Baked icons are framed to their item's cells.
 - **Some items are hard to tell apart**, such as the stone and iron axes. That is their models' colours, to fix in the looks, not the icons.
 
 ## In the game's model

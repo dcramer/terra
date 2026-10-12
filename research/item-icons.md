@@ -31,6 +31,10 @@ Bevy 0.19 ships what this needs: a camera can draw to an image (`examples/3d/ren
 
 An image model is still useful for the **style**: drawing a few icons by hand or by model as targets, then tuning the rig and the post pass until the renders match them.
 
+## Afterwards
+
+The developers doubted rendering icons in play, and on reflection the evidence above supports them: rendering in play is the exception (Tarkov, for gun builds too many to bake; Minecraft's blocks), and the usual way is to render or paint icons during development and ship them as files. Terra now bakes them (D129): the same rendering from each look, run by `cargo xtask icons`.
+
 ## Limits
 
 - Nothing was built or measured. How many icons a frame can draw on an integrated GPU, and how big the atlas should be, are unknown.

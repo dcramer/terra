@@ -7,6 +7,8 @@
 //!            Windows build. Your game is saved between runs; `--fresh` starts over.
 //!            Anything else after it goes to the game, such as `--at 10,20`.
 //!   loop     Plays the demo's loop by script and checks every step happened (D69).
+//!   icons    Bakes every item's icon from its look (D129) into the sandbox's assets/icons.
+//!            Anything after it goes to the baker, such as `--sheet shots/icons/all`.
 //!   win      Under WSL: builds a program for Windows and runs it there, on the real
 //!            GPU. `cargo xtask win -p <package> [--release] [--copy <name>] [-- program args]`
 
@@ -18,6 +20,7 @@ usage: cargo xtask <task>
 
   play [--fresh]   play the tech demo, on the real GPU; --fresh starts a new game
   loop             play the demo's loop by script and check every step
+  icons [args]     bake every item's icon from its look into assets/icons
   check            what every change must pass: formatting, lints, tests, rules
   doctor           what this machine is missing
   win -p <package> [--release] [--copy <name>] [-- args]
@@ -34,6 +37,7 @@ fn main() -> ExitCode {
         "win" => win(&std::env::args().skip(2).collect::<Vec<_>>()),
         "play" => play(&std::env::args().skip(2).collect::<Vec<_>>()),
         "loop" => run("bash", &["crates/terra_sandbox/loop.sh"]),
+        "icons" => icons(&std::env::args().skip(2).collect::<Vec<_>>()),
         _ => {
             eprintln!("{USAGE}");
             false
@@ -73,6 +77,14 @@ fn output(program: &str, args: &[&str]) -> Option<String> {
     out.status
         .success()
         .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// Renders every item's icon and writes them into the sandbox's assets. It opens a window
+/// for the few seconds it takes; under WSL the CPU renderer is enough.
+fn icons(args: &[String]) -> bool {
+    let mut all = vec!["run", "-p", "terra_sandbox", "--", "--experiment", "icons"];
+    all.extend(args.iter().map(String::as_str));
+    run("cargo", &all)
 }
 
 fn check() -> bool {

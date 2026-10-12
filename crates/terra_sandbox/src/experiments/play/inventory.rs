@@ -448,6 +448,22 @@ impl Items {
             .map_or("?", |def| def.name.as_str())
     }
 
+    /// What a kind's icon is baked from (D129): a tool's held look, gear's look on the
+    /// player's body, and anything else's own look; and the cells it fills, which set the
+    /// icon's shape. Whether the look exists yet is for the caller to find out.
+    pub fn icon_source(&self, kind: ItemKind) -> Option<(String, crate::icons::Icon)> {
+        let def = self.catalogue.get(kind).ok()?;
+        let id = crate::character::item_id(&def.name);
+        let look = if self.tool(kind).is_some() {
+            crate::character::held_look(&id)
+        } else if def.gear.is_some() {
+            crate::character::look(super::figure::BODY, &id)
+        } else {
+            crate::character::item_look(&id)
+        };
+        Some((id, crate::icons::Icon::new(look, (def.size.w, def.size.h))))
+    }
+
     /// Makes an item of a kind found by its name, as when a saved world is loaded.
     pub fn make_named(&mut self, name: &str) -> Option<Item> {
         let kind = self.catalogue.find(name)?;

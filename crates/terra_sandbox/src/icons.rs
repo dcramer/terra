@@ -1,14 +1,16 @@
-//! Item icons (D129) in the house style (D130): each drawn from the item's own look by a
-//! camera of its own into an image, the first time something asks for it, and kept. Held
-//! things lie along the icon's diagonal, square on, broad side to the front, working end
-//! up and to the right; worn things face the front, seen from a little above. One rig for
-//! every icon, no background. Nothing here knows any one item. The playbook is
-//! `.claude/skills/item-icons/SKILL.md`.
+//! The item icon renderer (D129), in the house style (D130): each icon rendered from the
+//! item's own look by a camera of its own into an image. Held things lie along the icon's
+//! diagonal, square on, broad side to the front, working end up and to the right; anything
+//! else faces the front, seen from a little above. One rig for every icon, no background.
+//! Nothing here knows any one item. The playbook is `.claude/skills/item-icons/SKILL.md`.
 //!
-//! Ask with [`Icons::want`] and read with [`Icons::get`]. The resource counts as
-//! changed only when an icon is made or given up on, so a screen can lay itself out again
-//! then. Icons are drawn one at a time, a few frames each, on a render layer of their
-//! own, so the world and its lights are not in them.
+//! Icons are baked during development, not rendered in play: `cargo xtask icons` runs the
+//! `icons` experiment, which renders every item with this and writes `assets/icons/<item>.png`
+//! and a manifest of what each was rendered from. The game loads the files ([`file`]).
+//!
+//! Ask with [`Icons::want`] and read with [`Icons::get`]. Icons are rendered one at a time,
+//! a few frames each, on a render layer of their own, so the world and its lights are not
+//! in them.
 
 use std::collections::{HashMap, VecDeque};
 
@@ -31,6 +33,26 @@ use bevy::{
 };
 
 use crate::character::Tint;
+
+/// The style's version: raise it whenever the rig changes, so every icon baked before is
+/// stale and the check asks for them to be baked again.
+pub const STYLE: u32 = 1;
+/// Where the manifest of baked icons is, under `assets/`: a line per item, `<item> <look>
+/// <fingerprint of the look> <style>`.
+pub const MANIFEST: &str = "icons/manifest.txt";
+
+/// Where an item's baked icon is, under `assets/`, by its id (`character::item_id`).
+pub fn file(item: &str) -> String {
+    format!("icons/{item}.png")
+}
+
+/// A fingerprint of a look's file, so a baked icon is known to be stale when its look
+/// changes: FNV-1a, which is stable across machines and versions.
+pub fn fingerprint(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
 
 /// The render layer icons are drawn on, apart from the world's.
 pub const LAYER: usize = 7;
@@ -108,46 +130,27 @@ struct Key {
     cells: (u8, u8),
 }
 
-enum Made {
-    Waiting,
-    Ready(Handle<Image>),
-    /// The look did not load or had nothing to draw; whoever asked shows something else.
-    Failed,
-}
-
-/// Every icon asked for, made or on its way.
+/// Every icon asked for: rendered, as RGBA `cells` times `PX_PER_CELL` on a side, or on
+/// its way, or failed (its look did not load or had nothing to draw).
 #[derive(Resource, Default)]
 pub struct Icons {
-    made: HashMap<Key, Made>,
+    made: HashMap<Key, Option<Vec<u8>>>,
     queue: VecDeque<Icon>,
     drawing: Option<Drawing>,
-    /// Keep a copy of each icon on the CPU as it is drawn, for tools that save them. A
-    /// icon can only be read back while its camera draws it.
-    pub keep_copies: bool,
-    copies: HashMap<Key, Vec<u8>>,
 }
 
 impl Icons {
-    /// Asks for an icon, if it has not been asked for already. Call through
-    /// `bypass_change_detection`, so asking does not count as a change.
+    /// Asks for an icon, if it has not been asked for already.
     pub fn want(&mut self, icon: &Icon) {
         if let std::collections::hash_map::Entry::Vacant(entry) = self.made.entry(icon.key()) {
-            entry.insert(Made::Waiting);
+            entry.insert(None);
             self.queue.push_back(icon.clone());
         }
     }
 
-    /// The icon, once it is made.
-    pub fn get(&self, subject: &Icon) -> Option<Handle<Image>> {
-        match self.made.get(&subject.key()) {
-            Some(Made::Ready(image)) => Some(image.clone()),
-            _ => None,
-        }
-    }
-
-    /// A copy of the icon, as RGBA, if `keep_copies` was set when it was drawn.
-    pub fn copy(&self, subject: &Icon) -> Option<&[u8]> {
-        self.copies.get(&subject.key()).map(Vec::as_slice)
+    /// The icon as RGBA, once it is rendered.
+    pub fn get(&self, icon: &Icon) -> Option<&[u8]> {
+        self.made.get(&icon.key())?.as_deref()
     }
 
     /// Whether every icon asked for is made or given up on.
@@ -164,8 +167,9 @@ struct Drawing {
     /// Frames since the look appeared, until it is placed; then frames drawn.
     frames: u32,
     placed: bool,
-    /// A copy has been asked for.
+    /// A copy has been asked for, and has come back.
     copying: bool,
+    copied: bool,
     /// Frames in a row with no shader compiling, while drawing.
     shaders_ready_for: u32,
     camera: Option<Entity>,
@@ -268,7 +272,7 @@ fn camera(image: Handle<Image>, at: Transform, projection: Projection) -> impl B
 #[allow(clippy::too_many_arguments)]
 fn draw(
     mut commands: Commands,
-    mut icons: ResMut<Icons>,
+    icons: ResMut<Icons>,
     assets: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
     ready: Query<(), With<Ready>>,
@@ -277,7 +281,7 @@ fn draw(
     mut lights: Query<(&mut Transform, &IconLight)>,
     shaders: Res<ShadersReady>,
 ) {
-    let icons = icons.bypass_change_detection();
+    let icons = icons.into_inner();
     let Some(drawing) = icons.drawing.as_mut() else {
         let Some(subject) = icons.queue.pop_front() else {
             return;
@@ -308,6 +312,7 @@ fn draw(
             frames: 0,
             placed: false,
             copying: false,
+            copied: false,
             shaders_ready_for: 0,
             camera: None,
             image: None,
@@ -318,8 +323,7 @@ fn draw(
         warn!("icons: {} did not load: {error}", drawing.subject.look);
         let drawing = icons.drawing.take().expect("drawing");
         commands.entity(drawing.look).despawn();
-        icons.made.insert(drawing.subject.key(), Made::Failed);
-        icons_changed(&mut commands);
+        icons.made.insert(drawing.subject.key(), None);
         return;
     }
     if !ready.contains(drawing.look) {
@@ -337,8 +341,7 @@ fn draw(
             warn!("icons: {} has nothing to draw", drawing.subject.look);
             let drawing = icons.drawing.take().expect("drawing");
             commands.entity(drawing.look).despawn();
-            icons.made.insert(drawing.subject.key(), Made::Failed);
-            icons_changed(&mut commands);
+            icons.made.insert(drawing.subject.key(), None);
             return;
         }
         let (w, h) = drawing.subject.cells;
@@ -388,48 +391,38 @@ fn draw(
     if !drawn && drawing.frames < MOST_DRAW_FRAMES {
         return;
     }
-    if icons.keep_copies {
-        let key = drawing.subject.key();
-        if icons.copies.contains_key(&key) {
-            // Copied; done.
-        } else {
-            if !drawing.copying
-                && let Some(image) = drawing.image.clone()
-            {
-                drawing.copying = true;
-                commands.spawn(Screenshot::image(image)).observe(
-                    move |captured: On<ScreenshotCaptured>, mut icons: ResMut<Icons>| {
-                        let copy = match captured.image.clone().try_into_dynamic() {
-                            Ok(icon) => icon.to_rgba8().into_raw(),
-                            Err(error) => {
-                                error!("icons: could not copy an icon: {error}");
-                                Vec::new()
-                            }
-                        };
-                        icons
-                            .bypass_change_detection()
-                            .copies
-                            .insert(key.clone(), copy);
-                    },
-                );
-            }
-            return;
+    // An image can only be read back while a camera renders into it, so the camera keeps
+    // rendering until the copy comes back.
+    if !drawing.copied {
+        if !drawing.copying
+            && let Some(image) = drawing.image.clone()
+        {
+            drawing.copying = true;
+            commands.spawn(Screenshot::image(image)).observe(
+                |captured: On<ScreenshotCaptured>, mut icons: ResMut<Icons>| {
+                    let Some(drawing) = icons.drawing.as_mut() else {
+                        return;
+                    };
+                    drawing.copied = true;
+                    let key = drawing.subject.key();
+                    let copy = match captured.image.clone().try_into_dynamic() {
+                        Ok(icon) => Some(icon.to_rgba8().into_raw()),
+                        Err(error) => {
+                            error!("icons: could not read an icon back: {error}");
+                            None
+                        }
+                    };
+                    icons.made.insert(key, copy);
+                },
+            );
         }
+        return;
     }
     let drawing = icons.drawing.take().expect("drawing");
     commands.entity(drawing.look).despawn();
     if let Some(camera) = drawing.camera {
         commands.entity(camera).despawn();
     }
-    if let Some(image) = drawing.image {
-        icons.made.insert(drawing.subject.key(), Made::Ready(image));
-    }
-    icons_changed(&mut commands);
-}
-
-/// Marks the icons changed, so screens showing them lay themselves out again.
-fn icons_changed(commands: &mut Commands) {
-    commands.queue(|world: &mut World| world.resource_mut::<Icons>().set_changed());
 }
 
 /// The corners of every part of a look, in the world.

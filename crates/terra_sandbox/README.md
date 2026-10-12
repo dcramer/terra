@@ -43,7 +43,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--wear <item>` | In the workbench: an item's look for each model's body, named as in `--give`, such as `leather_coat`. Repeatable |
 | `--attach <file>[@<socket>]` | In the workbench: any look, on a socket such as `models/x.glb@socket.back`, or without one as its file says. Repeatable |
 | `--focus <name>` | In the workbench: look closely at one part, such as `socket.hand.R` |
-| `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. In `icons`: the sheet of item icons, `<prefix>.png` and `<prefix>-half.png`, then exit |
+| `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. In `icons`: also save the baked icons laid out, `<prefix>.png` and `<prefix>-half.png` |
 | `--sides <degrees,…>` | In the workbench sheet: where to look from, round from the front; 30,120,210,300 by default |
 | `--moments <fraction,…>` | In the workbench sheet: how far through each clip; 0.4 by default |
 
@@ -265,10 +265,10 @@ Models on a plain floor in the game's own light and renderer, playing animations
 ## Item icons
 
 ```bash
-cargo run -p terra_sandbox -- --experiment icons --sheet shots/icons/all
+cargo xtask icons --sheet shots/icons/all
 ```
 
-Every held look and every worn look on one base body, rendered one cell square by the game's own icon renderer (`src/icons.rs`, D129) in the house style (D130), laid out on empty slots at 96 and 48 pixels (`<prefix>.png`, `<prefix>-half.png`), then it exits. `--model <path>` draws only the looks named. In play, the same renderer fills the bar, backpack and equipment slots. How to check and fix an icon is in `.claude/skills/item-icons/SKILL.md`.
+The icon baker (D129): renders every item in the catalogue from its own look in the house style (D130) with the icon renderer (`src/icons.rs`), writes `assets/icons/<item>.png` sized to the item's cells and `assets/icons/manifest.txt`, lists items with no look yet, and exits; `--sheet` also saves the icons laid out on empty slots, at 96 and 48 pixels a cell. `--model <path>` previews looks one cell square without writing to the assets. The play experiment loads the baked files. A test fails when an icon is stale. How to make, check and fix icons is in `.claude/skills/item-icons/SKILL.md`.
 
 ## Adding an experiment
 

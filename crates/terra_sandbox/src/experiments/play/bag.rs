@@ -1,8 +1,8 @@
 //! The inventory on screen: the action bar along the bottom, a count of raw items, a
 //! notice above the bar when something could not be done, and the inventory itself,
 //! which Tab opens: the character sheet of what is worn (D64), and the backpack's grid,
-//! with each item filling its cells. Items show their icon (D129, `icons`), or their name
-//! while it is drawn or if they have no look yet.
+//! with each item filling its cells. Items show their icon, baked by `cargo xtask icons`
+//! (D129), or their name if they have none yet.
 //!
 //!   1 to 6        pick a slot of the action bar; whatever it points at is in hand
 //!   Tab           open and close the inventory (I does the same; either can be changed)
@@ -13,17 +13,16 @@ use super::Player;
 use super::build_menu::BuildMenu;
 use super::controls::{Action, Settings};
 use super::dial::Dial;
-use super::figure::BODY;
 use super::grab_mouse;
 use super::inventory::{self, BAR_SLOTS, Backpack, Belongings, InventoryScreen, Items, Raw, SLOTS};
 use super::options::OptionsMenu;
 use super::vitals::{Vitals, nourishment};
-use crate::character;
-use crate::icons::{Icon, Icons};
+use crate::{character, icons};
 use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
+use std::collections::HashMap;
 use terra_items::{GearSlot, ItemId, ItemKind};
 
 const PLAIN: Color = Color::srgba(0.07, 0.08, 0.1, 0.6);
@@ -121,6 +120,7 @@ struct Hud;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Items>()
+        .init_resource::<ItemIcons>()
         .init_resource::<InventoryScreen>()
         .init_resource::<Notice>()
         .add_systems(Startup, setup)
@@ -464,36 +464,47 @@ fn colour(items: &Items, kind: ItemKind) -> Color {
     }
 }
 
-/// An item's icon (D129), drawn from its look: a tool's held look, gear's look on the
-/// player's body, and anything else's own look (`character::item_look`). An item whose
-/// look does not exist yet is shown by its name.
-fn icon(items: &Items, kind: ItemKind) -> Option<Icon> {
-    let def = items.catalogue.get(kind).ok()?;
-    let id = character::item_id(&def.name);
-    let look = if items.tool(kind).is_some() {
-        character::held_look(&id)
-    } else if def.gear.is_some() {
-        character::look(BODY, &id)
-    } else {
-        character::item_look(&id)
-    };
-    Some(Icon::new(look, (def.size.w, def.size.h)))
+/// Each kind's baked icon (D129), loaded the first time it is shown, or none if it has
+/// not been baked: an item without a look yet.
+#[derive(Resource, Default)]
+struct ItemIcons(HashMap<ItemKind, Option<(Handle<Image>, (u8, u8))>>);
+
+impl ItemIcons {
+    /// The icon and the cells it was baked for.
+    fn get(
+        &mut self,
+        items: &Items,
+        assets: &AssetServer,
+        kind: ItemKind,
+    ) -> Option<(Handle<Image>, (u8, u8))> {
+        self.0
+            .entry(kind)
+            .or_insert_with(|| {
+                let def = items.catalogue.get(kind).ok()?;
+                let file = icons::file(&character::item_id(&def.name));
+                let baked = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("assets")
+                    .join(&file)
+                    .exists();
+                baked.then(|| (assets.load(file), (def.size.w, def.size.h)))
+            })
+            .clone()
+    }
 }
 
-/// Draws the backpack's grid again whenever what is in it changes, or an icon it waits
-/// for is made.
+/// Draws the backpack's grid again whenever what is in it changes.
 fn lay_out(
     mut commands: Commands,
     items: Res<Items>,
     backpack: Single<Ref<Backpack>>,
     area: Single<(Entity, &mut Node), With<GridArea>>,
-    mut icons: ResMut<Icons>,
+    mut icons: ResMut<ItemIcons>,
+    assets: Res<AssetServer>,
     mut drawn: Local<bool>,
 ) {
-    if *drawn && !backpack.is_changed() && !icons.is_changed() {
+    if *drawn && !backpack.is_changed() {
         return;
     }
-    let icons = icons.bypass_change_detection();
     *drawn = true;
     let grid = &backpack.0;
     let (area, mut node) = area.into_inner();
@@ -523,11 +534,7 @@ fn lay_out(
         }
         for placed in grid.iter() {
             let kind = placed.item.kind;
-            let icon = icon(&items, kind);
-            if let Some(icon) = &icon {
-                icons.want(icon);
-            }
-            let image = icon.as_ref().and_then(|icon| icons.get(icon));
+            let image = icons.get(&items, &assets, kind).map(|(image, _)| image);
             let name = items.name(kind);
             // A container says how full it is; an item without an icon says what it is.
             let label = match (placed.stack, image.is_some()) {
@@ -599,7 +606,8 @@ fn draw(
     >,
     mut shown: Query<(&Interaction, &Shown, &mut BorderColor), (Without<Slot>, Without<GearBox>)>,
     mut boxes: Query<(&Interaction, &GearBox, &mut BorderColor), (Without<Slot>, Without<Shown>)>,
-    mut icons: ResMut<Icons>,
+    mut icons: ResMut<ItemIcons>,
+    assets: Res<AssetServer>,
     mut icon_nodes: Query<(&IconAt, &mut ImageNode, &mut Node)>,
     mut texts: ParamSet<(
         Query<(&SlotLabel, &mut Text)>,
@@ -647,9 +655,7 @@ fn draw(
             *border = BorderColor::all(if held { Color::WHITE } else { Color::NONE });
         }
     }
-    // Icons on the bar and the sheet, once made; until then, and for things with none,
-    // the bar shows the name.
-    let icons = icons.bypass_change_detection();
+    // Icons on the bar and the sheet; for things with none, the bar shows the name.
     let mut bar_icons = [false; BAR_SLOTS];
     for (at, mut image, mut node) in &mut icon_nodes {
         let kind = match at {
@@ -659,11 +665,9 @@ fn draw(
                 .map(|placed| placed.item.kind),
             IconAt::Gear(slot) => gear.worn(*slot).map(|item| item.kind),
         };
-        let icon = kind.and_then(|kind| icon(items, kind));
-        if let Some(icon) = &icon {
-            icons.want(icon);
-        }
-        let shown = icon.and_then(|icon| icons.get(&icon).map(|handle| (icon.cells, handle)));
+        let shown = kind
+            .and_then(|kind| icons.get(items, &assets, kind))
+            .map(|(handle, cells)| (cells, handle));
         if let (IconAt::Bar(slot), Some(_)) = (at, &shown) {
             bar_icons[*slot] = true;
         }

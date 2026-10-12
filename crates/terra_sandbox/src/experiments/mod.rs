@@ -51,7 +51,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "icons",
-        about: "Item icons in the house style (D130): every look, or --model <path>, drawn as a slot shows it; --sheet <prefix> saves them and exits.",
+        about: "The icon baker (D129): renders every item from its look into assets/icons, then exits; --sheet <prefix> also lays them out; --model <path> previews a look. Run as cargo xtask icons.",
         add: icons::plugin,
     },
     Experiment {
