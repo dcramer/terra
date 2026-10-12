@@ -33,13 +33,14 @@ GEAR = os.path.join(HERE, "..", "model_bakeoff", "out", "tripo")
 OUT = os.path.join(HERE, "..", "..", "crates", "terra_sandbox", "assets", "models", "gear")
 
 # item: (Tripo model, turn about Z in degrees so its front faces the body's front (-Y) and
-# its body side faces the body, how it is fitted, size as a share of the body's height).
+# its body side faces the body, how it is fitted, size as a share of the body's height, and
+# the role its material plays, which a tint in the game names to recolour it).
 PIECES = {
-    "small_pack": ("pack", 90, "back", 0.23),
-    "large_pack": ("pack", 90, "back", 0.31),
-    "leather_cap": ("cap", -90, "head", None),
-    "leather_coat": ("coat", -90, "torso", None),
-    "quiver": ("quiver", 90, "belt", 0.4),
+    "small_pack": ("pack", 90, "back", 0.23, "Pack"),
+    "large_pack": ("pack", 90, "back", 0.31, "Pack"),
+    "leather_cap": ("cap", -90, "head", None, "Leather"),
+    "leather_coat": ("coat", -90, "torso", None, "Leather"),
+    "quiver": ("quiver", 90, "belt", 0.4, "Leather"),
 }
 
 body_path, names = look.args()[0], look.args()[1:]
@@ -233,10 +234,13 @@ TOUCHING = {"back": 0.08, "head": 0.3, "belt": 0.05, "torso": 0.4}
 OUT = os.path.join(OUT, body_name)
 os.makedirs(OUT, exist_ok=True)
 for name in names:
-    model, turn, how, size = PIECES[name]
+    model, turn, how, size, role = PIECES[name]
     size = size * height if size else None
     ob = import_gear(model, turn)
     ob.name = name
+    for slot in ob.material_slots:
+        if slot.material:
+            slot.material.name = role
     if how == "back":
         socket = fit_back(ob, size)
     elif how == "head":

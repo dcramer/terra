@@ -4,7 +4,9 @@
 //!
 //! What is worn has a look for each base body, fitted to it once
 //! (`spike/character_gear/fit_gear.py`) and found by name: `models/gear/<body>/<item>.glb`,
-//! the item named as in the catalogue (`item_id`). The file says how it goes on, so
+//! the item named as in the catalogue (`item_id`). Looks name their materials by role
+//! (Leather, Metal, Wood...), so a `Tint` can recolour one look many ways without a new
+//! file, and tinted materials are shared, one per colour. The file says how it goes on, so
 //! nothing here knows any one item: a look with a skin bends with the body, and its joints
 //! are swapped for the body's own; a rigid one names its socket in its glTF extras,
 //! `{"socket": "socket.back"}`, and is hung there.
@@ -16,7 +18,7 @@
 //! does in play.
 
 use bevy::{
-    gltf::GltfExtras,
+    gltf::{GltfExtras, GltfMaterialName},
     mesh::skinning::SkinnedMesh,
     prelude::*,
     world_serialization::{WorldAsset, WorldAssetRoot, WorldInstanceReady},
@@ -73,11 +75,36 @@ pub struct Body {
     pub name: &'static str,
 }
 
-/// What a character wears, by item id (`item_id`): the looks its body shows (`worn` in the
-/// play experiment). The player's follows its equipment; anyone else's is set by whatever
-/// stands them in the world.
+/// What a character wears: the looks its body shows (`worn` in the play experiment). The
+/// player's follows its equipment; anyone else's is set by whatever stands them in the world.
 #[derive(Component, Clone, Debug, Default, PartialEq)]
-pub struct Outfit(pub Vec<String>);
+pub struct Outfit(pub Vec<Clothing>);
+
+/// One thing worn: the item, by id (`item_id`), and how it is coloured.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Clothing {
+    pub item: String,
+    pub tint: Tint,
+}
+
+impl Clothing {
+    pub fn new(item: impl Into<String>) -> Self {
+        Clothing {
+            item: item.into(),
+            tint: Tint::default(),
+        }
+    }
+}
+
+/// Colours for a look's parts, by the role their material plays (its glTF material name
+/// before any `.`): `[("Leather", blue)]` dyes every leather part blue. Over a texture, the
+/// colour dyes it, keeping its light and dark (`dye`). On a look's root; applied once it has loaded.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct Tint(pub Vec<(String, Color)>);
+
+/// Tinted materials, shared: one per original material and colour, however many looks use it.
+#[derive(Resource, Default)]
+struct Tinted(HashMap<(AssetId<StandardMaterial>, [u32; 4]), Handle<StandardMaterial>>);
 
 /// A body whose model has loaded, so its sockets exist.
 #[derive(Component)]
@@ -106,9 +133,11 @@ pub fn held_look(item: &str) -> String {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_observer(put_on)
+    app.init_resource::<Tinted>()
+        .add_observer(put_on)
         .add_observer(body_ready)
         .add_observer(held_ready)
+        .add_observer(tint)
         .add_systems(Update, tilt);
 }
 
@@ -211,6 +240,60 @@ fn held_ready(
     }
 }
 
+/// Once a tinted look has loaded, gives each part whose role has a colour a material in that
+/// colour, shared with every other part tinted the same.
+fn tint(
+    ready: On<WorldInstanceReady>,
+    tints: Query<&Tint>,
+    children: Query<&Children>,
+    parts: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &GltfMaterialName)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut tinted: ResMut<Tinted>,
+    mut commands: Commands,
+) {
+    let Ok(tint) = tints.get(ready.entity) else {
+        return;
+    };
+    for each in children.iter_descendants(ready.entity) {
+        let Ok((part, material, name)) = parts.get(each) else {
+            continue;
+        };
+        let role = name.0.split('.').next().unwrap_or_default();
+        let Some((_, colour)) = tint.0.iter().find(|(wanted, _)| wanted == role) else {
+            continue;
+        };
+        let key = (
+            material.0.id(),
+            colour.to_linear().to_f32_array().map(f32::to_bits),
+        );
+        let handle = match tinted.0.get(&key) {
+            Some(handle) => handle.clone(),
+            None => {
+                let Some(mut recoloured) = materials.get(&material.0).cloned() else {
+                    continue;
+                };
+                recoloured.base_color = if recoloured.base_color_texture.is_some() {
+                    dye(*colour)
+                } else {
+                    *colour
+                };
+                let handle = materials.add(recoloured);
+                tinted.0.insert(key, handle.clone());
+                handle
+            }
+        };
+        commands.entity(part).insert(MeshMaterial3d(handle));
+    }
+}
+
+/// A colour to multiply a texture by, keeping its brightness: scaled so its brightest
+/// channel is full, as dye takes the cloth's own light and dark.
+fn dye(colour: Color) -> Color {
+    let linear = colour.to_linear();
+    let most = linear.red.max(linear.green).max(linear.blue).max(1e-3);
+    Color::linear_rgb(linear.red / most, linear.green / most, linear.blue / most)
+}
+
 /// Once a worn look has loaded: a skinned one's joints become the body's; a rigid one moves
 /// onto the socket it names.
 fn put_on(
@@ -275,6 +358,13 @@ mod tests {
             look("base-female", &item_id("Small pack")),
             "models/gear/base-female/small_pack.glb"
         );
+    }
+
+    #[test]
+    fn a_dye_keeps_a_texture_bright() {
+        let blue = dye(Color::linear_rgb(0.1, 0.2, 0.4)).to_linear();
+        assert!((blue.blue - 1.0).abs() < 1e-5);
+        assert!((blue.green - 0.5).abs() < 1e-5);
     }
 
     #[test]

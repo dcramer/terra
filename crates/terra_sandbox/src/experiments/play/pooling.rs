@@ -9,7 +9,7 @@
 use super::creatures::{Creature, Form, Lair, Species};
 use super::flora::ClearAround;
 use super::interact::Interactable;
-use super::people::{Arrive, Doing};
+use super::people::{Arrive, Doing, Dyed};
 use bevy::{light::NotShadowCaster, prelude::*};
 
 /// How many spiders the place keeps, and how often it forms another below that.
@@ -115,7 +115,10 @@ fn mark(
         doing: Doing::Bound,
         smith: true,
         body: "base-male",
-        wears: &["leather_coat"],
+        wears: vec![Dyed(
+            "leather_coat",
+            Some(("Leather", Color::srgb(0.45, 0.32, 0.22))),
+        )],
         interact: Some(Interactable::Prisoner),
         says: None,
     });

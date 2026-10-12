@@ -101,8 +101,9 @@ struct Animates {
 }
 
 /// Asks for a person to be stood in the world, on a base body (one of `BODIES`), wearing
-/// items by id (`character::item_id`).
-#[derive(Message, Clone, Copy)]
+/// items by id (`character::item_id`), each dyed a colour if given (its leather, or the
+/// role its look names).
+#[derive(Message, Clone)]
 pub struct Arrive {
     pub name: &'static str,
     pub at: Vec3,
@@ -110,10 +111,14 @@ pub struct Arrive {
     pub doing: Doing,
     pub smith: bool,
     pub body: &'static str,
-    pub wears: &'static [&'static str],
+    pub wears: Vec<Dyed>,
     pub interact: Option<Interactable>,
     pub says: Option<&'static str>,
 }
+
+/// Something a person wears, by item id, and the colour its main material is dyed, if any.
+#[derive(Clone, Copy)]
+pub struct Dyed(pub &'static str, pub Option<(&'static str, Color)>);
 
 pub fn plugin(app: &mut App) {
     app.add_message::<Arrive>()
@@ -203,7 +208,7 @@ fn arrive(
     mut asked: MessageReader<Arrive>,
     mut waiting: Local<Vec<Arrive>>,
 ) {
-    waiting.extend(asked.read().copied());
+    waiting.extend(asked.read().cloned());
     let mut later = Vec::new();
     for arrival in waiting.drain(..) {
         let Some(figure) = figures.0.iter().find(|figure| figure.body == arrival.body) else {
@@ -238,7 +243,20 @@ fn arrive(
             },
             Transform::from_translation(feet).looking_to(facing, up),
             Visibility::default(),
-            character::Outfit(arrival.wears.iter().map(|item| item.to_string()).collect()),
+            character::Outfit(
+                arrival
+                    .wears
+                    .iter()
+                    .map(|Dyed(item, dye)| character::Clothing {
+                        item: item.to_string(),
+                        tint: character::Tint(
+                            dye.iter()
+                                .map(|(role, colour)| (role.to_string(), *colour))
+                                .collect(),
+                        ),
+                    })
+                    .collect(),
+            ),
         ));
         if let Some(what) = arrival.interact {
             person.insert(CanInteract(what));

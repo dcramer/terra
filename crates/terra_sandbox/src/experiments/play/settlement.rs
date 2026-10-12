@@ -13,7 +13,7 @@ use super::catalogue;
 use super::creatures::Lair;
 use super::flora::ClearAround;
 use super::interact::{Focus, Focusing, Interactable};
-use super::people::{Arrive, Doing, Person};
+use super::people::{Arrive, Doing, Dyed, Person};
 use super::props::{self, Models, Theirs};
 use super::scene::SUN_DIRECTION;
 use crate::experiments::build::{self, Build, BuildLook, Built, Site};
@@ -208,7 +208,10 @@ fn found(
             place(1.6, 1.4),
             Doing::Standing,
             "base-female",
-            &["leather_coat"] as &[&str],
+            vec![Dyed(
+                "leather_coat",
+                Some(("Leather", Color::srgb(0.32, 0.42, 0.55))),
+            )],
             Some(Interactable::Talk),
             None,
         ),
@@ -217,7 +220,13 @@ fn found(
             place(5.0, 2.6),
             Doing::Standing,
             "base-male",
-            &["leather_coat", "leather_cap"],
+            vec![
+                Dyed(
+                    "leather_coat",
+                    Some(("Leather", Color::srgb(0.55, 0.42, 0.24))),
+                ),
+                Dyed("leather_cap", None),
+            ],
             Some(Interactable::Talk),
             Some("Tobin: \"Ore rock has a rust to it. A stone pick will break it, slowly.\""),
         ),
@@ -226,7 +235,10 @@ fn found(
             place(-3.5, 2.5),
             Doing::Sitting,
             "base-female",
-            &["leather_cap"],
+            vec![Dyed(
+                "leather_cap",
+                Some(("Leather", Color::srgb(0.46, 0.5, 0.3))),
+            )],
             Some(Interactable::Talk),
             Some("Ilse: \"The deer graze in the open. Come at them quietly, or they're gone.\""),
         ),
@@ -235,7 +247,10 @@ fn found(
             place(-2.0, -3.0),
             Doing::Standing,
             "base-male",
-            &["small_pack"],
+            vec![Dyed(
+                "small_pack",
+                Some(("Pack", Color::srgb(0.6, 0.3, 0.28))),
+            )],
             Some(Interactable::Talk),
             Some("Wyn: \"Meat keeps you longer cooked. Any fire will do.\""),
         ),

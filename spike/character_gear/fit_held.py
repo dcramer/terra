@@ -6,6 +6,9 @@ its working end, as a hand socket expects, and says in its glTF extras how far i
 carried rather than used: {"carry_tilt": -45} tips its head forward and down in a hanging
 hand, positive raises it. Body-independent: a hand socket is the same on every body.
 
+Its materials are named by role (Wood, Metal, Trim, String), so a colour given for a role
+reaches every part of it: here, a stone or iron head; in the game, a tint (character.rs).
+
     spike/model_bakeoff/run.sh ../character_gear/fit_held.py hammer stone_axe iron_axe knife spear bow stone_pickaxe iron_pickaxe
 
 Reads the free tool models in crates/terra_sandbox/assets/models/tools (THIRD_PARTY.md), or
@@ -46,6 +49,11 @@ TOOLS = {
 }
 
 
+# The free models' material names, by the role each part plays.
+ROLES = {"DarkWood": "Wood", "LightWood": "Wood", "Steel": "Metal", "LightSteel": "Metal", "Grey": "Metal",
+         "LightGrey": "Metal", "Red": "Metal", "Yellow": "Trim", "White": "String"}
+
+
 def material(name, colour):
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
@@ -57,7 +65,7 @@ def material(name, colour):
 def pickaxe(head):
     """A handle, and a head that tapers to two points."""
     wood = material("Wood", (0.48, 0.32, 0.2))
-    metal = material("Head", head)
+    metal = material("Metal", head)
     parts = []
     bpy.ops.mesh.primitive_cylinder_add(vertices=6, radius=0.025, depth=1.0, location=(0, 0, 0.5))
     parts.append((bpy.context.object, wood))
@@ -103,19 +111,21 @@ for item in look.args():
         for o in list(bpy.context.scene.objects):
             if o.type != "MESH":
                 bpy.data.objects.remove(o)
-        # The working end's material, where it shows: the grey parts that are not dark.
-        if head:
-            for o in objects:
-                for slot in o.material_slots:
-                    if slot.material is None:
-                        continue
-                    bsdf = slot.material.node_tree.nodes.get("Principled BSDF") if slot.material.use_nodes else None
-                    if bsdf is None:
-                        continue
-                    r, g, b, _ = bsdf.inputs["Base Color"].default_value
-                    if abs(r - g) < 0.08 and abs(g - b) < 0.08 and r > 0.05:
-                        slot.material = slot.material.copy()
-                        slot.material.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = look.linear(head) + (1.0,)
+        # Each part keeps its own material, named by its role (Blender numbers the second
+        # Metal as Metal.001; the game reads the role before the dot). The working end
+        # takes its colour, where it has one.
+        renamed = {}
+        for o in objects:
+            for slot in o.material_slots:
+                if slot.material is None:
+                    continue
+                source = slot.material.name.split(".")[0]
+                if source not in renamed:
+                    renamed[source] = slot.material.copy()
+                    renamed[source].name = ROLES.get(source, source)
+                    if head and ROLES.get(source) == "Metal":
+                        renamed[source].node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = look.linear(head) + (1.0,)
+                slot.material = renamed[source]
     ob = one(objects, item)
     # Its length along Blender's Z, which glTF's +Y becomes: scaled to `length`, the foot of
     # its handle at the origin, then down by where it is held.

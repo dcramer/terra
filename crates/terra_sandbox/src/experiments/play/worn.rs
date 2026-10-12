@@ -5,7 +5,7 @@
 //! equipment holds.
 
 use super::inventory::{Gear, Items};
-use crate::character::{self, Body, BodyReady, Outfit, Worn};
+use crate::character::{self, Body, BodyReady, Clothing, Outfit, Worn};
 use bevy::{gltf::GltfAssetLabel, prelude::*};
 
 /// The outfit a body is shown wearing, so its looks are changed only when that changes.
@@ -30,7 +30,7 @@ fn outfit_from_gear(
             .0
             .iter()
             .filter_map(|(_, item)| items.catalogue.get(item?.kind).ok())
-            .map(|def| character::item_id(&def.name))
+            .map(|def| Clothing::new(character::item_id(&def.name)))
             .collect();
         let wears = Outfit(wears);
         if outfit != Some(&wears) {
@@ -59,13 +59,16 @@ fn show(
                 commands.entity(look).despawn();
             }
         }
-        for item in &outfit.0 {
-            let file = character::look(body.name, item);
-            character::wear(
+        for clothing in &outfit.0 {
+            let file = character::look(body.name, &clothing.item);
+            let look = character::wear(
                 &mut commands,
                 assets.load(GltfAssetLabel::Scene(0).from_asset(file)),
                 root,
             );
+            if !clothing.tint.0.is_empty() {
+                commands.entity(look).insert(clothing.tint.clone());
+            }
         }
         commands
             .entity(root)
