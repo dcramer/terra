@@ -49,6 +49,12 @@ pub trait Field: Send + Sync {
     /// Work kept between asks about nearby points, such as the heights of the land there.
     type Memo: Default;
 
+    /// A memo for asking about ground seen at a coarseness, voxels so many metres apart,
+    /// as a distant chunk is. A field may answer such asks more cheaply and less finely.
+    fn memo_for(&self, _spacing_m: f32) -> Self::Memo {
+        Self::Memo::default()
+    }
+
     /// How far a point is from the surface: positive above, negative inside.
     fn distance_in(&self, point: Vec3, memo: &mut Self::Memo) -> f32;
 
@@ -62,9 +68,29 @@ pub trait Field: Send + Sync {
 }
 
 /// The heights of the land at lattice points already worked out, for asks nearby.
-#[derive(Default)]
 pub struct HeightMemo {
     heights: HashMap<(u8, u32, u32), f32, BuildHasherDefault<LatticeHasher>>,
+    /// Blend between every so many lattice points, for ground seen coarsely: 1 is the
+    /// ground itself.
+    step: u32,
+}
+
+impl HeightMemo {
+    /// A memo for asking about ground seen at a coarseness: voxels so many metres apart.
+    /// The lattice points used are the ground's own, fewer of them.
+    pub fn coarse(spacing_m: f32) -> Self {
+        let step = (spacing_m / GeneratedPlanet::LATTICE_M).max(1.0) as u32;
+        Self {
+            heights: HashMap::default(),
+            step: step.next_power_of_two(),
+        }
+    }
+}
+
+impl Default for HeightMemo {
+    fn default() -> Self {
+        Self::coarse(GeneratedPlanet::LATTICE_M)
+    }
 }
 
 /// A quick hash for lattice points, which are small integers.
@@ -183,24 +209,22 @@ impl GeneratedPlanet {
     fn height_in(&self, direction: Vec3, memo: &mut HeightMemo) -> f32 {
         let (face, s, t) = cube_coordinates(direction);
         let cells = self.lattice as f32;
+        let step = memo.step.min(self.lattice);
+        // The lattice points either side, `step` apart, and how far between them.
         let at = |u: f32| {
             let f = ((u + 1.0) * 0.5 * cells).clamp(0.0, cells);
-            let low = (f.floor() as u32).min(self.lattice - 1);
-            (low, f - low as f32)
+            let low = ((f as u32 / step) * step).min(self.lattice - 1);
+            let high = (low + step).min(self.lattice);
+            (low, high, (f - low as f32) / (high - low) as f32)
         };
-        let ((i, fi), (j, fj)) = (at(s), at(t));
+        let ((i, i2, fi), (j, j2, fj)) = (at(s), at(t));
         let mut node = |i: u32, j: u32| {
             *memo.heights.entry((face, i, j)).or_insert_with(|| {
                 let u = |k: u32| k as f32 / cells * 2.0 - 1.0;
                 self.exact_height(cube_direction(face, u(i), u(j)))
             })
         };
-        let (a, b, c, d) = (
-            node(i, j),
-            node(i + 1, j),
-            node(i, j + 1),
-            node(i + 1, j + 1),
-        );
+        let (a, b, c, d) = (node(i, j), node(i2, j), node(i, j2), node(i2, j2));
         let near = a + (b - a) * fi;
         let far = c + (d - c) * fi;
         near + (far - near) * fj
@@ -255,6 +279,10 @@ fn cube_direction(face: u8, s: f32, t: f32) -> Vec3 {
 
 impl Field for GeneratedPlanet {
     type Memo = HeightMemo;
+
+    fn memo_for(&self, spacing_m: f32) -> HeightMemo {
+        HeightMemo::coarse(spacing_m)
+    }
 
     fn distance_in(&self, point: Vec3, memo: &mut HeightMemo) -> f32 {
         let from_centre = point.length();

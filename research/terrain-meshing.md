@@ -14,7 +14,9 @@ Yes, at about half the budget, once nearby voxels share the work of asking where
 | After 40 digs, one in each chunk | 4.3 ms | 4.9 ms |
 | The mesher alone, on a plain sphere that costs nothing to ask about | 0.4 to 0.6 ms | 0.6 ms |
 
-About 2,650 triangles a chunk. Run it with `cargo run --release -p terra_voxel`, or `cargo xtask win -p terra_voxel --release` on Windows.
+About 2,650 triangles a chunk.
+
+Around one viewer on the ground of the 2 km test planet, the tree chooses 882 chunks in 7.8 ms, 525 of which hold surface, 1.14 million triangles in all, and meshes the lot in 4.2 s on one thread (Linux). That was 22.7 s until distant chunks blended fewer lattice points: a coarse chunk's voxels are metres apart, so they shared no lattice points and each paid for four. Now a coarse chunk blends every second, fourth or eighth point, the same exact points, and reads a seam with a finer chunk at the finer one's spacing, so they still meet without cracks (tested at levels 1 and 3). Run it with `cargo run --release -p terra_voxel`, or `cargo xtask win -p terra_voxel --release` on Windows.
 
 ## What it took
 

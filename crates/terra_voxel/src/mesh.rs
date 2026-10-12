@@ -174,23 +174,30 @@ pub fn mesh_chunk<F: Field>(field: &F, id: ChunkId, finer: Sides) -> ChunkMesh {
     // Nearby voxels share work, such as the land's height, through one memo. What the
     // ground is made of is only asked near the surface: nothing deeper or higher reaches a
     // vertex.
-    let memo = RefCell::new(F::Memo::default());
-    let near = 2.0 * VOXEL_M * (1u32 << id.level) as f32;
-    let sample = |x: f32, y: f32, z: f32| {
-        let point = Vec3::new(x, y, z);
-        let memo = &mut *memo.borrow_mut();
-        let distance = field.distance_in(point, memo);
-        let material = if distance.abs() < near {
-            field.sample_in(point, memo).material
-        } else {
-            material::AIR
-        };
-        Voxel {
-            density: -distance,
-            material,
+    //
+    // A coarse chunk sees the ground at its own coarseness; where it meets a finer chunk it
+    // reads that seam at the finer one's, so the two agree there and meet without cracks.
+    let spacing = VOXEL_M * (1u32 << id.level) as f32;
+    let reader = |spacing: f32| {
+        let memo = RefCell::new(field.memo_for(spacing));
+        move |x: f32, y: f32, z: f32| {
+            let point = Vec3::new(x, y, z);
+            let memo = &mut *memo.borrow_mut();
+            let distance = field.distance_in(point, memo);
+            let material = if distance.abs() < 2.0 * spacing {
+                field.sample_in(point, memo).material
+            } else {
+                material::AIR
+            };
+            Voxel {
+                density: -distance,
+                material,
+            }
         }
     };
-    let relay: &dyn DataField<Voxel, f32> = &sample;
+    let sample = reader(spacing);
+    let seam = reader(spacing * 0.5);
+    let relay: &dyn DataField<Voxel, f32> = &seam;
     // The chunk's own voxels are read once each. A finer neighbour is only read where it
     // meets this chunk, so it asks the field directly. (The crate's own cached path reads
     // neighbours from the wrong block, which cracks seams, so this builds the view itself.)
@@ -316,31 +323,35 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn a_coarse_chunk_meets_finer_ones_without_cracks() {
+    /// Meshes a coarse chunk whose high-x face is the plane x = 0, holding the ground
+    /// there, and the four chunks one level finer on the other side; returns the open
+    /// edges on that face, away from the region's own outer rim, which are cracks.
+    fn cracks_at(level: u8, transition: bool) -> usize {
         let planet = planet();
         let ground = top(&planet);
-        // A coarse chunk whose high-x face is the plane x = 0, holding the ground there,
-        // and the four finer chunks on the other side of that face.
-        let size = chunk_size_m(1);
+        let size = chunk_size_m(level);
         let coarse = ChunkId {
-            level: 1,
+            level,
             coord: IVec3::new(-1, (ground.y / size).floor() as i32, -1),
         };
         let height = ground.y - coarse.coord.y as f32 * size;
         assert!(
-            (6.0..size - 6.0).contains(&height),
+            (size * 0.2..size * 0.8).contains(&height),
             "the ground is well inside the coarse chunk: {height} m up it"
         );
-        let mut meshes = vec![mesh_chunk(&planet, coarse, Sides::HIGH_X)];
+        let sides = if transition {
+            Sides::HIGH_X
+        } else {
+            Sides::none()
+        };
+        let mut meshes = vec![mesh_chunk(&planet, coarse, sides)];
         for (y, z) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
             let fine = ChunkId {
-                level: 0,
+                level: level - 1,
                 coord: IVec3::new(0, coarse.coord.y * 2 + y, coarse.coord.z * 2 + z),
             };
             meshes.push(mesh_chunk(&planet, fine, Sides::none()));
         }
-        // Open edges on the shared face, away from the region's own outer rim, are cracks.
         let low = chunk_origin(coarse);
         let inside_face = |p: Vec3| {
             p.x.abs() < 1e-3
@@ -349,22 +360,22 @@ mod tests {
                 && p.z > low.z + 1e-3
                 && p.z < low.z + size - 1e-3
         };
-        let cracks: Vec<_> = open_edges(&meshes)
+        open_edges(&meshes)
             .into_iter()
             .filter(|&(a, b)| inside_face(a) && inside_face(b))
-            .collect();
-        assert!(
-            cracks.is_empty(),
-            "{} cracks, such as {:?}",
-            cracks.len(),
-            cracks.first()
-        );
+            .count()
+    }
+
+    #[test]
+    fn a_coarse_chunk_meets_finer_ones_without_cracks() {
+        // The finest seam, and a coarse one, where both sides blend fewer lattice points.
+        for level in [1, 3] {
+            assert_eq!(cracks_at(level, true), 0, "cracks at level {level}");
+        }
         // Without the transition face there would be cracks, so the test can see them.
-        meshes[0] = mesh_chunk(&planet, coarse, Sides::none());
-        let cracks = open_edges(&meshes)
-            .into_iter()
-            .filter(|&(a, b)| inside_face(a) && inside_face(b))
-            .count();
-        assert!(cracks > 0, "the test finds cracks when there are some");
+        assert!(
+            cracks_at(1, false) > 0,
+            "the test finds cracks when there are some"
+        );
     }
 }

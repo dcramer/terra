@@ -72,6 +72,26 @@ fn main() {
     }
     let sphere = start.elapsed().as_secs_f64() * 1000.0 / chunks.len() as f64;
     println!("The mesher alone, on a plain sphere: {sphere:.2} ms");
+    // The whole tree of chunks around one viewer on the ground, and meshing all of it.
+    let detail = terra_voxel::Detail::for_planet(2000.0, 150.0);
+    let viewer = surface[0] + surface[0].normalize() * 1.7;
+    let start = Instant::now();
+    let tree = terra_voxel::chunks_around(&[viewer], &detail, |id| {
+        terra_voxel::may_hold_surface(&planet, id)
+    });
+    let choosing = start.elapsed().as_secs_f64() * 1000.0;
+    let start = Instant::now();
+    let meshed: Vec<usize> = tree
+        .iter()
+        .map(|&(id, finer)| mesh_chunk(&planet, id, finer).triangle_count())
+        .collect();
+    let meshing = start.elapsed().as_secs_f64();
+    let with_surface = meshed.iter().filter(|&&triangles| triangles > 0).count();
+    println!(
+        "Around a viewer: {} chunks chosen in {choosing:.1} ms, {with_surface} with surface, {} triangles, all meshed on one thread in {meshing:.2} s",
+        tree.len(),
+        meshed.iter().sum::<usize>()
+    );
     println!(
         "Budget: 6 ms (docs/terrain.md). {}",
         if plain <= 6.0 {

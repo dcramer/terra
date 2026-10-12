@@ -1,6 +1,6 @@
 # Terrain: brief for `terra_voxel`
 
-Status: being built in `crates/terra_voxel` (the field, edits, harvest and meshing so far), and provisional like the rest of the engine plan ([engine.md](engine.md)). This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
+Status: A1 built in `crates/terra_voxel`; A2, drawing it, next, and provisional like the rest of the engine plan ([engine.md](engine.md)). This is the brief for track A's first checkpoint, A1, in [prototypes.md](prototypes.md). It says what to build and how to know it works, not how to write it.
 
 ## What it is
 
@@ -33,7 +33,7 @@ Everything is in planet-local coordinates, in metres, with the planet's centre a
 
 ## Done when
 
-Where it stands, 2026-10-11: met for no cracks, edits, harvest and speed (3.1 ms a chunk on Linux, 3.5 on Windows; [research/terrain-meshing.md](../research/terrain-meshing.md)). Not yet: matching Voxel Tools, which needs Godot on a machine; the tree of chunks around viewers.
+Where it stands, 2026-10-11: A1 is built in `terra_voxel`, the field, edits, harvest, meshing and the tree of chunks around viewers, and meets every criterion below but one: no cracks (tested at fine and coarse seams), edits, harvest, and speed (3.1 ms a chunk on Linux, 3.5 on Windows; [research/terrain-meshing.md](../research/terrain-meshing.md)). Not yet: matching Voxel Tools, which needs Godot on a machine. Next is A2, drawing it in the sandbox.
 
 - `cargo xtask check` passes, with no GPU.
 - **It matches the original.** On the same density function, voxel values and meshes agree with Voxel Tools within a stated tolerance. The Godot build in `spike/planet_test` runs headless and is the reference.
@@ -66,7 +66,7 @@ Code ported from Voxel Tools keeps its MIT notice; see [THIRD_PARTY.md](../THIRD
 
 ## Open questions for whoever builds it
 
-- Which of Voxel Tools' two streaming schemes to follow. Our Godot tests used the older octree one; the clipbox one is newer.
+- Answered 2026-10-11, for now: **which streaming scheme.** An octree split by distance to each viewer, two chunk sizes, kept to chunks the surface may pass through and balanced so neighbours differ by a level at most. About 880 chunks around one viewer on the 2 km planet, chosen in 8 ms. Voxel Tools' clipbox scheme stays the reference if streaming as the camera moves needs it.
 - Answered 2026-10-11: **how edited voxels are stored.** Not as voxels: edits are kept as the operations themselves and laid over the generated field whenever a point is asked about, as D21 already syncs and saves them. Deterministic and small; the cost grows with the number of edits near a point, so a spatial index, and later cached blocks, come when that shows. The original uses 16-bit values in 16-cubed blocks.
 - Whether the `transvoxel` crate's need to re-mesh on detail changes is acceptable (D32).
 - How materials are stored. The original packs four material indices and four weights into each voxel. The `transvoxel` crate lets a voxel carry extra data and hands both voxels to the mesh builder, so weights can be interpolated there.

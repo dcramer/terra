@@ -11,11 +11,14 @@
 //!   digs, fills and walks on. Edits are kept as the operations themselves (D21).
 //! - [`mesh`]: the chunks the ground is drawn in, and meshing one with seams toward finer
 //!   neighbours (D32).
+//! - [`lod`]: which chunks to draw, and how finely, around the people looking.
 
 pub mod field;
+pub mod lod;
 pub mod mesh;
 pub mod planet;
 
 pub use field::{Field, GeneratedPlanet, Sample, material};
+pub use lod::{Detail, chunks_around, may_hold_surface};
 pub use mesh::{CELLS, Sides, VOXEL_M, chunk_at, chunk_origin, chunk_size_m, mesh_chunk};
 pub use planet::VoxelPlanet;

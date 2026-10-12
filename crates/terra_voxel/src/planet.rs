@@ -156,6 +156,10 @@ impl<F: Field> VoxelPlanet<F> {
 impl<F: Field> Field for VoxelPlanet<F> {
     type Memo = F::Memo;
 
+    fn memo_for(&self, spacing_m: f32) -> F::Memo {
+        self.field.memo_for(spacing_m)
+    }
+
     fn distance_in(&self, point: Vec3, memo: &mut F::Memo) -> f32 {
         let mut distance = self.field.distance_in(point, memo);
         for edit in self.edits_at(point) {
