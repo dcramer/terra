@@ -95,7 +95,7 @@ The first proposal, staking out each building before the tribe touches it, suits
 | Mode | What you lay | The tribe |
 |---|---|---|
 | **Build** (the default) | A plan, as today: the pale ghost, meant to be built | Carries for it at once and, later, builds it |
-| **Plan** | A draft: drawn in blue lines like a drawing on paper, with your name on it for the rest of the tribe | Leaves it alone |
+| **Plan** | A draft: drawn in blue lines like a drawing on paper, with your name on it, seen only by those building (see below) | Leaves it alone |
 
 **How it plays**:
 
@@ -122,7 +122,7 @@ The first proposal, staking out each building before the tribe touches it, suits
 - **Copy what is built**: pick up a finished building as drafts, to build another like it.
 - **See its cost** for the whole design, and what the outpost's stores already hold toward it.
 
-Still to think through, with the developers: whether drafts should be seen by the whole tribe or only by whoever drew them until they are made plans.
+**Who sees drafts** (D170, Leaning, from the developers): drafts show only to someone building, with the hammer in hand, in either mode. They show to anyone building within the claim. Put the hammer away and the outpost looks as it is, without anyone's half-finished ideas over it. Plans the tribe is working on still show to everyone, since they are work under way.
 
 ### Also
 
@@ -158,7 +158,7 @@ Proposed, for how:
   - The outpost runs out of food. Recruits say so, and the roster says so.
   - Those who can hunt, fish or gather go out for food on their own, before their other work.
   - Hungry, with the gauge empty, their attributes fall and they work slower and recover less, as you would.
-  - Health then wears away over a few days: three in-game days for hunger (D101), an hour and a half of play at half an hour to a day (D134). Proposed: about two for thirst.
+  - Health then wears away over a few days: three in-game days for hunger and two for thirst (D101), an hour and a half and an hour of play at half an hour to a day (D134).
 
   So a death from hunger means an outpost left without food for days, with everyone saying so.
 - **Food has a quality, and good food saves time** (D169, from the developers): what recruits forage for themselves is poor food, and cooked food is better. It fills more hunger, and may give other boosts. So:
@@ -263,6 +263,6 @@ Technical, mine:
 
 ## Questions for the developers
 
-1. Answered for now: **Plan and Build** (D170, Leaning), perhaps to revisit, with copying and other tools in Plan mode. Still open: are drafts seen by the whole tribe, or only by whoever drew them?
+1. Answered for now: **Plan and Build** (D170, Leaning), perhaps to revisit, with copying and other tools in Plan mode. Drafts show only to those building within the claim.
 2. Answered: **food quality**. Foraged food is poor; cooked fills more hunger and may give other boosts (D169).
-3. Answered in part: **starving takes three in-game days** (D101). Thirst proposed at two.
+3. Answered: **starving takes three in-game days, thirst two** (D101).
