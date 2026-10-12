@@ -16,10 +16,10 @@ Blender is for cleaning up, fitting, rigging, rendering and exporting models, no
 
 - **The MCP server and Blender run on Windows.** Every path you give them is a Windows path: `wslpath -w <path>` (`\\wsl.localhost\Ubuntu\...`). Read what they write back through the WSL path.
 - **"Cannot connect to Blender at localhost:9876"** means the add-on's server isn't running. `claude mcp` showing "Connected" only means the bridge is up. Ask the developer to open Blender and press Start in the MCP add-on's preferences. The add-on also needs Preferences → System → Network → Allow Online Access turned on, even for localhost. Check it from WSL with `powershell.exe Test-NetConnection localhost -Port 9876`.
-- **The `*_for_cli` tools time out** in this setup (2026-10-11), even on an empty file. Use `tools/blender/run.sh` instead, with `--open` for a `.blend`.
+- **The `*_for_cli` tools** open a `.blend` in a background Blender without the live one. They timed out until the launcher stopped passing its stdin on (docs/development.md, step 3); if they time out again, check that first. `tools/blender/run.sh --open` does the same job.
 - **It is the developer's scene.** Look before you change anything (`get_objects_summary`, `get_object_detail_summary`). Keep their names and collections, and ask before deleting or overwriting anything, including saving over their file.
 - **Prefer the specific tools to `execute_blender_code`.** In code, assign a dict to `result` to get data back.
-- **Check the API, don't recall it.** `search_api_docs` and `get_python_api_docs` match the running Blender (5.2). Blender 5 removed `scene.node_tree` for the compositor and `Action.fcurves` (actions are slotted), and deprecated `use_nodes`.
+- **Check the API, don't recall it.** `search_api_docs` and `get_python_api_docs` match the running Blender (5.2). Blender 5 removed `scene.node_tree` for the compositor and `Action.fcurves` (actions are slotted), and deprecated `use_nodes`. Bones' selection and visibility moved to pose bones (`Bone.select` is gone, `Bone.hide` is edit-bone visibility only). Assigning an action does not pick its slot, so a clip that assigns but does not move needs its slot set.
 - **Look at what you did** with `get_screenshot_of_area_as_image` (`VIEW_3D`) or `render_viewport_to_path`, then read the image.
 
 ## Traps already found
