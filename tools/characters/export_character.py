@@ -140,7 +140,9 @@ if MORPHS:
     node_world.update({e.name: e.matrix_world.translation.copy() for e in sockets})
     offsets = {}
     for m in MORPHS:
-        data = np.load(os.path.join(look.OUT, f"{m}.npz"))
+        # Each array read once: an .npz reads an array from disk on every access.
+        with np.load(os.path.join(look.OUT, f"{m}.npz")) as npz:
+            data = {"points": npz["points"], "delta": npz["delta"]}
         kd = KDTree(len(data["points"]))
         for i, p in enumerate(data["points"]):
             kd.insert(Vector(p), i)

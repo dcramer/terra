@@ -224,6 +224,19 @@ cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model mod
 - **The `JOINTS` lines**, in Blender's axes, must match the `SOCKETS` lines the export printed for that morph (`tools/characters/out/M-game.glb`) to a millimetre or so: that is the game shaping a body as the tools do.
 - **Live, with `--remote`**: `node tools/sandbox/remote.ts shape --model 2 heavy=0.5 strong=0.3` reshapes a body in the running workbench, to look at any mix.
 
+### Gear on every body
+
+A worn look is made once, on the base, and every morph carries it (`carry_gear.py`):
+- **Skinned parts close to the skin** follow it vertex by vertex: garments, straps.
+- **Parts that stand off** move as one, far enough to keep their clearance over the skin that grew most beneath them: a pack's bag.
+- **A look hung on a socket** moves with its socket, which each morph moves, and then by the same rule as a part that stands off. A bigger seat does not swallow a quiver. Its shift per morph is in its extras (`morphs`), and the game mixes it by the body's morph weights (`character::Shifts`).
+- **The clipping fixer.** A morph can still bring skin through a look, as a heavy flank through a strap in a swing.
+  - `make_morph.sh` checks each look on the morph's body with `gear_check.py --fix`. That records how far each part of the look must move out to clear the skin in every frame, plus 4 mm.
+  - It then carries the look again with that push baked into the morph, away from the skin and spread smoothly round each place, and checks again, for up to three rounds.
+  - A round is kept only while the look gets better. One that makes it worse is undone, and no more are tried.
+  - That is BodySlide's clipping fixer per extreme, through our clips as well as at rest. The game's files carry the same pushes (`out/M-ITEM-push.npz`).
+  - What a push cannot fix: clipping that happens only in pose, where it would have to go one way in one frame and another in the next. A thigh lifting into a coat's skirt is that kind. Pushing the skirt out sinks it into the belly at rest, and it measured worse each round, so its rounds are undone. That wants the look's weights fixed (the skirt partly following the thigh), not more push.
+
 ## Traps already found
 
 - Blender's glTF importer leaves the skeleton posed in the first frame of some animation. Clear every pose bone's transform before using its rest pose, or that pose becomes the rest pose.

@@ -9,13 +9,13 @@ iron painted - - -
 iron_axe painted models/held/iron_axe.glb f2b26d24513e2b9b -
 iron_pickaxe painted models/held/iron_pickaxe.glb e922e2e105634538 -
 knife painted models/held/knife.glb fdb7acba51e094c1 -
-large_pack painted models/gear/large_pack.glb b55909206678a1f8 -
-leather_cap painted models/gear/leather_cap.glb 27e376a881744ac0 -
+large_pack painted models/gear/large_pack.glb b66271bcc516c55b -
+leather_cap painted models/gear/leather_cap.glb 4c0ece57376957a9 -
 leather_coat painted models/gear/leather_coat.glb f17bf37c4cc18d92 -
 meat painted - - -
 ore painted - - -
-quiver painted models/gear/quiver.glb b760fdc6cc78a59a -
-small_pack painted models/gear/small_pack.glb 3db8a517f875343f -
+quiver painted models/gear/quiver.glb a0772fa541b7a5c8 -
+small_pack painted models/gear/small_pack.glb ea94605f6b2b197f -
 spear painted models/held/spear.glb 9dd22f7a5b0d1c13 -
 stone painted - - -
 stone_axe painted models/held/stone_axe.glb ff834e6b0ad4b8d2 -

@@ -181,6 +181,33 @@ struct BodyMaterials(HashMap<(AssetId<StandardMaterial>, [u32; 32]), Handle<Body
 #[derive(Component)]
 pub struct BodyReady;
 
+/// How far a look hung on a socket moves, in its socket's space, for each of the body's morphs
+/// at full weight (`{"morphs": {M: [x, y, z]}}` in its extras, by `carry_gear.py`): beyond its
+/// socket's own move, so it keeps its clearance as the skin beneath it grows. `appearance`
+/// mixes them by the body's morph weights.
+#[derive(Component, Default, Debug, PartialEq)]
+pub struct Shifts(pub HashMap<String, Vec3>);
+
+impl Shifts {
+    /// The shifts in a look's extras, if it has any.
+    pub fn from_extras(value: serde_json::Value) -> Option<Shifts> {
+        let raw: HashMap<String, [f32; 3]> = serde_json::from_value(value).ok()?;
+        Some(Shifts(
+            raw.into_iter()
+                .map(|(m, v)| (m, Vec3::from_array(v)))
+                .collect(),
+        ))
+    }
+
+    /// The shift for a mix of morphs: each morph's by its weight.
+    pub fn mixed(&self, weights: &[(String, f32)]) -> Vec3 {
+        weights
+            .iter()
+            .filter_map(|(m, w)| self.0.get(m).map(|v| *v * *w))
+            .sum()
+    }
+}
+
 /// A worn thing's look, on `body`, a character's model.
 #[derive(Component)]
 pub struct Worn {
@@ -501,9 +528,14 @@ fn put_on(
         let socket = own
             .iter()
             .find_map(|each| socket_in(extras.get(*each).ok()?));
+        let shifts = own
+            .iter()
+            .find_map(|each| extra(extras.get(*each).ok()?, "morphs"))
+            .and_then(Shifts::from_extras)
+            .unwrap_or_default();
         match socket.and_then(|socket| Some((find(*body, &socket, &children, &names)?, socket))) {
             Some((at, _)) => {
-                commands.entity(ready.entity).insert(ChildOf(at));
+                commands.entity(ready.entity).insert((ChildOf(at), shifts));
             }
             None => warn!("A worn look names no socket this body has."),
         }
@@ -556,6 +588,21 @@ mod tests {
         let key = mask.key();
         assert_eq!((key[0], key[1], key[31]), (1, 2, 1 << 31));
         assert_eq!(key[2..31].iter().sum::<u32>(), 0);
+    }
+
+    #[test]
+    fn a_hung_look_shifts_by_the_mix_of_morphs() {
+        let shifts = Shifts::from_extras(serde_json::json!({
+            "heavy": [0.0, 0.0, -0.04], "strong": [0.0, 0.02, -0.02]
+        }))
+        .unwrap();
+        let mix = shifts.mixed(&[
+            ("heavy".into(), 0.5),
+            ("strong".into(), 1.0),
+            ("thin".into(), 1.0),
+        ]);
+        assert!((mix - Vec3::new(0.0, 0.02, -0.04)).length() < 1e-6);
+        assert_eq!(shifts.mixed(&[]), Vec3::ZERO);
     }
 
     #[test]

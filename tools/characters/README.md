@@ -18,11 +18,11 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `export_character.py` | The body as the game loads it: skeleton, sockets, our clips re-sampled on it, skin patches (`patches.py`) |
 | `shell_garment.py` | Clothing cut from the base body, from a model of that body wearing it (`art/gear/dressed-<body>-<item>/`) |
 | `fit_gear.py` | Rigid gear (a pack, a quiver) fitted to a body at its socket, from `art/gear/<item>/`; straps from the skin (`bands.py`) |
-| `gear_check.py` | How much skin comes through each worn piece, through our clips |
+| `gear_check.py` | How much skin comes through each worn piece, through our clips; `--fix` records how far each part must move out to clear it (the clipping fixer, per morph) |
 | `build_bodies.sh` | Rebuilds every character asset the game loads from `art/`: the base, its gear, every morph, the skins, and the game's files |
 | `make_morph.sh NAME "CHANGE"` or `NAME --design BODY.glb` | A morph of the base body end to end: design (free), model (Studio credits), registration, export, gear carried and checked; skips what `art/` already keeps |
 | `morph.py` | Registers the base onto a design's model: pose by the base's skeleton, shape by a pull smoothed over distance, back to the T-pose; the morph |
-| `carry_gear.py` | A worn look made on the base carried onto a morph |
+| `carry_gear.py` | A worn look made on the base carried onto a morph: skinned parts follow the skin, standing-off parts and looks hung on sockets move as one to keep their clearance (a hung look's shift per morph in its extras, for the game), and the clipping fixer's pushes are baked in |
 | `paint_skin.sh NAME FRONT` | A template's own skin, painted by Tripo on the base's mesh in its shape (`paint_skin.py`), baked onto the base's layout |
 | `compare.py` | Bodies side by side, dressed with `a.glb+b.glb` (worn or hung as in the game), at rest or held at a moment of a clip (`--pose`), or close on one bone from four sides (`--focus`) |
 | `fit_held.py` | The held look of each tool, from the models in `assets/models/tools`: free ones, and ours made by [tools/props](../props/README.md) |

@@ -98,6 +98,14 @@ The rig check on the base, through its seven clips:
 - **Why the hips are the exception.** Dual quaternions keep the knees and elbows full through deep bends as well as the forearms through rolls. Across the wide blend of seat and groin they bulge, and renders of the roll show the seat ballooning. Blended, the hips render close to the linear blend while the limbs stay full.
 - **Rejected along the way:** a twist bone share of 0.75 instead of 0.5, matching where its skin lies. It made the linear blend's forearm squeeze worse, 74% against 46%.
 
+## Gear on the bigger bodies
+
+With the forearms fixed, the build found gear failing on the bigger morphs. Both fixes are BodySlide's ideas, done per morph:
+- **A hung look follows the skin under it.** A quiver set against the base's hip was swallowed by the strong body's seat: 11% of the skin it watches came through, at rest. A look on a socket now also moves, per morph, by the rule for parts that stand off, less its socket's own move. The shift is recorded in its extras, and the game mixes it by the body's morph weights.
+- **The clipping fixer, through our clips.** On the heavy body, the flank came through the small pack's straps in the sword swing: 2.0%, at the limit. `gear_check.py --fix` records how far each part of a look must move out to clear the skin in every frame, plus 4 mm; `carry_gear.py` bakes that into the morph, away from the skin. It was 1.0% after.
+- **A mistake on the way.** Pushing along each vertex's own normal first made it worse, 6.1%: the bag's back panel faces the body. The push goes along the nearest skin's normal.
+- **Where the fixer cannot help.** It made the coat worse on the heavy body: 1.8%, a pass, became 2.1%, then 2.8% and 4.2% over three rounds. The coat's clipping is a thigh lifting into its front skirt in the jog and crouch: clipping only in pose. A push baked into the morph moves the skirt into the belly at rest. So the fixer keeps a round only while the look gets better, and undoes one that makes it worse. Pose-only clipping wants the skirt weighted partly to the thighs.
+
 ## Still open
 
 - **Deep bends.** The ring right at a fully bent elbow or knee still loses 20 to 35% in kip-ups and zombie spawns. That is skinning at a sharp bend, not twist. Shipped games use corrective bones or shapes, driven by the joint's angle.

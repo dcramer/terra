@@ -15,7 +15,7 @@
 //!
 //! A template (D111) is a named appearance, from `models/character/templates.json`.
 
-use crate::character::{Body, BodyReady, Covers, Skin, Worn};
+use crate::character::{Body, BodyReady, Covers, Shifts, Skin, Worn};
 use bevy::{
     gltf::GltfExtras,
     math::{Affine3A, Vec3A},
@@ -461,6 +461,7 @@ fn fit_worn(
     names: Query<&Name>,
     mut skins: Query<&mut SkinnedMesh>,
     mut own_weights: Query<&mut MorphWeights>,
+    mut hung: Query<(&Shifts, &mut Transform)>,
     meshes: Res<Assets<Mesh>>,
     mut bindposes: ResMut<Assets<SkinnedMeshInverseBindposes>>,
     mut shared: ResMut<Shared>,
@@ -471,6 +472,10 @@ fn fit_worn(
         };
         if !shape.is_changed() && !new_looks.contains(look) {
             continue;
+        }
+        // A look hung on a socket moves beyond its socket by its own shifts, mixed.
+        if let Ok((shifts, mut transform)) = hung.get_mut(look) {
+            transform.translation = shifts.mixed(&shape.weights_by_name);
         }
         let key = format!("{:?}", shape.weights_by_name);
         for each in children.iter_descendants(look) {

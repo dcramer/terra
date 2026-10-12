@@ -1,161 +1,114 @@
-# Character system: the plan from scratch
+# Character system: the plan
 
-How bodies and what they wear would be built if we started over, for humans first, following what modern games with deep creators and varied populations ship. The intent and contracts are in [characters.md](characters.md) (D111, D112, D128). The evidence is [research/modern-character-variety.md](../research/modern-character-variety.md), with methods in [research/one-mesh-for-every-body.md](../research/one-mesh-for-every-body.md). Current thinking, for the developers to read before it is built.
+How bodies, customisation and wearable gear are built on Bevy, following the techniques shipped games and public tools use. It covers what each part is, where the technique comes from, how it maps onto Bevy, the order of work, and how each step is proven done. Current thinking (D111, D112, D115, D128). For the developers to read before the remaining steps are built.
+
+- **The contracts** are in [characters.md](characters.md).
+- **The techniques**, with sources, are in [research/character-systems-industry.md](../research/character-systems-industry.md).
+- **What Bevy gives and costs** is in [research/bevy-character-capabilities.md](../research/bevy-character-capabilities.md).
+- **How deformation was fixed** is in [research/skin-deformation.md](../research/skin-deformation.md).
 
 ## Goals
 
-- **Many bodies, many items, no item × body work** (D127). A new item is made once; a new body works with every item.
-- **A small creator** (D111): male and female, up to twenty templates, skin and hair colours, hairstyles; sliders possible later. NPCs drawn from the same system by seed, varied enough that the world feels alive (D85, Red Dead Redemption 2).
-- **No artist**: generated art for looks, scripts for everything else, every step checked by a machine (D69).
+- **A small creator** (D111): male and female, body templates, skin and hair colours, hairstyles. Perhaps a few sliders, "build, height, skin colour" (Open). NPCs drawn from the same parameters by seed.
+- **Gear in every slot fits every body** (D64, D128): head, chest with the arms, gloves, legs, feet, back, belt. One item is made once, with no work per item per body (D127).
 - **Looks good** in the art style ([art-style.md](art-style.md), D14), at life size (D110).
-- **Performs** with many characters on screen and a thousand players (D127).
-- **Easy to work on**: adding a body or an item is one command and a check.
+- **Looks right in motion:** no twisting, squeezing or poke-through in any clip, on any body, checked by machine (D69).
+- **Many characters** on screen, toward a thousand players (D127).
+- **One command** to add a body parameter, an item or a clip, and one command to check everything.
 
-## What modern games do
+## The system
 
-Red Dead Redemption 2, Starfield, Final Fantasy XIV, Bannerlord and Dragon's Dogma 2 share one pattern, read from their own files and talks:
+Each part names its technique (T1 to T9 in the industry note) and its state.
 
-- **One skeleton per family of bodies, with shape mostly in the bones.** Height, limb length, shoulders, build and weight are bone scales or helper bones moved by parameters. Gear skinned to the skeleton follows with no work per item. Final Fantasy XIV carries gear between about 16 body types with one matrix per bone; Bannerlord's weight and build are bone scales.
-- **A few body morphs for soft volume, copied onto every garment by a tool.** Starfield ships three on every outfit: Heavy, Muscular and Thin, the corners of its body triangle.
-- **The body hides what is covered.**
-- **Variety from texture and data:**
-  - tint masks and palettes;
-  - dirt, wetness and wear as per-character shader parameters;
-  - curated looks per kind of person, picked from at random.
-  
-  This is what makes Red Dead Redemption 2's crowds read as people.
-- **Hand work only where it pays:** a few alternate states for conflicts players see constantly (Red Dead Redemption 2's tucked shirts and boots over trousers), and a model of its own for a body where deforming fails (Final Fantasy XIV's per-race flag).
+### Skeleton and motion
 
-Games that instead make gear per body type (Baldur's Gate 3, Cyberpunk, Watch Dogs: Legion) pay for each item on each type, which is why they keep types few.
-
-## How our first attempts went wrong
-
-- **One generated model per body**, each with its own rig: gear had to be made per body.
-- **Then the shared mesh with free shape:** each body fitted vertex by vertex to a generated model, with weights and joints borrowed from that model's rig. It copied the model's clothing creases, broke the face, and failed the rig checks. Each fix uncovered the next.
-
-Neither is what shipped games do. Their bodies are a small number of parameters on one asset, not arbitrary meshes.
-
-## 1. The base body, made once
-
-| Part | What it is | From |
+| Part | Technique | State |
 |---|---|---|
-| Mesh | One human body in our T-pose, its seams welded | Our own: the base male Tripo made from its approved sheet (`art/characters/base-male/`), cleaned once (its topology rebuilt evenly if morphs or deformation need it) |
-| Skeleton | Ours: the one Quaternius's animation libraries use, Unreal's names, with Tripo's twist bones, so all our clips play (D115) | `mannequin.glb` (clips.py) |
-| Skin weights | Made for this mesh, on our bones | Tripo's rig converted onto our bones (as now; it passes the rig checks), fixed on the base if a check fails |
-| Patches | 1,024 patches a garment can hide | Cut once |
-| Sockets | Hands, head, back, belt | Rules on the skeleton and skin, as now |
+| One skeleton, Unreal's names; Quaternius's animation libraries, current versions; Tripo's V3 rig with weighted twist bones | Standard humanoid skeleton | **Built** (D115) |
+| Twist step: a limb's roll moved to the hand and foot and spread over the twist bones, baked into each clip | Unreal's twist bones, Unity's arm-twist setting | **Built** |
+| Weight-blended skinning: dual quaternions but round the hips | Maya's weight-blended skinning | **Built** (our shader) |
+| Feet on the ground for every body size; hands on what they hold | Two-bone IK after animation | To build: phase 4 |
+| Hip offset by body size, so a heavy body's roll stays out of the floor | Root and pelvis adjustment, measured per body | To build: phase 4 |
+| Animation at a lower rate for far characters | Unreal's Animation Budget Allocator | To build: phase 6 |
 
-The base is checked with the rig checks until it passes, once.
+### The body: parameters on one base
 
-## 2. A body is a few parameters
-
-| Parameter | How it works | Example |
-|---|---|---|
-| **Sex** | Either a morph on one base or two bases (male, female); decided by the spike | Starfield's body type 1 or 2 |
-| **Proportions** | Bone scales and offsets per bone: height, leg and arm length, shoulder and hip width, neck, head size | Bannerlord, Final Fantasy XIV, ARK |
-| **Build** | A few soft morphs: heavy, muscular, thin, plus chest and belly | Starfield's triangle |
-| **Head** | Blends of a few head and face shapes | GTA's parent heads, Watch Dogs: Legion's blended heads |
-| **Skin** | A painted texture on the base's layout, tinted for skin colour | Red Dead Redemption 2's tints |
-
-- **A template (D111) is a preset of these numbers and a skin.** Sliders later are the same numbers, clamped to the range every item passes its check at.
-- **An NPC is a template plus small random offsets** within its culture's ranges, from its seed.
-- **Making a template from a design** (`body new NAME SHEET`): the design's sheet and Tripo model, as now. Then:
-  - estimate the parameters that bring the base closest to the model: its pose matched, then proportions, build and head solved by least squares;
-  - Tripo paints the base's layout in those proportions from the design's front view.
-  
-  A design is never copied vertex by vertex into a body, so no crease of the generated model comes through. Tried on 2026-10-12: Tripo's paint on a mesh we gave it, from a design's front view, looked like the design, face included.
-- **The parameters themselves are made once each, from designs of the base person**: the same sheet redrawn heavier, thinner, stronger, as a woman, with another head. Tripo makes each into a model, and the base's mesh is registered onto it (its pose matched, then drawn smoothly onto the model's skin, the hands kept as the base's). What moved is kept as a morph, so every morph is the same base mesh. Bone proportions are measured from the skeletons. A new morph is a new parameter for every body and is copied onto every item by the tool.
-
-## 3. Gear, made once on the base
-
-| Kind | Examples | Made as | On any body |
+| Parameter | Technique | Bevy | State |
 |---|---|---|---|
-| **Skin garments** | Shirts, jerkins, trousers, gloves, boots, caps | The base's faces it covers (by a coverage rule), pushed out by its stand-off, with its own texture | Skinned to the skeleton, so proportions come free; carries the body's build morphs, copied from the base by vertex |
-| **Bound pieces** | Collars, hoods, plates | A model of its own on the base, each vertex bound to the nearest base surface | Weights and build morphs copied through the binding; parts marked rigid ride one bone |
-| **Loose pieces** | Skirts, coat tails, cloaks | Bound to a smooth helper between the legs, not the legs | Follows the helper; spring bones later |
-| **Rigid things** | Packs, quivers, helmets, tools | Made once in a socket's space, as now | On the socket. Under a helmet the head gives way (a hat morph on the head, as in Starfield), not the helmet |
+| **Build and sex** (heavy, thin, strong, female) | T2: morph targets on the base mesh, made from designs of the base person | `MorphWeights`; the game mixes joint offsets per morph | **Built** |
+| **Height and proportions** (limb length, shoulders, hips, head) | T1: bone scales and offsets per parameter, leaf or helper bones so nothing shears | A system writes joint rest transforms, as joint offsets are written now | To build: phase 2 |
+| **Skin colour** | T8: tint baked out of the albedo, a skin mask and a palette (melanin-like) in the shader | The body's material extension | To build: phase 2 |
+| **Head and face variety** | T2: blends of head morphs | Its own weight set, never animated by clips | Later: design open |
+| **Hair** | Hair as a part bound to the head; hide flags and hat-hair variants under helmets | A worn look, by name | Phase 5 |
 
-- **One mesh per item, shared by every wearer.** Only each character's parameter values differ.
-- **Colour, once per item:** painted by Tripo on the garment's shape on the base, or baked from one model of the base wearing it.
-- **No clipping by construction:**
-  - covered patches are not drawn;
-  - each slot keeps its height off the skin;
-  - an item that fails at a template gets that template's own model by exception, as in Final Fantasy XIV.
-- **Checks:** every item on every template and at each parameter's limits (`gear_check`), and its icon.
-- **Later, from Red Dead Redemption 2:** a few alternate states (tucked, rolled, under boots) when a conflict shows up constantly; dirt, wetness and wear as shader parameters; tint masks and palettes on everything.
+- **A template is a preset of these numbers.** A slider is the same numbers, clamped to what every item passes at. An NPC is a template plus offsets from its seed.
+- **One crate turns appearance into numbers.** `terra_body`, without Bevy, turns appearance data into joint transforms and morph weights. It is tested without a GPU and shared by the tools and the game.
 
-## 4. In the game
+### Gear
 
-- **Appearance is data:** sex, proportions, build, head, skin and tints, hairstyle, outfit. A few bytes, saved and sent; an NPC's from a seed.
-- **Bevy does the work it already supports:**
-  - Skinned meshes share one skeleton.
-  - Proportions are each body's own joint rest positions and scales, from its parameters, applied after animation. Clips carry rotations; the hips' height is scaled.
-  - Build morphs are morph weights; every worn piece points at the body's weights (`MeshMorphWeights::Reference`), so one set moves all.
-  - The patch mask shader and tints stay as built.
-- **No per-character meshes**, so a crowd in the same jerkin draws the same mesh. For crowds later: merging each character's parts, and lighter bodies at a distance.
-- **A small Rust crate without Bevy**, `terra_body`, turns appearance data into joint rest positions, scales and morph weights, and holds the binding used by the tools. It is tested without a GPU.
-
-## 5. Tools and workflow
-
-| Command | Does | Cost |
+| Kind | Technique | State |
 |---|---|---|
-| `body base` | Builds the base from its design and our skeleton; rig checks | free, once |
-| `body morph NAME SHEET` | A new parameter from a design of the base person: model, registration, morph, checks on every item | a model |
-| `body new NAME SHEET` | Design model, parameters estimated, skin painted, checks | a model and a texture |
-| `gear new ITEM --kind skin --coverage chest_sleeveless --concept IMAGE` | Piece made once on the base, morphs copied, painted, checked on every template | a texture, or a model |
-| `gear new ITEM --kind rigid --socket back --concept IMAGE` | Model fitted to its socket, checked | a model |
-| `body check`, `gear check` | Every check on everything | free |
-| Workbench | Any template in any outfit through any clip | free |
+| Garments cut from the body (coat, cap) | Faces of the base pushed out, keeping its weights | **Built**; edges ragged (phase 3) |
+| Garments from their own models (a boot, plate, a hood) | T4: weights copied from the body by Epic's inpainting method (MIT reference code); T2/T3: morphs by surface binding with rigid clusters | To build: phase 3 |
+| Every garment on every body | T2: the base's morphs carried onto each item | **Built** by nearest vertex; phase 3 moves to surface binding (Outfit Studio's averaging, Mutable's Reshape) |
+| Clipping per body shape | BodySlide's clipping fixer, through our clips, a round kept only while it helps | **Built** |
+| Rigid looks on sockets (packs, quivers, helmets) | Made in socket space; per-morph shifts to keep clearance | **Built** |
+| Loose parts (coat skirts, cloaks, long hair) | T7: helper bones turned by the thighs, then spring bones with capsule colliders (the VRM spring-bone model) | To build: phase 5. Pose-only clipping, which no push can fix |
+| Skin hidden under gear | T6: per-triangle masks, conservative, unioned across what is worn, from a sweep of poses with margins at openings | Built by 1,024 patches; per triangle in phase 3 |
+| Layering (a shirt under a jacket) | T5: a compressed shape per item and a slot order | **Not planned:** D64 has no layers |
 
-Costs are the Tripo commands each runs; [tools/tripo/README.md](../tools/tripo/README.md) lists their credits.
+### In the game
 
-They live in `tools/characters/` (D133): TypeScript to drive, Blender for imports, posing and baking, Rust for what the game shares.
+| What | How | State |
+|---|---|---|
+| One mesh per item, shared by every wearer, re-bound to the body's joints | — | **Built** |
+| Each look's copied skeleton removed after re-binding | — | Phase 1 |
+| Each garment's skin cut down to the joints it uses | Joint matrices are per skinned mesh | Phase 1 |
+| The body material made bindless | So bodies batch | Phase 1 |
+| Morph weights shared by reference, garments listing morphs in the body's order; body shape never animated by clips | — | Phase 1 check, phase 2 build |
+| Characters merged into one skinned mesh with a texture atlas, at a distance or always | T9: UMA's combiner, Mutable's packing; our own merge, since Bevy's doesn't do skins or morphs | Phase 6, if the crowd measurement asks for it |
+| Bevy 0.20 | Shaders move to WESL | Phase 7: after `bevy-inspector-egui` supports it (D31); spike the skinning override first |
 
-## Tried, 2026-10-12
+## Order of work, and how each step is proven
 
-The spike's first question, answered yes ([research/body-morphs.md](../research/body-morphs.md)):
-- Heavy, thin and strong morphs were made from designs of the base man.
-- The female body was made a morph of the male base, on her own proportions with her own painted skin.
-- The jerkin, cap and pack, made once on the base, were carried onto all four by a tool. Of 12 clipping checks, 11 pass. The one failure is the pack on the heavy body, by skin hidden inside the bag; the fix is to hide the patches under it.
+Each phase ends when its checks pass in the build, and a person has looked at the workbench sheets.
 
-So sex is a morph on one base, and gear is made once for both.
+| Phase | Builds | Done when |
+|---|---|---|
+| **0. Deformation and gear on morphs** | Everything marked built above | **Done** (2026-10-12): the build passes; the forearm squeeze through the libraries' 20 hardest clips is down from 70% to 0–13%; every item passes on every body |
+| **1. Scale foundations** | Copied skeletons removed; garment skins trimmed; `BodyMask` bindless; a crowd benchmark (dressed characters at 100, 500 and 1,000) | Entity and draw-call counts fall as predicted; the benchmark is recorded on the fast and the integrated GPU, with a budget set from it |
+| **2. Body parameters** | `terra_body`; height and proportions in the bones; skin tint; templates as data; the parameter grid in the build (each limit, and mixes such as half heavy and half strong) | Rig and gear checks pass at every limit and mix; joints in the game match the tools to the millimetre (`--joints`); workbench sheets of each template |
+| **3. Gear from any model** | Weight inpainting; morphs by surface binding with rigid clusters; per-triangle hiding from a pose sweep; garment edges (hem where the dressed model's garment ends, a turned-in rim, the bake masked); every clip in the rig and gear checks | A boot and a hood made from their own models pass on every template; a rendered hole check finds no holes; no ragged edges on the sheets |
+| **4. Contact** | Foot IK; pelvis offset by body size; a held tool's off hand | Feet within 1 cm of the ground while standing on every template; no body below the floor by more than 2 cm in any clip |
+| **5. Loose parts and hair** | Thigh-driven helper bones; spring bones with capsules on the thighs; hair as parts; hide flags and hat-hair variants | A long coat and long hair pass the gear check through every clip on every template; no hair through a helmet |
+| **6. Crowds** | Animation rate by importance; per-character merge and atlas if phase 1's budget needs it; LOD meshes; NPC looks from a seed | The crowd budget is met on the integrated GPU |
+| **7. Bevy 0.20** | Shaders in WESL; skinning override re-done | Every check passes and the sheets match the 0.19 ones |
 
-## 6. Order of work
-
-Steps 1 to 3 are built (2026-10-12; [research/body-morphs.md](../research/body-morphs.md#in-the-game-2026-10-12)). Still open from them: the packs' straps on the biggest builds, and the jerkin's ragged edges.
-
-1. **Spike**, one question: does a base body with a few parameters reproduce our two bodies well enough to look right, and does a jerkin made once pass its clipping check on both and at each parameter's limits?
-   - build the base and pass the rig checks;
-   - estimate our two bodies' parameters and paint them;
-   - make one jerkin once, copy the morphs, and check it everywhere.
-   
-   It also settles sex as one base or two.
-2. **The game**: appearance data, per-body joints and morph weights, one mesh per item; the per-body gear files deleted.
-3. **The tools and the playbook**; the old per-body scripts deleted.
-4. **Then**: hair, the remaining slots, bound and loose pieces, NPC looks per culture, tints and wear on everything, crowds.
-
-## 7. Risks
+## What could go wrong
 
 | Risk | How we would know | If it happens |
 |---|---|---|
-| The base's weights deform badly at some morph | The rig checks at each morph's limit | Fix on the base, once; corrective morphs at elbows and knees |
-| Registering the base onto a design fails somewhere (hands, face) | The fit's error and a look | Keep the base's own there; a design closer to the base's pose and proportions |
-| A few parameters cannot reach a design | The parameter fit's error and a look | Add a parameter to everyone (a new bone scale or morph), never a one-off mesh |
-| One base for both sexes makes gear sit wrong on one | `gear_check` on both | Two bases, gear moved from one to the other by the binding, with a per-item exception flag |
-| Rigid parts bend with build morphs | `gear_check` and a look | Mark rigid parts to ride one bone |
-| Loose garments tear between the legs | `gear_check` | The skirt helper; spring bones |
-| 27,000 triangles a body is heavy for crowds | GPU measurements, integrated and fast | Lighter bodies at a distance |
+| Morph-blended shapes clip between the extremes | The parameter grid in the build | A corrective morph for that pair, or clamp the slider |
+| Bone scales shear or squash gear | Rig and gear checks at the limits | Scale on helper or leaf bones only (T1) |
+| The crowd costs too much | The phase 1 benchmark | Trim skins, then merge per character, then rate LOD, in that order |
+| Weight inpainting is slow or unstable on generated meshes | The rig check on the transferred weights | Its reference implementation is MIT; fall back to nearest weights with smoothing for the parts it fails on |
+| A third-party clip misbehaves | The clip check | Check the author's current version first; replace the clip |
+| Bevy 0.20 breaks the skinning override | The spike in phase 7 | Stay on 0.19 (D31) until it works |
 
-## 8. Commercial options
+## Design questions for the developers (Open)
 
-None does this for us in Bevy:
+1. **Sliders or templates or both?** D111 says templates; the developers since asked for "build, height, skin colour". The system supports both at the same cost: which do players get?
+2. **Height range,** say ±10%, and whether templates differ in proportions or only build.
+3. **Head and face variety:** blends of a few heads, or fixed faces per template?
+4. **Hair:** how many styles to start; long hair with physics, or short only at first?
+5. **Loose garments:** are long coats, robes and cloaks wanted early? They need phase 5.
+
+## Why not something ready-made
 
 | Option | Why not |
 |---|---|
 | Reallusion Character Creator | Its licence forbids use in a character generator and with AI |
 | Daz | A game licence per item |
 | MetaHuman | Made only in Unreal; realistic, not our style |
+| Unreal Mutable, Unity UMA | Tied to their engines. This plan rebuilds their techniques on Bevy |
 | Synty Sidekick | Its licence forbids AI work |
-| Unreal Mutable, Unity UMA | Tied to their engines; this plan is the same design |
-| Meshcapade (SMPL) | A realistic body model only, with no clothing |
-| Faceform Wrap | Fits a base mesh onto a generated body, with a person placing landmarks; not needed if parameters are estimated |

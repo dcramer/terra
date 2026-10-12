@@ -88,6 +88,6 @@ echo "BUILT base.glb with morphs $morphs, $(ls $out/gear/$base/*.glb | wc -l) lo
 # Every check's verdict, from this build's output and the morphs' logs.
 # The base's rig check, not a rigged design's (the female's own body is only the shape her
 # morph is fitted to; what ships is the base's skeleton and weights in her shape).
-failed=$( { cat "$out/build-clips.log" "$out/build-gear.log" "$out/rig-check-$base.json"; for m in "${designed[@]}"; do cat "$out/build-$m.log"; done; for r in "${rigged[@]}"; do cat "$out/build-${r%% *}.log"; done; } \
-  | grep -oE '^(CLIPCHECK|GEARCHECK) .*"pass": false|"file": "[^"]*", "pass": false|^CLIPCHECK fail|Error.*' | cut -c1-160 || true)
+failed=$( { cat "$out/build-clips.log" "$out/build-gear.log"; echo "RIGCHECK $(cat "$out/rig-check-$base.json")"; for m in "${designed[@]}"; do cat "$out/build-$m.log"; done; for r in "${rigged[@]}"; do cat "$out/build-${r%% *}.log"; done; } \
+  | grep -oE '^(CLIPCHECK|GEARCHECK) .*"pass": false|^RIGCHECK \{"file": "tools/characters/out/'"$base"'.glb", "pass": false|^CLIPCHECK fail|Error.*' | cut -c1-160 || true)
 if [[ -z "$failed" ]]; then echo "BUILD pass"; else echo "BUILD fail"; echo "$failed"; fi

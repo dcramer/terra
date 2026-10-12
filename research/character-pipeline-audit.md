@@ -64,7 +64,8 @@
 | Turn and size of each model | `PIECES`: a turn per model (Tripo faces its models its own way) and a share of height | Duct tape, per item; should be found from the model |
 | The pack's strap loops | Cut below the socket plus 1.5 cm | Duct tape, for one model |
 | Strap routes | Rays from the body's joints; a ray that misses moves 15% inward, up to 8 times | Duct tape in its search; the idea is sound |
-| Straps on the biggest morphs | Fail in the sword swing (2.3–3.1%) on heavy and strong; pass at rest on every morph (0%) | A failure in pose only, not of the morph carry. The straps are copies of the body's faces with their weights, so they skin as the skin under them does; the flank skin of a bigger body slides under them in a twist. Fix after the deformation work, then re-measure |
+| Straps on the biggest morphs | Failed in the sword swing on heavy and strong; passed at rest on every morph | **Fixed (2026-10-12):** the clipping fixer, per morph, through our clips (`gear_check.py --fix`, baked by `carry_gear.py`); the heavy body's small pack went from 2.0% to 1.0% in the swing |
+| A look hung on a socket across morphs | Moved only with its socket; a bigger seat swallowed the quiver (11% through on strong) | **Fixed (2026-10-12):** it also moves by the standing-off rule, less its socket's move, per morph, in its extras for the game to mix (`character::Shifts`); 0% on every morph |
 | `skin_weights` in `fit_gear.py` | Fades weights to one bone away from the skin; called by nothing since the straps were made from the skin | Dead code; delete |
 
 ## Morphs and the game

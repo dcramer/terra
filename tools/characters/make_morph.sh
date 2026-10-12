@@ -12,7 +12,8 @@
 #   3. Tripo's model of it (credits: tools/tripo/README.md)
 #   4. the base registered onto the model (morph.py): the morph and the base at full weight
 #   5. that body exported as the game loads it (export_character.py), keeping the base's patches
-#   6. every worn look made for the base carried onto it (carry_gear.py), and checked (gear_check.py)
+#   6. every worn look made for the base carried onto it (carry_gear.py), pushed clear wherever
+#      its skin comes through in our clips (gear_check.py --fix, the clipping fixer), and checked
 # Look at the sheet before step 3 spends credits, and at the result with compare.py after.
 # BASE defaults to base-male; set BASE= to use another. The base is its exported body,
 # tools/characters/out/BASE-game.glb (build_bodies.sh or finish_character.sh makes it).
@@ -44,10 +45,21 @@ else
 fi
 $blender $here/morph.py "$out/$base-game.glb" "$design" "$name" | grep -E "MORPH|EXPORTED|Error" || true
 $blender $here/export_character.py "$out/$name.glb" "$out/$name-game.glb" | grep -E "PATCHES|EXPORTED|Error" || true
-looks=()
-for look in tools/characters/out/gear/$base/*.glb; do
-  item=$(basename "$look" .glb)
-  $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "$out/$name-$item.glb" "$name" | grep -E "Error" || true
-  looks+=("$out/$name-$item.glb")
+# The looks carried onto this body, then the clipping fixer: where the check finds skin
+# through a look in our clips (--fix), the look is carried again pushed clear there; three
+# rounds, each on the look as the last left it, as clearing one place can bare another.
+carry() {
+  looks=()
+  for look in tools/characters/out/gear/$base/*.glb; do
+    item=$(basename "$look" .glb)
+    $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "$out/$name-$item.glb" "$name" | grep -E "PUSHED|Error" || true
+    looks+=("$out/$name-$item.glb")
+  done
+}
+rm -f "$out/$name"-*-push.npz
+carry
+for round in 1 2 3; do
+  $blender $here/gear_check.py "$out/$name-game.glb" "${looks[@]}" --fix | grep -E "^FIX|Error" || true
+  carry
 done
 $blender $here/gear_check.py "$out/$name-game.glb" "${looks[@]}" | grep -E "^GEARCHECK|Error" || true

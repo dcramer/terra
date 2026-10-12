@@ -13,6 +13,12 @@ and not counted: until 2026-10-12 it was, which failed packs on skin no one coul
 in every frame, no more than `through_share` of the skin it watches is through it.
 
     tools/blender/run.sh tools/characters/gear_check.py tools/characters/out/base-male-game.glb leather_coat leather_cap small_pack quiver
+
+With --fix, it also adds to a file beside each look given as a file (`M-ITEM.glb`) how far
+each of its vertices must move outward for no skin to come through it in any frame, plus a
+margin (`M-ITEM-push.npz`, one round per run): the clipping fixer's push for that morph, which
+carry_gear.py bakes into the look's morph target, as BodySlide's clipping fixer does for each
+extreme, but through our clips as well as at rest.
 """
 
 import json
@@ -41,7 +47,9 @@ LIMITS = {
     "hole_share": 0.01,      # share of the skin a look hides allowed uncovered (a hole), in any frame
 }
 
-body_path, items = look.args()[0], [a for a in look.args()[1:] if a != "--explain"]
+body_path, items = look.args()[0], [a for a in look.args()[1:] if a not in ("--explain", "--fix")]
+fix = "--fix" in look.args()
+FIX_MARGIN_M = 0.004  # pushed this much clear of the skin, past where it came through
 # With --explain, say where the first few points of skin found through a piece at rest are.
 explain = "--explain" in look.args()
 body_name = look.body_name(body_path)
@@ -167,6 +175,19 @@ for item in items:
     hidden = [i for i in range(0, len(pts), 3) if patch_of.get(i) in covers
               and bvh.find_nearest(pts[i], LIMITS["hidden_near_m"])[0] is not None]
     at_rest = float(np.mean(through(pts, nrm, bvh, watch))) if watch else 0.0
+    # How far each of the piece's vertices must move out, for --fix: wherever skin comes
+    # through, the face of the piece beneath it and how deep.
+    need = np.zeros(len(piece.data.vertices))
+
+    def note(pts, nrm, bvh, hits):
+        for i in np.array(watch)[hits]:
+            hit = bvh.ray_cast(pts[i] - nrm[i] * 0.001, -nrm[i], LIMITS["depth_m"])
+            if hit[2] is not None:
+                for v in piece.data.polygons[hit[2]].vertices:
+                    need[v] = max(need[v], hit[3] + FIX_MARGIN_M)
+
+    if fix and watch:
+        note(pts, nrm, bvh, through(pts, nrm, bvh, watch))
     if explain:
         lo = [min(c) for c in zip(*[piece.matrix_world @ v.co for v in piece.data.vertices])]
         hi = [max(c) for c in zip(*[piece.matrix_world @ v.co for v in piece.data.vertices])]
@@ -205,6 +226,8 @@ for item in items:
                     places["hole " + bone_of[i]] = places.get("hole " + bone_of[i], 0) + 1
             if watch:
                 hits = through(pts, nrm, bvh, watch)
+                if fix:
+                    note(pts, nrm, bvh, hits)
                 if float(np.mean(hits)) > worst:
                     worst = float(np.mean(hits))
                     worst_at = (k, [(i, bvh.ray_cast(pts[i] - nrm[i] * 0.001, -nrm[i], LIMITS["depth_m"])[3])
@@ -230,6 +253,30 @@ for item in items:
         pb.matrix_basis.identity()
     report["where"] = dict(sorted(report.get("where", {}).items(), key=lambda t: -t[1])[:6])
     report["pass"] = ok
+    if fix and item.endswith(".glb"):
+        # By place, not vertex number: a file read back has its vertices split at seams. Each
+        # run adds a round, measured on the look as the rounds before left it, and kept only
+        # while it helps: a round after which the look is worse is taken back, and no more are
+        # added. Clipping only in pose (a thigh lifting into a coat's skirt) is not something
+        # a push baked into the morph can clear: that wants the weights fixed.
+        worst_now = max([at_rest] + list(report["clips"].values()))
+        at = np.array([tuple(piece.matrix_world @ v.co) for v in piece.data.vertices])
+        path = look.path(item[:-4] + "-push.npz")
+        rounds = dict(np.load(path)) if os.path.exists(path) else {}
+        n = sum(1 for k in rounds if k.startswith("need"))
+        if "stopped" in rounds:
+            print("FIX", item, "stopped: a round made it worse")
+        elif n and worst_now > float(rounds[f"worst{n - 1}"]):
+            for k in (f"need{n - 1}", f"at{n - 1}", f"worst{n - 1}"):
+                rounds.pop(k)
+            rounds["stopped"] = np.array(1)
+            print("FIX", item, f"round {n} undone: worse after it ({worst_now:.1%})")
+        elif worst_now > 0 and need.any():
+            rounds[f"need{n}"], rounds[f"at{n}"], rounds[f"worst{n}"] = need, at, np.array(worst_now)
+            print("FIX", item, f"round {n + 1}: {int((need > 0).sum())} vertices to push, up to {need.max() * 100:.1f} cm, at {worst_now:.1%}")
+        else:
+            print("FIX", item, "nothing to push")
+        np.savez(path, **rounds)
     print("GEARCHECK", json.dumps(report))
     results.append(report)
     bpy.data.objects.remove(piece)
