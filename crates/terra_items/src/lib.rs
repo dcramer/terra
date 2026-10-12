@@ -173,4 +173,99 @@ mod tests {
             }
         }
     }
+
+    /// Random stowing, paying, drawing, moving and wearing of things that stack never
+    /// change how many there are except by what was put in or taken out, never overfill
+    /// a container, and pay all or nothing. A failure names its seed and step, so it can
+    /// be run again exactly.
+    #[test]
+    fn counts_change_only_by_what_goes_in_or_out() {
+        const BELT: GearSlot = GearSlot(0);
+        let mut catalogue = Catalogue::default();
+        let arrow = catalogue.add(KindDef::new("Arrow"));
+        let quiver = catalogue.add(
+            KindDef::new("Quiver")
+                .size(1, 2)
+                .gear(BELT)
+                .holds(arrow, 12),
+        );
+        let pouch = catalogue.add(KindDef::new("Pouch").holds(arrow, 5));
+        let carried = |backpack: &Grid, locker: &Grid, gear: &Equipment| {
+            backpack.count(arrow) + locker.count(arrow) + gear.stacked(arrow)
+        };
+        for seed in 0..20 {
+            let mut rng = Seed(seed).derive("counts").rng();
+            let mut ids = IdSource::default();
+            let mut backpack = Grid::new(4, 3);
+            let mut locker = Grid::new(6, 6);
+            let mut gear = Equipment::new(&[BELT]);
+            for kind in [quiver, quiver, pouch, pouch] {
+                locker.insert(&catalogue, ids.make(kind), None).unwrap();
+            }
+            let mut expected = 0;
+            for step in 0..2000 {
+                let roll = rng.below(1000);
+                let some = 1 + rng.below(8);
+                let pick = |grid: &Grid| {
+                    let index = roll as usize % grid.len().max(1);
+                    grid.iter().nth(index).map(|placed| placed.item.id)
+                };
+                let op = rng.below(7);
+                match op {
+                    0 => {
+                        if backpack.insert(&catalogue, ids.make(arrow), None).is_ok() {
+                            expected += 1;
+                        }
+                    }
+                    1 => expected += backpack.stow(arrow, some),
+                    2 => expected += gear.stow(arrow, some),
+                    3 => {
+                        let before = backpack.count(arrow);
+                        match backpack.take(&[(arrow, some)]) {
+                            Ok(_) => expected -= some,
+                            Err(_) => assert!(
+                                before < some && backpack.count(arrow) == before,
+                                "seed {seed} step {step}: a refused payment took something"
+                            ),
+                        }
+                    }
+                    4 => expected -= gear.draw(arrow, some),
+                    5 => {
+                        let (from, to) = if roll.is_multiple_of(2) {
+                            (&mut locker, &mut backpack)
+                        } else {
+                            (&mut backpack, &mut locker)
+                        };
+                        if let Some(id) = pick(from) {
+                            let _ = transfer(&catalogue, from, to, id, None);
+                        }
+                    }
+                    _ => {
+                        let bare = Size { w: 4, h: 3 };
+                        let _ = match (roll % 2, pick(&backpack)) {
+                            (0, Some(id)) => equip(&catalogue, &mut backpack, &mut gear, bare, id),
+                            _ => unequip(&catalogue, &mut backpack, &mut gear, bare, BELT, None)
+                                .map(drop),
+                        };
+                    }
+                }
+                assert_eq!(
+                    carried(&backpack, &locker, &gear),
+                    expected,
+                    "seed {seed} step {step}, after op {op}: arrows made or lost"
+                );
+                let stacks = backpack
+                    .iter()
+                    .chain(locker.iter())
+                    .filter_map(|placed| placed.stack)
+                    .chain(gear.stack(BELT));
+                for stack in stacks {
+                    assert!(
+                        stack.held <= stack.most,
+                        "seed {seed} step {step}: a container holds more than it can"
+                    );
+                }
+            }
+        }
+    }
 }
