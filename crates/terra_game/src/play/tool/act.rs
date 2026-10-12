@@ -236,8 +236,10 @@ pub(super) fn act(
     let pay = builder.price;
     // What closing a window or doorway gives back.
     let opening_worth = |run: &[Face]| match run.first().and_then(|&cell| site.base.filling(cell)) {
-        Some(Panel::Window { .. }) => Some((catalogue::WINDOW, catalogue::window_units(run.len()))),
-        Some(Panel::Door) => Some((catalogue::DOOR, 1)),
+        Some(Panel::Window { .. }) => {
+            Some((catalogue::window(), catalogue::window_units(run.len())))
+        }
+        Some(Panel::Door) => Some((catalogue::door(), 1)),
         _ => None,
     };
     // Fills every cell of the run, in an outside wall or an interior one.
@@ -268,7 +270,7 @@ pub(super) fn act(
         }
         (Kind::Reshape, Target::Wall(face)) if builder.pull => {
             let floor = catalogue::floor_units(site.base.wall(face).len());
-            let refund = Some((catalogue::FLOOR, floor));
+            let refund = Some((catalogue::floor(), floor));
             (unbuilding(vec![BuildOp::Shrink(face)], refund), true)
         }
         (Kind::Window(shapes), Target::Wall(_) | Target::Edge { .. }) if can_pay => (
@@ -305,7 +307,7 @@ pub(super) fn act(
                     .iter()
                     .map(|&cell| BuildOp::SetPartition(cell, None))
                     .collect(),
-                Some((catalogue::WALL, catalogue::wall_units(builder.run.len()))),
+                Some((catalogue::wall(), catalogue::wall_units(builder.run.len()))),
             ),
             true,
         ),

@@ -68,9 +68,10 @@ All five were fixed on 2026-10-12, in separate commits, each passing `cargo xtas
 
 ## Left to do
 
-- **Flora kinds** (pine, leafy, birch, rock, ore rock) are still an enum in `flora.rs`, and what each gives names its item in code; likewise what digging stone and ore gives. They should be data like the rest.
-- **The build catalogue** (`catalogue.rs`) is a table in code rather than a file. It names no kind in its logic, so it already keeps D127, but a file would let it change without a rebuild.
 - **Change detection** is still little used. Systems such as the inventory screen and the held look compare against what they last drew rather than asking what changed.
+- **The ground's materials** (soil, stone, ore, sand) are still constants in `terra_voxel`, laid down by its generation rules. What digging each gives is data (`assets/data/ground.ron`); the materials themselves will move when per-planet ground is designed (D59).
+
+Flora, what digging gives, and the build catalogue were made data on 2026-10-12 too (`flora.ron`, `ground.ron`, `builds.ron`), growing the same world as before: 13,366 trees, rocks and plants, 4,588 of them solid.
 
 ## Limits
 

@@ -408,10 +408,10 @@ pub(super) fn afford(
                 .flat_map(|i| (0..tiles.y).map(move |j| IVec3::new(i, 0, j)))
                 .filter(|&step| !site.base.contains(corner + step))
                 .count();
-            Some((catalogue::FLOOR, catalogue::floor_units(new_cells)))
+            Some((catalogue::floor(), catalogue::floor_units(new_cells)))
         }
         (Kind::Reshape, Target::Wall(face)) if !builder.pull => Some((
-            catalogue::FLOOR,
+            catalogue::floor(),
             catalogue::floor_units(site.base.wall(face).len()),
         )),
         (Kind::Wall(_), Target::Edge { fits: true, .. }) => {
@@ -420,13 +420,13 @@ pub(super) fn afford(
                 .iter()
                 .filter(|&&cell| site.base.partition(cell).is_none())
                 .count();
-            (new_cells > 0).then(|| (catalogue::WALL, catalogue::wall_units(new_cells)))
+            (new_cells > 0).then(|| (catalogue::wall(), catalogue::wall_units(new_cells)))
         }
         (Kind::Window(_), Target::Wall(_) | Target::Edge { .. }) if cuts => Some((
-            catalogue::WINDOW,
+            catalogue::window(),
             catalogue::window_units(builder.run.len()),
         )),
-        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) if cuts => Some((catalogue::DOOR, 1)),
+        (Kind::Door, Target::Wall(_) | Target::Edge { .. }) if cuts => Some((catalogue::door(), 1)),
         (Kind::Items(_), Target::Spot { blocked: None, .. }) => {
             builder.item().map(|item| (item.cost, 1))
         }
