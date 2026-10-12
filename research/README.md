@@ -24,6 +24,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [terrain-meshing.md](terrain-meshing.md) | Can `terra_voxel` mesh a real planet's chunk within budget on Linux and Windows, and what stands in the way? |
 | [item-icons.md](item-icons.md) | How do games make the icons of items in slots, and which way keeps one style across procedural variants? |
 | [agent-debugging-tools.md](agent-debugging-tools.md) | What tools and patterns help a coding agent debug and check a game, and what should we build or adopt? |
+| [repo-layout.md](repo-layout.md) | Where should each kind of thing in this repository live, what do our folders actually hold, and what does the industry call these things? |
 
 ## Adding a note
 
