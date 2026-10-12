@@ -17,6 +17,7 @@ mod debug;
 mod experiments;
 mod icons;
 mod planet;
+mod record;
 mod remote;
 mod shell;
 mod sky;

@@ -13,20 +13,30 @@
 //!   `aim` how far above it to look, as at a person's chest rather than their feet.
 //!   `sandbox.release` lets the camera go.
 //! - `sandbox.pause {paused}`: stops or restarts the game's clock, animations included.
+//! - `sandbox.step {frames}`: lets a stopped clock run for so many frames, then stops it.
+//! - `sandbox.press {key, frames?}`: holds a key down for so many frames, one by default.
+//! - `sandbox.status`: the frame, the game's time, whether it is stopped, frames still to
+//!   step, and the number the run's next line will get.
+//! - `sandbox.said {since?, containing?, most?}`: what the run has said, from the line
+//!   numbered `since`, only lines containing some text if asked (`record`).
 //! - `sandbox.shot {path}`: saves a screenshot; the reply comes before the file does.
 //! - `sandbox.quit`: closes the sandbox.
 //!
 //! An experiment adds its own methods with [`method`].
 
 use crate::planet::MainCamera;
-use crate::shell::Options;
+use crate::record::Record;
+use crate::shell::{self, Options};
 use bevy::{
+    diagnostic::FrameCount,
+    input::InputSystems,
     prelude::*,
     remote::{
         BrpError, BrpResult, RemoteMethodSystemId, RemoteMethods, RemotePlugin,
         builtin_methods::parse_some, http::RemoteHttpPlugin,
     },
     render::view::screenshot::{Screenshot, save_to_disk},
+    time::TimeSystems,
     transform::TransformSystems,
     world_serialization::WorldAssetRoot,
 };
@@ -43,13 +53,21 @@ pub fn plugin(app: &mut App) {
         RemoteHttpPlugin::default().with_port(port),
     ))
     .init_resource::<HeldCamera>()
+    .init_resource::<Steps>()
+    .init_resource::<Pressed>()
     .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
+    .add_systems(First, step.before(TimeSystems))
+    .add_systems(PreUpdate, press_keys.after(InputSystems))
     .add_systems(PostUpdate, hold_camera.in_set(CameraHold));
     method(app, "sandbox.find", find);
     method(app, "sandbox.place", place);
     method(app, "sandbox.look", look);
     method(app, "sandbox.release", release);
     method(app, "sandbox.pause", pause);
+    method(app, "sandbox.step", start_steps);
+    method(app, "sandbox.press", press);
+    method(app, "sandbox.status", status);
+    method(app, "sandbox.said", said);
     method(app, "sandbox.shot", shot);
     method(app, "sandbox.quit", quit);
     info!("remote: listening on localhost:{port}");
@@ -285,6 +303,125 @@ fn pause(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         time.unpause();
     }
     Ok(json!({ "paused": paused }))
+}
+
+/// Frames left to run before the clock stops again, after `sandbox.step`.
+#[derive(Resource, Default)]
+struct Steps {
+    left: u32,
+    stepping: bool,
+}
+
+#[derive(Deserialize)]
+struct Step {
+    frames: u32,
+}
+
+fn start_steps(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Step { frames } = parse_some(params)?;
+    world.resource_mut::<Time<Virtual>>().pause();
+    *world.resource_mut::<Steps>() = Steps {
+        left: frames,
+        stepping: true,
+    };
+    Ok(json!({ "frames": frames }))
+}
+
+/// Runs the clock for the frames asked for, then stops it, before the frame's time is
+/// worked out.
+fn step(mut steps: ResMut<Steps>, mut time: ResMut<Time<Virtual>>) {
+    if steps.left > 0 {
+        time.unpause();
+        steps.left -= 1;
+    } else if steps.stepping {
+        time.pause();
+        steps.stepping = false;
+    }
+}
+
+/// Keys a script is holding down, and for how many more frames.
+#[derive(Resource, Default)]
+struct Pressed(Vec<(KeyCode, u32)>);
+
+#[derive(Deserialize)]
+struct Press {
+    key: String,
+    frames: Option<u32>,
+}
+
+fn press(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Press { key, frames } = parse_some(params)?;
+    let code = shell::parse_key(&key)
+        .ok_or_else(|| refused(format!("wanted {}, not `{key}`", shell::KEYS)))?;
+    let frames = frames.unwrap_or(1).max(1);
+    let mut pressed = world.resource_mut::<Pressed>();
+    pressed.0.retain(|(held, _)| *held != code);
+    pressed.0.push((code, frames));
+    Ok(json!({ "key": key, "frames": frames }))
+}
+
+/// Holds down what a script pressed, after the real keyboard is read and, in a scripted
+/// run, after its own presses, and lets each key up once its frames are done.
+fn press_keys(mut pressed: ResMut<Pressed>, mut keys: ResMut<ButtonInput<KeyCode>>) {
+    pressed.0.retain_mut(|(key, left)| {
+        if *left == 0 {
+            keys.release(*key);
+            return false;
+        }
+        keys.press(*key);
+        *left -= 1;
+        true
+    });
+}
+
+fn status(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let time = world.resource::<Time<Virtual>>();
+    let (_, next) = world
+        .get_resource::<Record>()
+        .map_or((Vec::new(), 0), |record| record.read(u64::MAX, None, 0));
+    Ok(json!({
+        "frame": world.resource::<FrameCount>().0,
+        "seconds": time.elapsed_secs_f64(),
+        "paused": time.is_paused(),
+        "stepping": world.resource::<Steps>().left,
+        "next_line": next,
+    }))
+}
+
+#[derive(Deserialize)]
+struct Said {
+    since: Option<u64>,
+    containing: Option<String>,
+    most: Option<usize>,
+}
+
+fn said(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Said {
+        since,
+        containing,
+        most,
+    } = parse_some(params.or(Some(json!({}))))?;
+    let record = world
+        .get_resource::<Record>()
+        .ok_or_else(|| refused("this run keeps no record"))?;
+    let (lines, next) = record.read(
+        since.unwrap_or(0),
+        containing.as_deref(),
+        most.unwrap_or(200),
+    );
+    let lines: Vec<Value> = lines
+        .into_iter()
+        .map(|line| {
+            json!({
+                "line": line.number,
+                "frame": line.frame,
+                "level": line.level.as_str(),
+                "source": line.source,
+                "text": line.text,
+            })
+        })
+        .collect();
+    Ok(json!({ "lines": lines, "next_line": next }))
 }
 
 #[derive(Deserialize)]

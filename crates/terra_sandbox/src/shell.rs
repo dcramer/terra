@@ -1,7 +1,7 @@
 //! The parts every experiment gets for free: the window, overlays, inspectors, and the
 //! scripted modes that let a run be checked without anyone watching.
 
-use crate::{audio, debug};
+use crate::{audio, debug, record};
 use bevy::{
     audio::AudioPlugin,
     camera_controller::free_camera::FreeCameraPlugin,
@@ -40,6 +40,8 @@ usage: terra_sandbox [options]
   --remote              let a script drive this run over Bevy's remote protocol, on
                         localhost:15702 (tools/sandbox/remote.ts)
   --remote-port <port>  listen on this port instead, so several runs can be driven apart
+  --steady              advance the game a sixtieth of a second every frame, however
+                        fast frames are drawn, as scripted runs do
   --settle <frames>     frames to run before capturing or measuring (default 120)
   --model <path>        in the workbench: a model to load, under assets/; repeatable,
                         to stand several side by side
@@ -103,6 +105,8 @@ pub struct Options {
     /// Listen for a script driving the run (`remote`), and on which port.
     pub remote: bool,
     pub remote_port: u16,
+    /// Advance the game by a fixed step every frame, as scripted runs do.
+    pub steady: bool,
     /// No readout on screen.
     pub clean: bool,
     /// No sound, and sound under WSL, where it is off unless asked for.
@@ -162,6 +166,7 @@ impl Options {
             bench: false,
             remote: false,
             remote_port: 15702,
+            steady: false,
             clean: false,
             mute: false,
             sound: false,
@@ -197,6 +202,7 @@ impl Options {
                         .parse()
                         .map_err(|_| "--remote-port needs a port number".to_string())?;
                 }
+                "--steady" => options.steady = true,
                 "--clean" => options.clean = true,
                 "--mute" => options.mute = true,
                 "--sound" => options.sound = true,
@@ -299,6 +305,26 @@ fn east_south(name: &str, text: &str) -> Result<(f32, f32), String> {
 }
 
 fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
+    let problem =
+        || format!("--press wants {KEYS} and a frame, like f@60, F3@10 or w@40-90, not `{text}`");
+    let (key, frames) = text.split_once('@').ok_or_else(problem)?;
+    let code = parse_key(key).ok_or_else(problem)?;
+    let frame = |text: &str| text.parse::<u32>().map_err(|_| problem());
+    let (down, up) = match frames.split_once('-') {
+        Some((from, to)) => (frame(from)?, frame(to)?),
+        None => (frame(frames)?, frame(frames)? + 1),
+    };
+    if up <= down {
+        return Err(problem());
+    }
+    Ok((code, down, up))
+}
+
+/// The keys a script can press, in words.
+pub const KEYS: &str = "a letter, digit, F1 to F12, esc, enter, backspace, equal, minus or an arrow (left, right, up, down)";
+
+/// A key a script can press, by name: one of [`KEYS`].
+pub fn parse_key(key: &str) -> Option<KeyCode> {
     const LETTERS: [KeyCode; 26] = [
         KeyCode::KeyA,
         KeyCode::KeyB,
@@ -327,12 +353,6 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
         KeyCode::KeyY,
         KeyCode::KeyZ,
     ];
-    let problem = || {
-        format!(
-            "--press wants a letter, digit, F1 to F12, esc, enter, backspace, equal, minus or an arrow (left, right, up, down) and a frame, like f@60, F3@10 or w@40-90, not `{text}`"
-        )
-    };
-    let (key, frames) = text.split_once('@').ok_or_else(problem)?;
     const DIGITS: [KeyCode; 10] = [
         KeyCode::Digit0,
         KeyCode::Digit1,
@@ -363,7 +383,7 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
         .strip_prefix(['F', 'f'])
         .and_then(|number| number.parse::<usize>().ok())
         .and_then(|number| FUNCTIONS.get(number.checked_sub(1)?));
-    let code = match function {
+    Some(match function {
         Some(&code) => code,
         None if key.eq_ignore_ascii_case("esc") => KeyCode::Escape,
         None if key.eq_ignore_ascii_case("enter") => KeyCode::Enter,
@@ -379,22 +399,13 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
                 .chars()
                 .next()
                 .filter(|c| key.len() == 1 && c.is_ascii_alphanumeric());
-            let symbol = symbol.ok_or_else(problem)?.to_ascii_lowercase();
+            let symbol = symbol?.to_ascii_lowercase();
             match symbol.to_digit(10) {
                 Some(digit) => DIGITS[digit as usize],
                 None => LETTERS[(symbol as u8 - b'a') as usize],
             }
         }
-    };
-    let frame = |text: &str| text.parse::<u32>().map_err(|_| problem());
-    let (down, up) = match frames.split_once('-') {
-        Some((from, to)) => (frame(from)?, frame(to)?),
-        None => (frame(frames)?, frame(frames)? + 1),
-    };
-    if up <= down {
-        return Err(problem());
-    }
-    Ok((code, down, up))
+    })
 }
 
 pub struct ShellPlugin(pub Options);
@@ -424,6 +435,8 @@ impl Plugin for ShellPlugin {
                 focused_mode: UpdateMode::Continuous,
                 unfocused_mode: UpdateMode::Continuous,
             });
+        }
+        if options.scripted() || options.steady {
             // A scripted run advances the game by a sixtieth of a second every frame,
             // however fast the machine draws, so the same script does the same thing on
             // a software renderer and on a fast GPU.
@@ -439,6 +452,8 @@ impl Plugin for ShellPlugin {
             })
             .set(LogPlugin {
                 filter: format!("{DEFAULT_FILTER},{QUIET}"),
+                // What the log keeps is kept in memory too, for a script to ask about.
+                custom_layer: record::layer,
                 ..default()
             });
         app.insert_resource(options)

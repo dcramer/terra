@@ -44,6 +44,7 @@ mod noises;
 mod options;
 mod people;
 mod pooling;
+mod probe;
 mod props;
 mod save;
 mod scene;
@@ -171,6 +172,7 @@ pub fn plugin(app: &mut App) {
     harvest::plugin(app);
     dig::plugin(app);
     options::plugin(app);
+    probe::plugin(app);
     // Sound: noises from what happens, what they sound like, the place, and music.
     noise::plugin(app);
     noises::plugin(app);
@@ -288,33 +290,36 @@ fn spawn(
     ));
 }
 
-/// For testing, moves the player where a scripted run says, on the frame it says (--warp).
+/// For testing, moves the player where a scripted run says, on the frame it says (--warp),
+/// or where a script asks over the remote protocol (`probe`).
 fn warp(
     options: Res<Options>,
     frame: Res<crate::shell::ScriptFrame>,
+    mut asked: ResMut<probe::Asked>,
     site: Res<Site>,
     planet: Res<Planet>,
     mut view: ResMut<View>,
     player: Single<(&mut Transform, &mut Player)>,
 ) {
-    let Some(warp) = options.warps.iter().find(|warp| warp.frame == frame.0) else {
+    let scripted = options
+        .warps
+        .iter()
+        .find(|warp| warp.frame == frame.0)
+        .map(|warp| (warp.at, Some(warp.facing)));
+    let Some((at, facing)) = scripted.or_else(|| asked.warp.take()) else {
         return;
     };
     let (mut transform, mut player) = player.into_inner();
     let place = |(east, south): (f32, f32)| site.frame.transform_point(Vec3::new(east, 0.0, south));
-    let feet = planet.ground_at(place(warp.at));
+    let feet = planet.ground_at(place(at));
     let up = feet.normalize();
-    let facing = (place(warp.facing) - feet)
-        .reject_from(up)
-        .normalize_or(view.forward);
+    let ahead = facing.map_or(view.forward, |facing| place(facing) - feet);
+    let facing = ahead.reject_from(up).normalize_or(view.forward);
     transform.translation = feet;
     player.velocity = Vec3::ZERO;
     player.facing = facing;
     view.forward = facing;
-    info!(
-        "Warped to {:.1} m east and {:.1} m south.",
-        warp.at.0, warp.at.1
-    );
+    info!("Warped to {:.1} m east and {:.1} m south.", at.0, at.1);
 }
 
 /// Takes the mouse for the game, or gives it back.

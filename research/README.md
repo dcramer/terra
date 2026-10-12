@@ -23,6 +23,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [godot-spike.md](godot-spike.md) | What did the Godot build prove, and what are the numbers to beat? |
 | [terrain-meshing.md](terrain-meshing.md) | Can `terra_voxel` mesh a real planet's chunk within budget on Linux and Windows, and what stands in the way? |
 | [item-icons.md](item-icons.md) | How do games make the icons of items in slots, and which way keeps one style across procedural variants? |
+| [agent-debugging-tools.md](agent-debugging-tools.md) | What tools and patterns help a coding agent debug and check a game, and what should we build or adopt? |
 
 ## Adding a note
 

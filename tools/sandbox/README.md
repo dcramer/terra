@@ -1,6 +1,6 @@
 # Sandbox remote
 
-Drives a running sandbox from the command line over Bevy's remote protocol (D69): find things, move them, hold the camera on them, pause, pose a model, and take screenshots, all without restarting. Use it whenever you would otherwise change a number and restart to see the result, such as placing a socket, fitting gear or framing a shot. TypeScript, run directly by Node 22.18 or later, with no dependencies.
+Drives a running sandbox from the command line over Bevy's remote protocol (D69): find things, move them, hold the camera on them, pause and step the clock, press keys, read what is true and what the run has said, wait for something to happen, pose a model, and take screenshots, all without restarting. Use it whenever you would otherwise change a number and restart to see the result, such as placing a socket, fitting gear or framing a shot, and to test a feature in one running game instead of a scripted run per step. TypeScript, run directly by Node 22.18 or later, with no dependencies.
 
 ```bash
 r() { node tools/sandbox/remote.ts "$@"; }
@@ -14,7 +14,19 @@ r shot shots/hand.png                    # waits for the file
 r stop
 ```
 
-`start` runs the sandbox in the background on a port nothing else answers on, records the port in `shots/remote.port`, and waits until it answers; every other command talks only to that port, so commands never reach a sandbox another session is driving (`TERRA_REMOTE_PORT` overrides it); anything after `--` goes to the sandbox, and `--windows` runs it on the Windows GPU from WSL (`cargo xtask win`), which is much faster than WSL's CPU renderer. Its log is `shots/remote.log`. A sandbox started by hand with `--remote` works the same.
+Testing a feature in play, in one running game:
+
+```bash
+r start --windows -- --experiment play --fresh --save test.ron
+r give bow quiver arrow:4                # waits until each is given
+r warp -32,34 --facing -45,36            # waits until the player is there
+r state                                  # where they are, their body, what they carry, what is near
+r press 5 e:60                           # the bow, then draw for 60 frames and loose
+r wait "An arrow hit" --timeout 20       # or fail, showing what was said instead
+r said                                   # everything said since the last action
+```
+
+`start` runs the sandbox in the background on a port nothing else answers on, records the port in `shots/remote.port`, and waits until it answers; every other command talks only to that port, so commands never reach a sandbox another session is driving (`TERRA_REMOTE_PORT` overrides it); anything after `--` goes to the sandbox, and `--windows` runs it on the Windows GPU from WSL (`cargo xtask win`), which is much faster than WSL's CPU renderer. Its log is `shots/remote.log`. A sandbox started by hand with `--remote` works the same. `start` also passes `--steady`, so the game moves a sixtieth of a second every frame however fast frames are drawn, as scripted runs do: a key held for 60 frames is a second of play on any machine. `--real-time` leaves the clock alone.
 
 | Command | What it does |
 |---|---|
@@ -25,9 +37,26 @@ r stop
 | `look NAME\|x,y,z [--distance m] [--around degrees] [--height m] [--aim m]` | Hold the camera on an entity, following it, or a point; `around` is from the model's front, `aim` how far above it to look (a person's position is their feet) |
 | `release` | Let the camera go |
 | `pause`, `resume` | Stop and start the game's clock, animations included |
+| `step FRAMES` | Stop the clock, let it run that many frames, stop it again, and wait until it has |
+| `press KEY[:FRAMES] …` | Hold keys for so many frames, one if not given, named as `--press` names them: `e`, `w:60`, `F3`, `esc`, `left:20` |
+| `status` | The frame, the game's time, whether the clock is stopped, and the next line's number |
+| `said [--containing TEXT] [--all] [--from LINE]` | What the run has said since the mark, with the frame of each |
+| `wait TEXT [--timeout s]` | Wait until the run says something containing TEXT since the mark; on timeout, show what it said instead and fail |
+| `mark` | Start `said` and `wait` from now |
+| `state` | In play: where the player is and faces, their body, what they hold, carry and wear, and the creatures and people within 40 m |
+| `warp EAST,SOUTH [--facing EAST,SOUTH]` | In play: move the player, as `--warp` does, and wait until they are there |
+| `give ITEM[:COUNT] …` | In play: carry something, as `--give` does, or set the body (`health:20`), and wait until it is given |
 | `pose CLIP [FRACTION]` | In the workbench: hold every model that far through a clip given with `--anim`, or play it |
 | `shot FILE.png` | Save a screenshot and wait for it |
 | `call METHOD [JSON]` | Any method; `call rpc.discover` lists them, Bevy's `world.*` ones included |
+
+## What the run said, and the mark
+
+Everything the log keeps is also kept in memory, numbered, with the frame it was said on (`crates/terra_sandbox/src/record.rs`), so a script can ask what happened instead of counting frames. Every on-screen notice is logged, as are kills, gains, things made and much else, so most checks need no new code: act, then `wait` for the words.
+
+The client keeps a mark in `shots/remote.mark`: the first line not yet looked at. Commands that act (`press`, `step`, `warp`, `give`) move it to now before acting, so `wait` and `said` see only what followed; `wait` moves it past what it found, so waiting twice for the same words waits for them twice. When `wait` times out it prints what was said instead, which is usually the reason.
+
+When a check needs a fact the log does not say, add it to `play.state` (`crates/terra_sandbox/src/experiments/play/probe.rs`) rather than parsing the screen: one place that answers what is true, read the same way by every test.
 
 Changes made this way last only as long as the run. When a value is right, put it where it belongs (a socket's place goes in `spike/character_gear/export_character.py`), and check it with a workbench sheet.
 
@@ -35,4 +64,4 @@ Changes made this way last only as long as the run. When a value is right, put i
 
 The sandbox listens on `localhost:15702`, or the port `--remote-port` gives. Under WSL, a sandbox running on Windows is on Windows' own localhost, which WSL cannot reach, so the client sends through Windows' `curl.exe` there, and writes screenshots through WSL's share so they land where you asked. The remote protocol can change anything in the running world, so it only listens on localhost and only when started with `--remote`.
 
-To add a method, see `crates/terra_sandbox/src/remote.rs`: an experiment registers its own with `remote::method`, as the workbench does with `workbench.pose`. An experiment that moves its camera in `PostUpdate` orders that `.before(remote::CameraHold)`, so a held camera wins and what it sees is not culled from the old view.
+To add a method, see `crates/terra_sandbox/src/remote.rs`: an experiment registers its own with `remote::method`, as the workbench does with `workbench.pose` and play with `play.state`. A method that changes the game asks for it and lets the system that already does the same for the command line do it on the next frame, as `play.warp` does with `--warp`, so the two cannot drift apart; it logs what it did, so the client can wait for that. An experiment that moves its camera in `PostUpdate` orders that `.before(remote::CameraHold)`, so a held camera wins and what it sees is not culled from the old view.
