@@ -53,7 +53,7 @@ impl Surface {
 
     /// A triangle seen from the side its normal points to, wound counter-clockwise from
     /// there.
-    fn triangle(&mut self, corners: [Vec3; 3], normal: Vec3, colour: [f32; 3]) {
+    pub(crate) fn triangle(&mut self, corners: [Vec3; 3], normal: Vec3, colour: [f32; 3]) {
         self.positions.extend(corners);
         self.normals.extend([normal; 3]);
         self.colours.extend([colour; 3]);
@@ -74,7 +74,7 @@ impl Surface {
 
     /// A rectangle seen from the side its normal points to. Corners go low-left,
     /// low-right, high-right, high-left as seen from that side.
-    fn quad(&mut self, corners: [Vec3; 4], normal: Vec3, colour: [f32; 3]) {
+    pub(crate) fn quad(&mut self, corners: [Vec3; 4], normal: Vec3, colour: [f32; 3]) {
         let [a, b, c, d] = corners;
         self.positions.extend([a, b, c, a, c, d]);
         self.normals.extend([normal; 6]);
@@ -106,9 +106,18 @@ impl Rect {
     }
 }
 
-pub(crate) fn build(base: &Base) -> BaseMesh {
+/// Builds a base's mesh. With a kit's colours for a gable and a roof, its walls are left
+/// to the kit's pieces, but for what is behind a gable's.
+pub(crate) fn build(base: &Base, kit: Option<([f32; 3], [f32; 3])>) -> BaseMesh {
     let mut mesh = BaseMesh::default();
-    for (face, panel) in base.walls() {
+    let walls = kit.map(|(gable, _)| gable);
+    let roof = kit.map_or(ROOF, |(_, roof)| roof);
+    if let Some(colour) = walls {
+        for (face, _) in base.walls() {
+            gable(&mut mesh, base, &Frame::of(face), face, Some(colour));
+        }
+    }
+    for (face, panel) in base.walls().filter(|_| walls.is_none()) {
         let frame = Frame::of(face);
         // Each side of a wall is coloured by whether it faces into a room.
         let front = side_colour(base.contains(face.tile() + face.side.offset()));
@@ -120,7 +129,9 @@ pub(crate) fn build(base: &Base) -> BaseMesh {
         wall_trim(&mut mesh, base, &frame, face, panel);
         opening_trim(&mut mesh, base, &frame, face, panel, hole);
     }
-    posts(&mut mesh, base);
+    if walls.is_none() {
+        posts(&mut mesh, base);
+    }
     for tile in base.floors() {
         let frame = Frame::of(Face::new(tile, Side::Down));
         mesh.structure.quad(
@@ -139,12 +150,12 @@ pub(crate) fn build(base: &Base) -> BaseMesh {
         // Its top, unless a floor above is there to be seen instead.
         if !base.has_floor(tile + IVec3::Y) {
             mesh.structure
-                .quad(frame.corners(frame.whole(), false), frame.normal, ROOF);
+                .quad(frame.corners(frame.whole(), false), frame.normal, roof);
         }
         mesh.structure
             .quad(frame.corners(frame.whole(), true), -frame.normal, CEILING);
     }
-    pitched_roofs(&mut mesh, base);
+    pitched_roofs(&mut mesh, base, roof);
     mesh
 }
 
@@ -153,12 +164,12 @@ pub(crate) fn build(base: &Base) -> BaseMesh {
 /// diagonals (research/procedural-buildings.md).
 const ROOF_STEP_M: f32 = CELL_M * 0.5;
 /// How thick a pitched roof is.
-const ROOF_THICK_M: f32 = 0.1;
+pub(crate) const ROOF_THICK_M: f32 = 0.1;
 
 /// Every pitched roof, as its height above the walls sampled on a fine lattice: each small
 /// square in four triangles from its middle, so the faces are as flat as the roof. Its top
 /// is roof and its underside ceiling.
-fn pitched_roofs(mesh: &mut BaseMesh, base: &Base) {
+fn pitched_roofs(mesh: &mut BaseMesh, base: &Base, roof: [f32; 3]) {
     let mut squares = std::collections::BTreeSet::new();
     for section in base.sections() {
         let per = (CELL_M / ROOF_STEP_M).round() as i32;
@@ -187,7 +198,7 @@ fn pitched_roofs(mesh: &mut BaseMesh, base: &Base) {
             } else {
                 (a, b, normal)
             };
-            mesh.structure.triangle([middle, a, b], normal, ROOF);
+            mesh.structure.triangle([middle, a, b], normal, roof);
             let down = Vec3::Y * ROOF_THICK_M;
             mesh.structure
                 .triangle([middle - down, b - down, a - down], -normal, CEILING);
@@ -299,7 +310,7 @@ fn wall_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, panel:
     }
 
     // Up to a pitched roof over it: a gable end, or a wall inside up to the slope.
-    gable(mesh, base, frame, face);
+    gable(mesh, base, frame, face, None);
 
     // A line where the wall carries on up another storey; else a cap on its top, and
     // where a roof meets it, a parapet over the roof and a fascia under its edge.
@@ -352,7 +363,7 @@ fn wall_trim(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, panel:
 /// The wall carried up to a pitched roof over it, as far as the roof's underside, so a
 /// gable end is closed and a wall inside meets the slope. In two pieces along the cell,
 /// so a ridge over its middle is followed.
-fn gable(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face) {
+fn gable(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face, colour: Option<[f32; 3]>) {
     let storey = face.tile[1];
     let rise = |across: f32| {
         let at = frame.origin + frame.right * across;
@@ -363,8 +374,8 @@ fn gable(mesh: &mut BaseMesh, base: &Base, frame: &Frame, face: Face) {
     let (Some(start), Some(middle), Some(end)) = (rise(0.0), rise(half), rise(frame.width)) else {
         return;
     };
-    let colour = side_colour(base.contains(face.tile() + face.side.offset()));
-    let behind = side_colour(base.contains(face.tile()));
+    let behind = colour.unwrap_or(side_colour(base.contains(face.tile())));
+    let colour = colour.unwrap_or(side_colour(base.contains(face.tile() + face.side.offset())));
     let height = frame.height;
     let at = |across: f32, up: f32, depth: f32| {
         frame.origin + frame.right * across + frame.up * up + frame.normal * depth

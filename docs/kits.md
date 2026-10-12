@@ -103,7 +103,15 @@ Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 
 ## Checking it
 
-The yard (structures.md) gets a kit sheet: `--kit-sheet logs` lays one of each situation in a row. That means a free end, a corner, a T, a cross, two walls in line, a late corner, a post on a wall, a long wall, a door, a window and a small cabin, each in all three states. It saves a picture from set vantages, so a change to the rule or the kit is seen in one command (D69, D71). Tests in `terra_build` check the layout without a picture: no two logs in one course overlap, the courses fill the storey, each kind of end and the count of logs per wall.
+The yard (structures.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall and a small cabin with a door, windows and a gable roof, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71):
+
+```bash
+cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet --time 16 --vantage 13,9,-6,13,0.5,-26.5 --shot out/corners.png
+```
+
+`--walls logs` lays every build's walls in logs, the player's own too. The kit's file is read again when it is saved, so the look can be tuned with the sheet running. Tests in `terra_build` check the layout without a picture: the courses fill the storey, walls either way never share a course, corners run past and free ends are flush, a door cuts the courses it crosses and is framed, long walls stagger their seams, and gables shorten toward the ridge.
+
+![The kit sheet's corners and T's: built, going up, and as a blueprint](images/log-kit-sheet-2026-10-12.png)
 
 ## What it costs
 
@@ -111,9 +119,13 @@ What a part costs is set apart from its pieces (2026-10-12): "we dont need 1:1 t
 
 ## First build
 
-1. The stacked layout in `terra_build`: each wall's logs, from the grid's walls and what meets their ends, in the order they go in.
-2. The log made in code, with the kit file for pine.
-3. In the game: the base's walls drawn from the kit instead of the plain boxes, built as one merged mesh; a sandbox flag to draw them as a blueprint, or partly built, since plans themselves come with step 3.
-4. The kit sheet on the yard, and pictures of it for the developers.
+Built 2026-10-12:
 
-Floors and roofs stay as they are until walls look right.
+1. **The stacked layout** in `terra_build` (`logs.rs`): each wall's logs, from the grid's walls and what meets their ends, in the order they go in; openings framed; gable ends in logs that shorten under the roof.
+2. **The log made in code**, with the kit file for pine, `assets/data/kits/logs.ron`.
+3. **In the game**: a build's walls drawn from the kit instead of the plain boxes, those in merged into one mesh, the rest a ghost with the next lit. Until plans come (step 3 of structures.md), the kit sheet sets how far each build is in.
+4. **The kit sheet** on the yard.
+
+![A log cabin from the kit sheet, late in the day](images/log-cabin-2026-10-12.png)
+
+**Not yet:** posts as parts, and the late corner, which need parts with their own history (step 3); a kind for each wall, so log and stone can mix (D179); saddle notches cut into the logs, rather than logs meeting; roofs, floors and the foundation in the kit's materials; eaves over the walls (D175); doors in the frames.

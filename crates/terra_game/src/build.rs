@@ -15,8 +15,13 @@ use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, prelude::*,
     render::render_resource::PrimitiveTopology,
 };
+use std::sync::Arc;
+use std::time::SystemTime;
+use terra_build::logs::{self, LogKit};
 use terra_build::{Base, BuildOp, CELL_M, Face, Panel, STOREY_M, Side, Surface, Walker};
 use terra_core::Operation;
+
+mod sheet;
 
 const REACH_M: f32 = 300.0;
 /// The base's floor clears the highest ground under it by this much.
@@ -55,6 +60,22 @@ pub(super) struct Build {
     glass: Entity,
     foundation: Entity,
     steps: Entity,
+    /// With a kit, its walls are laid as its pieces (docs/kits.md), drawn as they stand.
+    pub logs: Option<Arc<LogKit>>,
+    pub shown: Shown,
+    /// The pieces that are in, those still a ghost, and the next to go in.
+    pieces: Entity,
+    ghost: Entity,
+    next: Entity,
+}
+
+/// How far a build's pieces are in (D139, D177): built, or a plan with so much of it in,
+/// from nothing, a blueprint, to all of it. Plans proper come with step 3 of
+/// docs/structures.md; until then, the kit sheet shows each state this way.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Shown {
+    Built,
+    Plan(f32),
 }
 
 /// How much ground a room set into it clears round its walls.
@@ -83,6 +104,53 @@ pub(super) struct BuildLook {
     structure: Handle<StandardMaterial>,
     glass: Handle<StandardMaterial>,
     concrete: Handle<StandardMaterial>,
+    /// A plan's pieces not yet in, and the next one.
+    ghost: Handle<StandardMaterial>,
+    next: Handle<StandardMaterial>,
+    /// The log kit new builds' walls are laid in, if any (`--walls logs`).
+    pub logs: Option<Arc<LogKit>>,
+}
+
+/// The log kit's file, `assets/data/kits/logs.ron`, read again when it is saved so a log
+/// wall's look can be tuned while the game runs.
+#[derive(Resource)]
+struct KitFile {
+    modified: Option<SystemTime>,
+    timer: Timer,
+}
+
+const LOG_KIT: &str = "assets/data/kits/logs.ron";
+
+fn kit_path() -> std::path::PathBuf {
+    bevy::asset::io::file::FileAssetReader::get_base_path().join(LOG_KIT)
+}
+
+fn modified() -> Option<SystemTime> {
+    std::fs::metadata(kit_path())
+        .and_then(|m| m.modified())
+        .ok()
+}
+
+/// Reads the log kit. A mistake in it is said in the log, and `None` returned.
+fn read_kit() -> Option<LogKit> {
+    let path = kit_path();
+    let text = std::fs::read_to_string(&path)
+        .map_err(|problem| error!("Could not read {}: {problem}", path.display()))
+        .ok()?;
+    let kit: LogKit = ron::from_str(&text)
+        .map_err(|problem| error!("{}: {problem}", path.display()))
+        .ok()?;
+    match kit.courses() {
+        (_, true) => Some(kit),
+        _ => {
+            error!(
+                "{}: a course of {} m does not divide the storey",
+                path.display(),
+                kit.course
+            );
+            None
+        }
+    }
 }
 
 #[derive(Component)]
@@ -99,6 +167,7 @@ pub fn plugin(app: &mut App) {
     let free = not(resource_exists::<DrivenByPlayer>);
     app.insert_resource(Added)
         .add_systems(Startup, setup)
+        .add_systems(Update, (reload_kit, sheet::lay))
         .add_systems(
             Update,
             (
@@ -176,7 +245,12 @@ impl Build {
         let foundation = part("foundation", &look.concrete);
         let steps = part("steps", &look.concrete);
         let glass = part("glass", &look.glass);
+        let pieces = part("pieces", &look.structure);
+        let ghost = part("ghost", &look.ghost);
+        let next = part("next", &look.next);
         commands.entity(glass).insert(NotShadowCaster);
+        commands.entity(ghost).insert(NotShadowCaster);
+        commands.entity(next).insert(NotShadowCaster);
         Self {
             base: Base::default(),
             frame,
@@ -187,6 +261,11 @@ impl Build {
             glass,
             foundation,
             steps,
+            logs: look.logs.clone(),
+            shown: Shown::Built,
+            pieces,
+            ghost,
+            next,
         }
     }
 
@@ -646,7 +725,28 @@ fn setup(
             perceptual_roughness: 0.95,
             ..default()
         }),
+        ghost: materials.add(StandardMaterial {
+            base_color: Color::srgba(1.0, 1.0, 1.0, 0.38),
+            emissive: LinearRgba::rgb(0.05, 0.12, 0.25),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 0.6,
+            ..default()
+        }),
+        next: materials.add(StandardMaterial {
+            base_color: Color::srgba(1.0, 0.78, 0.35, 0.75),
+            emissive: LinearRgba::rgb(0.6, 0.35, 0.05),
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        }),
+        logs: (options.walls.as_deref() == Some("logs"))
+            .then(read_kit)
+            .flatten()
+            .map(Arc::new),
     };
+    commands.insert_resource(KitFile {
+        modified: modified(),
+        timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+    });
     let mut build = Build::new(&mut commands, &look, frame, "Base");
     let operations = if driven.is_some() {
         Vec::new()
@@ -715,15 +815,25 @@ fn to_mesh(surface: &Surface) -> Option<Mesh> {
 
 /// Rebuilds everything drawn for a build from its current shape.
 fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &mut Assets<Mesh>) {
-    let mesh = site.base.mesh();
     let mut show = |entity: Entity, mesh: Option<Mesh>| {
         match mesh {
             Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
             None => commands.entity(entity).remove::<Mesh3d>(),
         };
     };
+    let (mesh, pieces) = match &site.logs {
+        Some(kit) => {
+            let (mesh, layout) = site.base.mesh_with_logs(kit);
+            (mesh, draw_pieces(&layout.pieces, kit, site.shown))
+        }
+        None => (site.base.mesh(), [None, None, None]),
+    };
+    let [placed, ghost, next] = pieces;
     show(site.structure, to_mesh(&mesh.structure));
     show(site.glass, to_mesh(&mesh.glass));
+    show(site.pieces, placed);
+    show(site.ghost, ghost);
+    show(site.next, next);
 
     // A foundation under every ground-floor cell with a floor, down into the ground,
     // standing a little proud of the walls.
@@ -805,6 +915,75 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
         site.ramps.push(ramp);
     }
     show(site.steps, steps.into_mesh());
+}
+
+/// Colour of a plan's pieces not yet in: each a shade apart, so they can be counted.
+const GHOST: [f32; 3] = [0.62, 0.84, 1.0];
+
+/// A kit's pieces as three meshes: those in, those still a ghost, and the next to go in.
+fn draw_pieces(pieces: &[logs::Piece], kit: &LogKit, shown: Shown) -> [Option<Mesh>; 3] {
+    let done = match shown {
+        Shown::Built => pieces.len(),
+        Shown::Plan(fraction) => {
+            ((pieces.len() as f32 * fraction.clamp(0.0, 1.0)) as usize).min(pieces.len())
+        }
+    };
+    let mut placed = Surface::default();
+    let mut ghost = Surface::default();
+    let mut next = Surface::default();
+    for (index, piece) in pieces.iter().enumerate() {
+        let surface = if index < done {
+            &mut placed
+        } else if index == done {
+            &mut next
+        } else {
+            &mut ghost
+        };
+        let from = surface.colours.len();
+        logs::draw(piece, kit, surface);
+        if index > done {
+            let shade = if index % 2 == 0 { 1.0 } else { 0.86 };
+            let colour = GHOST.map(|c| c * shade);
+            surface.colours[from..].fill(colour);
+        }
+    }
+    [to_mesh(&placed), to_mesh(&ghost), to_mesh(&next)]
+}
+
+/// Reads the log kit again when its file is saved, and draws every build in logs again.
+fn reload_kit(
+    time: Res<Time>,
+    mut file: ResMut<KitFile>,
+    mut look: ResMut<BuildLook>,
+    mut commands: Commands,
+    planet: Res<Planet>,
+    mut site: ResMut<Site>,
+    mut builds: Query<&mut Built>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    if !file.timer.tick(time.delta()).just_finished() {
+        return;
+    }
+    let now = modified();
+    if now == file.modified {
+        return;
+    }
+    file.modified = now;
+    let Some(kit) = read_kit().map(Arc::new) else {
+        return;
+    };
+    info!("Read {LOG_KIT} again.");
+    if look.logs.is_some() {
+        look.logs = Some(kit.clone());
+    }
+    for build in
+        std::iter::once(&mut site.build).chain(builds.iter_mut().map(|b| &mut b.into_inner().0))
+    {
+        if build.logs.is_some() {
+            build.logs = Some(kit.clone());
+            redraw(&mut commands, build, &planet, &mut meshes);
+        }
+    }
 }
 
 /// Moves the camera to a good view of the base, once.

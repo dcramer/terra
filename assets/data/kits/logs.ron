@@ -1,0 +1,43 @@
+// A log wall's kit (docs/kits.md, D177, D178): pine logs, peeled, with daub between the
+// courses. The game reads it again when it is saved, so the look can be tuned while it
+// runs. Sizes are in metres; colours as they appear on screen (sRGB), from the palette's
+// wood roles where they have one (tools/characters/look.py).
+//
+// diameter    how thick a log is, and so the wall (D175: 0.3)
+// course      how far apart the courses are; it must divide the 3 m storey
+// overhang    how far a log runs past the wall it crosses at a corner
+// longest     the longest wall one log spans, as long as a tree gives (D174)
+// facets      how many sides a log's section has, from the first to the second
+// taper       how much thicker one end is than the middle, as a fraction
+// bend        how far a log bows from straight, at most
+// roughness   how uneven a log's section is, as a fraction of its radius
+// knots       knots for every metre of log, on average
+// ragged      how far a corner log's end may differ from the others'
+// chinking    whether there is daub between the courses
+// frame       how wide the boards round an opening are
+(
+    diameter: 0.3,
+    course: 0.25,
+    overhang: 0.25,
+    longest: 4.0,
+    facets: (9, 11),
+    taper: 0.07,
+    bend: 0.035,
+    roughness: 0.07,
+    knots: 0.5,
+    ragged: 0.04,
+    chinking: true,
+    frame: 0.08,
+    colours: (
+        wood: (0.62, 0.43, 0.26),
+        light: (0.74, 0.56, 0.37),   // WoodLight
+        dark: (0.5, 0.34, 0.22),
+        bark: (0.37, 0.26, 0.19),    // WoodDark
+        end: (0.8, 0.64, 0.44),
+        heart: (0.66, 0.47, 0.3),
+        knot: (0.33, 0.22, 0.15),
+        chinking: (0.66, 0.6, 0.5),
+        board: (0.45, 0.32, 0.22),   // boards round openings, and behind a gable
+        roof: (0.47, 0.42, 0.37),    // the roof, until roofs have kits of their own
+    ),
+)

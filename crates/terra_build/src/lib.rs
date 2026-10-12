@@ -21,6 +21,7 @@
 //! Coordinates are local to the base: cells on an integer grid, X and Z along the floor
 //! and Y up, counted in storeys.
 
+pub mod logs;
 mod mesh;
 mod walk;
 
@@ -648,7 +649,18 @@ impl Base {
 
     /// The base as triangles, ready to draw.
     pub fn mesh(&self) -> BaseMesh {
-        mesh::build(self)
+        mesh::build(self, None)
+    }
+
+    /// The base with its walls laid as logs: its floors, roofs and gable ends as
+    /// triangles, and the walls' pieces, in the order they go in, to draw as they stand.
+    pub fn mesh_with_logs(&self, kit: &logs::LogKit) -> (BaseMesh, logs::Layout) {
+        let mut mesh = mesh::build(self, Some((kit.colours.board, kit.colours.roof)));
+        let layout = logs::lay(self, kit);
+        mesh.glass.positions.extend(&layout.glass.positions);
+        mesh.glass.normals.extend(&layout.glass.normals);
+        mesh.glass.colours.extend(&layout.glass.colours);
+        (mesh, layout)
     }
 }
 

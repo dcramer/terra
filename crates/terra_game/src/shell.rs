@@ -110,6 +110,9 @@ usage: terra_sandbox [options]
   --warp <east,south:east,south@frame>
                         on that frame, move the play experiment's player to the first
                         spot, facing the second, for testing (repeatable)
+  --walls logs          lay every build's walls in logs (docs/kits.md)
+  --kit-sheet           on the yard, lay one of each way log walls meet, built, going
+                        up and as a blueprint, to look at (docs/kits.md)
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the base's corner, for experiments
@@ -186,6 +189,10 @@ pub struct Options {
     pub fresh: bool,
     /// Which level the play experiment is on: the world, or a test level.
     pub level: Level,
+    /// What every build's walls are laid in, if not plain: `logs` (docs/kits.md).
+    pub walls: Option<String>,
+    /// On the yard: lay one of each way log walls meet, in each state (docs/kits.md).
+    pub kit_sheet: bool,
     /// The hour of the day the play experiment's clock is set to, if not its own.
     pub time: Option<f32>,
     /// Where the play experiment's player starts, east and south of the start in metres.
@@ -259,6 +266,8 @@ impl Options {
             trace: None,
             fresh: false,
             level: Level::World,
+            walls: None,
+            kit_sheet: false,
             start_at: None,
             time: None,
             start_facing: None,
@@ -339,6 +348,13 @@ impl Options {
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--trace" => options.trace = Some(PathBuf::from(value("--trace")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
+                "--walls" => {
+                    options.walls = match value("--walls")?.as_str() {
+                        "logs" => Some("logs".to_string()),
+                        other => return Err(format!("--walls is logs, not `{other}`")),
+                    }
+                }
+                "--kit-sheet" => options.kit_sheet = true,
                 "--model" => options.models.push(value("--model")?),
                 "--prop" => options.props.push(value("--prop")?),
                 "--hold" => options.hold = Some(value("--hold")?),
