@@ -12,7 +12,7 @@ Everything is built in Rust on Bevy, with our own voxel terrain. The plan is in 
 | `research/` | Findings, surveys and measurements, one dated note per question. |
 | `crates/` | The Rust workspace: the game's code. See `crates/README.md`. |
 | `xtask/` | Project tasks, run as `cargo xtask <task>`. |
-| `tools/` | Team tooling outside the game, such as [token stats](tools/token-stats/README.md) and the [Tripo CLI](tools/tripo/README.md). |
+| `tools/` | Team tooling outside the game, such as [token stats](tools/token-stats/README.md), the [Tripo CLI](tools/tripo/README.md) and the [sandbox remote](tools/sandbox/README.md). |
 | `demo/` | The playable tech demo on Godot. A working reference until the Rust build replaces it. |
 | `prototypes/sim_toy/` | A globe for watching the planet simulation, on Godot. |
 | `spike/` | Throwaway experiments. |
@@ -50,7 +50,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - **Use `libm` for trigonometry and exponentials**, never `f32::sin` and friends. The system maths library differs between platforms in both results and speed. The lints enforce this.
 - **No `unsafe`.** It is forbidden workspace-wide.
 - **Tests live next to the code** and need no GPU. A behaviour you rely on gets a test.
-- **Make what you build checkable without a person** (D69). Today that means the sandbox's scripted runs (`--press`, `--shot`, `--vantage`, `--bench`); later, Bevy's remote protocol. A feature is not done until an agent can drive it and see that it worked.
+- **Make what you build checkable without a person** (D69). That means the sandbox's scripted runs (`--press`, `--shot`, `--vantage`, `--bench`), the workbench's sheets, and driving a run live over Bevy's remote protocol (`--remote`, [tools/sandbox](tools/sandbox/README.md)). A feature is not done until an agent can drive it and see that it worked.
 - **Check the real API, don't recall it.** Bevy changes every release. Read the examples and source that ship with the pinned version under `~/.cargo/registry/src/` before writing against it.
 - **Look at what you made.** The Linux build renders on the CPU under WSL, so you can save a screenshot and read it without a GPU: `cargo run -p terra_sandbox -- --shot <file.png>`.
 - **Measure performance on a real GPU, in the loop a player runs**, and report the integrated GPU as well as the fast one. Software rendering numbers mean nothing. Under WSL, `cargo xtask win -p <package>` builds for Windows and runs there.

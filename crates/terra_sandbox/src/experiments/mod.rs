@@ -45,7 +45,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "workbench",
-        about: "A model on a plain floor in the game's light: --model <path> to load, --anim <clip> to play, --sheet <prefix> to capture views and exit.",
+        about: "Models on a plain floor in the game's light: --model <path> to load, --anim <clip> to play, --hold and --attach for what they carry, --sheet <prefix> to capture views and exit; --remote to drive it live.",
         add: workbench::plugin,
     },
     Experiment {

@@ -74,7 +74,7 @@ The developers want tools that help refine each system (D71). The sandbox's expe
 
   What it needs to check is in [research/ai-models-for-art.md](../research/ai-models-for-art.md#the-tools-the-agent-would-need).
 
-  Built so far: the `workbench` experiment shows one model, animated, in the game's renderer, and with `--sheet` saves views of each animation from four sides for an agent to read ([sandbox README](../crates/terra_sandbox/README.md#the-workbench)). Characters are checked before that by `spike/character_gear/rig_check.py`, which compares a rig with the hand-rigged mannequin on every animation. Not yet built: scaling, recolouring and the review by a person.
+  Built so far: the `workbench` experiment shows models in the game's renderer, side by side, animated, holding and wearing things, and with `--sheet` saves a contact sheet per animation for an agent to read ([sandbox README](../crates/terra_sandbox/README.md#the-workbench)). Any sandbox run started with `--remote` can be driven live, to move things, hold the camera on them, pose and screenshot without a restart ([tools/sandbox](../tools/sandbox/README.md)). Characters are checked before that by `spike/character_gear/rig_check.py`, which compares a rig with the hand-rigged mannequin on every animation. Not yet built: scaling, recolouring and the review by a person.
 
 Each tool should be scriptable as well as usable by hand, so an agent can use it too.
 

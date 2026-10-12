@@ -12,9 +12,11 @@
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
 mod audio;
+mod character;
 mod debug;
 mod experiments;
 mod planet;
+mod remote;
 mod shell;
 mod sky;
 
@@ -36,7 +38,11 @@ fn main() -> AppExit {
     }
 
     let mut app = App::new();
-    app.add_plugins((shell::ShellPlugin(options.clone()), planet::plugin));
+    app.add_plugins((
+        shell::ShellPlugin(options.clone()),
+        planet::plugin,
+        character::plugin,
+    ));
     for name in &options.experiments {
         let Some(experiment) = experiments::ALL.iter().find(|e| e.name == name) else {
             eprintln!("No experiment called `{name}`. Run with --list to see them.");

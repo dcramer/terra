@@ -37,10 +37,24 @@ usage: terra_sandbox [options]
   --mute                no sound
   --sound               sound under WSL too, where it is off by default
   --bench               measure frame times with vsync off, print them, then exit
+  --remote              let a script drive this run over Bevy's remote protocol, on
+                        localhost:15702 (tools/sandbox/remote.ts)
   --settle <frames>     frames to run before capturing or measuring (default 120)
-  --model <path>        in the workbench: the model to load, under assets/
+  --model <path>        in the workbench: a model to load, under assets/; repeatable,
+                        to stand several side by side
   --anim <clip>         in the workbench: a clip to play; repeatable
-  --sheet <prefix>      in the workbench: capture each clip from four sides, then exit
+  --hold <tool>         in the workbench: a tool in the right hand, named as in --give
+  --attach <file>[@<socket>]
+                        in the workbench: a model on a socket, such as socket.back, or
+                        without one, clothing bound to the skeleton (repeatable)
+  --focus <name>        in the workbench: look closely at a part, such as socket.hand.R
+  --sheet <prefix>      in the workbench: capture each clip, save one picture of it per
+                        clip as <prefix>-<clip>.png, then exit
+  --sides <degrees,…>   in the workbench sheet: directions to look from, round from the
+                        front (default 30,120,210,300)
+  --moments <fraction,…>
+                        in the workbench sheet: how far through each clip to look
+                        (default 0.4)
   --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace or an arrow
                         (left, right, up, down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
@@ -82,6 +96,8 @@ pub struct Options {
     pub shot: Option<PathBuf>,
     pub settle_frames: u32,
     pub bench: bool,
+    /// Listen for a script driving the run (`remote`).
+    pub remote: bool,
     /// No readout on screen.
     pub clean: bool,
     /// No sound, and sound under WSL, where it is off unless asked for.
@@ -103,8 +119,15 @@ pub struct Options {
     pub start_facing: Option<(f32, f32)>,
     /// On a frame, put the play experiment's player at a spot, facing another.
     pub warps: Vec<Warp>,
-    /// In the workbench: the model to load, its clips to play, and where to save a sheet.
-    pub model: Option<String>,
+    /// In the workbench: the models to load, their clips to play, what they hold and
+    /// wear, what to look at closely, and where to save a sheet, from which sides, at
+    /// which moments.
+    pub models: Vec<String>,
+    pub hold: Option<String>,
+    pub attaches: Vec<String>,
+    pub focus: Option<String>,
+    pub sides: Vec<f32>,
+    pub moments: Vec<f32>,
     pub anims: Vec<String>,
     pub sheet: Option<PathBuf>,
 }
@@ -131,6 +154,7 @@ impl Options {
             shot: None,
             settle_frames: SETTLE_FRAMES,
             bench: false,
+            remote: false,
             clean: false,
             mute: false,
             sound: false,
@@ -142,7 +166,12 @@ impl Options {
             start_at: None,
             start_facing: None,
             warps: Vec::new(),
-            model: None,
+            models: Vec::new(),
+            hold: None,
+            attaches: Vec::new(),
+            focus: None,
+            sides: Vec::new(),
+            moments: Vec::new(),
             anims: Vec::new(),
             sheet: None,
         };
@@ -153,6 +182,7 @@ impl Options {
                 "--experiment" => options.experiments.push(value("--experiment")?),
                 "--list" => options.list = true,
                 "--bench" => options.bench = true,
+                "--remote" => options.remote = true,
                 "--clean" => options.clean = true,
                 "--mute" => options.mute = true,
                 "--sound" => options.sound = true,
@@ -176,7 +206,12 @@ impl Options {
                 }
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
-                "--model" => options.model = Some(value("--model")?),
+                "--model" => options.models.push(value("--model")?),
+                "--hold" => options.hold = Some(value("--hold")?),
+                "--attach" => options.attaches.push(value("--attach")?),
+                "--focus" => options.focus = Some(value("--focus")?),
+                "--sides" => options.sides = numbers("--sides", &value("--sides")?)?,
+                "--moments" => options.moments = numbers("--moments", &value("--moments")?)?,
                 "--anim" => options.anims.push(value("--anim")?),
                 "--sheet" => options.sheet = Some(PathBuf::from(value("--sheet")?)),
                 "--radius" => {
@@ -228,6 +263,15 @@ impl Options {
     pub fn sound_on(&self) -> bool {
         !self.scripted() && !self.mute && (self.sound || !on_wsl())
     }
+}
+
+/// Numbers written like 30,120,210.
+fn numbers(name: &str, text: &str) -> Result<Vec<f32>, String> {
+    text.split(',')
+        .map(|number| number.trim().parse().ok())
+        .collect::<Option<Vec<f32>>>()
+        .filter(|numbers| !numbers.is_empty())
+        .ok_or(format!("{name} wants numbers like 30,120, not `{text}`"))
 }
 
 /// Metres east and south of the start, written like 70,-55.
@@ -401,6 +445,9 @@ impl Plugin for ShellPlugin {
             )
             .add_systems(PreUpdate, scripted_presses.after(InputSystems))
             .add_systems(Update, scripted_run);
+        if self.0.remote {
+            crate::remote::plugin(app);
+        }
     }
 }
 
@@ -504,6 +551,30 @@ mod tests {
 
     fn parse(args: &[&str]) -> Result<Options, String> {
         Options::from_args(args.iter().map(|a| a.to_string()))
+    }
+
+    #[test]
+    fn reads_the_workbench_options() {
+        let options = parse(&[
+            "--model",
+            "a.glb",
+            "--model",
+            "b.glb",
+            "--attach",
+            "pack.glb@socket.back",
+            "--sides",
+            "30, 120",
+            "--moments",
+            "0.25,0.75",
+            "--remote",
+        ])
+        .unwrap();
+        assert_eq!(options.models, ["a.glb", "b.glb"]);
+        assert_eq!(options.attaches, ["pack.glb@socket.back"]);
+        assert_eq!(options.sides, [30.0, 120.0]);
+        assert_eq!(options.moments, [0.25, 0.75]);
+        assert!(options.remote);
+        assert!(parse(&["--sides", "front"]).is_err());
     }
 
     #[test]

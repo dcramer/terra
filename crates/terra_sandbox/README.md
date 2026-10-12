@@ -35,9 +35,15 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--warp <east,south:east,south@frame>` | In the play experiment: on that frame, move the player to the first spot, facing the second, for testing. Repeatable. |
 | `--give <item>:<count>` | In the play experiment: carry something extra, for testing: a raw item such as `stone:10`, a tool such as `spear:1` (put on the bar), clothing such as `leather_coat:1` (worn), or `health`, `fed` or `stamina` at a value out of 100. Added to a loaded save too, so scripted runs can follow on from each other. Repeatable. |
 | `--vantage <x,y,z,x,y,z>` | In the play experiment: a fixed camera, given as where it stands and what it looks at, in metres east, up and south of the base's corner |
-| `--model <path>` | In the workbench: the model to look at, a `.glb` or `.gltf` under `assets/` |
+| `--remote` | Let a script drive the run over Bevy's remote protocol, on `localhost:15702`: [tools/sandbox](../../tools/sandbox/README.md) |
+| `--model <path>` | In the workbench: a model to look at, a `.glb` or `.gltf` under `assets/`. Repeatable: models stand side by side doing the same thing |
 | `--anim <clip>` | In the workbench: an animation to play. Repeatable; the first plays when looking by hand |
-| `--sheet <prefix>` | In the workbench: save `<prefix>-<clip>-<degrees>.png` for each `--anim`, paused partway, from four sides, then exit |
+| `--hold <tool>` | In the workbench: a tool in the right hand, as in play, named as in `--give` |
+| `--attach <file>[@<socket>]` | In the workbench: a model on a socket, such as `models/x.glb@socket.back`, or without one, clothing fitted to the skeleton. Repeatable |
+| `--focus <name>` | In the workbench: look closely at one part, such as `socket.hand.R` |
+| `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments |
+| `--sides <degrees,…>` | In the workbench sheet: where to look from, round from the front; 30,120,210,300 by default |
+| `--moments <fraction,…>` | In the workbench sheet: how far through each clip; 0.4 by default |
 
 ## Controls
 
@@ -245,16 +251,10 @@ A base you shape, inspired by Subnautica 2. It stands on the most level ground n
 ## The workbench
 
 ```bash
-cargo run -p terra_sandbox -- --experiment workbench --model models/character/base-male.glb --anim Walk_Loop
+cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/figure.gltf --model models/character/base-male.glb --anim Jog_Fwd_Loop --sides 30,100 --moments 0.1,0.35,0.6,0.85 --sheet shots/wb/compare --clean --settle 60
 ```
 
-On the Windows GPU, which a sheet needs (the CPU renderer under WSL is far too slow):
-
-```bash
-cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/base-male.glb --anim Idle_Loop --anim Walk_Loop --sheet shots/wb/base-male --clean --settle 90
-```
-
-One model on a plain floor in the game's own light and renderer, playing an animation (D71). It prints the model's clips and how many of our skeleton's joints it has. Fly round it with the free camera, or give `--sheet` to have it save views of each clip from four sides and exit, which is how an agent checks a model. How characters are made and checked before they get here is in `.claude/skills/character/SKILL.md`.
+Models on a plain floor in the game's own light and renderer, playing animations (D71), holding and wearing things as they would in play (`--hold`, `--attach`, through the shared `character` module). It prints each model's clips, joints and sockets. Fly round by hand, drive it live with `--remote` ([tools/sandbox](../../tools/sandbox/README.md), which adds `pose CLIP FRACTION`), or give `--sheet` to save one contact sheet per clip and exit, which is how an agent checks a model. The command above puts the mannequin and the base body side by side through the jog, from two sides at four moments. Run sheets on the Windows GPU; the CPU renderer under WSL is far too slow. How characters are made and checked before they get here is in `.claude/skills/character/SKILL.md`.
 
 ## Adding an experiment
 

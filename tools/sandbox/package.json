@@ -1,0 +1,6 @@
+{
+  "name": "terra-sandbox-remote",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18" }
+}

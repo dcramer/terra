@@ -13,7 +13,7 @@ use bevy::{
     prelude::*,
 };
 
-/// Where the figure's figure.rs hangs things in its right hand. Held tools are its
+/// The socket in the figure's right hand (`character::HAND_R`). Held tools are its
 /// children.
 #[derive(Component)]
 pub struct Grip;
@@ -51,30 +51,49 @@ fn about(tool: Tool) -> (Option<&'static str>, f32, f32) {
     }
 }
 
+/// The tool called `name`, written as in `--give`, such as `stone_axe`.
+pub fn tool_named(name: &str) -> Option<Tool> {
+    Tool::ALL
+        .into_iter()
+        .find(|tool| tool.name().replace(' ', "_").eq_ignore_ascii_case(name))
+}
+
+/// What every tool in hand is drawn with; its colours are in its mesh.
+pub fn tool_material() -> StandardMaterial {
+    StandardMaterial {
+        perceptual_roughness: 0.7,
+        reflectance: 0.3,
+        ..default()
+    }
+}
+
+/// A tool as held: one mesh along +Y, the place it is held at the origin.
+pub fn tool_mesh(tool: Tool) -> Option<Mesh> {
+    let (file, length, held_from_end) = about(tool);
+    let parts = match file {
+        Some(file) => match read_model(file) {
+            Ok(parts) => parts,
+            Err(problem) => {
+                error!("Could not read a tool. {problem}");
+                return None;
+            }
+        },
+        None => pickaxe(tool == Tool::IronPickaxe),
+    };
+    Some(bake(&parts, length, held_from_end, head_colour(tool)))
+}
+
 fn load(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let material = materials.add(StandardMaterial {
-        perceptual_roughness: 0.7,
-        reflectance: 0.3,
-        ..default()
-    });
+    let material = materials.add(tool_material());
     let mut tools = Vec::new();
     for tool in Tool::ALL {
-        let (file, length, held_from_end) = about(tool);
-        let parts = match file {
-            Some(file) => match read_model(file) {
-                Ok(parts) => parts,
-                Err(problem) => {
-                    error!("Could not read a tool. {problem}");
-                    continue;
-                }
-            },
-            None => pickaxe(tool == Tool::IronPickaxe),
+        let Some(mesh) = tool_mesh(tool) else {
+            continue;
         };
-        let mesh = bake(&parts, length, held_from_end, head_colour(tool));
         tools.push((
             tool,
             Look {

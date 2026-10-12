@@ -1,6 +1,6 @@
 //! The player's body: the male base body, made with Tripo and rigged onto the skeleton
-//! of a free animation library (D115, THIRD_PARTY.md), with what is in hand fixed to its
-//! right hand. Which animation plays follows what the player is doing.
+//! of a free animation library (D115, THIRD_PARTY.md), with what is in hand held in its
+//! right hand's socket (`character`). Which animation plays follows what the player is doing.
 //!
 //! A base body has no hair or clothes of its own; those are parts still to come (D111,
 //! D112).
@@ -13,9 +13,6 @@ use std::time::Duration;
 const MODEL: &str = "models/character/base-male.glb";
 /// How long one animation takes to give way to the next.
 const BLEND: Duration = Duration::from_millis(180);
-/// Turns a held tool, which runs along +Y, to lie across the right palm with its head
-/// above the thumb. Found by looking at pictures of it.
-const GRIP_TURN: [f32; 3] = [std::f32::consts::FRAC_PI_2, 0.0, 0.0];
 
 #[derive(Resource)]
 struct FigureModel(Handle<Gltf>);
@@ -127,7 +124,7 @@ fn dress(
     moves: Res<Moves>,
     children: Query<&Children>,
     mut animators: Query<&mut AnimationPlayer>,
-    bones: Query<(Entity, &Name)>,
+    names: Query<&Name>,
 ) {
     // The figure's own animation player, among everything its model spawned; creatures
     // have theirs.
@@ -150,26 +147,12 @@ fn dress(
         Animated(Doing::Idle),
     ));
 
-    let bone = |name: &str| {
-        children
-            .iter_descendants(ready.entity)
-            .filter_map(|child| bones.get(child).ok())
-            .find(|(_, bone)| bone.as_str() == name)
-            .map(|(entity, _)| entity)
-    };
-    // Whatever is in hand is held here: across the palm, head toward the thumb (`held`).
-    if let Some(hand) = bone("DEF-hand.R") {
-        commands.spawn((
-            Grip,
-            Transform::from_xyz(0.0, 0.08, 0.03).with_rotation(Quat::from_euler(
-                EulerRot::XYZ,
-                GRIP_TURN[0],
-                GRIP_TURN[1],
-                GRIP_TURN[2],
-            )),
-            Visibility::default(),
-            ChildOf(hand),
-        ));
+    // Whatever is in hand is held in the hand's socket (`held`).
+    match crate::character::find(ready.entity, crate::character::HAND_R, &children, &names) {
+        Some(hand) => {
+            commands.entity(hand).insert(Grip);
+        }
+        None => warn!("The figure has no {}.", crate::character::HAND_R),
     }
 }
 
