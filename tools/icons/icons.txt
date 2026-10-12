@@ -19,7 +19,7 @@ stone_pickaxe: a stone pickaxe, a wooden handle with a pale stone pick head
 # Worn
 small_pack: a small leather backpack with straps and pockets
 large_pack: a large leather backpack with straps and pockets
-leather_cap: a rounded cap of stitched leather
+leather_cap: a rounded cap of stitched leather, on its own, with no head, face, skin or hair under it
 leather_coat: a sleeveless leather jerkin laced at the front, with a belt
 quiver: a leather quiver holding a few arrows
 
