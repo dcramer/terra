@@ -76,6 +76,11 @@ Probably an attribute of its own (D153, Leaning): "if you're too cold it could i
 
 - **Seen on the body before any meter** (D93): breath in cold air, shivering, sweat, a flushed face. Whether there is also a meter is survival's open question 5.
 - **Creatures have it too,** by their own band. That is why some sleep through the cold.
+- **The order to build the effects in,** decided as the developers asked (2026-10-12):
+  1. The body temperature itself, and health falling when too far out. These are the stakes.
+  2. Hunger and thirst rising. These are the everyday cost that makes preparing worth it.
+  3. Stamina costs.
+  4. Clumsy hands and dizziness, which need tuning against work and combat.
 
 ## Winter on the starter world
 
@@ -94,12 +99,13 @@ The starter world is challenging, not a freebie (2026-10-12, D62). Winter poses 
 
 ## Reading the weather
 
-Players can forecast it (2026-10-12) by looking, as D93 asks:
+Players can forecast it (2026-10-12), mostly by looking, as D93 asks:
 
 - clouds building and the sky's colour;
 - the wind turning;
-- animals sheltering or moving;
-- for those who learn it, a skill or a tool.
+- animals sheltering or moving.
+
+Technology and magic can add to it, such as an instrument or a rite that tells further ahead, but they don't replace looking.
 
 Since weather is worked out from the seed and the time, what is coming is already known to the game, so a forecast can be exactly right.
 
@@ -122,9 +128,7 @@ Answered on 2026-10-12:
 
 - **Body temperature:** probably its own attribute (D153).
 - **The starter world's winter:** challenging, with goals (D62).
-- **Forecasting:** yes.
+- **Forecasting:** yes, mostly by looking, with technology and magic adding to it.
+- **Which effects of cold and heat come first:** left to me; the order is under [body temperature](#body-temperature).
 
-Still open:
-
-1. **Which effects** of cold and heat to start with, from the table above.
-2. **How a forecast is learned:** by looking alone, or also by a skill or a tool.
+Nothing is open here now beyond the numbers, which are tuned by playing.
