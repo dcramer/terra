@@ -143,7 +143,7 @@ With the hammer in hand and nothing picked, aim at something damaged: its damage
 The calls for the developers, each recommended as written above:
 
 1. **Click lays, hold builds**: a click puts down a plan for free; holding spends materials (putting in parts, building an item, taking apart, repairing).
-2. **Drawing**: press, drag and let go to lay a wall or fence along a line, or a room or floor over a rectangle.
+2. **Drawing**: press, drag and let go to lay a wall or fence along a line, or a room or floor over a rectangle, in the grid's four directions (D146).
 3. **Height on Shift and the wheel**, with Page Up and Page Down; **the kind of construction on Ctrl and the wheel**.
 4. **Undo on Y**, within a minute (Ctrl and Z would roll, so Enshrouded's key instead; built).
 5. **Right mouse stays the build menu** and **Q stays take-apart**, as Subnautica, not Enshrouded.
@@ -199,7 +199,7 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 
 **Drawing a plan.** Asked about on 2026-10-12: "how would dragging to draw work exactly? … say it's a stone wall, we'll need the stone to look modular". Proposed:
 
-- **A wall or fence is drawn as a line.** Press where it starts, drag, let go where it ends. The start snaps to a join (the end of a wall already there) or the grid; the line runs along the base's grid, in its four directions, a grid step (half a metre) at a time, so every wall is a whole number of steps long. While dragging, the plan is shown already split into its parts, with its length and what it needs: "4.5 m stone wall: 54 stones, 12 in reach". Shift and the wheel, while dragging, set how high, a course or a storey at a time.
+- **A wall or fence is drawn as a line.** Press where it starts, drag, let go where it ends. The start snaps to a join (the end of a wall already there) or the grid; the line runs along the base's grid, in its four directions only for now (D146), a grid step (half a metre) at a time, so every wall is a whole number of steps long. While dragging, the plan is shown already split into its parts, with its length and what it needs: "4.5 m stone wall: 54 stones, 12 in reach". Shift and the wheel, while dragging, set how high, a course or a storey at a time.
 - **A room or floor is drawn as a rectangle**: press at one corner, drag to the other. A room's plan is its floor, its four walls and its roof, each split into parts.
 - **Drawing on from a wall's end continues it**, and closing a loop of walls offers to make it a room.
 - **A plain click lays the variant's own size**, as now: a 4.5 metre wall, a 3 by 3 metre room.
@@ -215,7 +215,9 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 
 Because every wall is a whole number of half metres, the kit always fits: a stone wall of 4.5 metres is four whole blocks and a half in one course, a half and four whole in the next. Corners and openings choose their own pieces by what they are next to, which is the morphing the developers asked for (D56). Each piece gets a little variety, a slightly different shape, turn or shade from a few made versions, so a long wall does not repeat.
 
-**What the pieces are made of.** Proposed: each piece is a model from its kind's kit, made once by script (as the pickaxe and torch are) with a few versions each, set on the base's grid. The grid is still the skeleton (D48, D57): it says where each piece is, what is inside and out, what blocks a walker, and what an opening cuts. The pieces are what is seen and what goes in one at a time. The other way, the grid's blocks drawn with a stone material, as Enshrouded's are, blends seamlessly but cannot show each stone going in; the two can meet later, the pieces sitting on the voxel volume where they join it.
+**What the pieces are made of** (D146, decided 2026-10-12). Each piece is a model from its kind's kit, made once by script (as the pickaxe and torch are) with a few versions each, set on the base's grid. The pieces are parts of the blueprint picked in the build menu, never things made first at a station and then placed: the developers do not want to "build walls then place them". The grid is still the skeleton (D48, D57): it says where each piece is, what is inside and out, what blocks a walker, and what an opening cuts. The pieces are what is seen and what goes in one at a time.
+
+**Carving, later.** The developers may want to carve what is built, and agreed it can come later. Carving by the grid's half metre needs nothing new: it takes cells out of the skeleton and the kit lays itself again around the gap, a cut block becoming a half block, as doors and windows are cut now. Carving finer than the grid, chiselled or smoothed, needs the material drawn as voxels, Enshrouded's way; our ground already is (D48), so it would come as a kind of construction of its own, such as carved rock, where the pieces sit on the voxel volume where they meet it. Nothing about the kit stops either.
 
 **Building in bulk.** Putting in parts one by one is the realistic way and must not become a chore: holding the build key keeps putting in the next part while you have the materials; a skilled builder (D88) puts them in faster; recruits put them in for you (D90). The Forest's later option to skip each part's animation is the lesson: show each part going in, quickly.
 
@@ -381,12 +383,10 @@ For the developers to reorder. Each step is small enough to play and judge.
 
 For the developers. Each has my recommendation.
 
-Answered on 2026-10-12: structures are planned, then constructed, a blueprint showing its parts, which can be small and depend on the kind of construction (D139); big materials are carried, with better transport later (D140); building draws on storage, with special storage for big materials later (D141); no stability in the MVP, but later (D142); rooms can be underground (D143).
+Answered on 2026-10-12: structures are planned, then constructed, a blueprint showing its parts, which can be small and depend on the kind of construction (D139); big materials are carried, with better transport later (D140); building draws on storage, with special storage for big materials later (D141); no stability in the MVP, but later (D142); rooms can be underground (D143). A kind's pieces are kit models, parts of the blueprint, not made first and placed; walls in four directions for now; carving later (D146).
 
 1. **The kinds of construction**: which there are, and when each is learned (D68). Recommend wattle and daub, then logs, then planks, then stone for the MVP's first two.
 2. **Must parts go up in order**, what rests on something after it? Recommend yes.
-2a. **What a kind's pieces are**: kit models set on the grid, each seen going in (recommended), or the grid's blocks drawn in a material, as Enshrouded's (seamless, but no single stone goes in)?
-2b. **Walls in four directions only**, along the base's grid, or diagonals too? Recommend four for now: Enshrouded's players ask for diagonals and round walls, which need pieces of their own.
 3. **Are stations constructed too**, being large, or placed whole like furniture? Recommend placed whole for now.
 4. **Cutting an opening in a finished wall**: with which tool, and does it give back what was cut? Recommend the axe for wood, the pickaxe for stone, giving it back.
 5. **Which materials are big**, and how many does a player carry? Recommend logs and cut stone; one comfortably, two at a walk.
