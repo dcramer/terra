@@ -57,17 +57,23 @@ What ECS does not give:
 - **Not everything should be an entity.** Voxel terrain is dense arrays, with entities only for the chunks on screen; items inside a container are data in that component (D83); grass is drawn by the square, not one entity per blade. All three are right as they are.
 - **It does not make a thousand players possible on its own.** That comes from simulating and sending only what is near each player (interest management over a spatial partition), sending only what changed, and updating distant things less often. ECS makes these easier, through change detection and queries filtered by place, but they are work still to do (track D in [engine.md](../docs/engine.md)). The code uses change detection in only 24 places so far.
 
-## What to change
+## What was done
 
-Four changes cover the five findings, each its own commit:
+All five were fixed on 2026-10-12, in separate commits, each passing `cargo xtask check` and the play loop end to end on the Windows GPU (`cargo xtask loop`):
 
-1. Find bodies and obstacles through a spatial hash, so keeping bodies apart and walking past trees cost what is near, not what exists.
-2. Split `Player` into components that each do one job.
-3. Move the per-player resources onto the player. Systems driven by input act on the local player; the world’s systems act on every player.
-4. Make items, recipes, stations and creature species data files, and stop looking for things by name.
+1. **A spatial hash** (`crates/terra_game/src/spatial.rs`) files bodies, trees and rocks, and players, by place. Keeping bodies apart, a walker meeting trees and rocks, placing a build clear of them, and a creature finding the nearest player now look only at what is near. The demo has 4,588 solid trees and rocks, which the player's walk used to check every frame.
+2. **`Player` is a marker**, beside `Motion` (how the body moves), `Stance` (what the hands and feet are doing) and `Downed` (present only while lying where they fell). Falling is now noticed by `Downed` being added, which also fixed the bag dropping again every frame while the loading screen holds the clock.
+3. **What belongs to a player is a component of the player**: what they dig, cut, swing and build, their claim, where they look and arrived, and what of the map they have seen. Each plugin makes its own required by `Player` (`register_required_components`), so a new player gets them all. Systems driven by input or drawing the screen act on the `LocalPlayer` (the `IsLocalPlayer` filter, which names `Player` too so Bevy can tell its queries apart from `Without<Player>`). The world's own act on every `Player`: creatures hunt and flee the nearest awake one, blows land on whoever was bitten, anyone falls and wakes at their own bed, followers follow whoever freed them, stations work while any player is near, and every player has a figure holding what they hold. The forge's smith is read from the people (`crafting::Staff`) instead of a flag beside them. Tests put two players in one world.
+4. **Kinds are data** (D136), in `assets/data/`: `items.ron` (every item, what it does in hand and worn, and the starting kit), `stations.ron`, `recipes.ron` and `creatures.ron`. Code asks what a kind does (whether a tool builds, what it cuts, what it shoots; whether a creature is hostile, what its carcass gives) rather than which one it is. A bed and a seat are a property of what is built (`Rest`), not looked for by file or part name. Tests check that every name a file or cost uses is a kind.
+
+## Left to do
+
+- **Flora kinds** (pine, leafy, birch, rock, ore rock) are still an enum in `flora.rs`, and what each gives names its item in code; likewise what digging stone and ore gives. They should be data like the rest.
+- **The build catalogue** (`catalogue.rs`) is a table in code rather than a file. It names no kind in its logic, so it already keeps D127, but a file would let it change without a rebuild.
+- **Change detection** is still little used. Systems such as the inventory screen and the held look compare against what they last drew rather than asking what changed.
 
 ## Limits
 
-- Nothing was profiled. The quadratic cost of `keep_apart` is inferred from the code, not measured.
+- Nothing was profiled. The quadratic cost of `keep_apart` is inferred from the code, not measured, and so is what the spatial hash saves.
 - There is still only one player in a running game, so "works with any number" is checked by tests that spawn two, not by a networked session.
 - Input still reaches the player through local systems. A server will need each player's input as a component written by the network; that belongs to track D, not here.
