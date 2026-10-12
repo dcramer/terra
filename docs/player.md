@@ -126,7 +126,7 @@ There will be an options menu (D80) with what players expect of one. Proposed, b
 
 Remapping means every control is looked up by action, not by key, from the start.
 
-**Built so far** (in the sandbox's `play` experiment, opened with Esc): remapping every control of the demo to any key or mouse button, two per action; mouse look speed; invert look; field of view; full screen; vsync; volume overall and for music, the sounds of the world, and the sounds of things done ([audio.md](audio.md)). Saved as the player changes them. Not yet: voices, resolution, frame-rate cap, graphics quality, text size.
+**Built so far** (in the sandbox's `play` experiment, opened with Esc): remapping every control of the demo to any key or mouse button, two per action; mouse look speed; invert look; field of view; full screen; vsync; a Sound section with master volume, music, ambience and effects ([audio.md](audio.md)). Saved as the player changes them. Not yet: voices, resolution, frame-rate cap, graphics quality, text size.
 
 ## Building as an action
 

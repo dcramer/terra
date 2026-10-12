@@ -15,6 +15,7 @@ use super::tool;
 use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::{
+    input::mouse::{AccumulatedMouseScroll, MouseScrollUnit},
     prelude::*,
     window::{CursorOptions, MonitorSelection, PresentMode, PrimaryWindow, WindowMode},
 };
@@ -24,6 +25,8 @@ const PICKED: Color = Color::srgba(0.9, 0.46, 0.17, 0.95);
 const POINTED: Color = Color::srgba(0.35, 0.75, 0.85, 0.95);
 const DIM: Color = Color::srgba(1.0, 1.0, 1.0, 0.7);
 const ROW_HEIGHT: f32 = 27.0;
+/// How many controls show at once; the rest are scrolled to.
+const CONTROLS_SHOWN: usize = 20;
 
 #[derive(Resource, Default)]
 pub struct OptionsMenu {
@@ -100,10 +103,10 @@ impl General {
             General::FieldOfView => "Field of view",
             General::FullScreen => "Full screen",
             General::Vsync => "Vsync",
-            General::Volume(Part::Master) => "Volume",
+            General::Volume(Part::Master) => "Master volume",
             General::Volume(Part::Music) => "Music",
-            General::Volume(Part::Ambience) => "Sounds of the world",
-            General::Volume(Part::Effects) => "Sounds of things done",
+            General::Volume(Part::Ambience) => "Ambience",
+            General::Volume(Part::Effects) => "Effects",
         }
     }
 
@@ -166,6 +169,10 @@ enum Shows {
 #[derive(Component)]
 struct Screen;
 
+/// The list of controls, which scrolls.
+#[derive(Component)]
+struct ControlsList;
+
 pub fn plugin(app: &mut App) {
     let scripted = app.world().resource::<Options>().scripted();
     // A scripted run uses the defaults, so it does the same thing on every machine.
@@ -182,7 +189,7 @@ pub fn plugin(app: &mut App) {
         // sets a control to a mouse button is not also a click in the game.
         .add_systems(
             Update,
-            (listen, press, draw, apply)
+            (listen, press, draw, apply, scroll_controls)
                 .chain()
                 .after(toggle)
                 .after(tool::Acting),
@@ -198,6 +205,8 @@ fn setup(mut commands: Commands) {
 
     let row = || Node {
         height: px(ROW_HEIGHT),
+        // Rows keep their height in the scrolling list rather than squeeze to fit it.
+        flex_shrink: 0.0,
         align_items: AlignItems::Center,
         justify_content: JustifyContent::SpaceBetween,
         column_gap: px(8),
@@ -265,6 +274,18 @@ fn setup(mut commands: Commands) {
                                 .with_children(|column| {
                                     column.spawn((Text::new("General"), heading.clone(), white));
                                     for general in General::ALL {
+                                        // Sound has a heading of its own, master first.
+                                        if general == General::Volume(Part::Master) {
+                                            column.spawn(Node {
+                                                height: px(10),
+                                                ..default()
+                                            });
+                                            column.spawn((
+                                                Text::new("Sound"),
+                                                heading.clone(),
+                                                white,
+                                            ));
+                                        }
                                         column.spawn(row()).with_children(|line| {
                                             line.spawn((
                                                 Text::new(general.name()),
@@ -365,35 +386,53 @@ fn setup(mut commands: Commands) {
                                     ..default()
                                 })
                                 .with_children(|column| {
-                                    column.spawn((Text::new("Controls"), heading.clone(), white));
-                                    for action in Action::ALL {
-                                        column.spawn(row()).with_children(|line| {
-                                            line.spawn((
-                                                Text::new(action.name()),
-                                                TextLayout::no_wrap(),
-                                                normal.clone(),
-                                                white,
-                                            ));
-                                            line.spawn(Node {
-                                                column_gap: px(8),
-                                                ..default()
-                                            })
-                                            .with_children(|pair| {
-                                                for slot in 0..2 {
-                                                    pair.spawn(button(
-                                                        Control::Bind(action, slot),
-                                                        118.0,
-                                                    ))
-                                                    .with_child((
-                                                        Shows::Binding(action, slot),
-                                                        Text::new(""),
-                                                        normal.clone(),
-                                                        white,
-                                                    ));
-                                                }
+                                    column.spawn((
+                                        Text::new("Controls  (scroll for more)"),
+                                        heading.clone(),
+                                        white,
+                                    ));
+                                    // More controls than fit: the list scrolls with the wheel,
+                                    // so the menu stays inside the window.
+                                    let mut list = column.spawn((
+                                        ControlsList,
+                                        ScrollPosition::default(),
+                                        Node {
+                                            flex_direction: FlexDirection::Column,
+                                            max_height: px(CONTROLS_SHOWN as f32 * ROW_HEIGHT),
+                                            overflow: Overflow::scroll_y(),
+                                            ..default()
+                                        },
+                                    ));
+                                    list.with_children(|column| {
+                                        for action in Action::ALL {
+                                            column.spawn(row()).with_children(|line| {
+                                                line.spawn((
+                                                    Text::new(action.name()),
+                                                    TextLayout::no_wrap(),
+                                                    normal.clone(),
+                                                    white,
+                                                ));
+                                                line.spawn(Node {
+                                                    column_gap: px(8),
+                                                    ..default()
+                                                })
+                                                .with_children(|pair| {
+                                                    for slot in 0..2 {
+                                                        pair.spawn(button(
+                                                            Control::Bind(action, slot),
+                                                            118.0,
+                                                        ))
+                                                        .with_child((
+                                                            Shows::Binding(action, slot),
+                                                            Text::new(""),
+                                                            normal.clone(),
+                                                            white,
+                                                        ));
+                                                    }
+                                                });
                                             });
-                                        });
-                                    }
+                                        }
+                                    });
                                 });
                         });
                     panel
@@ -620,4 +659,23 @@ fn apply(
     if window.present_mode != present_mode {
         window.present_mode = present_mode;
     }
+}
+
+/// The wheel scrolls the list of controls while the menu is open.
+fn scroll_controls(
+    menu: Res<OptionsMenu>,
+    wheel: Res<AccumulatedMouseScroll>,
+    list: Single<(&mut ScrollPosition, &ComputedNode), With<ControlsList>>,
+) {
+    if !menu.open || wheel.delta.y == 0.0 {
+        return;
+    }
+    let step = match wheel.unit {
+        MouseScrollUnit::Line => wheel.delta.y * ROW_HEIGHT,
+        MouseScrollUnit::Pixel => wheel.delta.y,
+    };
+    let (mut position, computed) = list.into_inner();
+    let most = ((computed.content_size().y - computed.size().y) * computed.inverse_scale_factor())
+        .max(0.0);
+    position.y = (position.y - step).clamp(0.0, most);
 }

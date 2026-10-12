@@ -159,10 +159,12 @@ pub(super) fn zoom(
     builder: Single<&tool::Builder, IsLocalPlayer>,
     builds: Res<catalogue::Builds>,
     screen: Res<inventory::InventoryScreen>,
+    menu: Res<super::options::OptionsMenu>,
     mut zoom: ResMut<Zoom>,
 ) {
     let dt = time.delta_secs();
-    let wheel = if builder.wants_wheel(&builds) || screen.open {
+    // With a panel open the wheel scrolls it instead.
+    let wheel = if builder.wants_wheel(&builds) || screen.open || menu.open {
         0.0
     } else {
         match scroll.unit {
