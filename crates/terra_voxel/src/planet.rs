@@ -7,7 +7,7 @@
 //! material (D45).
 
 use crate::field::{Field, Sample, material};
-use glam::Vec3;
+use glam::{Quat, Vec3};
 use terra_core::{Ground, Harvested, MaterialId, Operation, Yield};
 
 /// One change to the ground's shape.
@@ -17,6 +17,11 @@ enum Edit {
         centre: Vec3,
         radius: f32,
     },
+    DigBox {
+        centre: Vec3,
+        half: Vec3,
+        rotation: Quat,
+    },
     Fill {
         centre: Vec3,
         radius: f32,
@@ -24,19 +29,53 @@ enum Edit {
     },
 }
 
+/// How far a point is from a box, negative inside it.
+fn box_distance(point: Vec3, centre: Vec3, half: Vec3, rotation: Quat) -> f32 {
+    let beyond = (rotation.inverse() * (point - centre)).abs() - half;
+    beyond.max(Vec3::ZERO).length() + beyond.max_element().min(0.0)
+}
+
 impl Edit {
+    /// The middle of what it changes, and how far from there it reaches.
     fn centre_and_radius(&self) -> (Vec3, f32) {
         match *self {
             Edit::Dig { centre, radius } | Edit::Fill { centre, radius, .. } => (centre, radius),
+            Edit::DigBox { centre, half, .. } => (centre, half.length()),
+        }
+    }
+
+    /// The distance to the ground at a point after this edit, given what it was before.
+    fn distance(&self, point: Vec3, before: f32) -> f32 {
+        match *self {
+            Edit::Dig { centre, radius } => before.max(radius - point.distance(centre)),
+            Edit::DigBox {
+                centre,
+                half,
+                rotation,
+            } => before.max(-box_distance(point, centre, half, rotation)),
+            Edit::Fill { centre, radius, .. } => before.min(point.distance(centre) - radius),
+        }
+    }
+
+    /// Whether a point is inside what a dig takes away.
+    fn takes(&self, point: Vec3) -> bool {
+        match *self {
+            Edit::Dig { centre, radius } => point.distance(centre) <= radius,
+            Edit::DigBox {
+                centre,
+                half,
+                rotation,
+            } => box_distance(point, centre, half, rotation) <= 0.0,
+            Edit::Fill { .. } => false,
         }
     }
 
     /// The ground at a point after this edit, given what it was before.
     fn apply(&self, point: Vec3, before: Sample) -> Sample {
         match *self {
-            // Take the sphere away: the ground is wherever it was and the sphere is not.
-            Edit::Dig { centre, radius } => Sample {
-                distance: before.distance.max(radius - point.distance(centre)),
+            // Take the shape away: the ground is wherever it was and the shape is not.
+            Edit::Dig { .. } | Edit::DigBox { .. } => Sample {
+                distance: self.distance(point, before.distance),
                 material: before.material,
             },
             // Add the sphere: the ground is wherever it was or the sphere is.
@@ -90,6 +129,15 @@ impl<F: Field> VoxelPlanet<F> {
             .iter()
             .map(|edit| match *edit {
                 Edit::Dig { centre, radius } => Operation::Dig { centre, radius },
+                Edit::DigBox {
+                    centre,
+                    half,
+                    rotation,
+                } => Operation::DigBox {
+                    centre,
+                    half,
+                    rotation,
+                },
                 Edit::Fill {
                     centre,
                     radius,
@@ -137,6 +185,15 @@ impl<F: Field> VoxelPlanet<F> {
     pub fn apply(&mut self, operation: &Operation) -> Yield {
         let edit = match *operation {
             Operation::Dig { centre, radius } => Edit::Dig { centre, radius },
+            Operation::DigBox {
+                centre,
+                half,
+                rotation,
+            } => Edit::DigBox {
+                centre,
+                half,
+                rotation,
+            },
             Operation::Fill {
                 centre,
                 radius,
@@ -151,16 +208,17 @@ impl<F: Field> VoxelPlanet<F> {
             }
         };
         let taken = match edit {
-            Edit::Dig { centre, radius } => self.measure_dig(centre, radius),
             Edit::Fill { .. } => Yield::default(),
+            _ => self.measure_dig(&edit),
         };
         self.edits.push(edit);
         taken
     }
 
-    /// What digging a sphere would take out: every measuring cell inside it that is solid
-    /// now, by its material.
-    fn measure_dig(&self, centre: Vec3, radius: f32) -> Yield {
+    /// What a dig would take out: every measuring cell inside it that is solid now, by
+    /// its material.
+    fn measure_dig(&self, dig: &Edit) -> Yield {
+        let (centre, radius) = dig.centre_and_radius();
         let mut taken = Yield::default();
         let mut memo = F::Memo::default();
         let cells = (radius / HARVEST_STEP_M).ceil() as i32;
@@ -169,7 +227,7 @@ impl<F: Field> VoxelPlanet<F> {
             for y in -cells..cells {
                 for z in -cells..cells {
                     let offset = (Vec3::new(x as f32, y as f32, z as f32) + 0.5) * HARVEST_STEP_M;
-                    if offset.length() > radius {
+                    if !dig.takes(centre + offset) {
                         continue;
                     }
                     let before = self.sample_in(centre + offset, &mut memo);
@@ -193,10 +251,7 @@ impl<F: Field> Field for VoxelPlanet<F> {
     fn distance_in(&self, point: Vec3, memo: &mut F::Memo) -> f32 {
         let mut distance = self.field.distance_in(point, memo);
         for edit in self.edits_at(point) {
-            distance = match *edit {
-                Edit::Dig { centre, radius } => distance.max(radius - point.distance(centre)),
-                Edit::Fill { centre, radius, .. } => distance.min(point.distance(centre) - radius),
-            };
+            distance = edit.distance(point, distance);
         }
         distance
     }
@@ -385,5 +440,40 @@ mod tests {
             "the ray falls into the hole"
         );
         assert_eq!(planet.material(ground + up * 10.0), material::AIR);
+    }
+
+    #[test]
+    fn a_box_dug_into_the_ground_is_flat_inside_and_measured() {
+        let mut planet = planet();
+        let (ground, up) = surface(&planet);
+        // A room two by three metres and two high, its floor a metre below the ground,
+        // turned a little about the way up.
+        let rotation = Quat::from_rotation_arc(Vec3::Y, up) * Quat::from_rotation_y(0.4);
+        let half = Vec3::new(1.0, 1.0, 1.5);
+        let centre = ground;
+        let taken = planet.apply(&Operation::DigBox {
+            centre,
+            half,
+            rotation,
+        });
+        // About the half of the box below the ground, 6 cubic metres, came out.
+        let volume: f32 = taken.iter().map(|(_, amount)| amount).sum();
+        assert!((volume - 6.0).abs() < 0.5, "{volume}");
+        // Inside, the ground is the box's floor; just outside it, untouched.
+        let floor = centre - up * 1.0;
+        assert!((planet.distance(floor + up * 0.5) - 0.5).abs() < 0.01);
+        assert!(planet.distance(floor - up * 0.1) < 0.0);
+        let outside = centre + rotation * Vec3::new(0.0, 0.0, 2.5) - up * 0.3;
+        let undug = planet.field().distance_in(outside, &mut Default::default());
+        assert_eq!(planet.distance(outside), undug);
+        // Saved as it was given.
+        assert_eq!(
+            planet.operations(),
+            vec![Operation::DigBox {
+                centre,
+                half,
+                rotation
+            }]
+        );
     }
 }

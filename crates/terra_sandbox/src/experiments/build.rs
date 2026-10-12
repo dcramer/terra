@@ -14,7 +14,8 @@ use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, prelude::*,
     render::render_resource::PrimitiveTopology,
 };
-use terra_build::{Base, BuildOp, CELL_M, Face, Panel, Side, Surface, Walker};
+use terra_build::{Base, BuildOp, CELL_M, Face, Panel, STOREY_M, Side, Surface, Walker};
+use terra_core::Operation;
 
 const REACH_M: f32 = 300.0;
 /// The base's floor clears the highest ground under it by this much.
@@ -52,6 +53,9 @@ pub(super) struct Build {
     foundation: Entity,
     steps: Entity,
 }
+
+/// How much ground a room set into it clears round its walls.
+const ROOM_CLEARANCE_M: f32 = 0.2;
 
 /// The build under construction by the player, and where it stands.
 #[derive(Resource, Deref, DerefMut)]
@@ -230,6 +234,27 @@ impl Build {
 
     /// Applies several operations as one act, and redraws the base once. Returns whether
     /// anything changed.
+    /// The ground a room from one tile to another would cut away to stand in it: its
+    /// whole space from the floor to above the roof, and a little round its walls, so a
+    /// room set into a slope has room. What is under the floor stays, for the foundation.
+    pub(super) fn cut_for_room(&self, min: IVec3, max: IVec3) -> Operation {
+        let low = Vec3::new(
+            min.x as f32 * CELL_M,
+            min.y as f32 * STOREY_M,
+            min.z as f32 * CELL_M,
+        ) - Vec3::new(ROOM_CLEARANCE_M, 0.05, ROOM_CLEARANCE_M);
+        let high = Vec3::new(
+            (max.x + 1) as f32 * CELL_M,
+            (max.y + 1) as f32 * STOREY_M + 0.6,
+            (max.z + 1) as f32 * CELL_M,
+        ) + Vec3::new(ROOM_CLEARANCE_M, 0.0, ROOM_CLEARANCE_M);
+        Operation::DigBox {
+            centre: self.frame.transform_point((low + high) * 0.5),
+            half: (high - low) * 0.5,
+            rotation: self.frame.rotation,
+        }
+    }
+
     pub(super) fn apply_all(
         &mut self,
         ops: &[BuildOp],

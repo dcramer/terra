@@ -1,5 +1,5 @@
 use crate::MaterialId;
-use glam::Vec3;
+use glam::{Quat, Vec3};
 
 /// A change to the world.
 ///
@@ -9,6 +9,13 @@ use glam::Vec3;
 pub enum Operation {
     /// Remove a sphere of ground.
     Dig { centre: Vec3, radius: f32 },
+    /// Remove a box of ground, `half` its size each way and turned by `rotation`: room
+    /// cut for something built into the ground.
+    DigBox {
+        centre: Vec3,
+        half: Vec3,
+        rotation: Quat,
+    },
     /// Add a sphere of ground.
     Fill {
         centre: Vec3,

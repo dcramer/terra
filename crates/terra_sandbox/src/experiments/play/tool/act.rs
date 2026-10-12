@@ -23,7 +23,7 @@ pub(super) fn act(
     time: Res<Time>,
     controls: Controls,
     dial: Res<Dial>,
-    planet: Res<Planet>,
+    mut planet: ResMut<Planet>,
     models: Res<Models>,
     props: Query<&Prop>,
     mut builder: ResMut<Builder>,
@@ -91,6 +91,13 @@ pub(super) fn act(
                 {
                     notice.say("No room in your backpack for what that gives back");
                     return;
+                }
+                // A room set into the ground cuts the ground away where it stands.
+                for op in &ops {
+                    if let BuildOp::AddRoom { min, max } = *op {
+                        let cut = site.cut_for_room(IVec3::from(min), IVec3::from(max));
+                        planet.apply(&cut);
+                    }
                 }
                 if site.apply_all(&ops, &mut commands, &planet, &mut meshes) {
                     let cue = if refund.is_some() {
@@ -307,6 +314,7 @@ pub(super) fn act(
                 tiles,
                 fits: true,
                 adds: true,
+                clear: true,
             },
         ) if can_pay => (
             building(vec![BuildOp::AddRoom {

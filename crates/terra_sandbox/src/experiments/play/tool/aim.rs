@@ -282,14 +282,26 @@ pub(super) fn aim(
                         0,
                         (local.z / CELL_M - size.y as f32 * 0.5).round() as i32,
                     );
-                    // The room's floor is the base's floor. Its foundation may go into
-                    // the ground; the room itself may not. Checked every metre or so.
+                    // The room's floor is the base's floor. Set into the ground, it
+                    // cuts the ground away where it stands, but not deeper than its own
+                    // height. Checked every metre or so.
                     let every = cells(1.0).max(1) as usize;
                     let fits = (0..=size.x).step_by(every).chain([size.x]).all(|i| {
                         (0..=size.y).step_by(every).chain([size.y]).all(|j| {
                             let on_floor = (corner + IVec3::new(i, 0, j)).as_vec3() * CELL_M;
-                            planet.distance(site.frame.transform_point(on_floor)) > 0.02
+                            let at_roof = on_floor + Vec3::Y * STOREY_M;
+                            planet.distance(site.frame.transform_point(at_roof)) > 0.02
                         })
+                    });
+                    // Trees and rocks are cleared by the player first, not by the room.
+                    let low = corner.as_vec3() * CELL_M;
+                    let high = (corner + IVec3::new(size.x, 0, size.y)).as_vec3() * CELL_M;
+                    let clear = !obstacles.0.iter().any(|&(at, radius)| {
+                        let local = to_base.transform_point3(at);
+                        let nearest = local.with_y(0.0).clamp(low, high);
+                        nearest.distance(local.with_y(0.0)) < radius
+                            && local.y > -STOREY_M
+                            && local.y < STOREY_M * 2.0
                     });
                     let adds = (0..size.x).any(|i| {
                         (0..size.y).any(|j| !site.base.contains(corner + IVec3::new(i, 0, j)))
@@ -299,6 +311,7 @@ pub(super) fn aim(
                         tiles: size,
                         fits,
                         adds,
+                        clear,
                     }
                 })
         }
@@ -385,6 +398,7 @@ pub(super) fn afford(
                 tiles,
                 fits: true,
                 adds: true,
+                ..
             },
         ) => {
             let new_cells = (0..tiles.x)

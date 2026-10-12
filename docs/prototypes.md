@@ -100,7 +100,7 @@ As of 2026-10-11.
 | Gathering with separate tools (D96) | Built |
 | Crafting at stations, timed and queued (D109) | Built: workbench, smelter, forge, campfire |
 | A claim, upgradable (D94, D104) | Built |
-| Building on the voxel grid (D48) | Missing: rooms and items on the build grid only, waiting on voxel terrain |
+| Building on the voxel grid (D48) | Rooms and items on the build grid; a room cuts into the ground it stands on, once trees and rocks are cleared (D131). Blocks on the voxel grid are missing |
 | Backpack, equipment, action bar (D84); a belt quiver (D118) | Built; wear and repair (D99) missing |
 | One wildlife, hunted for meat and hide | Built: deer, with the bow |
 | One monster, forming where magic pools (D103), holding a prisoner | Built: spiders at a glowing hollow |

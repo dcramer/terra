@@ -45,7 +45,8 @@ struct SaveFile {
     ground: Vec<SavedEdit>,
 }
 
-/// One change to the ground: a sphere dug out, or filled with a material.
+/// One change to the ground: a sphere dug out, or filled with a material, or a box dug
+/// out.
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct SavedEdit {
     centre: [f32; 3],
@@ -53,6 +54,15 @@ struct SavedEdit {
     /// The material it was filled with, for a fill; nothing for a dig.
     #[serde(default)]
     fill: Option<u16>,
+    /// For a box, half its size each way and how it is turned; the radius is then unused.
+    #[serde(default)]
+    cut: Option<SavedBox>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct SavedBox {
+    half: [f32; 3],
+    rotation: [f32; 4],
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -200,12 +210,17 @@ fn load(
         info!("Replayed {} changes to the ground.", save.ground.len());
         for edit in &save.ground {
             let centre = Vec3::from(edit.centre);
-            planet.apply(&match edit.fill {
-                None => Operation::Dig {
+            planet.apply(&match (&edit.cut, edit.fill) {
+                (Some(cut), _) => Operation::DigBox {
+                    centre,
+                    half: Vec3::from(cut.half),
+                    rotation: Quat::from_array(cut.rotation),
+                },
+                (None, None) => Operation::Dig {
                     centre,
                     radius: edit.radius,
                 },
-                Some(material) => Operation::Fill {
+                (None, Some(material)) => Operation::Fill {
                     centre,
                     radius: edit.radius,
                     material: MaterialId(material),
@@ -526,6 +541,20 @@ fn gather(
                     centre: centre.into(),
                     radius,
                     fill: None,
+                    cut: None,
+                }),
+                Operation::DigBox {
+                    centre,
+                    half,
+                    rotation,
+                } => Some(SavedEdit {
+                    centre: centre.into(),
+                    radius: 0.0,
+                    fill: None,
+                    cut: Some(SavedBox {
+                        half: half.into(),
+                        rotation: rotation.to_array(),
+                    }),
                 }),
                 Operation::Fill {
                     centre,
@@ -535,6 +564,7 @@ fn gather(
                     centre: centre.into(),
                     radius,
                     fill: Some(material.0),
+                    cut: None,
                 }),
                 _ => None,
             })
@@ -621,11 +651,23 @@ mod tests {
                 done: vec!["Iron".to_string()],
             }],
             claim_step: 1,
-            ground: vec![SavedEdit {
-                centre: [1.0, 2000.0, 2.0],
-                radius: 0.7,
-                fill: None,
-            }],
+            ground: vec![
+                SavedEdit {
+                    centre: [1.0, 2000.0, 2.0],
+                    radius: 0.7,
+                    fill: None,
+                    cut: None,
+                },
+                SavedEdit {
+                    centre: [1.0, 2000.0, 2.0],
+                    radius: 0.0,
+                    fill: None,
+                    cut: Some(SavedBox {
+                        half: [1.0, 1.5, 2.0],
+                        rotation: [0.0, 0.0, 0.0, 1.0],
+                    }),
+                },
+            ],
             people: vec![SavedPerson {
                 name: "Bren".to_string(),
                 doing: "working".to_string(),

@@ -86,12 +86,14 @@ pub enum Target {
         open: bool,
     },
     /// Where a room would go: its lowest tile, its size in tiles, whether the ground is
-    /// low enough for its floor to clear it, and whether it would add anything.
+    /// low enough for it to be cut into, whether it would add anything, and whether the
+    /// place is clear of trees and rocks.
     Ground {
         corner: IVec3,
         tiles: IVec2,
         fits: bool,
         adds: bool,
+        clear: bool,
     },
     /// Somewhere an item could stand, in the base's own space, how far above the floor
     /// or ground, and what is in the way if anything.

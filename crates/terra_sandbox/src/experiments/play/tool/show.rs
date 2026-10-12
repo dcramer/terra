@@ -62,6 +62,7 @@ pub(super) fn highlight(
         builder.target,
         Target::Ground { fits: false, .. }
             | Target::Ground { adds: false, .. }
+            | Target::Ground { clear: false, .. }
             | Target::Edge { fits: false, .. }
             | Target::Spot {
                 blocked: Some(_),

@@ -58,7 +58,10 @@ pub fn prompt(builder: &Builder, settings: &Settings) -> String {
         (Kind::Wall(_), Target::Edge { fits: false, .. }) => "Walls go indoors".to_string(),
         (Kind::Wall(_), _) => "Aim at a floor indoors".to_string(),
         (Kind::Room(_), Target::Ground { fits: false, .. }) => {
-            "The ground is too high here: only a foundation may go into it".to_string()
+            "The ground is too high here: a room cuts into it no deeper than its roof".to_string()
+        }
+        (Kind::Room(_), Target::Ground { clear: false, .. }) => {
+            "Trees or rocks are in the way: clear them first".to_string()
         }
         (Kind::Room(_), Target::Ground { adds: false, .. }) => {
             "That is all indoors already".to_string()

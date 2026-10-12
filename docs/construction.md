@@ -15,7 +15,8 @@ In their words, shortened.
 - **Furniture and kit are buildable items.**
 - **Everything has a collision box**, used for placing things as well as for walking (D53).
 - **A grid things snap to**, which can be switched off. New rooms snap to rooms already there.
-- **Only a foundation may go into the ground.** Anything else that would clip shows red and cannot be built. (Said with "I think".)
+- **Only a foundation may go into the ground.** Anything else that would clip shows red and cannot be built. (Said with "I think".) Since voxel terrain, a room set into the ground cuts it away instead, no deeper than its own height (D131, Leaning).
+- **Trees and rocks are cleared first.** A room cannot be placed where they stand; the player fells or breaks them (D131, Leaning).
 - **Details morph.** "Corners become rounded on the outside and inside, but when two segments are next to each other they're flat."
 - **It must be really easy to extend**: new buildables, and properties like that morphing applying to anything related. "We might let you build a round room, or connectors, or different materials for rooms, and they should be able to change their look based on what they're connected to."
 - **One square grid for everything**, though you might not see all of it all the time. Buildings join through connectors that can face any way, "more like Subnautica". The grid should be "a little flexible": in some games each cell is huge, "so you have no freedom to build".
