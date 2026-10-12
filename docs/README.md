@@ -12,7 +12,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 
 | Doc | What it covers |
 |---|---|
-| [vision.md](vision.md) | Pitch, pillars, our inspirations (Kenshi, Enshrouded, Subnautica 2, *He Who Fights With Monsters*, Soulmask), non-goals. |
+| [vision.md](vision.md) | Pitch, pillars, our inspirations (Kenshi, Enshrouded, Subnautica 2, *He Who Fights With Monsters*, Soulmask, Red Dead Redemption 2), non-goals. |
 | [proposals](proposals/README.md) | Numbered proposals, each one candidate. So far one for the whole game: [game design 001, a living world](proposals/game-design-001/README.md) (working name), in the spirit of Kenshi, Enshrouded and *He Who Fights With Monsters*, with a proposal for each system: combat, creatures, essences, crafting, people, survival, character and the arc. |
 
 **Parts of the game**
