@@ -6,15 +6,15 @@
 //! settles at a forge in your claim and works it (D90); villagers go about their day
 //! and say what is going on when you speak to them (D92), from `settlement`.
 
-use super::Player;
 use super::bag::Notice;
 use super::bodies::Body;
 use super::catalogue;
 use super::claim::Claim;
-use super::crafting::{SmithAtHand, Station};
+use super::crafting::Station;
 use super::creatures::{Creature, Species};
 use super::interact::{CanInteract, Focus, Focusing, Interactable};
 use super::props::Prop;
+use super::{IsLocalPlayer, LocalPlayer, Player};
 use crate::build::Site;
 use crate::character;
 use crate::loading::Loading;
@@ -38,8 +38,8 @@ const JOG_MPS: f32 = 4.6;
 pub enum Doing {
     /// Bound, waiting to be freed.
     Bound,
-    /// Freed, and keeping up with the player.
-    Following,
+    /// Freed, and keeping up with the player who freed them.
+    Following(Entity),
     /// At work at a spot, such as a forge.
     Working(Vec3),
     /// Standing about at a spot, facing a way.
@@ -313,6 +313,7 @@ fn free(
     focus: Res<Focus>,
     creatures: Query<(&Creature, &Transform)>,
     mut people: Query<(&mut Person, &Transform), Without<Creature>>,
+    player: Single<Entity, IsLocalPlayer>,
     mut notice: ResMut<Notice>,
 ) {
     if !focus.used(Interactable::Prisoner) {
@@ -331,7 +332,7 @@ fn free(
         notice.say("Not while the spiders are near");
         return;
     }
-    person.doing = Doing::Following;
+    person.doing = Doing::Following(*player);
     commands.entity(entity).remove::<CanInteract>();
     info!("Freed {}.", person.name);
     notice.say(format!(
@@ -340,11 +341,11 @@ fn free(
     ));
 }
 
-/// Followers keep up with the player, walking when near and jogging when behind.
+/// Followers keep up with the player they follow, walking when near and jogging when behind.
 fn follow(
     time: Res<Time>,
     planet: Res<Planet>,
-    player: Single<&Transform, With<Player>>,
+    players: Query<&Transform, With<Player>>,
     mut people: Query<(&mut Person, &mut Transform), Without<Player>>,
 ) {
     let dt = time.delta_secs().min(0.1);
@@ -352,13 +353,16 @@ fn follow(
         let here = at.translation;
         let up = here.normalize();
         let goal = match person.doing {
-            Doing::Following => player.translation,
+            Doing::Following(leader) => match players.get(leader) {
+                Ok(leader) => leader.translation,
+                Err(_) => continue,
+            },
             Doing::Working(spot) => spot,
             _ => continue,
         };
         let toward = (goal - here).reject_from(up);
         let distance = toward.length();
-        let keep = if person.doing == Doing::Following {
+        let keep = if matches!(person.doing, Doing::Following(_)) {
             2.5
         } else {
             0.4
@@ -382,18 +386,29 @@ fn follow(
     }
 }
 
-/// A smith who has followed you into your claim settles at its forge and works it.
+/// A smith who has followed a player into their claim settles at its forge and works it.
 fn settle(
-    claim: Res<Claim>,
+    claims: Query<(&Claim, Has<LocalPlayer>)>,
     props: Query<(&Prop, &Transform)>,
     mut people: Query<(&mut Person, &Transform), Without<Prop>>,
-    mut smith_at_hand: ResMut<SmithAtHand>,
     mut notice: ResMut<Notice>,
 ) {
     for (mut person, at) in &mut people {
-        if person.doing != Doing::Following || !person.smith || !claim.covers(at.translation) {
+        let Doing::Following(leader) = person.doing else {
+            continue;
+        };
+        let Ok((claim, ours)) = claims.get(leader) else {
+            continue;
+        };
+        if !person.smith || !claim.covers(at.translation) {
             continue;
         }
+        // Only what happens to this machine's own player is said on its screen.
+        let mut say = |text: String| {
+            if ours {
+                notice.say(text);
+            }
+        };
         let forge = props
             .iter()
             .find(|(prop, there)| {
@@ -405,16 +420,15 @@ fn settle(
                 let up = forge.normalize();
                 let spot = forge + up.any_orthonormal_vector() * 1.8;
                 person.doing = Doing::Working(spot);
-                smith_at_hand.0 = true;
                 info!("{} took up the forge.", person.name);
-                notice.say(format!(
+                say(format!(
                     "{} takes up the forge: iron can be worked now",
                     person.name
                 ));
             }
             None if !person.asked => {
                 person.asked = true;
-                notice.say(format!(
+                say(format!(
                     "{}: \"Build a forge here and I'll work it.\"",
                     person.name
                 ));

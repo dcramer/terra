@@ -19,7 +19,7 @@
 //! Places are in metres east and south of the start, as the command-line options take them.
 
 use super::{
-    Downed, Motion, Player, View,
+    Downed, IsLocalPlayer, Motion, View,
     creatures::Creature,
     inventory::{self, Backpack, Bar, Gear, Items, Raw},
     people::Person,
@@ -116,7 +116,7 @@ fn ask_take(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 fn take(
     mut asked: ResMut<Asked>,
     items: Res<Items>,
-    player: Single<(&mut Backpack, &mut Gear, &mut Bar), With<Player>>,
+    player: Single<(&mut Backpack, &mut Gear, &mut Bar), IsLocalPlayer>,
 ) {
     if asked.takes.is_empty() {
         return;
@@ -163,7 +163,7 @@ fn aim(
     mut asked: ResMut<Asked>,
     site: Res<Site>,
     planet: Res<Planet>,
-    mut view: ResMut<View>,
+    mut view: Single<&mut View, IsLocalPlayer>,
     camera: Single<&Transform, With<MainCamera>>,
 ) {
     let Some(((east, south), up_m, frames)) = asked.aim else {
@@ -206,7 +206,7 @@ fn ask_give(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 fn give(
     mut asked: ResMut<Asked>,
     mut items: ResMut<Items>,
-    player: Single<(&mut Backpack, &mut Gear, &mut Bar, &mut Vitals), With<Player>>,
+    player: Single<(&mut Backpack, &mut Gear, &mut Bar, &mut Vitals), IsLocalPlayer>,
 ) {
     if asked.gives.is_empty() {
         return;
@@ -263,21 +263,21 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         &Backpack,
         &Gear,
         &Bar,
-    ), With<Player>>();
+        &View,
+    ), IsLocalPlayer>();
     let mut creatures = world.query::<(&Creature, &GlobalTransform)>();
     let mut people = world.query_filtered::<(&Name, &GlobalTransform), With<Person>>();
     let site = world
         .get_resource::<Site>()
         .ok_or_else(|| refused("no site yet"))?
         .frame;
-    let forward = world.resource::<View>().forward;
-    let (transform, motion, downed, body, backpack, gear, bar) = players
+    let (transform, motion, downed, body, backpack, gear, bar, view) = players
         .single(world)
         .map_err(|_| refused("no player yet"))?;
     let items = world.resource::<Items>();
     let feet = transform.translation;
     let here = east_south(&site, feet);
-    let ahead = east_south(&site, feet + forward);
+    let ahead = east_south(&site, feet + view.forward);
     let carrying: serde_json::Map<String, Value> = items
         .catalogue
         .iter()

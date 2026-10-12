@@ -5,7 +5,7 @@
 //! Other systems say what was done by sending [`Did`]; only this one turns it into
 //! progress. The list shows beside the backpack while the inventory is open (D93).
 
-use super::Player;
+use super::IsLocalPlayer;
 use super::bag::Notice;
 use super::death::WentDown;
 use super::inventory::InventoryScreen;
@@ -160,7 +160,7 @@ pub fn plugin(app: &mut App) {
 
 fn learn(
     mut did: MessageReader<Did>,
-    mut skills: Single<&mut Skills, With<Player>>,
+    mut skills: Single<&mut Skills, IsLocalPlayer>,
     mut notice: ResMut<Notice>,
 ) {
     for &Did(skill, amount) in did.read() {
@@ -178,9 +178,12 @@ fn learn(
     }
 }
 
-fn forget(mut went_down: MessageReader<WentDown>, mut skills: Single<&mut Skills, With<Player>>) {
-    for _ in went_down.read() {
-        skills.lose_some();
+/// Going down costs whoever fell a little of what they knew (D101).
+fn forget(mut went_down: MessageReader<WentDown>, mut skills: Query<&mut Skills>) {
+    for &WentDown(player) in went_down.read() {
+        if let Ok(mut skills) = skills.get_mut(player) {
+            skills.lose_some();
+        }
     }
 }
 
@@ -219,7 +222,7 @@ fn setup(mut commands: Commands) {
 
 fn draw(
     screen: Res<InventoryScreen>,
-    skills: Single<&Skills, With<Player>>,
+    skills: Single<&Skills, IsLocalPlayer>,
     mut panel: Single<&mut Visibility, With<Panel>>,
     mut list: Single<&mut Text, With<List>>,
 ) {

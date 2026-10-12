@@ -3,7 +3,7 @@
 //! something is hunting you, and then with hardly a pause. The phrases are made in code
 //! (`audio::music`), so none repeats.
 
-use super::Player;
+use super::IsLocalPlayer;
 use super::creatures::{Creature, Lair, State};
 use super::settlement::Village;
 use crate::audio::{
@@ -119,7 +119,7 @@ fn follow(
     time: Res<Time>,
     village: Option<Res<Village>>,
     lair: Option<Res<Lair>>,
-    player: Single<&GlobalTransform, With<Player>>,
+    player: Single<&GlobalTransform, IsLocalPlayer>,
     creatures: Query<(&Creature, &GlobalTransform)>,
     playing: Query<Entity, With<Playing>>,
     mut director: ResMut<Director>,

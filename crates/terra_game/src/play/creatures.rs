@@ -18,6 +18,7 @@ use super::{Downed, Player};
 use crate::build::Site;
 use crate::loading::Loading;
 use crate::planet::Planet;
+use crate::spatial::SpatialHash;
 use bevy::{
     prelude::*,
     world_serialization::{WorldAsset, WorldInstanceReady},
@@ -28,6 +29,8 @@ use terra_gen::{Rng, Seed};
 const BLEND: Duration = Duration::from_millis(200);
 /// How hard a spider bites, out of 100 health.
 const BITE: f32 = 9.0;
+/// How far off a creature notices a player, or keeps track of one it chases.
+const SENSE_M: f32 = 40.0;
 /// How long a butchered or fallen creature's body lies before it is gone.
 const BODY_LASTS_S: f32 = 300.0;
 
@@ -113,6 +116,8 @@ pub struct Creature {
     facing: Vec3,
     /// Hurt lately, which sends wildlife running.
     pub hurt: bool,
+    /// The player it is chasing, biting or running from, if any.
+    quarry: Option<Entity>,
 }
 
 impl Creature {
@@ -127,9 +132,12 @@ impl Creature {
     }
 }
 
-/// Sent when a creature lands a blow on the player.
+/// Sent when a creature lands a blow on a player.
 #[derive(Message, Clone, Copy)]
-pub struct Bitten(pub f32);
+pub struct Bitten {
+    pub player: Entity,
+    pub damage: f32,
+}
 
 /// The animations of each species, ready to play.
 #[derive(Resource)]
@@ -344,6 +352,7 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
                 home: feet,
                 facing,
                 hurt: false,
+                quarry: None,
             },
             about.body,
             Transform::from_translation(feet).looking_to(facing, up),
@@ -386,18 +395,22 @@ fn spawn(commands: &mut Commands, kinds: &Kinds, planet: &Planet, species: Speci
 /// Decides what each creature does next.
 fn think(
     time: Res<Time>,
-    player: Single<(&Transform, Has<Downed>), With<Player>>,
+    players: Query<(Entity, &Transform), (With<Player>, Without<Downed>)>,
     mut creatures: Query<(&mut Creature, &Transform), Without<Player>>,
     mut bitten: MessageWriter<Bitten>,
     mut dice: ResMut<Dice>,
+    mut awake: Local<SpatialHash<Entity>>,
 ) {
     let dt = time.delta_secs().min(0.1);
-    let (player_at, downed) = player.into_inner();
-    let target = player_at.translation;
-    let player_up = !downed;
+    // Players filed by place, so each creature looks only at those near it (D127).
+    awake.clear();
+    awake.extend(players.iter().map(|(player, at)| (at.translation, player)));
     for (mut creature, at) in &mut creatures {
         let here = at.translation;
-        let apart = (target - here).reject_from(here.normalize()).length();
+        let (quarry, apart) = nearest(&awake, here).unzip();
+        creature.quarry = quarry;
+        let player_up = quarry.is_some();
+        let apart = apart.unwrap_or(f32::INFINITY);
         let from_home = (here - creature.home).length();
         let next = match (creature.species, creature.state) {
             (_, State::Dead(lying)) => State::Dead(lying + dt),
@@ -408,9 +421,16 @@ fn think(
             }
             (Species::Spider, State::Attack(through)) => {
                 let through = through + dt;
-                // The bite lands partway through, if the player is still there.
-                if through - dt < 0.45 && through >= 0.45 && apart < 2.8 && player_up {
-                    bitten.write(Bitten(BITE));
+                // The bite lands partway through, if its quarry is still there.
+                if through - dt < 0.45
+                    && through >= 0.45
+                    && apart < 2.8
+                    && let Some(player) = quarry
+                {
+                    bitten.write(Bitten {
+                        player,
+                        damage: BITE,
+                    });
                 }
                 if through > 1.3 {
                     State::Chase
@@ -453,11 +473,22 @@ fn think(
     }
 }
 
+/// The nearest awake player a creature at a place can sense, and how far off across the
+/// ground.
+fn nearest(awake: &SpatialHash<Entity>, here: Vec3) -> Option<(Entity, f32)> {
+    let up = here.normalize();
+    awake
+        .near(here, SENSE_M)
+        .map(|&(at, player)| (player, (at - here).reject_from(up).length()))
+        .filter(|&(_, apart)| apart <= SENSE_M)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+}
+
 /// Moves each creature over the ground by what it is doing.
 fn walk(
     time: Res<Time>,
     planet: Res<Planet>,
-    player: Single<&Transform, With<Player>>,
+    players: Query<&Transform, With<Player>>,
     mut creatures: Query<(&mut Creature, &mut Transform), Without<Player>>,
 ) {
     let dt = time.delta_secs().min(0.1);
@@ -466,12 +497,20 @@ fn walk(
         let up = here.normalize();
         let about = kind(creature.species);
         let toward = |point: Vec3| (point - here).reject_from(up).normalize_or_zero();
-        let (direction, speed) = match creature.state {
-            State::Wander(to) => (toward(to), about.walk_mps),
-            State::Return => (toward(creature.home), about.walk_mps),
-            State::Flee(_) => (-toward(player.translation), about.run_mps),
-            State::Chase => (toward(player.translation), about.run_mps),
-            State::Attack(_) => (toward(player.translation), 0.0),
+        let quarry = creature
+            .quarry
+            .and_then(|player| players.get(player).ok())
+            .map(|at| toward(at.translation));
+        let (direction, speed) = match (creature.state, quarry) {
+            (State::Wander(to), _) => (toward(to), about.walk_mps),
+            (State::Return, _) => (toward(creature.home), about.walk_mps),
+            // Hurt from afar with nobody near, it runs the way it faces.
+            (State::Flee(_), quarry) => (
+                quarry.map_or(creature.facing, |toward| -toward),
+                about.run_mps,
+            ),
+            (State::Chase, Some(toward)) => (toward, about.run_mps),
+            (State::Attack(_), Some(toward)) => (toward, 0.0),
             _ => (Vec3::ZERO, 0.0),
         };
         if direction != Vec3::ZERO {
@@ -577,5 +616,82 @@ fn butcher(
         {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::play::test_player;
+    use bevy::ecs::system::RunSystemOnce;
+
+    fn spider(world: &mut World, at: Vec3) -> Entity {
+        world
+            .spawn((
+                Creature {
+                    species: Species::Spider,
+                    health: 10.0,
+                    state: State::Idle(1.0),
+                    home: at,
+                    facing: Vec3::X,
+                    hurt: false,
+                    quarry: None,
+                },
+                Transform::from_translation(at),
+            ))
+            .id()
+    }
+
+    fn world() -> World {
+        let mut world = World::new();
+        world.init_resource::<Time>();
+        world.init_resource::<Messages<Bitten>>();
+        world.insert_resource(Dice(Seed(1).derive("test").rng()));
+        world
+    }
+
+    #[test]
+    fn a_spider_goes_for_the_nearest_player_who_is_up() {
+        let mut world = world();
+        let ground = Vec3::Y * 2000.0;
+        let near = test_player(&mut world, ground + Vec3::X * 5.0);
+        let far = test_player(&mut world, ground + Vec3::X * 10.0);
+        let spider = spider(&mut world, ground);
+        world.run_system_once(think).unwrap();
+        let chased = world.get::<Creature>(spider).unwrap();
+        assert_eq!(chased.quarry, Some(near));
+        assert_eq!(chased.state, State::Chase);
+        // Down, the nearer one is passed over for the other.
+        world.entity_mut(near).insert(Downed { lying_s: 0.0 });
+        world.run_system_once(think).unwrap();
+        assert_eq!(world.get::<Creature>(spider).unwrap().quarry, Some(far));
+    }
+
+    #[test]
+    fn a_bite_lands_on_the_player_bitten() {
+        let mut world = world();
+        let ground = Vec3::Y * 2000.0;
+        let _far = test_player(&mut world, ground + Vec3::X * 20.0);
+        let near = test_player(&mut world, ground + Vec3::X * 1.5);
+        let spider = spider(&mut world, ground);
+        world.get_mut::<Creature>(spider).unwrap().state = State::Attack(0.44);
+        world
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_millis(20));
+        world.run_system_once(think).unwrap();
+        let bites: Vec<_> = world
+            .resource_mut::<Messages<Bitten>>()
+            .drain()
+            .map(|bite| bite.player)
+            .collect();
+        assert_eq!(bites, [near]);
+    }
+
+    #[test]
+    fn nobody_beyond_its_senses_is_noticed() {
+        let mut awake = SpatialHash::default();
+        let here = Vec3::Y * 2000.0;
+        awake.insert(here + Vec3::X * (SENSE_M + 1.0), Entity::PLACEHOLDER);
+        assert_eq!(nearest(&awake, here), None);
     }
 }

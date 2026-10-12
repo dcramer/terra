@@ -344,7 +344,7 @@ fn talk(
                 None => "past the trees".to_string(),
             }
         ),
-        Some(Doing::Following) => format!(
+        Some(Doing::Following(_)) => format!(
             "{}: \"You found Bren! Take them somewhere safe; they'll work a forge for you.\"",
             person.name
         ),

@@ -12,7 +12,7 @@ use super::creatures::Lair;
 use super::noise::{Cue, Noise};
 use super::props::Prop;
 use super::settlement::Village;
-use super::{Motion, Player};
+use super::{IsLocalPlayer, Motion};
 use crate::audio::{
     self, Bus, Fade, Mix, Voice,
     synth::{Sound, Synth},
@@ -105,7 +105,7 @@ fn follow_place(
     time: Res<Time>,
     planet: Res<Planet>,
     lair: Option<Res<Lair>>,
-    player: Single<(&Motion, &GlobalTransform), With<Player>>,
+    player: Single<(&Motion, &GlobalTransform), IsLocalPlayer>,
     layers: Query<(Entity, &Layer, &Voice)>,
     mut wait: Local<f32>,
 ) {

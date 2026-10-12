@@ -10,9 +10,8 @@
 
 use super::bag::{Notice, Shown};
 use super::combat::weapon;
-use super::crafting::{self, RECIPES, SmithAtHand, Station, Works};
+use super::crafting::{self, RECIPES, Staff, Station, Works};
 use super::inventory::{Belongings, InventoryScreen, Made, Tool};
-use super::people::{Doing, Person};
 use super::tiles::{self, PICKED, PLAIN, TILE};
 use bevy::prelude::*;
 
@@ -160,7 +159,7 @@ fn shown(station: Station, tab: usize) -> Vec<usize> {
 fn choose(
     keys: Res<ButtonInput<KeyCode>>,
     screen: Res<InventoryScreen>,
-    smith: Res<SmithAtHand>,
+    staff: Staff,
     backpack: Query<&Interaction, With<Shown>>,
     mut stations: Query<&mut Works>,
     mut belongings: Belongings,
@@ -198,7 +197,8 @@ fn choose(
         && let Some(&index) = list.get(state.cursor)
         && let Ok(mut works) = stations.get_mut(entity)
     {
-        crafting::queue(&mut works, index, &smith, &mut belongings, &mut notice);
+        let staffed = staff.works(entity, station);
+        crafting::queue(&mut works, index, staffed, &mut belongings, &mut notice);
     }
 }
 
@@ -206,7 +206,7 @@ fn choose(
 #[allow(clippy::too_many_arguments)]
 fn click(
     screen: Res<InventoryScreen>,
-    smith: Res<SmithAtHand>,
+    staff: Staff,
     recipes: Query<(&Interaction, &Tile), Changed<Interaction>>,
     queued: Query<(&Interaction, &Queued), Changed<Interaction>>,
     tabs: Query<(&Interaction, &TabButton), Changed<Interaction>>,
@@ -215,7 +215,10 @@ fn click(
     mut notice: ResMut<Notice>,
     mut state: ResMut<StationScreen>,
 ) {
-    let Some((entity, _)) = screen.at else { return };
+    let Some((entity, station)) = screen.at else {
+        return;
+    };
+    let staffed = staff.works(entity, station);
     let pressed = |interaction: &Interaction| *interaction == Interaction::Pressed;
     for (_, tab) in tabs.iter().filter(|(interaction, _)| pressed(interaction)) {
         state.tab = tab.0;
@@ -225,7 +228,7 @@ fn click(
         return;
     };
     if let Some((_, tile)) = recipes.iter().find(|(interaction, _)| pressed(interaction)) {
-        crafting::queue(&mut works, tile.0, &smith, &mut belongings, &mut notice);
+        crafting::queue(&mut works, tile.0, staffed, &mut belongings, &mut notice);
     }
     if let Some((_, place)) = queued.iter().find(|(interaction, _)| pressed(interaction)) {
         crafting::cancel(&mut works, place.0, &mut belongings, &mut notice);
@@ -350,14 +353,11 @@ fn about(made: Made) -> String {
 }
 
 /// Who works a station, or how it works.
-fn who(station: Station, smith: &SmithAtHand, people: &Query<&Person>) -> String {
+fn who(entity: Entity, station: Station, staff: &Staff) -> String {
     if station == Station::Forge {
-        return match people
-            .iter()
-            .find(|person| person.smith && matches!(person.doing, Doing::Working(_)))
-        {
-            Some(person) if smith.0 => format!("{} works this forge", person.name),
-            _ => "No smith works this forge yet".to_string(),
+        return match staff.worker(entity, station) {
+            Some(person) => format!("{} works this forge", person.name),
+            None => "No smith works this forge yet".to_string(),
         };
     }
     if station.works_alone() {
@@ -372,11 +372,10 @@ fn who(station: Station, smith: &SmithAtHand, people: &Query<&Person>) -> String
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn draw(
     screen: Res<InventoryScreen>,
-    smith: Res<SmithAtHand>,
+    staff: Staff,
     state: Res<StationScreen>,
     belongings: Belongings,
     stations: Query<&Works>,
-    people: Query<&Person>,
     mut panel: Single<&mut Visibility, With<Panel>>,
     mut tabs: Query<(&TabButton, &mut BackgroundColor), (Without<Tile>, Without<Queued>)>,
     mut tiles_shown: Query<
@@ -406,7 +405,8 @@ fn draw(
         }
     };
     set(&mut texts.p0(), station.name().to_string());
-    set(&mut texts.p1(), who(station, &smith, &people));
+    set(&mut texts.p1(), who(entity, station, &staff));
+    let running = staff.works(entity, station);
     for (tab, mut background) in &mut tabs {
         tiles::fill(
             &mut background,
@@ -426,7 +426,7 @@ fn draw(
             hovered || list.get(state.cursor) == Some(&tile.0),
         );
         let recipe = &RECIPES[tile.0];
-        let can = smith.works(station) && belongings.missing(recipe.cost, 1).is_none();
+        let can = running && belongings.missing(recipe.cost, 1).is_none();
         tiles::fill(
             &mut background,
             if can { PLAIN } else { PLAIN.with_alpha(0.45) },
@@ -459,7 +459,6 @@ fn draw(
     let Ok(works) = stations.get(entity) else {
         return;
     };
-    let running = smith.works(station);
     for (line, mut text) in &mut texts.p4() {
         let status = match line.0 {
             0 if running => format!("{:.0}%", works.through() * 100.0),

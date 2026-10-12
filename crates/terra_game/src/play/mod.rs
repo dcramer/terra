@@ -112,6 +112,16 @@ const STRIDE_M: f32 = 0.4;
 #[derive(Component)]
 struct Player;
 
+/// The player this machine steers: its input moves them, and the camera, the screen and
+/// what is heard follow them. Systems driven by input or drawing the screen act on this
+/// one; the world's own systems, such as creatures and stations, act on every [`Player`].
+#[derive(Component)]
+struct LocalPlayer;
+
+/// The query filter for this machine's player. It names [`Player`] as well, so Bevy can
+/// tell a query for them is apart from one that leaves players out (`Without<Player>`).
+type IsLocalPlayer = (With<Player>, With<LocalPlayer>);
+
 /// How a body moves over the planet.
 #[derive(Component)]
 struct Motion {
@@ -175,8 +185,8 @@ struct Downed {
     lying_s: f32,
 }
 
-/// Where the player is looking.
-#[derive(Resource)]
+/// Where a player is looking.
+#[derive(Component)]
 struct View {
     /// Along the ground.
     forward: Vec3,
@@ -284,17 +294,18 @@ fn spawn(
         .sub(outside)
         .reject_from(up)
         .normalize();
-    commands.insert_resource(View {
-        forward: toward_door,
-        pitch: -0.08,
-    });
-    commands.insert_resource(death::Arrival {
-        at: feet,
-        facing: toward_door,
-    });
     commands.spawn((
         Name::new("Player"),
         Player,
+        LocalPlayer,
+        View {
+            forward: toward_door,
+            pitch: -0.08,
+        },
+        death::Arrival {
+            at: feet,
+            facing: toward_door,
+        },
         Motion::facing(toward_door),
         Stance::default(),
         {
@@ -335,8 +346,7 @@ fn warp(
     mut asked: ResMut<probe::Asked>,
     site: Res<Site>,
     planet: Res<Planet>,
-    mut view: ResMut<View>,
-    player: Single<(&mut Transform, &mut Motion), With<Player>>,
+    player: Single<(&mut Transform, &mut Motion, &mut View), IsLocalPlayer>,
 ) {
     let scripted = options
         .warps
@@ -346,7 +356,7 @@ fn warp(
     let Some((at, facing)) = scripted.or_else(|| asked.warp.take()) else {
         return;
     };
-    let (mut transform, mut motion) = player.into_inner();
+    let (mut transform, mut motion, mut view) = player.into_inner();
     let place = |(east, south): (f32, f32)| site.frame.transform_point(Vec3::new(east, 0.0, south));
     let feet = planet.ground_at(place(at));
     let up = feet.normalize();
@@ -415,9 +425,9 @@ fn look(
     dial: Res<dial::Dial>,
     menu: Res<options::OptionsMenu>,
     build_menu: Res<build_menu::BuildMenu>,
-    player: Single<&Transform, With<Player>>,
-    mut view: ResMut<View>,
+    player: Single<(&Transform, &mut View), IsLocalPlayer>,
 ) {
+    let (player, mut view) = player.into_inner();
     let up = player.translation.normalize();
     // The arrow keys look about too, for keyboards and for scripted runs, except while
     // the build menu uses them.
@@ -470,7 +480,6 @@ fn walk(
     planet: Res<Planet>,
     site: Res<Site>,
     builds: Query<&build::Built>,
-    view: Res<View>,
     obstacles: Res<flora::Obstacles>,
     items: Query<(&props::Prop, &Transform, &Visibility), Without<Player>>,
     others: Query<(&bodies::Body, &Transform), Without<Player>>,
@@ -480,12 +489,13 @@ fn walk(
             &mut Motion,
             &mut Stance,
             &mut vitals::Vitals,
+            &View,
             Has<Downed>,
         ),
-        With<Player>,
+        IsLocalPlayer,
     >,
 ) {
-    let (mut transform, mut motion, mut stance, mut vitals, downed) = player.into_inner();
+    let (mut transform, mut motion, mut stance, mut vitals, view, downed) = player.into_inner();
     // Lying where you fell, you do not move.
     if downed {
         motion.velocity = Vec3::ZERO;
@@ -717,7 +727,7 @@ fn zoom(
     time: Res<Time>,
     controls: Controls,
     scroll: Res<AccumulatedMouseScroll>,
-    builder: Res<tool::Builder>,
+    builder: Single<&tool::Builder, IsLocalPlayer>,
     screen: Res<inventory::InventoryScreen>,
     mut zoom: ResMut<Zoom>,
 ) {
@@ -740,8 +750,7 @@ fn zoom(
 }
 
 fn follow(
-    player: Single<&Transform, (With<Player>, Without<MainCamera>)>,
-    view: Res<View>,
+    player: Single<(&Transform, &View), (IsLocalPlayer, Without<MainCamera>)>,
     zoom: Res<Zoom>,
     site: Res<Site>,
     builds: Query<&build::Built>,
@@ -756,7 +765,8 @@ fn follow(
             .looking_at(site.frame.transform_point(toward), from.normalize());
         return;
     }
-    let (head, looking) = eye(&player, &view);
+    let (player, view) = *player;
+    let (head, looking) = eye(player, view);
     let up = head.normalize();
     let right = view.forward.cross(up);
     // Over the shoulder, unless the ground is in the way there, as in a narrow pit.
@@ -800,6 +810,25 @@ fn follow(
         at = at.normalize() * ground;
     }
     **camera = Transform::from_translation(at).looking_to(looking, up);
+}
+
+/// A player standing at a place, with what the world's systems read of one, for tests
+/// that put several in one world.
+#[cfg(test)]
+fn test_player(world: &mut World, at: Vec3) -> Entity {
+    let mut items = world.get_resource_or_init::<inventory::Items>();
+    let kit = inventory::starting_kit(&mut items);
+    world
+        .spawn((
+            Player,
+            Motion::facing(Vec3::X),
+            Stance::default(),
+            vitals::Vitals::default(),
+            skills::Skills::default(),
+            kit,
+            Transform::from_translation(at),
+        ))
+        .id()
 }
 
 #[cfg(test)]

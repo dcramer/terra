@@ -7,6 +7,7 @@
 //! `wear_worn`), and kept on the item (`terra_items`). This says when something breaks,
 //! burns a torch down, and mends.
 
+use super::IsLocalPlayer;
 use super::bag::Notice;
 use super::claim::Claim;
 use super::crafting::{RECIPES, Station};
@@ -73,7 +74,7 @@ fn tell(items: Res<Items>, mut broke: MessageReader<Broke>, mut notice: ResMut<N
 /// Opening a station in a claim mends everything carried or worn that it makes.
 fn mend(
     screen: Res<InventoryScreen>,
-    claim: Res<Claim>,
+    claim: Single<&Claim, IsLocalPlayer>,
     stations: Query<&Transform, With<Prop>>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,

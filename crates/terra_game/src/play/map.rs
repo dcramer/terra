@@ -7,9 +7,9 @@
 //!
 //!   M             open and close the map
 
-use super::Player;
 use super::claim::Claim;
 use super::controls::{Action, Controls};
+use super::{IsLocalPlayer, LocalPlayer, Player};
 use crate::build::Site;
 use crate::planet::Planet;
 use bevy::{
@@ -32,8 +32,17 @@ struct Chart {
     image: Handle<Image>,
     /// The land's colour at each pixel, worked out once.
     land: Vec<[u8; 4]>,
-    seen: Vec<bool>,
     open: bool,
+}
+
+/// Which pixels of the map a player has seen. You know the land you have been near (D93).
+#[derive(Component)]
+struct Explored(Vec<bool>);
+
+impl Default for Explored {
+    fn default() -> Self {
+        Self(vec![false; PIXELS * PIXELS])
+    }
 }
 
 #[derive(Component)]
@@ -46,7 +55,8 @@ struct You;
 struct Yours;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(PostStartup, draw_land)
+    app.register_required_components::<Player, Explored>()
+        .add_systems(PostStartup, draw_land)
         .add_systems(Update, (explore, toggle, place_marks).chain());
 }
 
@@ -168,21 +178,46 @@ fn draw_land(
     commands.insert_resource(Chart {
         image,
         land,
-        seen: vec![false; PIXELS * PIXELS],
         open: false,
     });
 }
 
-/// Marks the land around the player as seen, and shows it on the map.
+/// Marks the land around each player as seen by them, and shows on the map what this
+/// machine's player has seen.
 fn explore(
     site: Res<Site>,
-    player: Single<&Transform, With<Player>>,
-    chart: Option<ResMut<Chart>>,
+    mut players: Query<(&Transform, &mut Explored, Has<LocalPlayer>), With<Player>>,
+    chart: Option<Res<Chart>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let Some(mut chart) = chart else { return };
-    let Some((cx, cy)) = planet_to_pixel(&site, player.translation) else {
-        return;
+    let Some(chart) = chart else { return };
+    for (at, mut explored, ours) in &mut players {
+        let newly = newly_seen(&site, at.translation, &explored.0);
+        if newly.is_empty() {
+            continue;
+        }
+        for &index in &newly {
+            explored.0[index] = true;
+        }
+        if !ours {
+            continue;
+        }
+        let Some(data) = images
+            .get_mut(&chart.image)
+            .and_then(|image| image.into_inner().data.as_mut())
+        else {
+            continue;
+        };
+        for index in newly {
+            data[index * 4..index * 4 + 4].copy_from_slice(&chart.land[index]);
+        }
+    }
+}
+
+/// The pixels near a point not yet seen.
+fn newly_seen(site: &Site, point: Vec3, seen: &[bool]) -> Vec<usize> {
+    let Some((cx, cy)) = planet_to_pixel(site, point) else {
+        return Vec::new();
     };
     let reach = (SEEN_M / METRES_PER_PIXEL).ceil() as i64;
     let mut newly = Vec::new();
@@ -191,24 +226,12 @@ fn explore(
             let (x, y) = (cx as i64 + dx, cy as i64 + dy);
             let inside = (0..PIXELS as i64).contains(&x) && (0..PIXELS as i64).contains(&y);
             let near = ((dx * dx + dy * dy) as f32).sqrt() * METRES_PER_PIXEL <= SEEN_M;
-            if inside && near && !chart.seen[y as usize * PIXELS + x as usize] {
+            if inside && near && !seen[y as usize * PIXELS + x as usize] {
                 newly.push(y as usize * PIXELS + x as usize);
             }
         }
     }
-    if newly.is_empty() {
-        return;
-    }
-    let Some(mut image) = images.get_mut(&chart.image) else {
-        return;
-    };
-    let Some(data) = image.data.as_mut() else {
-        return;
-    };
-    for index in newly {
-        chart.seen[index] = true;
-        data[index * 4..index * 4 + 4].copy_from_slice(&chart.land[index]);
-    }
+    newly
 }
 
 fn toggle(
@@ -234,8 +257,8 @@ fn toggle(
 #[allow(clippy::type_complexity)]
 fn place_marks(
     site: Res<Site>,
-    claim: Res<Claim>,
-    player: Single<&Transform, With<Player>>,
+    claim: Single<&Claim, IsLocalPlayer>,
+    player: Single<&Transform, IsLocalPlayer>,
     mut you: Single<&mut Node, (With<You>, Without<Yours>)>,
     yours: Single<(&mut Node, &mut Visibility), (With<Yours>, Without<You>)>,
 ) {

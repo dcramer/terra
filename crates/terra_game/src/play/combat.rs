@@ -10,10 +10,10 @@
 use super::bag::Notice;
 use super::controls::{Action, Controls};
 use super::creatures::{self, Bitten, Creature, Species};
-use super::inventory::{Belongings, InventoryScreen, Tool};
+use super::inventory::{self, Belongings, Broke, Gear, InventoryScreen, Items, Tool};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::vitals::Vitals;
-use super::{Downed, Player, Stance, View};
+use super::{Downed, IsLocalPlayer, LocalPlayer, Player, Stance, View};
 use bevy::prelude::*;
 
 /// What a swing costs in stamina.
@@ -40,8 +40,8 @@ pub fn weapon(tool: Tool) -> (f32, f32) {
     }
 }
 
-/// When the last swing was, so another waits its turn and gathering waits for it.
-#[derive(Resource)]
+/// When a player last swung, so another waits its turn and gathering waits for it.
+#[derive(Component)]
 pub struct Swing {
     pub since: f32,
 }
@@ -61,14 +61,17 @@ pub struct Struck {
     pub killed: bool,
 }
 
-/// The player took a blow, of so much health.
+/// A player took a blow, of so much health.
 #[derive(Message, Clone, Copy, Debug)]
-pub struct Hurt(pub f32);
+pub struct Hurt {
+    pub player: Entity,
+    pub amount: f32,
+}
 
 pub fn plugin(app: &mut App) {
     app.add_message::<Struck>()
         .add_message::<Hurt>()
-        .init_resource::<Swing>()
+        .register_required_components::<Player, Swing>()
         .add_systems(Update, (swing, guard, take_blows).chain());
 }
 
@@ -79,11 +82,11 @@ fn swing(
     time: Res<Time>,
     controls: Controls,
     screen: Res<InventoryScreen>,
-    view: Res<View>,
+    view: Single<&View, IsLocalPlayer>,
     mut belongings: Belongings,
-    player: Single<(&Transform, &mut Stance, &mut Vitals, &Skills, Has<Downed>), With<Player>>,
+    player: Single<(&Transform, &mut Stance, &mut Vitals, &Skills, Has<Downed>), IsLocalPlayer>,
     mut creatures: Query<(Entity, &mut Creature, &Transform), Without<Player>>,
-    mut swung: ResMut<Swing>,
+    mut swung: Single<&mut Swing, IsLocalPlayer>,
     mut did: MessageWriter<Did>,
     mut struck: MessageWriter<Struck>,
     mut notice: ResMut<Notice>,
@@ -185,7 +188,7 @@ pub fn strike(
 fn guard(
     controls: Controls,
     belongings: Belongings,
-    player: Single<(&mut Stance, Has<Downed>), With<Player>>,
+    player: Single<(&mut Stance, Has<Downed>), IsLocalPlayer>,
 ) {
     let (mut stance, downed) = player.into_inner();
     let holding = belongings.holding();
@@ -194,29 +197,49 @@ fn guard(
         && controls.held(Action::BuildMenu);
 }
 
-/// Lands the blows creatures deal, less what leather, a guard or a roll takes.
+/// Lands the blows creatures deal on whoever they hit, less what leather, a guard or a
+/// roll takes.
 fn take_blows(
     mut bitten: MessageReader<Bitten>,
-    mut belongings: Belongings,
-    player: Single<(&mut Stance, &mut Vitals, Has<Downed>), With<Player>>,
+    items: Res<Items>,
+    mut players: Query<
+        (
+            &mut Stance,
+            &mut Vitals,
+            &mut Gear,
+            Has<Downed>,
+            Has<LocalPlayer>,
+        ),
+        With<Player>,
+    >,
     mut hurt: MessageWriter<Hurt>,
+    mut broke: MessageWriter<Broke>,
 ) {
-    let (mut stance, mut vitals, downed) = player.into_inner();
-    for &Bitten(damage) in bitten.read() {
+    for &Bitten { player, damage } in bitten.read() {
+        let Ok((mut stance, mut vitals, mut gear, downed, ours)) = players.get_mut(player) else {
+            continue;
+        };
         if downed || stance.dodging > 0.0 {
             continue;
         }
         // Leather takes some of it.
-        let damage = damage * (1.0 - belongings.protection());
+        let damage = damage * (1.0 - inventory::protection(&items, &gear.0));
         let taken = if stance.guarding && vitals.spend(GUARD_STAMINA) {
             damage * GUARDED
         } else {
             damage
         };
         vitals.hurt(taken);
-        hurt.write(Hurt(taken));
-        // What is worn takes the blow too, and wears.
-        belongings.wear_worn(1);
+        hurt.write(Hurt {
+            player,
+            amount: taken,
+        });
+        // What is worn takes the blow too, and wears. Only this machine's player hears of it.
+        for kind in inventory::wear_worn(&items, &mut gear.0, 1) {
+            if ours {
+                broke.write(Broke { kind });
+            }
+        }
         stance.flinch = 0.35;
         info!("Bitten for {taken:.0}; health {:.0}.", vitals.health);
     }
@@ -225,6 +248,30 @@ fn take_blows(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::play::test_player;
+    use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn a_blow_hurts_only_the_player_it_lands_on() {
+        let mut world = World::new();
+        world.init_resource::<Messages<Bitten>>();
+        world.init_resource::<Messages<Hurt>>();
+        world.init_resource::<Messages<Broke>>();
+        let ground = Vec3::Y * 2000.0;
+        let spared = test_player(&mut world, ground);
+        let bitten = test_player(&mut world, ground + Vec3::X * 3.0);
+        world.write_message(Bitten {
+            player: bitten,
+            damage: 9.0,
+        });
+        world.run_system_once(take_blows).unwrap();
+        let health = |world: &World, player| world.get::<Vitals>(player).unwrap().health;
+        assert_eq!(health(&world, spared), Vitals::default().health);
+        assert!(health(&world, bitten) < Vitals::default().health);
+        let hurt: Vec<_> = world.resource_mut::<Messages<Hurt>>().drain().collect();
+        assert_eq!(hurt.len(), 1);
+        assert_eq!(hurt[0].player, bitten);
+    }
 
     #[test]
     fn the_spear_is_the_weapon_and_the_hammer_is_not() {

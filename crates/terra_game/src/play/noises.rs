@@ -16,7 +16,7 @@ use super::options::OptionsMenu;
 use super::people::Person;
 use super::props::Prop;
 use super::tool::Builder;
-use super::{Downed, Motion, Player, Stance, View};
+use super::{Downed, IsLocalPlayer, Motion, Player, Stance, View};
 use crate::planet::Planet;
 use bevy::{platform::collections::HashMap, prelude::*};
 
@@ -186,33 +186,42 @@ fn creatures_heard(
     }
 }
 
-/// The player's swings, hurts and falls.
+/// Players' swings, hurts and falls, each heard from where it happened.
 fn player_heard(
-    player: Single<(&Stance, &GlobalTransform), With<Player>>,
+    players: Query<(Entity, &Stance, &GlobalTransform), With<Player>>,
     mut bitten: MessageReader<Bitten>,
     mut went_down: MessageReader<WentDown>,
-    mut swinging: Local<f32>,
+    mut swinging: Local<HashMap<Entity, f32>>,
     mut noise: MessageWriter<Noise>,
 ) {
-    let (stance, at) = *player;
-    let chest = at.translation() + at.translation().normalize_or(Vec3::Y) * 1.2;
-    // A swing sets the figure's attack going again.
-    if stance.attacking > *swinging + 0.2 {
-        noise.write(Noise::at(Cue::Swing, chest));
+    let chest =
+        |at: &GlobalTransform| at.translation() + at.translation().normalize_or(Vec3::Y) * 1.2;
+    swinging.retain(|player, _| players.contains(*player));
+    for (player, stance, at) in &players {
+        // A swing sets the figure's attack going again.
+        let swung = swinging.entry(player).or_default();
+        if stance.attacking > *swung + 0.2 {
+            noise.write(Noise::at(Cue::Swing, chest(at)));
+        }
+        *swung = stance.attacking;
     }
-    *swinging = stance.attacking;
-    for _ in bitten.read() {
-        noise.write(Noise::at(Cue::Hurt, chest));
+    let mut heard = |player: Entity, cue: Cue| {
+        if let Ok((_, _, at)) = players.get(player) {
+            noise.write(Noise::at(cue, chest(at)));
+        }
+    };
+    for &Bitten { player, .. } in bitten.read() {
+        heard(player, Cue::Hurt);
     }
-    for _ in went_down.read() {
-        noise.write(Noise::at(Cue::Down, chest));
+    for &WentDown(player) in went_down.read() {
+        heard(player, Cue::Down);
     }
 }
 
 /// An axe, pick or knife at work, stroke by stroke, and what it cut coming down.
 fn cutting_heard(
     time: Res<Time>,
-    cutting: Res<Cutting>,
+    cutting: Single<&Cutting, IsLocalPlayer>,
     growth: Query<(&Growth, &GlobalTransform)>,
     felled: Query<(&Felled, &GlobalTransform), Added<Felled>>,
     mut beat: Local<f32>,
@@ -246,9 +255,9 @@ fn cutting_heard(
 /// The hammer at work while something is built or taken apart.
 fn building_heard(
     time: Res<Time>,
-    builder: Res<Builder>,
-    view: Res<View>,
-    player: Single<&GlobalTransform, With<Player>>,
+    builder: Single<&Builder, IsLocalPlayer>,
+    view: Single<&View, IsLocalPlayer>,
+    player: Single<&GlobalTransform, IsLocalPlayer>,
     mut beat: Local<f32>,
     mut noise: MessageWriter<Noise>,
 ) {

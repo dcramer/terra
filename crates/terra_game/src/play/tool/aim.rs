@@ -10,7 +10,7 @@ use crate::play::dial::Dial;
 use crate::play::flora::Obstacles;
 use crate::play::inventory::{Belongings, Cost};
 use crate::play::props::{self, Blocked, Models, Prop, Standing};
-use crate::play::{Player, View};
+use crate::play::{IsLocalPlayer, View};
 use crate::shell::Options;
 use terra_build::{CELL_M, DOOR_WIDTH_M, Face, Panel, STOREY_M, Side, cells};
 
@@ -19,13 +19,13 @@ pub(super) fn aim(
     site: Res<Site>,
     options: Res<Options>,
     dial: Res<Dial>,
-    view: Res<View>,
+    view: Single<&View, IsLocalPlayer>,
     models: Res<Models>,
     obstacles: Res<Obstacles>,
     camera: Single<&GlobalTransform, With<MainCamera>>,
-    player: Single<&Transform, With<Player>>,
+    player: Single<&Transform, IsLocalPlayer>,
     props: Query<(Entity, &Prop, &Transform, &Visibility)>,
-    mut builder: ResMut<Builder>,
+    mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
     // What is being worked on stays the target until the work is done or dropped.
     if builder.work.is_some() {
@@ -360,10 +360,10 @@ pub(super) fn aim(
 /// Works out what the thing aimed at would cost to build, and whether it can be paid.
 pub(super) fn afford(
     site: Res<Site>,
-    claim: Res<Claim>,
+    claim: Single<&Claim, IsLocalPlayer>,
     props: Query<&Prop>,
     belongings: Belongings,
-    mut builder: ResMut<Builder>,
+    mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
     if builder.work.is_some() {
         return;

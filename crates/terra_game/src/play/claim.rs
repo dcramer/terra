@@ -1,7 +1,7 @@
 //! Your claim (D94): you build only inside ground you have claimed, so the world is not
 //! built over or taken apart everywhere. Place a claim stone with the hammer to make one;
 //! it starts 40 metres across and grows to 80 and then 160 when you pay at the stone with
-//! the interact key (D104). One claim each, for now.
+//! the interact key (D104). One claim each, for now: it is a component of each player.
 //!
 //! While the hammer is in hand, its edge is drawn on the ground.
 
@@ -9,6 +9,7 @@ use super::bag::Notice;
 use super::interact::{Focus, Focusing, Interactable};
 use super::inventory::{Belongings, Cost, Raw, Tool, describe};
 use super::props::Prop;
+use super::{IsLocalPlayer, LocalPlayer, Player};
 use crate::planet::Planet;
 use bevy::prelude::*;
 
@@ -20,8 +21,8 @@ const GROW: [Cost; 2] = [
     &[(Raw::Wood, 20), (Raw::Stone, 20), (Raw::Iron, 4)],
 ];
 
-/// The player's claim, if they have placed one.
-#[derive(Resource, Default)]
+/// A player's claim, if they have placed one.
+#[derive(Component, Default)]
 pub struct Claim {
     /// The claim stone, and where it stands.
     pub stone: Option<(Entity, Vec3)>,
@@ -56,26 +57,30 @@ impl Claim {
 }
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Claim>()
+    app.register_required_components::<Player, Claim>()
         .add_systems(Update, (track, grow.after(Focusing), show));
 }
 
-/// Notices a claim stone being placed or taken away.
+/// Notices a claim stone being placed or taken away. Stones are placed by this machine's
+/// player, with the hammer or as a saved game is put back, so a new one is theirs.
 fn track(
     placed: Query<(Entity, &Prop, &Transform), Added<Prop>>,
     mut removed: RemovedComponents<Prop>,
-    mut claim: ResMut<Claim>,
+    mut ours: Single<&mut Claim, IsLocalPlayer>,
+    mut claims: Query<&mut Claim, Without<LocalPlayer>>,
 ) {
     for (entity, prop, at) in &placed {
         if prop.item.claims {
-            claim.stone = Some((entity, at.translation));
+            ours.stone = Some((entity, at.translation));
             info!("Claimed the land around {}.", at.translation);
         }
     }
     for entity in removed.read() {
-        if claim.stone.is_some_and(|(stone, _)| stone == entity) {
-            *claim = Claim::default();
-            info!("The claim is given up.");
+        for mut claim in std::iter::once(ours.reborrow()).chain(claims.iter_mut()) {
+            if claim.stone.is_some_and(|(stone, _)| stone == entity) {
+                *claim = Claim::default();
+                info!("A claim is given up.");
+            }
         }
     }
 }
@@ -83,7 +88,7 @@ fn track(
 /// Grows the claim when the player pays at its stone.
 fn grow(
     focus: Res<Focus>,
-    mut claim: ResMut<Claim>,
+    mut claim: Single<&mut Claim, IsLocalPlayer>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
 ) {
@@ -114,7 +119,12 @@ fn grow(
 }
 
 /// Draws the claim's edge on the ground while the hammer is in hand.
-fn show(claim: Res<Claim>, planet: Res<Planet>, belongings: Belongings, mut gizmos: Gizmos) {
+fn show(
+    claim: Single<&Claim, IsLocalPlayer>,
+    planet: Res<Planet>,
+    belongings: Belongings,
+    mut gizmos: Gizmos,
+) {
     let Some((_, centre)) = claim.stone else {
         return;
     };

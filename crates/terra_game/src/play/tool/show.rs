@@ -53,7 +53,8 @@ pub(super) fn highlight(
     planet: Res<Planet>,
     models: Res<Models>,
     props: Query<(&Prop, &Transform)>,
-    mut builder: ResMut<Builder>,
+    builder: Single<&Builder, IsLocalPlayer>,
+    mut drawn: ResMut<BuilderLook>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut gizmos: Gizmos,
 ) {
@@ -176,7 +177,7 @@ pub(super) fn highlight(
     };
     // While a wall or room is being built, a stronger film climbs it; while one is being
     // taken apart, the film drains away.
-    let filling = builder.filling;
+    let filling = drawn.filling;
     match builder.work.as_ref() {
         Some(Work {
             job: Job::Structure { .. },
@@ -206,7 +207,7 @@ pub(super) fn highlight(
                         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals),
                     ),
                 ),
-                MeshMaterial3d(builder.ghost_looks[look].clone()),
+                MeshMaterial3d(drawn.ghost_looks[look].clone()),
                 site.frame,
                 Visibility::Visible,
             ));
@@ -227,7 +228,7 @@ pub(super) fn highlight(
         boxed(&mut gizmos, prop.half, transform, colour);
     }
 
-    let ghost = builder.ghost;
+    let ghost = drawn.ghost;
     match (builder.item(), builder.target) {
         (
             Some(item),
@@ -295,7 +296,7 @@ pub(super) fn highlight(
                 if let Some(mesh) = model.solid.clone() {
                     commands.entity(ghost).insert((
                         Mesh3d(mesh),
-                        MeshMaterial3d(builder.ghost_looks[look].clone()),
+                        MeshMaterial3d(drawn.ghost_looks[look].clone()),
                         stood.with_translation(stood.translation + *stood.up() * 0.01),
                         Visibility::Visible,
                     ));
@@ -312,11 +313,11 @@ pub(super) fn highlight(
         }
     }
 
-    if builder.shown == (quads.clone(), look) {
+    if drawn.shown == (quads.clone(), look) {
         return;
     }
-    builder.shown = (quads.clone(), look);
-    let mut film = commands.entity(builder.highlight);
+    drawn.shown = (quads.clone(), look);
+    let mut film = commands.entity(drawn.highlight);
     if quads.is_empty() {
         film.insert(Visibility::Hidden);
         return;
@@ -341,7 +342,7 @@ pub(super) fn highlight(
                 .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals),
             ),
         ),
-        MeshMaterial3d(builder.looks[look].clone()),
+        MeshMaterial3d(drawn.looks[look].clone()),
         site.frame,
         Visibility::Visible,
     ));

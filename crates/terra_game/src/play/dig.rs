@@ -14,7 +14,7 @@ use super::harvest::Cutting;
 use super::inventory::{Belongings, Cut, InventoryScreen, Raw};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::work::Hold;
-use super::{Player, Stance};
+use super::{IsLocalPlayer, Player, Stance};
 use crate::planet::MainCamera;
 use crate::planet::Planet;
 use bevy::prelude::*;
@@ -31,7 +31,8 @@ const DIG_SECONDS: f32 = 0.9;
 const PER_ITEM_M3: f32 = 0.4;
 
 /// Where the pickaxe meets the ground, and how far through digging there it is.
-#[derive(Resource, Default)]
+/// What a player is digging, if anything.
+#[derive(Component, Default)]
 pub struct Digging {
     pub target: Option<Vec3>,
     held: Option<(Vec3, Hold)>,
@@ -44,15 +45,16 @@ impl Digging {
 }
 
 /// What has been dug but not yet made an item, by what it is made of.
-#[derive(Resource, Default)]
+/// The loose stone and ore a player has dug that has not yet made a whole one.
+#[derive(Component, Default)]
 struct Spoil {
     stone_m3: f32,
     ore_m3: f32,
 }
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Digging>()
-        .init_resource::<Spoil>()
+    app.register_required_components::<Player, Digging>()
+        .register_required_components::<Player, Spoil>()
         .add_systems(Update, dig.after(super::harvest::Harvesting));
 }
 
@@ -67,14 +69,14 @@ fn dig(
     controls: Controls,
     dial: Res<Dial>,
     screen: Res<InventoryScreen>,
-    cutting: Res<Cutting>,
+    cutting: Single<&Cutting, IsLocalPlayer>,
     camera: Single<&GlobalTransform, With<MainCamera>>,
-    player: Single<(&Transform, &mut Stance), With<Player>>,
-    skills: Single<&Skills, With<Player>>,
+    player: Single<(&Transform, &mut Stance), IsLocalPlayer>,
+    skills: Single<&Skills, IsLocalPlayer>,
     mut planet: ResMut<Planet>,
     mut belongings: Belongings,
-    mut digging: ResMut<Digging>,
-    mut spoil: ResMut<Spoil>,
+    mut digging: Single<&mut Digging, IsLocalPlayer>,
+    mut spoil: Single<&mut Spoil, IsLocalPlayer>,
     mut notice: ResMut<Notice>,
     mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
@@ -153,7 +155,7 @@ fn dig(
     spoil.stone_m3 += taken.amount(Harvested::Material(material::STONE));
     spoil.ore_m3 += taken.amount(Harvested::Material(material::ORE));
     // What it gives is shown as it comes in (`gains`).
-    let spoil = &mut *spoil;
+    let spoil: &mut Spoil = &mut spoil;
     for (raw, kept) in [
         (Raw::Stone, &mut spoil.stone_m3),
         (Raw::Ore, &mut spoil.ore_m3),

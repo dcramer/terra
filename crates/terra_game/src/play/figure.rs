@@ -1,6 +1,7 @@
 //! The player's body: the male base body, made with Tripo and rigged onto the skeleton
 //! of a free animation library (D115, THIRD_PARTY.md), with what is in hand held in its
-//! right hand's socket (`character`). Which animation plays follows what the player is doing.
+//! right hand's socket (`character`). Every player stands on one, and which animation
+//! plays follows what that player is doing.
 //!
 //! A base body has no hair or clothes of its own; those are parts still to come (D111,
 //! D112).
@@ -69,14 +70,28 @@ struct Moves {
     guard: AnimationNodeIndex,
 }
 
-/// What the figure is animated as doing.
+/// On a figure's animation player: whose figure it is, its hand, and what it is
+/// animated as doing.
 #[derive(Component)]
-struct Animated(Doing);
+struct Animated {
+    player: Entity,
+    hand: Option<Entity>,
+    doing: Doing,
+}
+
+/// On a player who has been given a figure.
+#[derive(Component)]
+struct Figured;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, load).add_systems(
         Update,
-        (spawn.run_if(not(resource_exists::<Moves>)), animate),
+        (
+            prepare.run_if(not(resource_exists::<Moves>)),
+            stand.run_if(resource_exists::<Moves>),
+            animate,
+        )
+            .chain(),
     );
 }
 
@@ -86,14 +101,13 @@ fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Lo
     commands.insert_resource(FigureModel(model));
 }
 
-/// Once the model has loaded, stands it on the player.
-fn spawn(
+/// Once the model has loaded, makes the animations ready.
+fn prepare(
     mut commands: Commands,
     model: Res<FigureModel>,
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
-    player: Single<Entity, With<Player>>,
 ) {
     if !assets.is_loaded_with_dependencies(&model.0) {
         return;
@@ -130,19 +144,34 @@ fn spawn(
         roll: nodes[8],
         guard: nodes[9],
     });
-    let Some(scene) = gltf.default_scene.clone() else {
+}
+
+/// Stands a figure on each player who has none yet.
+fn stand(
+    mut commands: Commands,
+    model: Res<FigureModel>,
+    gltfs: Res<Assets<Gltf>>,
+    players: Query<Entity, (With<Player>, Without<Figured>)>,
+) {
+    let Some(scene) = gltfs
+        .get(&model.0)
+        .and_then(|gltf| gltf.default_scene.clone())
+    else {
         return;
     };
-    commands
-        .spawn((
-            Name::new("Figure"),
-            crate::character::Body { name: BODY },
-            WorldAssetRoot(scene),
-            // The model faces +Z; things here face -Z.
-            Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
-            ChildOf(*player),
-        ))
-        .observe(dress);
+    for player in &players {
+        commands.entity(player).insert(Figured);
+        commands
+            .spawn((
+                Name::new("Figure"),
+                crate::character::Body { name: BODY },
+                WorldAssetRoot(scene.clone()),
+                // The model faces +Z; things here face -Z.
+                Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
+                ChildOf(player),
+            ))
+            .observe(dress);
+    }
 }
 
 /// When the figure's bones exist, starts it animating and gives it a hand to hold things in.
@@ -153,7 +182,11 @@ fn dress(
     children: Query<&Children>,
     mut animators: Query<&mut AnimationPlayer>,
     names: Query<&Name>,
+    parents: Query<&ChildOf>,
 ) {
+    let Ok(player) = parents.get(ready.entity).map(ChildOf::parent) else {
+        return;
+    };
     // The figure's own animation player, among everything its model spawned; creatures
     // have theirs.
     let Some(entity) = children
@@ -169,25 +202,31 @@ fn dress(
     transitions
         .play(&mut animator, moves.idle, Duration::ZERO)
         .repeat();
-    commands.entity(entity).insert((
-        AnimationGraphHandle(moves.graph.clone()),
-        transitions,
-        Animated(Doing::Idle),
-    ));
-
     // Whatever is in hand is held in the hand's socket (`held`).
-    match crate::character::find(ready.entity, crate::character::HAND_R, &children, &names) {
+    let hand = crate::character::find(ready.entity, crate::character::HAND_R, &children, &names);
+    match hand {
         Some(hand) => {
-            commands.entity(hand).insert((Grip, Carrying(true)));
+            commands
+                .entity(hand)
+                .insert((Grip::of(player), Carrying(true)));
         }
         None => warn!("The figure has no {}.", crate::character::HAND_R),
     }
+    commands.entity(entity).insert((
+        AnimationGraphHandle(moves.graph.clone()),
+        transitions,
+        Animated {
+            player,
+            hand,
+            doing: Doing::Idle,
+        },
+    ));
 }
 
-/// Picks the animation that fits what the player is doing, and blends into it.
+/// Picks the animation that fits what each player is doing, and blends their figure into it.
 fn animate(
     moves: Option<Res<Moves>>,
-    player: Single<(&Motion, &Stance, Has<Downed>), With<Player>>,
+    players: Query<(&Motion, &Stance, Has<Downed>), With<Player>>,
     mut figures: Query<(
         &mut AnimationPlayer,
         &mut AnimationTransitions,
@@ -196,35 +235,16 @@ fn animate(
     mut hands: Query<&mut Carrying, With<Grip>>,
 ) {
     let Some(moves) = moves else { return };
-    let (motion, stance, downed) = *player;
-    let speed = motion.velocity.length();
-    let doing = if downed {
-        Doing::Down
-    } else if stance.dodging > 0.0 {
-        Doing::Roll
-    } else if stance.flinch > 0.0 {
-        Doing::Flinch
-    } else if stance.attacking > 0.0 {
-        Doing::Attack
-    } else if stance.guarding {
-        Doing::Guard
-    } else if motion.airborne > 0.12 {
-        Doing::Fall
-    } else if speed > 5.6 {
-        Doing::Sprint
-    } else if speed > 0.5 {
-        Doing::Jog
-    } else if stance.since_acting < 0.9 {
-        Doing::Use
-    } else {
-        Doing::Idle
-    };
     for (mut animator, mut transitions, mut animated) in &mut figures {
-        if animated.0 == doing {
+        let Ok((motion, stance, downed)) = players.get(animated.player) else {
+            continue;
+        };
+        let doing = doing(motion, stance, downed);
+        if animated.doing == doing {
             continue;
         }
-        animated.0 = doing;
-        for mut hand in &mut hands {
+        animated.doing = doing;
+        if let Some(mut hand) = animated.hand.and_then(|hand| hands.get_mut(hand).ok()) {
             hand.0 = CARRIED_IN.contains(&doing.clip());
         }
         let node = match doing {
@@ -246,5 +266,31 @@ fn animate(
         ) {
             playing.repeat();
         }
+    }
+}
+
+/// What a player is doing, as their figure shows it.
+fn doing(motion: &Motion, stance: &Stance, downed: bool) -> Doing {
+    let speed = motion.velocity.length();
+    if downed {
+        Doing::Down
+    } else if stance.dodging > 0.0 {
+        Doing::Roll
+    } else if stance.flinch > 0.0 {
+        Doing::Flinch
+    } else if stance.attacking > 0.0 {
+        Doing::Attack
+    } else if stance.guarding {
+        Doing::Guard
+    } else if motion.airborne > 0.12 {
+        Doing::Fall
+    } else if speed > 5.6 {
+        Doing::Sprint
+    } else if speed > 0.5 {
+        Doing::Jog
+    } else if stance.since_acting < 0.9 {
+        Doing::Use
+    } else {
+        Doing::Idle
     }
 }

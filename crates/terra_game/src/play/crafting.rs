@@ -5,17 +5,19 @@
 //! on with it whether you are there or not, and what it makes waits in it until you come
 //! back to it. Its screen is in `station_screen`.
 //!
-//! The forge only works with a smith living at your claim, as Enshrouded's rescued
-//! survivors run its stations; until one is rescued it says so.
+//! The forge only works while a smith is at work at it, as Enshrouded's rescued
+//! survivors run its stations; until one is rescued it says so. Who works where is read
+//! from the people themselves (`Staff`), so there is nothing to keep in step with them.
 
-use super::Player;
 use super::bag::Notice;
 use super::grab_mouse;
 use super::interact::{Focus, Focusing, Interactable, REACH_M};
 use super::inventory::{Apparel, Belongings, Container, Cost, InventoryScreen, Made, Raw, Tool};
+use super::people::{Doing, Person};
 use super::props::Prop;
 use super::skills::{Did, ONCE, Skill};
-use bevy::{prelude::*, window::CursorOptions};
+use super::{IsLocalPlayer, Player};
+use bevy::{ecs::system::SystemParam, prelude::*, window::CursorOptions};
 use std::collections::VecDeque;
 
 /// How many things a station can have waiting at once.
@@ -210,14 +212,39 @@ pub fn families(station: Station) -> Vec<Family> {
     families
 }
 
-/// Whether a smith lives at the claim, so the forge works. Set when one is rescued.
-#[derive(Resource, Default)]
-pub struct SmithAtHand(pub bool);
+/// How near a station someone at work at it stands.
+const WORKER_REACH_M: f32 = 3.0;
 
-impl SmithAtHand {
-    pub fn works(&self, station: Station) -> bool {
-        station != Station::Forge || self.0
+/// Who works the stations that need someone to: the forge works only while a smith is at
+/// work beside it.
+#[derive(SystemParam)]
+pub struct Staff<'w, 's> {
+    people: Query<'w, 's, &'static Person>,
+    stations: Query<'w, 's, &'static Transform, With<Works>>,
+}
+
+impl Staff<'_, '_> {
+    /// Whoever is at work at a station, if it is one that needs someone.
+    pub fn worker(&self, entity: Entity, station: Station) -> Option<&Person> {
+        if station != Station::Forge {
+            return None;
+        }
+        let at = self.stations.get(entity).ok()?.translation;
+        self.people
+            .iter()
+            .find(|person| person.smith && at_work(person, at))
     }
+
+    /// Whether a station can get on with its queue: always, unless it needs someone to
+    /// work it and nobody is.
+    pub fn works(&self, entity: Entity, station: Station) -> bool {
+        station != Station::Forge || self.worker(entity, station).is_some()
+    }
+}
+
+/// Whether someone is at work at a station standing at a place.
+fn at_work(person: &Person, station: Vec3) -> bool {
+    matches!(person.doing, Doing::Working(spot) if spot.distance(station) < WORKER_REACH_M)
 }
 
 /// A station's queue: what is to be made, by its place in `RECIPES`, how far into the
@@ -270,7 +297,7 @@ impl Works {
 }
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<SmithAtHand>().add_systems(
+    app.add_systems(
         Update,
         (fit_out, open, leave, work, hand_over)
             .chain()
@@ -320,7 +347,7 @@ fn open(
 
 /// Walking away from a station closes its screen.
 fn leave(
-    player: Single<&Transform, With<Player>>,
+    player: Single<&Transform, IsLocalPlayer>,
     stations: Query<(&Prop, &Transform)>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut screen: ResMut<InventoryScreen>,
@@ -337,20 +364,24 @@ fn leave(
     }
 }
 
-/// Stations get on with their queues: those that work alone always, the rest while the
+/// Stations get on with their queues: those that work alone always, the rest while a
 /// player stays within reach.
 fn work(
     time: Res<Time>,
-    smith: Res<SmithAtHand>,
-    player: Single<&Transform, With<Player>>,
-    mut stations: Query<(&Prop, &Transform, &mut Works)>,
+    staff: Staff,
+    players: Query<&Transform, (With<Player>, Without<Works>)>,
+    mut stations: Query<(Entity, &Prop, &Transform, &mut Works)>,
 ) {
-    for (prop, at, mut works) in &mut stations {
+    for (entity, prop, at, mut works) in &mut stations {
         let Some(station) = prop.item.station else {
             continue;
         };
-        let attended = within_reach(player.translation, prop, at.translation);
-        if smith.works(station) && (station.works_alone() || attended) {
+        let attended = || {
+            players
+                .iter()
+                .any(|player| within_reach(player.translation, prop, at.translation))
+        };
+        if staff.works(entity, station) && (station.works_alone() || attended()) {
             works.advance(time.delta_secs());
         }
     }
@@ -360,17 +391,24 @@ fn work(
 /// are there; from one that works alone when they open it.
 fn hand_over(
     screen: Res<InventoryScreen>,
-    mut stations: Query<(Entity, &Prop, &mut Works)>,
+    player: Single<&Transform, IsLocalPlayer>,
+    mut stations: Query<(Entity, &Prop, &Transform, &mut Works)>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
     mut did: MessageWriter<Did>,
 ) {
-    for (entity, prop, mut works) in &mut stations {
+    for (entity, prop, at, mut works) in &mut stations {
         let Some(station) = prop.item.station else {
             continue;
         };
-        let at_it = screen.at.is_some_and(|(open, _)| open == entity);
-        if works.done.is_empty() || (station.works_alone() && !at_it) {
+        // A worked station hands over to whoever is working it, so only to this machine's
+        // player while they are there; one that works alone, when they open it.
+        let at_it = if station.works_alone() {
+            screen.at.is_some_and(|(open, _)| open == entity)
+        } else {
+            within_reach(player.translation, prop, at.translation)
+        };
+        if works.done.is_empty() || !at_it {
             continue;
         }
         while let Some(&first) = works.done.first() {
@@ -396,15 +434,16 @@ fn hand_over(
 }
 
 /// Queues one of a recipe at a station, paying for it now. Says why not if it cannot.
+/// `staffed` is whether the station has whoever it needs to work it (`Staff::works`).
 pub fn queue(
     works: &mut Works,
     index: usize,
-    smith: &SmithAtHand,
+    staffed: bool,
     belongings: &mut Belongings,
     notice: &mut Notice,
 ) {
     let recipe = &RECIPES[index];
-    if !smith.works(recipe.station) {
+    if !staffed {
         notice.say("The forge needs a smith to work it");
     } else if works.queue.len() >= MOST_QUEUED {
         notice.say(format!(
@@ -449,6 +488,7 @@ pub fn cancel(works: &mut Works, place: usize, belongings: &mut Belongings, noti
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
 
     fn index_of(makes: Made) -> usize {
         RECIPES
@@ -475,9 +515,33 @@ mod tests {
 
     #[test]
     fn the_forge_waits_for_a_smith_and_the_smelter_works_alone() {
-        assert!(!SmithAtHand(false).works(Station::Forge));
-        assert!(SmithAtHand(false).works(Station::Smelter));
+        let mut world = World::new();
+        let forge = Vec3::new(0.0, 2000.0, 0.0);
+        let station = world
+            .spawn((Transform::from_translation(forge), Works::default()))
+            .id();
+        let staffed = |world: &mut World, station_kind| {
+            world
+                .run_system_once(move |staff: Staff| staff.works(station, station_kind))
+                .unwrap()
+        };
+        assert!(!staffed(&mut world, Station::Forge));
+        assert!(staffed(&mut world, Station::Smelter));
         assert!(Station::Smelter.works_alone() && !Station::Forge.works_alone());
+        // A smith following you is not at work; one working beside the forge is.
+        let smith = world
+            .spawn(Person::new(
+                "Bren",
+                Doing::Following(Entity::PLACEHOLDER),
+                true,
+            ))
+            .id();
+        assert!(!staffed(&mut world, Station::Forge));
+        world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 1.8);
+        assert!(staffed(&mut world, Station::Forge));
+        // Someone at work at another forge far off does not work this one.
+        world.get_mut::<Person>(smith).unwrap().doing = Doing::Working(forge + Vec3::X * 50.0);
+        assert!(!staffed(&mut world, Station::Forge));
     }
 
     #[test]

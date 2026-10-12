@@ -4,6 +4,7 @@
 //! build menu (`build_menu`). Under the aiming mark, a line says what is picked and what
 //! each button would do.
 
+use super::IsLocalPlayer;
 use super::build_menu::BuildMenu;
 use super::controls::{Action, Controls, Settings};
 use super::flora::Growth;
@@ -255,7 +256,7 @@ pub fn steer(
     menu: Res<OptionsMenu>,
     build_menu: Res<BuildMenu>,
     mut dial: ResMut<Dial>,
-    mut builder: ResMut<Builder>,
+    mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
     // The wheel belongs to the hammer, with a part in it.
     let usable = !inventory.open
@@ -307,12 +308,12 @@ pub fn steer(
 fn draw(
     dial: Res<Dial>,
     settings: Res<Settings>,
-    builder: Res<Builder>,
+    builder: Single<&Builder, IsLocalPlayer>,
     inventory: Res<InventoryScreen>,
     focus: Res<Focus>,
     belongings: Belongings,
-    cutting: Res<Cutting>,
-    digging: Res<super::dig::Digging>,
+    cutting: Single<&Cutting, IsLocalPlayer>,
+    digging: Single<&super::dig::Digging, IsLocalPlayer>,
     growth: Query<&Growth>,
     options: Res<Options>,
     cursor: Single<&CursorOptions>,
@@ -485,9 +486,9 @@ fn draw(
 /// Fills the bar under the aiming mark while a job is held down: building, taking apart,
 /// cutting or digging.
 fn draw_progress(
-    builder: Res<Builder>,
-    cutting: Res<Cutting>,
-    digging: Res<super::dig::Digging>,
+    builder: Single<&Builder, IsLocalPlayer>,
+    cutting: Single<&Cutting, IsLocalPlayer>,
+    digging: Single<&super::dig::Digging, IsLocalPlayer>,
     mut bar: Single<&mut Visibility, With<ProgressBar>>,
     mut fill: Single<(&mut Node, &mut BackgroundColor), With<ProgressFill>>,
 ) {

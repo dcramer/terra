@@ -3,7 +3,7 @@
 //! decides what that is each frame, and each feature acts only on its own kind of thing,
 //! so two never answer the same key.
 
-use super::Player;
+use super::IsLocalPlayer;
 use super::controls::{Action, Settings};
 use super::crafting::Station;
 use super::options::OptionsMenu;
@@ -98,7 +98,7 @@ fn focus(
     menu: Res<OptionsMenu>,
     cursor: Single<&CursorOptions>,
     camera: Single<&GlobalTransform, With<MainCamera>>,
-    player: Single<&Transform, With<Player>>,
+    player: Single<&Transform, IsLocalPlayer>,
     things: Query<(Entity, &CanInteract, &GlobalTransform)>,
     mut focus: ResMut<Focus>,
 ) {

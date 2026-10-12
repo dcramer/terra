@@ -12,7 +12,7 @@ use super::flora::{Growth, Obstacles};
 use super::inventory::{Belongings, Cut, Cuttable, InventoryScreen, Tool};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::work::Hold;
-use super::{Player, Stance};
+use super::{IsLocalPlayer, Player, Stance};
 use crate::planet::MainCamera;
 use bevy::prelude::*;
 
@@ -24,7 +24,7 @@ const NEAR_M: f32 = 2.6;
 const FALL_SECONDS: f32 = 0.55;
 
 /// What the tool in hand is pointed at, and how far through cutting it is.
-#[derive(Resource, Default)]
+#[derive(Component, Default)]
 pub struct Cutting {
     pub target: Option<Entity>,
     held: Option<(Entity, Hold)>,
@@ -68,7 +68,7 @@ impl Felled {
 pub struct Harvesting;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Cutting>()
+    app.register_required_components::<Player, Cutting>()
         .add_systems(Update, (cut.in_set(Harvesting), fall));
 }
 
@@ -88,14 +88,14 @@ fn cut(
         ),
         (Without<Player>, Without<Felled>),
     >,
-    player: Single<(&Transform, &mut Stance), (With<Player>, Without<Growth>)>,
-    mut cutting: ResMut<Cutting>,
+    player: Single<(&Transform, &mut Stance), (IsLocalPlayer, Without<Growth>)>,
+    mut cutting: Single<&mut Cutting, IsLocalPlayer>,
     screen: Res<InventoryScreen>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
     mut obstacles: ResMut<Obstacles>,
-    skills: Single<&Skills, With<Player>>,
-    swing: Res<Swing>,
+    skills: Single<&Skills, IsLocalPlayer>,
+    swing: Single<&Swing, IsLocalPlayer>,
     mut did: MessageWriter<Did>,
     mut gizmos: Gizmos,
 ) {

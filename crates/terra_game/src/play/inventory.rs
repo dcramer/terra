@@ -11,6 +11,7 @@
 //! the list of raw items, what you start with, what things cost, the sizes, and that
 //! everything is refunded in full.
 
+use super::IsLocalPlayer;
 use bevy::{ecs::system::SystemParam, prelude::*};
 use terra_items::{
     ActionBar, Catalogue, Equipment, GearSlot, Grid, IdSource, Item, ItemId, ItemKind, KindDef,
@@ -771,6 +772,30 @@ pub fn give(items: &mut Items, grid: &mut Grid, raw: Raw, count: u32) -> u32 {
     given
 }
 
+/// Wears everything worn that wears, by so much, as a blow taken does (D99). Returns the
+/// kinds that broke.
+pub fn wear_worn(items: &Items, gear: &mut Equipment, amount: u16) -> Vec<ItemKind> {
+    let slots: Vec<GearSlot> = gear.iter().map(|(slot, _)| slot).collect();
+    slots
+        .into_iter()
+        .filter_map(|slot| {
+            let item = gear.worn(slot)?;
+            (gear.wear(&items.catalogue, slot, amount) == Ok(true)).then_some(item.kind)
+        })
+        .collect()
+}
+
+/// Empties a backpack into a bag of the same size, as when someone goes down (D84).
+pub fn empty_into_bag(items: &Items, backpack: &mut Grid) -> Grid {
+    let size = backpack.size();
+    let mut bag = Grid::new(size.w, size.h);
+    let ids: Vec<ItemId> = backpack.iter().map(|placed| placed.item.id).collect();
+    for id in ids {
+        let _ = terra_items::transfer(&items.catalogue, backpack, &mut bag, id, None);
+    }
+    bag
+}
+
 /// Whether the inventory is open on screen.
 #[derive(Resource, Default)]
 pub struct InventoryScreen {
@@ -793,11 +818,12 @@ pub struct Gained {
     pub count: u32,
 }
 
-/// What the player carries, for a system to read or change.
+/// What this machine's player carries, for a system driven by their input to read or change.
 #[derive(SystemParam)]
 pub struct Belongings<'w, 's> {
     items: ResMut<'w, Items>,
-    player: Single<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static mut Gear)>,
+    player:
+        Single<'w, 's, (&'static mut Backpack, &'static mut Bar, &'static mut Gear), IsLocalPlayer>,
     gained: MessageWriter<'w, Gained>,
     broke: MessageWriter<'w, Broke>,
 }
@@ -850,14 +876,8 @@ impl Belongings<'_, '_> {
 
     /// Wears everything worn that wears, by so much: a blow taken (D99).
     pub fn wear_worn(&mut self, amount: u16) {
-        let slots: Vec<GearSlot> = self.gear().iter().map(|(slot, _)| slot).collect();
-        for slot in slots {
-            let Some(item) = self.gear().worn(slot) else {
-                continue;
-            };
-            if self.player.2.0.wear(&self.items.catalogue, slot, amount) == Ok(true) {
-                self.broke.write(Broke { kind: item.kind });
-            }
+        for kind in wear_worn(&self.items, &mut self.player.2.0, amount) {
+            self.broke.write(Broke { kind });
         }
     }
 
@@ -928,15 +948,7 @@ impl Belongings<'_, '_> {
     /// bar keeps pointing at what was on it, so taking the bag back puts the tools back
     /// in reach.
     pub fn empty_into_bag(&mut self) -> Grid {
-        let backpack = &mut self.player.0;
-        let size = backpack.0.size();
-        let mut bag = Grid::new(size.w, size.h);
-        let ids: Vec<ItemId> = backpack.0.iter().map(|placed| placed.item.id).collect();
-        for id in ids {
-            let _ =
-                terra_items::transfer(&self.items.catalogue, &mut backpack.0, &mut bag, id, None);
-        }
-        bag
+        empty_into_bag(&self.items, &mut self.player.0.0)
     }
 
     /// Takes back what fits from a bag. Returns how many things came back.

@@ -16,7 +16,7 @@ use super::inventory::{Belongings, InventoryScreen, Raw, Tool};
 use super::models::bake;
 use super::models::read_model;
 use super::skills::{Did, Skill, Skills};
-use super::{Downed, Player, Stance, View};
+use super::{Downed, IsLocalPlayer, Player, Stance, View};
 use crate::build::Site;
 use crate::planet::MainCamera;
 use crate::planet::Planet;
@@ -108,12 +108,12 @@ fn draw(
     time: Res<Time>,
     controls: Controls,
     screen: Res<InventoryScreen>,
-    view: Res<View>,
+    view: Single<&View, IsLocalPlayer>,
     look: Res<ArrowLook>,
     planet: Res<Planet>,
     creatures: Query<(&Creature, &Transform, &Body), Without<Player>>,
     camera: Single<&Transform, (With<MainCamera>, Without<Player>)>,
-    player: Single<(&Transform, &mut Stance, Has<Downed>), With<Player>>,
+    player: Single<(&Transform, &mut Stance, Has<Downed>), IsLocalPlayer>,
     mut belongings: Belongings,
     mut drawing: ResMut<Drawing>,
     mut notice: ResMut<Notice>,
@@ -190,7 +190,7 @@ fn fly(
     time: Res<Time>,
     planet: Res<Planet>,
     site: Res<Site>,
-    skills: Single<&Skills, With<Player>>,
+    skills: Single<&Skills, IsLocalPlayer>,
     mut arrows: Query<(Entity, &mut Arrow, &mut Transform), Without<Creature>>,
     mut creatures: Query<(Entity, &mut Creature, &Transform, &Body), Without<Arrow>>,
     mut did: MessageWriter<Did>,

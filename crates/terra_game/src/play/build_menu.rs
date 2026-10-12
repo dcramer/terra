@@ -7,6 +7,7 @@
 //!   Arrows             move between tiles     Enter     pick
 //!   Backspace          put the hammer's part away
 
+use super::IsLocalPlayer;
 use super::catalogue::{self, Kind, PARTS, Tab};
 use super::controls::{Action, Settings};
 use super::grab_mouse;
@@ -146,7 +147,7 @@ fn toggle(
     belongings: Belongings,
     window: Single<(&Window, &mut CursorOptions)>,
     mut menu: ResMut<BuildMenu>,
-    mut builder: ResMut<Builder>,
+    mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
     let (window, mut cursor) = window.into_inner();
     let hammer = belongings.holding() == Some(Tool::Hammer);
@@ -191,7 +192,7 @@ fn navigate(
     keys: Res<ButtonInput<KeyCode>>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut menu: ResMut<BuildMenu>,
-    mut builder: ResMut<Builder>,
+    mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
     if !menu.open {
         return;
@@ -242,7 +243,7 @@ fn click(
     tabs: Query<(&Interaction, &TabButton), Changed<Interaction>>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut menu: ResMut<BuildMenu>,
-    mut builder: ResMut<Builder>,
+    mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
     if !menu.open {
         return;
@@ -281,7 +282,7 @@ fn cost_of(part: usize, variant: usize) -> String {
 /// Spawns the tiles for the tab shown, and the recent row, when they change.
 fn lay_out(
     mut commands: Commands,
-    builder: Res<Builder>,
+    builder: Single<&Builder, IsLocalPlayer>,
     grid: Single<Entity, With<Grid>>,
     recent: Single<Entity, With<Recent>>,
     mut menu: ResMut<BuildMenu>,
@@ -326,7 +327,7 @@ fn lay_out(
 #[allow(clippy::type_complexity)]
 fn draw(
     menu: Res<BuildMenu>,
-    builder: Res<Builder>,
+    builder: Single<&Builder, IsLocalPlayer>,
     belongings: Belongings,
     mut panel: Single<&mut Visibility, With<Panel>>,
     mut tabs: Query<(&TabButton, &mut BackgroundColor), Without<Tile>>,

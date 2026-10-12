@@ -8,6 +8,7 @@
 //! It reads [`Struck`] and [`Hurt`], which `combat` writes, so how a blow was dealt,
 //! swung or shot, is no concern here.
 
+use super::IsLocalPlayer;
 use super::combat::{Hurt, Struck};
 use super::creatures::Species;
 use bevy::prelude::*;
@@ -209,9 +210,17 @@ fn jolt(
     }
 }
 
-/// The player hurt: red at the edges, and the view shakes, both by how bad it was.
-fn hurt(mut blows: MessageReader<Hurt>, mut hurting: ResMut<Hurting>, mut shake: ResMut<Shake>) {
-    for &Hurt(amount) in blows.read() {
+/// This machine's player hurt: red at the edges, and the view shakes, both by how bad it was.
+fn hurt(
+    mut blows: MessageReader<Hurt>,
+    ours: Single<Entity, IsLocalPlayer>,
+    mut hurting: ResMut<Hurting>,
+    mut shake: ResMut<Shake>,
+) {
+    for &Hurt { player, amount } in blows.read() {
+        if player != *ours {
+            continue;
+        }
         let how_bad = (0.4 + amount / 25.0).min(1.0);
         hurting.0 = hurting.0.max(how_bad);
         *shake = Shake {

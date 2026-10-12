@@ -11,14 +11,14 @@ use super::bag::Notice;
 use super::catalogue;
 use super::claim::Claim;
 use super::controls::Settings;
-use super::crafting::{self, RECIPES, SmithAtHand, Works};
+use super::crafting::{self, RECIPES, Works};
 use super::daylight::Clock;
 use super::inventory::{self, Backpack, Bar, Gear, Items, SLOTS};
 use super::people::{Doing, Person};
 use super::props::{self, Models, Prop, Theirs};
 use super::skills::{Skill, Skills};
 use super::vitals::Vitals;
-use super::{Player, View};
+use super::{IsLocalPlayer, Player, View};
 use crate::build::Site;
 use crate::planet::Planet;
 use crate::shell::Options;
@@ -178,7 +178,7 @@ fn load(
     models: Res<Models>,
     mut site: ResMut<Site>,
     mut items: ResMut<Items>,
-    mut view: ResMut<View>,
+    mut view: Single<&mut View, IsLocalPlayer>,
     mut waiting: ResMut<Waiting>,
     mut meshes: ResMut<Assets<Mesh>>,
     placed: Query<Entity, (With<Prop>, Without<Theirs>)>,
@@ -191,7 +191,7 @@ fn load(
             &mut Gear,
             &mut Bar,
         ),
-        With<Player>,
+        IsLocalPlayer,
     >,
 ) {
     let Some(path) = path else { return };
@@ -367,7 +367,7 @@ fn load(
     info!("Loaded the saved game from {}.", path.0.display());
 }
 
-fn restore_claim(mut waiting: ResMut<Waiting>, mut claim: ResMut<Claim>) {
+fn restore_claim(mut waiting: ResMut<Waiting>, mut claim: Single<&mut Claim, IsLocalPlayer>) {
     if let Some(step) = waiting.claim_step
         && claim.stone.is_some()
     {
@@ -380,7 +380,7 @@ fn restore_people(
     mut commands: Commands,
     mut waiting: ResMut<Waiting>,
     mut people: Query<(Entity, &mut Person, &mut Transform)>,
-    mut smith: ResMut<SmithAtHand>,
+    player: Single<Entity, IsLocalPlayer>,
 ) {
     if waiting.people.is_empty() {
         return;
@@ -395,11 +395,9 @@ fn restore_people(
             continue;
         };
         person.doing = match (saved.doing.as_str(), saved.spot) {
-            ("working", Some(spot)) => {
-                smith.0 |= person.smith;
-                Doing::Working(Vec3::from(spot))
-            }
-            ("following", _) => Doing::Following,
+            ("working", Some(spot)) => Doing::Working(Vec3::from(spot)),
+            // A saved game is this machine's player's, so whoever followed, follows them.
+            ("following", _) => Doing::Following(*player),
             _ => continue,
         };
         transform.translation = Vec3::from(saved.at);
@@ -419,12 +417,12 @@ fn autosave(
     path: Res<SavePath>,
     planet: Res<Planet>,
     site: Res<Site>,
-    claim: Res<Claim>,
+    claim: Single<&Claim, IsLocalPlayer>,
     items: Res<Items>,
-    view: Res<View>,
+    view: Single<&View, IsLocalPlayer>,
     props: Query<(&Prop, Option<&Works>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
-    player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), With<Player>>,
+    player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), IsLocalPlayer>,
     mut since: Local<f32>,
     mut notice: ResMut<Notice>,
 ) {
@@ -458,12 +456,12 @@ fn save_on_exit(
     path: Res<SavePath>,
     planet: Res<Planet>,
     site: Res<Site>,
-    claim: Res<Claim>,
+    claim: Single<&Claim, IsLocalPlayer>,
     items: Res<Items>,
-    view: Res<View>,
+    view: Single<&View, IsLocalPlayer>,
     props: Query<(&Prop, Option<&Works>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
-    player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), With<Player>>,
+    player: Single<(&Transform, &Vitals, &Skills, &Backpack, &Gear, &Bar), IsLocalPlayer>,
 ) {
     if exits.read().next().is_some() {
         let save = gather(
@@ -610,7 +608,7 @@ fn gather(
             .iter()
             .filter_map(|(person, at)| {
                 let (doing, spot) = match person.doing {
-                    Doing::Following => ("following", None),
+                    Doing::Following(_) => ("following", None),
                     Doing::Working(spot) => ("working", Some(spot.into())),
                     _ => return None,
                 };

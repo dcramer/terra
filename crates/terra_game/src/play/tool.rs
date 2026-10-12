@@ -35,6 +35,7 @@ use super::dial::Dial;
 use super::inventory::{Belongings, Cost, InventoryScreen, Raw, Tool};
 use super::props::{Blocked, Prop};
 use super::work::Hold;
+use super::{IsLocalPlayer, Player};
 use bevy::{
     input::mouse::AccumulatedMouseScroll,
     light::{NotShadowCaster, NotShadowReceiver},
@@ -144,7 +145,8 @@ struct Work {
     began_at: Vec3,
 }
 
-#[derive(Resource)]
+/// A player's builder: what is picked, turned and aimed at, and the work in hand.
+#[derive(Component)]
 pub struct Builder {
     /// Which part is picked, as its place in the catalogue.
     pub part: usize,
@@ -188,6 +190,41 @@ pub struct Builder {
     /// Why the claim forbids building here, if it does (D94).
     unclaimed: Option<&'static str>,
     pub target: Target,
+}
+
+impl Default for Builder {
+    fn default() -> Self {
+        Self {
+            part: 0,
+            stowed: true,
+            variants: vec![0; PARTS.len()],
+            turn: 0.0,
+            room_turned: false,
+            wall_turned: false,
+            run: Vec::new(),
+            snap: true,
+            snapping: true,
+            viewed: None,
+            wheel: 0,
+            before_mode: None,
+            carrying: None,
+            work: None,
+            must_release: false,
+            pull: false,
+            shrinking: None,
+            cancel: false,
+            price: None,
+            short: None,
+            unclaimed: None,
+            target: Target::Nothing,
+        }
+    }
+}
+
+/// How this machine draws its player's builder: the highlight, the ghost of what would be
+/// built, and the work going on.
+#[derive(Resource)]
+pub struct BuilderLook {
     /// The rectangles the highlight was last drawn for, and in which look.
     shown: (Vec<[Vec3; 4]>, usize),
     highlight: Entity,
@@ -292,12 +329,14 @@ impl Builder {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup).add_systems(
-        Update,
-        (choose, aim, afford, act, animate, highlight)
-            .chain()
-            .in_set(Acting),
-    );
+    app.register_required_components::<Player, Builder>()
+        .add_systems(Startup, setup)
+        .add_systems(
+            Update,
+            (choose, aim, afford, act, animate, highlight)
+                .chain()
+                .in_set(Acting),
+        );
 }
 
 fn setup(
@@ -354,29 +393,7 @@ fn setup(
             Visibility::Hidden,
         ))
         .id();
-    commands.insert_resource(Builder {
-        part: 0,
-        stowed: true,
-        variants: vec![0; PARTS.len()],
-        turn: 0.0,
-        room_turned: false,
-        wall_turned: false,
-        run: Vec::new(),
-        snap: true,
-        snapping: true,
-        viewed: None,
-        wheel: 0,
-        before_mode: None,
-        carrying: None,
-        work: None,
-        must_release: false,
-        pull: false,
-        shrinking: None,
-        cancel: false,
-        price: None,
-        short: None,
-        unclaimed: None,
-        target: Target::Nothing,
+    commands.insert_resource(BuilderLook {
         shown: (Vec::new(), 0),
         highlight,
         ghost,
@@ -395,7 +412,7 @@ fn choose(
     dial: Res<Dial>,
     screen: Res<InventoryScreen>,
     belongings: Belongings,
-    mut builder: ResMut<Builder>,
+    mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
     builder.wheel = 0;
     if screen.open || belongings.holding() != Some(Tool::Hammer) {

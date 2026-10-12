@@ -1,11 +1,12 @@
 //! A torch in hand burns: a small flame at its head and a warm, wavering light around
-//! the player, which is what lets them see at night (D134). The torch's look is shown in
+//! whoever holds it, which is what lets them see at night (D134). The torch's look is shown in
 //! hand as any held thing's is (`held`); this only sets it alight.
 
+use super::Player;
 use super::held::Grip;
-use super::inventory::{Belongings, Tool};
+use super::inventory::{self, Backpack, Bar, Items, Tool};
 use crate::character::Held;
-use bevy::{light::NotShadowCaster, prelude::*};
+use bevy::{light::NotShadowCaster, platform::collections::HashSet, prelude::*};
 
 /// How bright a torch is, in lumens, and how far its light reaches.
 const TORCH_LUMENS: f32 = 160_000.0;
@@ -46,34 +47,48 @@ fn setup(
     });
 }
 
-/// Sets the torch in hand alight, and puts it out when it is put away. The flame goes on
-/// the look in hand, so it moves with it.
+/// Sets a torch in a player's hand alight, and puts it out when it is put away. The flame
+/// goes on the look in hand, so it moves with it.
 fn light(
     mut commands: Commands,
     look: Res<FlameLook>,
-    belongings: Belongings,
-    grip: Option<Single<Entity, With<Grip>>>,
-    held: Query<(Entity, &ChildOf), With<Held>>,
+    items: Res<Items>,
+    players: Query<(&Backpack, &Bar), With<Player>>,
+    grips: Query<(Entity, &Grip)>,
+    children: Query<&Children>,
+    held: Query<(), With<Held>>,
     flames: Query<(Entity, &ChildOf), With<Flame>>,
 ) {
-    let Some(grip) = grip else { return };
-    let in_hand = held
-        .iter()
-        .find(|(_, parent)| parent.parent() == *grip)
-        .map(|(entity, _)| entity);
-    let burning = belongings.holding() == Some(Tool::Torch);
-    // Anything alight that is not the torch in hand goes out.
+    // What is alight now: the look in each hand holding a torch.
+    let mut alight = HashSet::new();
+    for (hand, grip) in &grips {
+        let burning = players.get(grip.player).is_ok_and(|(backpack, bar)| {
+            inventory::holding(&items, &backpack.0, &bar.0) == Some(Tool::Torch)
+        });
+        let in_hand = children
+            .get(hand)
+            .ok()
+            .and_then(|looks| looks.iter().find(|&each| held.contains(each)));
+        if let (true, Some(torch)) = (burning, in_hand) {
+            alight.insert(torch);
+        }
+    }
+    // Anything alight that is not a torch in hand goes out.
+    let mut lit = HashSet::new();
     for (flame, parent) in &flames {
-        if !burning || Some(parent.parent()) != in_hand {
+        if alight.contains(&parent.parent()) {
+            lit.insert(parent.parent());
+        } else {
             commands.entity(flame).despawn();
         }
     }
-    let (true, Some(torch)) = (burning, in_hand) else {
-        return;
-    };
-    if flames.iter().any(|(_, parent)| parent.parent() == torch) {
-        return;
+    for torch in alight.into_iter().filter(|torch| !lit.contains(torch)) {
+        light_torch(&mut commands, &look, torch);
     }
+}
+
+/// Puts a flame, with its light, on a torch's head.
+fn light_torch(commands: &mut Commands, look: &FlameLook, torch: Entity) {
     commands.entity(torch).with_child((
         Name::new("Flame"),
         Flame,

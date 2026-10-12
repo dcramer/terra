@@ -7,7 +7,7 @@
 //!
 //!   H             eat the most filling food you carry
 
-use super::Player;
+use super::IsLocalPlayer;
 use super::bag::Notice;
 use super::controls::{Action, Controls};
 use super::inventory::{Belongings, Raw};
@@ -191,7 +191,7 @@ fn setup(mut commands: Commands) {
 /// H eats the most filling food carried.
 fn eat(
     controls: Controls,
-    mut vitals: Single<&mut Vitals, With<Player>>,
+    mut vitals: Single<&mut Vitals, IsLocalPlayer>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
 ) {
@@ -212,7 +212,7 @@ fn eat(
 }
 
 fn show(
-    vitals: Single<&Vitals, With<Player>>,
+    vitals: Single<&Vitals, IsLocalPlayer>,
     options: Res<crate::shell::Options>,
     mut bars: Query<(&Bar, &mut Node, &ChildOf)>,
     mut frames: Query<&mut Visibility, Without<Bar>>,

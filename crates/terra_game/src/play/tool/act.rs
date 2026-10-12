@@ -13,7 +13,7 @@ use crate::play::noise::{Cue, Noise};
 use crate::play::props::{self, Models, Prop};
 use crate::play::skills::{Did, ONCE, Skill};
 use crate::play::work::Hold;
-use crate::play::{Player, Stance};
+use crate::play::{IsLocalPlayer, Stance};
 use terra_build::{BuildOp, Face, Panel};
 
 /// Starts, carries on and finishes building and taking apart. Both take a moment: the
@@ -26,13 +26,13 @@ pub(super) fn act(
     mut planet: ResMut<Planet>,
     models: Res<Models>,
     props: Query<&Prop>,
-    mut builder: ResMut<Builder>,
+    mut builder: Single<&mut Builder, IsLocalPlayer>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
     mut site: ResMut<Site>,
     mut did: MessageWriter<Did>,
     mut noise: MessageWriter<Noise>,
-    player: Single<(&Transform, &mut Stance), With<Player>>,
+    player: Single<(&Transform, &mut Stance), IsLocalPlayer>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let (player_at, mut stance) = player.into_inner();
@@ -380,7 +380,8 @@ pub(super) fn animate(
     site: Res<Site>,
     planet: Res<Planet>,
     models: Res<Models>,
-    mut builder: ResMut<Builder>,
+    mut builder: Single<&mut Builder, IsLocalPlayer>,
+    drawn: Res<BuilderLook>,
     mut props: Query<&mut Transform, With<Prop>>,
 ) {
     let (growing, taking) = match &builder.work {
@@ -406,7 +407,7 @@ pub(super) fn animate(
         }) => (None, Some((*entity, hold.fraction()))),
         _ => (None, None),
     };
-    let rising = builder.rising;
+    let rising = drawn.rising;
     match growing.and_then(|growing| Some((growing, models.of(growing.0)?.solid.clone()?))) {
         Some(((item, at, lift, turn, indoors, done), mesh)) => {
             let stood = props::standing(&site, &planet, at, lift + item.lift, turn, indoors);

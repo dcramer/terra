@@ -9,7 +9,7 @@
 //!   In the inventory, point at a tool and press 1 to 8 to put it in that slot; click
 //!   gear in the backpack to wear it, and click a slot of the sheet to take it off.
 
-use super::Player;
+use super::IsLocalPlayer;
 use super::build_menu::BuildMenu;
 use super::controls::{Action, Settings};
 use super::dial::Dial;
@@ -474,7 +474,7 @@ fn click(
     shown: Query<(&Interaction, &Shown), Changed<Interaction>>,
     boxes: Query<(&Interaction, &GearBox), Changed<Interaction>>,
     mut belongings: Belongings,
-    mut vitals: Single<&mut Vitals, With<Player>>,
+    mut vitals: Single<&mut Vitals, IsLocalPlayer>,
     mut notice: ResMut<Notice>,
 ) {
     if !screen.open {
