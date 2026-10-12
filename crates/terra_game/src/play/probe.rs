@@ -168,7 +168,7 @@ fn aim(
     let Some(((east, south), up_m, frames)) = asked.aim else {
         return;
     };
-    let ground = planet.ground_at(site.frame.transform_point(Vec3::new(east, 0.0, south)));
+    let ground = planet.ground_at(site.start.transform_point(Vec3::new(east, 0.0, south)));
     let target = ground + ground.normalize() * up_m;
     let eye = camera.translation;
     let off = (target - eye).reject_from(*camera.forward()).length();
@@ -269,7 +269,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
     let site = world
         .get_resource::<Site>()
         .ok_or_else(|| refused("no site yet"))?
-        .frame;
+        .start;
     let (transform, motion, downed, body, backpack, gear, bar, view) = players
         .single(world)
         .map_err(|_| refused("no player yet"))?;

@@ -10,6 +10,7 @@ use super::interact::{Focus, Focusing, Interactable};
 use super::inventory::{Belongings, Cost, describe};
 use super::props::Prop;
 use super::{IsLocalPlayer, LocalPlayer, Player};
+use crate::build::{Site, frame_at};
 use crate::planet::Planet;
 use bevy::prelude::*;
 
@@ -58,7 +59,48 @@ impl Claim {
 
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Claim>()
-        .add_systems(Update, (track, grow.after(Focusing), show));
+        .add_systems(
+            Update,
+            ((track, settle).chain(), grow.after(Focusing), show),
+        );
+}
+
+/// A base is begun where its claim is: when the player's first claim stone goes down
+/// before anything is built, the base's grid moves to stand there, its floor level with
+/// the ground at the stone (D57). Otherwise a base begun on lower ground than the start
+/// would stand on tall foundations. Things already set down keep their places.
+fn settle(
+    mut commands: Commands,
+    mut props: Query<(&mut Prop, &Transform), Without<Player>>,
+    mut site: ResMut<Site>,
+    planet: Res<Planet>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    let Some(stone) = props
+        .iter_mut()
+        .find(|(prop, _)| prop.is_added() && prop.item.claims)
+        .map(|(_, at)| *at)
+    else {
+        return;
+    };
+    if !site.operations.is_empty() {
+        return;
+    }
+    let frame = frame_at(stone.translation, &site.frame);
+    if frame.translation.distance(site.frame.translation) < 0.01 {
+        return;
+    }
+    site.move_to(frame, &mut commands, &planet, &mut meshes);
+    let to_base = frame.compute_affine().inverse();
+    for (mut prop, at) in &mut props {
+        if !prop.indoors {
+            prop.at = to_base.transform_point3(at.translation - at.up() * prop.lift);
+        }
+    }
+    info!(
+        "Began the base at the claim stone, {:.1} m from the centre.",
+        frame.translation.length()
+    );
 }
 
 /// Notices a claim stone being placed or taken away. Stones are placed by this machine's

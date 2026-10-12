@@ -63,6 +63,10 @@ const ROOM_CLEARANCE_M: f32 = 0.2;
 pub(super) struct Site {
     #[deref]
     pub build: Build,
+    /// Where the base first stood, before any claim moved it: "the start", the fixed place
+    /// that every position given as metres east and south is measured from, by scripts,
+    /// the map and the log, wherever the base is later begun.
+    pub start: Transform,
     camera_placed: bool,
 }
 
@@ -231,6 +235,23 @@ impl Build {
             (-margin..=ramp.length + margin).contains(&along)
                 && across.abs() <= ramp.width * 0.5 + margin
         })
+    }
+
+    /// Moves the build to stand somewhere else, as when a base is begun where its claim
+    /// is: its parts are drawn there from then on.
+    pub(super) fn move_to(
+        &mut self,
+        frame: Transform,
+        commands: &mut Commands,
+        planet: &Planet,
+        meshes: &mut Assets<Mesh>,
+    ) {
+        self.frame = frame;
+        for part in [self.structure, self.glass, self.foundation, self.steps] {
+            commands.entity(part).insert(frame);
+        }
+        self.revision += 1;
+        redraw(commands, self, planet, meshes);
     }
 
     /// Applies several operations as one act, and redraws the base once. Returns whether
@@ -546,6 +567,17 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
     })
 }
 
+/// Where a base begun at a point on the ground stands: level there, its floor at the ground,
+/// and turned as `like` is, so its grid keeps the same heading wherever it is begun (D57).
+pub(super) fn frame_at(point: Vec3, like: &Transform) -> Transform {
+    let up = point.normalize();
+    Transform {
+        translation: point,
+        rotation: Quat::from_rotation_arc(*like.up(), up) * like.rotation,
+        scale: Vec3::ONE,
+    }
+}
+
 /// Raises a build's frame until its floor clears the highest ground under it. The
 /// stand-in planet cannot be dug, so a build has to stay out of the ground's way; a
 /// foundation and steps make up the difference.
@@ -614,6 +646,7 @@ fn setup(
     commands.insert_resource(look);
     commands.insert_resource(Site {
         build,
+        start: frame,
         camera_placed: false,
     });
 

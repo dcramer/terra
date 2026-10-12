@@ -224,7 +224,7 @@ fn prepare(
     // Herds in the meadow, and those that keep a lair in a hollow further off, each as
     // many as its kind says.
     let on_ground = |east: f32, south: f32| {
-        let point = site.frame.transform_point(Vec3::new(east, 0.0, south));
+        let point = site.start.transform_point(Vec3::new(east, 0.0, south));
         planet.ground_at(point)
     };
     let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 0.6;
@@ -237,7 +237,7 @@ fn prepare(
         .map(|(east, south)| on_ground(east, south))
         .find(|&point| dry(point));
     let local = |point: Vec3| {
-        site.frame
+        site.start
             .compute_affine()
             .inverse()
             .transform_point3(point)

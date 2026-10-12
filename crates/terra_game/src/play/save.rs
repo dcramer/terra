@@ -38,6 +38,9 @@ struct SaveFile {
     version: u32,
     player: SavedPlayer,
     base: Vec<BuildOp>,
+    /// Where the base stands: the place and turn of its grid, begun at its claim stone.
+    #[serde(default)]
+    frame: Option<([f32; 3], [f32; 4])>,
     props: Vec<SavedProp>,
     claim_step: usize,
     people: Vec<SavedPerson>,
@@ -245,7 +248,12 @@ fn load(
         }
     }
 
-    // The base and what stands in and around it.
+    // The base and what stands in and around it, where it was begun.
+    if let Some((at, turn)) = save.frame {
+        let frame =
+            Transform::from_translation(Vec3::from(at)).with_rotation(Quat::from_array(turn));
+        site.move_to(frame, &mut commands, &planet, &mut meshes);
+    }
     site.replace_with(&save.base, &mut commands, &planet, &mut meshes);
     for entity in &placed {
         commands.entity(entity).despawn();
@@ -548,6 +556,10 @@ fn gather(
             picked: bar.0.picked(),
         },
         base: site.operations.clone(),
+        frame: Some((
+            site.frame.translation.into(),
+            site.frame.rotation.to_array(),
+        )),
         props: props
             .iter()
             .map(|(prop, works)| {
@@ -677,6 +689,7 @@ mod tests {
                 min: [0, 0, 0],
                 max: [2, 0, 2],
             }],
+            frame: Some(([1.0, 2000.0, 2.0], [0.0, 0.0, 0.0, 1.0])),
             props: vec![SavedProp {
                 file: "Table_Small".to_string(),
                 at: [1.0, 0.0, 2.0],

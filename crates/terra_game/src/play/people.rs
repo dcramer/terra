@@ -217,7 +217,7 @@ fn arrive(
         let feet = planet.ground_at(arrival.at);
         let up = feet.normalize();
         // Where, in the terms --at and --face take, so a scripted run can go to them.
-        let local = site.frame.compute_affine().inverse().transform_point3(feet);
+        let local = site.start.compute_affine().inverse().transform_point3(feet);
         info!(
             "{} is {:.1} m east and {:.1} m south of the start.",
             arrival.name, local.x, local.z

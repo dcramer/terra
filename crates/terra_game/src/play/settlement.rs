@@ -136,7 +136,7 @@ fn found(
     mut clear: MessageWriter<ClearAround>,
 ) {
     let on_ground = |east: f32, south: f32| {
-        planet.ground_at(site.frame.transform_point(Vec3::new(east, 0.0, south)))
+        planet.ground_at(site.start.transform_point(Vec3::new(east, 0.0, south)))
     };
     let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 1.0;
     let Some(middle) = [(-70.0, 55.0), (75.0, 60.0), (-60.0, -75.0), (60.0, -80.0)]

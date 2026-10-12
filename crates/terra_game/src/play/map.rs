@@ -64,13 +64,13 @@ pub fn plugin(app: &mut App) {
 fn pixel_to_planet(site: &Site, x: usize, y: usize) -> Vec3 {
     let east = (x as f32 - PIXELS as f32 * 0.5) * METRES_PER_PIXEL;
     let south = (y as f32 - PIXELS as f32 * 0.5) * METRES_PER_PIXEL;
-    site.frame.transform_point(Vec3::new(east, 0.0, south))
+    site.start.transform_point(Vec3::new(east, 0.0, south))
 }
 
 /// Which pixel a point on the planet falls in, if it is on the map.
 fn planet_to_pixel(site: &Site, point: Vec3) -> Option<(usize, usize)> {
     let local = site
-        .frame
+        .start
         .compute_affine()
         .inverse()
         .transform_point3(point);

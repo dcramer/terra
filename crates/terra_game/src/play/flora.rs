@@ -247,7 +247,7 @@ fn plant(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
 ) {
-    let middle = site.frame.translation;
+    let middle = site.start.translation;
     let up = middle.normalize();
     let east = up.cross(Vec3::X).normalize();
     let ground = Patch {
@@ -304,7 +304,7 @@ fn plant(
     };
 
     let sea = planet.sea_radius_m();
-    let to_base = site.frame.compute_affine().inverse();
+    let to_base = site.start.compute_affine().inverse();
     let woods = Noise::new(seed.derive("woods"));
     let species = Noise::new(seed.derive("species"));
     let blooms = Noise::new(seed.derive("blooms"));
@@ -491,7 +491,7 @@ fn plant(
         });
     for (kind, beside, size) in by_the_door {
         let model = &models[kind][0];
-        let point = planet.ground_at(site.frame.transform_point(beside));
+        let point = planet.ground_at(site.start.transform_point(beside));
         let mut rng = seed.derive("props").rng();
         put(
             model,

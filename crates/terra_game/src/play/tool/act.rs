@@ -139,7 +139,11 @@ pub(super) fn act(
                         turn,
                         indoors,
                     );
-                    info!("Placed a {} at {at}, {lift} up.", item.name);
+                    info!(
+                        "Placed a {} at {}, {lift} up.",
+                        item.name,
+                        from_start(&site, at)
+                    );
                     did.write(Did(Skill::Building, ONCE));
                     belongings.wear_in_hand(1);
                     noise.write(Noise::at(Cue::Placed, work_at));
@@ -222,7 +226,11 @@ pub(super) fn act(
                     builder.turn,
                     indoors,
                 );
-                info!("Placed a {} at {at}, {lift} up.", carried.item.name);
+                info!(
+                    "Placed a {} at {}, {lift} up.",
+                    carried.item.name,
+                    from_start(&site, carried.at)
+                );
                 stance.since_acting = 0.0;
             }
             return;
@@ -440,4 +448,14 @@ pub(super) fn animate(
         transform.scale = Vec3::splat(1.0 - 0.7 * done * done);
         builder.shrinking = Some(entity);
     }
+}
+
+/// A place in the base's own space as metres east, up and south of the start, which is how
+/// scripts and the log give places, wherever the base was begun.
+fn from_start(site: &Site, at: Vec3) -> Vec3 {
+    let world = site.frame.transform_point(at);
+    site.start
+        .compute_affine()
+        .inverse()
+        .transform_point3(world)
 }

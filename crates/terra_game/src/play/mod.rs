@@ -283,7 +283,7 @@ fn spawn(
     let (approach, facing) = site.approach();
     // For testing, a run can start somewhere else (--at).
     let outside = match options.start_at {
-        Some((east, south)) => site.frame.transform_point(Vec3::new(east, 0.0, south)),
+        Some((east, south)) => site.start.transform_point(Vec3::new(east, 0.0, south)),
         None => site.frame.transform_point(approach - facing * 5.0),
     };
     let feet = planet.ground_at(outside);
@@ -362,7 +362,7 @@ fn warp(
         return;
     };
     let (mut transform, mut motion, mut view) = player.into_inner();
-    let place = |(east, south): (f32, f32)| site.frame.transform_point(Vec3::new(east, 0.0, south));
+    let place = |(east, south): (f32, f32)| site.start.transform_point(Vec3::new(east, 0.0, south));
     let feet = planet.ground_at(place(at));
     let up = feet.normalize();
     let ahead = facing.map_or(view.forward, |facing| place(facing) - feet);
