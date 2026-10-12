@@ -7,3 +7,5 @@ shots/
 .claude/worktrees/
 # Local secrets, such as the token stats key. Copy .env.example.
 .env
+# The save game `cargo xtask loop` plays through.
+loop.ron
