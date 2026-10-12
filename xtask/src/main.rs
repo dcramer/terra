@@ -1,6 +1,8 @@
 //! Project tasks, and the one place every tool is started from. Run as `cargo xtask <task>`;
 //! `cargo xtask tools` lists them all, from `TASKS` below. A new tool gets a line there.
 
+mod seed;
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
@@ -128,6 +130,13 @@ const TASKS: &[Task] = &[
         does: "under WSL, build for Windows and run it there, on the real GPU",
         group: "This machine",
         run: win,
+    },
+    Task {
+        name: "seed",
+        takes: "",
+        does: "in a new worktree, copy the main checkout's compiled dependencies in, so the first build is quick",
+        group: "This machine",
+        run: seed::seed,
     },
     Task {
         name: "tools",

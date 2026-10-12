@@ -40,6 +40,10 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 
 A clean build of a Bevy application takes about two and a half minutes; a rebuild after a small change takes a few seconds.
 
+## Worktrees
+
+Agents each work in a git worktree of their own, and each worktree has its own `target/`. To spare a new one from building all of Bevy, `cargo xtask seed` copies the main checkout's compiled dependencies into it, leaving out our own crates, which it then builds in about a minute (D183). A Claude Code hook starts it in the background when a session or subagent starts in a worktree with no `target/`. A `cargo` command started meanwhile prints "Blocking waiting for file lock" and waits a few seconds for the copy. In a worktree entered partway through a session, run `cargo xtask seed` before the first build. It only helps once the main checkout has built, and it never touches a worktree that has built already. Why it copies rather than sharing a cache is in [research/worktree-builds.md](../research/worktree-builds.md).
+
 ## Seeing and measuring
 
 Sound is on in the sandbox except in scripted runs, which print what they would have played instead, and under WSL, which usually has no sound device: pass `--sound` to try it there, or `--mute` anywhere ([audio.md](audio.md)).
