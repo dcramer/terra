@@ -54,7 +54,22 @@ Every slot that holds an item shows its icon: the bar, the backpack and the equi
 
 **Which look**: a tool's held look, gear's look on the wearer's body, and for anything else, such as a material, the item's own look, `models/items/<item>.glb`: the thing on its own as it lies, life size, facing +Z, its materials named by role. The same look would show an item dropped in the world. No material has one yet (stone, wood, fibre, hide, ore, iron, meat, berries, cooked meat, arrows), so they show their names.
 
-**What they look like** (D130, Decided): the game's art style, by drawing the looks in the world's own light.
+**Proposed next: painted icons, drawn with each model** (D130, Leaning). Games with many generated items do not give each one a rendered icon: they make an authored icon per base kind, drawn to read at slot size, and show variation on top of it systematically, as rarity frames, palette swaps and badges, with a 3D view for a close look (Diablo, Path of Exile, Borderlands, Starbound, No Man's Sky; Tarkov and Minecraft, which render, are the exceptions). For Terra:
+
+- **An icon is drawn for each kind when its model is made**, by the image model, from two references: the baked render, so every icon has the same angle, framing and shape as its model, and a style anchor (the mood board's painted look, then a few approved icons), so icons do not drift. Cut out of a flat background, fitted to the item's cells, saved as `assets/icons/<item>.png`, and approved on the sheet by a person.
+- **Kinds with no model, such as materials, are drawn from a description** with the same anchors.
+- **The rendered icon stays as the underdrawing and the fallback**, so no item is ever without one.
+- **Variants are shown systematically, not redrawn**: a palette shift of the drawn icon for a dyed or recoloured item, a frame or badge for quality or state, a count for a container.
+
+Tested on 2026-10-12 with four items, rendered above and painted below, at 96 and 48 pixels a cell. The painted ones read clearly better at slot size, the style held across all four, and stone needed no model. One catch: the painted stone axe has a cord binding its model lacks, so a painted icon can drift from its model and needs the person's check.
+
+![Rendered (top) and painted (bottom) icons, at 96 pixels a cell](images/item-icons-painted-2026-10-12.png)
+
+![The same at 48 pixels, the size of a backpack cell](images/item-icons-painted-half-2026-10-12.png)
+
+Not built: the drawing step in the baker or a tool, keeping the baker from replacing a drawn icon, and the staleness check for drawn icons. The house style below is what renders, and the underdrawings, look like.
+
+**How renders look** (D130): the game's art style, by drawing the looks in the world's own light.
 
 - **Held things** lie corner to corner, square on, broad side to the front, working end up and to the right.
 - **Worn things** face the front, seen from 15 degrees above, as worn, with no body in them.

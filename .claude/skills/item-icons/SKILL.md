@@ -84,6 +84,21 @@ When icons change, redraw the sheet [docs/items.md](../../../docs/items.md#item-
 cargo xtask icons --sheet docs/images/item-icons
 ```
 
+## Painted icons (proposed, D130 Leaning)
+
+The proposal is to paint each kind's icon when its model is made, with the render as the underdrawing ([items.md](../../../docs/items.md#item-icons)). Until the developers settle it and a tool does it, this is how the 2026-10-12 test was made, by hand:
+
+1. Put the baked icon on grey, four times its size: `convert assets/icons/<item>.png -resize 400% -background "#9a9a9a" -flatten <item>-ref.png`.
+2. Paint it with the image model (free), the render first and a style reference last; the test used the mood board's painted workbench (`web/c-painted-workbench.jpg` in the Terra Style Directions artifact). `--aspect 16:9` for an item two cells wide, `1:1` for one cell square:
+
+   ```bash
+   node tools/tripo/tripo.ts image "A game inventory icon of <what it is>. Keep the exact shape, angle and framing of the first reference image: <how it lies>, filling the frame. Painted in the art style of the last reference image: hand-painted surfaces with visible brush strokes and painted highlights, chunky readable forms, slightly exaggerated proportions and a bold clear silhouette that reads at a small size, warm light from the upper left. A single object only, no text, no border, no frame, no cast shadow, on a solid flat pure magenta (#FF00FF) background." --ref <item>-ref.png --ref <style>.jpg --aspect 16:9 -o <item>-painted.png
+   ```
+
+   For a kind with no model, describe it instead and give another item's render as the framing reference.
+3. Cut it out and fit it to its cells (here two by one, 96 pixels a cell): `convert <item>-painted.png -fuzz 30% -transparent "#FF00FF" -channel A -morphology Erode Disk:1.5 -blur 0x0.6 +channel -trim +repage -resize 167x83 -background none -gravity center -extent 192x96 <item>.png`.
+4. Check it beside the others at 48 pixels a cell, and against its model: the test's stone axe gained a cord binding its model does not have.
+
 ## Not built yet
 
 Icons for colour variants (a mask baked with each icon, saying which parts take which colour, for the screen to tint) and for an item's state, such as broken; both wait until items carry them. Icons in storage and the station screens. Looks for materials.
