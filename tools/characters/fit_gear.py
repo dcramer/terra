@@ -8,12 +8,12 @@ pushed clear of the skin, given the body's skin weights, and saved on the same s
 the game binds it to the body's joints. Each piece reports how much of it rests on the body;
 less than its kind should means it floats.
 
-    spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../assets/models/character/base-male.glb small_pack large_pack quiver
+    tools/blender/run.sh tools/characters/fit_gear.py assets/models/character/base-male.glb small_pack large_pack quiver
 
 Clothing, and anything worn close on the body such as a cap, is made on the body instead, by
 shell_garment.py.
 
-Reads out/tripo/gear-<model>.glb in the bake-off folder; writes
+Reads art/gear/<model>/model.glb; writes
 assets/models/gear/<body>/<item>.glb, the item named as in the game's
 catalogue in lower case with `_` for spaces. Each piece's turn, size and fit are in PIECES,
 found by looking at the models and then at the fitted result in the workbench; run it for
@@ -25,7 +25,6 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
 sys.path.insert(0, HERE)
 
 import bmesh
@@ -36,7 +35,7 @@ import bands
 import look
 import patches
 
-GEAR = os.path.join(HERE, "..", "model_bakeoff", "out", "tripo")
+GEAR = os.path.join(look.ART, "gear")
 OUT = os.path.join(HERE, "..", "..", "assets", "models", "gear")
 
 # item: (Tripo model, turn about Z in degrees so its front faces the body's front (-Y) and
@@ -52,7 +51,7 @@ body_path, names = look.args()[0], look.args()[1:]
 body_name = os.path.splitext(os.path.basename(body_path))[0]
 
 look.reset()
-bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, body_path))
+bpy.ops.import_scene.gltf(filepath=look.path(body_path))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 # Each vertex's patch of skin (patches.py), which a piece may hide.
@@ -105,7 +104,7 @@ def apply(ob, mod):
 
 def import_gear(model, turn):
     before = set(bpy.context.scene.objects)
-    bpy.ops.import_scene.gltf(filepath=os.path.join(GEAR, f"gear-{model}.glb"))
+    bpy.ops.import_scene.gltf(filepath=os.path.join(GEAR, model, "model.glb"))
     new = [o for o in bpy.context.scene.objects if o not in before]
     ob = max((o for o in new if o.type == "MESH"), key=lambda o: len(o.data.vertices))
     mw = ob.matrix_world.copy()

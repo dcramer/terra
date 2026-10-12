@@ -10,7 +10,7 @@ the Quaternius one every sandbox animation is made for. This:
   4. adds forearm twist bones (twist.py), keeps at most four bones a vertex, normalised,
      and exports the mesh and skin only.
 
-    spike/model_bakeoff/run.sh ../character_gear/convert_rig.py out/tripo/base-male-tpose-hd-rigged.glb base-male-tripo 1.80
+    tools/blender/run.sh tools/characters/convert_rig.py art/characters/base-male/rigged.glb base-male-tripo 1.80
 """
 
 import math
@@ -18,7 +18,6 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
 sys.path.insert(0, HERE)
 
 import bpy
@@ -81,7 +80,7 @@ def select_only(*objs, active=None):
 look.reset()
 
 # 1. Tripo's rigged model, turned to face -Y and scaled to height, applied to both.
-bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, src))
+bpy.ops.import_scene.gltf(filepath=look.path(src))
 t_arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 for o in list(bpy.context.scene.objects):

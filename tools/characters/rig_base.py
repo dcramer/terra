@@ -9,7 +9,7 @@ made for), by script, at no cost, then play animations on it to test how it bend
   4. Pose it back to the T-pose, bake the body into that pose, and make it the rest pose,
      so animations made for the T-pose play unchanged.
 
-    spike/model_bakeoff/run.sh ../character_gear/rig_base.py out/refined-BaseMaleHD-BaseMaleHD16000.glb
+    tools/blender/run.sh tools/characters/rig_base.py art/characters/base-male/model.glb
 """
 
 import math
@@ -17,7 +17,6 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
 
 import bpy
 import numpy as np
@@ -27,7 +26,7 @@ import look
 
 FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure.gltf")
 OUT = os.path.join(HERE, "out")
-body_path = os.path.join(look.HERE, look.args()[0])
+body_path = look.path(look.args()[0])
 WEIGHT_SOURCE = (look.args() + ["heat"])[1]  # heat, or mannequin
 OUT_NAME = (look.args() + ["heat", "base-male-rigged"])[2]
 

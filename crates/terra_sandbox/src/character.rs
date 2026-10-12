@@ -1,9 +1,9 @@
 //! What hangs on a character: things held and worn. A character's model carries sockets,
 //! named points on its skeleton placed for that body when it was exported
-//! (`spike/character_gear/export_character.py`).
+//! (`tools/characters/export_character.py`).
 //!
 //! What is worn has a look for each base body, fitted to it once
-//! (`spike/character_gear/fit_gear.py`) and found by name: `models/gear/<body>/<item>.glb`,
+//! (`tools/characters/fit_gear.py`) and found by name: `models/gear/<body>/<item>.glb`,
 //! the item named as in the catalogue (`item_id`). Looks name their materials by role
 //! (Leather, Metal, Wood...), so a `Tint` can recolour one look many ways without a new
 //! file, and tinted materials are shared, one per colour. The file says how it goes on, so
@@ -117,7 +117,7 @@ struct Tinted(HashMap<(AssetId<StandardMaterial>, [u32; 4]), Handle<StandardMate
 /// A body's material: the standard one, collapsing the patches of skin its mask hides.
 pub type BodyMaterial = ExtendedMaterial<StandardMaterial, BodyMask>;
 
-/// How many patches a body is divided into (`spike/character_gear/patches.py`).
+/// How many patches a body is divided into (`tools/characters/patches.py`).
 pub const PATCHES: u32 = 1024;
 
 /// Which of a body's patches are hidden, one bit each. Field order must match

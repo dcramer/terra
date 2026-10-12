@@ -5,7 +5,7 @@ Bevy plays a clip by setting each joint's whole transform, position included, so
 from the mannequin's file would put our moved joints back where the mannequin's were.
 Re-sampling the clips on this skeleton writes its own joint positions into them.
 
-    spike/model_bakeoff/run.sh ../character_gear/export_character.py ../character_gear/out/NAME.glb ../character_gear/out/NAME-game.glb
+    tools/blender/run.sh tools/characters/export_character.py tools/characters/out/NAME.glb tools/characters/out/NAME-game.glb
 
 make_character.sh runs it last.
 """
@@ -14,7 +14,6 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
 sys.path.insert(0, HERE)
 
 import bpy
@@ -28,7 +27,7 @@ FIGURE = os.path.join(HERE, "..", "..", "assets", "models", "character", "figure
 src, dst = look.args()[:2]
 
 look.reset()
-bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, src))
+bpy.ops.import_scene.gltf(filepath=look.path(src))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
 # The twist bones' constraints, which glTF does not keep; the export bakes them into every clip.
 twist.drive(arm)
@@ -136,7 +135,7 @@ for o in bpy.context.scene.objects:
     o.select_set(o in (arm, body) or o in sockets)
 bpy.context.view_layer.objects.active = arm
 bpy.ops.export_scene.gltf(
-    filepath=os.path.join(look.HERE, dst), export_format="GLB", use_selection=True,
+    filepath=look.path(dst), export_format="GLB", use_selection=True,
     export_animations=True, export_animation_mode="NLA_TRACKS", export_force_sampling=True,
     export_influence_nb=4,
 )

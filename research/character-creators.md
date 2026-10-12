@@ -2,7 +2,7 @@
 
 2026-10-11. Question: how do the best character creators and equipment systems work, with Enshrouded as the model the developers named, and how would we build one that fits our goals? Those goals: generated assets, many realms with cultures, NPCs made by rule, visible equipment, the painted look of the mood board (D14), life size (D110), and many players on one server.
 
-Read, not tried, except where it says otherwise. The one thing tried is fitting generated gear to a rigged body ([spike/character_gear](../spike/character_gear/README.md)).
+Read, not tried, except where it says otherwise. The one thing tried is fitting generated gear to a rigged body (`spike/character_gear`, since grown into [tools/characters](../tools/characters/README.md)).
 
 ## Answer
 
@@ -34,7 +34,7 @@ Engine systems: Unreal's [Mutable](https://dev.epicgames.com/documentation/unrea
 | A base body | Quaternius Universal Base Characters (CC0) to start; restyled toward the mood board | Six bodies, 20 hairstyles, rigged to that skeleton ([itch](https://quaternius.itch.io/universal-base-characters)) |
 | Body-shape sliders, if wanted | MakeHuman / MPFB2's targets, CC0 ([licence](https://static.makehumancommunity.org/about/license.html)) | Realistic proportions; moving them onto a stylised body is our work |
 | Ruled out | Reallusion Character Creator (its licence forbids use in any character generation system and AI work, [EULA](https://cdn-www.reallusion.com/Content/EULA/AP/EULA_AP.htm)); Daz (per-item game licences); Ready Player Me (shut down January 2026) | |
-| Gear made to fit | Our Blender script: fit, push out of the body, copy the body's weights, hide what is covered | Works for single pieces ([spike](../spike/character_gear/README.md)); pairs should be generated one at a time |
+| Gear made to fit | Our Blender script: fit, push out of the body, copy the body's weights, hide what is covered | Works for single pieces ([tools/characters](../tools/characters/README.md)); pairs should be generated one at a time |
 | Gear following body sliders | Blender's Surface Deform: each body slider saved as a matching shape key on each piece | Scriptable; untried |
 | Generated heads as slider variants | Non-rigid registration (trimesh's `nricp_amberg`, open source) onto the base head, with landmarks | Possible by script; likely to fail on extreme stylised heads, so each needs a look |
 

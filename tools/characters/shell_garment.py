@@ -14,7 +14,7 @@ made by Tripo, as one outer surface. This:
      skin under it does, so skin cannot come through it in any pose;
   5. bakes the dressed model's colour onto it, and lists the patches of skin it hides.
 
-    spike/model_bakeoff/run.sh ../character_gear/shell_garment.py ../../assets/models/character/base-male.glb out/tripo/dressed-male-coat.glb leather_coat Leather chest
+    tools/blender/run.sh tools/characters/shell_garment.py assets/models/character/base-male.glb art/gear/dressed-male-coat/model.glb leather_coat Leather chest
 
 The slot (D64) says where on the body the piece can be: a chest piece never reaches the thighs,
 whatever colour Tripo gave the dressed model's shorts.
@@ -27,7 +27,6 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
 sys.path.insert(0, HERE)
 
 import bmesh
@@ -73,7 +72,7 @@ COVER = COVERAGE[coverage]
 body_name = os.path.splitext(os.path.basename(body_path))[0]
 
 look.reset()
-bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, body_path))
+bpy.ops.import_scene.gltf(filepath=look.path(body_path))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 arm.animation_data_clear()
@@ -98,7 +97,7 @@ top = max(p.z for p in skin_pts)
 
 # 1. The dressed model, turned to face -Y as ours do (Tripo's face +X), scaled and lined up.
 before = set(bpy.context.scene.objects)
-bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, dressed_path))
+bpy.ops.import_scene.gltf(filepath=look.path(dressed_path))
 new = [o for o in bpy.context.scene.objects if o not in before]
 dressed = max((o for o in new if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 dmw = dressed.matrix_world.copy()

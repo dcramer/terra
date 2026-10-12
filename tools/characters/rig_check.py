@@ -2,7 +2,7 @@
 bad rig is caught by numbers instead of by eye. Prints one JSON report with a pass or fail
 for each check, and writes out/rig-check.json.
 
-    spike/model_bakeoff/run.sh ../character_gear/rig_check.py ../character_gear/out/base-male-rigged.glb
+    tools/blender/run.sh tools/characters/rig_check.py tools/characters/out/base-male-rigged.glb
 
 Checks:
   skeleton      same bones, same parents as our skeleton
@@ -25,7 +25,6 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
 sys.path.insert(0, HERE)
 
 import bpy
@@ -83,7 +82,7 @@ ref_parents = {b.name: b.parent.name if b.parent else None for b in ref_arm.data
 for m in ref_meshes:
     bpy.data.objects.remove(m)
 
-arm, meshes = load(os.path.join(look.HERE, look.args()[0]))
+arm, meshes = load(look.path(look.args()[0]))
 twist.drive(arm)
 body = max(meshes, key=lambda m: len(m.data.vertices))
 report, ok = {}, {}
@@ -247,8 +246,8 @@ for name in ACTIONS:
 top = sorted(where.items(), key=lambda t: -t[1])[:6]
 report["motion"] = {"actions": motion, "worst_places": top, "sink_m": round(sink, 3), "standing_foot_gap_m": round(standing_gap, 3)}
 # Big moves crush some edges on any rig; judge each animation against the hand-rigged
-# mannequin's own share on the same frames (out/rig-baseline.json, from checking figure.gltf).
-baseline_path = os.path.join(OUT, "rig-baseline.json")
+# mannequin's own share on the same frames (art/characters/rig-baseline.json, from checking figure.gltf).
+baseline_path = os.path.join(look.ART, "characters", "rig-baseline.json")
 baseline = json.load(open(baseline_path)) if os.path.exists(baseline_path) else {}
 moves_ok = True
 for a, v in motion.items():

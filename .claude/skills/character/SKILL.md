@@ -7,7 +7,7 @@ description: Make a game character for Terra (a base body, an NPC, a body templa
 
 From a design to a model that plays every animation in the game, with Tripo doing the hard parts and scripts doing the rest. Worked out on 2026-10-11 ([research](../../../research/ai-models-for-art.md#characters-made-and-rigged), D115). The male base body was made this way.
 
-Everything runs from the repository root under WSL, with the Windows Blender (`spike/model_bakeoff/run.sh` runs a script through `tools/blender/run.sh`, which finds it) for the steps that must run inside Blender, and the Tripo CLI (`tools/tripo/tripo.ts`, the `tripo` skill) for everything Tripo does, logged in with `TRIPO_STUDIO_COOKIE` in `.env`. Check it first with `node tools/tripo/tripo.ts balance`.
+Everything runs from the repository root under WSL, with the Windows Blender (`tools/blender/run.sh`, which finds it) for the steps that must run inside Blender, and the Tripo CLI (`tools/tripo/tripo.ts`, the `tripo` skill) for everything Tripo does, logged in with `TRIPO_STUDIO_COOKIE` in `.env`. Check it first with `node tools/tripo/tripo.ts balance`.
 
 Costs per character, on the Studio subscription: design sheets are free (100 images a month), the model about 25 credits, the rig 20.
 
@@ -18,21 +18,21 @@ A turnaround sheet: the same character three times, front, side and back, **in a
 Draw it in the mood board's style by giving the image model a mood-board image as a reference:
 
 ```bash
-node tools/tripo/tripo.ts image "Character turnaround sheet for a stylised game character: <who they are, build, clothing>. The same person three times side by side, front view, side view and back view, standing in a T-pose with both arms straight out to the sides at shoulder height, palms down, legs straight and slightly apart. Draw it in the art style of the townsfolk in the reference image: hand-painted, slightly simplified forms, warm soft light, not realistic. Plain light grey background, no text, no scenery." --t-pose --aspect 16:9 --ref spike/model_bakeoff/out/tripo/mood-medieval-town-generated_image_url.png -o spike/model_bakeoff/out/tripo/NAME-sheet.png
+node tools/tripo/tripo.ts image "Character turnaround sheet for a stylised game character: <who they are, build, clothing>. The same person three times side by side, front view, side view and back view, standing in a T-pose with both arms straight out to the sides at shoulder height, palms down, legs straight and slightly apart. Draw it in the art style of the townsfolk in the reference image: hand-painted, slightly simplified forms, warm soft light, not realistic. Plain light grey background, no text, no scenery." --t-pose --aspect 16:9 --ref art/style/mood-medieval-town.png -o tools/characters/out/NAME-sheet.png
 ```
 
 The reference is the medieval-town mood board (docs/art.md); any approved image in our style works.
 
 For a second body of a cast, such as the female base to match the male, give the first body's sheet as a second reference and say so ("the female base body to match the man in the second reference image ... wearing the same underclothes"), so the two share a style and their underclothes.
 
-Show it to the developers before spending anything else. To change a detail, redraw from the approved sheet (`--ref spike/model_bakeoff/out/tripo/NAME-sheet.png`) and say only what changes; it keeps the rest. **Always end in a T-pose**: a body generated with its arms down and moved into our T-pose crushes its shoulders in every animation.
+Show it to the developers before spending anything else. To change a detail, redraw from the approved sheet (`--ref tools/characters/out/NAME-sheet.png`, or `art/characters/NAME/sheet.png` once it is made) and say only what changes; it keeps the rest. **Always end in a T-pose**: a body generated with its arms down and moved into our T-pose crushes its shoulders in every animation.
 
 ## 2. Model, rig, convert, check
 
 One command, on the Studio subscription:
 
 ```bash
-spike/character_gear/make_character.sh NAME spike/model_bakeoff/out/tripo/NAME-sheet.png 1.80
+tools/characters/make_character.sh NAME tools/characters/out/NAME-sheet.png 1.80
 ```
 
 The last number is the character's height in metres (life size, D110). It:
@@ -41,16 +41,16 @@ The last number is the character's height in metres (life size, D110). It:
 2. rigs it with Tripo's auto-rig in Tripo's own skeleton (`tripo.ts rig --skeleton tripo`), the one the converter reads;
 3. runs the rest, which is free and is `finish_character.sh NAME HEIGHT` on its own:
    - converts Tripo's skeleton onto ours (`convert_rig.py`): our joints move to Tripo's, our bones keep their directions, Tripo's weights are renamed onto our bones with its twist and helper bones folded in, then smoothed lightly; forearm twist bones are added (`twist.py`), and every vertex kept to four bones;
-   - checks it (`rig_check.py`) and renders it moving (`rig_render.py`, to `spike/character_gear/out/NAME-sheet.png`);
-   - exports it as the game reads it (`export_character.py`, to `spike/character_gear/out/NAME-game.glb`): body, skeleton, sockets and all our animation clips in one file, every clip re-sampled on this character's skeleton with the twist bones baked in. That matters: Bevy sets each joint's whole position from the clip, so the mannequin's own clips would pull our moved joints back to the mannequin's.
+   - checks it (`rig_check.py`) and renders it moving (`rig_render.py`, to `tools/characters/out/NAME-sheet.png`);
+   - exports it as the game reads it (`export_character.py`, to `tools/characters/out/NAME-game.glb`): body, skeleton, sockets and all our animation clips in one file, every clip re-sampled on this character's skeleton with the twist bones baked in. That matters: Bevy sets each joint's whole position from the clip, so the mannequin's own clips would pull our moved joints back to the mannequin's.
 
-**When the conversion, checker or export improves, run `finish_character.sh` again for every character** (`spike/character_gear/out/` lists them; the male's rig is `out/tripo/base-male-tpose-hd-rigged.glb`), refit their gear (step 5), and check them in the workbench. It costs nothing; only `make_character.sh` spends credits.
+**When the conversion, checker or export improves, run `finish_character.sh` again for every character** (`art/characters/` lists them, each with its `rigged.glb`), refit their gear (step 5), and check them in the workbench. It costs nothing; only `make_character.sh` spends credits.
 
 Read the line starting `RIGCHECK`. It must say `"pass": true`. Then look at the render sheet.
 
 ## 3. When the checker fails
 
-The checker compares the rig with our skeleton and with the hand-rigged mannequin on the same animations. Its baseline, `spike/character_gear/out/rig-baseline.json`, comes from running it on `figure.gltf` first.
+The checker compares the rig with our skeleton and with the hand-rigged mannequin on the same animations. Its baseline, `art/characters/rig-baseline.json`, comes from running it on `figure.gltf` first.
 
 | Check | What failing means | What to do |
 |---|---|---|
@@ -62,12 +62,12 @@ The checker compares the rig with our skeleton and with the hand-rigged mannequi
 | `symmetry` | Left and right driven differently | Usually an asymmetric model; check the sheet, regenerate |
 | `motion` | Too many edges crush or stretch in some animation, compared with the mannequin, or a ring of skin round an elbow, knee or wrist shrinks by more than a fifth (`pinched`, `pinched_at`) | Edges: see `worst_places`; try `SMOOTH=4` on the conversion. A pinched elbow means a forearm's turn has nowhere to go: check the twist bones (`twist.py`) were added and are driven. Look at `rig_render`'s sheet before deciding: the limits were set by eye |
 
-If Tripo's rig cannot be made to pass, `rig_base.py` rigs the same body with Blender's own weights instead (`run.sh ../character_gear/rig_base.py <refined body> heat <name>`); it did a little worse but passes most checks.
+If Tripo's rig cannot be made to pass, `rig_base.py` rigs the same body with Blender's own weights instead (`tools/blender/run.sh tools/characters/rig_base.py art/characters/NAME/model.glb heat <name>`); it did a little worse but passes most checks.
 
 ## 4. Into the game
 
 ```bash
-cp spike/character_gear/out/NAME-game.glb assets/models/character/NAME.glb
+cp tools/characters/out/NAME-game.glb assets/models/character/NAME.glb
 ```
 
 Add a row for it to `THIRD_PARTY.md` under "Made with AI". Then look at it in the game's own renderer with the workbench, on the Windows GPU (about a minute; WSL's CPU renderer takes far too long). Beside the mannequin, through the same clips, from two sides at four moments:
@@ -87,11 +87,11 @@ The game has many items and several bodies (D127), so gear is data: every worn i
 **Clothing and armour that bend with the body** (chest, legs, gloves, feet) are made on each base body, so nothing is set per character (D128):
 
 1. Draw that base's own sheet wearing it (free): `--ref` the base's approved sheet, and say "the same person, in exactly the same T-pose ... now also wearing <the piece>". Check it kept the person and the pose.
-2. Make the dressed model (25 credits): crop the front view as `make_character.sh` does, then `tripo.ts model`.
+2. Make the dressed model (25 credits): crop the front view as `make_character.sh` does, then `tripo.ts model`. Keep the sheet, front view and model as source art in `art/gear/dressed-<body>-<item>/` (`sheet.png`, `front.png`, `model.glb`) and commit them.
 3. Build the piece from the base body:
 
 ```bash
-spike/model_bakeoff/run.sh ../character_gear/shell_garment.py ../../assets/models/character/base-male.glb out/tripo/dressed-male-coat.glb leather_coat Leather chest_sleeveless
+tools/blender/run.sh tools/characters/shell_garment.py assets/models/character/base-male.glb art/gear/dressed-male-coat/model.glb leather_coat Leather chest_sleeveless
 ```
 
 The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveless`, `chest_long_sleeves`, `legs_long`, `gloves`, `feet`...): which parts of the body it covers and where its hems fall. The piece is those faces of the base body, pushed out (and as far as the dressed model stands off, for bulk), keeping the body's own weights, so it moves as the skin under it does; its colour is baked from the dressed model. Do not try to cut the piece out of the dressed model by colour or distance: Tripo paints its dressed body a shade off ours and makes it a little thinner, and every such cut came out full of holes.
@@ -99,7 +99,7 @@ The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveles
 **Rigid worn things** (a pack, a cap, a quiver) are made as models on their own and fitted at their socket:
 
 ```bash
-spike/model_bakeoff/run.sh ../character_gear/fit_gear.py ../../assets/models/character/base-male.glb small_pack large_pack leather_cap quiver
+tools/blender/run.sh tools/characters/fit_gear.py assets/models/character/base-male.glb small_pack large_pack leather_cap quiver
 ```
 
 Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. A pack keeps only its bag from the model: its straps are made from the body's own skin (`bands.py`), along a route of rays cast from the body's joints, so they bend as the shoulders do and fit any body. Keep to the heights off the skin in `docs/characters.md`: a chest piece within 1.8 cm above the waist, straps solid from the skin to 2.2 cm, so a pack and a jerkin from different makers still stack. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front. Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does.
@@ -107,14 +107,14 @@ Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. 
 **Check every piece on every body**, by numbers first:
 
 ```bash
-spike/model_bakeoff/run.sh ../character_gear/gear_check.py ../../assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
+tools/blender/run.sh tools/characters/gear_check.py assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
 ```
 
 It plays our clips and reports, per clip, the share of skin near each piece that comes through it (or that it sinks into), and `where` on the body. Then look, live, with the body hidden if need be ([tools/sandbox](../../../tools/sandbox/README.md)): a picture through the body hid a coat full of holes. Each piece also lists the patches of skin it covers, which the game does not draw under it (`patches.py`, `body_mask.wgsl`).
 
 Then add a row for it to `THIRD_PARTY.md`.
 
-What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, and how far it tips when carried in its glTF extras (`carry_tilt`). `spike/character_gear/fit_held.py` makes them; each item's length, grip and tilt are in its `TOOLS`. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
+What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, and how far it tips when carried in its glTF extras (`carry_tilt`). `tools/characters/fit_held.py` makes them; each item's length, grip and tilt are in its `TOOLS`. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
 
 ## Traps already found
 

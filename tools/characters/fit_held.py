@@ -9,7 +9,7 @@ hand, positive raises it. Body-independent: a hand socket is the same on every b
 Its materials are named by role (Wood, Metal, Trim, String), so a colour given for a role
 reaches every part of it: here, a stone or iron head; in the game, a tint (character.rs).
 
-    spike/model_bakeoff/run.sh ../character_gear/fit_held.py hammer stone_axe iron_axe knife spear bow stone_pickaxe iron_pickaxe
+    tools/blender/run.sh tools/characters/fit_held.py hammer stone_axe iron_axe knife spear bow stone_pickaxe iron_pickaxe
 
 Reads the free tool models in assets/models/tools (THIRD_PARTY.md), or
 builds a pickaxe from a few faceted pieces, since no free one exists; writes
@@ -22,7 +22,6 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
 
 import bpy
 from mathutils import Matrix, Vector

@@ -1,7 +1,7 @@
 //! What is in hand, on the figure: the item in the picked slot of the bar, as its own look
 //! in the right hand's socket, swapped as soon as another slot is picked. Each item's look is
 //! a file found by its name (`character::held_look`, made by
-//! `spike/character_gear/fit_held.py`), which also says how it is carried; nothing here knows
+//! `tools/characters/fit_held.py`), which also says how it is carried; nothing here knows
 //! any one tool.
 
 use super::inventory::Belongings;

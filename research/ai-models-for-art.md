@@ -155,7 +155,7 @@ Every result is coloured in one palette and rendered in the sandbox's light on o
 
 ## The bake-off, first round
 
-Run on 2026-10-11 in [spike/model_bakeoff](../spike/model_bakeoff/README.md). Six models: rocks, a fence, a workbench, a tree, a wolf, a villager.
+Run on 2026-10-11 in `spike/model_bakeoff` (deleted on 2026-10-12 once this note held its findings; in git history). Six models: rocks, a fence, a workbench, a tree, a wolf, a villager.
 
 **The agent in Blender, from scratch: not good enough.** The developers called the results "pretty garbage", and they were: readable blockouts. The fence and workbench were passable props, the rocks and tree generic, the wolf and villager crude. This matches the benchmarks' ceiling for organic shapes.
 
@@ -191,7 +191,7 @@ Run on 2026-10-11, the same day. Pages: [Terra Style Directions](https://claude.
 
 ## Image to Blender
 
-Tried on 2026-10-11 at the developers' request ([spike/model_bakeoff/image](../spike/model_bakeoff/image)): the agent modelled the workbench and the wolf in Blender against their concept images, rendering from the concept's camera beside it and correcting each round. No credits.
+Tried on 2026-10-11 at the developers' request (`spike/model_bakeoff/image`, in git history): the agent modelled the workbench and the wolf in Blender against their concept images, rendering from the concept's camera beside it and correcting each round. No credits.
 
 - **The workbench, after four rounds:** recognisably the concept's bench, with every part (plank top and holes, leg vice with hanging handle, splayed legs, shelf, crate, hammer) as clean separate pieces in palette roles, about 1,500 triangles, and parametric. But less faithful than Tripo's from one image: the proportions and the legs' splay never quite matched, and judging by eye, fixing one thing broke another more than once.
 - **The wolf, after two rounds:** poor, as the benchmarks predicted. A stick skeleton skinned in code reads as a wolf-like animal, not the concept's wolf.
@@ -199,7 +199,7 @@ Tried on 2026-10-11 at the developers' request ([spike/model_bakeoff/image](../s
 
 ## Characters made and rigged
 
-Worked out on 2026-10-11 ([spike/character_gear](../spike/character_gear/README.md)). The male base body, from an approved design sheet, now plays every sandbox animation.
+Worked out on 2026-10-11 in `spike/character_gear`; the pipeline now lives in [tools/characters](../tools/characters/README.md). The male base body, from an approved design sheet, now plays every sandbox animation.
 
 - **Generate in a T-pose.** Our skeleton and its animations are in a T-pose. A body generated with its arms down (an A-pose) and moved into the T-pose crushed its shoulders every time the arms came down, in every animation. The design sheet is redrawn in a T-pose (one image edit, keeping the design) before the model is made.
 - **Let Tripo rig it, then convert.** Studio's auto-rig (about 20 credits) puts a 78-bone humanoid skeleton in the body with good weights. A script moves our skeleton's joints to Tripo's joints without turning any bone, renames Tripo's weights onto our bones (folding its twist and helper bones into the bones they help), smooths them lightly, and keeps four bones a vertex.

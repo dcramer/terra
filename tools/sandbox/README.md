@@ -58,7 +58,7 @@ The client keeps a mark in `shots/remote.mark`: the first line not yet looked at
 
 When a check needs a fact the log does not say, add it to `play.state` (`crates/terra_sandbox/src/experiments/play/probe.rs`) rather than parsing the screen: one place that answers what is true, read the same way by every test.
 
-Changes made this way last only as long as the run. When a value is right, put it where it belongs (a socket's place goes in `spike/character_gear/export_character.py`), and check it with a workbench sheet.
+Changes made this way last only as long as the run. When a value is right, put it where it belongs (a socket's place goes in `tools/characters/export_character.py`), and check it with a workbench sheet.
 
 ## How it reaches the sandbox
 

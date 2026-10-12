@@ -27,7 +27,7 @@ const IMAGE_MODELS: Record<string, string> = {
 };
 const VIEWS = ["front", "left", "back", "right"]; // the order Studio uses everywhere
 // Rig skeletons. "tripo" is Tripo's own V1 rig (BoneRoot, Hip, L_Thigh…), which our skeleton
-// converter expects (spike/character_gear); the others are V3 rigs whose bones are named for
+// converter expects (tools/characters); the others are V3 rigs whose bones are named for
 // that target. Both come with fingers.
 const SKELETONS = ["mixamo", "actorcore", "unreal", "unity", "vrm", "tripo"];
 const RIG_V1 = "v1.0-20240301";

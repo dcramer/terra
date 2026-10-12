@@ -8,7 +8,7 @@ does. That is skin poking through clothing, or a rigid look sunk into the body, 
 any mesh, single-sided or closed. Prints one GEARCHECK line of JSON per look; a look passes when,
 in every frame, no more than `through_share` of the skin it watches is through it.
 
-    spike/model_bakeoff/run.sh ../character_gear/gear_check.py ../../assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
+    tools/blender/run.sh tools/characters/gear_check.py assets/models/character/base-male.glb leather_coat leather_cap small_pack quiver
 """
 
 import json
@@ -16,7 +16,6 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "model_bakeoff"))
 sys.path.insert(0, HERE)
 
 import bpy
@@ -41,7 +40,7 @@ explain = "--explain" in look.args()
 body_name = os.path.splitext(os.path.basename(body_path))[0]
 
 look.reset()
-bpy.ops.import_scene.gltf(filepath=os.path.join(look.HERE, body_path))
+bpy.ops.import_scene.gltf(filepath=look.path(body_path))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
 body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
 twist.drive(arm)

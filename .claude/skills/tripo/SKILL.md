@@ -11,6 +11,6 @@ Everything Tripo does goes through `tools/tripo/tripo.ts`, the team's CLI for Tr
 - **Say what it will cost before spending much.** About 25 credits for a model, 45 for a Smart Mesh model with its texture, 20 for a rig or views, 10 for a texture, 40 for segmenting; images and preset animations are free. Several models at once, or anything over about 100 credits, needs the developer's go-ahead.
 - **Chain by project.** Each command prints one line of JSON; take `project` from it for the next command. Commands on a project wait for anything already running on it.
 - **Look at what you made.** Read the images you generate, and render or open models before calling them done (`docs/development.md`, Blender). A model for the game is judged against `docs/art.md`.
-- **Rigs:** `--skeleton tripo` is what our skeleton converter takes (`spike/character_gear/make_character.sh`); the default, `mixamo`, is for outside tools.
-- **Output files are build output**: write them under an ignored folder such as `spike/model_bakeoff/out/`, never commit them.
+- **Rigs:** `--skeleton tripo` is what our skeleton converter takes (`tools/characters/make_character.sh`); the default, `mixamo`, is for outside tools.
+- **Drafts are build output; what is kept is source art.** Write drafts under an ignored folder such as `tools/characters/out/`. What the developers approve, and what the game's files are made from, goes in `art/` and is committed (`art/README.md`).
 - **When a command breaks** because Tripo changed its requests, fix the CLI and follow "Capturing again" in [research/tripo-studio-api.md](../../../research/tripo-studio-api.md). Don't call Tripo's API or web backend some other way.
