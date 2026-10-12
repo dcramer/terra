@@ -111,6 +111,8 @@ The first proposal, staking out each building before the tribe touches it, suits
 - **Among players, a draft is someone's idea and a plan is the tribe's.** Any member may turn their own drafts into plans; a leader may do it to anyone's (see [ranks](#tribes-and-outposts)).
 - **What is needed counts plans, not drafts.** The outpost's list of what its plans still need leaves drafts out. Aiming at a draft still shows its own cost, so you can plan.
 
+**Plan mode might become a building mode of its own** (the developers, 2026-10-12, an idea): rather than drafting through your character's eyes, a separate view for designing, such as from above, or any camera that is not your character's, as The Sims and city builders do. Nothing is chosen.
+
 Still to think through, with the developers: whether Plan mode should do more than Build mode, such as laying whole rooms at once or copying a building; and whether drafts should be seen by the whole tribe or only by whoever drew them until they are made plans.
 
 ### Also
