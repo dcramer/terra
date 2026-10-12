@@ -26,6 +26,8 @@ In their words, shortened.
 - **What does not fit in the inventory drops to the ground** (2026-10-12).
 - **You build only inside a claim** (D94, Leaning), which starts small and grows (D104).
 - **Structures are planned, then constructed** (D139, Leaning, 2026-10-12): "for structures, you place a blueprint/plan of it, and then you have to actually construct it somehow… it makes it more realistic. So each wall you'd have to do that, and then doors are like carve outs so it can be slightly diff? Same with windows? We'll wanna think this through."
+- **Constructing should feel immersive** (D139, 2026-10-12): "you'll actually go up and hit the thing with a hammer or similar? Or maybe it's like, you bring the resource and place it? Like you carry it, like The Forest / Grounded 2? We want it to feel a little immersive when you build up these structures."
+- **The controls and plans proposed here "feel good"** (D144, 2026-10-12).
 - **A blueprint shows its parts, and they can be small** (D139): "ideally a blueprint shows its 'parts' if you will, kind of like Forest shows the logs, and that can vary based on the type of construction".
 - **Large structures take large materials, carried** (D140, Leaning): "you probably need large materials and can carry them? And later in the game maybe you unlock ways to transport them more efficiently."
 - **Building draws on storage** (D141): "building from storage absolutely, but large items probably will need a special storage? And that probably would be unlocked later game (some of this)."
@@ -69,9 +71,9 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 
 ## Controls
 
-Proposed, to be locked down by the developers (2026-10-12: "make sure you've got the controls locked down too for how building will work"). One scheme for everything in this document, on mouse and keyboard, after what the prior art agrees on, keeping what is built where it already works. Every key can be changed in the options (D116) but the wheel and the numbers. A gamepad scheme comes later and follows the same states.
+Agreed by the developers on 2026-10-12 (D144: "generally speaking your plans feel good"), after asking that they be locked down; how a part is put into a plan is the one part still being worked through (D139). One scheme for everything in this document, on mouse and keyboard, after what the prior art agrees on, keeping what is built where it already works. Every key can be changed in the options (D116) but the wheel and the numbers. A gamepad scheme comes later and follows the same states.
 
-**The rule underneath: click lays, hold builds.** A click puts down a plan (D139), which costs nothing and can be undone at once. Holding the button does work that spends materials: putting in parts, building an item, taking apart, repairing. So a misclick never costs anything, and nothing is spent without holding.
+**The rule underneath: a click lays, work builds.** A click puts down a plan (D139), which costs nothing and can be undone at once. Spending materials takes work: setting a carried part, swinging the hammer at a part, holding to build an item, take apart or repair. So a misclick never costs anything.
 
 ### Always, with the hammer in hand
 
@@ -109,7 +111,8 @@ After a placement the same part, variant, turn and height stay in hand, so the n
 | Input | Does | Built |
 |---|---|---|
 | Aim at a plan | Its next part is outlined, and the prompt says what it is, what it needs and how many are within reach: "Log: 3 of 12. 9 more needed, 4 in reach" | No |
-| Hold left mouse | Put in the next part, and the next, for as long as it is held and the materials last, from the pack or storage in the claim (D141) | No |
+| Carrying a big part, left mouse at its outline | Set it in place (see [how a part goes in](#planned-then-constructed)) | No |
+| Swing the hammer (left mouse) at a set part, or at a plan's next small part | Fix it, or put it in: a few swings each, the fixings from the pack or storage in the claim (D141) | No |
 | Q, then hold left mouse | Take the plan away, and everything put into it comes back | No |
 
 ### Taking apart (Q)
@@ -184,6 +187,15 @@ The developers' direction (D139, Leaning): a structure is first laid out as a pl
 | Wattle and daub (early) | Stakes, woven sticks, then a coat of mud | Packed earth | Thatch on poles |
 
 So a log cabin's wall of 4.5 metres, a storey high, is about a dozen logs, put in from the bottom up; a stone wall is many more, smaller parts. The order is the physical one: what a part rests on goes in first. That is not a stability check (D142), only which outline is next.
+
+**How a part goes in: carried, set, hammered.** The developers want it to feel immersive, and named both ways: bringing the material and placing it, as The Forest and Grounded 2, and going up and hitting it with a hammer. Proposed, both, by the size of the material, which is how building is really done:
+
+- **Big parts are carried and set.** A log, a beam or a cut stone is brought to the plan, on the shoulder (D140) or picked up from a pile within reach, and set into the outline it fits: you see it go in, and the outline fills.
+- **Then the hammer fixes it.** A few swings at what was just set peg, nail or mortar it in, the small fixings coming from the pack or storage (D141). Until it is fixed, the part is in place but loose: it can be lifted out again freely.
+- **Small parts are only hammered.** Wattle, planks, shingles and thatch come from the pack or storage; swinging the hammer at the plan puts the next one in with each few strikes.
+- **Recruits do the same**, visibly, when the materials are near (D90).
+
+Open: how many swings a part takes, and whether fixing is a separate step or the last swing of setting it.
 
 **Building in bulk.** Putting in parts one by one is the realistic way and must not become a chore: holding the build key keeps putting in the next part while you have the materials; a skilled builder (D88) puts them in faster; recruits put them in for you (D90). The Forest's later option to skip each part's animation is the lesson: show each part going in, quickly.
 
