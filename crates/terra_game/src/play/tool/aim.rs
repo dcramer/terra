@@ -2,14 +2,15 @@
 
 use super::*;
 use crate::build::Site;
+use crate::build::act::Building;
 use crate::planet::Planet;
 use crate::play::View;
-use crate::play::catalogue::{self, Builds, Kind};
+use crate::play::catalogue::{Builds, Kind};
 use crate::play::claim::Claim;
 use crate::play::flora::Obstacles;
-use crate::play::inventory::Belongings;
 use crate::play::props::{self, Blocked, Models, Prop, Standing};
 use crate::shell::Options;
+use terra_build::RoofSection;
 use terra_build::{CELL_M, DOOR_WIDTH_M, Panel, STOREY_M, Side, cells};
 
 pub(super) fn aim(
@@ -50,6 +51,13 @@ pub(super) fn aim(
         // The first of the base's walls, floors and roofs the view meets; the ground; and
         // the first item.
         let hull = site.base.raycast(local_origin, local_direction, 200.0);
+        // The same, meeting openings too: a doorway is aimed at, not through.
+        let any = site
+            .base
+            .raycast_where(local_origin, local_direction, 200.0, |_| true);
+        builder.aimed = any
+            .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M))
+            .map(|hit| hit.cube);
         let ground = planet.raycast(origin, direction, 200.0);
         let met = |distance: f32| local_origin + local_direction * distance;
         let limit = hull.map_or(f32::MAX, |hit| hit.distance + 0.05);
@@ -65,19 +73,14 @@ pub(super) fn aim(
             })
             .min_by(|a, b| a.2.total_cmp(&b.2));
         builder.viewed = item.map(|(entity, ..)| entity);
+        // With nothing picked, the hammer builds whatever of the base it is on.
         if builder.stowed {
-            builder.target = Target::Nothing;
+            builder.target = hull
+                .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M))
+                .map_or(Target::Nothing, |hit| Target::Structure { cube: hit.cube });
             continue;
         }
 
-        // What was drawn with another part, or another variant, is let go of.
-        let (part, variant) = (builder.part, builder.variant());
-        if builder
-            .laid
-            .is_some_and(|laid| laid.part != part || laid.variant != variant)
-        {
-            builder.laid = None;
-        }
         if !builder.draws(&builds) {
             builder.drag = None;
             builder.point = None;
@@ -224,8 +227,8 @@ pub(super) fn aim(
                 Vec::new()
             }
         };
-        // Any wall the view is on, within reach.
-        let any_wall = hull
+        // Any wall the view is on, within reach, an opening in it included.
+        let any_wall = any
             .filter(|hit| hit.wall)
             .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M));
         let opening_on = |width_m: f32, run: &mut Vec<IVec3>| {
@@ -441,31 +444,13 @@ pub(super) fn aim(
             Kind::Items(_) => spot(),
             Kind::Move if builder.is_carrying() => spot(),
             Kind::Move => item.map_or(Target::Nothing, |(entity, ..)| Target::Prop(entity)),
-            Kind::Remove => match (item, hull) {
+            // An item; a door or window fitted; else what of the base is aimed at.
+            Kind::Remove => match (item, builder.aimed) {
                 (Some((entity, ..)), _) => Target::Prop(entity),
-                (None, Some(hit)) if hit.wall => {
-                    let tile = hit.face.tile();
-                    let target = wall_at(tile);
-                    run = if matches!(target, Target::Wall { open: true, .. }) {
-                        // The window or doorway in it.
-                        site.base.run(tile)
-                    } else {
-                        // The whole straight stretch of plain wall.
-                        let along = site.base.along(tile);
-                        let plain = |at: IVec3| site.base.filling(at) == Some(Panel::Solid);
-                        let mut first = tile;
-                        while plain(first - along) {
-                            first -= along;
-                        }
-                        let mut found = Vec::new();
-                        while plain(first) {
-                            found.push(first);
-                            first += along;
-                        }
-                        found
-                    };
-                    target
-                }
+                (None, Some(cube)) => match site.base.prop_in(cube) {
+                    Some(prop) => Target::Fitted { at: prop.min },
+                    None => Target::Structure { cube },
+                },
                 _ => Target::Nothing,
             },
         };
@@ -473,32 +458,39 @@ pub(super) fn aim(
     }
 }
 
-/// Works out what the thing aimed at would cost to build, and whether it can be paid.
+/// Works out what the thing aimed at would do and cost, and whether it can be done: an
+/// item's price and what is short of it; for the base, the work and the base's answer.
 pub(super) fn afford(
-    site: Res<Site>,
-    options: Res<Options>,
     builds: Res<Builds>,
+    look: Res<crate::build::BuildLook>,
     props: Query<&Prop>,
-    mut belongings: Belongings,
-    mut players: Query<(Entity, &Claim, &mut Builder), With<Player>>,
+    mut building: Building,
+    mut players: Query<
+        (
+            Entity,
+            &Transform,
+            &Claim,
+            &mut Builder,
+            Has<crate::play::LocalPlayer>,
+        ),
+        With<Player>,
+    >,
 ) {
-    for (player, claim, mut builder) in &mut players {
-        let Some(belongings) = belongings.of(player) else {
-            continue;
-        };
+    for (player, at, claim, mut builder, local) in &mut players {
         if builder.work.is_some() {
             continue;
         }
+        let free = building.free();
         // Nothing is built or taken apart outside your claim (D94), except the claim stone
         // that makes one; and there is one claim each.
         let placing_claim = matches!(builder.picked(&builds).kind, Kind::Items(_))
             && builder.item(&builds).is_some_and(|item| item.claims)
             && !builder.is_carrying();
-        let on_planet =
-            target_point(&builder.target, &props).map(|point| site.frame.transform_point(point));
+        let on_planet = target_point(&builder.target, &props)
+            .map(|point| building.site.frame.transform_point(point));
         builder.unclaimed = match on_planet {
             // The yard, the flat test level, is all one claim.
-            _ if options.yard() => None,
+            _ if free => None,
             Some(_) if placing_claim && claim.stone.is_some() => {
                 Some("You already have a claim; take its stone away to move it")
             }
@@ -510,65 +502,179 @@ pub(super) fn afford(
             }),
             _ => None,
         };
-        // Cutting an opening is paid for where the wall was solid; changing the shape of
-        // one already there is free.
-        let cuts = builder
-            .run
-            .iter()
-            .any(|&cell| site.base.filling(cell) == Some(Panel::Solid));
-        let price: Option<Price> = match (&builder.picked(&builds).kind, builder.target) {
-            (
-                Kind::Room(_) | Kind::Roof(_),
-                Target::Ground {
-                    corner,
-                    tiles,
-                    fits: true,
-                    adds: true,
-                    ..
-                },
-            ) => {
-                let new_cells = (0..tiles.x)
-                    .flat_map(|i| (0..tiles.y).map(move |j| IVec3::new(i, 0, j)))
-                    .filter(|&step| {
-                        let cell = corner + step;
-                        if matches!(builder.picked(&builds).kind, Kind::Roof(_)) {
-                            roofs_anew(
-                                &site.base,
-                                &builder.picked(&builds).kind,
-                                builder.variant(),
-                                cell,
-                            )
-                        } else {
-                            !site.base.contains(cell) && site.base.filling(cell).is_none()
-                        }
-                    })
-                    .count();
-                Some((builds.floor().to_vec(), catalogue::floor_units(new_cells)))
-            }
-            (Kind::Wall(_), Target::Wall { fits: true, .. }) => {
-                let new_cells = builder
-                    .run
+        let near = building.local(at.translation);
+        builder.planned = plan_work(&builds, &look, &mut building, player, near, &builder);
+        // What this machine's player would build next is lit in the base.
+        if local {
+            let next = match &builder.planned {
+                Some(Planned {
+                    doing: Doing::Build,
+                    work,
+                }) if work.check.is_ok() => work
+                    .ops
                     .iter()
-                    .filter(|&&cell| site.base.filling(cell).is_none())
-                    .count();
-                (new_cells > 0).then(|| (builds.wall().to_vec(), catalogue::wall_units(new_cells)))
-            }
-            (Kind::Window(_), Target::Wall { .. }) if cuts => Some((
-                builds.window().to_vec(),
-                catalogue::window_units(builder.run.len()),
-            )),
-            (Kind::Door, Target::Wall { .. }) if cuts => Some((builds.door().to_vec(), 1)),
+                    .flat_map(|op| match op {
+                        Op::Fill { cubes } => cubes.clone(),
+                        _ => Vec::new(),
+                    })
+                    .collect(),
+                _ => Default::default(),
+            };
+            building.site.light(next);
+        }
+        let price: Option<Price> = match (&builder.picked(&builds).kind, builder.target) {
             (Kind::Items(_), Target::Spot { blocked: None, .. }) => {
                 builder.item(&builds).map(|item| (item.cost.clone(), 1))
             }
             _ => None,
         };
         // On the yard, building costs nothing.
-        let price = price.filter(|_| !options.yard());
-        builder.short = price
-            .as_ref()
-            .and_then(|(cost, times)| belongings.missing(cost, *times));
+        let price = price.filter(|_| !free);
+        builder.short = match (&price, building.belongings.of(player)) {
+            (Some((cost, times)), Some(belongings)) => belongings.missing(cost, *times),
+            _ => None,
+        };
         builder.price = price;
+    }
+}
+
+/// What the hammer would do to the base where it is aimed, with the base's answer: lay
+/// what is drawn, cut or fit an opening, build what goes in next, or take apart what came
+/// last.
+fn plan_work(
+    builds: &Builds,
+    look: &crate::build::BuildLook,
+    building: &mut Building,
+    player: Entity,
+    near: Vec3,
+    builder: &Builder,
+) -> Option<Planned> {
+    use crate::build::plans;
+    let base = &building.site.base;
+    let kind = look.laying;
+    let work = |building: &mut Building, doing: Doing, what: String, ops: Vec<Op>| {
+        let ops = building.with_ground(ops);
+        let check = building.check(Some(player), &ops);
+        Some(Planned {
+            doing,
+            work: BaseWork { what, ops, check },
+        })
+    };
+    let laying = |what: &str, ops: Vec<Op>| (what.to_string(), ops);
+    let lay = match (&builder.picked(builds).kind, builder.target) {
+        (Kind::Room(_), Target::Ground { corner, tiles, .. }) => Some(laying(
+            "lay a room",
+            plans::room(
+                base,
+                corner,
+                corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1),
+                kind,
+                kind,
+            ),
+        )),
+        (Kind::Roof(shapes), Target::Ground { corner, tiles, .. }) => {
+            let (min, max) = (corner, corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1));
+            let shape = &shapes[builder.variant()];
+            Some(match shape.style {
+                // A gable's ridge runs along its longer side, unless turned.
+                Some(style) => laying(
+                    "lay a roof",
+                    plans::roof(
+                        base,
+                        RoofSection {
+                            min: min.to_array(),
+                            max: max.to_array(),
+                            style,
+                            along_x: (tiles.x >= tiles.y) != builder.room_turned,
+                            pitch: shape.pitch,
+                        },
+                        kind,
+                    ),
+                ),
+                None => laying("lay a flat roof", plans::flat_roof(base, min, max, kind)),
+            })
+        }
+        (Kind::Wall(_), Target::Wall { .. }) => {
+            Some(laying("lay a wall", plans::wall(base, &builder.run, kind)))
+        }
+        _ => None,
+    };
+    if let Some((what, ops)) = lay {
+        return if ops.is_empty() {
+            None
+        } else {
+            work(building, Doing::Lay, what, ops)
+        };
+    }
+    match (&builder.picked(builds).kind, builder.target) {
+        // An opening cut into a wall's plan; once the wall is up round it, a door or
+        // window fitted into it.
+        (Kind::Window(_) | Kind::Door, Target::Wall { .. }) if !builder.run.is_empty() => {
+            let (panel, door) = match &builder.picked(builds).kind {
+                Kind::Window(shapes) => (shapes[builder.variant()].2, false),
+                _ => (Panel::Door, true),
+            };
+            let cubes = plans::opening_cubes(&builder.run, panel);
+            let opened = plans::opening(base, &cubes);
+            if opened.is_empty() {
+                let prop = plans::prop_for(base, cubes[0], Some(door))?;
+                let what = format!("fit a {}", crate::build::props::name(prop.kind));
+                work(building, Doing::Fit, what, vec![Op::FitProp(prop)])
+            } else {
+                let what = if door {
+                    "cut a doorway"
+                } else {
+                    "cut a window"
+                };
+                work(building, Doing::Lay, what.to_string(), opened)
+            }
+        }
+        (Kind::Remove, Target::Fitted { at }) => {
+            let what = base
+                .prop(IVec3::from_array(at))
+                .map_or("door", |prop| crate::build::props::name(prop.kind));
+            work(
+                building,
+                Doing::TakeApart,
+                format!("take the {what} out"),
+                vec![Op::RemoveProp { at }],
+            )
+        }
+        (Kind::Remove, Target::Structure { cube })
+            if base
+                .cube(cube)
+                .is_some_and(|cube| cube.fill == terra_build::Fill::Open) =>
+        {
+            let (low, high) = plans::hole(base, cube)?;
+            let cubes = (low.x..=high.x)
+                .flat_map(|x| {
+                    (low.y..=high.y).flat_map(move |y| (low.z..=high.z).map(move |z| [x, y, z]))
+                })
+                .collect();
+            work(
+                building,
+                Doing::TakeApart,
+                "close the opening".to_string(),
+                vec![Op::Close { cubes }],
+            )
+        }
+        (Kind::Remove, Target::Structure { cube }) => {
+            let found = building.last_work(Some(player), cube, near)?;
+            Some(Planned {
+                doing: Doing::TakeApart,
+                work: found,
+            })
+        }
+        // With nothing picked, what goes in next.
+        (_, Target::Structure { cube }) if builder.stowed => {
+            let part = base.cube(cube).and_then(|cube| cube.part);
+            let found = building.next_work(Some(player), part, near)?;
+            Some(Planned {
+                doing: Doing::Build,
+                work: found,
+            })
+        }
+        _ => None,
     }
 }
 

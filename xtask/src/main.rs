@@ -41,6 +41,17 @@ const TASKS: &[Task] = &[
         run: |_| run("node", &["tools/sandbox/loop.ts"]),
     },
     Task {
+        name: "cabin",
+        takes: "[--here] [--until STEP]",
+        does: "build a cabin from plan to door by script, walk in, and check every step by state (D69, D139)",
+        group: "Play and check",
+        run: |args| {
+            let mut all = vec!["tools/sandbox/cabin.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "bench",
         takes: "[scene…] [--runs N] [--record] [--debug]",
         does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded",

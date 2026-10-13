@@ -1,45 +1,63 @@
-//! Doing it: building, taking apart and moving, over the moment it takes, and showing
-//! the work on the thing itself.
+//! Doing it: laying plans at a click, building, taking apart and moving over the moment
+//! each takes, and showing the work on the thing itself. What is done to the base goes
+//! through `build::act::Building`, which checks it and settles what it costs.
 
 use super::*;
 use crate::build::Site;
+use crate::build::act::Building;
 use crate::planet::Planet;
 use crate::play::catalogue::{self, Builds, Kind, Tab};
 use crate::play::controls::Action;
-use crate::play::inventory::Belongings;
 use crate::play::noise::{Cue, Noise};
 use crate::play::props::{self, Models, PlacedBy, Prop};
 use crate::play::skills::{Did, ONCE, Skill};
-use crate::play::told::Told;
 use crate::play::work::Hold;
 use crate::play::{IsLocalPlayer, Stance};
 use crate::start::Start;
-use terra_build::{BuildOp, Panel, RoofSection};
+use terra_build::Bill;
+
+/// How long a piece of work on the base takes: a moment, and a little more for every item
+/// it takes or gives back, up to a few seconds. A stand-in, like the costs.
+fn seconds(doing: Doing, done: &terra_build::ops::Done) -> f32 {
+    let items = |bill: &Bill| -> f32 {
+        bill.0
+            .values()
+            .map(|amount| {
+                let (num, den) = amount.parts();
+                num as f32 / den as f32
+            })
+            .sum()
+    };
+    let build = (0.3 + 0.5 * items(&done.took)).min(2.5);
+    match doing {
+        Doing::TakeApart => (0.3 + 0.3 * items(&done.gave)).min(1.5),
+        _ => build,
+    }
+}
 
 /// Starts, carries on and finishes building and taking apart. Both take a moment: the
 /// button is held until the job is done, and letting go early leaves nothing done.
 pub(super) fn act(
     mut commands: Commands,
     time: Res<Time>,
-    mut planet: ResMut<Planet>,
     models: Res<Models>,
-    (builds, look): (Res<Builds>, Res<crate::build::BuildLook>),
-    options: Res<crate::shell::Options>,
+    builds: Res<Builds>,
     props: Query<&Prop>,
     mut players: Query<(Entity, &Transform, &Intent, &mut Builder, &mut Stance), With<Player>>,
-    mut belongings: Belongings,
-    mut told: MessageWriter<Told>,
-    mut site: ResMut<Site>,
+    mut building: Building,
     start: Res<Start>,
     mut did: MessageWriter<Did>,
     mut noise: MessageWriter<Noise>,
-    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     for (player, player_at, intent, mut builder, mut stance) in &mut players {
-        let Some(mut belongings) = belongings.of(player) else {
-            continue;
+        let in_hand = |building: &mut Building| {
+            building
+                .belongings
+                .of(player)
+                .is_some_and(|belongings| belongings.tool_in_hand().is_some_and(|tool| tool.builds))
         };
         let player_at = player_at.translation;
+        let near = building.local(player_at);
         // A tap of the right button: stop what is being done; or put back what was picked
         // up; or put the part away.
         if std::mem::take(&mut builder.cancel) {
@@ -48,7 +66,6 @@ pub(super) fn act(
             }
             if builder.is_drawing() {
                 builder.drag = None;
-                builder.laid = None;
                 continue;
             }
             match builder.carrying.take() {
@@ -56,8 +73,8 @@ pub(super) fn act(
                     if let Some(placed) = props::place(
                         &mut commands,
                         &models,
-                        &site,
-                        &planet,
+                        &building.site,
+                        &building.planet,
                         &carried.item,
                         carried.at,
                         carried.lift,
@@ -71,65 +88,30 @@ pub(super) fn act(
             }
             continue;
         }
-        // Undo the last thing built or taken apart, within a while (D144).
-        if intent.starts(Action::Undo)
-            && builder.work.is_none()
-            && belongings.tool_in_hand().is_some_and(|tool| tool.builds)
-        {
-            let said = match builder.done.take() {
-                Some(done) if time.elapsed_secs() - done.at_s <= UNDO_S => match done.what {
-                    Undoable::Structure {
-                        before,
-                        paid,
-                        refunded,
-                    } => {
-                        // What taking it apart gave back is taken again first.
-                        if let Some((cost, times)) = &refunded
-                            && !belongings.pay(cost, *times)
-                        {
-                            "You no longer have what taking it apart gave back"
-                        } else {
-                            site.replace_with(&before, &mut commands, &planet, &mut meshes);
-                            if let Some((cost, times)) = &paid {
-                                belongings.refund(cost, *times);
-                            }
-                            "Undone"
-                        }
-                    }
-                    Undoable::Placed(entity) => match props.get(entity) {
-                        Ok(prop) => {
-                            belongings.refund(&prop.item.cost, 1);
-                            commands.entity(entity).despawn();
-                            "Undone"
-                        }
-                        Err(_) => "It is gone already",
-                    },
-                    Undoable::TakenAway(was) => {
-                        if belongings.pay(&was.item.cost, 1) {
-                            if let Some(placed) = props::place(
-                                &mut commands,
-                                &models,
-                                &site,
-                                &planet,
-                                &was.item,
-                                was.at,
-                                was.lift,
-                                was.turn,
-                                was.indoors,
-                            ) {
-                                commands.entity(placed).insert(PlacedBy(player));
-                            }
-                            "Undone"
-                        } else {
-                            "You no longer have what taking it apart gave back"
-                        }
-                    }
-                },
-                Some(_) => "Too long ago to undo",
-                None => "Nothing to undo",
+        // Undo the last thing built or taken apart, within a while (D144): the newer of
+        // an item placed or taken away, and a change to the base.
+        if intent.starts(Action::Undo) && builder.work.is_none() && in_hand(&mut building) {
+            let item_s = builder.done.as_ref().map(|done| done.at_s);
+            let base_s = building.last_change_s(player);
+            let said = if base_s.is_some_and(|base| item_s.is_none_or(|item| base >= item)) {
+                match building.undo(player) {
+                    Ok(_) => "Undone".to_string(),
+                    Err(why) => why,
+                }
+            } else {
+                undo_item(
+                    &mut builder,
+                    &time,
+                    &props,
+                    &mut commands,
+                    &models,
+                    &mut building,
+                    player,
+                )
+                .to_string()
             };
             info!("Undo: {said}.");
-            told.write(Told::new(player, said));
+            building.tell(player, said);
             continue;
         }
         let held = intent.held(Action::Use);
@@ -141,8 +123,7 @@ pub(super) fn act(
         // Carry on with what is under way, or drop it.
         if let Some(mut work) = builder.work.take() {
             let stayed = work.began_at.distance(player_at) < WANDER_M;
-            let in_hand =
-                !intent.choosing && belongings.tool_in_hand().is_some_and(|tool| tool.builds);
+            let in_hand = !intent.choosing && in_hand(&mut building);
             if !held || !stayed || !in_hand {
                 continue;
             }
@@ -155,41 +136,56 @@ pub(super) fn act(
             // Heard just in front of the player, where the work is.
             let work_at = player_at + player_at.normalize_or(Vec3::Y);
             match work.job {
-                Job::Structure { ops, pay, refund } => {
-                    let before = site.operations.clone();
-                    // A room set into the ground cuts the ground away where it stands.
-                    for op in &ops {
-                        if let BuildOp::AddRoom { min, max, .. } = *op {
-                            let cut = site.cut_for_room(IVec3::from(min), IVec3::from(max));
-                            planet.apply(&cut);
-                        }
+                Job::Base {
+                    doing,
+                    what,
+                    ops,
+                    part,
+                    cube,
+                } => {
+                    let Ok(done) = building.act(Some(player), &what, &ops) else {
+                        continue;
+                    };
+                    let cue = if doing == Doing::TakeApart {
+                        Cue::TakenApart
+                    } else {
+                        Cue::Built
+                    };
+                    noise.write(Noise::at(cue, work_at));
+                    if !done.took.is_empty()
+                        && let Some(mut belongings) = building.belongings.of(player)
+                    {
+                        did.write(Did(player, Skill::Building, ONCE));
+                        belongings.wear_in_hand(1);
                     }
-                    if site.apply_all(&ops, &mut commands, &planet, &mut meshes) {
-                        builder.laid = None;
-                        let cue = if refund.is_some() {
-                            Cue::TakenApart
-                        } else {
-                            Cue::Built
-                        };
-                        noise.write(Noise::at(cue, work_at));
-                        if pay.is_some() {
-                            did.write(Did(belongings.player(), Skill::Building, ONCE));
-                            belongings.wear_in_hand(1);
+                    // Still held, the next goes in, or comes out, at once (building in
+                    // bulk, docs/building.md).
+                    let next = match doing {
+                        Doing::Build => building.next_work(Some(player), part, near),
+                        Doing::TakeApart => {
+                            cube.and_then(|cube| building.last_work(Some(player), cube, near))
                         }
-                        if let Some((cost, times)) = &refund {
-                            belongings.refund(cost, *times);
+                        _ => None,
+                    };
+                    if let Some(next) = next {
+                        match &next.check {
+                            Ok(done) => {
+                                builder.must_release = false;
+                                builder.work = Some(Work {
+                                    hold: Hold::new(job_seconds(doing, done, &building)),
+                                    job: Job::Base {
+                                        doing,
+                                        what: next.what.clone(),
+                                        ops: next.ops.clone(),
+                                        part,
+                                        cube,
+                                    },
+                                    removing: doing == Doing::TakeApart,
+                                    began_at: work.began_at,
+                                });
+                            }
+                            Err(why) => building.tell(player, why.message()),
                         }
-                        if let Some((cost, times)) = &pay {
-                            belongings.pay(cost, *times);
-                        }
-                        builder.done = Some(Done {
-                            what: Undoable::Structure {
-                                before,
-                                paid: pay,
-                                refunded: refund,
-                            },
-                            at_s: time.elapsed_secs(),
-                        });
                     }
                 }
                 Job::Place {
@@ -200,14 +196,19 @@ pub(super) fn act(
                     indoors,
                 } => {
                     // Paid for on finishing. If what it costs has gone since the button
-                    // went down, nothing is built.
-                    // On the yard, building costs nothing.
-                    if options.yard() || belongings.pay(&item.cost, 1) {
+                    // went down, nothing is built. On the yard, building costs nothing.
+                    let free = building.free();
+                    let paid = free
+                        || building
+                            .belongings
+                            .of(player)
+                            .is_some_and(|mut belongings| belongings.pay(&item.cost, 1));
+                    if paid {
                         if let Some(placed) = props::place(
                             &mut commands,
                             &models,
-                            &site,
-                            &planet,
+                            &building.site,
+                            &building.planet,
                             &item,
                             at,
                             lift,
@@ -223,17 +224,21 @@ pub(super) fn act(
                         info!(
                             "Placed a {} at {}, {lift} up.",
                             item.name,
-                            from_start(&site, &start, at)
+                            from_start(&building.site, &start, at)
                         );
-                        did.write(Did(belongings.player(), Skill::Building, ONCE));
-                        belongings.wear_in_hand(1);
+                        did.write(Did(player, Skill::Building, ONCE));
+                        if let Some(mut belongings) = building.belongings.of(player) {
+                            belongings.wear_in_hand(1);
+                        }
                         noise.write(Noise::at(Cue::Placed, work_at));
                     }
                 }
                 Job::TakeAway(entity) => {
                     if let Ok(prop) = props.get(entity) {
                         // What does not fit in the backpack drops at the player's feet.
-                        belongings.refund(&prop.item.cost, 1);
+                        if let Some(mut belongings) = building.belongings.of(player) {
+                            belongings.refund(&prop.item.cost, 1);
+                        }
                         info!("Removed a {}.", prop.item.name);
                         builder.done = Some(Done {
                             what: Undoable::TakenAway(Carried {
@@ -256,7 +261,7 @@ pub(super) fn act(
         // The middle button: another of whatever the view is on.
         if intent.pressed(Action::Copy)
         && !builder.is_carrying()
-        && belongings.tool_in_hand().is_some_and(|tool| tool.builds)
+        && in_hand(&mut building)
         && let Some(prop) = builder.viewed.and_then(|entity| props.get(entity).ok())
         && let Some((part, variant)) = builds.place_of(&prop.item)
         // What is not in the build menu, such as a village's well, cannot be copied.
@@ -267,10 +272,11 @@ pub(super) fn act(
             builder.turn = prop.turn;
             continue;
         }
-        // A wall or room is drawn: pressed, dragged and let go of, it is laid where it was
-        // drawn; clicked, it is laid at its own size where the view is. Held still on what
-        // is laid, it is built: a click lays, work builds (D144).
+        // A wall, room or roof is drawn: pressed, dragged and let go of, its plan is laid
+        // where it was drawn; clicked, at its own size where the view is. Held still on a
+        // plan, what goes in next is built: a click lays, work builds (D144).
         let mut begin = click && !builder.must_release;
+        let mut building_held = false;
         if builder.draws(&builds) {
             if begin {
                 builder.drag = builder.point.map(|(point, level)| Drag {
@@ -283,35 +289,33 @@ pub(super) fn act(
                 begin = false;
             } else if let Some(mut drag) = builder.drag.take() {
                 if !held {
-                    let (from, to, level) = match laid_as(builder.target, &builder.run) {
-                        _ if drag.moved => (drag.from, drag.to, drag.level),
-                        // A click on what is already laid leaves it as it is.
-                        _ if builder.laid.is_some() => continue,
-                        Some(shape) => shape,
-                        None => continue,
-                    };
-                    builder.laid = Some(Drawn {
-                        from,
-                        to,
-                        level,
-                        part: builder.part,
-                        variant: builder.variant(),
-                    });
-                    info!(
-                        "Laid a {} from {from} to {to}, in cells.",
-                        builder.picked(&builds).name
-                    );
-                    noise.write(Noise::at(Cue::Click, player_at));
+                    // Let go: the plan drawn, or the part's own size, is laid.
+                    if drag.still_s < HOLD_TO_BUILD_S
+                        && let Some(planned) = builder.planned.clone()
+                        && planned.doing == Doing::Lay
+                    {
+                        if let Some(reason) = builder.unclaimed {
+                            building.tell(player, reason);
+                            continue;
+                        }
+                        lay(&mut building, player, &builder, &builds, planned);
+                        noise.write(Noise::at(Cue::Click, player_at));
+                    }
                 } else {
-                    // Held still long enough on what is laid, it builds, once. The drag
-                    // is kept, so if building cannot begin, moving on still draws.
+                    // Held still long enough on a plan, what goes in next is built.
                     let was = drag.still_s;
                     if !drag.moved {
                         drag.still_s += time.delta_secs();
                     }
-                    begin = was < HOLD_TO_BUILD_S
-                        && drag.still_s >= HOLD_TO_BUILD_S
-                        && builder.laid.is_some_and(|laid| laid.near(drag.from));
+                    let on_plan = builder.aimed.is_some_and(|cube| {
+                        building
+                            .site
+                            .base
+                            .cube(cube)
+                            .is_some_and(|cube| cube.part.is_some())
+                    });
+                    begin = was < HOLD_TO_BUILD_S && drag.still_s >= HOLD_TO_BUILD_S && on_plan;
+                    building_held = begin;
                     builder.drag = Some(drag);
                 }
             }
@@ -321,7 +325,7 @@ pub(super) fn act(
         }
 
         if let Some(reason) = builder.unclaimed {
-            told.write(Told::new(player, reason));
+            building.tell(player, reason);
             continue;
         }
 
@@ -356,8 +360,8 @@ pub(super) fn act(
                     if let Some(placed) = props::place(
                         &mut commands,
                         &models,
-                        &site,
-                        &planet,
+                        &building.site,
+                        &building.planet,
                         &carried.item,
                         at,
                         lift,
@@ -369,7 +373,7 @@ pub(super) fn act(
                     info!(
                         "Placed a {} at {}, {lift} up.",
                         carried.item.name,
-                        from_start(&site, &start, carried.at)
+                        from_start(&building.site, &start, carried.at)
                     );
                     stance.since_acting = 0.0;
                 }
@@ -378,139 +382,69 @@ pub(super) fn act(
             _ => {}
         }
 
-        // Building is paid for from what is carried, and refused when that is not enough.
-        // Taking apart gives everything back.
-        let can_pay = builder.short.is_none();
-        let pay = builder.price.clone();
-        // What closing a window or doorway gives back.
-        let opening_worth =
-            |run: &[IVec3]| match run.first().and_then(|&tile| site.base.filling(tile)) {
-                Some(Panel::Window { .. }) => {
-                    Some((builds.window().to_vec(), catalogue::window_units(run.len())))
-                }
-                Some(Panel::Door) => Some((builds.door().to_vec(), 1)),
-                _ => None,
-            };
-        // Fills every tile of the run, keeping its kind.
-        let fill = |run: &[IVec3], panel: Panel| -> Vec<BuildOp> {
-            run.iter()
-                .map(|&tile| BuildOp::SetWall {
-                    tile: tile.to_array(),
-                    panel: Some(panel),
-                    kind: site.base.kind(tile).unwrap_or(look.laying),
+        // Work on the base: what was worked out as it was aimed, or, held still on a plan
+        // with a wall, room or roof in hand, what goes in next.
+        let planned = if building_held {
+            let part = builder
+                .aimed
+                .and_then(|cube| building.site.base.cube(cube))
+                .and_then(|cube| cube.part);
+            building
+                .next_work(Some(player), part, near)
+                .map(|work| Planned {
+                    doing: Doing::Build,
+                    work,
                 })
-                .collect()
+        } else {
+            builder.planned.clone()
         };
-        let building = |ops: Vec<BuildOp>| Job::Structure {
-            ops,
-            pay: pay.clone(),
-            refund: None,
-        };
-        let unbuilding = |ops: Vec<BuildOp>, refund: Option<Price>| Job::Structure {
-            ops,
-            pay: None,
-            refund,
-        };
+        if let Some(planned) = planned.filter(|_| !matches!(builder.target, Target::Prop(_))) {
+            match (&planned.work.check, planned.doing) {
+                (Err(why), _) => {
+                    building.tell(player, why.message());
+                    builder.must_release = true;
+                }
+                // A plan, or an opening cut into one, costs nothing and is laid at once.
+                (Ok(_), Doing::Lay) => {
+                    lay(&mut building, player, &builder, &builds, planned);
+                    noise.write(Noise::at(Cue::Click, player_at));
+                    builder.must_release = true;
+                }
+                (Ok(done), doing) => {
+                    let part = match &planned.work.ops[..] {
+                        [terra_build::ops::Op::Fill { cubes }] => building
+                            .site
+                            .base
+                            .cube(IVec3::from_array(cubes[0]))
+                            .and_then(|cube| cube.part),
+                        _ => None,
+                    };
+                    let cube = match builder.target {
+                        Target::Structure { cube } => Some(cube),
+                        _ => None,
+                    };
+                    builder.drag = None;
+                    builder.work = Some(Work {
+                        hold: Hold::new(job_seconds(doing, done, &building)),
+                        job: Job::Base {
+                            doing,
+                            what: planned.work.what.clone(),
+                            ops: planned.work.ops.clone(),
+                            part,
+                            cube,
+                        },
+                        removing: doing == Doing::TakeApart,
+                        began_at: player_at,
+                    });
+                }
+            }
+            continue;
+        }
+
+        // Items: built from what is carried, and refused when that is not enough; taken
+        // apart, everything comes back.
+        let can_pay = builder.short.is_none();
         let (job, removing) = match (&builder.picked(&builds).kind, builder.target) {
-            (Kind::Window(shapes), Target::Wall { .. }) if can_pay => (
-                building(fill(&builder.run, shapes[builder.variant()].2)),
-                false,
-            ),
-            (Kind::Door, Target::Wall { .. }) if can_pay => {
-                (building(fill(&builder.run, Panel::Door)), false)
-            }
-            // A wall is built where there is none, and leaves alone what is already there.
-            (Kind::Wall(_), Target::Wall { fits: true, .. }) if can_pay => (
-                building(
-                    builder
-                        .run
-                        .iter()
-                        .filter(|&&tile| site.base.filling(tile).is_none())
-                        .map(|&tile| BuildOp::SetWall {
-                            tile: tile.to_array(),
-                            panel: Some(Panel::Solid),
-                            kind: look.laying,
-                        })
-                        .collect(),
-                ),
-                false,
-            ),
-            // An opening is closed first; a plain wall is taken away.
-            (Kind::Remove, Target::Wall { open: true, .. }) => (
-                unbuilding(
-                    fill(&builder.run, Panel::Solid),
-                    opening_worth(&builder.run),
-                ),
-                true,
-            ),
-            (Kind::Remove, Target::Wall { .. }) => (
-                unbuilding(
-                    builder
-                        .run
-                        .iter()
-                        .map(|&tile| BuildOp::SetWall {
-                            tile: tile.to_array(),
-                            panel: None,
-                            kind: look.laying,
-                        })
-                        .collect(),
-                    Some((
-                        builds.wall().to_vec(),
-                        catalogue::wall_units(builder.run.len()),
-                    )),
-                ),
-                true,
-            ),
-            (
-                Kind::Room(_),
-                Target::Ground {
-                    corner,
-                    tiles,
-                    fits: true,
-                    adds: true,
-                    clear: true,
-                    item: None,
-                },
-            ) if can_pay => (
-                building(vec![BuildOp::AddRoom {
-                    min: corner.to_array(),
-                    max: (corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1)).to_array(),
-                    kind: look.laying,
-                }]),
-                false,
-            ),
-            (
-                Kind::Roof(shapes),
-                Target::Ground {
-                    corner,
-                    tiles,
-                    adds: true,
-                    ..
-                },
-            ) if can_pay => {
-                let (min, max) = (
-                    corner.to_array(),
-                    (corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1)).to_array(),
-                );
-                let shape = &shapes[builder.variant()];
-                let op = match shape.style {
-                    // A gable's ridge runs along its longer side, unless turned.
-                    Some(style) => BuildOp::AddRoof(RoofSection {
-                        min,
-                        max,
-                        style,
-                        along_x: (tiles.x >= tiles.y) != builder.room_turned,
-                        pitch: shape.pitch,
-                    }),
-                    None => BuildOp::SetRoof {
-                        min,
-                        max,
-                        laid: true,
-                        kind: look.laying,
-                    },
-                };
-                (building(vec![op]), false)
-            }
             (
                 Kind::Items(items),
                 Target::Spot {
@@ -534,25 +468,15 @@ pub(super) fn act(
         };
         // How long it takes follows from what it costs.
         let seconds = match &job {
-            Job::Structure { ops, .. } if ops.is_empty() => continue,
-            Job::Structure {
-                pay: Some((cost, times)),
-                ..
-            } => catalogue::build_seconds(cost, *times),
-            Job::Structure {
-                refund: Some((cost, times)),
-                ..
-            } => catalogue::take_apart_seconds(cost, *times),
-            // Changing the shape of an opening already there costs nothing and is quick.
-            Job::Structure { .. } => catalogue::build_seconds(&[], 1),
             Job::Place { item, .. } => catalogue::build_seconds(&item.cost, 1),
             Job::TakeAway(entity) => match props.get(*entity) {
                 Ok(prop) => catalogue::take_apart_seconds(&prop.item.cost, 1),
                 Err(_) => continue,
             },
+            Job::Base { .. } => continue,
         };
         // On the yard, building is all but instant: a moment, so a click is not a build.
-        let seconds = if options.yard() { 0.1 } else { seconds };
+        let seconds = if building.free() { 0.1 } else { seconds };
         builder.drag = None;
         builder.work = Some(Work {
             job,
@@ -560,6 +484,94 @@ pub(super) fn act(
             removing,
             began_at: player_at,
         });
+    }
+}
+
+/// How long work on the base takes, all but instant on the yard.
+fn job_seconds(doing: Doing, done: &terra_build::ops::Done, building: &Building) -> f32 {
+    if building.free() {
+        0.1
+    } else {
+        seconds(doing, done)
+    }
+}
+
+/// Lays a plan, or cuts an opening into one, at once; a room set into the ground cuts it
+/// away first (`Building::lay`).
+fn lay(
+    building: &mut Building,
+    player: Entity,
+    builder: &Builder,
+    builds: &Builds,
+    planned: Planned,
+) {
+    let room = match (&builder.picked(builds).kind, builder.target) {
+        (
+            Kind::Room(_),
+            Target::Ground {
+                corner,
+                tiles,
+                fits: true,
+                clear: true,
+                item: None,
+                ..
+            },
+        ) => Some((corner, corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1))),
+        (Kind::Room(_), Target::Ground { .. }) => return,
+        _ => None,
+    };
+    let _ = building.lay(Some(player), &planned.work.what, planned.work.ops, room);
+}
+
+/// Undoes the last item placed or taken away, within a while; says how it went.
+fn undo_item(
+    builder: &mut Builder,
+    time: &Time,
+    props: &Query<&Prop>,
+    commands: &mut Commands,
+    models: &Models,
+    building: &mut Building,
+    player: Entity,
+) -> &'static str {
+    match builder.done.take() {
+        Some(done) if time.elapsed_secs() - done.at_s <= UNDO_S => match done.what {
+            Undoable::Placed(entity) => match props.get(entity) {
+                Ok(prop) => {
+                    if let Some(mut belongings) = building.belongings.of(player) {
+                        belongings.refund(&prop.item.cost, 1);
+                    }
+                    commands.entity(entity).despawn();
+                    "Undone"
+                }
+                Err(_) => "It is gone already",
+            },
+            Undoable::TakenAway(was) => {
+                let paid = building
+                    .belongings
+                    .of(player)
+                    .is_some_and(|mut belongings| belongings.pay(&was.item.cost, 1));
+                if paid {
+                    if let Some(placed) = props::place(
+                        commands,
+                        models,
+                        &building.site,
+                        &building.planet,
+                        &was.item,
+                        was.at,
+                        was.lift,
+                        was.turn,
+                        was.indoors,
+                    ) {
+                        commands.entity(placed).insert(PlacedBy(player));
+                    }
+                    "Undone"
+                } else {
+                    "You no longer have what taking it apart gave back"
+                }
+            }
+        },
+        Some(_) => "Too long ago to undo",
+        None => "Nothing to undo",
     }
 }
 
@@ -629,24 +641,4 @@ pub(super) fn animate(
 /// scripts and the log give places, wherever the base was begun.
 fn from_start(site: &Site, start: &Start, at: Vec3) -> Vec3 {
     start.local(site.frame.transform_point(at))
-}
-
-/// The two points of the grid a room, or the two tiles a wall, shown at its own size
-/// would be drawn between, and its floor, so a click can lay it.
-fn laid_as(target: Target, run: &[IVec3]) -> Option<(IVec2, IVec2, i32)> {
-    match target {
-        Target::Ground { corner, tiles, .. } => {
-            let from = IVec2::new(corner.x, corner.z);
-            Some((from, from + tiles, corner.y))
-        }
-        Target::Wall { .. } => {
-            let (first, last) = (run.first()?, run.last()?);
-            Some((
-                IVec2::new(first.x, first.z),
-                IVec2::new(last.x, last.z),
-                first.y,
-            ))
-        }
-        _ => None,
-    }
 }

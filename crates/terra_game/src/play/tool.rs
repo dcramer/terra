@@ -11,8 +11,8 @@
 //!   Tap right mouse    put the part away, or put back what you picked up
 //!   Hold left click    build, or take apart: it takes a moment, and letting go
 //!                      early leaves nothing done                         (or E)
-//!   Drag left mouse    draw a room or an interior wall; let go and it stays laid,
-//!                      a click laying its own size; hold on it to build it
+//!   Drag left mouse    draw a room, a wall or a roof; let go and its plan is laid,
+//!                      a click laying its own size; hold still on a plan to build it
 //!   Left click         pick an item up and put it down, in move mode
 //!   Scroll wheel       turn an item, a room or a wall; switch a wall between
 //!                      pushing out and pulling in                        (or Z and C)
@@ -39,12 +39,14 @@ use super::props::{Blocked, Prop};
 use super::tick::Sim;
 use super::work::Hold;
 use super::{IsLocalPlayer, Player};
+use crate::build::act::Work as BaseWork;
 use bevy::{
     light::{NotShadowCaster, NotShadowReceiver},
     prelude::*,
 };
 use std::sync::Arc;
-use terra_build::{BuildOp, CELL_M, cells};
+use terra_build::ops::Op;
+use terra_build::{CELL_M, cells};
 use terra_items::ItemKind;
 
 mod act;
@@ -72,7 +74,7 @@ const FREE_TURN: f32 = 15.0;
 /// How far, in cells, the aim must move from where a room snapped before it moves on.
 const ROOM_STICK_CELLS: f32 = 0.8;
 /// How long after building or taking something apart it can be undone, in seconds.
-const UNDO_S: f32 = 60.0;
+const UNDO_S: f32 = crate::build::act::UNDO_S;
 /// How far one notch raises or lowers an item off the grid; on it, a grid step.
 const FREE_RAISE_M: f32 = 0.1;
 /// How high an item can be raised above where it would stand.
@@ -80,7 +82,7 @@ const HIGHEST_RAISE_M: f32 = 3.0;
 /// How far the ground can be above or below a room's level for the room to be aimed on
 /// the level rather than where the view meets the ground.
 const LEVEL_BUMPS_M: f32 = 0.75;
-/// How long the button is held on a wall or room laid, without drawing, before it is built.
+/// How long the button is held still on a plan, without drawing, before it is built.
 const HOLD_TO_BUILD_S: f32 = 0.4;
 /// The least a drawn room measures across, in cells, so a drag along a line still makes
 /// a room that can be stood in: a metre inside its walls, which are a cube thick (D181).
@@ -127,6 +129,14 @@ pub enum Target {
     },
     /// An item already placed.
     Prop(Entity),
+    /// A cube of the base, planned or built, to build on or take apart.
+    Structure {
+        cube: IVec3,
+    },
+    /// A door or window fitted into the base, by its lowest cube.
+    Fitted {
+        at: [i32; 3],
+    },
 }
 
 /// The point of the grid nearest `raw`, in cells, keeping to `held` until the aim has moved
@@ -148,28 +158,6 @@ struct Carried {
     lift: f32,
     turn: f32,
     indoors: bool,
-}
-
-/// A wall or room drawn between two points of the grid, east and south in cells, waiting
-/// to be built (D144). A room is the rectangle between them; a wall runs from the first
-/// toward the second, along whichever direction is further.
-#[derive(Clone, Copy, PartialEq, Debug)]
-struct Drawn {
-    from: IVec2,
-    to: IVec2,
-    /// The floor a wall stands on, in storeys. A room goes on the storey chosen.
-    level: i32,
-    /// The part and variant it was drawn with: picking another lets it go.
-    part: usize,
-    variant: usize,
-}
-
-impl Drawn {
-    /// Whether a point of the grid is on what is drawn, or a cell from it.
-    fn near(&self, point: IVec2) -> bool {
-        let (low, high) = (self.from.min(self.to), self.from.max(self.to));
-        point.cmpge(low - 1).all() && point.cmple(high + 1).all()
-    }
 }
 
 /// The button is down on a wall or room: drawing it if the aim has moved, building what
@@ -204,31 +192,42 @@ fn drawn_room(from: IVec2, to: IVec2) -> (IVec2, IVec2) {
 }
 
 /// The wall tiles of a wall drawn from one tile toward another, along the grid's four
-/// directions only (D146): east and west, or north and south, whichever the drag went
-/// further. Both ends included, so it is at least a tile long.
+/// directions only (D146). Both ends included, so it is at least a tile long.
 fn drawn_wall(from: IVec2, to: IVec2, level: i32) -> Vec<IVec3> {
-    let step = to - from;
-    let (along, length) = if step.x.abs() >= step.y.abs() {
-        (IVec2::new(step.x.signum(), 0), step.x.abs())
-    } else {
-        (IVec2::new(0, step.y.signum()), step.y.abs())
-    };
-    (0..=length)
-        .map(|i| {
-            let at = from + along * i;
-            IVec3::new(at.x, level, at.y)
-        })
-        .collect()
+    crate::build::plans::wall_tiles(from, to, level)
+}
+
+/// What the hammer does to the base (D139, D144): lays a plan, for nothing, at a click;
+/// builds what goes in next, takes apart what came last, or fits a door or window, each
+/// held for a moment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Doing {
+    Lay,
+    Build,
+    TakeApart,
+    Fit,
+}
+
+/// What the hammer would do to the base now, worked out as it is aimed, and whether the
+/// base would allow it: the words of a refusal are what the prompt shows.
+#[derive(Clone, Debug)]
+pub struct Planned {
+    pub doing: Doing,
+    pub work: BaseWork,
 }
 
 /// What is being built or taken apart while the button is held. Everything needed to
 /// finish it is taken when the button goes down, so looking away does not change it.
 enum Job {
-    /// Changes to the base, with what they cost or give back.
-    Structure {
-        ops: Vec<BuildOp>,
-        pay: Option<Price>,
-        refund: Option<Price>,
+    /// Work on the base, done when the hold is through; still held, the next goes on.
+    Base {
+        doing: Doing,
+        what: String,
+        ops: Vec<Op>,
+        /// The part being built, so held on, the next of it goes in.
+        part: Option<terra_build::PartId>,
+        /// The cube being taken apart from, so held on, the next comes out.
+        cube: Option<IVec3>,
     },
     Place {
         item: Arc<Item>,
@@ -248,12 +247,6 @@ struct Done {
 }
 
 enum Undoable {
-    /// The base changed: how it was before, and what was paid or given back for it.
-    Structure {
-        before: Vec<BuildOp>,
-        paid: Option<Price>,
-        refunded: Option<Price>,
-    },
     /// An item built where it stands.
     Placed(Entity),
     /// An item taken apart: what it was and where it stood.
@@ -296,8 +289,6 @@ pub struct Builder {
     point: Option<(IVec2, i32)>,
     /// A wall or room being drawn, or pressed on.
     drag: Option<Drag>,
-    /// A wall or room drawn, or clicked, and waiting to be built.
-    laid: Option<Drawn>,
     /// Whether the next room is turned a quarter circle.
     room_turned: bool,
     /// Whether the next interior wall runs north and south instead of east and west.
@@ -332,6 +323,10 @@ pub struct Builder {
     /// Why the claim forbids building here, if it does (D94).
     unclaimed: Option<&'static str>,
     pub target: Target,
+    /// The cube of the base the view is on, within reach, openings included.
+    aimed: Option<IVec3>,
+    /// What the hammer would do to the base now.
+    pub planned: Option<Planned>,
 }
 
 impl Default for Builder {
@@ -347,7 +342,6 @@ impl Default for Builder {
             held_corner: None,
             point: None,
             drag: None,
-            laid: None,
             room_turned: false,
             wall_turned: false,
             run: Vec::new(),
@@ -366,6 +360,8 @@ impl Default for Builder {
             short: None,
             unclaimed: None,
             target: Target::Nothing,
+            aimed: None,
+            planned: None,
         }
     }
 }
@@ -427,16 +423,14 @@ impl Builder {
     /// Whether a wall or room is drawn, or being drawn, which a tap of the right button
     /// lets go of.
     pub fn is_drawing(&self) -> bool {
-        self.drag.is_some() || self.laid.is_some()
+        self.drag.is_some()
     }
 
-    /// What is drawn and should be shown: what is being dragged out, else what was laid.
+    /// What is drawn and should be shown: what is being dragged out.
     fn drawn(&self) -> Option<(IVec2, IVec2, i32)> {
-        match (self.drag, self.laid) {
-            (Some(drag), _) if drag.moved => Some((drag.from, drag.to, drag.level)),
-            (_, Some(laid)) => Some((laid.from, laid.to, laid.level)),
-            _ => None,
-        }
+        self.drag
+            .filter(|drag| drag.moved)
+            .map(|drag| (drag.from, drag.to, drag.level))
     }
 
     /// Whether the picked part is drawn by dragging: a room or a wall.
@@ -508,6 +502,7 @@ impl Builder {
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Builder>()
         .add_systems(Startup, setup)
+        .add_systems(PostStartup, price)
         .add_systems(
             FixedUpdate,
             (choose, aim, afford, act).chain().in_set(Sim::Act),
@@ -580,6 +575,32 @@ fn setup(
     });
 }
 
+/// Tells the base what the catalogue says: what fitting a door or window costs, and each
+/// claim's budget of planned cubes (D193).
+fn price(
+    builds: Res<Builds>,
+    items: Res<crate::play::inventory::Items>,
+    mut rules: ResMut<crate::build::act::BuildRules>,
+) {
+    let bill = |cost: &crate::play::inventory::Cost| {
+        let mut bill = terra_build::Bill::default();
+        for &(kind, count) in cost {
+            bill.add(&terra_build::Bill::of(
+                items.name(kind),
+                terra_build::Amount::whole(u64::from(count)),
+            ));
+        }
+        bill
+    };
+    let (door, window) = (bill(builds.door()), bill(builds.window()));
+    rules.rules.props.insert(crate::build::props::DOOR, door);
+    rules
+        .rules
+        .props
+        .insert(crate::build::props::WINDOW, window);
+    rules.budgets = builds.claim.planned.clone();
+}
+
 /// Reads the keys and the wheel: switching modes, cycling variants, and turning what is
 /// in hand. The builder only answers while it is the tool in hand.
 fn choose(
@@ -601,7 +622,6 @@ fn choose(
             builder.before_mode = None;
             builder.work = None;
             builder.drag = None;
-            builder.laid = None;
             continue;
         }
         // Nothing about the job changes while it is being done.
@@ -692,6 +712,8 @@ fn target_point(target: &Target, props: &Query<&Prop>) -> Option<Vec3> {
         )),
         Target::Spot { at, .. } => Some(at.with_y(0.0)),
         Target::Prop(entity) => props.get(entity).ok().map(|prop| prop.at.with_y(0.0)),
+        Target::Structure { cube } => Some(tile(cube.to_array())),
+        Target::Fitted { at } => Some(tile(at)),
     }
 }
 
@@ -748,21 +770,6 @@ mod tests {
                 IVec3::new(1, 1, 0)
             ]
         );
-    }
-
-    #[test]
-    fn what_is_laid_is_near_the_points_on_it_and_a_cell_round() {
-        let laid = Drawn {
-            from: IVec2::new(4, 2),
-            to: IVec2::new(0, 6),
-            level: 0,
-            part: 0,
-            variant: 0,
-        };
-        assert!(laid.near(IVec2::new(2, 4)));
-        assert!(laid.near(IVec2::new(-1, 7)));
-        assert!(!laid.near(IVec2::new(-2, 4)));
-        assert!(!laid.near(IVec2::new(2, 8)));
     }
 
     #[test]

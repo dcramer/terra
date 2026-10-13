@@ -6,6 +6,7 @@
 //! fill their squares. Block kinds are not pieces but their cubes' surface (`terra_build::surface`). Pieces not yet in are the same models in the ghost's material, and
 //! the next one lit.
 
+use super::draw::State;
 use super::{Build, BuildLook, Built, Shown, Site, redraw};
 use crate::planet::Planet;
 use bevy::asset::LoadState;
@@ -230,15 +231,20 @@ fn resolve(
 /// Places a copy of a model for each piece a model draws, in the order they go in: those
 /// in drawn as the model is, the next lit and the rest a ghost. The copies are children of
 /// the entity the build's other pieces are drawn on.
-pub(super) fn place(commands: &mut Commands, build: &mut Build, laid: &[(&LogKit, &[Piece])]) {
+pub(super) fn place(
+    commands: &mut Commands,
+    build: &mut Build,
+    laid: &[(&LogKit, &[Piece])],
+    states: &[Vec<State>],
+) {
     for entity in build.model_entities.drain(..) {
         commands.entity(entity).despawn();
     }
     let Some(kit) = build.kit_pieces.clone() else {
         return;
     };
-    for &(own, pieces) in laid {
-        place_kit(commands, build, &kit, pieces, own.diameter);
+    for (&(own, pieces), states) in laid.iter().zip(states) {
+        place_kit(commands, build, &kit, pieces, states, own.diameter);
     }
 }
 
@@ -247,22 +253,22 @@ fn place_kit(
     build: &mut Build,
     kit: &KitPieces,
     pieces: &[Piece],
+    states: &[State],
     diameter: f32,
 ) {
-    let done = done(pieces.len(), build.shown);
-    for (index, piece) in pieces.iter().enumerate() {
+    for (piece, state) in pieces.iter().zip(states) {
         // A door or window is not part of the plan: it is fitted into its opening once
         // the building is up, so a plan or a building going up shows only the opening.
         if matches!(piece, Piece::Opening { .. }) && !matches!(build.shown, Shown::Built) {
             continue;
         }
-        let state = index.cmp(&done);
         for (model, at) in fitted(kit, piece, diameter) {
             for (mesh, material) in &model.parts {
                 let material = match state {
-                    std::cmp::Ordering::Less => material.clone(),
-                    std::cmp::Ordering::Equal => build.next_material.clone(),
-                    std::cmp::Ordering::Greater => build.ghost_material.clone(),
+                    State::In => material.clone(),
+                    State::Next => build.next_material.clone(),
+                    State::Ghost => build.ghost_material.clone(),
+                    State::Left => continue,
                 };
                 let entity = commands
                     .spawn((
@@ -276,6 +282,32 @@ fn place_kit(
             }
         }
     }
+}
+
+/// The kit's door or window fitted to an opening's box, in the base's own space: each
+/// part's mesh and material, and where it goes.
+pub(super) fn opening(
+    kit: &KitPieces,
+    min: Vec3,
+    max: Vec3,
+    along_x: bool,
+    door: bool,
+) -> Vec<(Handle<Mesh>, Handle<StandardMaterial>, Transform)> {
+    let piece = Piece::Opening {
+        min,
+        max,
+        along_x,
+        door,
+    };
+    fitted(kit, &piece, 0.0)
+        .into_iter()
+        .flat_map(|(model, at)| {
+            model
+                .parts
+                .iter()
+                .map(move |(mesh, material)| (mesh.clone(), material.clone(), at))
+        })
+        .collect()
 }
 
 /// The models a piece is drawn with, and where each copy goes.

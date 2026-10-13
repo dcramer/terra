@@ -956,9 +956,22 @@ impl Base {
     /// `origin` and `direction` are in the base's own space, in metres; `direction` is
     /// unit length.
     pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f32) -> Option<BuildHit> {
+        self.raycast_where(origin, direction, max_distance, |cube| {
+            cube.fill != Fill::Open
+        })
+    }
+
+    /// As [`Base::raycast`], meeting only the cubes `meets` says, such as openings too.
+    pub fn raycast_where(
+        &self,
+        origin: Vec3,
+        direction: Vec3,
+        max_distance: f32,
+        meets: impl Fn(&Cube) -> bool,
+    ) -> Option<BuildHit> {
         self.cubes
             .iter()
-            .filter(|(_, cube)| cube.fill != Fill::Open)
+            .filter(|(_, cube)| meets(cube))
             .filter_map(|(at, _)| {
                 let low = at.as_vec3() * CELL_M;
                 let (distance, normal) =
@@ -1013,7 +1026,15 @@ impl Base {
     /// The base with its log walls laid as logs: everything else as triangles, and the
     /// logs, in the order they go in, to draw as they stand.
     pub fn mesh_with_kits(&self, kits: &logs::Kits) -> (BaseMesh, Vec<logs::Layout>) {
-        let mesh = mesh::build(self, |kind| {
+        let mesh = self.mesh_for_kits(kits);
+        let layouts = kits.0.iter().map(|kit| logs::lay(self, kit)).collect();
+        (mesh, layouts)
+    }
+
+    /// The base as triangles, its walls of a kind with a kit left to the kit, and its
+    /// floors and roofs in the kits' colours.
+    pub fn mesh_for_kits(&self, kits: &logs::Kits) -> BaseMesh {
+        mesh::build(self, |kind| {
             kits.of(kind).map(|kit| mesh::KitLook {
                 gable: kit.colours.board,
                 floor: kit.colours.light,
@@ -1026,9 +1047,7 @@ impl Base {
                     .map(|(material, texture)| (*material, texture.metres))
                     .collect(),
             })
-        });
-        let layouts = kits.0.iter().map(|kit| logs::lay(self, kit)).collect();
-        (mesh, layouts)
+        })
     }
 }
 

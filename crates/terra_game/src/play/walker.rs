@@ -20,13 +20,13 @@ use terra_world::{lod::Viewpoint, tick::Smoothed};
 /// down (`Downed`), along with what they carry, know and feel, which the layers above add.
 #[derive(Component)]
 #[require(Smoothed, Viewpoint)]
-pub(super) struct Player;
+pub(crate) struct Player;
 
 /// The player this machine steers: its input moves them, and the camera, the screen and
 /// what is heard follow them. Systems driven by input or drawing the screen act on this
 /// one; the world's own systems, such as creatures and stations, act on every [`Player`].
 #[derive(Component)]
-pub(super) struct LocalPlayer;
+pub(crate) struct LocalPlayer;
 
 /// The query filter for this machine's player. It names [`Player`] as well, so Bevy can
 /// tell a query for them is apart from one that leaves players out (`Without<Player>`).

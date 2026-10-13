@@ -100,7 +100,7 @@ Agreed by the developers (D144); how a part is put into a plan is the one part s
 | Wheel, or Z and C | Turn: a quarter turn for structures; an eighth for items on the grid; 15 degrees off it | Yes |
 | Shift and wheel, or Page Up and Page Down | Raise and lower: half a metre a notch on the grid, a tenth off it, up to three metres; structures a storey at a time, two down to two up (D143). Stations and the claim stone stay on the ground | Yes |
 | Ctrl and wheel | The kind of construction (D139) or material. Ctrl also rolls (D97), so while a part is picked it should not; to settle when there are kinds | No |
-| Click left mouse | Lay it: a plan, for a structure; for an item, hold instead | For walls, roofs and the room shortcut, laid as a ghost that stays; holding on it builds it whole, as there are no plans yet |
+| Click left mouse | Lay it: a plan, for a structure; for an item, hold instead | For walls, roofs and the room shortcut, laid as a plan (D201) |
 | Press, drag and let go | Draw it: a wall or fence along the line dragged; a room or floor over the rectangle dragged. A plain click lays the variant's own size | For walls, roofs and the room shortcut |
 | Hold left mouse (items) | Build the item there, spending its cost | Yes |
 | Tap right mouse | Put the part away (or, carrying something in move mode, put it back) | Yes |
@@ -111,10 +111,10 @@ After a placement the same part, variant, turn and height stay in hand, so the n
 
 | Input | Does | Built |
 |---|---|---|
-| Aim at a plan | Its next part is outlined, and the prompt says what it is, what it needs and how many are within reach: "Log: 3 of 12. 9 more needed, 4 in reach" | No |
+| Aim at a plan | Its next part is outlined, and the prompt says what it is, what it needs and how many are within reach: "Log: 3 of 12. 9 more needed, 4 in reach" | Lit in the plan, the prompt saying what it takes or why it cannot go in; not counts or reach |
 | Carrying a big part, left mouse at its outline | Set it in place (see [how a part goes in](#planned-then-constructed)) | No |
-| Swing the hammer (left mouse) at a set part, or at a plan's next small part | Fix it, or put it in: a few swings each, the fixings from the pack or storage in the claim (D141) | No |
-| Q, then hold left mouse | Take the plan away, and everything put into it comes back | No |
+| Swing the hammer (left mouse) at a set part, or at a plan's next small part | Fix it, or put it in: a few swings each, the fixings from the pack or storage in the claim (D141) | Held, from the pack: with nothing picked, or held still on a plan, what goes in next goes in, and the next while held; not from storage, no carrying |
+| Q, then hold left mouse | Take the plan away, and everything put into it comes back | Yes, part by part, last in first out |
 
 ### Taking apart (Q)
 
@@ -290,7 +290,7 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 | A storey up, and stairs or a ladder to it | Storeys built; stairs missing |
 | Footing under walls on the ground | Built |
 | Fence, wall, gate and palisade, drawn as a line | Missing; needed once bases are attacked (D90) |
-| Door that opens, closes and locks | Missing |
+| Door that opens, closes and locks | Fitted into an opening, opened and shut with F; no lock (D201) |
 | Stations: workbench, smelter, forge, campfire | Built |
 | Furniture, storage, lights | Built |
 | Claim stone | Built |

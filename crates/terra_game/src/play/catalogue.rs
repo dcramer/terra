@@ -11,7 +11,7 @@ use super::inventory::{Cost, Items};
 use bevy::prelude::Resource;
 use serde::Deserialize;
 use std::sync::Arc;
-use terra_build::{CELL_M, Panel};
+use terra_build::Panel;
 use terra_items::ItemKind;
 
 const FILE: &str = "builds.ron";
@@ -22,8 +22,6 @@ const FILE: &str = "builds.ron";
 #[derive(Resource)]
 pub struct Builds {
     parts: Vec<Part>,
-    floor: Vec<(ItemKind, u32)>,
-    wall: Vec<(ItemKind, u32)>,
     window: Vec<(ItemKind, u32)>,
     door: Vec<(ItemKind, u32)>,
     pub claim: ClaimRule,
@@ -34,6 +32,8 @@ pub struct Builds {
 pub struct ClaimRule {
     pub across_m: Vec<f32>,
     pub grow: Vec<Vec<(ItemKind, u32)>>,
+    /// How many cubes it may have planned and not yet built, at each step (D193).
+    pub planned: Vec<usize>,
 }
 
 #[derive(Deserialize)]
@@ -47,8 +47,6 @@ struct BuildsFile {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StructureFile {
-    floor: Vec<(String, u32)>,
-    wall: Vec<(String, u32)>,
     window: Vec<(String, u32)>,
     door: Vec<(String, u32)>,
 }
@@ -58,6 +56,7 @@ struct StructureFile {
 struct ClaimFile {
     across_m: Vec<f32>,
     grow: Vec<Vec<(String, u32)>>,
+    planned: Vec<usize>,
 }
 
 #[derive(Deserialize)]
@@ -152,13 +151,12 @@ impl Builds {
             .collect();
         Self {
             parts,
-            floor: cost(&file.structure.floor),
-            wall: cost(&file.structure.wall),
             window: cost(&file.structure.window),
             door: cost(&file.structure.door),
             claim: ClaimRule {
                 across_m: file.claim.across_m,
                 grow: file.claim.grow.iter().map(|each| cost(each)).collect(),
+                planned: file.claim.planned,
             },
         }
     }
@@ -170,16 +168,6 @@ impl Builds {
 
     pub fn part(&self, index: usize) -> &Part {
         &self.parts[index]
-    }
-
-    /// What floor costs, paid by `floor_units`.
-    pub fn floor(&self) -> &Cost {
-        &self.floor
-    }
-
-    /// What wall costs, paid by `wall_units`.
-    pub fn wall(&self) -> &Cost {
-        &self.wall
     }
 
     /// What a window costs, paid by `window_units`.
@@ -231,23 +219,6 @@ impl Builds {
             .position(|part| wanted(&part.kind))
             .expect("the catalogue has this part")
     }
-}
-
-/// How many times over `floor()` is paid for so many cells of floor: once for every three
-/// square metres, or part of that.
-pub fn floor_units(cells: usize) -> u32 {
-    libm::ceilf(cells as f32 * CELL_M * CELL_M / 3.0) as u32
-}
-
-/// How many times over `wall()` is paid for so many cells of interior wall: once for every
-/// metre and a half.
-pub fn wall_units(cells: usize) -> u32 {
-    libm::ceilf(cells as f32 * CELL_M / 1.5) as u32
-}
-
-/// How many times over `window()` is paid for a window so many cells wide: once a metre.
-pub fn window_units(cells: usize) -> u32 {
-    libm::ceilf(cells as f32 * CELL_M) as u32
 }
 
 /// How long something takes to build, from what it costs: half a second, and a little

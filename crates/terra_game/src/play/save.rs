@@ -20,12 +20,15 @@ use super::told::Notice;
 use super::vitals::Vitals;
 use super::{IsLocalPlayer, Player, View};
 use crate::build::Site;
+use crate::build::act::{BuildRules, Offcuts};
 use crate::planet::Planet;
 use crate::shell::Options;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use terra_build::save::{SavedOp, convert};
+use terra_build::ops::Op;
+use terra_build::save::{SavedOp, Snapshot, convert};
+use terra_build::{Base, Bill};
 use terra_core::{MaterialId, Operation};
 use terra_items::{ActionBar, Cell, Equipment, ItemId};
 
@@ -37,7 +40,18 @@ const EVERY_S: f32 = 30.0;
 struct SaveFile {
     version: u32,
     player: SavedPlayer,
+    /// The base, as saves before snapshots held it: the shortcuts that made it, read and
+    /// turned into cubes, and never written.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     base: Vec<SavedOp>,
+    /// The base: a snapshot of it and the operations since (construction-001, gap 4).
+    #[serde(default)]
+    snapshot: Option<Snapshot>,
+    #[serde(default)]
+    since: Vec<Op>,
+    /// What is left of items cut into for building (`build::act::Offcuts`).
+    #[serde(default)]
+    offcuts: Bill,
     /// Where the base stands: the place and turn of its grid, begun at its claim stone.
     #[serde(default)]
     frame: Option<([f32; 3], [f32; 4])>,
@@ -185,6 +199,7 @@ fn load(
     mut planet: ResMut<Planet>,
     models: Res<Models>,
     (builds, recipes, look): (Res<Builds>, Res<Recipes>, Res<crate::build::BuildLook>),
+    (rules, mut offcuts): (Res<BuildRules>, ResMut<Offcuts>),
     mut site: ResMut<Site>,
     mut items: ResMut<Items>,
     mut view: Single<&mut View, IsLocalPlayer>,
@@ -260,13 +275,20 @@ fn load(
             Transform::from_translation(Vec3::from(at)).with_rotation(Quat::from_array(turn));
         site.move_to(frame, &mut commands, &planet, &mut meshes);
     }
-    let (base, left_out) = convert(&save.base, look.laying);
-    if left_out > 0 {
-        warn!(
-            "{left_out} of the saved base's rooms had a wall pushed or pulled; those changes are left out."
-        );
+    match &save.snapshot {
+        Some(snapshot) => site.restore(snapshot, &save.since, &rules.rules),
+        None => {
+            // A save from before snapshots: the shortcuts that made it, laid as built.
+            let (base, left_out) = convert(&save.base, look.laying);
+            if left_out > 0 {
+                warn!(
+                    "{left_out} of the saved base's rooms had a wall pushed or pulled; those changes are left out."
+                );
+            }
+            site.restore(&Base::from_shortcuts(&base).snapshot(), &[], &rules.rules);
+        }
     }
-    site.replace_with(&base, &mut commands, &planet, &mut meshes);
+    offcuts.0 = save.offcuts.clone();
     for entity in &placed {
         commands.entity(entity).despawn();
     }
@@ -449,7 +471,7 @@ fn autosave(
     keys: Res<ButtonInput<KeyCode>>,
     path: Res<SavePath>,
     planet: Res<Planet>,
-    site: Res<Site>,
+    (site, offcuts): (Res<Site>, Res<Offcuts>),
     claim: Single<&Claim, IsLocalPlayer>,
     items: Res<Items>,
     recipes: Res<Recipes>,
@@ -469,7 +491,7 @@ fn autosave(
     let save = gather(
         &clock,
         &planet,
-        &site,
+        (&site, &offcuts),
         &claim,
         (&items, &recipes),
         &view,
@@ -489,7 +511,7 @@ fn save_on_exit(
     mut exits: MessageReader<AppExit>,
     path: Res<SavePath>,
     planet: Res<Planet>,
-    site: Res<Site>,
+    (site, offcuts): (Res<Site>, Res<Offcuts>),
     claim: Single<&Claim, IsLocalPlayer>,
     items: Res<Items>,
     recipes: Res<Recipes>,
@@ -502,7 +524,7 @@ fn save_on_exit(
         let save = gather(
             &clock,
             &planet,
-            &site,
+            (&site, &offcuts),
             &claim,
             (&items, &recipes),
             &view,
@@ -526,7 +548,7 @@ type PlayerParts<'a> = (
 fn gather(
     clock: &Clock,
     planet: &Planet,
-    site: &Site,
+    (site, offcuts): (&Site, &Offcuts),
     claim: &Claim,
     (items, recipes): (&Items, &Recipes),
     view: &View,
@@ -582,7 +604,18 @@ fn gather(
             bar: bar_slots,
             picked: bar.0.picked(),
         },
-        base: site.operations.iter().map(|&op| op.into()).collect(),
+        base: Vec::new(),
+        snapshot: Some(
+            site.snapshot
+                .clone()
+                .unwrap_or_else(|| site.base.snapshot()),
+        ),
+        since: if site.snapshot.is_some() {
+            site.since.clone()
+        } else {
+            Vec::new()
+        },
+        offcuts: offcuts.0.clone(),
         frame: Some((
             site.frame.translation.into(),
             site.frame.rotation.to_array(),
@@ -934,7 +967,7 @@ mod tests {
         /// What each slot of the bar points at, by where it is carried.
         bar: Vec<Option<(u8, u8)>>,
         picked: usize,
-        base: Vec<BuildOp>,
+        base: Snapshot,
         frame: Transform,
         /// Each station or thing placed, with its queue, progress and what it has made.
         props: Vec<(
@@ -991,7 +1024,7 @@ mod tests {
                 })
                 .collect(),
             picked: bar.picked(),
-            base: site.operations.clone(),
+            base: site.base.snapshot(),
             frame: site.frame,
             props: Vec::new(),
             claim: entity.get::<Claim>().unwrap().step(),
@@ -1040,6 +1073,7 @@ mod tests {
                 |clock: Res<Clock>,
                  planet: Res<Planet>,
                  site: Res<Site>,
+                 offcuts: Res<Offcuts>,
                  claim: Single<&Claim, IsLocalPlayer>,
                  items: Res<Items>,
                  recipes: Res<Recipes>,
@@ -1053,7 +1087,7 @@ mod tests {
                     gather(
                         &clock,
                         &planet,
-                        &site,
+                        (&site, &offcuts),
                         &claim,
                         (&items, &recipes),
                         &view,
@@ -1143,5 +1177,17 @@ mod tests {
         load_from(world, &path);
         let _ = std::fs::remove_file(&path);
         assert_eq!(kept(world), before);
+    }
+
+    #[test]
+    fn a_save_from_before_snapshots_holds_the_shortcuts_that_made_its_base() {
+        let text = "(version: 1, player: (at: (0, 0, 0), facing: (0, 0, 1), health: 100, \
+            stamina: 100, fed: 100, skills: [], worn: [], backpack: [], bar: [], picked: 0), \
+            base: [Op(AddRoom(min: (0, 0, 0), max: (3, 0, 3), kind: (1)))], props: [], \
+            claim_step: 0, people: [])";
+        let save: SaveFile = ron::from_str(text).unwrap();
+        assert_eq!(save.snapshot, None);
+        let (ops, _) = convert(&save.base, terra_build::Kind(1));
+        assert_eq!(Base::from_shortcuts(&ops).tile_count(), 4);
     }
 }

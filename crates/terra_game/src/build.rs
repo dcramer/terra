@@ -16,16 +16,22 @@ use crate::play::Footprint;
 use crate::start::Start;
 pub(crate) use crate::start::lifted;
 use bevy::{light::NotShadowCaster, prelude::*};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::SystemTime;
 use terra_build::logs::{Kits, LogKit, Pattern};
-use terra_build::{Base, BuildOp, CELL_M, Kind, Material, Panel, STOREY_M, Walker, example};
+use terra_build::ops::{Context, Done, Op, Refusal};
+use terra_build::save::Snapshot;
+use terra_build::{Base, BuildOp, CELL_M, Kind, Material, Panel, Rules, STOREY_M, Walker, example};
 use terra_core::Operation;
 
+pub(crate) mod act;
 mod draw;
 mod pieces;
+pub(crate) mod plans;
+pub(crate) mod props;
 mod relief;
+mod remote;
 mod sheet;
 
 use draw::redraw;
@@ -46,9 +52,23 @@ pub(super) struct Build {
     pub base: Base,
     /// Places the build's own space on the planet.
     pub frame: Transform,
+    /// The shortcuts that built it, for a build laid whole, as a village's houses are.
     pub operations: Vec<BuildOp>,
+    /// The operations done to it since its last snapshot, which are kept and saved with
+    /// it (construction-001, gap 4).
+    pub snapshot: Option<Snapshot>,
+    pub since: Vec<Op>,
     /// Goes up by one every time the build changes shape.
     pub revision: u64,
+    /// The revision last drawn.
+    drawn: u64,
+    /// The cubes lit as what goes in next.
+    next: BTreeSet<[i32; 3]>,
+    /// Whether it must be drawn again though its shape has not changed.
+    stale: bool,
+    /// Whether its doors and windows are props fitted into it (the player's base), rather
+    /// than drawn by its kit in every opening (a village's houses, the kit sheet).
+    pub fitted_props: bool,
     /// Steps from each ground-floor door down to the ground. A walker treats each flight
     /// as a ramp.
     ramps: Vec<Ramp>,
@@ -89,6 +109,9 @@ pub enum Shown {
     Built,
     Plan(f32),
 }
+
+/// How many operations are kept before they are folded into a snapshot.
+const FOLD_AFTER: usize = 400;
 
 /// How much ground a room set into it clears round its walls.
 const ROOM_CLEARANCE_M: f32 = 0.2;
@@ -179,6 +202,18 @@ fn modified() -> Option<SystemTime> {
         .max()
 }
 
+/// Each kit's kind, by its file's name: `logs`, `stone`.
+fn kit_names() -> BTreeMap<Kind, String> {
+    kit_paths()
+        .iter()
+        .filter_map(|path| {
+            let kit = read_kit(path)?;
+            let name = path.file_stem()?.to_string_lossy().to_string();
+            Some((kit.kind(), name))
+        })
+        .collect()
+}
+
 /// Reads every kit. A mistake in one is said in the log and that kit left out; `None` if
 /// none could be read.
 fn read_kits() -> Option<Kits> {
@@ -222,6 +257,8 @@ pub fn plugin(app: &mut App) {
     }
     let free = not(resource_exists::<DrivenByPlayer>);
     app.insert_resource(Added)
+        .init_resource::<act::BuildRules>()
+        .init_resource::<act::Offcuts>()
         .add_systems(Startup, setup)
         .add_systems(
             PostStartup,
@@ -243,6 +280,16 @@ pub fn plugin(app: &mut App) {
             )
                 .chain(),
         );
+}
+
+/// The player's base, built by plans (docs/building-plan.md, step 4): acting on it, its
+/// fitted doors and windows, and drawing it again as it changes. Only where a player
+/// builds, so a run of the build keys alone needs nothing of the player.
+pub(crate) fn player_plugin(app: &mut App) {
+    act::plugin(app);
+    props::plugin(app);
+    remote::plugin(app);
+    app.add_systems(Update, draw::redraw_changed);
 }
 
 /// A point just outside the example base's door, in the base's own space.
@@ -278,6 +325,12 @@ impl Build {
             base: Base::default(),
             frame,
             operations: Vec::new(),
+            snapshot: None,
+            since: Vec::new(),
+            drawn: 0,
+            next: BTreeSet::new(),
+            stale: false,
+            fitted_props: false,
             revision: 0,
             ramps: Vec::new(),
             footprint: Footprint {
@@ -350,7 +403,13 @@ impl Build {
         meshes: &mut Assets<Mesh>,
     ) {
         self.frame = frame;
-        for part in [self.structure, self.glass, self.foundation, self.steps] {
+        for part in [
+            self.structure,
+            self.glass,
+            self.foundation,
+            self.steps,
+            self.pieces,
+        ] {
             commands.entity(part).insert(frame);
         }
         self.revision += 1;
@@ -416,6 +475,56 @@ impl Build {
             self.revision += 1;
             redraw(commands, self, planet, meshes);
         }
+    }
+
+    /// Does operations to the base as one act, checked against it as it is (D21): all of
+    /// them or, if one is refused, none. It is drawn again on the next frame.
+    pub(super) fn act(&mut self, ops: &[Op], cx: &Context) -> Result<Done, Refusal> {
+        let done = self.base.act_all(ops, cx)?;
+        self.since.extend(ops.iter().cloned());
+        // Now and then what has been done is folded into a snapshot.
+        if self.since.len() > FOLD_AFTER {
+            self.fold();
+        }
+        self.revision += 1;
+        Ok(done)
+    }
+
+    /// Lights these cubes as what goes in next, drawing it again if that changes them.
+    pub(super) fn light(&mut self, next: BTreeSet<[i32; 3]>) {
+        if self.next != next {
+            self.next = next;
+            self.stale = true;
+        }
+    }
+
+    /// Takes a snapshot of the base as it is, and forgets the operations before it.
+    pub(super) fn fold(&mut self) {
+        self.snapshot = Some(self.base.snapshot());
+        self.since.clear();
+    }
+
+    /// Starts the base again from a snapshot and the operations since, as when a saved
+    /// game is loaded. Operations that no longer apply are left out, and said.
+    pub(super) fn restore(&mut self, snapshot: &Snapshot, since: &[Op], rules: &Rules) {
+        match Base::from_snapshot(snapshot) {
+            Ok(base) => self.base = base,
+            Err(problem) => {
+                warn!("The saved base could not be read: {problem:?}");
+                self.base = Base::default();
+            }
+        }
+        self.operations.clear();
+        self.snapshot = Some(snapshot.clone());
+        self.since.clear();
+        let cx = Context::free(rules);
+        for op in since {
+            match self.base.act(op, &cx) {
+                Ok(_) => self.since.push(op.clone()),
+                Err(why) => warn!("A saved change to the base no longer applies: {why:?}"),
+            }
+        }
+        self.revision += 1;
     }
 
     /// Applies an operation and redraws the base. Returns whether anything changed.
@@ -522,6 +631,21 @@ fn setup(
         timer: Timer::from_seconds(1.0, TimerMode::Repeating),
     });
     let mut build = Build::new(&mut commands, &look, frame, "Base");
+    // The player's base is built by plans, its doors and windows fitted as props.
+    build.fitted_props = driven.is_some();
+    if let Some(kits) = look.kits.as_deref() {
+        commands.insert_resource(act::BuildRules {
+            rules: kits.rules(),
+            blocks: kits
+                .0
+                .iter()
+                .map(|kit| kit.kind())
+                .filter(|&kind| kits.one_at_a_time(kind))
+                .collect(),
+            names: kit_names(),
+            budgets: Vec::new(),
+        });
+    }
     let operations = if driven.is_some() {
         Vec::new()
     } else {

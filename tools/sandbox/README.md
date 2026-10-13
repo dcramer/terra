@@ -36,7 +36,7 @@ r said                                   # everything said since the last action
 | `stop` | Close it |
 | `find NAME` | Entities whose name contains NAME: id, where they are, their local transform |
 | `place NAME [--translation x,y,z] [--rotation x,y,z] [--scale s]` | Set the local transform of the entity called exactly NAME |
-| `look NAME\|x,y,z [--distance m] [--around degrees] [--height m] [--aim m]` | Hold the camera on an entity, following it, or a point; `around` is from the model's front, `aim` how far above it to look (a person's position is their feet) |
+| `look NAME\|x,y,z [--distance m] [--around degrees] [--height m] [--aim m] [--from x,y,z]` | Hold the camera on an entity, following it, or a point; `around` is from the model's front, `aim` how far above it to look (a person's position is their feet); `from` puts the eye at a point in the world |
 | `release` | Let the camera go |
 | `pause`, `resume` | Stop and start the game's clock, animations included |
 | `step FRAMES` | Stop the clock, let it run that many frames, stop it again, and wait until it has |
@@ -56,13 +56,15 @@ r said                                   # everything said since the last action
 | `pose CLIP [FRACTION]` | In the workbench: hold every model that far through a clip given with `--anim`, or play it |
 | `shape [--model N] TEMPLATE` or `shape heavy=0.5 thin=0.2` | In the workbench: reshape a model's body live, as a template or any mix of morphs (`appearance`) |
 | `shot FILE.png` | Save a screenshot and wait for it |
+| `call build.state`, `call build.lay {…}` … | In play: the player's base, read and built through the same checked operations as the hammer: `build.state`, `build.lay`, `build.opening`, `build.fill`, `build.take_apart`, `build.fit`, `build.door`, `build.undo`, `build.op`, `build.point` (see `crates/terra_game/src/build/remote.rs`) |
 | `call METHOD [JSON]` | Any method; `call rpc.discover` lists them, Bevy's `world.*` ones included |
 
 ## Scripts
 
-The commands are also a module, [client.ts](client.ts), for scripts that test the game: `start`, `stop`, `press`, `unpress`, `step`, `waitFor`, `waitUntil`, `waitSeconds`, `state`, `warp`, `aim`, `give`, `take`, `hold` and `shot`. Two use it:
+The commands are also a module, [client.ts](client.ts), for scripts that test the game: `start`, `stop`, `press`, `unpress`, `step`, `waitFor`, `waitUntil`, `waitSeconds`, `state`, `warp`, `aim`, `give`, `take`, `hold` and `shot`. Three use it:
 
 - [loop.ts](loop.ts), run by `cargo xtask loop`: the play experiment's loop end to end in one running game, restarted once to load what it saved. Each step sets itself up, aims at what it needs by asking the game where it is, acts, and waits for the game to say what happened. A failing step says what the game said instead and leaves `shots/loop-<step>.png`.
+- [cabin.ts](cabin.ts), run by `cargo xtask cabin`: a log cabin on a stone floor from plan to door: laid, a doorway and window cut, a roof laid, built step by step from the pack, a cube taken out and the taking undone, a refusal, a door and window fitted, the shut door keeping the player out and opened with F letting them in, saved and loaded the same. Each step checked by `build.state`; screenshots in `shots/cabin-*.png`.
 - [diverge.ts](diverge.ts): where two runs of the game part ways. The sandbox writes the play experiment's whole state every frame with `--trace FILE.jsonl`; `diverge.ts A.jsonl B.jsonl` names the first frame that differs and the values that differ in it. `diverge.ts --twice -- <options for a scripted run>` runs the same run twice and compares, which says whether the game does the same thing from the same start and keys.
 
 ## What the run said, and the mark

@@ -12,12 +12,12 @@
 
 mod archery;
 mod bag;
-mod bodies;
+pub(crate) mod bodies;
 mod build_menu;
 mod button;
 mod camera;
 mod catalogue;
-mod claim;
+pub(crate) mod claim;
 mod combat;
 mod controls;
 mod crafting;
@@ -34,7 +34,7 @@ mod harvest;
 pub(crate) mod held;
 mod hits;
 mod intent;
-mod interact;
+pub(crate) mod interact;
 pub mod inventory;
 mod kinds;
 mod map;
@@ -47,7 +47,7 @@ mod people;
 mod pile;
 mod pooling;
 mod probe;
-mod props;
+pub(crate) mod props;
 mod registries;
 pub use props::{Look as PropLook, glowing as prop_glowing, lit as prop_lit, looks as prop_looks};
 mod save;
@@ -58,7 +58,7 @@ mod soundscape;
 mod species;
 mod station_screen;
 mod tiles;
-mod told;
+pub(crate) mod told;
 mod tool;
 mod torchlight;
 mod vitals;
@@ -76,7 +76,8 @@ use options::MenuSystems;
 use terra_world::{data, daylight, flora, flora_kinds, footprint, lod, models, tick, world};
 pub use walker::{ArriveAt, Hands, PlayerInput, WalkerPlugin, WarpTo};
 // The player's own components are the walker's; every layer reads them by these names.
-use walker::{Downed, IsLocalPlayer, LocalPlayer, Motion, Player, Stance, View};
+use walker::{Downed, IsLocalPlayer, Motion, Stance, View};
+pub(crate) use walker::{LocalPlayer, Player};
 pub use world::WorldPlugin;
 
 /// The whole game, in three layers, each standing only on those before it:
@@ -115,6 +116,7 @@ impl Plugin for GameplayPlugin {
         registries::plugin(app);
         // A player needs something to build on, and takes over from the build keys.
         build::plugin(app);
+        build::player_plugin(app);
         torchlight::plugin(app);
         wear::plugin(app);
         pile::plugin(app);

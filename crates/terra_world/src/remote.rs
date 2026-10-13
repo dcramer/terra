@@ -8,9 +8,10 @@
 //! - `sandbox.find {name}`: entities whose name contains `name`, with where they are.
 //! - `sandbox.place {name, translation?, rotation?, scale?}`: sets the local transform of
 //!   the entity called exactly `name`; rotation in degrees about X, Y, then Z.
-//! - `sandbox.look {at, distance?, around?, height?, aim?}`: holds the camera on an entity
-//!   by name, or a point, following it; `around` is degrees round from the model's front,
-//!   `aim` how far above it to look, as at a person's chest rather than their feet.
+//! - `sandbox.look {at, distance?, around?, height?, aim?, from?}`: holds the camera on an
+//!   entity by name, or a point, following it; `around` is degrees round from the model's
+//!   front, `aim` how far above it to look, as at a person's chest rather than their feet;
+//!   `from` puts the eye at a point in the world instead.
 //!   `sandbox.release` lets the camera go.
 //! - `sandbox.pause {paused}`: stops or restarts the game's clock, animations included.
 //! - `sandbox.step {frames}`: lets a stopped clock run for so many frames, then stops it.
@@ -227,6 +228,8 @@ struct Hold {
     distance: f32,
     around: f32,
     height: f32,
+    /// Where the eye is, in the world, when asked for rather than worked out.
+    from: Option<Vec3>,
 }
 
 enum Aim {
@@ -248,6 +251,7 @@ struct Look {
     distance: Option<f32>,
     around: Option<f32>,
     height: Option<f32>,
+    from: Option<[f32; 3]>,
 }
 
 fn look(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
@@ -257,6 +261,7 @@ fn look(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         distance,
         around,
         height,
+        from,
     } = parse_some(params)?;
     let target = match at {
         At::Name(name) => Aim::Entity(
@@ -270,6 +275,7 @@ fn look(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         distance: distance.unwrap_or(LOOK_DISTANCE_M),
         around: around.unwrap_or(30.0),
         height: height.unwrap_or(0.3),
+        from: from.map(Vec3::from_array),
     });
     Ok(json!("held"))
 }
@@ -315,7 +321,9 @@ fn hold_camera(
     let side = up.cross(front);
     let turn = hold.around.to_radians();
     let out = front * libm::cosf(turn) + side * libm::sinf(turn);
-    let eye = target + out * hold.distance + up * hold.height;
+    let eye = hold
+        .from
+        .unwrap_or(target + out * hold.distance + up * hold.height);
     for mut camera in &mut cameras {
         *camera = Transform::from_translation(eye).looking_at(target, up);
     }

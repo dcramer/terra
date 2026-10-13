@@ -16,19 +16,53 @@ pub fn prompt(
     settings: &Settings,
     items: &inventory::Items,
 ) -> String {
-    if builder.stowed {
-        return format!(
-            "{}  build menu",
-            capitalised(settings.key(Action::BuildMenu))
-        );
-    }
+    let menu = format!(
+        "{}  build menu",
+        capitalised(settings.key(Action::BuildMenu))
+    );
     match builder.progress() {
         Some((_, true)) => return "Taking apart      Let go to stop".to_string(),
         Some((_, false)) => return "Building      Let go to stop".to_string(),
         None => {}
     }
-    if let Some(reason) = builder.unclaimed {
+    if let Some(reason) = builder.unclaimed
+        && !builder.stowed
+    {
         return reason.to_string();
+    }
+    let hold = settings.hold(Action::Use);
+    // Work on the base: what it would do and take, or, refused, why, in the words the
+    // base gives (docs/building-plan.md, operations).
+    if let Some(planned) = &builder.planned
+        && planned.doing != Doing::Lay
+    {
+        let said = match &planned.work.check {
+            Err(why) => why.message(),
+            Ok(done) => {
+                let mut said = format!("{hold}  {}", planned.work.what);
+                if !done.took.is_empty() {
+                    said += &format!("      Takes {}", done.took);
+                }
+                if !done.gave.is_empty() {
+                    said += &format!("      Gives back {}", done.gave);
+                }
+                said
+            }
+        };
+        return if builder.stowed {
+            format!("{said}      {menu}")
+        } else {
+            said
+        };
+    }
+    if builder.stowed {
+        return menu;
+    }
+    // A plan the base would refuse says why, before it is laid.
+    if let Some(planned) = &builder.planned
+        && let Err(why) = &planned.work.check
+    {
+        return why.message();
     }
     // Laying costs nothing, so drawing is not stopped for want of what building needs.
     if let Some((kind, more)) = builder.short
@@ -40,13 +74,11 @@ pub fn prompt(
             items.found(kind)
         );
     }
-    let hold = settings.hold(Action::Use);
     let tap = capitalised(settings.key(Action::Use));
     let next = settings.key(Action::NextKind);
     let let_go = capitalised(settings.key(Action::BuildMenu));
-    // Drawing a wall or room, or one drawn and waiting (D144).
+    // Drawing a wall, room or roof (D144).
     let dragging = builder.drag.is_some_and(|drag| drag.moved);
-    let laid = builder.laid.is_some() && !dragging;
     let metres = |cells: i32| cells as f32 * CELL_M;
     let size = match builder.target {
         Target::Ground { tiles, .. } => format!("{} by {} m", metres(tiles.x), metres(tiles.y)),
@@ -54,13 +86,11 @@ pub fn prompt(
     };
     let drawn = |what: &str, keys: String| {
         if dragging {
-            format!("Let go to lay this {what} ({size})")
-        } else if laid {
-            format!(
-                "{hold} on it  build this {what} ({size})      Drag  draw another      {let_go}  let it go"
-            )
+            format!("Let go to lay this {what}'s plan ({size})      {let_go}  let it go")
         } else {
-            format!("{tap}  lay this {what}      Drag  draw it      {keys}")
+            format!(
+                "{tap}  lay this {what}'s plan      Drag  draw it      Hold still on a plan  build it      {keys}"
+            )
         }
     };
     let action = match (&builder.picked(builds).kind, builder.target) {
@@ -68,9 +98,9 @@ pub fn prompt(
             "The wall is not wide enough here".to_string()
         }
         (Kind::Window(_), Target::Wall { .. }) => {
-            format!("{hold}  cut this window      {next}  size")
+            format!("{tap}  cut this window into the plan      {next}  size")
         }
-        (Kind::Door, Target::Wall { .. }) => format!("{hold}  cut a door"),
+        (Kind::Door, Target::Wall { .. }) => format!("{tap}  cut a doorway into the plan"),
         (Kind::Window(_) | Kind::Door, _) => "Aim at a wall".to_string(),
         (Kind::Wall(_), Target::Wall { .. }) => drawn(
             "wall",
@@ -133,18 +163,10 @@ pub fn prompt(
             settings.key(Action::MoveItems)
         ),
         (Kind::Remove, Target::Prop(_)) => format!("{hold}  take this apart"),
-        (Kind::Remove, Target::Wall { open: true, .. }) => format!("{hold}  close this opening"),
-        (Kind::Remove, Target::Wall { .. }) => format!("{hold}  take this wall away"),
         (Kind::Remove, _) => format!(
             "Aim at an item, a wall, a window or a door      {}  done",
             settings.key(Action::TakeApart)
         ),
-    };
-    // What was drawn can be let go of, whatever is wrong with it.
-    let action = if laid && !action.contains("let it go") {
-        format!("{action}      {let_go}  let it go")
-    } else {
-        action
     };
     match &builder.price {
         Some((cost, times)) if *times > 0 => {

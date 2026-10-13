@@ -12,7 +12,7 @@ use bevy::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use terra_build::logs::{self, Kits, LogKit, Pattern};
-use terra_build::{Base, CELL_M, Kind, Panel, Surface};
+use terra_build::{Base, CELL_M, Fill, Kind, Panel, ROOF_STAGES, Surface};
 use terra_build::{Material, Surfaces};
 
 /// The foundation stands this far out from the walls, and reaches this far into the ground.
@@ -249,16 +249,45 @@ pub(super) fn redraw(
     planet: &Planet,
     meshes: &mut Assets<Mesh>,
 ) {
+    site.drawn = site.revision;
+    site.stale = false;
+    // The player's base is drawn by what each cube holds: what is in solid, what is
+    // planned as the ghost, the next lit. Anything else is drawn whole, or, on the kit
+    // sheet, as far in as it is shown.
+    let by_cubes = site.fitted_props && site.shown == Shown::Built;
+    let (in_view, planned) = if by_cubes {
+        (
+            site.base.view(
+                |cube| cube.is_in() || cube.fill == Fill::Open,
+                |roof| roof.standing(),
+            ),
+            Some(site.base.view(
+                |cube| !cube.is_in() && cube.fill != Fill::Open,
+                |roof| !roof.standing(),
+            )),
+        )
+    } else {
+        (site.base.clone(), None)
+    };
     let (mesh, states) = match site.kits.clone() {
         Some(kits) => {
-            let (mesh, layouts) = site.base.mesh_with_kits(&kits);
+            let mesh = in_view.mesh_for_kits(&kits);
+            let layouts: Vec<logs::Layout> = kits
+                .0
+                .iter()
+                .map(|kit| logs::lay(&site.base, kit))
+                .collect();
             let laid: Vec<(&LogKit, &[logs::Piece])> = kits
                 .0
                 .iter()
                 .zip(&layouts)
                 .map(|(kit, layout)| (kit, layout.pieces.as_slice()))
                 .collect();
-            pieces::place(commands, site, &laid);
+            let states: Vec<Vec<State>> = laid
+                .iter()
+                .map(|&(_, pieces)| states(pieces, site, by_cubes))
+                .collect();
+            pieces::place(commands, site, &laid, &states);
             site.standing = match site.shown {
                 Shown::Built => None,
                 shown => Some(site.base.standing(
@@ -271,7 +300,7 @@ pub(super) fn redraw(
             let models = site.kit_pieces.clone();
             let drawn = draw_pieces(
                 &laid,
-                site.shown,
+                &states,
                 models.as_deref(),
                 &site.base,
                 site.relief.as_deref(),
@@ -279,17 +308,32 @@ pub(super) fn redraw(
             (mesh, drawn)
         }
         None => {
-            pieces::place(commands, site, &[]);
+            pieces::place(commands, site, &[], &[]);
             site.standing = None;
-            (site.base.mesh(|_| None), Default::default())
+            (in_view.mesh(|_| None), Default::default())
         }
     };
+    // Planned floors, roofs and walls with no kit, as the ghost.
+    let planned_mesh = planned.map(|planned| match site.kits.as_deref() {
+        Some(kits) => planned.mesh_for_kits(kits),
+        None => planned.mesh(|_| None),
+    });
     // What is drawn in each material, built and planned: a mesh for each, under the
     // entity the pieces are drawn on.
     for entity in site.textured_entities.drain(..) {
         commands.entity(entity).despawn();
     }
-    let [placed, ghost, next] = states;
+    let [placed, mut ghost, next] = states;
+    if let Some(planned) = planned_mesh {
+        let mut plain = Surfaces::default();
+        *plain.of(Material::Plain) = planned.structure;
+        let mut planned = joined(planned.textured, plain);
+        // In the ghost's own blue, as the kit's pieces not yet in are.
+        for surface in planned.0.values_mut() {
+            surface.colours.fill(GHOST);
+        }
+        ghost = joined(ghost, planned);
+    }
     let built = [&mesh.textured, &placed];
     for (surfaces, state) in built
         .into_iter()
@@ -448,7 +492,7 @@ const GHOST: [f32; 3] = [0.62, 0.84, 1.0];
 /// and the next to go in. Pieces a model draws are left out, but for the daub under a log.
 fn draw_pieces(
     laid: &[(&LogKit, &[logs::Piece])],
-    shown: Shown,
+    states: &[Vec<State>],
     models: Option<&pieces::KitPieces>,
     base: &Base,
     relief: Option<&relief::Relief>,
@@ -458,9 +502,9 @@ fn draw_pieces(
         Surfaces::default(),
         Surfaces::default(),
     ];
-    for &(kit, pieces) in laid {
-        let [p, g, n] = draw_kit(pieces, kit, shown, models);
-        let [bp, bg, bn] = draw_blocks(pieces, kit, shown, base, relief);
+    for (&(kit, pieces), states) in laid.iter().zip(states) {
+        let [p, g, n] = draw_kit(pieces, kit, states, models);
+        let [bp, bg, bn] = draw_blocks(pieces, kit, states, base, relief);
         let (p, g, n) = (joined(p, bp), joined(g, bg), joined(n, bn));
         for (into, from) in [(&mut placed, p), (&mut ghost, g), (&mut next, n)] {
             for (material, surface) in from.0 {
@@ -492,21 +536,21 @@ fn joined(mut a: Surfaces, b: Surfaces) -> Surfaces {
 fn draw_blocks(
     pieces: &[logs::Piece],
     kit: &LogKit,
-    shown: Shown,
+    states: &[State],
     base: &Base,
     relief: Option<&relief::Relief>,
 ) -> [Surfaces; 3] {
     if kit.pattern != Pattern::Masonry {
         return Default::default();
     }
-    let done = pieces::done(pieces.len(), shown);
     let mut sets: [std::collections::BTreeSet<[i32; 3]>; 3] = Default::default();
-    for (index, piece) in pieces.iter().enumerate() {
+    for (piece, state) in pieces.iter().zip(states) {
         if let logs::Piece::Block { cube } = piece {
-            let set = match index.cmp(&done) {
-                std::cmp::Ordering::Less => 0,
-                std::cmp::Ordering::Equal => 2,
-                std::cmp::Ordering::Greater => 1,
+            let set = match state {
+                State::In => 0,
+                State::Next => 2,
+                State::Ghost => 1,
+                State::Left => continue,
             };
             sets[set].insert(cube.to_array());
         }
@@ -554,22 +598,20 @@ const SURFACE_STEPS: u32 = 10;
 fn draw_kit(
     pieces: &[logs::Piece],
     kit: &LogKit,
-    shown: Shown,
+    states: &[State],
     models: Option<&pieces::KitPieces>,
 ) -> [Surfaces; 3] {
-    let done = pieces::done(pieces.len(), shown);
     let [mut placed, mut ghost, mut next] = [
         Surfaces::default(),
         Surfaces::default(),
         Surfaces::default(),
     ];
-    for (index, piece) in pieces.iter().enumerate() {
-        let surfaces = if index < done {
-            &mut placed
-        } else if index == done {
-            &mut next
-        } else {
-            &mut ghost
+    for (index, (piece, state)) in pieces.iter().zip(states).enumerate() {
+        let surfaces = match state {
+            State::In => &mut placed,
+            State::Next => &mut next,
+            State::Ghost => &mut ghost,
+            State::Left => continue,
         };
         let before: BTreeMap<Material, usize> = surfaces
             .0
@@ -581,7 +623,7 @@ fn draw_kit(
         } else {
             logs::draw(piece, kit, surfaces);
         }
-        if index > done {
+        if *state == State::Ghost {
             let shade = if index % 2 == 0 { 1.0 } else { 0.86 };
             let colour = GHOST.map(|c| c * shade);
             for (material, surface) in surfaces.0.iter_mut() {
@@ -591,4 +633,137 @@ fn draw_kit(
         }
     }
     [placed, ghost, next]
+}
+
+/// How far a piece is in, as it is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum State {
+    In,
+    /// What goes in next, lit.
+    Next,
+    /// Not yet in: the ghost.
+    Ghost,
+    /// Not drawn: a door or window, which is a prop fitted into its opening.
+    Left,
+}
+
+/// How far each of a kit's pieces is in: by the cubes it stands in, on the player's base;
+/// as far as the kit sheet shows it, in the order they go in; or all of it.
+fn states(pieces: &[logs::Piece], build: &Build, by_cubes: bool) -> Vec<State> {
+    let opening =
+        |piece: &logs::Piece| build.fitted_props && matches!(piece, logs::Piece::Opening { .. });
+    if !by_cubes {
+        let done = pieces::done(pieces.len(), build.shown);
+        return pieces
+            .iter()
+            .enumerate()
+            .map(|(index, piece)| match index.cmp(&done) {
+                _ if opening(piece) => State::Left,
+                std::cmp::Ordering::Less => State::In,
+                std::cmp::Ordering::Equal => State::Next,
+                std::cmp::Ordering::Greater => State::Ghost,
+            })
+            .collect();
+    }
+    pieces
+        .iter()
+        .map(|piece| {
+            if opening(piece) {
+                return State::Left;
+            }
+            let (is_in, cubes) = piece_in(&build.base, piece);
+            if is_in {
+                State::In
+            } else if cubes.iter().any(|at| build.next.contains(at)) {
+                State::Next
+            } else {
+                State::Ghost
+            }
+        })
+        .collect()
+}
+
+/// How far a cube must be filled, in sixteenths, for a piece to be in it: up to the middle
+/// of the part of the piece within it, so a log is in once the fill reaches its middle.
+const SLIVER_M: f32 = 0.05;
+
+/// Whether a piece is in, by the cubes it stands in, and those cubes.
+fn piece_in(base: &Base, piece: &logs::Piece) -> (bool, Vec<[i32; 3]>) {
+    use logs::Piece;
+    let point_cube = |point: Vec3| (point / CELL_M).floor().as_ivec3();
+    match *piece {
+        // A footing is in with the wall it stands under.
+        Piece::Footing { from, to, .. } => {
+            let at = point_cube((from + to) * 0.5 + Vec3::Y * (CELL_M * 0.5));
+            (base.is_in(at), vec![at.to_array()])
+        }
+        // A roof's covering is in once the roof under it is covered.
+        Piece::Shakes { corners } => {
+            let middle = corners.iter().copied().sum::<Vec3>() * 0.25;
+            (roof_covered(base, middle), Vec::new())
+        }
+        Piece::Ridge { from, to } => (roof_covered(base, (from + to) * 0.5), Vec::new()),
+        _ => {
+            let Some((min, max)) = piece.bounds() else {
+                return (true, Vec::new());
+            };
+            let low = ((min + SLIVER_M) / CELL_M).floor().as_ivec3();
+            let high = ((max - SLIVER_M) / CELL_M).floor().as_ivec3();
+            let mut cubes = Vec::new();
+            let mut is_in = true;
+            for x in low.x..=high.x {
+                for y in low.y..=high.y {
+                    for z in low.z..=high.z {
+                        let at = IVec3::new(x, y, z);
+                        let bottom = y as f32 * CELL_M;
+                        let (from, to) = (min.y.max(bottom), max.y.min(bottom + CELL_M));
+                        let middle = ((from + to) * 0.5 - bottom) / CELL_M;
+                        let needed = (middle * 16.0).ceil().clamp(1.0, 16.0) as u8;
+                        // Only the cubes it stands in count: not air its rough edge
+                        // reaches into, nor an opening it frames.
+                        let Some(cube) = base.cube(at).filter(|cube| cube.fill != Fill::Open)
+                        else {
+                            continue;
+                        };
+                        is_in &= cube.level() >= needed;
+                        cubes.push(at.to_array());
+                    }
+                }
+            }
+            if cubes.is_empty() {
+                // Flat, as a floor's boards on its top: in with the cube under it.
+                let at = point_cube((min + max) * 0.5 - Vec3::Y * 0.01);
+                let is_in = base.cube(at).is_none_or(|cube| cube.is_in());
+                return (is_in, vec![at.to_array()]);
+            }
+            (is_in, cubes)
+        }
+    }
+}
+
+/// Whether a roof over a point, in the base's own space, is covered there.
+fn roof_covered(base: &Base, point: Vec3) -> bool {
+    let column = [
+        (point.x / CELL_M).floor() as i32,
+        (point.z / CELL_M).floor() as i32,
+    ];
+    match base.roof_over(column).and_then(|roof| base.roof(roof)) {
+        Some(roof) => roof.stage(column) == Some(ROOF_STAGES),
+        // Past the walls, under the eaves: the nearest roof.
+        None => base
+            .roofs()
+            .any(|(_, roof)| roof.stages.iter().all(|&stage| stage == ROOF_STAGES)),
+    }
+}
+
+/// Draws the player's base again whenever it has changed since it was last drawn.
+pub(super) fn redraw_changed(
+    mut commands: Commands,
+    mut site: ResMut<super::Site>,
+    planet: Res<Planet>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    if site.drawn != site.revision || site.stale {
+        redraw(&mut commands, &mut site, &planet, &mut meshes);
+    }
 }

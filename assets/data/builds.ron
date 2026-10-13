@@ -5,12 +5,12 @@
 // stool. The list is a stand-in. What can be built, what it costs and how it is unlocked
 // are design questions nobody has answered (docs/building.md).
 //
-// structure  what the pieces of a base cost, by items.ron's names. Sizes are measured,
-//            not counted in cells, so prices do not change if the grid does: floor by
-//            every three square metres, however a room comes to have it; interior wall by
-//            every metre and a half; a window by the metre; a door each.
-// claim      how far across a claim is at each step, and what growing it to the next
-//            step costs (D94, D104)
+// structure  what fitting a window or a door into an opening costs, by items.ron's
+//            names, each. What walls, floors and roofs take is their kits' to say
+//            (assets/data/kits); floor and wall are no longer read.
+// claim      how far across a claim is at each step, what growing it to the next step
+//            costs (D94, D104), and how many cubes it may have planned and not yet built
+//            at each step (D193), a cabin's plan being about three hundred
 // parts      in the order the build menu lists them within each tab. Each is in a tab
 //            (Hidden ones are not in the menu) and is one of:
 //              Items    things stood on a floor or the ground, each with its model in
@@ -34,8 +34,6 @@
 //              Door, Remove, Move   the hammer's other work
 (
     structure: (
-        floor: [("Wood", 1)],
-        wall: [("Wood", 1)],
         window: [("Wood", 1), ("Fibre", 1)],
         door: [("Wood", 2)],
     ),
@@ -45,6 +43,7 @@
             [("Wood", 10), ("Stone", 10)],
             [("Wood", 20), ("Stone", 20), ("Iron", 4)],
         ],
+        planned: [1500, 3000, 6000],
     ),
     parts: [
         (name: "Claim stone", tab: Claim, kind: Items([

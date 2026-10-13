@@ -280,12 +280,10 @@ fn cost_of(builds: &Builds, items: &Items, part: usize, variant: usize) -> Strin
     let wall = |cost| describe(items, cost, 1);
     match &builds.part(part).kind {
         Kind::Items(each) => wall(&each[variant.min(each.len() - 1)].cost),
-        Kind::Room(_) | Kind::Roof(_) => {
-            format!("{} per 3 m² of floor", wall(builds.floor()))
-        }
-        Kind::Wall(_) => format!("{} per 1.5 m", wall(builds.wall())),
-        Kind::Window(_) => format!("{} per metre", wall(builds.window())),
-        Kind::Door => wall(builds.door()),
+        // A plan costs nothing; what goes into it, as its kind's kit says, piece by piece.
+        Kind::Room(_) | Kind::Roof(_) | Kind::Wall(_) => "Plan free, built piece by piece".into(),
+        Kind::Window(_) => format!("{} each, fitted", wall(builds.window())),
+        Kind::Door => format!("{} each, fitted", wall(builds.door())),
         Kind::Remove | Kind::Move => String::new(),
     }
 }

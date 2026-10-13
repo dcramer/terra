@@ -260,7 +260,7 @@ pub(super) fn highlight(
     let filling = drawn.filling;
     match builder.work.as_ref() {
         Some(Work {
-            job: Job::Structure { .. },
+            job: Job::Base { .. },
             hold,
             removing,
             ..
@@ -288,6 +288,26 @@ pub(super) fn highlight(
             shapes.show(filling, mesh, material, site.frame);
         }
         _ => shapes.hide(filling),
+    }
+
+    // The cubes work on the base would touch: blue to build, amber to open or fit, red to
+    // take apart or where it is refused.
+    if let Some(planned) = builder.planned.as_ref() {
+        let colour = match (&planned.work.check, planned.doing) {
+            (Err(_), _) | (_, Doing::TakeApart) => REFUSED_COLOUR,
+            (_, Doing::Fit) => OPENING_COLOUR,
+            _ => BUILD_COLOUR,
+        };
+        for cube in touched(&planned.work.ops).into_iter().take(400) {
+            let low = cube.as_vec3() * CELL_M;
+            let middle = site.frame.transform_point(low + Vec3::splat(CELL_M * 0.5));
+            gizmos.cube(
+                Transform::from_translation(middle)
+                    .with_rotation(site.frame.rotation)
+                    .with_scale(Vec3::splat(CELL_M * 1.02)),
+                colour,
+            );
+        }
     }
 
     // Outlines are drawn afresh every frame; the film only when something changes.
@@ -425,4 +445,19 @@ pub(super) fn highlight(
         site.frame,
         Visibility::Visible,
     ));
+}
+
+/// The cubes operations on the base would touch, for outlining; none for a whole plan
+/// being laid, which is outlined by what is drawn.
+fn touched(ops: &[terra_build::ops::Op]) -> Vec<IVec3> {
+    use terra_build::ops::Op;
+    ops.iter()
+        .flat_map(|op| match op {
+            Op::Fill { cubes } | Op::Empty { cubes } | Op::Open { cubes } | Op::Close { cubes } => {
+                cubes.iter().map(|&at| IVec3::from_array(at)).collect()
+            }
+            Op::FitProp(prop) => prop.cubes().collect(),
+            _ => Vec::new(),
+        })
+        .collect()
 }
