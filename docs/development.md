@@ -179,6 +179,17 @@ Off in release builds, since it lets anything on the machine control the game.
 
 Playing the game as an agent, inside its rules rather than as a tester, is a separate want: see [multiplayer.md](multiplayer.md#agents-as-players) (D73).
 
+## Writing tests
+
+A test earns its place by failing when the behaviour breaks, and only then. Before keeping one, name a plausible bug in the code it covers and check that the test catches it; for a new test, make that bug for a moment and watch it fail.
+
+- **Test the outcome, through the code that makes it.** A system is tested by running it on a small `World` (`run_system_once`) and reading what changed, not by calling the helper it uses and trusting the glue. A save is tested by saving a world and loading it into another, not by round-tripping a struct through serde.
+- **Know the answer another way.** Never work out the expected value with the function under test, or with the same formula, predicate or constant copied out of it. Use a value worked out by hand, a law the result must obey (volume of a sphere, nothing made or lost, undo gives back the same state), or a second, simpler implementation.
+- **Logic on small made-up data, real data checked for its shape.** A rule is tested on a fixture written in the test. The shipped files under `assets/data/` get integrity checks: everything they name exists, values are in range, every kind has what it needs. Neither pins tuned values (a pack is 6x5, the Hammer is in slot 0, a pine has 46 triangles), so retuning never breaks a test. Write a number relative to the constant or data it follows from.
+- **Same on every machine is a pinned value.** Running something twice in one process and comparing proves nothing. Determinism that matters (D30, D41) is checked against values written into the test, as `terra_gen` does.
+- **Inputs that reach the bug.** Unsorted input to what sorts, a turned frame for what rotates, two entities for what staggers, a cost naming a kind twice. A check that holds on empty output also asserts the output is not empty, and a random test asserts its operations were accepted often enough to mean something.
+- **Not worth a test:** that a getter returns what was set, that a constant equals its literal, that serde or `format!` works, that something does not panic, or what another test already covers.
+
 ## Conventions
 
 - The rules for working in the workspace are in [AGENTS.md](../AGENTS.md). They apply to people as well as agents.
