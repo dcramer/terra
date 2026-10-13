@@ -45,10 +45,7 @@ impl Lifts {
             return 0.0;
         };
         let frame = at * self.fps - lifts.first;
-        morphs
-            .iter()
-            .filter_map(|(name, weight)| Some(weight * sample(lifts.morphs.get(name)?, frame)))
-            .sum()
+        crate::appearance::mix(morphs, |name| Some(sample(lifts.morphs.get(name)?, frame)))
     }
 }
 
@@ -220,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn a_body_is_lifted_by_the_mix_of_its_morphs() {
+    fn a_body_is_lifted_by_its_morphs_curves_at_the_frame() {
         let lifts = lifts();
         // Frame 3 is the curves' third value: 0.06 heavy, -0.02 thin.
         let at = 3.0 / 30.0;
@@ -228,6 +225,26 @@ mod tests {
         assert!((heavy - 0.06).abs() < 1e-5, "{heavy}");
         let mixed = lifts.at("Roll", at, &[("heavy".into(), 0.5), ("thin".into(), 0.5)]);
         assert!((mixed - 0.02).abs() < 1e-5, "{mixed}");
+    }
+
+    #[test]
+    fn the_base_bodys_lifts_are_for_its_clips_and_morphs() {
+        let base = crate::model_files::json(crate::appearance::BASE);
+        // As `find_lifts` reads them, which warns and lifts nothing when they do not read.
+        let lifts: Lifts = serde_json::from_value(
+            crate::model_files::extra(&base, "lifts").expect("the base body carries no lifts"),
+        )
+        .unwrap();
+        assert!(lifts.fps > 0.0);
+        assert!(!lifts.clips.is_empty());
+        let clips = crate::model_files::animations(&base);
+        let morphs = crate::model_files::morphs(&base);
+        for (clip, curves) in &lifts.clips {
+            assert!(clips.contains(clip), "lifts for no clip {clip}");
+            for morph in curves.morphs.keys() {
+                assert!(morphs.contains(morph), "{clip}: lifts for no morph {morph}");
+            }
+        }
     }
 
     #[test]

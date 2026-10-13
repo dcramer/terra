@@ -5821,6 +5821,7 @@ dependencies = [
  "bevy-inspector-egui",
  "gltf",
  "libm",
+ "naga",
  "ron",
  "serde",
  "serde_json",
@@ -5830,6 +5831,7 @@ dependencies = [
  "terra_items",
  "terra_voxel",
  "terra_world",
+ "wesl",
 ]
 
 [[package]]

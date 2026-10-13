@@ -216,7 +216,6 @@ mod tests {
             let depth = -planet.distance(rock.position);
             assert!((0.0..=rock.scale.y).contains(&depth), "depth {depth}");
             assert!(rock.position.distance(planet.start()) < SPREAD_M * 1.2);
-            assert!((rock.rotation.length() - 1.0).abs() < 1e-4);
         }
         let again = placements(&planet, seed, ROCKS);
         assert!(

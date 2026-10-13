@@ -35,6 +35,14 @@ impl Relief {
     }
 }
 
+/// The first channel of each of the first `texels` texels of an image's bytes, a byte a
+/// channel and one to four channels a texel, however many it has, its first level only if
+/// it has smaller ones after: the map is grey, so its red is its height.
+fn first_channel(data: &[u8], texels: usize) -> Vec<u8> {
+    let channels = (data.len() / texels.max(1)).clamp(1, 4);
+    (0..texels).map(|i| data[i * channels]).collect()
+}
+
 /// The height map being loaded, and the path it is for.
 #[derive(Resource, Default)]
 pub(super) struct Loading {
@@ -91,18 +99,10 @@ pub(super) fn load(
     };
     let size = image.texture_descriptor.size;
     let (width, height) = (size.width as usize, size.height as usize);
-    // The first level, its red channel: the map is grey.
-    let texels = width * height;
-    let channels = (data.len() / texels.max(1)).clamp(1, 4).min(4);
-    let channels = if data.len() >= texels * 4 {
-        4
-    } else {
-        channels
-    };
     let relief = Arc::new(Relief {
         width,
         height,
-        data: (0..texels).map(|i| data[i * channels]).collect(),
+        data: first_channel(data, width * height),
     });
     loading.done = true;
     info!("Block kinds are displaced by a height map {width} by {height}.");
@@ -123,15 +123,45 @@ mod tests {
 
     #[test]
     fn the_relief_repeats_and_blends_between_texels() {
+        // Row by row from the top: 0 and 51 above, 102 and 255 below.
         let relief = Relief {
             width: 2,
-            height: 1,
-            data: vec![0, 255],
+            height: 2,
+            data: vec![0, 51, 102, 255],
         };
-        // Texel centres are a quarter and three quarters across.
-        assert!((relief.at([0.25, 0.5]) - 0.0).abs() < 1e-5);
-        assert!((relief.at([0.75, 0.5]) - 1.0).abs() < 1e-5);
-        assert!((relief.at([0.5, 0.5]) - 0.5).abs() < 1e-5);
-        assert!((relief.at([1.25, 0.5]) - relief.at([0.25, 0.5])).abs() < 1e-5);
+        let near = |uv: [f32; 2], height: f32| {
+            let at = relief.at(uv);
+            assert!((at - height).abs() < 1e-5, "{uv:?}: {at}, not {height}");
+        };
+        // Texel centres are a quarter and three quarters across and down.
+        near([0.25, 0.25], 0.0);
+        near([0.75, 0.25], 0.2);
+        near([0.25, 0.75], 0.4);
+        near([0.75, 0.75], 1.0);
+        // Halfway across the top row, halfway down the left column, and in the middle.
+        near([0.5, 0.25], 0.1);
+        near([0.25, 0.5], 0.2);
+        near([0.5, 0.5], (0.0 + 0.2 + 0.4 + 1.0) / 4.0);
+        // It repeats: past the right edge is the left, past the bottom is the top.
+        near([1.25, 0.25], 0.0);
+        near([0.25, 1.75], 0.4);
+        // Between the last row and the first, as it wraps.
+        near([0.25, 0.0], 0.2);
+    }
+
+    #[test]
+    fn a_height_is_read_from_the_first_channel_however_many_there_are() {
+        // Two texels, heights 10 and 20, in each layout an image may come in.
+        let heights = vec![10, 20];
+        assert_eq!(first_channel(&[10, 20], 2), heights);
+        assert_eq!(first_channel(&[10, 99, 20, 99], 2), heights);
+        assert_eq!(first_channel(&[10, 99, 98, 20, 99, 98], 2), heights);
+        assert_eq!(first_channel(&[10, 99, 98, 97, 20, 99, 98, 97], 2), heights);
+        // Smaller levels after the first are left alone: four texels of one channel and a
+        // level of one, and four of four channels and a level of one.
+        assert_eq!(first_channel(&[1, 2, 3, 4, 5], 4), vec![1, 2, 3, 4]);
+        let mut rgba: Vec<u8> = (1..=4).flat_map(|h| [h, 99, 98, 97]).collect();
+        rgba.extend([5, 99, 98, 97]);
+        assert_eq!(first_channel(&rgba, 4), vec![1, 2, 3, 4]);
     }
 }

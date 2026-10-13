@@ -165,7 +165,7 @@ impl MaterialExtension for BodyMask {
 
 /// The patches of skin a worn look covers, from its file; on a look once it is put on.
 #[derive(Component)]
-pub struct Covers(Vec<u32>);
+pub struct Covers(pub(crate) Vec<u32>);
 
 /// A body's meshes and the standard materials they show now (their own, or a template's
 /// painted skin, `appearance`), the materials they came with, and the mask they show now.
@@ -204,10 +204,7 @@ impl Shifts {
 
     /// The shift for a mix of morphs: each morph's by its weight.
     pub fn mixed(&self, weights: &[(String, f32)]) -> Vec3 {
-        weights
-            .iter()
-            .filter_map(|(m, w)| self.0.get(m).map(|v| *v * *w))
-            .sum()
+        crate::appearance::mix(weights, |morph| self.0.get(morph).copied())
     }
 }
 
@@ -708,13 +705,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_look_is_found_by_body_and_item_name() {
-        assert_eq!(item_id("Leather coat"), "leather_coat");
-        assert_eq!(item_id("Quiver"), "quiver");
-        assert_eq!(look(&item_id("Small pack")), "models/gear/small_pack.glb");
-    }
-
-    #[test]
     fn a_dye_keeps_a_texture_bright() {
         let blue = dye(Color::linear_rgb(0.1, 0.2, 0.4)).to_linear();
         assert!((blue.blue - 1.0).abs() < 1e-5);
@@ -768,39 +758,209 @@ mod tests {
     }
 
     #[test]
-    fn a_skin_keeps_only_the_joints_its_vertices_use() {
-        // Joints 1 and 3 of 5 carry weight; joint 4 is named by a slot with none.
-        let indices = [[1, 3, 4, 0], [3, 0, 0, 0]];
-        let weights = [[0.7, 0.3, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]];
-        let (kept, index) = used_joints(&indices, &weights, 5);
-        assert_eq!(kept, vec![1, 3]);
-        assert_eq!((index[1], index[3]), (0, 1));
+    fn a_skinned_look_is_cut_to_the_joints_it_uses_once_for_every_wearer() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        world.insert_resource(Assets::<Mesh>::default());
+        world.insert_resource(Assets::<SkinnedMeshInverseBindposes>::default());
+        world.init_resource::<Trimmed>();
+        let names = ["j0", "j1", "j2", "j3", "j4"];
+        let body = world.spawn(Name::new("body")).id();
+        let ours: Vec<Entity> = names
+            .iter()
+            .map(|name| world.spawn((Name::new(*name), ChildOf(body))).id())
+            .collect();
+        // Five joints, each bind pose told apart by its own offset. Joints 1 and 3 carry
+        // weight; joint 4, and one past the last, are named by slots with none.
+        let poses: Vec<Mat4> = (0..5)
+            .map(|i| Mat4::from_translation(Vec3::X * i as f32))
+            .collect();
+        let posed = world
+            .resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
+            .add(SkinnedMeshInverseBindposes::from(poses.clone()));
+        let mesh = world.resource_mut::<Assets<Mesh>>().add(
+            Mesh::new(
+                bevy::mesh::PrimitiveTopology::TriangleList,
+                bevy::asset::RenderAssetUsages::default(),
+            )
+            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![Vec3::ZERO; 2])
+            .with_inserted_attribute(
+                Mesh::ATTRIBUTE_JOINT_INDEX,
+                VertexAttributeValues::Uint16x4(vec![[1, 3, 4, 9], [3, 0, 0, 0]]),
+            )
+            .with_inserted_attribute(
+                Mesh::ATTRIBUTE_JOINT_WEIGHT,
+                vec![[0.7f32, 0.3, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+            ),
+        );
+        // Two wearers of the same look, each with its file's copy of the skeleton.
+        let mut skins = vec![];
+        for _ in 0..2 {
+            let look = world.spawn(Worn { body }).id();
+            let armature = world.spawn(ChildOf(look)).id();
+            let copy: Vec<Entity> = names
+                .iter()
+                .map(|name| world.spawn((Name::new(*name), ChildOf(armature))).id())
+                .collect();
+            let skin = world
+                .spawn((
+                    Mesh3d(mesh.clone()),
+                    SkinnedMesh {
+                        inverse_bindposes: posed.clone(),
+                        joints: copy,
+                    },
+                    ChildOf(armature),
+                ))
+                .id();
+            world.run_system_once_with(dress, (look, body)).unwrap();
+            skins.push(skin);
+        }
+        for skin in skins {
+            let skin = world.get::<SkinnedMesh>(skin).unwrap();
+            assert_eq!(skin.joints, vec![ours[1], ours[3]]);
+            let kept = world
+                .resource::<Assets<SkinnedMeshInverseBindposes>>()
+                .get(&skin.inverse_bindposes)
+                .unwrap()
+                .to_vec();
+            assert_eq!(kept, vec![poses[1], poses[3]]);
+        }
+        // Numbered among the joints kept, an unused slot at the first; cut once, not twice.
+        let indices = world
+            .resource::<Assets<Mesh>>()
+            .get(&mesh)
+            .unwrap()
+            .attribute(Mesh::ATTRIBUTE_JOINT_INDEX)
+            .cloned();
+        assert_eq!(
+            indices,
+            Some(VertexAttributeValues::Uint16x4(vec![
+                [0, 1, 0, 0],
+                [1, 0, 0, 0]
+            ]))
+        );
     }
 
     #[test]
-    fn a_hung_look_shifts_by_the_mix_of_morphs() {
-        let shifts = Shifts::from_extras(serde_json::json!({
-            "heavy": [0.0, 0.0, -0.04], "strong": [0.0, 0.02, -0.02]
-        }))
-        .unwrap();
-        let mix = shifts.mixed(&[
-            ("heavy".into(), 0.5),
-            ("strong".into(), 1.0),
-            ("thin".into(), 1.0),
-        ]);
-        assert!((mix - Vec3::new(0.0, 0.02, -0.04)).length() < 1e-6);
-        assert_eq!(shifts.mixed(&[]), Vec3::ZERO);
+    fn a_rigid_look_hangs_on_the_socket_it_names_and_swings_as_it_says() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let body = world.spawn(Name::new("body")).id();
+        let hips = world.spawn((Name::new(HIPS), ChildOf(body))).id();
+        world.spawn((Name::new("socket.back"), ChildOf(hips)));
+        let belt = world
+            .spawn((Name::new("socket.belt.R"), ChildOf(hips)))
+            .id();
+        let look = world.spawn((Worn { body }, ChildOf(body))).id();
+        let holder = world.spawn((Name::new("quiver"), ChildOf(look))).id();
+        // As a rigid look's file carries it (`carry_gear.py`): on the part that swings.
+        let part = world
+            .spawn((
+                GltfExtras {
+                    value: serde_json::json!({
+                        "socket": "socket.belt.R",
+                        "covers": [3, 98],
+                        "swing": {"tail": [0.0, -0.2, 0.0], "stiffness": 0.2, "drag": 0.1, "gravity": 0.6},
+                        "morphs": {"heavy": [0.0, 0.0, -0.04], "thin": [0.02, 0.0, 0.0]}
+                    })
+                    .to_string(),
+                },
+                ChildOf(holder),
+            ))
+            .id();
+        world.run_system_once_with(dress, (look, body)).unwrap();
+        assert_eq!(world.get::<ChildOf>(look).unwrap().parent(), belt);
+        assert_eq!(world.get::<Covers>(look).unwrap().0, vec![3, 98]);
+        let swing = world.get::<crate::swing::Swing>(part).unwrap();
+        assert_eq!(swing.spring.tail, [0.0, -0.2, 0.0]);
+        assert_eq!(swing.spring.stiffness, 0.2);
+        assert!(world.get::<crate::swing::Swing>(holder).is_none());
+        let shifts = world.get::<Shifts>(look).unwrap();
+        assert_eq!(shifts.0.get("thin"), Some(&Vec3::new(0.02, 0.0, 0.0)));
+        assert_eq!(shifts.0.len(), 2);
+    }
+
+    /// The base body's file, read without Bevy.
+    fn base() -> serde_json::Value {
+        crate::model_files::json(crate::appearance::BASE)
     }
 
     #[test]
-    fn a_rigid_look_names_its_socket() {
-        let extras = GltfExtras {
-            value: r#"{"socket": "socket.back"}"#.to_string(),
-        };
-        assert_eq!(socket_in(&extras).as_deref(), Some("socket.back"));
-        let none = GltfExtras {
-            value: "{}".to_string(),
-        };
-        assert_eq!(socket_in(&none), None);
+    fn what_this_module_names_is_on_the_base_body() {
+        let base = base();
+        let nodes = crate::model_files::nodes(&base);
+        for node in [HIPS, HAND_R] {
+            assert!(nodes.iter().any(|n| n == node), "no {node}");
+        }
+        // A clip named wrong is never carried in, and nothing says so.
+        let clips = crate::model_files::animations(&base);
+        for clip in CARRIED_IN {
+            assert!(clips.iter().any(|c| c == clip), "no clip {clip}");
+        }
+    }
+
+    #[test]
+    fn every_worn_look_fits_the_base_body() {
+        let base = base();
+        let nodes = crate::model_files::nodes(&base);
+        let morphs = crate::model_files::morphs(&base);
+        let looks = crate::model_files::glbs("models/gear");
+        assert!(!looks.is_empty());
+        for file in &looks {
+            let json = crate::model_files::json(file);
+            // Its morphs follow the body's by name; one the body lacks stays at nothing.
+            for morph in crate::model_files::morphs(&json) {
+                assert!(morphs.contains(&morph), "{file}: the body has no {morph}");
+            }
+            let skinned = json["skins"].as_array().is_some_and(|s| !s.is_empty());
+            if skinned {
+                // Its joints are swapped for the body's by name.
+                for joint in crate::model_files::joints(&json) {
+                    assert!(nodes.contains(&joint), "{file}: the body has no {joint}");
+                }
+            } else {
+                // A rigid look hangs on the socket it names, or nowhere.
+                let socket = crate::model_files::extra(&json, "socket");
+                let socket = socket.as_ref().and_then(|s| s.as_str());
+                assert!(
+                    socket.is_some_and(|s| nodes.iter().any(|n| n == s)),
+                    "{file}: names no socket the body has: {socket:?}"
+                );
+            }
+            // What its extras say, as `dress` reads them, where they would otherwise be
+            // dropped without a word.
+            if let Some(shifts) = crate::model_files::extra(&json, "morphs") {
+                let shifts =
+                    Shifts::from_extras(shifts).unwrap_or_else(|| panic!("{file}: morphs"));
+                for morph in shifts.0.keys() {
+                    assert!(
+                        morphs.contains(morph),
+                        "{file}: shifts for no morph {morph}"
+                    );
+                }
+            }
+            if let Some(swing) = crate::model_files::extra(&json, "swing") {
+                let spring = crate::swing::Springiness::from_extras(swing)
+                    .unwrap_or_else(|| panic!("{file}: swing"));
+                assert!(Vec3::from(spring.tail).length() > 0.0, "{file}: no tail");
+            }
+            if let Some(covers) = crate::model_files::extra(&json, "covers") {
+                let covers: Vec<u32> =
+                    serde_json::from_value(covers).unwrap_or_else(|e| panic!("{file}: {e}"));
+                assert!(covers.iter().all(|patch| *patch < PATCHES), "{file}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_held_look_says_how_it_tips_in_a_number() {
+        let looks = crate::model_files::glbs("models/held");
+        assert!(!looks.is_empty());
+        for file in &looks {
+            let json = crate::model_files::json(file);
+            if let Some(tilt) = crate::model_files::extra(&json, "carry_tilt") {
+                assert!(tilt.as_f64().is_some(), "{file}: carry_tilt {tilt}");
+            }
+        }
     }
 }

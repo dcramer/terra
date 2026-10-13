@@ -233,31 +233,136 @@ mod tests {
                 shader.imports
             );
         }
-        // Every function Bevy's shaders call from it.
-        for f in [
-            "fn skin_model(",
-            "fn skin_prev_model(",
-            "fn skin_normals(",
-            "fn inverse_transpose_3x3m(",
-        ] {
-            assert!(OURS.contains(f), "{f} missing");
+    }
+
+    /// Resolves our shader, and in place of Bevy's own modules it imports, the parts of them
+    /// it uses as Bevy declares them (`bevy_pbr/src/render/mesh_types.wesl` and
+    /// `mesh_bindings.wesl`).
+    struct Modules;
+
+    const MESH_TYPES: &str = "
+        struct Mesh {
+            world_from_local: mat3x4<f32>,
+            current_skin_index: u32,
+        };
+        @if(SKINNED)
+        struct SkinnedMesh {
+            data: array<mat4x4<f32>, 256u>,
+        };
+    ";
+    const MESH_BINDINGS: &str = "
+        import package::render::mesh_types::Mesh;
+        @group(2) @binding(0) var<storage> mesh: array<Mesh>;
+    ";
+    /// A vertex shader calling it as Bevy's mesh and prepass shaders do.
+    const VERTEX: &str = "
+        import package::render::skinning;
+        @vertex
+        fn vertex(
+            @builtin(instance_index) instance: u32,
+            @location(0) position: vec3<f32>,
+            @location(1) normal: vec3<f32>,
+            @location(2) joints: vec4<u32>,
+            @location(3) weights: vec4<f32>,
+        ) -> @builtin(position) vec4<f32> {
+            var world_from_local = skinning::skin_model(joints, weights, instance);
+            let before = skinning::skin_prev_model(joints, weights, instance);
+            let world_normal = skinning::skin_normals(world_from_local, normal);
+            return world_from_local * vec4<f32>(position, 1.0) + before * vec4<f32>(world_normal, 0.0);
+        }
+    ";
+
+    impl wesl::Resolver for Modules {
+        fn resolve_source<'a>(
+            &'a self,
+            path: &wesl::syntax::ModulePath,
+        ) -> Result<std::borrow::Cow<'a, str>, wesl::error::ResolveError> {
+            match path.components.last().map(String::as_str) {
+                Some("skinning") => Ok(OURS.into()),
+                Some("mesh_types") => Ok(MESH_TYPES.into()),
+                Some("mesh_bindings") => Ok(MESH_BINDINGS.into()),
+                Some("vertex") => Ok(VERTEX.into()),
+                _ => Err(wesl::error::ResolveError::ModuleNotFound(
+                    path.clone(),
+                    "not one of the test's modules".into(),
+                )),
+            }
         }
     }
 
     #[test]
-    fn the_rule_reads_and_keeps_the_hips_linear() {
-        let blend = Blend::read();
-        assert_eq!(blend.linear_joints, vec!["pelvis".to_string()]);
-        // A forearm: dual quaternions throughout.
+    fn ours_compiles_and_validates_as_bevy_would_build_it() {
+        // Both ways Bevy can hand a skin its joints: uniform buffers where storage buffers
+        // are not allowed in a vertex shader, storage buffers elsewhere.
+        for uniform in [false, true] {
+            // As Bevy's shader cache compiles a module (`bevy_shader`'s `shader_cache.rs`).
+            let mut options = wesl::CompileOptions {
+                imports: true,
+                condcomp: true,
+                visibility: false,
+                ..Default::default()
+            };
+            options.features.set("SKINNED", true);
+            options.features.set("SKINS_USE_UNIFORM_BUFFERS", uniform);
+            let main = wesl::syntax::ModulePath {
+                origin: wesl::syntax::PathOrigin::Package("bevy_pbr".into()),
+                components: vec!["render".into(), "vertex".into()],
+            };
+            let wgsl = wesl::compile(&main, &options, &Modules)
+                .unwrap_or_else(|e| panic!("uniform {uniform}: {}", e.diagnostic().render_plain()))
+                .to_string();
+            let module = naga::front::wgsl::parse_str(&wgsl)
+                .unwrap_or_else(|e| panic!("uniform {uniform}: {}", e.emit_to_string(&wgsl)));
+            naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::default(),
+            )
+            .validate(&module)
+            .unwrap_or_else(|e| panic!("uniform {uniform}: {}", e.emit_to_string(&wgsl)));
+        }
+    }
+
+    #[test]
+    fn a_vertex_leaves_dual_quaternions_by_the_gain_times_its_weight_on_linear_joints() {
+        let blend = Blend {
+            linear_joints: vec!["hips".into()],
+            linear_gain: 4.0,
+        };
+        let hips = [true, false, false, false];
+        // On no linear joint: dual quaternions throughout.
         assert_eq!(blend.share([0.6, 0.4, 0.0, 0.0], [false; 4]), 1.0);
-        // Half on the pelvis: the linear blend throughout.
-        assert_eq!(
-            blend.share([0.5, 0.5, 0.0, 0.0], [true, false, false, false]),
-            0.0
+        // An eighth on the hips, four times over: half and half.
+        assert!((blend.share([0.125, 0.875, 0.0, 0.0], hips) - 0.5).abs() < 1e-6);
+        // A quarter or more: the linear blend throughout, never less than none.
+        assert_eq!(blend.share([0.25, 0.75, 0.0, 0.0], hips), 0.0);
+        assert_eq!(blend.share([0.8, 0.2, 0.0, 0.0], hips), 0.0);
+        // Weights are shares of their sum: 0.25 of 2 is an eighth.
+        assert!((blend.share([0.25, 1.75, 0.0, 0.0], hips) - 0.5).abs() < 1e-6);
+        // Two linear joints count together.
+        assert!(
+            (blend.share([0.0625, 0.0625, 0.875, 0.0], [true, true, false, false]) - 0.5).abs()
+                < 1e-6
         );
-        // A quarter on the pelvis: half and half.
-        let half = blend.share([0.25, 0.75, 0.0, 0.0], [true, false, false, false]);
-        assert!((half - 0.5).abs() < 1e-6);
+        // No weight at all: the linear blend, as Bevy would.
+        assert_eq!(blend.share([0.0; 4], hips), 0.0);
+    }
+
+    #[test]
+    fn the_shipped_rule_names_joints_the_skeleton_has() {
+        // Read as the game reads it, without the fallback that would hide a broken file.
+        let blend: Blend = serde_json::from_str(include_str!(
+            "../../../assets/models/character/skinning.json"
+        ))
+        .unwrap();
+        assert!(blend.linear_gain > 0.0);
+        assert!(!blend.linear_joints.is_empty());
+        let joints = crate::model_files::joints(&crate::model_files::json(crate::appearance::BASE));
+        for joint in &blend.linear_joints {
+            assert!(
+                joints.contains(joint),
+                "{joint} is not a joint of the base body"
+            );
+        }
     }
 
     #[test]

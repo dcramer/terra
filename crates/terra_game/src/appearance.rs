@@ -156,19 +156,48 @@ fn parse_offsets(text: &str) -> Option<Offsets> {
     )
 }
 
-/// How far each joint and socket moves, in the model's space, for a mix of morphs: the sum of
-/// each morph's offsets by its weight.
+/// The morph offsets a node's glTF extras carry, as the body's file writes them: a JSON
+/// string under `"morphs"`.
+fn offsets_in(extras: &str) -> Option<Offsets> {
+    let value: serde_json::Value = serde_json::from_str(extras).ok()?;
+    parse_offsets(value.get("morphs")?.as_str()?)
+}
+
+/// What a mix of morphs (name and weight) makes of something each morph gives at full
+/// weight: each morph's by its weight, summed. A morph that gives none adds nothing. How
+/// far a joint moves, a hung look shifts and a body is lifted are all mixed so.
+pub fn mix<T>(weights: &[(String, f32)], value: impl Fn(&str) -> Option<T>) -> T
+where
+    T: std::ops::Mul<f32, Output = T> + std::iter::Sum,
+{
+    weights
+        .iter()
+        .filter_map(|(morph, weight)| Some(value(morph)? * *weight))
+        .sum()
+}
+
+/// How far each joint and socket moves, in the model's space, for a mix of morphs.
 fn mixed(offsets: &Offsets, appearance: &Appearance) -> HashMap<String, Vec3> {
-    let mut out: HashMap<String, Vec3> = HashMap::new();
-    for (morph, weight) in &appearance.morphs {
-        let Some(nodes) = offsets.get(morph) else {
-            continue;
-        };
-        for (node, by) in nodes {
-            *out.entry(node.clone()).or_default() += *by * *weight;
-        }
-    }
-    out
+    let nodes: std::collections::HashSet<&String> = appearance
+        .morphs
+        .iter()
+        .filter_map(|(morph, _)| offsets.get(morph))
+        .flat_map(HashMap::keys)
+        .collect();
+    nodes
+        .into_iter()
+        .map(|node| {
+            let by = mix(&appearance.morphs, |morph| {
+                offsets.get(morph)?.get(node).copied()
+            });
+            (node.clone(), by)
+        })
+        .collect()
+}
+
+/// Where a painted skin is, under `assets/`, by its name.
+fn skin_file(name: &str) -> String {
+    format!("models/character/skins/{name}.png")
 }
 
 /// Each body as tall as its appearance says: the scale of its root, the whole character.
@@ -355,10 +384,7 @@ fn shape_bodies(
         let offsets = descendants
             .iter()
             .filter_map(|each| extras.get(*each).ok())
-            .find_map(|extras| {
-                let value: serde_json::Value = serde_json::from_str(&extras.value).ok()?;
-                parse_offsets(value.get("morphs")?.as_str()?)
-            })
+            .find_map(|extras| offsets_in(&extras.value))
             .unwrap_or_default();
         let moved = mixed(&offsets, appearance);
         let key = format!("{:?}", appearance.key());
@@ -432,7 +458,7 @@ fn shape_bodies(
         let skin_image: Option<Handle<Image>> = appearance
             .skin
             .as_ref()
-            .map(|name| assets.load(format!("models/character/skins/{name}.png")));
+            .map(|name| assets.load(skin_file(name)));
         let mut parts = std::mem::take(&mut skin.parts);
         for ((_, material), original) in parts.iter_mut().zip(skin.original.clone()) {
             let Some(image) = &skin_image else {
@@ -661,6 +687,7 @@ fn hold_joints(mut bodies: Query<&mut Moved>, mut transforms: Query<&mut Transfo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model_files;
 
     #[test]
     fn a_body_is_as_tall_as_it_says_and_holds_things_at_their_own_size() {
@@ -704,13 +731,81 @@ mod tests {
     }
 
     #[test]
-    fn the_shipped_templates_parse() {
+    fn the_shipped_templates_name_morphs_and_skins_there_are() {
+        // Read as the game reads it, without the fallback that would leave no templates.
         let templates = parse_templates(include_str!(
             "../../../assets/models/character/templates.json"
         ))
         .unwrap();
-        assert!(templates.contains_key("male"));
-        assert!(templates.contains_key("female"));
+        let morphs = model_files::morphs(&model_files::json(BASE));
+        assert!(!morphs.is_empty());
+        for (name, template) in &templates {
+            // A morph the body lacks would be left out of its shape without a word.
+            for (morph, weight) in &template.morphs {
+                assert!(
+                    morphs.contains(morph),
+                    "{name}: the base body has no {morph}"
+                );
+                assert!(weight.is_finite(), "{name}: {morph}");
+            }
+            if let Some(skin) = &template.skin {
+                let file = skin_file(skin);
+                assert!(model_files::asset(&file).exists(), "{name}: no {file}");
+            }
+            assert!(template.height > 0.0, "{name}");
+        }
+        // The templates the game asks for by name: the player's (`play::figure::TEMPLATE`)
+        // and the people stood in the world (`play::settlement`, `play::pooling`).
+        for wanted in ["male", "female", "heavy", "thin", "strong"] {
+            assert!(templates.contains_key(wanted), "no template {wanted}");
+        }
+    }
+
+    #[test]
+    fn the_base_body_says_how_each_of_its_morphs_moves_its_joints() {
+        let base = model_files::json(BASE);
+        let offsets = model_files::extras(&base)
+            .iter()
+            .find_map(|(_, extras)| offsets_in(&extras.to_string()))
+            .expect("the base body's file carries no morph offsets that read");
+        let morphs = model_files::morphs(&base);
+        let nodes = model_files::nodes(&base);
+        for morph in &morphs {
+            assert!(offsets.contains_key(morph), "nothing moves for {morph}");
+        }
+        for (morph, moved) in &offsets {
+            assert!(morphs.contains(morph), "offsets for {morph}, not a morph");
+            for node in moved.keys() {
+                assert!(nodes.contains(node), "{morph} moves {node}, not a node");
+            }
+        }
+    }
+
+    #[test]
+    fn a_mix_is_each_morphs_value_by_its_weight() {
+        let value = |morph: &str| match morph {
+            "heavy" => Some(Vec3::new(0.0, 0.0, -0.04)),
+            "strong" => Some(Vec3::new(0.0, 0.02, -0.02)),
+            _ => None,
+        };
+        let mix = |weights: &[(&str, f32)]| {
+            let weights: Vec<(String, f32)> =
+                weights.iter().map(|(m, w)| (m.to_string(), *w)).collect();
+            mix(&weights, value)
+        };
+        // Half heavy and fully strong: -0.02 and -0.02 back, 0.02 up; thin gives nothing.
+        let both = mix(&[("heavy", 0.5), ("strong", 1.0), ("thin", 1.0)]);
+        assert!(
+            (both - Vec3::new(0.0, 0.02, -0.04)).length() < 1e-6,
+            "{both}"
+        );
+        // A morph named twice counts twice, as `Appearance::weight` adds them.
+        let twice = mix(&[("heavy", 0.25), ("heavy", 0.25)]);
+        assert!(
+            (twice - Vec3::new(0.0, 0.0, -0.02)).length() < 1e-6,
+            "{twice}"
+        );
+        assert_eq!(mix(&[]), Vec3::ZERO);
     }
 
     #[test]
@@ -728,27 +823,210 @@ mod tests {
         assert!((moved["Head"] - Vec3::new(0.0, -0.1, 0.0)).length() < 1e-6);
     }
 
-    #[test]
-    fn a_moved_joint_carries_the_skin_bound_to_it() {
-        // A joint at (0, 1, 0), its bind pose the inverse of that; moved down by 0.1, a point
-        // of skin that moved with it maps to the same place in the joint's space as before.
-        let joint = Mat4::from_translation(Vec3::new(0.0, 1.0, 0.0));
-        let pose = joint.inverse();
-        let by = Vec3::new(0.0, -0.1, 0.0);
-        let moved = moved_bindposes(&[pose], &[by], Mat3::IDENTITY)[0];
-        let skin = Vec3::new(0.2, 1.3, 0.0);
-        let before = pose.transform_point3(skin);
-        let after = moved.transform_point3(skin + by);
-        assert!((before - after).length() < 1e-6);
+    /// Where skinning draws `vertex` (in the mesh's space) of a mesh whose space is turned
+    /// `model_from_mesh` in the model's, bound to a joint standing at `joint` in the model,
+    /// before and after the joint moves `by` and the mesh is bound again for it.
+    fn drawn_before_and_after(
+        model_from_mesh: Quat,
+        joint: Mat4,
+        by: Vec3,
+        rebound: impl Fn(Mat4) -> Mat4,
+        vertex: Vec3,
+    ) -> (Vec3, Vec3) {
+        // A bind pose takes the mesh's space into the joint's at rest.
+        let pose = (Mat4::from_quat(model_from_mesh).inverse() * joint).inverse();
+        let moved = Mat4::from_translation(by) * joint;
+        (
+            (joint * pose).transform_point3(vertex),
+            (moved * rebound(pose)).transform_point3(vertex),
+        )
     }
 
     #[test]
-    fn a_mesh_turned_in_the_model_moves_its_joints_in_its_own_space() {
-        // The mesh's space is the model's turned a quarter about Y; a joint moved +X in the
-        // model moves -Z... in the mesh's space it is the turned vector.
-        let mesh_from_model = Mat3::from_rotation_y(std::f32::consts::FRAC_PI_2).inverse();
-        let moved = moved_bindposes(&[Mat4::IDENTITY], &[Vec3::X], mesh_from_model)[0];
-        let expected = Mat4::from_translation(-(mesh_from_model * Vec3::X));
-        assert!(moved.abs_diff_eq(expected, 1e-6));
+    fn a_moved_joint_bound_again_leaves_its_skin_where_it_was() {
+        // Skinning draws a vertex at joint times bind pose times vertex. Moved and bound again,
+        // a joint must draw the skin where it was: the morph, not the joint, moves the skin.
+        // So in a mesh as the model has it, and in meshes turned in the model.
+        let joint = Mat4::from_translation(Vec3::new(0.2, 1.0, -0.1)) * Mat4::from_rotation_z(0.3);
+        let by = Vec3::new(0.05, -0.1, 0.02);
+        for model_from_mesh in [
+            Quat::IDENTITY,
+            Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+            Quat::from_rotation_x(0.7),
+        ] {
+            let mesh_from_model = Mat3::from_quat(model_from_mesh.inverse());
+            for vertex in [
+                Vec3::ZERO,
+                Vec3::new(0.2, 1.3, 0.0),
+                Vec3::new(-0.4, 0.1, 0.6),
+            ] {
+                let (before, after) = drawn_before_and_after(
+                    model_from_mesh,
+                    joint,
+                    by,
+                    |pose| moved_bindposes(&[pose], &[by], mesh_from_model)[0],
+                    vertex,
+                );
+                assert!(
+                    before.distance(after) < 1e-5,
+                    "{model_from_mesh}: {before} became {after}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_joint_held_by_its_appearance_moves_from_where_the_animation_put_it_or_its_rest() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let rest = Vec3::new(0.0, 1.0, 0.0);
+        let by = Vec3::new(0.0, -0.1, 0.0);
+        let joint = world.spawn(Transform::from_translation(rest)).id();
+        world.spawn(Moved(vec![MovedNode {
+            node: joint,
+            rest,
+            by,
+            held: Some(rest),
+        }]));
+        let frame = |world: &mut World, animated: Option<Vec3>| {
+            if let Some(at) = animated {
+                world.get_mut::<Transform>(joint).unwrap().translation = at;
+            }
+            world.run_system_once(hold_joints).unwrap();
+            world.get::<Transform>(joint).unwrap().translation
+        };
+        // Frames no clip sets it: moved from its rest, and never further each frame.
+        assert!(frame(&mut world, None).distance(rest + by) < 1e-6);
+        assert!(frame(&mut world, None).distance(rest + by) < 1e-6);
+        // A clip sets it: moved from there.
+        let animated = Vec3::new(0.0, 1.2, 0.05);
+        assert!(frame(&mut world, Some(animated)).distance(animated + by) < 1e-6);
+        assert!(frame(&mut world, None).distance(rest + by) < 1e-6);
+    }
+
+    #[test]
+    fn a_rest_is_chained_up_to_the_root_and_not_past_it() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let root = world.spawn_empty().id();
+        let arm = world.spawn(ChildOf(root)).id();
+        let hand = world.spawn(ChildOf(arm)).id();
+        let rest = Rest(HashMap::from([
+            // The root's own rest places the model in the world, and is left out.
+            (root, Transform::from_xyz(100.0, 0.0, 0.0)),
+            (
+                arm,
+                Transform::from_xyz(0.0, 1.0, 0.0)
+                    .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+            ),
+            (hand, Transform::from_xyz(1.0, 0.0, 0.0)),
+        ]));
+        let at = world
+            .run_system_once(move |parents: Query<&ChildOf>| {
+                rest_from_root(hand, root, &rest, &parents)
+            })
+            .unwrap();
+        // The hand is 1 along the arm's X, which the quarter turn points up: 1 above the
+        // arm, 2 above the root, and turned as the arm is.
+        assert!(
+            Vec3::from(at.translation).distance(Vec3::Y * 2.0) < 1e-6,
+            "{at:?}"
+        );
+        assert!(Vec3::from(at.matrix3 * Vec3A::X).distance(Vec3::Y) < 1e-6);
+    }
+
+    #[test]
+    fn a_worn_look_takes_its_bodys_shape() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        world.init_resource::<Shared>();
+        world.insert_resource(Assets::<Mesh>::default());
+        world.insert_resource(Assets::<SkinnedMeshInverseBindposes>::default());
+        let weights = vec![("heavy".to_string(), 0.5), ("thin".to_string(), 0.25)];
+        let by = Vec3::new(0.0, -0.1, 0.05);
+        let body = world
+            .spawn(Shape {
+                moved: HashMap::from([("Head".to_string(), by)]),
+                weights_by_name: weights,
+            })
+            .id();
+        let head = world.spawn((Name::new("Head"), ChildOf(body))).id();
+        let head_at = Mat4::from_translation(Vec3::new(0.0, 1.6, 0.05));
+
+        // A rigid look hung on a socket, shifted beyond it by each morph.
+        let hung = world
+            .spawn((
+                Worn { body },
+                Covers(vec![]),
+                Rest(HashMap::new()),
+                Shifts(HashMap::from([
+                    ("heavy".to_string(), Vec3::new(0.0, 0.0, -0.04)),
+                    ("thin".to_string(), Vec3::new(0.02, 0.0, 0.0)),
+                ])),
+                Transform::default(),
+            ))
+            .id();
+
+        // A skinned look whose mesh is turned a quarter in the look, with morphs of its own
+        // in an order of its own.
+        let turned = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+        let pose = (Mat4::from_quat(turned).inverse() * head_at).inverse();
+        let poses = world
+            .resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
+            .add(SkinnedMeshInverseBindposes::from(vec![pose]));
+        let shape = world.resource_mut::<Assets<Mesh>>().add(
+            Mesh::new(
+                bevy::mesh::PrimitiveTopology::TriangleList,
+                bevy::asset::RenderAssetUsages::default(),
+            )
+            .with_morph_target_names(vec![
+                "thin".into(),
+                "female".into(),
+                "heavy".into(),
+            ]),
+        );
+        let skinned = world.spawn(Worn { body }).id();
+        let mesh = world
+            .spawn((
+                SkinnedMesh {
+                    inverse_bindposes: poses.clone(),
+                    joints: vec![head],
+                },
+                MorphWeights::new(vec![0.0; 3], Some(shape)).unwrap(),
+                ChildOf(skinned),
+            ))
+            .id();
+        world.entity_mut(skinned).insert((
+            Covers(vec![]),
+            Rest(HashMap::from([(mesh, Transform::from_rotation(turned))])),
+        ));
+
+        world.run_system_once(fit_worn).unwrap();
+
+        // Half the heavy shift and a quarter of the thin.
+        let shifted = world.get::<Transform>(hung).unwrap().translation;
+        assert!(
+            shifted.distance(Vec3::new(0.005, 0.0, -0.02)) < 1e-6,
+            "{shifted}"
+        );
+        // Its morphs by name, whatever their order.
+        let morphs = world.get::<MorphWeights>(mesh).unwrap().weights().to_vec();
+        assert_eq!(morphs, vec![0.25, 0.0, 0.5]);
+        // Bound again for the moved head, in the mesh's own turned space: the skin is drawn
+        // where it was, before the morph moves it.
+        let bound = world
+            .get::<SkinnedMesh>(mesh)
+            .unwrap()
+            .inverse_bindposes
+            .clone();
+        assert_ne!(bound.id(), poses.id());
+        let rebound = world
+            .resource::<Assets<SkinnedMeshInverseBindposes>>()
+            .get(&bound)
+            .unwrap()[0];
+        for vertex in [Vec3::ZERO, Vec3::new(0.1, 1.5, -0.2)] {
+            let (before, after) = drawn_before_and_after(turned, head_at, by, |_| rebound, vertex);
+            assert!(before.distance(after) < 1e-5, "{before} became {after}");
+        }
     }
 }

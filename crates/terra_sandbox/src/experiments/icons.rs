@@ -339,6 +339,24 @@ mod tests {
         assert_eq!(out, vec![0.25, 0.25, 0.25, 0.25]);
     }
 
+    /// Only things neither held nor worn may go without a look, shown by name and a painted
+    /// icon: something in hand or on the body with none is drawn as nothing at all.
+    #[test]
+    fn every_item_held_or_worn_has_a_look() {
+        let items = Items::default();
+        let (_, missing) = catalogue();
+        let mut checked = 0;
+        for kind in items.kinds() {
+            if items.tool(kind).is_none() && items.worn(kind).is_none() {
+                continue;
+            }
+            checked += 1;
+            let (item, _) = items.icon_source(kind).unwrap();
+            assert!(!missing.contains(&item), "{item} has no look");
+        }
+        assert!(checked > 0);
+    }
+
     /// Every item whose look exists has an icon made from that look as it is now: rendered
     /// in the style as it is now, or painted from it. Every icon in the manifest exists.
     /// When this fails, run `cargo xtask icons` (or paint again, `tools/icons`) and commit

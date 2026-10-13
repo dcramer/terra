@@ -235,13 +235,14 @@ mod tests {
         hit_radius: 0.03,
     };
 
-    /// Runs the spring for `steps` at 60 a second with the pivot moved by `pivot(k)`.
+    /// Runs the spring for `steps` at 60 a second with the pivot moved by `pivot(k)`, its
+    /// tail resting along `rest` and falling along -Y.
     fn run(
         steps: usize,
         pivot: impl Fn(usize) -> Vec3,
+        rest: Vec3,
         capsules: &[(Vec3, Vec3, f32)],
     ) -> Vec<Vec3> {
-        let rest = Vec3::NEG_Y;
         let length = 0.3;
         let mut now = pivot(0) + rest * length;
         let mut before = now;
@@ -267,17 +268,20 @@ mod tests {
     }
 
     #[test]
-    fn a_loose_look_hanging_still_stays_where_it_rests() {
-        let tails = run(120, |_| Vec3::ZERO, &[]);
+    fn a_tail_resting_sideways_sags_until_its_pulls_balance() {
+        // Resting along +X and falling along -Y, it settles where the pull back toward its
+        // rest and its weight add up to a pull straight along it: it sags, but holds.
+        let tails = run(600, |_| Vec3::ZERO, Vec3::X, &[]);
         let last = *tails.last().unwrap();
-        assert!(last.distance(Vec3::new(0.0, -0.3, 0.0)) < 1e-3, "{last}");
+        let balance = (Vec3::X * SPRING.stiffness + Vec3::NEG_Y * SPRING.gravity).normalize();
+        assert!(last.distance(balance * 0.3) < 1e-3, "{last}");
     }
 
     #[test]
     fn it_trails_when_the_body_moves_off_and_settles_once_it_stops() {
         // Walked forward along +X for a second, then stood still.
         let walk = |k: usize| Vec3::X * (k.min(60) as f32 / 60.0) * 1.5;
-        let tails = run(360, walk, &[]);
+        let tails = run(360, walk, Vec3::NEG_Y, &[]);
         assert!(
             tails[30].x < -0.01,
             "it lags behind while moving: {}",
@@ -297,7 +301,7 @@ mod tests {
         // A thigh just in front of where it hangs, and the body moving backwards into it.
         let thigh = (Vec3::new(0.08, 0.0, 0.0), Vec3::new(0.08, -0.5, 0.0), 0.06);
         let back = |k: usize| Vec3::NEG_X * (k.min(30) as f32 / 30.0) * 0.5;
-        let tails = run(200, back, &[(thigh.0, thigh.1, thigh.2)]);
+        let tails = run(200, back, Vec3::NEG_Y, &[(thigh.0, thigh.1, thigh.2)]);
         for (k, tail) in tails.iter().enumerate() {
             // The thigh stands still in the world; the tail, kept relative to the pivot, is
             // put back in the world to measure.
@@ -312,14 +316,125 @@ mod tests {
         }
     }
 
+    /// Where the parts hang in `hung`: the look's root on its socket, 10 m up, so the world's
+    /// down there is -Y.
+    const ROOT_AT: Vec3 = Vec3::new(0.0, 10.0, 0.0);
+
+    /// A body, a look's root on it turned `turn` in the world, and on that a part resting
+    /// turned `rest` that swings; and the part.
+    fn hung(turn: Quat, rest: Quat) -> (World, Entity, Entity) {
+        let mut world = World::new();
+        world.insert_resource(BodyCapsules(vec![]));
+        world.insert_resource(Time::<()>::default());
+        let body = world.spawn(Body).id();
+        let root = world
+            .spawn((
+                GlobalTransform::from(Transform::from_translation(ROOT_AT).with_rotation(turn)),
+                ChildOf(body),
+            ))
+            .id();
+        let part = world
+            .spawn((
+                Swing::new(SPRING),
+                Transform::from_rotation(rest),
+                ChildOf(root),
+            ))
+            .id();
+        (world, root, part)
+    }
+
+    fn frame(world: &mut World, seconds: f32) {
+        use bevy::ecs::system::RunSystemOnce;
+        world
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_secs_f32(seconds));
+        world.run_system_once(swing).unwrap();
+    }
+
+    /// Which way the part's tail points in the world, as it is drawn.
+    fn drawn(world: &World, turn: Quat, part: Entity) -> Vec3 {
+        let rotation = world.get::<Transform>(part).unwrap().rotation;
+        (turn * rotation * Vec3::from(SPRING.tail)).normalize()
+    }
+
+    /// A socket turned a quarter about Z and a part turned 40 degrees about X within it: its
+    /// tail, down in its own space, rests level in the world.
+    fn turns() -> (Quat, Quat) {
+        (
+            Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+            Quat::from_rotation_x(40f32.to_radians()),
+        )
+    }
+
     #[test]
-    fn a_look_reads_how_it_swings_from_its_extras() {
-        let spring = Springiness::from_extras(serde_json::json!({
-            "tail": [0.0, -0.25, 0.05], "stiffness": 0.8, "drag": 0.4, "gravity": 0.6
-        }))
+    fn a_part_turned_on_a_turned_socket_sags_from_where_it_rests_in_the_world() {
+        let (turn, rest) = turns();
+        let (mut world, _, part) = hung(turn, rest);
+        for _ in 0..600 {
+            frame(&mut world, 1.0 / 60.0);
+        }
+        let resting = (turn * rest * Vec3::from(SPRING.tail)).normalize();
+        assert!(resting.y.abs() < 1e-5, "the fixture rests level: {resting}");
+        // Settled where the pull back toward its rest and its weight balance, as the tail is
+        // drawn, not only as the spring has it.
+        let balance = (resting * SPRING.stiffness + Vec3::NEG_Y * SPRING.gravity).normalize();
+        let tail = drawn(&world, turn, part);
+        assert!(tail.distance(balance) < 1e-3, "{tail} against {balance}");
+        let swung = world.get::<Swing>(part).unwrap().swung;
+        assert!(
+            (swung - resting.angle_between(balance).to_degrees()).abs() < 0.1,
+            "{swung}"
+        );
+    }
+
+    #[test]
+    fn a_part_whose_body_jumps_is_hung_afresh_where_it_rests() {
+        let (turn, rest) = turns();
+        let (mut world, root, part) = hung(turn, rest);
+        for _ in 0..120 {
+            frame(&mut world, 1.0 / 60.0);
+        }
+        assert!(world.get::<Swing>(part).unwrap().swung > 20.0);
+        // Teleported 100 m: not dragged after its old place, but placed at rest and one
+        // step on from there.
+        world.entity_mut(root).insert(GlobalTransform::from(
+            Transform::from_translation(ROOT_AT + Vec3::X * 100.0).with_rotation(turn),
+        ));
+        frame(&mut world, 1.0 / 60.0);
+        let swung = world.get::<Swing>(part).unwrap().swung;
+        assert!(swung < 5.0, "{swung}");
+    }
+
+    #[test]
+    fn a_long_frame_is_taken_as_one_ordinary_step() {
+        let (turn, rest) = turns();
+        let (mut hitch, _, hitched) = hung(turn, rest);
+        frame(&mut hitch, 1.0);
+        let (mut ordinary, _, part) = hung(turn, rest);
+        frame(&mut ordinary, 1.0 / 30.0);
+        let (a, b) = (drawn(&hitch, turn, hitched), drawn(&ordinary, turn, part));
+        assert!(ordinary.get::<Swing>(part).unwrap().swung > 1.0);
+        assert!(a.distance(b) < 1e-5, "{a} against {b}");
+    }
+
+    #[test]
+    fn the_shipped_capsules_run_between_joints_the_skeleton_has() {
+        // Read without the fallback the plugin has, which would leave a broken file unseen;
+        // a joint the body lacks drops its capsule as quietly.
+        let colliders: Colliders = serde_json::from_str(include_str!(
+            "../../../assets/models/character/colliders.json"
+        ))
         .unwrap();
-        assert_eq!(spring.tail, [0.0, -0.25, 0.05]);
-        assert_eq!(spring.hit_radius, 0.03);
-        assert!(Springiness::from_extras(serde_json::json!({"tail": [0.0, 1.0, 0.0]})).is_none());
+        assert!(!colliders.capsules.is_empty());
+        let joints = crate::model_files::joints(&crate::model_files::json(crate::appearance::BASE));
+        for capsule in &colliders.capsules {
+            for end in [&capsule.from, &capsule.to] {
+                assert!(
+                    joints.contains(end),
+                    "{end} is not a joint of the base body"
+                );
+            }
+            assert!(capsule.radius > 0.0);
+        }
     }
 }

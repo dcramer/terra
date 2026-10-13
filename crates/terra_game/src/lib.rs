@@ -16,6 +16,8 @@ pub mod build;
 pub mod character;
 pub mod icons;
 pub mod lift;
+#[cfg(test)]
+pub(crate) mod model_files;
 pub mod pace;
 pub mod play;
 pub mod skinning;

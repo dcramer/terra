@@ -48,6 +48,22 @@ mod tests {
     }
 
     #[test]
+    fn the_base_bodys_paces_are_for_its_clips() {
+        let base = crate::model_files::json(crate::appearance::BASE);
+        // As `paces` reads them, which gives none when they do not read.
+        let paces: HashMap<String, f32> = serde_json::from_value(
+            crate::model_files::extra(&base, "paces").expect("the base body carries no paces"),
+        )
+        .unwrap();
+        assert!(!paces.is_empty());
+        let clips = crate::model_files::animations(&base);
+        for (clip, pace) in &paces {
+            assert!(clips.contains(clip), "a pace for no clip {clip}");
+            assert!(*pace > 0.0, "{clip}");
+        }
+    }
+
+    #[test]
     fn it_is_never_played_absurdly_slow_or_fast() {
         assert_eq!(rate(0.1, 5.5, 1.0), SLOWEST);
         assert_eq!(rate(20.0, 5.5, 1.0), FASTEST);
