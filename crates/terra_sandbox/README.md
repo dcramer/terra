@@ -50,7 +50,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--template <name>[@<height>]` | In the workbench: the template the next model's body is shaped as (`models/character/templates.json`), such as `female` or `heavy`, and its height against the base's, such as `male@1.15`. Repeatable, in the order of the models |
 | `--crowd <n>` | In the crowd experiment: how many dressed characters (100 by default) |
 | `--linear-skinning` | Skin with Bevy's own linear blend instead of our dual quaternions, to compare the two |
-| `--joints` | In the workbench: print where each model's joints and sockets stand once shaped (`JOINTS` lines), to compare with the export's `SOCKETS` |
+| `--joints` | In the workbench: print where each model's joints and sockets stand once shaped (`JOINTS` lines), to compare with the export's `SOCKETS` (`tools/characters/sockets.py`) |
 | `--attach <file>[@<socket>]` | In the workbench: any look, on a socket such as `models/x.glb@socket.back`, or without one as its file says. Repeatable |
 | `--focus <name>` | In the workbench: look closely at one part, such as `socket.hand.R` |
 | `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. In `icons`: also save the baked icons laid out, `<prefix>.png` and `<prefix>-half.png` |

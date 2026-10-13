@@ -33,6 +33,8 @@ Broadly, yes: Python inside a headless Blender, with numeric validators, is how 
 5. **Format-only steps could leave Blender.** Re-exporting a Tripo file so Bevy can read it, and grounding a model, are glTF edits that glTF Transform can do in Node, faster and without Blender installed. It is only worth doing if those steps get in the way.
 6. **One loose script.** `sockets.py` is in no README or build; only research notes mention it. Document it as a check or delete it.
 
+Since fixed: 1 (`tools/blender/version`), 2 (`tools/blender/check.py`, run by `cargo xtask check`) and 6 (documented).
+
 None of these is a design question. 1 and 2 are cheap and catch real faults; 3 to 5 are for when the pipeline grows.
 
 ## Sources

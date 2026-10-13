@@ -29,6 +29,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `carry_gear.py` | A worn look made on the base carried onto a morph: skinned parts follow the skin, standing-off parts and looks hung on sockets move as one to keep their clearance (a hung look's shift per morph in its extras, for the game), and the clipping fixer's pushes are baked in |
 | `paint_skin.sh NAME FRONT` | A template's own skin, painted by Tripo on the base's mesh in its shape (`paint_skin.py`), baked onto the base's layout |
 | `compare.py` | Bodies side by side, dressed with `a.glb+b.glb` (worn or hung as in the game), at rest or held at a moment of a clip (`--pose`), or close on one bone from four sides (`--focus`) |
+| `sockets.py` | Where a body file's sockets and main joints stand, at rest or partway through a clip (`--pose`), as `SOCKETS` lines: what the sandbox workbench's `--joints` is checked against |
 | `fit_held.py` | The held look of each tool, from the models in `assets/models/tools`: free ones, and ours made by [tools/props](../props/README.md) |
 
 `look.py` holds what the scripts share: paths, our palette and light, contact sheets and close-ups, and `skin_as_game`, which skins a loaded body as the game does (weight-blended, from `assets/models/character/skinning.json`).

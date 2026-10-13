@@ -31,7 +31,7 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | `cargo xtask yard` | Play the yard: a flat test level for working on building. Smooth ground with nothing on it, building free and instant without a claim stone, the sun at noon, nothing saved. The same as `--level yard` on the play experiment, so the sandbox remote can drive it. |
 | `cargo xtask loop` | Play the MVP's loop by script and check every step happened ([QA for agents](#checking-the-game-without-a-person-qa-for-agents)) |
 | `cargo xtask bench` | Time the benchmark scenes ([Measuring performance](#measuring-performance)) |
-| `cargo xtask check` | Formatting, lints, tests (the TypeScript tools' too) and the dependency rule. Must pass before a commit. |
+| `cargo xtask check` | Formatting, lints, tests (the TypeScript tools' too), the Blender scripts' check (skipped with no Blender) and the dependency rule. Must pass before a commit. |
 | `cargo test -p terra_items` | One crate's tests |
 | `cargo fmt --all` | Format everything |
 | `cargo xtask sandbox` | Open the sandbox, the test environment for graphics and utilities; anything after it goes to the sandbox, and `--list` lists its experiments. See its [README](../crates/terra_sandbox/README.md). |
@@ -134,7 +134,7 @@ Each tool should be scriptable as well as usable by hand, so an agent can use it
 
 ### Blender
 
-For making and cleaning up models ([research/ai-models-for-art.md](../research/ai-models-for-art.md)). Install Blender 5.1 or later; under WSL, the Windows install is the one to use, since it renders on the real GPU.
+For making and cleaning up models ([research/ai-models-for-art.md](../research/ai-models-for-art.md)). Install the Blender version in [tools/blender/version](../tools/blender/version) (5.2 LTS); `run.sh` refuses any other, and `cargo xtask doctor` says what you have; under WSL, the Windows install is the one to use, since it renders on the real GPU.
 
 - **Scripts, headless.** `tools/blender/run.sh <script.py>` runs a script in Blender, from WSL in the Windows Blender ([tools/blender](../tools/blender/README.md)). Repeatable, and nothing has to be open.
 - **A live session, through MCP.** Blender's official [MCP server](https://www.blender.org/lab/mcp-server/) lets an agent work in the Blender you have open, so you can watch it and change things by hand. It runs any code it is sent, so keep it to your own machine. Setting it up under WSL:

@@ -616,6 +616,7 @@ fn check() -> bool {
         )
         && cargo("test", &["--workspace"])
         && tools_tests()
+        && blender_scripts()
         && shared_crates_avoid_bevy()
         && shared_crates_are_repeatable()
 }
@@ -631,6 +632,26 @@ fn tools_tests() -> bool {
     };
     let files: Vec<&str> = files.lines().collect();
     run("node", &[&["--test"], files.as_slice()].concat())
+}
+
+/// The Blender scripts (D121) compile and find what they import, checked inside the pinned
+/// Blender without running them. A machine with no Blender skips this.
+fn blender_scripts() -> bool {
+    println!("\n> Blender scripts (tools/blender/check.py)");
+    if output("tools/blender/run.sh", &["--find"]).is_none() {
+        println!("  skipped: no Blender here (cargo xtask doctor)");
+        return true;
+    }
+    let Some(files) = output("git", &["ls-files", "tools/**/*.py"]) else {
+        println!("  git cannot list them");
+        return false;
+    };
+    Command::new("tools/blender/run.sh")
+        .arg("tools/blender/check.py")
+        .args(files.lines())
+        .current_dir(root())
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 /// Anything every player must agree on lives in crates that know nothing about Bevy.
@@ -999,6 +1020,18 @@ fn doctor() -> bool {
     );
 
     println!("\nArt tools");
+    let pinned = std::fs::read_to_string(root().join("tools/blender/version")).unwrap_or_default();
+    let pinned = pinned.trim();
+    let blender = output("tools/blender/run.sh", &["--find"])
+        .and_then(|path| output(&path, &["--version"]))
+        .and_then(|v| v.lines().next().map(str::to_string))
+        .unwrap_or_default();
+    report.item(
+        &format!("Blender {pinned}, for the model pipeline and its check (found: {blender})"),
+        blender.starts_with(&format!("Blender {pinned}.")),
+        false,
+        &format!("install Blender {pinned} (https://www.blender.org/download/lts/); under WSL, the Windows one"),
+    );
     report.item(
         "ImageMagick, for painting item icons (tools/icons)",
         output("convert", &["-version"]).is_some(),
