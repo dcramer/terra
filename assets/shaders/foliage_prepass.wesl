@@ -24,6 +24,20 @@ import bevy_pbr::render::pbr_bindings::material_indices;
 
 @group(0) @binding(1) var<uniform> globals: Globals;
 
+fn noise_at(frag_coord: vec4<f32>) -> f32 {
+    let shifted = frag_coord.xy + 5.588238 * f32(globals.frame_count % 64u);
+    return fract(52.9829189 * fract(dot(shifted, vec2<f32>(0.06711056, 0.00583715))));
+}
+
+// As foliage_fragment.wesl: what is right at the camera fades out. A shadow view stands far
+// off, so shadows keep it.
+fn near_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
+    let near = smoothstep(0.5, 1.6, distance(world, view.world_position));
+    if near < 1.0 && noise_at(frag_coord) > near {
+        discard;
+    }
+}
+
 fn temporal_dither(frag_coord: vec4<f32>, dither: i32) {
     if dither == 0 {
         return;
@@ -31,9 +45,7 @@ fn temporal_dither(frag_coord: vec4<f32>, dither: i32) {
     if dither <= -16 || dither >= 16 {
         discard;
     }
-    let shifted = frag_coord.xy + 5.588238 * f32(globals.frame_count % 64u);
-    let noise = fract(52.9829189 * fract(dot(shifted, vec2<f32>(0.06711056, 0.00583715))));
-    let threshold = i32(noise * 16.0);
+    let threshold = i32(noise_at(frag_coord) * 16.0);
     if (dither >= 0 && dither + threshold >= 16) || (dither < 0 && 1 + dither + threshold <= 0) {
         discard;
     }
@@ -55,6 +67,7 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
 
 @if(VISIBILITY_RANGE_DITHER)
     temporal_dither(in.position, in.visibility_range_dither);
+    near_fade(in.position, in.world_position.xyz);
 
     pbr_prepass_functions::prepass_sample_color_and_alpha_discard(in);
 

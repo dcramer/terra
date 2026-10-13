@@ -996,13 +996,16 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
             let angle = j as f32 / sides as f32 * TAU;
             let normal = side * libm::cosf(angle) + other * libm::sinf(angle);
             let uv = Vec2::new(j as f32 / sides as f32 * wraps, along / BARK_M.y);
-            build.vertex(
+            let index = build.vertex(
                 point + normal * radius,
                 normal,
                 uv,
                 Vec2::new(bend * bend, flutter),
                 Vec3::ONE,
             );
+            // How much of the sky it sees, under its own crown and its neighbours': little
+            // low on the trunk, most up in the crown (D216).
+            build.colours[index as usize][3] = 0.35 + 0.65 * smoothstep(0.2, 0.85, bend);
         }
     }
     let ring = sides + 1;

@@ -22,6 +22,11 @@ use std::f32::consts::TAU;
 /// How long a whole day and night lasts, in seconds of play. Proposed: half an hour, as
 /// Valheim's and Enshrouded's are.
 pub const DAY_SECONDS: f32 = 30.0 * 60.0;
+/// The sky lights the shade this many times as brightly as the keys below say. Open sky
+/// gives level ground something like a sixth of what the sun does; the keys gave it about a
+/// sixteenth, so every shadow was near black (D216).
+const SKY_LIGHT_GAIN: f32 = 1.4;
+
 /// The sun's direction moves on in this many steps an hour: a twentieth of a degree each,
 /// a few times a second at the game's pace.
 const SUN_STEPS: f32 = 300.0;
@@ -334,7 +339,7 @@ fn shine(
     sky.spin = (clock.hour - MORNING) / 24.0 * TAU;
     let lit = SkyLight {
         shade: colour(light.shade),
-        brightness: light.ambient,
+        brightness: light.ambient * SKY_LIGHT_GAIN,
     };
     // Set only when it changes, so the sky is painted again only then.
     skylight.set_if_neq(lit);

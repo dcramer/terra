@@ -83,7 +83,7 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
 
 /// What the eye adapts round: the log brightness a scene meters at when it is as bright as
 /// the day's exposure for the hour expects (D214).
-const METERED_AS_SET: f32 = -2.5;
+const METERED_AS_SET: f32 = -3.0;
 /// How far the eye adapts from the day's exposure: up to two stops brighter in deep shade,
 /// as under a canopy, and one darker in glare, as every game with a forest clamps it.
 const ADAPT_BRIGHTER: f32 = 2.0;
@@ -155,15 +155,13 @@ fn style_camera(
         // contrast through the middle and shadows, as a print's look adds.
         ColorGrading {
             global: ColorGradingGlobal {
-                post_saturation: 1.06,
+                post_saturation: 1.12,
                 ..default()
             },
-            shadows: ColorGradingSection {
-                contrast: 1.1,
-                ..default()
-            },
+            // No extra contrast in the shadows, which crushed the shade under a canopy to
+            // black (D216); a little in the midtones.
             midtones: ColorGradingSection {
-                contrast: 1.12,
+                contrast: 1.1,
                 ..default()
             },
             ..default()
