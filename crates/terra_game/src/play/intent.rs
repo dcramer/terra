@@ -64,6 +64,11 @@ impl Intent {
         self.free() && self.pressed(action)
     }
 
+    /// Holds an action down for a script, as a key held all along is: held, not pressed.
+    pub fn keep_held(&mut self, action: Action) {
+        self.held |= Self::bit(action);
+    }
+
     /// Holds an action down, and presses it if it was not held, as a key does.
     #[cfg(test)]
     pub fn hold(&mut self, action: Action) {

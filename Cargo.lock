@@ -5888,6 +5888,7 @@ dependencies = [
  "bevy-inspector-egui",
  "gltf",
  "libm",
+ "objc2-foundation 0.3.2",
  "ron",
  "serde",
  "serde_json",

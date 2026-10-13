@@ -1,6 +1,7 @@
 //! The parts every experiment gets for free: the window, overlays, inspectors, and the
 //! scripted modes that let a run be checked without anyone watching.
 
+use crate::debug::FRAME_BUDGET_MS;
 use crate::{
     audio, debug,
     loading::{self, Screen},
@@ -43,7 +44,9 @@ usage: terra_sandbox [options]
   --clean               leave the frame-time readout off the screen, for pictures
   --mute                no sound
   --sound               sound under WSL too, where it is off by default
-  --bench               measure frame times with vsync off, print them, then exit
+  --bench               measure frame times with vsync off, print them and how they hold
+                        to the frame budget, then exit
+  --bench-frames <n>    how many frames --bench times (default 600)
   --remote              let a script drive this run over Bevy's remote protocol, on
                         localhost:15702 (tools/sandbox/remote.ts)
   --remote-port <port>  listen on this port instead, so several runs can be driven apart
@@ -125,6 +128,8 @@ usage: terra_sandbox [options]
   --warp <east,south:east,south@frame>
                         on that frame, move the play experiment's player to the first
                         spot, facing the second, for testing (repeatable)
+  --route <east,south>  walk the player to this spot, then the next given, steering as a
+                        player would, for scripted walks such as benchmarks (repeatable)
   --walls plain         lay walls, floors and roofs plain rather than in logs, the
                         first kit (docs/building-kits.md)
   --kit-sheet           on the yard, lay one of each way log walls meet, built, going
@@ -222,6 +227,10 @@ pub struct Options {
     pub start_facing: Option<(f32, f32)>,
     /// On a frame, put the play experiment's player at a spot, facing another.
     pub warps: Vec<Warp>,
+    /// Spots for the player to walk to in turn, east and south of the start (`--route`).
+    pub route: Vec<(f32, f32)>,
+    /// How many frames `--bench` times.
+    pub bench_frames: usize,
     /// In the workbench: the models to load, their clips to play, what they hold and
     /// wear, what to look at closely, and where to save a sheet, from which sides, at
     /// which moments.
@@ -297,6 +306,8 @@ impl Options {
             time: None,
             start_facing: None,
             warps: Vec::new(),
+            route: Vec::new(),
+            bench_frames: BENCH_FRAMES,
             models: Vec::new(),
             props: Vec::new(),
             hold: None,
@@ -358,6 +369,16 @@ impl Options {
                 }
                 "--at" => options.start_at = Some(east_south("--at", &value("--at")?)?),
                 "--face" => options.start_facing = Some(east_south("--face", &value("--face")?)?),
+                "--route" => options
+                    .route
+                    .push(east_south("--route", &value("--route")?)?),
+                "--bench-frames" => {
+                    options.bench_frames = value("--bench-frames")?
+                        .parse()
+                        .ok()
+                        .filter(|&frames| frames >= 100)
+                        .ok_or_else(|| "--bench-frames needs a number, 100 or more".to_string())?;
+                }
                 "--warp" => {
                     let text = value("--warp")?;
                     let problem = || {
@@ -588,6 +609,9 @@ pub struct ShellPlugin(pub Options);
 
 impl Plugin for ShellPlugin {
     fn build(&self, app: &mut App) {
+        if self.0.scripted() {
+            stay_awake();
+        }
         let options = self.0.clone();
         let readout = !options.clean;
         let window = Window {
@@ -809,6 +833,12 @@ fn scripted_run(
     mut part_ms: Local<[Vec<f32>; 3]>,
     parts: Option<Res<crate::debug::FrameParts>>,
     mut last_frame: Local<Option<Instant>>,
+    (entities, meshes, images, mut grew): (
+        &bevy::ecs::entity::Entities,
+        Res<Assets<Mesh>>,
+        Res<Assets<Image>>,
+        Local<Option<[usize; 3]>>,
+    ),
     mut exit: MessageWriter<AppExit>,
 ) {
     if !options.scripted() {
@@ -851,13 +881,40 @@ fn scripted_run(
         }
     }
     if options.bench {
+        // What the world holds, at the first timed frame and the last: what a long run
+        // keeps adding and never lets go of shows here.
+        let holds = [entities.len() as usize, meshes.len(), images.len()];
+        grew.get_or_insert(holds);
         frame_ms.extend(real_ms.map(|ms| (*frame, ms)));
         if let Some(parts) = &parts {
             part_ms[0].push(parts.game_ms);
             part_ms[1].extend(parts.render_ms);
             part_ms[2].extend(parts.gpu_ms);
         }
-        if frame_ms.len() == BENCH_FRAMES {
+        let frames = options.bench_frames;
+        if frame_ms.len() == frames {
+            let in_order: Vec<f32> = frame_ms.iter().map(|(_, ms)| *ms).collect();
+            // Drift is the game's own work, where leaks and a throttled machine show,
+            // apart from what the view happens to hold; frames when that is not measured.
+            let sustained = Sustained::of(
+                &in_order,
+                (part_ms[0].len() == frames).then_some(part_ms[0].as_slice()),
+            );
+            // The run in tenths, each its median, to see whether it climbs or jumps, and
+            // whether the game's own work does.
+            let by_tenths = |values: &[f32]| -> String {
+                values
+                    .chunks(frames.div_ceil(10))
+                    .map(|part| {
+                        let mut part = part.to_vec();
+                        part.sort_by(f32::total_cmp);
+                        format!("{:.1}", part[part.len() / 2])
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            };
+            let tenths = by_tenths(&in_order);
+            let game_tenths = (!part_ms[0].is_empty()).then(|| by_tenths(&part_ms[0]));
             frame_ms.sort_by(|a, b| a.1.total_cmp(&b.1));
             let size = match (&picture, window.single()) {
                 (Some(_), _) => format!("{}x{} offscreen", PICTURE_SIZE.x, PICTURE_SIZE.y),
@@ -869,9 +926,16 @@ fn scripted_run(
             println!(
                 "SANDBOX frames on {} at {size}: median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms",
                 adapter.name,
-                frame_ms[BENCH_FRAMES / 2].1,
-                frame_ms[BENCH_FRAMES * 99 / 100].1,
-                frame_ms[BENCH_FRAMES - 1].1
+                frame_ms[frames / 2].1,
+                frame_ms[frames * 99 / 100].1,
+                frame_ms[frames - 1].1
+            );
+            println!(
+                "SANDBOX against the {FRAME_BUDGET_MS:.1} ms budget: {:.2}% of frames over, {} hitches over {:.1} ms, the game's work in the last third {:+.1}% on the first",
+                sustained.over_pct,
+                sustained.hitches,
+                2.0 * FRAME_BUDGET_MS,
+                sustained.drift_pct
             );
             // Where the time goes: the medians of the game's systems, the render passes on
             // the CPU, and the GPU, so a slow frame says which to work on.
@@ -895,10 +959,77 @@ fn scripted_run(
                 .map(|(frame, ms)| format!("{frame} ({ms:.1} ms)"))
                 .collect();
             println!("SANDBOX slowest frames: {}", slowest.join(", "));
+            println!("SANDBOX by tenths of the run, medians in ms: {tenths}");
+            if let Some(game) = game_tenths {
+                println!("SANDBOX the game's own work by tenths, medians in ms: {game}");
+            }
+            let [entities_then, meshes_then, images_then] = grew.unwrap_or(holds);
+            println!(
+                "SANDBOX the world over the timed frames: entities {entities_then} to {}, meshes {meshes_then} to {}, images {images_then} to {}",
+                holds[0], holds[1], holds[2]
+            );
             finish(&mut exit, AppExit::Success);
         }
     }
 }
+
+/// How a run of frames, in the order they were drawn, holds to the frame budget: the share
+/// over it, the hitches (frames over twice it), and the drift, how much slower the last
+/// third of the game's own work ran than the first, which leaks, heat and a throttled
+/// machine show as. It is the game's work, not the frame, so a walk past more or fewer
+/// trees is not taken for one.
+#[derive(Debug, PartialEq)]
+pub struct Sustained {
+    pub over_pct: f32,
+    pub hitches: usize,
+    pub drift_pct: f32,
+}
+
+impl Sustained {
+    pub fn of(frame_ms: &[f32], game_ms: Option<&[f32]>) -> Self {
+        let over = frame_ms.iter().filter(|&&ms| ms > FRAME_BUDGET_MS).count();
+        let hitches = frame_ms
+            .iter()
+            .filter(|&&ms| ms > 2.0 * FRAME_BUDGET_MS)
+            .count();
+        let median = |part: &[f32]| {
+            let mut part = part.to_vec();
+            part.sort_by(f32::total_cmp);
+            part.get(part.len() / 2).copied().unwrap_or(0.0)
+        };
+        let work = game_ms.unwrap_or(frame_ms);
+        let third = work.len() / 3;
+        let (first, last) = (median(&work[..third]), median(&work[work.len() - third..]));
+        Self {
+            over_pct: 100.0 * over as f32 / frame_ms.len().max(1) as f32,
+            hitches,
+            drift_pct: if first > 0.0 {
+                100.0 * (last / first - 1.0)
+            } else {
+                0.0
+            },
+        }
+    }
+}
+
+/// Keeps macOS from throttling a scripted run. A program none of whose windows can be seen,
+/// as a scripted run's offscreen window cannot, is put into App Nap after some 40 s: its
+/// threads run slower and its timers late, and a benchmark's frames came out three times as
+/// long from then on. A run the person started says it is latency-critical work they asked
+/// for, as benchmarks and games do, which keeps it out of App Nap until it ends.
+#[cfg(target_os = "macos")]
+fn stay_awake() {
+    use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
+    let activity = NSProcessInfo::processInfo().beginActivityWithOptions_reason(
+        NSActivityOptions::UserInitiated | NSActivityOptions::LatencyCritical,
+        &NSString::from_str("a scripted run of the game, timed or captured"),
+    );
+    // The activity lasts as long as the program; ending it is ending the run.
+    std::mem::forget(activity);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn stay_awake() {}
 
 /// How long a finished scripted run may take to close before it is ended.
 const CLOSING_S: u64 = 5;
@@ -930,6 +1061,38 @@ fn on_wsl() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_run_holds_to_the_budget_by_its_share_over_its_hitches_and_its_drift() {
+        // Three thirds: steady at 8 ms, then two frames over budget and one hitch, then 10 ms.
+        let mut frames = vec![8.0; 30];
+        frames.extend([8.0, 20.0, 40.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0]);
+        frames.extend(vec![10.0; 30]);
+        let sustained = Sustained::of(&frames, None);
+        assert_eq!(sustained.hitches, 1);
+        assert!((sustained.over_pct - 200.0 / 70.0).abs() < 1e-3);
+        assert!((sustained.drift_pct - 25.0).abs() < 1e-3);
+        // With the game's work measured, the drift is its.
+        let game = vec![2.0; 70];
+        assert_eq!(Sustained::of(&frames, Some(&game)).drift_pct, 0.0);
+        assert_eq!(Sustained::of(&[], None).hitches, 0);
+    }
+
+    #[test]
+    fn a_route_is_its_spots_in_order_and_a_long_bench_its_frames() {
+        let options = parse(&[
+            "--route",
+            "-58,-39",
+            "--route",
+            "10,-80",
+            "--bench-frames",
+            "3600",
+        ])
+        .unwrap();
+        assert_eq!(options.route, [(-58.0, -39.0), (10.0, -80.0)]);
+        assert_eq!(options.bench_frames, 3600);
+        assert!(parse(&["--bench-frames", "5"]).is_err());
+    }
 
     fn parse(args: &[&str]) -> Result<Options, String> {
         Options::from_args(args.iter().map(|a| a.to_string()))

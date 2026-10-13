@@ -181,6 +181,8 @@ struct Scene {
     name: &'static str,
     about: &'static str,
     args: &'static [&'static str],
+    /// How many frames are timed.
+    frames: &'static str,
 }
 
 /// The scenes, at the hour whose long shadows cost the most.
@@ -189,11 +191,13 @@ const SCENES: &[Scene] = &[
         name: "yard",
         about: "the flat test level with nothing on it: what the engine and the player cost",
         args: &["--experiment", "play", "--level", "yard", "--time", "17"],
+        frames: "600",
     },
     Scene {
         name: "world",
         about: "the game where a new one starts: ground, sea, trees, grass, creatures",
         args: &["--experiment", "play", "--time", "17"],
+        frames: "600",
     },
     Scene {
         name: "forest",
@@ -208,6 +212,7 @@ const SCENES: &[Scene] = &[
             "--time",
             "17",
         ],
+        frames: "600",
     },
     Scene {
         name: "forest-walk",
@@ -228,6 +233,36 @@ const SCENES: &[Scene] = &[
             "--press",
             "w@200-2000",
         ],
+        frames: "600",
+    },
+    Scene {
+        name: "walk",
+        about: "40 seconds' walk through the lush forest and its grass, out from the clearing and round, turning as a player would; the world and the walker alone",
+        args: &[
+            "--experiment",
+            "walk",
+            "--experiment",
+            "lush",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--route",
+            "-58,-39",
+            "--route",
+            "-40,-69",
+            "--route",
+            "-6,-80",
+            "--route",
+            "30,-74",
+            "--route",
+            "59,-54",
+            "--route",
+            "77,-22",
+            "--route",
+            "79,14",
+        ],
+        frames: "2400",
     },
 ];
 
@@ -239,7 +274,14 @@ const BENCH_TIMEOUT_S: u64 = 300;
 const SLOWER_BY: f32 = 0.10;
 /// Where `--record` keeps results, one line per scene per run of the task.
 const BENCHMARKS: &str = "research/benchmarks.csv";
-const BENCHMARKS_HEADER: &str = "date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs";
+const BENCHMARKS_HEADER: &str =
+    "date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches,drift_pct";
+/// The frame budget (D25), and what a scene must hold to on the machine it runs on: at most
+/// this share of frames over budget, no hitch (a frame over twice it), and its last third
+/// no slower than its first by more than this.
+const BUDGET_MS: f32 = 1000.0 / 60.0;
+const MOST_OVER_PCT: f32 = 1.0;
+const MOST_DRIFT_PCT: f32 = 15.0;
 
 /// One timed run, as the sandbox prints it.
 #[derive(Debug, Clone, PartialEq)]
@@ -249,6 +291,46 @@ struct Timing {
     median_ms: f32,
     p99_ms: f32,
     worst_ms: f32,
+    /// How the run held to the budget, from its next line.
+    over_pct: f32,
+    hitches: u32,
+    drift_pct: f32,
+}
+
+impl Timing {
+    /// What the scene missed of the budget's gates, if anything.
+    fn misses(&self) -> Vec<String> {
+        let mut missed = Vec::new();
+        if self.p99_ms > BUDGET_MS {
+            missed.push(format!("99th percentile over {BUDGET_MS:.1} ms"));
+        }
+        if self.over_pct > MOST_OVER_PCT {
+            missed.push(format!("{:.1}% of frames over budget", self.over_pct));
+        }
+        if self.hitches > 0 {
+            missed.push(format!("{} hitches", self.hitches));
+        }
+        if self.drift_pct > MOST_DRIFT_PCT {
+            missed.push(format!("{:+.0}% slower by the end", self.drift_pct));
+        }
+        missed
+    }
+}
+
+/// Reads `SANDBOX against the 16.7 ms budget: 0.50% of frames over, 2 hitches over
+/// 33.3 ms, the last third +3.0% on the first`.
+fn parse_sustained(line: &str) -> Option<(f32, u32, f32)> {
+    let rest = line.strip_prefix("SANDBOX against the ")?;
+    let (_, rest) = rest.split_once(" budget: ")?;
+    let (over, rest) = rest.split_once("% of frames over, ")?;
+    let (hitches, rest) = rest.split_once(" hitches over ")?;
+    let (_, drift) = rest.split_once("in the last third ")?;
+    let drift = drift.strip_suffix("% on the first")?;
+    Some((
+        over.parse().ok()?,
+        hitches.parse().ok()?,
+        drift.parse().ok()?,
+    ))
 }
 
 /// Reads `SANDBOX frames on <gpu> at <size>: median 1.00 ms, 99th percentile 2.00 ms,
@@ -276,11 +358,14 @@ fn parse_timing(line: &str) -> Option<Timing> {
         median_ms,
         p99_ms,
         worst_ms,
+        over_pct: 0.0,
+        hitches: 0,
+        drift_pct: 0.0,
     })
 }
 
-/// Several runs of a scene as one: the middle run's median and 99th percentile, and the
-/// worst frame of any.
+/// Several runs of a scene as one: the middle run's median, 99th percentile, share over
+/// budget and drift, and the worst frame and most hitches of any.
 fn combine(runs: &[Timing]) -> Option<Timing> {
     let middle = |pick: fn(&Timing) -> f32| {
         let mut values: Vec<f32> = runs.iter().map(pick).collect();
@@ -292,6 +377,9 @@ fn combine(runs: &[Timing]) -> Option<Timing> {
         median_ms: middle(|t| t.median_ms),
         p99_ms: middle(|t| t.p99_ms),
         worst_ms: runs.iter().map(|t| t.worst_ms).fold(0.0, f32::max),
+        over_pct: middle(|t| t.over_pct),
+        hitches: runs.iter().map(|t| t.hitches).max().unwrap_or(0),
+        drift_pct: middle(|t| t.drift_pct),
         ..first.clone()
     })
 }
@@ -359,10 +447,20 @@ fn bench(args: &[String]) -> bool {
 
     let mut ok = true;
     let mut lines = Vec::new();
+    let mut busiest: Option<(f32, usize)> = None;
     for scene in chosen {
         let mut timed = Vec::new();
         for run in 1..=runs {
-            println!("\n> {} {}/{runs}", scene.name, run);
+            let load = machine_load();
+            if let Some((now, cores)) = load
+                && busiest.is_none_or(|(most, _)| now > most)
+            {
+                busiest = Some((now, cores));
+            }
+            let load = load.map_or(String::new(), |(load, cores)| {
+                format!(", machine load {load:.1} on {cores} cores")
+            });
+            println!("\n> {} {}/{runs}{load}", scene.name, run);
             match time_scene(&program, &folder, scene) {
                 Some(timing) => timed.push(timing),
                 None => println!("  no frame times came out"),
@@ -383,14 +481,17 @@ fn bench(args: &[String]) -> bool {
         lines.push((scene.name, timing.clone(), against));
         if record {
             let row = format!(
-                "{date},{commit},{},{},{build},{},{:.2},{:.2},{:.2},{}",
+                "{date},{commit},{},{},{build},{},{:.2},{:.2},{:.2},{},{:.2},{},{:.1}",
                 timing.gpu,
                 timing.size,
                 scene.name,
                 timing.median_ms,
                 timing.p99_ms,
                 timing.worst_ms,
-                timed.len()
+                timed.len(),
+                timing.over_pct,
+                timing.hitches,
+                timing.drift_pct
             );
             ok &= append_line(&root().join(BENCHMARKS), BENCHMARKS_HEADER, &row);
         }
@@ -401,16 +502,39 @@ fn bench(args: &[String]) -> bool {
             first.gpu, first.size
         );
         println!(
-            "  {:8} {:>8} {:>8} {:>8}  against the last recorded",
-            "scene", "median", "99th", "worst"
+            "  {:11} {:>8} {:>8} {:>8} {:>6} {:>7} {:>6}  budget  against the last recorded",
+            "scene", "median", "99th", "worst", "over", "hitches", "drift"
         );
         for (name, timing, against) in &lines {
+            let missed = timing.misses();
             println!(
-                "  {name:8} {:>5.2} ms {:>5.2} ms {:>5.2} ms  {against}",
-                timing.median_ms, timing.p99_ms, timing.worst_ms
+                "  {name:11} {:>5.2} ms {:>5.2} ms {:>5.2} ms {:>5.1}% {:>7} {:>+5.0}%  {:6}  {against}",
+                timing.median_ms,
+                timing.p99_ms,
+                timing.worst_ms,
+                timing.over_pct,
+                timing.hitches,
+                timing.drift_pct,
+                if missed.is_empty() { "holds" } else { "MISSED" }
+            );
+            for miss in &missed {
+                println!("  {:11} {miss}", "");
+            }
+            ok &= missed.is_empty();
+        }
+        println!(
+            "  The budget is {BUDGET_MS:.1} ms (D25): a scene holds to it with its 99th percentile under it, \
+             at most {MOST_OVER_PCT}% of frames over, no hitch over twice it, and no more than \
+             {MOST_DRIFT_PCT}% slower by the end. On this machine; D25's target is a mid-range GPU."
+        );
+        if let Some((load, cores)) = busiest
+            && load > cores as f32 / 2.0
+        {
+            println!(
+                "  The machine was busy with other work (load up to {load:.1} on {cores} cores): \
+                 numbers come out slower and less even than on a quiet machine."
             );
         }
-        println!("  The budget is 16.7 ms on a mid-range GPU (D25).");
         if record {
             println!("  Recorded in {BENCHMARKS}.");
         }
@@ -453,6 +577,18 @@ fn sandbox_program(release: bool) -> Option<(PathBuf, PathBuf)> {
     Some((program, root()))
 }
 
+/// How busy the machine is: its load over the last minute, against its cores. A benchmark
+/// shares the machine, and other work on it makes frames slower and less even.
+fn machine_load() -> Option<(f32, usize)> {
+    let text = output("sysctl", &["-n", "vm.loadavg"])
+        .or_else(|| std::fs::read_to_string("/proc/loadavg").ok())?;
+    let load = text
+        .split_whitespace()
+        .find_map(|word| word.parse::<f32>().ok())?;
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    Some((load, cores))
+}
+
 /// Runs one scene once and reads its frame times, ending it if it takes too long.
 fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
     use std::io::{BufRead, BufReader};
@@ -460,6 +596,7 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
     command
         .args(scene.args)
         .args(["--offscreen", "--bench", "--settle", BENCH_SETTLE])
+        .args(["--bench-frames", scene.frames])
         .current_dir(folder);
     // Run outside Cargo, a Bevy program looks for assets/ next to itself, which is where
     // the Windows copy has them; the native one is pointed at the root's.
@@ -473,10 +610,17 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
         .ok()?;
     let stdout = child.stdout.take()?;
     let reader = std::thread::spawn(move || {
-        BufReader::new(stdout)
-            .lines()
-            .map_while(Result::ok)
-            .find_map(|line| parse_timing(&line))
+        let mut timing: Option<Timing> = None;
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Some(read) = parse_timing(&line) {
+                timing = Some(read);
+            } else if let (Some(timing), Some((over, hitches, drift))) =
+                (&mut timing, parse_sustained(&line))
+            {
+                (timing.over_pct, timing.hitches, timing.drift_pct) = (over, hitches, drift);
+            }
+        }
+        timing
     });
     let started = std::time::Instant::now();
     loop {
@@ -494,8 +638,13 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
     }
     let timing = reader.join().ok()??;
     println!(
-        "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms",
-        timing.median_ms, timing.p99_ms, timing.worst_ms
+        "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms; {:.2}% over budget, {} hitches, {:+.1}% by the end",
+        timing.median_ms,
+        timing.p99_ms,
+        timing.worst_ms,
+        timing.over_pct,
+        timing.hitches,
+        timing.drift_pct
     );
     Some(timing)
 }
@@ -1156,7 +1305,31 @@ mod bench_tests {
             median_ms,
             p99_ms,
             worst_ms,
+            over_pct: 0.0,
+            hitches: 0,
+            drift_pct: 0.0,
         }
+    }
+
+    #[test]
+    fn reads_how_a_run_held_to_the_budget() {
+        let line = "SANDBOX against the 16.7 ms budget: 0.50% of frames over, 2 hitches over \
+                    33.3 ms, the game's work in the last third -3.0% on the first";
+        assert_eq!(parse_sustained(line), Some((0.5, 2, -3.0)));
+        assert_eq!(parse_sustained("SANDBOX saved shot.png"), None);
+    }
+
+    #[test]
+    fn a_scene_holds_to_the_budget_unless_it_misses_a_gate() {
+        assert!(timing(5.0, 9.0, 20.0).misses().is_empty());
+        assert_eq!(timing(5.0, 18.0, 20.0).misses().len(), 1);
+        let stutters = Timing {
+            hitches: 1,
+            drift_pct: 20.0,
+            over_pct: 2.0,
+            ..timing(5.0, 9.0, 40.0)
+        };
+        assert_eq!(stutters.misses().len(), 3);
     }
 
     #[test]

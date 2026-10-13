@@ -85,8 +85,19 @@ It builds the sandbox for release and runs each **scene**, a scripted run that c
 | `world` | The game where a new one starts: ground, sea, trees, grass, creatures |
 | `forest` | The lush forest spike, standing still ([research/lush-forest-spike.md](../research/lush-forest-spike.md)) |
 | `forest-walk` | The same, walking down a path: grass built as the player goes, trees changing detail |
+| `walk` | 40 seconds' walk through the lush forest, out from the clearing and round through the trees, steered by `--route` as a player would; the world and the walker alone (`--experiment walk`), so it is the environment's cost |
 
-Each run draws offscreen at 1920x1080 (`--offscreen`), with one frame in flight as a window has; skips 240 frames for shaders and streaming to settle; and times the next 600 against the real clock. A scene's result is the middle run's median and 99th percentile and the worst frame of any. The table compares each median with the last one recorded for the same GPU, size and build, and marks it `SLOWER` past 10%: look into it before committing. Record a baseline when a change makes something faster or slower on purpose, and when a new machine first runs it.
+Each run draws offscreen at 1920x1080 (`--offscreen`), with one frame in flight as a window has; skips 240 frames for shaders and streaming to settle; and times the scene's frames against the real clock (600, 2,400 for `walk`; `--bench-frames`). A scene's result is the middle run's median and 99th percentile and the worst frame of any.
+
+**Holding to the budget.** Each scene must sustain 60 frames a second (D25) on the machine it runs on, or the task fails:
+
+- its 99th percentile under 16.7 ms, and at most 1% of frames over it;
+- no **hitch**, a frame over 33.3 ms, the stutter a player sees;
+- no **drift**: the game's own work in the last third of the run no more than 15% slower than in the first. Leaks, heat and a throttled machine show here; it is measured on the game's work, not the frame, so walking past more trees does not count.
+
+The table also compares each median with the last one recorded for the same GPU, size and build, and marks it `SLOWER` past 10%: look into it before committing. Record a baseline when a change makes something faster or slower on purpose, and when a new machine first runs it. The task prints the machine's load before each run and says so when it was busy: a benchmark shares the machine, and others' work makes it slower and less even. Scenes stay short, under a minute each, since a benchmark is something run often.
+
+For each run the sandbox also prints its frames and the game's own work by tenths of the run, so a climb or a jump shows where it starts, and what the world held at the first and last timed frame (entities, meshes, images), so something that keeps growing shows. On macOS a scripted run tells the system it is latency-critical: a hidden window, as a scripted run's is, is put into App Nap after about 40 s, which made every frame three times as long from then on.
 
 Read the 99th percentile and worst frame as well as the median: a stutter hides in a good median. Each run also prints `SANDBOX slowest frames`, which frames were slowest, counted as `--press` counts them; slow frames at a steady interval point at something periodic. Benchmarks stream the ground as play does, so they include its cost; screenshot runs wait for every chunk instead, so they see the same ground every time.
 

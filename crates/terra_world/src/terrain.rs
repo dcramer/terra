@@ -248,6 +248,14 @@ fn choose(
     if moved {
         terrain.chosen_from = Some(viewer);
     }
+    // What is being meshed for a chunk no longer wanted stops (dropping a task cancels it).
+    // Left to finish, the meshing of chunks walked past piles up faster than it is done,
+    // keeps the threads busy long after the walk, and keeps old chunks from being taken
+    // away, which waits for nothing to be pending.
+    let Terrain {
+        pending, wanted, ..
+    } = &mut *terrain;
+    pending.retain(|id, _| wanted.contains_key(id));
     let touched = |id: ChunkId| {
         let low = chunk_origin(id);
         let high = low + Vec3::splat(chunk_size_m(id.level));

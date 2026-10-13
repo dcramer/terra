@@ -8,6 +8,8 @@
 //! (`ArriveAt`) and asks for a warp (`WarpTo`), and orders its systems around
 //! [`PlayerInput`]. The walker never names a system above it.
 
+use super::controls::Action;
+use super::intent::Intent;
 use super::{camera, figure, intent, movement, options};
 use crate::planet::{MainCamera, Planet};
 use crate::shell::{Options, ScriptFrame};
@@ -125,7 +127,7 @@ impl Plugin for WalkerPlugin {
             // What this machine's player means to do, read before the frame's ticks.
             .add_systems(
                 RunFixedMainLoop,
-                (camera::look, intent::read)
+                (camera::look, intent::read, follow_route)
                     .chain()
                     .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
             );
@@ -218,6 +220,40 @@ pub(super) fn spawn(
         Transform::from_translation(feet).looking_to(facing, up),
         Visibility::default(),
     ));
+}
+
+/// How fast a route turns the player, in radians a second: as fast as the arrow keys do.
+const ROUTE_TURN: f32 = 1.6;
+/// A spot of a route is reached this near it.
+const ROUTE_REACHED_M: f32 = 1.5;
+
+/// For scripted walks, such as benchmarks (`--route`): the player walks to each spot in
+/// turn, east and south of the start, turning toward it no faster than the arrow keys turn
+/// the view, as someone playing would. Once at the last, they stand.
+fn follow_route(
+    time: Res<Time>,
+    options: Res<Options>,
+    start: Res<Start>,
+    mut next: Local<usize>,
+    player: Single<(&Transform, &mut View, &mut Intent), IsLocalPlayer>,
+) {
+    let Some(&(east, south)) = options.route.get(*next) else {
+        return;
+    };
+    let (transform, mut view, mut intent) = player.into_inner();
+    let feet = transform.translation;
+    let up = feet.normalize();
+    let to = (start.at(east, south) - feet).reject_from(up);
+    if to.length() < ROUTE_REACHED_M {
+        *next += 1;
+        info!("Route: reached {east:.0},{south:.0}.");
+        return;
+    }
+    let wanted = to.normalize();
+    let turn = libm::atan2f(up.dot(view.forward.cross(wanted)), view.forward.dot(wanted));
+    let most = ROUTE_TURN * time.delta_secs();
+    view.forward = Quat::from_axis_angle(up, turn.clamp(-most, most)) * view.forward;
+    intent.keep_held(Action::Forward);
 }
 
 /// For testing, moves the player where a scripted run says, on the frame it says (--warp),

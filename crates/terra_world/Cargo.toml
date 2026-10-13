@@ -22,6 +22,11 @@ terra_core.workspace = true
 terra_gen.workspace = true
 terra_voxel.workspace = true
 
+# macOS's App Nap throttles a run whose window is hidden, as scripted runs' are; the run
+# asks it not to (shell::stay_awake). Already built for Bevy's windowing (winit).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSProcessInfo", "NSString"] }
+
 [features]
 # Helpers for the tests of the crates above, such as measuring how loud a sound is.
 testing = []
