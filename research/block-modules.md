@@ -1,6 +1,6 @@
 # Block modules: conformed pieces or a displaced surface
 
-2026-10-12. Question (the spike in [spike/block-modules](../spike/block-modules/README.md), step 0 of [building-plan.md](../docs/building-plan.md)): can stone built of pieces chosen by their neighbours, cut from Tripo's stone and conformed at their edges, look as good as whole sections, with no seams? And how does the main other way look: the cubes' surface, bevelled, displaced by a real stone material?
+2026-10-12. Question (the spike `spike/block-modules`, deleted once judged and kept in git history; step 0 of [building-plan.md](../docs/building-plan.md)): can stone built of pieces chosen by their neighbours, cut from Tripo's stone and conformed at their edges, look as good as whole sections, with no seams? And how does the main other way look: the cubes' surface, bevelled, displaced by a real stone material?
 
 ## What was built
 

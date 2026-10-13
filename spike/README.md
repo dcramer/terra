@@ -8,4 +8,3 @@ Throwaway work that answers one question (D133). Each spike is a folder, `spike/
 
 Open:
 
-- [block-modules](block-modules/README.md): can stone pieces chosen by their neighbours, cut from Tripo's stone and conformed at their edges, look as good as whole sections? Beside it, bevelled cubes with a displaced stone texture (building-plan.md, step 0). Written up in [research/block-modules.md](../research/block-modules.md); judged by the developers (D197), so it is due for deletion.
