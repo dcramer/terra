@@ -6,8 +6,8 @@
 //!
 //! `GamePlugins` is all three, as the `play` experiment runs them; `walk` runs the first
 //! two alone. A module belongs to the lowest layer that can hold it, and never needs a
-//! system or resource above it to run. The player's own components (`Player`, `Motion`, `Stance`,
-//! `View`) are here, for every layer to read. See docs/player.md and docs/building.md for
+//! system or resource above it to run. The player's own components (`Player`, `Motion`,
+//! `Stance`, `View`, `Downed`) are the walker's, for every layer to read. See docs/player.md and docs/building.md for
 //! the design.
 
 mod archery;
@@ -74,98 +74,10 @@ use crate::shell::Options;
 use bevy::{app::PluginGroupBuilder, prelude::*, window::CursorOptions};
 use options::MenuSystems;
 use terra_world::{data, daylight, flora, flora_kinds, footprint, lod, models, tick, world};
-use tick::Smoothed;
 pub use walker::{ArriveAt, Hands, PlayerInput, WalkerPlugin, WarpTo};
+// The player's own components are the walker's; every layer reads them by these names.
+use walker::{Downed, IsLocalPlayer, LocalPlayer, Motion, Player, Stance, View};
 pub use world::WorldPlugin;
-
-/// Someone playing. What they are doing is in the components beside this one: how they
-/// move (`Motion`), what their hands and feet are up to (`Stance`), and whether they are
-/// down (`Downed`), along with what they carry, know and feel.
-#[derive(Component)]
-#[require(Smoothed, lod::Viewpoint)]
-struct Player;
-
-/// The player this machine steers: its input moves them, and the camera, the screen and
-/// what is heard follow them. Systems driven by input or drawing the screen act on this
-/// one; the world's own systems, such as creatures and stations, act on every [`Player`].
-#[derive(Component)]
-struct LocalPlayer;
-
-/// The query filter for this machine's player. It names [`Player`] as well, so Bevy can
-/// tell a query for them is apart from one that leaves players out (`Without<Player>`).
-type IsLocalPlayer = (With<Player>, With<LocalPlayer>);
-
-/// How a body moves over the planet.
-#[derive(Component)]
-struct Motion {
-    /// Speed over the ground, as a direction and metres a second.
-    velocity: Vec3,
-    /// Speed away from the planet's centre, in metres a second.
-    rising: f32,
-    on_ground: bool,
-    /// Seconds since the feet last touched something.
-    airborne: f32,
-    indoors: bool,
-    /// The level direction the figure faces.
-    facing: Vec3,
-}
-
-impl Motion {
-    fn facing(facing: Vec3) -> Self {
-        Self {
-            velocity: Vec3::ZERO,
-            rising: 0.0,
-            on_ground: false,
-            airborne: 0.0,
-            indoors: false,
-            facing,
-        }
-    }
-}
-
-/// What a player's hands and feet are doing besides walking: using a tool, swinging,
-/// rolling, flinching from a blow, or guarding.
-#[derive(Component)]
-struct Stance {
-    /// Seconds since the tool was last used.
-    since_acting: f32,
-    /// Seconds left of a swing, a roll, and a flinch from a blow, for the figure.
-    attacking: f32,
-    dodging: f32,
-    flinch: f32,
-    /// Which way a roll goes.
-    dodge_direction: Vec3,
-    /// Holding a guard up.
-    guarding: bool,
-}
-
-impl Default for Stance {
-    fn default() -> Self {
-        Self {
-            since_acting: f32::MAX,
-            attacking: 0.0,
-            dodging: 0.0,
-            flinch: 0.0,
-            dodge_direction: Vec3::ZERO,
-            guarding: false,
-        }
-    }
-}
-
-/// Lying where they fell, and for how long so far. Taken away when they wake.
-#[derive(Component)]
-struct Downed {
-    lying_s: f32,
-}
-
-/// Where a player is looking.
-#[derive(Component)]
-struct View {
-    /// Along the ground.
-    forward: Vec3,
-    /// Up or down from level, in radians.
-    pitch: f32,
-}
 
 /// The whole game, in three layers, each standing only on those before it:
 ///

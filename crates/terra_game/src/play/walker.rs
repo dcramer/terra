@@ -8,12 +8,101 @@
 //! (`ArriveAt`) and asks for a warp (`WarpTo`), and orders its systems around
 //! [`PlayerInput`]. The walker never names a system above it.
 
-use super::{IsLocalPlayer, LocalPlayer, Motion, Player, Stance, View};
 use super::{camera, figure, intent, movement, options};
 use crate::planet::{MainCamera, Planet};
 use crate::shell::{Options, ScriptFrame};
 use crate::start::Start;
 use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
+use terra_world::{lod::Viewpoint, tick::Smoothed};
+
+/// Someone playing. What they are doing is in the components beside this one: how they
+/// move (`Motion`), what their hands and feet are up to (`Stance`), and whether they are
+/// down (`Downed`), along with what they carry, know and feel, which the layers above add.
+#[derive(Component)]
+#[require(Smoothed, Viewpoint)]
+pub(super) struct Player;
+
+/// The player this machine steers: its input moves them, and the camera, the screen and
+/// what is heard follow them. Systems driven by input or drawing the screen act on this
+/// one; the world's own systems, such as creatures and stations, act on every [`Player`].
+#[derive(Component)]
+pub(super) struct LocalPlayer;
+
+/// The query filter for this machine's player. It names [`Player`] as well, so Bevy can
+/// tell a query for them is apart from one that leaves players out (`Without<Player>`).
+pub(super) type IsLocalPlayer = (With<Player>, With<LocalPlayer>);
+
+/// How a body moves over the planet.
+#[derive(Component)]
+pub(super) struct Motion {
+    /// Speed over the ground, as a direction and metres a second.
+    pub(super) velocity: Vec3,
+    /// Speed away from the planet's centre, in metres a second.
+    pub(super) rising: f32,
+    pub(super) on_ground: bool,
+    /// Seconds since the feet last touched something.
+    pub(super) airborne: f32,
+    pub(super) indoors: bool,
+    /// The level direction the figure faces.
+    pub(super) facing: Vec3,
+}
+
+impl Motion {
+    pub(super) fn facing(facing: Vec3) -> Self {
+        Self {
+            velocity: Vec3::ZERO,
+            rising: 0.0,
+            on_ground: false,
+            airborne: 0.0,
+            indoors: false,
+            facing,
+        }
+    }
+}
+
+/// What a player's hands and feet are doing besides walking: using a tool, swinging,
+/// rolling, flinching from a blow, or guarding.
+#[derive(Component)]
+pub(super) struct Stance {
+    /// Seconds since the tool was last used.
+    pub(super) since_acting: f32,
+    /// Seconds left of a swing, a roll, and a flinch from a blow, for the figure.
+    pub(super) attacking: f32,
+    pub(super) dodging: f32,
+    pub(super) flinch: f32,
+    /// Which way a roll goes.
+    pub(super) dodge_direction: Vec3,
+    /// Holding a guard up.
+    pub(super) guarding: bool,
+}
+
+impl Default for Stance {
+    fn default() -> Self {
+        Self {
+            since_acting: f32::MAX,
+            attacking: 0.0,
+            dodging: 0.0,
+            flinch: 0.0,
+            dodge_direction: Vec3::ZERO,
+            guarding: false,
+        }
+    }
+}
+
+/// Lying where they fell, and for how long so far. Taken away when they wake.
+#[derive(Component)]
+pub(super) struct Downed {
+    pub(super) lying_s: f32,
+}
+
+/// Where a player is looking.
+#[derive(Component)]
+pub(super) struct View {
+    /// Along the ground.
+    pub(super) forward: Vec3,
+    /// Up or down from level, in radians.
+    pub(super) pitch: f32,
+}
 
 pub struct WalkerPlugin;
 

@@ -66,6 +66,18 @@ How a lower layer stays free of a higher one, in the usual Bevy ways:
 - **It owns the small types the layers above meet it through.** The world has `Footprint` (where something built stands, which flora keeps out of; the base keeps its own up to date), `Viewpoint` (what detail is graded from; a player requires one) and flora's kinds, which name the items they give by name (gameplay's `FloraGives` makes them items).
 - **What may be missing is optional.** A query over another layer's components is simply empty without it; a resource another layer may provide is `Option<Res<_>>`, or the system runs only when it exists (`run_if(resource_exists::<_>)`).
 
+#### Where shared types go
+
+In the lowest layer that has to understand them, defined by the side that asks the question; never in a "common" or "types" crate, where everything ends up because it is easy and then everything depends on everything.
+
+| Kind of type | Goes in | Examples |
+|---|---|---|
+| Rules every player must agree on, plain Rust | The engine-free crate of their domain (D28) | `terra_core`'s ground and operations, `terra_items`' `ItemKind`, `terra_build`'s `Base` |
+| A Bevy type a lower layer asks the layers above to fill in | The lower layer, which owns the question | `terra_world`'s `Footprint` (flora asks what is built here) and `Viewpoint`; the walker's `Hands` (the camera asks what is on screen), `ArriveAt`, `WarpTo` |
+| A type one layer alone uses | That layer's own module | Gameplay's `FloraGives`, `Site` |
+
+Two parts of one layer that share a type: the part that defines the idea keeps it and the other imports it; it moves down only when a lower layer needs it too. The player's own components (`Player`, `Motion`, `Stance`, `View`, `Downed`) are the walker's, which spawns and moves the body. Bevy itself works this way: `bevy_render` defines what `bevy_pbr` fills in.
+
 Cargo keeps the world below the game, since `terra_game` depends on `terra_world`. The walker shares `terra_game` with gameplay and still names a few gameplay types, though it runs without them: movement and the camera ask the player's building (`Site`, `Built`) what to stand on and bump into, and movement asks props, other bodies and stamina (`Prop`, `Body`, `Vitals`) what is in the way and what a jump costs. Giving the walker its own crate would mean turning those into shared types (a "solid" that stops a walker, a "surface" that holds one up) and taking the character's look (`appearance`, `character`, `skinning`) with it; it is not needed yet.
 
 ## State, and how it is shared
