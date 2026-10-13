@@ -24,6 +24,7 @@ struct Wind {
     direction: vec3<f32>,
     strength: f32,
     bark: f32,
+    cards: vec3<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)

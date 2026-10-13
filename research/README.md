@@ -12,6 +12,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [forest-scale-test.md](forest-scale-test.md) | Can the world hold a very large number of objects that are each interactive? |
 | [lush-forest-spike.md](lush-forest-spike.md) | Can the world feel like a dense, rich forest, as The Witcher 3 or Sons of the Forest do, within the frame budget? How big games make foliage fast. |
 | [aaa-forest-look.md](aaa-forest-look.md) | What makes a forest read as AAA (no pops, bark that is not black, light under the canopy), and what Bevy 0.20 has for it? |
+| [forest-lod-and-mood.md](forest-lod-and-mood.md) | How does the Witcher 3 change distant trees' detail without pops, what makes a forest feel like being inside one, and how do The Forest and ARK make their trees? |
 | [building-drawing.md](building-drawing.md) | What do fifty buildings cost to draw, laid and merged a section at a time on the workers, against drawn whole on the main thread, and do they meet the building plan's bars? |
 | [benchmarks.csv](benchmarks.csv) | Frame times of the benchmark scenes, recorded by `cargo xtask bench --record` (D185) |
 | [subnautica-2-building.md](subnautica-2-building.md) | How does Subnautica 2's construction work, and what would the same idea look like here? |

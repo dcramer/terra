@@ -72,6 +72,9 @@ const FADE: f32 = 0.2;
 /// second; beyond, none. For a 20 m tree; they grow with its height as its levels do. Card
 /// shadows farther out cost 4 ms a frame on the RTX 3080 (D221).
 const SHADOW_M: [f32; 2] = [30.0, 100.0];
+/// A crown's cards drop out between these distances, from all of them to two a clump; past
+/// the second it is drawn as those two (D223).
+const CARDS_DROP_M: [f32; 2] = [18.0, 110.0];
 /// How many kinds of fallen log there are; each is drawn many times.
 const LOG_KINDS: u64 = 5;
 /// How much of a trunk one repeat of the bark's picture covers: round it, and along it.
@@ -118,6 +121,9 @@ pub struct FoliageExtension {
     /// with moss and a wet foot (D218).
     #[uniform(100)]
     bark: f32,
+    /// For a crown whose cards drop out: from where, to where, and 1 (D223).
+    #[uniform(100)]
+    cards: Vec3,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -399,7 +405,9 @@ fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
 /// One kind of tree at each level of detail, and the stand-in its shadow is cast from.
 struct TreeModel {
     wood: [Handle<Mesh>; 3],
-    crown: [Handle<Mesh>; 3],
+    /// Every card, dropping out with distance, and far off two a clump (D223).
+    crown_near: Handle<Mesh>,
+    crown_far: Handle<Mesh>,
     shadow: Handle<Mesh>,
     clumps: Handle<Mesh>,
     /// The solid lumps the crown's shadow is cast from beyond the cards: smaller than the
@@ -442,6 +450,7 @@ fn plant(
         direction: east,
         strength: 1.0,
         bark: 0.0,
+        cards: Vec3::ZERO,
     };
     // Read at a slant, as leaves edge-on are, a picture blurs unless sampled along the
     // slant too (anisotropic filtering).
@@ -495,7 +504,7 @@ fn plant(
     });
     let leaves = materials.add(Foliage {
         base: StandardMaterial {
-            base_color_texture: Some(leaf_picture),
+            base_color_texture: Some(leaf_picture.clone()),
             alpha_mode: AlphaMode::Mask(LEAF_CUT),
             // Seen from both sides, but with the same normal on both, which leans out of
             // the crown, so a card does not flip from lit to dark as it turns.
@@ -507,6 +516,25 @@ fn plant(
             ..default()
         },
         extension: wind.clone(),
+    });
+    // The near crown's leaves, whose cards drop out with distance (D223).
+    let dropping_leaves = materials.add(Foliage {
+        base: StandardMaterial {
+            base_color_texture: Some(leaf_picture),
+            alpha_mode: AlphaMode::Mask(LEAF_CUT),
+            // Seen from both sides, but with the same normal on both, which leans out of
+            // the crown, so a card does not flip from lit to dark as it turns.
+            cull_mode: None,
+            double_sided: false,
+            diffuse_transmission: 0.5,
+            perceptual_roughness: 0.75,
+            reflectance: 0.3,
+            ..default()
+        },
+        extension: FoliageExtension {
+            cards: Vec2::from(CARDS_DROP_M).extend(1.0),
+            ..wind.clone()
+        },
     });
     // Only the sun sees it, so how it would look does not matter.
     let solid = plain.add(StandardMaterial::default());
@@ -531,18 +559,18 @@ fn plant(
             let wood = [0, 1, 2].map(|detail| wood(&tree, detail, height));
             // Every level of the crown, and its shadow, from one set of cards (D221).
             let cards = crown_cards(&mut dice, &tree, height);
-            let crown = [0, 1, 2].map(|detail| crown(&cards, detail));
+            let near = crown_near(&cards);
+            let far = crown_far(&cards);
             let shadow = crown_stand_in(&cards);
             let clumps = crown_clumps(&tree, 1.0);
             let lumps = crown_clumps(&tree, SHADOW_LUMP);
             info!(
-                "lush: tree {kind}, {height:.0} m: wood {} {} {} triangles, crown {} {} {}, shadows {} {}",
+                "lush: tree {kind}, {height:.0} m: wood {} {} {} triangles, crown {} near and {} far, shadows {} {}",
                 wood[0].triangles(),
                 wood[1].triangles(),
                 wood[2].triangles(),
-                crown[0].triangles(),
-                crown[1].triangles(),
-                crown[2].triangles(),
+                near.triangles(),
+                far.triangles(),
                 shadow.triangles(),
                 clumps.triangles()
             );
@@ -553,7 +581,8 @@ fn plant(
                     mesh.generate_tangents().expect("the tubes have normals and texture places");
                     meshes.add(mesh)
                 }),
-                crown: crown.map(|build| meshes.add(build.mesh())),
+                crown_near: meshes.add(near.mesh()),
+                crown_far: meshes.add(far.mesh()),
                 shadow: meshes.add(shadow.mesh()),
                 clumps: meshes.add(clumps.mesh()),
                 lumps: meshes.add(lumps.mesh()),
@@ -598,6 +627,8 @@ fn plant(
         end_margin: to * (1.0 - FADE)..to,
         use_aabb: false,
     };
+    // Where a crown of two cards a clump gives way to lumps.
+    let far_from = |size: f32| (DETAIL_M[2] * size).max(CARDS_DROP_M[1] * 1.4);
     let detail = |first: usize, last: usize, size: f32| {
         let at = |level: usize| DETAIL_M[level] * size;
         let from = if first == 0 { 0.0 } else { at(first - 1) };
@@ -660,19 +691,27 @@ fn plant(
                         if level == 2 {
                             wood.insert(NotShadowCaster);
                         }
-                        tree.spawn((
-                            Mesh3d(model.crown[level].clone()),
-                            MeshMaterial3d(leaves.clone()),
-                            detail(level, level, size),
-                            NotShadowCaster,
-                        ));
                     }
+                    // The crown thins card by card out to CARDS_DROP_M[1], then is two cards
+                    // a clump, the same cards at the same size, then lumps (D223).
+                    tree.spawn((
+                        Mesh3d(model.crown_near.clone()),
+                        MeshMaterial3d(dropping_leaves.clone()),
+                        between(0.0, CARDS_DROP_M[1]),
+                        NotShadowCaster,
+                    ));
+                    tree.spawn((
+                        Mesh3d(model.crown_far.clone()),
+                        MeshMaterial3d(leaves.clone()),
+                        between(CARDS_DROP_M[1], far_from(size)),
+                        NotShadowCaster,
+                    ));
                     // Far off, the crown as its solid lumps in the leaves' colour, so the
                     // forest carries on past where its cards end.
                     tree.spawn((
                         Mesh3d(model.clumps.clone()),
                         MeshMaterial3d(far_crown.clone()),
-                        detail(3, 3, size),
+                        between(far_from(size), DETAIL_M[3] * size),
                         NotShadowCaster,
                     ));
                     tree.spawn((
@@ -971,6 +1010,10 @@ struct Build {
     sway: Vec<[f32; 2]>,
     colours: Vec<[f32; 4]>,
     indices: Vec<u32>,
+    /// For a crown whose cards drop out with distance: each vertex's offset from its
+    /// card's middle, and in w the card's rank in its clump plus a hundredth of how many
+    /// cards the clump has (D223). Carried as the tangent, which leaves have no other use for.
+    dropping: Vec<[f32; 4]>,
 }
 
 impl Build {
@@ -988,7 +1031,7 @@ impl Build {
     }
 
     fn mesh(self) -> Mesh {
-        Mesh::new(
+        let mesh = Mesh::new(
             PrimitiveTopology::TriangleList,
             RenderAssetUsages::RENDER_WORLD,
         )
@@ -997,7 +1040,12 @@ impl Build {
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs)
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.sway)
         .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.colours)
-        .with_inserted_indices(Indices::U32(self.indices))
+        .with_inserted_indices(Indices::U32(self.indices));
+        if self.dropping.is_empty() {
+            mesh
+        } else {
+            mesh.with_inserted_attribute(Mesh::ATTRIBUTE_TANGENT, self.dropping)
+        }
     }
 }
 
@@ -1387,18 +1435,26 @@ fn crown_cards(dice: &mut Rng, tree: &Tree, height: f32) -> Vec<Vec<Card>> {
         .collect()
 }
 
-/// A crown at a level of detail: all its cards, then three a tip, then one.
-fn crown(cards: &[Vec<Card>], detail: usize) -> Build {
+/// A crown near the camera: every card, each knowing its rank, which the foliage shader
+/// shrinks to its middle one by one with distance while the rest grow to cover as much, as
+/// SpeedTree's leaves drop out: the crown thins without ever being swapped (D223).
+fn crown_near(cards: &[Vec<Card>]) -> Build {
     let mut build = Build::default();
     for tip in cards {
-        let keep = [tip.len(), 3, 1][detail].min(tip.len());
-        // Area kept: each card grows by the root of how many it stands for, a little less,
-        // since the kept cards overlap less than all of them did.
-        let grow = if keep == tip.len() {
-            1.0
-        } else {
-            0.85 * libm::sqrtf(tip.len() as f32 / keep as f32).min(2.6)
-        };
+        for (k, card) in tip.iter().enumerate() {
+            card.draw_ranked(&mut build, 1.0, Some((k, tip.len())));
+        }
+    }
+    build
+}
+
+/// A crown far off: two cards a clump, the first two of its near crown's, grown as they
+/// are there when the rest have dropped out (D223).
+fn crown_far(cards: &[Vec<Card>]) -> Build {
+    let mut build = Build::default();
+    for tip in cards {
+        let keep = 2.min(tip.len());
+        let grow = libm::powf(tip.len() as f32 / keep as f32, 0.55);
         for card in &tip[..keep] {
             card.draw(&mut build, grow);
         }
@@ -1532,8 +1588,13 @@ fn card(dice: &mut Rng, canopy: &Canopy, at: Vec3, size: f32) -> Card {
 }
 
 impl Card {
-    /// Draws it, `grow` times its size.
+    /// Draws it, `grow` times its size; `rank`, its place and its clump's count, for a crown
+    /// whose cards drop out with distance.
     fn draw(&self, build: &mut Build, grow: f32) {
+        self.draw_ranked(build, grow, None);
+    }
+
+    fn draw_ranked(&self, build: &mut Build, grow: f32, rank: Option<(usize, usize)>) {
         let half = self.half * grow;
         let base = build.positions.len() as u32;
         for (u, v) in LEAF_OUTLINE {
@@ -1541,6 +1602,12 @@ impl Card {
                 + self.right * (u * 2.0 - 1.0) * half * self.flip
                 + self.up * (1.0 - v * 2.0) * half;
             build.vertex(corner, self.normal, Vec2::new(u, v), self.sway, self.tint);
+            if let Some((k, n)) = rank {
+                let offset = corner - self.middle;
+                build
+                    .dropping
+                    .push([offset.x, offset.y, offset.z, k as f32 + n as f32 / 100.0]);
+            }
         }
         for i in 1..LEAF_OUTLINE.len() as u32 - 1 {
             build.indices.extend([base, base + i, base + i + 1]);

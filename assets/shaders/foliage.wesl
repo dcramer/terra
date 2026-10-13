@@ -7,6 +7,7 @@
 
 import bevy_pbr::render::{
     mesh_functions,
+    mesh_view_bindings::view,
     view_transformations::position_world_to_clip,
 };
 
@@ -29,10 +30,30 @@ struct Wind {
     strength: f32,
     // 1 for bark.
     bark: f32,
+    // For a crown whose cards drop out with distance: from where, to where, and 1 (D223).
+    cards: vec3<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> wind: Wind;
+
+// A crown's cards drop out with distance, as SpeedTree's leaves do (D223): each vertex
+// knows its offset from its card's middle, and its card's rank and how many its clump has
+// (the tangent's w: the rank, plus a hundredth of the count). From cards.x to cards.y the
+// clump keeps fewer, down to two: the next card to go shrinks to its middle while those that
+// stay grow to cover as much. The tree's distance from the camera is the same in its shadow's
+// pass, which Bevy measures from the camera too.
+fn dropped(local: vec3<f32>, tangent: vec4<f32>, tree: vec3<f32>) -> vec3<f32> {
+    let rank = floor(tangent.w);
+    let count = round(fract(tangent.w) * 100.0);
+    let far = distance(tree, view.lod_view_world_position);
+    let t = smoothstep(wind.cards.x, wind.cards.y, far);
+    let keep = mix(count, min(2.0, count), t);
+    let stays = clamp(keep - rank, 0.0, 1.0);
+    let grow = pow(count / max(keep, 1.0), 0.55);
+    let middle = local - tangent.xyz;
+    return middle + tangent.xyz * grow * stays;
+}
 
 fn hash(p: vec3<f32>) -> f32 {
     let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -59,7 +80,12 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     var out: VertexOutput;
     let vertex = decompress_vertex(vertex_in, vertex_in.instance_index);
     let world_from_local = mesh_functions::get_world_from_local(vertex_in.instance_index);
-    var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(vertex.position, 1.0));
+    var local = vertex.position;
+@if(VERTEX_TANGENTS)
+    if wind.cards.z > 0.5 {
+        local = dropped(local, vertex.tangent, world_from_local[3].xyz);
+    }
+    var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
     world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv_b, globals.time), 1.0);
 @if(VERTEX_UVS_A)
@@ -88,7 +114,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     out.color = vertex.color;
 @if(MOTION_VECTOR_PREPASS) {
     let previous_from_local = mesh_functions::get_previous_world_from_local(vertex_in.instance_index);
-    var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(vertex.position, 1.0));
+    var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
     previous = vec4<f32>(previous.xyz + sway(previous.xyz, vertex.uv_b, globals.time - globals.delta_time), 1.0);
     out.previous_world_position = previous;

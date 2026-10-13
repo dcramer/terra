@@ -11,7 +11,7 @@ use bevy::{
     camera::{Exposure, visibility::RenderLayers},
     core_pipeline::tonemapping::Tonemapping,
     light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
-    pbr::{ContactShadows, ScreenSpaceAmbientOcclusion},
+    pbr::{ContactShadows, DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
     post_process::bloom::Bloom,
     prelude::*,
     render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
@@ -124,6 +124,9 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
     ));
 }
 
+/// How far one sees between the trees before the haze swallows what is there.
+const HAZE_VISIBLE_M: f32 = 240.0;
+
 /// What the eye adapts round: the log brightness a scene meters at when it is as bright as
 /// the day's exposure for the hour expects (D214).
 const METERED_AS_SET: f32 = -3.6;
@@ -161,6 +164,16 @@ fn style_camera(
 ) {
     let camera = *camera;
     commands.entity(camera).insert(adaptation(&mut curves));
+    // Haze between the trees, thickening with distance: a forest's own air, at the scale of
+    // its sightlines, where the physical air (`air`) works at the scale of hills. Its colour
+    // follows the hour (`daylight`). The Witcher 3 fades its distance the same way, so its
+    // far trees change detail in air that has already flattened them (D224).
+    commands.entity(camera).insert(DistanceFog {
+        color: Color::srgb(0.5, 0.56, 0.55),
+        directional_light_color: Color::srgba(1.0, 0.85, 0.65, 0.5),
+        directional_light_exponent: 16.0,
+        falloff: FogFalloff::from_visibility_squared(HAZE_VISIBLE_M),
+    });
     commands.entity(camera).insert(VolumetricFog {
         // The sky's light in the haze, roughly its colour.
         ambient_color: Color::srgb(0.7, 0.8, 1.0),

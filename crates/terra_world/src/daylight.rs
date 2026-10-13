@@ -16,7 +16,7 @@ use super::skylight::SkyLight;
 use crate::planet::{MainCamera, Planet, Tweaks};
 use crate::shell::Options;
 use crate::sky::Sky;
-use bevy::{camera::Exposure, prelude::*};
+use bevy::{camera::Exposure, pbr::DistanceFog, prelude::*};
 use std::f32::consts::TAU;
 
 /// How long a whole day and night lasts, in seconds of play. Proposed: half an hour, as
@@ -313,6 +313,7 @@ fn shine(
     mut sky: ResMut<Sky>,
     mut skylight: ResMut<SkyLight>,
     mut exposure: Query<&mut Exposure, With<MainCamera>>,
+    mut haze: Query<&mut DistanceFog, With<MainCamera>>,
 ) {
     let Some(path) = path else { return };
     // The sun's shadows move in small steps rather than every frame: a light turning by a
@@ -330,6 +331,14 @@ fn shine(
         moonlight(height)
     };
     sky.horizon = colour(light.horizon);
+    // The haze between the trees (D224): the horizon's colour, greyed toward the green the
+    // canopy lets through and dimmed by the shade it hangs in, so trees fade into it with
+    // distance as they do in a real forest, before any of their levels of detail change.
+    for mut fog in &mut haze {
+        let air = light.horizon.lerp(Vec3::new(0.42, 0.5, 0.42), 0.35) * 0.62;
+        fog.color = colour(air);
+        fog.directional_light_color = colour(light.light * 0.55).with_alpha(0.5);
+    }
     sky.zenith = colour(light.zenith);
     sky.glow = colour(light.glow);
     sky.brightness = light.sky;

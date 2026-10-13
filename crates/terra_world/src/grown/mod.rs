@@ -241,6 +241,10 @@ pub struct FoliageExtension {
     /// with moss and a wet foot (D218).
     #[uniform(100)]
     pub bark: f32,
+    /// For a crown whose cards drop out with distance: from where, to where, and 1 (D223).
+    /// Off for grown plants until they draw their crowns that way.
+    #[uniform(100)]
+    pub cards: Vec3,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -288,6 +292,7 @@ impl Looks {
             direction: wind,
             strength: 1.0,
             bark: 0.0,
+            cards: Vec3::ZERO,
         };
         let leaves = foliage.add(Foliage {
             base: StandardMaterial {
