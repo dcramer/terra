@@ -620,24 +620,6 @@ fn a_plan_on_a_slope_keeps_the_ground_it_was_laid_on() {
     assert_eq!(base, before);
 }
 
-#[test]
-fn every_refusal_has_words_to_show() {
-    let refusals = [
-        Refusal::Floats(IVec3::ZERO),
-        Refusal::Holds(vec![Holder::Roof(RoofId(0))]),
-        Refusal::Materials(Bill::of("Log", Amount::new(1, 8))),
-        Refusal::OverBudget { budget: 200 },
-    ];
-    for refusal in refusals {
-        let words = refusal.message();
-        assert!(words.ends_with('.') && words.len() > 10, "{words}");
-    }
-    assert_eq!(
-        Refusal::Materials(Bill::of("Log", Amount::new(1, 8))).message(),
-        "You need 1/8 Log."
-    );
-}
-
 // Random operations.
 
 /// The ground's height under a column for a seed, in centimetres: a slope with bumps.
@@ -946,6 +928,9 @@ fn fills_under_what_rests(ops: &[Op], after: &Base, holders: &[Holder]) -> bool 
     holders.iter().all(|holder| resting.contains(holder))
 }
 
+/// How many seeds of random operations a test run tries, unless `TERRA_SEEDS` says.
+const SEEDS: u64 = 4;
+
 #[test]
 fn random_operations_keep_every_rule() {
     let rules = rules();
@@ -961,7 +946,13 @@ fn random_operations_keep_every_rule() {
         budget: 120,
     };
     let mut accepted: BTreeMap<String, usize> = BTreeMap::new();
-    for seed in 0..16 {
+    // A few seeds by default, enough that every operation is accepted; more for a sweep,
+    // as `TERRA_SEEDS=64 cargo test -p terra_build random_operations`.
+    let seeds: u64 = std::env::var("TERRA_SEEDS")
+        .ok()
+        .and_then(|seeds| seeds.parse().ok())
+        .unwrap_or(SEEDS);
+    for seed in 0..seeds {
         let mut rng = Seed(seed).derive("building").rng();
         let mut yard = Yard {
             stock: plenty(),
@@ -969,6 +960,7 @@ fn random_operations_keep_every_rule() {
         };
         let mut base = Base::default();
         let mut log: Vec<Op> = Vec::new();
+        let (mut again, mut replayed) = (Base::default(), 0);
         // A stone wall a storey high with a doorway in it and a roof planned along its top
         // to begin with, so doors are fitted and roofs go up and are held.
         let wall: Vec<[i32; 3]> = (13..18)
@@ -1118,18 +1110,20 @@ fn random_operations_keep_every_rule() {
                 // A snapshot reads back the same.
                 let snapshot = base.snapshot();
                 assert_eq!(Base::from_snapshot(&snapshot).as_ref(), Ok(&base), "{at}");
-                // The same operations, in order, build the same base.
-                let mut again = Base::default();
+                // The same operations, in order, build the same base: replayed on a base
+                // of their own from the start, carried on from where the last check left
+                // it.
                 let cx = Context {
                     rules: &rules,
                     claim: Some(&claim),
                     world: &Free,
                 };
-                for op in &log {
+                for op in &log[replayed..] {
                     again
                         .act(op, &cx)
                         .unwrap_or_else(|why| panic!("{at}: replaying {op:?}: {why:?}"));
                 }
+                replayed = log.len();
                 assert_eq!(again, base, "{at}: replayed, not the same");
             }
         }

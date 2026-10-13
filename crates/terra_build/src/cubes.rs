@@ -620,8 +620,13 @@ impl Cubes {
             if cubes.sections.contains_key(&at) {
                 return Err(BadSection::Twice(at));
             }
+            // Checked as the runs are read, so a snapshot sent with runs past a section's
+            // end is refused before it takes any more memory than a section.
             let mut words = Vec::with_capacity(SECTION_CUBES);
             for &(count, word) in &section.runs {
+                if words.len() + usize::from(count) > SECTION_CUBES {
+                    return Err(BadSection::Length(at));
+                }
                 words.extend(std::iter::repeat_n(word, usize::from(count)));
             }
             if words.len() != SECTION_CUBES {
@@ -788,5 +793,49 @@ mod tests {
         one.set(IVec3::new(3, 4, 5), Some(Cube::new(Kind(1), Fill::Solid)))
             .unwrap();
         assert_eq!(one.save()[0].runs.len(), 3);
+    }
+
+    #[test]
+    fn a_malformed_section_is_refused_for_what_is_wrong_with_it() {
+        let air = |runs: Vec<(u16, u32)>| SavedSection {
+            at: [1, 2, 3],
+            parts: Vec::new(),
+            runs,
+        };
+        let whole = SECTION_CUBES as u16;
+        assert!(Cubes::load(&[air(vec![(whole, 0)])]).is_ok());
+        // Runs short of a section, or past its end.
+        for runs in [vec![(whole - 1, 0)], vec![(whole, 0), (1, 0)]] {
+            assert_eq!(
+                Cubes::load(&[air(runs)]).err(),
+                Some(BadSection::Length([1, 2, 3]))
+            );
+        }
+        // Runs far past its end, as a snapshot sent to bring a server down would have:
+        // refused before they are spread out, which would take 275 GB.
+        let hostile = air(vec![(u16::MAX, 0); 1 << 20]);
+        assert_eq!(
+            Cubes::load(&[hostile]).err(),
+            Some(BadSection::Length([1, 2, 3]))
+        );
+        // A cube in the second part of a palette of one.
+        let cube = Cube::planned(Kind(1), Some(PartId(4))).pack(2);
+        let mut bad = air(vec![(1, cube), (whole - 1, 0)]);
+        bad.parts = vec![PartId(4)];
+        assert_eq!(
+            Cubes::load(&[bad.clone()]).err(),
+            Some(BadSection::Part([1, 2, 3]))
+        );
+        bad.parts.push(PartId(9));
+        let loaded = Cubes::load(&[bad.clone()]).unwrap();
+        assert_eq!(
+            loaded.get(IVec3::new(16, 32, 48)).unwrap().part,
+            Some(PartId(9))
+        );
+        // The same section twice.
+        assert_eq!(
+            Cubes::load(&[bad.clone(), bad]).err(),
+            Some(BadSection::Twice([1, 2, 3]))
+        );
     }
 }

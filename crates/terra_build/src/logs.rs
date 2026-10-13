@@ -1623,18 +1623,178 @@ mod tests {
             .count()
     }
 
-    #[test]
-    fn the_kit_fills_a_storey_with_whole_courses() {
-        assert_eq!(kit().courses(), (12, true));
+    /// A kit with a texture for footings and floors, so it lays them.
+    fn textured() -> LogKit {
+        let texture = |path: &str| Texture {
+            path: path.into(),
+            metres: [1.0, 1.0],
+            depth: 0.0,
+        };
+        LogKit {
+            textures: BTreeMap::from([
+                (Material::Stone, texture("stone")),
+                (Material::Floor, texture("floor")),
+            ]),
+            ..kit()
+        }
+    }
+
+    /// A kit with models of a door, a window and a roof's covering, so it lays them.
+    fn modelled() -> LogKit {
+        LogKit {
+            models: KitModels {
+                door: Some("door".into()),
+                window: Some("window".into()),
+                shakes: Some("shakes".into()),
+                ridge: Some("ridge".into()),
+                ..KitModels::default()
+            },
+            ..textured()
+        }
+    }
+
+    fn assets() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    }
+
+    fn shipped(name: &str) -> LogKit {
+        let path = assets().join("data/kits").join(name);
+        let text = std::fs::read_to_string(&path).unwrap();
+        ron::from_str(&text).unwrap_or_else(|why| panic!("{}: {why}", path.display()))
     }
 
     #[test]
-    fn a_room_has_a_dozen_logs_a_wall_a_side_and_stays_inside_its_cubes() {
-        let layout = lay(&cabin(), &kit());
+    fn every_shipped_kit_reads_and_its_values_are_in_range() {
+        #[derive(serde::Deserialize)]
+        struct Items {
+            kinds: Vec<Item>,
+        }
+        #[derive(serde::Deserialize)]
+        struct Item {
+            name: String,
+        }
+        let items = std::fs::read_to_string(assets().join("data/items.ron")).unwrap();
+        let items: Items = ron::from_str(&items).unwrap();
+        let item = |name: &str| items.kinds.iter().any(|item| item.name == name);
+        let mut ids = BTreeSet::new();
+        let mut read = 0;
+        for entry in std::fs::read_dir(assets().join("data/kits")).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "ron") {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let kit = shipped(&name);
+            read += 1;
+            assert!(ids.insert(kit.id), "{name}: kind {} twice", kit.id);
+            assert!(
+                kit.kind() != Kind::PLAIN && kit.kind() <= Kind::LAST,
+                "{name}"
+            );
+            if kit.pattern == Pattern::Logs {
+                let (count, whole) = kit.courses();
+                assert!(
+                    whole && count > 0,
+                    "{name}: courses do not divide the storey"
+                );
+                // Scribed into one another, in a wall a cube thick.
+                assert!(
+                    kit.course <= kit.diameter && kit.diameter <= CELL_M,
+                    "{name}"
+                );
+                assert!(kit.facets.0 >= 3 && kit.facets.0 <= kit.facets.1, "{name}");
+                assert!(kit.longest >= CELL_M, "{name}");
+            }
+            let sizes = [
+                kit.overhang,
+                kit.taper,
+                kit.bend,
+                kit.roughness,
+                kit.knots,
+                kit.ragged,
+                kit.frame,
+                kit.eaves,
+                kit.bevel,
+                kit.relief,
+            ];
+            assert!(sizes.iter().all(|v| v.is_finite() && *v >= 0.0), "{name}");
+            assert!(kit.taper < 1.0 && kit.roughness < 1.0, "{name}");
+            assert!(kit.bevel < CELL_M * 0.5, "{name}");
+            let c = &kit.colours;
+            let colours = [
+                c.wood, c.light, c.dark, c.bark, c.end, c.heart, c.knot, c.chinking, c.board,
+                c.roof,
+            ];
+            assert!(
+                colours.iter().flatten().all(|v| (0.0..=1.0).contains(v)),
+                "{name}"
+            );
+            // Everything it names is there.
+            let m = &kit.models;
+            let models = m.logs.iter().chain(&m.footing).chain(
+                [
+                    &m.long_log,
+                    &m.board,
+                    &m.door,
+                    &m.window,
+                    &m.shakes,
+                    &m.ridge,
+                    &m.floor,
+                ]
+                .into_iter()
+                .flatten(),
+            );
+            for model in models {
+                assert!(assets().join(model).is_file(), "{name}: no {model}");
+            }
+            for (material, texture) in &kit.textures {
+                let folder = assets().join(&texture.path);
+                let mut needs = vec!["color.jpg", "normal.jpg", "arm.jpg"];
+                if texture.depth > 0.0 {
+                    needs.push("height.jpg");
+                }
+                for file in needs {
+                    assert!(
+                        folder.join(file).is_file(),
+                        "{name}: {material:?} has no {file}"
+                    );
+                }
+                assert!(texture.metres.iter().all(|m| *m > 0.0), "{name}");
+            }
+            let steps = kit.cost.steps;
+            assert!(
+                steps > 0 && crate::cubes::FULL.is_multiple_of(steps),
+                "{name}: {steps} steps"
+            );
+            for (thing, _, den) in kit.cost.step.iter().chain(&kit.cost.roof) {
+                assert!(item(thing) && *den > 0, "{name}: {thing}");
+            }
+        }
+        assert!(read > 0);
+    }
+
+    #[test]
+    fn the_default_kit_is_pine_as_its_file_has_it() {
+        // What a kit's file leaves out is the default's, which is to be logs.ron's but
+        // for what it lays with: its models, textures and cost.
+        let pine = LogKit {
+            models: KitModels::default(),
+            textures: BTreeMap::new(),
+            cost: KitCost::default(),
+            ..shipped("logs.ron")
+        };
+        assert_eq!(pine, LogKit::default());
+    }
+
+    #[test]
+    fn a_room_has_a_log_a_course_on_every_wall_and_stays_inside_its_cubes() {
+        let kit = kit();
+        let courses = kit.courses().0 as usize;
+        let layout = lay(&cabin(), &kit);
         let logs = logs(&layout);
-        // Walls running east and west lay 12 courses; the others 11 and a split log at
-        // the foot and on top.
-        assert_eq!(logs.len(), 2 * 12 + 2 * 13, "{logs:?}");
+        // Walls running east and west lay a log a course; the others one fewer and a
+        // split log at the foot and on top.
+        assert_eq!(logs.len(), 2 * courses + 2 * (courses + 1), "{logs:?}");
         assert_eq!(logs.iter().filter(|l| l.2 != Split::Whole).count(), 4);
         // The south wall, the row of cubes from z = 2.5 to 3, runs through both corners
         // to their outer faces, a little short of them here and there, and no further.
@@ -1642,10 +1802,11 @@ mod tests {
             .iter()
             .filter(|(from, to, _)| from.z == 2.75 && to.z == 2.75)
             .collect();
-        assert_eq!(south.len(), 12);
+        assert_eq!(south.len(), courses);
         for (from, to, _) in south {
+            let short = kit.ragged + 1e-4;
             assert!(
-                from.x >= 0.0 && from.x < 0.1 && to.x <= 4.0 && to.x > 3.9,
+                from.x >= 0.0 && from.x < short && to.x <= 4.0 && to.x > 4.0 - short,
                 "{from} {to}"
             );
         }
@@ -1677,7 +1838,9 @@ mod tests {
     fn a_free_end_is_cut_flush() {
         let mut base = Base::default();
         wall(&mut base, (0..4).map(|x| [x, 0, 0]), Panel::Solid);
-        for (from, to, _) in logs(&lay(&base, &kit())) {
+        let logs = logs(&lay(&base, &kit()));
+        assert!(!logs.is_empty());
+        for (from, to, _) in logs {
             assert!(
                 from.x.abs() < 1e-4 && (to.x - 2.0).abs() < 1e-4,
                 "{from} {to}"
@@ -1703,7 +1866,7 @@ mod tests {
             .count();
         let whole = south.len() - crossed;
         assert_eq!(crossed % 2, 0);
-        assert_eq!(crossed / 2 + whole, 12);
+        assert_eq!((crossed / 2 + whole) as i32, kit.courses().0);
         for (from, to, _) in &south {
             let clear = to.x <= 1.5 - kit.frame + 1e-4 || from.x >= 2.5 + kit.frame - 1e-4;
             assert!(clear || from.y > DOOR_HEIGHT_M, "{from} {to}");
@@ -1716,23 +1879,27 @@ mod tests {
     fn a_window_has_a_sill_and_a_cube_carved_out_is_framed_too() {
         let mut base = cabin();
         wall(&mut base, [[0, 0, 2]], Panel::WINDOW);
-        assert_eq!(boards(&lay(&base, &kit())), 4);
+        let kit = kit();
+        let before = lay(&base, &kit);
+        // Two jambs, a head and a sill.
+        assert_eq!(boards(&before), 4);
         // One cube a metre and a half up the north wall, carved out.
         base.apply(BuildOp::Fill {
             min: [3, 3, 0],
             max: [3, 3, 0],
-            cube: Some(Cube::new(kit().kind(), Fill::Open)),
+            cube: Some(Cube::new(kit.kind(), Fill::Open)),
         });
-        let layout = lay(&base, &kit());
-        assert_eq!(boards(&layout), 8);
-        // The two courses through it are cut, so the north wall has two more logs.
+        let after = lay(&base, &kit);
+        assert_eq!(boards(&after), 8);
+        // Every course through it is cut, so the north wall has a log more for each.
         let north = |layout: &Layout| {
             logs(layout)
                 .iter()
                 .filter(|(from, to, _)| from.z == 0.25 && to.z == 0.25)
                 .count()
         };
-        assert_eq!(north(&layout), 14);
+        let through = (CELL_M / kit.course).round() as usize;
+        assert_eq!(north(&after), north(&before) + through);
     }
 
     #[test]
@@ -1810,7 +1977,7 @@ mod tests {
                 .map(|(from, _, _)| (from.x * 100.0).round() as i32)
                 .collect()
         };
-        let (first, second) = (seams(0.125), seams(0.375));
+        let (first, second) = (seams(kit.course * 0.5), seams(kit.course * 1.5));
         assert!(first.len() > 1 && second.len() > 1);
         assert!(first[1..].iter().all(|x| !second.contains(x)));
     }
@@ -1831,23 +1998,329 @@ mod tests {
     }
 
     #[test]
-    fn logs_are_the_same_on_every_machine_and_differ_from_one_another() {
-        let kit = kit();
-        let layout = lay(&cabin(), &kit);
-        let drawn = |piece: &Piece| {
+    fn logs_are_the_same_on_every_machine_and_each_seed_makes_another() {
+        // A log's own numbers, written here, so retuning pine does not move it.
+        let kit = LogKit {
+            diameter: 0.3,
+            facets: (9, 11),
+            taper: 0.07,
+            bend: 0.035,
+            roughness: 0.07,
+            ..LogKit::default()
+        };
+        let log = |seed: u32, split: Split| Piece::Log {
+            from: Vec3::new(0.0, 0.125, 0.25),
+            to: Vec3::new(3.0, 0.125, 0.25),
+            split,
+            seed,
+            chinking: None,
+        };
+        let corners = |piece: &Piece| -> Vec<Vec3> {
             let mut surfaces = Surfaces::default();
             draw(piece, &kit, &mut surfaces);
-            surfaces.of(Material::Log).clone()
+            surfaces
+                .0
+                .values()
+                .flat_map(|s| s.positions.clone())
+                .collect()
         };
-        assert_eq!(drawn(&layout.pieces[0]), drawn(&layout.pieces[0]));
-        let a = drawn(&layout.pieces[0]);
-        let b = drawn(&layout.pieces[1]);
-        assert!(!a.positions.is_empty());
-        assert_ne!(a.positions, b.positions);
-        // Faces point outward: each triangle's normal agrees with its winding.
-        for (corners, normal) in a.positions.chunks(3).zip(a.normals.chunks(3)) {
+        // FNV-1a over the bits of every corner.
+        let checksum = |points: &[Vec3]| {
+            points
+                .iter()
+                .flat_map(|p| p.to_array())
+                .fold(0xcbf2_9ce4_8422_2325_u64, |sum, v| {
+                    (sum ^ u64::from(v.to_bits())).wrapping_mul(0x0100_0000_01b3)
+                })
+        };
+        let whole = corners(&log(7, Split::Whole));
+        let top = corners(&log(7, Split::Top));
+        assert!(!whole.is_empty() && !top.is_empty());
+        assert_eq!(
+            [checksum(&whole), checksum(&top)],
+            [0xd07c_efcf_87f9_1dad, 0x263b_8671_6b9c_9eef],
+            "drawn differently from the machine these were taken on (D30)"
+        );
+        // The same log with another seed is another log.
+        assert_ne!(corners(&log(8, Split::Whole)), whole);
+    }
+
+    /// Each triangle's corners wind the way its normals point; how many there were.
+    fn facing_out(surface: &Surface, what: &str) -> usize {
+        for (corners, normals) in surface.positions.chunks(3).zip(surface.normals.chunks(3)) {
             let own = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
-            assert!(own.dot(normal[0]) >= 0.0);
+            assert!(
+                normals.iter().all(|n| own.dot(*n) > 0.0),
+                "{what}: {corners:?} is wound against its normals {normals:?}"
+            );
+        }
+        surface.triangle_count()
+    }
+
+    #[test]
+    fn every_piece_is_drawn_facing_out() {
+        let kit = textured();
+        let mut base = cabin();
+        wall(&mut base, [[0, 0, 2]], Panel::WINDOW);
+        let layout = lay(&base, &kit);
+        let mut drawn: BTreeMap<String, usize> = BTreeMap::new();
+        for piece in &layout.pieces {
+            let mut surfaces = Surfaces::default();
+            draw(piece, &kit, &mut surfaces);
+            let what = format!("{piece:?}");
+            let kind = what.split([' ', '{']).next().unwrap_or("").to_string();
+            for (material, surface) in &surfaces.0 {
+                let count = facing_out(surface, &what);
+                *drawn.entry(format!("{kind} {material:?}")).or_default() += count;
+            }
+        }
+        for each in [
+            "Log Log",
+            "Log LogEnd",
+            "Log Daub",
+            "Board Board",
+            "Footing Stone",
+            "Floor Floor",
+        ] {
+            assert!(
+                drawn.get(each).is_some_and(|&n| n > 0),
+                "no {each}: {drawn:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_kit_with_a_covering_lays_it_in_panels_on_the_roof_and_a_ridge_along_a_gable() {
+        let kit = modelled();
+        let e = kit.eaves;
+        for style in [RoofStyle::Gable, RoofStyle::LeanTo, RoofStyle::Hip] {
+            let mut base = cabin();
+            let pitch = 0.7;
+            base.apply(BuildOp::AddRoof(RoofSection {
+                min: [0, 0, 0],
+                max: [7, 0, 5],
+                style,
+                along_x: true,
+                pitch,
+            }));
+            let layout = lay(&base, &kit);
+            // The cabin is 4 m by 3, its roof's top over the eaves at each point, worked
+            // out by hand: a gable rises from the north and south, a lean-to from the
+            // north.
+            let roof = |z: f32| match style {
+                RoofStyle::Gable => STOREY_M + z.min(3.0 - z) * pitch,
+                _ => STOREY_M + z * pitch,
+            };
+            let mut area = 0.0;
+            let mut ridges = Vec::new();
+            for piece in &layout.pieces {
+                match *piece {
+                    Piece::Shakes { corners } => {
+                        for c in corners {
+                            assert!(
+                                (c.y - roof(c.z)).abs() < 1e-4,
+                                "{style:?}: {c} off the roof"
+                            );
+                            assert!((-e - 1e-4..=4.0 + e + 1e-4).contains(&c.x), "{c}");
+                            assert!((-e - 1e-4..=3.0 + e + 1e-4).contains(&c.z), "{c}");
+                        }
+                        // Its area seen from above.
+                        let [a, b, c, d] = corners.map(|c| glam::Vec2::new(c.x, c.z));
+                        area += ((c - a).perp_dot(d - b)).abs() * 0.5;
+                    }
+                    Piece::Ridge { from, to } => ridges.push((from, to)),
+                    _ => {}
+                }
+            }
+            match style {
+                // A hip's faces are not rectangles: left to the plain roof.
+                RoofStyle::Hip => assert_eq!((area, ridges.len()), (0.0, 0)),
+                _ => {
+                    // All of it, eaves and all, once over.
+                    let whole = (4.0 + 2.0 * e) * (3.0 + 2.0 * e);
+                    assert!((area - whole).abs() < 1e-3, "{style:?}: {area} of {whole}");
+                }
+            }
+            if style == RoofStyle::Gable {
+                let top = Vec3::new(0.0, roof(1.5), 1.5);
+                assert_eq!(ridges, vec![(top - Vec3::X * e, top + Vec3::X * (4.0 + e))]);
+            } else {
+                assert!(ridges.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn a_kit_with_floors_lays_one_under_every_tile_of_its_rooms_once() {
+        let mut base = cabin();
+        // A room on top of it, and one opening off its north side, its edge a tile out of
+        // step with the panels laid inside the cabin.
+        base.apply(BuildOp::AddRoom {
+            min: [0, 1, 0],
+            max: [7, 1, 5],
+            kind: kit().kind(),
+        });
+        base.apply(BuildOp::AddRoom {
+            min: [3, 0, -3],
+            max: [7, 0, 0],
+            kind: kit().kind(),
+        });
+        let layout = lay(&base, &textured());
+        let mut under: BTreeMap<[i32; 3], usize> = BTreeMap::new();
+        let mut panels = 0;
+        let mut largest = 0;
+        for piece in &layout.pieces {
+            let Piece::Floor { min, max } = *piece else {
+                continue;
+            };
+            panels += 1;
+            assert_eq!(min.y, max.y);
+            let storey = (min.y / STOREY_M).round() as i32;
+            assert!((min.y - storey as f32 * STOREY_M).abs() < 1e-5, "{min}");
+            let (low, high) = ((min / CELL_M).round(), (max / CELL_M).round());
+            largest = largest.max((high.x - low.x) as i32);
+            for x in low.x as i32..high.x as i32 {
+                for z in low.z as i32..high.z as i32 {
+                    *under.entry([x, storey, z]).or_default() += 1;
+                }
+            }
+        }
+        // Inside the cabin's walls, six tiles by four, on both storeys; and the other
+        // room's three by two, and the three tiles of wall between taken away.
+        let inside: BTreeMap<[i32; 3], usize> = (0..2)
+            .flat_map(|y| (1..7).flat_map(move |x| (1..5).map(move |z| ([x, y, z], 1))))
+            .chain((4..7).flat_map(|x| (-2..1).map(move |z| ([x, 0, z], 1))))
+            .collect();
+        assert_eq!(under, inside);
+        // In panels two tiles square where they fit.
+        assert_eq!(largest, 2);
+        assert!(panels < inside.len());
+    }
+
+    #[test]
+    fn a_wall_on_the_ground_stands_on_a_footing_all_along_and_one_above_does_not() {
+        let mut base = cabin();
+        // A wall on the cabin's roof, on the next storey.
+        wall(&mut base, (0..4).map(|x| [x, 1, 2]), Panel::Solid);
+        let layout = lay(&base, &textured());
+        let footings: Vec<(Vec3, Vec3)> = layout
+            .pieces
+            .iter()
+            .filter_map(|piece| match *piece {
+                Piece::Footing { from, to, .. } => Some((from, to)),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            footings
+                .iter()
+                .all(|(from, to)| from.y == 0.0 && to.y == 0.0)
+        );
+        // Under the middle of every cube of wall on the ground, a footing.
+        for (at, _) in base.cubes().filter(|(at, _)| at.y == 0) {
+            let middle = (at.as_vec3() + Vec3::splat(0.5)) * CELL_M;
+            let on = footings.iter().any(|&(from, to)| {
+                let along = (to - from).normalize();
+                let t = (middle - from).dot(along);
+                let off = middle - from - along * t;
+                t >= 0.0 && t <= from.distance(to) && off.x.abs() < 1e-4 && off.z.abs() < 1e-4
+            });
+            assert!(on, "no footing under {at}");
+        }
+        // And none but under them, past their ends by a little.
+        for &(from, to) in &footings {
+            let along = (to - from).normalize();
+            let mut at = from + along * 0.1;
+            while at.distance(from) < from.distance(to) - 0.1 {
+                let column = (at / CELL_M).floor().as_ivec3();
+                assert!(
+                    base.cube(column.with_y(0)).is_some(),
+                    "a footing at {at} under no wall"
+                );
+                at += along * CELL_M * 0.5;
+            }
+        }
+    }
+
+    #[test]
+    fn a_door_or_window_the_kit_has_fills_its_opening_and_no_log_runs_into_it() {
+        let kit = modelled();
+        let f = kit.frame;
+        let mut base = cabin();
+        // A door a metre wide in the south wall, a window in the west.
+        wall(&mut base, [[3, 0, 5], [4, 0, 5]], Panel::Door);
+        wall(&mut base, [[0, 0, 2]], Panel::WINDOW);
+        // And glass in the north wall no window is the shape of.
+        for at in [[1, 2, 0], [1, 3, 0], [2, 3, 0]] {
+            base.apply(BuildOp::Fill {
+                min: at,
+                max: at,
+                cube: Some(Cube::new(kit.kind(), Fill::Glass)),
+            });
+        }
+        let layout = lay(&base, &kit);
+        let openings: Vec<(Vec3, Vec3, bool, bool)> = layout
+            .pieces
+            .iter()
+            .filter_map(|piece| match *piece {
+                Piece::Opening {
+                    min,
+                    max,
+                    along_x,
+                    door,
+                } => Some((min, max, along_x, door)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(openings.len(), 2, "{openings:?}");
+        // Each as wide and high as its hole and a board's width round it; a door from the
+        // floor.
+        let (door, window) = (openings[0], openings[1]);
+        let (door, window) = if door.3 {
+            (door, window)
+        } else {
+            (window, door)
+        };
+        assert!(door.2 && door.3 && !window.2 && !window.3);
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-4;
+        assert!(
+            close(door.0.x, 1.5 - f) && close(door.1.x, 2.5 + f),
+            "{door:?}"
+        );
+        assert!(
+            close(door.0.y, 0.0) && close(door.1.y, DOOR_HEIGHT_M + f),
+            "{door:?}"
+        );
+        assert!(
+            close(window.0.z, 1.0 - f) && close(window.1.z, 1.5 + f),
+            "{window:?}"
+        );
+        assert!(
+            close(window.0.y, 1.0 - f) && close(window.1.y, 2.0 + f),
+            "{window:?}"
+        );
+        // The odd one is framed in boards instead: a jamb up its west side, two up its
+        // east as that side steps, a head over it, and a sill under each step.
+        assert_eq!(boards(&layout), 6);
+        // No log's middle runs into either.
+        for (from, to, _) in logs(&layout) {
+            for (min, max, along_x, _) in [door, window] {
+                let (a, b, across, low, high) = if along_x {
+                    (from.x.min(to.x), from.x.max(to.x), from.z, min.x, max.x)
+                } else {
+                    (from.z.min(to.z), from.z.max(to.z), from.x, min.z, max.z)
+                };
+                let (near, far) = if along_x {
+                    (min.z, max.z)
+                } else {
+                    (min.x, max.x)
+                };
+                let beside = across > near && across < far && from.y > min.y && from.y < max.y;
+                assert!(
+                    !beside || b <= low + 1e-3 || a >= high - 1e-3,
+                    "{from} {to} runs into {min} {max}"
+                );
+            }
         }
     }
 }

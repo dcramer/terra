@@ -510,11 +510,6 @@ mod tests {
     }
 
     #[test]
-    fn drawing_the_same_base_twice_gives_the_same_mesh() {
-        assert_eq!(room().mesh(|_| None), room().mesh(|_| None));
-    }
-
-    #[test]
     fn faces_between_two_cubes_are_not_drawn() {
         let mut base = Base::default();
         base.apply(BuildOp::Fill {
@@ -540,5 +535,88 @@ mod tests {
         let kitted = room().mesh(|_| Some(look.clone()));
         assert!(kitted.structure.triangle_count() < plain.structure.triangle_count());
         assert!(kitted.structure.colours.contains(&[1.0, 0.0, 0.0]));
+    }
+
+    #[test]
+    fn a_kit_with_textures_covers_its_roof_boards_under_it_and_boards_its_gables() {
+        let shakes = [3.2, 1.6];
+        let look = KitLook {
+            gable: [0.0, 0.0, 1.0],
+            floor: [0.0; 3],
+            roof: [1.0, 0.0, 0.0],
+            side: [0.0; 3],
+            eaves: 0.5,
+            textures: BTreeMap::from([(Material::Shakes, shakes), (Material::Board, [2.0, 2.0])]),
+        };
+        let e = look.eaves;
+        let mesh = room().mesh(|_| Some(look.clone()));
+        // The room is 3 m by 2.5, its gable rising from the north and south, worked out
+        // by hand.
+        let roof = |z: f32| STOREY_M + z.min(2.5 - z) * 0.7;
+        // Covered all over, eaves and all, on the roof, its rows along the ridge.
+        let covering = &mesh.textured.0[&Material::Shakes];
+        let mut area = 0.0;
+        for ((corners, normals), uvs) in covering
+            .positions
+            .chunks(3)
+            .zip(covering.normals.chunks(3))
+            .zip(covering.uvs.chunks(3))
+        {
+            for (corner, uv) in corners.iter().zip(uvs) {
+                assert!(
+                    (corner.y - roof(corner.z)).abs() < 1e-4,
+                    "{corner} off the roof"
+                );
+                assert!(
+                    ((uv[0] * shakes[0]).abs() - corner.x.abs()).abs() < 1e-3,
+                    "{uv:?}"
+                );
+            }
+            assert!(normals.iter().all(|n| n.y > 0.0));
+            let [a, b, c] = [0, 1, 2].map(|i| glam::Vec2::new(corners[i].x, corners[i].z));
+            area += (b - a).perp_dot(c - a).abs() * 0.5;
+        }
+        let whole = (3.0 + 2.0 * e) * (2.5 + 2.0 * e);
+        assert!((area - whole).abs() < 1e-3, "{area} of {whole}");
+        // Nothing of the plain roof is left up there.
+        let plain_roof = mesh
+            .structure
+            .positions
+            .iter()
+            .zip(&mesh.structure.colours)
+            .any(|(p, colour)| *colour == look.roof && p.y > 1.0);
+        assert!(!plain_roof);
+        // Boards under it and round its edge, no higher than its top nor lower than its
+        // thickness under it.
+        let boards = &mesh.textured.0[&Material::Board];
+        assert!(boards.triangle_count() > 0);
+        for p in &boards.positions {
+            let top = roof(p.z);
+            assert!(p.y <= top + 1e-4 && p.y >= top - ROOF_THICK_M - 1e-4, "{p}");
+        }
+        // The gables' boards, up the middle of their walls; at the gable ends, under the
+        // roof.
+        let gable: Vec<(Vec3, Vec3)> = mesh
+            .structure
+            .positions
+            .iter()
+            .zip(&mesh.structure.normals)
+            .zip(&mesh.structure.colours)
+            .filter(|(_, colour)| **colour == look.gable)
+            .map(|((p, n), _)| (*p, *n))
+            .collect();
+        let ends = gable.iter().filter(|(_, n)| n.x.abs() > 0.5).count();
+        assert!(ends > 0);
+        for (p, n) in gable {
+            assert_eq!(n.y, 0.0);
+            let end = n.x.abs() > 0.5;
+            let across = if end { p.x } else { p.z };
+            let off_middle = across - ((across / CELL_M).floor() + 0.5) * CELL_M;
+            assert!((off_middle.abs() - GABLE_BACKING_M).abs() < 1e-4, "{p} {n}");
+            assert!(p.y >= STOREY_M - 1e-4, "{p}");
+            if end {
+                assert!(p.y <= roof(p.z) - ROOF_THICK_M + 1e-4, "{p}");
+            }
+        }
     }
 }

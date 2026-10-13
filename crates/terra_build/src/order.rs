@@ -357,9 +357,40 @@ mod tests {
         wall(&mut base, 0, LOGS, &cx);
         let cubes = base.next_in(PartId(0), Vec3::ZERO, false).unwrap();
         base.act(&Op::Fill { cubes }, &cx).unwrap();
-        let built = base.view(|cube| cube.is_in(), |_| true);
+        // A roof up, by the shortcut, and one planned beside it.
+        let section = |x: i32| RoofSection {
+            min: [x, 0, 0],
+            max: [x + 1, 0, 1],
+            style: RoofStyle::Gable,
+            along_x: true,
+            pitch: 0.7,
+        };
+        base.apply(crate::BuildOp::AddRoof(section(0)));
+        let planned_roof = base.next_roof();
+        base.act(
+            &Op::AddRoof {
+                roof: planned_roof,
+                section: section(4),
+                kind: Some(LOGS),
+            },
+            &cx,
+        )
+        .unwrap();
+        let built = base.view(|cube| cube.is_in(), crate::Roof::standing);
         assert_eq!(built.cubes().count(), 4);
-        let planned = base.view(|cube| !cube.is_in(), |_| true);
+        assert!(
+            built
+                .cubes()
+                .all(|(at, cube)| at.y == 0 && cube.part.is_none())
+        );
+        assert_eq!(built.sections(), &[section(0)]);
+        let planned = base.view(|cube| !cube.is_in(), |roof| !roof.standing());
         assert_eq!(planned.cubes().count(), 4);
+        assert!(planned.cubes().all(|(at, _)| at.y == 1));
+        assert_eq!(planned.sections(), &[section(4)]);
+        assert_eq!(
+            planned.roofs().map(|(id, _)| id).collect::<Vec<_>>(),
+            [planned_roof]
+        );
     }
 }

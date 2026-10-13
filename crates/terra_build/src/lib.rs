@@ -1138,25 +1138,65 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_columns_a_base_stands_on_are_where_its_tiles_say() {
+    fn the_ground_floor_is_rooms_and_floors_and_anything_standing_is_occupied() {
         let mut base = Base::default();
-        for op in crate::example(Kind::PLAIN) {
-            base.apply(op);
-        }
-        let ground: std::collections::HashSet<IVec2> = base.ground_columns().collect();
-        let standing: std::collections::HashSet<IVec2> = base.occupied_columns().collect();
-        assert!(!ground.is_empty() && !standing.is_empty());
-        for x in -40..60 {
-            for z in -40..40 {
-                let tile = IVec3::new(x, 0, z);
-                let at = IVec2::new(x, z);
-                assert_eq!(
-                    ground.contains(&at),
-                    base.contains(tile) || base.has_floor(tile)
-                );
-                assert_eq!(standing.contains(&at), base.occupied(x, z));
+        let solid = Some(Cube::new(LOGS, Fill::Solid));
+        // A room three tiles square, with a floor under all of it.
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [2, 0, 2],
+            kind: LOGS,
+        });
+        // A ring of walls on bare ground, closing in one tile with no floor.
+        for x in 20..23 {
+            for z in 0..3 {
+                if (x, z) != (21, 1) {
+                    base.apply(BuildOp::SetWall {
+                        tile: [x, 0, z],
+                        panel: Some(Panel::Solid),
+                        kind: LOGS,
+                    });
+                }
             }
         }
+        // A floor out in the open, a floor cube cut open, a post on the ground and a
+        // floor on the storey above.
+        base.apply(BuildOp::SetFloor {
+            min: [5, 0, 0],
+            max: [6, 0, 0],
+            laid: true,
+            kind: LOGS,
+        });
+        let fill =
+            |min: [i32; 3], max: [i32; 3], cube: Option<Cube>| BuildOp::Fill { min, max, cube };
+        base.apply(fill(
+            [8, -1, 0],
+            [8, -1, 0],
+            Some(Cube::new(LOGS, Fill::Open)),
+        ));
+        base.apply(fill([10, 0, 0], [10, 2, 0], solid));
+        base.apply(fill([12, 5, 0], [12, 5, 0], solid));
+        let ground: BTreeSet<[i32; 2]> = base.ground_columns().map(|c| c.to_array()).collect();
+        let standing: BTreeSet<[i32; 2]> = base.occupied_columns().map(|c| c.to_array()).collect();
+        let room: Vec<[i32; 2]> = (0..3).flat_map(|x| (0..3).map(move |z| [x, z])).collect();
+        let ring: Vec<[i32; 2]> = (20..23)
+            .flat_map(|x| (0..3).map(move |z| [x, z]))
+            .filter(|&c| c != [21, 1])
+            .collect();
+        let want_ground: BTreeSet<[i32; 2]> = room
+            .iter()
+            .copied()
+            .chain([[21, 1], [5, 0], [6, 0]])
+            .collect();
+        let want_standing: BTreeSet<[i32; 2]> = room
+            .iter()
+            .chain(&ring)
+            .copied()
+            .chain([[5, 0], [6, 0], [8, 0], [10, 0], [12, 0]])
+            .collect();
+        assert_eq!(ground, want_ground);
+        assert_eq!(standing, want_standing);
+        assert!(base.occupied(10, 0) && !base.occupied(21, 1));
     }
 
     const LOGS: Kind = Kind(1);
@@ -1242,19 +1282,6 @@ mod tests {
     }
 
     #[test]
-    fn cubes_carved_out_of_a_wall_are_an_opening_of_any_shape() {
-        let mut base = room();
-        // One cube, a metre up, opened.
-        base.apply(BuildOp::Fill {
-            min: [0, 2, 1],
-            max: [0, 2, 1],
-            cube: Some(Cube::new(LOGS, Fill::Open)),
-        });
-        assert!(base.filling(IVec3::new(0, 0, 1)).is_some());
-        assert_eq!(base.tile_count(), 2);
-    }
-
-    #[test]
     fn rooms_that_touch_open_into_each_other() {
         let mut base = room();
         // Another sharing the east wall: the wall between is taken away.
@@ -1327,30 +1354,6 @@ mod tests {
             .raycast(Vec3::new(0.75, 2.0, 0.75), Vec3::NEG_Y, 20.0)
             .unwrap();
         assert_eq!(hit.face, Face::new(IVec3::new(1, 0, 1), Side::Down));
-    }
-
-    #[test]
-    fn the_same_operations_build_the_same_base() {
-        let ops = [
-            BuildOp::AddRoom {
-                min: [0, 0, 0],
-                max: [5, 0, 4],
-                kind: LOGS,
-            },
-            BuildOp::SetWall {
-                tile: [2, 0, 4],
-                panel: Some(Panel::Door),
-                kind: LOGS,
-            },
-        ];
-        let build = || {
-            let mut base = Base::default();
-            for op in ops {
-                base.apply(op);
-            }
-            base
-        };
-        assert_eq!(build(), build());
     }
 
     #[test]

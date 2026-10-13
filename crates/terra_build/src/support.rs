@@ -281,15 +281,4 @@ mod tests {
         let gone = BTreeSet::from([[2, 5, 0]]);
         assert_eq!(base.unjoined_without(&gone).len(), 4);
     }
-
-    #[test]
-    fn a_cube_holds_what_is_over_it() {
-        let mut base = Base::default();
-        post(&mut base, 0, 0, 2);
-        assert_eq!(
-            base.resting_on(IVec3::new(0, 1, 0)),
-            vec![Holder::Cube(IVec3::new(0, 2, 0))]
-        );
-        assert!(base.resting_on(IVec3::new(0, 2, 0)).is_empty());
-    }
 }

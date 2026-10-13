@@ -248,13 +248,18 @@ mod tests {
     }
 
     fn drawn(cubes: &[[i32; 3]], height: &dyn Fn([f32; 2]) -> f32) -> Surface {
+        drawn_as(cubes, &look(), height)
+    }
+
+    fn drawn_as(cubes: &[[i32; 3]], look: &Look, height: &dyn Fn([f32; 2]) -> f32) -> Surface {
         let set: BTreeSet<[i32; 3]> = cubes.iter().copied().collect();
         let mut out = Surface::default();
-        draw(&set, &|_| false, &look(), height, [1.0; 3], &mut out);
+        draw(&set, &|_| false, look, height, [1.0; 3], &mut out);
         out
     }
 
-    /// Every edge of every triangle is shared by exactly one other triangle: no cracks.
+    /// There are triangles, and every edge of every one is shared by exactly one other
+    /// triangle: no cracks.
     fn closed(surface: &Surface) -> bool {
         let key = |p: Vec3| ((p * 2048.0).round()).as_ivec3().to_array();
         let mut edges: HashMap<([i32; 3], [i32; 3]), i32> = HashMap::new();
@@ -268,7 +273,7 @@ mod tests {
                 *edges.entry(k).or_default() += 1;
             }
         }
-        edges.values().all(|&count| count == 2)
+        !edges.is_empty() && edges.values().all(|&count| count == 2)
     }
 
     #[test]
@@ -313,15 +318,39 @@ mod tests {
     }
 
     #[test]
-    fn the_relief_moves_the_surface() {
-        let a = drawn(&[[0, 0, 0]], &flat);
-        let b = drawn(&[[0, 0, 0]], &bumpy);
+    fn the_relief_moves_the_surface_by_half_its_depth_at_most_and_not_at_an_inside_corner() {
+        // An L two cubes high, its inside corner the upright line at x and z of one cube.
+        let ell = [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 0, 1],
+            [0, 1, 0],
+            [1, 1, 0],
+            [0, 1, 1],
+        ];
+        let smooth = Look {
+            relief: 0.0,
+            ..look()
+        };
+        let (a, b) = (drawn_as(&ell, &smooth, &bumpy), drawn(&ell, &bumpy));
         assert_eq!(a.positions.len(), b.positions.len());
-        assert!(
-            a.positions
-                .iter()
-                .zip(&b.positions)
-                .any(|(x, y)| x.distance(*y) > 0.005)
-        );
+        let moved: Vec<(Vec3, f32)> = a
+            .positions
+            .iter()
+            .zip(&b.positions)
+            .map(|(x, y)| (*x, x.distance(*y)))
+            .collect();
+        // A height from 0 to 1 moves it out or in by half the relief, no more.
+        let half = look().relief * 0.5;
+        assert!(moved.iter().all(|&(_, by)| by <= half + 1e-5));
+        assert!(moved.iter().any(|&(_, by)| by > half * 0.8));
+        // Along the inside corner it does not move at all.
+        let corner: Vec<f32> = moved
+            .iter()
+            .filter(|(at, _)| (at.x - CELL_M).abs() < 1e-5 && (at.z - CELL_M).abs() < 1e-5)
+            .map(|&(_, by)| by)
+            .collect();
+        assert!(!corner.is_empty());
+        assert!(corner.iter().all(|&by| by < 1e-5), "{corner:?}");
     }
 }

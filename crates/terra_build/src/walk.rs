@@ -353,6 +353,70 @@ mod tests {
     }
 
     #[test]
+    fn a_pitched_roof_is_stood_on_and_is_the_ceiling_under_it() {
+        // A room four metres by three, under a gable rising half a metre for each metre
+        // in from its north and south sides.
+        let mut base = Base::default();
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [7, 0, 5],
+            kind: Kind::PLAIN,
+        });
+        base.apply(BuildOp::AddRoof(crate::RoofSection {
+            min: [0, 0, 0],
+            max: [7, 0, 5],
+            style: crate::RoofStyle::Gable,
+            along_x: true,
+            pitch: 0.5,
+        }));
+        let w = walker();
+        // A metre in from the north side, and at the ridge, a metre and a half in.
+        let (side, ridge) = (STOREY_M + 0.5, STOREY_M + 0.75);
+        assert_eq!(base.support(Vec3::new(2.0, side, 1.0), &w), Some(side));
+        assert_eq!(base.support(Vec3::new(2.0, ridge, 1.5), &w), Some(ridge));
+        // Inside, the floor holds you up, and the roof's underside is over you.
+        let thick = crate::mesh::ROOF_THICK_M;
+        assert_eq!(base.support(Vec3::new(2.0, 0.0, 1.0), &w), Some(0.0));
+        assert_eq!(base.ceiling(Vec3::new(2.0, 0.0, 1.0)), Some(side - thick));
+        assert_eq!(base.ceiling(Vec3::new(2.0, 0.0, 1.5)), Some(ridge - thick));
+        // Beyond its walls, nothing.
+        assert_eq!(base.ceiling(Vec3::new(6.0, 0.0, 1.0)), None);
+    }
+
+    #[test]
+    fn a_half_cube_is_stepped_onto_and_a_whole_stair_or_slope_is_not() {
+        use crate::{Cube, Facing, Fill, Shape};
+        let w = walker();
+        for shape in [
+            Shape::Half,
+            Shape::Whole,
+            Shape::Stair(Facing::East),
+            Shape::Slope(Facing::West),
+        ] {
+            let mut base = Base::default();
+            base.apply(BuildOp::Fill {
+                min: [0, 0, 0],
+                max: [0, 0, 0],
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::PLAIN, Fill::Solid)
+                }),
+            });
+            let top = if shape == Shape::Half {
+                CELL_M * 0.5
+            } else {
+                CELL_M
+            };
+            let over = Vec3::new(CELL_M * 0.5, 0.3, CELL_M * 0.5);
+            assert_eq!(base.support(over, &w), Some(top), "{shape:?}");
+            // Walked at from the west: passed over if it is lower than a step.
+            let (from, to) = (Vec3::new(-1.0, 0.0, 0.25), Vec3::new(1.5, 0.0, 0.25));
+            let passed = (stroll(&base, from, to) - to).length() < 0.01;
+            assert_eq!(passed, top <= w.step_up, "{shape:?}");
+        }
+    }
+
+    #[test]
     fn walking_over_a_base_is_not_blocked_by_its_walls() {
         let base = room();
         // On the roof, walking off the east edge.

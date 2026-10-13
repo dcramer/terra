@@ -292,6 +292,28 @@ mod tests {
     }
 
     #[test]
+    fn amounts_stay_exact_where_the_working_is_past_64_bits() {
+        let big = u64::MAX;
+        // Compared across: each product is past 64 bits.
+        assert!(Amount::new(big - 1, big) < Amount::new(big, big - 1));
+        assert!(Amount::new(big, big - 1) > Amount::whole(1));
+        // Shares of large denominators, whose product is past 64 bits: the common
+        // denominator is the larger, not the product.
+        let tiny = Amount::new(1, 1 << 40);
+        assert_eq!(tiny + Amount::new(1, 1 << 41), Amount::new(3, 1 << 41));
+        assert_eq!(
+            Amount::new(1, 1 << 33).minus(Amount::new(1, 1 << 34)),
+            Some(Amount::new(1, 1 << 34))
+        );
+        // A large number of a small share.
+        assert_eq!(tiny.times(1 << 50), Amount::whole(1 << 10));
+        assert_eq!(
+            Amount::whole(big - 1) + Amount::whole(1),
+            Amount::whole(big)
+        );
+    }
+
+    #[test]
     fn a_bill_is_taken_whole_or_not_at_all() {
         let mut stock = Bill::of("Log", Amount::whole(1));
         stock.add(&Bill::of("Stone", Amount::new(1, 2)));

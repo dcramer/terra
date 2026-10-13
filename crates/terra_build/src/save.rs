@@ -307,4 +307,42 @@ mod tests {
         };
         assert_eq!(Base::from_snapshot(&old), Err(BadSnapshot::Version(0)));
     }
+
+    #[test]
+    fn a_snapshot_naming_a_part_it_does_not_have_is_refused() {
+        use crate::ops::{Context, Op, Planned};
+        let rules = crate::Rules::default();
+        let mut base = Base::default();
+        base.act(
+            &Op::LayPlan {
+                part: Some(PartId(3)),
+                kind: Kind(1),
+                cubes: vec![Planned {
+                    at: [0, 0, 0],
+                    shape: crate::Shape::Whole,
+                }],
+                ground: Vec::new(),
+            },
+            &Context::free(&rules),
+        )
+        .unwrap();
+        let snapshot = base.snapshot();
+        assert!(Base::from_snapshot(&snapshot).is_ok());
+        // A cube in it, with the part left out.
+        let without = Snapshot {
+            parts: Vec::new(),
+            ..snapshot.clone()
+        };
+        assert_eq!(
+            Base::from_snapshot(&without),
+            Err(BadSnapshot::Part(PartId(3)))
+        );
+        // A cube marked to change to it.
+        let mut replacing = snapshot;
+        replacing.replacing = vec![([0, 0, 0], (Kind(1), Some(PartId(8))))];
+        assert_eq!(
+            Base::from_snapshot(&replacing),
+            Err(BadSnapshot::Part(PartId(8)))
+        );
+    }
 }
