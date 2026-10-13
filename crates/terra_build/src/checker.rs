@@ -18,6 +18,10 @@ use std::collections::BTreeMap;
 /// and caps together.
 pub const MEMBER_PER_METRE: usize = 700;
 pub const ROOF_PER_SQUARE_METRE: usize = 500;
+/// A kit's dress (D215): triangles in a metre of a profile swept along an edge, its ends
+/// and joints included, and in one corner stone.
+pub const TRIM_PER_METRE: usize = 600;
+pub const CORNER_STONE: usize = 320;
 
 /// What a kit drew on the checker's cabin: triangles a metre of its long members, and a
 /// square metre of its roof.
@@ -26,6 +30,8 @@ pub struct Measured {
     pub per_metre: Option<usize>,
     pub per_square_metre: usize,
     pub triangles: usize,
+    /// What its dress adds a cube of its kind on the cabin, if it dresses any.
+    pub dress_per_cube: Option<usize>,
 }
 
 /// What the checker found of a kit: its problems, none if it passes, and what it measured.
@@ -167,6 +173,7 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
             ));
         }
     }
+    dress(kit, &mut fail);
     // Its budgets, on a cabin laid in it.
     let measured = measure(kit);
     if measured.per_metre.is_some_and(|n| n > MEMBER_PER_METRE) {
@@ -182,6 +189,89 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
         ));
     }
     Report { problems, measured }
+}
+
+/// A kit's dress (D215): every role it dresses has its piece among the kit's pieces, or
+/// for a member a material it has; and each piece keeps to its budget.
+fn dress(kit: &Kit, fail: &mut dyn FnMut(String)) {
+    use crate::kit::Dress;
+    let pieces = kit.dress.made.as_deref();
+    if kit.dress.pieces.is_some() && pieces.is_none() {
+        fail("its dressed pieces are not read".into());
+    }
+    for (role, dress) in &kit.dress.roles {
+        match dress {
+            Dress::Profile { name, extend, .. } => {
+                let Some(profile) = pieces.and_then(|p| p.profiles.get(name)) else {
+                    fail(format!(
+                        "dresses {role:?} with the profile {name}, which it has not"
+                    ));
+                    continue;
+                };
+                if profile.len() < 3 {
+                    fail(format!("its profile {name} has too few points"));
+                }
+                // Out from its face; a floor's border lies on the floor, so up from it.
+                let axis = usize::from(*role == crate::layout::Role::Border);
+                let out = profile.iter().map(|p| p[axis]).fold(f32::MIN, f32::max);
+                if out > CELL_M / 8.0 + 1e-3 {
+                    fail(format!(
+                        "its profile {name} stands out {out} m, past an eighth of a cube (D192)"
+                    ));
+                }
+                if !(0.0..=CELL_M).contains(extend) {
+                    fail(format!("{role:?} runs on {extend} m past its ends"));
+                }
+                let per_metre = crate::dress::trim_triangles(profile) * 2;
+                if per_metre > TRIM_PER_METRE {
+                    fail(format!(
+                        "its profile {name}: {per_metre} triangles a metre, over the {TRIM_PER_METRE} its budget allows"
+                    ));
+                }
+            }
+            Dress::Corners { set } => {
+                let Some(stones) = pieces.and_then(|p| p.corners.get(set)) else {
+                    fail(format!(
+                        "dresses {role:?} with the corner set {set}, which it has not"
+                    ));
+                    continue;
+                };
+                if stones.long.is_empty() {
+                    fail(format!("its corner set {set} has no stones"));
+                }
+                for stone in stones.long.iter().chain(&stones.short) {
+                    if stone.triangles.len() > CORNER_STONE {
+                        fail(format!(
+                            "a stone of its corner set {set}: {} triangles, over the {CORNER_STONE} its budget allows",
+                            stone.triangles.len()
+                        ));
+                    }
+                    let out = stone
+                        .positions
+                        .iter()
+                        .map(|p| p[0].max(p[2]))
+                        .fold(f32::MIN, f32::max);
+                    if out > CELL_M / 8.0 + 1e-3 {
+                        fail(format!(
+                            "a stone of its corner set {set} stands out {out} m, past an eighth of a cube (D192)"
+                        ));
+                    }
+                }
+            }
+            Dress::Member {
+                material, scale, ..
+            } => {
+                if !kit.textures.contains_key(material) {
+                    fail(format!(
+                        "dresses {role:?} in {material:?}, which it has no texture for"
+                    ));
+                }
+                if !(0.2..=2.0).contains(scale) {
+                    fail(format!("{role:?}'s member is {scale} times a log"));
+                }
+            }
+        }
+    }
 }
 
 /// Checks every kit there is, by its file's name: each as [`check`], and no two laying the
@@ -235,12 +325,16 @@ pub fn measure(kit: &Kit) -> Measured {
     }));
     let layout = layout::lay(&base, kit);
     let (mut logs, mut length, mut roof, mut squares, mut all) = (0, 0.0, 0, 0, 0);
+    let mut dress = 0;
     for piece in &layout.pieces {
         let mut surfaces = Surfaces::default();
         crate::draw::draw(piece, kit, None, &mut surfaces);
         let count: usize = surfaces.0.values().map(|s| s.triangle_count()).sum();
         all += count;
         match *piece {
+            Piece::Trim { .. } | Piece::Corner { .. } | Piece::Log { role: Some(_), .. } => {
+                dress += count;
+            }
             Piece::Log { from, to, .. } => {
                 logs += count;
                 length += from.metres().distance(to.metres());
@@ -260,6 +354,7 @@ pub fn measure(kit: &Kit) -> Measured {
         per_metre: (length > 0.0).then(|| (logs as f32 / length).round() as usize),
         per_square_metre: (roof as f32 / area.max(1e-3)).round() as usize,
         triangles: all,
+        dress_per_cube: (dress > 0).then(|| dress / base.cubes().count().max(1)),
     }
 }
 
@@ -284,8 +379,12 @@ mod tests {
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|e| e == "ron") {
                 let text = std::fs::read_to_string(&path).unwrap();
-                let kit: Kit =
+                let mut kit: Kit =
                     ron::from_str(&text).unwrap_or_else(|why| panic!("{}: {why}", path.display()));
+                let read = |file: &str| {
+                    std::fs::read_to_string(assets.join(file)).map_err(|why| why.to_string())
+                };
+                kit.dress.read(&read).unwrap();
                 let name = path.file_name().unwrap().to_string_lossy().to_string();
                 kits.push((name, kit));
             }
@@ -327,6 +426,30 @@ mod tests {
             "diameter 2",
             "Gold, which is no item",
         ] {
+            assert!(said.contains(words), "{said}");
+        }
+        // The stone kit dressing a role with a piece it has not, and one past its budget.
+        let mut stone = kits
+            .iter()
+            .find(|(name, _)| name == "stone.ron")
+            .map(|(_, kit)| kit.clone())
+            .unwrap();
+        stone.dress.roles.insert(
+            crate::layout::Role::Inside,
+            crate::kit::Dress::Profile {
+                name: "cornice".into(),
+                extend: 0.0,
+                joints: true,
+            },
+        );
+        let mut pieces = (**stone.dress.made.as_ref().unwrap()).clone();
+        let quoin = pieces.corners.get_mut("quoin").unwrap();
+        let stone_of = &mut quoin.long[0];
+        let more = stone_of.triangles.clone();
+        stone_of.triangles.extend(more);
+        stone.dress.made = Some(std::sync::Arc::new(pieces));
+        let said = check(&stone, &|_| true, &items).problems.join("; ");
+        for words in ["the profile cornice, which it has not", "corner set quoin"] {
             assert!(said.contains(words), "{said}");
         }
         // Two kits of one kind.

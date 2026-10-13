@@ -16,7 +16,7 @@
 //! the texture of its own and a little lighter or darker, in the kit's `Dressed` material.
 
 use crate::kit::{Dress, Kit, Masks};
-use crate::layout::{self, Dir, End, Piece, Role, TICKS, hash};
+use crate::layout::{self, Dir, End, Piece, TICKS, hash};
 use crate::mesh::{Indexed, Material, Surface, Surfaces, planar};
 use crate::{Base, CELL_M};
 use glam::{IVec3, Mat3, Vec3};
@@ -582,12 +582,11 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     }
 }
 
-/// Whether a kit dresses a role with pieces of its own: a profile or corner stones.
-pub fn dresses(kit: &Kit, role: Role) -> bool {
-    matches!(
-        kit.dress.roles.get(&role),
-        Some(Dress::Profile { .. } | Dress::Corners { .. })
-    )
+/// How many triangles a profile swept along a cube's edge has at most: along it in three
+/// lengths, between its joints' chamfers, and its two ends closed.
+pub fn trim_triangles(profile: &[[f32; 2]]) -> usize {
+    let segments = profile.len().saturating_sub(1);
+    segments * 3 * 2 + 2 * profile.len().saturating_sub(2)
 }
 
 #[cfg(test)]

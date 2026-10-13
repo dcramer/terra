@@ -66,6 +66,8 @@ A wall's layout is a pure function of its plan, how it meets its neighbours, its
 
 **A course must divide the storey**, or a top plate takes what is left; each kit is checked for it as it is read.
 
+**Each exposed edge is dressed by its role** (D215): a role worked out from the cubes and the ground when a section is laid, never stored, and the piece the kit's file gives it, belonging to that edge's cube ([building-kits.md](building-kits.md)).
+
 **Layouts follow the cubes and the current kit.** Progress is kept per cube, not per piece, so a layout can always be worked out again: a kit tuned later redraws what is built, and a corner looks the same whichever wall went up first, with nothing lost (since 2026-10-12; layouts were frozen once a piece was in). Layouts are in grid units from kit data only, so the server needs no art, and versions are picked by a fixed hash of the base's seed and the cube's place.
 
 ## Roofs: a height field

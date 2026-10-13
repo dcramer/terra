@@ -48,7 +48,11 @@ fn main() -> ExitCode {
             .to_string();
         match read(&path)
             .and_then(|text| ron::from_str::<Kit>(&text).map_err(|why| why.to_string()))
-        {
+            .and_then(|mut kit| {
+                // Its dressed pieces, made from their source under art/kits (D215).
+                kit.dress.read(&|file| read(&assets.join(file)))?;
+                Ok(kit)
+            }) {
             Ok(kit) => kits.push((name, kit)),
             Err(why) => {
                 println!("{name}: does not read: {why}");
@@ -66,8 +70,11 @@ fn main() -> ExitCode {
         let per_metre = m.per_metre.map_or("no logs".into(), |n| {
             format!("{n}/{MEMBER_PER_METRE} a metre of log")
         });
+        let dress = m
+            .dress_per_cube
+            .map_or(String::new(), |n| format!(", its dress {n} a cube"));
         println!(
-            "{name}: {} ({per_metre}, {}/{ROOF_PER_SQUARE_METRE} a square metre of roof, {} on a cabin)",
+            "{name}: {} ({per_metre}, {}/{ROOF_PER_SQUARE_METRE} a square metre of roof, {} on a cabin{dress})",
             if report.problems.is_empty() {
                 "ok"
             } else {

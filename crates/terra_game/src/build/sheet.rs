@@ -96,7 +96,7 @@ fn keen(kind: Kind, solid: bool) -> Vec<BuildOp> {
 
 /// Each row: its name, and the operations that make it, in cubes of half a metre. Laid
 /// in `kind`, with rows mixing in `stone` where there is a stone kit (D179).
-fn rows(kind: Kind, stone: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
+fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
     let cabin = {
         let mut ops = vec![BuildOp::AddRoom {
             min: [0, 0, 0],
@@ -278,6 +278,7 @@ fn rows(kind: Kind, stone: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
         ("lean-to", roofed(RoofStyle::LeanTo, true)),
     ];
     rows.extend(mixed);
+    rows.extend(hewn.map(|hewn| ("Keen's piece in hewn timber", keen(hewn, false))));
     rows
 }
 
@@ -590,13 +591,13 @@ pub(super) fn lay(
                 .y,
         )
     };
+    // The walls' rows, then each kind's roof rows to the east of them, a group a kind.
     let hewn = kits
         .0
         .iter()
         .find(|kit| kit.pattern == Pattern::Logs && kit.timber.profile == Profile::Hewn)
         .map(|kit| kit.kind());
-    // The walls' rows, then each kind's roof rows to the east of them, a group a kind.
-    let mut placed: Vec<(String, Vec<BuildOp>, f32, usize)> = rows(laying, stone)
+    let mut placed: Vec<(String, Vec<BuildOp>, f32, usize)> = rows(laying, stone, hewn)
         .into_iter()
         .enumerate()
         .map(|(row, (name, ops))| (name.to_string(), ops, 0.0, row))
