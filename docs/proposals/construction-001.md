@@ -26,6 +26,7 @@ The developers, 2026-10-12:
 8. **Roofs are the one surface.** A roof is drawn from its height field, not its cubes, and its pieces are chosen by the field's shape round each point: slope, eave, verge, ridge, hip, valley, where it meets a wall. Walls under it end at its underside.
 9. **The ground is not changed by building.** Footings fill the space between the floor and the ground and stop where they meet it, set a few centimetres in so no gap shows; nothing is flattened or filled. Only building below the ground's level, a cellar or a terrace into a slope, digs it, as D131 says (an [open question](#open-for-the-developers)).
 10. **Pieces are models** (D177): made by the art pipeline, one concept to a kit, one grade, several versions of every common piece, every side alike (building-kits.md).
+11. **Nothing floats** (the developers, 2026-10-12: "we also want the structure system so you cant just build floating buildings"). A built cube must be joined, through built cubes, to the ground: a cube the ground passes through, or a footing that reaches it. A roof stands on the walls under its edges. A plan may float, as a ghost, but a part is built only once what it rests on is, and a part that holds others up cannot be taken out, or the ground dug from under it, until they are. One flood fill over a building's built cubes when one changes (D127). This is not load or span, which stay for later (D142): a ten-storey tower on one post is allowed, a house in the air is not.
 
 ## Drawing by neighbours
 
@@ -96,6 +97,13 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | A cellar, a terrace into a hill | Built below ground level: the ground dug there (D131) | Built |
 | Ground dug away under a building later | Open: the footing shows, or the building is undermined | Footing shows |
 | Door steps | Steps of the kit down to the ground | Plain blocks stand in |
+| **Support** (rule 11) | | |
+| A wall, floor or post on the ground | Joined to the ground: built | Not checked |
+| A floor or wall built off something not yet built | Refused until what it rests on is in; the plan shows what is first | Not checked |
+| A balcony, a cantilever | Allowed while joined; how far it may reach waits for load (D142) | |
+| Taking out a part that holds others up | Refused, saying which parts rest on it | Not checked |
+| Digging the ground from under a building | Refused in a claim while something rests on it | Not checked |
+| A roof whose walls are taken away | The walls cannot be taken until the roof is | Not checked |
 | **Walking** | | |
 | Walls, glass, openings | Cubes block, openings pass | Built |
 | Ghosts | Walked through (rule 6) | Built |
@@ -114,7 +122,7 @@ How the pieces work together, walked through as players will meet them (the deve
 
 **3. Adding on: a stone room against the cabin.** The player draws stone walls meeting the built log wall at a T and an L. The log wall is built, and a built wall never changes under the player (building-tech.md), so the stone ends against the logs here, though the heavier would normally run through. The new roof meets the cabin's wall or roof in a valley. *Asks:* rule 5 gives way to what is built. **Gaps:** a shared wall between two rooms of different kinds; roofs meeting walls and other roofs (D160's hard part).
 
-**4. Changing their mind.** A window in the wrong place: carved out of the built wall a cube at a time, the logs cut and framed round it, the cut logs given back. A whole wall taken down: it comes down last part first, giving back its logs. *Asks:* carving and taking apart drawn by the same rules as building. **Gaps:** what happens to a roof whose wall is taken away, with no stability yet (D142): recommend a wall under a roof cannot be taken down until the roof is.
+**4. Changing their mind.** A window in the wrong place: carved out of the built wall a cube at a time, the logs cut and framed round it, the cut logs given back. A whole wall taken down: it comes down last part first, giving back its logs; if the roof rests on it, the roof must come down first (rule 11). *Asks:* carving and taking apart drawn by the same rules as building.
 
 **5. A cellar.** The player draws walls a storey down, inside the claim. The ground there is dug as the plan is built (D131), and the cubes it no longer fills show the walls; no footing is laid below ground. *Asks:* rule 9's exception. **Gaps:** stairs down (building.md step 4); whether the digging is the player's work or the plan's.
 
@@ -130,6 +138,7 @@ How the pieces work together, walked through as players will meet them (the deve
 4. **Walls thicker than a cube**, for castles and retaining walls. Recommend yes for block kinds; it costs nothing on the dual grid.
 5. **Which kinds are blocks and which are long members.** Recommend stone, brick, plaster and earth as blocks; logs, timber framing, planks and wattle as long members.
 6. **Is a footing its own part?** The developers, 2026-10-12: "the footings might need to be a specific kind of building block tho? like a footing or floor? idk". A footing needs no special block: it is cubes of a block kind, stone by default, in the layers under the floor, and one rule makes it stop at the ground: **a cube the ground passes through is drawn down to the ground and no further**, which also closes a floor's edge. What is open is who lays it. Placed by hand first, as Valheim, Rust and Enshrouded do: explicit, but a step to forget, and gaps on slopes until it is done. Laid by the game: The Sims' way (D154). Recommend the game lays it into the plan under every ground-floor wall and floor edge, shown as its own part with its own cost, built first (D139), and changed if wanted: timber posts or stilts instead, or none over a cellar.
+7. **Nothing floats, now or later?** D142 says no stability in the MVP, wanted later. Rule 11 is the smallest part of it, joined to the ground or not, with no load or span. Recommend rule 11 in the MVP, which refines D142, and load and span later as it says.
 
 ## What changes from what is built
 
