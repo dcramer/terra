@@ -308,20 +308,46 @@ fn take_blows(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::inventory::Spilled;
-    use crate::play::test_player;
+    use crate::play::inventory::{Backpack, give, wear};
+    use crate::play::{test_player, test_world};
     use bevy::ecs::system::RunSystemOnce;
+
+    fn world() -> World {
+        let mut world = test_world();
+        world.init_resource::<Messages<Bitten>>();
+        world.init_resource::<Messages<Hurt>>();
+        world
+    }
+
+    const GROUND: Vec3 = Vec3::new(0.0, 2000.0, 0.0);
+
+    /// A player as `ready` leaves them, bitten once: their body after it, and how much
+    /// the blow was said to take.
+    fn bitten(ready: impl FnOnce(&mut World, Entity)) -> (Vitals, Option<f32>) {
+        let mut world = world();
+        let player = test_player(&mut world, GROUND);
+        ready(&mut world, player);
+        world.write_message(Bitten {
+            player,
+            damage: 20.0,
+        });
+        world.run_system_once(take_blows).unwrap();
+        let hurt = world.resource_mut::<Messages<Hurt>>().drain().next();
+        (
+            *world.get::<Vitals>(player).unwrap(),
+            hurt.map(|hurt| hurt.amount),
+        )
+    }
+
+    fn health_lost((vitals, _): (Vitals, Option<f32>)) -> f32 {
+        Vitals::default().health - vitals.health
+    }
 
     #[test]
     fn a_blow_hurts_only_the_player_it_lands_on() {
-        let mut world = World::new();
-        world.init_resource::<Messages<Bitten>>();
-        world.init_resource::<Messages<Hurt>>();
-        world.init_resource::<Messages<Broke>>();
-        world.init_resource::<Messages<Spilled>>();
-        let ground = Vec3::Y * 2000.0;
-        let spared = test_player(&mut world, ground);
-        let bitten = test_player(&mut world, ground + Vec3::X * 3.0);
+        let mut world = world();
+        let spared = test_player(&mut world, GROUND);
+        let bitten = test_player(&mut world, GROUND + Vec3::X * 3.0);
         world.write_message(Bitten {
             player: bitten,
             damage: 9.0,
@@ -336,16 +362,173 @@ mod tests {
     }
 
     #[test]
-    fn the_spear_is_the_weapon_and_the_hammer_is_not() {
+    fn what_is_worn_takes_some_of_a_blow() {
+        let bare = health_lost(bitten(|_, _| {}));
+        let armoured = health_lost(bitten(|world, player| {
+            world.resource_scope(|world, mut items: Mut<Items>| {
+                let armour = items
+                    .kinds()
+                    .find(|&kind| items.worn(kind).is_some_and(|worn| worn.protection > 0.0))
+                    .expect("something worn protects");
+                let mut player = world.entity_mut(player);
+                let mut backpack = player.take::<Backpack>().unwrap();
+                let mut gear = player.take::<Gear>().unwrap();
+                assert_eq!(give(&mut items, &mut backpack.0, armour, 1), 1);
+                let placed = backpack.0.iter().find(|placed| placed.item.kind == armour);
+                let id = placed.unwrap().item.id;
+                wear(&items, &mut backpack.0, &mut gear.0, id).unwrap();
+                player.insert((backpack, gear));
+            });
+        }));
+        assert!(bare > 0.0);
+        assert!(armoured > 0.0 && armoured < bare);
+    }
+
+    #[test]
+    fn a_guard_takes_a_blow_on_stamina() {
+        let open = bitten(|_, _| {});
+        let guarded = bitten(|world, player| {
+            world.get_mut::<Stance>(player).unwrap().guarding = true;
+        });
+        assert!(health_lost(guarded) < health_lost(open));
+        assert!(guarded.0.stamina < open.0.stamina);
+        // With no stamina left, a guard is no help.
+        let spent = bitten(|world, player| {
+            let mut stance = world.get_mut::<Stance>(player).unwrap();
+            stance.guarding = true;
+            world.get_mut::<Vitals>(player).unwrap().stamina = 0.0;
+        });
+        assert_eq!(health_lost(spent), health_lost(open));
+    }
+
+    #[test]
+    fn a_roll_or_lying_down_is_not_hit() {
+        let rolling = bitten(|world, player| {
+            world.get_mut::<Stance>(player).unwrap().dodging = 0.3;
+        });
+        let down = bitten(|world, player| {
+            world.entity_mut(player).insert(Downed { lying_s: 0.0 });
+        });
+        for missed in [rolling, down] {
+            assert_eq!(missed.1, None);
+            assert_eq!(health_lost(missed), 0.0);
+        }
+        assert!(health_lost(bitten(|_, _| {})) > 0.0);
+    }
+
+    /// What a blow on a part of a creature in some state does, and whether it was told
+    /// as a critical.
+    fn struck(part: Part, state: creatures::State) -> (f32, bool) {
+        let mut world = test_world();
+        world.init_resource::<Messages<Did>>();
+        world.init_resource::<Messages<Struck>>();
+        let bestiary = Bestiary::read(&Items::default());
+        let species = bestiary.all().next().unwrap();
+        world.insert_resource(bestiary);
+        let mut creature = Creature::resting(species, 1000.0, GROUND);
+        creature.state = state;
+        let creature = world.spawn(creature).id();
+        let by = world.spawn_empty().id();
+        let dealt = world
+            .run_system_once(
+                move |mut commands: Commands,
+                      bestiary: Res<Bestiary>,
+                      mut creatures: Query<&mut Creature>,
+                      mut did: MessageWriter<Did>,
+                      mut struck: MessageWriter<Struck>,
+                      mut told: MessageWriter<Told>| {
+                    let blow = Blow {
+                        damage: 10.0,
+                        at: GROUND,
+                        part,
+                        skill: Skill::Fighting,
+                    };
+                    strike(
+                        &mut commands,
+                        &bestiary,
+                        by,
+                        creature,
+                        &mut creatures.get_mut(creature).unwrap(),
+                        blow,
+                        &mut did,
+                        &mut struck,
+                        &mut told,
+                    )
+                },
+            )
+            .unwrap();
+        let left = world.get::<Creature>(creature).unwrap();
+        assert!((1000.0 - left.health - dealt).abs() < 1e-3);
+        assert!(left.hurt);
+        let told = world.resource_mut::<Messages<Struck>>().drain().next();
+        (dealt, told.unwrap().critical)
+    }
+
+    #[test]
+    fn a_blow_to_the_head_does_most_and_to_the_legs_least() {
+        let aware = creatures::State::Chase;
+        let (head, critical) = struck(Part::Head, aware);
+        let (body, not) = struck(Part::Body, aware);
+        let (legs, _) = struck(Part::Legs, aware);
+        assert!(head > body && body > legs && legs > 0.0);
+        assert!(critical && !not);
+    }
+
+    #[test]
+    fn a_blow_it_did_not_see_coming_does_more() {
+        let (seen, critical) = struck(Part::Body, creatures::State::Chase);
+        let (unseen, ambushed) = struck(Part::Body, creatures::State::Idle(1.0));
+        assert!(unseen > seen);
+        assert!(ambushed && !critical);
+    }
+
+    /// A weapon is a tool for nothing but striking.
+    fn weapon(tool: &ToolDef) -> bool {
+        tool.cuts.is_empty() && !tool.builds && !tool.lights && tool.shoots.is_none()
+    }
+
+    #[test]
+    fn a_weapon_out_hits_the_tools_that_strike_as_well() {
         let items = Items::default();
-        let strikes = |name: &str| items.tool(items.kind(name)).and_then(ToolDef::strikes);
-        let (spear, spear_reach) = strikes("Spear").unwrap();
-        for kind in items.kinds() {
-            if let Some((damage, reach)) = items.tool(kind).and_then(ToolDef::strikes) {
-                assert!(damage <= spear && reach <= spear_reach);
+        let tools: Vec<&ToolDef> = items.kinds().filter_map(|kind| items.tool(kind)).collect();
+        let hits = |weapons: bool| -> Vec<f32> {
+            tools
+                .iter()
+                .filter(|tool| weapon(tool) == weapons)
+                .filter_map(|tool| tool.strikes().map(|(damage, _)| damage))
+                .collect()
+        };
+        let (weapons, others) = (hits(true), hits(false));
+        assert!(!weapons.is_empty() && !others.is_empty());
+        let weakest = weapons.iter().copied().fold(f32::MAX, f32::min);
+        assert!(others.iter().all(|&other| other < weakest));
+        // A click with what builds builds, so it does not strike too.
+        assert!(
+            tools
+                .iter()
+                .filter(|tool| tool.builds)
+                .all(|tool| tool.strikes().is_none())
+        );
+    }
+
+    #[test]
+    fn of_two_tools_for_one_thing_the_better_cutter_hits_harder() {
+        let items = Items::default();
+        let tools: Vec<&ToolDef> = items.kinds().filter_map(|kind| items.tool(kind)).collect();
+        let mut compared = 0;
+        for a in &tools {
+            for b in &tools {
+                for &(cut, speed) in &a.cuts {
+                    if let (Some(other), Some((hits, _)), Some((other_hits, _))) =
+                        (b.cuts(cut), a.strikes(), b.strikes())
+                        && speed > other
+                    {
+                        assert!(hits > other_hits);
+                        compared += 1;
+                    }
+                }
             }
         }
-        assert_eq!(strikes("Hammer"), None);
-        assert!(strikes("Iron axe").unwrap().0 > strikes("Stone axe").unwrap().0);
+        assert!(compared > 0);
     }
 }

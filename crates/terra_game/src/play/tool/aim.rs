@@ -187,7 +187,7 @@ pub(super) fn aim(
             let world = site.frame.transform_point(at);
             let wet = !indoors && planet.under_sea(world);
             let blocked = props::blocked(
-                &site,
+                (&site.base, &site.footprint),
                 &boxed(at, lift, indoors),
                 props
                     .iter()

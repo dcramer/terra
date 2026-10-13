@@ -88,6 +88,22 @@ impl Creature {
     }
 }
 
+#[cfg(test)]
+impl Creature {
+    /// One of a kind at its home, resting and unhurt, for tests.
+    pub fn resting(species: Species, health: f32, home: Vec3) -> Self {
+        Self {
+            species,
+            health,
+            state: State::Idle(1.0),
+            home,
+            facing: Vec3::X,
+            hurt: false,
+            quarry: None,
+        }
+    }
+}
+
 /// Sent when a creature lands a blow on a player.
 #[derive(Message, Clone, Copy)]
 pub struct Bitten {
@@ -764,7 +780,11 @@ mod tests {
         let _far = test_player(&mut world, ground + Vec3::X * 20.0);
         let near = test_player(&mut world, ground + Vec3::X * 1.5);
         let spider = spider(&mut world, ground);
-        world.get_mut::<Creature>(spider).unwrap().state = State::Attack(0.44);
+        let Temper::Hostile { bite_at_s, .. } = temper(&world, spider) else {
+            panic!("a spider is hostile");
+        };
+        // Just short of where the bite lands, which the next moment passes.
+        world.get_mut::<Creature>(spider).unwrap().state = State::Attack(bite_at_s - 0.01);
         world
             .resource_mut::<Time>()
             .advance_by(Duration::from_millis(20));
@@ -783,5 +803,119 @@ mod tests {
         let here = Vec3::Y * 2000.0;
         awake.insert(here + Vec3::X * (SENSE_M + 1.0), Entity::PLACEHOLDER);
         assert_eq!(nearest(&awake, here), None);
+    }
+
+    fn temper(world: &World, creature: Entity) -> Temper {
+        let species = world.get::<Creature>(creature).unwrap().species;
+        world.resource::<Bestiary>().get(species).temper
+    }
+
+    /// A creature of the first kind that is shy, or hostile, at home at a place.
+    fn one(world: &mut World, hostile: bool, home: Vec3) -> Entity {
+        let bestiary = world.resource::<Bestiary>();
+        let species = bestiary
+            .all()
+            .find(|&species| bestiary.hostile(species) == hostile)
+            .unwrap();
+        world
+            .spawn((
+                Creature::resting(species, 10.0, home),
+                Transform::from_translation(home),
+            ))
+            .id()
+    }
+
+    fn state(world: &World, creature: Entity) -> State {
+        world.get::<Creature>(creature).unwrap().state
+    }
+
+    #[test]
+    fn a_shy_creature_runs_from_anyone_near() {
+        let ground = Vec3::Y * 2000.0;
+        let (mut world, mut far_world) = (world(), world());
+        let near = one(&mut world, false, ground);
+        let far = one(&mut far_world, false, ground);
+        let Temper::Shy { flees_within_m, .. } = temper(&world, near) else {
+            unreachable!()
+        };
+        test_player(&mut world, ground + Vec3::X * flees_within_m * 0.5);
+        test_player(&mut far_world, ground + Vec3::X * (flees_within_m + 1.0));
+        world.run_system_once(think).unwrap();
+        far_world.run_system_once(think).unwrap();
+        assert!(matches!(state(&world, near), State::Flee(_)));
+        assert!(!matches!(state(&far_world, far), State::Flee(_)));
+    }
+
+    #[test]
+    fn a_shy_creature_hurt_with_nobody_near_runs_and_then_settles() {
+        let mut world = world();
+        let deer = one(&mut world, false, Vec3::Y * 2000.0);
+        world.get_mut::<Creature>(deer).unwrap().hurt = true;
+        world.run_system_once(think).unwrap();
+        assert!(matches!(state(&world, deer), State::Flee(left) if left > 0.0));
+        assert!(!world.get::<Creature>(deer).unwrap().hurt);
+        // Once it has run its course, it goes back to its day.
+        world.get_mut::<Creature>(deer).unwrap().state = State::Flee(0.0);
+        world.run_system_once(think).unwrap();
+        assert!(world.get::<Creature>(deer).unwrap().unaware());
+    }
+
+    #[test]
+    fn a_hostile_creature_led_too_far_from_home_goes_back() {
+        let home = Vec3::Y * 2000.0;
+        let mut world = world();
+        let spider = one(&mut world, true, home);
+        let Temper::Hostile {
+            notices_m,
+            leash_m,
+            attacks_within_m,
+            ..
+        } = temper(&world, spider)
+        else {
+            unreachable!()
+        };
+        // Someone it would chase, near enough to notice and too far to bite.
+        let quarry = Vec3::X * (notices_m + attacks_within_m) * 0.5;
+        let player = test_player(&mut world, home + quarry);
+        world.get_mut::<Creature>(spider).unwrap().state = State::Chase;
+        world.run_system_once(think).unwrap();
+        assert_eq!(
+            state(&world, spider),
+            State::Chase,
+            "at home it gives chase"
+        );
+        let beyond = home + Vec3::NEG_Z * (leash_m + 1.0);
+        world.get_mut::<Transform>(spider).unwrap().translation = beyond;
+        world.get_mut::<Transform>(player).unwrap().translation = beyond + quarry;
+        world.run_system_once(think).unwrap();
+        assert_eq!(state(&world, spider), State::Return);
+        // It keeps going home with nobody about, until it is there.
+        world.despawn(player);
+        world.run_system_once(think).unwrap();
+        assert_eq!(state(&world, spider), State::Return);
+        world.get_mut::<Transform>(spider).unwrap().translation = home;
+        world.run_system_once(think).unwrap();
+        assert_ne!(state(&world, spider), State::Return);
+    }
+
+    #[test]
+    fn a_hostile_creature_goes_for_whoever_hurt_it_from_beyond_its_notice() {
+        let home = Vec3::Y * 2000.0;
+        let mut world = world();
+        let spider = one(&mut world, true, home);
+        let Temper::Hostile { notices_m, .. } = temper(&world, spider) else {
+            unreachable!()
+        };
+        assert!(notices_m < SENSE_M);
+        test_player(&mut world, home + Vec3::X * (notices_m + SENSE_M) * 0.5);
+        world.run_system_once(think).unwrap();
+        assert_ne!(
+            state(&world, spider),
+            State::Chase,
+            "unhurt, it has not noticed"
+        );
+        world.get_mut::<Creature>(spider).unwrap().hurt = true;
+        world.run_system_once(think).unwrap();
+        assert_eq!(state(&world, spider), State::Chase);
     }
 }

@@ -531,26 +531,56 @@ fn draw(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::crafting::{Family, Stations};
+    use crate::play::crafting::Stations;
+    use bevy::ecs::system::RunSystemOnce;
 
     #[test]
-    fn a_tab_shows_only_its_family() {
+    fn each_tab_shows_one_kind_of_thing_and_the_tabs_every_recipe_once() {
         let items = Items::default();
         let stations = Stations::read();
         let recipes = Recipes::read(&stations, &items);
-        let workbench = stations.named("Workbench").unwrap();
-        let tools = shown(&recipes, workbench, 0, &items);
-        let clothing = shown(&recipes, workbench, 1, &items);
-        assert!(
-            tools
-                .iter()
-                .all(|&index| recipes[index].family(&items) == Family::Tools)
-        );
-        assert!(
-            clothing
-                .iter()
-                .all(|&index| recipes[index].family(&items) == Family::Clothing)
-        );
-        assert_eq!(tools.len() + clothing.len(), recipes.at(workbench).count());
+        let mut tabbed = 0;
+        for station in stations.all() {
+            let families = recipes.families(station, &items);
+            let mut seen = Vec::new();
+            for (tab, &family) in families.iter().enumerate() {
+                let list = shown(&recipes, station, tab, &items);
+                assert!(!list.is_empty());
+                assert!(
+                    list.iter()
+                        .all(|&index| recipes[index].family(&items) == family)
+                );
+                seen.extend(list);
+            }
+            seen.sort_unstable();
+            assert_eq!(seen, recipes.at(station).collect::<Vec<_>>());
+            tabbed += usize::from(families.len() > 1);
+        }
+        assert!(tabbed > 0, "no station has tabs, so none were tried");
+    }
+
+    #[test]
+    fn a_station_shows_tabs_only_when_it_makes_more_than_one_kind_of_thing() {
+        let stations = Stations::read();
+        for station in stations.all() {
+            let items = Items::default();
+            let recipes = Recipes::read(&stations, &items);
+            let families = recipes.families(station, &items).len();
+            let mut world = World::new();
+            world.insert_resource(items);
+            world.insert_resource(recipes);
+            world.init_resource::<StationScreen>();
+            world.spawn(Tabs);
+            world.spawn(Grid);
+            world.spawn(Queue);
+            let at = world.spawn(Works::default()).id();
+            world.insert_resource(InventoryScreen {
+                open: true,
+                at: Some((at, station)),
+            });
+            world.run_system_once(lay_out).unwrap();
+            let tabs = world.query::<&TabButton>().iter(&world).count();
+            assert_eq!(tabs, if families > 1 { families } else { 0 });
+        }
     }
 }

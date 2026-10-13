@@ -242,7 +242,12 @@ fn dig(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::inventory::Items;
+    use crate::play::inventory::{Bar, Gained, Items};
+    use crate::play::{test_player, test_world};
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::gizmos::config::{DefaultGizmoConfigGroup, GizmoConfig, GizmoConfigStore};
+    use std::time::Duration;
+    use terra_core::{PlanetSpec, Seed};
 
     #[test]
     fn what_is_dug_makes_items_and_keeps_the_rest() {
@@ -261,11 +266,120 @@ mod tests {
         assert!(yields.0.iter().any(|each| each.material == material::STONE));
     }
 
+    fn planet() -> Planet {
+        Planet::smooth(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        })
+    }
+
+    /// A player standing on the planet with a pickaxe in hand, where digging gives one
+    /// of the first kind of item for so much of a material.
+    fn digger(planet: Planet, material: MaterialId, per_item_m3: f32) -> (World, Entity) {
+        let mut world = test_world();
+        let feet = planet.start();
+        world.insert_resource(planet);
+        world.init_resource::<Messages<Did>>();
+        world.init_resource::<GizmoConfigStore>();
+        world
+            .resource_mut::<GizmoConfigStore>()
+            .insert(GizmoConfig::default(), DefaultGizmoConfigGroup);
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs(10));
+        world.insert_resource(time);
+        let items = world.resource::<Items>();
+        let gives = items.kinds().next().unwrap();
+        world.insert_resource(Yields(vec![Yield {
+            material,
+            name: "Ground".to_string(),
+            gives,
+            per_item_m3,
+        }]));
+        let player = test_player(&mut world, feet);
+        world
+            .entity_mut(player)
+            .insert((Cutting::default(), Digging::default(), Spoil::default()));
+        world.resource_scope(|world, items: Mut<Items>| {
+            let mut player = world.entity_mut(player);
+            let backpack = player
+                .get::<crate::play::inventory::Backpack>()
+                .unwrap()
+                .0
+                .clone();
+            let mut bar = player.get_mut::<Bar>().unwrap();
+            let pickaxe = (0..bar.0.len())
+                .find(|&slot| {
+                    bar.0.get(slot).is_some_and(|id| {
+                        let kind = backpack.get(id).unwrap().item.kind;
+                        items.tool(kind).is_some_and(|tool| tool.works(Cut::Rock))
+                    })
+                })
+                .expect("a pickaxe on the bar");
+            bar.0.pick(pickaxe);
+        });
+        (world, player)
+    }
+
+    /// Digs once, at the ground a couple of metres off along a level direction. Returns
+    /// how many items it gave, and what is kept toward the next.
+    fn dig_toward(world: &mut World, player: Entity, along: Vec3) -> (u32, f32) {
+        let feet = world.get::<Transform>(player).unwrap().translation;
+        let up = feet.normalize();
+        let eye = feet + up * 1.6;
+        let aim = Ray3d::new(eye, Dir3::new(feet + along * 2.0 - eye).unwrap());
+        let mut intent = world.get_mut::<Intent>(player).unwrap();
+        intent.aim = Some(aim);
+        intent.hold(Action::Use);
+        world.run_system_once(dig).unwrap();
+        let gives = world.resource::<Yields>().0[0].gives;
+        let given = world
+            .resource_mut::<Messages<Gained>>()
+            .drain()
+            .filter(|gained| gained.player == player && gained.kind == gives)
+            .map(|gained| gained.count)
+            .sum();
+        (given, world.get::<Spoil>(player).unwrap().0[0])
+    }
+
     #[test]
-    fn a_pickaxe_digs_and_an_axe_does_not() {
-        let items = Items::default();
-        let works = |name| items.tool(items.kind(name)).unwrap().works(Cut::Rock);
-        assert!(works("Stone pickaxe"));
-        assert!(!works("Stone axe"));
+    fn what_one_dig_leaves_over_counts_toward_the_next() {
+        let start = planet().start();
+        let (east, west) = {
+            let up = start.normalize();
+            let east = up.any_orthonormal_vector();
+            (east, -east)
+        };
+        // What the ground there is made of, by digging a copy of it.
+        let mut probe = planet();
+        let material = probe
+            .apply(&Operation::Dig {
+                centre: start,
+                radius: SCOOP_M,
+            })
+            .iter()
+            .filter_map(|(what, amount)| match what {
+                Harvested::Material(material) => Some((material, amount)),
+                _ => None,
+            })
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+            .unwrap()
+            .0;
+        // How much each of two digs takes alone, with nothing made of it.
+        let alone = |along| {
+            let (mut world, player) = digger(planet(), material, f32::MAX);
+            dig_toward(&mut world, player, along)
+        };
+        let (none, first) = alone(east);
+        let (_, second) = alone(west);
+        assert_eq!(none, 0);
+        assert!(first > 0.0 && second > 0.0);
+        // An item for more than either dig takes, but less than both.
+        let per = (first + second) * 0.75;
+        assert!(first < per && second < per);
+        let (mut world, player) = digger(planet(), material, per);
+        assert_eq!(dig_toward(&mut world, player, east), (0, first));
+        let (given, kept) = dig_toward(&mut world, player, west);
+        assert_eq!(given, 1);
+        assert!((kept - (first + second - per)).abs() < 1e-4);
     }
 }

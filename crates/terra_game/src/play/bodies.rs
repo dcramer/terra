@@ -151,6 +151,59 @@ fn keep_apart(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use terra_core::{PlanetSpec, Seed};
+
+    /// A world on a smooth planet, and a place on its ground.
+    fn world() -> (World, Vec3) {
+        let planet = Planet::smooth(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        let ground = planet.ground_at(Vec3::Y * 2100.0);
+        let mut world = World::new();
+        world.insert_resource(planet);
+        world.init_resource::<Obstacles>();
+        (world, ground)
+    }
+
+    fn apart(world: &World, a: Entity, b: Entity) -> f32 {
+        let at = |entity| world.get::<Transform>(entity).unwrap().translation;
+        (at(a) - at(b)).reject_from(at(a).normalize()).length()
+    }
+
+    #[test]
+    fn overlapping_bodies_are_pushed_apart() {
+        let (mut world, ground) = world();
+        let deer = world
+            .spawn((Body::new(0.5, 3.0), Transform::from_translation(ground)))
+            .id();
+        let spider = world
+            .spawn((
+                Body::new(0.4, 1.0),
+                Transform::from_translation(ground + Vec3::X * 0.3),
+            ))
+            .id();
+        world.run_system_once(keep_apart).unwrap();
+        assert!(apart(&world, deer, spider) > 0.9 - 1e-3);
+    }
+
+    #[test]
+    fn a_fixed_body_stays_where_it_is() {
+        let (mut world, ground) = world();
+        let bound = world
+            .spawn((Body::fixed(0.4), Transform::from_translation(ground)))
+            .id();
+        let spider = world
+            .spawn((
+                Body::new(0.5, 1.0),
+                Transform::from_translation(ground + Vec3::X * 0.3),
+            ))
+            .id();
+        world.run_system_once(keep_apart).unwrap();
+        assert_eq!(world.get::<Transform>(bound).unwrap().translation, ground);
+        assert!(apart(&world, bound, spider) > 0.9 - 1e-3);
+    }
 
     #[test]
     fn the_lighter_body_gives_way_more() {

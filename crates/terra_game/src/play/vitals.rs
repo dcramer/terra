@@ -241,17 +241,13 @@ fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::inventory::{Backpack, Broke, Gained, Items, Spilled, give};
-    use crate::play::test_player;
+    use crate::play::inventory::{Backpack, Items, give};
+    use crate::play::{test_player, test_world};
     use bevy::ecs::system::RunSystemOnce;
 
     #[test]
     fn only_the_player_who_means_to_eat_eats() {
-        let mut world = World::new();
-        world.init_resource::<Messages<Gained>>();
-        world.init_resource::<Messages<Broke>>();
-        world.init_resource::<Messages<Spilled>>();
-        world.init_resource::<Messages<Told>>();
+        let mut world = test_world();
         let ground = Vec3::Y * 2000.0;
         let hungry = |world: &mut World, at| {
             let player = test_player(world, at);

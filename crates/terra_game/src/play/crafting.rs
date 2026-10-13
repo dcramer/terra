@@ -543,7 +543,10 @@ pub fn cancel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::play::inventory::{Backpack, Gained, Gear, give};
+    use crate::play::{test_player, test_world};
     use bevy::ecs::system::RunSystemOnce;
+    use std::time::Duration;
 
     struct Kinds {
         items: Items,
@@ -551,6 +554,8 @@ mod tests {
         recipes: Recipes,
     }
 
+    /// The kinds as the files have them. Reading them checks that every recipe names a
+    /// station and kinds of item there are.
     fn kinds() -> Kinds {
         let items = Items::default();
         let stations = Stations::read();
@@ -580,12 +585,6 @@ mod tests {
                 .position(|recipe| recipe.makes == makes)
                 .unwrap()
         }
-    }
-
-    /// Reading checks that every recipe names a station and kinds of item there are.
-    #[test]
-    fn every_recipe_names_a_station_and_items_there_are() {
-        assert!(kinds().recipes.iter().count() > 0);
     }
 
     #[test]
@@ -641,14 +640,6 @@ mod tests {
     }
 
     #[test]
-    fn the_workbench_has_tabs_and_the_smelter_none() {
-        let kinds = kinds();
-        let families = |name| kinds.recipes.families(kinds.station(name), &kinds.items);
-        assert_eq!(families("Workbench"), [Family::Tools, Family::Clothing]);
-        assert_eq!(families("Smelter").len(), 1);
-    }
-
-    #[test]
     fn a_saved_name_finds_its_recipe_at_its_own_station() {
         let kinds = kinds();
         let named = |station, name| {
@@ -659,5 +650,138 @@ mod tests {
         let iron = named("Smelter", "Iron").unwrap();
         assert_eq!(kinds.recipes[iron].makes, kinds.made("Iron"));
         assert_eq!(named("Forge", "Iron"), None);
+    }
+
+    const GROUND: Vec3 = Vec3::new(0.0, 2000.0, 0.0);
+
+    /// A world with the kinds of station and recipe, and a moment gone by.
+    fn station_world() -> World {
+        let mut world = test_world();
+        let kinds = kinds();
+        world.insert_resource(kinds.stations);
+        world.insert_resource(kinds.recipes);
+        world.init_resource::<InventoryScreen>();
+        world.init_resource::<Messages<Did>>();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_millis(500));
+        world.insert_resource(time);
+        world
+    }
+
+    /// The first kind of station that suits, and the first thing it makes.
+    fn station_where(
+        world: &World,
+        suits: impl Fn(&Stations, Station) -> bool,
+    ) -> (Station, usize) {
+        let stations = world.resource::<Stations>();
+        let station = stations
+            .all()
+            .find(|&station| suits(stations, station))
+            .unwrap();
+        let recipe = world.resource::<Recipes>().at(station).next().unwrap();
+        (station, recipe)
+    }
+
+    /// A station standing at a place, with one thing queued or made.
+    fn put(world: &mut World, (station, recipe): (Station, usize), at: Vec3, made: bool) -> Entity {
+        let works = if made {
+            Works::resumed(Vec::new(), 0.0, vec![recipe])
+        } else {
+            Works::resumed(vec![recipe], 0.0, Vec::new())
+        };
+        world
+            .spawn((
+                Prop::boxed(Vec3::splat(0.5), Some(station)),
+                Transform::from_translation(at),
+                works,
+            ))
+            .id()
+    }
+
+    fn progress(world: &World, station: Entity) -> f32 {
+        world.get::<Works>(station).unwrap().progress
+    }
+
+    #[test]
+    fn a_station_that_needs_a_worker_waits_for_one_with_a_player_beside_it() {
+        let mut world = station_world();
+        let kind = station_where(&world, |stations, station| {
+            stations.worked_by(station).is_some()
+        });
+        let forge = put(&mut world, kind, GROUND, false);
+        test_player(&mut world, GROUND + Vec3::X);
+        world.run_system_once(work).unwrap();
+        assert_eq!(progress(&world, forge), 0.0);
+        let trade = world.resource::<Stations>().worked_by(kind.0).unwrap();
+        let trade: &'static str = trade.to_string().leak();
+        world.spawn(Person::new(
+            "Bren",
+            Doing::Working(GROUND + Vec3::Z),
+            Some(trade),
+        ));
+        world.run_system_once(work).unwrap();
+        assert!(progress(&world, forge) > 0.0);
+    }
+
+    #[test]
+    fn a_station_gets_on_while_someone_is_by_it_unless_it_works_alone() {
+        let mut world = station_world();
+        let unworked = |stations: &Stations, station| stations.worked_by(station).is_none();
+        let worked = station_where(&world, |stations, station| {
+            unworked(stations, station) && !stations.works_alone(station)
+        });
+        let alone = station_where(&world, |stations, station| {
+            unworked(stations, station) && stations.works_alone(station)
+        });
+        let bench = put(&mut world, worked, GROUND, false);
+        let furnace = put(&mut world, alone, GROUND + Vec3::Z * 30.0, false);
+        let player = test_player(&mut world, GROUND + Vec3::X * 30.0);
+        world.run_system_once(work).unwrap();
+        assert_eq!(progress(&world, bench), 0.0);
+        assert!(progress(&world, furnace) > 0.0);
+        world.get_mut::<Transform>(player).unwrap().translation = GROUND + Vec3::X;
+        world.run_system_once(work).unwrap();
+        assert!(progress(&world, bench) > 0.0);
+    }
+
+    #[test]
+    fn what_is_made_waits_while_the_backpack_is_full_and_says_so_once() {
+        let mut world = station_world();
+        let kind = station_where(&world, |stations, station| !stations.works_alone(station));
+        let bench = put(&mut world, kind, GROUND, true);
+        let player = test_player(&mut world, GROUND + Vec3::X);
+        let makes = world.resource::<Recipes>()[kind.1].makes.kind;
+        let room = (
+            world.get::<Backpack>(player).unwrap().clone(),
+            world.get::<Gear>(player).unwrap().clone(),
+        );
+        // Full of what it makes, worn and carried.
+        world.resource_scope(|world, mut items: Mut<Items>| {
+            let mut player = world.entity_mut(player);
+            player.get_mut::<Gear>().unwrap().0.stow(makes, u32::MAX);
+            give(
+                &mut items,
+                &mut player.get_mut::<Backpack>().unwrap().0,
+                makes,
+                1000,
+            );
+        });
+        world.run_system_once(hand_over).unwrap();
+        world.run_system_once(hand_over).unwrap();
+        assert_eq!(world.get::<Works>(bench).unwrap().done, [kind.1]);
+        let told: Vec<_> = world.resource_mut::<Messages<Told>>().drain().collect();
+        assert_eq!(told.len(), 1, "told it is full once");
+        assert_eq!(told[0].player, player);
+        world.resource_mut::<Messages<Gained>>().clear();
+        // With room again, it is handed over.
+        world.entity_mut(player).insert(room);
+        world.run_system_once(hand_over).unwrap();
+        assert!(world.get::<Works>(bench).unwrap().done.is_empty());
+        let gained: Vec<_> = world.resource_mut::<Messages<Gained>>().drain().collect();
+        assert!(
+            gained
+                .iter()
+                .any(|gained| gained.player == player && gained.kind == makes)
+        );
     }
 }

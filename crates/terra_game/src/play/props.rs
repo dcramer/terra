@@ -5,6 +5,7 @@
 //! changes so that an item is no longer indoors, or now stands in a wall, the item is
 //! hidden.
 
+use super::Footprint;
 use super::catalogue::{Builds, Item, Light};
 use super::flora::Obstacles;
 use super::interact::{CanInteract, Interactable};
@@ -16,7 +17,7 @@ use bevy::{
     platform::collections::HashMap, prelude::*, render::render_resource::PrimitiveTopology,
 };
 use std::sync::Arc;
-use terra_build::CELL_M;
+use terra_build::{Base, CELL_M};
 
 /// Bright enough to show beside daylight, which is what the camera is exposed for.
 const FIRELIGHT_LUMENS: f32 = 500_000.0;
@@ -47,6 +48,35 @@ impl Prop {
     /// Whether a walker has to go round this rather than over it.
     pub fn is_solid(&self) -> bool {
         self.half.y * 2.0 > STEP_OVER_M
+    }
+}
+
+#[cfg(test)]
+impl Prop {
+    /// A made-up item, a box so big, standing outdoors at the base's middle: a station
+    /// of a kind if it is given one. For tests.
+    pub fn boxed(half: Vec3, station: Option<super::crafting::Station>) -> Self {
+        let item = Item {
+            name: "Box".to_string(),
+            file: "box".to_string(),
+            size: half.max_element() * 2.0,
+            height: (0.0, half.y * 2.0),
+            cost: Vec::new(),
+            lift: 0.0,
+            light: Light::None,
+            station,
+            claims: false,
+            rest: None,
+            seat: None,
+        };
+        Prop {
+            item: Arc::new(item),
+            at: Vec3::ZERO,
+            indoors: false,
+            lift: 0.0,
+            turn: 0.0,
+            half,
+        }
     }
 }
 
@@ -426,7 +456,7 @@ impl Standing {
 
     /// Whether a wall runs through the box's foot, near enough: whether any tile its
     /// outline covers is a wall (D181).
-    fn crosses_a_wall(&self, site: &Site) -> bool {
+    fn crosses_a_wall(&self, base: &Base) -> bool {
         let corners = self.corners();
         let low = corners
             .iter()
@@ -437,9 +467,8 @@ impl Standing {
         let cell = |at: Vec2| (at / CELL_M).floor().as_ivec2();
         let (low, high) = (cell(low + 0.02), cell(high - 0.02));
         let storey = (self.at.y / terra_build::STOREY_M).round() as i32;
-        (low.x..=high.x).any(|x| {
-            (low.y..=high.y).any(|z| site.base.filling(IVec3::new(x, storey, z)).is_some())
-        })
+        (low.x..=high.x)
+            .any(|x| (low.y..=high.y).any(|z| base.filling(IVec3::new(x, storey, z)).is_some()))
     }
 
     /// Whether two boxes share space. Boxes that only touch do not.
@@ -499,25 +528,26 @@ pub enum Blocked {
     Water,
 }
 
-/// What stops an item standing somewhere, if anything. It has to be wholly indoors or
-/// wholly clear of the base, and not in the same space as another item, a tree or a
-/// boulder. Rugs and other flat things share space with anything.
+/// What stops an item standing somewhere in a base, if anything, given the base's shape
+/// and where it stands on the ground. It has to be wholly indoors or wholly clear of the
+/// base, and not in the same space as another item, a tree or a boulder. Rugs and other
+/// flat things share space with anything.
 pub fn blocked<'a>(
-    site: &Site,
+    (base, footprint): (&Base, &Footprint),
     standing: &Standing,
     others: impl Iterator<Item = (Entity, &'a Prop)>,
     obstacles: &Obstacles,
 ) -> Option<Blocked> {
+    let frame = footprint.frame;
     let placed = standing.corners().iter().all(|corner| {
         let at = Vec3::new(corner.x, 0.0, corner.y);
         if standing.indoors {
-            site.base
-                .contains((at / CELL_M).floor().as_ivec3().with_y(0))
+            base.contains((at / CELL_M).floor().as_ivec3().with_y(0))
         } else {
-            !site.covers(site.frame.transform_point(at), 0.05)
+            !footprint.covers(frame.transform_point(at), 0.05)
         }
     });
-    if !placed || standing.crosses_a_wall(site) {
+    if !placed || standing.crosses_a_wall(base) {
         return Some(Blocked::Structure);
     }
     if !standing.is_solid() {
@@ -529,8 +559,8 @@ pub fn blocked<'a>(
     {
         return Some(Blocked::Item(entity));
     }
-    let to_base = site.frame.compute_affine().inverse();
-    let middle = site.frame.transform_point(standing.at);
+    let to_base = frame.compute_affine().inverse();
+    let middle = frame.transform_point(standing.at);
     (!standing.indoors
         && obstacles
             .near(middle, standing.half.length())
@@ -664,16 +694,7 @@ mod tests {
     }
 
     fn box_at_origin() -> (Prop, Transform, Visibility) {
-        let prop = Prop {
-            item: Builds::read(&Items::default(), &Stations::read())
-                .item_from("Bookshelf")
-                .unwrap(),
-            at: Vec3::ZERO,
-            indoors: false,
-            lift: 0.0,
-            turn: 0.0,
-            half: Vec3::new(0.4, 0.4, 0.4),
-        };
+        let prop = Prop::boxed(Vec3::splat(0.4), None);
         (prop, Transform::IDENTITY, Visibility::Inherited)
     }
 
@@ -765,5 +786,116 @@ mod tests {
         // Past it, or away from it.
         assert!(ray_box(&stood, half, Vec3::new(0.0, 0.4, 2.0), Vec3::X).is_none());
         assert!(ray_box(&stood, half, Vec3::new(0.0, 0.4, 0.0), Vec3::NEG_X).is_none());
+    }
+
+    /// A room ten tiles by ten outside, eight by eight inside, at the world's middle,
+    /// with a stub of wall standing alone in it.
+    fn room() -> (Base, Footprint) {
+        use terra_build::{BuildOp, Kind, Panel};
+        let mut base = Base::default();
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [9, 0, 9],
+            kind: Kind::PLAIN,
+        });
+        base.apply(BuildOp::SetWall {
+            tile: [5, 0, 5],
+            panel: Some(Panel::Solid),
+            kind: Kind::PLAIN,
+        });
+        assert!(base.contains(IVec3::new(4, 0, 4)) && !base.contains(IVec3::new(5, 0, 5)));
+        let footprint = Footprint {
+            frame: Transform::IDENTITY,
+            cell_m: CELL_M,
+            ground: base.ground_columns().collect(),
+            standing: base.occupied_columns().collect(),
+            steps: Vec::new(),
+        };
+        (base, footprint)
+    }
+
+    /// A box half a metre across and a metre high, its middle at a place.
+    fn boxed(east: f32, south: f32, indoors: bool) -> Standing {
+        Standing {
+            at: Vec3::new(east, 0.0, south),
+            lift: 0.0,
+            turn: 0.0,
+            half: Vec3::new(0.25, 0.5, 0.25),
+            indoors,
+        }
+    }
+
+    #[test]
+    fn an_item_stands_wholly_indoors_or_wholly_out() {
+        let (base, footprint) = room();
+        let blocked = |standing| {
+            blocked(
+                (&base, &footprint),
+                &standing,
+                std::iter::empty(),
+                &Obstacles::default(),
+            )
+        };
+        // Inside the room, clear of the walls; and well out of the base.
+        assert_eq!(blocked(boxed(1.5, 1.5, true)), None);
+        assert_eq!(blocked(boxed(10.0, 10.0, false)), None);
+        // Through the room's wall, from either side, and outdoors in the room.
+        assert_eq!(blocked(boxed(0.6, 1.5, true)), Some(Blocked::Structure));
+        assert_eq!(blocked(boxed(-0.1, 1.5, false)), Some(Blocked::Structure));
+        // Indoors where there is no room.
+        assert_eq!(blocked(boxed(10.0, 10.0, true)), Some(Blocked::Structure));
+        assert_eq!(blocked(boxed(1.5, 1.5, false)), Some(Blocked::Structure));
+        // Round a wall standing in the room, every corner of it in the room.
+        let over_the_stub = Standing {
+            half: Vec3::new(0.6, 0.5, 0.6),
+            ..boxed(2.75, 2.75, true)
+        };
+        assert_eq!(blocked(over_the_stub), Some(Blocked::Structure));
+    }
+
+    #[test]
+    fn a_solid_item_is_kept_out_of_another_but_a_rug_is_not() {
+        let (base, footprint) = room();
+        let mut world = World::new();
+        let mut put = |at: Vec3, half: Vec3| {
+            let prop = Prop {
+                at,
+                indoors: true,
+                ..Prop::boxed(half, None)
+            };
+            world.spawn(prop).id()
+        };
+        let chest = put(Vec3::new(1.5, 0.0, 1.5), Vec3::new(0.25, 0.5, 0.25));
+        // Low enough to step over, though not so low it shares no space with a box.
+        let rug = put(Vec3::new(3.5, 0.0, 1.5), Vec3::new(0.5, 0.1, 0.5));
+        let props: Vec<(Entity, &Prop)> = [chest, rug]
+            .map(|entity| (entity, world.get::<Prop>(entity).unwrap()))
+            .to_vec();
+        let blocked = |standing| {
+            blocked(
+                (&base, &footprint),
+                &standing,
+                props.iter().copied(),
+                &Obstacles::default(),
+            )
+        };
+        assert_eq!(blocked(boxed(1.7, 1.5, true)), Some(Blocked::Item(chest)));
+        assert_eq!(blocked(boxed(3.5, 1.5, true)), None, "on the rug");
+        let flat = Standing {
+            half: Vec3::new(0.25, 0.1, 0.25),
+            ..boxed(1.5, 1.5, true)
+        };
+        assert_eq!(blocked(flat), None, "a rug under the chest");
+    }
+
+    #[test]
+    fn an_item_is_kept_out_of_a_tree_outdoors() {
+        let (base, footprint) = room();
+        let mut trees = Obstacles::default();
+        trees.add(Vec3::new(10.0, 0.0, 10.0), 0.3);
+        let blocked =
+            |standing| blocked((&base, &footprint), &standing, std::iter::empty(), &trees);
+        assert_eq!(blocked(boxed(10.4, 10.0, false)), Some(Blocked::Nature));
+        assert_eq!(blocked(boxed(11.0, 10.0, false)), None);
     }
 }
