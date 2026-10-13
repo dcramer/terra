@@ -67,8 +67,9 @@ export type Prop = {
   size: number;
   // Triangles the finished model may have.
   budget: number;
-  // The palette colours its faces may take (tools/characters/look.py).
-  roles: string[];
+  // The palette colours its faces may take (tools/characters/look.py); none for a textured
+  // prop, which keeps its own.
+  roles?: string[];
   // For a role whose colour in the texture is not its own, the sRGB colour that means it
   // there: coals painted dull red, say, mean Fire, which is far brighter in the game.
   match?: Record<string, [number, number, number]>;
@@ -79,6 +80,9 @@ export type Prop = {
   // A building kit's piece laid along its length, such as a log or a board, which the game
   // stretches to fit: its length along X, its thinnest side up, its middle on the origin.
   along?: boolean;
+  // It keeps the textures Tripo made (D14, docs/art-style.md), scaled to 2K, rather than a
+  // palette role painted on each face.
+  textured?: boolean;
   // Tripo's generator: "p1", the low-poly Smart Mesh, by default; "h3.1", its most detailed,
   // for a piece seen close and often, such as a building kit's, textured in detail so its
   // colours are matched to roles more truly.
@@ -86,6 +90,16 @@ export type Prop = {
   // It lies flat, as a rug does: laid on the plane it best fits and pressed thin, since a
   // generator models such things tilted or curled.
   flat?: boolean;
+  // A block, such as a section of stone wall: squared to its box however far it leans,
+  // so it sits flush against its neighbours, and each of its sides' colour evened out to
+  // the same, so it reads alike turned any way.
+  block?: boolean;
+  // Another prop whose colour this one's texture is matched to when refined, its mean and
+  // spread on the surface, so a kit's pieces share one grade. That one is refined first.
+  grade?: string;
+  // Another prop whose concept it is drawn after, so the pieces of a kit share one stone,
+  // one wood and one grade (docs/art-style.md, "One kit, one grade").
+  reference?: string;
 };
 
 export function readProp(text: string, name: string): Prop {
@@ -96,13 +110,15 @@ export function readProp(text: string, name: string): Prop {
   for (const key of ["size", "budget"]) {
     if (typeof prop[key] !== "number" || prop[key] <= 0) throw new Error(`${name}: prop.json needs a positive "${key}"`);
   }
-  if (!Array.isArray(prop.roles) || prop.roles.length === 0) throw new Error(`${name}: prop.json needs "roles"`);
+  if (!prop.textured && (!Array.isArray(prop.roles) || prop.roles.length === 0)) {
+    throw new Error(`${name}: prop.json needs "roles", unless it is textured`);
+  }
   return prop;
 }
 
 /** The arguments refine.py takes for a prop. */
 export function refineArgs(prop: Prop, model: string, out: string, sheet: string): string[] {
-  const roles = prop.roles.map((role) => (prop.match?.[role] ? `${role}=${prop.match[role].join(",")}` : role));
+  const roles = (prop.roles ?? []).map((role) => (prop.match?.[role] ? `${role}=${prop.match[role].join(",")}` : role));
   return [
     model,
     out,
@@ -113,6 +129,8 @@ export function refineArgs(prop: Prop, model: string, out: string, sheet: string
     ...roles,
     ...(prop.flat ? ["--flat"] : []),
     ...(prop.along ? ["--along"] : []),
+    ...(prop.textured ? ["--textured"] : []),
+    ...(prop.block ? ["--block"] : []),
   ];
 }
 
@@ -126,7 +144,10 @@ function concept(name: string, prop: Prop, again: boolean) {
   const image = join(ART, name, "concept.png");
   if (existsSync(image) && !again) return console.log(`${name}: has a concept`);
   const prompt = conceptPrompt(prop.subject, readFileSync(GUIDE, "utf8"));
-  const reference = existsSync(REFERENCE) ? ["--ref", REFERENCE] : [];
+  const own = prop.reference ? join(ART, prop.reference, "concept.png") : undefined;
+  if (own && !existsSync(own)) throw new Error(`${name}: its reference ${prop.reference} has no concept`);
+  const ref = own ?? (existsSync(REFERENCE) ? REFERENCE : undefined);
+  const reference = ref ? ["--ref", ref] : [];
   run("node", [TRIPO, "image", prompt, ...reference, "--aspect", "1:1", "-o", image]);
   writeFileSync(join(ART, name, "concept.prompt.txt"), `${prompt}\n`);
 }
@@ -153,7 +174,14 @@ function refine(name: string, prop: Prop) {
   const out = join(ROOT, "assets", "models", prop.into ?? "props", `${prop.file}.glb`);
   // Relative paths, which a Windows Blender under WSL reads as they are (tools/blender).
   const here = (path: string) => relative(ROOT, path);
-  run(BLENDER, [join(HERE, "refine.py"), ...refineArgs(prop, here(glb), here(out), here(join(OUT, `${name}.png`)))]);
+  const args = refineArgs(prop, here(glb), here(out), here(join(OUT, `${name}.png`)));
+  if (prop.grade) {
+    const report = join(OUT, `${prop.grade}.json`);
+    const colour = existsSync(report) ? JSON.parse(readFileSync(report, "utf8")).colour : undefined;
+    if (!colour) throw new Error(`${name}: refine ${prop.grade} first, whose grade it matches`);
+    args.push(`--grade=${colour.join(",")}`);
+  }
+  run(BLENDER, [join(HERE, "refine.py"), ...args]);
 }
 
 /** Every prop, tool and village model from the front, labelled, on one sheet. */

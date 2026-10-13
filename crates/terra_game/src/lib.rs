@@ -18,6 +18,7 @@ pub mod character;
 pub mod debug;
 pub mod icons;
 pub mod loading;
+pub mod mipmaps;
 pub mod planet;
 pub mod play;
 pub mod record;

@@ -1,0 +1,43 @@
+// A stone wall's kit (docs/building-kits.md, D179): rough fieldstone in lime mortar, a cube thick,
+// laid as the models from tools/props (art/props/kit-stone-*), a metre square where it
+// can, half-metre blocks where it cannot, and cornerstones at corners and wall ends
+// (crates/terra_build/src/masonry.rs). Several of each, turned where they are placed, so
+// neighbours differ (docs/art-style.md). Where it meets logs it runs through, and the logs
+// end flush against it. What this leaves out is the log kit's, which a masonry kit does
+// not use.
+//
+// id          the kind of construction it lays, the number its cubes carry (D181)
+// pattern     how its walls are laid
+// eaves       how far a roof over these walls overhangs them (D175)
+// models      its stone: sections, half blocks and cornerstones
+// textures    the roof over it, as the log kit's (D14; assets/materials)
+(
+    id: 2,
+    pattern: Masonry,
+    eaves: 0.5,
+    models: (
+        stone: [
+            "models/kits/StoneWall.glb",
+            "models/kits/StoneWall2.glb",
+            "models/kits/StoneWall3.glb",
+        ],
+        stone_half: ["models/kits/StoneHalf.glb", "models/kits/StoneHalf2.glb"],
+        stone_corner: ["models/kits/StoneCorner.glb"],
+    ),
+    textures: {
+        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
+        Shakes: (path: "materials/shakes", metres: (3.2, 1.6), depth: 0.04),
+    },
+    colours: (
+        wood: (0.55, 0.53, 0.5),
+        light: (0.62, 0.6, 0.56),
+        dark: (0.4, 0.38, 0.35),
+        bark: (0.37, 0.26, 0.19),
+        end: (0.8, 0.64, 0.44),
+        heart: (0.66, 0.47, 0.3),
+        knot: (0.33, 0.22, 0.15),
+        chinking: (0.72, 0.68, 0.6),
+        board: (0.45, 0.32, 0.22),
+        roof: (0.47, 0.42, 0.37),
+    ),
+)

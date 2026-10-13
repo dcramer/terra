@@ -37,7 +37,7 @@ test("gives refine.py the texture's colour for a role matched by another", () =>
 test("a concept is the subject, then the style guide's paragraph word for word", () => {
   const guide = readFileSync(new URL("../../docs/art-style.md", import.meta.url), "utf8");
   const paragraph = stylePrompt(guide);
-  assert.match(paragraph, /^Stylised 3D render/);
+  assert.match(paragraph, /^Stylised realistic 3D game asset render/);
   assert.equal(conceptPrompt("oak tree", guide), `A single oak tree. ${paragraph}`);
   assert.throws(() => stylePrompt("# A guide with no concept prompt"), /concept prompt/);
 });

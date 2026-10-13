@@ -1,18 +1,22 @@
-//! The kit sheet (docs/building-kits.md, D69, D71): on the yard, with `--kit-sheet`, one of each
+//! The kit sheet (docs/building-kits.md, D69, D71): with `--kit-sheet`, one of each
 //! way log walls meet, laid in a row of three: built, going up and as a blueprint. Each
 //! row's vantage is written to the log, so a picture of it is one command:
 //!
 //!   cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet \
 //!     --vantage <from the log> --shot out/corner.png
 //!
+//! On the yard, the flat test level, to compare pieces; without `--level yard`, in the
+//! world, among its trees and on its slopes, to judge them in a whole scene.
+//!
 //! The kit's file is read again when it is saved, so the sheet can be left running while
 //! the look is tuned.
 
-use super::{Build, BuildLook, Built, FLOOR_CLEARANCE_M, Shown, Site, frame_at, lifted, read_kit};
+use super::{Build, BuildLook, Built, FLOOR_CLEARANCE_M, Shown, Site, frame_at, lifted, read_kits};
 use crate::planet::Planet;
 use crate::shell::Options;
 use bevy::prelude::*;
 use std::sync::Arc;
+use terra_build::logs::Pattern;
 use terra_build::{Base, BuildOp, Cube, Fill, Kind, Panel, RoofSection, RoofStyle};
 
 /// How far apart the rows are, and the three states along each, in metres.
@@ -41,8 +45,9 @@ fn wall(tile: [i32; 3], panel: Panel, kind: Kind) -> BuildOp {
     }
 }
 
-/// Each row: its name, and the operations that make it, in cubes of half a metre.
-fn rows(kind: Kind) -> Vec<(&'static str, Vec<BuildOp>)> {
+/// Each row: its name, and the operations that make it, in cubes of half a metre. Laid
+/// in `kind`, with rows mixing in `stone` where there is a stone kit (D179).
+fn rows(kind: Kind, stone: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
     let cabin = {
         let mut ops = vec![BuildOp::AddRoom {
             min: [0, 0, 0],
@@ -95,7 +100,63 @@ fn rows(kind: Kind) -> Vec<(&'static str, Vec<BuildOp>)> {
         ops.extend((6..=8).map(|x| open(x, 1)));
         ops
     };
-    vec![
+    let mut mixed = Vec::new();
+    if let Some(stone) = stone {
+        // A house all of stone under a hip roof, with a door and windows.
+        let mut house = vec![BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            kind: stone,
+        }];
+        house.extend((4..=5).map(|x| wall([x, 0, 7], Panel::Door, stone)));
+        house.extend(
+            (1..=2)
+                .chain(7..=8)
+                .map(|x| wall([x, 0, 7], Panel::WINDOW, stone)),
+        );
+        house.extend((3..=4).map(|z| wall([0, 0, z], Panel::WINDOW, stone)));
+        house.push(BuildOp::AddRoof(RoofSection {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            style: RoofStyle::Hip,
+            along_x: true,
+            pitch: 0.7,
+        }));
+        // The cabin on a stone plinth a metre high: one wall over another.
+        let mut plinth = vec![BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            kind,
+        }];
+        let stone_cube = Some(Cube {
+            kind: stone,
+            fill: Fill::Solid,
+        });
+        plinth.extend((6..=7).map(|x| wall([x, 0, 7], Panel::WINDOW, kind)));
+        plinth.extend((2..=4).map(|z| wall([9, 0, z], Panel::WINDOW, kind)));
+        // After the windows, which set their whole column.
+        for (min, max) in [
+            ([0, 0, 0], [9, 1, 0]),
+            ([0, 0, 7], [9, 1, 7]),
+            ([0, 0, 0], [0, 1, 7]),
+            ([9, 0, 0], [9, 1, 7]),
+        ] {
+            plinth.push(BuildOp::Fill {
+                min,
+                max,
+                cube: stone_cube,
+            });
+        }
+        plinth.push(BuildOp::AddRoof(RoofSection {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            style: RoofStyle::Gable,
+            along_x: true,
+            pitch: 0.7,
+        }));
+        mixed = vec![("stone house", house), ("stone plinth", plinth)];
+    }
+    let mut rows = vec![
         ("free end", east_west(0, 5, 0, kind).collect()),
         (
             "corner",
@@ -126,7 +187,9 @@ fn rows(kind: Kind) -> Vec<(&'static str, Vec<BuildOp>)> {
         ("cabin", cabin),
         ("hip roof", roofed(RoofStyle::Hip, true)),
         ("lean-to", roofed(RoofStyle::LeanTo, true)),
-    ]
+    ];
+    rows.extend(mixed);
+    rows
 }
 
 /// Lays the sheet once the site is there.
@@ -140,17 +203,23 @@ pub(super) fn lay(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    if *done || !options.kit_sheet || !options.yard() {
+    if *done || !options.kit_sheet {
         return;
     }
     let (Some(site), Some(look)) = (site, look) else {
         return;
     };
     *done = true;
-    let Some(kit) = read_kit().map(Arc::new) else {
+    let Some(kits) = read_kits().map(Arc::new) else {
         return;
     };
-    for (row, (name, ops)) in rows(kit.kind()).into_iter().enumerate() {
+    let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
+    let stone = kits
+        .0
+        .iter()
+        .find(|kit| kit.pattern == Pattern::Masonry)
+        .map(|kit| kit.kind());
+    for (row, (name, ops)) in rows(laying, stone).into_iter().enumerate() {
         let north = -FIRST_ROW_M - ROW_M * row as f32;
         for (column, shown) in [Shown::Built, Shown::Plan(GOING_UP), Shown::Plan(0.0)]
             .into_iter()
@@ -173,7 +242,7 @@ pub(super) fn lay(
             };
             let label = format!("Kit sheet: {name}, {shown:?}");
             let mut build = Build::new(&mut commands, &look, frame, &label);
-            build.logs = Some(kit.clone());
+            build.kits = Some(kits.clone());
             build.shown = shown;
             build.replace_with(&ops, &mut commands, &planet, &mut meshes);
             commands.spawn((Name::new(label), Built(build)));

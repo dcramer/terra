@@ -30,7 +30,18 @@ The log kit's pieces, from the approved cabin:
 | A door, a shuttered window | Set into openings of their size |
 | A footing of fieldstones | Under walls on the ground |
 
-**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for logs), its sizes, its pieces' models, and its colours as palette roles (D14). A pine cabin and a dark-wood cabin are two files.
+The stone kit's pieces (built 2026-10-12), rough fieldstone in lime mortar, all drawn after one concept ([art/props/kit-stone-wall-2](../art/props/kit-stone-wall-2/concept.png)) and matched to its grade:
+
+| Piece | Laid as |
+|---|---|
+| A wall section a metre square, three versions | Each two cubes by two of a straight run, every other band starting a half block in so seams never line up; turned end for end by its seed |
+| A half-metre block, two versions | Odd cubes, the ends of runs, and round holes; turned any of four ways |
+| A column of cornerstones, half a metre square and a metre high | Up every corner and wall end, a half block for an odd cube |
+| A timber lintel | Over every opening with wall above it |
+
+A Tripo model's back and sides come out darker than its front, since it is textured from views lit differently; `tools/props` evens each side of a block to its front's colour, and every piece to the kit's grade, so a piece reads the same turned any way.
+
+**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for logs; masonry, for stone), its sizes, its pieces' models, and its colours as palette roles (D14). A pine cabin and a dark-wood cabin are two files.
 
 ## Drawing them
 
@@ -111,6 +122,8 @@ Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 - **Changing a kind** is free on a plan nothing is in yet. Once pieces are in, the wall is frozen (building-tech.md), so it is taken down and laid again, as D146 says.
 - **Drawing it** costs nothing extra: a finished building is one mesh per material already.
 
+Built 2026-10-12: a base is laid by every kit in `assets/data/kits/` at once, each its own kind's cubes, so mixing is per cube. Logs end flush against stone, as they end at anything not open air. The kit sheet has a stone house under a hip roof and a cabin on a stone plinth a metre high.
+
 ## Checking it
 
 The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a door, windows and a gable roof, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71):
@@ -140,4 +153,8 @@ Built:
 
 ![A log cabin from the kit sheet, late in the day](images/log-cabin-2026-10-12.png)
 
-**Not yet:** the late corner, which needs parts with their own history (step 3); a second kit, so log and stone can mix (D179); a tool for carving cubes by hand, though the operation is there and the sheet shows it; saddle notches cut into the logs, rather than logs meeting; roofs and floors with kits of their own; eaves over the walls (D175); doors in the frames.
+**Not yet:** the late corner, which needs parts with their own history (step 3); a tool for carving cubes by hand, though the operation is there and the sheet shows it; saddle notches cut into the logs, rather than logs meeting; roofs and floors with kits of their own; stone gables, so a stone wall under a gable carries boards above its eaves for now; stone cut to a roof's slope; seams between stone sections, which still show faintly.
+
+**Doors and windows are not part of a plan** (the developers, 2026-10-12: "when you're building blueprints/etc, they dont have doors attached ... showing a partial ghost with a door does not reflect how the game should work"). A plan and a building going up show the opening and its frame only; the door or window is its own item, fitted once the building is up (construction.md). They are laid last.
+
+**Logs stop at roofs.** A log that would pass through a roof or its eaves is cut back where the roof begins, as a builder saws the corner ends under a hip; one cut in the middle is left in two.

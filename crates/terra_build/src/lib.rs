@@ -27,6 +27,7 @@
 //! in cubes all three ways; tiles count X and Z in cubes and Y in storeys.
 
 pub mod logs;
+pub mod masonry;
 mod mesh;
 mod walk;
 
@@ -262,14 +263,27 @@ impl RoofSection {
     /// How far above the tops of its walls it is at a point, in metres east and south in
     /// the base's own space, if it is over that point.
     pub fn rise(&self, at: glam::Vec2) -> Option<f32> {
-        let low = glam::Vec2::new(self.min[0] as f32, self.min[2] as f32) * CELL_M;
-        let high = glam::Vec2::new((self.max[0] + 1) as f32, (self.max[2] + 1) as f32) * CELL_M;
-        const EDGE: f32 = 1e-4;
-        if at.cmplt(low - EDGE).any() || at.cmpgt(high + EDGE).any() {
+        self.rise_beyond(at, 0.0).map(|rise| rise.max(0.0))
+    }
+
+    /// Its corners in metres along the floor, east and south: the lowest and the highest.
+    pub fn bounds(&self) -> (glam::Vec2, glam::Vec2) {
+        (
+            glam::Vec2::new(self.min[0] as f32, self.min[2] as f32) * CELL_M,
+            glam::Vec2::new((self.max[0] + 1) as f32, (self.max[2] + 1) as f32) * CELL_M,
+        )
+    }
+
+    /// As [`RoofSection::rise`], but carried on down past its edges as far as `beyond`
+    /// metres, for eaves that overhang the walls: below the walls' tops there.
+    pub fn rise_beyond(&self, at: glam::Vec2, beyond: f32) -> Option<f32> {
+        let (low, high) = self.bounds();
+        let edge = beyond + 1e-4;
+        if at.cmplt(low - edge).any() || at.cmpgt(high + edge).any() {
             return None;
         }
-        let (west, east) = ((at.x - low.x).max(0.0), (high.x - at.x).max(0.0));
-        let (north, south) = ((at.y - low.y).max(0.0), (high.y - at.y).max(0.0));
+        let (west, east) = (at.x - low.x, high.x - at.x);
+        let (north, south) = (at.y - low.y, high.y - at.y);
         let run = match (self.style, self.along_x) {
             // As far as the nearest side, so every face is flat and every hip a diagonal.
             (RoofStyle::Hip, _) => west.min(east).min(north).min(south),
@@ -836,20 +850,27 @@ impl Base {
 
     /// The base with its log walls laid as logs: everything else as triangles, and the
     /// logs, in the order they go in, to draw as they stand.
-    pub fn mesh_with_logs(&self, kit: &logs::LogKit) -> (BaseMesh, logs::Layout) {
+    pub fn mesh_with_kits(&self, kits: &logs::Kits) -> (BaseMesh, Vec<logs::Layout>) {
         let mesh = mesh::build(self, |kind| {
-            (kind == kit.kind()).then_some(mesh::KitLook {
+            kits.of(kind).map(|kit| mesh::KitLook {
                 gable: kit.colours.board,
                 floor: kit.colours.light,
                 roof: kit.colours.roof,
                 side: kit.colours.dark,
+                eaves: kit.eaves,
+                textures: kit
+                    .textures
+                    .iter()
+                    .map(|(material, texture)| (*material, texture.metres))
+                    .collect(),
             })
         });
-        (mesh, logs::lay(self, kit))
+        let layouts = kits.0.iter().map(|kit| logs::lay(self, kit)).collect();
+        (mesh, layouts)
     }
 }
 
-pub use mesh::KitLook;
+pub use mesh::{KitLook, Material, Surfaces};
 
 /// The rectangle up the middle of a wall tile running along `along`, in the base's own
 /// space: low-left, low-right, high-right, high-left as seen from the south or east.

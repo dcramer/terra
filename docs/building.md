@@ -243,7 +243,7 @@ Because every wall is a whole number of cubes, the kit always fits: a stone wall
 
 - **On a plan**, an opening is planned into the wall: the parts it crosses are shortened or left out, so the wall needs less, and a frame is added to build.
 - **In a finished wall**, an opening is cut: it takes work with a tool, gives back the material of what was cut away, and leaves a frame to build.
-- **The door or the glass is its own item**, made at a station and fitted into the frame. A doorway without a door is just a gap; a window frame without glass is open to the weather.
+- **The door or the glass is its own item**, made at a station and fitted into the frame. A doorway without a door is just a gap; a window frame without glass is open to the weather. A plan never shows a door or glass in its openings, only the opening and its frame (2026-10-12).
 
 **Small things are not planned.** Furniture, storage, lights and stations are placed whole, as now: they are made, then set down. Open whether stations should be constructed too, being large.
 

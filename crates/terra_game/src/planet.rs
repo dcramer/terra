@@ -10,6 +10,7 @@ use crate::shell::Options;
 use crate::sky::Sky;
 use bevy::{
     camera_controller::free_camera::FreeCamera,
+    image::{ImageArrayLayout, ImageLoaderSettings},
     input::common_conditions::input_toggle_active,
     light::NotShadowCaster,
     pbr::{ExtendedMaterial, MaterialExtension},
@@ -292,6 +293,53 @@ pub struct GroundExtension {
     sand: LinearRgba,
     #[uniform(100)]
     sea_deep: LinearRgba,
+    /// How many metres each layer of the ground's textures covers: soil, grass, rock, sand.
+    #[uniform(100)]
+    layer_metres: Vec4,
+    /// Whether the ground is drawn with its textures, or in flat colours.
+    #[uniform(100)]
+    textured: u32,
+    #[texture(101, dimension = "2d_array")]
+    #[sampler(102)]
+    color: Option<Handle<Image>>,
+    #[texture(103, dimension = "2d_array")]
+    normal: Option<Handle<Image>>,
+}
+
+/// The ground's textures (D14): real soil, grass, rock and sand, each tinted by the
+/// planet's colours for it, so the planet still decides what colour its ground is.
+#[derive(Resource, Clone)]
+pub struct GroundTextures {
+    color: Handle<Image>,
+    normal: Handle<Image>,
+}
+
+/// The layers of `materials/ground`, in order, and how many metres each covers
+/// (assets/materials/README.md).
+const GROUND_LAYERS: u32 = 4;
+const GROUND_LAYER_METRES: Vec4 = Vec4::new(3.15, 2.0, 2.7, 1.5);
+
+impl GroundTextures {
+    fn load(assets: &AssetServer) -> Self {
+        let layers = |linear: bool| {
+            move |settings: &mut ImageLoaderSettings| {
+                settings.array_layout = Some(ImageArrayLayout::RowCount {
+                    rows: GROUND_LAYERS,
+                });
+                settings.is_srgb = !linear;
+            }
+        };
+        GroundTextures {
+            color: assets
+                .load_builder()
+                .with_settings(layers(false))
+                .load("materials/ground/color.jpg"),
+            normal: assets
+                .load_builder()
+                .with_settings(layers(true))
+                .load("materials/ground/normal.jpg"),
+        }
+    }
 }
 
 impl MaterialExtension for GroundExtension {
@@ -301,7 +349,7 @@ impl MaterialExtension for GroundExtension {
 }
 
 impl GroundExtension {
-    fn new(planet: &Planet, tweaks: &Tweaks) -> Self {
+    fn new(planet: &Planet, tweaks: &Tweaks, textures: &GroundTextures) -> Self {
         let radius_m = planet.radius_m();
         GroundExtension {
             radius_m,
@@ -321,6 +369,11 @@ impl GroundExtension {
             grass_lush: tweaks.grass_lush.into(),
             sand: tweaks.sand.into(),
             sea_deep: tweaks.sea_deep.into(),
+            layer_metres: GROUND_LAYER_METRES,
+            // Textures are for ground that is covered; the bare stand-in stays flat.
+            textured: (tweaks.ground_cover > 0.0) as u32,
+            color: Some(textures.color.clone()),
+            normal: Some(textures.normal.clone()),
         }
     }
 }
@@ -418,16 +471,19 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut ground_materials: ResMut<Assets<GroundMaterial>>,
     mut water_materials: ResMut<Assets<WaterMaterial>>,
+    assets: Res<AssetServer>,
 ) {
     let radius_m = planet.radius_m();
+    let textures = GroundTextures::load(&assets);
     let ground_material = ground_materials.add(ExtendedMaterial {
         base: StandardMaterial {
             perceptual_roughness: 0.95,
             reflectance: 0.2,
             ..default()
         },
-        extension: GroundExtension::new(&planet, &tweaks),
+        extension: GroundExtension::new(&planet, &tweaks, &textures),
     });
+    commands.insert_resource(textures);
     // The ground itself is drawn in chunks, by `terrain`, with this look.
     commands.insert_resource(GroundLook(ground_material));
     commands.spawn((
@@ -486,6 +542,7 @@ fn apply_tweaks(
     mut sea: Single<(&mut Transform, &mut Visibility), With<Sea>>,
     mut ground_materials: ResMut<Assets<GroundMaterial>>,
     mut water_materials: ResMut<Assets<WaterMaterial>>,
+    textures: Res<GroundTextures>,
 ) {
     let toward_sun = tweaks.sun_direction.normalize_or(Vec3::Y);
     sun.0.color = tweaks.sun_color;
@@ -501,7 +558,7 @@ fn apply_tweaks(
 
     // The ground changes only when its tweaks do, not with the sun, so it is left alone
     // otherwise: a changed material is prepared again, and every chunk drawn with it.
-    let ground = GroundExtension::new(&planet, &tweaks);
+    let ground = GroundExtension::new(&planet, &tweaks, &textures);
     let stale: Vec<_> = ground_materials
         .iter()
         .filter(|(_, material)| material.extension != ground)

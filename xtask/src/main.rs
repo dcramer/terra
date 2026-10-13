@@ -90,6 +90,13 @@ const TASKS: &[Task] = &[
         run: |args| node("tools/props/props.ts", args),
     },
     Task {
+        name: "textures",
+        takes: "<step> [args]",
+        does: "make materials: fetch from Poly Haven, material from an image, stack for the ground (tools/textures)",
+        group: "Make art",
+        run: |args| node("tools/textures/textures.ts", args),
+    },
+    Task {
         name: "tripo",
         takes: "<command> [args]",
         does: "Tripo on our Studio subscription: image, model, rig, animate, balance… (tools/tripo)",

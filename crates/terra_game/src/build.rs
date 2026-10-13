@@ -16,10 +16,12 @@ use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, prelude::*,
     render::render_resource::PrimitiveTopology,
 };
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::SystemTime;
-use terra_build::logs::{self, LogKit};
+use terra_build::logs::{self, Kits, LogKit, Pattern};
 use terra_build::{Base, BuildOp, CELL_M, Kind, Panel, STOREY_M, Side, Surface, Walker};
+use terra_build::{Material, Surfaces};
 use terra_core::Operation;
 
 mod pieces;
@@ -62,19 +64,22 @@ pub(super) struct Build {
     glass: Entity,
     foundation: Entity,
     steps: Entity,
-    /// With a kit, its walls are laid as its pieces (docs/building-kits.md), drawn as they stand.
-    pub logs: Option<Arc<LogKit>>,
+    /// With kits, walls of their kinds are laid as their pieces (docs/building-kits.md), drawn as
+    /// they stand.
+    pub kits: Option<Arc<Kits>>,
     pub shown: Shown,
-    /// The pieces that are in, those still a ghost, and the next to go in.
+    /// What a kit's pieces and materials are drawn under.
     pieces: Entity,
-    ghost: Entity,
-    next: Entity,
-    /// The kit's log model, once loaded, and the copies of it placed for each log.
-    log_model: Option<pieces::LogModel>,
-    log_entities: Vec<Entity>,
+    /// The kit's pieces' models, once loaded, and the copies of them placed.
+    kit_pieces: Option<Arc<pieces::KitPieces>>,
+    model_entities: Vec<Entity>,
     /// What pieces not yet in, and the next, are drawn in.
     ghost_material: Handle<StandardMaterial>,
     next_material: Handle<StandardMaterial>,
+    /// The kit's materials, textured, and what is drawn plain; and what is drawn in them.
+    materials: Arc<BTreeMap<Material, Handle<StandardMaterial>>>,
+    plain_material: Handle<StandardMaterial>,
+    textured_entities: Vec<Entity>,
 }
 
 /// How far a build's pieces are in (D139, D177): built, or a plan with so much of it in,
@@ -115,45 +120,71 @@ pub(super) struct BuildLook {
     /// A plan's pieces not yet in, and the next one.
     ghost: Handle<StandardMaterial>,
     next: Handle<StandardMaterial>,
-    /// The log kit, which draws the cubes of its kind as logs.
-    pub logs: Option<Arc<LogKit>>,
+    /// The kits, each drawing the cubes of its kind: logs, stone (D179).
+    pub kits: Option<Arc<Kits>>,
     /// The kind of construction walls, floors and roofs are laid in (`--walls`).
     pub laying: Kind,
-    /// The log kit's log model, once loaded.
-    log_model: Option<pieces::LogModel>,
+    /// The kits' pieces' models, once loaded.
+    kit_pieces: Option<Arc<pieces::KitPieces>>,
+    /// The kits' materials, textured (D14).
+    materials: Arc<BTreeMap<Material, Handle<StandardMaterial>>>,
 }
 
-/// The log kit's file, `assets/data/kits/logs.ron`, read again when it is saved so a log
-/// wall's look can be tuned while the game runs.
+/// The kits' files, `assets/data/kits/`, read again when one is saved so a wall's look can
+/// be tuned while the game runs.
 #[derive(Resource)]
 struct KitFile {
     modified: Option<SystemTime>,
     timer: Timer,
 }
 
-const LOG_KIT: &str = "assets/data/kits/logs.ron";
+const KITS: &str = "assets/data/kits";
+/// The kit things are laid in by default, which comes first.
+const FIRST_KIT: &str = "logs.ron";
 
-fn kit_path() -> std::path::PathBuf {
-    bevy::asset::io::file::FileAssetReader::get_base_path().join(LOG_KIT)
+/// Every kit's file: the first kit, then the rest by name.
+fn kit_paths() -> Vec<std::path::PathBuf> {
+    let folder = bevy::asset::io::file::FileAssetReader::get_base_path().join(KITS);
+    let mut paths: Vec<_> = std::fs::read_dir(&folder)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.extension().is_some_and(|e| e == "ron"))
+                .collect()
+        })
+        .unwrap_or_default();
+    paths.sort_by_key(|path| (!path.ends_with(FIRST_KIT), path.clone()));
+    paths
 }
 
+/// When a kit's file last changed.
 fn modified() -> Option<SystemTime> {
-    std::fs::metadata(kit_path())
-        .and_then(|m| m.modified())
-        .ok()
+    kit_paths()
+        .iter()
+        .filter_map(|path| std::fs::metadata(path).and_then(|m| m.modified()).ok())
+        .max()
 }
 
-/// Reads the log kit. A mistake in it is said in the log, and `None` returned.
-fn read_kit() -> Option<LogKit> {
-    let path = kit_path();
-    let text = std::fs::read_to_string(&path)
+/// Reads every kit. A mistake in one is said in the log and that kit left out; `None` if
+/// none could be read.
+fn read_kits() -> Option<Kits> {
+    let kits: Vec<LogKit> = kit_paths()
+        .iter()
+        .filter_map(|path| read_kit(path))
+        .collect();
+    (!kits.is_empty()).then_some(Kits(kits))
+}
+
+fn read_kit(path: &std::path::Path) -> Option<LogKit> {
+    let text = std::fs::read_to_string(path)
         .map_err(|problem| error!("Could not read {}: {problem}", path.display()))
         .ok()?;
     let kit: LogKit = ron::from_str(&text)
         .map_err(|problem| error!("{}: {problem}", path.display()))
         .ok()?;
-    match kit.courses() {
-        (_, true) => Some(kit),
+    match (kit.pattern, kit.courses()) {
+        (Pattern::Masonry, _) | (_, (_, true)) => Some(kit),
         _ => {
             error!(
                 "{}: a course of {} m does not divide the storey",
@@ -250,6 +281,8 @@ impl Build {
                 .spawn((
                     Name::new(format!("{name} {what}")),
                     frame,
+                    // Seen, and so are what is drawn under it, with or without a mesh.
+                    Visibility::default(),
                     MeshMaterial3d(material.clone()),
                 ))
                 .id()
@@ -259,11 +292,7 @@ impl Build {
         let steps = part("steps", &look.concrete);
         let glass = part("glass", &look.glass);
         let pieces = part("pieces", &look.structure);
-        let ghost = part("ghost", &look.ghost);
-        let next = part("next", &look.next);
         commands.entity(glass).insert(NotShadowCaster);
-        commands.entity(ghost).insert(NotShadowCaster);
-        commands.entity(next).insert(NotShadowCaster);
         Self {
             base: Base::default(),
             frame,
@@ -274,13 +303,14 @@ impl Build {
             glass,
             foundation,
             steps,
-            logs: look.logs.clone(),
+            kits: look.kits.clone(),
             shown: Shown::Built,
             pieces,
-            ghost,
-            next,
-            log_model: look.log_model.clone(),
-            log_entities: Vec::new(),
+            kit_pieces: look.kit_pieces.clone(),
+            model_entities: Vec::new(),
+            materials: look.materials.clone(),
+            plain_material: look.structure.clone(),
+            textured_entities: Vec::new(),
             ghost_material: look.ghost.clone(),
             next_material: look.next.clone(),
         }
@@ -712,6 +742,7 @@ fn setup(
     driven: Option<Res<DrivenByPlayer>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    assets: Res<AssetServer>,
 ) {
     // The example base decides where the base stands, whether or not it is built: a
     // player starts with nothing built, on the same spot. On the yard, the flat test
@@ -761,12 +792,22 @@ fn setup(
             alpha_mode: AlphaMode::Blend,
             ..default()
         }),
-        logs: read_kit().map(Arc::new),
+        kits: read_kits().map(Arc::new),
         laying: Kind::PLAIN,
-        log_model: None,
+        kit_pieces: None,
+        materials: Arc::default(),
     };
+    let materials_of_kit = look
+        .kits
+        .as_deref()
+        .map(|kits| kit_materials(kits, &assets, &mut materials))
+        .unwrap_or_default();
     let look = BuildLook {
-        laying: match (options.walls.as_deref(), &look.logs) {
+        materials: materials_of_kit,
+        laying: match (
+            options.walls.as_deref(),
+            look.kits.as_deref().and_then(|k| k.0.first()),
+        ) {
             (Some("plain"), _) | (_, None) => Kind::PLAIN,
             (_, Some(kit)) => kit.kind(),
         },
@@ -831,46 +872,144 @@ fn to_mesh(surface: &Surface) -> Option<Mesh> {
         .iter()
         .map(|c| Color::srgb(c[0], c[1], c[2]).to_linear().to_f32_array())
         .collect();
-    Some(
-        Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::RENDER_WORLD,
-        )
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, surface.positions.clone())
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, surface.normals.clone())
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours),
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, surface.positions.clone())
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, surface.normals.clone())
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours);
+    // Textured: where each corner falls on its texture, and the tangents its normal map
+    // needs.
+    if surface.uvs.len() == surface.positions.len() {
+        let count = surface.positions.len() as u32;
+        mesh = mesh
+            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, surface.uvs.clone())
+            .with_inserted_indices(bevy::mesh::Indices::U32((0..count).collect()));
+        if let Err(problem) = mesh.generate_tangents() {
+            warn!("No tangents for a textured surface: {problem}");
+        }
+    }
+    Some(mesh)
+}
+
+/// The kits' materials, each from its textures: colour, normal, roughness and occlusion,
+/// and parallax where it is given a depth (D14). Where two kits name the same material,
+/// the first's textures are used.
+fn kit_materials(
+    kits: &Kits,
+    assets: &AssetServer,
+    materials: &mut Assets<StandardMaterial>,
+) -> Arc<BTreeMap<Material, Handle<StandardMaterial>>> {
+    let linear = |path: String| -> Handle<Image> {
+        assets
+            .load_builder()
+            .with_settings(|settings: &mut bevy::image::ImageLoaderSettings| {
+                settings.is_srgb = false;
+            })
+            .load(path)
+    };
+    let mut textures = BTreeMap::new();
+    for kit in &kits.0 {
+        for (material, texture) in &kit.textures {
+            textures.entry(*material).or_insert(texture);
+        }
+    }
+    Arc::new(
+        textures
+            .into_iter()
+            .map(|(material, texture)| {
+                let path = &texture.path;
+                let arm: Handle<Image> = linear(format!("{path}/arm.jpg"));
+                let parallax = texture.depth > 0.0;
+                let standard = StandardMaterial {
+                    base_color_texture: Some(assets.load(format!("{path}/color.jpg"))),
+                    normal_map_texture: Some(linear(format!("{path}/normal.jpg"))),
+                    metallic_roughness_texture: Some(arm.clone()),
+                    occlusion_texture: Some(arm),
+                    perceptual_roughness: 1.0,
+                    metallic: 1.0,
+                    depth_map: parallax.then(|| linear(format!("{path}/height.jpg"))),
+                    parallax_depth_scale: texture.depth,
+                    parallax_mapping_method:
+                        bevy::pbr::ParallaxMappingMethod::DEFAULT_RELIEF_MAPPING,
+                    max_parallax_layer_count: 16.0,
+                    ..default()
+                };
+                (material, materials.add(standard))
+            })
+            .collect(),
     )
 }
 
 /// Rebuilds everything drawn for a build from its current shape.
 fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &mut Assets<Mesh>) {
-    let (mesh, pieces) = match site.logs.clone() {
-        Some(kit) => {
-            let (mesh, layout) = site.base.mesh_with_logs(&kit);
-            let modelled = site.log_model.is_some();
-            pieces::place(commands, site, &layout.pieces, &kit);
-            (
-                mesh,
-                draw_pieces(&layout.pieces, &kit, site.shown, modelled),
-            )
+    let (mesh, states) = match site.kits.clone() {
+        Some(kits) => {
+            let (mesh, layouts) = site.base.mesh_with_kits(&kits);
+            let laid: Vec<(&LogKit, &[logs::Piece])> = kits
+                .0
+                .iter()
+                .zip(&layouts)
+                .map(|(kit, layout)| (kit, layout.pieces.as_slice()))
+                .collect();
+            pieces::place(commands, site, &laid);
+            let models = site.kit_pieces.clone();
+            let drawn = draw_pieces(&laid, site.shown, models.as_deref());
+            (mesh, drawn)
         }
         None => {
-            pieces::place(commands, site, &[], &LogKit::default());
-            (site.base.mesh(|_| None), [None, None, None])
+            pieces::place(commands, site, &[]);
+            (site.base.mesh(|_| None), Default::default())
         }
     };
+    // What is drawn in each material, built and planned: a mesh for each, under the
+    // entity the pieces are drawn on.
+    for entity in site.textured_entities.drain(..) {
+        commands.entity(entity).despawn();
+    }
+    let [placed, ghost, next] = states;
+    let built = [&mesh.textured, &placed];
+    for (surfaces, state) in built
+        .into_iter()
+        .map(|surfaces| (surfaces, 0))
+        .chain([(&ghost, 1), (&next, 2)])
+    {
+        for (material, surface) in &surfaces.0 {
+            let Some(drawn) = to_mesh(surface) else {
+                continue;
+            };
+            let look = match state {
+                1 => site.ghost_material.clone(),
+                2 => site.next_material.clone(),
+                _ => site
+                    .materials
+                    .get(material)
+                    .cloned()
+                    .unwrap_or_else(|| site.plain_material.clone()),
+            };
+            let entity = commands
+                .spawn((
+                    Mesh3d(meshes.add(drawn)),
+                    MeshMaterial3d(look),
+                    Transform::IDENTITY,
+                    ChildOf(site.pieces),
+                ))
+                .id();
+            if state == 1 {
+                commands.entity(entity).insert(NotShadowCaster);
+            }
+            site.textured_entities.push(entity);
+        }
+    }
     let mut show = |entity: Entity, mesh: Option<Mesh>| {
         match mesh {
             Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
             None => commands.entity(entity).remove::<Mesh3d>(),
         };
     };
-    let [placed, ghost, next] = pieces;
     show(site.structure, to_mesh(&mesh.structure));
     show(site.glass, to_mesh(&mesh.glass));
-    show(site.pieces, placed);
-    show(site.ghost, ghost);
-    show(site.next, next);
 
     // A foundation under every ground-floor cell with a floor, down into the ground,
     // standing a little proud of the walls.
@@ -968,46 +1107,78 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
 /// Colour of a plan's pieces not yet in: each a shade apart, so they can be counted.
 const GHOST: [f32; 3] = [0.62, 0.84, 1.0];
 
-/// A kit's pieces as three meshes: those in, those still a ghost, and the next to go in.
-/// Logs are left out when a model draws them.
+/// A kit's pieces as three sets of surfaces by material: those in, those still a ghost,
+/// and the next to go in. Pieces a model draws are left out, but for the daub under a log.
 fn draw_pieces(
+    laid: &[(&LogKit, &[logs::Piece])],
+    shown: Shown,
+    models: Option<&pieces::KitPieces>,
+) -> [Surfaces; 3] {
+    let [mut placed, mut ghost, mut next] = [
+        Surfaces::default(),
+        Surfaces::default(),
+        Surfaces::default(),
+    ];
+    for &(kit, pieces) in laid {
+        let [p, g, n] = draw_kit(pieces, kit, shown, models);
+        for (into, from) in [(&mut placed, p), (&mut ghost, g), (&mut next, n)] {
+            for (material, surface) in from.0 {
+                let to = into.of(material);
+                to.positions.extend(surface.positions);
+                to.normals.extend(surface.normals);
+                to.colours.extend(surface.colours);
+                to.uvs.extend(surface.uvs);
+            }
+        }
+    }
+    [placed, ghost, next]
+}
+
+/// One kit's pieces: those in, those not yet, and the next.
+fn draw_kit(
     pieces: &[logs::Piece],
     kit: &LogKit,
     shown: Shown,
-    modelled: bool,
-) -> [Option<Mesh>; 3] {
-    let done = match shown {
-        Shown::Built => pieces.len(),
-        Shown::Plan(fraction) => {
-            ((pieces.len() as f32 * fraction.clamp(0.0, 1.0)) as usize).min(pieces.len())
-        }
-    };
-    let mut placed = Surface::default();
-    let mut ghost = Surface::default();
-    let mut next = Surface::default();
+    models: Option<&pieces::KitPieces>,
+) -> [Surfaces; 3] {
+    let done = pieces::done(pieces.len(), shown);
+    let [mut placed, mut ghost, mut next] = [
+        Surfaces::default(),
+        Surfaces::default(),
+        Surfaces::default(),
+    ];
     for (index, piece) in pieces.iter().enumerate() {
-        let surface = if index < done {
+        let surfaces = if index < done {
             &mut placed
         } else if index == done {
             &mut next
         } else {
             &mut ghost
         };
-        let from = surface.colours.len();
-        if modelled && matches!(piece, logs::Piece::Log { .. }) {
-            continue;
+        let before: BTreeMap<Material, usize> = surfaces
+            .0
+            .iter()
+            .map(|(material, surface)| (*material, surface.colours.len()))
+            .collect();
+        if models.is_some_and(|models| models.draws(piece)) {
+            logs::draw_chinking(piece, kit, surfaces);
+        } else {
+            logs::draw(piece, kit, surfaces);
         }
-        logs::draw(piece, kit, surface);
         if index > done {
             let shade = if index % 2 == 0 { 1.0 } else { 0.86 };
             let colour = GHOST.map(|c| c * shade);
-            surface.colours[from..].fill(colour);
+            for (material, surface) in surfaces.0.iter_mut() {
+                let from = before.get(material).copied().unwrap_or(0);
+                surface.colours[from..].fill(colour);
+            }
         }
     }
-    [to_mesh(&placed), to_mesh(&ghost), to_mesh(&next)]
+    [placed, ghost, next]
 }
 
-/// Reads the log kit again when its file is saved, and draws every build in logs again.
+/// Reads the kits again when one's file is saved, and draws every build in them again.
+#[allow(clippy::too_many_arguments)]
 fn reload_kit(
     time: Res<Time>,
     mut file: ResMut<KitFile>,
@@ -1017,6 +1188,7 @@ fn reload_kit(
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
     mut meshes: ResMut<Assets<Mesh>>,
+    (assets, mut materials): (Res<AssetServer>, ResMut<Assets<StandardMaterial>>),
 ) {
     if !file.timer.tick(time.delta()).just_finished() {
         return;
@@ -1026,18 +1198,21 @@ fn reload_kit(
         return;
     }
     file.modified = now;
-    let Some(kit) = read_kit().map(Arc::new) else {
+    let Some(kits) = read_kits().map(Arc::new) else {
         return;
     };
-    info!("Read {LOG_KIT} again.");
-    if look.logs.is_some() {
-        look.logs = Some(kit.clone());
+    info!("Read the kits in {KITS} again.");
+    let textured = kit_materials(&kits, &assets, &mut materials);
+    look.materials = textured.clone();
+    if look.kits.is_some() {
+        look.kits = Some(kits.clone());
     }
     for build in
         std::iter::once(&mut site.build).chain(builds.iter_mut().map(|b| &mut b.into_inner().0))
     {
-        if build.logs.is_some() {
-            build.logs = Some(kit.clone());
+        if build.kits.is_some() {
+            build.kits = Some(kits.clone());
+            build.materials = textured.clone();
             redraw(&mut commands, build, &planet, &mut meshes);
         }
     }

@@ -26,14 +26,9 @@ pub fn plugin(app: &mut App) {
             ZENITH,
             Color::srgb(1.0, 0.74, 0.46),
             0.55,
-            2.4,
+            1.6,
         ))
-        // Shade is lit by the sky, so it comes out cool against the warm sun.
-        .insert_resource(GlobalAmbientLight {
-            color: Color::srgb(0.66, 0.76, 1.0),
-            brightness: 1800.0,
-            ..default()
-        })
+        // Shade is lit by the sky (`skylight`), so it comes out cool against the warm sun.
         .insert_resource(DirectionalLightShadowMap { size: 4096 })
         .add_systems(Startup, preset)
         .add_systems(PostStartup, (style_camera, style_sun));
@@ -43,14 +38,15 @@ fn preset(mut tweaks: ResMut<Tweaks>) {
     tweaks.sun_direction = SUN_DIRECTION;
     tweaks.sun_color = Color::srgb(1.0, 0.87, 0.7);
     tweaks.sun_illuminance = 21_000.0;
-    // Red soil showing through young growth.
-    tweaks.ground_low = Color::srgb(0.7, 0.4, 0.3);
-    tweaks.ground_high = Color::srgb(0.82, 0.58, 0.42);
-    tweaks.ground_steep = Color::srgb(0.5, 0.3, 0.27);
+    // Brown earth showing through grass, in the colours real ground has (D14): soil and
+    // grass are darker and less saturated than a painted palette would make them.
+    tweaks.ground_low = Color::srgb(0.42, 0.32, 0.24);
+    tweaks.ground_high = Color::srgb(0.5, 0.4, 0.3);
+    tweaks.ground_steep = Color::srgb(0.46, 0.4, 0.34);
     tweaks.ground_cover = 1.0;
-    tweaks.grass_dry = Color::srgb(0.6, 0.55, 0.28);
-    tweaks.grass_lush = Color::srgb(0.36, 0.49, 0.21);
-    tweaks.sand = Color::srgb(0.9, 0.76, 0.56);
+    tweaks.grass_dry = Color::srgb(0.46, 0.43, 0.27);
+    tweaks.grass_lush = Color::srgb(0.27, 0.36, 0.15);
+    tweaks.sand = Color::srgb(0.72, 0.64, 0.5);
     tweaks.sea_shallow = Color::srgb(0.08, 0.42, 0.5);
     tweaks.sea_deep = Color::srgb(0.03, 0.14, 0.27);
 }
@@ -85,10 +81,10 @@ fn style_camera(mut commands: Commands, camera: Single<Entity, With<MainCamera>>
             intensity: 0.2,
             ..Bloom::NATURAL
         },
-        Tonemapping::TonyMcMapface,
+        Tonemapping::AcesFitted,
         ColorGrading {
             global: ColorGradingGlobal {
-                post_saturation: 1.15,
+                post_saturation: 0.95,
                 ..default()
             },
             shadows: ColorGradingSection {

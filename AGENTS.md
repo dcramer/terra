@@ -6,7 +6,7 @@
 
 **Core tenet: hundreds of variants, not millions** (D182). Almost everything is made from parts by rules, as Borderlands makes guns and No Man's Sky makes planets, with a theme (a realm, a maker, a people) deciding which parts and rules apply. Aim for hundreds or thousands of variants of a kind that a player can tell apart and care about, not millions of near-copies. When you design a generator, say how many distinct variants it makes and what tells them apart.
 
-**Art style: one guide for every realm** (D14). Everything the game draws follows [docs/art-style.md](docs/art-style.md): direction D, graphic layers, with bold simple shapes, flat areas of colour by palette role, and shading left to the light. Read it before you make, generate or judge a model, a concept image or an icon, and check the result against its checklist. A realm changes only the parts, the palette and the light, never the rules.
+**Art style: one guide for every realm** (D14). Everything the game draws follows [docs/art-style.md](docs/art-style.md): textured, lightly stylised realism, real materials in detailed textures, a little shaded, neither photoreal nor cartoon. Read it before you make, generate or judge a model, a concept image, a material or an icon, and check the result against its checklist. A realm, medieval or cyber or alien, changes its parts, materials and light, never the rules.
 
 Everything is built in Rust on Bevy, with our own voxel terrain. The stack is in [docs/tech.md](docs/tech.md), the parts and their status in [docs/engine.md](docs/engine.md), and the next milestone in [docs/prototypes.md](docs/prototypes.md).
 

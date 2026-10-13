@@ -63,6 +63,7 @@ mod save;
 mod scene;
 mod settlement;
 mod skills;
+mod skylight;
 mod sounds;
 mod soundscape;
 mod species;
@@ -180,6 +181,7 @@ pub fn plugin(app: &mut App) {
     build::plugin(app);
     data::plugin(app);
     scene::plugin(app);
+    skylight::plugin(app);
     daylight::plugin(app);
     torchlight::plugin(app);
     wear::plugin(app);

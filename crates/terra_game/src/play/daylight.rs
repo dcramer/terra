@@ -12,6 +12,7 @@
 //! say; the numbers here are a proposal (prototypes.md).
 
 use super::scene::SUN_DIRECTION;
+use super::skylight::SkyLight;
 use crate::planet::{MainCamera, Planet, Tweaks};
 use crate::shell::Options;
 use crate::sky::Sky;
@@ -162,7 +163,7 @@ fn keys() -> [(f32, Light); 6] {
                 glow: v(0.85, 0.45, 0.35),
                 shade: v(0.48, 0.52, 0.88),
                 ambient: 1_000.0,
-                sky: 2.0,
+                sky: 1.6,
                 night: 0.6,
             },
         ),
@@ -176,7 +177,7 @@ fn keys() -> [(f32, Light); 6] {
                 glow: v(1.0, 0.45, 0.22),
                 shade: v(0.68, 0.66, 0.9),
                 ambient: 1_150.0,
-                sky: 2.3,
+                sky: 1.7,
                 night: 0.0,
             },
         ),
@@ -190,7 +191,7 @@ fn keys() -> [(f32, Light); 6] {
                 glow: v(1.0, 0.6, 0.32),
                 shade: v(0.66, 0.72, 0.98),
                 ambient: 1_550.0,
-                sky: 2.4,
+                sky: 1.6,
                 night: 0.0,
             },
         ),
@@ -199,12 +200,12 @@ fn keys() -> [(f32, Light); 6] {
             Light {
                 light: v(1.0, 0.87, 0.7),
                 illuminance: 21_000.0,
-                horizon: v(0.98, 0.85, 0.7),
-                zenith: v(0.24, 0.46, 0.84),
+                horizon: v(0.92, 0.86, 0.78),
+                zenith: v(0.22, 0.44, 0.84),
                 glow: v(1.0, 0.74, 0.46),
                 shade: v(0.66, 0.76, 1.0),
                 ambient: 1_800.0,
-                sky: 2.4,
+                sky: 1.6,
                 night: 0.0,
             },
         ),
@@ -218,7 +219,7 @@ fn keys() -> [(f32, Light); 6] {
                 glow: v(1.0, 0.92, 0.8),
                 shade: v(0.68, 0.78, 1.0),
                 ambient: 2_000.0,
-                sky: 2.4,
+                sky: 1.6,
                 night: 0.0,
             },
         ),
@@ -275,7 +276,7 @@ fn shine(
     path: Option<Res<SkyPath>>,
     mut tweaks: ResMut<Tweaks>,
     mut sky: ResMut<Sky>,
-    mut ambient: ResMut<GlobalAmbientLight>,
+    mut skylight: ResMut<SkyLight>,
     mut fog: Query<&mut DistanceFog, With<MainCamera>>,
 ) {
     let Some(path) = path else { return };
@@ -294,8 +295,12 @@ fn shine(
     sky.night = light.night;
     sky.spin_axis = path.pole();
     sky.spin = (clock.hour - MORNING) / 24.0 * TAU;
-    ambient.color = colour(light.shade);
-    ambient.brightness = light.ambient;
+    let lit = SkyLight {
+        shade: colour(light.shade),
+        brightness: light.ambient,
+    };
+    // Set only when it changes, so the sky is painted again only then.
+    skylight.set_if_neq(lit);
     for mut fog in &mut fog {
         fog.color = colour(light.horizon);
     }

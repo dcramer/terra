@@ -8,6 +8,12 @@
 // lush it is, blue is rock showing through where the ground has been dug (half for
 // stone, all for ore), and alpha is how much of the sky it sees. The mesh decides that so that whatever is planted on the ground can agree
 // with it; this only draws it, and roughens the edges.
+//
+// Covered ground is textured (D14): real soil, grass, rock and sand, layers of one texture
+// array, each projected along the three axes and blended by which the surface faces
+// (triplanar), so no seams or stretching follow the voxel mesh. Each is tinted by the
+// planet's colour for it: its own average colour is swapped for the planet's, keeping its
+// detail, so a planet still decides what colour its ground is.
 
 import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
@@ -40,10 +46,91 @@ struct Ground {
     grass_lush: vec4<f32>,
     sand: vec4<f32>,
     sea_deep: vec4<f32>,
+    layer_metres: vec4<f32>,
+    textured: u32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> ground: Ground;
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var ground_color: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var ground_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(103)
+var ground_normal: texture_2d_array<f32>;
+
+// The layers of the texture array, in the order planet.rs gives them.
+const SOIL: u32 = 0u;
+const GRASS: u32 = 1u;
+const ROCK: u32 = 2u;
+const SAND: u32 = 3u;
+
+struct Layer {
+    colour: vec3<f32>,
+    normal: vec3<f32>,
+}
+
+// Where a surface faces along each axis, how much each axis's projection counts: sharply
+// favouring the nearest, so the blend between them is narrow.
+fn facing(n: vec3<f32>) -> vec3<f32> {
+    let w = pow(abs(n), vec3<f32>(4.0));
+    return w / (w.x + w.y + w.z);
+}
+
+// One layer, projected along each axis the surface faces and blended, its colour with its
+// average swapped for `tint`, and the surface's normal bent by its relief. The position's
+// gradients are given so that this can be called where only some pixels need it.
+fn layer(index: u32, scale: f32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<f32>, gy: vec3<f32>, n: vec3<f32>) -> Layer {
+    let k = 1.0 / (ground.layer_metres[index] * scale);
+    let p = world * k;
+    let dx = gx * k;
+    let dy = gy * k;
+    let w = facing(n);
+    let side = sign(n);
+    var colour = vec3<f32>(0.0);
+    var tx = vec3<f32>(0.0, 0.0, 1.0);
+    var ty = vec3<f32>(0.0, 0.0, 1.0);
+    var tz = vec3<f32>(0.0, 0.0, 1.0);
+    // Each projection mirrored on the far side, so the relief does not turn inside out there.
+    if w.x > 0.01 {
+        let uv = vec2<f32>(p.z * side.x, p.y);
+        let ddx = vec2<f32>(dx.z * side.x, dx.y);
+        let ddy = vec2<f32>(dy.z * side.x, dy.y);
+        colour += textureSampleGrad(ground_color, ground_sampler, uv, index, ddx, ddy).rgb * w.x;
+        tx = textureSampleGrad(ground_normal, ground_sampler, uv, index, ddx, ddy).xyz * 2.0 - 1.0;
+        tx.x *= side.x;
+    }
+    if w.y > 0.01 {
+        let uv = vec2<f32>(p.x * side.y, p.z);
+        let ddx = vec2<f32>(dx.x * side.y, dx.z);
+        let ddy = vec2<f32>(dy.x * side.y, dy.z);
+        colour += textureSampleGrad(ground_color, ground_sampler, uv, index, ddx, ddy).rgb * w.y;
+        ty = textureSampleGrad(ground_normal, ground_sampler, uv, index, ddx, ddy).xyz * 2.0 - 1.0;
+        ty.x *= side.y;
+    }
+    if w.z > 0.01 {
+        let uv = vec2<f32>(-p.x * side.z, p.y);
+        let ddx = vec2<f32>(-dx.x * side.z, dx.y);
+        let ddy = vec2<f32>(-dy.x * side.z, dy.y);
+        colour += textureSampleGrad(ground_color, ground_sampler, uv, index, ddx, ddy).rgb * w.z;
+        tz = textureSampleGrad(ground_normal, ground_sampler, uv, index, ddx, ddy).xyz * 2.0 - 1.0;
+        tz.x *= -side.z;
+    }
+    // Each projection's relief added to the surface as seen along its axis (the "UDN"
+    // blend), then turned back to the world's axes.
+    let nx = vec3<f32>(n.x, tx.y + n.y, tx.x + n.z);
+    let ny = vec3<f32>(ty.x + n.x, n.y, ty.y + n.z);
+    let nz = vec3<f32>(tz.x + n.x, tz.y + n.y, n.z);
+    let normal = normalize(nx * w.x + ny * w.y + nz * w.z);
+    // The smallest copy of the texture is its average colour.
+    let average = textureSampleLevel(ground_color, ground_sampler, vec2<f32>(0.5), index, 16.0).rgb;
+    return Layer(colour * tint / max(average, vec3<f32>(0.02)), normal);
+}
+
+// `under` with `top` laid on it, `amount` of the way, colour and relief alike.
+fn over(under: Layer, top: Layer, amount: f32) -> Layer {
+    return Layer(mix(under.colour, top.colour, amount), normalize(mix(under.normal, top.normal, amount)));
+}
 
 fn hash(p: vec3<f32>) -> f32 {
     let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -78,10 +165,64 @@ fn fragment(
     let flatness = dot(normalize(in.world_normal), up);
 
     var colour = mix(ground.low.rgb, ground.high.rgb, smoothstep(0.25, 0.75, height));
-    colour = mix(ground.steep.rgb, colour, smoothstep(0.93, 0.99, flatness));
+    let steep = 1.0 - smoothstep(0.93, 0.99, flatness);
 
 @if(!PREPASS_PIPELINE)
-    if ground.cover > 0.0 {
+    if ground.cover > 0.0 && ground.textured != 0u {
+        // The same patches as the flat ground's, below, in textured layers.
+        let blotch = noise(world * 0.23) * 0.6 + noise(world * 0.9 + 17.0) * 0.4;
+        let fleck = noise(world * 3.1 + 5.0);
+@if(VERTEX_COLORS)
+        let grows = in.color;
+@else
+        let grows = vec4<f32>(0.0);
+        let n = normalize(in.world_normal);
+        let gx = dpdx(world);
+        let gy = dpdy(world);
+        var ground_is = layer(SOIL, 1.0, colour * (0.9 + 0.2 * blotch), world, gx, gy, n);
+        if steep > 0.0 {
+            ground_is = over(ground_is, layer(ROCK, 1.0, ground.steep.rgb, world, gx, gy, n), steep);
+        }
+
+        // Grass sits in the soil's hollows first: where the soil is lighter it is higher,
+        // and the grass gives out there.
+        let soil_high = dot(ground_is.colour / max(colour, vec3<f32>(0.02)), vec3<f32>(0.33)) - 1.0;
+        let grass = smoothstep(0.38, 0.62, grows.r + (blotch - 0.5) * 0.5 - soil_high * 0.35) * ground.cover * (1.0 - steep);
+        if grass > 0.0 {
+            let lush = smoothstep(0.2, 0.8, grows.g + (blotch - 0.5) * 0.45);
+            let tint = mix(ground.grass_dry.rgb, ground.grass_lush.rgb, lush) * (0.92 + 0.16 * fleck);
+            // Two sizes of the same grass, so its repeat does not show across a field.
+            let near = layer(GRASS, 1.0, tint, world, gx, gy, n);
+            let far = layer(GRASS, 3.7, tint, world + 11.0, gx, gy, n);
+            ground_is = over(ground_is, over(near, far, 0.25 + 0.4 * blotch), grass);
+        }
+
+        let rock = smoothstep(0.2, 0.4, grows.b);
+        if rock > 0.0 {
+            let ore = smoothstep(0.7, 0.9, grows.b);
+            let stone_colour = vec3<f32>(0.56, 0.49, 0.42) * (0.85 + 0.3 * blotch);
+            let ore_colour = vec3<f32>(0.55, 0.3, 0.2) * (0.8 + 0.4 * fleck);
+            ground_is = over(ground_is, layer(ROCK, 0.6, mix(stone_colour, ore_colour, ore), world, gx, gy, n), rock);
+        }
+
+        let above_sea = from_centre - ground.sea_radius_m;
+        let lap = sin(globals.time * 0.9 + noise(world * 0.12) * 12.0) * 0.06;
+        let sandy = (1.0 - smoothstep(0.35, 1.5, above_sea + (blotch - 0.5) * 0.9)) * ground.cover;
+        if sandy > 0.0 {
+            ground_is = over(ground_is, layer(SAND, 1.0, ground.sand.rgb, world, gx, gy, n), sandy);
+        }
+        colour = ground_is.colour;
+        colour *= mix(0.72, 1.0, smoothstep(0.05, 0.3, above_sea - lap));
+        colour = mix(colour, ground.sea_deep.rgb, smoothstep(0.0, 4.5, -above_sea) * 0.92);
+        let foam_width = 0.07 + 0.05 * noise(world * 1.7 + globals.time * 0.25);
+        let foam = 1.0 - smoothstep(0.0, foam_width, abs(above_sea - lap - 0.02));
+        colour = mix(colour, vec3<f32>(1.0, 0.99, 0.96), foam * 0.85 * ground.cover);
+        pbr_input.N = ground_is.normal;
+    } else {
+        colour = mix(colour, ground.steep.rgb, steep);
+    }
+@if(!PREPASS_PIPELINE)
+    if ground.cover > 0.0 && ground.textured == 0u {
         // Blotches a few metres across and smaller, to break up every edge and tone.
         let blotch = noise(world * 0.23) * 0.6 + noise(world * 0.9 + 17.0) * 0.4;
         let fleck = noise(world * 3.1 + 5.0);

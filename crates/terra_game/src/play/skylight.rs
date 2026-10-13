@@ -1,0 +1,245 @@
+//! Light from the whole sky (D14): the shade is lit by the sky above and by the sunlit
+//! ground below, as it is outdoors, not by one flat colour from everywhere. A side facing
+//! open sky is bright and cool, an underside takes the ground's warm or green bounce, and
+//! shiny things reflect the sky. Shipped games do this with an environment map captured
+//! from their sky; this paints a small one from the sky's colours, the sun and the
+//! ground, and Bevy filters it into diffuse and specular light every frame
+//! (`GeneratedEnvironmentMapLight`).
+
+use crate::planet::{MainCamera, Tweaks};
+use crate::sky::Sky;
+use bevy::{
+    asset::RenderAssetUsages,
+    light::GeneratedEnvironmentMapLight,
+    prelude::*,
+    render::render_resource::{
+        Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
+    },
+};
+
+/// Pixels along each face of the painted sky: it is smooth, so small is enough.
+const FACE: u32 = 32;
+
+/// The light the sky gives the shade, which `daylight` sets for the hour.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct SkyLight {
+    /// The colour the shade takes from the sky overhead, and how bright.
+    pub shade: Color,
+    pub brightness: f32,
+}
+
+impl Default for SkyLight {
+    fn default() -> Self {
+        Self {
+            shade: Color::srgb(0.66, 0.76, 1.0),
+            brightness: 1800.0,
+        }
+    }
+}
+
+/// The painted sky, and what it was last painted from.
+#[derive(Resource)]
+struct Painted {
+    image: Handle<Image>,
+    from: Option<[f32; 16]>,
+}
+
+pub fn plugin(app: &mut App) {
+    app.init_resource::<SkyLight>()
+        // The sky's light replaces the flat ambient light.
+        .insert_resource(GlobalAmbientLight {
+            brightness: 0.0,
+            ..default()
+        })
+        .add_systems(Startup, setup)
+        .add_systems(PostStartup, light_camera)
+        .add_systems(PostUpdate, paint);
+}
+
+fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let mut image = Image::new_fill(
+        Extent3d {
+            width: FACE,
+            height: FACE,
+            depth_or_array_layers: 6,
+        },
+        TextureDimension::D2,
+        &[0; 16],
+        TextureFormat::Rgba32Float,
+        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    );
+    image.texture_view_descriptor = Some(TextureViewDescriptor {
+        dimension: Some(TextureViewDimension::Cube),
+        ..default()
+    });
+    commands.insert_resource(Painted {
+        image: images.add(image),
+        from: None,
+    });
+}
+
+fn light_camera(
+    mut commands: Commands,
+    camera: Single<Entity, With<MainCamera>>,
+    painted: Res<Painted>,
+    light: Res<SkyLight>,
+) {
+    commands
+        .entity(*camera)
+        .insert(GeneratedEnvironmentMapLight {
+            environment_map: painted.image.clone(),
+            intensity: light.brightness,
+            ..default()
+        });
+}
+
+/// Paints the sky again when its light has changed enough to see, and turns it so its
+/// up is the camera's: the planet's centre is the world's origin.
+fn paint(
+    light: Res<SkyLight>,
+    sky: Res<Sky>,
+    tweaks: Res<Tweaks>,
+    mut painted: ResMut<Painted>,
+    mut images: ResMut<Assets<Image>>,
+    mut camera: Query<(&GlobalTransform, &mut GeneratedEnvironmentMapLight), With<MainCamera>>,
+) {
+    let Ok((at, mut environment)) = camera.single_mut() else {
+        return;
+    };
+    let up = at.translation().normalize_or(Vec3::Y);
+    let rotation = Quat::from_rotation_arc(Vec3::Y, up);
+    if environment.rotation.angle_between(rotation) > 0.01 {
+        environment.rotation = rotation;
+    }
+    if environment.intensity != light.brightness {
+        environment.intensity = light.brightness;
+    }
+
+    let linear = |c: Color| Vec3::from_slice(&c.to_linear().to_f32_array()[..3]);
+    let sun_height = tweaks.sun_direction.normalize_or(Vec3::Y).dot(up).max(0.0);
+    let colours = Colours {
+        shade: linear(light.shade),
+        horizon: linear(sky.horizon),
+        zenith: linear(sky.zenith),
+        // Sunlit ground, as bright beside the sky as the sun makes it.
+        ground: linear(tweaks.grass_lush).lerp(linear(tweaks.ground_low), 0.4)
+            * linear(tweaks.sun_color)
+            * (tweaks.sun_illuminance * sun_height
+                / (std::f32::consts::PI * light.brightness.max(1.0))
+                + 1.0),
+    };
+    let key = colours.key();
+    // Repainted only when something moved by more than a shade: a few times a minute
+    // while the sun crosses the sky.
+    if painted
+        .from
+        .is_some_and(|from| from.iter().zip(key).all(|(a, b)| (a - b).abs() < 0.005))
+    {
+        return;
+    }
+    painted.from = Some(key);
+    let Some(mut image) = images.get_mut(&painted.image) else {
+        return;
+    };
+    image.data = Some(colours.cube());
+}
+
+/// What the sky is painted from, as linear colours.
+#[derive(Clone, Copy)]
+struct Colours {
+    shade: Vec3,
+    horizon: Vec3,
+    zenith: Vec3,
+    ground: Vec3,
+}
+
+impl Colours {
+    fn key(&self) -> [f32; 16] {
+        let mut key = [0.0; 16];
+        for (i, c) in [self.shade, self.horizon, self.zenith, self.ground]
+            .iter()
+            .enumerate()
+        {
+            key[i * 3..i * 3 + 3].copy_from_slice(&c.to_array());
+        }
+        key
+    }
+
+    /// The light from a direction, +Y up. The sky takes its hue from the drawn sky, half
+    /// way to the shade's colour, which the art chose, and is brighter toward the horizon
+    /// as a clear sky is; below the horizon is the ground.
+    fn toward(&self, d: Vec3) -> Vec3 {
+        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722)).max(1e-4);
+        let up = d.y;
+        let hue = |c: Vec3| c / luma(c);
+        let sky = |e: f32| {
+            let drawn = hue(self.horizon.lerp(self.zenith, e.max(0.0).sqrt()));
+            hue(drawn.lerp(hue(self.shade), 0.5)) * (1.15 - 0.35 * e.max(0.0))
+        };
+        if up >= 0.0 {
+            sky(up)
+        } else {
+            sky(0.0).lerp(self.ground, (-up / 0.15).clamp(0.0, 1.0))
+        }
+    }
+
+    /// The six faces of the cube, +X, -X, +Y, -Y, +Z, -Z, as RGBA floats.
+    fn cube(&self) -> Vec<u8> {
+        let mut data = Vec::with_capacity((FACE * FACE * 6 * 16) as usize);
+        for face in 0..6 {
+            for y in 0..FACE {
+                for x in 0..FACE {
+                    let u = (x as f32 + 0.5) / FACE as f32 * 2.0 - 1.0;
+                    let v = (y as f32 + 0.5) / FACE as f32 * 2.0 - 1.0;
+                    let d = match face {
+                        0 => Vec3::new(1.0, -v, -u),
+                        1 => Vec3::new(-1.0, -v, u),
+                        2 => Vec3::new(u, 1.0, v),
+                        3 => Vec3::new(u, -1.0, -v),
+                        4 => Vec3::new(u, -v, 1.0),
+                        _ => Vec3::new(-u, -v, -1.0),
+                    };
+                    let c = self.toward(d.normalize());
+                    for channel in [c.x, c.y, c.z, 1.0] {
+                        data.extend_from_slice(&channel.to_le_bytes());
+                    }
+                }
+            }
+        }
+        data
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn colours() -> Colours {
+        Colours {
+            shade: Vec3::new(0.4, 0.5, 1.0),
+            horizon: Vec3::new(0.9, 0.85, 0.8),
+            zenith: Vec3::new(0.1, 0.25, 0.7),
+            ground: Vec3::new(0.3, 0.35, 0.1),
+        }
+    }
+
+    #[test]
+    fn the_sky_is_blue_above_and_the_ground_below() {
+        let c = colours();
+        let above = c.toward(Vec3::Y);
+        assert!(above.z > above.x, "{above}");
+        assert_eq!(c.toward(-Vec3::Y), c.ground);
+    }
+
+    #[test]
+    fn a_clear_sky_is_brighter_at_the_horizon() {
+        let c = colours();
+        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        assert!(luma(c.toward(Vec3::X)) > luma(c.toward(Vec3::Y)));
+    }
+
+    #[test]
+    fn the_cube_has_six_faces_of_four_floats_a_pixel() {
+        assert_eq!(colours().cube().len(), (FACE * FACE * 6 * 16) as usize);
+    }
+}

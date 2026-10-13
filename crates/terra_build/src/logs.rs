@@ -18,20 +18,25 @@
 
 #[cfg(test)]
 use crate::DOOR_HEIGHT_M;
-use crate::mesh::ROOF_THICK_M;
-use crate::{Base, CELL_M, Fill, Kind, STOREY_CUBES, STOREY_M, Surface, storey_of, wall_layer};
+use crate::mesh::{Material, ROOF_THICK_M, Surfaces};
+use crate::{
+    Base, CELL_M, Fill, Kind, RoofStyle, STOREY_CUBES, STOREY_M, Surface, storey_of, wall_layer,
+};
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
 use std::f32::consts::TAU;
 
-/// A kind of log wall: its sizes, how much each log varies, and its colours, from a file
-/// in `assets/data/kits/` (D136). Colours are as they should appear on screen (sRGB),
-/// named from the palette's roles where there is one.
+/// A kind of construction's kit: how its walls are laid, its sizes, how much each piece
+/// varies, and its colours and textures, from a file in `assets/data/kits/` (D136).
+/// Colours are as they should appear on screen (sRGB), named from the palette's roles
+/// where there is one. What a file leaves out is pine's, as `logs.ron` has it.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, default)]
 pub struct LogKit {
     /// The kind of construction it lays (D181): the number the cubes it lays carry.
     pub id: u16,
+    /// How its walls are laid: as logs, or as masonry.
+    pub pattern: Pattern,
     /// How thick a log is.
     pub diameter: f32,
     /// How far apart the courses are; less than the diameter, as logs are scribed to sit
@@ -58,11 +63,83 @@ pub struct LogKit {
     pub chinking: bool,
     /// The boards round an opening: how wide and how far proud of the logs.
     pub frame: f32,
-    /// The model each log is drawn with (D177), an asset path, its length along X; until
-    /// the kit has one, logs are drawn in code.
+    /// How far a roof over its walls overhangs them, at the eaves and the gable ends (D175).
+    pub eaves: f32,
+    /// The models its pieces are drawn with (D177), as asset paths; a piece with none is
+    /// drawn in code, as a stand-in.
     #[serde(default)]
-    pub log_model: Option<String>,
+    pub models: KitModels,
+    /// Its materials' textures (D14): where each is, how many metres across it is, and how
+    /// deep its parallax reads; a material with none is drawn in its plain colour.
+    #[serde(default)]
+    pub textures: BTreeMap<Material, Texture>,
     pub colours: LogColours,
+}
+
+/// How a kit lays its walls (D160: a few patterns in code, kits as data).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Pattern {
+    /// Courses of logs, crossing at the corners (this file).
+    #[default]
+    Logs,
+    /// Stone (`masonry.rs`): sections a metre square, half-metre blocks and
+    /// cornerstones, drawn by the kit's models, as thick as the grid. Where it meets logs,
+    /// it runs through and the logs end flush against it (D179).
+    Masonry,
+}
+
+/// Every kit a base is laid by, one for each kind of construction.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Kits(pub Vec<LogKit>);
+
+impl Kits {
+    /// The kit that lays a kind, if any does.
+    pub fn of(&self, kind: Kind) -> Option<&LogKit> {
+        self.0.iter().find(|kit| kit.kind() == kind)
+    }
+}
+
+/// A material's textures: a folder under `assets` with `color.jpg`, `normal.jpg` and
+/// `arm.jpg` (occlusion, roughness, metal), and `height.jpg` for parallax.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Texture {
+    pub path: String,
+    /// How many metres across and down one copy of it covers.
+    pub metres: [f32; 2],
+    /// How deep its parallax reads, as a fraction of its size; none if not given.
+    #[serde(default)]
+    pub depth: f32,
+}
+
+/// The models of a kit's pieces, as asset paths (docs/building-kits.md). A list gives versions, one
+/// picked for each place by its seed.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct KitModels {
+    /// Logs of an everyday length, laid along X, stretched to fit.
+    pub logs: Vec<String>,
+    /// A long log, for a course longer than `long_from` metres.
+    pub long_log: Option<String>,
+    pub long_from: f32,
+    /// A board round openings, laid along X.
+    pub board: Option<String>,
+    /// A door and a window in their frames, set into openings of their shape.
+    pub door: Option<String>,
+    pub window: Option<String>,
+    /// Stretches of footing under walls on the ground, front to +Z.
+    pub footing: Vec<String>,
+    /// A panel of a roof's covering, its rows' lower edges to +Z; and a ridge cap along X.
+    pub shakes: Option<String>,
+    pub ridge: Option<String>,
+    /// A panel of floor.
+    pub floor: Option<String>,
+    /// A masonry kit's stone (`masonry.rs`): sections a metre square, blocks half a metre
+    /// each way, and columns of cornerstones half a metre square and a metre high, each
+    /// with its face to +Z.
+    pub stone: Vec<String>,
+    pub stone_half: Vec<String>,
+    pub stone_corner: Vec<String>,
 }
 
 /// The colours a log wall is drawn in.
@@ -95,6 +172,7 @@ impl Default for LogKit {
     fn default() -> Self {
         LogKit {
             id: 1,
+            pattern: Pattern::Logs,
             diameter: 0.3,
             course: 0.25,
             overhang: 0.25,
@@ -107,7 +185,9 @@ impl Default for LogKit {
             ragged: 0.04,
             chinking: true,
             frame: 0.08,
-            log_model: None,
+            eaves: 0.5,
+            models: KitModels::default(),
+            textures: BTreeMap::new(),
             colours: LogColours {
                 wood: [0.62, 0.43, 0.26],
                 light: [0.74, 0.56, 0.37],
@@ -169,14 +249,44 @@ pub enum Piece {
     },
     /// A board round an opening: a jamb, a head or a sill.
     Board { min: Vec3, max: Vec3 },
+    /// A door or window set into an opening, filling the box from `min` to `max`, its face
+    /// across the wall, which runs along X or along Z.
+    Opening {
+        min: Vec3,
+        max: Vec3,
+        along_x: bool,
+        door: bool,
+    },
+    /// A footing along the foot of a wall on the ground, its top along the line from one
+    /// end to the other.
+    Footing { from: Vec3, to: Vec3, seed: u32 },
+    /// A panel of a roof's covering, by its corners: along its lower edge, then its upper.
+    Shakes { corners: [Vec3; 4] },
+    /// A ridge cap along a roof's ridge, on it.
+    Ridge { from: Vec3, to: Vec3 },
+    /// A panel of floor, its top from one corner to the other.
+    Floor { min: Vec3, max: Vec3 },
+    /// A piece of a stone wall (`masonry.rs`), filling a box about its centre: its
+    /// length along X, or along Z if not `along_x`.
+    Stone {
+        shape: crate::masonry::Stone,
+        centre: Vec3,
+        size: Vec3,
+        along_x: bool,
+        seed: u32,
+    },
 }
 
 impl Piece {
     /// The lowest point of it, which orders the pieces as they go in.
     fn bottom(&self) -> f32 {
         match self {
-            Piece::Log { from, to, .. } => from.y.min(to.y),
-            Piece::Board { min, .. } => min.y,
+            Piece::Log { from, to, .. } | Piece::Ridge { from, to } => from.y.min(to.y),
+            Piece::Footing { from, to, .. } => from.y.min(to.y) - 1.0,
+            Piece::Board { min, .. } | Piece::Opening { min, .. } => min.y,
+            Piece::Floor { min, .. } => min.y - 0.5,
+            Piece::Shakes { corners } => corners.iter().map(|c| c.y).fold(f32::MAX, f32::min),
+            Piece::Stone { centre, size, .. } => centre.y - size.y * 0.5,
         }
     }
 }
@@ -308,6 +418,13 @@ impl Walls<'_> {
 
 /// Lays every wall of a base in the kit's kind as logs.
 pub fn lay(base: &Base, kit: &LogKit) -> Layout {
+    if kit.pattern == Pattern::Masonry {
+        let mut layout = Layout {
+            pieces: crate::masonry::lay(base, kit),
+        };
+        sort(&mut layout);
+        return layout;
+    }
     let walls = Walls {
         base,
         kind: kit.kind(),
@@ -353,13 +470,31 @@ pub fn lay(base: &Base, kit: &LogKit) -> Layout {
         }
     }
     posts(&walls, &ours, &mut layout);
-    // Bottom up, keeping walls together within a course.
-    layout.pieces.sort_by(|a, b| {
-        (a.bottom() * 100.0)
-            .round()
-            .total_cmp(&(b.bottom() * 100.0).round())
-    });
+    if !kit.models.footing.is_empty() || kit.textures.contains_key(&Material::Stone) {
+        footings(&walls, &ours, &mut layout);
+    }
+    if kit.models.shakes.is_some() {
+        coverings(&walls, kit, &mut layout);
+    }
+    if kit.models.floor.is_some() || kit.textures.contains_key(&Material::Floor) {
+        floors(&walls, &mut layout);
+    }
+    under_roofs(base, kit, &mut layout);
+    sort(&mut layout);
     layout
+}
+
+/// Bottom up, keeping walls together within a course; doors and windows last, fitted
+/// into their openings once the rest is up, as they are not part of the plan.
+fn sort(layout: &mut Layout) {
+    layout.pieces.sort_by(|a, b| {
+        let fitted = |p: &Piece| matches!(p, Piece::Opening { .. });
+        fitted(a).cmp(&fitted(b)).then(
+            (a.bottom() * 100.0)
+                .round()
+                .total_cmp(&(b.bottom() * 100.0).round()),
+        )
+    });
 }
 
 /// The courses of one row, each split into logs where it runs unbroken.
@@ -459,6 +594,52 @@ fn frames(walls: &Walls, kit: &LogKit, axis: Axis, row: i32, layout: &mut Layout
             holes.insert((along, at.y));
         }
     }
+    // A door or window the kit has a model of fills its opening, when the opening is the
+    // shape of one: a rectangle, at the foot of its wall for a door, above it for a window.
+    let mut framed: BTreeSet<(i32, i32)> = BTreeSet::new();
+    for region in regions(&holes) {
+        let (low, high) = region.iter().fold(
+            ((i32::MAX, i32::MAX), (i32::MIN, i32::MIN)),
+            |(lo, hi), &(a, l)| ((lo.0.min(a), lo.1.min(l)), (hi.0.max(a), hi.1.max(l))),
+        );
+        let whole = region.len() as i32 == (high.0 - low.0 + 1) * (high.1 - low.1 + 1);
+        let at_foot = walls.ours(axis.cube(row, low.0, low.1 - 1)).is_none();
+        let glazed = region
+            .iter()
+            .any(|&(a, l)| walls.ours(axis.cube(row, a, l)) == Some(Fill::Glass));
+        let modelled = whole
+            && if at_foot && !glazed {
+                kit.models.door.is_some()
+            } else {
+                !at_foot && glazed && kit.models.window.is_some()
+            };
+        if !modelled {
+            framed.extend(region);
+            continue;
+        }
+        let depth = kit.radius() + 0.02;
+        let (start, end) = (
+            low.0 as f32 * CELL_M - kit.frame,
+            (high.0 + 1) as f32 * CELL_M + kit.frame,
+        );
+        let bottom = low.1 as f32 * CELL_M - if at_foot { 0.0 } else { kit.frame };
+        let top = (high.1 + 1) as f32 * CELL_M + kit.frame;
+        let out = match axis {
+            Axis::X => Vec3::Z,
+            Axis::Z => Vec3::X,
+        } * depth;
+        let (a, b) = (
+            axis.point(row, start, bottom) - out,
+            axis.point(row, end, top) + out,
+        );
+        layout.pieces.push(Piece::Opening {
+            min: a.min(b),
+            max: a.max(b),
+            along_x: axis == Axis::X,
+            door: at_foot,
+        });
+    }
+    let holes = framed;
     let solid =
         |along: i32, layer: i32| walls.ours(axis.cube(row, along, layer)) == Some(Fill::Solid);
     let per_cube = (CELL_M / kit.course).round() as i32;
@@ -524,6 +705,176 @@ fn frames(walls: &Walls, kit: &LogKit, axis: Axis, row: i32, layout: &mut Layout
                 board(a, b, foot, edge, 0.03);
             }
         }
+    }
+}
+
+/// The groups of cells that touch, each in order.
+fn regions(cells: &BTreeSet<(i32, i32)>) -> Vec<Vec<(i32, i32)>> {
+    let mut left = cells.clone();
+    let mut found = Vec::new();
+    while let Some(&start) = left.iter().next() {
+        left.remove(&start);
+        let mut group = vec![start];
+        let mut frontier = vec![start];
+        while let Some((a, l)) = frontier.pop() {
+            for next in [(a + 1, l), (a - 1, l), (a, l + 1), (a, l - 1)] {
+                if left.remove(&next) {
+                    group.push(next);
+                    frontier.push(next);
+                }
+            }
+        }
+        group.sort();
+        found.push(group);
+    }
+    found
+}
+
+/// A footing under every straight run of wall that stands on the ground: the cubes of the
+/// first layer, with nothing of the wall under them.
+fn footings(walls: &Walls, ours: &[IVec3], layout: &mut Layout) {
+    for axis in [Axis::X, Axis::Z] {
+        let mut rows: BTreeMap<i32, BTreeSet<i32>> = BTreeMap::new();
+        for &at in ours.iter().filter(|at| at.y == 0) {
+            let alone = !walls.runs(at, Axis::X) && !walls.runs(at, Axis::Z);
+            if walls.runs(at, axis) || (alone && axis == Axis::X) {
+                let (row, along) = match axis {
+                    Axis::X => (at.z, at.x),
+                    Axis::Z => (at.x, at.z),
+                };
+                rows.entry(row).or_default().insert(along);
+            }
+        }
+        for (row, cells) in rows {
+            let keyed: BTreeSet<(i32, i32)> = cells.iter().map(|&a| (0, a)).collect();
+            for (_, first, last) in runs_of(&keyed, |cell| cell) {
+                let reach = 0.05;
+                layout.pieces.push(Piece::Footing {
+                    from: axis.point(row, first as f32 * CELL_M - reach, 0.0),
+                    to: axis.point(row, (last + 1) as f32 * CELL_M + reach, 0.0),
+                    seed: hash(&[axis as u32, row as u32, first as u32]),
+                });
+            }
+        }
+    }
+}
+
+/// How large a panel of roof covering or floor is, about.
+const PANEL_M: f32 = 1.0;
+
+/// The covering of each gable and lean-to roof over walls of the kit's kind: each face,
+/// eaves and all, in panels of about a metre, as many as fit it exactly; and a ridge cap
+/// along a gable's ridge. A hip's faces are not rectangles, and are left to the plain roof.
+fn coverings(walls: &Walls, kit: &LogKit, layout: &mut Layout) {
+    for section in walls.base.sections() {
+        if walls.base.kind(IVec3::from_array(section.min)) != Some(walls.kind) {
+            continue;
+        }
+        let (low, high) = section.bounds();
+        let eaves = (section.storey() + 1) as f32 * STOREY_M;
+        let e = kit.eaves;
+        let along_x = section.along_x;
+        // Along the ridge and across it, as points.
+        let point = |along: f32, across: f32, height: f32| {
+            if along_x {
+                Vec3::new(along, height, across)
+            } else {
+                Vec3::new(across, height, along)
+            }
+        };
+        let (start, end) = if along_x {
+            (low.x - e, high.x + e)
+        } else {
+            (low.y - e, high.y + e)
+        };
+        let (near, far) = if along_x {
+            (low.y, high.y)
+        } else {
+            (low.x, high.x)
+        };
+        let height = |across: f32, from_eave: f32| eaves + from_eave * section.pitch + 0.0 * across;
+        // Each face: its eave's edge across the ridge, and where it rises to.
+        let faces: Vec<(f32, f32)> = match section.style {
+            RoofStyle::Gable => {
+                let middle = (near + far) * 0.5;
+                vec![(near - e, middle), (far + e, middle)]
+            }
+            RoofStyle::LeanTo => vec![(near - e, far + e)],
+            RoofStyle::Hip => continue,
+        };
+        for (eave, ridge) in faces {
+            let toward = (ridge - eave).signum();
+            let run = (ridge - eave).abs();
+            let slope = run * (1.0 + section.pitch * section.pitch).sqrt();
+            let (rows, columns) = (
+                (slope / PANEL_M).round().max(1.0) as i32,
+                ((end - start) / PANEL_M).round().max(1.0) as i32,
+            );
+            let at = |column: i32, row: i32| {
+                let along = start + (end - start) * column as f32 / columns as f32;
+                let across = eave + toward * run * row as f32 / rows as f32;
+                let from_eave = run * row as f32 / rows as f32 - e;
+                point(along, across, height(across, from_eave))
+            };
+            for row in 0..rows {
+                for column in 0..columns {
+                    layout.pieces.push(Piece::Shakes {
+                        corners: [
+                            at(column, row),
+                            at(column + 1, row),
+                            at(column + 1, row + 1),
+                            at(column, row + 1),
+                        ],
+                    });
+                }
+            }
+        }
+        if section.style == RoofStyle::Gable {
+            let middle = (near + far) * 0.5;
+            let top = eaves + (far - near) * 0.5 * section.pitch;
+            layout.pieces.push(Piece::Ridge {
+                from: point(start, middle, top),
+                to: point(end, middle, top),
+            });
+        }
+    }
+}
+
+/// The floors of rooms in the kit's kind, in panels: two tiles square where four make one,
+/// else a tile.
+fn floors(walls: &Walls, layout: &mut Layout) {
+    let ours = |tile: IVec3| {
+        walls.base.contains(tile)
+            && walls
+                .base
+                .cube(IVec3::new(tile.x, crate::floor_layer(tile.y), tile.z))
+                .is_some_and(|cube| cube.kind == walls.kind)
+    };
+    let mut done: BTreeSet<[i32; 3]> = BTreeSet::new();
+    for (tile, _) in walls.base.tiles() {
+        if done.contains(&tile.to_array()) || !ours(tile) {
+            continue;
+        }
+        let block = [IVec3::ZERO, IVec3::X, IVec3::Z, IVec3::new(1, 0, 1)];
+        let size = if block
+            .iter()
+            .all(|step| ours(tile + *step) && !done.contains(&(tile + *step).to_array()))
+        {
+            2
+        } else {
+            1
+        };
+        for x in 0..size {
+            for z in 0..size {
+                done.insert((tile + IVec3::new(x, 0, z)).to_array());
+            }
+        }
+        let y = tile.y as f32 * STOREY_M;
+        let low = Vec3::new(tile.x as f32 * CELL_M, y, tile.z as f32 * CELL_M);
+        layout.pieces.push(Piece::Floor {
+            min: low,
+            max: low + Vec3::new(size as f32 * CELL_M, 0.0, size as f32 * CELL_M),
+        });
     }
 }
 
@@ -620,6 +971,86 @@ fn gables(
     }
 }
 
+/// Cuts back every log that would pass through a roof, its eaves too: the ends of the top
+/// courses that run past a corner, under a hip's slope, end where the roof begins, as a
+/// builder saws them. A log the roof cuts in the middle is left in two.
+fn under_roofs(base: &Base, kit: &LogKit, layout: &mut Layout) {
+    let radius = kit.radius() + kit.ragged;
+    // Where the slab of a roof is at a point, its underside and its top, if one is there.
+    let slab = |at: Vec3| {
+        base.sections().iter().find_map(|section| {
+            let eaves = (section.storey() + 1) as f32 * STOREY_M;
+            let rise = section.rise_beyond(glam::Vec2::new(at.x, at.z), kit.eaves)?;
+            let top = eaves + rise;
+            (at.y + radius > top - ROOF_THICK_M && at.y - radius < top).then_some(())
+        })
+    };
+    let pieces = std::mem::take(&mut layout.pieces);
+    for piece in pieces {
+        let Piece::Log {
+            from,
+            to,
+            split,
+            seed,
+            chinking,
+        } = piece
+        else {
+            layout.pieces.push(piece);
+            continue;
+        };
+        let length = from.distance(to);
+        if base.sections().is_empty() || from.y != to.y || length < 1e-3 {
+            layout.pieces.push(piece);
+            continue;
+        }
+        let along = (to - from) / length;
+        let samples = (length / GABLE_STEP_M).ceil() as i32;
+        let clear: Vec<bool> = (0..=samples)
+            .map(|i| slab(from + along * (length * i as f32 / samples as f32)).is_none())
+            .collect();
+        if clear.iter().all(|&c| c) {
+            layout.pieces.push(piece);
+            continue;
+        }
+        // The runs of it that are clear of every roof.
+        let mut start = None;
+        let mut spans = Vec::new();
+        for (i, &c) in clear.iter().enumerate() {
+            let at = length * i as f32 / samples as f32;
+            match (c, start) {
+                (true, None) => start = Some(at),
+                (false, Some(a)) => {
+                    spans.push((a, at - length / samples as f32));
+                    start = None;
+                }
+                _ => {}
+            }
+        }
+        if let Some(a) = start {
+            spans.push((a, length));
+        }
+        for (index, (a, b)) in spans.into_iter().enumerate() {
+            if b - a < 0.15 {
+                continue;
+            }
+            layout.pieces.push(Piece::Log {
+                from: from + along * a,
+                to: from + along * b,
+                split,
+                seed: if index == 0 {
+                    seed
+                } else {
+                    hash(&[seed, index as u32])
+                },
+                chinking: chinking.and_then(|(c0, c1)| {
+                    let (c0, c1) = (c0.max(a) - a, c1.min(b) - a);
+                    (c1 > c0).then_some((c0, c1))
+                }),
+            });
+        }
+    }
+}
+
 /// A cube of ours with none beside it either way is a post: an upright log up each
 /// stack of them.
 fn posts(walls: &Walls, ours: &[IVec3], layout: &mut Layout) {
@@ -677,34 +1108,94 @@ fn joined(start: f32, end: f32, longest: f32, course: i32) -> Vec<(f32, f32)> {
     cuts.windows(2).map(|pair| (pair[0], pair[1])).collect()
 }
 
-/// Draws a piece.
-pub fn draw(piece: &Piece, kit: &LogKit, surface: &mut Surface) {
+/// The size in metres of a kit's texture for a material, or a metre square if it has none.
+fn metres(kit: &LogKit, material: Material) -> [f32; 2] {
+    kit.textures
+        .get(&material)
+        .map_or([1.0, 1.0], |texture| texture.metres)
+}
+
+/// Draws a piece, each part in its material.
+pub fn draw(piece: &Piece, kit: &LogKit, surfaces: &mut Surfaces) {
     match *piece {
         Piece::Log {
             from,
             to,
             split,
             seed,
-            chinking,
+            ..
         } => {
-            log(surface, kit, from, to, split, seed);
-            if let Some((near, far)) = chinking {
-                let along = (to - from).normalize_or_zero();
-                let depth = Vec3::Y.cross(along) * kit.radius() * 0.5;
-                let start = from + along * near;
-                let end = from + along * far;
-                let gap = kit.course * 0.5;
-                let low = start - depth - Vec3::Y * (gap + 0.018);
-                let high = end + depth - Vec3::Y * (gap - 0.018);
-                cuboid(surface, low.min(high), low.max(high), kit.colours.chinking);
-            }
+            log(surfaces, kit, from, to, split, seed);
+            draw_chinking(piece, kit, surfaces);
         }
-        Piece::Board { min, max } => cuboid(surface, min, max, kit.colours.board),
+        Piece::Board { min, max } => cuboid(
+            surfaces.of(Material::Board),
+            min,
+            max,
+            metres(kit, Material::Board),
+            [1.0; 3],
+        ),
+        Piece::Footing { from, to, .. } => {
+            // A wall of stone under the wall's line, its top a little over the foot.
+            let along = (to - from).normalize_or_zero();
+            let across = Vec3::Y.cross(along) * FOOTING_DEEP_M * 0.5;
+            let low = from - across - Vec3::Y * (FOOTING_HIGH_M - 0.02);
+            let high = to + across + Vec3::Y * 0.02;
+            cuboid(
+                surfaces.of(Material::Stone),
+                low.min(high),
+                low.max(high),
+                metres(kit, Material::Stone),
+                [1.0; 3],
+            );
+        }
+        Piece::Floor { min, max } => cuboid(
+            surfaces.of(Material::Floor),
+            min - Vec3::Y * 0.03,
+            max + Vec3::Y * 0.005,
+            metres(kit, Material::Floor),
+            [1.0; 3],
+        ),
+        // Laid from a model.
+        Piece::Opening { .. }
+        | Piece::Shakes { .. }
+        | Piece::Ridge { .. }
+        | Piece::Stone { .. } => {}
     }
 }
 
-/// A box from one corner to the other, flat-faced in one colour.
-fn cuboid(surface: &mut Surface, min: Vec3, max: Vec3, colour: [f32; 3]) {
+/// How tall and deep a footing of stone is, its top at the wall's foot.
+const FOOTING_HIGH_M: f32 = 0.5;
+const FOOTING_DEEP_M: f32 = 0.6;
+
+/// The daub under a log, alone.
+pub fn draw_chinking(piece: &Piece, kit: &LogKit, surfaces: &mut Surfaces) {
+    if let Piece::Log {
+        from,
+        to,
+        chinking: Some((near, far)),
+        ..
+    } = *piece
+    {
+        let along = (to - from).normalize_or_zero();
+        let depth = Vec3::Y.cross(along) * kit.radius() * 0.5;
+        let start = from + along * near;
+        let end = from + along * far;
+        let gap = kit.course * 0.5;
+        let low = start - depth - Vec3::Y * (gap + 0.018);
+        let high = end + depth - Vec3::Y * (gap - 0.018);
+        cuboid(
+            surfaces.of(Material::Daub),
+            low.min(high),
+            low.max(high),
+            metres(kit, Material::Daub),
+            kit.colours.chinking,
+        );
+    }
+}
+
+/// A box from one corner to the other, each face's texture mapped from its plane.
+fn cuboid(surface: &mut Surface, min: Vec3, max: Vec3, metres: [f32; 2], colour: [f32; 3]) {
     let corner = |x: bool, y: bool, z: bool| {
         Vec3::new(
             if x { max.x } else { min.x },
@@ -769,16 +1260,17 @@ fn cuboid(surface: &mut Surface, min: Vec3, max: Vec3, colour: [f32; 3]) {
         ),
     ];
     for (normal, corners) in faces {
-        let [a, b, c, d] = corners.map(|(x, y, z)| corner(x, y, z));
-        surface.quad([a, b, c, d], normal, colour);
+        let corners = corners.map(|(x, y, z)| corner(x, y, z));
+        surface.planar_quad(corners, normal, metres, colour);
     }
 }
 
 /// How far each ring of a log is from its start, as a fraction of its length: close
-/// together at the ends, where the axe's chamfer is, and about every half metre between.
+/// together at the ends, where the axe's chamfer is, and every two thirds of a metre or so
+/// between, enough for its bow.
 fn stations(length: f32) -> Vec<f32> {
     let chamfer = (0.035 / length).min(0.2);
-    let middle = ((length / 0.45).ceil() as usize).max(1);
+    let middle = ((length / 0.7).ceil() as usize).max(1);
     let mut at = vec![0.0, chamfer];
     for step in 1..middle {
         at.push(chamfer + (1.0 - 2.0 * chamfer) * step as f32 / middle as f32);
@@ -787,8 +1279,10 @@ fn stations(length: f32) -> Vec<f32> {
     at
 }
 
-/// One log.
-fn log(surface: &mut Surface, kit: &LogKit, from: Vec3, to: Vec3, split: Split, seed: u32) {
+/// One log: round, a little uneven, tapered and bowed in one sweep, shaded smooth round it,
+/// in the kit's wood, its texture placed anew on each log by its seed so no two repeat;
+/// its sawn ends in the kit's cut face.
+fn log(surfaces: &mut Surfaces, kit: &LogKit, from: Vec3, to: Vec3, split: Split, seed: u32) {
     let length = from.distance(to);
     if length < 1e-3 {
         return;
@@ -799,51 +1293,50 @@ fn log(surface: &mut Surface, kit: &LogKit, from: Vec3, to: Vec3, split: Split, 
     let side = axis.cross(up).normalize();
     let up = side.cross(axis);
     let radius = kit.radius();
-    let colours = &kit.colours;
 
-    // The section: an uneven polygon, the same shape all along, turned a little.
+    // The section: round, a little uneven, the same shape all along.
     let (fewest, most) = kit.facets;
     let facets = (fewest + random.below(most.saturating_sub(fewest) + 1)) as usize;
     let turn = random.unit() * TAU;
     let section: Vec<(f32, f32)> = (0..facets)
         .map(|i| {
-            let angle = turn + TAU * (i as f32 + (random.unit() - 0.5) * 0.55) / facets as f32;
+            let angle = turn + TAU * (i as f32 + (random.unit() - 0.5) * 0.2) / facets as f32;
             let out = 1.0 + (random.unit() - 0.5) * 2.0 * kit.roughness;
             (angle, out)
         })
         .collect();
 
-    // A tree's shape along it: thicker at one end, bowed, swelling here and there.
+    // A tree's shape along it: thicker at one end and bowed, in one sweep.
     let thick_first = random.unit() < 0.5;
     let bow = (random.unit() - 0.5) * 2.0 * kit.bend;
     let sag = (random.unit() - 0.5) * kit.bend;
-    let twist = (random.unit() - 0.5) * 0.3;
     let at = stations(length);
     let last = at.len() - 1;
+    let centres: Vec<Vec3> = at
+        .iter()
+        .map(|&t| {
+            let arc = libm::sinf(std::f32::consts::PI * t);
+            from + axis * (length * t) + side * (bow * arc) + up * (sag * arc)
+        })
+        .collect();
     let rings: Vec<Vec<Vec3>> = at
         .iter()
         .enumerate()
         .map(|(index, &t)| {
-            let end = index == 0 || index == last;
             let taper = if thick_first {
                 1.0 - 2.0 * t
             } else {
                 2.0 * t - 1.0
             };
-            let swell = 1.0 + (random.unit() - 0.5) * 0.06;
-            let mut scale = radius * (1.0 + kit.taper * taper) * swell;
-            if end {
-                // The axe's chamfer round a cut end.
-                scale *= 0.86;
+            let mut scale = radius * (1.0 + kit.taper * taper);
+            if index == 0 || index == last {
+                // The axe's chamfer round a sawn end.
+                scale *= 0.88;
             }
-            let arc = libm::sinf(std::f32::consts::PI * t);
-            let centre = from + axis * (length * t) + side * (bow * arc) + up * (sag * arc);
             section
                 .iter()
                 .map(|&(angle, out)| {
-                    let wobble = 1.0 + (random.unit() - 0.5) * 0.04;
-                    let angle = angle + twist * t;
-                    let r = scale * out * wobble;
+                    let r = scale * out;
                     let across = libm::cosf(angle) * r;
                     let mut height = libm::sinf(angle) * r * 0.94;
                     // A split log keeps one half, flat along its middle.
@@ -852,164 +1345,107 @@ fn log(surface: &mut Surface, kit: &LogKit, from: Vec3, to: Vec3, split: Split, 
                         Split::Bottom => height = height.min(0.0),
                         Split::Whole => {}
                     }
-                    centre + side * across + up * height
+                    centres[index] + side * across + up * height
                 })
                 .collect()
         })
         .collect();
 
-    // Its surface: each log its own tone, each facet a faint streak of a lighter or darker
-    // shade, now and then a patch of bark left on, the top weathered lighter.
-    let tone = match random.unit() {
-        x if x < 0.33 => mix(colours.wood, colours.light, random.unit() * 0.35),
-        x if x < 0.66 => mix(colours.wood, colours.dark, random.unit() * 0.35),
-        _ => colours.wood,
-    };
-    let streaks: Vec<[f32; 3]> = (0..facets)
-        .map(|_| match random.unit() {
-            x if x < 0.3 => mix(tone, colours.light, 0.2),
-            x if x < 0.55 => mix(tone, colours.dark, 0.2),
-            _ => tone,
-        })
-        .collect();
+    // Its side: the wood's grain along it, its texture shifted by the seed, its shade a
+    // little lighter or darker log to log.
+    let wood = metres(kit, Material::Log);
+    let (shift_round, shift_along) = (random.unit() * 7.0, random.unit() * 7.0);
+    let shade = 0.82 + random.unit() * 0.18;
+    let colour = [shade; 3];
+    let around = TAU * radius;
+    let surface = surfaces.of(Material::Log);
     for (ring, pair) in rings.windows(2).enumerate() {
         let (near, far) = (&pair[0], &pair[1]);
-        let middle = from + axis * (length * (at[ring] + at[ring + 1]) * 0.5);
+        let (near_centre, far_centre) = (centres[ring], centres[ring + 1]);
+        let round = |point: Vec3, centre: Vec3| {
+            let out = point - centre;
+            (out - axis * out.dot(axis)).normalize_or_zero()
+        };
+        let uv = |facet: usize, station: usize| {
+            [
+                shift_round + facet as f32 / facets as f32 * around / wood[0],
+                shift_along + at[station] * length / wood[1],
+            ]
+        };
         for i in 0..facets {
             let j = (i + 1) % facets;
-            let mut colour = streaks[i];
-            if random.unit() < 0.04 {
-                colour = mix(colour, colours.bark, 0.7);
-            }
-            for corners in [[near[i], far[i], far[j]], [near[i], far[j], near[j]]] {
+            for (corners, middles, uvs) in [
+                (
+                    [near[i], far[i], far[j]],
+                    [near_centre, far_centre, far_centre],
+                    [uv(i, ring), uv(i, ring + 1), uv(i + 1, ring + 1)],
+                ),
+                (
+                    [near[i], far[j], near[j]],
+                    [near_centre, far_centre, near_centre],
+                    [uv(i, ring), uv(i + 1, ring + 1), uv(i + 1, ring)],
+                ),
+            ] {
+                let middle = (near_centre + far_centre) * 0.5;
                 let normal = facing(corners, middle);
                 if normal == Vec3::ZERO {
                     continue;
                 }
-                let colour = if normal.dot(up) > 0.6 {
-                    mix(colour, colours.light, 0.25)
+                let mut smooth = [0, 1, 2].map(|k| round(corners[k], middles[k]));
+                if smooth.iter().any(|n| n.dot(normal) < CREASE) {
+                    smooth = [normal; 3];
+                }
+                let flipped = wound(corners, normal) != corners;
+                if flipped {
+                    surface.textured(
+                        [corners[0], corners[2], corners[1]],
+                        [smooth[0], smooth[2], smooth[1]],
+                        [uvs[0], uvs[2], uvs[1]],
+                        colour,
+                    );
                 } else {
-                    colour
-                };
-                let corners = wound(corners, normal);
-                surface.triangle(corners, normal, colour);
-            }
-        }
-    }
-
-    // The cut ends: a ring of bark, the sapwood, and a darker heart, a little off square.
-    for (ring, outward) in [(&rings[0], -axis), (&rings[last], axis)] {
-        let centre = ring.iter().copied().sum::<Vec3>() / ring.len() as f32;
-        let tilt = (side * (random.unit() - 0.5) + up * (random.unit() - 0.5)) * 0.12;
-        let lean = |point: Vec3| point + outward * (point - centre).dot(tilt);
-        let inset = |fraction: f32| -> Vec<Vec3> {
-            ring.iter()
-                .map(|&point| lean(centre + (point - centre) * fraction))
-                .collect()
-        };
-        let bands = [
-            (inset(1.0), inset(0.84), colours.bark),
-            (inset(0.84), inset(0.42), colours.end),
-        ];
-        for (outer, inner, colour) in bands {
-            for i in 0..facets {
-                let j = (i + 1) % facets;
-                for corners in [
-                    [outer[i], outer[j], inner[j]],
-                    [outer[i], inner[j], inner[i]],
-                ] {
-                    end_triangle(surface, corners, outward, colour);
+                    surface.textured(corners, smooth, uvs, colour);
                 }
             }
         }
-        let heart = inset(0.42);
-        let middle = lean(centre);
+    }
+
+    // Its sawn ends: the cut face's picture across each, turned by the seed.
+    let ends = surfaces.of(Material::LogEnd);
+    for (ring, outward) in [(&rings[0], -axis), (&rings[last], axis)] {
+        let centre = ring.iter().copied().sum::<Vec3>() / ring.len() as f32;
+        let reach = ring
+            .iter()
+            .map(|p| p.distance(centre))
+            .fold(0.0, f32::max)
+            .max(1e-3);
+        let spin = random.unit() * TAU;
+        let (s, c) = (libm::sinf(spin), libm::cosf(spin));
+        let uv = |p: Vec3| {
+            let (x, y) = ((p - centre).dot(side) / reach, (p - centre).dot(up) / reach);
+            let (x, y) = (x * c - y * s, x * s + y * c);
+            [0.5 + 0.48 * x, 0.5 - 0.48 * y]
+        };
         for i in 0..facets {
             let j = (i + 1) % facets;
-            end_triangle(
-                surface,
-                [middle, heart[i], heart[j]],
-                outward,
-                colours.heart,
-            );
-        }
-    }
-
-    // Knots: the stubs of branches cut off, on a side that shows.
-    let knots = (length * kit.knots + random.unit()).floor() as usize;
-    if split == Split::Whole {
-        for _ in 0..knots {
-            let t = 0.15 + random.unit() * 0.7;
-            let angle =
-                (random.unit() - 0.5) * 1.6 + if random.unit() < 0.5 { 0.0 } else { TAU * 0.5 };
-            let out = side * libm::cosf(angle) + up * libm::sinf(angle);
-            let centre = from + axis * (length * t);
-            knot(
-                surface,
-                centre + out * radius * 0.86,
-                out,
-                axis,
-                radius * 0.24,
-                &mut random,
-                colours,
-            );
+            let corners = [centre, ring[i], ring[j]];
+            let normal = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
+            if normal.length_squared() < 1e-12 {
+                continue;
+            }
+            let corners = if normal.dot(outward) < 0.0 {
+                [corners[0], corners[2], corners[1]]
+            } else {
+                corners
+            };
+            ends.textured(corners, [outward; 3], corners.map(uv), [1.0; 3]);
         }
     }
 }
 
-/// A short stub standing out from a log.
-fn knot(
-    surface: &mut Surface,
-    base: Vec3,
-    out: Vec3,
-    along: Vec3,
-    size: f32,
-    random: &mut Random,
-    colours: &LogColours,
-) {
-    let across = out.cross(along).normalize();
-    let along = across.cross(out);
-    let sides = 5;
-    let height = size * (0.5 + random.unit() * 0.4);
-    let ring = |scale: f32, lift: f32| -> Vec<Vec3> {
-        (0..sides)
-            .map(|i| {
-                let angle = TAU * i as f32 / sides as f32;
-                base + out * lift
-                    + (across * libm::cosf(angle) + along * libm::sinf(angle)) * size * scale
-            })
-            .collect()
-    };
-    let foot = ring(1.0, 0.0);
-    let top = ring(0.6, height);
-    for i in 0..sides {
-        let j = (i + 1) % sides;
-        for corners in [[foot[i], top[i], top[j]], [foot[i], top[j], foot[j]]] {
-            let normal = facing(corners, base + out * (height * 0.5));
-            surface.triangle(wound(corners, normal), normal, colours.knot);
-        }
-    }
-    let tip = base + out * height;
-    for i in 0..sides {
-        let j = (i + 1) % sides;
-        end_triangle(surface, [tip, top[i], top[j]], out, colours.end);
-    }
-}
-
-/// A triangle of a cut end, facing the way the end does.
-fn end_triangle(surface: &mut Surface, corners: [Vec3; 3], outward: Vec3, colour: [f32; 3]) {
-    let normal = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
-    if normal.length_squared() < 1e-12 {
-        return;
-    }
-    let normal = normal.normalize();
-    let (corners, normal) = if normal.dot(outward) < 0.0 {
-        ([corners[0], corners[2], corners[1]], -normal)
-    } else {
-        (corners, normal)
-    };
-    surface.triangle(corners, normal, colour);
-}
+/// Faces that meet at more than about 50 degrees are shaded apart, as a crease; less, smooth
+/// across (docs/art-style.md).
+const CREASE: f32 = 0.64;
 
 /// The normal of a triangle on a surface round `inside`, pointing away from it.
 fn facing(corners: [Vec3; 3], inside: Vec3) -> Vec3 {
@@ -1032,10 +1468,6 @@ fn wound(corners: [Vec3; 3], normal: Vec3) -> [Vec3; 3] {
     } else {
         corners
     }
-}
-
-fn mix(a: [f32; 3], b: [f32; 3], amount: f32) -> [f32; 3] {
-    [0, 1, 2].map(|i| a[i] + (b[i] - a[i]) * amount)
 }
 
 /// A number from a list of numbers, the same on every machine.
@@ -1258,6 +1690,40 @@ mod tests {
     }
 
     #[test]
+    fn no_log_passes_through_a_roof() {
+        let kit = kit();
+        for style in [RoofStyle::Hip, RoofStyle::Gable, RoofStyle::LeanTo] {
+            let mut base = cabin();
+            base.apply(BuildOp::AddRoof(RoofSection {
+                min: [0, 0, 0],
+                max: [7, 0, 5],
+                style,
+                along_x: true,
+                pitch: 0.7,
+            }));
+            let section = base.sections()[0];
+            let logs = logs(&lay(&base, &kit));
+            for (from, to, _) in &logs {
+                for i in 0..=20 {
+                    let at = from.lerp(*to, i as f32 / 20.0);
+                    let Some(rise) = section.rise_beyond(glam::Vec2::new(at.x, at.z), kit.eaves)
+                    else {
+                        continue;
+                    };
+                    let top = STOREY_M + rise;
+                    let r = kit.radius();
+                    assert!(
+                        at.y + r <= top - ROOF_THICK_M + 1e-3 || at.y - r >= top - 1e-3,
+                        "{style:?}: a log at {at} meets the roof at {top}"
+                    );
+                }
+            }
+            // The corners' top courses still run past, where the roof leaves room.
+            assert!(logs.iter().any(|(from, _, _)| from.x < 0.0));
+        }
+    }
+
+    #[test]
     fn a_long_wall_is_joined_with_the_seams_staggered() {
         let mut base = Base::default();
         wall(&mut base, (0..20).map(|x| [x, 0, 0]), Panel::Solid);
@@ -1299,9 +1765,9 @@ mod tests {
         let kit = kit();
         let layout = lay(&cabin(), &kit);
         let drawn = |piece: &Piece| {
-            let mut surface = Surface::default();
-            draw(piece, &kit, &mut surface);
-            surface
+            let mut surfaces = Surfaces::default();
+            draw(piece, &kit, &mut surfaces);
+            surfaces.of(Material::Log).clone()
         };
         assert_eq!(drawn(&layout.pieces[0]), drawn(&layout.pieces[0]));
         let a = drawn(&layout.pieces[0]);

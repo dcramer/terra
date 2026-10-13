@@ -34,16 +34,30 @@ import look
 # --along: a building kit's piece laid along its length, such as a log or a board, which the
 # game stretches to fit (docs/building-kits.md): its length along X, its thinnest side up, its middle
 # on the origin.
+# --textured: the model keeps its own textures (D14), scaled to TEXTURE_PX at most, rather
+# than a palette role painted on each face.
+# --block: a block, such as a section of stone wall, squared to its box by the turn that
+# makes its box smallest, however far it leans, so its faces lie flat against its
+# neighbours'.
 args = look.args()
 flat = "--flat" in args
 along = "--along" in args
-src, out, sheet, size, budget, turn, *given = [a for a in args if a not in ("--flat", "--along")]
+textured = "--textured" in args
+block = "--block" in args
+# --grade=R,G,B,SR,SG,SB: the colour texture's mean and spread on the surface, per channel,
+# to match, so the pieces of a kit share one grade (docs/art-style.md).
+grade = next((tuple(map(float, a.split("=")[1].split(","))) for a in args if a.startswith("--grade=")), None)
+src, out, sheet, size, budget, turn, *given = [
+    a for a in args if a not in ("--flat", "--along", "--textured", "--block") and not a.startswith("--grade=")
+]
 size, budget, turn = float(size), int(budget), float(turn)
 # ROLE, or ROLE=r,g,b for a role that the texture paints in another colour than its own.
 roles = [role.split("=")[0] for role in given]
 palette = np.array(
     [[float(c) for c in role.split("=")[1].split(",")] if "=" in role else look.PALETTE[role] for role in given]
 )
+# The largest side of a kept texture, in pixels (docs/art-style.md: 2K unless seen very close).
+TEXTURE_PX = 2048
 # The most a model's feet may lean, in degrees, for level() to stand it straight.
 LEVEL_MAX = 8.0
 # How thick a flat thing is pressed, in metres.
@@ -114,6 +128,129 @@ def smooth(ob, crease=50.0):
     shades in a few clean bands and a board's edge stays crisp."""
     select_only(ob)
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(crease), keep_sharp_edges=True)
+
+
+def shrink_textures():
+    """Each kept texture no larger than TEXTURE_PX on its longest side."""
+    for image in bpy.data.images:
+        width, height = image.size
+        largest = max(width, height)
+        if largest > TEXTURE_PX:
+            image.scale(width * TEXTURE_PX // largest, height * TEXTURE_PX // largest)
+
+
+def colour_image(ob):
+    """The image a textured model's base colour comes from, if it has one."""
+    for slot in ob.material_slots:
+        tree = slot.material and slot.material.node_tree
+        if not tree:
+            continue
+        for node in tree.nodes:
+            if node.type == "BSDF_PRINCIPLED":
+                for link in node.inputs["Base Color"].links:
+                    if link.from_node.type == "TEX_IMAGE":
+                        return link.from_node.image
+    return None
+
+
+def image_pixels(image):
+    width, height = image.size
+    pixels = np.empty(width * height * 4, dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    return pixels.reshape(height, width, 4)
+
+
+def side_map(ob, width, height):
+    """Which way the surface faces at each pixel of its texture: 0 to 5 for +X, -X, +Y, -Y,
+    +Z, -Z, by the face drawn there, and -1 where no face is. Each face's triangles are
+    filled in texture space, then grown a few pixels so filtering at their edges takes the
+    same side."""
+    sides = np.full((height, width), -1, dtype=np.int8)
+    me = ob.data
+    uv_layer = me.uv_layers.active.data
+    for poly in me.polygons:
+        n = poly.normal
+        axis = int(np.argmax(np.abs([n.x, n.y, n.z])))
+        side = axis * 2 + (1 if (n.x, n.y, n.z)[axis] < 0 else 0)
+        uvs = [np.array(uv_layer[i].uv) % 1.0 * (width, height) for i in poly.loop_indices]
+        for k in range(1, len(uvs) - 1):
+            a, b, c = uvs[0], uvs[k], uvs[k + 1]
+            low = np.floor(np.minimum(np.minimum(a, b), c)).astype(int)
+            high = np.ceil(np.maximum(np.maximum(a, b), c)).astype(int)
+            low = np.maximum(low, 0)
+            high = np.minimum(high, (width - 1, height - 1))
+            if (high < low).any():
+                continue
+            xs, ys = np.meshgrid(np.arange(low[0], high[0] + 1) + 0.5, np.arange(low[1], high[1] + 1) + 0.5)
+            v0, v1 = b - a, c - a
+            den = v0[0] * v1[1] - v1[0] * v0[1]
+            if abs(den) < 1e-9:
+                continue
+            px, py = xs - a[0], ys - a[1]
+            u = (px * v1[1] - v1[0] * py) / den
+            v = (v0[0] * py - px * v0[1]) / den
+            inside = (u >= -0.01) & (v >= -0.01) & (u + v <= 1.01)
+            region = sides[low[1]:high[1] + 1, low[0]:high[0] + 1]
+            region[inside] = side
+    for _ in range(4):
+        empty = sides < 0
+        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+            shifted = np.roll(sides, (dy, dx), axis=(0, 1))
+            take = empty & (shifted >= 0)
+            sides[take] = shifted[take]
+            empty = sides < 0
+    return sides
+
+
+# The side a model's front is on once placed: +Z, where Tripo's front, the concept's, is
+# turned. Its colour is the one the concept drew.
+FRONT = 4
+
+
+def stats(pixels, where):
+    seen = pixels[where][:, :3]
+    return [float(v) for v in (*seen.mean(axis=0), *seen.std(axis=0))]
+
+
+def colour_stats(ob):
+    """The mean and spread of each channel of the colour on the model's front, or on all of
+    it if it has little front."""
+    image = colour_image(ob)
+    if image is None or not ob.data.uv_layers:
+        return None
+    pixels = image_pixels(image)
+    width, height = image.size
+    sides = side_map(ob, width, height)
+    front = sides == FRONT
+    where = front if front.sum() >= 64 else sides >= 0
+    return [round(v, 4) for v in stats(pixels, where)]
+
+
+def match_grade(ob, target, by_side):
+    """Shifts and scales each channel of the colour texture so the surface's mean and spread
+    are the target's; with by_side, each side's on its own, so a model whose generator lit
+    its back darker than its front is evened out and reads the same turned any way. With no
+    target, the model's own front's, as the concept drew it."""
+    image = colour_image(ob)
+    if image is None or not ob.data.uv_layers:
+        return
+    pixels = image_pixels(image)
+    width, height = image.size
+    sides = side_map(ob, width, height)
+    if target is None:
+        front = sides == FRONT
+        target = stats(pixels, front if front.sum() >= 64 else sides >= 0)
+    want_mean, want_spread = np.array(target[:3]), np.array(target[3:])
+    groups = [sides == side for side in range(6)] if by_side else [sides >= 0]
+    for where in groups:
+        if where.sum() < 64:
+            continue
+        seen = pixels[where][:, :3]
+        mean, spread = seen.mean(axis=0), np.maximum(seen.std(axis=0), 1e-3)
+        pixels[where, :3] = np.clip((seen - mean) / spread * want_spread + want_mean, 0.0, 1.0)
+    image.pixels.foreach_set(pixels.ravel())
+    image.update()
+    image.pack()
 
 
 def weld(me):
@@ -274,6 +411,35 @@ def lay_flat(me):
     me.transform(Matrix.Diagonal((1, 1, 0.01 / max(max(zs) - min(zs), 1e-6), 1)))
 
 
+def square(me):
+    """Turns a block about the level axes until its box is smallest, so its faces line up
+    with the axes, and returns how far it leaned. A coarse search, then a fine one about
+    the best."""
+    pts = np.array([v.co for v in me.vertices])
+    pts = pts - pts.mean(axis=0)
+
+    def turned(ax, ay):
+        cx, sx, cy, sy = math.cos(ax), math.sin(ax), math.cos(ay), math.sin(ay)
+        rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]])
+        ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+        return ry @ rx
+
+    def volume(ax, ay):
+        p = pts @ turned(ax, ay).T
+        return np.prod(p.max(axis=0) - p.min(axis=0))
+
+    best = (0.0, 0.0)
+    for step, reach in ((math.radians(2), math.radians(30)), (math.radians(0.2), math.radians(2))):
+        n = int(round(reach / step))
+        centre = best
+        best = min(
+            ((centre[0] + i * step, centre[1] + j * step) for i in range(-n, n + 1) for j in range(-n, n + 1)),
+            key=lambda a: volume(*a),
+        )
+    me.transform(Matrix([list(r) + [0] for r in turned(*best)] + [[0, 0, 0, 1]]))
+    return math.degrees(math.hypot(*best))
+
+
 def level(me):
     """Stands the model level: the lowest point in each quarter of its footprint is where it
     rests, as a chair on its four legs, and a model a little askew on those is turned until
@@ -354,17 +520,23 @@ def checks(ob):
             for e in g.edges:
                 stack.extend(h for h in e.link_faces if h.index not in seen)
     area = Counter()
-    for f in bm.faces:
-        area[roles[f.material_index]] += f.calc_area()
+    if not textured:
+        for f in bm.faces:
+            area[roles[f.material_index]] += f.calc_area()
     bm.free()
     total = sum(area.values()) or 1.0
-    return {
+    report = {
         "triangles": tris,
         "budget": budget,
         "size_m": [round(d, 2) for d in ob.dimensions],
         "islands": islands,
-        "colours": {role: round(a / total, 3) for role, a in area.most_common()},
     }
+    if textured:
+        report["textures"] = sorted({f"{i.name}: {i.size[0]}x{i.size[1]}" for i in bpy.data.images if i.size[0]})
+        report["colour"] = colour_stats(ob)
+    else:
+        report["colours"] = {role: round(a / total, 3) for role, a in area.most_common()}
+    return report
 
 
 def figure():
@@ -430,18 +602,26 @@ ob = load()
 ob.name = os.path.splitext(os.path.basename(out))[0]
 weld(ob.data)
 reduce(ob)
+if textured:
+    shrink_textures()
+    if grade or block:
+        match_grade(ob, grade, by_side=block)
+else:
+    if flat:
+        split_finely(ob)
+    paint(ob)
+    # A flat thing is one plane, so evening out its planes would leave it one colour.
+    if not flat:
+        flatten_regions(ob.data)
+    despeckle(ob.data)
+    if flat:
+        merge_colours(ob)
 if flat:
-    split_finely(ob)
-paint(ob)
-# A flat thing is one plane, so evening out its planes would leave it one colour.
-if not flat:
-    flatten_regions(ob.data)
-despeckle(ob.data)
-if flat:
-    merge_colours(ob)
     lay_flat(ob.data)
 elif along:
     leaned = 0.0
+elif block:
+    leaned = square(ob.data)
 else:
     leaned = level(ob.data)
 if along:
