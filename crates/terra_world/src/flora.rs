@@ -1,13 +1,14 @@
 //! What grows and lies around the scene: trees, rocks, bushes, flowers and grass.
 //!
 //! The models are free ones (see THIRD_PARTY.md), read for their shapes only. Their
-//! colours are ours, chosen per kind to sit with the light, and everything moves in one
+//! colours are ours, chosen per kind to sit with the light, their parts are drawn in real
+//! materials, bark, leaves and rock (D212, flora.wesl), and everything moves in one
 //! wind. Where each thing stands comes from the seed and the place, so it is the same on
 //! every run. Trees, rocks and plants are one entity each, sharing a mesh per model.
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
 use super::flora_kinds::Cuttable;
-use super::flora_kinds::{Flora, FloraDef, Grows, Sway};
+use super::flora_kinds::{Flora, FloraDef, Grows, MATERIALS, Sway};
 use super::footprint::Footprint;
 use super::models::{Part, read_model};
 use super::scene::SUN_DIRECTION;
@@ -36,13 +37,23 @@ const GRASS_SPACING_M: f32 = 0.34;
 
 type WindMaterial = ExtendedMaterial<StandardMaterial, WindExtension>;
 
-/// What the wind shader is told. Field order must match the struct in wind.wesl.
+/// What the wind shader is told, and the real materials parts are drawn in (bark,
+/// leaves, rock; `flora_kinds::MATERIALS`). Field order must match the structs in
+/// wind.wesl and flora.wesl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct WindExtension {
     #[uniform(100)]
     direction: Vec3,
     #[uniform(100)]
     strength: f32,
+    /// How many metres each layer of the materials covers, in order.
+    #[uniform(100)]
+    layer_metres: [Vec4; 2],
+    #[texture(101, dimension = "2d_array")]
+    #[sampler(102)]
+    color: Option<Handle<Image>>,
+    #[texture(103, dimension = "2d_array")]
+    normal: Option<Handle<Image>>,
 }
 
 impl MaterialExtension for WindExtension {
@@ -50,9 +61,49 @@ impl MaterialExtension for WindExtension {
         "shaders/wind.wesl".into()
     }
 
+    fn fragment_shader() -> ShaderRef {
+        "shaders/flora.wesl".into()
+    }
+
     fn prepass_vertex_shader() -> ShaderRef {
         "shaders/wind.wesl".into()
     }
+}
+
+/// Loads `materials/flora`, the real materials parts of plants and rocks are drawn in,
+/// as texture arrays.
+fn flora_textures(assets: &AssetServer) -> (Handle<Image>, Handle<Image>) {
+    use bevy::image::{ImageArrayLayout, ImageLoaderSettings};
+    let layers = |linear: bool| {
+        move |settings: &mut ImageLoaderSettings| {
+            settings.array_layout = Some(ImageArrayLayout::RowCount {
+                rows: MATERIALS.len() as u32,
+            });
+            settings.is_srgb = !linear;
+        }
+    };
+    (
+        assets
+            .load_builder()
+            .with_settings(layers(false))
+            .load("materials/flora/color.jpg"),
+        assets
+            .load_builder()
+            .with_settings(layers(true))
+            .load("materials/flora/normal.jpg"),
+    )
+}
+
+/// How many metres each of the materials covers, eight to a uniform.
+fn layer_metres() -> [Vec4; 2] {
+    let mut metres = [1.0; 8];
+    for (slot, (_, m)) in metres.iter_mut().zip(MATERIALS) {
+        *slot = m;
+    }
+    [
+        Vec4::from_slice(&metres[..4]),
+        Vec4::from_slice(&metres[4..]),
+    ]
 }
 
 /// Trees and rocks that stop a walker: where each stands and how far round it, filed by
@@ -204,12 +255,22 @@ fn build_model(kind: &FloraDef, parts: &[Part], meshes: &mut Assets<Mesh>) -> Mo
     let mut sways = Vec::new();
     let mut indices = Vec::new();
     for part in parts {
-        let (colour, foliage) = kind.colour(&part.material);
-        let colour = colour.to_linear();
+        let look = kind.look(&part.material);
+        let foliage = look.foliage;
+        let colour = look.colour.to_linear();
         let low = part.positions.iter().map(|p| p.y).fold(f32::MAX, f32::min);
         let high = part.positions.iter().map(|p| p.y).fold(f32::MIN, f32::max);
         let first = positions.len() as u32;
-        for (position, normal) in part.positions.iter().zip(&part.normals) {
+        // The free models are flat-shaded, every triangle its own plane. Drawn in a real
+        // material they read as cut facets, so their normals are made smooth across gentle
+        // curves and kept split at creases (docs/art-style.md): a crown or a bush as soft
+        // lobes, a trunk round, a rock still angular at its edges.
+        let crease = if foliage { 75.0 } else { 50.0 };
+        let part_normals = smooth_normals(&part.positions, &part.indices, &part.normals, crease);
+        // The material is told to the shader in the colour's alpha: a layer of
+        // `materials/flora` in eighths, or whole for plain colour.
+        let alpha = look.material.map_or(1.0, |layer| layer as f32 / 8.0);
+        for (position, normal) in part.positions.iter().zip(&part_normals) {
             let up_plant = (position.y / height).clamp(0.0, 1.0);
             // Foliage is darker underneath and inside, which gives a crown its depth.
             let up_part = ((position.y - low) / (high - low).max(1e-3)).clamp(0.0, 1.0);
@@ -230,12 +291,13 @@ fn build_model(kind: &FloraDef, parts: &[Part], meshes: &mut Assets<Mesh>) -> Mo
                 colour.red * shade,
                 colour.green * shade,
                 colour.blue * shade,
-                1.0,
+                alpha,
             ]);
             sways.push([bend, flutter]);
         }
         indices.extend(part.indices.iter().map(|index| first + index));
     }
+    let count = positions.len();
     let mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
@@ -244,12 +306,68 @@ fn build_model(kind: &FloraDef, parts: &[Part], meshes: &mut Assets<Mesh>) -> Mo
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
     .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, sways)
+    // Room for the shader to carry where each point is on the plant, unmoved by the wind,
+    // which is where its material is projected from (wind.wesl).
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, vec![[0.0f32; 2]; count])
     .with_inserted_indices(Indices::U32(indices));
     Model {
         mesh: meshes.add(mesh),
         height,
         spread,
     }
+}
+
+/// Normals smooth across a surface where its triangles meet at less than `crease_deg`,
+/// and split where they meet at more, as a modeller's auto-smooth does: each corner takes
+/// the area-weighted normals of the triangles at the same point that face within the
+/// crease of its own.
+fn smooth_normals(
+    positions: &[Vec3],
+    indices: &[u32],
+    normals: &[Vec3],
+    crease_deg: f32,
+) -> Vec<Vec3> {
+    let limit = libm::cosf(crease_deg.to_radians());
+    // Corners at the same point, found by position rounded to a tenth of a millimetre.
+    let key = |p: Vec3| (p * 1.0e4).round().as_ivec3();
+    let mut faces_at: HashMap<IVec3, Vec<usize>> = HashMap::default();
+    let faces: Vec<Vec3> = indices
+        .chunks_exact(3)
+        .map(|t| {
+            let [a, b, c] = [t[0], t[1], t[2]].map(|i| positions[i as usize]);
+            (b - a).cross(c - a)
+        })
+        .collect();
+    for (face, t) in indices.chunks_exact(3).enumerate() {
+        for &i in t {
+            faces_at
+                .entry(key(positions[i as usize]))
+                .or_default()
+                .push(face);
+        }
+    }
+    let mut out = normals.to_vec();
+    let mut done = vec![false; positions.len()];
+    for (face, t) in indices.chunks_exact(3).enumerate() {
+        let own = faces[face].normalize_or_zero();
+        if own == Vec3::ZERO {
+            continue;
+        }
+        for &i in t {
+            let i = i as usize;
+            if done[i] {
+                continue;
+            }
+            done[i] = true;
+            let sum: Vec3 = faces_at[&key(positions[i])]
+                .iter()
+                .map(|&other| faces[other])
+                .filter(|n| n.normalize_or_zero().dot(own) >= limit)
+                .sum();
+            out[i] = sum.normalize_or(own);
+        }
+    }
+    out
 }
 
 /// Calls `place` once for each square of a grid laid over the map, with a random point
@@ -282,6 +400,7 @@ fn plant(
     mut obstacles: ResMut<Obstacles>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
+    assets: Res<AssetServer>,
 ) {
     let middle = start.translation;
     let up = middle.normalize();
@@ -294,9 +413,13 @@ fn plant(
     let seed = planet.seed().derive("flora");
 
     // The wind blows in off the water, which is where the sun is.
+    let (color, normal) = flora_textures(&assets);
     let wind = WindExtension {
         direction: -SUN_DIRECTION.reject_from(up).normalize(),
         strength: 1.0,
+        layer_metres: layer_metres(),
+        color: Some(color),
+        normal: Some(normal),
     };
     let matte = |cull_mode| StandardMaterial {
         perceptual_roughness: 0.9,
@@ -614,7 +737,8 @@ fn grass_square(
     let mut normals: Vec<Vec3> = Vec::new();
     let mut colours: Vec<[f32; 4]> = Vec::new();
     let mut sways: Vec<[f32; 2]> = Vec::new();
-    let tip_tint = LinearRgba::rgb(0.6, 0.62, 0.22);
+    // Tips a little lighter and drier than the blade, not yellow.
+    let tip_tint = LinearRgba::rgb(0.42, 0.46, 0.22);
 
     let per_side = (GRASS_SQUARE_M / GRASS_SPACING_M).round() as i32;
     let mut rng = meadow.seed.at(i, 0, j).rng();
@@ -818,6 +942,37 @@ fn clear_around(
 mod tests {
     use super::*;
     use terra_core::{Operation, PlanetSpec};
+
+    /// Two triangles, each its own copy of the shared edge, as flat-shaded models are,
+    /// folded along it by `fold` degrees.
+    fn hinge(fold: f32) -> (Vec<Vec3>, Vec<u32>, Vec<Vec3>) {
+        let (s, c) = (libm::sinf(fold.to_radians()), libm::cosf(fold.to_radians()));
+        let far = Vec3::new(0.0, s, c);
+        let positions = vec![
+            Vec3::ZERO,
+            Vec3::X,
+            Vec3::new(0.0, 0.0, -1.0),
+            Vec3::ZERO,
+            far,
+            Vec3::X,
+        ];
+        let indices = vec![0, 1, 2, 3, 4, 5];
+        let normals = vec![Vec3::Y; 6];
+        (positions, indices, normals)
+    }
+
+    #[test]
+    fn normals_are_smooth_across_a_gentle_bend_and_split_at_a_crease() {
+        let (positions, indices, normals) = hinge(20.0);
+        let smooth = smooth_normals(&positions, &indices, &normals, 50.0);
+        // Where the two meet, both sides take the same normal, between their planes.
+        assert!(smooth[0].distance(smooth[3]) < 1e-4, "{smooth:?}");
+        let (positions, indices, normals) = hinge(70.0);
+        let split = smooth_normals(&positions, &indices, &normals, 50.0);
+        assert!(split[0].distance(split[3]) > 0.5, "{split:?}");
+        // Away from the shared edge, each keeps its own plane.
+        assert!(split[2].distance(Vec3::Y) < 1e-4, "{split:?}");
+    }
 
     #[test]
     fn scatter_puts_the_same_things_in_the_same_places_on_every_machine() {

@@ -1,5 +1,5 @@
 //! Day and night (game design 001, survival.md): a clock, the sun crossing the sky by it,
-//! and the light, sky, shade and haze following how high the sun is.
+//! and the light, sky and shade following how high the sun is.
 //!
 //! The sun keeps a real path over the start, as seen from a middle latitude in early
 //! summer: it rises in the east, stands high at noon and sets in the west, and the day is
@@ -11,12 +11,12 @@
 //! How long a day is, and what night does besides being dark, are the developers' to
 //! say; the numbers here are a proposal (prototypes.md).
 
-use super::scene::SUN_DIRECTION;
+use super::scene::{EXPOSURE_EV100, SUN_DIRECTION};
 use super::skylight::SkyLight;
 use crate::planet::{MainCamera, Planet, Tweaks};
 use crate::shell::Options;
 use crate::sky::Sky;
-use bevy::prelude::*;
+use bevy::{camera::Exposure, prelude::*};
 use std::f32::consts::TAU;
 
 /// How long a whole day and night lasts, in seconds of play. Proposed: half an hour, as
@@ -117,6 +117,9 @@ struct Light {
     /// How bright the sky is drawn, and how far into the night.
     sky: f32,
     night: f32,
+    /// The camera's exposure (EV at ISO 100): set for sunlit ground by day, opening up a
+    /// little through the dusk so that the twilight sky still shows, as an eye adapts.
+    exposure: f32,
 }
 
 impl Light {
@@ -132,6 +135,7 @@ impl Light {
             ambient: f(self.ambient, other.ambient),
             sky: f(self.sky, other.sky),
             night: f(self.night, other.night),
+            exposure: f(self.exposure, other.exposure),
         }
     }
 }
@@ -139,6 +143,10 @@ impl Light {
 /// The light at a few heights of the sun, in degrees, from deep night to high noon. The
 /// light between is blended. At 20 degrees it is the look the art was made in. By night
 /// most light is the sky's, which has no direction, so the moon's shadows are faint.
+///
+/// The sun's light is as it is above the air: the air (`air`) dims and warms it on its
+/// way down, the more the lower the sun, and below the horizon it lights only the sky,
+/// as twilight. There it hands over to the moon, which fades in as the sky darkens.
 fn keys() -> [(f32, Light); 6] {
     let v = Vec3::new;
     let moon = v(0.62, 0.72, 1.0);
@@ -147,35 +155,37 @@ fn keys() -> [(f32, Light); 6] {
             -18.0,
             Light {
                 light: moon,
-                illuminance: 600.0,
+                illuminance: 370.0,
                 horizon: v(0.07, 0.09, 0.17),
                 zenith: v(0.015, 0.02, 0.06),
                 glow: v(0.25, 0.3, 0.45),
                 shade: v(0.42, 0.52, 0.9),
-                ambient: 1_050.0,
+                ambient: 650.0,
                 sky: 1.6,
                 night: 1.0,
+                exposure: 9.0,
             },
         ),
         (
             -6.0,
             Light {
                 light: moon,
-                illuminance: 200.0,
+                illuminance: 125.0,
                 horizon: v(0.32, 0.27, 0.42),
                 zenith: v(0.07, 0.09, 0.22),
                 glow: v(0.85, 0.45, 0.35),
                 shade: v(0.48, 0.52, 0.88),
-                ambient: 1_000.0,
+                ambient: 620.0,
                 sky: 1.6,
                 night: 0.6,
+                exposure: 9.0,
             },
         ),
         (
             0.0,
             Light {
-                light: v(1.0, 0.55, 0.3),
-                illuminance: 0.0,
+                light: v(1.0, 0.85, 0.7),
+                illuminance: 30_000.0,
                 horizon: v(0.95, 0.55, 0.38),
                 zenith: v(0.16, 0.24, 0.52),
                 glow: v(1.0, 0.45, 0.22),
@@ -183,13 +193,14 @@ fn keys() -> [(f32, Light); 6] {
                 ambient: 1_150.0,
                 sky: 1.7,
                 night: 0.0,
+                exposure: 10.0,
             },
         ),
         (
             6.0,
             Light {
-                light: v(1.0, 0.68, 0.45),
-                illuminance: 11_000.0,
+                light: v(1.0, 0.92, 0.84),
+                illuminance: 30_000.0,
                 horizon: v(1.0, 0.72, 0.52),
                 zenith: v(0.2, 0.36, 0.72),
                 glow: v(1.0, 0.6, 0.32),
@@ -197,13 +208,14 @@ fn keys() -> [(f32, Light); 6] {
                 ambient: 1_550.0,
                 sky: 1.6,
                 night: 0.0,
+                exposure: 10.4,
             },
         ),
         (
             20.0,
             Light {
-                light: v(1.0, 0.87, 0.7),
-                illuminance: 21_000.0,
+                light: v(1.0, 0.96, 0.9),
+                illuminance: 30_000.0,
                 horizon: v(0.92, 0.86, 0.78),
                 zenith: v(0.22, 0.44, 0.84),
                 glow: v(1.0, 0.74, 0.46),
@@ -211,13 +223,14 @@ fn keys() -> [(f32, Light); 6] {
                 ambient: 1_800.0,
                 sky: 1.6,
                 night: 0.0,
+                exposure: EXPOSURE_EV100,
             },
         ),
         (
             60.0,
             Light {
-                light: v(1.0, 0.96, 0.9),
-                illuminance: 26_000.0,
+                light: v(1.0, 0.98, 0.95),
+                illuminance: 32_000.0,
                 horizon: v(0.86, 0.9, 0.96),
                 zenith: v(0.2, 0.44, 0.86),
                 glow: v(1.0, 0.92, 0.8),
@@ -225,6 +238,7 @@ fn keys() -> [(f32, Light); 6] {
                 ambient: 2_000.0,
                 sky: 1.6,
                 night: 0.0,
+                exposure: EXPOSURE_EV100 + 1.0,
             },
         ),
     ]
@@ -241,6 +255,18 @@ fn light_at(height: f32) -> Light {
             pair[0].1.mix(pair[1].1, t)
         })
         .unwrap_or(keys[keys.len() - 1].1)
+}
+
+fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
+    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// The moon's light with the sun so many degrees below the horizon: none as it sets,
+/// growing to the night's as the twilight goes.
+fn moonlight(height: f32) -> f32 {
+    let t = ((-1.0 - height) / 5.0).clamp(0.0, 1.0);
+    light_at(height.min(-6.0)).illuminance * t * t * (3.0 - 2.0 * t)
 }
 
 pub fn plugin(app: &mut App) {
@@ -274,14 +300,14 @@ fn tick(time: Res<Time>, mut clock: ResMut<Clock>) {
     clock.advance(time.delta_secs());
 }
 
-/// Lights the world for the hour: the sun or the moon, the sky, the shade and the haze.
+/// Lights the world for the hour: the sun or the moon, the sky and the shade.
 fn shine(
     clock: Res<Clock>,
     path: Option<Res<SkyPath>>,
     mut tweaks: ResMut<Tweaks>,
     mut sky: ResMut<Sky>,
     mut skylight: ResMut<SkyLight>,
-    mut fog: Query<&mut DistanceFog, With<MainCamera>>,
+    mut exposure: Query<&mut Exposure, With<MainCamera>>,
 ) {
     let Some(path) = path else { return };
     // The sun's shadows move in small steps rather than every frame: a light turning by a
@@ -293,12 +319,17 @@ fn shine(
     // Above the horizon the light comes from the sun; below it, from the moon opposite.
     tweaks.sun_direction = if height > -1.0 { sun } else { -sun };
     tweaks.sun_color = colour(light.light);
-    tweaks.sun_illuminance = light.illuminance;
+    tweaks.sun_illuminance = if height > -1.0 {
+        light.illuminance
+    } else {
+        moonlight(height)
+    };
     sky.horizon = colour(light.horizon);
     sky.zenith = colour(light.zenith);
     sky.glow = colour(light.glow);
     sky.brightness = light.sky;
     sky.night = light.night;
+    sky.twilight = 1.0 - smoothstep(-1.0, 6.0, height);
     sky.spin_axis = path.pole();
     sky.spin = (clock.hour - MORNING) / 24.0 * TAU;
     let lit = SkyLight {
@@ -307,8 +338,10 @@ fn shine(
     };
     // Set only when it changes, so the sky is painted again only then.
     skylight.set_if_neq(lit);
-    for mut fog in &mut fog {
-        fog.color = colour(light.horizon);
+    for mut camera in &mut exposure {
+        if camera.ev100 != light.exposure {
+            camera.ev100 = light.exposure;
+        }
     }
 }
 
@@ -385,6 +418,14 @@ mod tests {
             assert!(close(between.illuminance, halfway), "{low} to {high}");
             assert!(close(between.sky, (a.sky + b.sky) / 2.0), "{low} to {high}");
         }
+    }
+
+    #[test]
+    fn the_moon_rises_from_nothing_as_the_sun_sets() {
+        assert_eq!(moonlight(-1.0), 0.0);
+        assert!(moonlight(-3.0) < moonlight(-6.0));
+        assert_eq!(moonlight(-6.0), light_at(-6.0).illuminance);
+        assert_eq!(moonlight(-18.0), light_at(-18.0).illuminance);
     }
 
     #[test]

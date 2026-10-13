@@ -12,6 +12,7 @@
 // types are normal here.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
+pub mod air;
 pub mod audio;
 pub mod cover;
 pub mod data;

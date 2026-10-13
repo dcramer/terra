@@ -62,10 +62,17 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let vertex = decompress_vertex(vertex_in, vertex_in.instance_index);
     let world_from_local = mesh_functions::get_world_from_local(vertex_in.instance_index);
     var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(vertex.position, 1.0));
+    // Where the point is on the plant before the wind moves it, from the plant's foot,
+    // which is what its material is projected from (flora.wesl), so bark and leaves stay
+    // put on a swaying tree. Carried in the texture coordinates, which the fragment
+    // shader reads as this and not as coordinates.
+    let on_plant = world.xyz - world_from_local[3].xyz;
 @if(VERTEX_UVS_A) {
     world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv), 1.0);
-    out.uv = vertex.uv;
+    out.uv = on_plant.xy;
 }
+@if(VERTEX_UVS_B)
+    out.uv_b = vec2<f32>(on_plant.z, 0.0);
     out.world_position = world;
     out.position = position_world_to_clip(world.xyz);
 
@@ -96,7 +103,8 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     if dot(origin, origin) > 1.0 {
         shade = 0.86 + 0.28 * hash(origin * 7.3);
     }
-    out.color = vec4<f32>(vertex.color.rgb * shade, 1.0);
+    // The alpha says which material the part is drawn in (flora.wesl).
+    out.color = vec4<f32>(vertex.color.rgb * shade, vertex.color.a);
 }
 }
 

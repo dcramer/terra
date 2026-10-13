@@ -7,9 +7,11 @@
 // Each kind:
 //   name     what it is called
 //   models   the models it is drawn from, in assets/models/nature
-//   colours  our colour for each material its models name, and whether that part is
-//            foliage, which catches the wind, or Firm; * is any material. Materials not named
-//            here take the shared colours below.
+//   colours  our colour for each material its models name, whether that part is foliage,
+//            which catches the wind, or Firm, and the real material it is drawn in, if any,
+//            a layer of assets/materials/flora (pine_bark, bark_brown_02, leaves, mossy_rock,
+//            lichen_rock), its own colour swapped for ours; * is any material. Materials not
+//            named here take the shared colours below.
 //   sway     how it moves in the wind: Tree, Bush, Plant or Still
 //   grows    the layer it grows in: Trees, Rocks, Bushes, Plants or Flowers, or
 //            ByTheDoor(east, south, height) for one placed by the base's door
@@ -25,19 +27,19 @@
 //            cut as a greater sort, such as a great tree that only iron fells (D96)
 (
     shared_colours: [
-        ("Wood", (0.43, 0.29, 0.22), Firm),
+        ("Wood", (0.36, 0.28, 0.22), Firm, "bark_brown_02"),
         ("LightWood", (0.78, 0.62, 0.44), Firm),
         ("Mushroom_Top", (0.84, 0.32, 0.22), Firm),
         ("Mushroom_Bottom", (0.93, 0.88, 0.78), Firm),
-        ("DarkGreen", (0.27, 0.45, 0.22), Foliage),
-        ("Leaves", (0.42, 0.58, 0.25), Foliage),
+        ("DarkGreen", (0.25, 0.36, 0.18), Foliage, "leaves"),
+        ("Leaves", (0.34, 0.45, 0.22), Foliage, "leaves"),
         ("*", (0.4, 0.56, 0.24), Foliage),
     ],
     kinds: [
         (
             name: "Pine",
             models: ["PineTree_1", "PineTree_2", "PineTree_3", "PineTree_4", "PineTree_5"],
-            colours: [("Green", (0.2, 0.4, 0.3), Foliage)],
+            colours: [("Wood", (0.38, 0.28, 0.22), Firm, "pine_bark"), ("Green", (0.17, 0.3, 0.2), Foliage, "leaves")],
             sway: Tree,
             grows: Trees,
             below: -0.06,
@@ -48,10 +50,10 @@
             name: "Birch",
             models: ["BirchTree_1", "BirchTree_2", "BirchTree_3"],
             colours: [
-                ("White", (0.93, 0.9, 0.84), Firm),
-                ("Black", (0.24, 0.2, 0.2), Firm),
-                ("Green", (0.96, 0.68, 0.2), Foliage),
-                ("DarkGreen", (0.88, 0.5, 0.16), Foliage),
+                ("White", (0.86, 0.84, 0.78), Firm, "bark_brown_02"),
+                ("Black", (0.22, 0.2, 0.19), Firm, "bark_brown_02"),
+                ("Green", (0.86, 0.62, 0.22), Foliage, "leaves"),
+                ("DarkGreen", (0.76, 0.46, 0.16), Foliage, "leaves"),
             ],
             sway: Tree,
             grows: Trees,
@@ -62,7 +64,7 @@
         (
             name: "Leafy tree",
             models: ["CommonTree_1", "CommonTree_2", "CommonTree_3", "CommonTree_4", "CommonTree_5"],
-            colours: [("Green", (0.47, 0.6, 0.22), Foliage), ("DarkGreen", (0.33, 0.5, 0.22), Foliage)],
+            colours: [("Green", (0.38, 0.48, 0.2), Foliage, "leaves"), ("DarkGreen", (0.27, 0.4, 0.18), Foliage, "leaves")],
             sway: Tree,
             grows: Trees,
             size: (6.0, 10.5),
@@ -73,7 +75,7 @@
         (
             name: "Ore rock",
             models: ["Rock_1", "Rock_3", "Rock_5", "Rock_7"],
-            colours: [("*", (0.52, 0.33, 0.27), Firm)],
+            colours: [("*", (0.5, 0.36, 0.3), Firm, "lichen_rock")],
             sway: Still,
             grows: Rocks,
             size_above: 0.7,
@@ -83,7 +85,7 @@
         (
             name: "Mossy rock",
             models: ["Rock_Moss_1", "Rock_Moss_2", "Rock_Moss_3"],
-            colours: [("Rock", (0.66, 0.58, 0.54), Firm), ("Green", (0.5, 0.58, 0.26), Firm)],
+            colours: [("Rock", (0.44, 0.42, 0.39), Firm, "mossy_rock"), ("Green", (0.4, 0.47, 0.22), Firm, "mossy_rock")],
             sway: Still,
             grows: Rocks,
             grass_above: 0.6,
@@ -93,7 +95,7 @@
         (
             name: "Rock",
             models: ["Rock_1", "Rock_2", "Rock_3", "Rock_4", "Rock_5", "Rock_6", "Rock_7"],
-            colours: [("Rock", (0.66, 0.58, 0.54), Firm), ("Green", (0.5, 0.58, 0.26), Firm)],
+            colours: [("Rock", (0.44, 0.42, 0.39), Firm, "mossy_rock"), ("Green", (0.4, 0.47, 0.22), Firm, "mossy_rock")],
             sway: Still,
             grows: Rocks,
             cut: (what: Rock, gives: ("Stone", 0.5, 1.5), seconds: (0.8, 0.5)),
@@ -103,7 +105,7 @@
         (
             name: "Berry bush",
             models: ["BushBerries_1"],
-            colours: [("Green", (0.36, 0.53, 0.24), Foliage), ("Berry", (0.85, 0.22, 0.26), Foliage)],
+            colours: [("Green", (0.3, 0.42, 0.2), Foliage, "leaves"), ("Berry", (0.7, 0.16, 0.2), Foliage)],
             sway: Bush,
             grows: Bushes,
             chance: 0.33,
@@ -113,7 +115,7 @@
         (
             name: "Bush",
             models: ["Bush_1", "Bush_2"],
-            colours: [("Green", (0.36, 0.53, 0.24), Foliage), ("Berry", (0.85, 0.22, 0.26), Foliage)],
+            colours: [("Green", (0.3, 0.42, 0.2), Foliage, "leaves"), ("Berry", (0.7, 0.16, 0.2), Foliage)],
             sway: Bush,
             grows: Bushes,
             size: (0.7, 1.5),

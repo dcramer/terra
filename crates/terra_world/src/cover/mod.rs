@@ -7,6 +7,9 @@
 //! draws it: blades in squares round the camera, finer near it ([`blades`]), shrinking into
 //! the ground with distance so the grass has no edge.
 //!
+//! Nothing grows where a base has built or planned anything: its [`Footprint`]s are kept
+//! clear, and the squares under one are built again when it changes.
+//!
 //! It also measures what docs/biomes.md asks to be measured: the share of the ground within
 //! 30 m of the camera that nothing grows on ([`BareGround`]), which scripted runs print with
 //! their screenshots.
@@ -14,6 +17,7 @@
 pub mod blades;
 mod floor;
 
+use crate::footprint::Footprint;
 use crate::planet::{MainCamera, Planet};
 use crate::start::Start;
 use bevy::{
@@ -127,6 +131,8 @@ struct Square {
 struct Meadow {
     material: Handle<GrassMaterial>,
     squares: HashMap<(i32, i32), Square>,
+    /// What is built or planned, which the squares are kept clear of.
+    clear: Arc<Vec<Footprint>>,
 }
 
 pub fn plugin(app: &mut App) {
@@ -179,6 +185,7 @@ fn grow(
     planet: Res<Planet>,
     start: Res<Start>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
+    footprints: Query<Ref<Footprint>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<GrassMaterial>>,
 ) {
@@ -208,10 +215,44 @@ fn grow(
         commands.insert_resource(Meadow {
             material,
             squares: HashMap::default(),
+            clear: Arc::new(footprints.iter().map(|f| f.into_inner().clone()).collect()),
         });
         return;
     };
-    let Meadow { material, squares } = &mut *meadow;
+    let Meadow {
+        material,
+        squares,
+        clear,
+    } = &mut *meadow;
+    // When something built changes shape, the squares on or beside it, before or after,
+    // are built again without what now stands there.
+    let changed: Vec<Footprint> = footprints
+        .iter()
+        .filter(|f| f.is_changed())
+        .map(|f| f.into_inner().clone())
+        .collect();
+    if !changed.is_empty() {
+        let before = std::mem::replace(
+            clear,
+            Arc::new(footprints.iter().map(|f| f.into_inner().clone()).collect()),
+        );
+        let touched = |key: (i32, i32)| {
+            let middle = square_middle(key);
+            let point = planet.ground_at(start.at(middle.x, middle.y));
+            changed
+                .iter()
+                .chain(before.iter())
+                .any(|f| f.covers(point, SQUARE_M * 0.75))
+        };
+        for (&key, square) in squares.iter_mut() {
+            if touched(key) {
+                // Built again, from scratch: what is drawn stays until then, and one being
+                // built from the old footprints is dropped.
+                square.building = None;
+                square.ring = usize::MAX;
+            }
+        }
+    }
     let local = start.local(camera.translation());
     let here = Vec2::new(local.x, local.z);
 
@@ -274,7 +315,9 @@ fn grow(
                 return None;
             }
             let square = squares.get(&key);
-            let current = square.map(|s| s.building.as_ref().map_or(s.ring, |(ring, _)| *ring));
+            let current = square
+                .map(|s| s.building.as_ref().map_or(s.ring, |(ring, _)| *ring))
+                .filter(|&ring| ring < RINGS.len());
             let ring = ring_for(distance, current);
             (current != Some(ring)).then_some((distance, key, ring))
         })
@@ -282,11 +325,16 @@ fn grow(
     wanted.sort_by(|a, b| a.0.total_cmp(&b.0));
     let threads = AsyncComputeTaskPool::get();
     for (_, key, ring) in wanted.into_iter().take(BUILDING.saturating_sub(building)) {
-        let (source, planet, start, seed) =
-            (rules.source.clone(), planet.clone(), *start, rules.seed);
+        let (source, planet, start, seed, clear) = (
+            rules.source.clone(),
+            planet.clone(),
+            *start,
+            rules.seed,
+            clear.clone(),
+        );
         let shape: Ring = RINGS[ring].0;
         let task = threads.spawn(async move {
-            blades::square(source.as_ref(), &planet, &start, seed, key, shape)
+            blades::square(source.as_ref(), &planet, &start, seed, key, shape, &clear)
         });
         let square = squares.entry(key).or_insert_with(|| Square {
             ring,

@@ -174,7 +174,8 @@ fn fragment(
     let flatness = dot(normalize(in.world_normal), up);
 
     var colour = mix(ground.low.rgb, ground.high.rgb, smoothstep(0.25, 0.75, height));
-    let steep = 1.0 - smoothstep(0.93, 0.99, flatness);
+    // Rock shows through from about 30 degrees, as soil and grass hold on gentler slopes.
+    let steep = 1.0 - smoothstep(0.8, 0.9, flatness);
 
 @if(!PREPASS_PIPELINE)
     if ground.cover > 0.0 && ground.textured != 0u {
@@ -206,9 +207,22 @@ fn fragment(
         let gy = dpdy(world);
         // Under trees the soil is fallen leaves, browner than the open ground's.
         let litter_colour = vec3<f32>(0.15, 0.09, 0.045);
-        var ground_is = layer(SOIL, 1.0, mix(colour, litter_colour, litter) * (0.9 + 0.2 * blotch), world, gx, gy, n);
+        // Soil and rock each at two sizes, blended in patches, so their repeat does not
+        // show across a field or a hillside.
+        let soil_tint = mix(colour, litter_colour, litter) * (0.9 + 0.2 * blotch);
+        var ground_is = over(
+            layer(SOIL, 1.0, soil_tint, world, gx, gy, n),
+            layer(SOIL, 2.9, soil_tint, world + 23.0, gx, gy, n),
+            0.2 + 0.45 * blotch,
+        );
         if steep > 0.0 {
-            ground_is = over(ground_is, layer(ROCK, 1.0, ground.steep.rgb, world, gx, gy, n), steep);
+            let rock_tint = ground.steep.rgb * (0.85 + 0.3 * blotch);
+            let cliff = over(
+                layer(ROCK, 1.0, rock_tint, world, gx, gy, n),
+                layer(ROCK, 3.3, rock_tint, world + 37.0, gx, gy, n),
+                0.3 + 0.4 * fleck,
+            );
+            ground_is = over(ground_is, cliff, steep);
         }
 
         // Grass sits in the soil's hollows first: where the soil is lighter it is higher,
@@ -238,23 +252,26 @@ fn fragment(
         let rock = smoothstep(0.2, 0.4, grows.b);
         if rock > 0.0 {
             let ore = smoothstep(0.7, 0.9, grows.b);
-            let stone_colour = vec3<f32>(0.56, 0.49, 0.42) * (0.85 + 0.3 * blotch);
-            let ore_colour = vec3<f32>(0.55, 0.3, 0.2) * (0.8 + 0.4 * fleck);
+            // Linear colours, as the renderer works: a mid grey-brown stone, a rusty ore.
+            let stone_colour = vec3<f32>(0.12, 0.1, 0.08) * (0.85 + 0.3 * blotch);
+            let ore_colour = vec3<f32>(0.24, 0.08, 0.04) * (0.8 + 0.4 * fleck);
             ground_is = over(ground_is, layer(ROCK, 0.6, mix(stone_colour, ore_colour, ore), world, gx, gy, n), rock);
         }
 
         let above_sea = from_centre - ground.sea_radius_m;
         let lap = sin(globals.time * 0.9 + noise(world * 0.12) * 12.0) * 0.06;
-        let sandy = (1.0 - smoothstep(0.35, 1.5, above_sea + (blotch - 0.5) * 0.9)) * ground.cover;
+        // The shore is the sea's: ground dug down to its level inland is not a beach.
+        let undug = 1.0 - smoothstep(0.1, 0.3, grows.b);
+        let sandy = (1.0 - smoothstep(0.35, 1.5, above_sea + (blotch - 0.5) * 0.9)) * ground.cover * undug;
         if sandy > 0.0 {
             ground_is = over(ground_is, layer(SAND, 1.0, ground.sand.rgb, world, gx, gy, n), sandy);
         }
         colour = ground_is.colour;
-        colour *= mix(0.72, 1.0, smoothstep(0.05, 0.3, above_sea - lap));
-        colour = mix(colour, ground.sea_deep.rgb, smoothstep(0.0, 4.5, -above_sea) * 0.92);
+        colour *= mix(0.72, 1.0, smoothstep(0.05, 0.3, above_sea - lap) * undug + (1.0 - undug));
+        colour = mix(colour, ground.sea_deep.rgb, smoothstep(0.0, 4.5, -above_sea) * 0.92 * undug);
         let foam_width = 0.07 + 0.05 * noise(world * 1.7 + globals.time * 0.25);
         let foam = 1.0 - smoothstep(0.0, foam_width, abs(above_sea - lap - 0.02));
-        colour = mix(colour, vec3<f32>(1.0, 0.99, 0.96), foam * 0.85 * ground.cover);
+        colour = mix(colour, vec3<f32>(1.0, 0.99, 0.96), foam * 0.85 * ground.cover * undug);
         pbr_input.N = ground_is.normal;
     } else {
         colour = mix(colour, ground.steep.rgb, steep);
@@ -280,8 +297,8 @@ fn fragment(
         let rock = smoothstep(0.2, 0.4, grows.b);
         let ore = smoothstep(0.7, 0.9, grows.b);
         // Warm, so a pit lit only by the blue sky reads as stone and not as water.
-        let stone_colour = vec3<f32>(0.56, 0.49, 0.42) * (0.85 + 0.3 * blotch);
-        let ore_colour = vec3<f32>(0.55, 0.3, 0.2) * (0.8 + 0.4 * fleck);
+        let stone_colour = vec3<f32>(0.12, 0.1, 0.08) * (0.85 + 0.3 * blotch);
+        let ore_colour = vec3<f32>(0.24, 0.08, 0.04) * (0.8 + 0.4 * fleck);
         colour = mix(colour, mix(stone_colour, ore_colour, ore), rock);
 
         // The shore: sand above the waterline, darker where it is wet, foam where the

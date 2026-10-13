@@ -26,9 +26,17 @@ pub struct Sky {
     /// How far into the night it is, from 0 by day to 1 in full dark: the stars and the
     /// moon, which stands opposite the sun.
     pub night: f32,
+    /// Over the atmosphere, how much of this sky's own colours to draw: none by day, all
+    /// once the sun is down. The atmosphere's sky goes dark as soon as the sun sets, where a
+    /// real one glows for a while; the dusk and the night are drawn in the colours chosen
+    /// for them.
+    pub twilight: f32,
     /// How the stars have turned with the sky: about which axis, and how far, in radians.
     pub spin_axis: Vec3,
     pub spin: f32,
+    /// Whether the sky's colour comes from Bevy's atmosphere (`air`), so that this draws
+    /// only the clouds, the stars and the moon over it, lit as the sun lights the world.
+    pub over_air: bool,
 }
 
 impl Sky {
@@ -47,8 +55,10 @@ impl Sky {
             cloudiness,
             brightness,
             night: 0.0,
+            twilight: 0.0,
             spin_axis: Vec3::Y,
             spin: 0.0,
+            over_air: false,
         }
     }
 }
@@ -75,11 +85,28 @@ struct SkyMaterial {
     spin_axis: Vec3,
     #[uniform(0)]
     spin: f32,
+    /// The sun's (or the moon's) colour times its illuminance in lux, which lights the
+    /// clouds when they are drawn over the atmosphere.
+    #[uniform(0)]
+    sunlight: Vec3,
+    #[uniform(0)]
+    over_air: u32,
+    #[uniform(0)]
+    twilight: f32,
 }
 
 impl Material for SkyMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/sky.wesl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        // Over the atmosphere, clouds cover it and stars add to it.
+        if self.over_air != 0 {
+            AlphaMode::Premultiplied
+        } else {
+            AlphaMode::Opaque
+        }
     }
 }
 
@@ -96,6 +123,10 @@ impl SkyMaterial {
             night: sky.night,
             spin_axis: sky.spin_axis.normalize_or(Vec3::Y),
             spin: sky.spin,
+            sunlight: Vec3::from_slice(&tweaks.sun_color.to_linear().to_f32_array()[..3])
+                * tweaks.sun_illuminance,
+            over_air: sky.over_air as u32,
+            twilight: sky.twilight,
         }
     }
 }

@@ -17,6 +17,7 @@
 //! grass never shows an edge; each vertex carries the way back to its root for that.
 
 use super::{CoverSource, SQUARE_M};
+use crate::footprint::Footprint;
 use crate::planet::Planet;
 use crate::start::Start;
 use bevy::{
@@ -145,8 +146,12 @@ impl Samples {
     }
 }
 
+/// No blade grows within this of what is built or planned, as blades lean out from
+/// their roots.
+pub const CLEAR_M: f32 = 0.3;
+
 /// Builds the square `key` (squares of [`SQUARE_M`] east and south of the start) at a ring
-/// of detail.
+/// of detail, with no blades on the footprints of what is built or planned (`clear`).
 pub fn square(
     source: &dyn CoverSource,
     planet: &Planet,
@@ -154,6 +159,7 @@ pub fn square(
     seed: Seed,
     key: (i32, i32),
     ring: Ring,
+    clear: &[Footprint],
 ) -> Built {
     let middle = (Vec2::new(key.0 as f32, key.1 as f32) + 0.5) * SQUARE_M;
     let half = SQUARE_M / 2.0;
@@ -261,6 +267,14 @@ pub fn square(
             // the same ground.
             built.covered[index] = true;
             if rank > thick * ring.share {
+                continue;
+            }
+            // Nothing grows through floors, footings and steps, or where they are planned.
+            let root = centre + east * (at.x - middle.x) + up * rise + south * (at.y - middle.y);
+            if clear
+                .iter()
+                .any(|footprint| footprint.covers(root, CLEAR_M))
+            {
                 continue;
             }
             let (clump, from_middle) = nearest_clump(at);

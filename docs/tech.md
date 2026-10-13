@@ -18,7 +18,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 |---|---|---|
 | Language | Rust for the game; TypeScript on Node for tooling outside it (D121). No scripting language in the game. | Decided |
 | Engine framework | Bevy 0.20: entity system, renderer, windowing, input, assets, audio, UI | Decided |
-| Graphics | Bevy's renderer on wgpu (Vulkan, Metal, DirectX 12). Our own shaders for ground, sea and sky. | Decided |
+| Graphics | Bevy's renderer on wgpu (Vulkan, Metal, DirectX 12). Our own shaders for ground, sea, plants and clouds; Bevy's atmosphere for the sky. | Decided |
 | Voxel terrain | Our own crate, ported from the parts of Voxel Tools we need (MIT-licensed) | Decided |
 | Terrain meshing | The `transvoxel` crate | Decided (D32) |
 | Simulation | Our own crate, `terra_sim`, on its own thread; parked with terraforming (D26, D60) | Parked |
@@ -109,7 +109,7 @@ One known gap: the `transvoxel` crate bakes seam stitching into each mesh, so a 
 
 - **Ground:** one material, blending the voxel materials, with fine detail added in the shader.
 - **Sea:** one sphere per world at its sea level.
-- **Sky:** our own sky shader.
+- **Sky and air:** Bevy's physical atmosphere for the sky's colour and the haze, with our own shader drawing clouds, stars, the moon and the dusk over it (D212).
 - **Plants and objects:** instanced and baked together by area (D47).
 
 ## Risks

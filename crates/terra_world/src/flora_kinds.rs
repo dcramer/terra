@@ -47,8 +47,35 @@ struct FloraFile {
     kinds: Vec<FloraDef>,
 }
 
-/// A material a model names, our colour for it, and whether it is foliage.
-type Colour = (String, (f32, f32, f32), Surface);
+/// A material a model names, our colour for it, whether it is foliage, and the real
+/// material it is drawn in, if any: a layer of `materials/flora` by name (`MATERIALS`).
+#[derive(Deserialize, Debug, Clone)]
+struct Colour(
+    String,
+    (f32, f32, f32),
+    Surface,
+    #[serde(default)] Option<String>,
+);
+
+/// The real materials a part of a model may be drawn in, in the order they are stacked in
+/// `assets/materials/flora` (assets/materials/README.md), and how many metres each covers.
+pub const MATERIALS: [(&str, f32); 5] = [
+    ("pine_bark", 2.0),
+    ("bark_brown_02", 1.0),
+    ("leaves", 1.6),
+    ("mossy_rock", 3.0),
+    ("lichen_rock", 2.0),
+];
+
+/// How a part of a model is drawn.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Look {
+    pub colour: Color,
+    /// Whether it catches the wind.
+    pub foliage: bool,
+    /// Which of [`MATERIALS`] it is drawn in, if any; plain colour if not.
+    pub material: Option<u32>,
+}
 
 /// Whether a part of a model catches the wind.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -178,17 +205,29 @@ impl Flora {
 impl FloraDef {
     /// Our colour for a part of one of its models, by the material the part names, as it
     /// should look on screen, and whether it is foliage, which catches the wind.
-    pub fn colour(&self, material: &str) -> (Color, bool) {
+    /// How the part of a model with a material of this name is drawn: the first of the
+    /// kind's colours that names it, or `*`, else plain foliage.
+    pub fn look(&self, material: &str) -> Look {
         let material = material.split('.').next().unwrap_or(material);
-        let ((red, green, blue), surface) = self
+        let found = self
             .colours
             .iter()
-            .find(|(named, ..)| named == material || named == "*")
-            .map_or(
-                ((0.4, 0.56, 0.24), Surface::Foliage),
-                |(_, colour, surface)| (*colour, *surface),
-            );
-        (Color::srgb(red, green, blue), surface == Surface::Foliage)
+            .find(|Colour(named, ..)| named == material || named == "*");
+        let Some(Colour(_, (red, green, blue), surface, real)) = found else {
+            return Look {
+                colour: Color::srgb(0.4, 0.56, 0.24),
+                foliage: true,
+                material: None,
+            };
+        };
+        Look {
+            colour: Color::srgb(*red, *green, *blue),
+            foliage: *surface == Surface::Foliage,
+            material: real
+                .as_deref()
+                .and_then(|name| MATERIALS.iter().position(|(m, _)| *m == name))
+                .map(|layer| layer as u32),
+        }
     }
 
     /// The name of the item cutting it gives, as the file has it, if it can be cut.
@@ -338,7 +377,25 @@ mod tests {
         assert_eq!(lump.cuttable(0.8).unwrap().gives, (FloraKind(1), 1));
         assert_eq!(lump.cuttable(1.2).unwrap().gives.1, 2);
         // Its own colours first, then those every kind shares.
-        assert!(tree.colour("Green.001").1);
-        assert!(!tree.colour("Bark").1);
+        assert!(tree.look("Green.001").foliage);
+        assert!(!tree.look("Bark").foliage);
+    }
+
+    #[test]
+    fn every_real_material_named_is_in_the_stack() {
+        let flora = Flora::read();
+        for kind in flora.kinds() {
+            for Colour(named, _, _, real) in &kind.colours {
+                if let Some(real) = real {
+                    assert!(
+                        MATERIALS.iter().any(|(m, _)| m == real),
+                        "{}'s {named} is drawn in {real}, which is not in materials/flora",
+                        kind.name
+                    );
+                }
+            }
+        }
+        let trunk = flora.kinds()[0].look("Wood");
+        assert!(trunk.material.is_some() && !trunk.foliage);
     }
 }

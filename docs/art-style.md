@@ -131,20 +131,21 @@ Models carry their own materials; the light, the sky and the air are shared shad
 | No shimmer | Mipmaps and anisotropic filtering for every model's and material's textures | Working |
 | Ground | Soil, grass, rock and sand textures, triplanar, blended by what grows and tinted by the planet (D190) | Working on the voxel terrain |
 | Sky light | The shade lit by the sky above and the ground's bounce below, from a cube map painted from the sky (D190) | Working |
-| Haze and layered distance | Distance fog tinted toward the horizon | Working |
-| Sky | A gradient shader with soft clouds, day and night | Working |
-| Bloom and grading | Camera effects built into Bevy, ACES tone mapping | Working |
+| Haze and layered distance | Bevy's physical atmosphere's aerial perspective, its distances scaled 18 times so a few hundred metres read as many kilometres (D212) | Working |
+| Sky | Bevy's physical atmosphere (Hillaire's model, as Unreal's), with our clouds, stars and moon drawn over it, and the dusk and night in chosen colours, since it goes dark at sunset (D212) | Working |
+| Exposure, bloom and grading | A fixed exposure for sunlit ground, opening a little through the dusk; AgX tone mapping, a film's response; soft bloom (D212) | Working |
 | Dense foliage and wind | Instanced plants, merged grass blades, one wind shader | Working near the start; its models are still direction D |
 | Ground cover | Grass as clumped blades round the camera, fading into ground of its own colour; leaf litter and moss painted onto the ground under trees (D202) | Working in the lush forest; litter is still the soil texture tinted |
 | Water | A see-through surface mirroring the sky at a low angle | Working; no waves |
-| Shade in corners | Screen-space ambient occlusion | Working |
+| Shade in corners | Screen-space ambient occlusion over about a metre (D212), and contact shadows where things meet (D204) | Working |
+| Trees, bushes and rocks | Their parts drawn in real materials, bark, leaves and lichen-covered rock, projected triplanar and tinted by their kind, normals smoothed across curves (D212) | Working on the free models, which are still crude in shape; see below |
 
 - **Effort goes into light and atmosphere**, which is shader code and shared by everything.
 - **Fullness comes from quantity.** Ground cover, undergrowth and canopy in layers, as in Sons of the Forest (D148).
 
 ## Open questions
 
-- **Trees, plants and rocks** are still flat colour in direction D, and clash with textured buildings and ground. They are to be made again to this guide. Trees could be grown in code instead, with real bark and leaf cards: the lush forest spike runs 2,700 of them at about 5 ms a frame ([research/lush-forest-spike.md](../research/lush-forest-spike.md)). Which way is open.
+- **Trees, plants and rocks** are drawn in real materials now, but their shapes are still direction D's: pines as stacked cones, crowns as faceted blobs, rocks of 70 to 130 triangles, small plants in flat colour. They are to be made again to this guide. Trees could be grown in code instead, with real bark and leaf cards: the lush forest spike runs 2,700 of them at about 5 ms a frame ([research/lush-forest-spike.md](../research/lush-forest-spike.md)). Which way is open.
 - **How materials change through seasons and phases** (D149).
 - **Night.** Moonlight and lamps on textured surfaces.
 - **Blur and framing**, which matter more in third person.
