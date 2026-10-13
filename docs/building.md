@@ -2,7 +2,7 @@
 
 Status: the building system as the player meets it, for the developers to read and correct. It gathers what the developers have said about building, what players of the games we draw on will reach for ([research/building-systems-prior-art.md](../research/building-systems-prior-art.md)), and what is built. Each item says whether it is decided (with its D number), leaning, proposed, or open. How it works in code is [building-tech.md](building-tech.md); how each kind of construction looks is [building-kits.md](building-kits.md). The rules every construction piece follows, and every case they handle, are proposed in [proposals/construction-001.md](proposals/construction-001.md) (D192, Open).
 
-Everything built is half-metre cubes on its base's own grid (D48, D181): walls are rows of cubes a cube thick, posts columns of them, floors layers, openings cubes left empty, and roofs a surface over them. The player draws walls, floors and roofs; the game lays the details (D152, D154). Building is done with the hammer in hand, standing in the world, not from a separate view above: the build menu comes from the tool (D67) and offers what you have unlocked (D68), and a plan view from above stays [an idea for later](#ideas-for-later) (D176). You see what you would place before you commit, and taking apart gives back what it cost.
+Everything built is half-metre cubes on its base's own grid (D48, D181): walls are rows of cubes a cube thick, posts columns of them, floors layers, openings cubes left empty, and roofs a surface over them. The player builds by hand, roofs too, with brushes, carving and shapes, and the game lays the details from each cube's neighbours; drawing a room, a wall or a roof of a material over what is enclosed stays as a quick way (D152, D154, D226). Building is done with the hammer in hand, standing in the world, not from a separate view above: the build menu comes from the tool (D67) and offers what you have unlocked (D68), and a plan view from above stays [an idea for later](#ideas-for-later) (D176). You see what you would place before you commit, and taking apart gives back what it cost.
 
 ## What the developers want
 
@@ -33,7 +33,7 @@ In their words, shortened.
 - **Building draws on storage** (D141): "building from storage absolutely, but large items probably will need a special storage? And that probably would be unlocked later game (some of this)."
 - **No stability in the MVP, but wanted later** (D142).
 - **Rooms can be underground** (D143): "yes you can have underground rooms".
-- **Placing is The Sims' way** (D154): the player draws the shape, the game makes the details.
+- **Placing is by hand, Enshrouded's way** (D226, amending D154): brushes, carving, shapes and roofs built cube by cube, any shape and any number of storeys; the game makes the details from neighbours, and The Sims' drawing of rooms, walls and "a roof of this material" stays as a convenience.
 
 ## The baseline
 
@@ -309,7 +309,7 @@ None in the MVP, and wanted later (D142). Settled already (D193): nothing is tak
 
 ## Enshrouded or Subnautica: how placing works
 
-Decided (D154): The Sims' way, below. The developers, with walls, floors and roofs settled as the parts (D152): "the only question we have is how it should work. like enshrouded style, or subnautica style. i do like enshroudeds flexibility to design something truly interesting/unique/beautiful but i will admit its also a little overwhelming".
+Decided (D154): The Sims' way, below; since amended by D226 to building by hand, roofs too, with the Sims' drawing kept as a convenience. The developers, with walls, floors and roofs settled as the parts (D152): "the only question we have is how it should work. like enshrouded style, or subnautica style. i do like enshroudeds flexibility to design something truly interesting/unique/beautiful but i will admit its also a little overwhelming".
 
 The basis is settled (D48): **a voxel grid, as Enshrouded's**. What Enshrouded's does, from [research/enshrouded.md](../research/enshrouded.md): buildings of small voxel blocks in a material, placed one at a time or as ready-made pieces; pieces join seamlessly and materials blend where they meet; cutting an opening styles its edges; the ground can be dug, filled and flattened; you build only within an altar's radius.
 
