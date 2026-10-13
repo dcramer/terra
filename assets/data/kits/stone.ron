@@ -80,7 +80,7 @@
             Post: Pillar(width: 0.36),
         },
         tint: (0.93, 0.91, 0.88),
-        masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14, moss: 0.45, moss_tint: (0.72, 0.74, 0.58)),
+        masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14, moss: 0.5, moss_tint: (1.2, 1.18, 0.9)),
     ),
     colours: (
         light: (0.62, 0.6, 0.56),

@@ -143,7 +143,7 @@ A cube can be cut to a shape: a half (its lower half), a stair (two steps, each 
 
 **Floors** are drawn by their kind. A stone floor is the stone's surface, its top in flagstones (Poly Haven's `grey_stone_path`, CC0), flatter than its walls since it is walked on; a stone wall's top is capped in them too. A timber floor is a deck, made by the timber code: sawn boards two to a cube, as long as a tree gives, their joints staggered; each board drawn from one plank of `weathered_planks`, so no seam runs down a board; where the floor meets a wall standing on a footing, the boards run on to the logs' faces; a rim beam along any side left open, and joists under it where it is in the air.
 
-**A floor drawn alone**, with the hammer's *Floor* on any storey, with no walls on it, is finished at its edges: a timber deck with its rim of beams and its joists, a stone floor with its coping round the top and its plinth where it meets the ground.
+**A floor drawn alone**, with the hammer's *Floor* on any storey, with no walls on it, is finished at its edges: a timber deck with its rim of beams and its joists, a stone floor paved in its flagstones, its edges rounded into the ground.
 
 **Door steps** are stone slabs from each ground-floor door in an outside wall down to the ground, a riser of no more than 18 cm each, set into the ground; none where the threshold is less than a step up.
 

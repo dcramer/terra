@@ -68,7 +68,7 @@
             Nose: Member(profile: Hewn, scale: 1.0, material: Hewn),
             Post: Member(profile: Hewn, scale: 0.85, material: Hewn),
         },
-        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.25, moss: 0.4, moss_tint: (0.56, 0.58, 0.42)),
+        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.25, moss: 0.5, moss_tint: (0.66, 0.7, 0.46)),
     ),
     colours: (
         light: (0.74, 0.56, 0.37),

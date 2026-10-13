@@ -125,7 +125,8 @@ pub struct Masks {
     /// How much greyer timber is three metres up, as a fraction.
     pub weather: f32,
     /// How much a roof's covering is greened by moss and lichen toward its eaves, where the
-    /// rain runs off and lingers, as a fraction, and their colour (sRGB).
+    /// rain runs off and lingers, as a fraction, and what they multiply its colour by
+    /// (sRGB): greener and darker on shakes, paler on slate.
     pub moss: f32,
     pub moss_tint: [f32; 3],
 }

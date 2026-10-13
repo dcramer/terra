@@ -132,14 +132,30 @@ fn choose_site(planet: &Planet, base: &Base) -> Transform {
     })
 }
 
-/// Raises a build's frame until its floor clears the highest ground under it. The
-/// stand-in planet cannot be dug, so a build has to stay out of the ground's way; a
-/// foundation and steps make up the difference.
+/// Raises a build's frame until its floor clears the highest ground under it: under its
+/// rooms, or with none, as a floor laid alone, under its floor. The stand-in planet cannot
+/// be dug, so a build has to stay out of the ground's way; a foundation and steps make up
+/// the difference.
 pub fn lifted(mut frame: Transform, base: &Base, planet: &Planet) -> Transform {
-    let highest_ground = base
+    let mut columns: Vec<IVec3> = base
         .tiles()
         .filter(|(tile, _)| tile.y == 0)
-        .flat_map(|(tile, _)| {
+        .map(|(tile, _)| tile)
+        .collect();
+    if columns.is_empty() {
+        let floor = terra_build::floor_layer(0);
+        columns = base
+            .cubes()
+            .filter(|(at, _)| at.y == floor)
+            .map(|(at, _)| at.with_y(0))
+            .collect();
+    }
+    if columns.is_empty() {
+        return frame;
+    }
+    let highest_ground = columns
+        .into_iter()
+        .flat_map(|tile| {
             [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)].map(|(dx, dz)| {
                 let on_floor = Vec3::new(
                     (tile.x as f32 + dx) * CELL_M,

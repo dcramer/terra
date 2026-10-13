@@ -676,8 +676,8 @@ pub fn roof_mask(surface: &mut Surface, kit: &Kit, base: &Base) {
         let mut colour = Vec3::from_array(*c);
         if masks.moss > 0.0 {
             let blotch = smooth(p, 0.6, 17) * 0.7 + smooth(p, 2.1, 19) * 0.6;
-            let low = libm::powf((1.0 - up).clamp(0.0, 1.5) / 1.5, 1.2);
-            let moss = (masks.moss * low * blotch * 1.4).clamp(0.0, 0.85);
+            let low = libm::powf((1.0 - up).clamp(0.0, 1.0), 1.5);
+            let moss = (masks.moss * low * blotch * 1.8).clamp(0.0, 0.85);
             colour = colour.lerp(colour * Vec3::from_array(masks.moss_tint), moss);
         }
         if masks.weather > 0.0 {

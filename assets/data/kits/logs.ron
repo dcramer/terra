@@ -121,7 +121,7 @@
             Nose: Member(profile: Round, scale: 1.1, material: Log),
             Post: Member(profile: Round, scale: 0.9, material: Log),
         },
-        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.3, moss: 0.5, moss_tint: (0.5, 0.58, 0.36)),
+        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.3, moss: 0.6, moss_tint: (0.62, 0.74, 0.4)),
     ),
     colours: (
         light: (0.74, 0.56, 0.37),     // WoodLight: floors
