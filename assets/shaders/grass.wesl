@@ -40,17 +40,17 @@ struct Grass {
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> grass: Grass;
 
-fn sway(world: vec3<f32>, weights: vec2<f32>) -> vec3<f32> {
+fn sway(world: vec3<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
     let direction = grass.wind.xyz;
     let downwind = dot(world, direction);
     let crosswind = dot(world, cross(direction, normalize(world)));
-    let gust = sin(globals.time * 0.9 - downwind * 0.07 + crosswind * 0.03) * 0.6
-        + sin(globals.time * 1.9 - downwind * 0.23 - crosswind * 0.11) * 0.4;
+    let gust = sin(time * 0.9 - downwind * 0.07 + crosswind * 0.03) * 0.6
+        + sin(time * 1.9 - downwind * 0.23 - crosswind * 0.11) * 0.4;
     let bend = direction * (0.45 + gust) * weights.x * 0.25;
     let flutter = vec3<f32>(
-        sin(globals.time * 4.1 + world.x * 2.3 + world.z * 1.1),
-        sin(globals.time * 3.3 + world.y * 1.7 + world.x * 0.9),
-        sin(globals.time * 3.7 + world.z * 2.1 + world.y * 1.3),
+        sin(time * 4.1 + world.x * 2.3 + world.z * 1.1),
+        sin(time * 3.3 + world.y * 1.7 + world.x * 0.9),
+        sin(time * 3.7 + world.z * 2.1 + world.y * 1.3),
     ) * weights.y * 0.04;
     return (bend + flutter) * grass.wind.w;
 }
@@ -89,7 +89,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     local = shrunk(local, vertex.uv, vertex.color.a, vertex.uv_b.y, world_from_local);
     var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
-    world = vec4<f32>(world.xyz + sway(world.xyz, weights(vertex.uv_b.x)), 1.0);
+    world = vec4<f32>(world.xyz + sway(world.xyz, weights(vertex.uv_b.x), globals.time), 1.0);
 @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
 @if(VERTEX_UVS_B)
@@ -108,7 +108,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let previous_from_local = mesh_functions::get_previous_world_from_local(vertex_in.instance_index);
     var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
-    previous = vec4<f32>(previous.xyz + sway(previous.xyz, weights(vertex.uv_b.x)), 1.0);
+    previous = vec4<f32>(previous.xyz + sway(previous.xyz, weights(vertex.uv_b.x), globals.time - globals.delta_time), 1.0);
     out.previous_world_position = previous;
 }
 } @else {

@@ -31,7 +31,7 @@
 use bevy::{
     asset::RenderAssetUsages,
     camera::visibility::{RenderLayers, VisibilityRange},
-    image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
+    image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     light::NotShadowCaster,
     mesh::{Indices, PrimitiveTopology},
     pbr::{ExtendedMaterial, MaterialExtension},
@@ -71,6 +71,8 @@ const FADE: f32 = 0.2;
 /// cheaply, to the end of the second level; beyond, none. They switch where the tree does,
 /// so a shadow never changes when its tree does not.
 const SHADOW_LEVELS: [usize; 2] = [0, 1];
+/// How much of a trunk one repeat of the bark's picture covers: round it, and along it.
+const BARK_M: Vec2 = Vec2::new(2.15, 2.15);
 /// The solid shadow lumps are this much of the crown's size, so a low sun, which looks
 /// through many crowns, still comes through in places.
 const SHADOW_LUMP: f32 = 0.6;
@@ -118,6 +120,16 @@ impl MaterialExtension for FoliageExtension {
 
     fn prepass_vertex_shader() -> ShaderRef {
         "shaders/foliage.wesl".into()
+    }
+
+    // Crossfades between levels of detail dither in a pattern that moves every frame, for
+    // TAA to blend (D214).
+    fn fragment_shader() -> ShaderRef {
+        "shaders/foliage_fragment.wesl".into()
+    }
+
+    fn prepass_fragment_shader() -> ShaderRef {
+        "shaders/foliage_prepass.wesl".into()
     }
 }
 
@@ -384,37 +396,42 @@ fn plant(
         direction: east,
         strength: 1.0,
     };
-    // Read at a slant, as bark up a trunk and leaves edge-on are, a picture blurs unless
-    // sampled along the slant too (anisotropic filtering).
-    let repeat = |settings: &mut ImageLoaderSettings| {
-        settings.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-            address_mode_u: ImageAddressMode::Repeat,
-            address_mode_v: ImageAddressMode::Repeat,
-            anisotropy_clamp: 8,
-            ..ImageSamplerDescriptor::linear()
-        });
-    };
+    // Read at a slant, as leaves edge-on are, a picture blurs unless sampled along the
+    // slant too (anisotropic filtering).
     let slanted = |settings: &mut ImageLoaderSettings| {
         settings.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
             anisotropy_clamp: 8,
             ..ImageSamplerDescriptor::linear()
         });
     };
-    let bark_picture: Handle<Image> = assets
-        .load_builder()
-        .with_settings(repeat)
-        .load("textures/forest_spike/bark.png");
+    // Scanned furrowed bark, as an old oak's is, its colour in the range real bark has (D214), with the
+    // relief and roughness that let it catch the sky's light in the shade. Under materials/,
+    // so terra_world gives it its mipmaps.
+    let bark_map = |file: &str, colour: bool| -> Handle<Image> {
+        assets
+            .load_builder()
+            .with_settings(move |settings: &mut ImageLoaderSettings| settings.is_srgb = colour)
+            .load(format!("materials/oak_bark/{file}"))
+    };
     let leaf_picture: Handle<Image> = assets
         .load_builder()
         .with_settings(slanted)
         .load("textures/forest_spike/leaves.png");
-    unmipped.0.push((bark_picture.clone(), None));
     unmipped.0.push((leaf_picture.clone(), Some(LEAF_CUT)));
+    let arm = bark_map("arm.jpg", false);
     let bark = materials.add(Foliage {
         base: StandardMaterial {
-            base_color_texture: Some(bark_picture),
-            perceptual_roughness: 0.95,
-            reflectance: 0.2,
+            // The scan is at the top of bark's range; this takes it to the middle, about
+            // sRGB 112.
+            base_color: Color::srgb(0.85, 0.85, 0.85),
+            base_color_texture: Some(bark_map("color.jpg", true)),
+            normal_map_texture: Some(bark_map("normal.jpg", false)),
+            // Occlusion in red, roughness in green, metal in blue.
+            occlusion_texture: Some(arm.clone()),
+            metallic_roughness_texture: Some(arm),
+            perceptual_roughness: 1.0,
+            metallic: 0.0,
+            reflectance: 0.3,
             ..default()
         },
         extension: wind.clone(),
@@ -471,7 +488,12 @@ fn plant(
                 clumps.triangles()
             );
             TreeModel {
-                wood: wood.map(|build| meshes.add(build.mesh())),
+                // Bark has a normal map, which needs the tubes' tangents.
+                wood: wood.map(|build| {
+                    let mut mesh = build.mesh();
+                    mesh.generate_tangents().expect("the tubes have normals and texture places");
+                    meshes.add(mesh)
+                }),
                 crown: crown.map(|build| meshes.add(build.mesh())),
                 shadow: meshes.add(shadow.mesh()),
                 clumps: meshes.add(clumps.mesh()),
@@ -966,13 +988,14 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
         // Carry the ring's orientation along the limb, so it does not twist.
         side = (side - forward * side.dot(forward)).normalize_or(forward.any_orthonormal_vector());
         let other = forward.cross(side);
-        let wraps = (TAU * radius / 1.6).round().max(1.0);
+        // One repeat of the bark's picture is BARK_M round the trunk and along it.
+        let wraps = (TAU * radius / BARK_M.x).round().max(1.0);
         let bend = (point.y / height).clamp(0.0, 1.0);
         let flutter = if limb.depth >= 2 { 0.15 } else { 0.0 };
         for j in 0..=sides {
             let angle = j as f32 / sides as f32 * TAU;
             let normal = side * libm::cosf(angle) + other * libm::sinf(angle);
-            let uv = Vec2::new(j as f32 / sides as f32 * wraps, along / 1.6);
+            let uv = Vec2::new(j as f32 / sides as f32 * wraps, along / BARK_M.y);
             build.vertex(
                 point + normal * radius,
                 normal,
@@ -987,7 +1010,9 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
         for j in 0..sides {
             let a = start + i * ring + j;
             let b = a + ring;
-            build.indices.extend([a, b, a + 1, a + 1, b, b + 1]);
+            // Wound so each triangle faces out of the tube, as its normals do: the other way the
+            // outside was culled and the inside of the far wall drawn, lit from behind.
+            build.indices.extend([a, a + 1, b, a + 1, b + 1, b]);
         }
     }
 }

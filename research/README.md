@@ -11,6 +11,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [voxel-tools-port.md](voxel-tools-port.md) | How much of Voxel Tools would we need to port, and what makes that tractable? |
 | [forest-scale-test.md](forest-scale-test.md) | Can the world hold a very large number of objects that are each interactive? |
 | [lush-forest-spike.md](lush-forest-spike.md) | Can the world feel like a dense, rich forest, as The Witcher 3 or Sons of the Forest do, within the frame budget? How big games make foliage fast. |
+| [aaa-forest-look.md](aaa-forest-look.md) | What makes a forest read as AAA (no pops, bark that is not black, light under the canopy), and what Bevy 0.20 has for it? |
 | [benchmarks.csv](benchmarks.csv) | Frame times of the benchmark scenes, recorded by `cargo xtask bench --record` (D185) |
 | [subnautica-2-building.md](subnautica-2-building.md) | How does Subnautica 2's construction work, and what would the same idea look like here? |
 | [subnautica-inventory.md](subnautica-inventory.md) | How do items and containers work in Subnautica? |

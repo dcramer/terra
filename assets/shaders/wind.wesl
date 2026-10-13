@@ -41,17 +41,17 @@ fn hash(p: vec3<f32>) -> f32 {
     return fract((r.x + r.y) * r.z);
 }
 
-fn sway(world: vec3<f32>, weights: vec2<f32>) -> vec3<f32> {
+fn sway(world: vec3<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
     let downwind = dot(world, wind.direction);
     let crosswind = dot(world, cross(wind.direction, normalize(world)));
     // Gusts roll downwind as broad waves, with a quicker ripple on top.
-    let gust = sin(globals.time * 1.1 - downwind * 0.09 + crosswind * 0.03) * 0.6
-        + sin(globals.time * 2.3 - downwind * 0.31 - crosswind * 0.11) * 0.4;
+    let gust = sin(time * 1.1 - downwind * 0.09 + crosswind * 0.03) * 0.6
+        + sin(time * 2.3 - downwind * 0.31 - crosswind * 0.11) * 0.4;
     let bend = wind.direction * (0.45 + gust) * weights.x * 0.13;
     let flutter = vec3<f32>(
-        sin(globals.time * 4.1 + world.x * 2.3 + world.z * 1.1),
-        sin(globals.time * 3.3 + world.y * 1.7 + world.x * 0.9),
-        sin(globals.time * 3.7 + world.z * 2.1 + world.y * 1.3),
+        sin(time * 4.1 + world.x * 2.3 + world.z * 1.1),
+        sin(time * 3.3 + world.y * 1.7 + world.x * 0.9),
+        sin(time * 3.7 + world.z * 2.1 + world.y * 1.3),
     ) * weights.y * 0.035;
     return (bend + flutter) * wind.strength;
 }
@@ -68,7 +68,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     // shader reads as this and not as coordinates.
     let on_plant = world.xyz - world_from_local[3].xyz;
 @if(VERTEX_UVS_A) {
-    world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv), 1.0);
+    world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv, globals.time), 1.0);
     out.uv = on_plant.xy;
 }
 @if(VERTEX_UVS_B)
@@ -89,7 +89,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let previous_from_local = mesh_functions::get_previous_world_from_local(vertex_in.instance_index);
     var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(vertex.position, 1.0));
 @if(VERTEX_UVS_A)
-    previous = vec4<f32>(previous.xyz + sway(previous.xyz, vertex.uv), 1.0);
+    previous = vec4<f32>(previous.xyz + sway(previous.xyz, vertex.uv, globals.time - globals.delta_time), 1.0);
     out.previous_world_position = previous;
 }
 } @else {

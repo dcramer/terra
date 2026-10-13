@@ -4,3 +4,4 @@ date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches
 2026-10-12,a08196e+,Apple M4 Max,1920x1080 offscreen,release,forest,5.05,6.43,22.42,3
 2026-10-12,a08196e+,Apple M4 Max,1920x1080 offscreen,release,forest-walk,4.80,8.79,21.38,3
 2026-10-13,5444ec1,NVIDIA GeForce RTX 3080,1920x1080 offscreen,release,walk,6.23,9.10,10.28,3,0.00,0,-0.2
+2026-10-13,fd268d0+,NVIDIA GeForce RTX 3080,1920x1080 offscreen,release,walk,7.10,9.22,10.83,3,0.00,0,0.9

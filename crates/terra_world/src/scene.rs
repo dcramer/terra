@@ -5,8 +5,9 @@
 use crate::planet::MainCamera;
 use crate::planet::Tweaks;
 use crate::sky::{Sky, SkyPlugin};
+use bevy::light::ShadowFilteringMethod;
 use bevy::{
-    anti_alias::smaa::Smaa,
+    anti_alias::taa::TemporalAntiAliasing,
     camera::Exposure,
     core_pipeline::tonemapping::Tonemapping,
     light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
@@ -14,6 +15,12 @@ use bevy::{
     post_process::bloom::Bloom,
     prelude::*,
     render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
+};
+use bevy::{
+    curve::cubic_splines::LinearSpline,
+    post_process::auto_exposure::{
+        AutoExposure, AutoExposureCompensationCurve, AutoExposurePlugin,
+    },
 };
 
 /// Direction from the scene toward the sun: low over the water.
@@ -25,7 +32,7 @@ const ZENITH: Color = Color::srgb(0.24, 0.46, 0.84);
 pub const EXPOSURE_EV100: f32 = 10.8;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(SkyPlugin)
+    app.add_plugins((SkyPlugin, AutoExposurePlugin))
         .insert_resource(Sky {
             // The sky's colour is the air's (`air`); this draws the clouds over it.
             over_air: true,
@@ -74,9 +81,43 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
     );
 }
 
+/// What the eye adapts round: the log brightness a scene meters at when it is as bright as
+/// the day's exposure for the hour expects (D214).
+const METERED_AS_SET: f32 = -2.5;
+/// How far the eye adapts from the day's exposure: up to two stops brighter in deep shade,
+/// as under a canopy, and one darker in glare, as every game with a forest clamps it.
+const ADAPT_BRIGHTER: f32 = 2.0;
+const ADAPT_DARKER: f32 = 1.0;
+
+/// Eye adaptation clamped round the day's exposure: Bevy's auto exposure meters the frame
+/// and corrects by `curve(metered) - metered`, so a curve flat at the expected brightness
+/// over the band, and following the metering beyond it, holds the correction in the band.
+fn adaptation(curves: &mut Assets<AutoExposureCompensationCurve>) -> AutoExposure {
+    let at = METERED_AS_SET;
+    let curve = AutoExposureCompensationCurve::from_curve(LinearSpline::new([
+        Vec2::new(at - 8.0, at - 8.0 + ADAPT_BRIGHTER),
+        Vec2::new(at - ADAPT_BRIGHTER, at),
+        Vec2::new(at + ADAPT_DARKER, at),
+        Vec2::new(at + 8.0, at + 8.0 - ADAPT_DARKER),
+    ]))
+    .expect("a valid curve");
+    AutoExposure {
+        compensation_curve: curves.add(curve),
+        // An eye takes a few seconds to open up in the shade, and less to close in the sun.
+        speed_brighten: 1.2,
+        speed_darken: 2.0,
+        ..default()
+    }
+}
+
 /// The field of view is a setting, put into effect by `options::apply`.
-fn style_camera(mut commands: Commands, camera: Single<Entity, With<MainCamera>>) {
+fn style_camera(
+    mut commands: Commands,
+    camera: Single<Entity, With<MainCamera>>,
+    mut curves: ResMut<Assets<AutoExposureCompensationCurve>>,
+) {
     let camera = *camera;
+    commands.entity(camera).insert(adaptation(&mut curves));
     commands.entity(camera).insert((
         Exposure {
             ev100: EXPOSURE_EV100,
@@ -95,7 +136,13 @@ fn style_camera(mut commands: Commands, camera: Single<Entity, With<MainCamera>>
             length: 0.4,
             ..default()
         },
-        Smaa::default(),
+        // Each frame jittered and blended with the last, as every game with dense foliage
+        // does: it resolves the dithered crossfades between levels of detail, which
+        // otherwise crawl, and stops leaves and blades shimmering (D214). The wind shaders
+        // give it last frame's positions.
+        TemporalAntiAliasing::default(),
+        // Soft shadow edges that TAA smooths over frames.
+        ShadowFilteringMethod::Temporal,
         // A soft glow round the sun and bright sky, not a haze over everything.
         Bloom {
             intensity: 0.1,
