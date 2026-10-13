@@ -105,9 +105,10 @@ mod tests {
         let mut world = World::new();
         let ground = Vec3::Y * 2000.0;
         world.spawn((Viewpoint, Transform::from_translation(ground)));
+        let other = REDUCED_WITHIN_M * 4.0;
         world.spawn((
             Viewpoint,
-            Transform::from_translation(ground + Vec3::X * 1000.0),
+            Transform::from_translation(ground + Vec3::X * other),
         ));
         let at = |world: &mut World, east: f32| {
             world
@@ -117,32 +118,41 @@ mod tests {
                 ))
                 .id()
         };
-        let near = at(&mut world, 10.0);
-        let far = at(&mut world, 150.0);
-        let beyond = at(&mut world, 500.0);
-        let by_the_other = at(&mut world, 990.0);
+        let near = at(&mut world, FULL_WITHIN_M - 1.0);
+        let farther = at(&mut world, FULL_WITHIN_M + 1.0);
+        let far = at(&mut world, REDUCED_WITHIN_M - 1.0);
+        let beyond = at(&mut world, REDUCED_WITHIN_M + 1.0);
+        let by_the_other = at(&mut world, other - 1.0);
         world.run_system_cached(grade).unwrap();
         let detail = |entity| *world.get::<Detail>(entity).unwrap();
         assert_eq!(detail(near), Detail::Full);
+        assert_eq!(detail(farther), Detail::Reduced);
         assert_eq!(detail(far), Detail::Reduced);
         assert_eq!(detail(beyond), Detail::Dormant);
         assert_eq!(detail(by_the_other), Detail::Full);
     }
 
     #[test]
-    fn reduced_detail_thinks_once_in_so_many_ticks_over_all_of_them() {
-        let entity = Entity::PLACEHOLDER;
+    fn reduced_detail_thinks_once_in_so_many_ticks_and_takes_turns() {
+        let mut world = World::new();
+        let many = REDUCED_EVERY as usize * 6;
+        let things: Vec<Entity> = (0..many).map(|_| world.spawn_empty().id()).collect();
         let dt = 1.0 / 64.0;
-        let thought: Vec<f32> = (0..REDUCED_EVERY * 4)
-            .filter_map(|tick| Detail::Reduced.thinks(tick, entity, dt))
-            .collect();
-        assert_eq!(thought.len(), 4);
-        assert!(
-            thought
-                .iter()
-                .all(|&over| over == dt * REDUCED_EVERY as f32)
-        );
-        assert_eq!(Detail::Full.thinks(3, entity, dt), Some(dt));
-        assert_eq!(Detail::Dormant.thinks(0, entity, dt), None);
+        let mut each = vec![0; many];
+        for tick in 0..REDUCED_EVERY * 4 {
+            let mut this_tick = 0;
+            for (i, &thing) in things.iter().enumerate() {
+                if let Some(over) = Detail::Reduced.thinks(tick, thing, dt) {
+                    assert_eq!(over, dt * REDUCED_EVERY as f32);
+                    each[i] += 1;
+                    this_tick += 1;
+                }
+            }
+            // Spread over the ticks, not all on one.
+            assert_eq!(this_tick, many / REDUCED_EVERY as usize, "tick {tick}");
+        }
+        assert!(each.iter().all(|&times| times == 4), "{each:?}");
+        assert_eq!(Detail::Full.thinks(3, things[0], dt), Some(dt));
+        assert_eq!(Detail::Dormant.thinks(0, things[0], dt), None);
     }
 }

@@ -239,7 +239,21 @@ mod tests {
     }
 
     #[test]
-    fn the_cube_has_six_faces_of_four_floats_a_pixel() {
-        assert_eq!(colours().cube().len(), (FACE * FACE * 6 * 16) as usize);
+    fn the_cube_has_the_sky_on_its_top_face_and_the_ground_on_its_bottom() {
+        let c = colours();
+        let cube = c.cube();
+        // The pixel by the middle of a face, faces in the order +X, -X, +Y, -Y, +Z, -Z.
+        let middle = |face: u32| {
+            let pixel = (face * FACE + FACE / 2) * FACE + FACE / 2;
+            let at = pixel as usize * 16;
+            let float =
+                |i: usize| f32::from_le_bytes(cube[at + i * 4..at + i * 4 + 4].try_into().unwrap());
+            (Vec3::new(float(0), float(1), float(2)), float(3))
+        };
+        let (top, opaque) = middle(2);
+        assert_eq!(opaque, 1.0);
+        assert!(top.distance(c.toward(Vec3::Y)) < 0.01, "{top}");
+        let (bottom, _) = middle(3);
+        assert!(bottom.distance(c.ground) < 0.01, "{bottom}");
     }
 }

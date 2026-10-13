@@ -442,8 +442,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn spreads_numbers() {
-        let spread = Spread::of((1..=100).map(|n| n as f32).collect()).unwrap();
+    fn spreads_numbers_in_any_order() {
+        // 1 to 100, shuffled: stepping by 37, which shares no factor with 100, visits each.
+        let shuffled: Vec<f32> = (0..100).map(|n| (n * 37 % 100 + 1) as f32).collect();
+        assert_ne!(shuffled[99], 100.0);
+        let spread = Spread::of(shuffled).unwrap();
         assert_eq!(spread.median, 50.0);
         assert_eq!(spread.high, 99.0);
         assert_eq!(spread.worst, 100.0);

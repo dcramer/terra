@@ -618,6 +618,51 @@ mod tests {
         assert!(!planet.dug(planet.surface((ground + Vec3::X * 20.0).normalize())));
     }
 
+    /// Directions spread evenly over the sphere (a Fibonacci lattice).
+    fn directions(count: usize) -> impl Iterator<Item = Vec3> {
+        (0..count).map(move |i| {
+            let y = 1.0 - 2.0 * (i as f32 + 0.5) / count as f32;
+            let around = i as f32 * 2.399_963;
+            let flat = libm::sqrtf(1.0 - y * y);
+            Vec3::new(flat * libm::cosf(around), y, flat * libm::sinf(around))
+        })
+    }
+
+    #[test]
+    fn no_grass_grows_under_the_sea_or_on_a_cliff() {
+        let planet = planet();
+        let sea = planet.sea_radius_m();
+        let mut grassy = 0;
+        for up in directions(400) {
+            // Level ground a few metres above the sea, where grass can grow.
+            let shore = up * (sea + 3.0);
+            if planet.cover(shore, up).grass <= 0.0 {
+                continue;
+            }
+            grassy += 1;
+            // The same place under the sea, and as a cliff, facing sideways.
+            assert_eq!(planet.cover(up * (sea - 1.0), up).grass, 0.0);
+            assert_eq!(planet.cover(shore, up.any_orthonormal_vector()).grass, 0.0);
+        }
+        assert!(grassy > 40, "only {grassy} places had grass to lose");
+    }
+
+    #[test]
+    fn under_the_sea_is_where_the_ground_is_below_the_water_not_the_point() {
+        let planet = planet();
+        let sea = planet.sea_radius_m();
+        let ground = |up: Vec3| planet.surface(up).length();
+        let wet = directions(4000).find(|&up| ground(up) < sea - 2.0).unwrap();
+        let dry = directions(4000)
+            .find(|&up| ground(up) > sea + 10.0)
+            .unwrap();
+        // Up in the air over the sea floor, and down in the rock under a hill.
+        assert!(planet.under_sea(wet * (sea + 50.0)));
+        assert!(planet.under_sea(wet * (ground(wet) + 1.0)));
+        assert!(!planet.under_sea(dry * (sea - 5.0)));
+        assert!(!planet.under_sea(dry * (ground(dry) + 1.0)));
+    }
+
     /// A pit dug on a slant, as a pickaxe aimed ahead and down digs it, and the ground
     /// found beside it is never above where the ground was before.
     #[test]

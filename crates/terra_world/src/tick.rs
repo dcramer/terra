@@ -118,12 +118,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn between_two_ticks_is_between_their_places() {
-        let from = Transform::from_xyz(0.0, 0.0, 0.0);
-        let to = Transform::from_xyz(2.0, 0.0, 0.0);
-        assert_eq!(between(&from, &to, 0.0), from);
-        assert_eq!(between(&from, &to, 1.0), to);
-        assert!((between(&from, &to, 0.25).translation.x - 0.5).abs() < 1e-6);
+    fn a_body_is_shown_as_far_between_ticks_as_the_frame_is_and_a_teleport_stays() {
+        use std::f32::consts::FRAC_PI_2;
+        use std::time::Duration;
+        let mut world = World::new();
+        world.insert_resource(Time::<Fixed>::from_seconds(0.1));
+        let after =
+            Transform::from_xyz(2.0, 0.0, 0.0).with_rotation(Quat::from_rotation_y(FRAC_PI_2));
+        let body = world
+            .spawn((
+                after,
+                Smoothed {
+                    before: Some(Transform::IDENTITY),
+                    after: Some(after),
+                    shown: None,
+                },
+            ))
+            .id();
+        let frame = |world: &mut World, seconds: f32| {
+            world
+                .resource_mut::<Time<Fixed>>()
+                .accumulate_overstep(Duration::from_secs_f32(seconds));
+            world.run_system_cached(show).unwrap();
+            *world.get::<Transform>(body).unwrap()
+        };
+        // A quarter of the way into the next tick: a quarter of the way along, and turned.
+        let shown = frame(&mut world, 0.025);
+        assert!((shown.translation.x - 0.5).abs() < 1e-5, "{shown:?}");
+        assert!(
+            shown
+                .rotation
+                .angle_between(Quat::from_rotation_y(FRAC_PI_2 / 4.0))
+                < 1e-4
+        );
+        // Three quarters in.
+        let shown = frame(&mut world, 0.05);
+        assert!((shown.translation.x - 1.5).abs() < 1e-5, "{shown:?}");
+        // Moved outside the ticks, as by a warp: it is shown where it was moved to, and
+        // stays there.
+        world.get_mut::<Transform>(body).unwrap().translation.x = 10.0;
+        assert_eq!(frame(&mut world, 0.0).translation.x, 10.0);
+        assert_eq!(frame(&mut world, 0.01).translation.x, 10.0);
     }
 
     #[test]

@@ -518,14 +518,83 @@ mod tests {
     fn reports_of_one_thing_add_up() {
         let mut progress = Progress::default();
         progress.report("Loading", 2, 1);
-        progress.report("Loading", 1, 3);
+        progress.report("Preparing shaders", 4, 0);
+        progress.report("Loading", 3, 0);
+        // Five loading in all hold back more than four shaders.
+        assert_eq!(progress.status(), "Loading");
         assert_eq!(
-            progress.0,
-            vec![Part {
-                what: "Loading",
-                coming: 3,
-                done: 4
-            }]
+            progress.summary(),
+            "Loading 1 of 6, Preparing shaders 0 of 4"
         );
+    }
+
+    /// The loading screen as `cover` puts it up, with no frame yet watched.
+    fn screen() -> World {
+        let mut world = World::new();
+        world.insert_resource(Loading::default());
+        world.insert_resource(Progress::default());
+        let mut real = Time::<Real>::default();
+        real.update_with_duration(Duration::ZERO);
+        world.insert_resource(real);
+        world.insert_resource(Options::from_args(std::iter::empty()).unwrap());
+        world.insert_resource(NextState::<Screen>::default());
+        world.spawn((Bar, Node::default()));
+        world.spawn((Status, Text::new("Loading")));
+        world
+    }
+
+    /// One frame of so many seconds, with so much said to be coming and done. Whether the
+    /// game has been told to start, and how far the bar is.
+    fn frame(world: &mut World, coming: usize, done: usize, seconds: f32) -> (bool, Val) {
+        world
+            .resource_mut::<Time<Real>>()
+            .update_with_duration(Duration::from_secs_f32(seconds));
+        world
+            .resource_mut::<Progress>()
+            .report("Loading", coming, done);
+        world.run_system_cached(watch).unwrap();
+        let started = matches!(
+            world.resource::<NextState<Screen>>(),
+            NextState::Pending(Screen::Playing)
+        );
+        let bar = world
+            .query_filtered::<&Node, With<Bar>>()
+            .single(world)
+            .unwrap()
+            .width;
+        (started, bar)
+    }
+
+    #[test]
+    fn the_game_starts_once_nothing_has_come_for_some_frames_in_a_row() {
+        let mut world = screen();
+        assert!(!frame(&mut world, 2, 0, 0.1).0);
+        for _ in 1..QUIET_FRAMES {
+            assert!(!frame(&mut world, 0, 2, 0.1).0);
+        }
+        // Something more comes just before: the quiet starts again.
+        assert!(!frame(&mut world, 1, 2, 0.1).0);
+        for _ in 1..QUIET_FRAMES {
+            assert!(!frame(&mut world, 0, 3, 0.1).0);
+        }
+        assert!(frame(&mut world, 0, 3, 0.1).0);
+    }
+
+    #[test]
+    fn the_bar_never_goes_back() {
+        let mut world = screen();
+        assert_eq!(frame(&mut world, 1, 3, 0.1).1, percent(75.0));
+        // More was found to be coming: the bar waits rather than falling back.
+        assert_eq!(frame(&mut world, 3, 1, 0.1).1, percent(75.0));
+        assert_eq!(frame(&mut world, 0, 4, 0.1).1, percent(100.0));
+    }
+
+    #[test]
+    fn the_game_starts_anyway_when_something_never_loads() {
+        let mut world = screen();
+        let half = GIVE_UP.as_secs_f32() / 2.0;
+        assert!(!frame(&mut world, 1, 0, half).0);
+        assert!(!frame(&mut world, 1, 0, half).0);
+        assert!(frame(&mut world, 1, 0, 0.1).0);
     }
 }

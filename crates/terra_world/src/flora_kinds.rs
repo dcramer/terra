@@ -133,7 +133,10 @@ impl Flora {
 
     /// Reads the file, giving each kind the colours every kind shares after its own.
     pub fn read() -> Self {
-        let file: FloraFile = data::read(Self::FILE);
+        Self::from_file(data::read(Self::FILE))
+    }
+
+    fn from_file(file: FloraFile) -> Self {
         let mut kinds = file.kinds;
         for (place, kind) in kinds.iter_mut().enumerate() {
             kind.colours.extend(file.shared_colours.iter().cloned());
@@ -214,67 +217,128 @@ mod tests {
     use super::*;
     use terra_gen::Seed;
 
-    fn flora() -> Flora {
-        Flora::read()
+    const LAYERS: [Grows; 5] = [
+        Grows::Trees,
+        Grows::Rocks,
+        Grows::Bushes,
+        Grows::Plants,
+        Grows::Flowers,
+    ];
+
+    /// Flora from kinds written here, so the rules are tested apart from the game's file.
+    fn fixture(kinds: &str) -> Flora {
+        let text = format!(
+            "#![enable(implicit_some)]\n(shared_colours: [(\"*\", (0.1, 0.2, 0.3), Firm)], kinds: [{kinds}])"
+        );
+        Flora::from_file(ron::from_str(&text).unwrap())
     }
 
-    fn kind<'a>(flora: &'a Flora, name: &str) -> &'a FloraDef {
-        flora.kinds().iter().find(|kind| kind.name == name).unwrap()
+    fn rng() -> Rng {
+        Seed(1).derive("flora").rng()
     }
 
     #[test]
-    fn every_layer_has_something_to_grow_and_every_kind_a_model() {
-        let flora = flora();
-        let mut rng = Seed(1).derive("flora").rng();
-        for layer in [
-            Grows::Trees,
-            Grows::Rocks,
-            Grows::Bushes,
-            Grows::Plants,
-            Grows::Flowers,
-        ] {
+    fn every_layer_has_something_to_grow_and_every_kind_its_models() {
+        let flora = Flora::read();
+        let mut rng = rng();
+        for layer in LAYERS {
             assert!(
                 flora.choose(layer, 0.0, 0.0, 0.0, &mut rng).is_some(),
                 "nothing in {layer:?}"
             );
+            // The last of a layer is what grows otherwise, so it asks for nothing.
+            let last = flora
+                .kinds()
+                .iter()
+                .rfind(|kind| kind.grows.same_layer(layer))
+                .unwrap();
+            assert!(
+                last.below.is_none()
+                    && last.above.is_none()
+                    && last.grass_above.is_none()
+                    && last.size_above.is_none()
+                    && last.chance.is_none(),
+                "{}, the last of {layer:?}, has conditions",
+                last.name
+            );
         }
+        let folder =
+            bevy::asset::io::file::FileAssetReader::get_base_path().join("assets/models/nature");
         for kind in flora.kinds() {
             assert!(!kind.models.is_empty(), "{} has no models", kind.name);
+            for model in &kind.models {
+                assert!(
+                    folder.join(format!("{model}.glb")).is_file(),
+                    "{} names {model}, which is not in assets/models/nature",
+                    kind.name
+                );
+            }
         }
     }
 
     #[test]
-    fn a_layer_chooses_by_its_noise_and_falls_back_on_its_last() {
-        let flora = flora();
-        let mut rng = Seed(1).derive("flora").rng();
-        let mut name = |layer, noise, size| {
+    fn a_layer_chooses_the_first_kind_whose_conditions_hold() {
+        let flora = fixture(
+            r#"
+            (name: "Low", models: ["m"], sway: Still, grows: Trees, below: -0.5),
+            (name: "High", models: ["m"], sway: Still, grows: Trees, above: 0.5),
+            (name: "Also low", models: ["m"], sway: Still, grows: Trees, below: 0.0),
+            (name: "Other", models: ["m"], sway: Still, grows: Trees),
+            (name: "Grassy", models: ["m"], sway: Still, grows: Rocks, grass_above: 0.5),
+            (name: "Big", models: ["m"], sway: Still, grows: Rocks, size_above: 2.0),
+            (name: "Never", models: ["m"], sway: Still, grows: Rocks, chance: 0.0),
+            (name: "Stone", models: ["m"], sway: Still, grows: Rocks),
+            (name: "Always", models: ["m"], sway: Still, grows: Bushes, chance: 1.0),
+            (name: "Shrub", models: ["m"], sway: Still, grows: Bushes),
+            "#,
+        );
+        let mut rng = rng();
+        let mut name = |layer, noise, grass, size| {
             flora
-                .choose(layer, noise, 0.0, size, &mut rng)
+                .choose(layer, noise, grass, size, &mut rng)
                 .map(|index| flora.kinds()[index].name.as_str())
         };
-        assert_eq!(name(Grows::Trees, -0.5, 0.0), Some("Pine"));
-        assert_eq!(name(Grows::Trees, 0.5, 0.0), Some("Birch"));
-        assert_eq!(name(Grows::Trees, 0.0, 0.0), Some("Leafy tree"));
-        // Small rocks on bare ground hold no ore and grow no moss.
-        assert_eq!(name(Grows::Rocks, 0.0, 0.3), Some("Rock"));
+        // Below and above are strict, and the first that holds wins over a later one.
+        assert_eq!(name(Grows::Trees, -0.6, 0.0, 0.0), Some("Low"));
+        assert_eq!(name(Grows::Trees, -0.5, 0.0, 0.0), Some("Also low"));
+        assert_eq!(name(Grows::Trees, 0.6, 0.0, 0.0), Some("High"));
+        assert_eq!(name(Grows::Trees, 0.5, 0.0, 0.0), Some("Other"));
+        // Grass and size are strict too, and a roll that never wins falls to the last.
+        assert_eq!(name(Grows::Rocks, 0.0, 0.6, 3.0), Some("Grassy"));
+        assert_eq!(name(Grows::Rocks, 0.0, 0.5, 3.0), Some("Big"));
+        assert_eq!(name(Grows::Rocks, 0.0, 0.5, 2.0), Some("Stone"));
+        assert_eq!(name(Grows::Bushes, 0.0, 0.0, 0.0), Some("Always"));
+        // A layer with no kinds grows nothing.
+        assert_eq!(name(Grows::Flowers, 0.0, 1.0, 1.0), None);
     }
 
     #[test]
-    fn a_great_tree_takes_iron_and_gives_more_wood() {
-        let flora = flora();
-        let pine = kind(&flora, "Pine");
-        let small = pine.cuttable(9.0).unwrap();
-        let great = pine.cuttable(15.0).unwrap();
-        assert_eq!(small.what, Cut::Tree);
-        assert_eq!(great.what, Cut::GreatTree);
-        assert_eq!((small.gives.1, great.gives.1), (3, 5));
-        // Ore rounds up, as one ore comes of any ore rock.
-        let ore_rock = kind(&flora, "Ore rock");
-        assert_eq!(ore_rock.gives(), Some("Ore"));
-        assert_eq!(ore_rock.cuttable(0.8).unwrap().gives.1, 1);
-        let (_, foliage) = pine.colour("Green.001");
-        assert!(foliage);
-        let (_, foliage) = kind(&flora, "Ore rock").colour("Anything");
-        assert!(!foliage);
+    fn a_tree_is_cut_as_its_greater_sort_from_that_size_on() {
+        let flora = fixture(
+            r#"
+            (name: "Tree", models: ["m"], colours: [("Green", (0.0, 1.0, 0.0), Foliage)],
+                sway: Tree, grows: Trees,
+                cut: (what: Tree, gives: ("Wood", 1.0, 0.5), seconds: (2.0, 0.25),
+                    greater: (10.0, GreatTree))),
+            (name: "Lump", models: ["m"], sway: Still, grows: Rocks,
+                cut: (what: Ore, gives: ("Ore", 0.5, 1.0), seconds: (1.0, 0.0))),
+            "#,
+        );
+        let [tree, lump] = flora.kinds() else {
+            unreachable!()
+        };
+        let small = tree.cuttable(9.9).unwrap();
+        let great = tree.cuttable(10.0).unwrap();
+        assert_eq!((small.what, great.what), (Cut::Tree, Cut::GreatTree));
+        // So many and so many more a metre: 1 + 0.5 x 10 wood, in 2 + 0.25 x 10 seconds.
+        assert_eq!(great.gives, (FloraKind(0), 6));
+        assert_eq!(great.seconds, 4.5);
+        // What it gives rounds to the nearest: 0.5 + 0.8 is one, 0.5 + 1.2 is two.
+        assert_eq!(lump.gives(), Some("Ore"));
+        assert_eq!(lump.cuttable(0.8).unwrap().gives, (FloraKind(1), 1));
+        assert_eq!(lump.cuttable(1.2).unwrap().gives.1, 2);
+        // Its own colours first, then those every kind shares.
+        assert!(tree.colour("Green.001").1);
+        assert!(!tree.colour("Bark").1);
     }
 }

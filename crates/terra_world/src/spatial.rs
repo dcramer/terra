@@ -130,17 +130,29 @@ mod tests {
     }
 
     #[test]
-    fn it_works_on_a_planet_far_from_the_origin() {
+    fn a_reach_of_several_cubes_finds_all_within_it_on_either_side_of_zero() {
         let mut hash = SpatialHash::new(4.0);
-        let surface = Vec3::new(0.0, 2000.0, 0.0);
-        for i in 0..100 {
-            hash.insert(surface + Vec3::X * i as f32, i);
+        let mut all = Vec::new();
+        for i in -12..12 {
+            for j in -12..12 {
+                let at = Vec3::new(i as f32 * 1.3, j as f32 * 0.9 - 0.4, i as f32 * -0.7);
+                hash.insert(at, all.len());
+                all.push(at);
+            }
         }
-        assert_eq!(
-            hash.near(surface, 2.0)
-                .filter(|(at, _)| at.distance(surface) <= 2.0)
-                .count(),
-            3
-        );
+        for (centre, reach) in [
+            (Vec3::new(-5.1, -3.3, 2.0), 9.0),
+            (Vec3::new(-0.1, -0.1, -0.1), 4.5),
+            (Vec3::new(7.9, -8.0, -5.6), 2.5),
+        ] {
+            let found: Vec<usize> = hash.near(centre, reach).map(|(_, i)| *i).collect();
+            let within: Vec<usize> = (0..all.len())
+                .filter(|&i| all[i].distance(centre) <= reach)
+                .collect();
+            assert!(within.len() > 3, "too few within {reach} of {centre}");
+            for i in within {
+                assert!(found.contains(&i), "{} missed from {centre}", all[i]);
+            }
+        }
     }
 }

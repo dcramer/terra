@@ -564,13 +564,48 @@ pub mod tests {
     }
 
     #[test]
-    fn short_sounds_end_and_long_ones_do_not() {
-        let (splash, _) = render(Sound::Splash, 1, 5.0);
-        assert_eq!(splash.len(), (0.32 * RATE as f32) as usize);
-        assert!(!Sound::Splash.endless());
-        let (wind, channels) = render(Sound::Wind, 1, 5.0);
-        assert_eq!(wind.len(), 5 * RATE as usize * channels as usize);
-        assert!(Sound::Wind.endless());
+    fn a_sound_that_ends_is_as_long_as_it_says_and_an_endless_one_says_none() {
+        let phrase = Phrase {
+            root_hz: 220.0,
+            scale: &[0, 7],
+            seconds: 1.0,
+            notes: (1, 2),
+            register: (0, 1),
+            pad: 1.0,
+            drone: 0.0,
+        };
+        let every = [
+            Sound::Wind,
+            Sound::Birds,
+            Sound::Water,
+            Sound::Fire,
+            Sound::Hum,
+            Sound::Whoosh,
+            Sound::Hiss,
+            Sound::Snort,
+            Sound::Splash,
+            Sound::Music(phrase),
+        ];
+        for sound in every {
+            // A sound added to `Sound` stops this building until it is in the list above.
+            match sound {
+                Sound::Wind | Sound::Birds | Sound::Water | Sound::Fire | Sound::Hum => {}
+                Sound::Whoosh | Sound::Hiss | Sound::Snort | Sound::Splash | Sound::Music(_) => {}
+            }
+            let decoder = Synth { sound, seed: 1 }.decoder();
+            let length = decoder.total_duration();
+            let channels = decoder.channels().get() as usize;
+            assert_eq!(sound.endless(), length.is_none(), "{sound:?}");
+            let longest = 10 * RATE as usize * channels;
+            let played = decoder.take(longest).count();
+            match length {
+                Some(length) => {
+                    let frames = libm::roundf(length.as_secs_f32() * RATE as f32) as usize;
+                    assert_eq!(played, frames * channels, "{sound:?}");
+                }
+                None => assert_eq!(played, longest, "{sound:?} ended"),
+            }
+        }
     }
 
     #[test]

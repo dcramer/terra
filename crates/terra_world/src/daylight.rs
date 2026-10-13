@@ -322,14 +322,23 @@ mod tests {
             path.height(9.0) > path.height(MORNING),
             "the morning sun climbs"
         );
+        // At noon the sun is as far from overhead as the latitude, less its declination.
         let noon = path.height(12.0);
-        assert!((noon - (90.0 - 40.0 + 10.0)).abs() < 0.5, "noon {noon}");
+        let highest = 90.0 - LATITUDE.to_degrees() + DECLINATION.to_degrees();
+        assert!((noon - highest).abs() < 0.5, "noon {noon}, not {highest}");
         assert!(path.height(0.0) < -30.0, "midnight is dark");
-        // Up a little longer than it is down.
+        // As long up as the sunrise equation says: cos h = -tan latitude tan declination,
+        // with h the hour angle from sunrise to noon. In summer, longer than the night.
+        let sunrise = libm::acosf(-libm::tanf(LATITUDE) * libm::tanf(DECLINATION));
+        let day_tenths = sunrise / TAU * 2.0 * 240.0;
         let up = (0..240)
             .filter(|i| path.height(*i as f32 / 10.0) > 0.0)
             .count();
-        assert!((125..145).contains(&up), "{up} tenths of an hour of day");
+        assert!(
+            (up as f32 - day_tenths).abs() <= 2.0,
+            "{up} tenths of an hour of day, not {day_tenths}"
+        );
+        assert!(up > 120);
         // East in the morning, west in the evening.
         assert!(path.sun(7.0).dot(path.east) > 0.5);
         assert!(path.sun(17.0).dot(path.east) < -0.5);
@@ -345,17 +354,31 @@ mod tests {
 
     #[test]
     fn the_light_is_the_art_at_twenty_degrees_and_dark_at_night() {
-        let art = light_at(20.0);
-        assert_eq!(art.illuminance, 21_000.0);
-        let night = light_at(-40.0);
+        let keys = keys();
+        let (_, art) = keys.iter().find(|(height, _)| *height == 20.0).unwrap();
+        let (_, deepest) = keys[0];
+        let close = |a: f32, b: f32| (a - b).abs() <= 1e-3 * b.abs().max(1.0);
+        // At each key the light is the key's, and past the last ones it stays.
+        for (height, light) in keys {
+            let at = light_at(height);
+            assert!(close(at.illuminance, light.illuminance), "{height}");
+            assert!(close(at.ambient, light.ambient), "{height}");
+            assert!(at.zenith.distance(light.zenith) < 1e-4, "{height}");
+        }
+        let night = light_at(-90.0);
+        assert_eq!(night, deepest);
         assert_eq!(night.night, 1.0);
-        assert!(night.illuminance < art.illuminance / 20.0);
-        assert!(night.ambient < art.ambient);
+        assert!(night.illuminance < art.illuminance && night.ambient < art.ambient);
         // Most of the night's light is the sky's, so the moon's shadows are faint.
         assert!(night.illuminance < night.ambient);
-        // Blended smoothly between.
-        let dusk = light_at(-3.0);
-        assert!(dusk.illuminance > 0.0 && dusk.illuminance < 300.0);
+        // Halfway between two keys, the light is halfway between theirs.
+        for pair in keys.windows(2) {
+            let ((low, a), (high, b)) = (pair[0], pair[1]);
+            let between = light_at((low + high) / 2.0);
+            let halfway = (a.illuminance + b.illuminance) / 2.0;
+            assert!(close(between.illuminance, halfway), "{low} to {high}");
+            assert!(close(between.sky, (a.sky + b.sky) / 2.0), "{low} to {high}");
+        }
     }
 
     #[test]

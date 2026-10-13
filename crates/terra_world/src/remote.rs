@@ -644,3 +644,40 @@ fn quit_when_asked(quitting: Res<Quitting>, mut exit: MessageWriter<AppExit>) {
         exit.write(AppExit::Success);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_place_turns_by_degrees_and_says_the_turn_it_was_given() {
+        let mut world = World::new();
+        let thing = world.spawn((Name::new("thing"), Transform::default())).id();
+        let turn = |world: &mut World, degrees: [f32; 3]| {
+            let asked = json!({ "name": "thing", "rotation": degrees });
+            let reply = world
+                .run_system_cached_with(place, Some(asked))
+                .unwrap()
+                .unwrap();
+            let said: [f32; 3] = serde_json::from_value(reply["rotation"].clone()).unwrap();
+            (world.get::<Transform>(thing).unwrap().rotation, said)
+        };
+        // A quarter turn about Y takes the front, +Z, to +X; about X, up to +Z.
+        let (about_y, _) = turn(&mut world, [0.0, 90.0, 0.0]);
+        assert!((about_y * Vec3::Z).distance(Vec3::X) < 1e-5);
+        let (about_x, _) = turn(&mut world, [90.0, 0.0, 0.0]);
+        assert!((about_x * Vec3::Y).distance(Vec3::Z) < 1e-5);
+        // A turn about all three is said back as it was given, by place and by find.
+        let asked = [30.0, -50.0, 70.0];
+        let (_, said) = turn(&mut world, asked);
+        let found = world
+            .run_system_cached_with(find, Some(json!({ "name": "thing" })))
+            .unwrap()
+            .unwrap();
+        let found: [f32; 3] = serde_json::from_value(found[0]["rotation"].clone()).unwrap();
+        for (axis, want) in asked.into_iter().enumerate() {
+            assert!((said[axis] - want).abs() < 1e-3, "{said:?}");
+            assert!((found[axis] - want).abs() < 1e-3, "{found:?}");
+        }
+    }
+}

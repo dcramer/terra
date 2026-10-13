@@ -808,3 +808,169 @@ fn clear_around(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use terra_core::{Operation, PlanetSpec};
+
+    #[test]
+    fn scatter_puts_the_same_things_in_the_same_places_on_every_machine() {
+        let mut placed = Vec::new();
+        scatter(Seed(1).derive("trees"), 13.0, 6.5, |rng, east, north| {
+            placed.push((east, north, rng.unit()));
+        });
+        // Two squares either way of the middle, so four by four.
+        assert_eq!(placed.len(), 16);
+        let pinned = [
+            (-12.742245, -12.017293, 0.5474843),
+            (-8.730848, -0.9315399, 0.7379886),
+            (-12.104529, 4.3883123, 0.40877444),
+        ];
+        for (got, want) in placed.iter().zip(pinned) {
+            assert!(
+                (got.0 - want.0).abs() < 1e-4
+                    && (got.1 - want.1).abs() < 1e-4
+                    && (got.2 - want.2).abs() < 1e-6,
+                "{got:?}, not {want:?}"
+            );
+        }
+        // Each in its own square of the grid.
+        for &(east, north, _) in &placed {
+            assert!((-13.0..13.0).contains(&east) && (-13.0..13.0).contains(&north));
+        }
+    }
+
+    #[test]
+    fn a_wide_trunk_is_found_from_beyond_the_cubes_a_body_reaches() {
+        let ground = Vec3::Y * 2000.0;
+        let mut obstacles = Obstacles::default();
+        // A great trunk six metres round, its edge a metre and a half from the body.
+        let trunk = ground + Vec3::X * 7.5;
+        obstacles.add(trunk, 6.0);
+        obstacles.add(ground - Vec3::X * 40.0, 0.5);
+        let reach = 2.0;
+        let touching: Vec<Vec3> = obstacles
+            .near(ground, reach)
+            .filter(|&(at, radius)| at.distance(ground) < reach + radius)
+            .map(|(at, _)| at)
+            .collect();
+        assert_eq!(touching, [trunk]);
+        obstacles.remove(trunk);
+        assert_eq!(obstacles.near(ground, reach).count(), 0);
+    }
+
+    /// A tree standing on the ground, in the way, and another far off.
+    fn two_trees(world: &mut World, near: Vec3, far: Vec3) -> (Entity, Entity) {
+        let mut obstacles = Obstacles::default();
+        let mut tree = |at: Vec3| {
+            obstacles.add(at, 0.4);
+            world
+                .spawn((
+                    Growth::new(None, Some(at), 1.0),
+                    Transform::from_translation(at),
+                    Visibility::Inherited,
+                ))
+                .id()
+        };
+        let trees = (tree(near), tree(far));
+        world.insert_resource(obstacles);
+        trees
+    }
+
+    fn hidden(world: &World, tree: Entity) -> bool {
+        world.get::<Visibility>(tree) == Some(&Visibility::Hidden)
+    }
+
+    /// Whether a walker at a point would find a trunk there.
+    fn blocked(world: &World, at: Vec3) -> bool {
+        world
+            .resource::<Obstacles>()
+            .near(at, 0.1)
+            .any(|(trunk, _)| trunk == at)
+    }
+
+    fn planet() -> Planet {
+        Planet::new(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        })
+    }
+
+    /// The meadow, with no squares of grass, as `plant` leaves it.
+    fn meadow(planet: &Planet) -> Meadow {
+        let middle = planet.start();
+        Meadow {
+            ground: Patch {
+                middle,
+                east: Vec3::X,
+                north: Vec3::Z,
+            },
+            seed: Seed(1),
+            material: Handle::default(),
+            dry: LinearRgba::BLACK,
+            lush: LinearRgba::WHITE,
+            squares: HashMap::default(),
+            cleared_at: Tick::new(0),
+        }
+    }
+
+    #[test]
+    fn what_is_set_down_clears_the_plants_around_it_and_their_trunks() {
+        let mut world = World::new();
+        let ground = Vec3::Y * 2000.0;
+        let (near, far) = two_trees(&mut world, ground + Vec3::X * 3.0, ground + Vec3::X * 30.0);
+        world.init_resource::<Messages<ClearAround>>();
+        world.write_message(ClearAround(ground, 5.0));
+        world.run_system_cached(clear_around).unwrap();
+        assert!(hidden(&world, near) && !blocked(&world, ground + Vec3::X * 3.0));
+        assert!(!hidden(&world, far) && blocked(&world, ground + Vec3::X * 30.0));
+    }
+
+    #[test]
+    fn digging_under_a_plant_takes_it_and_its_trunk_away() {
+        let mut world = World::new();
+        let mut planet = planet();
+        let start = planet.start();
+        let up = start.normalize();
+        let away = planet.surface((start + up.any_orthonormal_vector() * 30.0).normalize());
+        let (near, far) = two_trees(&mut world, start, away);
+        world.insert_resource(meadow(&planet));
+        world.init_resource::<Assets<Mesh>>();
+        planet.apply(&Operation::Dig {
+            centre: start,
+            radius: 2.0,
+        });
+        world.insert_resource(planet);
+        world.run_system_cached(follow_digs).unwrap();
+        assert!(hidden(&world, near) && !blocked(&world, start));
+        assert!(!hidden(&world, far) && blocked(&world, away));
+    }
+
+    #[test]
+    fn building_over_a_plant_takes_it_away() {
+        let mut world = World::new();
+        let planet = planet();
+        let start = planet.start();
+        let up = start.normalize();
+        let frame =
+            Transform::from_translation(start).with_rotation(Quat::from_rotation_arc(Vec3::Y, up));
+        let on = frame.transform_point(Vec3::new(1.5, 0.0, 1.5));
+        let off = frame.transform_point(Vec3::new(40.0, 0.0, 0.0));
+        let (near, far) = two_trees(&mut world, on, off);
+        world.insert_resource(meadow(&planet));
+        world.insert_resource(planet);
+        world.init_resource::<Assets<Mesh>>();
+        world.spawn(Footprint {
+            frame,
+            cell_m: 1.0,
+            ground: (0..4)
+                .flat_map(|x| (0..4).map(move |z| IVec2::new(x, z)))
+                .collect(),
+            ..default()
+        });
+        world.run_system_cached(make_way).unwrap();
+        assert!(hidden(&world, near));
+        assert!(!hidden(&world, far) && blocked(&world, off));
+    }
+}

@@ -60,8 +60,12 @@ mod tests {
 
     #[test]
     fn a_footprint_covers_its_rooms_the_reach_of_its_walls_and_its_steps() {
+        // Somewhere on a planet, its up the ground's and turned about it, as a base is.
+        let up = Vec3::new(0.3, 0.9, 0.5).normalize();
+        let frame = Transform::from_translation(up * 2000.0)
+            .with_rotation(Quat::from_rotation_arc(Vec3::Y, up) * Quat::from_rotation_y(0.7));
         let footprint = Footprint {
-            frame: Transform::from_xyz(0.0, 2000.0, 0.0),
+            frame,
             cell_m: 0.5,
             ground: [IVec2::new(0, 0)].into_iter().collect(),
             standing: [IVec2::new(4, 0)].into_iter().collect(),
@@ -72,7 +76,8 @@ mod tests {
                 width: 1.0,
             }],
         };
-        let at = |x: f32, z: f32| Vec3::new(x, 2000.0, z);
+        // A place on the planet, given in the footprint's own space.
+        let at = |x: f32, z: f32| frame.transform_point(Vec3::new(x, 0.0, z));
         assert!(footprint.covers(at(0.25, 0.25), 0.0));
         assert!(!footprint.covers(at(1.25, 0.25), 0.0));
         // A wall at x 2 to 2.5 m: covered within half a metre of it, not beyond.

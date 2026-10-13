@@ -118,4 +118,18 @@ mod tests {
         assert_eq!(&chain[32..40], &[255, 255, 255, 255, 0, 0, 0, 255]);
         assert_eq!(&chain[40..44], &[127, 127, 127, 255]);
     }
+
+    #[test]
+    fn a_texture_one_pixel_across_or_odd_still_halves_to_one_pixel() {
+        let grey =
+            |values: &[u8]| -> Vec<u8> { values.iter().flat_map(|&v| [v, v, v, 255]).collect() };
+        // Four by one: 2x1, then 1x1; the pixel below the edge is the edge's own.
+        let (wide, levels) = chain(&grey(&[0, 100, 200, 40]), 4, 1);
+        assert_eq!(levels, 3);
+        assert_eq!(wide[16..], grey(&[50, 120, 85]));
+        // One by three: halving the three leaves one, from the first two.
+        let (tall, levels) = chain(&grey(&[10, 50, 250]), 1, 3);
+        assert_eq!(levels, 2);
+        assert_eq!(tall[12..], grey(&[30]));
+    }
 }

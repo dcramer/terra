@@ -1030,5 +1030,44 @@ mod tests {
                 .contains("like f@60")
         );
         assert!(parse(&["--press", "f"]).unwrap_err().contains("like f@60"));
+        // A key let go before it is pressed, or on the same frame.
+        assert!(parse(&["--press", "w@90-40"]).is_err());
+        assert!(parse(&["--press", "w@40-40"]).is_err());
+    }
+
+    #[test]
+    fn reads_the_play_options_and_refuses_what_is_out_of_range() {
+        let play = parse(&[
+            "--time", "22", "--give", "stone:10", "--give", "spear:1", "--level", "yard",
+            "--walls", "plain",
+        ])
+        .unwrap();
+        assert_eq!(play.time, Some(22.0));
+        assert_eq!(
+            play.gives,
+            [("stone".to_string(), 10), ("spear".to_string(), 1)]
+        );
+        assert!(play.yard());
+        assert_eq!(play.walls.as_deref(), Some("plain"));
+        assert!(!parse(&["--level", "world"]).unwrap().yard());
+        // The hour runs from 0 to 24, both ends included.
+        assert_eq!(parse(&["--time", "0"]).unwrap().time, Some(0.0));
+        assert_eq!(parse(&["--time", "24"]).unwrap().time, Some(24.0));
+        for hour in ["24.5", "-1", "night"] {
+            assert!(parse(&["--time", hour]).unwrap_err().contains("0 to 24"));
+        }
+        for give in ["stone", "stone:lots", "stone:-1"] {
+            assert!(parse(&["--give", give]).unwrap_err().contains("stone:10"));
+        }
+        assert!(
+            parse(&["--level", "moon"])
+                .unwrap_err()
+                .contains("world or yard")
+        );
+        assert!(
+            parse(&["--walls", "stone"])
+                .unwrap_err()
+                .contains("logs or plain")
+        );
     }
 }

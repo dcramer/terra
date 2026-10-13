@@ -229,11 +229,11 @@ mod tests {
     }
 
     #[test]
-    fn pitches_are_whole_semitones_from_the_root() {
-        for semitones in [0, 2, 4, 7, 9, 12, 14] {
-            let hz = hertz(110.0, semitones);
-            let back = libm::roundf(12.0 * libm::log2f(hz / 110.0)) as i32;
-            assert_eq!(back, semitones);
-        }
+    fn pitches_are_equal_tempered_semitones_from_the_root() {
+        // An octave doubles, and nine semitones below A440 is middle C.
+        assert_eq!(hertz(110.0, 12), 220.0);
+        assert_eq!(hertz(220.0, -12), 110.0);
+        assert!((hertz(440.0, -9) - 261.63).abs() < 0.01);
+        assert!((hertz(440.0, 7) - 659.26).abs() < 0.01);
     }
 }
