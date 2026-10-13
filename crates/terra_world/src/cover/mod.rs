@@ -36,9 +36,9 @@ use terra_gen::Seed;
 /// Grass is built in squares this wide, in metres east and south of the start.
 pub const SQUARE_M: f32 = 8.0;
 /// Grass grows within this of the camera.
-pub const REACH_M: f32 = 48.0;
+pub const REACH_M: f32 = 64.0;
 /// Blades shrink into the ground over this stretch, so the grass has no edge.
-const FADE_M: [f32; 2] = [30.0, REACH_M - 2.0];
+const FADE_M: [f32; 2] = [42.0, REACH_M - 2.0];
 /// A square changes ring only once the camera is this far past where the rings meet, so
 /// it does not flick between them.
 const HYSTERESIS_M: f32 = 2.0;

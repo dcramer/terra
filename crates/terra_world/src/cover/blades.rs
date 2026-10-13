@@ -72,19 +72,19 @@ pub const RINGS: [(Ring, f32); 3] = [
             segments: 3,
             share: 1.0,
         },
-        16.0,
+        22.0,
     ),
     (
         Ring {
             segments: 2,
-            share: 0.3,
+            share: 0.6,
         },
-        32.0,
+        42.0,
     ),
     (
         Ring {
             segments: 1,
-            share: 0.11,
+            share: 0.35,
         },
         f32::MAX,
     ),

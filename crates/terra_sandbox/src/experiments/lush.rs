@@ -61,17 +61,17 @@ const SPACING_M: f32 = 7.0;
 /// and cards, then fewer again, then far off its crown as solid lumps; past the last, it is
 /// not drawn. A tree's distances grow with its height, so detail follows how big it is on
 /// screen rather than how far it is (D203).
-const DETAIL_M: [f32; 4] = [30.0, 75.0, 180.0, 420.0];
+const DETAIL_M: [f32; 4] = [45.0, 100.0, 200.0, 420.0];
 /// The height the distances are for.
 const DETAIL_FOR_M: f32 = 20.0;
 /// One level of detail dithers into the next over this share of the distance where they
 /// meet, so a change is spread over many metres of walking.
 const FADE: f32 = 0.2;
-/// Crowns cast a dappled shadow from a sparse stand-in of leaf cards while the tree is
-/// drawn in full, then a solid one from rounded clumps, which the GPU draws far more
-/// cheaply, to the end of the second level; beyond, none. They switch where the tree does,
-/// so a shadow never changes when its tree does not.
-const SHADOW_LEVELS: [usize; 2] = [0, 1];
+/// A crown casts a dappled shadow from a sparse stand-in of its own cards to the first
+/// distance, a solid one from rounded clumps, which the GPU draws far more cheaply, to the
+/// second; beyond, none. For a 20 m tree; they grow with its height as its levels do. Card
+/// shadows farther out cost 4 ms a frame on the RTX 3080 (D221).
+const SHADOW_M: [f32; 2] = [30.0, 100.0];
 /// How many kinds of fallen log there are; each is drawn many times.
 const LOG_KINDS: u64 = 5;
 /// How much of a trunk one repeat of the bark's picture covers: round it, and along it.
@@ -468,9 +468,10 @@ fn plant(
     let arm = bark_map("arm.jpg", false);
     let bark = materials.add(Foliage {
         base: StandardMaterial {
-            // The scan is at the top of bark's range; this takes it to the middle, about
-            // sRGB 112.
-            base_color: Color::srgb(0.85, 0.85, 0.85),
+            // The scan is at the top of bark's range; this takes it to the darker grey-brown
+            // of an old oak, about sRGB 78, as the forests of the Witcher 3 and Sons of the
+            // Forest have it (D221).
+            base_color: Color::srgb(0.58, 0.56, 0.54),
             base_color_texture: Some(bark_map("color.jpg", true)),
             normal_map_texture: Some(bark_map("normal.jpg", false)),
             // Occlusion in red, roughness in green, metal in blue.
@@ -528,8 +529,10 @@ fn plant(
             };
             let tree = grow_tree(&mut dice, height);
             let wood = [0, 1, 2].map(|detail| wood(&tree, detail, height));
-            let crown = [0, 1, 2].map(|detail| crown(&mut dice, &tree, detail, height));
-            let shadow = crown_stand_in(&mut dice, &tree, height);
+            // Every level of the crown, and its shadow, from one set of cards (D221).
+            let cards = crown_cards(&mut dice, &tree, height);
+            let crown = [0, 1, 2].map(|detail| crown(&cards, detail));
+            let shadow = crown_stand_in(&cards);
             let clumps = crown_clumps(&tree, 1.0);
             let lumps = crown_clumps(&tree, SHADOW_LUMP);
             info!(
@@ -589,6 +592,12 @@ fn plant(
         }
     };
     // Levels `first` to `last` of a tree this many times the height the distances are for.
+    // From one distance to another, crossfading at each end as the levels do.
+    let between = |from: f32, to: f32| VisibilityRange {
+        start_margin: from * (1.0 - FADE)..from,
+        end_margin: to * (1.0 - FADE)..to,
+        use_aabb: false,
+    };
     let detail = |first: usize, last: usize, size: f32| {
         let at = |level: usize| DETAIL_M[level] * size;
         let from = if first == 0 { 0.0 } else { at(first - 1) };
@@ -669,13 +678,13 @@ fn plant(
                     tree.spawn((
                         Mesh3d(model.shadow.clone()),
                         MeshMaterial3d(leaves.clone()),
-                        detail(0, SHADOW_LEVELS[0], size),
+                        between(0.0, SHADOW_M[0] * size),
                         RenderLayers::layer(SUN_ONLY),
                     ));
                     tree.spawn((
                         Mesh3d(model.lumps.clone()),
                         MeshMaterial3d(solid.clone()),
-                        detail(SHADOW_LEVELS[0] + 1, SHADOW_LEVELS[1], size),
+                        between(SHADOW_M[0] * size, SHADOW_M[1] * size),
                         RenderLayers::layer(SUN_ONLY),
                     ));
                 });
@@ -1363,25 +1372,51 @@ impl Canopy {
     }
 }
 
-/// A tree's crown at a level of detail: a clump of many small cards at every tip, then a
-/// few larger ones, then one large one.
-fn crown(dice: &mut Rng, tree: &Tree, detail: usize, height: f32) -> Build {
+/// A crown's cards, grown once: for each tip, its cards in the order the levels of detail
+/// keep them. A simpler level keeps the first few in the same places, each enlarged so they
+/// cover as much as all of them did, as SpeedTree's levels do: crossfading between levels
+/// then shows one crown thinning, not two different crowns (D221).
+fn crown_cards(dice: &mut Rng, tree: &Tree, height: f32) -> Vec<Vec<Card>> {
     let canopy = Canopy::of(tree, height);
+    tree.tips
+        .iter()
+        .map(|&(tip, size)| {
+            let count = 9 + dice.below(6);
+            (0..count).map(|_| card(dice, &canopy, tip, size)).collect()
+        })
+        .collect()
+}
+
+/// A crown at a level of detail: all its cards, then three a tip, then one.
+fn crown(cards: &[Vec<Card>], detail: usize) -> Build {
     let mut build = Build::default();
-    for &(tip, size) in &tree.tips {
-        let (cards, grow) = [(9 + dice.below(6), 1.0), (3, 1.35), (1, 1.8)][detail];
-        clump(&mut build, dice, &canopy, tip, size * grow, cards);
+    for tip in cards {
+        let keep = [tip.len(), 3, 1][detail].min(tip.len());
+        // Area kept: each card grows by the root of how many it stands for, a little less,
+        // since the kept cards overlap less than all of them did.
+        let grow = if keep == tip.len() {
+            1.0
+        } else {
+            0.85 * libm::sqrtf(tip.len() as f32 / keep as f32).min(2.6)
+        };
+        for card in &tip[..keep] {
+            card.draw(&mut build, grow);
+        }
     }
     build
 }
 
-/// What a crown's shadow is cast from: two cards at every tip, so the light still comes
-/// through in flecks, with a fraction of the full crown's layers for the sun to draw.
-fn crown_stand_in(dice: &mut Rng, tree: &Tree, height: f32) -> Build {
-    let canopy = Canopy::of(tree, height);
+/// What a crown's shadow is cast from near the camera: the first two cards of every tip,
+/// the same as the crown's own, enlarged as the simpler levels are, so the light still
+/// comes through in flecks where it does through the crown.
+fn crown_stand_in(cards: &[Vec<Card>]) -> Build {
     let mut build = Build::default();
-    for &(tip, size) in &tree.tips {
-        clump(&mut build, dice, &canopy, tip, size * 1.3, 2);
+    for tip in cards {
+        let keep = 2.min(tip.len());
+        let grow = libm::sqrtf(tip.len() as f32 / keep as f32).min(2.6) * 0.8;
+        for card in &tip[..keep] {
+            card.draw(&mut build, grow);
+        }
     }
     build
 }
@@ -1447,39 +1482,76 @@ fn lump(build: &mut Build, centre: Vec3, radii: Vec3) {
     }
 }
 
-/// A clump of leaf cards round a point.
-fn clump(build: &mut Build, dice: &mut Rng, canopy: &Canopy, at: Vec3, size: f32, cards: u32) {
-    for _ in 0..cards {
-        let middle = at + dice.unit_vector() * size * dice.range(0.2, 0.75);
-        let out = (middle - canopy.centre).normalize_or(Vec3::Y);
-        let facing = (dice.unit_vector() + out * 0.7 + Vec3::Y * 0.3).normalize();
-        let spin = Quat::from_axis_angle(facing, dice.range(0.0, TAU));
-        let right = spin * facing.any_orthonormal_vector();
-        let up = facing.cross(right);
-        let half = size * dice.range(0.45, 0.65);
-        // The crown shades as one: normals lean out of it.
-        let normal = (out * 0.75 + facing * 0.25).normalize();
-        // Leaves deep in the crown, and low in it, are shaded by the rest.
-        let depth = (middle.distance(canopy.centre) / canopy.reach).clamp(0.0, 1.0);
-        let rise = ((middle.y - canopy.centre.y) / canopy.reach * 0.5 + 0.5).clamp(0.0, 1.0);
-        let light = 0.5 + 0.35 * depth + 0.25 * rise + dice.range(-0.06, 0.06);
-        let tint = Vec3::new(
-            light * dice.range(0.95, 1.05),
-            light,
-            light * dice.range(0.9, 1.0),
-        ) * canopy.tint;
-        let bend = (middle.y / canopy.height).clamp(0.0, 1.0);
-        let sway = Vec2::new(bend * bend * canopy.bend, dice.range(0.6, 1.0));
-        let flip = if dice.unit() < 0.5 { -1.0 } else { 1.0 };
+/// One leaf card in a crown: where it is, which way it faces, how big, and how it is lit
+/// and moves.
+#[derive(Clone, Copy)]
+struct Card {
+    middle: Vec3,
+    right: Vec3,
+    up: Vec3,
+    half: f32,
+    normal: Vec3,
+    tint: Vec3,
+    sway: Vec2,
+    flip: f32,
+}
+
+/// A card near `at` in a clump this size.
+fn card(dice: &mut Rng, canopy: &Canopy, at: Vec3, size: f32) -> Card {
+    let middle = at + dice.unit_vector() * size * dice.range(0.2, 0.75);
+    let out = (middle - canopy.centre).normalize_or(Vec3::Y);
+    let facing = (dice.unit_vector() + out * 0.7 + Vec3::Y * 0.3).normalize();
+    let spin = Quat::from_axis_angle(facing, dice.range(0.0, TAU));
+    let right = spin * facing.any_orthonormal_vector();
+    let up = facing.cross(right);
+    let half = size * dice.range(0.45, 0.65);
+    // The crown shades as one: normals lean out of it.
+    let normal = (out * 0.75 + facing * 0.25).normalize();
+    // Leaves deep in the crown, and low in it, are shaded by the rest.
+    let depth = (middle.distance(canopy.centre) / canopy.reach).clamp(0.0, 1.0);
+    let rise = ((middle.y - canopy.centre.y) / canopy.reach * 0.5 + 0.5).clamp(0.0, 1.0);
+    let light = 0.5 + 0.35 * depth + 0.25 * rise + dice.range(-0.06, 0.06);
+    let tint = Vec3::new(
+        light * dice.range(0.95, 1.05),
+        light,
+        light * dice.range(0.9, 1.0),
+    ) * canopy.tint;
+    let bend = (middle.y / canopy.height).clamp(0.0, 1.0);
+    let sway = Vec2::new(bend * bend * canopy.bend, dice.range(0.6, 1.0));
+    let flip = if dice.unit() < 0.5 { -1.0 } else { 1.0 };
+    Card {
+        middle,
+        right,
+        up,
+        half,
+        normal,
+        tint,
+        sway,
+        flip,
+    }
+}
+
+impl Card {
+    /// Draws it, `grow` times its size.
+    fn draw(&self, build: &mut Build, grow: f32) {
+        let half = self.half * grow;
         let base = build.positions.len() as u32;
         for (u, v) in LEAF_OUTLINE {
-            let corner =
-                middle + right * (u * 2.0 - 1.0) * half * flip + up * (1.0 - v * 2.0) * half;
-            build.vertex(corner, normal, Vec2::new(u, v), sway, tint);
+            let corner = self.middle
+                + self.right * (u * 2.0 - 1.0) * half * self.flip
+                + self.up * (1.0 - v * 2.0) * half;
+            build.vertex(corner, self.normal, Vec2::new(u, v), self.sway, self.tint);
         }
         for i in 1..LEAF_OUTLINE.len() as u32 - 1 {
             build.indices.extend([base, base + i, base + i + 1]);
         }
+    }
+}
+
+/// A clump of cards round `at`, for a bush.
+fn clump(build: &mut Build, dice: &mut Rng, canopy: &Canopy, at: Vec3, size: f32, cards: u32) {
+    for _ in 0..cards {
+        card(dice, canopy, at, size).draw(build, 1.0);
     }
 }
 
