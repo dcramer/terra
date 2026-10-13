@@ -133,6 +133,7 @@ Models carry their own materials; the light, the sky and the air are shared shad
 | Sky | A gradient shader with soft clouds, day and night | Working |
 | Bloom and grading | Camera effects built into Bevy, ACES tone mapping | Working |
 | Dense foliage and wind | Instanced plants, merged grass blades, one wind shader | Working near the start; its models are still direction D |
+| Ground cover | Grass as clumped blades round the camera, fading into ground of its own colour; leaf litter and moss painted onto the ground under trees (D202) | Working in the lush forest; litter is still the soil texture tinted |
 | Water | A see-through surface mirroring the sky at a low angle | Working; no waves |
 | Shade in corners | Screen-space ambient occlusion | Working |
 

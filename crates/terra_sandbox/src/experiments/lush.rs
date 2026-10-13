@@ -39,14 +39,14 @@ use bevy::{
     prelude::*,
     render::render_resource::{AsBindGroup, TextureFormat},
     shader::ShaderRef,
-    tasks::{AsyncComputeTaskPool, Task, futures::check_ready},
 };
 use std::f32::consts::TAU;
 use std::sync::Arc;
 use terra_gen::{Noise, Rng, Seed};
+use terra_world::cover::{CoverRules, CoverSource, Growing};
 use terra_world::flora::{Growth, Obstacles};
 use terra_world::flora_kinds::Flora;
-use terra_world::planet::{MainCamera, Planet};
+use terra_world::planet::Planet;
 
 type Foliage = ExtendedMaterial<StandardMaterial, FoliageExtension>;
 
@@ -73,16 +73,8 @@ const YOUNG_KINDS: u64 = 3;
 const BUSH_KINDS: u64 = 4;
 /// Bushes cast shadows this near, and fade out at the second distance.
 const BUSH_M: [f32; 2] = [20.0, 70.0];
-/// Grass is built in squares this wide, within this of the camera, from tufts tried this
-/// far apart.
-const GRASS_SQUARE_M: f32 = 8.0;
-const GRASS_M: f32 = 45.0;
-const GRASS_SPACING_M: f32 = 0.35;
-/// Squares of grass being built at once, and how many built ones are put in a frame:
-/// squares started together finish together, and sending them all to the GPU in one frame
-/// shows as a stutter.
-const GRASS_BUILDING: usize = 8;
-const GRASS_ARRIVING: usize = 2;
+/// Tree feet are filed in squares this wide, for the grass to thin under.
+const FILED_M: f32 = 8.0;
 /// Where the leaves' picture is cut: more opaque than this is leaf.
 const LEAF_CUT: f32 = 0.45;
 /// The outline of the leaves in their picture, as an octagon in texture coordinates, so a
@@ -125,11 +117,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Unmipped>()
         .add_systems(
             Update,
-            (
-                plant.run_if(not(resource_exists::<Forest>)),
-                grow_grass,
-                add_mipmaps,
-            ),
+            (plant.run_if(not(resource_exists::<Forest>)), add_mipmaps),
         );
 }
 
@@ -256,46 +244,65 @@ fn with_mipmaps(image: &mut Image, cut: Option<f32>) {
     image.texture_descriptor.mip_level_count = levels;
 }
 
-/// The forest once planted, and the grass growing round the camera.
+/// The forest, once planted. Its grass is terra_world's ground cover, told by the forest's
+/// map where it grows.
 #[derive(Resource)]
-struct Forest {
-    /// Shared with the threads grass is built on.
-    map: Arc<Map>,
-    grass: Handle<Foliage>,
-    squares: HashMap<(i32, i32), Square>,
-}
-
-/// A square of grass: being built on another thread, or built, if any grows there.
-enum Square {
-    Building(Task<Option<(Transform, Mesh)>>),
-    Built(Option<Entity>),
-}
+struct Forest;
 
 /// The forest's map, on a flat patch laid over the ground: east and south of the start, in
 /// metres.
 struct Map {
-    start: Vec3,
-    east: Vec3,
-    south: Vec3,
-    seed: Seed,
     path: Path,
     /// Every tree's foot, filed by square, for the grass to thin under.
     trunks: HashMap<(i32, i32), Vec<Vec2>>,
+    /// Where the grass grows thick or thin, and green or dry.
+    patches: Noise,
+}
+
+/// The forest's grass, as terra_world's ground cover asks it: thick in the open, thin
+/// under the trees, none on the paths.
+struct LushCover(Arc<Map>);
+
+impl CoverSource for LushCover {
+    fn growing(&self, _planet: &Planet, _ground: Vec3, at: Vec2) -> Growing {
+        self.0.growing(at)
+    }
+
+    fn reaches(&self, middle: Vec2, half: f32) -> bool {
+        middle.length() < FOREST_M + 30.0 + half
+    }
 }
 
 impl Map {
-    /// The ground, as drawn, at a place on the map.
-    fn ground(&self, planet: &Planet, at: Vec2) -> Vec3 {
-        planet.ground_at(self.start + self.east * at.x + self.south * at.y)
-    }
-
-    /// How thickly grass grows at a place, from nothing to one: none on the paths, and less
-    /// in the shade under trees.
-    fn grassiness(&self, at: Vec2, patches: &Noise) -> f32 {
-        let path = self.path.edge_distance(at);
-        let trunk = nearest(&self.trunks, at, 6.0);
-        let patch = 0.55 + 0.45 * patches.fbm(Vec3::new(at.x, 0.0, at.y) / 9.0, 2, 2.0, 0.5);
-        smoothstep(-0.1, 0.6, path) * (0.35 + 0.65 * smoothstep(0.8, 5.0, trunk)) * patch
+    /// What grows at a place: grass thick in the open and thin in the shade under the
+    /// crowns, none on the paths; there, fallen leaves, and moss round the trees' feet and
+    /// in patches on the leaves.
+    fn growing(&self, at: Vec2) -> Growing {
+        let off_path = smoothstep(-0.1, 0.6, self.path.edge_distance(at));
+        let trunk = nearest(&self.trunks, at, FILED_M);
+        let patch = 0.55
+            + 0.45
+                * self
+                    .patches
+                    .fbm(Vec3::new(at.x, 0.0, at.y) / 9.0, 2, 2.0, 0.5);
+        let open = smoothstep(2.5, 7.0, trunk);
+        let shaded = 1.0 - smoothstep(3.0, 8.0, trunk);
+        let noise = |height: f32, across: f32| {
+            0.5 + 0.5 * self.patches.sample(Vec3::new(at.x, height, at.y) / across)
+        };
+        // In the shade grass grows only where some light gets through, in patches.
+        let shade_grass = smoothstep(0.6, 0.8, noise(19.0, 4.0));
+        // Moss round a tree's foot, its edge wandering, and in patches on the leaves.
+        let foot = 1.0 - smoothstep(0.5, 2.4, trunk + (noise(53.0, 1.3) - 0.5) * 2.2);
+        let mossy = noise(31.0, 3.5);
+        Growing {
+            grass: off_path * patch * (0.9 * open + 0.6 * (1.0 - open) * shade_grass),
+            lush: noise(7.0, 20.0),
+            path: self.path.edge_distance(at) < 0.0,
+            litter: off_path * shaded,
+            moss: off_path
+                * (foot * (0.35 + 0.65 * mossy)).max(shaded * smoothstep(0.6, 0.85, mossy) * 0.7),
+        }
     }
 }
 
@@ -306,7 +313,7 @@ fn square(at: Vec2, side: f32) -> (i32, i32) {
 
 /// How far from the nearest of some points filed by grass square, up to `within`.
 fn nearest(filed: &HashMap<(i32, i32), Vec<Vec2>>, at: Vec2, within: f32) -> f32 {
-    let (i, j) = square(at, GRASS_SQUARE_M);
+    let (i, j) = square(at, FILED_M);
     let mut nearest = within;
     for di in -1..=1 {
         for dj in -1..=1 {
@@ -415,27 +422,8 @@ fn plant(
         },
         extension: wind.clone(),
     });
-    // Blades are solid shapes, not pictures cut out, which a GPU draws far more cheaply.
-    let grass = materials.add(Foliage {
-        base: StandardMaterial {
-            cull_mode: None,
-            double_sided: false,
-            diffuse_transmission: 0.2,
-            perceptual_roughness: 0.9,
-            reflectance: 0.12,
-            ..default()
-        },
-        extension: wind,
-    });
     // Only the sun sees it, so how it would look does not matter.
     let solid = plain.add(StandardMaterial::default());
-    let earth = plain.add(StandardMaterial {
-        alpha_mode: AlphaMode::Blend,
-        cull_mode: None,
-        perceptual_roughness: 1.0,
-        reflectance: 0.15,
-        ..default()
-    });
 
     let trees: Vec<TreeModel> = (0..OAK_KINDS + YOUNG_KINDS)
         .map(|kind| {
@@ -482,13 +470,6 @@ fn plant(
         "lush: a path leads out to {:.0},{:.0} (east, south).",
         way.x, way.y
     );
-    for piece in path.ribbons(&planet, start, east, south) {
-        commands.spawn((
-            Mesh3d(meshes.add(piece)),
-            MeshMaterial3d(earth.clone()),
-            NotShadowCaster,
-        ));
-    }
 
     let cut_as = |name: &str, size: f32| {
         flora
@@ -537,7 +518,7 @@ fn plant(
             {
                 continue;
             }
-            feet.entry(square(at, GRASS_SQUARE_M)).or_default().push(at);
+            feet.entry(square(at, FILED_M)).or_default().push(at);
             let kind = if young {
                 OAK_KINDS + u64::from(dice.below(YOUNG_KINDS as u32))
             } else {
@@ -654,196 +635,16 @@ fn plant(
         nearest_to_start[1].y
     );
 
-    commands.insert_resource(Forest {
-        map: Arc::new(Map {
-            start,
-            east,
-            south,
-            seed,
-            path,
-            trunks: feet,
-        }),
-        grass,
-        squares: HashMap::default(),
+    let map = Arc::new(Map {
+        path,
+        trunks: feet,
+        patches: Noise::new(seed.derive("patches")),
     });
-}
-
-/// Builds the squares of grass near the camera, nearest first, each on another thread so
-/// walking never waits for one; and takes away those it has left behind.
-fn grow_grass(
-    mut commands: Commands,
-    forest: Option<ResMut<Forest>>,
-    planet: Option<Res<Planet>>,
-    camera: Query<&GlobalTransform, With<MainCamera>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
-    let (Some(mut forest), Some(planet)) = (forest, planet) else {
-        return;
-    };
-    let Some(camera) = camera.iter().next() else {
-        return;
-    };
-    let Forest {
-        map,
-        grass,
-        squares,
-    } = &mut *forest;
-    let offset = camera.translation() - map.start;
-    let here = Vec2::new(offset.dot(map.east), offset.dot(map.south));
-    let middle = |(i, j): (i32, i32)| (Vec2::new(i as f32, j as f32) + 0.5) * GRASS_SQUARE_M;
-    // A square left behind goes; one still being built is dropped, which stops it.
-    squares.retain(|&key, square| {
-        let keep = middle(key).distance(here) < GRASS_M + GRASS_SQUARE_M;
-        if !keep && let Square::Built(Some(entity)) = square {
-            commands.entity(*entity).despawn();
-        }
-        keep
+    commands.insert_resource(CoverRules {
+        source: Arc::new(LushCover(map)),
+        seed: seed.derive("grass"),
     });
-    let (mut building, mut arrived) = (0, 0);
-    for square in squares.values_mut() {
-        let Square::Building(task) = square else {
-            continue;
-        };
-        let ready = if arrived < GRASS_ARRIVING {
-            check_ready(task)
-        } else {
-            None
-        };
-        let Some(built) = ready else {
-            building += 1;
-            continue;
-        };
-        arrived += 1;
-        *square = Square::Built(built.map(|(place, mesh)| {
-            commands
-                .spawn((
-                    Mesh3d(meshes.add(mesh)),
-                    MeshMaterial3d(grass.clone()),
-                    place,
-                    VisibilityRange {
-                        start_margin: 0.0..0.0,
-                        end_margin: GRASS_M - 10.0..GRASS_M - 2.0,
-                        use_aabb: false,
-                    },
-                    NotShadowCaster,
-                ))
-                .id()
-        }));
-    }
-    let reach = (GRASS_M / GRASS_SQUARE_M).ceil() as i32;
-    let (ci, cj) = square(here, GRASS_SQUARE_M);
-    let mut wanted: Vec<(f32, (i32, i32))> = (-reach..=reach)
-        .flat_map(|di| (-reach..=reach).map(move |dj| (ci + di, cj + dj)))
-        .filter(|key| !squares.contains_key(key))
-        .map(|key| (middle(key).distance(here), key))
-        .filter(|(distance, _)| *distance < GRASS_M)
-        .collect();
-    wanted.sort_by(|a, b| a.0.total_cmp(&b.0));
-    let threads = AsyncComputeTaskPool::get();
-    for (_, key) in wanted
-        .into_iter()
-        .take(GRASS_BUILDING.saturating_sub(building))
-    {
-        let (map, planet) = (map.clone(), planet.clone());
-        let task = threads.spawn(async move { grass_square(&map, &planet, key) });
-        squares.insert(key, Square::Building(task));
-    }
-}
-
-/// One square of grass, in tufts of blades, if any grows there.
-fn grass_square(map: &Map, planet: &Planet, key: (i32, i32)) -> Option<(Transform, Mesh)> {
-    let patches = Noise::new(map.seed.derive("patches"));
-    let middle = (Vec2::new(key.0 as f32, key.1 as f32) + 0.5) * GRASS_SQUARE_M;
-    if middle.length() > FOREST_M + 30.0 {
-        return None;
-    }
-    let centre = map.ground(planet, middle);
-    let up = centre.normalize();
-    let east = (map.east - up * map.east.dot(up)).normalize();
-    let south = east.cross(up);
-    let index = (u64::from(key.0 as u32) << 32) | u64::from(key.1 as u32);
-    let mut dice = map.seed.derive("grass").index(index).rng();
-    let mut build = Build::default();
-    let steps = (GRASS_SQUARE_M / GRASS_SPACING_M) as i32;
-    let half = GRASS_SQUARE_M / 2.0;
-    for a in 0..steps {
-        for b in 0..steps {
-            let local = Vec2::new(a as f32 + dice.unit(), b as f32 + dice.unit()) * GRASS_SPACING_M
-                - Vec2::splat(half);
-            let at = middle + local;
-            if dice.unit() > map.grassiness(at, &patches) {
-                continue;
-            }
-            let rise = (map.ground(planet, at) - centre).dot(up);
-            let lush = 0.5 + 0.5 * patches.sample(Vec3::new(at.x, 7.0, at.y) / 20.0);
-            tuft(
-                &mut build,
-                &mut dice,
-                Vec3::new(local.x, rise, local.y),
-                lush,
-            );
-        }
-    }
-    if build.indices.is_empty() {
-        return None;
-    }
-    let place = Transform {
-        translation: centre,
-        rotation: Quat::from_mat3(&Mat3::from_cols(east, up, south)),
-        scale: Vec3::ONE,
-    };
-    Some((place, build.mesh()))
-}
-
-/// A tuft of grass blades, each a tapering strip bent over by its own weight, darker at
-/// the root; `lush` from dry to green.
-fn tuft(build: &mut Build, dice: &mut Rng, at: Vec3, lush: f32) {
-    // Vertex colours are linear, as the renderer works.
-    let linear =
-        |r, g, b| Vec3::from_array(Color::srgb(r, g, b).to_linear().to_f32_array_no_alpha());
-    let dry = linear(0.6, 0.55, 0.28);
-    let green = linear(0.33, 0.47, 0.16);
-    for _ in 0..4 + dice.below(4) {
-        let angle = dice.range(0.0, TAU);
-        let lean = Vec3::new(libm::cosf(angle), 0.0, libm::sinf(angle));
-        let side = Vec3::new(-lean.z, 0.0, lean.x);
-        let height = dice.range(0.22, 0.6);
-        let width = dice.range(0.012, 0.024);
-        let bend = dice.range(0.1, 0.45) * height;
-        let foot = at + lean * dice.range(0.0, 0.06);
-        let dryness = (1.0 - lush + dice.range(-0.15, 0.15)).clamp(0.0, 1.0);
-        let tip = green.lerp(dry, dryness) * dice.range(0.85, 1.15);
-        let root = tip * 0.35;
-        let base = build.positions.len() as u32;
-        for (v, across) in [
-            (0.0, -1.0),
-            (0.0, 1.0),
-            (0.55, -0.7),
-            (0.55, 0.7),
-            (1.0, 0.0),
-        ] {
-            let point = foot + Vec3::Y * height * v + lean * bend * v * v + side * width * across;
-            // Lit as the ground is, so a field reads as one surface.
-            build.vertex(
-                point,
-                (Vec3::Y * 0.85 + lean * 0.15).normalize(),
-                Vec2::new(0.5 + across * 0.5, 1.0 - v),
-                Vec2::new(v * v * 0.5, v * 0.6),
-                root.lerp(tip, v),
-            );
-        }
-        build.indices.extend([
-            base,
-            base + 1,
-            base + 2,
-            base + 1,
-            base + 3,
-            base + 2,
-            base + 2,
-            base + 3,
-            base + 4,
-        ]);
-    }
+    commands.insert_resource(Forest);
 }
 
 /// Paths through the forest: a ring round the clearing, and two ways out from it to the
@@ -921,51 +722,6 @@ impl Path {
             }
         }
         nearest
-    }
-
-    /// The paths as strips of bare earth over the ground, fading out at the edges, in
-    /// pieces short enough to be left out when out of view.
-    fn ribbons(&self, planet: &Planet, start: Vec3, east: Vec3, south: Vec3) -> Vec<Mesh> {
-        let earth = Vec3::new(0.2, 0.13, 0.075);
-        let mut pieces = Vec::new();
-        for line in &self.lines {
-            let mut first = 0;
-            while first + 1 < line.len() {
-                // Each piece ends where the next begins, so there is no gap between them.
-                let last = (first + 30).min(line.len() - 1);
-                let points = &line[first..=last];
-                first = last;
-                let mut build = Build::default();
-                for (k, &(at, width)) in points.iter().enumerate() {
-                    let next = points[(k + 1).min(points.len() - 1)].0;
-                    let before = points[k.saturating_sub(1)].0;
-                    let across = (next - before).normalize_or(Vec2::X).perp();
-                    let shade = 0.85 + 0.3 * libm::sinf(at.x * 0.7) * libm::sinf(at.y * 0.9);
-                    for (out, alpha) in [(-1.6, 0.0), (-1.0, 1.0), (1.0, 1.0), (1.6, 0.0)] {
-                        let flat = at + across * width * out;
-                        let ground = planet.ground_at(start + east * flat.x + south * flat.y);
-                        let up = ground.normalize();
-                        let index = build.vertex(
-                            ground + up * 0.04,
-                            up,
-                            Vec2::ZERO,
-                            Vec2::ZERO,
-                            earth * shade,
-                        );
-                        build.colours[index as usize][3] = alpha;
-                    }
-                }
-                for k in 0..points.len() as u32 - 1 {
-                    for s in 0..3 {
-                        let a = k * 4 + s;
-                        let b = a + 4;
-                        build.indices.extend([a, b, a + 1, a + 1, b, b + 1]);
-                    }
-                }
-                pieces.push(build.mesh());
-            }
-        }
-        pieces
     }
 }
 

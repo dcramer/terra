@@ -57,9 +57,15 @@ for (const hour of hours) {
     process.exit(1);
   }
   VIEWS.forEach(([name], index) => {
+    const frame = index * HOLD + HOLD - 10;
     const file = resolve(out, `${hour}-${name}.png`);
-    renameSync(`${prefix}-${String(index * HOLD + HOLD - 10).padStart(5, "0")}.png`, file);
-    tiles.push("-label", `${name}, ${hour}:00`, file);
+    renameSync(`${prefix}-${String(frame).padStart(5, "0")}.png`, file);
+    // The share of the ground within 30 m that nothing grows on (docs/biomes.md), as the
+    // run measured it with the picture.
+    const bare = new RegExp(`SANDBOX frame ${frame}: bare ground within 30 m ([\\d.]+)%, paths ([\\d.]+)%`).exec(said);
+    const measured = bare ? `, bare ${bare[1]}% (paths ${bare[2]}%)` : "";
+    if (bare) console.log(`vantage: ${name} at ${hour}:00: bare ground within 30 m ${bare[1]}%, paths ${bare[2]}%`);
+    tiles.push("-label", `${name}, ${hour}:00${measured}`, file);
   });
   console.log(`vantage: ${hour}:00 in ${((Date.now() - started) / 1000).toFixed(0)} s`);
 }

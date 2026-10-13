@@ -13,6 +13,7 @@
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
 pub mod audio;
+pub mod cover;
 pub mod data;
 pub mod daylight;
 pub mod debug;

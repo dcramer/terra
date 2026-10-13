@@ -919,11 +919,12 @@ fn scripted_run(
     mut part_ms: Local<[Vec<f32>; 3]>,
     parts: Option<Res<crate::debug::FrameParts>>,
     mut last_frame: Local<Option<Instant>>,
-    (entities, meshes, images, mut grew): (
+    (entities, meshes, images, mut grew, bare): (
         &bevy::ecs::entity::Entities,
         Res<Assets<Mesh>>,
         Res<Assets<Image>>,
         Local<Option<[usize; 3]>>,
+        Option<Res<crate::cover::BareGround>>,
     ),
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -945,6 +946,7 @@ fn scripted_run(
             *frame,
             &mut commands,
             picture.as_deref(),
+            bare.as_deref(),
             &options,
             &mut exit,
         );
@@ -1077,6 +1079,7 @@ fn take_shots(
     frame: u32,
     commands: &mut Commands,
     picture: Option<&Picture>,
+    bare: Option<&crate::cover::BareGround>,
     options: &Options,
     exit: &mut MessageWriter<AppExit>,
 ) {
@@ -1089,6 +1092,16 @@ fn take_shots(
         }
     }
     if shots.frames.binary_search(&frame).is_ok() {
+        // How much of the ground near the camera nothing grows on, with each picture.
+        if let Some(bare) = bare {
+            println!(
+                "SANDBOX frame {frame}: bare ground within {} m {:.1}%, paths {:.1}%{}",
+                crate::cover::MEASURED_M,
+                bare.bare * 100.0,
+                bare.paths * 100.0,
+                if bare.complete { "" } else { ", still growing" }
+            );
+        }
         commands
             .spawn(screenshot(picture))
             .observe(save_to_disk(shots.path(frame)));

@@ -48,6 +48,9 @@ struct Ground {
     sea_deep: vec4<f32>,
     layer_metres: vec4<f32>,
     textured: u32,
+    // From a point in the world to its place on the cover map, and whether there is one.
+    cover_from_world: mat4x4<f32>,
+    cover_on: u32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -58,6 +61,12 @@ var ground_color: texture_2d_array<f32>;
 var ground_sampler: sampler;
 @group(constants::MATERIAL_BIND_GROUP) @binding(103)
 var ground_normal: texture_2d_array<f32>;
+// What covers the ground near the camera, painted by the ground cover (cover/floor.rs):
+// grass in red, how lush in green, forest floor in blue, moss in alpha.
+@group(constants::MATERIAL_BIND_GROUP) @binding(104)
+var cover_map: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(105)
+var cover_sampler: sampler;
 
 // The layers of the texture array, in the order planet.rs gives them.
 const SOIL: u32 = 0u;
@@ -173,13 +182,29 @@ fn fragment(
         let blotch = noise(world * 0.23) * 0.6 + noise(world * 0.9 + 17.0) * 0.4;
         let fleck = noise(world * 3.1 + 5.0);
 @if(VERTEX_COLORS)
-        let grows = in.color;
+        var grows = in.color;
 @else
-        let grows = vec4<f32>(0.0);
+        var grows = vec4<f32>(0.0);
+        // Near the camera the cover says what grows, as its plants do: grass gives out
+        // under the trees to leaf litter, and moss grows round their feet. It fades back to
+        // the mesh's own answer at the map's edge.
+        var litter = 0.0;
+        var moss = 0.0;
+        if ground.cover_on != 0u {
+            let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
+            let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
+            let map = textureSampleLevel(cover_map, cover_sampler, at, 0.0);
+            grows.r = mix(grows.r, min(grows.r, map.r), inside);
+            grows.g = mix(grows.g, map.g, inside);
+            litter = map.b * inside;
+            moss = map.a * inside;
+        }
         let n = normalize(in.world_normal);
         let gx = dpdx(world);
         let gy = dpdy(world);
-        var ground_is = layer(SOIL, 1.0, colour * (0.9 + 0.2 * blotch), world, gx, gy, n);
+        // Under trees the soil is fallen leaves, browner than the open ground's.
+        let litter_colour = vec3<f32>(0.15, 0.09, 0.045);
+        var ground_is = layer(SOIL, 1.0, mix(colour, litter_colour, litter) * (0.9 + 0.2 * blotch), world, gx, gy, n);
         if steep > 0.0 {
             ground_is = over(ground_is, layer(ROCK, 1.0, ground.steep.rgb, world, gx, gy, n), steep);
         }
@@ -195,6 +220,13 @@ fn fragment(
             let near = layer(GRASS, 1.0, tint, world, gx, gy, n);
             let far = layer(GRASS, 3.7, tint, world + 11.0, gx, gy, n);
             ground_is = over(ground_is, over(near, far, 0.25 + 0.4 * blotch), grass);
+        }
+
+        let mossy = smoothstep(0.25, 0.75, moss + (blotch - 0.5) * 0.5) * (1.0 - steep);
+        if mossy > 0.0 {
+            // Moss: the grass's texture, small and deep green, in soft patches.
+            let moss_colour = vec3<f32>(0.05, 0.09, 0.02) * (0.8 + 0.4 * fleck);
+            ground_is = over(ground_is, layer(GRASS, 0.55, moss_colour, world + 5.0, gx, gy, n), mossy);
         }
 
         let rock = smoothstep(0.2, 0.4, grows.b);

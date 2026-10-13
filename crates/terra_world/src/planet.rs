@@ -304,6 +304,28 @@ pub struct GroundExtension {
     color: Option<Handle<Image>>,
     #[texture(103, dimension = "2d_array")]
     normal: Option<Handle<Image>>,
+    /// What covers the ground near the camera, from its cover: from a point in the world
+    /// to its place on the map.
+    #[uniform(100)]
+    cover_from_world: Mat4,
+    /// Whether there is a cover map to read.
+    #[uniform(100)]
+    cover_on: u32,
+    #[texture(104)]
+    #[sampler(105)]
+    cover_map: Option<Handle<Image>>,
+}
+
+/// What covers the ground near the camera, painted by the ground cover (`cover`) for the
+/// ground to draw under it, as Horizon Zero Dawn's placement paints its terrain: grass in
+/// red, how lush in green, forest floor (leaf litter) in blue, moss in alpha. The ground
+/// owns the question; the cover answers it.
+#[derive(Resource, Clone, Default)]
+pub struct GroundCoverMap {
+    pub image: Option<Handle<Image>>,
+    /// From a point in the world to the map: its x and y are where on the picture, from 0
+    /// to 1.
+    pub from_world: Mat4,
 }
 
 /// The ground's textures (D14): real soil, grass, rock and sand, each tinted by the
@@ -349,7 +371,12 @@ impl MaterialExtension for GroundExtension {
 }
 
 impl GroundExtension {
-    fn new(planet: &Planet, tweaks: &Tweaks, textures: &GroundTextures) -> Self {
+    fn new(
+        planet: &Planet,
+        tweaks: &Tweaks,
+        textures: &GroundTextures,
+        cover: &GroundCoverMap,
+    ) -> Self {
         let radius_m = planet.radius_m();
         GroundExtension {
             radius_m,
@@ -374,6 +401,10 @@ impl GroundExtension {
             textured: (tweaks.ground_cover > 0.0) as u32,
             color: Some(textures.color.clone()),
             normal: Some(textures.normal.clone()),
+            cover_from_world: cover.from_world,
+            cover_on: cover.image.is_some() as u32,
+            // Bevy's blank picture stands in for a map until there is one.
+            cover_map: Some(cover.image.clone().unwrap_or_default()),
         }
     }
 }
@@ -444,6 +475,7 @@ pub fn plugin(app: &mut App) {
     app.insert_resource(planet)
         .insert_resource(start)
         .insert_resource(tweaks)
+        .init_resource::<GroundCoverMap>()
         .insert_resource(GlobalAmbientLight {
             brightness: 120.0,
             ..default()
@@ -460,8 +492,11 @@ pub fn plugin(app: &mut App) {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            apply_tweaks
-                .run_if(resource_changed::<Tweaks>.or_eager(resource_exists_and_changed::<Sky>)),
+            apply_tweaks.run_if(
+                resource_changed::<Tweaks>
+                    .or_eager(resource_exists_and_changed::<Sky>)
+                    .or_eager(resource_changed::<GroundCoverMap>),
+            ),
         );
 }
 
@@ -483,7 +518,7 @@ fn setup(
             reflectance: 0.2,
             ..default()
         },
-        extension: GroundExtension::new(&planet, &tweaks, &textures),
+        extension: GroundExtension::new(&planet, &tweaks, &textures, &GroundCoverMap::default()),
     });
     commands.insert_resource(textures);
     // The ground itself is drawn in chunks, by `terrain`, with this look.
@@ -545,6 +580,7 @@ fn apply_tweaks(
     mut ground_materials: ResMut<Assets<GroundMaterial>>,
     mut water_materials: ResMut<Assets<WaterMaterial>>,
     textures: Res<GroundTextures>,
+    cover: Res<GroundCoverMap>,
 ) {
     let toward_sun = tweaks.sun_direction.normalize_or(Vec3::Y);
     sun.0.color = tweaks.sun_color;
@@ -560,7 +596,7 @@ fn apply_tweaks(
 
     // The ground changes only when its tweaks do, not with the sun, so it is left alone
     // otherwise: a changed material is prepared again, and every chunk drawn with it.
-    let ground = GroundExtension::new(&planet, &tweaks, &textures);
+    let ground = GroundExtension::new(&planet, &tweaks, &textures, &cover);
     let stale: Vec<_> = ground_materials
         .iter()
         .filter(|(_, material)| material.extension != ground)

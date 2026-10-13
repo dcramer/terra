@@ -35,6 +35,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - Design decisions (what the game is: gameplay, art, scope) belong to the developers. Give a recommendation, mark it Open, and don't build on it. When a developer thinks out loud, that is input, not a decision, unless they say it is settled.
 - Technical decisions (engine, architecture, tooling, workflow) are yours: decide, record the reason, and keep going. The developers can overrule.
 - **Say who decided.** The By column is Developers or Agent. An agent's decision is soft: another agent may change it with a reason and a log line, without asking; a developer's decision is changed only by the developers. A choice that other work will build on gets a row, even a small one; one left only in chat or code didn't happen.
+- **Revisit what proves wrong.** Nothing decided is fixed for good. When a decision, or something built on one, turns out wrong or inefficient, say so with the evidence and change it: an agent's decision directly, with a reason and a log line; a developer's by raising it with them and a recommendation.
 - When a decision is made or changes, update its row and every doc it affects in the same change, and add a line to the log at the bottom. A new decision takes the next free number, goes in its area's section, with the Owner column saying Design or Tech, the By column saying who made it, and the developers' own words in the Why column. `cargo xtask check` checks the table's shape and that every decision cited exists.
 
 ## How we work
