@@ -6,8 +6,8 @@
 //! and west lays whole courses, two to a cube; a row running north and south lies half a
 //! course higher, with a split log at its foot and on top, so where two meet their logs
 //! interlock without either knowing of the other. A cube with rows both ways is a corner,
-//! a T or a cross, and its logs run past it into the open air; a row ending with nothing
-//! across it is cut flush. Openings, cubes cut open or glazed, cut the courses through
+//! a T or a cross, and its logs run through it to its outer face, no further, so nothing
+//! leaves the grid; a row ending with nothing across it is cut flush. Openings, cubes cut open or glazed, cut the courses through
 //! them, which end at a frame of boards. A cube with nothing beside it either way is a
 //! post. Under a pitched roof the courses carry on up, shortening to the ridge. The
 //! pieces come out in the order they go in: from the bottom up.
@@ -42,7 +42,8 @@ pub struct LogKit {
     /// How far apart the courses are; less than the diameter, as logs are scribed to sit
     /// into one another. Must divide the storey.
     pub course: f32,
-    /// How far a log runs past the wall it crosses at a corner.
+    /// How far a log runs past the corner cube it crosses at, beyond the grid. None, so
+    /// that every piece stays inside its cubes and anything can be built against it.
     pub overhang: f32,
     /// The longest wall one log spans, the longest a tree gives (D174); the ends that run
     /// past corners come with it.
@@ -57,7 +58,7 @@ pub struct LogKit {
     pub roughness: f32,
     /// Knots for every metre of log, on average.
     pub knots: f32,
-    /// How far a corner log's end may differ from the others', in metres.
+    /// How far short of the others' a corner log's end may stop, in metres.
     pub ragged: f32,
     /// Whether there is daub in the groove between courses.
     pub chinking: bool,
@@ -175,7 +176,7 @@ impl Default for LogKit {
             pattern: Pattern::Logs,
             diameter: 0.3,
             course: 0.25,
-            overhang: 0.25,
+            overhang: 0.0,
             longest: 4.0,
             facets: (9, 11),
             taper: 0.07,
@@ -278,6 +279,24 @@ pub enum Piece {
 }
 
 impl Piece {
+    /// The box it fills in a wall or floor, if it stands in the base's cubes: not a door
+    /// or window, which is not part of the plan, nor a roof's covering or a footing in the
+    /// ground.
+    pub fn bounds(&self) -> Option<(Vec3, Vec3)> {
+        match *self {
+            Piece::Log { from, to, .. } => {
+                let r = Vec3::splat(0.15);
+                Some((from.min(to) - r, from.max(to) + r))
+            }
+            Piece::Board { min, max } | Piece::Floor { min, max } => Some((min, max)),
+            Piece::Stone { centre, size, .. } => Some((centre - size * 0.5, centre + size * 0.5)),
+            Piece::Opening { .. }
+            | Piece::Footing { .. }
+            | Piece::Shakes { .. }
+            | Piece::Ridge { .. } => None,
+        }
+    }
+
     /// The lowest point of it, which orders the pieces as they go in.
     fn bottom(&self) -> f32 {
         match self {
@@ -541,9 +560,9 @@ fn courses(
                 let open = walls.open_beyond(axis.cube(row, beyond, cube.y));
                 match next {
                     Spot::Hole => -kit.frame,
+                    // Uneven, but never past the overhang: short of it by up to `ragged`.
                     Spot::Nothing if corner && open => {
-                        let ragged = (unit(hash(&[seed, end as u32, which])) - 0.5) * 2.0;
-                        kit.overhang + ragged * kit.ragged
+                        kit.overhang - unit(hash(&[seed, end as u32, which])) * kit.ragged
                     }
                     _ => 0.0,
                 }
@@ -1567,21 +1586,34 @@ mod tests {
     }
 
     #[test]
-    fn a_room_has_a_dozen_logs_a_wall_a_side_and_its_corners_run_past() {
+    fn a_room_has_a_dozen_logs_a_wall_a_side_and_stays_inside_its_cubes() {
         let layout = lay(&cabin(), &kit());
         let logs = logs(&layout);
         // Walls running east and west lay 12 courses; the others 11 and a split log at
         // the foot and on top.
         assert_eq!(logs.len(), 2 * 12 + 2 * 13, "{logs:?}");
         assert_eq!(logs.iter().filter(|l| l.2 != Split::Whole).count(), 4);
-        // The south wall, the row of cubes from z = 2.5 to 3, runs past both corners.
+        // The south wall, the row of cubes from z = 2.5 to 3, runs through both corners
+        // to their outer faces, a little short of them here and there, and no further.
         let south: Vec<_> = logs
             .iter()
             .filter(|(from, to, _)| from.z == 2.75 && to.z == 2.75)
             .collect();
         assert_eq!(south.len(), 12);
         for (from, to, _) in south {
-            assert!(from.x < -0.2 && to.x > 4.2, "{from} {to}");
+            assert!(
+                from.x >= 0.0 && from.x < 0.1 && to.x <= 4.0 && to.x > 3.9,
+                "{from} {to}"
+            );
+        }
+        // Nothing leaves the cubes: four metres by three.
+        for (from, to, _) in &logs {
+            for end in [from, to] {
+                assert!(
+                    (0.0..=4.0).contains(&end.x) && (0.0..=3.0).contains(&end.z),
+                    "{end}"
+                );
+            }
         }
     }
 
@@ -1718,8 +1750,6 @@ mod tests {
                     );
                 }
             }
-            // The corners' top courses still run past, where the roof leaves room.
-            assert!(logs.iter().any(|(from, _, _)| from.x < 0.0));
         }
     }
 

@@ -484,6 +484,22 @@ impl Base {
         self.cube(at).is_some_and(|cube| cube.fill != Fill::Open)
     }
 
+    /// A base of these cubes and roofs, with its walls and rooms worked out.
+    fn from_cubes(cubes: BTreeMap<[i32; 3], Cube>, sections: Vec<RoofSection>) -> Base {
+        let mut base = Base {
+            cubes,
+            sections,
+            ..Base::default()
+        };
+        base.work_out();
+        base
+    }
+
+    /// Whether anything stands at a place, counted in cubes along the floor.
+    pub fn occupied(&self, x: i32, z: i32) -> bool {
+        self.columns.contains_key(&[x, z])
+    }
+
     /// Applies an operation. Returns whether it changed anything.
     pub fn apply(&mut self, op: BuildOp) -> bool {
         let before = self.cubes.clone();

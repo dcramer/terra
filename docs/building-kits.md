@@ -73,16 +73,16 @@ Today the log is made in code from the kit's numbers. A kit can name a log model
 
 **Courses.** Logs 0.3 m thick (D175), centred in a wall a cube thick and laid 0.25 m apart, so they sit into one another: two courses to a cube, 12 in a 3 m storey, the dozen logs building.md expects. Walls running east to west and walls running north to south are half a course apart, which is how logs interlock at a corner. Walls on one axis start with a split log at the foot and finish with one on top, as real cabins do. Because it goes by axis, every corner, T and cross interlocks the same way, with nothing to work out between walls.
 
-**How walls meet.** A wall is a straight run of log cubes (D181). A cube with runs both ways is a corner, a T or a cross; a run that stops is a free end. Logs run past a corner only into the open air, never into a room. Each end of a wall is one of these:
+**How walls meet.** A wall is a straight run of log cubes (D181). A cube with runs both ways is a corner, a T or a cross; a run that stops is a free end. Logs run through a corner to its cube's outer face and no further, a few centimetres short here and there, so nothing leaves the grid and anything can be built against them (2026-10-12; they ran 0.25 m past, which got in the way of whatever stood beside them). Each end of a wall is one of these:
 
 | Where | Its logs | |
 |---|---|---|
 | Free end | Cut flush at the last cube | |
-| Corner (L) | Both walls run 0.25 m past the corner | The notched ends alternate, a course each |
-| T | The through wall runs on; the stem runs through it and sticks out the far side | |
+| Corner (L) | Both walls run through the corner cube to its outer face | The ends alternate, a course each |
+| T | The through wall runs on; the stem runs into it and ends at its far face | |
 | Cross | Both run through | |
 | In line, at a post | The two meet end to end under an upright log covering the seam | As building.md's splice |
-| Corner, the other wall built first | The built wall keeps its flush ends; the new wall runs past | A butt-and-pass corner, also real |
+| Corner, the other wall built first | The built wall keeps its flush ends; the new wall runs through to the corner's face | A butt-and-pass corner, also real |
 
 The last row is what freezing a wall's layout once a piece is in means (building-tech.md). Walls on the two axes never share a course, so a wall laid later never has to move a log already built. A corner drawn in one go, as a room or a loop of walls is, always gets the notched corner.
 
@@ -132,7 +132,7 @@ The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free 
 cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet --time 16 --vantage 13,9,-6,13,0.5,-26.5 --shot out/corners.png
 ```
 
-Everything built is laid in logs by default, the player's own building and the village's houses too; `--walls plain` lays it plain. The kit's file is read again when it is saved, so the look can be tuned with the sheet running. Tests in `terra_build` check the layout without a picture: the courses fill the storey, walls either way never share a course, corners run past and free ends are flush, a door cuts the courses it crosses and is framed, long walls stagger their seams, and gables shorten toward the ridge.
+Everything built is laid in logs by default, the player's own building and the village's houses too; `--walls plain` lays it plain. The kit's file is read again when it is saved, so the look can be tuned with the sheet running. Tests in `terra_build` check the layout without a picture: the courses fill the storey, walls either way never share a course, corners interlock and nothing leaves its cubes, free ends are flush, a door cuts the courses it crosses and is framed, long walls stagger their seams, and gables shorten toward the ridge.
 
 ![The kit sheet's corners and T's: built, going up, and as a blueprint](images/log-kit-sheet-2026-10-12.png)
 

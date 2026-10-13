@@ -6,14 +6,14 @@
 // id          the kind of construction it lays, the number its cubes carry (D181)
 // diameter    how thick a log is, in a wall a cube thick (D175, D181)
 // course      how far apart the courses are; it must divide the 3 m storey
-// overhang    how far a log runs past the wall it crosses at a corner
+// overhang    how far a log runs past its corner cube; none, so it stays in the grid
 // longest     the longest wall one log spans, as long as a tree gives (D174)
 // facets      how many sides a log's section has, from the first to the second
 // taper       how much thicker one end is than the middle, as a fraction
 // bend        how far a log bows from straight, at most
 // roughness   how uneven a log's section is, as a fraction of its radius
 // knots       knots for every metre of log, on average
-// ragged      how far a corner log's end may differ from the others'
+// ragged      how far short of the others' a corner log's end may stop
 // chinking    whether there is daub between the courses
 // frame       how wide the boards round an opening are
 // eaves       how far a roof over these walls overhangs them (D175)
@@ -24,7 +24,7 @@
     id: 1,
     diameter: 0.3,
     course: 0.25,
-    overhang: 0.25,
+    overhang: 0.0,
     longest: 4.0,
     facets: (9, 11),
     taper: 0.07,

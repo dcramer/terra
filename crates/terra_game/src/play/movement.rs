@@ -141,7 +141,7 @@ fn walk(
             .unwrap_or(&site);
         let to_base = site.frame.compute_affine().inverse();
         let from_base = site.frame.compute_affine();
-        let walked = site.base.walk(
+        let walked = site.walkable().walk(
             to_base.transform_point3(feet),
             to_base.transform_point3(target),
             &walker,
@@ -208,7 +208,7 @@ fn walk(
         // the true ground there sinks the player into the drawn one or lifts them off it.
         let ground = planet.ground_at(target).length();
         let held_at = match offered {
-            Some(floor) if site.base.ceiling(before).is_some() => floor,
+            Some(floor) if site.walkable().ceiling(before).is_some() => floor,
             Some(surface) => surface.max(ground),
             None => ground,
         };
@@ -221,7 +221,7 @@ fn walk(
             motion.airborne += dt;
         }
         // A ceiling stops a jump.
-        if let Some(ceiling) = site.base.ceiling(before)
+        if let Some(ceiling) = site.walkable().ceiling(before)
             && motion.rising > 0.0
             && to_base.transform_point3(target).y + walker.height > ceiling
         {
@@ -231,7 +231,7 @@ fn walk(
         }
 
         let indoors = site
-            .base
+            .walkable()
             .ceiling(to_base.transform_point3(target))
             .is_some();
         if indoors != motion.indoors {

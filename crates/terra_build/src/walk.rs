@@ -5,8 +5,13 @@
 //! glass cubes stop them, while openings let them through. Coordinates are the base's own,
 //! in metres, with `y` at the feet.
 
+use crate::logs::Piece;
 use crate::{Base, CELL_M, Fill, STOREY_M};
 use glam::{IVec2, IVec3, Vec3};
+use std::collections::BTreeMap;
+
+/// How far into a cube a piece must reach to stand in it.
+const SLIVER_M: f32 = 0.05;
 
 /// The size of something walking through a base.
 #[derive(Clone, Copy, Debug)]
@@ -36,6 +41,36 @@ fn column_at(point: Vec3) -> IVec2 {
 }
 
 impl Base {
+    /// The base as far as it stands while it goes up: only the cubes the pieces in so far
+    /// stand in, so a plan's ghost is walked through and what is built stops a walker
+    /// (docs/building-kits.md). Its roofs only once they are up.
+    pub fn standing<'a>(&self, done: impl IntoIterator<Item = &'a Piece>, roofs: bool) -> Base {
+        let mut cubes = BTreeMap::new();
+        for (min, max) in done.into_iter().filter_map(Piece::bounds) {
+            // The cubes it fills more than a sliver of.
+            let low = ((min + SLIVER_M) / CELL_M).floor().as_ivec3();
+            let high = ((max - SLIVER_M) / CELL_M).floor().as_ivec3();
+            for x in low.x..=high.x {
+                for y in low.y..=high.y {
+                    for z in low.z..=high.z {
+                        let at = IVec3::new(x, y, z);
+                        if let Some(cube) = self.cube(at) {
+                            cubes.insert(at.to_array(), cube);
+                        }
+                    }
+                }
+            }
+        }
+        Base::from_cubes(
+            cubes,
+            if roofs {
+                self.sections().to_vec()
+            } else {
+                Vec::new()
+            },
+        )
+    }
+
     /// The layers of a column of cubes that are not openings, with their bottoms and tops.
     fn solid_layers(&self, column: IVec2) -> impl Iterator<Item = (f32, f32)> + '_ {
         self.column(column.x, column.y)
@@ -171,6 +206,42 @@ mod tests {
             at = base.walk(at, Vec3::new(target.x, at.y, target.z), &walker());
         }
         at
+    }
+
+    /// A wall of logs four metres long, as the log kit lays it, east and west.
+    fn log_wall() -> (Base, Vec<Piece>) {
+        let kit = crate::logs::LogKit::default();
+        let mut base = Base::default();
+        for x in 0..8 {
+            base.apply(BuildOp::SetWall {
+                tile: [x, 0, 4],
+                panel: Some(Panel::Solid),
+                kind: kit.kind(),
+            });
+        }
+        let pieces = crate::logs::lay(&base, &kit).pieces;
+        (base, pieces)
+    }
+
+    #[test]
+    fn a_planned_wall_is_walked_through_and_a_built_one_stops_you() {
+        let (base, pieces) = log_wall();
+        let (from, to) = (Vec3::new(2.0, 0.0, 0.5), Vec3::new(2.0, 0.0, 4.0));
+        let plan = base.standing([], false);
+        assert!((stroll(&plan, from, to) - to).length() < 0.05);
+        let built = base.standing(&pieces, true);
+        assert!(stroll(&built, from, to).z < 2.0);
+        assert_eq!(built.cubes().count(), base.cubes().count());
+        // With only its first course in, it stands in the bottom layer of cubes alone.
+        let low: Vec<&Piece> = pieces
+            .iter()
+            .filter(|p| p.bounds().is_some_and(|(_, max)| max.y < 0.45))
+            .collect();
+        assert!(
+            base.standing(low.iter().copied(), false)
+                .cubes()
+                .all(|(at, _)| at.y == 0)
+        );
     }
 
     #[test]

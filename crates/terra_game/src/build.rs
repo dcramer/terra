@@ -68,6 +68,9 @@ pub(super) struct Build {
     /// they stand.
     pub kits: Option<Arc<Kits>>,
     pub shown: Shown,
+    /// What stands of it while it goes up, which is what a walker meets: `None` once it is
+    /// all built, when that is the base itself.
+    standing: Option<Base>,
     /// What a kit's pieces and materials are drawn under.
     pieces: Entity,
     /// The kit's pieces' models, once loaded, and the copies of them placed.
@@ -305,6 +308,7 @@ impl Build {
             steps,
             kits: look.kits.clone(),
             shown: Shown::Built,
+            standing: None,
             pieces,
             kit_pieces: look.kit_pieces.clone(),
             model_entities: Vec::new(),
@@ -335,34 +339,40 @@ impl Build {
             .filter_map(|ramp| ramp.height_at(point))
             .filter(|&height| height <= point.y + walker.step_up)
             .max_by(|a, b| a.total_cmp(b));
-        match (self.base.support(point, walker), ramp) {
+        match (self.walkable().support(point, walker), ramp) {
             (Some(floor), Some(ramp)) => Some(floor.max(ramp)),
             (floor, ramp) => floor.or(ramp),
         }
     }
 
-    /// Whether a point in the world is under the base, or within a margin of it.
+    /// What a walker meets: what stands of the base so far.
+    pub(super) fn walkable(&self) -> &Base {
+        self.standing.as_ref().unwrap_or(&self.base)
+    }
+
+    /// Whether a point in the world is under the base, or within a margin of it: in a room,
+    /// on a floor, or by any wall, such as one standing alone.
     pub(super) fn covers(&self, point: Vec3, margin: f32) -> bool {
         let local = self
             .frame
             .compute_affine()
             .inverse()
             .transform_point3(point);
-        let reach = [-margin, 0.0, margin];
-        reach.iter().any(|dx| {
-            reach.iter().any(|dz| {
-                let tile = ((local + Vec3::new(*dx, 0.0, *dz)) / CELL_M)
-                    .floor()
-                    .as_ivec3();
-                self.base.contains(tile.with_y(0)) || self.base.has_floor(tile.with_y(0))
+        // In a room or on a floor, or within the margin of anything standing: every column
+        // of cubes in reach is looked at, so a wall a cube thick is never missed.
+        let at = (local / CELL_M).floor().as_ivec3();
+        let reach = (margin / CELL_M).ceil() as i32;
+        self.base.contains(at.with_y(0))
+            || self.base.has_floor(at.with_y(0))
+            || (-reach..=reach)
+                .any(|dx| (-reach..=reach).any(|dz| self.base.occupied(at.x + dx, at.z + dz)))
+            || self.ramps.iter().any(|ramp| {
+                let offset = local - ramp.top;
+                let along = offset.dot(ramp.outward);
+                let across = offset.dot(ramp.outward.cross(Vec3::Y));
+                (-margin..=ramp.length + margin).contains(&along)
+                    && across.abs() <= ramp.width * 0.5 + margin
             })
-        }) || self.ramps.iter().any(|ramp| {
-            let offset = local - ramp.top;
-            let along = offset.dot(ramp.outward);
-            let across = offset.dot(ramp.outward.cross(Vec3::Y));
-            (-margin..=ramp.length + margin).contains(&along)
-                && across.abs() <= ramp.width * 0.5 + margin
-        })
     }
 
     /// Moves the build to stand somewhere else, as when a base is begun where its claim
@@ -954,12 +964,22 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
                 .map(|(kit, layout)| (kit, layout.pieces.as_slice()))
                 .collect();
             pieces::place(commands, site, &laid);
+            site.standing = match site.shown {
+                Shown::Built => None,
+                shown => Some(site.base.standing(
+                    laid.iter().flat_map(|&(_, pieces)| {
+                        pieces[..pieces::done(pieces.len(), shown)].iter()
+                    }),
+                    false,
+                )),
+            };
             let models = site.kit_pieces.clone();
             let drawn = draw_pieces(&laid, site.shown, models.as_deref());
             (mesh, drawn)
         }
         None => {
             pieces::place(commands, site, &[]);
+            site.standing = None;
             (site.base.mesh(|_| None), Default::default())
         }
     };
