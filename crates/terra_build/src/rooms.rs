@@ -47,11 +47,12 @@ impl Base {
     }
 
     /// Works out the rooms: on each storey, the tiles that cannot be reached from beyond
-    /// the walls without passing through one, grouped by which reach each other.
+    /// the walls without passing through one, grouped by which reach each other. Only
+    /// walls built whole close a room in; a plan, or a wall going up, does not.
     pub(crate) fn find_rooms(&mut self) {
         let mut rooms = BTreeMap::new();
         let mut storeys: BTreeMap<i32, (IVec2, IVec2)> = BTreeMap::new();
-        for &[x, y, z] in self.walls.keys() {
+        for &[x, y, z] in &self.enclosing {
             let at = IVec2::new(x, z);
             storeys
                 .entry(y)
@@ -66,7 +67,7 @@ impl Base {
             // One tile wider all round, so the open air surrounds everything.
             let (low, high) = (low - IVec2::ONE, high + IVec2::ONE);
             let within = |cell: IVec2| cell.cmpge(low).all() && cell.cmple(high).all();
-            let open = |cell: IVec2| !self.walls.contains_key(&[cell.x, y, cell.y]);
+            let open = |cell: IVec2| !self.enclosing.contains(&[cell.x, y, cell.y]);
             let step = |cell: IVec2, side: Side| {
                 let offset = side.offset();
                 cell + IVec2::new(offset.x, offset.z)

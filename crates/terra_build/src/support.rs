@@ -53,6 +53,12 @@ impl Base {
     /// Every cube with something in it that is not joined to the ground, sorted: none,
     /// so long as the rules held.
     pub fn floating(&self) -> Vec<IVec3> {
+        self.floating_on(&self.ground)
+    }
+
+    /// Every cube with something in it that would not be joined to the ground were the
+    /// ground as given, sorted.
+    pub fn floating_on(&self, ground: &crate::Ground) -> Vec<IVec3> {
         let ins: BTreeSet<[i32; 3]> = self
             .cubes()
             .filter(|(_, cube)| cube.is_in())
@@ -62,7 +68,7 @@ impl Base {
         let mut frontier: Vec<IVec3> = ins
             .iter()
             .map(|&at| IVec3::from_array(at))
-            .filter(|&at| self.grounded(at))
+            .filter(|&at| ground.reaches(at))
             .collect();
         reached.extend(frontier.iter().map(|at| at.to_array()));
         while let Some(at) = frontier.pop() {

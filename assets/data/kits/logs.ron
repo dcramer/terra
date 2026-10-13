@@ -20,6 +20,10 @@
 // models      the props set into it, from tools/props (D177): a door and a window
 // textures    each material's textures (D14; assets/materials): where, how many metres
 //             one copy covers, and how deep its parallax reads
+// cost        what building it takes (D139): a cube fills in so many steps, each taking
+//             so much of each item, in fractions (item, numerator, denominator), so
+//             a log of Wood a sixteenth a step goes in two courses; and each stage of a
+//             roof cell over these walls
 (
     id: 1,
     diameter: 0.3,
@@ -48,6 +52,7 @@
         Stone: (path: "materials/rustic_stone_wall", metres: (1.52, 1.52), depth: 0.03),
         Floor: (path: "materials/old_wood_floor", metres: (3.0, 3.0)),
     },
+    cost: (steps: 2, step: [("Wood", 1, 16)], roof: [("Wood", 1, 32)]),
     colours: (
         wood: (0.62, 0.43, 0.26),
         light: (0.74, 0.56, 0.37),   // WoodLight

@@ -22,6 +22,9 @@ pub struct Snapshot {
     pub replacing: Vec<([i32; 3], Replacement)>,
     pub roofs: Vec<(RoofId, Roof)>,
     pub props: Vec<Prop>,
+    /// What was paid for each prop, by its lowest cube.
+    #[serde(default)]
+    pub prop_paid: Vec<([i32; 3], crate::Bill)>,
     pub ground: Vec<Sample>,
 }
 
@@ -52,6 +55,11 @@ impl Base {
                 .map(|(&id, roof)| (id, roof.clone()))
                 .collect(),
             props: self.props.values().copied().collect(),
+            prop_paid: self
+                .prop_paid
+                .iter()
+                .map(|(&at, paid)| (at, paid.clone()))
+                .collect(),
             ground: self.ground.samples().collect(),
         }
     }
@@ -71,6 +79,7 @@ impl Base {
                 .iter()
                 .map(|prop| (prop.min, *prop))
                 .collect(),
+            prop_paid: snapshot.prop_paid.iter().cloned().collect(),
             ..Base::default()
         };
         for sample in &snapshot.ground {

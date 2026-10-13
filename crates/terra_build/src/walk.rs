@@ -77,15 +77,31 @@ impl Base {
     /// bottoms and tops: each cube to its fill, as high as its shape reaches. Openings and
     /// planned cubes with nothing in them are walked through.
     fn solid_layers(&self, column: IVec2) -> impl Iterator<Item = (f32, f32)> + '_ {
-        self.column(column.x, column.y).filter_map(move |layer| {
-            let cube = self.cube(IVec3::new(column.x, layer, column.y))?;
-            if !cube.is_in() {
-                return None;
-            }
-            let bottom = layer as f32 * CELL_M;
-            let fill = f32::from(cube.level()) / f32::from(FULL);
-            Some((bottom, bottom + CELL_M * fill.min(cube.shape.height())))
-        })
+        // A door or shutters fitted and shut stops a walker; open, it lets them by.
+        let shut = self
+            .props()
+            .filter(move |prop| {
+                !prop.open
+                    && (prop.min[0]..=prop.max[0]).contains(&column.x)
+                    && (prop.min[2]..=prop.max[2]).contains(&column.y)
+            })
+            .map(|prop| {
+                (
+                    prop.min[1] as f32 * CELL_M,
+                    (prop.max[1] + 1) as f32 * CELL_M,
+                )
+            });
+        self.column(column.x, column.y)
+            .filter_map(move |layer| {
+                let cube = self.cube(IVec3::new(column.x, layer, column.y))?;
+                if !cube.is_in() {
+                    return None;
+                }
+                let bottom = layer as f32 * CELL_M;
+                let fill = f32::from(cube.level()) / f32::from(FULL);
+                Some((bottom, bottom + CELL_M * fill.min(cube.shape.height())))
+            })
+            .chain(shut)
     }
 
     /// The height of whatever would hold up feet at `point`: the highest top of a cube, or

@@ -40,6 +40,7 @@ pub mod logs;
 pub mod masonry;
 mod mesh;
 pub mod ops;
+pub mod order;
 pub mod rooms;
 pub mod save;
 pub mod support;
@@ -51,6 +52,7 @@ pub use cubes::{Cube, Cubes, Facing, Fill, Kind, PartId, Pending, Replacement, S
 pub use example::example;
 pub use ground::{Ground, Sample};
 pub use mesh::{BaseMesh, Surface};
+pub use order::Progress;
 pub use walk::Walker;
 
 use glam::{IVec2, IVec3, Vec3};
@@ -452,11 +454,16 @@ pub struct Base {
     replacing: BTreeMap<[i32; 3], Replacement>,
     /// Fitted props, by their lowest cube.
     props: BTreeMap<[i32; 3], Prop>,
+    /// What was paid for each fitted prop, which taking it out gives back.
+    prop_paid: BTreeMap<[i32; 3], Bill>,
     ground: Ground,
     /// Worked out from the roofs: their sections, in order.
     sections: Vec<RoofSection>,
     /// Worked out from the cubes: each wall tile and what fills it.
     walls: BTreeMap<[i32; 3], Panel>,
+    /// The wall tiles that close a room in: every cube of them built (construction-001:
+    /// a plan, or a wall going up, encloses nothing).
+    enclosing: BTreeSet<[i32; 3]>,
     /// Each column of cubes, by where it stands, and its layers.
     columns: BTreeMap<[i32; 2], BTreeSet<i32>>,
     /// Every tile the walls close in, and which room it is in.
@@ -862,6 +869,7 @@ impl Base {
         self.columns.clear();
         // A wall tile has cubes below its top layer.
         let mut tiles: BTreeMap<[i32; 3], Vec<Option<Fill>>> = BTreeMap::new();
+        let mut unfinished: BTreeSet<[i32; 3]> = BTreeSet::new();
         for (at, cube) in self.cubes.iter() {
             self.columns.entry([at.x, at.z]).or_default().insert(at.y);
             let storey = storey_of(at.y);
@@ -871,8 +879,16 @@ impl Base {
                     .entry([at.x, storey, at.z])
                     .or_insert_with(|| vec![None; STOREY_CUBES as usize])[step as usize] =
                     Some(cube.fill);
+                if !cube.is_built() {
+                    unfinished.insert([at.x, storey, at.z]);
+                }
             }
         }
+        self.enclosing = tiles
+            .keys()
+            .filter(|tile| !unfinished.contains(*tile))
+            .copied()
+            .collect();
         self.walls = tiles
             .into_iter()
             .map(|(tile, fills)| (tile, panel_of(&fills)))

@@ -861,20 +861,41 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
             Some(at) => Op::RemoveProp { at },
             None => fallback,
         },
-        _ => match pick(rng, &props) {
+        20 => match pick(rng, &props) {
             Some(at) => Op::SetOpen {
                 at,
                 open: rng.below(2) == 0,
             },
             None => fallback,
         },
+        21 => {
+            let bare = with(&|cube| cube.level() == 0 && cube.fill == Fill::Solid);
+            let Some(start) = pick(rng, &bare) else {
+                return fallback;
+            };
+            let cubes = run_from(rng, start, 3, |at| {
+                base.cube(at)
+                    .is_some_and(|cube| cube.level() == 0 && cube.fill == Fill::Solid)
+            });
+            Op::Open { cubes }
+        }
+        _ => {
+            let open = with(&|cube| cube.fill == Fill::Open);
+            let Some(start) = pick(rng, &open) else {
+                return fallback;
+            };
+            let cubes = run_from(rng, start, 3, |at| {
+                base.cube(at).is_some_and(|cube| cube.fill == Fill::Open)
+            });
+            Op::Close { cubes }
+        }
     }
 }
 
 /// What is in a base: each cube's steps, each roof cell's stages, each prop.
 fn value(base: &Base, rules: &Rules) -> Bill {
     let mut bill = Bill::default();
-    for (_, cube) in base.cubes() {
+    for (_, cube) in base.cubes().filter(|(_, cube)| cube.fill != Fill::Open) {
         let terms = base.terms(&cube);
         let steps = u64::from(cube.level() / terms.step());
         bill.add(&terms.per_step.times(steps));
@@ -999,8 +1020,8 @@ fn random_operations_keep_every_rule() {
                 yard.bodies = (0..3).map(|_| somewhere(&mut rng).to_array()).collect();
                 yard.items = (0..3).map(|_| somewhere(&mut rng).to_array()).collect();
             }
-            let roll = rng.below(24);
-            let undo = roll >= 21;
+            let roll = rng.below(26);
+            let undo = roll >= 23;
             let ops = if undo {
                 match undos.pop() {
                     Some(ops) => ops,
@@ -1130,8 +1151,210 @@ fn random_operations_keep_every_rule() {
         "FitProp",
         "RemoveProp",
         "SetOpen",
+        "Open",
+        "Close",
     ];
     for name in every {
         assert!(accepted.contains_key(name), "{name} was never accepted");
     }
+}
+
+/// A stone wall five cubes long and five high, built, with a doorway a cube wide and four
+/// high planned into it as an opening.
+fn wall_with_a_doorway(base: &mut Base, cx: &Context) {
+    let cubes: Vec<Planned> = (0..5)
+        .flat_map(|x| (0..5).map(move |y| [x, y, 0]))
+        .map(|at| Planned {
+            at,
+            shape: Shape::Whole,
+        })
+        .collect();
+    base.act(
+        &Op::LayPlan {
+            part: Some(PartId(0)),
+            kind: STONE,
+            cubes,
+            ground: Vec::new(),
+        },
+        cx,
+    )
+    .unwrap();
+    base.act(
+        &Op::Open {
+            cubes: line([2, 0, 0], IVec3::Y, 4),
+        },
+        cx,
+    )
+    .unwrap();
+    for y in 0..5 {
+        let course: Vec<[i32; 3]> = (0..5)
+            .map(|x| [x, y, 0])
+            .filter(|&[x, y, _]| !(x == 2 && y < 4))
+            .collect();
+        base.act(&Op::Fill { cubes: course }, cx).unwrap();
+    }
+}
+
+#[test]
+fn an_opening_is_planned_into_a_wall_and_a_door_fits_it_once_built() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    wall_with_a_doorway(&mut base, &cx);
+    // An opening is not filled, and is walked through.
+    assert_eq!(
+        base.act(
+            &Op::Fill {
+                cubes: vec![[2, 0, 0]]
+            },
+            &cx
+        ),
+        Err(Refusal::Opening(IVec3::new(2, 0, 0)))
+    );
+    let door = Prop {
+        kind: DOOR,
+        min: [2, 0, 0],
+        max: [2, 3, 0],
+        open: false,
+    };
+    base.act(&Op::FitProp(door), &cx).unwrap();
+    // Shut, it stops a walker; open, it lets them through.
+    let walker = Walker {
+        radius: 0.2,
+        ..Walker::default()
+    };
+    let (from, to) = (Vec3::new(1.25, 0.0, -0.3), Vec3::new(1.25, 0.0, 0.3));
+    assert!(base.walk(from, to, &walker).z < 0.0);
+    base.act(
+        &Op::SetOpen {
+            at: [2, 0, 0],
+            open: true,
+        },
+        &cx,
+    )
+    .unwrap();
+    assert!((base.walk(from, to, &walker) - to).length() < 1e-3);
+    // A fitted opening cannot be closed, and a closed one is planned again.
+    assert_eq!(
+        base.act(
+            &Op::Close {
+                cubes: vec![[2, 0, 0]]
+            },
+            &cx
+        ),
+        Err(Refusal::PropThere(IVec3::new(2, 0, 0)))
+    );
+    base.act(&Op::RemoveProp { at: [2, 0, 0] }, &cx).unwrap();
+    let closed = base
+        .act(
+            &Op::Close {
+                cubes: line([2, 0, 0], IVec3::Y, 4),
+            },
+            &cx,
+        )
+        .unwrap();
+    assert_eq!(base.cube(IVec3::new(2, 0, 0)).unwrap().level(), 0);
+    base.act_all(&closed.undo, &cx).unwrap();
+    assert_eq!(base.cube(IVec3::new(2, 0, 0)).unwrap().fill, Fill::Open);
+}
+
+#[test]
+fn a_prop_gives_back_what_was_paid_for_it_whatever_it_costs_now() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    wall_with_a_doorway(&mut base, &cx);
+    let door = Prop {
+        kind: DOOR,
+        min: [2, 0, 0],
+        max: [2, 3, 0],
+        open: false,
+    };
+    let fitted = base.act(&Op::FitProp(door), &cx).unwrap();
+    // Doors cost more now; taking this one out gives back what went in.
+    let mut dearer = rules.clone();
+    dearer
+        .props
+        .insert(DOOR, Bill::of("Door", Amount::whole(3)));
+    let taken = base
+        .act(&Op::RemoveProp { at: [2, 0, 0] }, &Context::free(&dearer))
+        .unwrap();
+    assert_eq!(taken.gave, fitted.took);
+    // And a snapshot keeps it.
+    base.act(&Op::FitProp(door), &cx).unwrap();
+    let read = Base::from_snapshot(&base.snapshot()).unwrap();
+    assert_eq!(read, base);
+}
+
+#[test]
+fn only_walls_built_whole_close_a_room_in() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    // A ring of wall tiles four by four, a storey high, planned.
+    let ring: Vec<[i32; 3]> = (0..4)
+        .flat_map(|x| (0..4).map(move |z| (x, z)))
+        .filter(|&(x, z)| x == 0 || x == 3 || z == 0 || z == 3)
+        .flat_map(|(x, z)| (0..6).map(move |y| [x, y, z]))
+        .collect();
+    base.act(
+        &Op::LayPlan {
+            part: Some(PartId(0)),
+            kind: STONE,
+            cubes: ring
+                .iter()
+                .map(|&at| Planned {
+                    at,
+                    shape: Shape::Whole,
+                })
+                .collect(),
+            ground: Vec::new(),
+        },
+        &cx,
+    )
+    .unwrap();
+    assert_eq!(base.tile_count(), 0, "a plan encloses nothing");
+    for y in 0..6 {
+        let course: Vec<[i32; 3]> = ring.iter().copied().filter(|at| at[1] == y).collect();
+        base.act(&Op::Fill { cubes: course }, &cx).unwrap();
+        let expected = if y < 4 { 0 } else { 4 };
+        assert_eq!(base.tile_count(), expected, "after layer {y}");
+    }
+}
+
+#[test]
+fn the_ground_is_sampled_again_unless_that_would_undermine_what_is_built() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    stone_wall(&mut base, 2, &cx);
+    // Dug a little under one end: still joined through the rest.
+    let one = vec![Sample {
+        column: [0, 0],
+        height_cm: -80,
+    }];
+    let done = base.act(&Op::Ground { samples: one }, &cx).unwrap();
+    assert_eq!(base.ground().height_cm([0, 0]), -80);
+    base.act_all(&done.undo, &cx).unwrap();
+    assert_eq!(base.ground().height_cm([0, 0]), 0);
+    // Dug from under all of it: refused.
+    let all: Vec<Sample> = (0..4)
+        .map(|x| Sample {
+            column: [x, 0],
+            height_cm: -80,
+        })
+        .collect();
+    assert_eq!(
+        base.act(&Op::Ground { samples: all }, &cx),
+        Err(Refusal::Undermines(IVec3::new(0, 0, 0)))
+    );
+    // Where nothing stands, there is nothing to keep.
+    let elsewhere = vec![Sample {
+        column: [9, 9],
+        height_cm: -80,
+    }];
+    assert_eq!(
+        base.act(&Op::Ground { samples: elsewhere }, &cx),
+        Err(Refusal::Unchanged)
+    );
 }

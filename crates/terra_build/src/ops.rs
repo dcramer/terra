@@ -89,6 +89,15 @@ pub enum Op {
     RemoveProp { at: [i32; 3] },
     /// Open or shut a fitted prop.
     SetOpen { at: [i32; 3], open: bool },
+    /// Make planned cubes with nothing in them, or cubes marked to be cut out and now
+    /// empty, an opening: part of the wall still, walked through, a hole a door or window
+    /// can be fitted into (construction-001, rule 7).
+    Open { cubes: Vec<[i32; 3]> },
+    /// Close openings with nothing fitted in them: planned cubes again, to be built.
+    Close { cubes: Vec<[i32; 3]> },
+    /// The ground under columns sampled again, after it was dug or filled
+    /// (construction-001, gap 3): refused if it would leave anything built unjoined.
+    Ground { samples: Vec<Sample> },
 }
 
 /// A claim's ground and its budget of planned cubes (D193).
@@ -210,6 +219,10 @@ pub enum Refusal {
     PropThere(IVec3),
     /// No hole of built walls fits it.
     NoHole,
+    /// It is not an opening.
+    NotOpen(IVec3),
+    /// The ground would go from under what is built.
+    Undermines(IVec3),
 }
 
 impl Refusal {
@@ -258,6 +271,8 @@ impl Refusal {
             Refusal::NoProp(_) => "There's nothing fitted there.".into(),
             Refusal::PropThere(_) => "A door or window is there.".into(),
             Refusal::NoHole => "It needs a hole in a built wall that fits it.".into(),
+            Refusal::NotOpen(_) => "That's not an opening.".into(),
+            Refusal::Undermines(_) => "That would dig out from under what is built.".into(),
         }
     }
 }
@@ -271,6 +286,9 @@ pub struct Done {
     pub undo: Vec<Op>,
 }
 
+/// A prop fitted, and what was paid for it.
+type Fitted = (Prop, Bill);
+
 /// An operation's checked effect, before it is applied.
 #[derive(Default)]
 struct Change {
@@ -279,7 +297,8 @@ struct Change {
     replacing: Vec<(IVec3, Option<Replacement>)>,
     ground: Vec<Sample>,
     roofs: Vec<(RoofId, Option<Roof>)>,
-    props: Vec<([i32; 3], Option<Prop>)>,
+    /// Props fitted, with what was paid for them, or taken out.
+    props: Vec<([i32; 3], Option<Fitted>)>,
     done: Done,
 }
 
@@ -318,13 +337,20 @@ impl Base {
             }
         }
         for (at, prop) in change.props {
-            let marks: Vec<IVec3> = match prop.as_ref().or(self.props.get(&at)) {
-                Some(prop) => prop.cubes().collect(),
-                None => Vec::new(),
-            };
+            let marks: Vec<IVec3> =
+                match prop.as_ref().map(|(prop, _)| prop).or(self.props.get(&at)) {
+                    Some(prop) => prop.cubes().collect(),
+                    None => Vec::new(),
+                };
             match prop {
-                Some(prop) => self.props.insert(at, prop),
-                None => self.props.remove(&at),
+                Some((prop, paid)) => {
+                    self.props.insert(at, prop);
+                    self.prop_paid.insert(at, paid);
+                }
+                None => {
+                    self.props.remove(&at);
+                    self.prop_paid.remove(&at);
+                }
             };
             for cube in marks {
                 self.cubes.mark(cube);
@@ -387,6 +413,9 @@ impl Base {
             Op::FitProp(prop) => self.fit_prop(prop, cx),
             Op::RemoveProp { at } => self.remove_prop(IVec3::from_array(*at), cx),
             Op::SetOpen { at, open } => self.set_open(IVec3::from_array(*at), *open, cx),
+            Op::Open { cubes } => self.open(cubes, cx),
+            Op::Close { cubes } => self.close(cubes, cx),
+            Op::Ground { samples } => self.resample(samples, cx),
         }
     }
 
@@ -503,9 +532,16 @@ impl Base {
         // What lays them again: a plan for each part and kind, and the carving marked.
         let mut plans: BTreeMap<(Option<PartId>, Kind), Vec<Planned>> = BTreeMap::new();
         let mut carved = Vec::new();
+        let mut opened = Vec::new();
         for &at in &named {
             let cube = self.there(at)?;
-            if cube.level() > 0 {
+            if cube.fill == Fill::Open {
+                // An opening goes with its plan, unless something is fitted in it.
+                if let Some(prop) = self.prop_in(at) {
+                    return Err(Refusal::PropThere(IVec3::from_array(prop.min)));
+                }
+                opened.push(at.to_array());
+            } else if cube.level() > 0 {
                 return Err(Refusal::InProgress(at));
             }
             match cube.pending {
@@ -544,6 +580,9 @@ impl Base {
                 cubes,
                 ground,
             });
+        }
+        if !opened.is_empty() {
+            change.done.undo.push(Op::Open { cubes: opened });
         }
         if !carved.is_empty() {
             change.done.undo.push(Op::Carve { cubes: carved });
@@ -950,7 +989,7 @@ impl Base {
             return Err(Refusal::Materials(took));
         }
         let mut change = Change::default();
-        change.props.push((prop.min, Some(*prop)));
+        change.props.push((prop.min, Some((*prop, took.clone()))));
         change.done.took = took;
         change.done.undo = vec![Op::RemoveProp { at: prop.min }];
         Ok(change)
@@ -961,7 +1000,8 @@ impl Base {
         claimed(at, cx)?;
         let mut change = Change::default();
         change.props.push((prop.min, None));
-        change.done.gave = cx.rules.prop(prop.kind);
+        // What went in, not what fitting one costs now (gap 25).
+        change.done.gave = self.prop_paid.get(&prop.min).cloned().unwrap_or_default();
         change.done.undo = vec![Op::FitProp(*prop)];
         Ok(change)
     }
@@ -973,11 +1013,128 @@ impl Base {
             return Err(Refusal::Unchanged);
         }
         let mut change = Change::default();
-        change.props.push((prop.min, Some(Prop { open, ..*prop })));
+        let paid = self.prop_paid.get(&prop.min).cloned().unwrap_or_default();
+        change
+            .props
+            .push((prop.min, Some((Prop { open, ..*prop }, paid))));
         change.done.undo = vec![Op::SetOpen {
             at: prop.min,
             open: !open,
         }];
+        Ok(change)
+    }
+
+    fn open(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        let mut change = Change::default();
+        let mut carved = Vec::new();
+        for &at in &named {
+            let cube = self.there(at)?;
+            if cube.fill != Fill::Solid {
+                return Err(Refusal::Opening(at));
+            }
+            if cube.level() > 0 {
+                return Err(Refusal::InProgress(at));
+            }
+            match cube.pending {
+                Pending::Replace => return Err(Refusal::Pending(at)),
+                Pending::Carve => carved.push(at.to_array()),
+                Pending::None => {}
+            }
+            let opening = Cube {
+                fill: Fill::Open,
+                shape: Shape::Whole,
+                state: crate::State::Built,
+                pending: Pending::None,
+                ..cube
+            };
+            change.cubes.push((at, Some(opening)));
+        }
+        // Closed again as it was: its shape, and the carving marked.
+        let mut shapes: BTreeMap<ShapeKey, Vec<[i32; 3]>> = BTreeMap::new();
+        for &at in &named {
+            let shape = self.cube(at).map_or(Shape::Whole, |cube| cube.shape);
+            shapes
+                .entry(ShapeKey(shape))
+                .or_default()
+                .push(at.to_array());
+        }
+        change.done.undo.push(Op::Close {
+            cubes: cubes.to_vec(),
+        });
+        for (shape, cubes) in shapes {
+            if shape.0 != Shape::Whole {
+                change.done.undo.push(Op::SetShape {
+                    cubes,
+                    shape: shape.0,
+                });
+            }
+        }
+        if !carved.is_empty() {
+            change.done.undo.push(Op::Carve { cubes: carved });
+        }
+        Ok(change)
+    }
+
+    fn close(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        if let Some(claim) = cx.claim
+            && self.cubes.planned() + named.len() > claim.budget
+        {
+            return Err(Refusal::OverBudget {
+                budget: claim.budget,
+            });
+        }
+        let mut change = Change::default();
+        for &at in &named {
+            let cube = self.there(at)?;
+            if cube.fill != Fill::Open {
+                return Err(Refusal::NotOpen(at));
+            }
+            if let Some(prop) = self.prop_in(at) {
+                return Err(Refusal::PropThere(IVec3::from_array(prop.min)));
+            }
+            let planned = Cube {
+                fill: Fill::Solid,
+                ..Cube::planned(cube.kind, cube.part)
+            };
+            change.cubes.push((at, Some(planned)));
+        }
+        change.done.undo = vec![Op::Open {
+            cubes: cubes.to_vec(),
+        }];
+        Ok(change)
+    }
+
+    fn resample(&self, samples: &[Sample], cx: &Context) -> Result<Change, Refusal> {
+        let columns: BTreeSet<[i32; 2]> = samples.iter().map(|sample| sample.column).collect();
+        if columns.is_empty() || columns.len() != samples.len() {
+            return Err(Refusal::Malformed);
+        }
+        let mut ground = self.ground.clone();
+        let mut change = Change::default();
+        let mut was = Vec::new();
+        for sample in samples {
+            let [x, z] = sample.column;
+            claimed(IVec3::new(x, 0, z), cx)?;
+            // Only where something stands is the ground kept.
+            if !self.occupied(x, z) {
+                continue;
+            }
+            was.push(Sample {
+                column: sample.column,
+                height_cm: self.ground.height_cm(sample.column),
+            });
+            ground.set(sample.column, Some(sample.height_cm));
+            change.ground.push(*sample);
+        }
+        if change.ground.is_empty() {
+            return Err(Refusal::Unchanged);
+        }
+        if let Some(&at) = self.floating_on(&ground).first() {
+            return Err(Refusal::Undermines(at));
+        }
+        change.done.undo = vec![Op::Ground { samples: was }];
         Ok(change)
     }
 }

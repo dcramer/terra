@@ -18,6 +18,7 @@
 
 #[cfg(test)]
 use crate::DOOR_HEIGHT_M;
+use crate::cost::{Amount, Bill, Rules, Terms};
 use crate::mesh::{Material, ROOF_THICK_M, Surfaces};
 use crate::{
     Base, CELL_M, Fill, Kind, RoofStyle, STOREY_CUBES, STOREY_M, Surface, storey_of, wall_layer,
@@ -79,6 +80,30 @@ pub struct LogKit {
     #[serde(default)]
     pub textures: BTreeMap<Material, Texture>,
     pub colours: LogColours,
+    /// What its cubes and roofs cost to build (D139).
+    #[serde(default)]
+    pub cost: KitCost,
+}
+
+/// What a kind costs to build (D139, D194): how many steps fill a cube, and what each
+/// step takes, by the items' names, in exact fractions (numerator, denominator); and what
+/// each stage of a roof cell over its walls takes. What is left out is free.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct KitCost {
+    pub steps: u8,
+    pub step: Vec<(String, u64, u64)>,
+    pub roof: Vec<(String, u64, u64)>,
+}
+
+impl KitCost {
+    fn bill(amounts: &[(String, u64, u64)]) -> Bill {
+        let mut bill = Bill::default();
+        for (material, num, den) in amounts {
+            bill.add(&Bill::of(material, Amount::new(*num, (*den).max(1))));
+        }
+        bill
+    }
 }
 
 /// How a kit lays its walls (D160: a few patterns in code, kits as data).
@@ -101,6 +126,26 @@ impl Kits {
     /// The kit that lays a kind, if any does.
     pub fn of(&self, kind: Kind) -> Option<&LogKit> {
         self.0.iter().find(|kit| kit.kind() == kind)
+    }
+
+    /// What building in each kit's kind costs; props are not the kits' to say.
+    pub fn rules(&self) -> Rules {
+        let mut rules = Rules::default();
+        for kit in &self.0 {
+            let terms = Terms::new(kit.cost.steps.max(1), KitCost::bill(&kit.cost.step));
+            rules.kinds.insert(kit.kind(), terms);
+            rules
+                .roofs
+                .insert(kit.kind(), KitCost::bill(&kit.cost.roof));
+        }
+        rules
+    }
+
+    /// Whether a kind goes in a cube at a time, as blocks do, rather than a course across
+    /// every cube of a part, as long members do (D194).
+    pub fn one_at_a_time(&self, kind: Kind) -> bool {
+        self.of(kind)
+            .is_some_and(|kit| kit.pattern == Pattern::Masonry)
     }
 }
 
@@ -189,6 +234,7 @@ impl Default for LogKit {
             relief: 0.05,
             models: KitModels::default(),
             textures: BTreeMap::new(),
+            cost: KitCost::default(),
             colours: LogColours {
                 wood: [0.62, 0.43, 0.26],
                 light: [0.74, 0.56, 0.37],
