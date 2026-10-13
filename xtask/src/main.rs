@@ -522,6 +522,7 @@ fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     let name = args.next().unwrap_or_default();
     let rest: Vec<String> = args.collect();
+    use_hooks();
     let ok = match TASKS
         .iter()
         .find(|task| task.name == name || (name == "help" && task.name == "tools"))
@@ -536,6 +537,17 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// Points git at the repository's hooks, so `cargo xtask check` runs before every commit (D37).
+/// Any task does it, so a new clone has it as soon as anyone runs one; worktrees share it.
+fn use_hooks() {
+    if output("git", &["config", "--get", "core.hooksPath"]).as_deref() != Some(".githooks") {
+        let set = output("git", &["config", "core.hooksPath", ".githooks"]).is_some();
+        if set {
+            eprintln!("git now runs `cargo xtask check` before each commit (.githooks)");
+        }
     }
 }
 
@@ -1012,6 +1024,12 @@ fn doctor() -> bool {
     }
 
     println!("\nTools");
+    report.item(
+        "git runs `cargo xtask check` before each commit",
+        output("git", &["config", "--get", "core.hooksPath"]).as_deref() == Some(".githooks"),
+        true,
+        "git config core.hooksPath .githooks   (any cargo xtask task sets it)",
+    );
     let node = output("node", &["--version"]).unwrap_or_default();
     report.item(
         &format!("Node 22.18 or later, which runs the TypeScript tools (found: {node})"),
