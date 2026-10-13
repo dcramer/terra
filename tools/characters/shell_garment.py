@@ -49,7 +49,7 @@ BULK_M = 0.03          # the most it follows the dressed surface standing off
 CROSSED_M = 0.018      # and above the waist, where straps cross the chest, a chest piece's height
                        # off the skin, which they clear (fit_gear.py, docs/characters.md)
 MATCH_M = 0.03         # skin this close lines the dressed model up
-TEXTURE = 1024
+TEXTURE = 2048         # the bake's size; the game's files take gear at its budget (D188)
 CUT_SMOOTH_ROUNDS = 3  # rounds of smoothing the field the piece's edge is cut along
 CUT_CLEAR = 0.1        # the field kept this far from the cut at the body's vertices, so the cut
                        # never passes a hair from one and leaves a sliver of a triangle
@@ -398,6 +398,24 @@ piece.select_set(True)
 bpy.context.view_layer.objects.active = piece
 bpy.ops.object.bake(type="DIFFUSE")
 baked.pack()
+# Its surface as well as its colour: the dressed model's normals (its normal map included)
+# and roughness, baked the same way, so leather reads as leather and not as a printed sheet.
+bsdf = nodes["Principled BSDF"]
+for kind in ("NORMAL", "ROUGHNESS"):
+    image = bpy.data.images.new(f"{item}_{kind.lower()}", TEXTURE, TEXTURE, is_data=True)
+    image.colorspace_settings.name = "Non-Color"
+    node = nodes.new("ShaderNodeTexImage")
+    node.image = image
+    nodes.active = node
+    bpy.ops.object.bake(type=kind, normal_space="TANGENT")
+    image.pack()
+    if kind == "NORMAL":
+        mapping = nodes.new("ShaderNodeNormalMap")
+        mat.node_tree.links.new(node.outputs["Color"], mapping.inputs["Color"])
+        mat.node_tree.links.new(mapping.outputs["Normal"], bsdf.inputs["Normal"])
+    else:
+        mat.node_tree.links.new(node.outputs["Color"], bsdf.inputs["Roughness"])
+nodes.active = tex
 
 # A rim turned in from the edge to just off the skin, so the edge reads as the material's
 # thickness and nothing shows into the gap between piece and skin. Its faces take the colour

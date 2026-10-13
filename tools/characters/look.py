@@ -178,6 +178,22 @@ def material(name):
 # Rendering ------------------------------------------------------------------------------
 
 
+def fit_textures(flags):
+    """Scales every image down to the budget a `--textures=PIXELS` flag in `flags` names, as
+    games keep their source art large and give each kind of asset a texture budget: the game's
+    files take a body's maps at 2048 and gear's at 1024 (docs/decisions.md, D188). No flag,
+    no change."""
+    size = next((int(f.split("=", 1)[1]) for f in flags if f.startswith("--textures=")), None)
+    if size is None:
+        return
+    for image in bpy.data.images:
+        w, h = image.size
+        if max(w, h) > size:
+            k = size / max(w, h)
+            image.scale(max(1, round(w * k)), max(1, round(h * k)))
+            print("TEXTURE", image.name, f"{w}x{h} to {image.size[0]}x{image.size[1]}")
+
+
 def stage():
     """The game's light, a ground plane and the world colour."""
     scene = bpy.context.scene

@@ -74,20 +74,20 @@ mkdir -p assets/models/character/skins
 for k in "${skins[@]}"; do
   read -r m front <<<"$k"
   $here/paint_skin.sh "$m" "$front"
-  cp "$out/$m-skin.png" "assets/models/character/skins/$m.png"
+  convert "$out/$m-skin.png" -resize "2048x2048>" "assets/models/character/skins/$m.png"   # the body budget (D188)
 done
 echo "== 5. the game's files"
 mkdir -p assets/models/gear
 morphs=$(printf "%s\n" "${designed[@]}" $(for r in "${rigged[@]}"; do echo "${r%% *}"; done) | sort | paste -sd, -)
-$blender $here/export_character.py "$out/$base.glb" assets/models/character/base.glb "--morphs=$morphs" | grep -E "MORPH|SOCKETS|EXPORTED|Error" || true
+$blender $here/export_character.py "$out/$base.glb" assets/models/character/base.glb "--morphs=$morphs" --textures=2048 | grep -E "MORPH|SOCKETS|EXPORTED|Error" || true
 for look in $out/gear/$base/*.glb; do
-  $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "assets/models/gear/$(basename "$look")" "--morphs=$morphs" | grep -E "CARRIED|Error" &
+  $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "assets/models/gear/$(basename "$look")" "--morphs=$morphs" --textures=1024 | grep -E "CARRIED|Error" &
 done
 wait
 echo "BUILT base.glb with morphs $morphs, $(ls $out/gear/$base/*.glb | wc -l) looks"
 # Every check's verdict, from this build's output and the morphs' logs.
 # The base's rig check, not a rigged design's (the female's own body is only the shape her
 # morph is fitted to; what ships is the base's skeleton and weights in her shape).
-failed=$( { cat "$out/build-clips.log" "$out/build-gear.log"; echo "RIGCHECK $(cat "$out/rig-check-$base.json")"; for m in "${designed[@]}"; do cat "$out/build-$m.log"; done; for r in "${rigged[@]}"; do cat "$out/build-${r%% *}.log"; done; } \
-  | grep -oE '^(CLIPCHECK|GEARCHECK) .*"pass": false|^RIGCHECK \{"file": "tools/characters/out/'"$base"'.glb", "pass": false|^CLIPCHECK fail|Error.*' | cut -c1-160 || true)
+failed=$( { cat "$out/build-clips.log" "$out/build-gear.log"; node -p '"RIGCHECK " + JSON.stringify(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")))' "$out/rig-check-$base.json"; for m in "${designed[@]}"; do cat "$out/build-$m.log"; done; for r in "${rigged[@]}"; do cat "$out/build-${r%% *}.log"; done; } \
+  | grep -oE '^(CLIPCHECK|GEARCHECK) .*"pass": false|^RIGCHECK \{"file":"[^"]*","pass":false|^CLIPCHECK fail|Error.*' | cut -c1-160 || true)
 if [[ -z "$failed" ]]; then echo "BUILD pass"; else echo "BUILD fail"; echo "$failed"; fi

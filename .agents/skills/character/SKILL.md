@@ -15,13 +15,13 @@ Costs per character, on the Studio subscription: design sheets are free (100 ima
 
 A turnaround sheet: the same character three times, front, side and back, **in a T-pose** (arms straight out at shoulder height, palms down, legs straight and a little apart), plain light grey background. A base body wears plain, close-fitting underwear with no relief (D186) and has a shaved head: hair and clothes are separate parts (D111, D112).
 
-Draw it in the art style, [docs/art-style.md](../../../docs/art-style.md) (D14, direction D), which every character, creature and piece of gear follows: big simple shapes, flat areas of colour, true proportions, no painted shading. End the prompt with the guide's concept paragraph, keeping the sheet's own framing (three views, T-pose, light grey background):
+Draw it realistically, as the developers asked for characters on 2026-10-12 (D186): a realistic modern game character, more realistic than a painted or stylised one but not a photograph, with real skin, cloth and leather and a little soft shading. The art style guide ([docs/art-style.md](../../../docs/art-style.md), D14) is being rewritten to match; until it is, the new base sheet `art/characters/base-male/sheet.png` is the style reference: give it as `--ref`, and draw with `--model gpt-image-2.5` (the default image model drifts back to a painted look). Keep the sheet's framing (three views, T-pose, light grey background):
 
 ```bash
-node tools/tripo/tripo.ts image "Character turnaround sheet for a stylised game character: <who they are, build, clothing>. The same person three times side by side, front view, side view and back view, standing in a T-pose with both arms straight out to the sides at shoulder height, palms down, legs straight and slightly apart. Stylised 3D render with a graphic, illustrative look: bold simplified shapes, large flat areas of colour from a limited palette, no texture, no outlines, no painted shading; strong, clear silhouette; true real-world proportions. Lit evenly and softly from the upper left. Plain light grey background, no text, no scenery." --t-pose --aspect 16:9 -o tools/characters/out/NAME-sheet.png
+node tools/tripo/tripo.ts image "Character turnaround sheet of <who they are, build, clothing>, in the realistic style of the reference image: a realistic modern game character, like a high-end third-person action RPG's character model, not a photograph and not a cartoon or hand-painted illustration. Natural anatomy and true proportions, realistic skin with subtle texture, soft natural shading that shows the form. The same person three times side by side, front view, side view and back view, standing in a T-pose with both arms straight out to the sides at shoulder height, palms down, fingers together, legs straight and slightly apart. Lit evenly and softly from the upper left. Plain light grey background, no text, no scenery." --ref art/characters/base-male/sheet.png --model gpt-image-2.5 --t-pose --aspect 16:9 -o tools/characters/out/NAME-sheet.png
 ```
 
-Once an approved D image is at `art/style/reference.png`, give it as `--ref` too. Don't use `art/style/mood-medieval-town.png`: it is the earlier painted direction (C), kept as research. The bodies made so far were drawn after it and still carry Tripo's painted textures; moving them to flat palette roles is listed in the guide as work to do.
+Gear drawn for a body (a dressed sheet, a pack, a quiver) takes the same model and reference, and keeps Tripo's maps: the realism is in the colour, normal and roughness maps, which the build scales to their budgets (D188).
 
 For a second body of a cast, such as the female base to match the male, give the first body's sheet as a second reference and say so ("the female base body to match the man in the second reference image ... wearing the same underclothes"), so the two share a style and their underclothes.
 
@@ -37,7 +37,7 @@ tools/characters/make_character.sh NAME tools/characters/out/NAME-sheet.png 1.80
 
 The last number is the character's height in metres (life size, D110). It:
 
-1. crops the front view (the left 44% of the sheet) and makes a textured model (`tripo.ts model`);
+1. crops the front view, up to the first clear gap after it (`front_view.sh`), and makes a textured model (`tripo.ts model`);
 2. rigs it with Tripo's current auto-rig in its Unreal skeleton (`tripo.ts rig --skeleton unreal`, the default): the only one of Tripo's skeletons whose twist bones carry skin, with the bone names our clips use;
 3. runs the rest, which is free and is `finish_character.sh NAME HEIGHT` on its own:
    - converts Tripo's skeleton onto ours (`convert_rig.py`): our joints move to Tripo's, our bones keep their directions, Tripo's four twist bones a side are added, Tripo's weights are kept by name, smoothed lightly, and every vertex kept to four bones;
@@ -116,7 +116,7 @@ A piece is made on the base (below), into `tools/characters/out/gear/base-male/`
 **Clothing and armour that bend with the body** (chest, legs, gloves, feet) are made on the base body, so nothing is set per character:
 
 1. Draw that base's own sheet wearing it (free): `--ref` the base's approved sheet, and say "the same person, in exactly the same T-pose ... now also wearing <the piece>". Check it kept the person and the pose.
-2. Make the dressed model (a `model`'s credits): crop the front view as `make_character.sh` does, then `tripo.ts model`. Keep the sheet, front view and model as source art in `art/gear/dressed-<body>-<item>/` (`sheet.png`, `front.png`, `model.glb`) and commit them.
+2. Make the dressed model (a `model`'s credits): crop the front view with `tools/characters/front_view.sh SHEET FRONT`, then `tripo.ts model --faces 30000`. Keep the sheet, front view and model as source art in `art/gear/dressed-<body>-<item>/` (`sheet.png`, `front.png`, `model.glb`) and commit them.
 3. Build the piece from the base body:
 
 ```bash
@@ -155,7 +155,7 @@ Every body is the base body (`base-male`) with a few morphs, as modern games do 
 tools/characters/make_morph.sh heavy "the man is much heavier, overweight with a big round belly, thick arms, thighs and neck, a fuller face"
 ```
 
-The first run only draws the sheet (free) into `art/characters/base-male/morphs/heavy/` and stops. Look at it: it must be the same person in the same T-pose, front view on the left third; redraw (delete `sheet.png`) until it is. Run the same command again. It:
+The first run only draws the sheet (free) into `art/characters/base-male/morphs/heavy/` and stops. Look at it: it must be the same person in the same T-pose, front view on the left; redraw (delete `sheet.png`) until it is. Run the same command again. It:
 1. crops the front view;
 2. makes Tripo's model (a `model`'s credits);
 3. registers the base onto it (`morph.py`);

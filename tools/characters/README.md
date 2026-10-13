@@ -20,6 +20,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `fit_gear.py` | Rigid gear (a pack, a quiver) fitted to a body at its socket, from `art/gear/<item>/`; straps from the skin (`bands.py`) |
 | `gear_check.py` | How much skin comes through each worn piece, through our clips; `--fix` records how far each part must move out to clear it (the clipping fixer, per morph) |
 | `build_bodies.sh` | Rebuilds every character asset the game loads from `art/`: the base, its gear, every morph, the skins, and the game's files |
+| `front_view.sh SHEET FRONT` | A turnaround sheet's front view, cut at the first clear gap after it, at 2048 square, as Tripo is given it to model |
 | `make_morph.sh NAME "CHANGE"` or `NAME --design BODY.glb` | A morph of the base body end to end: design (free), model (Studio credits), registration, export, gear carried and checked; skips what `art/` already keeps |
 | `morph.py` | Registers the base onto a design's model: pose by the base's skeleton, shape by a pull smoothed over distance, back to the T-pose; the morph |
 | `carry_gear.py` | A worn look made on the base carried onto a morph: skinned parts follow the skin, standing-off parts and looks hung on sockets move as one to keep their clearance (a hung look's shift per morph in its extras, for the game), and the clipping fixer's pushes are baked in |

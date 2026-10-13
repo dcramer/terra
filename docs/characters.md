@@ -58,6 +58,8 @@ No layers (one piece per slot), but pieces from different slots overlap: a pack'
 - **Made once, in its socket's space**, by a rule for that socket: a helmet's inner crown at the origin, a pack's back panel on the socket's plane, a quiver's belt loop at the origin. Scaled from the body's own measure at that socket (head width, back width) when fitted to the base. No numbers per item beyond which socket.
 - **It follows the skin under it per morph**: its shift beyond the socket on each morph is recorded in its extras, and the game mixes them by the body's morph weights, so a heavy body's seat does not swallow a quiver.
 - A helmet covers the head's top and says so; hair under it is hidden or swapped for a short version (D112).
+- **A pack is a bag and a harness** (D189). The bag is any generated model, rigid on the back socket, its own straps cut away; it is fitted so its corners meet the harness's strap ends. The harness is the straps, made once per kind (leather straps, rope, a frame) on the base body like a garment, so they bend with the shoulders and carry the morphs, its path and look taken from a model of the base person wearing one. A new pack is one bag model; it names a harness. The belt is the same: a quiver, a pouch or a sheath hangs from a belt's standard points, from where it hangs on it (a quiver from its mouth).
+- **Loose things swing.** What hangs from a strap or a belt (a quiver, a pouch) swings about where it hangs, under gravity, damped and limited, kept off the thigh by a capsule, as spring bones do (the VRM spring-bone model; Source's jiggle bones). Its pivot and stiffness are data in its file. The same system later moves coat tails and long hair (phase 5 of the plan).
 
 ### Held things (tools, weapons)
 

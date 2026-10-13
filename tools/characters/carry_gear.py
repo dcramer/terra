@@ -226,6 +226,7 @@ for o in hung:
 if not skinned and not hung:
     print("CARRIED nothing: a look on a socket the base has not")
 bpy.ops.object.select_all(action="SELECT")
+look.fit_textures(sys.argv)
 bpy.ops.export_scene.gltf(filepath=os.path.join(look.ROOT, out_path), export_format="GLB", use_selection=True,
                           export_animations=False, export_extras=True, export_morph=True)
 print("EXPORTED", out_path)

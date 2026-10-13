@@ -201,6 +201,7 @@ ad.action = None
 for o in bpy.context.scene.objects:
     o.select_set(o in (arm, body) or o in sockets)
 bpy.context.view_layer.objects.active = arm
+look.fit_textures(sys.argv)
 bpy.ops.export_scene.gltf(
     filepath=look.path(dst), export_format="GLB", use_selection=True,
     export_animations=True, export_animation_mode="NLA_TRACKS", export_force_sampling=True,

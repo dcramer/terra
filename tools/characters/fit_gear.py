@@ -46,6 +46,14 @@ PIECES = {
     "large_pack": ("pack", 90, "back", 0.31, "Pack"),
     "quiver": ("quiver", 90, "belt", 0.4, "Leather"),
 }
+# Where a piece hung from the belt hangs from, as a share of its height from its foot: a
+# quiver's mouth, the top of its leather tube, below the arrows standing in it. Read off the
+# item's concept, as an artist sets an attach point; the mesh alone cannot tell the tube
+# from the fanned fletching.
+HANGS_AT = {"quiver": 0.71}
+# A loose piece hangs nearly plumb from where it hangs, its foot a little back, resting on
+# the seat.
+HANG_TILT_DEG = 8
 
 body_path, names = look.args()[0], look.args()[1:]
 body_name = look.body_name(body_path)
@@ -273,20 +281,19 @@ def fit_head(ob):
     return "socket.head"
 
 
-def fit_belt(ob, height):
+def fit_belt(ob, height, hangs_at):
     """Hanging from the belt behind the right hip, clear of the hand as the arm swings: its
-    mouth at the belt against the back of the hip, its bottom angled back clear of the leg as
-    a hip quiver hangs (tipped the other way, its mouth stood off the body and only its foot
-    touched the seat)."""
+    mouth (`hangs_at` of its height up from its foot) at the belt against the back of the hip,
+    nearly plumb with its foot a little back, as a loose hip quiver hangs from its strap."""
     scale_to(ob, height)
-    move(ob, Matrix.Rotation(math.radians(20), 4, "X"))
+    move(ob, Matrix.Rotation(math.radians(HANG_TILT_DEG), 4, "X"))
     at = sockets["socket.belt.R"].matrix_world.translation
     across = at.x * 0.55
     waist = [p for p in region({"pelvis", "spine_01", "thigh_r"})
              if abs(p.z - at.z) < 0.06 and abs(p.x - across) < 0.05]
     back = max(p.y for p in waist)
     lo, hi = box(points(ob))
-    move(ob, Matrix.Translation(Vector((across - (lo.x + hi.x) / 2, back + 0.005 - lo.y, at.z - 0.45 * (hi.z - lo.z) - lo.z))))
+    move(ob, Matrix.Translation(Vector((across - (lo.x + hi.x) / 2, back + 0.005 - lo.y, at.z - hangs_at * (hi.z - lo.z) - lo.z))))
     # Then against the hip by contact: forward (the body faces -Y) until it rests 1 cm off.
     pull_in(ob, Vector((0.0, -1.0, 0.0)), 0.01)
     push_out(ob, 0.01)
@@ -392,7 +399,7 @@ for name in names:
     elif how == "head":
         socket = fit_head(ob)
     elif how == "belt":
-        socket = fit_belt(ob, size)
+        socket = fit_belt(ob, size, HANGS_AT[name])
     else:
         socket = fit_torso(ob)
     # A pack hides the skin under its bag and straps as a garment does: that skin cannot be
