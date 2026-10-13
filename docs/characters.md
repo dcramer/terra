@@ -19,7 +19,7 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 
 - **One base body, made once and checked**: one mesh in our T-pose (our own base male, made by Tripo from its sheet), our skeleton, skin weights made for it, the skin patches and the socket rules. It passes the rig checks before anything uses it.
 - **A body is a few parameters on it**, as in modern games ([research](../research/modern-character-variety.md)): proportions as bone scales (height, limb length, shoulders, hips, head), build as a few soft morphs (heavy, muscular, thin, chest, belly), the head as blends of head shapes, and a painted skin, tinted. Sex is a morph or a second base; the spike decides.
-- **A template (D111) is a preset of those numbers and a skin**; sliders later are the same numbers, clamped to what every item passes at; an NPC is a template with small offsets from its seed.
+- **A character is a few slider values** (D111): sex and build as morph weights, height as a uniform scale, skin colour as a tint, each clamped to what every item passes at. The named templates are presets of the same numbers, for people and tests; an NPC's values come from its seed.
 - **A template from a design**: Tripo makes the design's model, as now; the parameters that bring the base closest to it are estimated, and Tripo paints the base's layout in those proportions.
 - **The morphs themselves are made once each from designs of the base person** (heavier, thinner, stronger, a woman, another head): the base's mesh is registered onto each design's model and what moved is kept as a morph.
 - **Sockets**, the same names and axes on every body: hands, head, back, belt.

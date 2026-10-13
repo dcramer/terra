@@ -275,12 +275,19 @@ fn spawn(
             continue;
         };
         let offset = bench.slots[index];
-        // Shaped as its template, if given one (`appearance`).
+        // Shaped as its template, if given one (`appearance`), as tall as `@height` says.
         let shape = options
             .templates
             .get(index)
-            .and_then(|name| {
-                let found = Appearance::template(name);
+            .and_then(|given| {
+                let (name, height) = match given.split_once('@') {
+                    Some((name, height)) => (name, height.parse::<f32>().ok()),
+                    None => (given.as_str(), None),
+                };
+                let found = Appearance::template(name).map(|mut shape| {
+                    shape.height = height.unwrap_or(shape.height);
+                    shape
+                });
                 if found.is_none() {
                     warn!("workbench: there is no template {name}");
                 }
@@ -506,6 +513,7 @@ struct Reshape {
     template: Option<String>,
     morphs: Option<std::collections::HashMap<String, f32>>,
     skin: Option<String>,
+    height: Option<f32>,
 }
 
 fn shape_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
@@ -514,6 +522,7 @@ fn shape_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         template,
         morphs,
         skin,
+        height,
     } = parse_some(params)?;
     let mut shape = match &template {
         Some(name) => Appearance::template(name)
@@ -527,6 +536,9 @@ fn shape_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     }
     if skin.is_some() {
         shape.skin = skin;
+    }
+    if let Some(height) = height {
+        shape.height = height;
     }
     let mut bodies = world.query::<(&Name, &mut Appearance)>();
     let mut changed = 0;
@@ -544,7 +556,9 @@ fn shape_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     if changed == 0 {
         return Err(remote::refused("no workbench model matches"));
     }
-    Ok(json!({ "shaped": changed, "morphs": shape.morphs, "skin": shape.skin }))
+    Ok(
+        json!({ "shaped": changed, "morphs": shape.morphs, "skin": shape.skin, "height": shape.height }),
+    )
 }
 
 fn pose_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {

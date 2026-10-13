@@ -15,7 +15,7 @@
 //!
 //! A template (D111) is a named appearance, from `models/character/templates.json`.
 
-use crate::character::{Body, BodyReady, Covers, Shifts, Skin, Worn};
+use crate::character::{Body, BodyReady, Covers, Held, Shifts, Skin, Worn};
 use bevy::{
     gltf::GltfExtras,
     math::{Affine3A, Vec3A},
@@ -34,15 +34,34 @@ use std::sync::OnceLock;
 /// The body every character stands on.
 pub const BASE: &str = "models/character/base.glb";
 
-/// How a body is shaped and skinned: how much of each of the base's morphs (by name) it has,
-/// and which painted skin it wears (`models/character/skins/<skin>.png`; none is the base's).
-/// On a body's root (with `Body`).
-#[derive(Component, Clone, Debug, Default, PartialEq, Deserialize)]
+/// How a body is shaped and skinned (D111): how much of each of the base's morphs (by name)
+/// it has, its height, and which painted skin it wears (`models/character/skins/<skin>.png`;
+/// none is the base's). On a body's root (with `Body`).
+#[derive(Component, Clone, Debug, PartialEq, Deserialize)]
 pub struct Appearance {
     #[serde(default)]
     pub morphs: Vec<(String, f32)>,
     #[serde(default)]
     pub skin: Option<String>,
+    /// Its height against the base body's (1.80 m): a uniform scale of the whole character,
+    /// so what it wears, its sockets and its clips scale with it and nothing is fitted per
+    /// height. What it holds keeps its own size (`keep_held_size`).
+    #[serde(default = "full_height")]
+    pub height: f32,
+}
+
+fn full_height() -> f32 {
+    1.0
+}
+
+impl Default for Appearance {
+    fn default() -> Self {
+        Appearance {
+            morphs: Vec::new(),
+            skin: None,
+            height: full_height(),
+        }
+    }
 }
 
 impl Appearance {
@@ -79,6 +98,8 @@ struct TemplateFile {
     morphs: HashMap<String, f32>,
     #[serde(default)]
     skin: Option<String>,
+    #[serde(default = "full_height")]
+    height: f32,
 }
 
 /// Every template, read once from the data file the game ships with.
@@ -107,6 +128,7 @@ fn parse_templates(text: &str) -> Result<HashMap<String, Appearance>, serde_json
                 Appearance {
                     morphs,
                     skin: template.skin,
+                    height: template.height,
                 },
             )
         })
@@ -147,6 +169,43 @@ fn mixed(offsets: &Offsets, appearance: &Appearance) -> HashMap<String, Vec3> {
         }
     }
     out
+}
+
+/// Each body as tall as its appearance says: the scale of its root, the whole character.
+fn size_bodies(
+    mut bodies: Query<(&Appearance, &mut Transform), (With<Body>, Changed<Appearance>)>,
+) {
+    for (appearance, mut transform) in &mut bodies {
+        let scale = Vec3::splat(appearance.height.max(0.01));
+        if transform.scale != scale {
+            transform.scale = scale;
+        }
+    }
+}
+
+/// What a body holds keeps its own size whatever the body's height: a tall person's axe is
+/// no bigger. Held where the hand's socket is, scaled back by the height of the body above it.
+fn keep_held_size(
+    mut held: Query<(Entity, &mut Transform), With<Held>>,
+    new: Query<(), Added<Held>>,
+    resized: Query<(), (With<Body>, Changed<Appearance>)>,
+    bodies: Query<&Appearance, With<Body>>,
+    parents: Query<&ChildOf>,
+) {
+    let any_resized = !resized.is_empty();
+    for (entity, mut transform) in &mut held {
+        if !any_resized && !new.contains(entity) {
+            continue;
+        }
+        let height = parents
+            .iter_ancestors(entity)
+            .find_map(|each| bodies.get(each).ok())
+            .map_or(1.0, |appearance| appearance.height);
+        let scale = Vec3::splat(1.0 / height.max(0.01));
+        if transform.scale != scale {
+            transform.scale = scale;
+        }
+    }
 }
 
 /// Bind poses for joints moved by `moved` (in the model's space): a joint's bind pose maps
@@ -208,6 +267,8 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
+                size_bodies,
+                keep_held_size,
                 shape_bodies,
                 fit_worn,
                 report_joints.run_if(resource_exists::<ReportJoints>),
@@ -602,12 +663,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_body_is_as_tall_as_it_says_and_holds_things_at_their_own_size() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let body = world
+            .spawn((
+                Body,
+                Appearance {
+                    height: 1.2,
+                    ..Appearance::default()
+                },
+                Transform::default(),
+            ))
+            .id();
+        let hand = world.spawn((Transform::default(), ChildOf(body))).id();
+        let held = world
+            .spawn((Held::new(0.0), Transform::default(), ChildOf(hand)))
+            .id();
+        world.run_system_once(size_bodies).unwrap();
+        world.run_system_once(keep_held_size).unwrap();
+        assert_eq!(
+            world.get::<Transform>(body).unwrap().scale,
+            Vec3::splat(1.2)
+        );
+        assert!(
+            (world.get::<Transform>(held).unwrap().scale - Vec3::splat(1.0 / 1.2)).length() < 1e-6
+        );
+    }
+
+    #[test]
     fn templates_parse_and_name_their_morphs() {
         let templates = parse_templates(
             r#"{"male": {}, "female": {"morphs": {"female": 1.0}, "skin": "female"}}"#,
         )
         .unwrap();
         assert_eq!(templates["male"], Appearance::default());
+        assert_eq!(templates["male"].height, 1.0);
         assert_eq!(templates["female"].weight("female"), 1.0);
         assert_eq!(templates["female"].skin.as_deref(), Some("female"));
     }
@@ -630,7 +721,7 @@ mod tests {
         .unwrap();
         let appearance = Appearance {
             morphs: vec![("heavy".into(), 0.5), ("female".into(), 1.0)],
-            skin: None,
+            ..Appearance::default()
         };
         let moved = mixed(&offsets, &appearance);
         assert!((moved["socket.back"] - Vec3::new(0.0, -0.1, -0.02)).length() < 1e-6);

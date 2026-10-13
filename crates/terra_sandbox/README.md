@@ -45,7 +45,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--anim <clip>` | In the workbench: an animation to play. Repeatable; the first plays when looking by hand |
 | `--hold <item>` | In the workbench: an item's held look in the right hand, as in play, named as in `--give`, such as `stone_axe` |
 | `--wear <item>` | In the workbench: an item's look, on every model, named as in `--give`, such as `leather_coat`. Repeatable |
-| `--template <name>` | In the workbench: the template the next model's body is shaped as (`models/character/templates.json`), such as `female` or `heavy`. Repeatable, in the order of the models |
+| `--template <name>[@<height>]` | In the workbench: the template the next model's body is shaped as (`models/character/templates.json`), such as `female` or `heavy`, and its height against the base's, such as `male@1.15`. Repeatable, in the order of the models |
 | `--crowd <n>` | In the crowd experiment: how many dressed characters (100 by default) |
 | `--linear-skinning` | Skin with Bevy's own linear blend instead of our dual quaternions, to compare the two |
 | `--joints` | In the workbench: print where each model's joints and sockets stand once shaped (`JOINTS` lines), to compare with the export's `SOCKETS` |

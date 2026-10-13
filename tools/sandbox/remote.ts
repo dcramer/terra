@@ -118,13 +118,15 @@ const COMMANDS: Record<string, Command> = {
     run: async ({ positionals: [clip, fraction] }) => print(await call("workbench.pose", { clip, fraction: number(fraction) })),
   },
   shape: {
-    usage: "shape [--model N] TEMPLATE | MORPH=WEIGHT …",
-    help: "in the workbench: reshape a model's body live, as a template or a mix of morphs (heavy=0.5 thin=0.2)",
+    usage: "shape [--model N] TEMPLATE | MORPH=WEIGHT … [height=H]",
+    help: "in the workbench: reshape a model's body live, as a template or a mix of morphs (heavy=0.5 thin=0.2), height=1.1 for a tenth taller",
     options: { model: { type: "string", help: "which model, by its order on the command line (all if not given)" } },
     run: async ({ values, positionals }) => {
-      const morphs = Object.fromEntries(positionals.filter((p) => p.includes("=")).map((p) => [p.split("=")[0], number(p.split("=")[1])]));
+      const pairs = positionals.filter((p) => p.includes("=")).map((p) => [p.split("=")[0], number(p.split("=")[1])] as const);
+      const morphs = Object.fromEntries(pairs.filter(([name]) => name !== "height"));
+      const height = pairs.find(([name]) => name === "height")?.[1];
       const template = positionals.find((p) => !p.includes("="));
-      print(await call("workbench.shape", { model: values.model === undefined ? undefined : number(values.model), template, morphs: Object.keys(morphs).length ? morphs : undefined }));
+      print(await call("workbench.shape", { model: values.model === undefined ? undefined : number(values.model), template, morphs: Object.keys(morphs).length ? morphs : undefined, height }));
     },
   },
   shot: { usage: "shot FILE.png", help: "save a screenshot and wait for it", run: async ({ positionals: [file] }) => console.log(await sandbox.shot(file)) },

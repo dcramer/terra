@@ -9,7 +9,7 @@ How bodies, customisation and wearable gear are built on Bevy, following the tec
 
 ## Goals
 
-- **A small creator** (D111): male and female, body templates, skin and hair colours, hairstyles. Perhaps a few sliders, "build, height, skin colour" (Open). NPCs drawn from the same parameters by seed.
+- **A creator of a few sliders** (D111): sex, build (heavier, thinner, stronger), height (widely, for other races later) and skin colour; hairstyles and hair colour. NPCs drawn from the same sliders by seed.
 - **Gear in every slot fits every body** (D64, D128): head, chest with the arms, gloves, legs, feet, back, belt. One item is made once, with no work per item per body (D127).
 - **Looks good** in the art style ([art-style.md](art-style.md), D14), at life size (D110).
 - **Looks right in motion:** no twisting, squeezing or poke-through in any clip, on any body, checked by machine (D69).
@@ -36,12 +36,13 @@ Each part names its technique (T1 to T9 in the industry note) and its state.
 | Parameter | Technique | Bevy | State |
 |---|---|---|---|
 | **Build and sex** (heavy, thin, strong, female) | T2: morph targets on the base mesh, made from designs of the base person | `MorphWeights`; the game mixes joint offsets per morph | **Built** |
-| **Height and proportions** (limb length, shoulders, hips, head) | T1: bone scales and offsets per parameter, leaf or helper bones so nothing shears | A system writes joint rest transforms, as joint offsets are written now | To build: phase 2 |
+| **Height** (widely, for other races later) | T1 at its simplest: a uniform scale of the whole character. Gear, sockets and clips scale with it, so nothing is checked per height; what is held keeps its own size | The character's root scale; our skinning keeps a uniform scale | To build: phase 2 |
+| **Other proportions** (limb length, shoulders, head) | T1: bone scales per parameter, on leaf or helper bones so nothing shears | A system writes joint rest transforms, as joint offsets are written now | Not yet (D111) |
 | **Skin colour** | T8: tint baked out of the albedo, a skin mask and a palette (melanin-like) in the shader | The body's material extension | To build: phase 2 |
 | **Head and face variety** | T2: blends of head morphs | Its own weight set, never animated by clips | Later: design open |
 | **Hair** | Hair as a part bound to the head; hide flags and hat-hair variants under helmets | A worn look, by name | Phase 5 |
 
-- **A template is a preset of these numbers.** A slider is the same numbers, clamped to what every item passes at. An NPC is a template plus offsets from its seed.
+- **A character is a few slider values** (D111): sex and build as morph weights, height as a scale, skin colour as a tint, each clamped to what every item passes at. The named templates stay as presets for people and tests. An NPC is slider values from its seed, within its people's ranges.
 - **One crate turns appearance into numbers.** `terra_body`, without Bevy, turns appearance data into joint transforms and morph weights. It is tested without a GPU and shared by the tools and the game.
 
 ### Gear
@@ -104,13 +105,14 @@ The likeliest replacement is computing joint matrices once per skeleton rather t
 | A third-party clip misbehaves | The clip check | Check the author's current version first; replace the clip |
 | Bevy 0.20 breaks the skinning override | The spike in phase 7 | Stay on 0.19 (D31) until it works |
 
-## Design questions for the developers (Open)
+## Design questions for the developers
 
-1. **Sliders or templates or both?** D111 says templates; the developers since asked for "build, height, skin colour". The system supports both at the same cost: which do players get?
-2. **Height range,** say ±10%, and whether templates differ in proportions or only build.
-3. **Head and face variety:** blends of a few heads, or fixed faces per template?
-4. **Hair:** how many styles to start; long hair with physics, or short only at first?
-5. **Loose garments:** are long coats, robes and cloaks wanted early? They need phase 5.
+Settled on 2026-10-12 (D111): sliders only; height varies widely, for other races later; no other proportions yet. Still open:
+
+1. **Height range for humans,** and later per race.
+2. **Head and face variety:** blends of a few heads, or fixed faces?
+3. **Hair:** how many styles to start; long hair with physics, or short only at first?
+4. **Loose garments:** are long coats, robes and cloaks wanted early? They need phase 5.
 
 ## Why not something ready-made
 

@@ -64,8 +64,10 @@ usage: terra_sandbox [options]
                         in --give, such as stone_axe
   --wear <item>         in the workbench: an item's look, on every model, named as in
                         --give, such as leather_coat (repeatable)
-  --template <name>     in the workbench: the template the next model's body is shaped
-                        as, such as female or heavy (repeatable, in the models' order)
+  --template <name>[@<height>]
+                        in the workbench: the template the next model's body is shaped
+                        as, such as female or heavy, and its height against the base's,
+                        such as male@1.15 (repeatable, in the models' order)
   --crowd <n>           in the crowd experiment: how many characters (100 by default)
   --linear-skinning     skin with Bevy's own linear blend instead of dual quaternions,
                         to compare the two (crates/terra_game/src/skinning.rs)
