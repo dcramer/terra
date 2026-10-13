@@ -4,7 +4,7 @@
 //! share each picture. Then the sandbox exits.
 
 use std::path::PathBuf;
-use terra_game::planet::MainCamera;
+use terra_world::planet::MainCamera;
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -16,7 +16,7 @@ use bevy::{
 };
 
 use super::{Bench, pose, view};
-use terra_game::shell::Options;
+use terra_world::shell::Options;
 
 /// Directions to look from, in degrees round from the front, and fractions of a clip,
 /// unless `--sides` and `--moments` say otherwise.
@@ -51,7 +51,7 @@ pub fn capture(
     mut commands: Commands,
     bench: Option<Res<Bench>>,
     options: Res<Options>,
-    picture: Option<Res<terra_game::shell::Picture>>,
+    picture: Option<Res<terra_world::shell::Picture>>,
     mut sheet: ResMut<Sheet>,
     mut players: Query<&mut AnimationPlayer>,
     mut hands: Query<&mut terra_game::character::Carrying>,
@@ -60,13 +60,13 @@ pub fn capture(
     names: Query<&Name>,
     globals: Query<&GlobalTransform>,
     mut frames: Local<u32>,
-    screen: Res<State<terra_game::loading::Screen>>,
+    screen: Res<State<terra_world::loading::Screen>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let (Some(bench), Some(prefix)) = (bench, options.sheet.as_ref()) else {
         return;
     };
-    if !terra_game::shell::counting(&options, &screen) {
+    if !terra_world::shell::counting(&options, &screen) {
         return;
     }
     *frames += 1;
@@ -124,7 +124,7 @@ pub fn capture(
     // A row with props in it is kept whole; a figure alone, its middle.
     let whole = bench.wide;
     commands
-        .spawn(terra_game::shell::screenshot(picture.as_deref()))
+        .spawn(terra_world::shell::screenshot(picture.as_deref()))
         .observe(
             move |captured: On<ScreenshotCaptured>, mut sheet: ResMut<Sheet>| {
                 sheet.waiting = false;

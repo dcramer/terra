@@ -43,9 +43,10 @@ use bevy::{
 };
 use std::f32::consts::TAU;
 use std::sync::Arc;
-use terra_game::planet::{MainCamera, Planet};
-use terra_game::play::{Flora, Growth, Obstacles};
 use terra_gen::{Noise, Rng, Seed};
+use terra_world::flora::{Growth, Obstacles};
+use terra_world::flora_kinds::Flora;
+use terra_world::planet::{MainCamera, Planet};
 
 type Foliage = ExtendedMaterial<StandardMaterial, FoliageExtension>;
 

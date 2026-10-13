@@ -6,8 +6,8 @@
 
 use bevy::prelude::*;
 use terra_core::{Harvested, KindId, ObjectId, Operation, Yield};
-use terra_game::planet::Planet;
 use terra_gen::Seed;
+use terra_world::planet::Planet;
 
 const ROCKS: u64 = 2000;
 /// Rocks are spread within this distance of the start, in metres.

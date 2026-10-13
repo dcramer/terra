@@ -18,9 +18,9 @@ use bevy::{
 };
 use std::time::Instant;
 use terra_core::{Harvested, KindId, ObjectId, Operation, Yield};
-use terra_game::planet::MainCamera;
-use terra_game::planet::{FACES, Planet};
 use terra_gen::{Rng, Seed};
+use terra_world::planet::MainCamera;
+use terra_world::planet::{FACES, Planet};
 
 /// Cells along each edge of each of the planet's six faces.
 const CELLS_PER_EDGE: u32 = 48;

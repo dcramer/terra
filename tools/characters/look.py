@@ -28,7 +28,7 @@ ASSETS = os.path.join(ROOT, "assets")
 # The mannequin and the clips the game plays, cut from the animation libraries (clips.py).
 FIGURE = os.path.join(ASSETS, "models", "character", "mannequin.glb")
 
-# The palette, in sRGB, from the sandbox's own recolouring (play/flora.rs and props.rs).
+# The palette, in sRGB, from the sandbox's own recolouring (terra_world's flora.rs and the game's play/props.rs).
 # A model's materials must be named from this list; its colour comes from here, not the file.
 PALETTE = {
     "Rock": (0.66, 0.58, 0.54),

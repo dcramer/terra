@@ -18,6 +18,7 @@ terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
 terra_sim = { path = "crates/terra_sim" }
 terra_voxel = { path = "crates/terra_voxel" }
+terra_world = { path = "crates/terra_world" }
 # The same version Bevy 0.20 uses, so vectors pass between our crates and Bevy unchanged.
 # `libm` routes its trigonometry through the portable maths library (D30).
 glam = { version = "0.33", features = ["libm"] }

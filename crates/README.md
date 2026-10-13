@@ -1,6 +1,6 @@
 # Crates
 
-The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28). Only the applications, `terra_sandbox` and `terra_game`, may depend on it.
+The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28). Only the applications, `terra_sandbox` and `terra_game`, and the world they stand on, `terra_world` (D198), may depend on it.
 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|
@@ -12,7 +12,8 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists; parked with terraforming (D60) |
 | `terra_net` | Network messages and transport | No | Not created yet (track D) |
 | `terra_body` | Appearance data into joints and morph weights ([docs/characters.md](../docs/characters.md)) | No | Not created yet |
-| `terra_game` | The game in Bevy, in three plugin layers (world, walker, gameplay; D198): the world on screen, the player, items, building, creatures, people, sound, saving, and the shell every build runs under | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
+| `terra_world` | The world on screen in Bevy: the shell every run starts in (window, options, scripted runs, the remote protocol, sound), the planet, terrain, sky and the start, and the world layer (light, the day, what grows, the tick, levels of detail; D198). Builds and tests alone. [README](terra_world/README.md) | Yes | Exists |
+| `terra_game` | The game in Bevy, on `terra_world`: the walker and gameplay layers (D198): the player, items, building, creatures, people, the game's sounds, saving | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
 | `terra_sandbox` | A test environment on top of the game: it launches it, and holds testbeds and developer tools such as the workbench and the icon baker | Yes | Exists. [README](terra_sandbox/README.md) |
 
 Where each part of the engine stands is in [docs/engine.md](../docs/engine.md#tracks). Crates are created when their track starts, not before.

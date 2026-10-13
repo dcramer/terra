@@ -34,7 +34,7 @@ We write the terrain, the networking model and the game. We do not write a rende
 
 ## How the code is split
 
-One Cargo workspace. The rule that shapes it: **anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy** (D28). Only the applications, `terra_game` and `terra_sandbox`, may depend on Bevy, and `cargo xtask check` enforces it. The crates are listed in [crates/README.md](../crates/README.md).
+One Cargo workspace. The rule that shapes it: **anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy** (D28). Only the applications, `terra_game` and `terra_sandbox`, may depend on Bevy, and `terra_world`, the world on screen they stand on (D198); `cargo xtask check` enforces it. The crates are listed in [crates/README.md](../crates/README.md).
 
 Why this split:
 
@@ -46,15 +46,15 @@ The plain crates share one maths library with Bevy (`glam`), so positions pass b
 
 ### Layers of the game (D198)
 
-Inside `terra_game` the game is three Bevy plugins, each standing only on those before it, bundled as the plugin group `GamePlugins`:
+The game is three Bevy plugins, each standing only on those before it, bundled as the plugin group `GamePlugins`. The world is its own crate, `terra_world`, which builds, tests and runs without the game; the walker and gameplay are `terra_game`, on top of it:
 
 | Layer | Plugin | What it holds |
 |---|---|---|
-| World | `WorldPlugin` | The kinds of thing from the data files, light and air, the day, what grows, the tick, levels of detail. Under it, always on: the planet, the terrain and **the start**, the fixed place every east-and-south position is measured from |
-| Walker | `WalkerPlugin` | A body this machine steers, its camera, the controls and the options menu |
-| Gameplay | `GameplayPlugin` | Everything a player does: building, items, crafting, creatures, people, combat, survival, the map, saving, the remote probe, sound |
+| World (`terra_world`) | `WorldPlugin` | Light and air, the day, what grows and its data file, the tick, levels of detail. Under it, always on: the shell every run starts in, sound, the planet, the terrain and **the start**, the fixed place every east-and-south position is measured from |
+| Walker (`terra_game`) | `WalkerPlugin` | A body this machine steers, its camera, the controls and the options menu |
+| Gameplay (`terra_game`) | `GameplayPlugin` | Everything a player does: building, items, crafting, creatures, people, combat, survival, the map, saving, the remote probe, the game's sounds |
 
-The full game turns on all three. A run can leave layers out to build and test the ones below alone: the sandbox's `walk` is the world and the walker, a walk through the forest with nothing else of the game (`GamePlugins.build().disable::<GameplayPlugin>()`).
+The full game turns on all three. A run can leave layers out to build and test the ones below alone: the sandbox's `walk` is the world and the walker, a walk through the forest with nothing else of the game (`GamePlugins.build().disable::<GameplayPlugin>()`), and `cargo run -p terra_world --example world` is the world alone, compiled without the game.
 
 The layers are big on purpose: a few large, pluggable chunks, not a plugin per feature to pick from. Each feature is still its own plugin module inside its layer (AGENTS.md).
 
@@ -63,9 +63,10 @@ How a lower layer stays free of a higher one, in the usual Bevy ways:
 - **It never orders itself by a system above it.** A higher layer orders itself against a lower one's system sets (`PlayerInput`, `MenuSystems`, `Grading`), never the other way.
 - **It publishes small types for the layer above to fill in.** The walker owns `Hands` (what the player's pointer, mouse, wheel and hands are on), `ArriveAt` and `WarpTo`; gameplay's screens and tools write them.
 - **It adds what it owns when an entity appears, with observers.** The walker spawns the body; gameplay adds what a player carries and feels when a `LocalPlayer` is added.
+- **It owns the small types the layers above meet it through.** The world has `Footprint` (where something built stands, which flora keeps out of; the base keeps its own up to date), `Viewpoint` (what detail is graded from; a player requires one) and flora's kinds, which name the items they give by name (gameplay's `FloraGives` makes them items).
 - **What may be missing is optional.** A query over another layer's components is simply empty without it; a resource another layer may provide is `Option<Res<_>>`, or the system runs only when it exists (`run_if(resource_exists::<_>)`).
 
-All three are still one crate, so they compile together. The world layer no longer names anything above it: flora keeps out of whatever has a `Footprint` (the base keeps its own up to date), its kinds name the items they give by name (gameplay's `FloraGives` makes them items), and level of detail is graded from any `Viewpoint` (a player requires one). The walker still names a few gameplay types, though it runs without them: movement and the camera ask the player's building (`Site`, `Built`) what to stand on and bump into, and movement asks props, other bodies and stamina (`Prop`, `Body`, `Vitals`) what is in the way and what a jump costs.
+Cargo keeps the world below the game, since `terra_game` depends on `terra_world`. The walker shares `terra_game` with gameplay and still names a few gameplay types, though it runs without them: movement and the camera ask the player's building (`Site`, `Built`) what to stand on and bump into, and movement asks props, other bodies and stamina (`Prop`, `Body`, `Vitals`) what is in the way and what a jump costs. Giving the walker its own crate would mean turning those into shared types (a "solid" that stops a walker, a "surface" that holds one up) and taking the character's look (`appearance`, `character`, `skinning`) with it; it is not needed yet.
 
 ## State, and how it is shared
 

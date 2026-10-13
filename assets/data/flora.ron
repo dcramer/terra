@@ -2,7 +2,7 @@
 // Every kind of thing that grows or lies about the ground (D39, D127, D136): trees, rocks,
 // bushes, plants and flowers. A new kind is an entry here with its models in
 // assets/models/nature; no code names one. Where things grow is worked out layer by layer
-// (crates/terra_game/src/play/flora.rs); each layer chooses among the kinds that grow in it.
+// (crates/terra_world/src/flora.rs); each layer chooses among the kinds that grow in it.
 //
 // Each kind:
 //   name     what it is called

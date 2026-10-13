@@ -74,7 +74,7 @@ Not recommended now: an MCP server of our own, `bevy_brp_extras`, Antithesis (co
 
 ## What was built
 
-The sandbox's remote protocol gained, in [remote.rs](../crates/terra_game/src/remote.rs), [record.rs](../crates/terra_game/src/record.rs) and the play experiment's [probe.rs](../crates/terra_game/src/play/probe.rs):
+The sandbox's remote protocol gained, in [remote.rs](../crates/terra_world/src/remote.rs), [record.rs](../crates/terra_world/src/record.rs) and the play experiment's [probe.rs](../crates/terra_game/src/play/probe.rs):
 
 - `sandbox.press`: a key held for so many frames in a live run.
 - `sandbox.step`: the clock run for so many frames, then stopped.

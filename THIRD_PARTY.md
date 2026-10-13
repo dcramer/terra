@@ -45,4 +45,4 @@ By [Kenney](https://kenney.nl), under [CC0 1.0](https://creativecommons.org/publ
 |---|---|---|
 | `assets/sounds/` | [Impact Sounds](https://kenney.nl/assets/impact-sounds) and [RPG Audio](https://kenney.nl/assets/rpg-audio): footsteps, impacts, chopping, creaks, clicks | None to the files; 88 of the packs' 180 sounds. Fetched from kenney.nl on 2026-10-11, licence checked in each pack's `License.txt`. |
 
-The rest of the game's sound, air, water, fire, birds and music, is made in code (`crates/terra_game/src/audio/`).
+The rest of the game's sound, air, water, fire, birds and music, is made in code (`crates/terra_world/src/audio/`).

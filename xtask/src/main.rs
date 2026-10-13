@@ -241,7 +241,7 @@ struct Timing {
 }
 
 /// Reads `SANDBOX frames on <gpu> at <size>: median 1.00 ms, 99th percentile 2.00 ms,
-/// worst 3.00 ms` (crates/terra_game/src/shell.rs).
+/// worst 3.00 ms` (crates/terra_world/src/shell.rs).
 fn parse_timing(line: &str) -> Option<Timing> {
     let rest = line.strip_prefix("SANDBOX frames on ")?;
     let (who, numbers) = rest.split_once(": ")?;
@@ -515,8 +515,9 @@ fn usage() -> String {
     text
 }
 
-/// The only crates allowed to depend on Bevy (D28): the applications.
-const BEVY_CRATES: [&str; 2] = ["terra_game", "terra_sandbox"];
+/// The only crates allowed to depend on Bevy (D28): the applications, and the world on
+/// screen that the game stands on (D198).
+const BEVY_CRATES: [&str; 3] = ["terra_game", "terra_sandbox", "terra_world"];
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);

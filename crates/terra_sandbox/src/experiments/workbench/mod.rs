@@ -30,7 +30,7 @@ use bevy::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use terra_game::planet::MainCamera;
+use terra_world::planet::MainCamera;
 
 use terra_game::appearance::{Appearance, ReportJoints};
 use terra_game::{character, planet::Planet, remote, shell::Options};

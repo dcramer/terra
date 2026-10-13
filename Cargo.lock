@@ -5829,6 +5829,7 @@ dependencies = [
  "terra_gen",
  "terra_items",
  "terra_voxel",
+ "terra_world",
 ]
 
 [[package]]
@@ -5856,6 +5857,7 @@ dependencies = [
  "terra_core",
  "terra_game",
  "terra_gen",
+ "terra_world",
 ]
 
 [[package]]
@@ -5874,6 +5876,23 @@ dependencies = [
  "terra_core",
  "terra_gen",
  "transvoxel",
+]
+
+[[package]]
+name = "terra_world"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-inspector-egui",
+ "gltf",
+ "libm",
+ "ron",
+ "serde",
+ "serde_json",
+ "terra_build",
+ "terra_core",
+ "terra_gen",
+ "terra_voxel",
 ]
 
 [[package]]

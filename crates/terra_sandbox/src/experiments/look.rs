@@ -13,10 +13,10 @@ use bevy::{
     prelude::*,
     render::view::{ColorGrading, ColorGradingGlobal},
 };
-use terra_game::planet::MainCamera;
-use terra_game::planet::{Planet, Tweaks};
-use terra_game::sky::{Sky, SkyPlugin};
 use terra_gen::{Noise, Seed};
+use terra_world::planet::MainCamera;
+use terra_world::planet::{Planet, Tweaks};
+use terra_world::sky::{Sky, SkyPlugin};
 
 const HORIZON: Color = Color::srgb(0.98, 0.84, 0.74);
 const ZENITH: Color = Color::srgb(0.36, 0.58, 0.86);

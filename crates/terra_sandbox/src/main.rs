@@ -14,7 +14,8 @@
 mod experiments;
 
 use bevy::prelude::*;
-use terra_game::{appearance, character, planet, shell, terrain};
+use terra_game::{appearance, character};
+use terra_world::{planet, shell, terrain};
 
 fn main() -> AppExit {
     let options = match shell::Options::from_args(std::env::args().skip(1)) {

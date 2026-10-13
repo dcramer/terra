@@ -22,6 +22,10 @@ terra_core.workspace = true
 terra_gen.workspace = true
 terra_items.workspace = true
 terra_voxel.workspace = true
+terra_world.workspace = true
+
+[dev-dependencies]
+terra_world = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

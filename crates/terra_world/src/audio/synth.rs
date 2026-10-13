@@ -493,8 +493,9 @@ fn splash(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
+/// Measuring sounds, for tests here and in the crates above (the `testing` feature).
+#[cfg(any(test, feature = "testing"))]
+pub mod tests {
     use super::*;
 
     /// The first so many seconds of a sound.
