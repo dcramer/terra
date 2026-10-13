@@ -1,5 +1,6 @@
 //! What we need in front of us to keep the game fast: a short readout of frame times
-//! against the budget that is always on screen, and more of it on F3. The same numbers go
+//! against the budget and a graph of the last few seconds, a bar a frame, always on screen,
+//! and more of both on F3. The same numbers go
 //! to the log, as a summary once a minute and a warning when frames stutter, so every
 //! session leaves a record of how it ran.
 //!
@@ -7,13 +8,23 @@
 //! of three things that run side by side: the game's own update on the CPU, the render
 //! passes recorded on the CPU, and the GPU drawing them. With vsync on, the time between
 //! frames only says how fast the screen refreshes, so headroom is judged on the work.
+//!
+//! The graph is the frame-time graph every engine has (Unreal's `stat unitgraph`, Bevy's
+//! own `FrameTimeGraph`), drawn on the CPU into a small picture so it shows our work rather
+//! than the time between frames, and so it can be tested.
 
 use bevy::{
+    asset::RenderAssetUsages,
     diagnostic::{
         DiagnosticsStore, EntityCountDiagnosticsPlugin, SystemInformationDiagnosticsPlugin,
     },
+    image::ImageSampler,
     prelude::*,
-    render::{diagnostic::RenderDiagnosticsPlugin, renderer::RenderAdapterInfo},
+    render::{
+        diagnostic::RenderDiagnosticsPlugin,
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+        renderer::RenderAdapterInfo,
+    },
     window::{PresentMode, PrimaryWindow},
 };
 use std::{
@@ -35,6 +46,12 @@ const SUMMARY: Duration = Duration::from_secs(60);
 const STUTTER_REPORT: Duration = Duration::from_secs(10);
 /// Frames at the start that load and compile shaders, and say nothing about play.
 const WARM_UP_FRAMES: u32 = 300;
+/// How many frames the graph shows: four seconds at 60 a second.
+const GRAPH_FRAMES: usize = 240;
+/// How wide each frame's bar is, in pixels.
+const BAR_PX: usize = 2;
+/// How tall a graph is, in pixels. Its top is a stutter, so the budget line is halfway up.
+const GRAPH_PX: usize = 40;
 
 /// One frame, timed on the real clock.
 #[derive(Clone, Copy)]
@@ -103,12 +120,91 @@ impl Standing {
     }
 
     fn colour(self) -> Color {
+        let [r, g, b, _] = self.rgba();
+        Color::srgb_u8(r, g, b)
+    }
+
+    /// The colour as sRGB bytes, for the graph's pixels.
+    fn rgba(self) -> [u8; 4] {
         match self {
-            Self::Within => Color::srgb(0.55, 0.95, 0.55),
-            Self::Close => Color::srgb(1.0, 0.8, 0.3),
-            Self::Over => Color::srgb(1.0, 0.4, 0.35),
+            Self::Within => [140, 242, 140, 255],
+            Self::Close => [255, 204, 77, 255],
+            Self::Over => [255, 102, 89, 255],
         }
     }
+}
+
+/// The budget line across a graph, drawn over the bars so it shows through them.
+const BUDGET_LINE: [u8; 4] = [255, 255, 255, 200];
+/// A graph's empty part, a little darker than the readout so its edges show.
+const GRAPH_BACKGROUND: [u8; 4] = [0, 0, 0, 110];
+
+/// Draws a graph of some frames' times into RGBA pixels `width` by `height`, oldest on the
+/// left, a bar a frame [`BAR_PX`] wide, the newest at the right edge. The top is a stutter
+/// (twice the budget) and taller bars stop there; the budget line is halfway up. A frame
+/// with no time draws nothing.
+fn draw_graph(times: &[Option<f32>], width: usize, height: usize, pixels: &mut [u8]) {
+    for pixel in pixels.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&GRAPH_BACKGROUND);
+    }
+    let bars = width / BAR_PX;
+    let shown = &times[times.len().saturating_sub(bars)..];
+    let first = bars - shown.len();
+    for (i, time) in shown.iter().enumerate() {
+        let Some(ms) = *time else { continue };
+        let tall = ((ms / STUTTER_MS).clamp(0.0, 1.0) * height as f32).round() as usize;
+        let colour = Standing::of(ms).rgba();
+        for x in (first + i) * BAR_PX..(first + i + 1) * BAR_PX {
+            for y in height - tall..height {
+                let at = (y * width + x) * 4;
+                pixels[at..at + 4].copy_from_slice(&colour);
+            }
+        }
+    }
+    let line = height - height / 2;
+    for x in 0..width {
+        let at = (line * width + x) * 4;
+        pixels[at..at + 4].copy_from_slice(&BUDGET_LINE);
+    }
+}
+
+/// What a graph shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Part {
+    /// The longest of the three, against the budget. Always shown.
+    Work,
+    Game,
+    Render,
+    Gpu,
+}
+
+impl Part {
+    const ALL: [Self; 4] = [Self::Work, Self::Game, Self::Render, Self::Gpu];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Work => "work",
+            Self::Game => "game",
+            Self::Render => "render",
+            Self::Gpu => "GPU",
+        }
+    }
+
+    fn of(self, sample: &Sample) -> Option<f32> {
+        match self {
+            Self::Work => Some(sample.work_ms()),
+            Self::Game => Some(sample.game_ms),
+            Self::Render => sample.render_ms,
+            Self::Gpu => sample.gpu_ms,
+        }
+    }
+}
+
+/// A row of the readout holding one part's graph; only work's shows until F3.
+#[derive(Component)]
+struct Graph {
+    part: Part,
+    image: Handle<Image>,
 }
 
 #[derive(Resource)]
@@ -138,8 +234,13 @@ pub struct FrameParts {
 #[derive(Resource, Default)]
 pub struct Detail(pub bool);
 
+/// The readout's first line, coloured by how the work stands.
 #[derive(Component)]
 struct Readout;
+
+/// What F3 adds under the graphs.
+#[derive(Component)]
+struct ReadoutDetail;
 
 /// Adds the readout and the log of frame times. `on_screen` is off for screenshots.
 pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
@@ -173,7 +274,7 @@ pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
         if on_screen {
             app.add_systems(Startup, spawn_readout)
                 .add_systems(Update, toggle_detail)
-                .add_systems(Last, show.after(end_update));
+                .add_systems(Last, (show, draw_graphs).after(end_update));
         }
     }
 }
@@ -310,28 +411,140 @@ fn report(mut frames: ResMut<Frames>) {
     );
 }
 
-fn spawn_readout(mut commands: Commands) {
+fn spawn_readout(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let (width, height) = (GRAPH_FRAMES * BAR_PX, GRAPH_PX);
+    let readout = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(8),
+                top: px(8),
+                padding: UiRect::axes(px(8), px(4)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(4),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45)),
+            // Above everything else on screen.
+            GlobalZIndex(i32::MAX - 1),
+        ))
+        .id();
     commands.spawn((
         Readout,
         Text::new(""),
         TextFont::from_font_size(14.0),
         TextColor(Standing::Within.colour()),
+        ChildOf(readout),
+    ));
+    for part in Part::ALL {
+        let mut image = Image::new_fill(
+            Extent3d {
+                width: width as u32,
+                height: height as u32,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[0, 0, 0, 0],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+        );
+        image.sampler = ImageSampler::nearest();
+        let image = images.add(image);
+        let row = commands
+            .spawn((
+                Graph {
+                    part,
+                    image: image.clone(),
+                },
+                Node {
+                    column_gap: px(6),
+                    align_items: AlignItems::Center,
+                    display: if part == Part::Work {
+                        Display::Flex
+                    } else {
+                        Display::None
+                    },
+                    ..default()
+                },
+                ChildOf(readout),
+            ))
+            .id();
+        commands.spawn((
+            Text::new(part.label()),
+            TextFont::from_font_size(12.0),
+            TextColor(Color::srgb(0.8, 0.8, 0.8)),
+            Node {
+                width: px(44),
+                ..default()
+            },
+            ChildOf(row),
+        ));
+        commands.spawn((
+            ImageNode::new(image),
+            Node {
+                width: px(width as f32),
+                height: px(height as f32),
+                ..default()
+            },
+            ChildOf(row),
+        ));
+    }
+    commands.spawn((
+        ReadoutDetail,
+        Text::new(""),
+        TextFont::from_font_size(14.0),
+        TextColor(Color::srgb(0.85, 0.85, 0.85)),
         Node {
-            position_type: PositionType::Absolute,
-            left: px(8),
-            top: px(8),
-            padding: UiRect::axes(px(8), px(4)),
+            display: Display::None,
             ..default()
         },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45)),
-        // Above everything else on screen.
-        GlobalZIndex(i32::MAX - 1),
+        ChildOf(readout),
     ));
 }
 
-fn toggle_detail(keys: Res<ButtonInput<KeyCode>>, mut detail: ResMut<Detail>) {
+fn toggle_detail(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut detail: ResMut<Detail>,
+    mut graphs: Query<(&Graph, &mut Node)>,
+) {
     if keys.just_pressed(KeyCode::F3) {
         detail.0 = !detail.0;
+        for (graph, mut node) in &mut graphs {
+            if graph.part != Part::Work {
+                node.display = if detail.0 {
+                    Display::Flex
+                } else {
+                    Display::None
+                };
+            }
+        }
+    }
+}
+
+/// Redraws every graph on screen with the newest frame.
+fn draw_graphs(
+    frames: Res<Frames>,
+    detail: Res<Detail>,
+    graphs: Query<&Graph>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let start = frames.samples.len().saturating_sub(GRAPH_FRAMES);
+    for graph in &graphs {
+        if graph.part != Part::Work && !detail.0 {
+            continue;
+        }
+        let Some(mut image) = images.get_mut(&graph.image) else {
+            continue;
+        };
+        let (width, height) = (image.width() as usize, image.height() as usize);
+        let times: Vec<Option<f32>> = frames
+            .samples
+            .range(start..)
+            .map(|sample| graph.part.of(sample))
+            .collect();
+        if let Some(pixels) = image.data.as_mut() {
+            draw_graph(&times, width, height, pixels);
+        }
     }
 }
 
@@ -342,6 +555,7 @@ fn show(
     adapter: Res<RenderAdapterInfo>,
     window: Single<&Window, With<PrimaryWindow>>,
     readout: Single<(&mut Text, &mut TextColor), With<Readout>>,
+    more: Single<(&mut Text, &mut Node), (With<ReadoutDetail>, Without<Readout>)>,
 ) {
     let Some(&Sample { at: now, .. }) = frames.samples.back() else {
         return;
@@ -364,16 +578,31 @@ fn show(
         |spread: Option<Spread>| spread.map_or("-".to_string(), |s| format!("{:.1}", s.median));
     let (mut text, mut colour) = readout.into_inner();
     colour.0 = Standing::of(work.high).colour();
-    let mut lines = vec![format!(
-        "{:.1} ms of {FRAME_BUDGET_MS:.1}  worst {:.1}   game {}  render {}  GPU {}   {:.0} fps",
+    text.0 = format!(
+        "{:.1} ms of {FRAME_BUDGET_MS:.1}  p99 {:.1}  worst {:.1}   game {}  render {}  GPU {}   {:.0} fps{}",
         work.median,
+        work.high,
         work.worst,
         figure(spread(&recent, |s| Some(s.game_ms))),
         figure(spread(&recent, |s| s.render_ms)),
         figure(spread(&recent, |s| s.gpu_ms)),
         1000.0 / frame.median.max(0.001),
-    )];
+        if detail.0 { "" } else { "   F3 more" },
+    );
+    let (mut more, mut node) = more.into_inner();
+    node.display = if detail.0 {
+        Display::Flex
+    } else {
+        Display::None
+    };
     if detail.0 {
+        let mut lines = vec![
+            "the line's colour is its p99: green under 12.5 ms, amber to 16.7, red over the budget"
+                .to_string(),
+            format!(
+                "graphs: the last {GRAPH_FRAMES} frames, newest right; the line is the budget, the top a stutter ({STUTTER_MS:.0} ms)"
+            ),
+        ];
         let value = |path: &str| {
             store
                 .iter()
@@ -433,8 +662,8 @@ fn show(
             lines.push("vsync is on, so frame time follows the screen; work is what counts".into());
         }
         lines.push("F3 less".into());
+        more.0 = lines.join("\n");
     }
-    text.0 = lines.join("\n");
 }
 
 #[cfg(test)]
@@ -458,6 +687,36 @@ mod tests {
         assert_eq!(Standing::of(5.0), Standing::Within);
         assert_eq!(Standing::of(14.0), Standing::Close);
         assert_eq!(Standing::of(20.0), Standing::Over);
+    }
+
+    #[test]
+    fn graphs_a_bar_a_frame_against_the_budget() {
+        let (width, height) = (4 * BAR_PX, 40);
+        let mut pixels = vec![0; width * height * 4];
+        let pixel = |pixels: &[u8], bar: usize, y: usize| {
+            let at = (y * width + bar * BAR_PX) * 4;
+            <[u8; 4]>::try_from(&pixels[at..at + 4]).unwrap()
+        };
+        let quarter = FRAME_BUDGET_MS / 2.0;
+        // Five frames for four bars: the oldest is left off.
+        let times = [Some(50.0), None, Some(quarter), Some(14.0), Some(100.0)];
+        draw_graph(&times, width, height, &mut pixels);
+        // A frame with no time is empty.
+        assert_eq!(pixel(&pixels, 0, height - 1), GRAPH_BACKGROUND);
+        // Half the budget is a quarter of the way up, the top being twice the budget.
+        assert_eq!(pixel(&pixels, 1, 30), Standing::Within.rgba());
+        assert_eq!(pixel(&pixels, 1, 29), GRAPH_BACKGROUND);
+        assert_eq!(pixel(&pixels, 2, 39), Standing::Close.rgba());
+        // A stutter fills the bar to the top and no further.
+        assert_eq!(pixel(&pixels, 3, 0), Standing::Over.rgba());
+        // The budget line runs halfway up, over the bars.
+        for bar in 0..4 {
+            assert_eq!(pixel(&pixels, bar, 20), BUDGET_LINE);
+        }
+        // Fewer frames than bars sit at the right.
+        draw_graph(&[Some(100.0)], width, height, &mut pixels);
+        assert_eq!(pixel(&pixels, 2, 0), GRAPH_BACKGROUND);
+        assert_eq!(pixel(&pixels, 3, 0), Standing::Over.rgba());
     }
 
     #[test]
