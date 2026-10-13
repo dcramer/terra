@@ -21,6 +21,7 @@ pub mod debug;
 pub mod flora;
 pub mod flora_kinds;
 pub mod footprint;
+pub mod grown;
 pub mod loading;
 pub mod lod;
 pub mod mipmaps;

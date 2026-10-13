@@ -6,6 +6,7 @@
 //! The file is read into a registry, `Flora` (`data`).
 
 use super::data;
+use super::grown::Grown;
 use bevy::prelude::{Color, Resource};
 use serde::Deserialize;
 use terra_gen::Rng;
@@ -59,12 +60,13 @@ struct Colour(
 
 /// The real materials a part of a model may be drawn in, in the order they are stacked in
 /// `assets/materials/flora` (assets/materials/README.md), and how many metres each covers.
-pub const MATERIALS: [(&str, f32); 5] = [
+pub const MATERIALS: [(&str, f32); 6] = [
     ("pine_bark", 2.0),
     ("bark_brown_02", 1.0),
     ("leaves", 1.6),
     ("mossy_rock", 3.0),
     ("lichen_rock", 2.0),
+    ("rock_boulder_dry", 1.8),
 ];
 
 /// How a part of a model is drawn.
@@ -111,12 +113,23 @@ impl Grows {
     }
 }
 
+fn four() -> u32 {
+    4
+}
+
 /// One kind, as the file has it. The file says what each part means.
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct FloraDef {
     pub name: String,
+    #[serde(default)]
     pub models: Vec<String>,
+    /// How it is grown, for a kind grown rather than modelled (`grown`).
+    #[serde(default)]
+    pub grown: Option<Grown>,
+    /// How many variants of a grown kind there are.
+    #[serde(default = "four")]
+    pub variants: u32,
     #[serde(default)]
     colours: Vec<Colour>,
     pub sway: Sway,
@@ -304,7 +317,11 @@ mod tests {
         let folder =
             bevy::asset::io::file::FileAssetReader::get_base_path().join("assets/models/nature");
         for kind in flora.kinds() {
-            assert!(!kind.models.is_empty(), "{} has no models", kind.name);
+            assert!(
+                kind.models.is_empty() == kind.grown.is_some(),
+                "{} must have models or be grown, not both",
+                kind.name
+            );
             for model in &kind.models {
                 assert!(
                     folder.join(format!("{model}.glb")).is_file(),

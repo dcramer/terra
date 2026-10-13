@@ -60,7 +60,7 @@ The one place that says where the engine stands. The MVP's game systems stand as
 | Foundation | Contracts, then part 0 | Small, and everything else leans on it | Built: `terra_core` and `terra_gen`, the toolkit giving the same output on Linux, macOS and Windows |
 | A: terrain | 1, then 2 | The hardest work and the critical path. One crate, one owner ([terrain.md](terrain.md)) | A1 built in `terra_voxel`; A2 built: the game streams, draws and digs it. Not yet: frame times on an integrated GPU |
 | B: a walkable world | 6, 4, 3, 5 | The shell is the harness everything is measured with; the rest gives a world to walk | Built in `terra_game`: the shell (options, remapping, frame-time readout, scripted runs, screenshots, the remote protocol), sky, sea, sun, and a third-person player on the round world. Not yet: the debug menu (D81), a moving origin |
-| C: things on the ground | 7, 8 | Needs only the toolkit and a ground query | Scattering built: trees, rocks, plants and grass, removable one by one. Procedural objects are the lush forest spike ([research/lush-forest-spike.md](../research/lush-forest-spike.md)) |
+| C: things on the ground | 7, 8 | Needs only the toolkit and a ground query | Scattering built: trees, rocks, plants and grass, removable one by one. Trees, bushes, herbs and flowers grown by rules from bark and leaf cards (`terra_world::grown`, D222), first tried in the lush forest spike ([research/lush-forest-spike.md](../research/lush-forest-spike.md)) |
 | D: networking | 9 | A plain crate tested with two peers in one process. Touches nothing else | Not started; no `terra_net` yet. The game has no server inside it (D51) |
 
 What done means, beyond each crate's tests:

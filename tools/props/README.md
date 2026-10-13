@@ -48,6 +48,17 @@ The concept, model and `prop.json` are source art and are committed (`art/README
 node tools/props/props.ts refine
 ```
 
+## Scans
+
+Rocks, and anything else whose real shape a scan has, come from Poly Haven's CC0 scanned models rather than Tripo (D222):
+
+```bash
+node tools/props/scans.ts            # every scan in art/scans.json
+node tools/props/scans.ts Rock_4     # one
+```
+
+[art/scans.json](../../art/scans.json) names each model the game loads and what it is made from: the Poly Haven id, which piece of a set (largest first), the triangle budget and the folder of `assets/models`. [scans.ts](scans.ts) fetches the scan's geometry without its textures into `out/scans`, and [tools/blender/scan.py](../blender/scan.py) cuts it into its loose pieces, largest first, reduces each to the budget, shades it smooth across curves and split at creases (`--loose --crease 50`) and stands it at the origin; the piece wanted is copied into `assets/models`. The game draws it in its kind's material (`flora.ron`).
+
 ## Checking it in the game
 
 The sheet shows a prop in Blender. To see it as the game draws it (our colours, the glow, the size `builds.ron` gives it) beside a body, without playing, line it up in the sandbox's workbench; each prop's size is printed:

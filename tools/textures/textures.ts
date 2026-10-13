@@ -6,6 +6,7 @@
 //   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px]
 //                                            [--strength s] [--roughness r]
 //   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
+//   node tools/textures/textures.ts cards <name> <card>=<image>… [--size px] [--columns n]
 //
 // Each writes assets/materials/<name>/, and adds or updates its line in that folder's
 // README.md, which says where every material came from.
@@ -18,6 +19,11 @@
 // --size (1024) square, for Bevy to load as an array (`ImageArrayLayout::RowCount`). Its
 // occlusion is multiplied into the colour, by --occlusion (0.6), since a stack has no
 // ARM map of its own.
+//
+// **cards** cuts leaves, fronds and flowers drawn on a flat blue background out of it and
+// lays them in one atlas, assets/materials/<name>/cards.png, a grid of --columns (4) cells
+// across --size (2048), and writes the table the game reads, assets/data/<name>.ron: each
+// card's cell and the octagon round its leaves, so a card is cut to them.
 //
 // **material** writes color.jpg, normal.jpg, arm.jpg and height.jpg for parallax:
 //
@@ -190,6 +196,222 @@ function stack(name: string, materials: string[], size: number, occlusion: numbe
   console.log(`${name}: ${materials.length} layers in ${out}`);
 }
 
+/** An image's pixels, four bytes each, and its size. */
+function rgba(image: string, size?: number): { data: Buffer; width: number; height: number } {
+  const resize = size ? ["-resize", `${size}x${size}!`] : [];
+  const info = execFileSync("convert", [image, ...resize, "-format", "%w %h", "info:"]).toString().split(" ");
+  const data = execFileSync("convert", [image, ...resize, "-alpha", "on", "-depth", "8", "rgba:-"], {
+    maxBuffer: 1 << 28,
+  });
+  return { data, width: Number(info[0]), height: Number(info[1]) };
+}
+
+/** Cuts a picture drawn on a flat blue background out of it, as a chroma key does: each
+ * pixel's cover from how much bluer it is than its other channels against the
+ * background's own blueness, and its colour unmixed from the background's by that cover,
+ * so edges carry no blue. A pixel the picture does not cover takes the colour of the
+ * nearest that it does, so filtering at the edge of a leaf reads leaf. */
+export function keyOut(data: Buffer, width: number, height: number): Buffer {
+  const n = width * height;
+  const blueness = (i: number) => data[i * 4 + 2] - Math.max(data[i * 4], data[i * 4 + 1]);
+  // The background, from the border, which a card's picture leaves clear.
+  const border: number[] = [];
+  for (let x = 0; x < width; x++) border.push(x, (height - 1) * width + x);
+  for (let y = 0; y < height; y++) border.push(y * width, y * width + width - 1);
+  border.sort((a, b) => blueness(a) - blueness(b));
+  const bg = border[Math.floor(border.length / 2)];
+  const back = [data[bg * 4], data[bg * 4 + 1], data[bg * 4 + 2]];
+  const full = Math.max(1, blueness(bg));
+  const out = Buffer.alloc(n * 4);
+  const known = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    // The cover that leaves the unmixed colour no bluer than grey, as leaves, stems and petals
+    // are; what is a little bluish, as a white petal can be, counts as wholly covered.
+    const t = (blueness(i) - 0.04 * full) / (0.96 * full);
+    const cover = Math.min(1, Math.max(0, 1 - t));
+    out[i * 4 + 3] = Math.round(cover * 255);
+    if (cover > 0.05) {
+      for (let c = 0; c < 3; c++) {
+        const unmixed = (data[i * 4 + c] - (1 - cover) * back[c]) / cover;
+        out[i * 4 + c] = Math.round(Math.min(255, Math.max(0, unmixed)));
+      }
+      // What blue is left is the background's: no more than the other channels have.
+      out[i * 4 + 2] = Math.min(out[i * 4 + 2], Math.max(out[i * 4], out[i * 4 + 1]));
+      known[i] = cover > 0.5 ? 1 : 0;
+    }
+  }
+  // Colour grown outward into what is not covered, a pixel a pass.
+  let front = known.slice();
+  for (let pass = 0; pass < 24; pass++) {
+    const next = front.slice();
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        if (front[i]) continue;
+        const sum = [0, 0, 0];
+        let count = 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const [nx, ny] = [x + dx, y + dy];
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height || !front[ny * width + nx]) continue;
+          for (let c = 0; c < 3; c++) sum[c] += out[(ny * width + nx) * 4 + c];
+          count++;
+        }
+        if (count) {
+          for (let c = 0; c < 3; c++) out[i * 4 + c] = Math.round(sum[c] / count);
+          next[i] = 1;
+        }
+      }
+    }
+    front = next;
+  }
+  // Beyond that, the average of what is covered.
+  const mean = [0, 0, 0];
+  let covered = 0;
+  for (let i = 0; i < n; i++) {
+    if (!known[i]) continue;
+    for (let c = 0; c < 3; c++) mean[c] += out[i * 4 + c];
+    covered++;
+  }
+  for (let i = 0; i < n; i++) {
+    if (front[i]) continue;
+    for (let c = 0; c < 3; c++) out[i * 4 + c] = Math.round(mean[c] / Math.max(1, covered));
+  }
+  return out;
+}
+
+/** The octagon round every pixel covered past `cut`, as corners in the image's own
+ * coordinates from 0 to 1, clockwise from the top left: the tightest with sides along the
+ * axes and the diagonals, a pixel out. A card cut to it shades far fewer empty pixels
+ * than a square, for six triangles instead of two (Persson's particle trimming). */
+export function outline(data: Buffer, width: number, height: number, cut: number): [number, number][] {
+  // Furthest a covered pixel reaches along x, y, x + y and x - y, each way.
+  let [minX, maxX, minY, maxY] = [Infinity, -Infinity, Infinity, -Infinity];
+  let [minS, maxS, minD, maxD] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] <= cut * 255) continue;
+      // The pixel's corners, so the octagon holds the whole of it.
+      for (const [px, py] of [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]]) {
+        minX = Math.min(minX, px);
+        maxX = Math.max(maxX, px);
+        minY = Math.min(minY, py);
+        maxY = Math.max(maxY, py);
+        minS = Math.min(minS, px + py);
+        maxS = Math.max(maxS, px + py);
+        minD = Math.min(minD, px - py);
+        maxD = Math.max(maxD, px - py);
+      }
+    }
+  }
+  if (minX === Infinity) return [];
+  const m = 1;
+  [minX, maxX, minY, maxY] = [minX - m, maxX + m, minY - m, maxY + m];
+  [minS, maxS, minD, maxD] = [minS - 2 * m, maxS + 2 * m, minD - 2 * m, maxD + 2 * m];
+  // Corners where each side meets the next, y growing downward.
+  const corners: [number, number][] = [
+    [minS - minY, minY], // top, from the top-left diagonal
+    [maxD + minY, minY], // top, to the top-right diagonal
+    [maxX, maxX - maxD], // right, from the top-right diagonal
+    [maxX, maxS - maxX], // right, to the bottom-right diagonal
+    [maxS - maxY, maxY], // bottom, from the bottom-right diagonal
+    [minD + maxY, maxY], // bottom, to the bottom-left diagonal
+    [minX, minX - minD], // left, from the bottom-left diagonal
+    [minX, minS - minX], // left, to the top-left diagonal
+  ];
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  return corners.map(([x, y]) => [
+    Number((clamp(x, minX, maxX) / width).toFixed(4)),
+    Number((clamp(y, minY, maxY) / height).toFixed(4)),
+  ]);
+}
+
+/** Cuts each picture out of its blue background and lays them in a square atlas, a grid
+ * of `columns` cells, writing the atlas and the card table the game reads, which gives
+ * each card's cell and outline in the atlas's coordinates. */
+function cards(name: string, entries: string[], size: number, columns: number, cut: number) {
+  const out = join(ROOT, "assets", "materials", name);
+  mkdirSync(out, { recursive: true });
+  const cell = Math.floor(size / columns);
+  const tmp = join(out, ".cells");
+  mkdirSync(tmp, { recursive: true });
+  const placed: string[] = [];
+  const table: string[] = [];
+  entries.forEach((entry, index) => {
+    const [card, image] = entry.split("=");
+    if (!card || !image) throw new Error(`a card is name=image, not ${entry}`);
+    const source = rgba(resolve(image));
+    // A picture already cut out, with its own transparency, is taken as it is.
+    let cutAlready = false;
+    for (let i = 3; i < source.data.length && !cutAlready; i += 4) cutAlready = source.data[i] < 255;
+    const keyed = cutAlready ? source.data : keyOut(source.data, source.width, source.height);
+    const file = join(tmp, `${card}.png`);
+    execFileSync("convert", ["-size", `${source.width}x${source.height}`, "-depth", "8", "rgba:-", "-resize", `${cell}x${cell}!`, file], {
+      input: keyed,
+    });
+    const small = rgba(file);
+    const shape = outline(small.data, small.width, small.height, cut);
+    const colour = meanColour(small.data, cut);
+    const [col, row] = [index % columns, Math.floor(index / columns)];
+    placed.push(file, "-geometry", `+${col * cell}+${row * cell}`, "-composite");
+    const corner = (u: number, v: number) => `(${((col + u) / columns).toFixed(4)}, ${((row + v) / columns).toFixed(4)})`;
+    table.push(`        "${card}": (`);
+    table.push(`            cell: ${corner(0, 0)},`);
+    table.push(`            outline: [${shape.map(([u, v]) => corner(u, v)).join(", ")}],`);
+    table.push(`            colour: (${colour.map((c) => c.toFixed(3)).join(", ")}),`);
+    table.push(`        ),`);
+    console.log(`${card}: cell ${col},${row}, its octagon ${(100 * area(shape)).toFixed(0)}% of the cell`);
+  });
+  execFileSync("convert", ["-size", `${size}x${size}`, "xc:none", ...placed, "-depth", "8", join(out, "cards.png")]);
+  execFileSync("rm", ["-r", tmp]);
+  const ron = [
+    `// The leaf, frond and flower cards in assets/materials/${name}/cards.png, made from their`,
+    `// pictures by \`node tools/textures/textures.ts cards\`; don't edit by hand. Each card's cell`,
+    `// is the top-left corner of its square in the atlas, a ${columns}th of it across, and its outline`,
+    `// the octagon round what it covers past the cut, in the atlas's coordinates (0 to 1), and`,
+    `// its colour the average of what it covers, in sRGB.`,
+    `(`,
+    `    atlas: "materials/${name}/cards.png",`,
+    `    cut: ${cut},`,
+    `    across: ${(1 / columns).toFixed(4)},`,
+    `    cards: {`,
+    ...table,
+    `    },`,
+    `)`,
+    ``,
+  ];
+  writeFileSync(join(ROOT, "assets", "data", `${name}.ron`), ron.join("\n"));
+  const names = entries.map((e) => e.split("=")[0]).join(", ");
+  record(name, `cards of ${names}, each cut out of a generated picture on a blue background (art/textures/cards) by \`textures.ts cards\`, ${cell} pixels each.`);
+}
+
+/** The average colour of what a card covers, in sRGB from 0 to 1, averaged as light adds:
+ * what it reads as from far off, where a tree is drawn as solid lumps in it. */
+export function meanColour(data: Buffer, cut: number): [number, number, number] {
+  const linear = (c: number) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const encoded = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
+  const sum = [0, 0, 0];
+  let count = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] <= cut * 255) continue;
+    for (let c = 0; c < 3; c++) sum[c] += linear(data[i + c]);
+    count++;
+  }
+  return sum.map((v) => encoded(v / Math.max(1, count))) as [number, number, number];
+}
+
+/** How much of the unit square a polygon covers. */
+function area(points: [number, number][]): number {
+  let sum = 0;
+  points.forEach(([x, y], i) => {
+    const [nx, ny] = points[(i + 1) % points.length];
+    sum += x * ny - nx * y;
+  });
+  return Math.abs(sum) / 2;
+}
+
 async function main() {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
@@ -200,6 +422,8 @@ async function main() {
       roughness: { type: "string", default: "0.85" },
       name: { type: "string" },
       occlusion: { type: "string", default: "0.6" },
+      columns: { type: "string", default: "4" },
+      cut: { type: "string", default: "0.45" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -208,6 +432,8 @@ async function main() {
     await fetchMaterial(name, values.name ?? name, values.size === "2048" ? "2k" : values.size!);
   } else if (step === "stack" && name && rest.length) {
     stack(name, rest, values.size === "2048" ? 1024 : Number(values.size), Number(values.occlusion));
+  } else if (step === "cards" && name && rest.length) {
+    cards(name, rest, Number(values.size), Number(values.columns), Number(values.cut));
   } else if (step === "material" && name && rest.length === 1) {
     material(name, resolve(rest[0]), values.tile!, Number(values.size), Number(values.strength), Number(values.roughness));
     record(name, `made from a generated image by \`textures.ts material\`.`);
@@ -215,7 +441,8 @@ async function main() {
     console.log(`usage:
   node tools/textures/textures.ts fetch <polyhaven id> [--name n] [--size 1k|2k|4k]
   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px] [--strength s] [--roughness r]
-  node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]`);
+  node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
+  node tools/textures/textures.ts cards <name> <card>=<image>… [--size px] [--columns n] [--cut a]`);
     process.exit(values.help ? 0 : 2);
   }
 }

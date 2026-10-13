@@ -18,7 +18,8 @@ Not here: characters, bodies and gear (the `character` skill); item icons (`item
 | Furniture, a prop or a station | `assets/models/props` | `assets/data/builds.ron`, an `Items` variant: file, size, the height a real one stands, cost; a station also in `stations.ron` |
 | A tool or weapon | `assets/models/tools` (`"into": "tools"`), standing on the end of its handle, parts `Wood` and `Metal` | `items.ron`; its held look is made from it by `tools/characters/fit_held.py` |
 | An item lying on its own, such as a material | `assets/models/items` | `items.ron`; its icon by `item-icons` |
-| A tree, bush, plant, flower or rock | `assets/models/nature` | `assets/data/flora.ron`, a kind (below) |
+| A tree, bush, plant or flower | Not a model: grown by rules from bark and leaf cards (D222) | `assets/data/flora.ron`, a kind with `grown` (below) |
+| A rock | `assets/models/nature`, from a CC0 scan (`tools/props/scans.ts`, `art/scans.json`) | `assets/data/flora.ron`, a kind (below) |
 | A village piece | `assets/models/village` | `builds.ron` |
 
 A creature or animal is not on this pipeline yet: it needs a rig (`tripo rig --type other`) and animations. Ask the developers before starting one.
@@ -60,7 +61,7 @@ node tools/props/props.ts refine <name>   # free, in Blender: the game's file, a
 
 ## 6. Put it in the game
 
-Add it to its data file (the table in step 1). For a kind of tree, plant or rock in `flora.ron`, which still colours and sways models by role, so a textured one cannot yet say which of its parts move in the wind; until it can, ask the developers before making one textured:
+Add it to its data file (the table in step 1). A tree, bush, herb or flower is not made through this pipeline at all: it is grown (D222), a kind in `flora.ron` with `grown` naming its habit or shape, its bark (a material from `tools/textures`) and its leaf card (a picture on a flat blue background, laid in the atlas by `textures.ts cards`); the file's header says each part. For a rock, or another modelled kind, in `flora.ron`, which colours and sways models by role:
 
 - `models`: its files in `assets/models/nature`, two to four for variety.
 - `colours`: **every role its models use**, each with our colour and whether it is `Foliage` (moves in the wind) or `Firm`. A role left out takes the shared colours, whose default is foliage green, so bark left out turns green and sways.
@@ -83,5 +84,5 @@ In one commit: `art/props/<name>/` (`prop.json`, `concept.png`, `concept.prompt.
 
 The style guide lists what does not yet follow it ("Where the pipeline stands"). The ones that touch this skill:
 
-- **Trees, plants and rocks are still flat colour by role**, and clash with textured buildings and ground; `flora.ron` needs to read a textured model's swaying parts first. Trees may instead be grown in code with real bark and leaf cards, as the lush forest spike does at about 5 ms a frame for 2,700 trees ([research/lush-forest-spike.md](../../../research/lush-forest-spike.md)); which way is open.
+- **Plants are grown, not modelled** (D222), so a textured Tripo plant has no place in `flora.ron`; a modelled kind there is drawn in its kind's material, projected onto it, not its own textures.
 - **No approved image in the style yet.** Concepts are drawn from the guide's paragraph alone. Once one is approved, put it at `art/style/reference.png` and `props.ts` gives it as a reference.

@@ -4,13 +4,17 @@ so its scanned colour, normal and roughness maps still fit), its normals smooth,
 the origin and its middle over it, and written as a glTF binary of its own with its textures
 in it.
 
-    tools/blender/run.sh tools/blender/scan.py MODEL.gltf OUT_PREFIX BUDGET [--whole]
+    tools/blender/run.sh tools/blender/scan.py MODEL.gltf OUT_PREFIX BUDGET [--whole] [--loose] [--crease DEG]
 
 Each separate object in the file is its own piece, as a set of rocks is, written to
 OUT_PREFIX_1.glb, OUT_PREFIX_2.glb and so on; --whole keeps them as one, written to
-OUT_PREFIX.glb. Prints SCAN with each piece's triangles before and after.
+OUT_PREFIX.glb. --loose takes each loose part as a piece instead, largest first, for a set
+scanned as one object; crumbs are dropped. --crease shades smooth across curves and splits
+where faces meet at more than so many degrees (docs/art-style.md), rather than smooth
+everywhere. Prints SCAN with each piece's triangles before and after.
 """
 
+import math
 import os
 import sys
 
@@ -18,7 +22,13 @@ import bpy
 
 args = sys.argv[sys.argv.index("--") + 1 :]
 whole = "--whole" in args
-model, prefix, budget = [a for a in args if a != "--whole"][:3]
+loose = "--loose" in args
+crease = None
+if "--crease" in args:
+    at = args.index("--crease")
+    crease = float(args[at + 1])
+    del args[at : at + 2]
+model, prefix, budget = [a for a in args if a not in ("--whole", "--loose")][:3]
 budget = int(budget)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -41,6 +51,29 @@ if whole and len(meshes) > 1:
     bpy.context.view_layer.objects.active = meshes[0]
     bpy.ops.object.join()
     meshes = [bpy.context.view_layer.objects.active]
+    bpy.ops.object.select_all(action="DESELECT")
+
+if loose:
+    # One object of every part, welded so a part split along its seams stays one.
+    for ob in meshes:
+        ob.select_set(True)
+    bpy.context.view_layer.objects.active = meshes[0]
+    if len(meshes) > 1:
+        bpy.ops.object.join()
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.remove_doubles(threshold=0.0005)
+    bpy.ops.mesh.separate(type="LOOSE")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    parts = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    # Crumbs and chips are not pieces.
+    for ob in [o for o in parts if len(o.data.vertices) <= 50]:
+        bpy.data.objects.remove(ob)
+    meshes = sorted(
+        (o for o in bpy.context.scene.objects if o.type == "MESH"),
+        key=lambda o: o.dimensions.length,
+        reverse=True,
+    )
     bpy.ops.object.select_all(action="DESELECT")
 
 
@@ -70,8 +103,14 @@ for number, ob in enumerate(meshes, start=1):
         cut.use_collapse_triangulate = True
         bpy.context.view_layer.objects.active = ob
         bpy.ops.object.modifier_apply(modifier=cut.name)
-    for poly in ob.data.polygons:
-        poly.use_smooth = True
+    if crease is None:
+        for poly in ob.data.polygons:
+            poly.use_smooth = True
+    else:
+        bpy.ops.object.select_all(action="DESELECT")
+        ob.select_set(True)
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.shade_smooth_by_angle(angle=math.radians(crease), keep_sharp_edges=True)
     # Foot at the origin, the middle over it: the lowest point of the piece on the ground.
     low = min(v.co.z for v in ob.data.vertices)
     xs = [v.co.x for v in ob.data.vertices]

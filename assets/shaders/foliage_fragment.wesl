@@ -19,7 +19,7 @@ import bevy_pbr::render::{
 // the sky's light (D216). Crysis bakes the same into its trees' vertices.
 const BOUNCE: vec3<f32> = vec3<f32>(0.55, 0.6, 0.4);
 
-// Field order must match FoliageExtension in lush.rs.
+// Field order must match FoliageExtension in grown/mod.rs and lush.rs.
 struct Wind {
     direction: vec3<f32>,
     strength: f32,

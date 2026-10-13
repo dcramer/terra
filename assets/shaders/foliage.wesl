@@ -1,5 +1,6 @@
-// Moves textured foliage in the wind: leaf cards, fern fronds and the trees they hang on,
-// for the lush-forest spike (crates/terra_sandbox/src/experiments/lush.rs). The same as
+// Moves textured foliage in the wind: leaf cards, fronds, flowers and the trees they hang
+// on, grown plants (crates/terra_world/src/grown) and the lush forest spike's
+// (crates/terra_sandbox/src/experiments/lush.rs). The same as
 // wind.wesl, except that how much a vertex moves comes from its second texture coordinate,
 // so the first is free for the leaf or bark texture: x is how far it bends with the whole
 // plant, y how much it flutters on its own.
@@ -22,7 +23,7 @@ import bevy_pbr::render::{
 @if(PREPASS_PIPELINE)
 @group(0) @binding(1) var<uniform> globals: Globals;
 
-// Field order must match FoliageExtension in lush.rs.
+// Field order must match FoliageExtension in grown/mod.rs and lush.rs.
 struct Wind {
     direction: vec3<f32>,
     strength: f32,
@@ -32,6 +33,12 @@ struct Wind {
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> wind: Wind;
+
+fn hash(p: vec3<f32>) -> f32 {
+    let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+    let r = q + dot(q, q.yzx + 33.33);
+    return fract((r.x + r.y) * r.z);
+}
 
 fn sway(world: vec3<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
     let downwind = dot(world, wind.direction);
@@ -75,6 +82,10 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
 }
 @if(NORMAL_PREPASS_OR_DEFERRED_PREPASS && VERTEX_NORMALS)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
+@if(NORMAL_PREPASS_OR_DEFERRED_PREPASS && VERTEX_TANGENTS)
+    out.world_tangent = mesh_functions::mesh_tangent_local_to_world(world_from_local, vertex.tangent, vertex_in.instance_index);
+@if(VERTEX_COLORS)
+    out.color = vertex.color;
 @if(MOTION_VECTOR_PREPASS) {
     let previous_from_local = mesh_functions::get_previous_world_from_local(vertex_in.instance_index);
     var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(vertex.position, 1.0));
@@ -85,8 +96,17 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
 } @else {
 @if(VERTEX_NORMALS)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
-@if(VERTEX_COLORS)
-    out.color = vertex.color;
+// The bark's normal map and relief need the surface's tangents.
+@if(VERTEX_TANGENTS)
+    out.world_tangent = mesh_functions::mesh_tangent_local_to_world(world_from_local, vertex.tangent, vertex_in.instance_index);
+@if(VERTEX_COLORS) {
+    // Each plant is a slightly different shade and hue, decided by where it stands, so no
+    // two of a variant look alike. The alpha, how much of the sky it sees, is kept.
+    let origin = world_from_local[3].xyz;
+    let shade = 0.9 + 0.2 * hash(origin * 7.3);
+    let warm = (hash(origin * 3.1 + 17.0) - 0.5) * 0.12;
+    out.color = vec4<f32>(vertex.color.rgb * shade * vec3<f32>(1.0 + warm, 1.0, 1.0 - warm), vertex.color.a);
+}
 }
 
 @if(VERTEX_OUTPUT_INSTANCE_INDEX)

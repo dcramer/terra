@@ -62,5 +62,5 @@ Along the way: a scripted screenshot counted an old file at its path as taken; B
 - **Rare single slow frames**, 15 to 30 ms about once in ten seconds, in the forest standing still and in the game's world scene too; not tied to walking or grass. Next: a GPU capture in Xcode, or Tracy.
 - **A low sun puts the whole floor in shade.** At 17:00 the solid lumps block it everywhere, so the flecks are gone. Smaller lumps, or cards farther out, would let some through at some cost.
 - **The edge of the draw distance.** Trees vanish at 180 m. In a dense forest the trees in front hide it; from a clearing or a hill it would show. Impostors, pictures of each tree from several sides, would carry the forest to the horizon.
-- **One generator, one species.** More species need their own branching rules and leaf pictures.
-- **Grown or modelled.** D14 now asks for real materials, which these trees have: real bark, real leaves. Whether the game's trees are grown in code like these or modelled through Tripo is open; flora.ron cannot yet sway a textured model's leaves apart from its trunk.
+- **One generator, one species.** The game's flora is grown by a generator graduated from this one (`terra_world::grown`, D222), with a pine's and a birch's habits beside the oak's. This spike keeps its own copy, which has moved on (D214, D216, D218); the two are to be made one.
+- **Grown or modelled.** Grown, for now (D222).

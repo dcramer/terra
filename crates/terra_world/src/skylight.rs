@@ -10,7 +10,7 @@ use crate::planet::{MainCamera, Tweaks};
 use crate::sky::Sky;
 use bevy::{
     asset::RenderAssetUsages,
-    light::GeneratedEnvironmentMapLight,
+    light::{EnvironmentMapLight, GeneratedEnvironmentMapLight},
     prelude::*,
     render::render_resource::{
         Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
@@ -101,9 +101,16 @@ fn paint(
     tweaks: Res<Tweaks>,
     mut painted: ResMut<Painted>,
     mut images: ResMut<Assets<Image>>,
-    mut camera: Query<(&GlobalTransform, &mut GeneratedEnvironmentMapLight), With<MainCamera>>,
+    mut camera: Query<
+        (
+            &GlobalTransform,
+            &mut GeneratedEnvironmentMapLight,
+            Option<&mut EnvironmentMapLight>,
+        ),
+        With<MainCamera>,
+    >,
 ) {
-    let Ok((at, mut environment)) = camera.single_mut() else {
+    let Ok((at, mut environment, filtered)) = camera.single_mut() else {
         return;
     };
     let up = at.translation().normalize_or(Vec3::Y);
@@ -113,6 +120,17 @@ fn paint(
     }
     if environment.intensity != light.brightness {
         environment.intensity = light.brightness;
+    }
+    // Bevy makes the light the shading reads, `EnvironmentMapLight`, once from the
+    // generated one, and does not follow later changes to its brightness or turn, so they
+    // are given to it as well; without this the shade kept the first frame's light all day.
+    if let Some(mut filtered) = filtered {
+        if filtered.intensity != environment.intensity {
+            filtered.intensity = environment.intensity;
+        }
+        if filtered.rotation != environment.rotation {
+            filtered.rotation = environment.rotation;
+        }
     }
 
     let linear = |c: Color| Vec3::from_slice(&c.to_linear().to_f32_array()[..3]);

@@ -66,9 +66,11 @@ These are triangles in the game's file, starting from what the bake-off and the 
 | A creature, wolf-sized | 1,500 to 3,000 |
 | A character body | 2,500 to 5,000 |
 | A rock | 100 to 600 |
-| A tree, near | 2,000 to 5,000, leaf clumps included |
+| A tree, near | 2,000 to 8,000, its leaf cards included (D222) |
 | A building kit's log or beam, generated (D200), a metre of it | up to 700 |
 | A building kit's roof, generated (D209), a square metre of it, covering, battens, boards and caps | up to 500 |
+
+A tree's leaves are cards, each cut to an octagon round its leaves, six triangles where a square would be two but a third fewer empty pixels shaded, so a full crown near the camera costs more triangles than a solid one would; its farther levels of detail fall to a few hundred (D203, D222).
 
 ## Made to vary
 
@@ -134,18 +136,19 @@ Models carry their own materials; the light, the sky and the air are shared shad
 | Haze and layered distance | Bevy's physical atmosphere's aerial perspective, its distances scaled 18 times so a few hundred metres read as many kilometres (D212) | Working |
 | Sky | Bevy's physical atmosphere (Hillaire's model, as Unreal's), with our clouds, stars and moon drawn over it, and the dusk and night in chosen colours, since it goes dark at sunset (D212) | Working |
 | Exposure, bloom and grading | A fixed exposure for sunlit ground, opening a little through the dusk; AgX tone mapping, a film's response; soft bloom (D212) | Working |
-| Dense foliage and wind | Instanced plants, merged grass blades, one wind shader | Working near the start; its models are still direction D |
+| Dense foliage and wind | Plants grown from cards, merged grass blades, one wind shader | Working near the start |
 | Ground cover | Grass as clumped blades round the camera, fading into ground of its own colour; leaf litter and moss painted onto the ground under trees (D202) | Working in the lush forest; litter is Poly Haven's Forest Leaves 02, a fifth layer of the ground |
 | Water | A see-through surface mirroring the sky at a low angle | Working; no waves |
 | Shade in corners | Screen-space ambient occlusion over about a metre (D212), and contact shadows where things meet (D204) | Working |
-| Trees, bushes and rocks | Their parts drawn in real materials, bark, leaves and lichen-covered rock, projected triplanar and tinted by their kind, normals smoothed across curves (D212) | Working on the free models, which are still crude in shape; see below |
+| Trees, bushes and small plants | Grown by rules, as SpeedTree makes them: trunks and branches of real bark, leaves as cards cut from pictures of real sprays, a few variants a kind, levels of detail and shadow stand-ins by size (D203, D222) | Working: pine, birch and a broadleaf, two bushes, fern, herb and three flowers |
+| Rocks | Shapes from CC0 scans cut to 350 to 550 triangles, drawn in real rock materials projected triplanar and tinted by their kind (D212, D222) | Working |
 
 - **Effort goes into light and atmosphere**, which is shader code and shared by everything.
 - **Fullness comes from quantity.** Ground cover, undergrowth and canopy in layers, as in Sons of the Forest (D148).
 
 ## Open questions
 
-- **Trees, plants and rocks** are drawn in real materials now, but their shapes are still direction D's: pines as stacked cones, crowns as faceted blobs, rocks of 70 to 130 triangles, small plants in flat colour. They are to be made again to this guide. Trees could be grown in code instead, with real bark and leaf cards: the lush forest spike runs 2,700 of them at about 5 ms a frame ([research/lush-forest-spike.md](../research/lush-forest-spike.md)). Which way is open.
+- **Leaves as cards or clumps** (D148) are the developers' to choose by eye. Trees, bushes and small plants are grown with cards for now (D222), as shipped games draw them; trees are still the small end of their species' range, below the mighty ones this guide asks for, since how big a tree is decides which axe fells it (D96).
 - **How materials change through seasons and phases** (D149).
 - **Night.** Moonlight and lamps on textured surfaces.
 - **Blur and framing**, which matter more in third person.

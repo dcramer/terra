@@ -4,7 +4,7 @@
 //! layers above it, so an experiment can put it on screen alone, to look at or walk
 //! through (`walk`), and test it there.
 
-use super::{air, cover, data, daylight, flora, lod, scene, skylight, tick};
+use super::{air, cover, data, daylight, flora, grown, lod, scene, skylight, tick};
 use bevy::prelude::*;
 
 pub struct WorldPlugin;
@@ -16,6 +16,7 @@ impl Plugin for WorldPlugin {
         air::plugin(app);
         skylight::plugin(app);
         daylight::plugin(app);
+        grown::plugin(app);
         flora::plugin(app);
         cover::plugin(app);
         tick::plugin(app);

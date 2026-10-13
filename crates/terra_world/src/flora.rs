@@ -1,15 +1,18 @@
 //! What grows and lies around the scene: trees, rocks, bushes, flowers and grass.
 //!
-//! The models are free ones (see THIRD_PARTY.md), read for their shapes only. Their
-//! colours are ours, chosen per kind to sit with the light, their parts are drawn in real
-//! materials, bark, leaves and rock (D212, flora.wesl), and everything moves in one
-//! wind. Where each thing stands comes from the seed and the place, so it is the same on
-//! every run. Trees, rocks and plants are one entity each, sharing a mesh per model.
+//! Trees, bushes, herbs and flowers are grown by rules from bark and leaf cards
+//! (`grown`, D222), a few variants a kind. Rocks and the like are models (scans and free
+//! ones, see THIRD_PARTY.md), read for their shapes only and drawn in real materials,
+//! rock and bark, tinted per kind (D212, flora.wesl). Everything moves in one wind. Where
+//! each thing stands comes from the seed and the place, so it is the same on every run.
+//! Each plant or rock is one entity, sharing its meshes with the rest of its variant; a
+//! tree's levels of detail are its children.
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
 use super::flora_kinds::Cuttable;
 use super::flora_kinds::{Flora, FloraDef, Grows, MATERIALS, Sway};
 use super::footprint::Footprint;
+use super::grown;
 use super::models::{Part, read_model};
 use super::scene::SUN_DIRECTION;
 use crate::planet::{Planet, Tweaks};
@@ -231,13 +234,22 @@ pub fn plugin(app: &mut App) {
         );
 }
 
-/// A model ready to place: its mesh, and its size as modelled.
+/// A model ready to place: its mesh, or what a grown one is drawn from, and its size as
+/// modelled or grown.
 #[derive(Clone)]
 struct Model {
-    mesh: Handle<Mesh>,
+    look: Drawn,
     height: f32,
     /// Half its width at the ground, more or less.
     spread: f32,
+}
+
+/// How a model is drawn: one mesh in the flora material, or a grown plant's levels of
+/// detail and shadow stand-ins (`grown`).
+#[derive(Clone)]
+enum Drawn {
+    Mesh(Handle<Mesh>),
+    Grown(Box<grown::Variant>),
 }
 
 /// Turns a model's parts into one mesh in our colours, carrying how each vertex moves in
@@ -311,7 +323,7 @@ fn build_model(kind: &FloraDef, parts: &[Part], meshes: &mut Assets<Mesh>) -> Mo
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, vec![[0.0f32; 2]; count])
     .with_inserted_indices(Indices::U32(indices));
     Model {
-        mesh: meshes.add(mesh),
+        look: Drawn::Mesh(meshes.add(mesh)),
         height,
         spread,
     }
@@ -400,6 +412,9 @@ fn plant(
     mut obstacles: ResMut<Obstacles>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
+    mut foliage: ResMut<Assets<grown::Foliage>>,
+    mut plain: ResMut<Assets<StandardMaterial>>,
+    cards: Res<grown::Cards>,
     assets: Res<AssetServer>,
 ) {
     let middle = start.translation;
@@ -437,11 +452,40 @@ fn plant(
         extension: wind,
     });
 
-    // Every kind's models, by its place in `assets/data/flora.ron`.
+    // Every kind's models, or its grown variants, by its place in `assets/data/flora.ron`.
+    let mut looks = grown::Looks::new(
+        -SUN_DIRECTION.reject_from(up).normalize(),
+        &cards,
+        &assets,
+        &mut foliage,
+        &mut plain,
+    );
     let models: Vec<Vec<Model>> = flora
         .kinds()
         .iter()
         .map(|kind| {
+            if let Some(how) = &kind.grown {
+                let grew = grown::grow(
+                    how,
+                    &kind.name,
+                    seed.derive("grown").derive(&kind.name),
+                    kind.variants,
+                    kind.size.unwrap_or((1.0, 1.0)),
+                    &cards,
+                    &mut looks,
+                    &assets,
+                    &mut meshes,
+                    &mut foliage,
+                );
+                return grew
+                    .into_iter()
+                    .map(|variant| Model {
+                        height: variant.height,
+                        spread: variant.spread,
+                        look: Drawn::Grown(Box::new(variant)),
+                    })
+                    .collect();
+            }
             kind.models
                 .iter()
                 .filter_map(|name| match read_model(&format!("nature/{name}.glb")) {
@@ -498,17 +542,31 @@ fn plant(
         }
         planted += 1;
         solid_things.extend(stops);
-        commands.spawn((
-            Mesh3d(model.mesh.clone()),
-            MeshMaterial3d(solid.clone()),
-            transform,
-            Growth {
-                clearance_m,
-                cut,
-                obstacle: stops.map(|(at, _)| at),
-                middle_m: (model.height * transform.scale.y * 0.4).min(1.4),
-            },
-        ));
+        let growth = Growth {
+            clearance_m,
+            cut,
+            obstacle: stops.map(|(at, _)| at),
+            middle_m: (model.height * transform.scale.y * 0.4).min(1.4),
+        };
+        match &model.look {
+            Drawn::Mesh(mesh) => {
+                commands.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(solid.clone()),
+                    transform,
+                    growth,
+                ));
+            }
+            Drawn::Grown(variant) => {
+                let tall = model.height * transform.scale.y;
+                grown::draw(
+                    &mut commands.spawn((transform, Visibility::default(), growth)),
+                    variant,
+                    tall,
+                    &looks,
+                );
+            }
+        }
     };
 
     // Trees: woods with clearings, thinning to nothing around the base and at the shore.

@@ -14,7 +14,7 @@ tools/blender/run.sh path/to/script.py --open scene.blend [args...]
 - **Start:** without `--open`, Blender starts from its factory settings with the default scene, without anyone's preferences or add-ons.
 - **Output:** Blender's noise is filtered out. The exit code is the script's: an uncaught error gives 1, and `SystemExit(n)` gives `n`.
 
-**[scan.py](scan.py)** makes a scanned model, such as a Poly Haven rock or fern, placeable by the hundred: each piece welded, cut to a triangle budget with its textures kept, its foot at the origin, written as its own glTF binary. `tools/blender/run.sh tools/blender/scan.py MODEL.gltf OUT_PREFIX BUDGET [--whole]`.
+**[scan.py](scan.py)** makes a scanned model, such as a Poly Haven rock or fern, placeable by the hundred: each piece welded, cut to a triangle budget with its textures kept, its foot at the origin, written as its own glTF binary. `tools/blender/run.sh tools/blender/scan.py MODEL.gltf OUT_PREFIX BUDGET [--whole] [--loose] [--crease DEG]`: `--loose` takes a set scanned as one object a loose part at a time, largest first, and `--crease` splits normals at creases rather than smoothing everywhere, as `tools/props/scans.ts` asks for the flora file's rocks.
 
 **Checked by `cargo xtask check`:** [check.py](check.py) compiles every tracked script, checks what it imports exists in this Blender and what it uses from our own modules is there, and imports the shared modules, without running any script. A machine with no Blender skips it.
 

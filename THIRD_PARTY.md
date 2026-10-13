@@ -17,7 +17,7 @@ All by [Quaternius](https://quaternius.com), who releases everything under [CC0 
 
 | Where | From | Changes |
 |---|---|---|
-| `assets/models/nature/` | Ultimate Nature Pack: trees, rocks, bushes, plants, flowers | None to the files. The sandbox reads their shapes and applies its own colours. |
+| `assets/models/nature/` | Ultimate Nature Pack: a stump, a mossy log and grass | None to the files. The sandbox reads their shapes and applies its own colours. Its trees, rocks, bushes, plants and flowers were replaced on 2026-10-13 by grown plants and scanned rocks (D222). |
 | `assets/models/props/` | Survival pack: a fire and a log | None to the files. Recoloured the same way. |
 | `assets/models/character/mannequin.glb` | Universal Animation Library v3.0 (2026-06-16, Pro edition, 120 clips) and Universal Animation Library 2 v2.2 (2026-09-28, Source edition, 134 clips), both bought from [quaternius.itch.io](https://quaternius.itch.io/universal-animation-library) on 2026-10-12: the mannequin, its skeleton and the clips the game plays | Only the clips listed in `art/animation/clips.txt` are kept, cut by `tools/characters/clips.py`, keyframes unchanged; the libraries themselves are not committed (`art/README.md`). |
 | `assets/models/creatures/` | Ultimate Animated Animals pack: `Deer.glb`. Easy Enemies pack: `Spider.glb`. Both rigged and animated | None to the files. |
@@ -33,6 +33,7 @@ From [Poly Haven](https://polyhaven.com), under [CC0 1.0](https://creativecommon
 | Where | From | Changes |
 |---|---|---|
 | `assets/models/nature/forest/` | [Rock Moss Set 01](https://polyhaven.com/a/rock_moss_set_01) (`mossy_rock_a_*`), [Rock Moss Set 02](https://polyhaven.com/a/rock_moss_set_02) (`mossy_rock_b_*`), [Boulder 01](https://polyhaven.com/a/boulder_01), [Fern 02](https://polyhaven.com/a/fern_02), [Tree Stump 01](https://polyhaven.com/a/tree_stump_01), at 1k, fetched 2026-10-13 | Split into one file a piece, welded, cut to 700 to 1,800 triangles, foot at the origin, by `tools/blender/scan.py`; their textures kept |
+| `assets/models/nature/Rock_*.glb`, `Rock_Moss_*.glb` | The scans listed in `art/scans.json`: [Boulder 01](https://polyhaven.com/a/boulder_01), [Rock 07](https://polyhaven.com/a/rock_07), [Rock 09](https://polyhaven.com/a/rock_09), [Stone 01](https://polyhaven.com/a/stone_01), Namaqualand Boulders 03 to 06 and Boulders 01, Rock Moss Sets 01 and 02, at 1k without their textures, fetched 2026-10-13 | A piece of each, cut to 350 to 550 triangles, shaded smooth across curves and split at creases, foot at the origin, by `tools/props/scans.ts` through `tools/blender/scan.py`; drawn in the flora file's materials (D222) |
 
 ## Made with AI
 
@@ -44,6 +45,7 @@ Made by us with generators on paid plans, whose terms leave what they make with 
 | `assets/models/character/skins/` | Tripo (texture, on our Studio subscription): a template's skin painted on the base's mesh from its design | `tools/characters/paint_skin.sh` |
 | `assets/models/gear/` | Tripo (concept images and models, on our Studio subscription): a pack in two sizes, a cap, a coat and a quiver | Made once on the base body and given its morphs, by `tools/characters/build_bodies.sh` |
 | `assets/models/props/Forge.glb`, `Smelter.glb`, `Workbench.glb`, `ClaimStone.glb`, `Sack.glb`, and the furniture (`Chair.glb`, `Stool.glb`, `RoundTable.glb`, `NightStand.glb`, `Bed.glb`, `Bookshelf.glb`, `RugRound.glb`, `RugLong.glb`, `Spade.glb`); `assets/models/tools/Pickaxe.glb`, `Torch.glb`; the trees `assets/models/nature/Oak.glb`, `Willow.glb`, `Maple.glb`, `Yew.glb`, `Teak.glb`, `Mahogany.glb`, `Redwood.glb` | Tripo (concept images and models, on our Studio subscription) | `tools/props`, from the source art in `art/props/`: cleaned up and given our palette in Blender; D147 |
+| `assets/materials/foliage/cards.png` (from `art/textures/cards/`), `assets/materials/birch_bark/` (from `art/textures/birch-bark.png`) | Tripo (images, free on our Studio subscription) | Leaf, frond and flower pictures on a blue background, cut out and laid in one atlas by `tools/textures` (`cards`); a birch bark made to tile by its `material` step (D222) |
 
 ## Sound
 

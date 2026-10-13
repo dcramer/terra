@@ -1,16 +1,29 @@
 #![enable(implicit_some)]
 // Every kind of thing that grows or lies about the ground (D39, D127, D136): trees, rocks,
-// bushes, plants and flowers. A new kind is an entry here with its models in
-// assets/models/nature; no code names one. Where things grow is worked out layer by layer
-// (crates/terra_world/src/flora.rs); each layer chooses among the kinds that grow in it.
+// bushes, plants and flowers. A new kind is an entry here, with its models in
+// assets/models/nature or how it is grown; no code names one. Where things grow is worked
+// out layer by layer (crates/terra_world/src/flora.rs); each layer chooses among the kinds
+// that grow in it.
 //
 // Each kind:
 //   name     what it is called
-//   models   the models it is drawn from, in assets/models/nature
+//   models   the models it is drawn from, in assets/models/nature, for one that is modelled
+//   grown    how it is grown, for one that is (D222, crates/terra_world/src/grown):
+//            Tree: its habit (Spreading as an oak, Conical as a pine, Upright as a birch),
+//              its bark (a material in assets/materials) and how many metres its picture
+//              covers, its leaves (a card in assets/data/foliage.ron) and their tint, how
+//              big a spray of them is, and its trunk's radius against its height;
+//            Bush: its leaf card and tint, how many clumps of cards, its width against its
+//              height;
+//            Rosette, a herb or fern: its card and tint, how many leaves, how steeply they
+//              rise (degrees), and where the leaf's stalk and tip are in the card's picture;
+//            Tuft, a flower: its cards, a variant to each in turn, their tint, and how many
+//              cross at its foot
+//   variants how many different ones of a grown kind there are (4 if not given)
 //   colours  our colour for each material its models name, whether that part is foliage,
 //            which catches the wind, or Firm, and the real material it is drawn in, if any,
 //            a layer of assets/materials/flora (pine_bark, bark_brown_02, leaves, mossy_rock,
-//            lichen_rock), its own colour swapped for ours; * is any material. Materials not
+//            lichen_rock, rock_boulder_dry), its own colour swapped for ours; * is any material. Materials not
 //            named here take the shared colours below.
 //   sway     how it moves in the wind: Tree, Bush, Plant or Still
 //   grows    the layer it grows in: Trees, Rocks, Bushes, Plants or Flowers, or
@@ -38,8 +51,16 @@
     kinds: [
         (
             name: "Pine",
-            models: ["PineTree_1", "PineTree_2", "PineTree_3", "PineTree_4", "PineTree_5"],
-            colours: [("Wood", (0.38, 0.28, 0.22), Firm, "pine_bark"), ("Green", (0.17, 0.3, 0.2), Foliage, "leaves")],
+            grown: Tree((
+                habit: Conical,
+                bark: "pine_bark",
+                bark_m: 2.0,
+                leaves: "pine",
+                tint: (1.2, 1.25, 1.15),
+                clump_m: 1.1,
+                trunk: 0.022,
+            )),
+            variants: 6,
             sway: Tree,
             grows: Trees,
             below: -0.06,
@@ -48,13 +69,15 @@
         ),
         (
             name: "Birch",
-            models: ["BirchTree_1", "BirchTree_2", "BirchTree_3"],
-            colours: [
-                ("White", (0.86, 0.84, 0.78), Firm, "bark_brown_02"),
-                ("Black", (0.22, 0.2, 0.19), Firm, "bark_brown_02"),
-                ("Green", (0.86, 0.62, 0.22), Foliage, "leaves"),
-                ("DarkGreen", (0.76, 0.46, 0.16), Foliage, "leaves"),
-            ],
+            grown: Tree((
+                habit: Upright,
+                bark: "birch_bark",
+                bark_m: 1.0,
+                leaves: "birch",
+                clump_m: 0.9,
+                trunk: 0.017,
+            )),
+            variants: 4,
             sway: Tree,
             grows: Trees,
             above: 0.1,
@@ -63,8 +86,15 @@
         ),
         (
             name: "Leafy tree",
-            models: ["CommonTree_1", "CommonTree_2", "CommonTree_3", "CommonTree_4", "CommonTree_5"],
-            colours: [("Green", (0.38, 0.48, 0.2), Foliage, "leaves"), ("DarkGreen", (0.27, 0.4, 0.18), Foliage, "leaves")],
+            grown: Tree((
+                habit: Spreading,
+                bark: "bark_brown_02",
+                bark_m: 1.0,
+                leaves: "oak",
+                clump_m: 1.5,
+                trunk: 0.034,
+            )),
+            variants: 6,
             sway: Tree,
             grows: Trees,
             size: (6.0, 10.5),
@@ -74,7 +104,7 @@
         // Rock with ore in it: the same shapes, in a colour that gives it away.
         (
             name: "Ore rock",
-            models: ["Rock_1", "Rock_3", "Rock_5", "Rock_7"],
+            models: ["Rock_1", "Rock_3", "Rock_4", "Rock_5", "Rock_7", "Rock_9"],
             colours: [("*", (0.5, 0.36, 0.3), Firm, "lichen_rock")],
             sway: Still,
             grows: Rocks,
@@ -84,8 +114,8 @@
         ),
         (
             name: "Mossy rock",
-            models: ["Rock_Moss_1", "Rock_Moss_2", "Rock_Moss_3"],
-            colours: [("Rock", (0.44, 0.42, 0.39), Firm, "mossy_rock"), ("Green", (0.4, 0.47, 0.22), Firm, "mossy_rock")],
+            models: ["Rock_Moss_1", "Rock_Moss_2", "Rock_Moss_3", "Rock_Moss_4", "Rock_Moss_5"],
+            colours: [("*", (0.38, 0.39, 0.31), Firm, "mossy_rock")],
             sway: Still,
             grows: Rocks,
             grass_above: 0.6,
@@ -94,8 +124,8 @@
         ),
         (
             name: "Rock",
-            models: ["Rock_1", "Rock_2", "Rock_3", "Rock_4", "Rock_5", "Rock_6", "Rock_7"],
-            colours: [("Rock", (0.44, 0.42, 0.39), Firm, "mossy_rock"), ("Green", (0.4, 0.47, 0.22), Firm, "mossy_rock")],
+            models: ["Rock_1", "Rock_2", "Rock_3", "Rock_4", "Rock_5", "Rock_6", "Rock_7", "Rock_8", "Rock_9", "Rock_10"],
+            colours: [("*", (0.4, 0.37, 0.33), Firm, "rock_boulder_dry")],
             sway: Still,
             grows: Rocks,
             cut: (what: Rock, gives: ("Stone", 0.5, 1.5), seconds: (0.8, 0.5)),
@@ -104,8 +134,8 @@
         // The first food to be found.
         (
             name: "Berry bush",
-            models: ["BushBerries_1"],
-            colours: [("Green", (0.3, 0.42, 0.2), Foliage, "leaves"), ("Berry", (0.7, 0.16, 0.2), Foliage)],
+            grown: Bush((leaves: "berry", clumps: (7, 10), spread: 1.1)),
+            variants: 3,
             sway: Bush,
             grows: Bushes,
             chance: 0.33,
@@ -114,29 +144,34 @@
         ),
         (
             name: "Bush",
-            models: ["Bush_1", "Bush_2"],
-            colours: [("Green", (0.3, 0.42, 0.2), Foliage, "leaves"), ("Berry", (0.7, 0.16, 0.2), Foliage)],
+            grown: Bush((leaves: "hazel", tint: (0.72, 0.8, 0.66), clumps: (7, 11), spread: 1.25)),
+            variants: 4,
             sway: Bush,
             grows: Bushes,
             size: (0.7, 1.5),
             cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.7, 0.0)),
         ),
         (
-            name: "Plant",
-            models: ["Plant_1", "Plant_3", "Plant_4"],
+            name: "Fern",
+            grown: Rosette((card: "fern", leaves: (7, 11), tilt: (25.0, 55.0), stalk: (0.03, 0.97), tip: (0.97, 0.03))),
             sway: Plant,
             grows: Plants,
-            size: (0.35, 0.75),
+            chance: 0.55,
+            size: (0.4, 0.8),
+            cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.4, 0.0)),
+        ),
+        (
+            name: "Plant",
+            grown: Rosette((card: "herb", leaves: (4, 6), tilt: (15.0, 40.0), stalk: (0.5, 0.97), tip: (0.5, 0.05))),
+            sway: Plant,
+            grows: Plants,
+            size: (0.3, 0.55),
             cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.4, 0.0)),
         ),
         (
             name: "Flower",
-            models: ["Flowers", "Plant_5"],
-            colours: [
-                ("Cyan", (0.98, 0.95, 0.88), Foliage),
-                ("Yellow", (1.0, 0.8, 0.2), Foliage),
-                ("Pink", (0.96, 0.5, 0.6), Foliage),
-            ],
+            grown: Tuft((cards: ["daisy", "buttercup", "campion"], planes: 2)),
+            variants: 6,
             sway: Plant,
             grows: Flowers,
             size: (0.4, 0.62),

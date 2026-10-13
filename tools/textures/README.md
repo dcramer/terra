@@ -6,10 +6,12 @@ Makes the game's materials (D14, D191): the tileable surfaces a model or the gro
 node tools/textures/textures.ts fetch pine_bark                         # a Poly Haven material, CC0, at 2K
 node tools/textures/textures.ts material shakes art/textures/shakes.png --tile y   # from a generated image
 node tools/textures/textures.ts stack ground forest_ground_04 leafy_grass rock_face_03 sand_01
+node tools/textures/textures.ts cards foliage oak=art/textures/cards/oak.png pine=art/textures/cards/bough.png …
 ```
 
 - **fetch** downloads a [Poly Haven](https://polyhaven.com) material by its id. Libraries come first: their maps are measured, not guessed. The material's size in metres is printed; a kit's file says it.
 - **material** makes one from a single image no library has, such as a Tripo image of a roof of shakes: it crops the image to the length at which it repeats itself, so rows tile without a seam, and works out a normal map and a height from its light and dark (weaker than a scanned material's). `--strength` sets how deep the relief reads, `--roughness` its roughness.
+- **cards** makes the atlas grown plants' leaves, fronds and flowers are drawn from (D222): each picture, drawn on a flat blue background (a Tripo image, prompt beside it in `art/textures/cards`), is keyed out of it, its edges unmixed from the blue, laid in a cell of `assets/materials/<name>/cards.png`, and given the octagon round its leaves that its cards are cut to and its average colour, written to `assets/data/<name>.ron`. Give every card each time, in the order wanted: the atlas is made whole.
 - **stack** puts several materials' colour and normal maps one above the next, 1024 pixels each, for a surface that blends them, such as the ground, which loads them as a texture array. Each layer's occlusion is multiplied into its colour. The stacked materials' own folders are not needed after; the stack's credit names them.
 
 It needs ImageMagick (`convert`). The tests are `node --test tools/textures/textures.test.ts`.

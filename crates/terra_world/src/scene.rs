@@ -8,7 +8,7 @@ use crate::sky::{Sky, SkyPlugin};
 use bevy::light::{FogVolume, ShadowFilteringMethod, VolumetricFog, VolumetricLight};
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
-    camera::Exposure,
+    camera::{Exposure, visibility::RenderLayers},
     core_pipeline::tonemapping::Tonemapping,
     light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
     pbr::{ContactShadows, ScreenSpaceAmbientOcclusion},
@@ -110,8 +110,9 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
     light.shadow_normal_bias = 2.6;
     // Where things meet the ground, finer than the shadow map can draw (D204).
     light.contact_shadows_enabled = true;
-    // Sharp shadows close up, and shadows at all out to the far trees.
-    commands.entity(sun).insert(
+    // Sharp shadows close up, and shadows at all out to the far trees. The sun sees the
+    // stand-ins plants cast their shadows from as well as everything the camera sees.
+    commands.entity(sun).insert((
         CascadeShadowConfigBuilder {
             num_cascades: 4,
             first_cascade_far_bound: 24.0,
@@ -119,7 +120,8 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
             ..default()
         }
         .build(),
-    );
+        RenderLayers::from_layers(&[0, crate::grown::SUN_ONLY]),
+    ));
 }
 
 /// What the eye adapts round: the log brightness a scene meters at when it is as bright as

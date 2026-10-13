@@ -1,0 +1,17 @@
+{
+  "Rock_1": { "from": "boulder_01", "budget": 550 },
+  "Rock_2": { "from": "rock_07", "budget": 450 },
+  "Rock_3": { "from": "rock_09", "budget": 500 },
+  "Rock_4": { "from": "namaqualand_boulder_03", "budget": 500 },
+  "Rock_5": { "from": "namaqualand_boulder_04", "budget": 500 },
+  "Rock_6": { "from": "namaqualand_boulder_05", "budget": 450 },
+  "Rock_7": { "from": "namaqualand_boulder_06", "budget": 500 },
+  "Rock_8": { "from": "stone_01", "budget": 500 },
+  "Rock_9": { "from": "namaqualand_boulders_01", "piece": 0, "budget": 400 },
+  "Rock_10": { "from": "namaqualand_boulders_01", "piece": 1, "budget": 350 },
+  "Rock_Moss_1": { "from": "rock_moss_set_01", "piece": 0, "budget": 400 },
+  "Rock_Moss_2": { "from": "rock_moss_set_01", "piece": 1, "budget": 400 },
+  "Rock_Moss_3": { "from": "rock_moss_set_01", "piece": 2, "budget": 400 },
+  "Rock_Moss_4": { "from": "rock_moss_set_02", "piece": 0, "budget": 400 },
+  "Rock_Moss_5": { "from": "rock_moss_set_02", "piece": 1, "budget": 400 }
+}

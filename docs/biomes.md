@@ -7,7 +7,7 @@ What this covers: everything that grows or lies on the ground, from grass to the
 ## Where we are
 
 - **Planted once, around the start.** `play::flora` plants trees out to 340 m from the start site, and grass out to 95 m, on a flat map laid over the ground. Walk past that and the ground is bare.
-- **Kinds are data.** `assets/data/flora.ron` has 12 kinds in five layers (trees, rocks, bushes, plants, flowers), each chosen by noise. Trees, rocks and plants are one entity each; grass is built in 10 m squares. Everything sways in one wind.
+- **Kinds are data.** `assets/data/flora.ron` has 13 kinds in five layers (trees, rocks, bushes, plants, flowers), each chosen by noise. Trees, bushes, herbs and flowers are grown by rules from bark and leaf cards, a few variants a kind (D222); rocks are CC0 scans. Each plant or rock is one entity, a tree with its levels of detail as children (D203); grass is built in 10 m squares. Everything sways in one wind.
 - **It follows digging.** Plants go where the ground is dug, and grass grows back around a dig.
 - **Ground cover round the camera** (D202). `terra_world::cover` grows grass as clumped blades round the camera and paints the ground under it, leaf litter and moss where the grass gives out, from a field the world gives it. The lush forest spike uses it; the game's own world does not yet.
 - **The whole planet is affordable.** The `forest` experiment held a million choppable trees on a 2 km planet by computing them from the seed and remembering only what was cut (D47; [research/forest-scale-test.md](../research/forest-scale-test.md)).
