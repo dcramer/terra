@@ -20,7 +20,7 @@ use crate::shell::Options;
 use bevy::prelude::*;
 use std::sync::Arc;
 use terra_build::logs::Pattern;
-use terra_build::{Base, BuildOp, Cube, Fill, Kind, Panel, RoofSection, RoofStyle};
+use terra_build::{Base, BuildOp, Cube, Fill, Kind, Panel, RoofSection, RoofStyle, STOREY_CUBES};
 
 /// How far apart the rows are, and the three states along each, in metres.
 const ROW_M: f32 = 14.0;
@@ -157,7 +157,51 @@ fn rows(kind: Kind, stone: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
             along_x: true,
             pitch: 0.7,
         }));
-        mixed = vec![("stone house", house), ("stone plinth", plinth)];
+        // Stone and logs meeting every way walls meet.
+        let column = |x: i32, z: i32| BuildOp::Fill {
+            min: [x, 0, z],
+            max: [x, STOREY_CUBES - 1, z],
+            cube: stone_cube,
+        };
+        let ell: Vec<BuildOp> = east_west(0, 5, 0, kind)
+            .chain(north_south(1, 5, 0, stone))
+            .collect();
+        let tee_stone: Vec<BuildOp> = east_west(0, 9, 0, stone)
+            .chain(north_south(1, 5, 4, kind))
+            .collect();
+        let tee_logs: Vec<BuildOp> = east_west(0, 9, 0, kind)
+            .chain(north_south(1, 5, 4, stone))
+            .collect();
+        let in_line: Vec<BuildOp> = east_west(0, 4, 0, kind)
+            .chain(east_west(5, 9, 0, stone))
+            .collect();
+        let mut pillars: Vec<BuildOp> = east_west(0, 11, 0, kind).collect();
+        pillars.extend([0, 4, 8, 11].map(|x| column(x, 0)));
+        // A log cabin with its east end, under the gable, of stone, as a chimney end.
+        let mut end = vec![BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            kind,
+        }];
+        end.extend((3..=4).map(|x| wall([x, 0, 7], Panel::Door, kind)));
+        end.extend((0..=7).map(|z| column(9, z)));
+        end.push(BuildOp::AddRoof(RoofSection {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            style: RoofStyle::Gable,
+            along_x: true,
+            pitch: 0.7,
+        }));
+        mixed = vec![
+            ("stone house", house),
+            ("stone plinth", plinth),
+            ("stone and logs: L", ell),
+            ("stone and logs: T, stone through", tee_stone),
+            ("stone and logs: T, logs through", tee_logs),
+            ("stone and logs: in line", in_line),
+            ("stone pillars in logs", pillars),
+            ("stone end", end),
+        ];
     }
     let mut rows = vec![
         ("free end", east_west(0, 5, 0, kind).collect()),

@@ -3,7 +3,7 @@
 //! stretched along its length and turned about it and end for end by its seed, so
 //! neighbours differ; a board fills its box; a door or window its opening; footings and
 //! ridge caps are laid along their lines a metre or so at a time; roof and floor panels
-//! fill their squares; stone fills its box, turned by its seed. Pieces not yet in are the same models in the ghost's material, and
+//! fill their squares. Block kinds are not pieces but their cubes' surface (`terra_build::surface`). Pieces not yet in are the same models in the ghost's material, and
 //! the next one lit.
 
 use super::{Build, BuildLook, Built, Shown, Site, redraw};
@@ -16,7 +16,6 @@ use std::collections::BTreeMap;
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 use terra_build::logs::{KitModels, LogKit, Piece, Split};
-use terra_build::masonry::Stone;
 
 /// How tall and deep a footing is, its top at the wall's foot.
 const FOOTING_HIGH_M: f32 = 0.5;
@@ -47,9 +46,6 @@ pub struct KitPieces {
     shakes: Option<Model>,
     ridge: Option<Model>,
     floor: Option<Model>,
-    stone: Vec<Model>,
-    stone_half: Vec<Model>,
-    stone_corner: Vec<Model>,
 }
 
 impl KitPieces {
@@ -98,10 +94,7 @@ pub(super) fn load(
             .chain(wanted.window.iter())
             .chain(wanted.shakes.iter())
             .chain(wanted.ridge.iter())
-            .chain(wanted.floor.iter())
-            .chain(&wanted.stone)
-            .chain(&wanted.stone_half)
-            .chain(&wanted.stone_corner);
+            .chain(wanted.floor.iter());
         loading.handles = paths
             .map(|path| (path.clone(), assets.load(path.clone())))
             .collect();
@@ -143,9 +136,6 @@ pub(super) fn load(
         shakes: one(&wanted.shakes),
         ridge: one(&wanted.ridge),
         floor: one(&wanted.floor),
-        stone: many(&wanted.stone),
-        stone_half: many(&wanted.stone_half),
-        stone_corner: many(&wanted.stone_corner),
     };
     loading.done = true;
     info!("The kits draw their pieces with {} models.", models.len());
@@ -169,9 +159,6 @@ fn merged(kits: &terra_build::logs::Kits) -> KitModels {
         let m = &kit.models;
         all.logs.extend(m.logs.iter().cloned());
         all.footing.extend(m.footing.iter().cloned());
-        all.stone.extend(m.stone.iter().cloned());
-        all.stone_half.extend(m.stone_half.iter().cloned());
-        all.stone_corner.extend(m.stone_corner.iter().cloned());
         for (into, from) in [
             (&mut all.long_log, &m.long_log),
             (&mut all.board, &m.board),
@@ -426,37 +413,7 @@ fn fitted<'a>(kit: &'a KitPieces, piece: &Piece, diameter: f32) -> Vec<(&'a Mode
                 )
             })
             .collect(),
-        Piece::Stone {
-            shape,
-            centre,
-            size,
-            along_x,
-            seed,
-        } => {
-            let models = match shape {
-                Stone::Wall => &kit.stone,
-                Stone::Half => &kit.stone_half,
-                Stone::Corner => &kit.stone_corner,
-            };
-            if models.is_empty() {
-                return Vec::new();
-            }
-            let model = &models[seed as usize % models.len()];
-            // A section is turned end for end, showing its other face; a block or a corner
-            // any of four ways, as it is square.
-            let turns = match shape {
-                Stone::Wall => 2 * ((seed >> 8) % 2),
-                Stone::Half | Stone::Corner => (seed >> 8) % 4,
-            };
-            let length = if along_x { Vec3::X } else { Vec3::Z };
-            let x = Quat::from_rotation_y(turns as f32 * PI * 0.5) * length;
-            let extents = if along_x {
-                size
-            } else {
-                Vec3::new(size.z, size.y, size.x)
-            };
-            vec![(model, fill(model, centre, x, Vec3::Y, extents))]
-        }
+        Piece::Block { .. } => Vec::new(),
     }
 }
 

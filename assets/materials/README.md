@@ -9,4 +9,5 @@ Where each material came from. Made by `cargo xtask textures` ([tools/textures](
 - `rough_wood`: Poly Haven [Rough Wood](https://polyhaven.com/a/rough_wood), CC0, 2k. 0.50 m across.
 - `rustic_stone_wall`: Poly Haven [Rustic Stone Wall](https://polyhaven.com/a/rustic_stone_wall), CC0, 2k. 1.52 m across. Its height.jpg is for parallax.
 - `shakes`: made from a generated image (art/textures/shakes.png) by `textures.ts material`.
+- `stone_wall`: Poly Haven [Stone Wall](https://polyhaven.com/a/stone_wall), CC0, 2k. 2.00 m across.
 - `weathered_planks`: Poly Haven [Weathered Planks](https://polyhaven.com/a/weathered_planks), CC0, 2k. 2.00 m across.

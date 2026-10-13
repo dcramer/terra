@@ -1,30 +1,24 @@
-// A stone wall's kit (docs/building-kits.md, D179): rough fieldstone in lime mortar, a cube thick,
-// laid as the models from tools/props (art/props/kit-stone-*), a metre square where it
-// can, half-metre blocks where it cannot, and cornerstones at corners and wall ends
-// (crates/terra_build/src/masonry.rs). Several of each, turned where they are placed, so
-// neighbours differ (docs/art-style.md). Where it meets logs it runs through, and the logs
+// A stone wall's kit (docs/building-kits.md, D179, D197): rough fieldstone, a cube thick,
+// drawn not as models but as its cubes' own surface, its outside edges rounded and its
+// face displaced by the stone's height, so a wall of any shape is one wall with no seams
+// (crates/terra_build/src/surface.rs). Where it meets logs it runs through, and the logs
 // end flush against it. What this leaves out is the log kit's, which a masonry kit does
 // not use.
 //
 // id          the kind of construction it lays, the number its cubes carry (D181)
-// pattern     how its walls are laid
+// pattern     how its walls are laid: Masonry, as its cubes' surface
 // eaves       how far a roof over these walls overhangs them (D175)
-// models      its stone: sections, half blocks and cornerstones
-// textures    the roof over it, as the log kit's (D14; assets/materials)
+// bevel       the radius its outside edges are rounded to
+// relief      how far its stone stands out, from the deepest joint to the proudest stone
+// textures    its stone (assets/materials, CC0), and the roof over it as the log kit's
 (
     id: 2,
     pattern: Masonry,
     eaves: 0.5,
-    models: (
-        stone: [
-            "models/kits/StoneWall.glb",
-            "models/kits/StoneWall2.glb",
-            "models/kits/StoneWall3.glb",
-        ],
-        stone_half: ["models/kits/StoneHalf.glb", "models/kits/StoneHalf2.glb"],
-        stone_corner: ["models/kits/StoneCorner.glb"],
-    ),
+    bevel: 0.04,
+    relief: 0.05,
     textures: {
+        Masonry: (path: "materials/stone_wall", metres: (2.0, 2.0)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Shakes: (path: "materials/shakes", metres: (3.2, 1.6), depth: 0.04),
     },

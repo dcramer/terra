@@ -66,6 +66,10 @@ pub struct LogKit {
     pub frame: f32,
     /// How far a roof over its walls overhangs them, at the eaves and the gable ends (D175).
     pub eaves: f32,
+    /// A block kind's surface: the radius its outside edges are rounded to, and how far
+    /// its material's relief stands out (`surface.rs`).
+    pub bevel: f32,
+    pub relief: f32,
     /// The models its pieces are drawn with (D177), as asset paths; a piece with none is
     /// drawn in code, as a stand-in.
     #[serde(default)]
@@ -83,9 +87,9 @@ pub enum Pattern {
     /// Courses of logs, crossing at the corners (this file).
     #[default]
     Logs,
-    /// Stone (`masonry.rs`): sections a metre square, half-metre blocks and
-    /// cornerstones, drawn by the kit's models, as thick as the grid. Where it meets logs,
-    /// it runs through and the logs end flush against it (D179).
+    /// Blocks (`masonry.rs`): stone, brick, plaster or earth, drawn as the cubes' own
+    /// surface, rounded and displaced by the kit's `Masonry` material (D197). Where it
+    /// meets logs, it runs through and the logs end flush against it (D179).
     Masonry,
 }
 
@@ -135,12 +139,6 @@ pub struct KitModels {
     pub ridge: Option<String>,
     /// A panel of floor.
     pub floor: Option<String>,
-    /// A masonry kit's stone (`masonry.rs`): sections a metre square, blocks half a metre
-    /// each way, and columns of cornerstones half a metre square and a metre high, each
-    /// with its face to +Z.
-    pub stone: Vec<String>,
-    pub stone_half: Vec<String>,
-    pub stone_corner: Vec<String>,
 }
 
 /// The colours a log wall is drawn in.
@@ -187,6 +185,8 @@ impl Default for LogKit {
             chinking: true,
             frame: 0.08,
             eaves: 0.5,
+            bevel: 0.04,
+            relief: 0.05,
             models: KitModels::default(),
             textures: BTreeMap::new(),
             colours: LogColours {
@@ -267,15 +267,9 @@ pub enum Piece {
     Ridge { from: Vec3, to: Vec3 },
     /// A panel of floor, its top from one corner to the other.
     Floor { min: Vec3, max: Vec3 },
-    /// A piece of a stone wall (`masonry.rs`), filling a box about its centre: its
-    /// length along X, or along Z if not `along_x`.
-    Stone {
-        shape: crate::masonry::Stone,
-        centre: Vec3,
-        size: Vec3,
-        along_x: bool,
-        seed: u32,
-    },
+    /// A block kind's cube (`masonry.rs`), drawn as part of its kind's surface
+    /// (`surface.rs`), counted in cubes.
+    Block { cube: IVec3 },
 }
 
 impl Piece {
@@ -289,7 +283,10 @@ impl Piece {
                 Some((from.min(to) - r, from.max(to) + r))
             }
             Piece::Board { min, max } | Piece::Floor { min, max } => Some((min, max)),
-            Piece::Stone { centre, size, .. } => Some((centre - size * 0.5, centre + size * 0.5)),
+            Piece::Block { cube } => {
+                let low = cube.as_vec3() * CELL_M;
+                Some((low, low + Vec3::splat(CELL_M)))
+            }
             Piece::Opening { .. }
             | Piece::Footing { .. }
             | Piece::Shakes { .. }
@@ -305,7 +302,7 @@ impl Piece {
             Piece::Board { min, .. } | Piece::Opening { min, .. } => min.y,
             Piece::Floor { min, .. } => min.y - 0.5,
             Piece::Shakes { corners } => corners.iter().map(|c| c.y).fold(f32::MAX, f32::min),
-            Piece::Stone { centre, size, .. } => centre.y - size.y * 0.5,
+            Piece::Block { cube } => cube.y as f32 * CELL_M,
         }
     }
 }
@@ -1179,7 +1176,7 @@ pub fn draw(piece: &Piece, kit: &LogKit, surfaces: &mut Surfaces) {
         Piece::Opening { .. }
         | Piece::Shakes { .. }
         | Piece::Ridge { .. }
-        | Piece::Stone { .. } => {}
+        | Piece::Block { .. } => {}
     }
 }
 

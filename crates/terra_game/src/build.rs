@@ -25,6 +25,7 @@ use terra_build::{Material, Surfaces};
 use terra_core::Operation;
 
 mod pieces;
+mod relief;
 mod sheet;
 
 const REACH_M: f32 = 300.0;
@@ -76,6 +77,8 @@ pub(super) struct Build {
     /// The kit's pieces' models, once loaded, and the copies of them placed.
     kit_pieces: Option<Arc<pieces::KitPieces>>,
     model_entities: Vec<Entity>,
+    /// The block kinds' relief, once loaded.
+    relief: Option<Arc<relief::Relief>>,
     /// What pieces not yet in, and the next, are drawn in.
     ghost_material: Handle<StandardMaterial>,
     next_material: Handle<StandardMaterial>,
@@ -129,6 +132,8 @@ pub(super) struct BuildLook {
     pub laying: Kind,
     /// The kits' pieces' models, once loaded.
     kit_pieces: Option<Arc<pieces::KitPieces>>,
+    /// The block kinds' relief, once loaded.
+    relief: Option<Arc<relief::Relief>>,
     /// The kits' materials, textured (D14).
     materials: Arc<BTreeMap<Material, Handle<StandardMaterial>>>,
 }
@@ -214,7 +219,8 @@ pub fn plugin(app: &mut App) {
     app.insert_resource(Added)
         .add_systems(Startup, setup)
         .init_resource::<pieces::Loading>()
-        .add_systems(Update, (reload_kit, sheet::lay, pieces::load))
+        .init_resource::<relief::Loading>()
+        .add_systems(Update, (reload_kit, sheet::lay, pieces::load, relief::load))
         .add_systems(
             Update,
             (
@@ -311,6 +317,7 @@ impl Build {
             standing: None,
             pieces,
             kit_pieces: look.kit_pieces.clone(),
+            relief: look.relief.clone(),
             model_entities: Vec::new(),
             materials: look.materials.clone(),
             plain_material: look.structure.clone(),
@@ -805,6 +812,7 @@ fn setup(
         kits: read_kits().map(Arc::new),
         laying: Kind::PLAIN,
         kit_pieces: None,
+        relief: None,
         materials: Arc::default(),
     };
     let materials_of_kit = look
@@ -974,7 +982,13 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
                 )),
             };
             let models = site.kit_pieces.clone();
-            let drawn = draw_pieces(&laid, site.shown, models.as_deref());
+            let drawn = draw_pieces(
+                &laid,
+                site.shown,
+                models.as_deref(),
+                &site.base,
+                site.relief.as_deref(),
+            );
             (mesh, drawn)
         }
         None => {
@@ -1133,6 +1147,8 @@ fn draw_pieces(
     laid: &[(&LogKit, &[logs::Piece])],
     shown: Shown,
     models: Option<&pieces::KitPieces>,
+    base: &Base,
+    relief: Option<&relief::Relief>,
 ) -> [Surfaces; 3] {
     let [mut placed, mut ghost, mut next] = [
         Surfaces::default(),
@@ -1141,6 +1157,8 @@ fn draw_pieces(
     ];
     for &(kit, pieces) in laid {
         let [p, g, n] = draw_kit(pieces, kit, shown, models);
+        let [bp, bg, bn] = draw_blocks(pieces, kit, shown, base, relief);
+        let (p, g, n) = (joined(p, bp), joined(g, bg), joined(n, bn));
         for (into, from) in [(&mut placed, p), (&mut ghost, g), (&mut next, n)] {
             for (material, surface) in from.0 {
                 let to = into.of(material);
@@ -1153,6 +1171,81 @@ fn draw_pieces(
     }
     [placed, ghost, next]
 }
+
+/// Two sets of surfaces as one.
+fn joined(mut a: Surfaces, b: Surfaces) -> Surfaces {
+    for (material, surface) in b.0 {
+        let to = a.of(material);
+        to.positions.extend(surface.positions);
+        to.normals.extend(surface.normals);
+        to.colours.extend(surface.colours);
+        to.uvs.extend(surface.uvs);
+    }
+    a
+}
+
+/// A block kind's cubes as its surface (D197): those in, those not yet, and the next, each
+/// closed where it meets the others but for what is already built.
+fn draw_blocks(
+    pieces: &[logs::Piece],
+    kit: &LogKit,
+    shown: Shown,
+    base: &Base,
+    relief: Option<&relief::Relief>,
+) -> [Surfaces; 3] {
+    if kit.pattern != Pattern::Masonry {
+        return Default::default();
+    }
+    let done = pieces::done(pieces.len(), shown);
+    let mut sets: [std::collections::BTreeSet<[i32; 3]>; 3] = Default::default();
+    for (index, piece) in pieces.iter().enumerate() {
+        if let logs::Piece::Block { cube } = piece {
+            let set = match index.cmp(&done) {
+                std::cmp::Ordering::Less => 0,
+                std::cmp::Ordering::Equal => 2,
+                std::cmp::Ordering::Greater => 1,
+            };
+            sets[set].insert(cube.to_array());
+        }
+    }
+    let look = terra_build::surface::Look {
+        bevel: kit.bevel,
+        relief: kit.relief,
+        steps: SURFACE_STEPS,
+        metres: kit
+            .textures
+            .get(&Material::Masonry)
+            .map_or([2.0, 2.0], |texture| texture.metres),
+    };
+    let height = |uv: [f32; 2]| relief.map_or(0.5, |relief| relief.at(uv));
+    // Floors, and walls of kinds drawn as boxes, hide a face; walls of other kits do not,
+    // being thinner than the cube.
+    let hides_always = |at: IVec3| {
+        base.cube(at).is_some_and(|cube| {
+            cube.fill != terra_build::Fill::Open
+                && cube.kind != kit.kind()
+                && (!base.in_wall(at) || cube.kind == Kind::PLAIN)
+        })
+    };
+    let mut out: [Surfaces; 3] = Default::default();
+    for (set, colour) in [(0, [1.0; 3]), (1, GHOST), (2, [1.0; 3])] {
+        // What is built hides what is not; the rest show their own faces.
+        let built = &sets[0];
+        let hides = |at: IVec3| hides_always(at) || (set != 0 && built.contains(&at.to_array()));
+        terra_build::surface::draw(
+            &sets[set],
+            &hides,
+            &look,
+            &height,
+            colour,
+            out[set].of(Material::Masonry),
+        );
+    }
+    out
+}
+
+/// How finely a block kind's cube faces are divided: a step every 5 cm or so.
+const SURFACE_STEPS: u32 = 10;
 
 /// One kit's pieces: those in, those not yet, and the next.
 fn draw_kit(

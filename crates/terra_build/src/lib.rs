@@ -29,6 +29,7 @@
 pub mod logs;
 pub mod masonry;
 mod mesh;
+pub mod surface;
 mod walk;
 
 pub use mesh::{BaseMesh, Surface};

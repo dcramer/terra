@@ -30,18 +30,9 @@ The log kit's pieces, from the approved cabin:
 | A door, a shuttered window | Set into openings of their size |
 | A footing of fieldstones | Under walls on the ground |
 
-The stone kit's pieces (built 2026-10-12), rough fieldstone in lime mortar, all drawn after one concept ([art/props/kit-stone-wall-2](../art/props/kit-stone-wall-2/concept.png)) and matched to its grade:
+**Block kinds are not pieces** (D197): stone, brick, plaster and earth are drawn as their cubes' own surface, each face a fine grid, rounded along every outside edge and pushed out by its material's height, so a wall of any shape, carved anywhere, is one wall with no seams (`terra_build::surface`; [research/block-modules.md](../research/block-modules.md)). The stone kit is rough fieldstone, Poly Haven's `stone_wall` (CC0); its file gives the bevel (4 cm) and how far the stone stands out (5 cm). A plan's progress counts its cubes from the bottom up, and the cubes in, the next and the rest are drawn as three surfaces, so the ghost and a wall going up work as for logs. A timber lintel spans every opening with wall above it; doors and windows are fitted props (D193).
 
-| Piece | Laid as |
-|---|---|
-| A wall section a metre square, three versions | Each two cubes by two of a straight run, every other band starting a half block in so seams never line up; turned end for end by its seed |
-| A half-metre block, two versions | Odd cubes, the ends of runs, and round holes; turned any of four ways |
-| A column of cornerstones, half a metre square and a metre high | Up every corner and wall end, a half block for an odd cube |
-| A timber lintel | Over every opening with wall above it |
-
-A Tripo model's back and sides come out darker than its front, since it is textured from views lit differently; `tools/props` evens each side of a block to its front's colour, and every piece to the kit's grade, so a piece reads the same turned any way.
-
-**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for logs; masonry, for stone), its sizes, its pieces' models, and its colours as palette roles (D14). A pine cabin and a dark-wood cabin are two files.
+**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for logs; masonry, for block kinds drawn as their surface), its sizes, its pieces' models, and its colours as palette roles (D14). A pine cabin and a dark-wood cabin are two files.
 
 ## Drawing them
 
@@ -122,7 +113,7 @@ Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 - **Changing a kind** is free on a plan nothing is in yet. Once pieces are in, the wall is frozen (building-tech.md), so it is taken down and laid again, as D146 says.
 - **Drawing it** costs nothing extra: a finished building is one mesh per material already.
 
-Built 2026-10-12: a base is laid by every kit in `assets/data/kits/` at once, each its own kind's cubes, so mixing is per cube. Logs end flush against stone, as they end at anything not open air. The kit sheet has a stone house under a hip roof and a cabin on a stone plinth a metre high.
+Built 2026-10-12: a base is laid by every kit in `assets/data/kits/` at once, each its own kind's cubes, so mixing is per cube. Logs end flush against stone, as they end at anything not open air; stone runs through corners and T's. The kit sheet has stone and logs meeting every way walls meet: a stone house under a hip roof, a log cabin on a stone plinth a metre high, an L, a T each way round, in line, stone pillars in a log wall, and a log cabin with a stone end wall.
 
 ## Checking it
 

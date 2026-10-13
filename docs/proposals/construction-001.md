@@ -1,6 +1,6 @@
 # Construction 001: a voxel core, drawn by its neighbours
 
-Status: adopted on 2026-10-12 (D192, D193, D194), but for the dual grid for block kinds, which waits on its spike ([Next](#next)). It sets the rules every construction piece follows, and walks through every case they must handle. It builds on what is decided (D48, D139, D146, D152, D154, D179, D181) and changes none of it except where it says so. The research behind it is [research/adjacency-pieces.md](../../research/adjacency-pieces.md).
+Status: adopted on 2026-10-12 (D192, D193, D194). Block kinds are drawn as their cubes' own displaced surface rather than on the dual grid (D197, [Next](#next)); where this page says dual grid or modules for blocks, read that. It sets the rules every construction piece follows, and walks through every case they must handle. It builds on what is decided (D48, D139, D146, D152, D154, D179, D181) and changes none of it except where it says so. The research behind it is [research/adjacency-pieces.md](../../research/adjacency-pieces.md).
 
 ## What it answers
 
@@ -202,10 +202,10 @@ Found by reading this proposal against the building docs, the decisions and the 
 ## What changes from what is built
 
 - **Logs stay on runs**, now inside the grid. Their footing becomes stone pieces into the ground, and the plain foundation slab and concrete steps go.
-- **The stone kit moves to the dual grid**: its metre sections and cornerstones become a dozen modules to shared edge profiles. The Tripo sections made today become the source of its texture and of details that do not tile.
+- **The stone kit is drawn as its cubes' surface** (D197, built): its Tripo sections are gone, its stone a displaced material.
 - **Collision by state** stays as built.
 - **Floors get edges**, and roofs ridges, hips and valleys, as pieces.
 
 ## Next
 
-Spiked on 2026-10-12 ([research/block-modules.md](../../research/block-modules.md)): conformed Tripo pieces read as a grid of metre blocks and break where a shape interrupts their tiling; the cubes' own surface, bevelled and displaced by a real stone material, reads as one natural wall, with no seams, and carves cleanly. Recommended: block kinds drawn as that surface, long members as modelled pieces, doors, windows and details as props. It cuts against D177 for block kinds, so it is the developers' call (D197).
+Spiked on 2026-10-12 ([research/block-modules.md](../../research/block-modules.md)): conformed Tripo pieces read as a grid of metre blocks and break where a shape interrupts their tiling; the cubes' own surface, bevelled and displaced by a real stone material, reads as one natural wall, with no seams, and carves cleanly. Recommended: block kinds drawn as that surface, long members as modelled pieces, doors, windows and details as props. Decided by the developers and built the same day (D197).

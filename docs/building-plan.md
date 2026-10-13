@@ -27,7 +27,7 @@ How we build the construction system that [proposals/construction-001.md](propos
 | `cost` | What each cube costs and what went into it, in exact fractions |
 | `kit` | A kit's data: its pattern, sizes, pieces by role, textures; checked as it is read |
 | `layout/runs` | Long members: logs, beams, planks, wattle, laid along runs (today's `logs.rs`, split) |
-| `layout/blocks` | Block kinds on the dual grid, from eighth-cube parts (or today's sections, if the spike says so) |
+| `layout/blocks` | Block kinds drawn as their cubes' surface, rounded and displaced by their material (`surface`, D197) |
 | `layout/trims` | Jambs, sills and lintels round every opening, and caps where thicknesses differ |
 | `layout/roofs` | Roof pieces from the height field: slope, eave, verge, ridge, hip, valley, flashing |
 | `layout/ground` | Footings down to the ground, and door steps |
@@ -76,7 +76,7 @@ Iteration is always in sorted order, so every machine lays and floods the same w
 4. **Far off**: each section's lowest-detail pieces merged, faded in with `VisibilityRange`; further, a box per section in its kits' colours, later an impostor.
 5. **Light**: the sky's light dimmed indoors, from rooms; a probe per room later.
 
-Long members come in a few lengths with their texture repeating along them, cut faces showing end grain, so nothing is stretched. Block kinds draw from about six eighth-cube parts per kit, a few versions each, which cover every arrangement.
+Long members come in a few lengths with their texture repeating along them, cut faces showing end grain, so nothing is stretched. Block kinds are no pieces: their cubes' surface is meshed per section, rounded and displaced by their material (D197), finer near the camera and coarser far off.
 
 ## Collision
 
@@ -86,7 +86,7 @@ First, as now: arithmetic on the cubes, each to its fill and its kind's slab, st
 
 - **Kits are data**: a file per kind in `assets/data/kits/`, its pattern, roles and their models, textures and sizes (as now).
 - **Long members**: Tripo models per role, logs in lengths, refined along their length (as now).
-- **Blocks**: Tripo models conformed by `refine`: cut to their cell, edges feathered to the kit's shared profile, the seam set in a joint, every side evened to its front's grade (built) and squared (built).
+- **Blocks**: a material each, from a library or generated (D191): colour, normal, roughness and the height the surface is displaced by (D197).
 - **Levels of detail**: `refine` writes each model at three budgets, for near, middle and far.
 - **A kit checker**, `cargo xtask kits`: every role a kit's pattern needs has a model; edges match the shared profile; sizes and budgets within the style guide's; textures present. Run by `cargo xtask check` on the kit files, and on the models when they change.
 
@@ -102,7 +102,7 @@ First, as now: arithmetic on the cubes, each to its fill and its kind's slab, st
 
 Each step ends checked by script before the next (D69), and is committed as it goes.
 
-0. **Spike: block modules** (done, 2026-10-12, [research/block-modules.md](../research/block-modules.md)). Conformed Tripo pieces read as a grid and break at carved shapes; the cubes' surface, bevelled and displaced by a real stone material, reads as one natural wall and carves cleanly. If the developers agree (D197), `layout/blocks` becomes a mesher for that surface, per section on workers, as the terrain's: outer faces, bevels, subdivision near the camera, the material's height displaced on the CPU, triplanar texturing.
+0. **Spike: block modules** (done, 2026-10-12, [research/block-modules.md](../research/block-modules.md)). Conformed Tripo pieces read as a grid and break at carved shapes; the cubes' surface, bevelled and displaced by a real stone material, reads as one natural wall and carves cleanly. Decided (D197) and built in `terra_build::surface`: a mesher for that surface, per section on workers, as the terrain's: outer faces, bevels, subdivision near the camera, the material's height displaced on the CPU, triplanar texturing.
 1. **The model.** The cube store in sections; fill, shape and state per cube; operations with their checks and inverses; ground sampled into plans; support; snapshots; older saves converted. Property tests. The game unchanged on top.
 2. **Layouts.** `logs.rs` split into runs, trims and ground; block layout from the spike's answer; roof pieces; all in grid units; the kit checker. The kit sheet covers every case.
 3. **Drawing.** Sections as entities, layouts on the worker pool, merged meshes, instanced ghosts, far meshes, indoor light. The entity per piece goes. The `village` bench, measured on both GPUs.
@@ -116,7 +116,7 @@ Each step ends checked by script before the next (D69), and is committed as it g
 
 | Risk | What we do |
 |---|---|
-| Conformed modules show their seams | The spike first; sections are the fallback |
+| A block kind's surface costs too many triangles near and far | Finer near the camera, coarser far off, per section; measured on the `village` bench |
 | A castle's section rebuilds too slowly | Section size tuned by the bench; the merge on workers |
 | The ghost of a large plan costs too much to draw | Instancing, plans drawn only near and to the tribe, a budget per claim |
 | Collision is undesigned (D53) | Cubes' arithmetic serves until its doc; sections give boxes when it comes |
