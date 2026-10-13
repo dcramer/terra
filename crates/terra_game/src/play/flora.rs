@@ -6,16 +6,17 @@
 //! every run. Trees, rocks and plants are one entity each, sharing a mesh per model.
 //! Grass is far too many blades for that, so it is built in squares, each one mesh.
 
+use super::flora_kinds::Cuttable;
 use super::flora_kinds::{Flora, FloraDef, Grows, Sway};
-use super::inventory::Cuttable;
+use super::footprint::Footprint;
 use super::models::{Part, read_model};
 use super::scene::SUN_DIRECTION;
-use crate::build::Site;
 use crate::planet::{Planet, Tweaks};
 use crate::spatial::SpatialHash;
 use crate::start::Start;
 use bevy::{
     asset::RenderAssetUsages,
+    ecs::{change_detection::Tick, system::SystemChangeTick},
     light::NotShadowCaster,
     mesh::Indices,
     pbr::{ExtendedMaterial, MaterialExtension},
@@ -129,8 +130,8 @@ struct Meadow {
     dry: LinearRgba,
     lush: LinearRgba,
     squares: HashMap<(i32, i32), Entity>,
-    /// The base's shape the grass was last cleared for.
-    cleared_for: u64,
+    /// When the grass was last cleared for what is built.
+    cleared_at: Tick,
 }
 
 /// A flat map laid over the ground around the scene: east and north of its middle, in
@@ -154,19 +155,28 @@ impl Patch {
 #[derive(Message, Clone, Copy)]
 pub struct ClearAround(pub Vec3, pub f32);
 
+/// When what grows is planted, and when it is cleared away for what is built or dug. Whatever
+/// keeps a [`Footprint`] up to date does it before these.
+#[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum FloraSystems {
+    Plant,
+    Clear,
+}
+
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<WindMaterial>::default())
         .init_resource::<Obstacles>()
         // The yard, the flat test level, has nothing growing on it.
-        .add_systems(PostStartup, plant.run_if(crate::shell::in_the_world))
+        .add_systems(
+            PostStartup,
+            plant
+                .run_if(crate::shell::in_the_world)
+                .in_set(FloraSystems::Plant),
+        )
         .add_message::<ClearAround>()
         .add_systems(
             Update,
-            (
-                make_way.run_if(resource_exists::<Site>),
-                clear_around,
-                follow_digs,
-            ),
+            (make_way, clear_around, follow_digs).in_set(FloraSystems::Clear),
         );
 }
 
@@ -265,7 +275,8 @@ fn plant(
     mut commands: Commands,
     planet: Res<Planet>,
     tweaks: Res<Tweaks>,
-    site: Option<Res<Site>>,
+    footprints: Query<&Footprint>,
+    ticks: SystemChangeTick,
     start: Res<Start>,
     flora: Res<Flora>,
     mut obstacles: ResMut<Obstacles>,
@@ -356,9 +367,9 @@ fn plant(
                    clearance_m: f32,
                    cut: Option<Cuttable>,
                    stops: Option<(Vec3, f32)>| {
-        if site
-            .as_ref()
-            .is_some_and(|site| site.covers(transform.translation, clearance_m))
+        if footprints
+            .iter()
+            .any(|footprint| footprint.covers(transform.translation, clearance_m))
         {
             return;
         }
@@ -542,17 +553,18 @@ fn plant(
         dry: tweaks.grass_dry.to_linear(),
         lush: tweaks.grass_lush.to_linear(),
         squares: HashMap::default(),
-        cleared_for: site.as_ref().map_or(0, |site| site.revision),
+        cleared_at: ticks.this_run(),
     };
     let squares = (GRASS_REACH_M / GRASS_SQUARE_M).ceil() as i32;
     // One thread per row of squares; working out where the ground is, is the slow part.
+    let footprints: Vec<&Footprint> = footprints.iter().collect();
     let grown: Vec<((i32, i32), Option<Mesh>)> = std::thread::scope(|scope| {
-        let (meadow, planet, site) = (&meadow, &*planet, site.as_deref());
+        let (meadow, planet, footprints) = (&meadow, &*planet, footprints.as_slice());
         let rows: Vec<_> = (-squares..squares)
             .map(|i| {
                 scope.spawn(move || {
                     (-squares..squares)
-                        .map(|j| ((i, j), grass_square(meadow, planet, site, i, j)))
+                        .map(|j| ((i, j), grass_square(meadow, planet, footprints, i, j)))
                         .collect::<Vec<_>>()
                 })
             })
@@ -589,7 +601,7 @@ fn plant(
 fn grass_square(
     meadow: &Meadow,
     planet: &Planet,
-    site: Option<&Site>,
+    footprints: &[&Footprint],
     i: i32,
     j: i32,
 ) -> Option<Mesh> {
@@ -621,7 +633,9 @@ fn grass_square(
             let cover = planet.cover(root, ground_normal);
             // Nothing grows on ground that has been dug or filled.
             if luck > smoothstep(0.3, 0.7, cover.grass) * thinning
-                || site.is_some_and(|site| site.covers(root, 0.25))
+                || footprints
+                    .iter()
+                    .any(|footprint| footprint.covers(root, 0.25))
                 || planet.dug(root)
             {
                 continue;
@@ -670,33 +684,50 @@ fn grass_square(
     )
 }
 
-/// When the base changes shape, clears away whatever it now stands on.
+/// When something built changes shape, clears away whatever it now stands on.
 fn make_way(
     mut commands: Commands,
-    site: Res<Site>,
+    footprints: Query<Ref<Footprint>>,
     planet: Res<Planet>,
     meadow: Option<ResMut<Meadow>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
+    ticks: SystemChangeTick,
 ) {
     let Some(mut meadow) = meadow else { return };
-    if meadow.cleared_for == site.revision {
+    let changed: Vec<&Footprint> = footprints
+        .iter()
+        .filter(|footprint| {
+            footprint
+                .last_changed()
+                .is_newer_than(meadow.cleared_at, ticks.this_run())
+        })
+        .map(Ref::into_inner)
+        .collect();
+    if changed.is_empty() {
         return;
     }
-    meadow.cleared_for = site.revision;
+    meadow.cleared_at = ticks.this_run();
     for (growth, transform, mut visibility) in &mut growth {
-        if site.covers(transform.translation, growth.clearance_m) {
+        if changed
+            .iter()
+            .any(|footprint| footprint.covers(transform.translation, growth.clearance_m))
+        {
             *visibility = Visibility::Hidden;
         }
     }
-    // Regrow the squares of grass at or beside the base.
+    // Regrow the squares of grass at or beside what changed.
+    let all: Vec<&Footprint> = footprints.iter().map(Ref::into_inner).collect();
     for (&(i, j), &entity) in &meadow.squares {
         let centre = (Vec2::new(i as f32, j as f32) + 0.5) * GRASS_SQUARE_M;
         let point = meadow.ground.ground(&planet, centre.x, centre.y);
-        if !site.covers(point, GRASS_SQUARE_M) {
+        if !changed
+            .iter()
+            .any(|footprint| footprint.covers(point, GRASS_SQUARE_M))
+        {
             continue;
         }
-        match grass_square(&meadow, &planet, Some(&site), i, j) {
+        match grass_square(&meadow, &planet, &all, i, j) {
             Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
             None => commands.entity(entity).remove::<Mesh3d>(),
         };
@@ -710,7 +741,7 @@ fn make_way(
 fn follow_digs(
     mut commands: Commands,
     planet: Res<Planet>,
-    site: Option<Res<Site>>,
+    footprints: Query<&Footprint>,
     meadow: Option<Res<Meadow>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut obstacles: ResMut<Obstacles>,
@@ -745,7 +776,13 @@ fn follow_digs(
         if !near(point, GRASS_SQUARE_M * 0.71) {
             continue;
         }
-        match grass_square(&meadow, &planet, site.as_deref(), i, j) {
+        match grass_square(
+            &meadow,
+            &planet,
+            &footprints.iter().collect::<Vec<_>>(),
+            i,
+            j,
+        ) {
             Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
             None => commands.entity(entity).remove::<Mesh3d>(),
         };

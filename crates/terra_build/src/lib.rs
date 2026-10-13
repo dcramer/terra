@@ -53,7 +53,7 @@ pub use ground::{Ground, Sample};
 pub use mesh::{BaseMesh, Surface};
 pub use walk::Walker;
 
-use glam::{IVec3, Vec3};
+use glam::{IVec2, IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The grid: the size of one cube, in metres. Everything else here is given in metres and
@@ -647,6 +647,26 @@ impl Base {
         self.columns.contains_key(&[x, z])
     }
 
+    /// Every place along the floor that is in a room, or has a floor, on the ground storey:
+    /// where `contains` or `has_floor` holds at storey 0. In no fixed order.
+    pub fn ground_columns(&self) -> impl Iterator<Item = IVec2> + '_ {
+        let rooms = self
+            .tiles()
+            .filter(|(tile, _)| tile.y == 0)
+            .map(|(tile, _)| IVec2::new(tile.x, tile.z));
+        let floors = self
+            .cubes
+            .iter()
+            .filter(|(at, cube)| at.y == floor_layer(0) && cube.fill != Fill::Open)
+            .map(|(at, _)| IVec2::new(at.x, at.z));
+        rooms.chain(floors)
+    }
+
+    /// Every place along the floor where anything stands: where `occupied` holds.
+    pub fn occupied_columns(&self) -> impl Iterator<Item = IVec2> + '_ {
+        self.columns.keys().map(|&[x, z]| IVec2::new(x, z))
+    }
+
     /// Applies a shortcut, laying built cubes at once, unchecked, as the yard builds.
     /// Returns whether it changed anything.
     pub fn apply(&mut self, op: BuildOp) -> bool {
@@ -1081,6 +1101,28 @@ fn ray_box(origin: Vec3, direction: Vec3, low: Vec3, high: Vec3) -> Option<(f32,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_columns_a_base_stands_on_are_where_its_tiles_say() {
+        let mut base = Base::default();
+        for op in crate::example(Kind::PLAIN) {
+            base.apply(op);
+        }
+        let ground: std::collections::HashSet<IVec2> = base.ground_columns().collect();
+        let standing: std::collections::HashSet<IVec2> = base.occupied_columns().collect();
+        assert!(!ground.is_empty() && !standing.is_empty());
+        for x in -40..60 {
+            for z in -40..40 {
+                let tile = IVec3::new(x, 0, z);
+                let at = IVec2::new(x, z);
+                assert_eq!(
+                    ground.contains(&at),
+                    base.contains(tile) || base.has_floor(tile)
+                );
+                assert_eq!(standing.contains(&at), base.occupied(x, z));
+            }
+        }
+    }
 
     const LOGS: Kind = Kind(1);
 

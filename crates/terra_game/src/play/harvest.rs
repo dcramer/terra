@@ -9,7 +9,8 @@ use super::controls::{Action, Settings};
 use super::flora::{Growth, Obstacles};
 use super::intent::Intent;
 use super::inventory::{Belongings, Cuttable, Items};
-use super::kinds::ToolDef;
+use super::kinds::{CutSkill, ToolDef};
+use super::registries::FloraGives;
 use super::skills::{Did, ONCE, Skills};
 use super::tick::Sim;
 use super::work::Hold;
@@ -76,6 +77,7 @@ pub fn plugin(app: &mut App) {
 fn cut(
     mut commands: Commands,
     time: Res<Time>,
+    flora_gives: Res<FloraGives>,
     mut growth: Query<
         (
             Entity,
@@ -227,7 +229,8 @@ fn cut(
             continue;
         }
 
-        let (kind, count) = cut.gives;
+        let (flora, count) = cut.gives;
+        let kind = flora_gives.item(flora);
         let gives = belongings.items().name(kind).to_string();
         // What does not fit in the backpack drops at the player's feet (`pile`).
         let given = belongings.give(kind, count);
@@ -286,6 +289,7 @@ fn fall(
 /// `name`, which does `tool`.
 pub fn prompt(
     items: &Items,
+    flora_gives: &FloraGives,
     name: &str,
     tool: &ToolDef,
     cutting: &Cutting,
@@ -307,7 +311,7 @@ pub fn prompt(
             "{}  work this      Gives {} {}",
             settings.hold(Action::Use),
             cut.gives.1,
-            items.name(cut.gives.0)
+            items.name(flora_gives.item(cut.gives.0))
         ),
         None => tool
             .hint(&settings.key(Action::Use), &settings.hold(Action::Use))

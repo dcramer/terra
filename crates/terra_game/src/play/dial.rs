@@ -14,6 +14,7 @@ use super::harvest::{self, Cutting};
 use super::interact::Focus;
 use super::inventory::{Belongings, InventoryScreen};
 use super::options::OptionsMenu;
+use super::registries::FloraGives;
 use super::tool::{self, Builder};
 use crate::shell::Options;
 use bevy::{input::mouse::AccumulatedMouseMotion, prelude::*, window::CursorOptions};
@@ -322,7 +323,7 @@ fn draw(
     digging: Single<&super::dig::Digging, IsLocalPlayer>,
     growth: Query<&Growth>,
     options: Res<Options>,
-    (crafts, builds): (Crafts, Res<Builds>),
+    (crafts, builds, flora_gives): (Crafts, Res<Builds>, Res<FloraGives>),
     cursor: Single<&CursorOptions>,
     mut root: Single<&mut Visibility, (With<DialRoot>, Without<Hud>)>,
     mut hud: Query<&mut Visibility, With<Hud>>,
@@ -463,9 +464,15 @@ fn draw(
                     }
                 }
                 Some(tool) => match items.tool(tool) {
-                    Some(does) => {
-                        harvest::prompt(items, items.name(tool), does, &cutting, &growth, &settings)
-                    }
+                    Some(does) => harvest::prompt(
+                        items,
+                        &flora_gives,
+                        items.name(tool),
+                        does,
+                        &cutting,
+                        &growth,
+                        &settings,
+                    ),
                     None => String::new(),
                 },
                 None if let Some(kind) = belongings.broken_in_hand() => {

@@ -6,11 +6,39 @@
 //! The file is read into a registry, `Flora` (`data`).
 
 use super::data;
-use super::inventory::{Cut, Cuttable, Items};
 use bevy::prelude::{Color, Resource};
 use serde::Deserialize;
 use terra_gen::Rng;
-use terra_items::ItemKind;
+
+/// The sorts of thing that can be cut. Each is worked by one family of tool, and some
+/// only by a tool of a better material (D96).
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Cut {
+    Tree,
+    /// A tree too great for a stone axe.
+    GreatTree,
+    Rock,
+    /// Rock with ore in it.
+    Ore,
+    Plant,
+    /// A carcass, butchered.
+    Flesh,
+}
+
+/// A kind of flora, by its place in the file.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct FloraKind(pub u16);
+
+/// What cutting something takes and gives.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Cuttable {
+    pub what: Cut,
+    /// So many of what its kind gives, which the file names and gameplay knows as an item
+    /// (`registries::FloraGives`).
+    pub gives: (FloraKind, u32),
+    /// How long it takes with a tool of ordinary speed, in seconds.
+    pub seconds: f32,
+}
 
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
@@ -80,9 +108,9 @@ pub struct FloraDef {
     pub size: Option<(f32, f32)>,
     #[serde(default)]
     cut: Option<CutDef>,
-    /// What cutting it gives, as the registry of items knows it.
+    /// Its place in the file.
     #[serde(skip)]
-    gives: Option<ItemKind>,
+    kind: Option<FloraKind>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -101,15 +129,15 @@ struct CutDef {
 pub struct Flora(Vec<FloraDef>);
 
 impl Flora {
-    /// Reads the file, giving each kind the colours every kind shares after its own, and
-    /// naming what cutting it gives as the registry of items does.
-    pub fn read(items: &Items) -> Self {
-        const FILE: &str = "flora.ron";
-        let file: FloraFile = data::read(FILE);
+    pub const FILE: &str = "flora.ron";
+
+    /// Reads the file, giving each kind the colours every kind shares after its own.
+    pub fn read() -> Self {
+        let file: FloraFile = data::read(Self::FILE);
         let mut kinds = file.kinds;
-        for kind in &mut kinds {
+        for (place, kind) in kinds.iter_mut().enumerate() {
             kind.colours.extend(file.shared_colours.iter().cloned());
-            kind.gives = kind.cut.as_ref().map(|cut| items.named(&cut.gives.0, FILE));
+            kind.kind = Some(FloraKind(place as u16));
         }
         Self(kinds)
     }
@@ -160,6 +188,11 @@ impl FloraDef {
         (Color::srgb(red, green, blue), surface == Surface::Foliage)
     }
 
+    /// The name of the item cutting it gives, as the file has it, if it can be cut.
+    pub fn gives(&self) -> Option<&str> {
+        self.cut.as_ref().map(|cut| cut.gives.0.as_str())
+    }
+
     /// What cutting one of a size takes and gives, if it can be cut.
     pub fn cuttable(&self, size: f32) -> Option<Cuttable> {
         let cut = self.cut.as_ref()?;
@@ -170,7 +203,7 @@ impl FloraDef {
         let (_, base, per_m) = cut.gives;
         Some(Cuttable {
             what,
-            gives: (self.gives?, (base + per_m * size).round() as u32),
+            gives: (self.kind?, (base + per_m * size).round() as u32),
             seconds: cut.seconds.0 + cut.seconds.1 * size,
         })
     }
@@ -181,20 +214,17 @@ mod tests {
     use super::*;
     use terra_gen::Seed;
 
-    fn flora() -> (Items, Flora) {
-        let items = Items::default();
-        let flora = Flora::read(&items);
-        (items, flora)
+    fn flora() -> Flora {
+        Flora::read()
     }
 
     fn kind<'a>(flora: &'a Flora, name: &str) -> &'a FloraDef {
         flora.kinds().iter().find(|kind| kind.name == name).unwrap()
     }
 
-    /// Reading checks that what each cut gives is a kind of item there is.
     #[test]
     fn every_layer_has_something_to_grow_and_every_kind_a_model() {
-        let (_, flora) = flora();
+        let flora = flora();
         let mut rng = Seed(1).derive("flora").rng();
         for layer in [
             Grows::Trees,
@@ -215,7 +245,7 @@ mod tests {
 
     #[test]
     fn a_layer_chooses_by_its_noise_and_falls_back_on_its_last() {
-        let (_, flora) = flora();
+        let flora = flora();
         let mut rng = Seed(1).derive("flora").rng();
         let mut name = |layer, noise, size| {
             flora
@@ -231,7 +261,7 @@ mod tests {
 
     #[test]
     fn a_great_tree_takes_iron_and_gives_more_wood() {
-        let (items, flora) = flora();
+        let flora = flora();
         let pine = kind(&flora, "Pine");
         let small = pine.cuttable(9.0).unwrap();
         let great = pine.cuttable(15.0).unwrap();
@@ -239,8 +269,9 @@ mod tests {
         assert_eq!(great.what, Cut::GreatTree);
         assert_eq!((small.gives.1, great.gives.1), (3, 5));
         // Ore rounds up, as one ore comes of any ore rock.
-        let ore = kind(&flora, "Ore rock").cuttable(0.8).unwrap();
-        assert_eq!(ore.gives, (items.kind("Ore"), 1));
+        let ore_rock = kind(&flora, "Ore rock");
+        assert_eq!(ore_rock.gives(), Some("Ore"));
+        assert_eq!(ore_rock.cuttable(0.8).unwrap().gives.1, 1);
         let (_, foliage) = pine.colour("Green.001");
         assert!(foliage);
         let (_, foliage) = kind(&flora, "Ore rock").colour("Anything");

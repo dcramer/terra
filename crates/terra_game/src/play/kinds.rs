@@ -117,25 +117,18 @@ pub struct WornDef {
     pub holds: Option<(String, u32)>,
 }
 
-/// The sorts of thing that can be cut. Each is worked by one family of tool, and some
-/// only by a tool of a better material (D96).
-#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Cut {
-    Tree,
-    /// A tree too great for a stone axe.
-    GreatTree,
-    Rock,
-    /// Rock with ore in it.
-    Ore,
-    Plant,
-    /// A carcass, butchered.
-    Flesh,
-}
+pub use super::flora_kinds::Cut;
 
-impl Cut {
+/// Which skill working a sort of thing grows: the world says what can be cut; skills are
+/// gameplay's.
+pub trait CutSkill {
     /// The skill working it grows (D88), which is also which family of tool works it:
     /// axes chop, pickaxes mine, knives forage.
-    pub fn skill(self) -> Skill {
+    fn skill(self) -> Skill;
+}
+
+impl CutSkill for Cut {
+    fn skill(self) -> Skill {
         match self {
             Cut::Tree | Cut::GreatTree => Skill::Chopping,
             Cut::Rock | Cut::Ore => Skill::Mining,

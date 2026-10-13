@@ -9,10 +9,14 @@
 //! this tick, and over how long. Things at reduced detail take turns, so their thinking is
 //! spread over the ticks rather than falling on one.
 
-use super::Player;
 use super::tick::Sim;
 use crate::spatial::SpatialHash;
 use bevy::prelude::*;
+
+/// Where detail is graded from: a player, or anything else that should see the world in
+/// full around it. Layers above the world give it to whoever plays (`Player` requires it).
+#[derive(Component, Default, Clone, Copy, Debug)]
+pub struct Viewpoint;
 
 /// Within this of a player, simulated in full.
 const FULL_WITHIN_M: f32 = 64.0;
@@ -73,10 +77,10 @@ pub fn plugin(app: &mut App) {
         .add_systems(FixedUpdate, grade.in_set(Grading));
 }
 
-/// Works out each thing's detail from the nearest player.
+/// Works out each thing's detail from the nearest viewpoint.
 fn grade(
-    players: Query<&Transform, With<Player>>,
-    mut things: Query<(&Transform, &mut Detail), Without<Player>>,
+    players: Query<&Transform, With<Viewpoint>>,
+    mut things: Query<(&Transform, &mut Detail), Without<Viewpoint>>,
     mut near: Local<Option<SpatialHash<()>>>,
 ) {
     let near = near.get_or_insert_with(|| SpatialHash::new(REDUCED_WITHIN_M));
@@ -97,12 +101,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn detail_falls_with_distance_from_the_nearest_player() {
+    fn detail_falls_with_distance_from_the_nearest_viewpoint() {
         let mut world = World::new();
         let ground = Vec3::Y * 2000.0;
-        world.spawn((Player, Transform::from_translation(ground)));
+        world.spawn((Viewpoint, Transform::from_translation(ground)));
         world.spawn((
-            Player,
+            Viewpoint,
             Transform::from_translation(ground + Vec3::X * 1000.0),
         ));
         let at = |world: &mut World, east: f32| {

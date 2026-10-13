@@ -12,6 +12,7 @@
 
 use crate::planet::MainCamera;
 use crate::planet::Planet;
+use crate::play::{Footprint, Steps};
 use crate::start::Start;
 pub(crate) use crate::start::lifted;
 use bevy::{
@@ -61,6 +62,8 @@ pub(super) struct Build {
     /// Steps from each ground-floor door down to the ground. A walker treats each flight
     /// as a ramp.
     ramps: Vec<Ramp>,
+    /// Where it stands on the ground, as the world sees it, remade with every redraw.
+    pub footprint: Footprint,
     structure: Entity,
     glass: Entity,
     foundation: Entity,
@@ -106,6 +109,22 @@ pub(super) struct Site {
     #[deref]
     pub build: Build,
     camera_placed: bool,
+}
+
+/// Marks the [`Footprint`] the world sees of the player's base.
+#[derive(Component)]
+struct SiteFootprint;
+
+/// Gives the world the base's footprint whenever the base changes shape or place.
+fn keep_footprint(
+    site: Res<Site>,
+    mut seen: Local<Option<u64>>,
+    mut footprint: Single<&mut Footprint, With<SiteFootprint>>,
+) {
+    if *seen != Some(site.revision) {
+        *seen = Some(site.revision);
+        footprint.set_if_neq(site.footprint.clone());
+    }
 }
 
 /// A build that is not the player's, such as a house in a village.
@@ -214,6 +233,14 @@ pub fn plugin(app: &mut App) {
     let free = not(resource_exists::<DrivenByPlayer>);
     app.insert_resource(Added)
         .add_systems(Startup, setup)
+        .add_systems(
+            PostStartup,
+            keep_footprint.before(crate::play::FloraSystems::Plant),
+        )
+        .add_systems(
+            Update,
+            keep_footprint.before(crate::play::FloraSystems::Clear),
+        )
         .init_resource::<pieces::Loading>()
         .init_resource::<relief::Loading>()
         .add_systems(Update, (reload_kit, sheet::lay, pieces::load, relief::load))
@@ -304,6 +331,11 @@ impl Build {
             operations: Vec::new(),
             revision: 0,
             ramps: Vec::new(),
+            footprint: Footprint {
+                frame,
+                cell_m: CELL_M,
+                ..default()
+            },
             structure,
             glass,
             foundation,
@@ -356,26 +388,7 @@ impl Build {
     /// Whether a point in the world is under the base, or within a margin of it: in a room,
     /// on a floor, or by any wall, such as one standing alone.
     pub(super) fn covers(&self, point: Vec3, margin: f32) -> bool {
-        let local = self
-            .frame
-            .compute_affine()
-            .inverse()
-            .transform_point3(point);
-        // In a room or on a floor, or within the margin of anything standing: every column
-        // of cubes in reach is looked at, so a wall a cube thick is never missed.
-        let at = (local / CELL_M).floor().as_ivec3();
-        let reach = (margin / CELL_M).ceil() as i32;
-        self.base.contains(at.with_y(0))
-            || self.base.has_floor(at.with_y(0))
-            || (-reach..=reach)
-                .any(|dx| (-reach..=reach).any(|dz| self.base.occupied(at.x + dx, at.z + dz)))
-            || self.ramps.iter().any(|ramp| {
-                let offset = local - ramp.top;
-                let along = offset.dot(ramp.outward);
-                let across = offset.dot(ramp.outward.cross(Vec3::Y));
-                (-margin..=ramp.length + margin).contains(&along)
-                    && across.abs() <= ramp.width * 0.5 + margin
-            })
+        self.footprint.covers(point, margin)
     }
 
     /// Moves the build to stand somewhere else, as when a base is begun where its claim
@@ -662,6 +675,11 @@ fn setup(
     };
     build.replace_with(&operations, &mut commands, &planet, &mut meshes);
     commands.insert_resource(look);
+    commands.spawn((
+        Name::new("Base footprint"),
+        SiteFootprint,
+        build.footprint.clone(),
+    ));
     commands.insert_resource(Site {
         build,
         camera_placed: false,
@@ -954,6 +972,22 @@ fn redraw(commands: &mut Commands, site: &mut Build, planet: &Planet, meshes: &m
         site.ramps.push(ramp);
     }
     show(site.steps, steps.into_mesh());
+    site.footprint = Footprint {
+        frame: site.frame,
+        cell_m: CELL_M,
+        ground: site.base.ground_columns().collect(),
+        standing: site.base.occupied_columns().collect(),
+        steps: site
+            .ramps
+            .iter()
+            .map(|ramp| Steps {
+                top: ramp.top,
+                outward: ramp.outward,
+                length: ramp.length,
+                width: ramp.width,
+            })
+            .collect(),
+    };
 }
 
 /// Colour of a plan's pieces not yet in: each a shade apart, so they can be counted.

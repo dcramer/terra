@@ -29,7 +29,9 @@ mod dial;
 mod dig;
 mod figure;
 mod flora;
-pub use flora::{Growth, Obstacles};
+pub use flora::{FloraSystems, Growth, Obstacles};
+mod footprint;
+pub use footprint::{Footprint, Steps};
 mod flora_kinds;
 pub use flora_kinds::Flora;
 mod gains;
@@ -53,6 +55,7 @@ mod pile;
 mod pooling;
 mod probe;
 mod props;
+mod registries;
 pub use props::{Look as PropLook, glowing as prop_glowing, lit as prop_lit, looks as prop_looks};
 mod save;
 mod scene;
@@ -88,7 +91,7 @@ pub use world::WorldPlugin;
 /// move (`Motion`), what their hands and feet are up to (`Stance`), and whether they are
 /// down (`Downed`), along with what they carry, know and feel.
 #[derive(Component)]
-#[require(Smoothed)]
+#[require(Smoothed, lod::Viewpoint)]
 struct Player;
 
 /// The player this machine steers: its input moves them, and the camera, the screen and
@@ -205,6 +208,8 @@ pub struct GameplayPlugin;
 
 impl Plugin for GameplayPlugin {
     fn build(&self, app: &mut App) {
+        // The kinds of thing gameplay runs on, after the world's.
+        registries::plugin(app);
         // A player needs something to build on, and takes over from the build keys.
         build::plugin(app);
         torchlight::plugin(app);

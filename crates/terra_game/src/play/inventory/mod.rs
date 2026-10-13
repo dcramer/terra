@@ -40,15 +40,7 @@ pub fn describe(items: &Items, cost: &Cost, times: u32) -> String {
         .join(", ")
 }
 
-/// What cutting something takes and gives.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct Cuttable {
-    pub what: Cut,
-    /// So many of a kind of item.
-    pub gives: (ItemKind, u32),
-    /// How long it takes with a tool of ordinary speed, in seconds.
-    pub seconds: f32,
-}
+pub use super::flora_kinds::Cuttable;
 
 /// How many slots the bar has: eight, as Valheim's has. A placeholder (D84).
 pub const BAR_SLOTS: usize = 8;

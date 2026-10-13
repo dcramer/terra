@@ -14,6 +14,7 @@ use super::bodies::Body;
 use super::flora::ClearAround;
 use super::interact::{CanInteract, Interactable, Interacted};
 use super::inventory::Belongings;
+use super::kinds::CutSkill;
 use super::lod::Detail;
 use super::skills::{Did, ONCE};
 pub use super::species::Species;
