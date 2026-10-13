@@ -4,7 +4,7 @@ How we build the construction system that [proposals/construction-001.md](propos
 
 ## The bar: on par with Enshrouded (D211)
 
-The developers' agenda, above everything below: building looks and behaves **on par with Enshrouded**. Cubes stay the truth and stay optimised cubes. Cubes that touch blend into one structure, never a stack of boxes; and each cube's look changes with what it touches and where it sits: a corner, an edge, a top, a base, rough or dressed, against another material, against the ground. Every kind is judged side by side with Enshrouded against this, and whatever falls short is changed, however it is drawn today. Finding the technology is ours: research (`research/voxel-building-look.md`, under way), then spikes compared with Enshrouded, then the chosen way built, merged per section and measured.
+The developers' agenda, above everything below: building takes **an approach to voxels like Enshrouded's** and is on par with it in how buildings blend together. Not a copy of its look: the style is ours (D14), as are the kits and materials. Cubes stay the truth and stay optimised cubes. Cubes that touch blend into one structure, never a stack of boxes; and each cube's look changes with what it touches and where it sits: a corner, an edge, a top, a base, rough or dressed, against another material, against the ground. Every kind is judged side by side with Enshrouded against this, and whatever falls short is changed, however it is drawn today. Finding the technology is ours: research (`research/voxel-building-look.md`, under way), then spikes compared with Enshrouded, then the chosen way built, merged per section and measured.
 
 ## What it must meet
 
