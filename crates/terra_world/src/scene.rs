@@ -5,7 +5,7 @@
 use crate::planet::MainCamera;
 use crate::planet::Tweaks;
 use crate::sky::{Sky, SkyPlugin};
-use bevy::light::ShadowFilteringMethod;
+use bevy::light::{FogVolume, ShadowFilteringMethod, VolumetricFog, VolumetricLight};
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
     camera::Exposure,
@@ -41,7 +41,8 @@ pub fn plugin(app: &mut App) {
         // Shade is lit by the sky (`skylight`), so it comes out cool against the warm sun.
         .insert_resource(DirectionalLightShadowMap { size: 4096 })
         .add_systems(Startup, preset)
-        .add_systems(PostStartup, (style_camera, style_sun));
+        .add_systems(PostStartup, (style_camera, style_sun, haze))
+        .add_systems(Update, haze_follows);
 }
 
 fn preset(mut tweaks: ResMut<Tweaks>) {
@@ -61,8 +62,48 @@ fn preset(mut tweaks: ResMut<Tweaks>) {
     tweaks.sea_deep = Color::srgb(0.03, 0.14, 0.27);
 }
 
+/// A thin haze round the camera that the sun lights in shafts where it comes through the
+/// leaves, as the forests of Red Dead Redemption 2 and Sons of the Forest have (D217): Bevy's
+/// volumetric fog, a box this wide and tall that follows the camera.
+#[derive(Component)]
+struct Haze;
+const HAZE_M: Vec3 = Vec3::new(240.0, 60.0, 240.0);
+
+fn haze(mut commands: Commands) {
+    commands.spawn((
+        Name::new("Haze"),
+        Haze,
+        FogVolume {
+            fog_color: Color::srgb(0.92, 0.95, 1.0),
+            density_factor: 0.008,
+            absorption: 0.05,
+            scattering: 0.5,
+            // Light scattered on forward, so a shaft shows best looking toward the sun.
+            scattering_asymmetry: 0.7,
+            ..default()
+        },
+        Transform::from_scale(HAZE_M),
+    ));
+}
+
+/// The haze stands round the camera, upright on the planet, its foot below the ground.
+fn haze_follows(
+    camera: Query<&GlobalTransform, With<MainCamera>>,
+    mut haze: Query<&mut Transform, With<Haze>>,
+) {
+    let (Some(camera), Ok(mut haze)) = (camera.iter().next(), haze.single_mut()) else {
+        return;
+    };
+    let at = camera.translation();
+    let up = at.normalize_or(Vec3::Y);
+    haze.translation = at + up * (HAZE_M.y * 0.5 - 10.0);
+    haze.rotation = Quat::from_rotation_arc(Vec3::Y, up);
+}
+
 fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)>) {
     let (sun, mut light) = sun.into_inner();
+    // The sun lights the haze, in shafts through the canopy (D217).
+    commands.entity(sun).insert(VolumetricLight);
     // A low sun rakes across level surfaces, which need more leeway before they are
     // taken to shade themselves.
     light.shadow_depth_bias = 0.06;
@@ -118,6 +159,14 @@ fn style_camera(
 ) {
     let camera = *camera;
     commands.entity(camera).insert(adaptation(&mut curves));
+    commands.entity(camera).insert(VolumetricFog {
+        // The sky's light in the haze, roughly its colour.
+        ambient_color: Color::srgb(0.7, 0.8, 1.0),
+        ambient_intensity: 0.05,
+        // Each frame's march starts a little differently, for TAA to smooth.
+        jitter: 0.5,
+        step_count: 48,
+    });
     commands.entity(camera).insert((
         Exposure {
             ev100: EXPOSURE_EV100,

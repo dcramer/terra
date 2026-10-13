@@ -444,7 +444,7 @@ fn plant(
             // the crown, so a card does not flip from lit to dark as it turns.
             cull_mode: None,
             double_sided: false,
-            diffuse_transmission: 0.35,
+            diffuse_transmission: 0.5,
             perceptual_roughness: 0.75,
             reflectance: 0.3,
             ..default()
