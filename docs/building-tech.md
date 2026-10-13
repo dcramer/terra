@@ -1,6 +1,6 @@
 # Building: the technical design
 
-How walls, floors and roofs work in code. The design is [building.md](building.md); the prior art is [research/procedural-buildings.md](../research/procedural-buildings.md). Technical choices here are mine (D160); nothing in it changes a design decision.
+How walls, floors and roofs work in code. The design is [building.md](building.md), and the rules every piece follows are [proposals/construction-001.md](proposals/construction-001.md) (D192 to D194); the prior art is [research/procedural-buildings.md](../research/procedural-buildings.md). Technical choices here are mine (D160); nothing in it changes a design decision.
 
 ## What it rests on
 
@@ -34,9 +34,9 @@ So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to
 
 **A kit draws cubes** ([building-kits.md](building-kits.md)): it finds the runs of cubes of its kind and lays its pieces along them, its corners where runs meet and its cut ends where cubes are empty. A piece is as thick as its kind, logs 0.3 to 0.4 m and stone the whole cube, centred in the cube; what stops a walker is the cube.
 
-**What is planned is parts** (step 3): each wall, floor or roof section the player lays, with an id that never changes, its kind of construction, and which of its pieces are in. When a part is finished, its edges and cells join what stands.
+**What is planned is cubes too** (D192): each cube is air, planned, or built to a **fill level** (a log fills a cube in two courses, a block in one), with at most one change pending on it: replace, carve, take away. Fill is the unit of progress, cost and collision: a cube collides from its foot to its fill. A part, a wall or floor or roof section the player lays, is only how the interface groups cubes. Ground heights under a plan are sampled when it is laid and kept with it, so every machine agrees on its footings and support.
 
-**What is done is operations** (D21): fill a block of cubes with a kind or empty it; a roof section; the room shortcut (a ring of wall cubes round a footprint, a floor under it and a roof over it, opening into rooms it meets); with plans, lay a part, put a piece in, take one out. A base is saved and sent as its operations. Older saves, of rooms and then of walls on the edges between cells, are still read and turned into cubes: a room becomes its walls, floor and roof, and a wall on an edge becomes the cubes on its outside, so rooms keep their size inside; a room's wall pushed or pulled is left out.
+**What is done is operations** (D21): fill a block of cubes with a kind or empty it; a roof section; the room shortcut (a ring of wall cubes round a footprint, a floor under it and a roof over it, opening into rooms it meets); with plans, lay a part, fill a cube, empty one. The server checks each against the state when it arrives, undo included as its inverse. A base is saved and sent as a snapshot of its cubes and roofs, and the operations since. Older saves, of rooms and then of walls on the edges between cells, are still read and turned into cubes: a room becomes its walls, floor and roof, and a wall on an edge becomes the cubes on its outside, so rooms keep their size inside; a room's wall pushed or pulled is left out.
 
 **Everything else is worked out from the parts**, by pure functions, so every machine gets the same answer and only the parts travel:
 
@@ -44,7 +44,8 @@ So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to
 - **Buildings**: parts that touch, grouped.
 - **Rooms and indoors**: the air cubes each building closes in, flood-filled.
 - **The roof's shape**: a height field over the grid.
-- **What stops a walker**: the cubes, read directly: their tops hold a walker up, solid and glass stop them, openings let them through.
+- **What stops a walker**: the built cubes, read directly, each to its fill: their tops hold a walker up, solid ones stop them, openings and plans let them through.
+- **Support**: every built cube joined, face to face, to the ground or a footing that reaches it; a roof section held by the cubes or posts under its eaves (D194). Nothing is taken away while anything rests on it (D193).
 
 Each is recomputed for the building that changed, when a part is laid, a piece goes in or comes out, never per frame.
 
@@ -65,7 +66,7 @@ A wall's layout is a pure function of its plan, how it meets its neighbours, its
 
 **A course must divide the storey**, or a top plate takes what is left; each kit is checked for it as it is read.
 
-**Once a piece is in, a part's layout is frozen.** It keeps the kit version it was laid with, and it cannot be changed, only taken out piece by piece and laid again. So a piece's identity never shifts under a builder, which the research names as the subtle problem, and a changed kit never re-lays a half-built wall.
+**Layouts follow the cubes and the current kit.** Progress is kept per cube, not per piece, so a layout can always be worked out again: a kit tuned later redraws what is built, and a corner looks the same whichever wall went up first, with nothing lost (since 2026-10-12; layouts were frozen once a piece was in). Layouts are in grid units from kit data only, so the server needs no art, and versions are picked by a fixed hash of the base's seed and the cube's place.
 
 ## Roofs: a height field
 
@@ -81,14 +82,14 @@ Because walls run in four directions only (D146), a hip roof over any footprint,
 
 On the Bevy side, in `terra_game`:
 
-- **A finished part is merged** into one mesh per building and material, rebuilt in a background task when a part changes. Never an entity per stone.
+- **Built pieces are merged** into meshes per fixed section of cubes and material, rebuilt in a background task only where cubes changed. Never an entity per stone.
 - **Pieces being built are drawn on their own**, instanced, with the ghost of what is still to go in, until the part is finished.
-- **Far off, a stand-in made from the plan**: walls as boxes and the roof as its few planes, in the material's colour, faded in with Bevy's `VisibilityRange`.
+- **Far off, a simplified mesh per section** with its texture baked, as Unreal's HLOD, faded in with Bevy's `VisibilityRange`.
 - **Measured before relying on it**: a village of fifty cabins, on the fast GPU and the integrated one, in the loop a player runs.
 
 ## Constructing
 
-- **A part's progress is one bit per piece**, in the layout's order: bottom course first, corners first. A 6 m stone wall a storey high is about thirty. Saved and sent as the forest's cut trees are.
+- **A part's progress is its cubes' fill**, built from the bottom, as what each rests on is in (D194).
 - **The next piece** is the lowest not yet in, nearest the builder, so holding the key builds a wall up course by course, and two players can work from both ends.
 - **Roofs go in by stages per face**, frame, then battens, then covering, not tile by tile.
 

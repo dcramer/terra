@@ -1,6 +1,6 @@
 # Construction 001: a voxel core, drawn by its neighbours
 
-Status: proposal, 2026-10-12, for the developers to read and correct before more is built. It sets the rules every construction piece follows, and walks through every case they must handle. It builds on what is decided (D48, D139, D146, D152, D154, D179, D181) and changes none of it except where it says so. The research behind it is [research/adjacency-pieces.md](../../research/adjacency-pieces.md).
+Status: adopted on 2026-10-12 (D192, D193, D194), but for the dual grid for block kinds, which waits on its spike ([Next](#next)). It sets the rules every construction piece follows, and walks through every case they must handle. It builds on what is decided (D48, D139, D146, D152, D154, D179, D181) and changes none of it except where it says so. The research behind it is [research/adjacency-pieces.md](../../research/adjacency-pieces.md).
 
 ## What it answers
 
@@ -132,7 +132,7 @@ How the pieces work together, walked through as players will meet them (the deve
 
 ## Gaps, and how to close them
 
-Found by reading this proposal against the building docs, the decisions and the code, with a second, adversarial review (2026-10-12). Each gap has the most obvious or best answer. **Mine** marks a technical answer, decided here and recorded in decisions.md as it is built; **yours** marks a design call, added to the questions below.
+Found by reading this proposal against the building docs, the decisions and the code, with a second, adversarial review (2026-10-12). Each gap has the most obvious or best answer. **Mine** marks a technical answer, decided here (D160 updated); the design calls were the questions below, all now decided.
 
 **The model**
 
@@ -184,13 +184,13 @@ Found by reading this proposal against the building docs, the decisions and the 
 
 ## Open for the developers
 
-1. **Foundations.** Leaning, the developers, 2026-10-12: "ideally foundations just stop at the ground? but im not really sure". So footings of the kit's stone fill the space between the floor and the ground and stop where they meet it, taller where the ground falls away; the ground is left as it is, and the floor sits at the highest ground under the building. Only building below ground level digs (D131). Still to say: whether a tall footing costs more, and what happens when the ground under a building is dug later.
-2. **The unit of building.** Recommend a piece for long members (a log), and a cube for blocks, or a metre of them, so a stone wall goes up in about the steps a real one does.
-3. **Round or crisp corners**, per kind: the developers asked for rounded outside and inside corners. Recommend crisp for cut stone, round for plaster and earth, as real ones are.
-4. **Walls thicker than a cube**, for castles and retaining walls. Recommend yes for block kinds; it costs nothing on the dual grid.
-5. **Which kinds are blocks and which are long members.** Recommend stone, brick, plaster and earth as blocks; logs, timber framing, planks and wattle as long members.
-6. **Is a footing its own part?** The developers, 2026-10-12: "the footings might need to be a specific kind of building block tho? like a footing or floor? idk". A footing needs no special block: it is cubes of a block kind, stone by default, in the layers under the floor, and one rule makes it stop at the ground: **a cube the ground passes through is drawn down to the ground and no further**, which also closes a floor's edge. What is open is who lays it. Placed by hand first, as Valheim, Rust and Enshrouded do: explicit, but a step to forget, and gaps on slopes until it is done. Laid by the game: The Sims' way (D154). Recommend the game lays it into the plan under every ground-floor wall and floor edge, shown as its own part with its own cost, built first (D139), and changed if wanted: timber posts or stilts instead, or none over a cellar.
-7. **Nothing floats, now or later?** D142 says no stability in the MVP, wanted later. Rule 11 is the smallest part of it, joined to the ground or not, with no load or span. Recommend rule 11 in the MVP, which refines D142, and load and span later as it says.
+1. **Foundations.** **Decided** (D194): footings fill the space between the floor and the ground and stop where they meet it, taller where it falls away, costed by the cube like anything else; the floor sits at the highest ground under the building; the ground outside is not changed.
+2. **The unit of building.** **Decided** (D194): a cube's fill level (gap 1). A log fills its course in every cube it spans; a block kind goes in a cube at a time; holding the key keeps going while there are materials (building.md, building in bulk).
+3. **Round or crisp corners.** **Decided** (D194): each kit's own, as its material really is: crisp for cut stone and brick, round for plaster and earth.
+4. **Walls thicker than a cube.** **Decided** (D194): allowed for every kind; a block kind draws them as one mass, a long-member kind as walls side by side.
+5. **Blocks and long members.** **Decided** (D194): stone, brick, plaster and earth are blocks; logs, timber framing, planks and wattle are long members.
+6. **Footings.** **Decided** (D194): the game lays them into the plan under every ground-floor wall and floor edge, as their own part with their own cost, built first (D139), in stone by default; posts or stilts instead, or none over a cellar, by choice.
+7. **Nothing floats.** **Decided** (D194): rule 11 is in the MVP, refining D142; load and span stay for later.
 8. **Taking away what holds something** (gap 16): **Decided** (D193): refused, for anything attached to it or resting on it, items, parts and props alike: "we should refuse to remove things with other things attach. otherwise we have to add another system to 'drop' those things".
 9. **Cube shapes** (gap 18): **Decided** (D193): whole, stair, slope and half, more as kinds need them.
 10. **Lost support** (gap 20): **Decided** (D193): what is no longer joined collapses into debris, giving back part of its materials.

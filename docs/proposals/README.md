@@ -9,6 +9,6 @@ Numbered proposals, each one candidate rather than the plan. The developers comp
 | Proposal | Status | In short |
 |---|---|---|
 | Game design 001: a living world | **Adopted** on 2026-10-12 (D89) | Now the game's design: [gameplay.md](../gameplay.md) and the system pages it links. |
-| [Construction 001: a voxel core, drawn by its neighbours](construction-001.md) | Proposed on 2026-10-12 (D192) | The rules every construction piece follows, Enshrouded's way, keeping plans and ghosts: the cube is the truth, nothing leaves its cubes, any shape is drawn, pieces chosen by their neighbours; every case walked through. |
+| [Construction 001: a voxel core, drawn by its neighbours](construction-001.md) | **Adopted** on 2026-10-12 (D192 to D194), the dual grid waiting on its spike | The rules every construction piece follows, Enshrouded's way, keeping plans and ghosts: the cube is the truth, nothing leaves its cubes, any shape is drawn, pieces chosen by their neighbours; every case walked through. |
 
 New proposals take the next number in their series, such as `game-design-002.md`.
