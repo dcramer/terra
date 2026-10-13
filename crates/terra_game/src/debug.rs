@@ -125,6 +125,15 @@ struct Frames {
     software: bool,
 }
 
+/// The last frame's parts, for scripted runs to time: the game's own systems on the CPU, the
+/// render passes on the CPU, and the GPU (when the backend has timestamp queries).
+#[derive(Resource, Default, Clone, Copy, Debug)]
+pub struct FrameParts {
+    pub game_ms: f32,
+    pub render_ms: Option<f32>,
+    pub gpu_ms: Option<f32>,
+}
+
 /// Whether the readout shows everything or one line.
 #[derive(Resource, Default)]
 pub struct Detail(pub bool);
@@ -154,6 +163,7 @@ pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
         .init_resource::<Detail>()
         .add_systems(Startup, describe_machine)
         .add_systems(First, begin_update)
+        .init_resource::<FrameParts>()
         .add_systems(Last, (end_update, report).chain());
         if on_screen {
             app.add_systems(Startup, spawn_readout)
@@ -205,7 +215,11 @@ fn render_times(store: &DiagnosticsStore, field: &str) -> Option<f32> {
     total
 }
 
-fn end_update(mut frames: ResMut<Frames>, store: Res<DiagnosticsStore>) {
+fn end_update(
+    mut frames: ResMut<Frames>,
+    store: Res<DiagnosticsStore>,
+    mut parts: ResMut<FrameParts>,
+) {
     let now = Instant::now();
     let game_ms = frames
         .update_began
@@ -220,6 +234,11 @@ fn end_update(mut frames: ResMut<Frames>, store: Res<DiagnosticsStore>) {
         game_ms,
         render_ms: render_times(&store, "elapsed_cpu"),
         gpu_ms: render_times(&store, "elapsed_gpu"),
+    };
+    *parts = FrameParts {
+        game_ms: sample.game_ms,
+        render_ms: sample.render_ms,
+        gpu_ms: sample.gpu_ms,
     };
     if frames.count > WARM_UP_FRAMES && sample.frame_ms > STUTTER_MS {
         frames.stutters.push(sample.frame_ms);

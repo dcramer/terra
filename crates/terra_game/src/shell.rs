@@ -66,6 +66,7 @@ usage: terra_sandbox [options]
                         --give, such as leather_coat (repeatable)
   --template <name>     in the workbench: the template the next model's body is shaped
                         as, such as female or heavy (repeatable, in the models' order)
+  --crowd <n>           in the crowd experiment: how many characters (100 by default)
   --linear-skinning     skin with Bevy's own linear blend instead of dual quaternions,
                         to compare the two (crates/terra_game/src/skinning.rs)
   --joints              in the workbench: print where each model's joints and sockets
@@ -218,6 +219,8 @@ pub struct Options {
     pub templates: Vec<String>,
     /// Skin with Bevy's linear blend rather than dual quaternions (`skinning`), to compare.
     pub linear_skinning: bool,
+    /// In the crowd experiment: how many characters.
+    pub crowd: Option<usize>,
     pub joints: bool,
     pub focus: Option<String>,
     pub sides: Vec<f32>,
@@ -281,6 +284,7 @@ impl Options {
             wears: Vec::new(),
             templates: Vec::new(),
             linear_skinning: false,
+            crowd: None,
             joints: false,
             focus: None,
             sides: Vec::new(),
@@ -365,6 +369,11 @@ impl Options {
                 "--template" => options.templates.push(value("--template")?),
                 "--joints" => options.joints = true,
                 "--linear-skinning" => options.linear_skinning = true,
+                "--crowd" => {
+                    options.crowd = Some(value("--crowd")?.parse().map_err(|_| {
+                        "--crowd wants how many characters, such as 500".to_string()
+                    })?)
+                }
                 "--focus" => options.focus = Some(value("--focus")?),
                 "--sides" => options.sides = numbers("--sides", &value("--sides")?)?,
                 "--moments" => options.moments = numbers("--moments", &value("--moments")?)?,
@@ -692,6 +701,8 @@ fn scripted_run(
     adapter: Res<RenderAdapterInfo>,
     mut frame: Local<u32>,
     mut frame_ms: Local<Vec<f32>>,
+    mut part_ms: Local<[Vec<f32>; 3]>,
+    parts: Option<Res<crate::debug::FrameParts>>,
     mut last_frame: Local<Option<Instant>>,
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -734,6 +745,11 @@ fn scripted_run(
     }
     if options.bench {
         frame_ms.extend(real_ms);
+        if let Some(parts) = &parts {
+            part_ms[0].push(parts.game_ms);
+            part_ms[1].extend(parts.render_ms);
+            part_ms[2].extend(parts.gpu_ms);
+        }
         if frame_ms.len() == BENCH_FRAMES {
             frame_ms.sort_by(|a, b| a.total_cmp(b));
             println!(
@@ -742,6 +758,19 @@ fn scripted_run(
                 frame_ms[BENCH_FRAMES / 2],
                 frame_ms[BENCH_FRAMES * 99 / 100],
                 frame_ms[BENCH_FRAMES - 1]
+            );
+            // Where the time goes: the medians of the game's systems, the render passes on
+            // the CPU, and the GPU, so a slow frame says which to work on.
+            let median = |v: &mut Vec<f32>| {
+                v.sort_by(|a, b| a.total_cmp(b));
+                v.get(v.len() / 2)
+                    .map_or("-".to_string(), |m| format!("{m:.2} ms"))
+            };
+            println!(
+                "SANDBOX frame parts, median: game {}, render CPU {}, GPU {}",
+                median(&mut part_ms[0]),
+                median(&mut part_ms[1]),
+                median(&mut part_ms[2])
             );
             exit.write(AppExit::Success);
         }

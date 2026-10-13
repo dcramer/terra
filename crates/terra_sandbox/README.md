@@ -1,6 +1,6 @@
 # Sandbox
 
-A test environment for the game. It opens a window on a stand-in planet with a free camera, lets you change values while it runs, and can switch on experiments: the game itself (`play`, from [terra_game](../terra_game/README.md)), testbeds that try one thing (`scatter`, `forest`, `look`, `build`), and developer tools (`workbench`, `icons`).
+A test environment for the game. It opens a window on a stand-in planet with a free camera, lets you change values while it runs, and can switch on experiments: the game itself (`play`, from [terra_game](../terra_game/README.md)), testbeds that try one thing (`scatter`, `forest`, `look`, `build`), and developer tools (`workbench`, `icons`, `crowd`).
 
 The game's code is in `terra_game`; what is here is the launcher, the testbeds and the tools. The planet is a formula, not voxels.
 
@@ -25,7 +25,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--clean` | Leave the frame-time readout off the screen, for pictures |
 | `--mute` | No sound. Scripted runs are always silent, and print what they would have played: `SANDBOX heard: step.grass 4` |
 | `--sound` | Sound under WSL, where it is off by default because WSL usually has no sound device |
-| `--bench` | Measure frame times with vsync off, print them, then exit |
+| `--bench` | Measure frame times with vsync off, print them and the median game, render-CPU and GPU parts of a frame, then exit |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default, counted from when the loading screen goes. A script's `--press` and `--warp` frames are counted from then too. |
 | `--loading` | Keep the loading screen up, to look at it (D135) |
 | `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc`, `enter`, `backspace`, `equal`, `minus`, `pageup`, `pagedown` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |
@@ -46,6 +46,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--hold <item>` | In the workbench: an item's held look in the right hand, as in play, named as in `--give`, such as `stone_axe` |
 | `--wear <item>` | In the workbench: an item's look, on every model, named as in `--give`, such as `leather_coat`. Repeatable |
 | `--template <name>` | In the workbench: the template the next model's body is shaped as (`models/character/templates.json`), such as `female` or `heavy`. Repeatable, in the order of the models |
+| `--crowd <n>` | In the crowd experiment: how many dressed characters (100 by default) |
 | `--linear-skinning` | Skin with Bevy's own linear blend instead of our dual quaternions, to compare the two |
 | `--joints` | In the workbench: print where each model's joints and sockets stand once shaped (`JOINTS` lines), to compare with the export's `SOCKETS` |
 | `--attach <file>[@<socket>]` | In the workbench: any look, on a socket such as `models/x.glb@socket.back`, or without one as its file says. Repeatable |
@@ -104,6 +105,15 @@ cargo run -p terra_sandbox -- --experiment look --experiment forest
 ```
 
 About a million generated pines over the whole planet. Left click or F chops the one you are pointing at; K chops every tree in view. None of the trees is stored: each cell's trees are computed from the seed when the camera comes near, and a chopped tree is one bit. Measurements are in [research/forest-scale-test.md](../../research/forest-scale-test.md).
+
+## The crowd
+
+What many characters cost: `--crowd <n>` dressed bodies in a grid, every template in turn, walking, jogging and idle, each from its own point in its clip. Once all are dressed it prints what they add up to: looks worn, skinned meshes, joint matrices sent each frame and entities. With `--bench`, the frame times and their parts. Measure on the real GPU, and on the integrated one too, as Bevy picks it from `WGPU_POWER_PREF` (passed to Windows by `WSLENV`):
+
+```bash
+cargo xtask win -p terra_sandbox --release --copy crowd -- --experiment crowd --crowd 500 --bench
+WGPU_POWER_PREF=low WSLENV=WGPU_POWER_PREF cargo xtask win -p terra_sandbox --release --copy crowd -- --experiment crowd --crowd 100 --bench
+```
 
 ## The workbench
 

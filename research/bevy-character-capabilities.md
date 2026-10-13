@@ -41,6 +41,30 @@
 7. **IK, root motion, spring bones, per-character merging and mesh LOD are ours to build or adopt.** They run between animation and transform propagation.
 8. **Moving to 0.20 means rewriting our shaders in WESL.** Spike the skinning override on 0.20 first.
 
+## Measured (2026-10-12)
+
+The crowd experiment (`--experiment crowd`), release builds. Each character is a template in turn, wearing a coat, cap, small pack and quiver, walking, jogging or idle.
+
+| Change | Per character | 1,000 characters on the RTX 5090 |
+|---|---|---|
+| As it was | 324 entities, 365 joint matrices a frame | 25.7 ms median frame |
+| Each look's copy of the skeleton dropped once re-bound | 105 entities | (part of the next row) |
+| Each garment's skin cut to the joints it uses | 108 joint matrices | **13.3 ms**: game CPU 10.2 ms, GPU 3.9 ms |
+
+| GPU | Characters | Frame, median | Game CPU | GPU |
+|---|---|---|---|---|
+| RTX 5090 | 100 | 5.8 ms | 3.8 ms | 0.7 ms |
+| RTX 5090 | 1,000 | 13.3 ms | 10.2 ms | 3.9 ms |
+| Integrated (AMD Radeon) | none: the world alone | 29.6 ms | 3.1 ms | 17.6 ms |
+| Integrated | 1 | 36.9 ms | 3.1 ms | 22.0 ms |
+| Integrated | 25 | 101 ms | 3.1 ms | 47 ms |
+| Integrated | 100 | 280 ms | 4.9 ms | 101 ms |
+
+- **Our weight-blended skinning costs about nothing:** within noise of Bevy's linear blend on both GPUs.
+- **On the fast GPU the crowd is CPU-bound:** animation and transforms for a thousand skeletons. The lever is animating far characters less often (Unreal's budget allocator).
+- **On the integrated GPU each dressed character costs about 2.5 to 4 ms,** about 45,000 vertices drawn in several passes, shadows included. The lever is lighter meshes and fewer shadow passes at a distance (LOD).
+- **The world alone is over budget on the integrated GPU (29.6 ms).** That is not the characters.
+
 ## Worth measuring before relying on it
 
 - A crowd of our dressed character (5 skinned meshes × 73 joints) at 100, 500 and 1,000, on the fast GPU and the integrated one: extract time and upload.

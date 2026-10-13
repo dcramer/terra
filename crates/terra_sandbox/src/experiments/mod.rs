@@ -5,6 +5,7 @@
 
 use bevy::prelude::*;
 
+mod crowd;
 mod forest;
 mod icons;
 mod look;
@@ -46,6 +47,11 @@ pub const ALL: &[Experiment] = &[
         name: "workbench",
         about: "Models on a plain floor in the game's light: --model <path> to load, --anim <clip> to play, --hold and --attach for what they carry, --sheet <prefix> to capture views and exit; --remote to drive it live.",
         add: workbench::plugin,
+    },
+    Experiment {
+        name: "crowd",
+        about: "Many dressed characters, every template in turn, walking, jogging and idle: --crowd <n> (100 by default), --wear to change the outfit; prints what they add up to. With --bench, times the frames.",
+        add: crowd::plugin,
     },
     Experiment {
         name: "icons",

@@ -24,7 +24,10 @@
 
 use bevy::{
     gltf::{GltfExtras, GltfMaterialName},
-    mesh::skinning::SkinnedMesh,
+    mesh::{
+        VertexAttributeValues,
+        skinning::{SkinnedMesh, SkinnedMeshInverseBindposes},
+    },
     pbr::{ExtendedMaterial, MaterialExtension},
     prelude::*,
     render::render_resource::AsBindGroup,
@@ -244,6 +247,7 @@ pub fn plugin(app: &mut App) {
     ))
     .init_resource::<Tinted>()
     .init_resource::<BodyMaterials>()
+    .init_resource::<Trimmed>()
     .add_systems(Update, mask_bodies)
     .add_observer(put_on)
     .add_observer(body_ready)
@@ -505,25 +509,102 @@ fn body_joints<'a>(
 
 /// Once a worn look has loaded: a skinned one's joints become the body's; a rigid one moves
 /// onto the socket it names.
-fn put_on(
-    ready: On<WorldInstanceReady>,
+fn put_on(ready: On<WorldInstanceReady>, mut commands: Commands, worn: Query<&Worn>) {
+    if let Ok(Worn { body }) = worn.get(ready.entity) {
+        commands.run_system_cached_with(dress, (ready.entity, *body));
+    }
+}
+
+/// Each worn look's mesh cut down to the joints it uses, once, for every wearer: which of its
+/// file's joints it keeps, in order, and their bind poses.
+#[derive(Resource, Default)]
+pub struct Trimmed(HashMap<AssetId<Mesh>, (Vec<usize>, Handle<SkinnedMeshInverseBindposes>)>);
+
+/// Which of `count` joints the vertices use (any weight above zero), in order, and for each
+/// joint its index among those kept: a look's file names every joint of the skeleton, and
+/// each costs a matrix computed and sent to the GPU every frame for every wearer.
+pub fn used_joints(
+    indices: &[[u16; 4]],
+    weights: &[[f32; 4]],
+    count: usize,
+) -> (Vec<usize>, Vec<u16>) {
+    let mut used = vec![false; count];
+    for (joints, ws) in indices.iter().zip(weights) {
+        for (j, w) in joints.iter().zip(ws) {
+            if *w > 0.0 && (*j as usize) < count {
+                used[*j as usize] = true;
+            }
+        }
+    }
+    let kept: Vec<usize> = (0..count).filter(|i| used[*i]).collect();
+    let mut index = vec![0u16; count];
+    for (new, old) in kept.iter().enumerate() {
+        index[*old] = new as u16;
+    }
+    (kept, index)
+}
+
+/// Cuts mesh `id`'s skin down to the joints it uses, once: its joint indices renumbered and its
+/// bind poses (from its file, before any body reshapes them) kept for those alone.
+fn trim(
+    id: AssetId<Mesh>,
+    poses: &Handle<SkinnedMeshInverseBindposes>,
+    count: usize,
+    meshes: &mut Assets<Mesh>,
+    bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
+) -> Option<(Vec<usize>, Handle<SkinnedMeshInverseBindposes>)> {
+    let all: Vec<Mat4> = bindposes.get(poses)?.to_vec();
+    let mut mesh = meshes.get_mut(id)?;
+    let weights = match mesh.attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT)? {
+        VertexAttributeValues::Float32x4(w) => w.clone(),
+        _ => return None,
+    };
+    let Some(VertexAttributeValues::Uint16x4(indices)) =
+        mesh.attribute_mut(Mesh::ATTRIBUTE_JOINT_INDEX)
+    else {
+        return None;
+    };
+    let (kept, index) = used_joints(indices, &weights, count);
+    if kept.is_empty() || kept.len() == count {
+        return None;
+    }
+    for (joints, ws) in indices.iter_mut().zip(&weights) {
+        for (j, w) in joints.iter_mut().zip(ws) {
+            // An unused slot points at the first joint kept, with no weight.
+            *j = if *w > 0.0 { index[*j as usize] } else { 0 };
+        }
+    }
+    let handle = bindposes.add(SkinnedMeshInverseBindposes::from(
+        kept.iter().map(|i| all[*i]).collect::<Vec<_>>(),
+    ));
+    Some((kept, handle))
+}
+
+/// Puts worn look `look` on `body`, as its file says: hung on its socket, or its skins
+/// re-bound to the body's own joints and its copy of the skeleton dropped.
+fn dress(
+    In((look, body)): In<(Entity, Entity)>,
     mut commands: Commands,
-    worn: Query<&Worn>,
     children: Query<&Children>,
     names: Query<&Name>,
     extras: Query<&GltfExtras>,
     mut skins: Query<&mut SkinnedMesh>,
+    parents: Query<&ChildOf>,
+    meshes: Query<(), With<Mesh3d>>,
+    worn: Query<&Worn>,
+    drawn: Query<&Mesh3d>,
+    mut assets: Option<ResMut<Assets<Mesh>>>,
+    mut bindposes: Option<ResMut<Assets<SkinnedMeshInverseBindposes>>>,
+    mut trimmed: Option<ResMut<Trimmed>>,
 ) {
-    let Ok(Worn { body }) = worn.get(ready.entity) else {
-        return;
-    };
-    let own: HashSet<Entity> = children.iter_descendants(ready.entity).collect();
+    let body = &body;
+    let own: HashSet<Entity> = children.iter_descendants(look).collect();
     let covered: Vec<u32> = own
         .iter()
         .find_map(|each| extra(extras.get(*each).ok()?, "covers"))
         .and_then(|value| serde_json::from_value(value).ok())
         .unwrap_or_default();
-    commands.entity(ready.entity).insert(Covers(covered));
+    commands.entity(look).insert(Covers(covered));
     if !own.iter().any(|each| skins.contains(*each)) {
         let socket = own
             .iter()
@@ -535,7 +616,7 @@ fn put_on(
             .unwrap_or_default();
         match socket.and_then(|socket| Some((find(*body, &socket, &children, &names)?, socket))) {
             Some((at, _)) => {
-                commands.entity(ready.entity).insert((ChildOf(at), shifts));
+                commands.entity(look).insert((ChildOf(at), shifts));
             }
             None => warn!("A worn look names no socket this body has."),
         }
@@ -544,10 +625,36 @@ fn put_on(
     // The body's own joints: not those of any look worn on it, which carry a copy of the
     // skeleton standing at rest.
     let joints = body_joints(*body, &children, &names, &worn);
+    let mut copied: HashSet<Entity> = HashSet::new();
     for entity in &own {
         let Ok(mut skin) = skins.get_mut(*entity) else {
             continue;
         };
+        copied.extend(skin.joints.iter().copied());
+        // Only the joints it uses, cut once per mesh for every wearer.
+        if let (Ok(mesh), Some(assets), Some(bindposes), Some(trimmed)) = (
+            drawn.get(*entity),
+            assets.as_deref_mut(),
+            bindposes.as_deref_mut(),
+            trimmed.as_deref_mut(),
+        ) {
+            let id = mesh.0.id();
+            if !trimmed.0.contains_key(&id)
+                && let Some(cut) = trim(
+                    id,
+                    &skin.inverse_bindposes,
+                    skin.joints.len(),
+                    assets,
+                    bindposes,
+                )
+            {
+                trimmed.0.insert(id, cut);
+            }
+            if let Some((kept, poses)) = trimmed.0.get(&id) {
+                skin.joints = kept.iter().map(|i| skin.joints[*i]).collect();
+                skin.inverse_bindposes = poses.clone();
+            }
+        }
         for joint in skin.joints.iter_mut() {
             match names
                 .get(*joint)
@@ -561,6 +668,23 @@ fn put_on(
                 ),
             }
         }
+    }
+    // Its own copy of the skeleton, now unused (each look's file brings one, and only that
+    // look's skins pointed at it): dropped, so a dressed character does not carry a dead
+    // skeleton per look, some 70 entities each, every one a transform kept up. Only the tops
+    // of the copy, and only where nothing drawn hangs beneath them.
+    for top in copied.iter().filter(|joint| {
+        !parents
+            .get(**joint)
+            .is_ok_and(|p| copied.contains(&p.parent()))
+    }) {
+        if children
+            .iter_descendants(*top)
+            .any(|each| meshes.contains(each))
+        {
+            continue;
+        }
+        commands.entity(*top).despawn();
     }
 }
 
@@ -588,6 +712,54 @@ mod tests {
         let key = mask.key();
         assert_eq!((key[0], key[1], key[31]), (1, 2, 1 << 31));
         assert_eq!(key[2..31].iter().sum::<u32>(), 0);
+    }
+
+    #[test]
+    fn a_worn_look_takes_the_bodys_joints_and_drops_its_own() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let joint = |world: &mut World, name: &str, parent: Entity| {
+            world
+                .spawn((Name::new(name.to_string()), ChildOf(parent)))
+                .id()
+        };
+        let body = world.spawn(Name::new("body")).id();
+        let hips = joint(&mut world, "pelvis", body);
+        let spine = joint(&mut world, "spine_01", hips);
+        let look = world.spawn(Worn { body }).id();
+        let armature = joint(&mut world, "Armature", look);
+        let their_hips = joint(&mut world, "pelvis", armature);
+        let their_spine = joint(&mut world, "spine_01", their_hips);
+        let mesh = world
+            .spawn((
+                Mesh3d::default(),
+                SkinnedMesh {
+                    inverse_bindposes: Handle::default(),
+                    joints: vec![their_hips, their_spine],
+                },
+                ChildOf(armature),
+            ))
+            .id();
+        world.run_system_once_with(dress, (look, body)).unwrap();
+        assert_eq!(
+            world.get::<SkinnedMesh>(mesh).unwrap().joints,
+            vec![hips, spine]
+        );
+        // The copy is gone, its mesh and the body's own joints are not.
+        assert!(world.get_entity(their_hips).is_err());
+        assert!(world.get_entity(their_spine).is_err());
+        assert!(world.get_entity(mesh).is_ok());
+        assert!(world.get_entity(spine).is_ok());
+    }
+
+    #[test]
+    fn a_skin_keeps_only_the_joints_its_vertices_use() {
+        // Joints 1 and 3 of 5 carry weight; joint 4 is named by a slot with none.
+        let indices = [[1, 3, 4, 0], [3, 0, 0, 0]];
+        let weights = [[0.7, 0.3, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]];
+        let (kept, index) = used_joints(&indices, &weights, 5);
+        assert_eq!(kept, vec![1, 3]);
+        assert_eq!((index[1], index[3]), (0, 1));
     }
 
     #[test]
