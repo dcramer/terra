@@ -168,8 +168,11 @@ async function build() {
     const walls = now.parts.filter((part) => part.kind === "logs");
     check(walls.every((wall) => wall.built > 0), "a wall has nothing in it");
     check(now.floating === 0, `${now.floating} cubes float`);
+    // The roof can't go on half-built walls: every cube under its eaves holds it.
+    const early = await act("build.op", { ops: [{ RoofStage: { roof: now.roofs[0].id, cells: [[MIN[0] + 1, MIN[2] + 1]], up: true } }] });
+    check(early.done === false, "a roof went on before the walls under it were up");
     await picture("going-up");
-    return `${done.length} courses in; walls ${walls.map((wall) => `${wall.built}/${wall.cubes - wall.openings}`).join(", ")}`;
+    return `${done.length} courses in; walls ${walls.map((wall) => `${wall.built}/${wall.cubes - wall.openings}`).join(", ")}; the roof too early: "${early.refused}"`;
   });
 
   await step("roof", async () => {

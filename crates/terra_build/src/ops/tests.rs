@@ -293,12 +293,21 @@ fn a_roof_goes_up_on_built_walls_and_holds_them_while_it_stands() {
         up: true,
     };
     assert_eq!(base.act(&frame, &cx), Err(Refusal::RoofNotHeld(roof)));
-    for y in 0..6 {
-        let course = Op::Fill {
-            cubes: (0..4).flat_map(|x| [[x, y, 0], [x, y, 3]]).collect(),
-        };
-        base.act(&course, &cx).unwrap();
-    }
+    // One end of each wall up to the eaves is not enough: the whole wall top bears it.
+    let fill = |base: &mut Base, columns: std::ops::Range<i32>| {
+        for y in 0..6 {
+            let course = Op::Fill {
+                cubes: columns
+                    .clone()
+                    .flat_map(|x| [[x, y, 0], [x, y, 3]])
+                    .collect(),
+            };
+            base.act(&course, &cx).unwrap();
+        }
+    };
+    fill(&mut base, 0..1);
+    assert_eq!(base.act(&frame, &cx), Err(Refusal::RoofNotHeld(roof)));
+    fill(&mut base, 1..4);
     let done = base.act(&frame, &cx).unwrap();
     assert_eq!(done.took, Bill::of("Thatch", Amount::new(1, 2)));
     // The wall top under an eave holds the roof now.

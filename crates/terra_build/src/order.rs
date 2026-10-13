@@ -305,11 +305,11 @@ mod tests {
         let rules = rules();
         let cx = Context::free(&rules);
         let mut base = Base::default();
-        // Posts at the four corners of a block of tiles to hold it, built.
-        for [x, z] in [[0, 0], [3, 0], [0, 2], [3, 2]] {
+        // Walls along both eaves of a block of tiles to hold it, built.
+        for z in [0, 2] {
             base.apply(crate::BuildOp::Fill {
-                min: [x, 0, z],
-                max: [x, 5, z],
+                min: [0, 0, z],
+                max: [3, 5, z],
                 cube: Some(Cube::new(STONE, Fill::Solid)),
             });
         }

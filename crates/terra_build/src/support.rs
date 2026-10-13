@@ -151,11 +151,10 @@ impl Base {
         }
     }
 
-    /// Whether a roof is held: a built cube under every one of its eaves.
+    /// Whether a roof is held: every cube along its eaves built, so the walls under it
+    /// are up before any of it goes on.
     pub fn roof_held(&self, roof: &Roof) -> bool {
-        self.eaves(roof)
-            .iter()
-            .all(|row| row.iter().any(|&at| self.bears(at)))
+        self.eaves(roof).iter().flatten().all(|&at| self.bears(at))
     }
 
     /// The cubes a prop's hole is made of, if it fits one: built cubes across its top,
