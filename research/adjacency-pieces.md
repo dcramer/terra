@@ -1,0 +1,23 @@
+# Pieces chosen by their neighbours
+
+2026-10-12. Question: how do games built on a grid draw each cell from what is around it, so corners, ends and openings look made rather than tiled, as Enshrouded's building does, and which way suits our cubes, our ghosts and our models?
+
+## What Enshrouded shows
+
+Keen has not said how Enshrouded meshes its building blocks; no talk or developer post was found. What players and previews see: blocks of a material join seamlessly, blocks of different materials meet cleanly, cutting an opening styles its edges, and two floors joined off the usual grid still mesh together "realistically", even adjusting a window's crenellation ([mmorpg.com preview](https://www.mmorpg.com/previews/enshrouded-preview-keen-games-plans-to-redefine-voxel-based-building-in-this-arpg-survival-game-2000128419), [mmorpg.com on its world](https://www.mmorpg.com/news/enshrouded-showcases-how-a-blend-of-handcrafted-and-support-from-algorithms-make-the-world-more-interesting-2000129766)). A voxel-engine developer reads it as voxels interpolated into smooth shapes rather than drawn as blocks ([Hacker News](https://news.ycombinator.com/item?id=41283686)). Its block is half a metre (research/enshrouded.md); prefabs come in 1, 2 and 4 metres, as walls, floors and roof slopes; roofs are their own block materials; doors and windows are prefabs or cut out of a wall; blocks turn in quarter turns ([gamevoyagers guide](https://gamevoyagers.com/how-to-build-in-enshrouded-easy-guide/), [dotesports block list](https://dotesports.com/enshrouded/news/all-building-blocks-in-enshrouded), [Steam discussion](https://steamcommunity.com/app/1203620/discussions/0/4142816719803768378)). Building into the ground flattens and fills it.
+
+## Three ways to draw a cell from its neighbours
+
+| | How | Who | For us |
+|---|---|---|---|
+| **A mesh from the voxels** | The surface is extracted from the cells (marching cubes, surface nets), bevelled and textured by material | Enshrouded, it seems; our terrain (D9) | Seamless and any shape, but the look is code, not a model, which our art rule rules out (D177) |
+| **Pieces per run** | Straight runs of cells are found, and long pieces laid along them, with joint pieces where runs meet | Our log kit; The Forest and Valheim's beams | Right for things that are long: logs, beams, planks |
+| **Modules on the dual grid** | A piece sits at each corner of the grid and is chosen by which of the eight cells round that corner are full: a flat face, an outer corner, an inner corner, an edge, an end | Townscaper and Bad North (Oskar Stålberg), marching-cubes "atoms" made in Blender ([Game Developer](https://www.gamedeveloper.com/game-platforms/how-townscaper-works-a-story-four-games-in-the-making), [Sylves on Townscaper's grid](https://boristhebrave.com/docs/sylves/1/articles/tutorials/townscaper.html), [a reimplementation](https://mark-zhu.myportfolio.com/marching-cube-function-like-townscaper)); dual-grid autotiling in 2D needs 16 tiles where the usual way needs 47 | Any arrangement of cells is drawn, outer and inner corners round or crisp as the modules are made, and the pieces are models |
+
+**The dual grid's numbers.** Eight cells round a corner, full or empty, are 256 cases. Turning about the upright and mirroring, but never turning upside down (a wall's top is not its foot), leaves 53 shapes besides empty and full. Walls, posts and floors use about a dozen of them; the rest are rare (cells touching only along an edge or at a point) and can be drawn with the nearest common shape. Townscaper chooses among versions of a shape with wave function collapse; a building game cannot accept a choice that fails, so a hash of the place picks the version instead (building-tech.md).
+
+**The art risk.** A module's edges must meet its neighbours' exactly. Townscaper's are modelled by hand to shared edge profiles. An AI-generated model's edges never match another's, so modules would be made as clean shapes to the shared profiles, by script in Blender, carrying the material's texture and relief, with generated models for what does not tile: doors, windows, trims, corner stones as details. Whether that reaches the look of the stone kit's Tripo sections is the thing to try.
+
+## What it means for us
+
+The cubes (D181) already are the voxels; what a cell looks like can come from its neighbours without changing what is stored. Both ways that draw models, runs and the dual grid, are worked out from the cubes alone, so a ghost, a building going up and what collides are all the same cubes in another state. See [docs/proposals/construction-001.md](../docs/proposals/construction-001.md).
