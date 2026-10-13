@@ -259,14 +259,26 @@ fn prepare(
     // many as its kind says.
     let on_ground = |east: f32, south: f32| planet.ground_at(start.at(east, south));
     let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 0.6;
-    let herd = [(-45.0, 30.0), (-55.0, -20.0), (40.0, 45.0), (-30.0, 60.0)]
-        .into_iter()
-        .map(|(east, south)| on_ground(east, south))
-        .find(|&point| dry(point));
     let lair = [(70.0, -60.0), (-80.0, -70.0), (90.0, 20.0), (-90.0, 10.0)]
         .into_iter()
         .map(|(east, south)| on_ground(east, south))
         .find(|&point| dry(point));
+    // Where they like it first, then the nearest dry ground on rings further out, so a
+    // world with water at all four still has a herd, away from the lair.
+    let rings = (3..=9).flat_map(|ring| {
+        (0..16).map(move |bearing| {
+            let (radius, angle) = (
+                10.0 * ring as f32,
+                bearing as f32 * std::f32::consts::TAU / 16.0,
+            );
+            (radius * libm::sinf(angle), radius * libm::cosf(angle))
+        })
+    });
+    let herd = [(-45.0, 30.0), (-55.0, -20.0), (40.0, 45.0), (-30.0, 60.0)]
+        .into_iter()
+        .chain(rings)
+        .map(|(east, south)| on_ground(east, south))
+        .find(|&point| dry(point) && lair.is_none_or(|lair| point.distance(lair) > 40.0));
     let local = |point: Vec3| start.local(point);
     if let Some(home) = herd {
         // They graze in the open, as the village says.

@@ -83,7 +83,9 @@ async function play() {
     "talk",
     async () => {
       await game.give("berries:2", "fed:50");
-      await game.warp([-68, 48], [-68, 53]);
+      // The village stands where the world has dry ground for it, said as the game starts.
+      const [east, south] = where(await game.waitFor("The village stands", { since: 0 }));
+      await game.warp([east + 2, south - 5], [east, south]);
       const maren = await nearest((near) => near.who === "Maren");
       await game.warp([maren.at[0], maren.at[1] - 2.3], maren.at);
       await game.aim(maren.at, 1.2);
@@ -99,7 +101,9 @@ async function play() {
     "hunt",
     async () => {
       await game.give("bow", "quiver", "arrow:6");
-      await game.warp([-30, 33], [-45, 34]);
+      // The herd grazes where the world has dry ground for it, said as the game starts.
+      const [east, south] = where(await game.waitFor("Deer graze", { since: 0 }));
+      await game.warp([east + 15, south], [east, south]);
       await game.hold("Bow");
       const since = await game.markNow();
       for (let arrow = 0; arrow < 6; arrow++) {
@@ -183,7 +187,8 @@ async function play() {
     async () => {
       await emptyPack();
       await game.give("stone:12", "wood:2");
-      await game.warp([14, 14], [22, 22]);
+      // On the meadow north of the lake, facing north, as the cabin builds.
+      await game.warp([0, -8], [0, -14]);
       await game.hold("Hammer");
       await game.press("b@20", "1@30", "enter@40", "e@70:80", "b@180", "4@190", "right@200", "enter@210", "right@230:40", "e@290:200");
       smelter = where(await game.waitFor("Placed a Smelter", { timeout: 60 }));
@@ -199,7 +204,8 @@ async function play() {
     async () => {
       await emptyPack();
       await game.give("stone:8", "wood:4");
-      await game.warp([12, 12], [6, 18]);
+      // Beside the smelter, inside the claim.
+      await game.warp([-4, -8], [-4, -14]);
       await game.hold("Hammer");
       await game.press("b@80", "4@90", "right@100", "right@105", "enter@115", "e@150:200");
       forge = where(await game.waitFor("Placed a Forge", { timeout: 60 }));

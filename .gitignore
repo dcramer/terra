@@ -9,6 +9,7 @@ shots/
 .env
 # The save game `cargo xtask loop` plays through.
 loop.ron
+cabin.ron
 spike/*/out/
 # A spike's models while it runs (spike/README.md); never kept.
 assets/models/spike/
