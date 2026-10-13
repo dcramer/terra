@@ -85,6 +85,10 @@ pub enum Piece {
     },
     /// A board round an opening: a jamb, a head or a sill.
     Board { min: Place, max: Place },
+    /// A dressed stone filling a box: a lintel, a sill or a jamb's stone round an opening in
+    /// a block kind's wall, or a cap where a thinner wall stands on it; its seed which part
+    /// of the stone's texture it shows.
+    Dressed { min: Place, max: Place, seed: u32 },
     /// A door or window set into an opening, filling the box from `min` to `max`, its face
     /// across the wall, which runs along X or along Z.
     Opening {
@@ -158,7 +162,9 @@ impl Piece {
                 let up = Vec3::Y * (metres(high) * 0.5);
                 Some((from.min(to) - across - up, from.max(to) + across + up))
             }
-            Piece::Board { min, max } => Some((min.metres(), max.metres())),
+            Piece::Board { min, max } | Piece::Dressed { min, max, .. } => {
+                Some((min.metres(), max.metres()))
+            }
             Piece::Block { cube } | Piece::Gable { cube, .. } => {
                 let low = cube.as_vec3() * CELL_M;
                 Some((low, low + Vec3::splat(CELL_M)))
@@ -182,7 +188,9 @@ impl Piece {
             Piece::Plank { from, to, high, .. } => {
                 from.metres().y.min(to.metres().y) - metres(*high) * 0.5
             }
-            Piece::Board { min, .. } | Piece::Opening { min, .. } => min.metres().y,
+            Piece::Board { min, .. } | Piece::Opening { min, .. } | Piece::Dressed { min, .. } => {
+                min.metres().y
+            }
             Piece::Block { cube } | Piece::Gable { cube, .. } => cube.y as f32 * CELL_M,
             // A roof after the walls under it, a stage at a time, each from its eaves up.
             Piece::Covering { corners, cell, .. } => {
@@ -434,6 +442,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits) -> Layout {
         }
     }
     runs::posts(&walls, &ours, &mut layout);
+    trims::ends(&walls, kit, &ours, &mut layout);
     if kit.textures.contains_key(&Material::Floor) {
         floors::decks(base, kit, &mut layout);
     }

@@ -67,6 +67,8 @@ These are triangles in the game's file, starting from what the bake-off and the 
 | A character body | 2,500 to 5,000 |
 | A rock | 100 to 600 |
 | A tree, near | 2,000 to 5,000, leaf clumps included |
+| A building kit's log or beam, generated (D200), a metre of it | up to 700 |
+| A building kit's roof, generated (D209), a square metre of it, covering, battens, boards and caps | up to 500 |
 
 ## Made to vary
 

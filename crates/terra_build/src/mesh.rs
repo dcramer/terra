@@ -65,6 +65,8 @@ pub enum Material {
     Masonry,
     /// Mortar where a roof meets a wall standing above it.
     Flashing,
+    /// Dressed stone: lintels, sills and jambs round a block kind's openings, and caps.
+    Dressed,
 }
 
 /// Surfaces by what they are drawn in.

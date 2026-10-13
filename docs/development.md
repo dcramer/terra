@@ -33,7 +33,8 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | `cargo xtask pops` | What pops in or out, or flickers, frame by frame through a stretch of the forest walk, worst frames marked in `shots/pops/pops.jpg` ([tools/sandbox](../tools/sandbox/README.md#scripts)) |
 | `cargo xtask loop` | Play the MVP's loop by script and check every step happened ([QA for agents](#checking-the-game-without-a-person-qa-for-agents)) |
 | `cargo xtask bench` | Time the benchmark scenes ([Measuring performance](#measuring-performance)) |
-| `cargo xtask check` | Run by git before every commit (`.githooks/pre-commit`). Formatting, lints, tests (the TypeScript tools' too), the docs check ([tools/docs](../tools/docs/README.md)), the Blender scripts' check (skipped with no Blender) and the dependency rule. Must pass before a commit. |
+| `cargo xtask check` | Run by git before every commit (`.githooks/pre-commit`). Formatting, lints, tests (the TypeScript tools' too), the kit checker (`cargo xtask kits`), the docs check ([tools/docs](../tools/docs/README.md)), the Blender scripts' check (skipped with no Blender) and the dependency rule. Must pass before a commit. |
+| `cargo xtask kits` | The kit checker: every building kit file in `assets/data/kits/` has the materials its pattern needs with all their maps, life-size numbers, and keeps to the style guide's budgets, measured on a cabin laid in it (`terra_build::checker`). |
 | `cargo test -p terra_items` | One crate's tests |
 | `cargo fmt --all` | Format everything |
 | `cargo xtask sandbox` | Open the sandbox, the test environment for graphics and utilities; anything after it goes to the sandbox, and `--list` lists its experiments. See its [README](../crates/terra_sandbox/README.md). |

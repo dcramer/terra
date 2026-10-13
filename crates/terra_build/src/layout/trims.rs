@@ -128,6 +128,49 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
     }
 }
 
+/// Where a wall of the kit's kind ends against a wall of another kind, as logs end flush
+/// against stone (D179): an end board up the joint, over the logs' sawn ends, from the
+/// foot of each stack of such cubes to its top.
+pub(super) fn ends(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut Layout) {
+    let other = |at: glam::IVec3| {
+        walls.base.cube(at).is_some_and(|cube| {
+            cube.kind != walls.kind
+                && cube.kind != crate::Kind::PLAIN
+                && cube.fill == Fill::Solid
+                && walls.base.in_wall(at)
+        })
+    };
+    let ends_at = |at: glam::IVec3, axis: Axis, outward: i32| {
+        walls.ours(at) == Some(Fill::Solid)
+            && walls.runs(at, axis)
+            && other(at + axis.step() * outward)
+    };
+    for axis in [Axis::X, Axis::Z] {
+        for outward in [-1, 1] {
+            for &at in ours {
+                // From the foot of each stack.
+                if !ends_at(at, axis, outward) || ends_at(at - glam::IVec3::Y, axis, outward) {
+                    continue;
+                }
+                let mut top = at;
+                while ends_at(top + glam::IVec3::Y, axis, outward) {
+                    top += glam::IVec3::Y;
+                }
+                let (row, along) = axis.row_of(at);
+                let face = (along + i32::from(outward > 0)) as f32 * CELL_M;
+                let (a, b) = (face, face - outward as f32 * kit.frame * 1.2);
+                let out = axis.across() * (kit.radius() + 0.03);
+                let low = axis.point(row, a.min(b), at.y as f32 * CELL_M) - out;
+                let high = axis.point(row, a.max(b), (top.y + 1) as f32 * CELL_M) + out;
+                layout.pieces.push(Piece::Board {
+                    min: Place::near(low.min(high)),
+                    max: Place::near(low.max(high)),
+                });
+            }
+        }
+    }
+}
+
 /// The groups of cells that touch, each in order.
 fn regions(cells: &BTreeSet<(i32, i32)>) -> Vec<Vec<(i32, i32)>> {
     let mut left = cells.clone();
@@ -156,7 +199,7 @@ mod tests {
     use super::super::{Layout, lay};
     use super::*;
     use crate::kit::KitModels;
-    use crate::{BuildOp, Cube, DOOR_HEIGHT_M, Panel};
+    use crate::{BuildOp, Cube, DOOR_HEIGHT_M, Panel, STOREY_CUBES};
     use glam::Vec3;
 
     /// A kit with models of a door and a window, so it sets them in.
@@ -303,5 +346,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn logs_ending_against_stone_have_an_end_board_up_the_joint() {
+        let mut base = crate::Base::default();
+        let stone = crate::Kind(2);
+        wall(&mut base, (0..6).map(|x| [x, 0, 0]), Panel::Solid);
+        // Its east end a stone pillar.
+        base.apply(BuildOp::Fill {
+            min: [5, 0, 0],
+            max: [5, STOREY_CUBES - 1, 0],
+            cube: Some(Cube::new(stone, Fill::Solid)),
+        });
+        let layout = lay(&base, &kit());
+        let ends: Vec<(Vec3, Vec3)> = layout
+            .pieces
+            .iter()
+            .filter_map(|p| match *p {
+                Piece::Board { min, max } => Some((min.metres(), max.metres())),
+                _ => None,
+            })
+            .collect();
+        // One board, the storey's height, its east face at the stone's face.
+        assert_eq!(ends.len(), 1, "{ends:?}");
+        let (a, b) = ends[0];
+        assert!(
+            (b.x - 2.5).abs() < 0.01 && a.x < 2.5 && a.x > 2.3,
+            "{a} {b}"
+        );
+        assert!(
+            a.y.abs() < 0.01 && (b.y - crate::STOREY_M).abs() < 0.01,
+            "{a} {b}"
+        );
     }
 }

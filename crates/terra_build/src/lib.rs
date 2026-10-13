@@ -32,6 +32,7 @@
 //! Coordinates are local to the base: X and Z along the floor and Y up. Cubes are counted
 //! in cubes all three ways; tiles count X and Z in cubes and Y in storeys.
 
+pub mod checker;
 pub mod cost;
 pub mod cubes;
 pub mod draw;

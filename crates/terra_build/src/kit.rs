@@ -404,8 +404,6 @@ impl Kit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::CELL_M;
-    use std::collections::BTreeSet;
 
     pub(crate) fn assets() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -415,123 +413,6 @@ mod tests {
         let path = assets().join("data/kits").join(name);
         let text = std::fs::read_to_string(&path).unwrap();
         ron::from_str(&text).unwrap_or_else(|why| panic!("{}: {why}", path.display()))
-    }
-
-    #[test]
-    fn every_shipped_kit_reads_and_its_values_are_in_range() {
-        #[derive(serde::Deserialize)]
-        struct Items {
-            kinds: Vec<Item>,
-        }
-        #[derive(serde::Deserialize)]
-        struct Item {
-            name: String,
-        }
-        let items = std::fs::read_to_string(assets().join("data/items.ron")).unwrap();
-        let items: Items = ron::from_str(&items).unwrap();
-        let item = |name: &str| items.kinds.iter().any(|item| item.name == name);
-        let mut ids = BTreeSet::new();
-        let mut read = 0;
-        for entry in std::fs::read_dir(assets().join("data/kits")).unwrap() {
-            let path = entry.unwrap().path();
-            if path.extension().is_none_or(|e| e != "ron") {
-                continue;
-            }
-            let name = path.file_name().unwrap().to_string_lossy().to_string();
-            let kit = shipped(&name);
-            read += 1;
-            assert!(ids.insert(kit.id), "{name}: kind {} twice", kit.id);
-            assert!(
-                kit.kind() != Kind::PLAIN && kit.kind() <= Kind::LAST,
-                "{name}"
-            );
-            if kit.pattern == Pattern::Logs {
-                let (count, whole) = kit.courses();
-                assert!(
-                    whole && count > 0,
-                    "{name}: courses do not divide the storey"
-                );
-                // Scribed into one another, in a wall a cube thick.
-                assert!(
-                    kit.course <= kit.diameter && kit.diameter <= CELL_M,
-                    "{name}"
-                );
-                assert!(kit.longest >= CELL_M, "{name}");
-                let t = &kit.timber;
-                assert!(t.sides >= 6 && t.step > 0.01, "{name}");
-                assert!(t.daub.0 > 0.0 && t.daub.0 < 1.0 && t.daub.1 > 0.0, "{name}");
-                // Logs that vary, but still fit their courses (D14: lightly stylised).
-                let v = &t.variation;
-                assert!(
-                    v.thickness < 0.2 && v.shade < 0.5 && v.warmth < 0.2,
-                    "{name}"
-                );
-                assert!(kit.textures.contains_key(&Material::Log), "{name}: no face");
-                if t.relief > 0.0 {
-                    let face = &kit.textures[&Material::Log].path;
-                    assert!(
-                        assets().join(face).join("height.jpg").is_file(),
-                        "{name}: relief with no height map"
-                    );
-                }
-            }
-            let t = &kit.timber;
-            let sizes = [
-                kit.overhang,
-                kit.ragged,
-                kit.frame,
-                kit.eaves,
-                kit.bevel,
-                kit.relief,
-                t.taper,
-                t.bend,
-                t.uneven,
-                t.swell,
-                t.relief,
-                t.variation.thickness,
-                t.variation.shade,
-                t.variation.warmth,
-            ];
-            assert!(sizes.iter().all(|v| v.is_finite() && *v >= 0.0), "{name}");
-            assert!(t.taper < 0.5 && t.uneven < 0.3, "{name}");
-            assert!(kit.bevel < CELL_M * 0.5, "{name}");
-            let c = &kit.colours;
-            let colours = [c.light, c.dark, c.roof, c.chinking, t.tint, t.end_tint];
-            assert!(
-                colours.iter().flatten().all(|v| (0.0..=1.0).contains(v)),
-                "{name}"
-            );
-            // Everything it names is there.
-            for model in [&kit.models.door, &kit.models.window].into_iter().flatten() {
-                assert!(assets().join(model).is_file(), "{name}: no {model}");
-            }
-            for (material, texture) in &kit.textures {
-                let folder = assets().join(&texture.path);
-                let mut needs = vec!["color.jpg", "normal.jpg", "arm.jpg"];
-                if texture.depth > 0.0 {
-                    needs.push("height.jpg");
-                }
-                for file in needs {
-                    assert!(
-                        folder.join(file).is_file(),
-                        "{name}: {material:?} has no {file}"
-                    );
-                }
-                assert!(texture.metres.iter().all(|m| *m > 0.0), "{name}");
-                assert!((0.0..=1.0).contains(&texture.reflectance), "{name}");
-            }
-            let steps = kit.cost.steps;
-            assert!(
-                steps > 0 && crate::cubes::FULL.is_multiple_of(steps),
-                "{name}: {steps} steps"
-            );
-            // In amounts a base may keep, or no snapshot of what is built in it loads.
-            for (thing, num, den) in kit.cost.step.iter().chain(&kit.cost.roof) {
-                assert!(item(thing) && *den > 0, "{name}: {thing}");
-                assert!(Amount::new(*num, *den).in_bounds(), "{name}: {thing}");
-            }
-        }
-        assert!(read > 0);
     }
 
     #[test]

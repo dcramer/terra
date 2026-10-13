@@ -88,6 +88,13 @@ const TASKS: &[Task] = &[
         run: |_| check(),
     },
     Task {
+        name: "kits",
+        takes: "",
+        does: "check every building kit file: the materials it needs, sizes and the style guide's budgets",
+        group: "Play and check",
+        run: |_| kits(),
+    },
+    Task {
         name: "sandbox",
         takes: "[args]",
         does: "the sandbox, the test environment; --list for its experiments (crates/terra_sandbox)",
@@ -811,10 +818,21 @@ fn check() -> bool {
         )
         && cargo("test", &["--workspace"])
         && tools_tests()
+        && kits()
         && run("node", &["tools/docs/docs.ts"])
         && blender_scripts()
         && shared_crates_avoid_bevy()
         && shared_crates_are_repeatable()
+}
+
+/// The kit checker (docs/building-plan.md): every kit file in `assets/data/kits/` has the
+/// materials its pattern needs, life-size numbers, and keeps to the style guide's budgets
+/// (`terra_build::checker`).
+fn kits() -> bool {
+    run(
+        "cargo",
+        &["run", "-q", "-p", "terra_build", "--example", "kits"],
+    )
 }
 
 /// The tests of the TypeScript tools (D121), which Node runs as they are.

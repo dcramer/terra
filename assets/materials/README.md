@@ -8,6 +8,7 @@ Where each material came from. Made by `cargo xtask textures` ([tools/textures](
 - `log_end`: made from a generated image (art/textures/log-end.png) by `textures.ts material`.
 - `pine_bark`: Poly Haven [Pine Bark](https://polyhaven.com/a/pine_bark), CC0, 2k. 2.00 m across.
 - `riet_01`: Poly Haven [Riet 01](https://polyhaven.com/a/riet_01), CC0, 2k. 2.50 m across.
+- `rock_boulder_dry`: Poly Haven [Rock Boulder Dry](https://polyhaven.com/a/rock_boulder_dry), CC0, 2k. 1.80 m across.
 - `rough_wood`: Poly Haven [Rough Wood](https://polyhaven.com/a/rough_wood), CC0, 2k. 0.50 m across.
 - `shakes`: made from a generated image (art/textures/shakes.png) by `textures.ts material`.
 - `stone_wall`: Poly Haven [Stone Wall](https://polyhaven.com/a/stone_wall), CC0, 2k. 2.00 m across.
