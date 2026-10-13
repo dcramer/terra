@@ -11,7 +11,7 @@ The developers' agenda, above everything below: building takes **an approach to 
 | From | It asks |
 |---|---|
 | D211 | On par with Enshrouded: touching cubes blend into one; each cube's look by its neighbours and place; still optimised cubes |
-| D192 to D194 | Cubes are the truth, each planned or built to a fill level; nothing leaves its cubes; any arrangement drawn; pieces chosen by their neighbours; plans as ghosts, walked through; doors and windows fitted props; nothing floats, and nothing taken while something rests on it; lost support collapses |
+| D192 to D194 | Cubes are the truth, each planned or built to a fill level; nothing leaves its cubes but eaves, footings and drawn-only trims (up to an eighth of a cube); any arrangement drawn; pieces chosen by their neighbours; plans as ghosts, walked through; doors and windows fitted props; nothing floats, and nothing taken while something rests on it; lost support collapses |
 | D28, D21, D51, D52 | Shared state in plain crates with no Bevy; every change an operation in the server's order; a thousand players on one server |
 | D58, D127, AGENTS.md | ECS, a plugin per feature, small systems; many of everything; work only where something changed; a new kind of thing is data |
 | D69, D71 | Every step checkable by an agent: tests, the kit sheet, scripted and live runs; tools for the work we repeat |
