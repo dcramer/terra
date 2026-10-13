@@ -22,6 +22,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 name=$1 base=${BASE:-base-male}
 blender=tools/blender/run.sh here=tools/characters out=tools/characters/out
+[[ -f "$out/lift-mannequin.json" ]] || $blender $here/lift.py | grep -E "^LIFT|Error" || true
 mkdir -p "$out"
 if [[ "${2:-}" == --design ]]; then
   design=$3
@@ -55,7 +56,7 @@ carry() {
     looks+=("$out/$name-$item.glb")
   done
 }
-rm -f "$out/$name"-*-push.npz
+rm -f "$out/$name"-*-push.npz "$out/$name"-*-uncover.json
 carry
 for round in 1 2 3; do
   $blender $here/gear_check.py "$out/$name-game.glb" "${looks[@]}" --fix | grep -E "^FIX|Error" || true

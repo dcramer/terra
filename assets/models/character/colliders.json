@@ -1,0 +1,8 @@
+{
+  "about": "Capsules round the body that loose worn things (a quiver, a pouch) swing against: each from one joint to another, this many metres round (src/swing.rs, D189).",
+  "capsules": [
+    { "from": "thigh_r", "to": "calf_r", "radius": 0.085 },
+    { "from": "thigh_l", "to": "calf_l", "radius": 0.085 },
+    { "from": "pelvis", "to": "spine_01", "radius": 0.14 }
+  ]
+}

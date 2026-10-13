@@ -4,8 +4,9 @@ A band runs along a path over the skin, given by a few rays cast at the body (fr
 joints and measurements, so it fits any body): each lands where it first meets the skin, as a
 strap is laid on (down onto the top of a shoulder, in onto the chest), never the nearest skin,
 which for a point off the body may be a hand or the head. The path between them is filled in
-on the skin; the band is the body's own faces within half its width of
-the path, pushed out a little, keeping each vertex's skin weights. So a strap moves exactly as
+on the skin; the band is the body's own skin within half its width of
+the path, cut along its edges through the faces (skin_piece.py), pushed out a little, keeping
+each vertex's skin weights. So a strap moves exactly as
 the skin under it does, over a shoulder or round a waist, and cannot come through it.
 """
 
@@ -14,8 +15,17 @@ import bpy
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
+import skin_piece
+
 # How finely the path is filled in on the skin, in metres.
 STEP_M = 0.01
+CUT_CLEAR_M = 0.001     # the cut kept this far from the body's vertices (skin_piece.cut)
+EDGE_RELAX_ROUNDS = 3   # rounds of evening its edges out
+
+
+def tree_of(body):
+    mw = body.matrix_world
+    return BVHTree.FromPolygons([mw @ v.co for v in body.data.vertices], [tuple(p.vertices) for p in body.data.polygons])
 
 
 def on_skin(tree, p):
@@ -26,9 +36,7 @@ def on_skin(tree, p):
 def path(body, rays):
     """The path through where `rays` (origin, direction) first meet the body's skin, filled in
     along the skin between them."""
-    mw = body.matrix_world
-    pts = [mw @ v.co for v in body.data.vertices]
-    tree = BVHTree.FromPolygons(pts, [tuple(p.vertices) for p in body.data.polygons])
+    tree = tree_of(body)
     anchors = []
     for origin, direction in rays:
         # A ray that passes beside a narrower body moves in toward its middle until it meets
@@ -70,11 +78,18 @@ def band(body, rays, width, offset, name, material, inner=None):
     piece.modifiers.clear()
     bm = bmesh.new()
     bm.from_mesh(piece.data)
-    keep = [f for f in bm.faces if kd.find(mw @ f.calc_center_median())[2] <= width / 2]
-    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f not in set(keep)], context="FACES")
-    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     # The file splits vertices at seams; weld them so the band is one strip as it is pushed out.
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    # Only the skin near the path, then cut along its edges, half its width either side,
+    # through the faces rather than along them, so its edges run straight (skin_piece.py).
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if all(kd.find(mw @ v.co)[2] > width for v in f.verts)], context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    inside = bm.verts.layers.float.new("inside")
+    for v in bm.verts:
+        v[inside] = width / 2 - kd.find(mw @ v.co)[2]
+    skin_piece.cut(bm, inside, 0.0, CUT_CLEAR_M)
+    skin_piece.relax(bm, mw, tree_of(body), EDGE_RELAX_ROUNDS)
+    bm.verts.layers.float.remove(inside)
     bm.normal_update()
     for v in bm.verts:
         v.co = v.co + v.normal * offset

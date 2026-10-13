@@ -25,6 +25,7 @@ from mathutils import Matrix, Vector
 
 import look
 import patches
+import lift
 import twist
 
 # --clips=FILE: the clips from another mannequin file cut by clips.py, such as a set of the
@@ -188,6 +189,25 @@ for o in list(bpy.data.objects):
 actions = [a for a in bpy.data.actions]
 # The limbs' roll moved to the hands and feet and spread over the twist bones (twist.py).
 twist.bake(arm, actions)
+# The hips lifted by this body's size wherever it would go deeper into the floor than the
+# mannequin (lift.py), measured skinned as the game skins it; the base's game file also keeps
+# how much more or less each morph needs, for the game to mix by the body's sliders.
+look.skin_as_game()
+floor = lift.reference()
+lift.bake(arm, actions, lift.needed(arm, body, actions, floor))
+if MORPHS:
+    scene = bpy.context.scene
+    by_clip = lift.morph_lifts(arm, body, actions, floor, MORPHS)
+    first = {a.name.split(".")[0]: a.frame_range[0] for a in actions}
+    arm["lifts"] = {"fps": scene.render.fps / scene.render.fps_base,
+                    "clips": {c: dict(curves, first=first[c]) for c, curves in by_clip.items()}}
+    print("LIFTS", ", ".join(f"{c}: {', '.join(curves)}" for c, curves in by_clip.items()) or "none")
+# The measuring set-up taken off again: the file carries plain skins.
+for o in bpy.data.objects:
+    for m in [m for m in o.modifiers if m.type == "ARMATURE" and m.name == "Armature DQS"]:
+        o.modifiers.remove(m)
+    if o.type == "MESH" and "dqs_share" in o.vertex_groups:
+        o.vertex_groups.remove(o.vertex_groups["dqs_share"])
 # Each clip as a track on our skeleton, so the exporter samples all of them on it.
 ad = arm.animation_data or arm.animation_data_create()
 for a in actions:

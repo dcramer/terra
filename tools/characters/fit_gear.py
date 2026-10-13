@@ -34,6 +34,7 @@ from mathutils import Matrix, Vector
 import bands
 import look
 import patches
+import skin_piece
 
 GEAR = os.path.join(look.ART, "gear")
 OUT = look.GEAR_MADE
@@ -42,8 +43,8 @@ OUT = look.GEAR_MADE
 # its body side faces the body, how it is fitted, size as a share of the body's height, and
 # the role its material plays, which a tint in the game names to recolour it).
 PIECES = {
-    "small_pack": ("pack", 90, "back", 0.23, "Pack"),
-    "large_pack": ("pack", 90, "back", 0.31, "Pack"),
+    "small_pack": ("small_pack", 90, "back", 0.23, "Pack"),
+    "large_pack": ("large_pack", 90, "back", 0.31, "Pack"),
     "quiver": ("quiver", 90, "belt", 0.4, "Leather"),
 }
 # Where a piece hung from the belt hangs from, as a share of its height from its foot: a
@@ -51,6 +52,17 @@ PIECES = {
 # item's concept, as an artist sets an attach point; the mesh alone cannot tell the tube
 # from the fanned fletching.
 HANGS_AT = {"quiver": 0.71}
+# A pack is a bag and a harness (D189): which harness each pack's bag rides on, and what each
+# harness is made from, a model of the base person wearing one, whose straps it takes its
+# look from. Many bags, few harnesses: a new pack is a bag model and a line here.
+HARNESS_OF = {"small_pack": "leather", "large_pack": "leather"}
+HARNESSES = {"leather": "art/gear/dressed-male-pack/model.glb"}
+HARNESS_TEXTURE = 2048
+HARNESS_LOOK_M = 0.04  # how far out and in from a strap the bake looks for the dressed one
+# How a loose piece swings from where it hangs (crates/terra_game/src/swing.rs): pulled back
+# toward where it rests, losing some of its motion each step, and falling. Its tail, where
+# it rests, is measured from the piece itself.
+SWINGS = {"quiver": {"stiffness": 0.8, "drag": 0.4, "gravity": 0.6}}
 # A loose piece hangs nearly plumb from where it hangs, its foot a little back, resting on
 # the seat.
 HANG_TILT_DEG = 8
@@ -70,6 +82,7 @@ for pb in arm.pose.bones:
 bpy.context.view_layer.update()
 sockets = {o.name: o for o in bpy.context.scene.objects if o.name.startswith("socket.")}
 height = max((body.matrix_world @ v.co).z for v in body.data.vertices)
+height_of_body = height
 groups = {g.index: g.name for g in body.vertex_groups}
 
 
@@ -167,14 +180,16 @@ CHEST_M = 0.018
 OVER_CHEST_M = 0.022
 
 
-def fit_back(ob, height):
+def fit_back(ob, height, harness):
     """A pack as it is worn: its bag riding the upper back, its straps made on the body.
 
     The bag's top is level with the top of the shoulders, which this body measures for itself,
     its back panel just off the skin. Tripo models shoulder straps as stiff loops standing out
     of the panel; they are cut away, and straps are made as bands of the body's own surface
     (bands.py) from the bag's top corners over the shoulders, down the chest, under the arms
-    and back to the bag's lower corners, so they bend as the shoulders do and cannot clip.
+    and back under the bag, so they bend as the shoulders do and cannot clip. Their ends are
+    set on the body, not on this bag, where any bag covers them, so one harness serves every
+    bag (D189); their look is baked from `harness`, a model of the base person wearing one.
     The bag rides the upper spine whole."""
     scale_to(ob, height)
     at = sockets["socket.back"].matrix_world.translation
@@ -192,6 +207,9 @@ def fit_back(ob, height):
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     bm.to_mesh(ob.data)
     bm.free()
+    # Then against the back by contact: forward (the body faces -Y) until it rests just off
+    # the skin, whatever this bag's own panel is like.
+    pull_in(ob, Vector((0.0, -1.0, 0.0)), 0.008)
     push_out(ob, 0.01)
     lo, hi = box(points(ob))
     rider = ob.vertex_groups.new(name="spine_03")
@@ -199,26 +217,34 @@ def fit_back(ob, height):
     # The straps, from this body's own joints and the bag's corners.
     chest = joint("spine_03").z
     leather = bpy.data.materials.new("Leather")
-    leather.use_nodes = True
-    leather.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = look.linear((0.42, 0.27, 0.16)) + (1.0,)
-    leather.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.8
     straps = []
     for side in (1, -1):
         reach = abs(joint(f"upperarm_{'l' if side > 0 else 'r'}").x)
         x = side * reach
         route = [
-            ((0.45 * x, 1.0, hi.z - 0.03), (0, -1, 0)),          # the bag's top corner, in from behind
+            ((0.4 * x, 1.0, shoulders - 0.06), (0, -1, 0)),      # under the bag's top, in from behind
             ((0.7 * x, 0.0, shoulders + 0.5), (0, 0, -1)),       # down onto the top of the shoulder
             ((0.6 * x, -1.0, chest + 0.02), (0, 1, 0)),          # in onto the chest
             ((0.85 * x, -1.0, chest - 0.1), (0, 1, 0)),
             ((3.0 * x, 0.0, chest - 0.13), (-side, 0, 0)),       # in onto the side, under the arm
-            ((0.6 * x, 1.0, lo.z + 0.06), (0, -1, 0)),           # the bag's lower corner, in from behind
+            ((0.6 * x, 1.0, chest - 0.18), (0, -1, 0)),          # under the bag's lower part, in from behind
         ]
         # Solid from just off the skin to above the thickest chest piece (OVER_CHEST_M).
         straps.append(bands.band(body, route, width=0.045, offset=OVER_CHEST_M, inner=0.006,
                                  name=f"strap.{side}", material=leather))
+    # The harness's look, from the dressed model's straps.
     bpy.ops.object.select_all(action="DESELECT")
-    for o in [ob] + straps:
+    for o in straps:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = straps[0]
+    bpy.ops.object.join()
+    dressed = skin_piece.line_up(look.path(harness), bands.tree_of(body), height_of_body, 0.03)
+    # Its own role, so a tint can recolour it apart from the bag and its icon can leave it out
+    # (it is made on the body, and hangs loose without one).
+    skin_piece.bake(straps[0], dressed, f"{ob.name}_harness", "Harness", HARNESS_TEXTURE, HARNESS_LOOK_M)
+    bpy.data.objects.remove(dressed)
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in (ob, straps[0]):
         o.select_set(True)
     bpy.context.view_layer.objects.active = ob
     bpy.ops.object.join()
@@ -395,7 +421,7 @@ for name in names:
         if slot.material:
             slot.material.name = role
     if how == "back":
-        socket = fit_back(ob, size)
+        socket = fit_back(ob, size, HARNESSES[HARNESS_OF[name]])
     elif how == "head":
         socket = fit_head(ob)
     elif how == "belt":
@@ -404,6 +430,9 @@ for name in names:
         socket = fit_torso(ob)
     # A pack hides the skin under its bag and straps as a garment does: that skin cannot be
     # seen, and a heavier back pressing into the bag would otherwise count as coming through.
+    if how == "back":
+        ob["icon_leaves_out"] = ["Harness"]
+        ob["icon_turn"] = 180  # seen from behind its wearer, as a pack is
     hides = covers(ob, REACH_BACK_M if how == "back" else REACH_M) if how in ("torso", "head", "back") else []
     if hides:
         ob["covers"] = hides
@@ -413,9 +442,26 @@ for name in names:
           "ok" if rests else f"FLOATING: under {TOUCHING[how]:.0%} touching, or nothing within {RESTS_M * 100:.0f} cm")
     path = os.path.join(OUT, f"{name}.glb")
     if socket:
+        # Where a loose piece hangs from, before it moves: the middle of it, at the height it
+        # hangs at (a quiver's mouth).
+        if name in SWINGS:
+            lo, hi = box(points(ob))
+            pivot = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z + HANGS_AT[name] * (hi.z - lo.z)))
         # In the socket's own space: the game puts it on the socket as it is.
         move(ob, sockets[socket].matrix_world.inverted())
         ob["socket"] = socket
+        if name in SWINGS:
+            # Its origin where it hangs from, which it swings about (swing.rs), and its tail at
+            # its middle from there, in its own space and glTF's axes.
+            at = sockets[socket].matrix_world.inverted() @ pivot
+            ob.data.transform(Matrix.Translation(-at))
+            ob.matrix_world = Matrix.Translation(at)
+            # Its tail: the middle of what hangs below where it hangs from (the vertices' own
+            # middle sits up in the arrows, which have the most of them).
+            below = [v.co for v in ob.data.vertices if v.co.z < 0]
+            blo, bhi = box(below)
+            c = (blo + bhi) / 2
+            ob["swing"] = dict(SWINGS[name], tail=[round(c.x, 4), round(c.z, 4), round(-c.y, 4)])
         select(ob)
         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_animations=False,
                                   export_extras=True)

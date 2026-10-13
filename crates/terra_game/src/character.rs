@@ -244,6 +244,8 @@ pub fn plugin(app: &mut App) {
     app.add_plugins((
         MaterialPlugin::<BodyMaterial>::default(),
         crate::skinning::plugin,
+        crate::swing::plugin,
+        crate::lift::plugin,
     ))
     .init_resource::<Tinted>()
     .init_resource::<BodyMaterials>()
@@ -614,9 +616,21 @@ fn dress(
             .find_map(|each| extra(extras.get(*each).ok()?, "morphs"))
             .and_then(Shifts::from_extras)
             .unwrap_or_default();
+        // A loose look swings about where it hangs (D189): the part that says so, about its
+        // own origin.
+        let swing = own.iter().find_map(|each| {
+            let spring =
+                crate::swing::Springiness::from_extras(extra(extras.get(*each).ok()?, "swing")?)?;
+            Some((*each, spring))
+        });
         match socket.and_then(|socket| Some((find(*body, &socket, &children, &names)?, socket))) {
             Some((at, _)) => {
                 commands.entity(look).insert((ChildOf(at), shifts));
+                if let Some((part, spring)) = swing {
+                    commands
+                        .entity(part)
+                        .insert(crate::swing::Swing::new(spring));
+                }
             }
             None => warn!("A worn look names no socket this body has."),
         }

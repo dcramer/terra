@@ -16,6 +16,8 @@ rigged=$(realpath "${3:-$root/art/characters/$name/rigged.glb}")
 cd "$root"
 blender=tools/blender/run.sh here=tools/characters
 $blender $here/convert_rig.py "$rigged" "$name" "$height" 2 | grep -E "WEIGHTS|EXPORTED|Error" || true
+# The mannequin's floor contact, which the rig check and the export lift each body to (lift.py).
+$blender $here/lift.py | grep -E "^LIFT|Error" || true
 $blender $here/rig_check.py "$here/out/$name.glb" | grep RIGCHECK || true
 $blender $here/rig_render.py "$here/out/$name.glb" "$name-sheet" | grep -E "SHEET|Error" || true
 $blender $here/export_character.py "$here/out/$name.glb" "$here/out/$name-game.glb" | grep -E "SOCKETS|EXPORTED|Error" || true

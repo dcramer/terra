@@ -53,7 +53,24 @@ for g in "${garments[@]}"; do
   $blender $here/shell_garment.py "$out/$base-game.glb" "$dressed" "$item" "$role" "$coverage" | grep -E "^SHELL .*hides|EXPORTED|Error" || true
 done
 $blender $here/fit_gear.py "$out/$base-game.glb" "${rigid[@]}" | grep -E "^FIT|FITTED|Error" || true
-$blender $here/gear_check.py "$out/$base-game.glb" $out/gear/$base/*.glb | grep -E "^GEARCHECK|Error" | tee "$out/build-gear.log" || true
+# The base is fixed as a morph is (make_morph.sh): its looks carried onto it, pushed clear
+# wherever its skin comes through in our clips, in rounds, and checked; the morphs start from
+# what this leaves.
+carry_base() {
+  looks=()
+  for look in $out/gear/$base/*.glb; do
+    item=$(basename "$look" .glb)
+    $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "$out/$base-$item.glb" "$base" | grep -E "PUSHED|Error" || true
+    looks+=("$out/$base-$item.glb")
+  done
+}
+rm -f "$out/$base"-*-push.npz "$out/$base"-*-uncover.json
+carry_base
+for round in 1 2 3; do
+  $blender $here/gear_check.py "$out/$base-game.glb" "${looks[@]}" --fix | grep -E "^FIX|Error" || true
+  carry_base
+done
+$blender $here/gear_check.py "$out/$base-game.glb" "${looks[@]}" | grep -E "^GEARCHECK|Error" | tee "$out/build-gear.log" || true
 echo "== 3. the morphs, side by side"
 morph_jobs=()
 for m in "${designed[@]}"; do

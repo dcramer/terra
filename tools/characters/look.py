@@ -273,7 +273,9 @@ def close_up(rig, bone, span, sides=(0, 90, 180, 270), size=400):
         a = math.radians(side)
         cam.location = at + Vector((math.sin(a), -math.cos(a), 0)) * 6
         cam.rotation_euler = (math.radians(90), 0, a)
-        path = os.path.join(OUT, f"close-{os.getpid()}-{len(paths)}-{bone}.png")
+        # Named for this process and this body too: a second body's pictures must not
+        # overwrite the first's (which made every column of a comparison the last body).
+        path = os.path.join(OUT, f"close-{os.getpid()}-{rig.name}-{len(paths)}-{bone}.png")
         scene.render.filepath = path
         bpy.ops.render.render(write_still=True)
         paths.append(path)

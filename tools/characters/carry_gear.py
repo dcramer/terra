@@ -26,6 +26,7 @@ clips (tools/characters/out/M-ITEM-push.npz), that morph also pushes the look ou
 as much, spread smoothly over the look round it: the clipping fixer, baked per morph.
 """
 
+import json
 import os
 import re
 import sys
@@ -47,6 +48,7 @@ APPLY = None if MORPHS is not None else rest[0]
 FOLLOWS_M = 0.035  # a part this close to the skin, over most of it, follows it vertex by vertex
 PUSH_SPREAD_M = 0.03  # a fixer's push fades to nothing this far round where it was needed
 ITEM = os.path.splitext(os.path.basename(look_path))[0]
+BASE_NAME = look.body_name(base_path)
 look.reset()
 
 
@@ -93,7 +95,10 @@ def morph_sockets(name):
 
 
 def morph_delta(name):
-    """The morph per vertex of the base body in BASE, matched by position."""
+    """The morph per vertex of the base body in BASE, matched by position. The base itself
+    is a morph of nothing, so its own looks are fixed by the same rounds as a morph's."""
+    if name == BASE_NAME:
+        return np.zeros((len(V), 3))
     # Each array read once: an .npz reads an array from disk on every access.
     with np.load(os.path.join(look.OUT, f"{name}.npz")) as data:
         points, delta = data["points"], data["delta"]
@@ -190,6 +195,11 @@ skinned = [o for o in piece if o.type == "MESH" and any(m.type == "ARMATURE" for
 deltas = {m: morph_delta(m) for m in (MORPHS if MORPHS is not None else [APPLY])}
 for o in skinned:
     inv = o.matrix_world.inverted().to_3x3()
+    # The base's own pushes first, where its skin came through the look in our clips: they are
+    # part of the look on every body. (Carried onto the base itself, they are its morph's.)
+    if APPLY != BASE_NAME and o.data.shape_keys is None:
+        for v, m in zip(o.data.vertices, pushes(o, BASE_NAME, np.zeros((len(o.data.vertices), 3)))):
+            v.co = v.co + inv @ Vector(m)
     if APPLY is not None:
         moved = carried(o, deltas[APPLY])
         for v, m in zip(o.data.vertices, moved + pushes(o, APPLY, moved)):
@@ -225,6 +235,20 @@ for o in hung:
     print("CARRIED", o.name, "on", o["socket"], ", ".join(f"{n} {tuple(round(c, 3) for c in x)}" for n, x in offsets.items()))
 if not skinned and not hung:
     print("CARRIED nothing: a look on a socket the base has not")
+# The game's file, for every body: hides no patch that opened in any pose on any of them
+# (gear_check.py writes which, beside each look it checks).
+if MORPHS is not None:
+    shown = set()
+    for m in [BASE_NAME] + MORPHS:
+        path = os.path.join(look.OUT, f"{m}-{ITEM}-uncover.json")
+        if os.path.exists(path):
+            with open(path) as f:
+                shown |= set(json.load(f))
+    for o in bpy.context.scene.objects:
+        if "covers" in o:
+            kept = [p for p in o["covers"] if p not in shown]
+            print("UNCOVERED", ITEM, f"{len(o['covers']) - len(kept)} of {len(o['covers'])} patches, which open in some pose")
+            o["covers"] = kept
 bpy.ops.object.select_all(action="SELECT")
 look.fit_textures(sys.argv)
 bpy.ops.export_scene.gltf(filepath=os.path.join(look.ROOT, out_path), export_format="GLB", use_selection=True,

@@ -164,8 +164,22 @@ groups = {g.index: g.name for g in body.vertex_groups}
 bone_of = [groups.get(max(v.groups, key=lambda g: g.weight).group, "") if v.groups else ""
            for v in body.data.vertices]
 results = []
+def uncover_path(item):
+    return look.path(item[:-4] + "-uncover.json") if item.endswith(".glb") else None
+
+
 for item in items:
     piece, covers, socket = wear(item)
+    # Hiding from a sweep of poses, kept conservative (T6): a patch is hidden only while it
+    # stays covered in every frame of every clip. Patches an earlier run saw open are shown,
+    # and watched for skin coming through like the rest; this run adds any it sees open. The
+    # game's file hides none that opened on any body (carry_gear.py).
+    shown = set()
+    if uncover_path(item) and os.path.exists(uncover_path(item)):
+        with open(uncover_path(item)) as f:
+            shown = set(json.load(f))
+    covers = covers - shown
+    opened = set()
     pts, nrm = evaluated(body)
     rest_pts = list(pts)
     bvh = tree(piece)
@@ -224,6 +238,7 @@ for item in items:
                 worst_hole = max(worst_hole, float(np.mean(open_)))
                 for i in np.array(hidden)[open_]:
                     places["hole " + bone_of[i]] = places.get("hole " + bone_of[i], 0) + 1
+                    opened.add(patch_of[i])
             if watch:
                 hits = through(pts, nrm, bvh, watch)
                 if fix:
@@ -253,6 +268,10 @@ for item in items:
         pb.matrix_basis.identity()
     report["where"] = dict(sorted(report.get("where", {}).items(), key=lambda t: -t[1])[:6])
     report["pass"] = ok
+    report["uncovered"] = len(shown | opened)
+    if uncover_path(item):
+        with open(uncover_path(item), "w") as f:
+            json.dump(sorted(shown | opened), f)
     if fix and item.endswith(".glb"):
         # By place, not vertex number: a file read back has its vertices split at seams. Each
         # run adds a round, measured on the look as the rounds before left it, and kept only

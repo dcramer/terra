@@ -37,6 +37,7 @@ from mathutils.bvhtree import BVHTree
 
 import look
 import patches
+import skin_piece
 
 OUT = look.GEAR_MADE
 LOOK_M = 0.06          # how far out and in from the skin to look for the dressed surface
@@ -103,25 +104,7 @@ skin = BVHTree.FromPolygons(skin_pts, [tuple(p.vertices) for p in body.data.poly
 top = max(p.z for p in skin_pts)
 
 # 1. The dressed model, turned to face -Y as ours do (Tripo's face +X), scaled and lined up.
-before = set(bpy.context.scene.objects)
-bpy.ops.import_scene.gltf(filepath=look.path(dressed_path))
-new = [o for o in bpy.context.scene.objects if o not in before]
-dressed = max((o for o in new if o.type == "MESH"), key=lambda o: len(o.data.vertices))
-dmw = dressed.matrix_world.copy()
-dressed.parent = None
-dressed.modifiers.clear()
-dressed.data.transform(Matrix.Rotation(-math.pi / 2, 4, "Z") @ dmw)
-dressed.matrix_world = Matrix.Identity(4)
-for o in new:
-    if o is not dressed:
-        bpy.data.objects.remove(o)
-zs = [v.co.z for v in dressed.data.vertices]
-dressed.data.transform(Matrix.Scale(top / (max(zs) - min(zs)), 4) @ Matrix.Translation((0, 0, -min(zs))))
-for _ in range(6):
-    offsets = [skin.find_nearest(v.co, MATCH_M) for v in list(dressed.data.vertices)[::5]]
-    offsets = [hit[0] - v.co for hit, v in zip(offsets, list(dressed.data.vertices)[::5]) if hit[0] is not None]
-    if offsets:
-        dressed.data.transform(Matrix.Translation(sum(offsets, Vector()) / len(offsets)))
+dressed = skin_piece.line_up(look.path(dressed_path), skin, top, MATCH_M)
 dressed_tree = BVHTree.FromPolygons([v.co for v in dressed.data.vertices], [tuple(p.vertices) for p in dressed.data.polygons])
 
 
@@ -264,39 +247,16 @@ for _ in range(CUT_SMOOTH_ROUNDS):
     np.add.at(count, edges[:, 0], 1)
     np.add.at(count, edges[:, 1], 1)
     field = (total + field) / (count + 1)
-field = np.where(np.abs(field - 0.5) < CUT_CLEAR, np.where(field >= 0.5, 0.5 + CUT_CLEAR, 0.5 - CUT_CLEAR), field)
 for v in bm.verts:
     v[stand_l] = stand[v.index]
     for k in range(3):
         v[normal_l[k]] = skin_nrm[v.index][k]
     v[body_l] = v.index
     v[field_l] = field[v.index]
-made = set()
-for e in [e for e in bm.edges if (e.verts[0][field_l] - 0.5) * (e.verts[1][field_l] - 0.5) < 0]:
-    a, b = e.verts
-    _, v = bmesh.utils.edge_split(e, a, (0.5 - a[field_l]) / (b[field_l] - a[field_l]))
-    v[field_l] = 0.5
+for v in skin_piece.cut(bm, field_l, 0.5, CUT_CLEAR):
     v[body_l] = -1
-    made.add(v)
-for f in list(bm.faces):
-    on = [v for v in f.verts if v in made]
-    if len(on) == 2:
-        bmesh.ops.connect_verts(bm, verts=on)
-bmesh.ops.delete(bm, geom=[f for f in bm.faces if sum(v[field_l] for v in f.verts) / len(f.verts) < 0.5], context="FACES")
-bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
-bmesh.ops.dissolve_degenerate(bm, dist=1e-4, edges=bm.edges[:])
 # The edge evened out along itself, each round put back on the skin.
-for _ in range(EDGE_RELAX_ROUNDS):
-    rim = [v for v in bm.verts if v.is_boundary]
-    moved = {}
-    for v in rim:
-        along = [e.other_vert(v) for e in v.link_edges if e.is_boundary]
-        if len(along) == 2:
-            p = mw @ (v.co * 0.5 + (along[0].co + along[1].co) * 0.25)
-            hit = skin.find_nearest(p)
-            moved[v] = mw.inverted() @ (hit[0] if hit[0] is not None else p)
-    for v, co in moved.items():
-        v.co = co
+skin_piece.relax(bm, mw, skin, EDGE_RELAX_ROUNDS)
 # Onto a copy of the body's own mesh, which carries the names of its vertex groups.
 piece = body.copy()
 piece.data = body.data.copy()
@@ -359,94 +319,11 @@ for v in piece.data.vertices:
 piece.data.update()
 # 4. Weights: the vertex groups came with the copy of the body, so each vertex keeps its own.
 
-# 5. Its colour, baked from the dressed model onto a new unwrap.
-for layer in list(piece.data.uv_layers):
-    piece.data.uv_layers.remove(layer)
-piece.data.uv_layers.new(name="UVMap")
-bpy.ops.object.select_all(action="DESELECT")
-piece.select_set(True)
-bpy.context.view_layer.objects.active = piece
-bpy.ops.object.mode_set(mode="EDIT")
-bpy.ops.mesh.select_all(action="SELECT")
-with bpy.context.temp_override(active_object=piece, object=piece, edit_object=piece):
-    bpy.ops.uv.smart_project(island_margin=0.01)
-bpy.ops.object.mode_set(mode="OBJECT")
-baked = bpy.data.images.new(f"{item}_colour", TEXTURE, TEXTURE)
-mat = bpy.data.materials.new(role)
-mat.use_nodes = True
-nodes = mat.node_tree.nodes
-tex = nodes.new("ShaderNodeTexImage")
-tex.image = baked
-mat.node_tree.links.new(tex.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
-nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.8
-nodes.active = tex
-piece.data.materials.clear()
-piece.data.materials.append(mat)
-scene = bpy.context.scene
-scene.render.engine = "CYCLES"
-scene.cycles.device = "CPU"
-scene.cycles.samples = 1
-scene.render.bake.use_pass_direct = False
-scene.render.bake.use_pass_indirect = False
-scene.render.bake.use_selected_to_active = True
-scene.render.bake.cage_extrusion = 2 * LOOK_M
-scene.render.bake.max_ray_distance = 4 * LOOK_M
-scene.render.bake.margin = 16
-bpy.ops.object.select_all(action="DESELECT")
-dressed.select_set(True)
-piece.select_set(True)
-bpy.context.view_layer.objects.active = piece
-bpy.ops.object.bake(type="DIFFUSE")
-baked.pack()
-# Its surface as well as its colour: the dressed model's normals (its normal map included)
-# and roughness, baked the same way, so leather reads as leather and not as a printed sheet.
-bsdf = nodes["Principled BSDF"]
-for kind in ("NORMAL", "ROUGHNESS"):
-    image = bpy.data.images.new(f"{item}_{kind.lower()}", TEXTURE, TEXTURE, is_data=True)
-    image.colorspace_settings.name = "Non-Color"
-    node = nodes.new("ShaderNodeTexImage")
-    node.image = image
-    nodes.active = node
-    bpy.ops.object.bake(type=kind, normal_space="TANGENT")
-    image.pack()
-    if kind == "NORMAL":
-        mapping = nodes.new("ShaderNodeNormalMap")
-        mat.node_tree.links.new(node.outputs["Color"], mapping.inputs["Color"])
-        mat.node_tree.links.new(mapping.outputs["Normal"], bsdf.inputs["Normal"])
-    else:
-        mat.node_tree.links.new(node.outputs["Color"], bsdf.inputs["Roughness"])
-nodes.active = tex
+# 5. Its colour, surface and roughness, baked from the dressed model onto a new unwrap.
+skin_piece.bake(piece, dressed, item, role, TEXTURE, LOOK_M)
 
-# A rim turned in from the edge to just off the skin, so the edge reads as the material's
-# thickness and nothing shows into the gap between piece and skin. Its faces take the colour
-# along the edge (their texture coordinates are the edge's), and the edge is kept sharp.
-bm = bmesh.new()
-bm.from_mesh(piece.data)
-bm.verts.ensure_lookup_table()
-uv = bm.loops.layers.uv.active
-edge = [e for e in bm.edges if e.is_boundary]
-# Keyed by the elements themselves: the extrusion leaves new elements' indices unset.
-edge_uv = {}
-for e in edge:
-    face = e.link_faces[0]
-    edge_uv[e] = {l.vert: l[uv].uv.copy() for l in face.loops if l.vert in e.verts}
-    e.smooth = False
-old = set(bm.verts)
-index = {v: v.index for v in bm.verts}
-grown = bmesh.ops.extrude_edge_only(bm, edges=edge)
-source = {}
-for v in [g for g in grown["geom"] if isinstance(g, bmesh.types.BMVert)]:
-    source[v] = next(e.other_vert(v) for e in v.link_edges if e.other_vert(v) in old)
-    i = index[source[v]]
-    v.co = inv @ (on_skin[i] + normals[i] * RIM_M)
-for f in [g for g in grown["geom"] if isinstance(g, bmesh.types.BMFace)]:
-    e = next(e for e in f.edges if e in edge_uv)
-    for l in f.loops:
-        l[uv].uv = edge_uv[e][l.vert if l.vert in old else source[l.vert]]
-bm.normal_update()
-bm.to_mesh(piece.data)
-bm.free()
-piece.data.update()
+# A rim turned in from the edge to just off the skin.
+skin_piece.rim(piece, lambda i: inv @ (on_skin[i] + normals[i] * RIM_M))
 
 # The patches it hides.
 covered_by = {}

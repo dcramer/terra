@@ -19,7 +19,7 @@ use bevy::{
     asset::LoadState,
     camera::{RenderTarget, ScalingMode, primitives::Aabb, visibility::RenderLayers},
     core_pipeline::tonemapping::Tonemapping,
-    gltf::GltfAssetLabel,
+    gltf::{GltfAssetLabel, GltfExtras, GltfMaterialName},
     post_process::bloom::Bloom,
     prelude::*,
     render::{
@@ -280,8 +280,9 @@ fn draw(
     assets: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
     ready: Query<(), With<Ready>>,
+    turns: Query<&IconTurn>,
     children: Query<&Children>,
-    bounds: Query<(&Aabb, &GlobalTransform)>,
+    bounds: Query<(&Aabb, &GlobalTransform), Without<LeftOut>>,
     mut lights: Query<(&mut Transform, &IconLight)>,
     shaders: Res<Shaders>,
 ) {
@@ -300,9 +301,25 @@ fn draw(
             .observe(
                 |ready: On<WorldInstanceReady>,
                  mut commands: Commands,
-                 children: Query<&Children>| {
+                 children: Query<&Children>,
+                 extras: Query<&GltfExtras>,
+                 materials: Query<&GltfMaterialName>| {
+                    let left_out = left_out(ready.entity, &children, &extras);
+                    if let Some(turn) = extra(ready.entity, &children, &extras, "icon_turn") {
+                        commands.entity(ready.entity).insert(IconTurn(turn));
+                    }
                     for each in children.iter_descendants(ready.entity) {
                         commands.entity(each).insert(RenderLayers::layer(LAYER));
+                        // A role is the material's name before any `.`, as tints read it.
+                        let role = |name: &GltfMaterialName| {
+                            name.0.split('.').next().unwrap_or("").to_string()
+                        };
+                        if materials
+                            .get(each)
+                            .is_ok_and(|name| left_out.contains(&role(name)))
+                        {
+                            commands.entity(each).insert((LeftOut, Visibility::Hidden));
+                        }
                     }
                     commands.entity(ready.entity).insert(Ready);
                 },
@@ -351,7 +368,7 @@ fn draw(
         let turn = if drawing.subject.held() {
             lay(&corners, f32::from(w) / f32::from(h))
         } else {
-            Quat::IDENTITY
+            Quat::from_rotation_y(turns.get(drawing.look).map_or(0.0, |t| t.0.to_radians()))
         };
         commands
             .entity(drawing.look)
@@ -428,11 +445,39 @@ fn draw(
     }
 }
 
-/// The corners of every part of a look, in the world.
+/// A part of a look its icon leaves out, by the look's own say.
+#[derive(Component)]
+struct LeftOut;
+
+/// How far a look turns about its up, in degrees, to be drawn from the side it is seen from:
+/// a pack from behind its wearer (`{"icon_turn": 180}` in its glTF extras).
+#[derive(Component)]
+struct IconTurn(f32);
+
+/// A value under `key` in the glTF extras of any part of `look`.
+fn extra<T: serde::de::DeserializeOwned>(
+    look: Entity,
+    children: &Query<&Children>,
+    extras: &Query<&GltfExtras>,
+    key: &str,
+) -> Option<T> {
+    children.iter_descendants(look).find_map(|each| {
+        let value: serde_json::Value = serde_json::from_str(&extras.get(each).ok()?.value).ok()?;
+        serde_json::from_value(value.get(key)?.clone()).ok()
+    })
+}
+
+/// The material roles a look's icon leaves out, from its glTF extras: `{"icon_leaves_out":
+/// ["Harness"]}`, as a pack's straps, which are made on the body and hang loose without it.
+fn left_out(look: Entity, children: &Query<&Children>, extras: &Query<&GltfExtras>) -> Vec<String> {
+    extra(look, children, extras, "icon_leaves_out").unwrap_or_default()
+}
+
+/// The corners of every part of a look the icon shows, in the world.
 fn corners(
     look: Entity,
     children: &Query<&Children>,
-    bounds: &Query<(&Aabb, &GlobalTransform)>,
+    bounds: &Query<(&Aabb, &GlobalTransform), Without<LeftOut>>,
 ) -> Vec<Vec3> {
     children
         .iter_descendants(look)

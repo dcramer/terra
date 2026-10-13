@@ -33,6 +33,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [one-mesh-for-every-body.md](one-mesh-for-every-body.md) | How do we fit every item to every body and template without a model per pair, and still look good? |
 | [modern-character-variety.md](modern-character-variety.md) | In modern games with deep creators or varied crowds, how are body variety and worn gear combined, and what is authored per body versus once? |
 | [body-morphs.md](body-morphs.md) | Can build and sex morphs be made from designs of the base person, and does gear made once pass on every morph? |
+| [gear-every-clip.md](gear-every-clip.md) | Do the realistic bodies and every worn item pass when the checks play every clip the game plays, and what fixes each failure? |
 | [agents-and-blender.md](agents-and-blender.md) | What is the current outside advice on agents in Blender, with skeletons and generated models, and are our playbooks current? |
 | [character-pipeline-audit.md](character-pipeline-audit.md) | Across the character pipeline, what is done as the industry does it, what is a bug, and what is duct tape? |
 | [ecs-audit.md](ecs-audit.md) | Does the game's code keep to our ECS rule and to many of everything, and is ECS the right model for a thousand players? |

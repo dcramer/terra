@@ -35,6 +35,7 @@ from mathutils import Vector
 from mathutils.geometry import intersect_point_line
 
 import look
+import lift
 import twist
 
 FIGURE = look.FIGURE
@@ -188,8 +189,11 @@ for o in list(bpy.context.scene.objects):
     if o not in (arm, body) and o.type in ("MESH", "ARMATURE") and o not in meshes:
         bpy.data.objects.remove(o)
 # The clips as the game plays them on this body: the limbs' roll spread over its twist bones.
-twist.bake(arm, [a for a in (bpy.data.actions.get(n) for n in ACTIONS) if a is not None])
+played = [a for a in (bpy.data.actions.get(n) for n in ACTIONS) if a is not None]
+twist.bake(arm, played)
 look.skin_as_game(linear="--linear" in look.args())
+# And the hips lifted by its size where it meets the floor, as the export bakes them (lift.py).
+lift.bake(arm, played, lift.needed(arm, body, played, lift.reference()))
 edges = np.array([tuple(e.vertices) for e in body.data.edges])
 rest_len = np.linalg.norm(pts[edges[:, 0]] - pts[edges[:, 1]], axis=1) + 1e-9
 # Generated meshes are full of sliver edges whose length ratio swings wildly from tiny
