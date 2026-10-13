@@ -17,6 +17,11 @@ const SLIVER_M: f32 = 0.05;
 /// under them holds them up.
 const FOOT_REACH: f32 = 0.6;
 
+/// How wide a post stops a walker, square about its column's middle: as wide as the
+/// widest any kit draws one (a stone pillar's 36 cm), not its whole cube, so a walker passes
+/// close by a post as they would a real one.
+pub const POST_M: f32 = 0.36;
+
 /// The size of something walking through a base.
 #[derive(Clone, Copy, Debug)]
 pub struct Walker {
@@ -101,10 +106,12 @@ impl Base {
                     (prop.max[1] + 1) as f32 * CELL_M,
                 )
             });
+        // Within a post's box, or outside it.
+        let off_post = (u - 0.5).abs().max((v - 0.5).abs()) * CELL_M > POST_M * 0.5;
         self.column(column.x, column.y)
             .filter_map(move |layer| {
                 let cube = self.cube(IVec3::new(column.x, layer, column.y))?;
-                if !cube.is_in() {
+                if !cube.is_in() || (cube.shape == crate::Shape::Post && off_post) {
                     return None;
                 }
                 let bottom = layer as f32 * CELL_M;
@@ -190,9 +197,63 @@ impl Base {
                     }
                 }
             }
+            let start = at[axis];
             at[axis] = wanted;
+            at = self.off_posts(at, axis, start, from.y, walker);
         }
         at.y = to.y;
+        at
+    }
+
+    /// A walker's place along an axis, having moved there from `start`, stopped at the
+    /// first post whose box their body would have come into on the way, as a post's box
+    /// stops them (`POST_M`): touching it, round its corner as far as the other way puts
+    /// them beside it.
+    fn off_posts(&self, at: Vec3, axis: usize, start: f32, feet: f32, walker: &Walker) -> Vec3 {
+        let mut at = at;
+        let (low, high) = (feet + walker.step_up, feet + walker.height);
+        let other_axis = 2 - axis;
+        let half = POST_M * 0.5;
+        let (from, to) = (start.min(at[axis]), start.max(at[axis]));
+        // The columns the body sweeps past, and those beside them a post's half away.
+        let reach = walker.radius + half;
+        let mut lo = Vec3::new(at.x, 0.0, at.z) - Vec3::splat(reach);
+        let mut hi = Vec3::new(at.x, 0.0, at.z) + Vec3::splat(reach);
+        lo[axis] = from - reach;
+        hi[axis] = to + reach;
+        let (first, last) = (column_at(lo), column_at(hi));
+        for x in first.x..=last.x {
+            for z in first.y..=last.y {
+                let post = self.column(x, z).any(|layer| {
+                    self.cube(IVec3::new(x, layer, z)).is_some_and(|cube| {
+                        cube.is_in()
+                            && cube.shape == crate::Shape::Post
+                            && (layer as f32 * CELL_M) < high
+                            && ((layer + 1) as f32 * CELL_M) > low
+                    })
+                });
+                if !post {
+                    continue;
+                }
+                let middle = Vec3::new((x as f32 + 0.5) * CELL_M, 0.0, (z as f32 + 0.5) * CELL_M);
+                // How far beside the box the walker is the other way, and so how close they
+                // may come along this one.
+                let beside = ((at[other_axis] - middle[other_axis]).abs() - half).max(0.0);
+                if beside >= walker.radius {
+                    continue;
+                }
+                let clear = half + (walker.radius * walker.radius - beside * beside).sqrt();
+                let (near, far) = (middle[axis] - clear, middle[axis] + clear);
+                // Came into it this step: stopped on the side they came from.
+                if to > near && from < far {
+                    if start <= middle[axis] {
+                        at[axis] = at[axis].min(near - 0.001).max(start.min(near - 0.001));
+                    } else {
+                        at[axis] = at[axis].max(far + 0.001).min(start.max(far + 0.001));
+                    }
+                }
+            }
+        }
         at
     }
 
@@ -439,6 +500,20 @@ mod tests {
             let passed = (stroll(&base, from, to) - to).length() < 0.01;
             assert_eq!(passed, top <= w.step_up, "{shape:?}");
         }
+    }
+
+    #[test]
+    fn a_post_stops_a_walker_by_its_own_width_not_its_cube() {
+        let base = shaped(crate::Shape::Post);
+        // Straight at it, stopped touching it.
+        let at = stroll(&base, Vec3::new(-1.0, 0.0, 0.25), Vec3::new(1.5, 0.0, 0.25));
+        let face = CELL_M * 0.5 - POST_M * 0.5;
+        assert!((at.x - (face - walker().radius)).abs() < 0.01, "{at}");
+        // Past it close by, a body's width from its middle, where its cube would have
+        // stopped them.
+        let z = CELL_M * 0.5 + POST_M * 0.5 + walker().radius + 0.01;
+        let to = Vec3::new(1.5, 0.0, z);
+        assert!((stroll(&base, Vec3::new(-1.0, 0.0, z), to) - to).length() < 0.01);
     }
 
     #[test]

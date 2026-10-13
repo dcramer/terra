@@ -42,7 +42,7 @@ Each log differs from the next by its seed, from its place, by as much as the ki
 | Jamb, Head, Sill | Round an opening | Jamb stones long and short, a lintel bearing 20 cm either side, a sloped sill with horns | Hewn posts up its sides | Hewn posts |
 | Meet | Where a thinner kind stands on it | A weathered cap under the logs | | |
 | Soffit | Under an overhang | A fascia | | |
-| Nose | Along a step | A tread with a rounded nose | A flight laid as steps: logs across it, a log along each nose, board treads, a stringer up each side | The same, hewn |
+| Nose | Along a step | A tread with a rounded nose | A flight laid as open stairs: treads between stringers, on posts where it stands high | The same, hewn |
 | Border | Along a floor a wall stands on | A border flag | | |
 | Inside | Up an inside corner | (nothing) | | |
 
@@ -105,7 +105,7 @@ Asked on 2026-10-12: "add a pillar to break up walls… arbitrarily? … giving 
 - **In the open**, posts hold up a porch roof or a lean-to, or make a fence's ends.
 - **Its kind can differ from the wall's**: a squared timber post or a stone pillar in a log wall. That is the next section.
 
-**Posts cut as posts** (D193, D220): the hammer's *Post* lays a column of cubes cut as posts, a storey high to the floor over it, on a footing on the ground. Each kit draws it as its file dresses `Post`: the log kit a round log a little thinner than its wall's, the hewn kit a squared beam, each on a pad of boards where it stands on something and under a short bolster across its top where something rests on it; the stone kit a pillar 36 cm square of its rubble, a drum a cube, with its plinth round the foot and its coping round the cap. A post collides and holds as a whole cube: a deck or a beam laid on it is joined through it, and nothing of it comes out while they rest on it.
+**Posts cut as posts** (D193, D220): the hammer's *Post* lays a column of cubes cut as posts, a storey high to the floor over it, on a footing on the ground. Each kit draws it as its file dresses `Post`: the log kit a round log a little thinner than its wall's, the hewn kit a squared beam, each on a pad of boards where it stands on something and under a short bolster across its top where something rests on it; the stone kit a pillar 36 cm square of its rubble, a drum a cube, with its plinth round the foot and its coping round the cap. A post holds as a whole cube: a deck or a beam laid on it is joined through it, and nothing of it comes out while they rest on it; a walker meets it as a box 36 cm square, the widest any kit draws, and passes close by it as by a real post.
 
 Placing a post on a wall already built is like a late corner. The built logs stay as they are and the post stands over them, so a post can be added to a finished wall as a detail, without taking the wall down.
 
@@ -129,8 +129,8 @@ A cube can be cut to a shape: a half (its lower half), a stair (two steps, each 
 
 | | Stone | Logs and hewn |
 |---|---|---|
-| Stair | A stone a tread, rounded and displaced like the wall, a tread with a rounded nose on each | Logs across the flight, a log along each step's nose, a board tread on each step, a stringer up each open side |
-| Slope | The stone's surface cut to the ramp, flagstones on it, a coping raking up each open side | Boards up the fall of the ramp, a cleat across them, a stringer up each open side |
+| Stair | A stone a tread, rounded and displaced like the wall, a tread with a rounded nose on each | Open stairs: a thick tread on each step, its nose a little out, housed between two board stringers from the floor to the top step's back, posts under the stringers where the flight stands over a metre high, nothing under the treads |
+| Slope | The stone's surface cut to the ramp, flagstones on it, a coping raking up each open side, its sides showing over any lower cut beside them | Boards up the fall of the ramp, a cleat across them, between stringers on posts, as a stair |
 | Half | The stone's surface cut to half height, flagstones on it, a coping round its open top | A low deck: boards on a rim of beams, joists where it is in the air |
 
 **Slopes are not roofs.** A roof is laid by its kit from roof sections over walls (D209), a height field of courses, ridges and eaves; a slope is a ramp of its own kind's material, and under or beside a roof it is a cube like any other.

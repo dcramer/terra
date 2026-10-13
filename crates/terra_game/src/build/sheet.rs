@@ -95,7 +95,8 @@ fn keen(kind: Kind, solid: bool) -> Vec<BuildOp> {
 
 /// Every shape a cube can be cut to (D193), in a kind: a platform on four posts, reached by
 /// a flight of stairs a metre wide and a ramp beside it, each column whole cubes under its
-/// cut top; a step of halves on the ground; and a post standing alone.
+/// cut top; a step of halves on the ground, and halves beside the ramp's foot; and a post
+/// standing alone.
 fn shapes(kind: Kind) -> Vec<BuildOp> {
     let put = |min: [i32; 3], max: [i32; 3], shape: Shape| BuildOp::Fill {
         min,
@@ -120,6 +121,8 @@ fn shapes(kind: Kind) -> Vec<BuildOp> {
         ops.push(put([2, step, z], [3, step, z], Shape::Slope(Facing::North)));
     }
     ops.push(put([-4, 0, 4], [-2, 0, 8], Shape::Half));
+    // A run of halves beside the foot of the ramp, so its side shows over them.
+    ops.push(put([4, 0, 6], [4, 0, 8], Shape::Half));
     ops.push(put([7, 0, 6], [7, 5, 6], Shape::Post));
     ops
 }

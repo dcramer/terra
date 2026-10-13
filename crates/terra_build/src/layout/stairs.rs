@@ -1,11 +1,13 @@
-//! Flights of steps in a timber kind (D215, research/role-pieces.md): a stack of the kind's
-//! cubes stepping up is laid as stairs, not as a stepped wall. Each step a short stack of
-//! logs across the flight, the top one along its nose, a tread of boards over it; and a
-//! stringer up each open side of the flight, through its noses. A step is a column of the
-//! kind's cubes topped by a cube cut as a stair (two treads, each with its nose) or a slope
-//! (boards up the ramp, a cleat across them) (D193), or, where the kit dresses a step's
-//! nose with a member, a whole cube whose top edge is a [`Role::Nose`] (`roles`), and the
-//! column the top step's nose leads onto.
+//! Flights of steps in a timber kind (D215, D220, research/role-pieces.md): a stack of
+//! the kind's cubes stepping up is laid as open stairs, as a carpenter builds them, not as
+//! a stepped wall: a thick tread on each step, its nose standing a little out, housed
+//! between two stringers, one up each side of the flight from the floor to the back of its
+//! top step, and posts from the floor under the stringers where the flight stands high;
+//! nothing under the treads. A step is a column of the kind's cubes topped by a cube cut as
+//! a stair (two treads) or a slope (boards up the ramp, a cleat across them) (D193), or,
+//! where the kit dresses a step's nose with a member, a whole cube whose top edge is a
+//! [`Role::Nose`] (`roles`), and the column the top step's nose leads onto. The cubes under
+//! the treads stay whole cubes, walked as cubes are (D220); only their drawing is open.
 
 use super::roles::{Dir, Role, Roles};
 use super::{Layout, Piece, Place, Split, hash, runs, ticks};
@@ -47,9 +49,19 @@ impl Step {
     }
 }
 
-/// How thick a tread's boards are, and how far a stringer stands out of the flight's side.
-const TREAD_M: f32 = 0.05;
+/// How thick a tread is, how far its nose stands out over the step below, and how far a
+/// stringer stands out of the flight's side.
+const TREAD_M: f32 = 0.07;
+const NOSING_M: f32 = 0.03;
 const STRINGER_PROUD_M: f32 = 0.03;
+/// A stringer: how thick and how deep a board, and how far its top edge stands over the
+/// line of the treads' noses.
+const STRINGER_M: (f32, f32) = (0.07, 0.32);
+const STRINGER_ABOVE_M: f32 = 0.06;
+/// How high a stringer's underside stands over the floor before posts carry it, and how far
+/// apart they are along its run.
+const POSTS_FROM_M: f32 = 1.0;
+const POST_SPACING_M: f32 = 1.25;
 /// A ramp's boards: how wide and thick; the cleat across them, how wide and thick.
 const RAMP_BOARD_M: f32 = 0.125;
 const RAMP_THICK_M: f32 = 0.035;
@@ -81,8 +93,10 @@ pub(super) fn find(base: &Base, kit: &Kit, kits: &Kits) -> BTreeMap<[i32; 2], St
             cap,
         }
     };
+    // A cube cut as a stair or a slope is a step whatever is on it: something set on its
+    // top hides part of it, but it is drawn as what it is. The highest in a column tops it.
     for (at, cube) in base.cubes() {
-        if cube.kind != kit.kind() || cube.fill != Fill::Solid || ours(at + IVec3::Y) {
+        if cube.kind != kit.kind() || cube.fill != Fill::Solid {
             continue;
         }
         let (facing, cap) = match cube.shape {
@@ -90,10 +104,15 @@ pub(super) fn find(base: &Base, kit: &Kit, kits: &Kits) -> BTreeMap<[i32; 2], St
             Shape::Slope(facing) => (facing, Cap::Slope),
             _ => continue,
         };
-        steps.insert(
-            [at.x, at.z],
-            column(at, Dir::facing(facing).opposite(), cap),
-        );
+        let step = column(at, Dir::facing(facing).opposite(), cap);
+        steps
+            .entry([at.x, at.z])
+            .and_modify(|was: &mut Step| {
+                if was.top < step.top {
+                    *was = step;
+                }
+            })
+            .or_insert(step);
     }
     if kit.dress.member(Role::Nose).is_none() {
         return steps;
@@ -136,10 +155,11 @@ pub(super) fn cubes(steps: &BTreeMap<[i32; 2], Step>) -> BTreeSet<[i32; 3]> {
         .collect()
 }
 
-/// Lays every flight: its steps' logs, noses and treads or ramps, and its stringers.
+/// Lays every flight as open stairs, as a carpenter builds them: a tread of thick boards on
+/// each step, a ramp of boards up a slope, between stringers up each side of the flight,
+/// and posts under the stringers where a flight is long and high; nothing under the treads,
+/// so the flight reads as a stair and not a stepped wall.
 pub(super) fn lay(kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layout) {
-    let radius = kit.radius();
-    let per_cube = ((CELL_M / kit.course).round() as i32).max(1);
     // Steps side by side across a flight, at the same height, laid as one.
     let mut done = BTreeSet::new();
     for (&[x, z], step) in steps {
@@ -171,90 +191,42 @@ pub(super) fn lay(kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layo
             p.y = height;
             p
         };
+        // The treads run from one stringer to the other.
         let (from, to) = (
-            first[axis] as f32 * CELL_M - kit.overhang,
-            (last[axis] + 1) as f32 * CELL_M + kit.overhang,
+            first[axis] as f32 * CELL_M,
+            (last[axis] + 1) as f32 * CELL_M,
         );
-        // The courses: the whole cubes', and a stair's lower half's.
-        let whole_courses = (step.top - step.bottom) * per_cube;
-        let courses = match step.cap {
-            Cap::Whole => whole_courses + per_cube,
-            Cap::Stair => whole_courses + (per_cube / 2).max(1),
-            Cap::Slope => whole_courses,
-        };
-        let seed = |course: i32, salt: u32| hash(&[x as u32, z as u32, course as u32, salt]);
-        let nose = |centre: f32, forward: f32, course: i32| {
-            let mut log = runs::log(
-                point(from, centre, forward),
-                point(to, centre, forward),
-                Split::Whole,
-                seed(course, 17),
-                None,
-            );
-            runs::set_role(&mut log, Some(Role::Nose));
-            log
-        };
-        for course in 0..courses {
-            let centre = step.bottom as f32 * CELL_M + kit.course * (course as f32 + 0.5);
-            // The top one along the nose, as far forward as the step's face.
-            if course + 1 == courses && step.cap != Cap::Slope {
-                layout
-                    .pieces
-                    .push(nose(centre, CELL_M * 0.5 - radius * 1.1, course));
-                continue;
-            }
-            layout.pieces.push(runs::log(
-                point(from, centre, 0.0),
-                point(to, centre, 0.0),
-                if course == 0 {
-                    Split::Top
-                } else {
-                    Split::Whole
-                },
-                seed(course, 17),
-                None,
-            ));
-        }
-        let tread = |height: f32, forward: f32, wide: f32, salt: u32| Piece::Plank {
-            from: Place::near(point(from + kit.overhang, height, forward)),
-            to: Place::near(point(to - kit.overhang, height, forward)),
-            wide: ticks(wide),
+        let tread = |height: f32, forward: f32, deep: f32, salt: u32| Piece::Plank {
+            from: Place::near(point(from, height - TREAD_M * 0.5, forward)),
+            to: Place::near(point(to, height - TREAD_M * 0.5, forward)),
+            wide: ticks(deep),
             high: ticks(TREAD_M),
             seed: hash(&[x as u32, z as u32, salt, 19]),
         };
         let top = (step.top + 1) as f32 * CELL_M;
+        let half = CELL_M * 0.5;
         match step.cap {
-            // A tread of two boards over it, from the nose back.
-            Cap::Whole => {
-                for board in 0..2 {
-                    let forward = CELL_M * (0.25 - 0.5 * board as f32) * 0.98;
-                    layout
-                        .pieces
-                        .push(tread(top + TREAD_M * 0.5, forward, CELL_M * 0.48, board));
-                }
-            }
-            // Its upper half: a course over the back, its nose at the middle; a board on
-            // each of its two treads.
+            // One tread at its top, the whole cube deep, its nose standing a little out.
+            Cap::Whole => layout
+                .pieces
+                .push(tread(top, NOSING_M * 0.5, CELL_M + NOSING_M, 0)),
+            // A tread on each of its two steps, each half a cube deep and a nosing more.
             Cap::Stair => {
-                layout
-                    .pieces
-                    .push(nose(top - kit.course * 0.5, -radius * 1.1, courses));
-                let half = CELL_M * 0.5;
                 layout.pieces.push(tread(
-                    top - half + TREAD_M * 0.5,
-                    CELL_M * 0.25,
-                    half * 0.96,
+                    top - half,
+                    half * 0.5 + NOSING_M * 0.5,
+                    half + NOSING_M,
                     0,
                 ));
                 layout
                     .pieces
-                    .push(tread(top + TREAD_M * 0.5, -CELL_M * 0.25, half * 0.96, 1));
+                    .push(tread(top, -half * 0.5 + NOSING_M * 0.5, half + NOSING_M, 1));
             }
             Cap::Slope => ramp(
                 step,
                 &point,
-                (from + kit.overhang, to - kit.overhang),
-                seed(0, 29),
+                (from, to),
+                hash(&[x as u32, z as u32, 29]),
                 layout,
             ),
         }
@@ -299,7 +271,9 @@ fn ramp(
     });
 }
 
-/// A stringer up each open side of each flight, through its noses, under its treads.
+/// A stringer up each side of each flight, the treads housed between them, from the floor
+/// at the flight's foot to the back of its top step; and, where a flight stands high, posts
+/// from the floor up under each stringer, one a post's spacing apart and one under its top.
 fn stringers(kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layout) {
     let width = runs::post_width(kit).unwrap_or(kit.diameter * 0.6);
     // Each side line: the steps whose neighbour across that way is no step of the flight,
@@ -336,30 +310,77 @@ fn stringers(kit: &Kit, steps: &BTreeMap<[i32; 2], Step>, layout: &mut Layout) {
         }
         let side_axis = if out.axis() == 0 { 2 } else { 0 };
         let face = (line + i32::from(sign > 0)) as f32 * CELL_M;
-        let across = face - sign as f32 * (width * 0.5 - STRINGER_PROUD_M);
+        let across = face - sign as f32 * (STRINGER_M.0 * 0.5 - STRINGER_PROUD_M);
         // Each step's nose: its front face, at its lowest tread; a ramp's foot.
         let nose = |at: i32, step: Step| {
             let front = (at + i32::from(out.sign() > 0)) as f32 * CELL_M;
             let mut p = Vec3::ZERO;
             p[out.axis()] = front;
             p[side_axis] = across;
-            p.y = step.nose()
-                - width * 0.5
-                - match step.cap {
-                    Cap::Slope => RAMP_THICK_M,
-                    _ => TREAD_M + 0.05,
-                };
+            p.y = step.nose();
             p
         };
-        let mut stringer = runs::log(
-            nose(low_at, low),
-            nose(high_at, high),
-            Split::Whole,
-            hash(&[line as u32, sign as u32, out as u32, 23]),
-            None,
-        );
-        runs::set_role(&mut stringer, Some(Role::Jamb));
-        layout.pieces.push(stringer);
+        let (a, b) = (nose(low_at, low), nose(high_at, high));
+        let rise = (b - a).normalize_or_zero();
+        // Its middle under the noses' line, so its top edge stands a little over the treads
+        // and its depth covers their backs, as a closed stringer houses them.
+        let level = (1.0 - rise.y * rise.y).sqrt().max(0.2);
+        let drop = Vec3::Y * ((STRINGER_M.1 * 0.5 - STRINGER_ABOVE_M) / level);
+        let (a, b) = (a - drop, b - drop);
+        // Down from the lowest nose to the floor, and up past the top nose to the back of
+        // the top step.
+        let floor = flight
+            .iter()
+            .map(|(_, step)| step.bottom)
+            .min()
+            .unwrap_or(low.bottom) as f32
+            * CELL_M;
+        let down = if rise.y > 1e-3 {
+            (a.y - floor - STRINGER_M.1 * 0.5 * level).max(0.0) / rise.y
+        } else {
+            0.0
+        };
+        let back = match high.cap {
+            Cap::Whole => CELL_M,
+            Cap::Stair => CELL_M * 0.5,
+            Cap::Slope => CELL_M,
+        };
+        let up = back / level;
+        let (foot, head) = (a - rise * down, b + rise * up);
+        let seed = hash(&[line as u32, sign as u32, out as u32, 23]);
+        layout.pieces.push(Piece::Plank {
+            from: Place::near(foot),
+            to: Place::near(head),
+            wide: ticks(STRINGER_M.0),
+            high: ticks(STRINGER_M.1),
+            seed,
+        });
+        // Posts under it where it stands high: along its run a spacing apart from its top
+        // down, wherever its underside is more than so high over the floor.
+        let run = Vec3::new(head.x - foot.x, 0.0, head.z - foot.z).length();
+        if run < 1e-3 {
+            continue;
+        }
+        let mut along = run - width * 0.5;
+        let mut n = 0;
+        while along > 0.0 {
+            let at = foot + (head - foot) * (along / run);
+            let under = at.y - STRINGER_M.1 * 0.5 / level;
+            if under - floor < POSTS_FROM_M {
+                break;
+            }
+            let mut post = runs::log(
+                Vec3::new(at.x, floor, at.z),
+                Vec3::new(at.x, under, at.z),
+                Split::Whole,
+                hash(&[seed, n, 0x9057]),
+                None,
+            );
+            runs::set_role(&mut post, Some(Role::Jamb));
+            layout.pieces.push(post);
+            along -= POST_SPACING_M;
+            n += 1;
+        }
     }
 }
 
@@ -385,7 +406,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flight_of_timber_is_laid_as_steps_with_noses_treads_and_stringers() {
+    fn a_flight_of_timber_is_laid_as_open_stairs_on_stringers_and_posts() {
         // Four steps two cubes wide, rising north, each a cube higher.
         let mut base = Base::default();
         for step in 0..4 {
@@ -400,30 +421,93 @@ mod tests {
         assert_eq!(steps.len(), 8, "{steps:?}");
         assert!(steps.values().all(|step| step.out == Dir::South));
         let layout = lay(&base, &kit());
-        let role = |which: Option<Role>| {
+        let logs: Vec<&Piece> = layout
+            .pieces
+            .iter()
+            .filter(|p| matches!(p, Piece::Log { .. }))
+            .collect();
+        // No log lies across the flight: nothing under the treads but posts.
+        for piece in &logs {
+            let Piece::Log { from, to, role, .. } = piece else {
+                unreachable!()
+            };
+            assert_eq!(*role, Some(Role::Jamb), "{piece:?}");
+            assert!(
+                from.0[0] == to.0[0] && from.0[2] == to.0[2],
+                "{piece:?} is no post"
+            );
+        }
+        // A stringer up each side, rising from the floor at the flight's foot.
+        let stringers: Vec<_> = layout
+            .pieces
+            .iter()
+            .filter_map(|p| match p {
+                Piece::Plank { from, to, .. } if from.0[1] != to.0[1] => {
+                    Some((from.metres(), to.metres()))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(stringers.len(), 2);
+        for (from, to) in &stringers {
+            let (low, high) = if from.y < to.y {
+                (from, to)
+            } else {
+                (to, from)
+            };
+            assert!(low.y < 0.2, "{low}");
+            assert!(high.y > 1.5, "{high}");
+        }
+        // Posts under them where the flight stands high: upright, from the floor.
+        let posts = logs
+            .iter()
+            .filter(|p| matches!(p, Piece::Log { from, to, .. } if from.0[0] == to.0[0] && from.0[2] == to.0[2]))
+            .count();
+        assert!(posts >= 2, "{posts} posts");
+        // A tread a step, as wide as the flight.
+        let treads: Vec<_> = layout
+            .pieces
+            .iter()
+            .filter_map(|p| match p {
+                Piece::Plank { from, to, .. } if from.0[1] == to.0[1] => {
+                    Some((from.metres(), to.metres()))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(treads.len(), 4);
+        for (from, to) in treads {
+            assert!((from.x.min(to.x) - 0.0).abs() < 1e-3 && (from.x.max(to.x) - 1.0).abs() < 1e-3);
+        }
+    }
+
+    #[test]
+    fn a_cut_cube_with_something_on_it_is_still_drawn() {
+        // A stair and a slope on the ground, each with a whole cube set on it.
+        let mut base = Base::default();
+        let put = |base: &mut Base, at: [i32; 3], shape: Shape| {
+            base.apply(BuildOp::Fill {
+                min: at,
+                max: at,
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(kit().kind(), Fill::Solid)
+                }),
+            });
+        };
+        put(&mut base, [0, 0, 0], Shape::Stair(crate::Facing::North));
+        put(&mut base, [4, 0, 0], Shape::Slope(crate::Facing::North));
+        put(&mut base, [0, 1, 0], Shape::Whole);
+        put(&mut base, [4, 1, 0], Shape::Whole);
+        let layout = lay(&base, &kit());
+        let under = |x: i32| {
             layout
                 .pieces
                 .iter()
-                .filter(|p| matches!(p, Piece::Log { role, .. } if *role == which))
+                .filter(|p| matches!(p, Piece::Plank { .. }) && p.anchor() == IVec3::new(x, 0, 0))
                 .count()
         };
-        // A nose along each step, across both its cubes as one.
-        assert_eq!(role(Some(Role::Nose)), 4);
-        // A stringer up each side.
-        assert_eq!(role(Some(Role::Jamb)), 2);
-        // Every log of a step lies across the flight, along x: none is a stepped wall.
-        for piece in &layout.pieces {
-            if let Piece::Log { from, to, role, .. } = piece
-                && *role != Some(Role::Jamb)
-            {
-                assert_eq!(from.0[2], to.0[2], "{piece:?}");
-            }
-        }
-        let treads = layout
-            .pieces
-            .iter()
-            .filter(|p| matches!(p, Piece::Plank { .. }))
-            .count();
-        assert_eq!(treads, 4 * 2);
+        assert_eq!(under(0), 2, "the stair's two treads");
+        assert!(under(4) >= 2, "the slope's boards");
     }
 }

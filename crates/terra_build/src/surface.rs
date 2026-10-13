@@ -240,9 +240,7 @@ pub fn draw_part(
             .collect();
         for (axis, side) in FACES {
             let out_step = step(axis, side as i32);
-            if full(cube + out_step) {
-                continue;
-            }
+            let beyond = cube + out_step;
             let normal = unit(axis, side);
             let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
             let plane = if side > 0.0 {
@@ -257,6 +255,20 @@ pub fn draw_part(
                 p[b] = low[b] + CELL_M * j as f32 / n as f32;
                 p
             };
+            // A side against another of the cubes drawn shows where that one is cut lower
+            // than this one, as a slope's side shows over a half beside it: from the other's
+            // cut up to this one's. Against anything else full, nothing shows.
+            let against_cut = axis != 1
+                && cubes.contains(&beyond.to_array())
+                && (0..=n).any(|i| {
+                    (0..=n).any(|j| {
+                        let p = point(i, j);
+                        cut(beyond, p) < cut(cube, p).min(p.y) - 1e-4
+                    })
+                });
+            if full(beyond) && !against_cut {
+                continue;
+            }
             // Only the boxes that may be nearest a point of this face: none further from
             // the face than its own cube's box can be, at most the bevel along every axis.
             let (face_low, face_high) = {
@@ -309,6 +321,9 @@ pub fn draw_part(
                     let p = point(i, j);
                     let mut q = place(p);
                     q.y = q.y.min(cut(cube, p));
+                    if against_cut {
+                        q.y = q.y.max(cut(beyond, p).min(cut(cube, p)));
+                    }
                     face.points.push(q);
                     face.uvs.push(planar(p, normal, metres));
                 }
@@ -637,6 +652,66 @@ mod tests {
         assert!(s.positions.iter().all(|p| p.distance(corner) > 0.01));
         // Its faces' middles are where the cube's faces are.
         assert!(s.positions.iter().any(|p| (p.x - CELL_M).abs() < 1e-5));
+    }
+
+    #[test]
+    fn a_side_shows_over_a_lower_cut_beside_it() {
+        // A half, and east of it a slope rising east: the slope's west side shows from the
+        // half's top up to the slope's.
+        let set: BTreeSet<[i32; 3]> = [[0, 0, 0], [1, 0, 0]].into_iter().collect();
+        let cut = |cube: IVec3, at: Vec3| {
+            if cube.x == 0 {
+                CELL_M * 0.5
+            } else {
+                at.x - CELL_M
+            }
+        };
+        let (mut out, mut tops) = (Surface::default(), Surface::default());
+        let heights = Heights {
+            sides: &flat,
+            top: &flat,
+        };
+        draw_cut(
+            &set,
+            &|_| false,
+            &look(),
+            &heights,
+            &cut,
+            [1.0; 3],
+            &mut out,
+            &mut tops,
+        );
+        let between = out.positions.chunks(3).any(|t| {
+            t.iter().all(|p| (p.x - CELL_M).abs() < 0.05) && t.iter().any(|p| p.y > CELL_M * 0.55)
+        });
+        assert!(
+            !between,
+            "the slope's side is no higher than its top at its foot"
+        );
+        // Against a half, a whole cube's own side shows from the half's top up.
+        let whole = |cube: IVec3, _: Vec3| if cube.x == 0 { CELL_M * 0.5 } else { f32::MAX };
+        let (mut out, mut tops) = (Surface::default(), Surface::default());
+        draw_cut(
+            &set,
+            &|_| false,
+            &look(),
+            &heights,
+            &whole,
+            [1.0; 3],
+            &mut out,
+            &mut tops,
+        );
+        let side = out.positions.chunks(3).any(|t| {
+            t.iter().all(|p| (p.x - CELL_M).abs() < 0.05) && t.iter().all(|p| p.y > CELL_M * 0.49)
+        });
+        assert!(side, "no side over the half");
+        assert!(
+            !out.positions.chunks(3).any(|t| {
+                t.iter().all(|p| (p.x - CELL_M).abs() < 0.05)
+                    && t.iter().all(|p| p.y < CELL_M * 0.45)
+            }),
+            "a side inside the half"
+        );
     }
 
     #[test]
