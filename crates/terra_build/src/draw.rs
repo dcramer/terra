@@ -20,18 +20,32 @@ fn metres(kit: &Kit, material: Material) -> [f32; 2] {
 /// Draws a piece, each part in its material. `face` is the height map of the kit's `Log`
 /// material, which its logs' bark stands out by, once it has been read.
 pub fn draw(piece: &Piece, kit: &Kit, face: Option<&Relief>, surfaces: &mut Surfaces) {
+    draw_as(piece, kit, face, false, surfaces);
+}
+
+/// Draws a piece as [`draw`] does, or, `plain`, with less of its detail, as a ghost is drawn:
+/// a roof's covering as a sheet without its courses.
+pub fn draw_as(
+    piece: &Piece,
+    kit: &Kit,
+    face: Option<&Relief>,
+    plain: bool,
+    surfaces: &mut Surfaces,
+) {
     match *piece {
         Piece::Log { .. } => crate::timber::draw(piece, kit, face, surfaces),
         Piece::Board { min, max } => cuboid(
             surfaces.of(Material::Board),
-            min,
-            max,
+            min.metres(),
+            max.metres(),
             metres(kit, Material::Board),
             [1.0; 3],
         ),
         Piece::Plank { .. } => crate::timber::plank(piece, kit, surfaces),
-        // A prop, or part of its kind's surface.
-        Piece::Opening { .. } | Piece::Block { .. } => {}
+        Piece::Covering { .. } | Piece::Roof { .. } => {
+            crate::roofing::draw_as(piece, kit, plain, surfaces)
+        }
+        Piece::Opening { .. } | Piece::Block { .. } | Piece::Gable { .. } => {}
     }
 }
 

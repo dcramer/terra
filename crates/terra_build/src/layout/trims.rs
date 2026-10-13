@@ -3,7 +3,7 @@
 //! and where the kit has a door or window the opening's shape, that set in it instead,
 //! fitted once the building is up (D193).
 
-use super::{Axis, Layout, Piece, Walls, runs_of};
+use super::{Axis, Layout, Piece, Place, Walls, runs_of};
 use crate::kit::Kit;
 use crate::{CELL_M, Fill};
 use std::collections::BTreeSet;
@@ -56,8 +56,8 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
             axis.point(row, end, top) + out,
         );
         layout.pieces.push(Piece::Opening {
-            min: a.min(b),
-            max: a.max(b),
+            min: Place::near(a.min(b)),
+            max: Place::near(a.max(b)),
             along_x: axis == Axis::X,
             door: at_foot,
         });
@@ -72,8 +72,8 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
         let (low, high) = (axis.point(row, a, bottom), axis.point(row, b, top));
         let out = across * (depth + proud);
         layout.pieces.push(Piece::Board {
-            min: (low - out).min(high + out),
-            max: (low - out).max(high + out),
+            min: Place::near((low - out).min(high + out)),
+            max: Place::near((low - out).max(high + out)),
         });
     };
     // Up each side: a jamb along every run of hole cubes with wall beside them.
@@ -249,7 +249,7 @@ mod tests {
                     max,
                     along_x,
                     door,
-                } => Some((min, max, along_x, door)),
+                } => Some((min.metres(), max.metres(), along_x, door)),
                 _ => None,
             })
             .collect();

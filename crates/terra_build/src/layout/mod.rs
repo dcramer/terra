@@ -14,10 +14,11 @@
 pub mod blocks;
 mod floors;
 pub mod ground;
+pub mod roofs;
 pub mod runs;
 mod trims;
 
-use crate::kit::{Kit, Pattern};
+use crate::kit::{Kit, Kits, Pattern};
 use crate::mesh::Material;
 use crate::{Base, CELL_M, Fill, Kind};
 use glam::{IVec3, Vec3};
@@ -33,50 +34,114 @@ pub enum Split {
     Bottom,
 }
 
-/// One piece of a wall, in the base's own space, in metres.
+/// How finely a piece is placed: in 256ths of a cube, about 2 mm (docs/building-plan.md:
+/// a layout's output is in grid units, not metres).
+pub const TICKS: i32 = 256;
+
+/// A point in a base's grid, counted in [`TICKS`] of a cube east, up and south: where a
+/// piece is, exact and the same on every machine, so nothing shared holds metres.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Place(pub [i32; 3]);
+
+impl Place {
+    /// The place nearest a point given in metres in the base's own space.
+    pub fn near(metres: Vec3) -> Place {
+        Place([ticks(metres.x), ticks(metres.y), ticks(metres.z)])
+    }
+
+    /// Where it is in metres in the base's own space, for drawing.
+    pub fn metres(self) -> Vec3 {
+        IVec3::from_array(self.0).as_vec3() * (CELL_M / TICKS as f32)
+    }
+}
+
+/// A length in metres, to the nearest tick.
+pub fn ticks(metres: f32) -> i32 {
+    (metres * (TICKS as f32 / CELL_M)).round() as i32
+}
+
+/// A length in ticks, in metres.
+pub fn metres(ticks: i32) -> f32 {
+    ticks as f32 * (CELL_M / TICKS as f32)
+}
+
+/// One piece of a base, placed in its grid ([`Place`]); its seed is its version.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Piece {
     /// A long member from one end to the other along its middle; its seed is its version,
     /// from its place.
     Log {
-        from: Vec3,
-        to: Vec3,
+        from: Place,
+        to: Place,
         split: Split,
         seed: u32,
         /// The daub under it, as far along it from `from` as from the first number to
-        /// the second, if any.
-        chinking: Option<(f32, f32)>,
+        /// the second, in ticks, if any.
+        chinking: Option<(i32, i32)>,
+        /// How each end, at `from` and at `to`, is cut to the slope of a roof over it, as
+        /// a gable's logs are: how many ticks the slope rises for each cube it runs in from
+        /// that end, from the log's foot there; none, sawn square.
+        lean: [i32; 2],
     },
     /// A board round an opening: a jamb, a head or a sill.
-    Board { min: Vec3, max: Vec3 },
+    Board { min: Place, max: Place },
     /// A door or window set into an opening, filling the box from `min` to `max`, its face
     /// across the wall, which runs along X or along Z.
     Opening {
-        min: Vec3,
-        max: Vec3,
+        min: Place,
+        max: Place,
         along_x: bool,
         door: bool,
     },
     /// A sawn member of a deck from one end to the other along its middle (`floors`): a
-    /// board, a joist or a rim beam, so wide across and so high; its seed is its version.
+    /// board, a joist or a rim beam, so wide across and so high, in ticks; its seed is its
+    /// version.
     Plank {
-        from: Vec3,
-        to: Vec3,
-        wide: f32,
-        high: f32,
+        from: Place,
+        to: Place,
+        wide: i32,
+        high: i32,
         seed: u32,
     },
     /// A block kind's cube (`blocks`), drawn as part of its kind's surface (`surface.rs`),
     /// counted in cubes.
     Block { cube: IVec3 },
+    /// A block kind's cube over the top of its wall, under a roof (`roofs::gables`): its
+    /// surface cut off at the roof's underside, whose height in ticks over the cube's top,
+    /// at its corners, the middles of its sides and its middle, west to east and north to
+    /// south, is `under`.
+    Gable { cube: IVec3, under: [[i32; 3]; 3] },
+    /// A square of a roof's covering (`roofs`), half a cube across: its
+    /// corners on the roof's top, north-west, north-east, south-east and south-west, and
+    /// its middle; its courses' lower edges, the first's height and how far apart, in
+    /// ticks; which of its sides, north, east, south and west, no covering carries on past.
+    Covering {
+        corners: [Place; 4],
+        middle: Place,
+        courses: (i32, i32),
+        open: [bool; 4],
+        cell: roofs::RoofCell,
+    },
+    /// A long piece of a roof (`roofs`), along its line from one end to the other: a rafter
+    /// along its middle, the rest along the roof's top. `sides` are a point on the roof
+    /// either side of it; for an edge, the second is beyond it.
+    Roof {
+        part: roofs::RoofPart,
+        from: Place,
+        to: Place,
+        sides: [Place; 2],
+        seed: u32,
+        cell: roofs::RoofCell,
+    },
 }
 
 impl Piece {
-    /// The box it fills in a wall or floor, if it stands in the base's cubes: not a door
-    /// or window, which is not part of the plan.
+    /// The box it fills in a wall or floor, in metres, if it stands in the base's cubes:
+    /// not a door or window, which is not part of the plan, nor a piece of roof.
     pub fn bounds(&self) -> Option<(Vec3, Vec3)> {
         match *self {
             Piece::Log { from, to, .. } => {
+                let (from, to) = (from.metres(), to.metres());
                 let r = Vec3::splat(0.15);
                 Some((from.min(to) - r, from.max(to) + r))
             }
@@ -87,27 +152,62 @@ impl Piece {
                 high,
                 ..
             } => {
+                let (from, to) = (from.metres(), to.metres());
                 let along = (to - from).normalize_or_zero();
-                let across = Vec3::Y.cross(along).abs() * (wide * 0.5);
-                let up = Vec3::Y * (high * 0.5);
+                let across = Vec3::Y.cross(along).abs() * (metres(wide) * 0.5);
+                let up = Vec3::Y * (metres(high) * 0.5);
                 Some((from.min(to) - across - up, from.max(to) + across + up))
             }
-            Piece::Board { min, max } => Some((min, max)),
-            Piece::Block { cube } => {
+            Piece::Board { min, max } => Some((min.metres(), max.metres())),
+            Piece::Block { cube } | Piece::Gable { cube, .. } => {
                 let low = cube.as_vec3() * CELL_M;
                 Some((low, low + Vec3::splat(CELL_M)))
             }
-            Piece::Opening { .. } => None,
+            Piece::Opening { .. } | Piece::Covering { .. } | Piece::Roof { .. } => None,
+        }
+    }
+
+    /// The roof cell it goes up with, and in which stage, if it is part of a roof.
+    pub fn roof_cell(&self) -> Option<roofs::RoofCell> {
+        match *self {
+            Piece::Covering { cell, .. } | Piece::Roof { cell, .. } => Some(cell),
+            _ => None,
         }
     }
 
     /// The lowest point of it, which orders the pieces as they go in.
     fn bottom(&self) -> f32 {
         match self {
-            Piece::Log { from, to, .. } => from.y.min(to.y),
-            Piece::Plank { from, to, high, .. } => from.y.min(to.y) - high * 0.5,
-            Piece::Board { min, .. } | Piece::Opening { min, .. } => min.y,
-            Piece::Block { cube } => cube.y as f32 * CELL_M,
+            Piece::Log { from, to, .. } => from.metres().y.min(to.metres().y),
+            Piece::Plank { from, to, high, .. } => {
+                from.metres().y.min(to.metres().y) - metres(*high) * 0.5
+            }
+            Piece::Board { min, .. } | Piece::Opening { min, .. } => min.metres().y,
+            Piece::Block { cube } | Piece::Gable { cube, .. } => cube.y as f32 * CELL_M,
+            // A roof after the walls under it, a stage at a time, each from its eaves up.
+            Piece::Covering { corners, cell, .. } => {
+                let low = corners
+                    .iter()
+                    .map(|c| c.metres().y)
+                    .fold(f32::MAX, f32::min);
+                low + 20.0 * f32::from(cell.stage)
+            }
+            // Its caps and flashing once its covering is on.
+            Piece::Roof {
+                from,
+                to,
+                cell,
+                part,
+                ..
+            } => {
+                let last = matches!(
+                    part,
+                    roofs::RoofPart::Ridge | roofs::RoofPart::Hip | roofs::RoofPart::Flashing
+                );
+                from.metres().y.min(to.metres().y)
+                    + 20.0 * f32::from(cell.stage)
+                    + if last { 10.0 } else { 0.0 }
+            }
         }
     }
 }
@@ -263,13 +363,28 @@ pub fn drawn_fill(cube: &crate::Cube) -> Fill {
     }
 }
 
-/// Lays every wall of a base in the kit's kind: as blocks, or as long members.
+/// Lays everything of a base in the kit's kind, as [`lay_among`] does, with the kit the
+/// only one there is.
 pub fn lay(base: &Base, kit: &Kit) -> Layout {
+    lay_among(base, kit, &Kits(vec![kit.clone()]))
+}
+
+/// Lays everything of a base built in one of `kits`' kinds, `kit`: its walls, as blocks or
+/// as long members, and their gables, and its roofs, which meet the other kits' (`roofs`).
+pub fn lay_among(base: &Base, kit: &Kit, kits: &Kits) -> Layout {
+    let mut layout = lay_walls(base, kit, kits);
+    roofs::lay(base, kit, kits, &mut layout.pieces);
+    sort(&mut layout);
+    layout
+}
+
+/// A kit's walls and their gables.
+fn lay_walls(base: &Base, kit: &Kit, kits: &Kits) -> Layout {
     if kit.pattern == Pattern::Masonry {
         let mut layout = Layout {
             pieces: blocks::lay(base, kit),
         };
-        sort(&mut layout);
+        roofs::gables(base, kit, kits, &mut layout.pieces);
         return layout;
     }
     let walls = Walls {
@@ -289,6 +404,7 @@ pub fn lay(base: &Base, kit: &Kit) -> Layout {
         }
         return layout;
     }
+    let mut gabled = Vec::new();
     for axis in [Axis::X, Axis::Z] {
         // Each row of cubes running this way, with how far along it and how high its
         // cubes go.
@@ -314,15 +430,19 @@ pub fn lay(base: &Base, kit: &Kit) -> Layout {
                 &mut layout,
             );
             trims::frames(&walls, kit, axis, row, &mut layout);
-            runs::gables(&walls, kit, axis, row, (first, last), &mut layout);
+            gabled.push((axis, row, (first, last)));
         }
     }
     runs::posts(&walls, &ours, &mut layout);
-    runs::under_roofs(base, kit, &mut layout);
     if kit.textures.contains_key(&Material::Floor) {
         floors::decks(base, kit, &mut layout);
     }
-    sort(&mut layout);
+    let fields = roofs::Field::all(base, kits);
+    runs::under_roofs(&fields, kit, &mut layout);
+    // Gables after, as their logs are cut to the roof already.
+    for (axis, row, ends) in gabled {
+        runs::gables(&walls, kit, &fields, axis, row, ends, &mut layout);
+    }
     layout
 }
 
@@ -437,7 +557,7 @@ pub(crate) mod tests {
             .filter_map(|piece| match *piece {
                 Piece::Log {
                     from, to, split, ..
-                } => Some((from, to, split)),
+                } => Some((from.metres(), to.metres(), split)),
                 _ => None,
             })
             .collect()
@@ -509,6 +629,22 @@ pub(crate) mod tests {
         let cut = lay(&base, &kit());
         assert!(boards(&cut) > boards(&whole), "framed");
         assert!(logs(&cut).len() > logs(&whole).len(), "its logs cut in two");
+    }
+
+    #[test]
+    fn pieces_are_placed_in_whole_ticks_of_the_grid() {
+        // A cube is so many ticks, and metres come back as they went in to within half a
+        // tick; a place on the grid's lines is exact.
+        assert_eq!(Place::near(Vec3::new(0.5, 3.0, -0.25)).0, [256, 1536, -128]);
+        let point = Vec3::new(1.4213, 0.1337, 2.9707);
+        let error = (Place::near(point).metres() - point).abs().max_element();
+        assert!(error <= CELL_M / TICKS as f32 * 0.5, "{error}");
+        assert_eq!(metres(ticks(0.125)), 0.125);
+        // Every piece of a cabin is in the grid, with its version from its place.
+        let mut base = cabin();
+        wall(&mut base, [[3, 0, 5], [4, 0, 5]], Panel::Door);
+        let layout = lay(&base, &textured());
+        assert!(layout.pieces.iter().any(|p| matches!(p, Piece::Log { .. })));
     }
 
     #[test]

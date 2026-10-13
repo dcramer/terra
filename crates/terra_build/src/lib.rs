@@ -43,6 +43,7 @@ mod mesh;
 pub mod ops;
 pub mod order;
 pub mod relief;
+pub mod roofing;
 pub mod rooms;
 pub mod save;
 pub mod support;
@@ -599,6 +600,30 @@ impl Base {
         self.has_roof(tile) || self.sections.iter().any(|section| section.covers(tile))
     }
 
+    /// The kind a roof is built in: its own, or for one the shortcuts put up, the kind of
+    /// most of the walls under it, the lowest of those as many.
+    pub fn roof_kind(&self, roof: &Roof) -> Option<Kind> {
+        roof.kind.or_else(|| {
+            let (min, max) = (roof.section.min, roof.section.max);
+            let mut counts: BTreeMap<Kind, usize> = BTreeMap::new();
+            for x in min[0]..=max[0] {
+                for z in min[2]..=max[2] {
+                    let tile = IVec3::new(x, min[1], z);
+                    if self.walls.contains_key(&tile.to_array())
+                        && let Some(kind) = self.kind(tile)
+                    {
+                        *counts.entry(kind).or_default() += 1;
+                    }
+                }
+            }
+            let most = counts.values().copied().max()?;
+            counts
+                .into_iter()
+                .find(|&(_, n)| n == most)
+                .map(|(kind, _)| kind)
+        })
+    }
+
     /// The pitched roofs, in the order they were put up.
     pub fn sections(&self) -> &[RoofSection] {
         &self.sections
@@ -1030,25 +1055,22 @@ impl Base {
     /// logs, in the order they go in, to draw as they stand.
     pub fn mesh_with_kits(&self, kits: &kit::Kits) -> (BaseMesh, Vec<layout::Layout>) {
         let mesh = self.mesh_for_kits(kits);
-        let layouts = kits.0.iter().map(|kit| layout::lay(self, kit)).collect();
+        let layouts = kits
+            .0
+            .iter()
+            .map(|kit| layout::lay_among(self, kit, kits))
+            .collect();
         (mesh, layouts)
     }
 
-    /// The base as triangles, its walls of a kind with a kit left to the kit, and its
-    /// floors and roofs in the kits' colours.
+    /// The base as triangles, its walls and pitched roofs of a kind with a kit left to the
+    /// kit, and its floors and flat roofs in the kits' colours.
     pub fn mesh_for_kits(&self, kits: &kit::Kits) -> BaseMesh {
         mesh::build(self, |kind| {
             kits.of(kind).map(|kit| mesh::KitLook {
-                gable: kit.colours.board,
                 floor: kit.colours.light,
                 roof: kit.colours.roof,
                 side: kit.colours.dark,
-                eaves: kit.eaves,
-                textures: kit
-                    .textures
-                    .iter()
-                    .map(|(material, texture)| (*material, texture.metres))
-                    .collect(),
             })
         })
     }

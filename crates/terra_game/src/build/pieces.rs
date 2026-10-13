@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use terra_build::kit::{Kit, KitModels, Kits};
-use terra_build::layout::Piece;
+use terra_build::layout::{Piece, Place};
 
 /// A model, ready to place: each of its parts, and the box round it all, in its own space;
 /// for a door cut into its frame and its leaf (`tools/props/split.py`), which parts are the
@@ -262,8 +262,8 @@ pub(super) fn opening(
     swing: f32,
 ) -> Vec<(Handle<Mesh>, Handle<StandardMaterial>, Transform)> {
     let piece = Piece::Opening {
-        min,
-        max,
+        min: Place::near(min),
+        max: Place::near(max),
         along_x,
         door,
     };
@@ -304,6 +304,7 @@ fn fitted<'a>(kit: &'a KitPieces, piece: &Piece) -> Vec<(&'a Model, Transform)> 
         .iter()
         .map(|model| {
             let x = if along_x { Vec3::X } else { Vec3::Z };
+            let (min, max) = (min.metres(), max.metres());
             let size = max - min;
             let width = if along_x { size.x } else { size.z };
             let depth = if along_x { size.z } else { size.x };

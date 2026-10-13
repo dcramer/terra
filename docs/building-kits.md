@@ -30,7 +30,7 @@ Each log differs from the next by its seed, from its place, by as much as the ki
 
 **Block kinds are not pieces** (D197): stone, brick, plaster and earth are drawn as their cubes' own surface, each face a fine grid, rounded along every outside edge and pushed out by its material's height, so a wall of any shape, carved anywhere, is one wall with no seams (`terra_build::surface`; [research/block-modules.md](../research/block-modules.md)). The stone kit is rough fieldstone, Poly Haven's `stone_wall` (CC0); its file gives the bevel (4 cm) and how far the stone stands out (5 cm). A plan's progress counts its cubes from the bottom up, and the cubes in, the next and the rest are drawn as three surfaces, so the ghost and a wall going up work as for logs. A timber lintel spans every opening with wall above it; doors and windows are fitted props (D193).
 
-**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for timber; masonry, for block kinds drawn as their surface), its sizes, its timber (profile, notch, sides, taper, bend, unevenness, bark relief, daub, tints and how much each log varies), its materials, its props' models and its cost. A pine cabin, an oak one and a hewn-timber one are three files; nothing about a kind of timber is code. The log kit is `logs.ron`.
+**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for timber; masonry, for block kinds drawn as their surface), its sizes, its timber (profile, notch, sides, taper, bend, unevenness, bark relief, daub, tints and how much each log varies), its materials, its props' models and its cost. A pine cabin, an oak one and a hewn-timber one are three files; nothing about a kind of timber is code. The log kit is `logs.ron`, under shakes; `hewn.ron` is hewn beams under thatch; `stone.ron` is fieldstone under slate.
 
 ## Drawing them
 
@@ -112,6 +112,21 @@ Built 2026-10-12: a base is laid by every kit in `assets/data/kits/` at once, ea
 **Door steps** are stone slabs from each ground-floor door in an outside wall down to the ground, a riser of no more than 18 cm each, set into the ground; none where the threshold is less than a step up.
 
 **Doors** are fitted props whose model is cut into a frame, which stays in the opening, and a leaf, which swings into the room on its hinge (D207).
+## Roofs (D209)
+
+A kit lays its own roofs, from the shape the roof's sections make over the walls (`terra_build::layout::roofs`, drawn by `roofing`): a gable, a hip or a lean-to over any plan, an L, T or U getting its valleys and its ridges dying into one another from the sections alone. In the order a roof goes up, a stage of its cells at a time:
+
+| Stage | Pieces |
+|---|---|
+| Frame | A rafter up the slope at every cube, in the kit's timber (round poles for logs and thatch, hewn for stone), and a beam under every ridge, hip and valley |
+| Battens | One under the foot of each course, along the face |
+| Covering | The covering a square at a time, from the eaves up; boards along the eaves (fascia) and the verges (bargeboards); then caps over ridges and hips (two boards, or a roll of the covering), valley boards, and a mortar fillet where a wall stands up through the roof |
+
+The covering is courses, level up the slope so they run round a hip, each stepping out at its butt by the kit's amount, wandering a little along it; the texture is laid so its rows sit on the steps, each course shifted along so no two rows repeat. Shakes over pine logs, slates (Poly Haven's `grey_roof_tiles_02`) over stone, a foot of thatch (`riet_01`) over hewn timber: each kit's `roof` numbers and its `Covering` material, so a roof is data too.
+
+**Gables close to the roof.** Over a timber wall the courses carry on up, each log's ends cut to the slope over it; over a block kind's wall its cubes carry on up as its own surface, cut off at the roof's underside, so a stone end wall is stone to the ridge.
+
+A ghost's covering is a plain sheet, without its courses, which costs a tenth as much to draw.
 
 ## Checking it
 
@@ -142,7 +157,7 @@ Built:
 
 ![A log cabin from the kit sheet, late in the day](images/log-cabin-2026-10-12.png)
 
-**Not yet:** the late corner, which needs parts with their own history (step 3); a tool for carving cubes by hand, though the operation is there and the sheet shows it; saddle notches cut into the logs, rather than logs meeting; roofs and floors with kits of their own; stone gables, so a stone wall under a gable carries boards above its eaves for now; stone cut to a roof's slope; seams between stone sections, which still show faintly.
+**Not yet:** the late corner, which needs parts with their own history (step 3); a tool for carving cubes by hand, though the operation is there and the sheet shows it; saddle notches cut into the logs, rather than logs meeting; floors with kits of their own; seams between stone sections, which still show faintly.
 
 **Doors and windows are not part of a plan** (the developers, 2026-10-12: "when you're building blueprints/etc, they dont have doors attached ... showing a partial ghost with a door does not reflect how the game should work"). A plan and a building going up show the opening and its frame only; the door or window is its own item, fitted once the building is up (construction.md). They are laid last.
 

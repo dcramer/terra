@@ -84,6 +84,32 @@ pub fn draw(
     out: &mut Surface,
     tops: &mut Surface,
 ) {
+    draw_cut(
+        cubes,
+        hides,
+        look,
+        heights,
+        &|_, _| f32::MAX,
+        colour,
+        out,
+        tops,
+    );
+}
+
+/// As [`draw`], with each cube's surface cut off at a height over each point of it, as a
+/// gable's is at its roof's underside: `cut` gives it for a cube and a point of its face
+/// before it is rounded, nothing of the face going higher.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_cut(
+    cubes: &BTreeSet<[i32; 3]>,
+    hides: &dyn Fn(IVec3) -> bool,
+    look: &Look,
+    heights: &Heights,
+    cut: &dyn Fn(IVec3, Vec3) -> f32,
+    colour: [f32; 3],
+    out: &mut Surface,
+    tops: &mut Surface,
+) {
     let full = |at: IVec3| cubes.contains(&at.to_array()) || hides(at);
     let n = look.steps.max(1) as usize;
     // Each cube shrunk by the bevel on every side nothing hides.
@@ -204,10 +230,18 @@ pub fn draw(
                         point(i + 1, j + 1),
                         point(i, j + 1),
                     ];
-                    let placed = corners.map(place);
+                    let mut placed = corners.map(place);
+                    for (q, p) in placed.iter_mut().zip(corners) {
+                        q.y = q.y.min(cut(cube, p));
+                    }
                     let mapped = corners.map(|p| planar(p, normal, metres));
                     for [x, y, z] in [[0, 1, 2], [0, 2, 3]] {
                         let (y, z) = if flip { (z, y) } else { (y, z) };
+                        let (a, b, c) = (placed[x], placed[y], placed[z]);
+                        // Cut away to nothing.
+                        if (b - a).cross(c - a).length_squared() < 1e-12 {
+                            continue;
+                        }
                         triangles.push([placed[x], placed[y], placed[z]]);
                         uvs.push([mapped[x], mapped[y], mapped[z]]);
                         on_top.push(top);

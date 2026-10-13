@@ -1,10 +1,10 @@
 //! Turning a base's cubes into triangles.
 //!
-//! Walls of a kind with a kit are left to the kit, which lays its own pieces
-//! (`layout`, `timber`); everything else is drawn here: walls of the plain kind as their cubes, a
-//! floor or flat roof as its cubes with a floor's colour on top and a ceiling's under it,
-//! glass as a pane up the middle of its wall, the gable over a wall up to a pitched roof,
-//! and the roof itself.
+//! Walls and pitched roofs of a kind with a kit are left to the kit, which lays its own
+//! pieces (`layout`, `timber`, `roofing`); everything else is drawn here: walls of the plain
+//! kind as their cubes, a floor or flat roof as its cubes with a floor's colour on top and a
+//! ceiling's under it, glass as a pane up the middle of its wall, the gable over a plain
+//! wall up to a pitched roof, and a plain roof itself.
 
 use crate::{Base, CELL_M, Fill, IVec3, Kind, STOREY_CUBES, STOREY_M, storey_of, wall_layer};
 use glam::Vec3;
@@ -20,31 +20,24 @@ const FLOOR: [f32; 3] = [0.6, 0.45, 0.33];
 const CEILING: [f32; 3] = [0.93, 0.91, 0.86];
 const GLASS: [f32; 3] = [0.55, 0.8, 0.9];
 
-/// How thick a pitched roof is: enough that its edge reads.
+/// How thick a pitched roof is under its covering: its rafters and battens. Walls and their
+/// gables stop under it.
 pub(crate) const ROOF_THICK_M: f32 = 0.15;
-/// How far a pitched roof overhangs its walls, at its eaves and its gable ends (D175),
-/// where no kit says otherwise.
+/// How far a pitched roof of no kit overhangs its walls, at its eaves and its gable ends
+/// (D175).
 const EAVES_M: f32 = 0.5;
 /// How finely a pitched roof is sampled, in metres: a quarter of a cell, on which every
 /// ridge, hip and valley of a roof over walls in four directions falls, or on its
 /// diagonals (research/procedural-buildings.md).
 const ROOF_STEP_M: f32 = CELL_M * 0.5;
-/// Half the thickness of the boards behind a kit's gable.
-const GABLE_BACKING_M: f32 = 0.05;
 
-/// The colours a kit gives what it does not lay itself: its floors, roofs and the boards
-/// behind its gables.
+/// The colours a kit gives what it does not lay itself: its floors and flat roofs.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KitLook {
-    pub gable: [f32; 3],
     pub floor: [f32; 3],
     pub roof: [f32; 3],
-    /// The sides and undersides of its floors, the edge and underside of its roof.
+    /// The sides and undersides of its floors and flat roofs.
     pub side: [f32; 3],
-    /// How far its roofs overhang its walls.
-    pub eaves: f32,
-    /// The size in metres of each of its materials' textures, for those it has.
-    pub textures: BTreeMap<Material, [f32; 2]>,
 }
 
 /// What a surface is drawn in: plain colour from each triangle, or one of a kit's
@@ -61,14 +54,17 @@ pub enum Material {
     Daub,
     /// Boards: round openings, under and along a roof's edge.
     Board,
-    /// A roof's covering.
-    Shakes,
+    /// A roof's covering: shakes, slates or thatch.
+    #[serde(alias = "Shakes")]
+    Covering,
     /// A footing's stone.
     Stone,
     /// A floor's planks.
     Floor,
     /// A block kind's surface: stone, brick, plaster, earth (D197).
     Masonry,
+    /// Mortar where a roof meets a wall standing above it.
+    Flashing,
 }
 
 /// Surfaces by what they are drawn in.
@@ -297,8 +293,10 @@ pub(crate) fn build(base: &Base, kit: impl Fn(Kind) -> Option<KitLook>) -> BaseM
         }
     }
     for (tile, _) in base.walls() {
-        let look = base.kind(tile).and_then(&kit);
-        gable(&mut mesh, base, tile, look);
+        // A kit lays its own gables (`layout::runs`, `layout::roofs`).
+        if base.kind(tile).and_then(&kit).is_none() {
+            gable(&mut mesh, base, tile);
+        }
     }
     pitched_roofs(&mut mesh, base, &kit);
     mesh
@@ -324,10 +322,9 @@ fn pane(mesh: &mut BaseMesh, base: &Base, at: IVec3) {
 }
 
 /// The wall carried up to a pitched roof over it, as far as the roof's underside, so a
-/// gable end is closed and a wall inside meets the slope: as the wall's own faces for a
-/// plain wall, as boards up its middle behind a kit's own gable. In two pieces along the
-/// tile, so a ridge over its middle is followed.
-fn gable(mesh: &mut BaseMesh, base: &Base, tile: IVec3, look: Option<KitLook>) {
+/// gable end is closed and a wall inside meets the slope, as the wall's own faces. In two
+/// pieces along the tile, so a ridge over its middle is followed.
+fn gable(mesh: &mut BaseMesh, base: &Base, tile: IVec3) {
     let top_layer = wall_layer(tile.y) + STOREY_CUBES - 1;
     if base.cube(IVec3::new(tile.x, top_layer, tile.z)).is_none() {
         return;
@@ -345,19 +342,14 @@ fn gable(mesh: &mut BaseMesh, base: &Base, tile: IVec3, look: Option<KitLook>) {
     if rise(0.5, 0.0).is_none() {
         return;
     }
-    let (depth, front, back) = match look {
-        Some(look) => (GABLE_BACKING_M, look.gable, look.gable),
-        None => {
-            let side = |out: Vec3| {
-                if base.contains(tile + out.round().as_ivec3()) {
-                    INNER_WALL
-                } else {
-                    HULL
-                }
-            };
-            (CELL_M * 0.5, side(normal), side(-normal))
+    let side = |out: Vec3| {
+        if base.contains(tile + out.round().as_ivec3()) {
+            INNER_WALL
+        } else {
+            HULL
         }
     };
+    let (depth, front, back) = (CELL_M * 0.5, side(normal), side(-normal));
     let height = origin.y + STOREY_M;
     let at = |across: f32, up: f32, out: f32| (origin + right * across).with_y(up) + normal * out;
     for (out, colour) in [(depth, front), (-depth, back)] {
@@ -390,37 +382,23 @@ fn gable(mesh: &mut BaseMesh, base: &Base, tile: IVec3, look: Option<KitLook>) {
     }
 }
 
-/// How a square of roof is drawn: its top's colour and its underside's, and the sizes of its
-/// covering's and its boards' textures, where the kit has them.
-type SquareLook = ([f32; 3], [f32; 3], Option<[f32; 2]>, Option<[f32; 2]>);
-
-/// Every pitched roof, as its height above the walls sampled on a fine lattice: each small
-/// square in four triangles from its middle, so the faces are as flat as the roof. It
-/// overhangs its walls by its eaves, carried on down at its pitch, and its edge shows its
-/// thickness. Its top is roof, in the kit's colour of the walls under it, where a kit's
-/// covering does not lie over it; its edge and underside the kit's dark wood.
+/// Every pitched roof of no kit's kind, as its height above the walls sampled on a fine
+/// lattice: each small square in four triangles from its middle, so the faces are as flat
+/// as the roof. It overhangs its walls by its eaves, carried on down at its pitch, and its
+/// edge shows its thickness. A kit lays its own roofs (`layout::roofs`).
 fn pitched_roofs(mesh: &mut BaseMesh, base: &Base, kit: &impl Fn(Kind) -> Option<KitLook>) {
     let per = (CELL_M / ROOF_STEP_M).round() as i32;
-    let look_of =
-        |section: &crate::RoofSection| base.kind(IVec3::from_array(section.min)).and_then(kit);
-    let eaves_of = |section: &crate::RoofSection| look_of(section).map_or(EAVES_M, |l| l.eaves);
-    let mut squares: BTreeMap<[i32; 3], SquareLook> = BTreeMap::new();
-    for section in base.sections() {
-        let look = look_of(section);
-        let (top, under) = look
-            .as_ref()
-            .map_or((ROOF, CEILING), |look| (look.roof, look.side));
-        let textures = look.map(|look| look.textures).unwrap_or_default();
-        let colours = (
-            top,
-            under,
-            textures.get(&Material::Shakes).copied(),
-            textures.get(&Material::Board).copied(),
-        );
-        let out = (eaves_of(section) / ROOF_STEP_M).round() as i32;
+    let out = (EAVES_M / ROOF_STEP_M).round() as i32;
+    let mut squares: BTreeMap<[i32; 3], ()> = BTreeMap::new();
+    for (_, roof) in base.roofs() {
+        let section = &roof.section;
+        let kind = base.roof_kind(roof);
+        if kind.and_then(kit).is_some() {
+            continue;
+        }
         for x in section.min[0] * per - out..(section.max[0] + 1) * per + out {
             for z in section.min[2] * per - out..(section.max[2] + 1) * per + out {
-                squares.entry([x, section.storey(), z]).or_insert(colours);
+                squares.insert([x, section.storey(), z], ());
             }
         }
     }
@@ -428,11 +406,11 @@ fn pitched_roofs(mesh: &mut BaseMesh, base: &Base, kit: &impl Fn(Kind) -> Option
         base.sections()
             .iter()
             .filter(|section| section.storey() == storey)
-            .filter_map(|section| section.rise_beyond(at, eaves_of(section)))
+            .filter_map(|section| section.rise_beyond(at, EAVES_M))
             .max_by(|a, b| a.total_cmp(b))
     };
     let down = Vec3::Y * ROOF_THICK_M;
-    for (&[x, storey, z], &(top, under, covering, boards)) in &squares {
+    for &[x, storey, z] in squares.keys() {
         let eaves = (storey + 1) as f32 * STOREY_M;
         let at = |dx: f32, dz: f32| {
             let along =
@@ -451,34 +429,9 @@ fn pitched_roofs(mesh: &mut BaseMesh, base: &Base, kit: &impl Fn(Kind) -> Option
             } else {
                 (a, b, normal)
             };
-            match covering {
-                // Its covering's rows along the slope's level, their lower edges down it.
-                Some(metres) => {
-                    let level = Vec3::Y.cross(normal).normalize_or(Vec3::X);
-                    let up = normal.cross(level);
-                    let uv = |p: Vec3| [p.dot(level) / metres[0], -p.dot(up) / metres[1]];
-                    mesh.textured.of(Material::Shakes).textured(
-                        [middle, a, b],
-                        [normal; 3],
-                        [uv(middle), uv(a), uv(b)],
-                        [1.0; 3],
-                    );
-                }
-                None => mesh.structure.triangle([middle, a, b], normal, top),
-            }
-            let under_side = [middle - down, b - down, a - down];
-            match boards {
-                Some(metres) => {
-                    let uvs = under_side.map(|p| planar(p, -normal, metres));
-                    mesh.textured.of(Material::Board).textured(
-                        under_side,
-                        [-normal; 3],
-                        uvs,
-                        [1.0; 3],
-                    );
-                }
-                None => mesh.structure.triangle(under_side, -normal, under),
-            }
+            mesh.structure.triangle([middle, a, b], normal, ROOF);
+            mesh.structure
+                .triangle([middle - down, b - down, a - down], -normal, CEILING);
         }
         // Its edge, where no square of roof carries on.
         for (step, (a, b)) in [
@@ -491,17 +444,8 @@ fn pitched_roofs(mesh: &mut BaseMesh, base: &Base, kit: &impl Fn(Kind) -> Option
                 continue;
             }
             let normal = Vec3::new(step[0] as f32, 0.0, step[1] as f32);
-            match boards {
-                Some(metres) => mesh.textured.of(Material::Board).planar_quad(
-                    [a - down, b - down, b, a],
-                    normal,
-                    metres,
-                    [1.0; 3],
-                ),
-                None => mesh
-                    .structure
-                    .quad([a - down, b - down, b, a], normal, under),
-            }
+            mesh.structure
+                .quad([a - down, b - down, b, a], normal, UNDERSIDE);
         }
     }
 }
@@ -625,82 +569,30 @@ mod tests {
     }
 
     #[test]
-    fn walls_with_a_kit_are_left_to_it_and_their_roof_takes_its_colour() {
+    fn walls_and_pitched_roofs_with_a_kit_are_left_to_it() {
         let look = KitLook {
-            gable: [0.0; 3],
             floor: [0.0; 3],
             roof: [1.0, 0.0, 0.0],
             side: [0.0; 3],
-            eaves: 0.5,
-            textures: BTreeMap::new(),
         };
         let plain = room().mesh(|_| None);
         let kitted = room().mesh(|_| Some(look.clone()));
         assert!(kitted.structure.triangle_count() < plain.structure.triangle_count());
-        assert!(kitted.structure.colours.contains(&[1.0, 0.0, 0.0]));
-    }
-
-    #[test]
-    fn a_kit_with_textures_covers_its_roof_boards_under_it_and_boards_its_gables() {
-        let shakes = [3.2, 1.6];
-        let look = KitLook {
-            gable: [0.0, 0.0, 1.0],
-            floor: [0.0; 3],
-            roof: [1.0, 0.0, 0.0],
-            side: [0.0; 3],
-            eaves: 0.5,
-            textures: BTreeMap::from([(Material::Shakes, shakes), (Material::Board, [2.0, 2.0])]),
-        };
-        let e = look.eaves;
-        let mesh = room().mesh(|_| Some(look.clone()));
-        let roof = room_roof;
-        // Covered all over, eaves and all, on the roof, its rows along the ridge.
-        let covering = &mesh.textured.0[&Material::Shakes];
-        let mut area = 0.0;
-        for ((corners, normals), uvs) in covering
-            .positions
-            .chunks(3)
-            .zip(covering.normals.chunks(3))
-            .zip(covering.uvs.chunks(3))
-        {
-            for (corner, uv) in corners.iter().zip(uvs) {
-                assert!(
-                    (corner.y - roof(corner.z)).abs() < 1e-4,
-                    "{corner} off the roof"
-                );
-                assert!(
-                    ((uv[0] * shakes[0]).abs() - corner.x.abs()).abs() < 1e-3,
-                    "{uv:?}"
-                );
-            }
-            assert!(normals.iter().all(|n| n.y > 0.0));
-            let [a, b, c] = [0, 1, 2].map(|i| glam::Vec2::new(corners[i].x, corners[i].z));
-            area += (b - a).perp_dot(c - a).abs() * 0.5;
-        }
-        let whole = (3.0 + 2.0 * e) * (2.5 + 2.0 * e);
-        assert!((area - whole).abs() < 1e-3, "{area} of {whole}");
-        // Nothing of the plain roof is left up there.
-        let plain_roof = mesh
-            .structure
-            .positions
-            .iter()
-            .zip(&mesh.structure.colours)
-            .any(|(p, colour)| *colour == look.roof && p.y > 1.0);
-        assert!(!plain_roof);
-        // Boards under it and round its edge, no higher than its top nor lower than its
-        // thickness under it.
-        let boards = &mesh.textured.0[&Material::Board];
-        assert!(boards.triangle_count() > 0);
-        for p in &boards.positions {
-            let top = roof(p.z);
-            assert!(p.y <= top + 1e-4 && p.y >= top - ROOF_THICK_M - 1e-4, "{p}");
-        }
-        // The gables' boards, up the middle of their walls and up to the roof.
-        for (p, n) in up_to_the_roof(&mesh, &[look.gable]) {
-            let across = if n.x.abs() > 0.5 { p.x } else { p.z };
-            let off_middle = across - ((across / CELL_M).floor() + 0.5) * CELL_M;
-            assert!((off_middle.abs() - GABLE_BACKING_M).abs() < 1e-4, "{p} {n}");
-            assert!(p.y >= STOREY_M - 1e-4, "{p}");
-        }
+        // Neither its roof nor its gables: nothing over the walls' tops.
+        assert!(
+            plain
+                .structure
+                .positions
+                .iter()
+                .any(|p| p.y > STOREY_M + 0.1)
+        );
+        assert!(
+            kitted
+                .structure
+                .positions
+                .iter()
+                .all(|p| p.y <= STOREY_M + 1e-4)
+        );
+        assert!(kitted.textured.0.is_empty());
     }
 }

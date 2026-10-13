@@ -162,7 +162,7 @@ pub(super) fn redraw(
             let layouts: Vec<layout::Layout> = kits
                 .0
                 .iter()
-                .map(|kit| layout::lay(&site.base, kit))
+                .map(|kit| layout::lay_among(&site.base, kit, &kits))
                 .collect();
             let laid: Vec<(&Kit, &[Piece])> = kits
                 .0
@@ -380,17 +380,30 @@ fn draw_blocks(
         return Default::default();
     }
     let mut sets: [std::collections::BTreeSet<[i32; 3]>; 3] = Default::default();
+    // A gable's cubes, with the roof's underside over each, which cuts them.
+    let mut gables: BTreeMap<[i32; 3], [[i32; 3]; 3]> = BTreeMap::new();
     for (piece, state) in pieces.iter().zip(states) {
-        if let Piece::Block { cube } = piece {
-            let set = match state {
-                State::In => 0,
-                State::Next => 2,
-                State::Ghost => 1,
-                State::Left => continue,
-            };
-            sets[set].insert(cube.to_array());
-        }
+        let cube = match piece {
+            Piece::Block { cube } => cube,
+            Piece::Gable { cube, under } => {
+                gables.insert(cube.to_array(), *under);
+                cube
+            }
+            _ => continue,
+        };
+        let set = match state {
+            State::In => 0,
+            State::Next => 2,
+            State::Ghost => 1,
+            State::Left => continue,
+        };
+        sets[set].insert(cube.to_array());
     }
+    let cut = |cube: IVec3, at: Vec3| {
+        gables
+            .get(&cube.to_array())
+            .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at))
+    };
     let look = block_look(kit);
     let sides = |uv: [f32; 2]| relief.map_or(0.5, |relief| relief.at(uv));
     let top = |uv: [f32; 2]| top.map_or(0.5, |relief| relief.at(uv));
@@ -413,11 +426,12 @@ fn draw_blocks(
         let built = &sets[0];
         let hides = |at: IVec3| hides_always(at) || (set != 0 && built.contains(&at.to_array()));
         let mut tops = Surface::default();
-        terra_build::surface::draw(
+        terra_build::surface::draw_cut(
             &sets[set],
             &hides,
             &look,
             &heights,
+            &cut,
             colour,
             out[set].of(Material::Masonry),
             &mut tops,
@@ -455,7 +469,8 @@ fn draw_kit(
             .iter()
             .map(|(material, surface)| (*material, surface.colours.len()))
             .collect();
-        terra_build::draw::draw(piece, kit, face, surfaces);
+        let plain = *state == State::Ghost;
+        terra_build::draw::draw_as(piece, kit, face, plain, surfaces);
         if *state == State::Ghost {
             let shade = if index % 2 == 0 { 1.0 } else { 0.86 };
             let colour = GHOST.map(|c| c * shade);
@@ -502,6 +517,22 @@ fn states(pieces: &[Piece], build: &Build, by_cubes: bool) -> Vec<State> {
         .map(|piece| {
             if opening(piece) {
                 return State::Left;
+            }
+            // A piece of roof is up with its cell's stage; the stage after is next once
+            // nothing of the walls is.
+            if let Some(cell) = piece.roof_cell() {
+                let stage = build
+                    .base
+                    .roof(cell.roof)
+                    .and_then(|roof| roof.stage(cell.cell))
+                    .unwrap_or(0);
+                return if stage >= cell.stage {
+                    State::In
+                } else if stage + 1 == cell.stage && build.next.is_empty() {
+                    State::Next
+                } else {
+                    State::Ghost
+                };
             }
             let (is_in, cubes) = piece_in(&build.base, piece);
             if is_in {
@@ -551,8 +582,15 @@ fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
         }
     }
     if cubes.is_empty() {
-        // Flat, as a floor's boards on its top: in with the cube under it.
-        let at = point_cube((min + max) * 0.5 - Vec3::Y * 0.01);
+        // Flat, as a floor's boards on its top, or over a wall's top, as a gable is: in
+        // with the first cube under it.
+        let mut at = point_cube((min + max) * 0.5 - Vec3::Y * 0.01);
+        for _ in 0..terra_build::STOREY_CUBES * 2 {
+            if base.cube(at).is_some() {
+                break;
+            }
+            at -= IVec3::Y;
+        }
         let is_in = base.cube(at).is_none_or(|cube| cube.is_in());
         return (is_in, vec![at.to_array()]);
     }

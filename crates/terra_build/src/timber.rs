@@ -20,7 +20,7 @@
 
 use crate::draw::cuboid;
 use crate::kit::{Kit, Notch, Profile};
-use crate::layout::{Piece, Random, Split};
+use crate::layout::{self, Piece, Random, Split};
 use crate::mesh::{Material, Surface, Surfaces};
 use crate::relief::Relief;
 use glam::Vec3;
@@ -45,20 +45,66 @@ pub fn draw(piece: &Piece, kit: &Kit, face: Option<&Relief>, surfaces: &mut Surf
         split,
         seed,
         chinking,
+        lean,
     } = *piece
     else {
         return;
     };
+    let chinking = chinking.map(|(near, far)| (layout::metres(near), layout::metres(far)));
+    member(
+        from.metres(),
+        to.metres(),
+        split,
+        seed,
+        chinking,
+        lean.map(|rise| rise as f32 / layout::TICKS as f32),
+        kit,
+        face,
+        surfaces,
+    );
+}
+
+/// Draws a long member from one point to another in metres, with the daub under it so far
+/// along it from `from`, and each end cut to a roof's slope rising so many metres a metre
+/// in from it (none, sawn square): as [`draw`] draws a log, and as a roof's rafters are.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn member(
+    from: Vec3,
+    to: Vec3,
+    split: Split,
+    seed: u32,
+    chinking: Option<(f32, f32)>,
+    lean: [f32; 2],
+    kit: &Kit,
+    face: Option<&Relief>,
+    surfaces: &mut Surfaces,
+) {
     let length = from.distance(to);
     if length < 0.05 {
         return;
     }
     let frame = Frame::new(from, to);
     let mut random = Random(seed);
-    let member = match kit.timber.profile {
+    let mut made = match kit.timber.profile {
         Profile::Round => round(&frame, kit, split, face, &mut random),
         Profile::Hewn => hewn(&frame, kit, split, &mut random),
     };
+    // A gable's log cut to the roof over it: nothing of it above the slope rising from its
+    // foot at each end, as a builder saws it.
+    if lean.iter().any(|&rise| rise > 0.0) {
+        let foot = kit.radius();
+        for p in made.grid.iter_mut().flatten() {
+            let along = (*p - from).dot(frame.axis);
+            let mut cut = f32::MAX;
+            if lean[0] > 0.0 {
+                cut = cut.min(from.y - foot + lean[0] * along);
+            }
+            if lean[1] > 0.0 {
+                cut = cut.min(to.y - foot + lean[1] * (length - along));
+            }
+            p.y = p.y.min(cut);
+        }
+    }
     let t = &kit.timber;
     let shade = 1.0 - t.variation.shade * random.unit();
     let warmth = t.variation.warmth * random.signed();
@@ -67,19 +113,16 @@ pub fn draw(piece: &Piece, kit: &Kit, face: Option<&Relief>, surfaces: &mut Surf
         (t.tint[1] * shade).clamp(0.0, 1.0),
         (t.tint[2] * shade * (1.0 - warmth)).clamp(0.0, 1.0),
     ];
-    sweep(surfaces.of(Material::Log), &member, colour);
+    sweep(surfaces.of(Material::Log), &made, colour);
     // Its ends, the cut face's picture across each, turned by the seed.
     let spin = random.unit() * TAU;
-    let last = member.grid.len() - 1;
+    let last = made.grid.len() - 1;
     let ends = surfaces.of(Material::LogEnd);
-    for (ring, outward) in [
-        (&member.grid[0], -frame.axis),
-        (&member.grid[last], frame.axis),
-    ] {
-        cap(ends, ring, outward, &frame, spin, member.grain, t.end_tint);
+    for (ring, outward) in [(&made.grid[0], -frame.axis), (&made.grid[last], frame.axis)] {
+        cap(ends, ring, outward, &frame, spin, made.grain, t.end_tint);
     }
     if let Some((near, far)) = chinking {
-        let (depth, high) = member.daub;
+        let (depth, high) = made.daub;
         let along = frame.axis;
         let across = frame.side * depth;
         let mid = Vec3::Y * (-kit.course * 0.5);
@@ -424,6 +467,8 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
     else {
         return;
     };
+    let (from, to) = (from.metres(), to.metres());
+    let (wide, high) = (layout::metres(wide), layout::metres(high));
     if from.distance(to) < 0.02 {
         return;
     }
@@ -578,16 +623,17 @@ mod tests {
     use super::*;
     use crate::draw::tests::facing_out;
     use crate::kit::Timber;
-    use crate::layout::{lay, tests as layouts};
+    use crate::layout::{Place, lay, tests as layouts};
     use crate::{CELL_M, Panel};
 
     fn log(seed: u32, split: Split) -> Piece {
         Piece::Log {
-            from: Vec3::new(0.0, 0.125, 0.25),
-            to: Vec3::new(3.0, 0.125, 0.25),
+            from: Place::near(Vec3::new(0.0, 0.125, 0.25)),
+            to: Place::near(Vec3::new(3.0, 0.125, 0.25)),
             split,
             seed,
-            chinking: Some((0.0, 3.0)),
+            chinking: Some((0, crate::layout::ticks(3.0))),
+            lean: [0, 0],
         }
     }
 
@@ -714,11 +760,12 @@ mod tests {
         }
         // An upright post too.
         let post = Piece::Log {
-            from: Vec3::new(0.25, 0.0, 0.25),
-            to: Vec3::new(0.25, 3.0, 0.25),
+            from: Place::near(Vec3::new(0.25, 0.0, 0.25)),
+            to: Place::near(Vec3::new(0.25, 3.0, 0.25)),
             split: Split::Whole,
             seed: 1,
             chinking: None,
+            lean: [0, 0],
         };
         let mut surfaces = Surfaces::default();
         draw(&post, &pinned(Profile::Round), None, &mut surfaces);
@@ -737,6 +784,7 @@ mod tests {
                 let Piece::Log { from, to, .. } = piece else {
                     continue;
                 };
+                let (from, to) = (from.metres(), to.metres());
                 let frame = Frame::new(from, to);
                 let mut surfaces = Surfaces::default();
                 draw(&piece, &kit, Some(&bark()), &mut surfaces);

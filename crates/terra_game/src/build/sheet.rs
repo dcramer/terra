@@ -21,7 +21,7 @@ use crate::shell::Options;
 use crate::start::FLOOR_CLEARANCE_M;
 use bevy::prelude::*;
 use std::sync::Arc;
-use terra_build::kit::Pattern;
+use terra_build::kit::{Pattern, Profile};
 use terra_build::ops::Op;
 use terra_build::{
     Base, BuildOp, Cube, Fill, Kind, Panel, Prop, RoofSection, RoofStyle, STOREY_CUBES,
@@ -35,6 +35,9 @@ const STATE_M: f32 = 11.0;
 const FIRST_ROW_M: f32 = 14.0;
 /// How far a going-up row has got.
 const GOING_UP: f32 = 0.45;
+/// How far a roof row going up has got: its walls up, its frame and battens on and its
+/// covering going on, most of a roof's pieces being its covering.
+const ROOF_GOING_UP: f32 = 0.72;
 
 /// A row of wall tiles from `from` to `to` east, on the row `z` south, in cubes.
 fn east_west(from: i32, to: i32, z: i32, kind: Kind) -> impl Iterator<Item = BuildOp> {
@@ -410,6 +413,101 @@ fn slope(frame: &Transform) -> Operation {
     }
 }
 
+/// How far east of the walls' rows each kind's roof rows are, a kind after another.
+const ROOF_GROUP_M: f32 = 40.0;
+
+/// A plan's shape: the rooms it is drawn as, from one tile to another, and the sections of
+/// its roof in a style. Arms are four metres wide, but a U's, three.
+fn plan(shape: &str, style: RoofStyle) -> (Vec<([i32; 3], [i32; 3])>, Vec<RoofSection>) {
+    let pitch = if style == RoofStyle::LeanTo { 0.4 } else { 0.7 };
+    let section = |min: [i32; 3], max: [i32; 3], along_x: bool| RoofSection {
+        min,
+        max,
+        style,
+        along_x,
+        pitch,
+    };
+    // A wing off the main block reaches into it: to its ridge for a gable, so its ridge
+    // dies into the main roof's; across it for a hip or a lean-to, whose ends lie under
+    // the main roof's slopes.
+    let wing = |x: (i32, i32), z_end: i32| {
+        let from = if style == RoofStyle::Gable { 4 } else { 0 };
+        let along_x = style == RoofStyle::LeanTo;
+        section([x.0, 0, from], [x.1, 0, z_end], along_x)
+    };
+    match shape {
+        "L" => (
+            vec![([0, 0, 0], [11, 0, 7]), ([0, 0, 7], [7, 0, 15])],
+            vec![section([0, 0, 0], [11, 0, 7], true), wing((0, 7), 15)],
+        ),
+        "T" => (
+            vec![([0, 0, 0], [13, 0, 7]), ([3, 0, 7], [10, 0, 15])],
+            vec![section([0, 0, 0], [13, 0, 7], true), wing((3, 10), 15)],
+        ),
+        "U" => (
+            vec![
+                ([0, 0, 0], [15, 0, 7]),
+                ([0, 0, 7], [5, 0, 13]),
+                ([10, 0, 7], [15, 0, 13]),
+            ],
+            vec![
+                section([0, 0, 0], [15, 0, 7], true),
+                wing((0, 5), 13),
+                wing((10, 15), 13),
+            ],
+        ),
+        _ => (
+            vec![([0, 0, 0], [9, 0, 7])],
+            vec![section([0, 0, 0], [9, 0, 7], true)],
+        ),
+    }
+}
+
+/// The roof rows: every style of roof over every shape of plan, in a kind, or mixed: the
+/// main block in the second kind and its wings in the first, so their roofs meet. Each with
+/// a door in its north wall and a window in its west.
+fn roof_rows(kinds: &[Kind], mixed: bool) -> Vec<(String, Vec<BuildOp>)> {
+    let mut rows = Vec::new();
+    for shape in ["rectangle", "L", "T", "U"] {
+        for (style, name) in [
+            (RoofStyle::Gable, "gable"),
+            (RoofStyle::Hip, "hip"),
+            (RoofStyle::LeanTo, "lean-to"),
+        ] {
+            let (rooms, sections) = plan(shape, style);
+            let mut ops = Vec::new();
+            for (index, &(min, max)) in rooms.iter().enumerate() {
+                let kind = if mixed && kinds.len() > 1 && index == 0 && rooms.len() > 1 {
+                    kinds[1]
+                } else {
+                    kinds[0]
+                };
+                ops.push(BuildOp::AddRoom { min, max, kind });
+            }
+            let main = ops.first().map_or(kinds[0], |op| match op {
+                BuildOp::AddRoom { kind, .. } => *kind,
+                _ => kinds[0],
+            });
+            ops.extend((4..=5).map(|x| wall([x, 0, 0], Panel::Door, main)));
+            ops.extend((3..=4).map(|z| wall([0, 0, z], Panel::WINDOW, main)));
+            // A plain rectangle mixed is a log cabin with stone ends, which carry
+            // gables of stone.
+            if mixed && rooms.len() == 1 && kinds.len() > 1 {
+                for x in [0, 9] {
+                    ops.push(BuildOp::Fill {
+                        min: [x, 0, 0],
+                        max: [x, STOREY_CUBES - 1, 7],
+                        cube: Some(Cube::new(kinds[1], Fill::Solid)),
+                    });
+                }
+            }
+            ops.extend(sections.into_iter().map(BuildOp::AddRoof));
+            rows.push((format!("{shape}, {name} roof"), ops));
+        }
+    }
+    rows
+}
+
 /// Lays the sheet once the site is there.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lay(
@@ -453,15 +551,62 @@ pub(super) fn lay(
                 .y,
         )
     };
-    let rows = rows(laying, stone);
-    let count = rows.len();
-    for (row, (name, ops)) in rows.into_iter().enumerate() {
+    let hewn = kits
+        .0
+        .iter()
+        .find(|kit| kit.pattern == Pattern::Logs && kit.timber.profile == Profile::Hewn)
+        .map(|kit| kit.kind());
+    // The walls' rows, then each kind's roof rows to the east of them, a group a kind.
+    let mut placed: Vec<(String, Vec<BuildOp>, f32, usize)> = rows(laying, stone)
+        .into_iter()
+        .enumerate()
+        .map(|(row, (name, ops))| (name.to_string(), ops, 0.0, row))
+        .collect();
+    let count = placed.len();
+    let groups = [
+        ("logs", vec![laying], false),
+        ("stone", stone.into_iter().collect(), false),
+        ("hewn", hewn.into_iter().collect(), false),
+        (
+            "stone and logs",
+            stone
+                .into_iter()
+                .map(|s| [laying, s])
+                .next()
+                .unwrap_or([laying; 2])
+                .to_vec(),
+            true,
+        ),
+    ];
+    for (group, (kit_name, kinds, mixed)) in groups.into_iter().enumerate() {
+        if kinds.is_empty() {
+            continue;
+        }
+        for (row, (name, ops)) in roof_rows(&kinds, mixed).into_iter().enumerate() {
+            let east = ROOF_GROUP_M * (group + 1) as f32;
+            placed.push((format!("{kit_name}: {name}"), ops, east, row));
+        }
+    }
+    for (name, ops, group_east, row) in placed {
+        // Only the rows asked for, each where it always is.
+        let wanted = &options.sheet_rows;
+        if !wanted.is_empty() && !wanted.iter().any(|text| name.contains(text.as_str())) {
+            continue;
+        }
         let north = -FIRST_ROW_M - ROW_M * row as f32;
-        for (column, shown) in [Shown::Built, Shown::Plan(GOING_UP), Shown::Plan(0.0)]
-            .into_iter()
-            .enumerate()
+        for (column, shown) in [
+            Shown::Built,
+            Shown::Plan(if group_east > 0.0 {
+                ROOF_GOING_UP
+            } else {
+                GOING_UP
+            }),
+            Shown::Plan(0.0),
+        ]
+        .into_iter()
+        .enumerate()
         {
-            let east = STATE_M * column as f32;
+            let east = group_east + STATE_M * column as f32;
             // On the ground there, the yard being round.
             let point = site.frame.transform_point(Vec3::new(east, 0.0, north));
             let ground = point - point.normalize() * planet.distance(point);
@@ -483,13 +628,13 @@ pub(super) fn lay(
             build.replace_with(&ops, &mut commands, &planet, &mut meshes);
             commands.spawn((Name::new(label), Built(build)));
         }
-        let (_, height) = ground_at(&planet, STATE_M, north);
+        let (_, height) = ground_at(&planet, group_east + STATE_M, north);
         info!(
             "Kit sheet: {name}: --vantage {},{},{},{},{},{}",
-            STATE_M + 2.0,
+            group_east + STATE_M + 2.0,
             height + 9.0,
             north + 22.0,
-            STATE_M + 2.0,
+            group_east + STATE_M + 2.0,
             height + 0.5,
             north + 1.5
         );

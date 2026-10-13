@@ -7,7 +7,7 @@
 //! counts; and for each hole, a cube cut open or glazed, the door or window set in it once
 //! the building is up (D193), with a timber lintel over it where the wall goes on above.
 
-use super::Piece;
+use super::{Piece, Place};
 use crate::kit::Kit;
 use crate::{Base, CELL_M, Fill, Kind};
 use glam::{IVec3, Vec3};
@@ -81,8 +81,8 @@ fn openings(base: &Base, kind: Kind, solid: &impl Fn(IVec3) -> bool, pieces: &mu
                 && base.along(IVec3::new(low.x, crate::storey_of(low.y), low.z)) == IVec3::X);
         let door = !solid(low - IVec3::Y);
         pieces.push(Piece::Opening {
-            min,
-            max,
+            min: Place::near(min),
+            max: Place::near(max),
             along_x,
             door,
         });
@@ -92,8 +92,8 @@ fn openings(base: &Base, kind: Kind, solid: &impl Fn(IVec3) -> bool, pieces: &mu
             let across = if along_x { Vec3::Z } else { Vec3::X };
             let inset = across * CELL_M * 0.1;
             pieces.push(Piece::Board {
-                min: Vec3::new(min.x, max.y - 0.02, min.z) - reach + inset,
-                max: Vec3::new(max.x, max.y + LINTEL_DEEP_M, max.z) + reach - inset,
+                min: Place::near(Vec3::new(min.x, max.y - 0.02, min.z) - reach + inset),
+                max: Place::near(Vec3::new(max.x, max.y + LINTEL_DEEP_M, max.z) + reach - inset),
             });
         }
     }

@@ -43,6 +43,8 @@ pub struct Kit {
     pub relief: f32,
     /// How each long member is shaped, and how much one differs from the next (D200).
     pub timber: Timber,
+    /// How a roof over its walls is made: its frame, battens, covering and trims.
+    pub roof: Roofing,
     /// The props set into its openings (D177), as asset paths.
     pub models: KitModels,
     /// Its materials' textures (D14): where each is, how many metres across it is, and how
@@ -88,6 +90,79 @@ pub struct Timber {
     pub end_tint: [f32; 3],
     /// How much each member differs from the next.
     pub variation: Variation,
+}
+
+/// How a kit's roofs are made (`layout::roofs`, docs/building-kits.md): a frame of rafters
+/// in its timber, battens across them, a covering of courses (shakes, slates) or a thick
+/// coat (thatch) in its `Covering` material, boards along its eaves and verges, caps over
+/// its ridges and hips, and a mortar fillet where it meets a wall.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Roofing {
+    /// How many courses one copy of the covering's texture holds up the slope: with its
+    /// size, how much of each course shows (its exposure).
+    pub rows: f32,
+    /// Where a course's lower edge falls on the texture, as a fraction of it down from its
+    /// top, so the texture's rows sit on the courses' steps.
+    pub phase: f32,
+    /// How far each course's lower edge stands out from the one under it, in metres.
+    pub butt: f32,
+    /// How thick the covering is over its battens, in metres: a few centimetres of shakes
+    /// or slate, a foot of thatch.
+    pub thick: f32,
+    /// How much a course's butt varies along it, as a fraction, so no row is ruled.
+    pub uneven: f32,
+    /// What the covering's colour is multiplied by (sRGB).
+    pub tint: [f32; 3],
+    /// Its rafters: their section, and how thick they are, in metres.
+    pub rafter: (Profile, f32),
+    /// Its battens, one under each course: how wide and how thick.
+    pub batten: (f32, f32),
+    /// The boards along its eaves (fascia) and verges (bargeboards): how deep and thick.
+    pub board: (f32, f32),
+    /// What caps its ridges and hips, and how wide it is either side of them.
+    pub ridge: Ridge,
+    pub cap: f32,
+    /// How big the fillet of mortar is where it meets a wall standing above it.
+    pub fillet: f32,
+}
+
+/// What caps a roof's ridges and hips.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Ridge {
+    /// Two boards meeting over it, one on each slope.
+    #[default]
+    Boards,
+    /// A rounded roll of the covering itself: ridge tiles, or a thatch's ridge.
+    Roll,
+}
+
+impl Default for Roofing {
+    /// Split pine shakes over round poles, as `logs.ron` has it.
+    fn default() -> Self {
+        Roofing {
+            rows: 6.0,
+            phase: 0.145,
+            butt: 0.03,
+            thick: 0.025,
+            uneven: 0.35,
+            tint: [1.0, 0.97, 0.93],
+            rafter: (Profile::Round, 0.14),
+            batten: (0.06, 0.025),
+            board: (0.22, 0.035),
+            ridge: Ridge::Boards,
+            cap: 0.16,
+            fillet: 0.1,
+        }
+    }
+}
+
+impl Roofing {
+    /// How far a course shows along the slope, in metres, for a covering texture so many
+    /// metres down.
+    pub fn exposure(&self, metres: f32) -> f32 {
+        metres / self.rows.max(0.1)
+    }
 }
 
 /// How much one member differs from the next, each by its seed: its thickness as a
@@ -224,12 +299,11 @@ pub struct KitModels {
     pub window: Option<String>,
 }
 
-/// The plain colours of what a kit has no texture for yet: the boards behind a gable, a
-/// floor, a roof and its sides, and the daub between courses, which tints its texture.
+/// The plain colours of what a kit has no texture for yet: a floor, a flat roof and their
+/// sides, and the daub between courses, which tints its texture.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct KitColours {
-    pub board: [f32; 3],
     pub light: [f32; 3],
     pub dark: [f32; 3],
     pub roof: [f32; 3],
@@ -284,11 +358,11 @@ impl Default for Kit {
             bevel: 0.04,
             relief: 0.05,
             timber: Timber::default(),
+            roof: Roofing::default(),
             models: KitModels::default(),
             textures: BTreeMap::new(),
             cost: KitCost::default(),
             colours: KitColours {
-                board: [0.45, 0.32, 0.22],
                 light: [0.74, 0.56, 0.37],
                 dark: [0.5, 0.34, 0.22],
                 roof: [0.47, 0.42, 0.37],
@@ -422,9 +496,7 @@ mod tests {
             assert!(t.taper < 0.5 && t.uneven < 0.3, "{name}");
             assert!(kit.bevel < CELL_M * 0.5, "{name}");
             let c = &kit.colours;
-            let colours = [
-                c.board, c.light, c.dark, c.roof, c.chinking, t.tint, t.end_tint,
-            ];
+            let colours = [c.light, c.dark, c.roof, c.chinking, t.tint, t.end_tint];
             assert!(
                 colours.iter().flatten().all(|v| (0.0..=1.0).contains(v)),
                 "{name}"

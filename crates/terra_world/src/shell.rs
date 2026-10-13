@@ -139,6 +139,8 @@ usage: terra_sandbox [options]
                         first kit (docs/building-kits.md)
   --kit-sheet           on the yard, lay one of each way log walls meet, built, going
                         up and as a blueprint, to look at (docs/building-kits.md)
+  --sheet-rows <text>   only the kit sheet's rows whose names hold this, such as
+                        hip or stone: L (repeatable)
   --vantage <x,y,z,x,y,z[@frame]>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the start, for experiments that have
@@ -230,6 +232,8 @@ pub struct Options {
     pub walls: Option<String>,
     /// On the yard: lay one of each way log walls meet, in each state (docs/building-kits.md).
     pub kit_sheet: bool,
+    /// The kit sheet's rows to lay, those whose names hold any of these; all if none.
+    pub sheet_rows: Vec<String>,
     /// The hour of the day the play experiment's clock is set to, if not its own.
     pub time: Option<f32>,
     /// Where the play experiment's player starts, east and south of the start in metres.
@@ -358,6 +362,7 @@ impl Options {
             level: Level::World,
             walls: None,
             kit_sheet: false,
+            sheet_rows: Vec::new(),
             start_at: None,
             time: None,
             start_facing: None,
@@ -461,6 +466,7 @@ impl Options {
                     }
                 }
                 "--kit-sheet" => options.kit_sheet = true,
+                "--sheet-rows" => options.sheet_rows.push(value("--sheet-rows")?),
                 "--model" => options.models.push(value("--model")?),
                 "--prop" => options.props.push(value("--prop")?),
                 "--hold" => options.hold = Some(value("--hold")?),

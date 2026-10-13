@@ -6,7 +6,7 @@
 //! where its underside is in the air. Where a floor meets a wall or a footing, its boards
 //! stop at the cube between them and the rim is left out, as the wall or footing covers it.
 
-use super::{Layout, Piece, Random, hash};
+use super::{Layout, Piece, Place, Random, hash, ticks};
 use crate::kit::Kit;
 use crate::{Base, CELL_M, Fill};
 use glam::{IVec3, Vec3};
@@ -156,10 +156,10 @@ fn lay_deck(
                     let end_m = (end + 1) as f32 * CELL_M - GAP_M * 0.5
                         + if end == last { end_out } else { 0.0 };
                     layout.pieces.push(Piece::Plank {
-                        from: point(start_m, middle, board_y),
-                        to: point(end_m, middle, board_y),
-                        wide,
-                        high: BOARD_THICK_M,
+                        from: Place::near(point(start_m, middle, board_y)),
+                        to: Place::near(point(end_m, middle, board_y)),
+                        wide: ticks(wide),
+                        high: ticks(BOARD_THICK_M),
                         seed: hash(&[seed, piece]),
                     });
                     at = end + 1;
@@ -191,10 +191,10 @@ fn lay_deck(
                     side.abs().as_vec3() * face + runs_along.as_vec3() * k + Vec3::Y * height
                 };
                 layout.pieces.push(Piece::Plank {
-                    from: on(from as f32 * CELL_M),
-                    to: on((to + 1) as f32 * CELL_M),
-                    wide: RIM_WIDE_M,
-                    high: beam_high,
+                    from: Place::near(on(from as f32 * CELL_M)),
+                    to: Place::near(on((to + 1) as f32 * CELL_M)),
+                    wide: ticks(RIM_WIDE_M),
+                    high: ticks(beam_high),
                     seed: hash(&[
                         0x41b,
                         line as u32,
@@ -216,10 +216,10 @@ fn lay_deck(
             let middle = (a as f32 + 0.5) * CELL_M;
             let height = top - BOARD_THICK_M - JOIST_DEEP_M * 0.5;
             layout.pieces.push(Piece::Plank {
-                from: point(middle, first as f32 * CELL_M, height),
-                to: point(middle, (last + 1) as f32 * CELL_M, height),
-                wide: JOIST_WIDE_M,
-                high: JOIST_DEEP_M,
+                from: Place::near(point(middle, first as f32 * CELL_M, height)),
+                to: Place::near(point(middle, (last + 1) as f32 * CELL_M, height)),
+                wide: ticks(JOIST_WIDE_M),
+                high: ticks(JOIST_DEEP_M),
                 seed: hash(&[0x1015, a as u32, first as u32, y as u32]),
             });
         }
@@ -248,7 +248,7 @@ mod tests {
     use super::*;
     use crate::{BuildOp, Kind};
 
-    fn planks(layout: &Layout) -> Vec<(Vec3, Vec3, f32, f32)> {
+    fn planks(layout: &Layout) -> Vec<(Vec3, Vec3, i32, i32)> {
         layout
             .pieces
             .iter()
@@ -259,7 +259,7 @@ mod tests {
                     wide,
                     high,
                     ..
-                } => Some((from, to, wide, high)),
+                } => Some((from.metres(), to.metres(), wide, high)),
                 _ => None,
             })
             .collect()
@@ -269,12 +269,13 @@ mod tests {
     fn boarded(layout: &Layout) -> std::collections::BTreeMap<[i32; 3], f32> {
         let mut cover = std::collections::BTreeMap::new();
         for (from, to, wide, high) in planks(layout) {
-            if high != BOARD_THICK_M {
+            let (wide, high_m) = (super::super::metres(wide), super::super::metres(high));
+            if high != ticks(BOARD_THICK_M) {
                 continue;
             }
             let along = (to - from).normalize();
             let across = Vec3::Y.cross(along).abs();
-            let y = ((from.y + high) / CELL_M).floor() as i32 - 1;
+            let y = ((from.y + high_m) / CELL_M).floor() as i32 - 1;
             let steps = (from.distance(to) / 0.05).round() as i32;
             for s in 0..steps {
                 let p = from + along * (0.025 + s as f32 * 0.05);
@@ -324,8 +325,8 @@ mod tests {
         let layout = lay(&base, &textured());
         let boards: Vec<(Vec3, Vec3, f32)> = planks(&layout)
             .into_iter()
-            .filter(|p| p.3 == BOARD_THICK_M)
-            .map(|(from, to, wide, _)| (from, to, wide))
+            .filter(|p| p.3 == ticks(BOARD_THICK_M))
+            .map(|(from, to, wide, _)| (from, to, super::super::metres(wide)))
             .collect();
         // Inside the walls, 3 m by 2, and under the logs as far as their faces.
         let reach = (CELL_M - kit().diameter) * 0.5;
@@ -357,8 +358,8 @@ mod tests {
         });
         let layout = lay(&base, &textured());
         let all = planks(&layout);
-        let rims: Vec<_> = all.iter().filter(|p| p.2 == RIM_WIDE_M).collect();
-        let joists: Vec<_> = all.iter().filter(|p| p.2 == JOIST_WIDE_M).collect();
+        let rims: Vec<_> = all.iter().filter(|p| p.2 == ticks(RIM_WIDE_M)).collect();
+        let joists: Vec<_> = all.iter().filter(|p| p.2 == ticks(JOIST_WIDE_M)).collect();
         // A rim along each of its four sides, their outer faces on its edges.
         assert_eq!(rims.len(), 4, "{rims:?}");
         let rim_length: f32 = rims.iter().map(|(f, t, ..)| f.distance(*t)).sum();
@@ -368,17 +369,17 @@ mod tests {
         // Everything within its cubes.
         for (from, to, wide, high) in &all {
             let piece = Piece::Plank {
-                from: *from,
-                to: *to,
+                from: Place::near(*from),
+                to: Place::near(*to),
                 wide: *wide,
                 high: *high,
                 seed: 0,
             };
             let (min, max) = piece.bounds().unwrap();
-            assert!(min.cmpge(Vec3::new(0.0, 2.5, 0.0) - 1e-4).all(), "{min}");
+            assert!(min.cmpge(Vec3::new(0.0, 2.5, 0.0) - 2e-3).all(), "{min}");
             // But for the boards standing a little proud.
             let top = 3.0 + BOARD_PROUD_M;
-            assert!(max.cmple(Vec3::new(3.0, top, 2.0) + 1e-4).all(), "{max}");
+            assert!(max.cmple(Vec3::new(3.0, top, 2.0) + 2e-3).all(), "{max}");
         }
     }
 }
