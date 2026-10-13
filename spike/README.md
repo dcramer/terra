@@ -8,3 +8,5 @@ Throwaway work that answers one question (D133). Each spike is a folder, `spike/
 
 Open:
 
+- [timber-walls](timber-walls/README.md): which way of drawing timber from its cubes looks best. Written up in [research/timber-walls.md](../research/timber-walls.md); kept until the developers judge it.
+
