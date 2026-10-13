@@ -74,6 +74,74 @@ const ITEMS: [(&str, f32, f32, f32); 3] = [
     ("Stool", -3.5, 2.5, 0.0),
 ];
 
+/// One of the village's people: who, where they stand from the middle in metres east and
+/// south, what they are doing, the template they are shaped as, what they wear, and what
+/// they say when spoken to.
+pub(super) struct Villager {
+    name: &'static str,
+    east: f32,
+    south: f32,
+    doing: Doing,
+    pub(super) template: &'static str,
+    pub(super) wears: &'static [Dyed],
+    says: Option<&'static str>,
+}
+
+/// The elder by the well, and others about their day.
+pub(super) const PEOPLE: [Villager; 4] = [
+    Villager {
+        name: "Maren",
+        east: 1.6,
+        south: 1.4,
+        doing: Doing::Standing,
+        template: "female",
+        wears: &[Dyed(
+            "leather_coat",
+            Some(("Leather", Color::srgb(0.32, 0.42, 0.55))),
+        )],
+        says: None,
+    },
+    Villager {
+        name: "Tobin",
+        east: 5.0,
+        south: 2.6,
+        doing: Doing::Standing,
+        template: "heavy",
+        wears: &[
+            Dyed(
+                "leather_coat",
+                Some(("Leather", Color::srgb(0.55, 0.42, 0.24))),
+            ),
+            Dyed("leather_cap", None),
+        ],
+        says: Some("Tobin: \"Ore rock has a rust to it. A stone pick will break it, slowly.\""),
+    },
+    Villager {
+        name: "Ilse",
+        east: -3.5,
+        south: 2.5,
+        doing: Doing::Sitting,
+        template: "female",
+        wears: &[Dyed(
+            "leather_cap",
+            Some(("Leather", Color::srgb(0.46, 0.5, 0.3))),
+        )],
+        says: Some("Ilse: \"The deer graze in the open. Come at them quietly, or they're gone.\""),
+    },
+    Villager {
+        name: "Wyn",
+        east: -2.0,
+        south: -3.0,
+        doing: Doing::Standing,
+        template: "thin",
+        wears: &[Dyed(
+            "small_pack",
+            Some(("Pack", Color::srgb(0.6, 0.3, 0.28))),
+        )],
+        says: Some("Wyn: \"Meat keeps you longer cooked. Any fire will do.\""),
+    },
+];
+
 /// The operations that put a house up in a kind of construction, in its own space: the
 /// door in the wall along z = 0, facing +Z, and the house behind it, its middle on x = 0.
 fn house(house: &House, kind: Kind) -> Vec<BuildOp> {
@@ -201,71 +269,18 @@ fn found(
     }
 
     // The people: the elder by the well, and others about their day.
-    let place = |east_m: f32, south_m: f32| middle + east * east_m + south * south_m;
-    let people = [
-        (
-            "Maren",
-            place(1.6, 1.4),
-            Doing::Standing,
-            "female",
-            vec![Dyed(
-                "leather_coat",
-                Some(("Leather", Color::srgb(0.32, 0.42, 0.55))),
-            )],
-            Some(Interactable::Talk),
-            None,
-        ),
-        (
-            "Tobin",
-            place(5.0, 2.6),
-            Doing::Standing,
-            "heavy",
-            vec![
-                Dyed(
-                    "leather_coat",
-                    Some(("Leather", Color::srgb(0.55, 0.42, 0.24))),
-                ),
-                Dyed("leather_cap", None),
-            ],
-            Some(Interactable::Talk),
-            Some("Tobin: \"Ore rock has a rust to it. A stone pick will break it, slowly.\""),
-        ),
-        (
-            "Ilse",
-            place(-3.5, 2.5),
-            Doing::Sitting,
-            "female",
-            vec![Dyed(
-                "leather_cap",
-                Some(("Leather", Color::srgb(0.46, 0.5, 0.3))),
-            )],
-            Some(Interactable::Talk),
-            Some("Ilse: \"The deer graze in the open. Come at them quietly, or they're gone.\""),
-        ),
-        (
-            "Wyn",
-            place(-2.0, -3.0),
-            Doing::Standing,
-            "thin",
-            vec![Dyed(
-                "small_pack",
-                Some(("Pack", Color::srgb(0.6, 0.3, 0.28))),
-            )],
-            Some(Interactable::Talk),
-            Some("Wyn: \"Meat keeps you longer cooked. Any fire will do.\""),
-        ),
-    ];
-    for (name, at, doing, template, wears, interact, says) in people {
+    for villager in PEOPLE {
+        let at = middle + east * villager.east + south * villager.south;
         arrive.write(Arrive {
-            name,
+            name: villager.name,
             at,
             facing: (middle - at).reject_from(up),
-            doing,
+            doing: villager.doing,
             trade: None,
-            template,
-            wears,
-            interact,
-            says,
+            template: villager.template,
+            wears: villager.wears.to_vec(),
+            interact: Some(Interactable::Talk),
+            says: villager.says,
         });
     }
     let local = site

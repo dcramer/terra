@@ -72,6 +72,16 @@ pub fn animations(json: &Value) -> Vec<String> {
         .collect()
 }
 
+/// The names of its materials.
+pub fn materials(json: &Value) -> Vec<String> {
+    json["materials"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|material| material["name"].as_str().map(str::to_string))
+        .collect()
+}
+
 /// Each node's glTF extras, by its name.
 pub fn extras(json: &Value) -> Vec<(String, Value)> {
     json["nodes"]

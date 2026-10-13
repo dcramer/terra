@@ -754,11 +754,8 @@ mod tests {
             }
             assert!(template.height > 0.0, "{name}");
         }
-        // The templates the game asks for by name: the player's (`play::figure::TEMPLATE`)
-        // and the people stood in the world (`play::settlement`, `play::pooling`).
-        for wanted in ["male", "female", "heavy", "thin", "strong"] {
-            assert!(templates.contains_key(wanted), "no template {wanted}");
-        }
+        // That the templates the game asks for by name are here is checked where they are
+        // named (`play::people`).
     }
 
     #[test]

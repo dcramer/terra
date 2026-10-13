@@ -556,3 +556,53 @@ fn animate(
         transitions.play(&mut player, wanted, BLEND).repeat();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::{figure, kinds, pooling, settlement};
+    use super::*;
+    use crate::model_files;
+
+    #[test]
+    fn everyone_stood_in_the_world_names_a_template_items_and_colours_there_are() {
+        // A name that matches nothing leaves a body unshaped, undressed or uncoloured
+        // without a word.
+        let mut templates = vec![figure::TEMPLATE, pooling::SMITH_TEMPLATE];
+        let mut wears = pooling::SMITH_WEARS.to_vec();
+        for villager in &settlement::PEOPLE {
+            templates.push(villager.template);
+            wears.extend_from_slice(villager.wears);
+        }
+        for template in templates {
+            assert!(
+                appearance::Appearance::template(template).is_some(),
+                "no template {template}"
+            );
+        }
+        let kinds = kinds::read().kinds;
+        let mut dyed = 0;
+        for Dyed(item, dye) in wears {
+            assert!(
+                kinds
+                    .iter()
+                    .any(|kind| kind.worn.is_some() && character::item_id(&kind.name) == item),
+                "no worn item {item} in the catalogue"
+            );
+            let file = character::look(item);
+            assert!(model_files::asset(&file).exists(), "{item}: no {file}");
+            let Some((role, _)) = dye else {
+                continue;
+            };
+            // A part's role is its material's name before any `.` (`character::Tint`).
+            let materials = model_files::materials(&model_files::json(&file));
+            assert!(
+                materials
+                    .iter()
+                    .any(|material| material.split('.').next() == Some(role)),
+                "{item}: no material plays {role}, only {materials:?}"
+            );
+            dyed += 1;
+        }
+        assert!(dyed > 0, "no colour was checked");
+    }
+}

@@ -20,6 +20,12 @@ const FORMS_EVERY_S: f32 = 90.0;
 const MOTES: usize = 60;
 const GLOW: Color = Color::srgb(0.66, 0.36, 1.0);
 const GLOW_LUMENS: f32 = 4_000_000.0;
+/// The template the smith bound here is shaped as, and what he wears.
+pub(super) const SMITH_TEMPLATE: &str = "strong";
+pub(super) const SMITH_WEARS: &[Dyed] = &[Dyed(
+    "leather_coat",
+    Some(("Leather", Color::srgb(0.45, 0.32, 0.22))),
+)];
 
 #[derive(Component)]
 struct Mote {
@@ -120,11 +126,8 @@ fn mark(
         facing: (middle - edge).reject_from(up),
         doing: Doing::Bound,
         trade: Some("smith"),
-        template: "strong",
-        wears: vec![Dyed(
-            "leather_coat",
-            Some(("Leather", Color::srgb(0.45, 0.32, 0.22))),
-        )],
+        template: SMITH_TEMPLATE,
+        wears: SMITH_WEARS.to_vec(),
         interact: Some(Interactable::Prisoner),
         says: None,
     });
