@@ -40,7 +40,7 @@ use bevy::{
         BrpError, BrpResult, RemoteMethodSystemId, RemoteMethods, RemotePlugin,
         builtin_methods::parse_some, http::RemoteHttpPlugin,
     },
-    render::view::screenshot::{Screenshot, save_to_disk},
+    render::view::screenshot::save_to_disk,
     time::TimeSystems,
     transform::TransformSystems,
     world_serialization::WorldAssetRoot,
@@ -489,9 +489,8 @@ fn shot(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         std::fs::create_dir_all(folder).map_err(refused)?;
     }
     std::fs::remove_file(&path).ok();
-    world
-        .spawn(Screenshot::primary_window())
-        .observe(save_to_disk(path.clone()));
+    let shot = crate::shell::screenshot(world.get_resource::<crate::shell::Picture>());
+    world.spawn(shot).observe(save_to_disk(path.clone()));
     Ok(json!({ "path": path }))
 }
 

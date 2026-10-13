@@ -9,6 +9,7 @@ mod crowd;
 mod forest;
 mod icons;
 mod look;
+mod lush;
 mod scatter;
 mod workbench;
 
@@ -57,6 +58,11 @@ pub const ALL: &[Experiment] = &[
         name: "icons",
         about: "The icon baker (D129): renders every item from its look into assets/icons, then exits; --sheet <prefix> also lays them out, --renders <folder> keeps the renders. Run as cargo xtask icons.",
         add: icons::plugin,
+    },
+    Experiment {
+        name: "lush",
+        about: "Spike: a forest as rich as big games make them, with trees grown in code and leaves as cards. Use with play on the yard.",
+        add: lush::plugin,
     },
     Experiment {
         name: "look",

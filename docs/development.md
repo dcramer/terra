@@ -42,7 +42,7 @@ A clean build of a Bevy application takes about two and a half minutes; a rebuil
 
 ## Worktrees
 
-Agents each work in a git worktree of their own, and each worktree has its own `target/`. To spare a new one from building all of Bevy, `cargo xtask seed` copies the main checkout's compiled dependencies into it, leaving out our own crates, which it then builds in about a minute (D183). A Claude Code hook starts it in the background when a session or subagent starts in a worktree with no `target/`. A `cargo` command started meanwhile prints "Blocking waiting for file lock" and waits a few seconds for the copy. In a worktree entered partway through a session, run `cargo xtask seed` before the first build. It only helps once the main checkout has built, and it never touches a worktree that has built already. Why it copies rather than sharing a cache is in [research/worktree-builds.md](../research/worktree-builds.md).
+Agents each work in a git worktree of their own, and each worktree has its own `target/`. To spare a new one from building all of Bevy, `cargo xtask seed` copies the main checkout's compiled dependencies into it, leaving out our own crates, which it then builds in about a minute (D185). A Claude Code hook starts it in the background when a session or subagent starts in a worktree with no `target/`. A `cargo` command started meanwhile prints "Blocking waiting for file lock" and waits a few seconds for the copy. In a worktree entered partway through a session, run `cargo xtask seed` before the first build. It only helps once the main checkout has built, and it never touches a worktree that has built already. Why it copies rather than sharing a cache is in [research/worktree-builds.md](../research/worktree-builds.md).
 
 ## Seeing and measuring
 
@@ -62,6 +62,33 @@ It cross-compiles the package, copies the program and its assets to the Windows 
 Keep debug builds on the workspace's default profile: full debug information produces a file Windows refuses to load.
 
 Every application we build gets scripted modes that fly a fixed camera path, print frame times and save screenshots, so results can be compared between machines and over time.
+
+### Measuring performance
+
+Performance is judged one way, so numbers compare between changes, machines and days (D185):
+
+```bash
+cargo xtask bench                    # every scene, three runs each
+cargo xtask bench forest --runs 5    # one scene
+cargo xtask bench --record           # and add the results to research/benchmarks.csv
+```
+
+It builds the sandbox for release and runs each **scene**, a scripted run that comes out the same on every machine, at 17:00, whose long shadows cost the most:
+
+| Scene | What it is |
+|---|---|
+| `yard` | The flat test level with nothing on it: what the engine and the player cost |
+| `world` | The game where a new one starts: ground, sea, trees, grass, creatures |
+| `forest` | The lush forest spike, standing still ([research/lush-forest-spike.md](../research/lush-forest-spike.md)) |
+| `forest-walk` | The same, walking down a path: grass built as the player goes, trees changing detail |
+
+Each run draws offscreen at 1920x1080 (`--offscreen`), with one frame in flight as a window has; skips 240 frames for shaders and streaming to settle; and times the next 600 against the real clock. A scene's result is the middle run's median and 99th percentile and the worst frame of any. The table compares each median with the last one recorded for the same GPU, size and build, and marks it `SLOWER` past 10%: look into it before committing. Record a baseline when a change makes something faster or slower on purpose, and when a new machine first runs it.
+
+Read the 99th percentile and worst frame as well as the median: a stutter hides in a good median. Each run also prints `SANDBOX slowest frames`, which frames were slowest, counted as `--press` counts them; slow frames at a steady interval point at something periodic. Benchmarks stream the ground as play does, so they include its cost; screenshot runs wait for every chunk instead, so they see the same ground every time.
+
+Under WSL the task builds and runs the Windows program, the only one with a real GPU. On macOS `--offscreen` is what makes numbers trustworthy: the window server draws nothing of a window that is covered, or when the screen is asleep or locked, and a Retina screen draws a 1600x900 window at 3200x1800. Report the integrated GPU too (D25) when a machine has one. Software rendering's numbers mean nothing.
+
+To find what a scene spends its time on, switch things off and run it again. A temporary environment variable read by the code under test is enough, removed before committing.
 
 ## Logs and the frame-time readout
 
@@ -132,7 +159,7 @@ node tools/tripo/tripo.ts animate <project> walk run idle -o crate-anim.glb
 
 The developers want the game's QA reachable by our coding agents (D69): an agent should be able to run the game, drive it, look at it and ask it what is true, the way a tester would.
 
-What exists: scripted runs of the sandbox. Every run starts on the loading screen (D135), and a script's frames are counted from when it goes, so a script does the same thing however long loading took. `--press` holds keys on given frames, `--shot` saves a screenshot, `--vantage` fixes the camera, `--bench` measures frame time. In the play experiment, `--at`, `--face`, `--warp` and `--give` set a scene up, and every on-screen notice is logged, which is how features were checked until the live commands below.
+What exists: scripted runs of the sandbox. Every run starts on the loading screen (D135), and a script's frames are counted from when it goes, so a script does the same thing however long loading took. `--press` holds keys on given frames, `--shot` saves a screenshot, `--vantage` fixes the camera, `--bench` measures frame time, and `--offscreen` draws into a picture rather than a window, so all of it works with the screen locked and without covering anyone's work. In the play experiment, `--at`, `--face`, `--warp` and `--give` set a scene up, and every on-screen notice is logged, which is how features were checked until the live commands below.
 
 Live, in one running game (D69): any sandbox run started with `--remote` answers Bevy's remote protocol, and [tools/sandbox](../tools/sandbox/README.md) drives it from the command line. Besides moving things and taking screenshots, a script can press keys, stop and step the clock exactly, read everything the run has said and wait for words to be said, and in the play experiment read a digest of the player's state (`state`) and set a scene up (`warp`, `give`). A check acts, then waits for what the game says or reads what is true, rather than counting frames or reading the screen. When a check needs a fact the game does not yet answer, add it to the game's methods; a command line over them is the interface, and an MCP server would only be a thin layer over the same methods if some client needed one.
 

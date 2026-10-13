@@ -1,6 +1,6 @@
 # Sandbox
 
-A test environment for the game. It opens a window on a stand-in planet with a free camera, lets you change values while it runs, and can switch on experiments: the game itself (`play`, from [terra_game](../terra_game/README.md)), testbeds that try one thing (`scatter`, `forest`, `look`, `build`), and developer tools (`workbench`, `icons`, `crowd`).
+A test environment for the game. It opens a window on a stand-in planet with a free camera, lets you change values while it runs, and can switch on experiments: the game itself (`play`, from [terra_game](../terra_game/README.md)), testbeds that try one thing (`scatter`, `forest`, `look`, `build`, `lush`), and developer tools (`workbench`, `icons`, `crowd`).
 
 The game's code is in `terra_game`; what is here is the launcher, the testbeds and the tools. The planet is a formula, not voxels.
 
@@ -25,7 +25,9 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--clean` | Leave the frame-time readout off the screen, for pictures |
 | `--mute` | No sound. Scripted runs are always silent, and print what they would have played: `SANDBOX heard: step.grass 4` |
 | `--sound` | Sound under WSL, where it is off by default because WSL usually has no sound device |
-| `--bench` | Measure frame times with vsync off, print them and the median game, render-CPU and GPU parts of a frame, then exit |
+| `--bench` | Measure frame times with vsync off, print them, the median game, render-CPU and GPU parts of a frame, and when the slowest frames came, then exit. `cargo xtask bench` runs the benchmark scenes this way ([development.md](../../docs/development.md#measuring-performance)) |
+| `--offscreen` | In a scripted or background run: draw into a picture 1920x1080 instead of the window, which stays hidden. Works with the screen asleep or locked, covers nothing, and measures every machine at the same size; a benchmark waits on the GPU as a window would. Use it for screenshots and benchmarks on macOS, which draws nothing of a covered window |
+| `--on-top` | In a scripted or background run: float the window above the others, still without taking focus, so it is drawn. Only needed to watch one; `--offscreen` needs no window |
 | `--settle <frames>` | Frames to run before capturing or measuring, 120 by default, counted from when the loading screen goes. A script's `--press` and `--warp` frames are counted from then too. |
 | `--loading` | Keep the loading screen up, to look at it (D135) |
 | `--press <key>@<frame>` | Press a letter, digit, F1 to F12, `esc`, `enter`, `backspace`, `equal`, `minus`, `pageup`, `pagedown` or an arrow (`left`, `right`, `up`, `down`) on a given frame, for scripted runs. `<key>@<from>-<to>` holds it. The arrows look about, so a script can aim. |

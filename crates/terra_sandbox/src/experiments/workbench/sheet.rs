@@ -11,7 +11,7 @@ use bevy::{
     prelude::*,
     render::{
         render_resource::{Extent3d, TextureDimension, TextureFormat},
-        view::screenshot::{Screenshot, ScreenshotCaptured},
+        view::screenshot::ScreenshotCaptured,
     },
 };
 
@@ -51,6 +51,7 @@ pub fn capture(
     mut commands: Commands,
     bench: Option<Res<Bench>>,
     options: Res<Options>,
+    picture: Option<Res<terra_game::shell::Picture>>,
     mut sheet: ResMut<Sheet>,
     mut players: Query<&mut AnimationPlayer>,
     mut hands: Query<&mut terra_game::character::Carrying>,
@@ -122,21 +123,23 @@ pub fn capture(
     sheet.waiting = true;
     // A row with props in it is kept whole; a figure alone, its middle.
     let whole = bench.wide;
-    commands.spawn(Screenshot::primary_window()).observe(
-        move |captured: On<ScreenshotCaptured>, mut sheet: ResMut<Sheet>| {
-            sheet.waiting = false;
-            match captured.image.clone().try_into_dynamic() {
-                Ok(picture) => {
-                    let picture = picture.to_rgb8();
-                    let (width, height) = (picture.width(), picture.height());
-                    sheet
-                        .cells
-                        .push(cut(width, height, &picture.into_raw(), whole));
+    commands
+        .spawn(terra_game::shell::screenshot(picture.as_deref()))
+        .observe(
+            move |captured: On<ScreenshotCaptured>, mut sheet: ResMut<Sheet>| {
+                sheet.waiting = false;
+                match captured.image.clone().try_into_dynamic() {
+                    Ok(picture) => {
+                        let picture = picture.to_rgb8();
+                        let (width, height) = (picture.width(), picture.height());
+                        sheet
+                            .cells
+                            .push(cut(width, height, &picture.into_raw(), whole));
+                    }
+                    Err(error) => error!("workbench: could not read a screenshot: {error}"),
                 }
-                Err(error) => error!("workbench: could not read a screenshot: {error}"),
-            }
-        },
-    );
+            },
+        );
 }
 
 /// The middle of a picture, as wide as three quarters of its height, or the `whole` of it,

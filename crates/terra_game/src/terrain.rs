@@ -292,8 +292,10 @@ fn receive(
         let Some(pending) = terrain.pending.get_mut(&id) else {
             continue;
         };
-        // A scripted run waits for each chunk, so it sees the same ground every time.
-        let ready = if options.scripted() {
+        // A scripted run waits for each chunk, so it sees the same ground every time. A
+        // benchmark does not, so it times what a player would see: waiting stalls a frame
+        // each time the camera has moved far enough for chunks to be chosen again.
+        let ready = if options.scripted() && !options.bench {
             Some(block_on(&mut pending.task))
         } else {
             block_on(future::poll_once(&mut pending.task))

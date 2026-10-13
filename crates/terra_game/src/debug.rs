@@ -144,8 +144,13 @@ struct Readout;
 /// Adds the readout and the log of frame times. `on_screen` is off for screenshots.
 pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
     move |app: &mut App| {
+        // Timing render passes takes GPU counters, which Metal cannot time anyway and runs
+        // out of as new pipelines appear, losing the device and quitting the game. On macOS
+        // the render and GPU times show as "-".
+        if !cfg!(target_os = "macos") {
+            app.add_plugins(RenderDiagnosticsPlugin);
+        }
         app.add_plugins((
-            RenderDiagnosticsPlugin,
             EntityCountDiagnosticsPlugin::default(),
             SystemInformationDiagnosticsPlugin,
         ))

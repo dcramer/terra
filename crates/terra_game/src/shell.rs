@@ -8,6 +8,7 @@ use crate::{
 };
 use bevy::{
     audio::AudioPlugin,
+    camera::{CameraUpdateSystems, RenderTarget},
     camera_controller::free_camera::FreeCameraPlugin,
     input::{
         InputSystems,
@@ -17,11 +18,13 @@ use bevy::{
     log::{DEFAULT_FILTER, LogPlugin},
     prelude::*,
     render::{
-        renderer::RenderAdapterInfo,
+        Render, RenderApp, RenderSystems,
+        render_resource::{PollType, TextureFormat, TextureUsages},
+        renderer::{RenderAdapterInfo, RenderDevice, RenderQueue},
         view::screenshot::{Screenshot, save_to_disk},
     },
     time::TimeUpdateStrategy,
-    window::{CursorGrabMode, CursorOptions, PresentMode, WindowLevel},
+    window::{CursorGrabMode, CursorOptions, PresentMode, PrimaryWindow, WindowLevel, WindowRef},
     winit::{UpdateMode, WinitSettings},
 };
 use bevy_inspector_egui::{bevy_egui::EguiPlugin, quick::WorldInspectorPlugin};
@@ -47,6 +50,15 @@ usage: terra_sandbox [options]
   --background          stay out of the way: open behind other windows without taking
                         focus, never take the mouse, ignore the real keyboard and
                         mouse, and stay silent; for runs a script drives
+  --on-top              a scripted or background run floats above the other windows,
+                        still without taking focus, so it is drawn when they would cover
+                        it: macOS draws nothing of a hidden window, so its screenshots come
+                        out black and its frame times are wrong
+  --offscreen           a scripted or background run draws into a picture 1920x1080
+                        instead of its window, which stays hidden: it works with the
+                        screen asleep or locked, covers nothing, measures every machine at
+                        the same size, and waits for the GPU each frame so a benchmark
+                        times the GPU's work too
   --steady              advance the game a sixtieth of a second every frame, however
                         fast frames are drawn, as scripted runs do
   --remote-token <text> what this run answers sandbox.whoami with, so a script knows it is
@@ -171,6 +183,10 @@ pub struct Options {
     pub steady: bool,
     /// Stay out of the way of the person at the machine, as scripted runs do.
     pub background: bool,
+    /// An unattended run's window floats above the others, so it is drawn.
+    pub on_top: bool,
+    /// Draw into a picture instead of the window, which stays hidden (`--offscreen`).
+    pub offscreen: bool,
     pub remote_token: String,
     /// No readout on screen.
     pub clean: bool,
@@ -261,6 +277,8 @@ impl Options {
             remote_port: 15702,
             steady: false,
             background: false,
+            on_top: false,
+            offscreen: false,
             remote_token: String::new(),
             clean: false,
             hold_loading: false,
@@ -313,6 +331,8 @@ impl Options {
                 }
                 "--steady" => options.steady = true,
                 "--background" => options.background = true,
+                "--on-top" => options.on_top = true,
+                "--offscreen" => options.offscreen = true,
                 "--clean" => options.clean = true,
                 "--loading" => options.hold_loading = true,
                 "--mute" => options.mute = true,
@@ -575,12 +595,13 @@ impl Plugin for ShellPlugin {
             // An unattended run needs nobody's attention, and should not take the keyboard
             // away from whatever is in front, nor sit on top of it.
             focused: !options.unattended(),
-            window_level: if options.unattended() {
-                WindowLevel::AlwaysOnBottom
-            } else {
-                WindowLevel::Normal
+            window_level: match (options.unattended(), options.on_top) {
+                (true, true) => WindowLevel::AlwaysOnTop,
+                (true, false) => WindowLevel::AlwaysOnBottom,
+                (false, _) => WindowLevel::Normal,
             },
             resolution: (1600u32, 900u32).into(),
+            visible: !(options.offscreen && options.unattended()),
             // Vsync hides how long a frame really takes, so benchmarks turn it off.
             present_mode: if options.bench {
                 PresentMode::AutoNoVsync
@@ -643,7 +664,86 @@ impl Plugin for ShellPlugin {
         if self.0.remote {
             crate::remote::plugin(app);
         }
+        if self.0.offscreen && self.0.unattended() {
+            app.add_systems(Startup, make_picture)
+                .add_systems(PostUpdate, draw_into_picture.before(CameraUpdateSystems));
+            app.sub_app_mut(RenderApp)
+                .init_resource::<InFlight>()
+                .add_systems(Render, wait_for_the_gpu.in_set(RenderSystems::Cleanup));
+        }
     }
+}
+
+/// How big an offscreen run's picture is: the resolution performance is judged at (D25).
+pub const PICTURE_SIZE: UVec2 = UVec2::new(1920, 1080);
+
+/// What an offscreen run draws into, in place of its window.
+#[derive(Resource)]
+pub struct Picture(pub Handle<Image>);
+
+fn make_picture(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let mut image = Image::new_target_texture(
+        PICTURE_SIZE.x,
+        PICTURE_SIZE.y,
+        TextureFormat::Rgba8Unorm,
+        Some(TextureFormat::Rgba8UnormSrgb),
+    );
+    // So it can be read back for a screenshot.
+    image.texture_descriptor.usage |= TextureUsages::COPY_SRC;
+    commands.insert_resource(Picture(images.add(image)));
+}
+
+/// Points every camera that would draw into the window at the picture instead, including
+/// cameras experiments spawn later.
+fn draw_into_picture(
+    picture: Res<Picture>,
+    primary: Query<(), With<PrimaryWindow>>,
+    mut cameras: Query<&mut RenderTarget, With<Camera>>,
+) {
+    for mut target in &mut cameras {
+        let into_window = match &*target {
+            RenderTarget::Window(WindowRef::Primary) => true,
+            RenderTarget::Window(WindowRef::Entity(window)) => primary.contains(*window),
+            _ => false,
+        };
+        if into_window {
+            *target = RenderTarget::Image(picture.0.clone().into());
+        }
+    }
+}
+
+/// Waiting for the frame before this one to be drawn.
+#[derive(Resource, Default)]
+struct InFlight(Option<Box<dyn FnOnce(&RenderDevice) + Send + Sync>>);
+
+/// Nothing is shown, so nothing holds the CPU back while the GPU catches up, as a window
+/// does by letting only a frame or two be in flight; without this a benchmark would time
+/// only the CPU. Like a window, each frame waits for the one before it to be drawn, so
+/// the CPU works on one frame while the GPU draws the last.
+fn wait_for_the_gpu(
+    device: Res<RenderDevice>,
+    queue: Res<RenderQueue>,
+    mut in_flight: ResMut<InFlight>,
+) {
+    // Done once everything this frame submitted is.
+    let drawn = queue.submit(std::iter::empty());
+    let wait = move |device: &RenderDevice| {
+        let until = PollType::Wait {
+            submission_index: Some(drawn),
+            timeout: None,
+        };
+        device.poll(until).ok();
+    };
+    if let Some(before) = in_flight.0.replace(Box::new(wait)) {
+        before(&device);
+    }
+}
+
+/// A screenshot of what a run shows: its window, or its picture when it is offscreen.
+pub fn screenshot(picture: Option<&Picture>) -> Screenshot {
+    picture.map_or_else(Screenshot::primary_window, |picture| {
+        Screenshot::image(picture.0.clone())
+    })
 }
 
 /// In an unattended run, the keyboard and mouse are whatever the script says and nothing
@@ -701,8 +801,10 @@ fn scripted_run(
     options: Res<Options>,
     screen: Res<State<Screen>>,
     adapter: Res<RenderAdapterInfo>,
+    picture: Option<Res<Picture>>,
+    window: Query<&Window, With<PrimaryWindow>>,
     mut frame: Local<u32>,
-    mut frame_ms: Local<Vec<f32>>,
+    mut frame_ms: Local<Vec<(u32, f32)>>,
     mut part_ms: Local<[Vec<f32>; 3]>,
     parts: Option<Res<crate::debug::FrameParts>>,
     mut last_frame: Local<Option<Instant>>,
@@ -729,8 +831,10 @@ fn scripted_run(
             if let Some(folder) = path.parent() {
                 std::fs::create_dir_all(folder).ok();
             }
+            // The run ends when the file is there, so one left from an earlier run must go.
+            std::fs::remove_file(path).ok();
             commands
-                .spawn(Screenshot::primary_window())
+                .spawn(screenshot(picture.as_deref()))
                 .observe(save_to_disk(path.clone()));
         }
         // Saving happens in the background, and how many frames that takes depends on
@@ -738,28 +842,35 @@ fn scripted_run(
         if *frame > settle + 1 && !options.bench {
             if path.exists() {
                 println!("SANDBOX saved {}", path.display());
-                exit.write(AppExit::Success);
+                finish(&mut exit, AppExit::Success);
             } else if *frame > settle + 3000 {
                 println!("SANDBOX could not save {}", path.display());
-                exit.write(AppExit::error());
+                finish(&mut exit, AppExit::error());
             }
         }
     }
     if options.bench {
-        frame_ms.extend(real_ms);
+        frame_ms.extend(real_ms.map(|ms| (*frame, ms)));
         if let Some(parts) = &parts {
             part_ms[0].push(parts.game_ms);
             part_ms[1].extend(parts.render_ms);
             part_ms[2].extend(parts.gpu_ms);
         }
         if frame_ms.len() == BENCH_FRAMES {
-            frame_ms.sort_by(|a, b| a.total_cmp(b));
+            frame_ms.sort_by(|a, b| a.1.total_cmp(&b.1));
+            let size = match (&picture, window.single()) {
+                (Some(_), _) => format!("{}x{} offscreen", PICTURE_SIZE.x, PICTURE_SIZE.y),
+                (None, Ok(window)) => {
+                    format!("{}x{}", window.physical_width(), window.physical_height())
+                }
+                (None, Err(_)) => "no window".to_string(),
+            };
             println!(
-                "SANDBOX frames on {}: median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms",
+                "SANDBOX frames on {} at {size}: median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms",
                 adapter.name,
-                frame_ms[BENCH_FRAMES / 2],
-                frame_ms[BENCH_FRAMES * 99 / 100],
-                frame_ms[BENCH_FRAMES - 1]
+                frame_ms[BENCH_FRAMES / 2].1,
+                frame_ms[BENCH_FRAMES * 99 / 100].1,
+                frame_ms[BENCH_FRAMES - 1].1
             );
             // Where the time goes: the medians of the game's systems, the render passes on
             // the CPU, and the GPU, so a slow frame says which to work on.
@@ -774,9 +885,34 @@ fn scripted_run(
                 median(&mut part_ms[1]),
                 median(&mut part_ms[2])
             );
-            exit.write(AppExit::Success);
+            // When the slowest frames came, counted as --press counts, to find what they
+            // have in common.
+            let slowest: Vec<String> = frame_ms
+                .iter()
+                .rev()
+                .take(8)
+                .map(|(frame, ms)| format!("{frame} ({ms:.1} ms)"))
+                .collect();
+            println!("SANDBOX slowest frames: {}", slowest.join(", "));
+            finish(&mut exit, AppExit::Success);
         }
     }
+}
+
+/// How long a finished scripted run may take to close before it is ended.
+const CLOSING_S: u64 = 5;
+
+/// Ends a scripted run whose work is done. Closing normally is given a few seconds, for
+/// whatever happens as the game closes; then the process is ended, because Bevy's
+/// shutdown sometimes never finishes, waiting on its render thread (seen on macOS).
+fn finish(exit: &mut MessageWriter<AppExit>, how: AppExit) {
+    let code = if how.is_success() { 0 } else { 1 };
+    exit.write(how);
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(CLOSING_S));
+        println!("SANDBOX took over {CLOSING_S} s to close, so it was ended");
+        std::process::exit(code);
+    });
 }
 
 /// Whether a scripted run's frames are being counted: once loading is done, or while the

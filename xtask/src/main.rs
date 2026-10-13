@@ -41,6 +41,13 @@ const TASKS: &[Task] = &[
         run: |_| run("node", &["tools/sandbox/loop.ts"]),
     },
     Task {
+        name: "bench",
+        takes: "[scene…] [--runs N] [--record] [--debug]",
+        does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded",
+        group: "Play and check",
+        run: bench,
+    },
+    Task {
         name: "check",
         takes: "",
         does: "what every change must pass: formatting, lints, tests, the dependency rules",
@@ -149,6 +156,331 @@ const TASKS: &[Task] = &[
         },
     },
 ];
+
+/// A scene performance is judged in: a scripted run of the sandbox that comes out the same
+/// on every machine. docs/development.md says how they are used.
+struct Scene {
+    name: &'static str,
+    about: &'static str,
+    args: &'static [&'static str],
+}
+
+/// The scenes, at the hour whose long shadows cost the most.
+const SCENES: &[Scene] = &[
+    Scene {
+        name: "yard",
+        about: "the flat test level with nothing on it: what the engine and the player cost",
+        args: &["--experiment", "play", "--level", "yard", "--time", "17"],
+    },
+    Scene {
+        name: "world",
+        about: "the game where a new one starts: ground, sea, trees, grass, creatures",
+        args: &["--experiment", "play", "--time", "17"],
+    },
+    Scene {
+        name: "forest",
+        about: "the lush forest spike: thousands of trees of leaf cards, grass, bushes",
+        args: &[
+            "--experiment",
+            "play",
+            "--experiment",
+            "lush",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+        ],
+    },
+    Scene {
+        name: "forest-walk",
+        about: "the same, walking down a path: grass built as the player goes, trees changing detail",
+        args: &[
+            "--experiment",
+            "play",
+            "--experiment",
+            "lush",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--at",
+            "-5,-3.4",
+            "--face",
+            "-191,-130",
+            "--press",
+            "w@200-2000",
+        ],
+    },
+];
+
+/// Frames run before any are timed, so shaders are ready and the scene has settled.
+const BENCH_SETTLE: &str = "240";
+/// A run that has not finished in this long is stuck, and is ended.
+const BENCH_TIMEOUT_S: u64 = 300;
+/// How much slower than the last recorded result counts as a regression to look into.
+const SLOWER_BY: f32 = 0.10;
+/// Where `--record` keeps results, one line per scene per run of the task.
+const BENCHMARKS: &str = "research/benchmarks.csv";
+const BENCHMARKS_HEADER: &str = "date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs";
+
+/// One timed run, as the sandbox prints it.
+#[derive(Debug, Clone, PartialEq)]
+struct Timing {
+    gpu: String,
+    size: String,
+    median_ms: f32,
+    p99_ms: f32,
+    worst_ms: f32,
+}
+
+/// Reads `SANDBOX frames on <gpu> at <size>: median 1.00 ms, 99th percentile 2.00 ms,
+/// worst 3.00 ms` (crates/terra_game/src/shell.rs).
+fn parse_timing(line: &str) -> Option<Timing> {
+    let rest = line.strip_prefix("SANDBOX frames on ")?;
+    let (who, numbers) = rest.split_once(": ")?;
+    let (gpu, size) = who.rsplit_once(" at ")?;
+    let ms: Vec<f32> = numbers
+        .split(", ")
+        .map(|part| {
+            part.trim_end_matches(" ms")
+                .rsplit(' ')
+                .next()?
+                .parse()
+                .ok()
+        })
+        .collect::<Option<_>>()?;
+    let [median_ms, p99_ms, worst_ms] = ms[..] else {
+        return None;
+    };
+    Some(Timing {
+        gpu: gpu.to_string(),
+        size: size.to_string(),
+        median_ms,
+        p99_ms,
+        worst_ms,
+    })
+}
+
+/// Several runs of a scene as one: the middle run's median and 99th percentile, and the
+/// worst frame of any.
+fn combine(runs: &[Timing]) -> Option<Timing> {
+    let middle = |pick: fn(&Timing) -> f32| {
+        let mut values: Vec<f32> = runs.iter().map(pick).collect();
+        values.sort_by(f32::total_cmp);
+        values[values.len() / 2]
+    };
+    let first = runs.first()?;
+    Some(Timing {
+        median_ms: middle(|t| t.median_ms),
+        p99_ms: middle(|t| t.p99_ms),
+        worst_ms: runs.iter().map(|t| t.worst_ms).fold(0.0, f32::max),
+        ..first.clone()
+    })
+}
+
+/// The last recorded median for a scene on the same GPU, size and build, and its commit.
+fn last_recorded(csv: &str, timing: &Timing, build: &str, scene: &str) -> Option<(f32, String)> {
+    csv.lines()
+        .skip(1)
+        .filter_map(|line| {
+            let cells: Vec<&str> = line.split(',').collect();
+            let [_, commit, gpu, size, built, named, median, ..] = cells[..] else {
+                return None;
+            };
+            (gpu == timing.gpu && size == timing.size && built == build && named == scene)
+                .then(|| Some((median.parse().ok()?, commit.to_string())))?
+        })
+        .last()
+}
+
+/// Times the benchmark scenes, each several times, and compares them with what was last
+/// recorded on this kind of machine. A release build unless `--debug`, which is quicker
+/// to build and only good for comparing changes with each other.
+fn bench(args: &[String]) -> bool {
+    let mut runs = 3usize;
+    let mut record = false;
+    let mut debug = false;
+    let mut chosen: Vec<&Scene> = Vec::new();
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--record" => record = true,
+            "--debug" => debug = true,
+            "--runs" => match args.next().and_then(|n| n.parse().ok()) {
+                Some(n) if n > 0 => runs = n,
+                _ => {
+                    eprintln!("--runs needs a number above nothing");
+                    return false;
+                }
+            },
+            name => match SCENES.iter().find(|scene| scene.name == name) {
+                Some(scene) => chosen.push(scene),
+                None => {
+                    eprintln!("No scene `{name}`. The scenes:");
+                    for scene in SCENES {
+                        eprintln!("  {:8} {}", scene.name, scene.about);
+                    }
+                    return false;
+                }
+            },
+        }
+    }
+    if chosen.is_empty() {
+        chosen = SCENES.iter().collect();
+    }
+    let build = if debug { "debug" } else { "release" };
+    let Some((program, folder)) = sandbox_program(!debug) else {
+        return false;
+    };
+    let commit = output("git", &["rev-parse", "--short", "HEAD"]).unwrap_or_default();
+    let dirty = output("git", &["status", "--porcelain", "--untracked-files=no"])
+        .is_some_and(|changes| !changes.is_empty());
+    let commit = if dirty { format!("{commit}+") } else { commit };
+    let date = output("date", &["+%F"]).unwrap_or_default();
+    let csv = std::fs::read_to_string(root().join(BENCHMARKS)).unwrap_or_default();
+
+    let mut ok = true;
+    let mut lines = Vec::new();
+    for scene in chosen {
+        let mut timed = Vec::new();
+        for run in 1..=runs {
+            println!("\n> {} {}/{runs}", scene.name, run);
+            match time_scene(&program, &folder, scene) {
+                Some(timing) => timed.push(timing),
+                None => println!("  no frame times came out"),
+            }
+        }
+        let Some(timing) = combine(&timed) else {
+            ok = false;
+            continue;
+        };
+        let against = match last_recorded(&csv, &timing, build, scene.name) {
+            Some((before, then)) => {
+                let change = timing.median_ms / before - 1.0;
+                let note = if change > SLOWER_BY { "  SLOWER" } else { "" };
+                format!("{:+.0}% on {then}{note}", change * 100.0)
+            }
+            None => "nothing recorded".to_string(),
+        };
+        lines.push((scene.name, timing.clone(), against));
+        if record {
+            let row = format!(
+                "{date},{commit},{},{},{build},{},{:.2},{:.2},{:.2},{}",
+                timing.gpu,
+                timing.size,
+                scene.name,
+                timing.median_ms,
+                timing.p99_ms,
+                timing.worst_ms,
+                timed.len()
+            );
+            ok &= append_line(&root().join(BENCHMARKS), BENCHMARKS_HEADER, &row);
+        }
+    }
+    if let Some((_, first, _)) = lines.first() {
+        println!(
+            "\nFrame times on {} at {}, {build} build, commit {commit}, {runs} runs each:",
+            first.gpu, first.size
+        );
+        println!(
+            "  {:8} {:>8} {:>8} {:>8}  against the last recorded",
+            "scene", "median", "99th", "worst"
+        );
+        for (name, timing, against) in &lines {
+            println!(
+                "  {name:8} {:>5.2} ms {:>5.2} ms {:>5.2} ms  {against}",
+                timing.median_ms, timing.p99_ms, timing.worst_ms
+            );
+        }
+        println!("  The budget is 16.7 ms on a mid-range GPU (D25).");
+        if record {
+            println!("  Recorded in {BENCHMARKS}.");
+        }
+    }
+    ok
+}
+
+/// Adds a line to a file, starting it with a header if it is new.
+fn append_line(path: &Path, header: &str, line: &str) -> bool {
+    use std::io::Write;
+    let new = !path.exists();
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut file| {
+            if new {
+                writeln!(file, "{header}")?;
+            }
+            writeln!(file, "{line}")
+        })
+        .is_ok()
+}
+
+/// Builds the sandbox and says where its program is and the folder to run it from. Under
+/// WSL that is the Windows build, the only one with a real GPU.
+fn sandbox_program(release: bool) -> Option<(PathBuf, PathBuf)> {
+    if on_wsl() {
+        return windows_program("terra_sandbox", release, Some("bench"));
+    }
+    let mut build = vec!["build", "-p", "terra_sandbox"];
+    if release {
+        build.push("--release");
+    }
+    if !run("cargo", &build) {
+        return None;
+    }
+    let profile = if release { "release" } else { "debug" };
+    let program = root().join("target").join(profile).join("terra_sandbox");
+    Some((program, root()))
+}
+
+/// Runs one scene once and reads its frame times, ending it if it takes too long.
+fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
+    use std::io::{BufRead, BufReader};
+    let mut command = Command::new(program);
+    command
+        .args(scene.args)
+        .args(["--offscreen", "--bench", "--settle", BENCH_SETTLE])
+        .current_dir(folder);
+    // Run outside Cargo, a Bevy program looks for assets/ next to itself, which is where
+    // the Windows copy has them; the native one is pointed at the root's.
+    if !on_wsl() {
+        command.env("BEVY_ASSET_ROOT", folder);
+    }
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let stdout = child.stdout.take()?;
+    let reader = std::thread::spawn(move || {
+        BufReader::new(stdout)
+            .lines()
+            .map_while(Result::ok)
+            .find_map(|line| parse_timing(&line))
+    });
+    let started = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if started.elapsed().as_secs() > BENCH_TIMEOUT_S => {
+                println!("  stuck after {BENCH_TIMEOUT_S} s, so ended");
+                child.kill().ok();
+                child.wait().ok();
+                break;
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(200)),
+            Err(_) => break,
+        }
+    }
+    let timing = reader.join().ok()??;
+    println!(
+        "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms",
+        timing.median_ms, timing.p99_ms, timing.worst_ms
+    );
+    Some(timing)
+}
 
 /// Every task, by group, for `tools` and for a task that is not known.
 fn usage() -> String {
@@ -423,12 +755,34 @@ fn win(args: &[String]) -> bool {
         return false;
     };
 
-    let mut build = vec!["build", "--target", WINDOWS_TARGET, "-p", package.as_str()];
+    let Some((program, run_dir)) = windows_program(package, release, copy.map(String::as_str))
+    else {
+        return false;
+    };
+    let exe_name = format!("{package}.exe");
+    println!(
+        "\n> {exe_name} {}   (in {})",
+        program_args.join(" "),
+        run_dir.display()
+    );
+    Command::new(program)
+        .args(program_args)
+        .current_dir(&run_dir)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+/// Builds a package for Windows and copies it, with the assets, to a folder of its own in
+/// the Windows temp folder. Windows cannot use a WSL folder as a working directory. Gives
+/// the program and its folder.
+fn windows_program(package: &str, release: bool, copy: Option<&str>) -> Option<(PathBuf, PathBuf)> {
+    let mut build = vec!["build", "--target", WINDOWS_TARGET, "-p", package];
     if release {
         build.push("--release");
     }
     if !run("cargo", &build) {
-        return false;
+        return None;
     }
 
     let profile = if release { "release" } else { "debug" };
@@ -440,11 +794,11 @@ fn win(args: &[String]) -> bool {
         .join(&exe_name);
     let folder = match copy {
         Some(name) => format!("{package}-{name}"),
-        None => package.clone(),
+        None => package.to_string(),
     };
     let Some(run_dir) = windows_temp().map(|temp| temp.join("terra").join(folder)) else {
         eprintln!("Could not find the Windows temp folder. Is Windows interop enabled?");
-        return false;
+        return None;
     };
     let staged = std::fs::create_dir_all(&run_dir)
         .and_then(|()| std::fs::copy(&built, run_dir.join(&exe_name)).map(|_| ()))
@@ -455,20 +809,9 @@ fn win(args: &[String]) -> bool {
             "Could not copy the program to {}: {error}",
             run_dir.display()
         );
-        return false;
+        return None;
     }
-
-    println!(
-        "\n> {exe_name} {}   (in {})",
-        program_args.join(" "),
-        run_dir.display()
-    );
-    Command::new(run_dir.join(&exe_name))
-        .args(program_args)
-        .current_dir(&run_dir)
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    Some((run_dir.join(&exe_name), run_dir))
 }
 
 /// Plays the tech demo as a person would: the sandbox's play experiment, with its save
@@ -686,6 +1029,57 @@ mod tests {
         assert!(!node_runs_typescript("v22.17.1"));
         assert!(!node_runs_typescript("v20.19.0"));
         assert!(!node_runs_typescript(""));
+    }
+}
+
+#[cfg(test)]
+mod bench_tests {
+    use super::*;
+
+    fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
+        Timing {
+            gpu: "Apple M4 Max".into(),
+            size: "1920x1080 offscreen".into(),
+            median_ms,
+            p99_ms,
+            worst_ms,
+        }
+    }
+
+    #[test]
+    fn reads_the_sandboxs_frame_times() {
+        let line = "SANDBOX frames on Apple M4 Max at 1920x1080 offscreen: median 7.51 ms, \
+                    99th percentile 15.39 ms, worst 16.40 ms";
+        assert_eq!(parse_timing(line), Some(timing(7.51, 15.39, 16.40)));
+        assert_eq!(parse_timing("SANDBOX saved shot.png"), None);
+    }
+
+    #[test]
+    fn runs_combine_as_the_middle_one_and_the_worst_frame() {
+        let runs = [
+            timing(9.0, 12.0, 30.0),
+            timing(7.0, 10.0, 11.0),
+            timing(8.0, 11.0, 12.0),
+        ];
+        assert_eq!(combine(&runs), Some(timing(8.0, 11.0, 30.0)));
+        assert_eq!(combine(&[]), None);
+    }
+
+    #[test]
+    fn compares_with_the_last_result_on_the_same_kind_of_run() {
+        let csv = format!(
+            "{BENCHMARKS_HEADER}\n\
+             2026-10-12,aaa,Apple M4 Max,1920x1080 offscreen,release,forest,6.00,7,8,3\n\
+             2026-10-12,bbb,Apple M4 Max,1920x1080 offscreen,debug,forest,14.00,15,16,3\n\
+             2026-10-13,ccc,Apple M4 Max,1920x1080 offscreen,release,forest,5.00,6,7,3\n\
+             2026-10-13,ddd,Radeon,1920x1080 offscreen,release,forest,20.00,21,22,3\n"
+        );
+        let now = timing(5.5, 6.0, 7.0);
+        assert_eq!(
+            last_recorded(&csv, &now, "release", "forest"),
+            Some((5.0, "ccc".to_string()))
+        );
+        assert_eq!(last_recorded(&csv, &now, "release", "yard"), None);
     }
 }
 

@@ -88,7 +88,7 @@ impl Obstacles {
             .map(|&(point, radius)| (point, radius))
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.solid.len()
     }
 }
@@ -103,6 +103,20 @@ pub struct Growth {
     pub obstacle: Option<Vec3>,
     /// How far up from its foot to aim for it, in metres.
     pub middle_m: f32,
+}
+
+impl Growth {
+    /// Something grown outside this module, such as by a sandbox experiment: cut as `cut`
+    /// says, in a walker's way at `obstacle` if anywhere, aimed at `middle_m` up from its
+    /// foot. A base clears it as it would a tree.
+    pub fn new(cut: Option<Cuttable>, obstacle: Option<Vec3>, middle_m: f32) -> Self {
+        Self {
+            clearance_m: 5.0,
+            cut,
+            obstacle,
+            middle_m,
+        }
+    }
 }
 
 /// The squares of grass, and what is needed to regrow one.
