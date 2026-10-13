@@ -6,18 +6,26 @@ fn give_named(items: &mut Items, grid: &mut Grid, name: &str, count: u32) -> u32
     give(items, grid, kind, count)
 }
 
+/// A pack protects only as much as the items file says it does, worn leather protects
+/// more, and broken leather protects no more than if it were not worn.
 #[test]
 fn broken_leather_protects_no_more() {
     let mut items = Items::default();
-    let (Backpack(mut grid), Gear(mut gear), _) = starting_kit(&mut items);
+    let (_, Gear(kit), _) = starting_kit(&mut items);
+    let mut gear = Equipment::new(&SLOTS.map(|(slot, _)| slot));
+    let mut grid = bare_backpack();
+    let pack = items.make(kit.worn(PACK).unwrap().kind);
+    grid.insert(&items.catalogue, pack, None).unwrap();
+    wear(&items, &mut grid, &mut gear, pack.id).unwrap();
+    let packed = protection(&items, &gear);
+    assert_eq!(packed, items.worn(pack.kind).unwrap().protection);
     let coat = items.make(items.kind("Leather coat"));
     grid.insert(&items.catalogue, coat, None).unwrap();
     wear(&items, &mut grid, &mut gear, coat.id).unwrap();
-    let whole = protection(&items, &gear);
-    assert!(whole > 0.0);
-    let body = SLOTS[2].0;
+    assert!(protection(&items, &gear) > packed);
+    let body = slot_named(&items.worn(coat.kind).unwrap().slot);
     gear.wear(&items.catalogue, body, u16::MAX).unwrap();
-    assert_eq!(protection(&items, &gear), 0.0);
+    assert_eq!(protection(&items, &gear), packed);
 }
 
 /// A cost, by item names.
@@ -39,20 +47,28 @@ fn made(items: &Items, name: &str, count: u32) -> Made {
     }
 }
 
+/// What the items file starts a player with is worn, and its tools are on the bar in its
+/// order, with room left in the backpack.
 #[test]
-fn the_starting_kit_has_both_tools_on_the_bar_and_room_to_spare() {
+fn the_starting_kit_wears_its_gear_and_has_its_tools_on_the_bar_and_room_to_spare() {
     let mut items = Items::default();
     let (Backpack(grid), Gear(gear), Bar(mut bar)) = starting_kit(&mut items);
-    assert_eq!(
-        gear.worn(PACK).map(|item| item.kind),
-        Some(items.kind("Small pack"))
-    );
-    assert_eq!(grid.size(), Size { w: 6, h: 5 });
-    assert_eq!(holding(&items, &grid, &bar), Some(items.kind("Hammer")));
-    bar.pick(1);
-    assert_eq!(holding(&items, &grid, &bar), Some(items.kind("Stone axe")));
-    for tool in items.start.tools.clone() {
-        assert_eq!(grid.count(items.kind(&tool)), 1);
+    let (wears, tools) = (items.start.wears.clone(), items.start.tools.clone());
+    assert!(!wears.is_empty() && !tools.is_empty());
+    let mut size = BARE;
+    for name in &wears {
+        let kind = items.kind(name);
+        let slot = slot_named(&items.worn(kind).unwrap().slot);
+        assert_eq!(gear.worn(slot).map(|item| item.kind), Some(kind));
+        if let Some((w, h)) = items.worn(kind).unwrap().backpack {
+            size = Size { w, h };
+        }
+    }
+    assert_eq!(grid.size(), size, "the backpack is as big as the pack worn");
+    for (slot, name) in tools.iter().enumerate() {
+        bar.pick(slot);
+        assert_eq!(holding(&items, &grid, &bar), Some(items.kind(name)));
+        assert_eq!(grid.count(items.kind(name)), 1);
     }
     assert!(grid.space_for(Size::ONE).is_some());
 }
@@ -121,23 +137,23 @@ fn a_full_backpack_takes_what_fits_and_refuses_the_rest() {
 fn gear_comes_off_into_the_backpack_and_goes_back_on() {
     let mut items = Items::default();
     let (Backpack(mut grid), Gear(mut gear), _) = starting_kit(&mut items);
-    // The pack comes off once what is carried fits the bare backpack.
+    // The pack comes off once what is carried fits the bare backpack: here, one thing.
     let pack = gear.worn(PACK).unwrap();
-    for tool in ["Stone pickaxe", "Knife"] {
-        let id = grid
-            .iter()
-            .find(|placed| placed.item.kind == items.kind(tool))
-            .unwrap()
-            .item
-            .id;
+    let packed = grid.size();
+    let ids: Vec<_> = grid.iter().map(|placed| placed.item.id).collect();
+    for id in ids {
         grid.remove(id).unwrap();
     }
+    assert_eq!(give_named(&mut items, &mut grid, "Wood", 1), 1);
     take_off(&items, &mut grid, &mut gear, PACK).unwrap();
     assert_eq!(gear.worn(PACK), None);
     assert!(grid.get(pack.id).is_some());
+    assert_eq!(grid.size(), BARE);
+    assert_eq!(grid.count(items.kind("Wood")), 1);
     wear(&items, &mut grid, &mut gear, pack.id).unwrap();
     assert_eq!(gear.worn(PACK), Some(pack));
     assert!(grid.get(pack.id).is_none());
+    assert_eq!(grid.size(), packed);
 }
 
 #[test]
@@ -169,17 +185,44 @@ fn what_is_made_goes_in_the_backpack_and_a_tool_on_the_bar() {
     );
 }
 
+/// Three made with room for two puts none in, not two.
 #[test]
 fn what_is_made_is_all_or_nothing_in_a_full_backpack() {
     let mut items = Items::default();
     let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
-    give_named(&mut items, &mut grid, "Ore", 100);
+    // A kind one cell big that no container holds, so each one made needs a cell.
+    let held: Vec<ItemKind> = items
+        .kinds()
+        .filter_map(|kind| items.catalogue.get(kind).ok()?.holds)
+        .map(|(kind, _)| kind)
+        .collect();
+    let kind = items
+        .kinds()
+        .find(|&kind| {
+            let def = items.catalogue.get(kind).unwrap();
+            def.size == Size::ONE && def.holds.is_none() && !held.contains(&kind)
+        })
+        .unwrap();
+    let free = grid.size().w as u32 * grid.size().h as u32
+        - grid
+            .iter()
+            .map(|placed| placed.size.w as u32 * placed.size.h as u32)
+            .sum::<u32>();
+    assert_eq!(give(&mut items, &mut grid, kind, free - 2), free - 2);
     let before = grid.clone();
-    assert!(!{
-        let made = made(&items, "Iron", 1);
-        receive(&mut items, &mut grid, &mut bar, made)
-    });
+    assert!(!receive(
+        &mut items,
+        &mut grid,
+        &mut bar,
+        Made { kind, count: 3 }
+    ));
     assert_eq!(grid, before);
+    assert!(receive(
+        &mut items,
+        &mut grid,
+        &mut bar,
+        Made { kind, count: 2 }
+    ));
 }
 
 #[test]
@@ -225,43 +268,34 @@ fn arrows_go_in_a_quiver_and_are_shot_from_it() {
     assert_eq!(grid.count(items.kind("Arrow")), 1);
 }
 
+/// A cost that names a kind twice wants both. Refused, it draws nothing from a worn
+/// quiver nor the backpack, though either line alone could be paid.
 #[test]
-fn paying_takes_all_or_nothing() {
-    let axe = cost(&Items::default(), &[("Wood", 2), ("Iron", 3)]);
+fn a_kind_named_twice_is_paid_for_both_or_not_at_all() {
     let mut items = Items::default();
     let (Backpack(mut grid), Gear(mut gear), Bar(mut bar)) = starting_kit(&mut items);
-    give_named(&mut items, &mut grid, "Wood", 2);
-    give_named(&mut items, &mut grid, "Iron", 2);
-    let before = grid.clone();
-    assert_eq!(
-        missing(&items, &grid, &gear, &axe, 1),
-        Some((items.kind("Iron"), 1))
-    );
-    assert!(!pay(&items, &mut grid, &mut bar, &mut gear, &axe, 1));
-    assert_eq!(grid, before);
-    give_named(&mut items, &mut grid, "Iron", 1);
-    assert!(pay(&items, &mut grid, &mut bar, &mut gear, &axe, 1));
-    assert_eq!(grid.count(items.kind("Iron")), 0);
-}
-
-#[test]
-fn worn_leather_protects_and_a_pack_does_not() {
-    let mut items = Items::default();
-    let (Backpack(mut grid), Gear(mut gear), _) = starting_kit(&mut items);
-    assert_eq!(protection(&items, &gear), 0.0);
-    let coat = items.make(items.kind("Leather coat"));
-    grid.insert(&items.catalogue, coat, None).unwrap();
-    wear(&items, &mut grid, &mut gear, coat.id).unwrap();
-    assert!((protection(&items, &gear) - 0.25).abs() < 1e-6);
+    let arrow = items.kind("Arrow");
+    let quiver = items.make(items.kind("Quiver"));
+    grid.insert(&items.catalogue, quiver, None).unwrap();
+    wear(&items, &mut grid, &mut gear, quiver.id).unwrap();
+    assert_eq!(gear.stow(arrow, 2), 2);
+    assert_eq!(give(&mut items, &mut grid, arrow, 1), 1);
+    let twice = [(arrow, 2), (arrow, 2)];
+    assert_eq!(missing(&items, &grid, &gear, &twice, 1), Some((arrow, 1)));
+    let before = (grid.clone(), gear.clone());
+    assert!(!pay(&items, &mut grid, &mut bar, &mut gear, &twice, 1));
+    assert_eq!((grid.clone(), gear.clone()), before);
+    let three = [(arrow, 1), (arrow, 2)];
+    assert!(pay(&items, &mut grid, &mut bar, &mut gear, &three, 1));
+    assert_eq!(grid.count(arrow) + gear.stacked(arrow), 0);
 }
 
 #[test]
 fn spending_what_the_bar_points_at_empties_its_slot() {
     let mut items = Items::default();
-    let (Backpack(mut grid), _, Bar(mut bar)) = starting_kit(&mut items);
-    let builder = bar.get(0).unwrap();
-    grid.remove(builder).unwrap();
-    bar.tidy(&grid);
+    let (Backpack(mut grid), Gear(mut gear), Bar(mut bar)) = starting_kit(&mut items);
+    let tool = grid.get(bar.get(0).unwrap()).unwrap().item.kind;
+    assert!(pay(&items, &mut grid, &mut bar, &mut gear, &[(tool, 1)], 1));
     assert_eq!(bar.get(0), None);
     assert_eq!(holding(&items, &grid, &bar), None);
 }

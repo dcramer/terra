@@ -161,8 +161,8 @@ pub fn missing(
     cost: &Cost,
     times: u32,
 ) -> Option<(ItemKind, u32)> {
-    items
-        .wanted(cost, times)
+    // Totalled, so a kind the cost names twice is counted for both.
+    terra_items::by_kind(&items.wanted(cost, times))
         .into_iter()
         .find_map(|(kind, wanted)| {
             let have = grid.count(kind) + gear.stacked(kind);
@@ -194,6 +194,8 @@ pub(super) fn spend(
     gear: &mut Equipment,
     wanted: &[(ItemKind, u32)],
 ) -> bool {
+    // Totalled first, so a kind named twice is checked for both before anything is drawn.
+    let wanted = terra_items::by_kind(wanted);
     let short = wanted
         .iter()
         .any(|&(kind, count)| grid.count(kind) + gear.stacked(kind) < count);
