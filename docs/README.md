@@ -2,6 +2,20 @@
 
 Working title: **Terra**. First and foremost, we are building an extremely ambitious sandbox engine, with multitudes of procedural worlds and intricate systems for each component of the game (D187). The game is a multiplayer survival sandbox with RPG in it, across realms reached through portals, built toward a thousand players on one persistent server (D52, D89).
 
+## Where things are
+
+| Looking for | Go to |
+|---|---|
+| What is decided, and who decided it | [decisions.md](decisions.md), by area; its log says what changed when |
+| How a part of the game works and why | The design docs below |
+| A design being weighed | [proposals](proposals/README.md) |
+| What we tried, measured or surveyed | [research](../research/README.md), dated notes; [benchmarks.csv](../research/benchmarks.csv) for frame times |
+| An experiment in progress | [spike](../spike/README.md) for throwaway code; the sandbox's testbeds and experiments in [terra_sandbox](../crates/terra_sandbox/README.md) |
+| How to run, check or measure something | [development.md](development.md); each tool's README in [tools](../tools) |
+| The steps for a repeated job (a character, a model, an icon) | The skills in [.agents/skills](../.agents/skills) |
+
+## The docs
+
 The source of truth, then the docs about the game as a whole, then one doc per part of the game, then parked docs, then the engine and how we work.
 
 | Doc | What it covers |
@@ -70,4 +84,6 @@ Findings, surveys and measurements live in [research](../research), not here. Th
 - **Every claim has a status.** *Decided* means don't reopen without a reason. *Leaning* means a working assumption that is untested or unconfirmed. *Open* means nobody has chosen yet.
 - **Change the doc in the same change as the thing it describes.** A decision made in chat that isn't written here didn't happen.
 - **Keep them short.** These describe intent and constraints, not implementation. Code explains itself.
+- **Say each thing once.** A decision's row says what and why in a few sentences and links its doc; the doc says how the system works; a tool's README has its commands and files; a skill has the steps and links the README rather than copying it; a research note is what was found on its date and isn't rewritten. Everywhere else cites the decision or links the place.
+- **Checked, not trusted.** `cargo xtask check` fails on a dead link or heading, a doc, note, spike or script missing from its index, and a malformed or unknown decision ([tools/docs](../tools/docs/README.md)).
 - **Record why.** A decision without its reason gets relitigated.

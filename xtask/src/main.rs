@@ -616,6 +616,7 @@ fn check() -> bool {
         )
         && cargo("test", &["--workspace"])
         && tools_tests()
+        && run("node", &["tools/docs/docs.ts"])
         && blender_scripts()
         && shared_crates_avoid_bevy()
         && shared_crates_are_repeatable()

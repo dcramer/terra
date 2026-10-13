@@ -31,7 +31,7 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | `cargo xtask yard` | Play the yard: a flat test level for working on building. Smooth ground with nothing on it, building free and instant without a claim stone, the sun at noon, nothing saved. The same as `--level yard` on the play experiment, so the sandbox remote can drive it. |
 | `cargo xtask loop` | Play the MVP's loop by script and check every step happened ([QA for agents](#checking-the-game-without-a-person-qa-for-agents)) |
 | `cargo xtask bench` | Time the benchmark scenes ([Measuring performance](#measuring-performance)) |
-| `cargo xtask check` | Formatting, lints, tests (the TypeScript tools' too), the Blender scripts' check (skipped with no Blender) and the dependency rule. Must pass before a commit. |
+| `cargo xtask check` | Formatting, lints, tests (the TypeScript tools' too), the docs check ([tools/docs](../tools/docs/README.md)), the Blender scripts' check (skipped with no Blender) and the dependency rule. Must pass before a commit. |
 | `cargo test -p terra_items` | One crate's tests |
 | `cargo fmt --all` | Format everything |
 | `cargo xtask sandbox` | Open the sandbox, the test environment for graphics and utilities; anything after it goes to the sandbox, and `--list` lists its experiments. See its [README](../crates/terra_sandbox/README.md). |
@@ -118,6 +118,7 @@ The developers want tools that help refine each system (D71), and as many of the
 | [Character pipeline](../tools/characters/README.md) | `cargo xtask bodies` | Bodies, morphs, skins, worn and held looks, from `art/`; the `character` skill has the steps |
 | [Blender runner](../tools/blender/README.md) | `cargo xtask blender <script.py>` | Any Blender script, headless, on the Windows Blender from WSL (below) |
 | [Icon painter](../tools/icons/README.md) | `cargo xtask icons`, `cargo xtask paint-icons <item>` | Item icons: baked from each item's look, then painted in the art style |
+| [Docs check](../tools/docs/README.md) | `cargo xtask check` | Links and anchors resolve, every doc, note, spike and script is in its index, the decisions table is well formed |
 | [Token stats](../tools/token-stats/README.md) | a Claude Code hook | Claude tokens and Tripo credits per developer, on a public page |
 
 A new tool gets a line in `TASKS` in `xtask/src/main.rs` and a row here, so it is found the same way as the rest.

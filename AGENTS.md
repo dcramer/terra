@@ -34,7 +34,8 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - **Decided** is our current answer. **Leaning** is a working assumption. **Open** is not chosen. **Superseded** rows are kept only so their numbers resolve.
 - Design decisions (what the game is: gameplay, art, scope) belong to the developers. Give a recommendation, mark it Open, and don't build on it. When a developer thinks out loud, that is input, not a decision, unless they say it is settled.
 - Technical decisions (engine, architecture, tooling, workflow) are yours: decide, record the reason, and keep going. The developers can overrule.
-- When a decision is made or changes, update its row and every doc it affects in the same change, and add a line to the log at the bottom. A new decision takes the next free number, with the Owner column saying Design or Tech, and the developers' own words in the Why column.
+- **Say who decided.** The By column is Developers or Agent. An agent's decision is soft: another agent may change it with a reason and a log line, without asking; a developer's decision is changed only by the developers. A choice that other work will build on gets a row, even a small one; one left only in chat or code didn't happen.
+- When a decision is made or changes, update its row and every doc it affects in the same change, and add a line to the log at the bottom. A new decision takes the next free number, goes in its area's section, with the Owner column saying Design or Tech, the By column saying who made it, and the developers' own words in the Why column. `cargo xtask check` checks the table's shape and that every decision cited exists.
 
 ## How we work
 
@@ -63,7 +64,7 @@ Read `docs/README.md`, then `docs/decisions.md`. Before building a component, re
 - **Use `libm` for trigonometry and exponentials** (D30), never `f32::sin` and friends. The system maths library differs between platforms in results and speed. The lints enforce this.
 - **No `unsafe`.** It is forbidden workspace-wide.
 - **Tests live next to the code** and need no GPU. A behaviour you rely on gets a test.
-- **`cargo xtask check` must pass before you commit.** It runs formatting, lints, tests, a check of the Blender scripts and the dependency rule. CI is off for now (D37), so this check is the gate.
+- **`cargo xtask check` must pass before you commit.** It runs formatting, lints, tests, the docs check (links, indexes, the decisions table), a check of the Blender scripts and the dependency rule. CI is off for now (D37), so this check is the gate.
 - **`cargo xtask doctor`** tells you what a machine is missing. **In a new worktree, build after the seed** (D183): a hook copies the main checkout's compiled dependencies in when a session starts there; if you entered the worktree partway through a session, run `cargo xtask seed` first.
 - **Make what you build checkable without a person** (D69): scripted runs (`--press`, `--shot`, `--vantage`, `--bench`), the workbench's sheets, `cargo xtask loop`, and driving a run live over Bevy's remote protocol (`cargo xtask remote`, [tools/sandbox](tools/sandbox/README.md)). A feature is not done until an agent can drive it and see that it worked.
 - **Check the real API, don't recall it.** Bevy changes every release. Read the examples and source that ship with the pinned version under `~/.cargo/registry/src/` before writing against it. How far we change Bevy itself is D184.
