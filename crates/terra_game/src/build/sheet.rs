@@ -95,10 +95,7 @@ fn rows(kind: Kind, stone: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
         let open = |x: i32, layer: i32| BuildOp::Fill {
             min: [x, layer, 0],
             max: [x, layer, 0],
-            cube: Some(Cube {
-                kind,
-                fill: Fill::Open,
-            }),
+            cube: Some(Cube::new(kind, Fill::Open)),
         };
         ops.extend([open(2, 3), open(3, 2), open(3, 3), open(3, 4), open(4, 3)]);
         ops.extend((6..=8).map(|x| open(x, 1)));
@@ -132,10 +129,7 @@ fn rows(kind: Kind, stone: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
             max: [9, 0, 7],
             kind,
         }];
-        let stone_cube = Some(Cube {
-            kind: stone,
-            fill: Fill::Solid,
-        });
+        let stone_cube = Some(Cube::new(stone, Fill::Solid));
         plinth.extend((6..=7).map(|x| wall([x, 0, 7], Panel::WINDOW, kind)));
         plinth.extend((2..=4).map(|z| wall([9, 0, z], Panel::WINDOW, kind)));
         // After the windows, which set their whole column.

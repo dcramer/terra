@@ -520,10 +520,7 @@ mod tests {
         base.apply(BuildOp::Fill {
             min: [0, 0, 0],
             max: [1, 0, 0],
-            cube: Some(crate::Cube {
-                kind: Kind::PLAIN,
-                fill: Fill::Solid,
-            }),
+            cube: Some(crate::Cube::new(Kind::PLAIN, Fill::Solid)),
         });
         // Two cubes side by side: ten faces, not twelve.
         assert_eq!(base.mesh(|_| None).structure.triangle_count(), 20);

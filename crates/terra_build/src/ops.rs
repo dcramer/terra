@@ -1,0 +1,1021 @@
+//! Operations (docs/building-plan.md, D21, D193): everything a player does to a base,
+//! each checked by one pure function against the state when it arrives, in the server's
+//! order, and each with an inverse for undo, checked the same way. A refusal says why, in
+//! the words the ghost shows.
+//!
+//! What a check asks:
+//!
+//! - **In the claim**, and a plan **within the claim's budget** of planned cubes (D193).
+//! - **Built from the bottom**: nothing goes in over a cube partly in, and a cube comes
+//!   out only from under air or nothing in (D194: last in, first out).
+//! - **Nothing floats**: a cube going in is joined, face to face, to the ground or to
+//!   cubes already in; one coming out leaves nothing unjoined (rule 11).
+//! - **Nothing taken while something rests on it**: a cube, a standing roof, a fitted
+//!   prop or an item (D193); a roof goes up only on built cubes under its eaves.
+//! - **No body in the way** of what goes in (construction-001, gap 17).
+//! - **The materials there** for what goes in; what comes out gives back exactly what
+//!   went in (gap 25).
+//!
+//! Applying an operation gives what it took, what it gave back, and the operations that
+//! undo it.
+
+use crate::cost::{Bill, Rules};
+use crate::cubes::{Cube, Fill, Kind, PartId, Pending, Replacement, Shape, section_of};
+use crate::ground::Sample;
+use crate::support::{FACES, Holder};
+use crate::{Base, Part, Prop, ROOF_STAGES, Roof, RoofId, RoofSection};
+use glam::IVec3;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// A cube of a plan: where, and its shape.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Planned {
+    pub at: [i32; 3],
+    pub shape: Shape,
+}
+
+/// Something a player does to a base.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Op {
+    /// Lay a part's cubes as a plan, each with nothing in it, with the ground's height
+    /// under the columns it is the first in. A part laid again takes more cubes.
+    LayPlan {
+        part: Option<PartId>,
+        kind: Kind,
+        cubes: Vec<Planned>,
+        ground: Vec<Sample>,
+    },
+    /// Take planned cubes with nothing in them out of the plan.
+    Unplan { cubes: Vec<[i32; 3]> },
+    /// Put the next step into cubes: a course of logs into each cube it spans, a block
+    /// into its cube.
+    Fill { cubes: Vec<[i32; 3]> },
+    /// Take the last step out of cubes.
+    Empty { cubes: Vec<[i32; 3]> },
+    /// Change the shape of planned cubes with nothing in them.
+    SetShape { cubes: Vec<[i32; 3]>, shape: Shape },
+    /// Mark cubes to change to another kind, in a part: the old taken out, then
+    /// [`Op::Swap`], then the new put in.
+    Replace {
+        cubes: Vec<[i32; 3]>,
+        kind: Kind,
+        part: Option<PartId>,
+    },
+    /// Turn cubes marked to change, with nothing in them, to what they change to, and
+    /// keep what they were, so a swap again turns them back.
+    Swap { cubes: Vec<[i32; 3]> },
+    /// Mark cubes to be cut out, leaving an opening: taken out step by step, then out of
+    /// the plan.
+    Carve { cubes: Vec<[i32; 3]> },
+    /// Clear the change marked on cubes.
+    Cancel { cubes: Vec<[i32; 3]> },
+    /// Plan a pitched roof over a block of tiles, in a kind.
+    AddRoof {
+        roof: RoofId,
+        section: RoofSection,
+        kind: Option<Kind>,
+    },
+    /// Take a planned roof, with nothing of it up, away.
+    RemoveRoof { roof: RoofId },
+    /// Put a roof's cells up a stage, or take them down one: frame, battens, covering.
+    RoofStage {
+        roof: RoofId,
+        cells: Vec<[i32; 2]>,
+        up: bool,
+    },
+    /// Fit a door, window or shutters into a hole in built walls.
+    FitProp(Prop),
+    /// Take a fitted prop out, by its lowest cube.
+    RemoveProp { at: [i32; 3] },
+    /// Open or shut a fitted prop.
+    SetOpen { at: [i32; 3], open: bool },
+}
+
+/// A claim's ground and its budget of planned cubes (D193).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Claim {
+    /// The columns it covers, counted in cubes east and south, both inclusive.
+    pub min: [i32; 2],
+    pub max: [i32; 2],
+    /// How many cubes may be planned and not yet built.
+    pub budget: usize,
+}
+
+impl Claim {
+    pub fn covers(&self, column: [i32; 2]) -> bool {
+        (self.min[0]..=self.max[0]).contains(&column[0])
+            && (self.min[1]..=self.max[1]).contains(&column[1])
+    }
+}
+
+/// What a check needs to know of the world beyond the base.
+pub trait World {
+    /// Whether a body, a creature or a dropped item is in a cube (gap 17).
+    fn in_the_way(&self, _at: IVec3) -> bool {
+        false
+    }
+    /// Whether an item stands on a cube or hangs from it (D193).
+    fn holds_item(&self, _at: IVec3) -> bool {
+        false
+    }
+    /// Whether the builder has what a bill asks.
+    fn has(&self, _bill: &Bill) -> bool {
+        true
+    }
+}
+
+/// A world with nothing in the way and everything to hand, as the yard.
+pub struct Free;
+
+impl World for Free {}
+
+/// Everything an operation is checked against beyond the base.
+#[derive(Clone, Copy)]
+pub struct Context<'a> {
+    pub rules: &'a Rules,
+    /// The claim the base is in; none, as in the yard, allows anything anywhere.
+    pub claim: Option<&'a Claim>,
+    pub world: &'a dyn World,
+}
+
+impl<'a> Context<'a> {
+    /// Building with these rules, unclaimed, with nothing in the way and everything to
+    /// hand.
+    pub fn free(rules: &'a Rules) -> Context<'a> {
+        Context {
+            rules,
+            claim: None,
+            world: &Free,
+        }
+    }
+}
+
+/// Why an operation is refused, to show the player.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Refusal {
+    /// It names no cubes, or a cube twice.
+    Malformed,
+    /// A kind past the last a cube can hold.
+    UnknownKind(Kind),
+    /// The part is of another kind.
+    WrongPart(PartId),
+    OutsideClaim(IVec3),
+    OverBudget {
+        budget: usize,
+    },
+    /// Something is there already.
+    Taken(IVec3),
+    /// There is nothing there.
+    Nothing(IVec3),
+    /// It is an opening or glass, not something built.
+    Opening(IVec3),
+    AlreadyBuilt(IVec3),
+    /// Something is in it: take it out first.
+    InProgress(IVec3),
+    /// Nothing is in it to take out.
+    NothingIn(IVec3),
+    /// What it stands on is not built yet.
+    BuildUnder(IVec3),
+    /// Something is built over it, so it cannot be built a step at a time.
+    Covered(IVec3),
+    /// It would not be joined to the ground.
+    Floats(IVec3),
+    /// Something rests on it or is attached to it.
+    Holds(Vec<Holder>),
+    InTheWay(IVec3),
+    /// Not enough materials: what it takes.
+    Materials(Bill),
+    /// Too many parts meet in one section.
+    TooManyParts(IVec3),
+    /// A change is already marked on it.
+    Pending(IVec3),
+    /// No change is marked on it.
+    NotPending(IVec3),
+    /// It is like that already.
+    Unchanged,
+    NoRoof(RoofId),
+    RoofTaken(RoofId),
+    /// The roof's tiles are not a block on one storey.
+    BadRoof,
+    /// Not under the roof.
+    NotUnder([i32; 2]),
+    /// Part of the roof is up: take it down first.
+    RoofUp(RoofId),
+    /// A cell is as far as it goes that way.
+    RoofStage([i32; 2]),
+    /// The roof's eaves do not rest on built walls.
+    RoofNotHeld(RoofId),
+    NoProp(IVec3),
+    /// A prop is in the way.
+    PropThere(IVec3),
+    /// No hole of built walls fits it.
+    NoHole,
+}
+
+impl Refusal {
+    /// The words shown to the player.
+    pub fn message(&self) -> String {
+        match self {
+            Refusal::Malformed => "That can't be built.".into(),
+            Refusal::UnknownKind(_) => "That isn't a kind of building.".into(),
+            Refusal::WrongPart(_) => "That part is of another kind.".into(),
+            Refusal::OutsideClaim(_) => "That's outside your claim.".into(),
+            Refusal::OverBudget { budget } => {
+                format!("Your claim can plan only {budget} cubes at once.")
+            }
+            Refusal::Taken(_) => "Something is built there already.".into(),
+            Refusal::Nothing(_) => "There's nothing there.".into(),
+            Refusal::Opening(_) => "That's an opening.".into(),
+            Refusal::AlreadyBuilt(_) => "That's built already.".into(),
+            Refusal::InProgress(_) => "Take it apart first.".into(),
+            Refusal::NothingIn(_) => "There's nothing in it to take out.".into(),
+            Refusal::BuildUnder(_) => "Build what it stands on first.".into(),
+            Refusal::Covered(_) => "Something is built over it.".into(),
+            Refusal::Floats(_) => "It would float: it must be joined to the ground.".into(),
+            Refusal::Holds(holders) => {
+                let what = match holders.first() {
+                    Some(Holder::Cube(_)) => "the building above",
+                    Some(Holder::Roof(_)) => "the roof",
+                    Some(Holder::Prop(_)) => "a door or window",
+                    Some(Holder::Item(_)) => "something on it",
+                    None => "something",
+                };
+                format!("It holds up {what}: take that away first.")
+            }
+            Refusal::InTheWay(_) => "Something is in the way.".into(),
+            Refusal::Materials(bill) => format!("You need {bill}."),
+            Refusal::TooManyParts(_) => "Too many parts meet here.".into(),
+            Refusal::Pending(_) => "A change is already marked there.".into(),
+            Refusal::NotPending(_) => "No change is marked there.".into(),
+            Refusal::Unchanged => "It's like that already.".into(),
+            Refusal::NoRoof(_) => "There's no such roof.".into(),
+            Refusal::RoofTaken(_) => "That roof is already planned.".into(),
+            Refusal::BadRoof => "A roof must cover a block of tiles on one storey.".into(),
+            Refusal::NotUnder(_) => "That's not under the roof.".into(),
+            Refusal::RoofUp(_) => "Take the roof down first.".into(),
+            Refusal::RoofStage(_) => "That part of the roof can't go further.".into(),
+            Refusal::RoofNotHeld(_) => "The roof needs built walls under its eaves.".into(),
+            Refusal::NoProp(_) => "There's nothing fitted there.".into(),
+            Refusal::PropThere(_) => "A door or window is there.".into(),
+            Refusal::NoHole => "It needs a hole in a built wall that fits it.".into(),
+        }
+    }
+}
+
+/// What an operation did: what it took, what it gave back, and what undoes it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Done {
+    pub took: Bill,
+    pub gave: Bill,
+    /// The operations that undo it, in order.
+    pub undo: Vec<Op>,
+}
+
+/// An operation's checked effect, before it is applied.
+#[derive(Default)]
+struct Change {
+    parts: Vec<(PartId, Part)>,
+    cubes: Vec<(IVec3, Option<Cube>)>,
+    replacing: Vec<(IVec3, Option<Replacement>)>,
+    ground: Vec<Sample>,
+    roofs: Vec<(RoofId, Option<Roof>)>,
+    props: Vec<([i32; 3], Option<Prop>)>,
+    done: Done,
+}
+
+impl Base {
+    /// Checks an operation against the base as it is, changing nothing: what it would
+    /// take, give back and be undone by, or why it is refused.
+    pub fn check(&self, op: &Op, cx: &Context) -> Result<Done, Refusal> {
+        self.plan(op, cx).map(|change| change.done)
+    }
+
+    /// Checks an operation and, if it is allowed, applies it.
+    pub fn act(&mut self, op: &Op, cx: &Context) -> Result<Done, Refusal> {
+        let change = self.plan(op, cx)?;
+        for (id, part) in change.parts {
+            self.parts.entry(id).or_insert(part);
+        }
+        for (at, cube) in change.cubes {
+            self.put(at, cube);
+        }
+        for (at, to) in change.replacing {
+            self.set_replacing(at, to);
+        }
+        for sample in change.ground {
+            self.ground.set(sample.column, Some(sample.height_cm));
+        }
+        for (id, roof) in change.roofs {
+            let old = match roof {
+                Some(roof) => self.roofs.insert(id, roof),
+                None => self.roofs.remove(&id),
+            };
+            if let Some(roof) = old.as_ref().or(self.roofs.get(&id)) {
+                let top = crate::wall_layer(roof.section.storey()) + crate::STOREY_CUBES - 1;
+                for [x, z] in roof.cells() {
+                    self.cubes.mark(IVec3::new(x, top, z));
+                }
+            }
+        }
+        for (at, prop) in change.props {
+            let marks: Vec<IVec3> = match prop.as_ref().or(self.props.get(&at)) {
+                Some(prop) => prop.cubes().collect(),
+                None => Vec::new(),
+            };
+            match prop {
+                Some(prop) => self.props.insert(at, prop),
+                None => self.props.remove(&at),
+            };
+            for cube in marks {
+                self.cubes.mark(cube);
+            }
+        }
+        self.settle();
+        Ok(change.done)
+    }
+
+    /// Applies operations in order as one act, such as an undo: all of them, or, if one
+    /// is refused, none.
+    pub fn act_all(&mut self, ops: &[Op], cx: &Context) -> Result<Done, Refusal> {
+        let mut done = Done::default();
+        let mut undo: Vec<Vec<Op>> = Vec::new();
+        for op in ops {
+            match self.act(op, cx) {
+                Ok(step) => {
+                    done.took.add(&step.took);
+                    done.gave.add(&step.gave);
+                    undo.push(step.undo);
+                }
+                Err(refusal) => {
+                    for ops in undo.iter().rev() {
+                        for op in ops {
+                            self.act(op, &Context::free(cx.rules))
+                                .expect("an inverse just taken applies");
+                        }
+                    }
+                    return Err(refusal);
+                }
+            }
+        }
+        done.undo = undo.into_iter().rev().flatten().collect();
+        Ok(done)
+    }
+
+    fn plan(&self, op: &Op, cx: &Context) -> Result<Change, Refusal> {
+        match op {
+            Op::LayPlan {
+                part,
+                kind,
+                cubes,
+                ground,
+            } => self.lay_plan(*part, *kind, cubes, ground, cx),
+            Op::Unplan { cubes } => self.unplan(cubes, cx),
+            Op::Fill { cubes } => self.fill(cubes, cx),
+            Op::Empty { cubes } => self.empty(cubes, cx),
+            Op::SetShape { cubes, shape } => self.set_shape(cubes, *shape, cx),
+            Op::Replace { cubes, kind, part } => self.replace(cubes, *kind, *part, cx),
+            Op::Swap { cubes } => self.swap(cubes, cx),
+            Op::Carve { cubes } => self.carve(cubes, cx),
+            Op::Cancel { cubes } => self.cancel(cubes, cx),
+            Op::AddRoof {
+                roof,
+                section,
+                kind,
+            } => self.add_roof(*roof, section, *kind, cx),
+            Op::RemoveRoof { roof } => self.remove_roof(*roof, cx),
+            Op::RoofStage { roof, cells, up } => self.roof_stage(*roof, cells, *up, cx),
+            Op::FitProp(prop) => self.fit_prop(prop, cx),
+            Op::RemoveProp { at } => self.remove_prop(IVec3::from_array(*at), cx),
+            Op::SetOpen { at, open } => self.set_open(IVec3::from_array(*at), *open, cx),
+        }
+    }
+
+    /// The cubes an operation names, sorted, each once and inside the claim.
+    fn named(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Vec<IVec3>, Refusal> {
+        let set: BTreeSet<[i32; 3]> = cubes.iter().copied().collect();
+        if set.is_empty() || set.len() != cubes.len() {
+            return Err(Refusal::Malformed);
+        }
+        let named: Vec<IVec3> = set.into_iter().map(IVec3::from_array).collect();
+        for &at in &named {
+            claimed(at, cx)?;
+        }
+        Ok(named)
+    }
+
+    /// The cube at a place, or a refusal that nothing is there.
+    fn there(&self, at: IVec3) -> Result<Cube, Refusal> {
+        self.cube(at).ok_or(Refusal::Nothing(at))
+    }
+
+    /// The part a plan or change is laid in, if it is new: refused if it is of another
+    /// kind.
+    fn new_part(
+        &self,
+        part: Option<PartId>,
+        kind: Kind,
+        cx: &Context,
+    ) -> Result<Option<(PartId, Part)>, Refusal> {
+        if kind > Kind::LAST {
+            return Err(Refusal::UnknownKind(kind));
+        }
+        let Some(id) = part else { return Ok(None) };
+        match self.parts.get(&id) {
+            Some(found) if found.kind != kind => Err(Refusal::WrongPart(id)),
+            Some(_) => Ok(None),
+            None => Ok(Some((id, Part::new(kind, cx.rules.of(kind))))),
+        }
+    }
+
+    /// Whether every section these cubes are in has room for their parts.
+    fn room_for_parts(&self, cubes: &[(IVec3, Option<PartId>)]) -> Result<(), Refusal> {
+        let mut by_section: BTreeMap<[i32; 3], BTreeSet<PartId>> = BTreeMap::new();
+        for &(at, part) in cubes {
+            let parts = by_section.entry(section_of(at).to_array()).or_default();
+            parts.extend(part);
+        }
+        for (section, parts) in by_section {
+            let section = IVec3::from_array(section);
+            if !self.cubes.has_room(section, &parts) {
+                return Err(Refusal::TooManyParts(section));
+            }
+        }
+        Ok(())
+    }
+
+    fn lay_plan(
+        &self,
+        part: Option<PartId>,
+        kind: Kind,
+        cubes: &[Planned],
+        ground: &[Sample],
+        cx: &Context,
+    ) -> Result<Change, Refusal> {
+        let new_part = self.new_part(part, kind, cx)?;
+        let places: Vec<[i32; 3]> = cubes.iter().map(|cube| cube.at).collect();
+        let named = self.named(&places, cx)?;
+        for &at in &named {
+            if self.cube(at).is_some() {
+                return Err(Refusal::Taken(at));
+            }
+            if let Some(prop) = self.prop_in(at) {
+                return Err(Refusal::PropThere(IVec3::from_array(prop.min)));
+            }
+        }
+        if let Some(claim) = cx.claim
+            && self.cubes.planned() + named.len() > claim.budget
+        {
+            return Err(Refusal::OverBudget {
+                budget: claim.budget,
+            });
+        }
+        let placed: Vec<(IVec3, Option<PartId>)> = named.iter().map(|&at| (at, part)).collect();
+        self.room_for_parts(&placed)?;
+        let mut change = Change::default();
+        change.parts.extend(new_part);
+        for planned in cubes {
+            let cube = Cube {
+                shape: planned.shape,
+                ..Cube::planned(kind, part)
+            };
+            change
+                .cubes
+                .push((IVec3::from_array(planned.at), Some(cube)));
+        }
+        // The ground under the columns it is the first in.
+        let columns: BTreeSet<[i32; 2]> = named.iter().map(|at| [at.x, at.z]).collect();
+        let mut sampled = BTreeSet::new();
+        for sample in ground {
+            if columns.contains(&sample.column)
+                && !self.occupied(sample.column[0], sample.column[1])
+                && sampled.insert(sample.column)
+            {
+                change.ground.push(*sample);
+            }
+        }
+        change.done.undo = vec![Op::Unplan { cubes: places }];
+        Ok(change)
+    }
+
+    fn unplan(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        let mut change = Change::default();
+        // What lays them again: a plan for each part and kind, and the carving marked.
+        let mut plans: BTreeMap<(Option<PartId>, Kind), Vec<Planned>> = BTreeMap::new();
+        let mut carved = Vec::new();
+        for &at in &named {
+            let cube = self.there(at)?;
+            if cube.level() > 0 {
+                return Err(Refusal::InProgress(at));
+            }
+            match cube.pending {
+                Pending::Replace => return Err(Refusal::Pending(at)),
+                Pending::Carve => carved.push(at.to_array()),
+                Pending::None => {}
+            }
+            plans
+                .entry((cube.part, cube.kind))
+                .or_default()
+                .push(Planned {
+                    at: at.to_array(),
+                    shape: cube.shape,
+                });
+            change.cubes.push((at, None));
+        }
+        // The ground under columns it leaves empty, as it was sampled.
+        let leaving: BTreeSet<[i32; 3]> = named.iter().map(|at| at.to_array()).collect();
+        let emptied = |column: [i32; 2]| {
+            self.column(column[0], column[1])
+                .all(|y| leaving.contains(&[column[0], y, column[1]]))
+        };
+        for ((part, kind), cubes) in plans {
+            let columns: BTreeSet<[i32; 2]> = cubes.iter().map(|c| [c.at[0], c.at[2]]).collect();
+            let ground = columns
+                .into_iter()
+                .filter(|&column| emptied(column))
+                .filter_map(|column| {
+                    let height_cm = self.ground.sample(column)?;
+                    Some(Sample { column, height_cm })
+                })
+                .collect();
+            change.done.undo.push(Op::LayPlan {
+                part,
+                kind,
+                cubes,
+                ground,
+            });
+        }
+        if !carved.is_empty() {
+            change.done.undo.push(Op::Carve { cubes: carved });
+        }
+        Ok(change)
+    }
+
+    fn fill(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        let mut after: BTreeMap<[i32; 3], Cube> = BTreeMap::new();
+        let mut change = Change::default();
+        for &at in &named {
+            let cube = self.there(at)?;
+            if cube.fill == Fill::Open {
+                return Err(Refusal::Opening(at));
+            }
+            if cube.is_built() {
+                return Err(Refusal::AlreadyBuilt(at));
+            }
+            if cx.world.in_the_way(at) {
+                return Err(Refusal::InTheWay(at));
+            }
+            let terms = self.terms(&cube);
+            change.done.took.add(&terms.per_step);
+            after.insert(at.to_array(), cube.at_level(cube.level() + terms.step()));
+        }
+        let now = |at: IVec3| after.get(&at.to_array()).copied().or(self.cube(at));
+        let partial =
+            |cube: Option<Cube>| cube.is_some_and(|cube| cube.is_in() && !cube.is_built());
+        for &at in &named {
+            // Built from the bottom: nothing goes in over a cube partly in, and no cube is
+            // left partly in under something already in, which nothing could then finish
+            // or take apart.
+            let (under, over) = (at - IVec3::Y, at + IVec3::Y);
+            if partial(now(under)) {
+                return Err(Refusal::BuildUnder(under));
+            }
+            if partial(now(at)) && now(over).is_some_and(|cube| cube.is_in()) {
+                return Err(Refusal::Covered(over));
+            }
+        }
+        // Each cube going in joined, through the others going in, to the ground or to
+        // something already in.
+        let new: BTreeSet<[i32; 3]> = named
+            .iter()
+            .filter(|&&at| !self.is_in(at))
+            .map(|at| at.to_array())
+            .collect();
+        let anchored = |at: IVec3| {
+            self.grounded(at)
+                || FACES.iter().any(|&step| {
+                    let beside = at + step;
+                    !new.contains(&beside.to_array()) && self.is_in(beside)
+                })
+        };
+        let mut reached: BTreeSet<[i32; 3]> = new
+            .iter()
+            .copied()
+            .filter(|&at| anchored(IVec3::from_array(at)))
+            .collect();
+        let mut frontier: Vec<[i32; 3]> = reached.iter().copied().collect();
+        while let Some(at) = frontier.pop() {
+            for step in FACES {
+                let next = (IVec3::from_array(at) + step).to_array();
+                if new.contains(&next) && reached.insert(next) {
+                    frontier.push(next);
+                }
+            }
+        }
+        if let Some(&at) = new.difference(&reached).next() {
+            return Err(Refusal::Floats(IVec3::from_array(at)));
+        }
+        if !cx.world.has(&change.done.took) {
+            return Err(Refusal::Materials(change.done.took));
+        }
+        change.cubes = after
+            .into_iter()
+            .map(|(at, cube)| (IVec3::from_array(at), Some(cube)))
+            .collect();
+        change.done.undo = vec![Op::Empty {
+            cubes: cubes.to_vec(),
+        }];
+        Ok(change)
+    }
+
+    fn empty(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        let mut after: BTreeMap<[i32; 3], Cube> = BTreeMap::new();
+        let mut change = Change::default();
+        for &at in &named {
+            let cube = self.there(at)?;
+            if !cube.is_in() {
+                return Err(Refusal::NothingIn(at));
+            }
+            if cx.world.holds_item(at) {
+                return Err(Refusal::Holds(vec![Holder::Item(at)]));
+            }
+            let terms = self.terms(&cube);
+            change.done.gave.add(&terms.per_step);
+            after.insert(at.to_array(), cube.at_level(cube.level() - terms.step()));
+        }
+        let now = |at: IVec3| after.get(&at.to_array()).copied().or(self.cube(at));
+        for &at in &named {
+            // Last in, first out: nothing in the cube over it.
+            let over = at + IVec3::Y;
+            if now(over).is_some_and(|cube| cube.is_in()) {
+                return Err(Refusal::Holds(vec![Holder::Cube(over)]));
+            }
+            // Nor a roof standing on it, nor a prop fitted against it (D193).
+            let held: Vec<Holder> = self
+                .resting_on(at)
+                .into_iter()
+                .filter(|holder| !matches!(holder, Holder::Cube(_)))
+                .collect();
+            if !held.is_empty() {
+                return Err(Refusal::Holds(held));
+            }
+        }
+        let gone: BTreeSet<[i32; 3]> = after
+            .iter()
+            .filter(|(_, cube)| !cube.is_in())
+            .map(|(&at, _)| at)
+            .collect();
+        let lost = self.unjoined_without(&gone);
+        if !lost.is_empty() {
+            return Err(Refusal::Holds(lost.into_iter().map(Holder::Cube).collect()));
+        }
+        change.cubes = after
+            .into_iter()
+            .map(|(at, cube)| (IVec3::from_array(at), Some(cube)))
+            .collect();
+        change.done.undo = vec![Op::Fill {
+            cubes: cubes.to_vec(),
+        }];
+        Ok(change)
+    }
+
+    /// The planned cubes an operation names, with nothing in them.
+    fn bare(&self, named: &[IVec3]) -> Result<Vec<(IVec3, Cube)>, Refusal> {
+        named
+            .iter()
+            .map(|&at| {
+                let cube = self.there(at)?;
+                if cube.fill != Fill::Solid {
+                    return Err(Refusal::Opening(at));
+                }
+                if cube.level() > 0 {
+                    return Err(Refusal::InProgress(at));
+                }
+                Ok((at, cube))
+            })
+            .collect()
+    }
+
+    fn set_shape(&self, cubes: &[[i32; 3]], shape: Shape, cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        let mut change = Change::default();
+        let mut was: BTreeMap<ShapeKey, Vec<[i32; 3]>> = BTreeMap::new();
+        for (at, cube) in self.bare(&named)? {
+            if cube.shape != shape {
+                was.entry(ShapeKey(cube.shape))
+                    .or_default()
+                    .push(at.to_array());
+                change.cubes.push((at, Some(Cube { shape, ..cube })));
+            }
+        }
+        if was.is_empty() {
+            return Err(Refusal::Unchanged);
+        }
+        change.done.undo = was
+            .into_iter()
+            .map(|(shape, cubes)| Op::SetShape {
+                cubes,
+                shape: shape.0,
+            })
+            .collect();
+        Ok(change)
+    }
+
+    /// The cubes an operation marks with a change, with none marked on them yet.
+    fn unmarked(&self, named: &[IVec3]) -> Result<Vec<(IVec3, Cube)>, Refusal> {
+        named
+            .iter()
+            .map(|&at| {
+                let cube = self.there(at)?;
+                if cube.fill == Fill::Open {
+                    return Err(Refusal::Opening(at));
+                }
+                if cube.pending != Pending::None {
+                    return Err(Refusal::Pending(at));
+                }
+                Ok((at, cube))
+            })
+            .collect()
+    }
+
+    fn replace(
+        &self,
+        cubes: &[[i32; 3]],
+        kind: Kind,
+        part: Option<PartId>,
+        cx: &Context,
+    ) -> Result<Change, Refusal> {
+        let new_part = self.new_part(part, kind, cx)?;
+        let named = self.named(cubes, cx)?;
+        let mut change = Change::default();
+        change.parts.extend(new_part);
+        for (at, cube) in self.unmarked(&named)? {
+            if cube.fill != Fill::Solid {
+                return Err(Refusal::Opening(at));
+            }
+            if (cube.kind, cube.part) == (kind, part) {
+                return Err(Refusal::Unchanged);
+            }
+            let marked = Cube {
+                pending: Pending::Replace,
+                ..cube
+            };
+            change.cubes.push((at, Some(marked)));
+            change.replacing.push((at, Some((kind, part))));
+        }
+        change.done.undo = vec![Op::Cancel {
+            cubes: cubes.to_vec(),
+        }];
+        Ok(change)
+    }
+
+    fn swap(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        let mut change = Change::default();
+        let mut placed = Vec::new();
+        for (at, cube) in self.bare(&named)? {
+            let Some((kind, part)) = self.replacing(at) else {
+                return Err(Refusal::NotPending(at));
+            };
+            let swapped = Cube { kind, part, ..cube };
+            placed.push((at, part));
+            change.cubes.push((at, Some(swapped)));
+            change.replacing.push((at, Some((cube.kind, cube.part))));
+        }
+        self.room_for_parts(&placed)?;
+        change.done.undo = vec![Op::Swap {
+            cubes: cubes.to_vec(),
+        }];
+        Ok(change)
+    }
+
+    fn carve(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        let mut change = Change::default();
+        for (at, cube) in self.unmarked(&named)? {
+            let marked = Cube {
+                pending: Pending::Carve,
+                ..cube
+            };
+            change.cubes.push((at, Some(marked)));
+        }
+        change.done.undo = vec![Op::Cancel {
+            cubes: cubes.to_vec(),
+        }];
+        Ok(change)
+    }
+
+    fn cancel(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Change, Refusal> {
+        let named = self.named(cubes, cx)?;
+        let mut change = Change::default();
+        let mut carved = Vec::new();
+        let mut replaced: BTreeMap<Replacement, Vec<[i32; 3]>> = BTreeMap::new();
+        for &at in &named {
+            let cube = self.there(at)?;
+            match cube.pending {
+                Pending::None => return Err(Refusal::NotPending(at)),
+                Pending::Carve => carved.push(at.to_array()),
+                Pending::Replace => {
+                    let to = self.replacing(at).ok_or(Refusal::NotPending(at))?;
+                    replaced.entry(to).or_default().push(at.to_array());
+                }
+            }
+            let cleared = Cube {
+                pending: Pending::None,
+                ..cube
+            };
+            change.cubes.push((at, Some(cleared)));
+        }
+        if !carved.is_empty() {
+            change.done.undo.push(Op::Carve { cubes: carved });
+        }
+        for ((kind, part), cubes) in replaced {
+            change.done.undo.push(Op::Replace { cubes, kind, part });
+        }
+        Ok(change)
+    }
+
+    fn add_roof(
+        &self,
+        id: RoofId,
+        section: &RoofSection,
+        kind: Option<Kind>,
+        cx: &Context,
+    ) -> Result<Change, Refusal> {
+        if self.roofs.contains_key(&id) {
+            return Err(Refusal::RoofTaken(id));
+        }
+        let (low, high) = (section.min, section.max);
+        if low[1] != high[1] || low[0] > high[0] || low[2] > high[2] {
+            return Err(Refusal::BadRoof);
+        }
+        if let Some(kind) = kind
+            && kind > Kind::LAST
+        {
+            return Err(Refusal::UnknownKind(kind));
+        }
+        let per_stage = kind.map(|kind| cx.rules.roof(kind)).unwrap_or_default();
+        let roof = Roof::planned(*section, kind, per_stage);
+        for [x, z] in roof.cells() {
+            claimed(IVec3::new(x, 0, z), cx)?;
+        }
+        let mut change = Change::default();
+        change.roofs.push((id, Some(roof)));
+        change.done.undo = vec![Op::RemoveRoof { roof: id }];
+        Ok(change)
+    }
+
+    fn remove_roof(&self, id: RoofId, cx: &Context) -> Result<Change, Refusal> {
+        let roof = self.roofs.get(&id).ok_or(Refusal::NoRoof(id))?;
+        claimed(IVec3::from_array(roof.section.min), cx)?;
+        if roof.standing() {
+            return Err(Refusal::RoofUp(id));
+        }
+        let mut change = Change::default();
+        change.roofs.push((id, None));
+        change.done.undo = vec![Op::AddRoof {
+            roof: id,
+            section: roof.section,
+            kind: roof.kind,
+        }];
+        Ok(change)
+    }
+
+    fn roof_stage(
+        &self,
+        id: RoofId,
+        cells: &[[i32; 2]],
+        up: bool,
+        cx: &Context,
+    ) -> Result<Change, Refusal> {
+        let roof = self.roofs.get(&id).ok_or(Refusal::NoRoof(id))?;
+        let set: BTreeSet<[i32; 2]> = cells.iter().copied().collect();
+        if set.is_empty() || set.len() != cells.len() {
+            return Err(Refusal::Malformed);
+        }
+        let mut after = roof.clone();
+        let mut change = Change::default();
+        for &cell in &set {
+            claimed(IVec3::new(cell[0], 0, cell[1]), cx)?;
+            let index = roof.index(cell).ok_or(Refusal::NotUnder(cell))?;
+            let stage = &mut after.stages[index];
+            match up {
+                true if *stage < ROOF_STAGES => *stage += 1,
+                false if *stage > 0 => *stage -= 1,
+                _ => return Err(Refusal::RoofStage(cell)),
+            }
+            if up {
+                change.done.took.add(&roof.per_stage);
+            } else {
+                change.done.gave.add(&roof.per_stage);
+            }
+        }
+        if up && !self.roof_held(roof) {
+            return Err(Refusal::RoofNotHeld(id));
+        }
+        if up && !cx.world.has(&change.done.took) {
+            return Err(Refusal::Materials(change.done.took));
+        }
+        change.roofs.push((id, Some(after)));
+        change.done.undo = vec![Op::RoofStage {
+            roof: id,
+            cells: cells.to_vec(),
+            up: !up,
+        }];
+        Ok(change)
+    }
+
+    fn fit_prop(&self, prop: &Prop, cx: &Context) -> Result<Change, Refusal> {
+        let (low, high) = (IVec3::from_array(prop.min), IVec3::from_array(prop.max));
+        if low.cmpgt(high).any() {
+            return Err(Refusal::Malformed);
+        }
+        for at in prop.cubes() {
+            claimed(at, cx)?;
+            if self.cube(at).is_some_and(|cube| cube.fill != Fill::Open) {
+                return Err(Refusal::Taken(at));
+            }
+            if let Some(other) = self.prop_in(at) {
+                return Err(Refusal::PropThere(IVec3::from_array(other.min)));
+            }
+            if cx.world.in_the_way(at) {
+                return Err(Refusal::InTheWay(at));
+            }
+        }
+        self.hole_for(prop).ok_or(Refusal::NoHole)?;
+        let took = cx.rules.prop(prop.kind);
+        if !cx.world.has(&took) {
+            return Err(Refusal::Materials(took));
+        }
+        let mut change = Change::default();
+        change.props.push((prop.min, Some(*prop)));
+        change.done.took = took;
+        change.done.undo = vec![Op::RemoveProp { at: prop.min }];
+        Ok(change)
+    }
+
+    fn remove_prop(&self, at: IVec3, cx: &Context) -> Result<Change, Refusal> {
+        let prop = self.prop(at).ok_or(Refusal::NoProp(at))?;
+        claimed(at, cx)?;
+        let mut change = Change::default();
+        change.props.push((prop.min, None));
+        change.done.gave = cx.rules.prop(prop.kind);
+        change.done.undo = vec![Op::FitProp(*prop)];
+        Ok(change)
+    }
+
+    fn set_open(&self, at: IVec3, open: bool, cx: &Context) -> Result<Change, Refusal> {
+        let prop = self.prop(at).ok_or(Refusal::NoProp(at))?;
+        claimed(at, cx)?;
+        if prop.open == open {
+            return Err(Refusal::Unchanged);
+        }
+        let mut change = Change::default();
+        change.props.push((prop.min, Some(Prop { open, ..*prop })));
+        change.done.undo = vec![Op::SetOpen {
+            at: prop.min,
+            open: !open,
+        }];
+        Ok(change)
+    }
+}
+
+/// A cube's place inside the claim, if there is one.
+fn claimed(at: IVec3, cx: &Context) -> Result<(), Refusal> {
+    match cx.claim {
+        Some(claim) if !claim.covers([at.x, at.z]) => Err(Refusal::OutsideClaim(at)),
+        _ => Ok(()),
+    }
+}
+
+/// A shape, ordered, to group cubes by.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct ShapeKey(Shape);
+
+impl ShapeKey {
+    fn rank(self) -> u8 {
+        match self.0 {
+            Shape::Whole => 0,
+            Shape::Half => 1,
+            Shape::Stair(facing) => 2 + facing as u8,
+            Shape::Slope(facing) => 6 + facing as u8,
+        }
+    }
+}
+
+impl PartialOrd for ShapeKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ShapeKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.rank().cmp(&other.rank())
+    }
+}
+
+#[cfg(test)]
+mod tests;

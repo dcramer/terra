@@ -1675,10 +1675,7 @@ mod tests {
         base.apply(BuildOp::Fill {
             min: [3, 3, 0],
             max: [3, 3, 0],
-            cube: Some(Cube {
-                kind: kit().kind(),
-                fill: Fill::Open,
-            }),
+            cube: Some(Cube::new(kit().kind(), Fill::Open)),
         });
         let layout = lay(&base, &kit());
         assert_eq!(boards(&layout), 8);

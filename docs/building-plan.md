@@ -15,7 +15,7 @@ How we build the construction system that [proposals/construction-001.md](propos
 
 ## Where it lives
 
-**`terra_build`**, shared, with no Bevy (D28). Today it is `lib.rs` (the base, operations, rooms), `logs.rs` (1,800 lines), `masonry.rs`, `mesh.rs` and `walk.rs`. It is split before it grows further, a module a concern:
+**`terra_build`**, shared, with no Bevy (D28), a module a concern. `cubes`, `ops`, `ground`, `support`, `rooms`, `cost`, `walk` and `save` are built (step 1, D199); the layouts are still `logs.rs`, `masonry.rs`, `surface.rs` and `mesh.rs`, split in step 2:
 
 | Module | Holds |
 |---|---|
@@ -103,7 +103,7 @@ First, as now: arithmetic on the cubes, each to its fill and its kind's slab, st
 Each step ends checked by script before the next (D69), and is committed as it goes.
 
 0. **Spike: block modules** (done, 2026-10-12, [research/block-modules.md](../research/block-modules.md)). Conformed Tripo pieces read as a grid and break at carved shapes; the cubes' surface, bevelled and displaced by a real stone material, reads as one natural wall and carves cleanly. Decided (D197) and built in `terra_build::surface`: a mesher for that surface, per section on workers, as the terrain's: outer faces, bevels, subdivision near the camera, the material's height displaced on the CPU, triplanar texturing.
-1. **The model.** The cube store in sections; fill, shape and state per cube; operations with their checks and inverses; ground sampled into plans; support; snapshots; older saves converted. Property tests. The game unchanged on top.
+1. **The model** (done, 2026-10-12, D199). The cube store in sections; fill, shape and state per cube; operations with their checks and inverses; ground sampled into plans; support; snapshots; older saves converted. Property tests. The game unchanged on top: it still builds with the shortcuts, instantly, and saves them, until step 4.
 2. **Layouts.** `logs.rs` split into runs, trims and ground; block layout from the spike's answer; roof pieces; all in grid units; the kit checker. The kit sheet covers every case.
 3. **Drawing.** Sections as entities, layouts on the worker pool, merged meshes, instanced ghosts, far meshes, indoor light. The entity per piece goes. The `village` bench, measured on both GPUs.
 4. **Plans and building** (D139). Laying plans with the tools there are; building by fill; taking apart and undo with their refusals; the plan budget; doors and windows fitted, opening and shutting. The remote commands, and a scripted cabin from plan to door.

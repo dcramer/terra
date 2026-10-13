@@ -11,5 +11,11 @@ glam.workspace = true
 serde.workspace = true
 libm.workspace = true
 
+[dev-dependencies]
+# Saves are RON (the game's save file); tests read old ones as they were written.
+ron.workspace = true
+# Seeded random streams for the property tests over random operations.
+terra_gen.workspace = true
+
 [lints]
 workspace = true

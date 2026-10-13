@@ -5,10 +5,10 @@
 //! glass cubes stop them, while openings let them through. Coordinates are the base's own,
 //! in metres, with `y` at the feet.
 
+use crate::cubes::{Cube, Cubes, FULL};
 use crate::logs::Piece;
-use crate::{Base, CELL_M, Fill, STOREY_M};
+use crate::{Base, CELL_M, STOREY_M};
 use glam::{IVec2, IVec3, Vec3};
-use std::collections::BTreeMap;
 
 /// How far into a cube a piece must reach to stand in it.
 const SLIVER_M: f32 = 0.05;
@@ -45,7 +45,7 @@ impl Base {
     /// stand in, so a plan's ghost is walked through and what is built stops a walker
     /// (docs/building-kits.md). Its roofs only once they are up.
     pub fn standing<'a>(&self, done: impl IntoIterator<Item = &'a Piece>, roofs: bool) -> Base {
-        let mut cubes = BTreeMap::new();
+        let mut cubes = Cubes::default();
         for (min, max) in done.into_iter().filter_map(Piece::bounds) {
             // The cubes it fills more than a sliver of.
             let low = ((min + SLIVER_M) / CELL_M).floor().as_ivec3();
@@ -55,7 +55,9 @@ impl Base {
                     for z in low.z..=high.z {
                         let at = IVec3::new(x, y, z);
                         if let Some(cube) = self.cube(at) {
-                            cubes.insert(at.to_array(), cube);
+                            cubes
+                                .set(at, Some(Cube { part: None, ..cube }))
+                                .expect("no parts");
                         }
                     }
                 }
@@ -64,21 +66,26 @@ impl Base {
         Base::from_cubes(
             cubes,
             if roofs {
-                self.sections().to_vec()
+                self.roofs.clone()
             } else {
-                Vec::new()
+                Default::default()
             },
         )
     }
 
-    /// The layers of a column of cubes that are not openings, with their bottoms and tops.
+    /// The layers of a column of cubes that hold a walker up or stop them, with their
+    /// bottoms and tops: each cube to its fill, as high as its shape reaches. Openings and
+    /// planned cubes with nothing in them are walked through.
     fn solid_layers(&self, column: IVec2) -> impl Iterator<Item = (f32, f32)> + '_ {
-        self.column(column.x, column.y)
-            .filter(move |&layer| {
-                self.cube(IVec3::new(column.x, layer, column.y))
-                    .is_some_and(|cube| cube.fill != Fill::Open)
-            })
-            .map(|layer| (layer as f32 * CELL_M, (layer + 1) as f32 * CELL_M))
+        self.column(column.x, column.y).filter_map(move |layer| {
+            let cube = self.cube(IVec3::new(column.x, layer, column.y))?;
+            if !cube.is_in() {
+                return None;
+            }
+            let bottom = layer as f32 * CELL_M;
+            let fill = f32::from(cube.level()) / f32::from(FULL);
+            Some((bottom, bottom + CELL_M * fill.min(cube.shape.height())))
+        })
     }
 
     /// The height of whatever would hold up feet at `point`: the highest top of a cube, or
