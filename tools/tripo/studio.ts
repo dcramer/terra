@@ -99,7 +99,8 @@ export class Studio {
 
   constructor(cookie = env("TRIPO_STUDIO_COOKIE")) {
     cookie = cookie.trim();
-    if (!cookie.includes("=")) cookie = `ory_kratos_session=${cookie}`; // the bare session value
+    // The bare session value, which may end in base64 padding, or a whole cookie header.
+    if (!cookie.includes(";") && !cookie.startsWith("ory_kratos_session=")) cookie = `ory_kratos_session=${cookie}`;
     const jar = new Map(
       cookie
         .split(";")

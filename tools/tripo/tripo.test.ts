@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { presignPut } from "./studio.ts";
+import { presignPut, Studio } from "./studio.ts";
 import { ourEndpoints, ourNames, versionEnums } from "./bundle.ts";
 import { projectIdOf, slug } from "./cli.ts";
 import { gltfOf, triangles } from "./glb.ts";
@@ -81,4 +81,13 @@ test("takes the names the CLI sends from versions.ts", () => {
   const names = ourNames();
   for (const name of ["v3.1-20260211", "v3.0-20260909", "gemini_3.1_flash_image_preview", "unreal", "gltf"]) assert.ok(names.has(name), name);
   assert.ok(!names.has("h3.1"), "our own names for them are not sent");
+});
+
+test("takes the session cookie bare, padded or not, or as a whole cookie header", () => {
+  const session = (c: string) => new Studio(c).cookie;
+  assert.equal(session("abc"), "ory_kratos_session=abc");
+  assert.equal(session("MTc5-k="), "ory_kratos_session=MTc5-k=");
+  assert.equal(session("ory_kratos_session=MTc5-k="), "ory_kratos_session=MTc5-k=");
+  assert.equal(session("tripo_device_id=d; ory_kratos_session=MTc5-k="), "tripo_device_id=d; ory_kratos_session=MTc5-k=");
+  assert.throws(() => session("tripo_device_id=d; other=x"));
 });
