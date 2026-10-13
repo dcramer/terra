@@ -684,13 +684,15 @@ fn grass_square(
     )
 }
 
-/// When something built changes shape, clears away whatever it now stands on.
+/// When something built changes shape, clears away whatever it now stands on, with what
+/// that blocked.
 fn make_way(
     mut commands: Commands,
     footprints: Query<Ref<Footprint>>,
     planet: Res<Planet>,
     meadow: Option<ResMut<Meadow>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut obstacles: ResMut<Obstacles>,
     mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
     ticks: SystemChangeTick,
 ) {
@@ -714,6 +716,9 @@ fn make_way(
             .any(|footprint| footprint.covers(transform.translation, growth.clearance_m))
         {
             *visibility = Visibility::Hidden;
+            if let Some(stood) = growth.obstacle {
+                obstacles.remove(stood);
+            }
         }
     }
     // Regrow the squares of grass at or beside what changed.
@@ -948,7 +953,7 @@ mod tests {
     }
 
     #[test]
-    fn building_over_a_plant_takes_it_away() {
+    fn building_over_a_plant_takes_it_and_its_trunk_away() {
         let mut world = World::new();
         let planet = planet();
         let start = planet.start();
@@ -970,7 +975,7 @@ mod tests {
             ..default()
         });
         world.run_system_cached(make_way).unwrap();
-        assert!(hidden(&world, near));
+        assert!(hidden(&world, near) && !blocked(&world, on));
         assert!(!hidden(&world, far) && blocked(&world, off));
     }
 }
