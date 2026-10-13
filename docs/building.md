@@ -211,7 +211,7 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 - **The room in the build menu is a shortcut**: a rectangle drawn with it lays its walls, its floor and a roof as plans, each its own, as if drawn one by one. Closing a loop of walls drawn by hand offers the same floor.
 - **A roof is laid over what is enclosed**, offered when the walls close, or drawn as a rectangle like a floor.
 - **Indoors is worked out**: inside walls and under a roof, by the grid. It is what shelters from weather and lets interior things go in.
-- **Into the ground**: a wall or floor laid where the ground is high cuts it away (D131); a cellar is the ground dug out, then walled.
+- **Into the ground**: ground inside a building's footprint above its floor is cut away, and nothing outside it (D131, D193); a cellar is the ground dug out, then walled.
 
 **What a building is** (D155). The developers: station expansions count "anywhere in the building … buildings will need to know if they're 'complete' (aka walls/roof) anyways because otherwise you have natural elements like rain/cold that should have effect". So the game keeps track of buildings:
 
@@ -269,7 +269,7 @@ Open: which materials are big; how many a player carries; whether a log is cut i
 
 - **The grid** is half a metre (D57; see [The grid](#the-grid)). Things snap to it and turn in eighths; off it, they turn freely.
 - **A base stands level where its claim stone is put** (built): its grid is set there, level with the ground at the stone. Everything in a base shares its floor height and stands on a footing where the ground falls away (built). **Rooms can be underground** (D143): walls and floors may be placed a storey or more down, cutting the ground away, for cellars and for terraces down a slope.
-- **Into the ground**: what is built cuts the ground away where it stands, no deeper than its own height (D131). Trees and rocks must be cleared first (D131); small plants clear themselves.
+- **Into the ground**: what is built cuts the ground away only inside its footprint, down to its floor, no deeper than its own height; outside it, the ground is not changed, and footings stop at it (D131, D193). Trees and rocks must be cleared first (D131); small plants clear themselves.
 - **Up and down**: anything placed can be raised and lowered (asked for), on the grid in half-metre steps. What must stand on something says so: a chair on a floor, a station on the ground.
 - **What may not overlap**: an item may not go into another item or a wall (built); a structure may not go over a solid thing set down outdoors, such as the claim stone, which is outlined (built).
 - **What the ghost says**: blue when it can go, red when not, with one line saying why and what it costs; what is in the way outlined, through walls too (proposed, after Subnautica 2's first update).
@@ -305,7 +305,7 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 
 ## Stability
 
-None in the MVP, and wanted later (D142). Rust, Valheim and Sons of the Forest make structures hold themselves up; Enshrouded and Subnautica do not; Ark does but hides its rules, which players complain about. When it comes: shown only while building, as Valheim's colours; a part that holds others up cannot be taken out from under them, as Sons of the Forest's; and constructing in order (floor, walls, roof) already reads as physical without it.
+None in the MVP, and wanted later (D142). Settled already (D193): nothing is taken away while something rests on it or is attached to it, and what loses its support to an attack collapses into debris. Rust, Valheim and Sons of the Forest make structures hold themselves up; Enshrouded and Subnautica do not; Ark does but hides its rules, which players complain about. When it comes: shown only while building, as Valheim's colours; a part that holds others up cannot be taken out from under them, as Sons of the Forest's; and constructing in order (floor, walls, roof) already reads as physical without it.
 
 ## Enshrouded or Subnautica: how placing works
 

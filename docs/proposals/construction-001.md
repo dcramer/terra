@@ -24,9 +24,9 @@ The developers, 2026-10-12:
 6. **Plans are the same cubes, not yet built.** A plan, a building going up and a finished one are one set of cubes in three states, drawn by the same rule: what is in, solid; what is not, as the ghost; the next part lit. Only what is built collides, holds a walker up or encloses a room.
 7. **Openings are cubes left open.** A door or window is an item fitted into an opening of its size once the wall is up, never part of a plan (2026-10-12). The kit frames every opening along its edges, whatever its shape.
 8. **Roofs are the one surface.** A roof is drawn from its height field, not its cubes, and its pieces are chosen by the field's shape round each point: slope, eave, verge, ridge, hip, valley, where it meets a wall. Walls under it end at its underside.
-9. **The ground is not changed by building.** Footings fill the space between the floor and the ground and stop where they meet it, set a few centimetres in so no gap shows; nothing is flattened or filled. Only building below the ground's level, a cellar or a terrace into a slope, digs it, as D131 says (an [open question](#open-for-the-developers)).
+9. **The ground is not changed by building.** Footings fill the space between the floor and the ground and stop where they meet it, set a few centimetres in so no gap shows; nothing is flattened or filled outside a building. Inside its footprint, ground above the floor is cut down to it, and building below the ground's level, a cellar or a terrace into a slope, digs it (D131, narrowed by D193).
 10. **Pieces are models** (D177): made by the art pipeline, one concept to a kit, one grade, several versions of every common piece, every side alike (building-kits.md).
-11. **Nothing floats** (the developers, 2026-10-12: "we also want the structure system so you cant just build floating buildings"). A built cube must be joined, through built cubes, to the ground: a cube the ground passes through, or a footing that reaches it. A roof stands on the walls under its edges. A plan may float, as a ghost, but a part is built only once what it rests on is, and a part that holds others up cannot be taken out, or the ground dug from under it, until they are. One flood fill over a building's built cubes when one changes (D127). This is not load or span, which stay for later (D142): a ten-storey tower on one post is allowed, a house in the air is not.
+11. **Nothing floats** (the developers, 2026-10-12: "we also want the structure system so you cant just build floating buildings"). A built cube must be joined, through built cubes, to the ground: a cube the ground passes through, or a footing that reaches it. A roof stands on the walls under its edges. A plan may float, as a ghost, but a part is built only once what it rests on is, and nothing is taken out, or the ground dug from under it, while anything rests on it or is attached to it (D193). One flood fill over a building's built cubes when one changes (D127). This is not load or span, which stay for later (D142): a ten-storey tower on one post is allowed, a house in the air is not.
 
 ## Drawing by neighbours
 
@@ -157,23 +157,23 @@ Found by reading this proposal against the building docs, the decisions and the 
 **Doors, windows and what stands in a room**
 
 15. **Glass was a cube in the plan**, though a window is fitted later. *Answer, the developers' own (2026-10-12):* doors and windows are props, so "they can actually look nice and be interactive": a wall only has a hole, cut by the door or window tool or carved; a prop fits a hole it sits inside, the kit filling any rest with boards or a transom, and the game says plainly when none fits. Glass leaves the cubes. A prop opens and shuts, has shutters, shows light within, and later breaks and is mended; a shut one closes its room. A door is a flag on the edge between two rooms, so opening it does not work the rooms out again. *Theirs, written in.*
-16. **Items rest on cubes**: take a floor away and the chest floats. *Answer:* every item records the cube it stands on or hangs from; taking that cube away is refused while it is there, as Valheim's. *Yours (refuse, or let it drop).*
+16. **Items rest on cubes**: take a floor away and the chest floats. *Answer:* every item records the cube it stands on or hangs from, and nothing is taken away while anything is attached to it or rests on it, items, parts and props alike, so nothing has to drop. *Decided (D193).*
 17. **Building into where someone stands** traps them. *Answer:* a part whose cubes hold a body, a creature or a dropped item is refused, and what is in the way outlined (Rust, Valheim). *Mine.*
-18. **Stairs, ramps and ladders** cannot be cubes that are only solid or not, and a cube is taller than a step. *Answer:* a cube has a shape as well as a kind (whole, stair, slope, half), each with its collision from a table, as Minecraft's and Enshrouded's shapes. *Yours: which shapes.*
+18. **Stairs, ramps and ladders** cannot be cubes that are only solid or not, and a cube is taller than a step. *Answer:* a cube has a shape as well as a kind (whole, stair, slope, half), each with its collision from a table, as Minecraft's and Enshrouded's shapes. *Decided (D193): whole, stair, slope, half.*
 
 **Support (rule 11)**
 
 19. **"Joined" was not defined.** *Answer:* face to face, between built cubes with any fill; a roof section is held when each of its eaves rests on a built cube's top or a post; roofs are in the graph. *Mine.*
-20. **Support lost by other means**: attacks (D90), ground dug at a claim's edge, old saves. *Answer:* what is no longer joined collapses into debris that gives back part of its materials (Valheim, 7 Days to Die); it never floats. *Yours.*
+20. **Support lost by other means**: attacks (D90), ground dug at a claim's edge, old saves. *Answer:* what is no longer joined collapses into debris that gives back part of its materials (Valheim, 7 Days to Die); it never floats. Only what does not ask, an attack or the ground giving way, makes a collapse; a player's taking apart is refused instead (16). *Decided (D193).*
 21. **A cellar under a built house is a deadlock**: the ground cannot be dug from under the footing, and the cellar cannot be built before it is dug. *Answer:* the cellar's plan digs, a column at a time, each column dug only once the cubes below it are built from the bottom and take the load; one operation, checked as one. *Mine.*
-22. **Ground above the floor inside a building**: rule 9 leaves the ground alone, D131 cuts it, and the floor sits on a grid layer, so a slope can poke through it. *Answer:* D131 narrowed: ground is cut only inside the building's footprint, down to the floor; outside, nothing is touched. *Yours: it changes D131.*
+22. **Ground above the floor inside a building**: rule 9 leaves the ground alone, D131 cuts it, and the floor sits on a grid layer, so a slope can poke through it. *Answer:* D131 narrowed: ground is cut only inside the building's footprint, down to the floor; outside, nothing is touched. *Decided (D193).*
 
 **Many players**
 
 23. **Undo and two people at once.** Operations are applied in the server's order (D21), so an undo or a second builder can find the state changed. *Answer:* the server checks every operation, undo included as its inverse, against the state then; undo is refused if it would break support or someone has changed those cubes since; the next part is held for the player taking it for a few seconds. *Mine.*
-24. **Plans cost nothing, so one player can plan a million cubes** that everyone nearby is sent and draws. *Answer:* a claim has a budget of planned cubes, and plans are seen only by its tribe, with the hammer in hand, nearby. *Yours.*
-25. **Refunds can be farmed**, as cost is set apart from pieces and carving gives back. *Answer:* cost is per cube in exact fractions, and taking apart gives back exactly what went in, no more; what is given back goes to the claim's storage when the taker did not pay for it, and who may take apart is by rank. *Yours.*
-26. **Two bases meeting**, each on its own grid and turn. *Answer:* claims do not overlap and keep a margin; every derived piece, eaves and footings included, stays inside its claim. *Yours.*
+24. **Plans cost nothing, so one player can plan a million cubes** that everyone nearby is sent and draws. *Answer:* a claim has a budget of planned cubes, and plans are seen only by its tribe, with the hammer in hand, nearby. *Decided (D193).*
+25. **Refunds can be farmed**, as cost is set apart from pieces and carving gives back. *Answer:* cost is per cube in exact fractions, and taking apart gives back exactly what went in, no more; what is given back goes to the claim's storage when the taker did not pay for it, and who may take apart is by rank. *Decided (D193).*
+26. **Two bases meeting**, each on its own grid and turn. *Answer:* claims do not overlap and keep a margin; every derived piece, eaves and footings included, stays inside its claim. *Decided (D193).*
 27. **Villages built by stored operations** cost too much across whole worlds (D52). *Answer:* a village is a seed and the generator that makes its plan; only what players change is stored (D108 stands). *Mine.*
 
 **The docs and the art**
@@ -191,13 +191,13 @@ Found by reading this proposal against the building docs, the decisions and the 
 5. **Which kinds are blocks and which are long members.** Recommend stone, brick, plaster and earth as blocks; logs, timber framing, planks and wattle as long members.
 6. **Is a footing its own part?** The developers, 2026-10-12: "the footings might need to be a specific kind of building block tho? like a footing or floor? idk". A footing needs no special block: it is cubes of a block kind, stone by default, in the layers under the floor, and one rule makes it stop at the ground: **a cube the ground passes through is drawn down to the ground and no further**, which also closes a floor's edge. What is open is who lays it. Placed by hand first, as Valheim, Rust and Enshrouded do: explicit, but a step to forget, and gaps on slopes until it is done. Laid by the game: The Sims' way (D154). Recommend the game lays it into the plan under every ground-floor wall and floor edge, shown as its own part with its own cost, built first (D139), and changed if wanted: timber posts or stilts instead, or none over a cellar.
 7. **Nothing floats, now or later?** D142 says no stability in the MVP, wanted later. Rule 11 is the smallest part of it, joined to the ground or not, with no load or span. Recommend rule 11 in the MVP, which refines D142, and load and span later as it says.
-8. **Items on cubes** (gap 16): refuse taking away what an item rests on, or let the item drop? Recommend refuse.
-9. **Cube shapes** (gap 18): which besides whole? Recommend stair, slope and half, then more as kinds need them.
-10. **Lost support** (gap 20): collapse into debris giving back part of the materials, or stay standing marked as unsound until mended? Recommend collapse.
-11. **Ground inside a building** (gap 22): narrow D131 to cut only inside the footprint, down to the floor? Recommend yes.
-12. **Plans** (gap 24): a budget of planned cubes per claim, seen only by its tribe? Recommend yes.
-13. **Refunds** (gap 25): exact, and to the claim's storage when the taker did not pay? Recommend yes, with taking apart by rank.
-14. **Claims meeting** (gap 26): no overlap, with a margin, and everything built inside? Recommend yes.
+8. **Taking away what holds something** (gap 16): **Decided** (D193): refused, for anything attached to it or resting on it, items, parts and props alike: "we should refuse to remove things with other things attach. otherwise we have to add another system to 'drop' those things".
+9. **Cube shapes** (gap 18): **Decided** (D193): whole, stair, slope and half, more as kinds need them.
+10. **Lost support** (gap 20): **Decided** (D193): what is no longer joined collapses into debris, giving back part of its materials.
+11. **Ground inside a building** (gap 22): **Decided** (D193, D131 narrowed): cut only inside the footprint, down to the floor.
+12. **Plans** (gap 24): **Decided** (D193): a budget of planned cubes per claim, seen only by its tribe, with the hammer in hand, nearby.
+13. **Refunds** (gap 25): **Decided** (D193): exactly what went in, to the claim's storage when the taker did not pay; taking apart by rank.
+14. **Claims meeting** (gap 26): **Decided** (D193): no overlap, with a margin, and everything built inside its claim.
 
 ## What changes from what is built
 
