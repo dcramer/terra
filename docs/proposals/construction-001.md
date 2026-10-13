@@ -104,6 +104,24 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | **Many** | | |
 | Fifty cabins in view | One mesh per building and material, rebuilt only where cubes changed; ghosts instanced; a stand-in far off (D160) | Not measured |
 
+## Player experiences
+
+How the pieces work together, walked through as players will meet them (the developers, 2026-10-12: "just thinking about how all the pieces work together and the different player experiences"). Each says what the player does and sees, and what it asks of the rules; **gaps** are what nothing above answers yet.
+
+**1. The first night: a shelter, fast.** Early on, with wattle and poles. The player draws three short walls and a lean-to roof over them, open on one side. The plan shows its stakes and thatch; they put them in from the pack in a minute or two. Under it they are out of the rain, though it is not indoors (D155), which a closed room would be. *Asks:* small plans must be quick to lay and build, and shelter must count before a room is closed. **Gaps:** whether a roof alone shelters from rain; whether early kinds go up in big parts, not stake by stake.
+
+**2. A log cabin on a slope.** The player draws a 5 by 4 m room with the room shortcut. The plan shows a footing, taller on the downhill side, a floor, four walls log by log with a door and a window cut, and a gable roof. Building goes from the bottom: the footing's stones, then the floor, then the logs, carried one at a time from where the trees fell (D140), then the roof in stages. The door, made at the workbench, is fitted last. *Asks:* the footing laid by the game (question 6); a plan's order the physical one; doors as items. **Gaps:** how a roof goes up in stages; how the next part to build is shown from inside and outside.
+
+**3. Adding on: a stone room against the cabin.** The player draws stone walls meeting the built log wall at a T and an L. The log wall is built, and a built wall never changes under the player (building-tech.md), so the stone ends against the logs here, though the heavier would normally run through. The new roof meets the cabin's wall or roof in a valley. *Asks:* rule 5 gives way to what is built. **Gaps:** a shared wall between two rooms of different kinds; roofs meeting walls and other roofs (D160's hard part).
+
+**4. Changing their mind.** A window in the wrong place: carved out of the built wall a cube at a time, the logs cut and framed round it, the cut logs given back. A whole wall taken down: it comes down last part first, giving back its logs. *Asks:* carving and taking apart drawn by the same rules as building. **Gaps:** what happens to a roof whose wall is taken away, with no stability yet (D142): recommend a wall under a roof cannot be taken down until the roof is.
+
+**5. A cellar.** The player draws walls a storey down, inside the claim. The ground there is dug as the plan is built (D131), and the cubes it no longer fills show the walls; no footing is laid below ground. *Asks:* rule 9's exception. **Gaps:** stairs down (building.md step 4); whether the digging is the player's work or the plan's.
+
+**6. Building together.** One player fells and carries logs; another sets them and hammers them in; a recruit fetches stone (D90). The plan is the same for all; each builds the next part nearest them (building-tech.md), and the claim's list says what is still needed. *Asks:* parts put in by anyone, in any order the physical order allows. **Gaps:** two players reaching for the same part.
+
+**7. A village.** Houses put up by the world, from the same parts and operations (D108): plans built by its people over days, so a village grows as a base does. *Asks:* every rule holds for buildings nobody drew by hand. **Gaps:** the far stand-in for many houses (D160), not measured.
+
 ## Open for the developers
 
 1. **Foundations.** Leaning, the developers, 2026-10-12: "ideally foundations just stop at the ground? but im not really sure". So footings of the kit's stone fill the space between the floor and the ground and stop where they meet it, taller where the ground falls away; the ground is left as it is, and the floor sits at the highest ground under the building. Only building below ground level digs (D131). Still to say: whether a tall footing costs more, and what happens when the ground under a building is dug later.
