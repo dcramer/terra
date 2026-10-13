@@ -43,7 +43,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [building-kits.md](building-kits.md) | How each kind of construction looks and is drawn, planned, going up and built, logs first: corners, joins and openings (D177 to D179). |
 | [progression.md](progression.md) | Three ways to grow (skills, studied techniques, essences), skills on the rank ladder, crossing a rank, and how things are unlocked. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
-| [art-style.md](art-style.md) | **The style guide and art direction for anything the game draws**, the same in every realm and setting: why direction D, what a realm brings, life size, shape, colour, light, budgets, the concept prompt, a checklist, how the renderer makes the look and open questions. |
+| [art-style.md](art-style.md) | **The style guide and art direction for anything the game draws**, the same in every realm and setting: textured, lightly stylised realism, what a realm brings, life size, shape, colour, light, budgets, the concept prompt, a checklist, how the renderer makes the look and open questions. |
 | [audio.md](audio.md) | Sound: how it is put together, what it sounds like now, and questions for the developers. |
 
 **Parked**

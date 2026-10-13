@@ -27,6 +27,8 @@ The starting realm reads more fantasy than medieval, given the lore ([vision.md]
 
 The world is at real-world scale (D110). A broadleaf tree stands 15 to 25 metres, a pine taller; boulders range from knee-high to bigger than a house; hills rise tens of metres and mountains hundreds. The player should feel small against the land, which is also what makes haze and layered distance work. Simple shapes do not mean small things: a model is simplified, never shrunk ([Shape](#shape), rule 3).
 
+Trees should be mighty, towering over the player (the developers, 2026-10-12). So a tree is drawn as an old-growth specimen at the top of its species' real range, with the massive trunk and full crown that go with it: an ancient oak 35 m across on a trunk 3 m thick, a redwood 100 m tall. That is still life size; it is the biggest real trees, not bigger than real.
+
 ## Shape
 
 1. **Silhouette first.** Filled in solid black, a thing must still say what it is. Make the outline distinct and the proportions clear, and give it one or two features that tell it apart from its neighbours.
@@ -137,7 +139,7 @@ Models carry their own materials; the light, the sky and the air are shared shad
 
 ## Open questions
 
-- **Trees, plants and rocks** are still flat colour in direction D, and clash with textured buildings and ground. They are to be made again to this guide.
+- **Trees, plants and rocks** are still flat colour in direction D, and clash with textured buildings and ground. They are to be made again to this guide. Trees could be grown in code instead, with real bark and leaf cards: the lush forest spike runs 2,700 of them at about 5 ms a frame ([research/lush-forest-spike.md](../research/lush-forest-spike.md)). Which way is open.
 - **How materials change through seasons and phases** (D149).
 - **Night.** Moonlight and lamps on textured surfaces.
 - **Blur and framing**, which matter more in third person.

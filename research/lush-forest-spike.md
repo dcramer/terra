@@ -1,6 +1,6 @@
 # A forest as rich as big games make them
 
-2026-10-12. Question: can the world feel like a dense, rich forest, as The Witcher 3 or Sons of the Forest do, within our frame budget (D25)? Asked by the developers as a test, knowing it is outside the art direction (D14). The first version looked right and ran at about 7 frames a second; they asked for it to be made fast, with a draw distance, its trees cut as the game's are, and grass, bushes and paths in place of ferns.
+2026-10-12. Question: can the world feel like a dense, rich forest, as The Witcher 3 or Sons of the Forest do, within our frame budget (D25)? Asked by the developers as a test, outside the art direction of the time (D14, then flat colour; it moved to textured, lightly stylised realism the same day, which this forest fits). The first version looked right and ran at about 7 frames a second; they asked for it to be made fast, with a draw distance, its trees cut as the game's are, and grass, bushes and paths in place of ferns.
 
 ## Answer
 
@@ -63,4 +63,4 @@ Along the way: a scripted screenshot counted an old file at its path as taken; B
 - **A low sun puts the whole floor in shade.** At 17:00 the solid lumps block it everywhere, so the flecks are gone. Smaller lumps, or cards farther out, would let some through at some cost.
 - **The edge of the draw distance.** Trees vanish at 180 m. In a dense forest the trees in front hide it; from a clearing or a hill it would show. Impostors, pictures of each tree from several sides, would carry the forest to the horizon.
 - **One generator, one species.** More species need their own branching rules and leaf pictures.
-- **The look is outside D14.** If the developers want it, the style guide and the models skill need changing first, as they said.
+- **Grown or modelled.** D14 now asks for real materials, which these trees have: real bark, real leaves. Whether the game's trees are grown in code like these or modelled through Tripo is open; flora.ron cannot yet sway a textured model's leaves apart from its trunk.

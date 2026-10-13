@@ -1,6 +1,7 @@
 //! Spike: can the world feel like a rich forest, as The Witcher or Sons of the Forest do, on
-//! our engine at 60 frames a second? Asked by the developers on 2026-10-12 as a test, knowing
-//! it is not the art direction (docs/art-style.md). Findings: research/lush-forest-spike.md.
+//! our engine at 60 frames a second? Asked by the developers on 2026-10-12 as a test, when the
+//! art direction was still flat colour; it is now textured, lightly stylised realism
+//! (docs/art-style.md), which this fits. Findings: research/lush-forest-spike.md.
 //!
 //! The way big games make forests, in the least code that shows it:
 //!
