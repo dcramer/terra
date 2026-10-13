@@ -15,3 +15,4 @@ Where each material came from. Made by `cargo xtask textures` ([tools/textures](
 - `stone_wall`: Poly Haven [Stone Wall](https://polyhaven.com/a/stone_wall), CC0, 2k. 2.00 m across.
 - `weathered_planks`: Poly Haven [Weathered Planks](https://polyhaven.com/a/weathered_planks), CC0, 2k. 2.00 m across.
 - `white_stucco`: Poly Haven [White Stucco](https://polyhaven.com/a/white_stucco), CC0, 2k. 2.00 m across.
+- `worn_rock_natural_01`: Poly Haven [Worn Rock Natural 01](https://polyhaven.com/a/worn_rock_natural_01), CC0, 2k. 2.00 m across.

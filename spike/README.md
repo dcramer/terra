@@ -6,5 +6,5 @@ Throwaway work that answers one question (D133). Each spike is a folder, `spike/
 - When its note is written, delete the spike. Git history keeps it.
 - Its scratch output goes in an ignored folder inside it, and nothing kept lives there.
 
-Open: none.
+Open: [role-pieces](role-pieces/README.md), until the developers judge [research/role-pieces.md](../research/role-pieces.md).
 
