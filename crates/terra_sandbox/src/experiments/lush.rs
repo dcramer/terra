@@ -56,15 +56,21 @@ const CLEARING_M: f32 = 14.0;
 const FOREST_M: f32 = 220.0;
 /// No two grown trees closer than this.
 const SPACING_M: f32 = 7.0;
-/// Where a tree's detail drops, in metres from the camera: full, then fewer branches and
-/// cards, then fewer again; past the last, it is not drawn.
-const DETAIL_M: [f32; 3] = [30.0, 75.0, 180.0];
-/// Over how many metres one level of detail dithers into the next.
-const FADE_M: f32 = 6.0;
-/// Crowns this near the camera cast a dappled shadow from a sparse stand-in of leaf cards;
-/// out to the second distance, a solid one from rounded clumps, which the GPU draws far
-/// more cheaply; beyond, none.
-const SHADOW_M: [f32; 2] = [25.0, 80.0];
+/// Where a 20 m tree's detail drops, in metres from the camera: full, then fewer branches
+/// and cards, then fewer again, then far off its crown as solid lumps; past the last, it is
+/// not drawn. A tree's distances grow with its height, so detail follows how big it is on
+/// screen rather than how far it is (D203).
+const DETAIL_M: [f32; 4] = [30.0, 75.0, 180.0, 420.0];
+/// The height the distances are for.
+const DETAIL_FOR_M: f32 = 20.0;
+/// One level of detail dithers into the next over this share of the distance where they
+/// meet, so a change is spread over many metres of walking.
+const FADE: f32 = 0.2;
+/// Crowns cast a dappled shadow from a sparse stand-in of leaf cards while the tree is
+/// drawn in full, then a solid one from rounded clumps, which the GPU draws far more
+/// cheaply, to the end of the second level; beyond, none. They switch where the tree does,
+/// so a shadow never changes when its tree does not.
+const SHADOW_LEVELS: [usize; 2] = [0, 1];
 /// The render layer only the sun sees, which the stand-ins are on.
 const SUN_ONLY: usize = 1;
 /// How many kinds of grown tree, young tree and bush there are; each is drawn many times.
@@ -424,6 +430,14 @@ fn plant(
     });
     // Only the sun sees it, so how it would look does not matter.
     let solid = plain.add(StandardMaterial::default());
+    // A far crown: the leaves' average colour, rough, lit through from behind a little.
+    let far_crown = plain.add(StandardMaterial {
+        base_color: Color::srgb(0.26, 0.36, 0.13),
+        perceptual_roughness: 0.9,
+        reflectance: 0.2,
+        diffuse_transmission: 0.2,
+        ..default()
+    });
 
     let trees: Vec<TreeModel> = (0..OAK_KINDS + YOUNG_KINDS)
         .map(|kind| {
@@ -488,11 +502,13 @@ fn plant(
             scale: Vec3::splat(scale),
         }
     };
-    let detail = |level: usize| {
-        let from = if level == 0 { 0.0 } else { DETAIL_M[level - 1] };
+    // Levels `first` to `last` of a tree this many times the height the distances are for.
+    let detail = |first: usize, last: usize, size: f32| {
+        let at = |level: usize| DETAIL_M[level] * size;
+        let from = if first == 0 { 0.0 } else { at(first - 1) };
         VisibilityRange {
-            start_margin: (from - FADE_M).max(0.0)..from,
-            end_margin: DETAIL_M[level] - FADE_M..DETAIL_M[level],
+            start_margin: from * (1.0 - FADE)..from,
+            end_margin: at(last) * (1.0 - FADE)..at(last),
             use_aabb: false,
         }
     };
@@ -526,6 +542,7 @@ fn plant(
             } as usize;
             let model = &trees[kind];
             let scale = dice.range(0.85, 1.15);
+            let size = (model.height * scale / DETAIL_FOR_M).clamp(0.45, 1.4);
             // Sunk a little, so the root flare meets uneven ground.
             let place = place_on(at, &mut dice, 0.3, scale);
             let foot = place.translation;
@@ -538,10 +555,12 @@ fn plant(
                 ))
                 .with_children(|tree| {
                     for level in 0..3 {
+                        // The simplest trunk stands on under the far crown too.
+                        let last = if level == 2 { 3 } else { level };
                         let mut wood = tree.spawn((
                             Mesh3d(model.wood[level].clone()),
                             MeshMaterial3d(bark.clone()),
-                            detail(level),
+                            detail(level, last, size),
                         ));
                         if level == 2 {
                             wood.insert(NotShadowCaster);
@@ -549,28 +568,28 @@ fn plant(
                         tree.spawn((
                             Mesh3d(model.crown[level].clone()),
                             MeshMaterial3d(leaves.clone()),
-                            detail(level),
+                            detail(level, level, size),
                             NotShadowCaster,
                         ));
                     }
+                    // Far off, the crown as its solid lumps in the leaves' colour, so the
+                    // forest carries on past where its cards end.
+                    tree.spawn((
+                        Mesh3d(model.clumps.clone()),
+                        MeshMaterial3d(far_crown.clone()),
+                        detail(3, 3, size),
+                        NotShadowCaster,
+                    ));
                     tree.spawn((
                         Mesh3d(model.shadow.clone()),
                         MeshMaterial3d(leaves.clone()),
-                        VisibilityRange {
-                            start_margin: 0.0..0.0,
-                            end_margin: SHADOW_M[0] - FADE_M..SHADOW_M[0],
-                            use_aabb: false,
-                        },
+                        detail(0, SHADOW_LEVELS[0], size),
                         RenderLayers::layer(SUN_ONLY),
                     ));
                     tree.spawn((
                         Mesh3d(model.clumps.clone()),
                         MeshMaterial3d(solid.clone()),
-                        VisibilityRange {
-                            start_margin: SHADOW_M[0] - FADE_M..SHADOW_M[0],
-                            end_margin: SHADOW_M[1] - FADE_M..SHADOW_M[1],
-                            use_aabb: false,
-                        },
+                        detail(SHADOW_LEVELS[0] + 1, SHADOW_LEVELS[1], size),
                         RenderLayers::layer(SUN_ONLY),
                     ));
                 });
@@ -602,24 +621,25 @@ fn plant(
                 Growth::new(cut_as("Bush", place.scale.y), None, 0.5),
             ))
             .with_children(|bush| {
+                // Drawn once, out to its distance; its shadow from a copy only the sun sees,
+                // which fades out nearer, so the bush itself never dithers between two of
+                // itself.
+                let within = |m: f32| VisibilityRange {
+                    start_margin: 0.0..0.0,
+                    end_margin: m * (1.0 - FADE)..m,
+                    use_aabb: false,
+                };
                 bush.spawn((
                     Mesh3d(mesh.clone()),
                     MeshMaterial3d(leaves.clone()),
-                    VisibilityRange {
-                        start_margin: 0.0..0.0,
-                        end_margin: BUSH_M[0] - 2.0..BUSH_M[0],
-                        use_aabb: false,
-                    },
+                    within(BUSH_M[1]),
+                    NotShadowCaster,
                 ));
                 bush.spawn((
                     Mesh3d(mesh),
                     MeshMaterial3d(leaves.clone()),
-                    VisibilityRange {
-                        start_margin: BUSH_M[0] - 2.0..BUSH_M[0],
-                        end_margin: BUSH_M[1] - FADE_M..BUSH_M[1],
-                        use_aabb: false,
-                    },
-                    NotShadowCaster,
+                    within(BUSH_M[0]),
+                    RenderLayers::layer(SUN_ONLY),
                 ));
             });
         bushed += 1;

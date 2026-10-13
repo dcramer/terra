@@ -63,6 +63,17 @@ const TASKS: &[Task] = &[
         },
     },
     Task {
+        name: "pops",
+        takes: "[--frames 1200-1320] [-- sandbox args]",
+        does: "find what pops in or out, or flickers, in a stretch of a scripted walk, frame by frame (tools/sandbox)",
+        group: "Play and check",
+        run: |args| {
+            let mut all = vec!["tools/sandbox/pops.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "bench",
         takes: "[scene…] [--runs N] [--record] [--debug]",
         does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded",
