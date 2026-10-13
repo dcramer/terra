@@ -28,20 +28,18 @@ pub enum Stage {
     Next,
     /// Not yet in: the ghost.
     Ghost,
-    /// Not drawn: a door or window, which is a prop fitted into its opening.
-    Left,
 }
 
 /// How far a base's pieces are in.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Progress {
-    /// All of it, its doors and windows drawn by its kit: a village's house.
+    /// All of it: a village's house.
     Whole,
-    /// As far as each cube is filled, these cubes lit as what goes in next; its doors and
-    /// windows are props fitted apart: the player's base.
+    /// As far as each cube is filled, these cubes lit as what goes in next: the player's
+    /// base.
     Cubes { next: BTreeSet<[i32; 3]> },
-    /// So much of it, in the order its pieces go in, doors and windows not yet: the kit
-    /// sheet's going-up and plan columns.
+    /// So much of it, in the order its pieces go in: the kit sheet's going-up and plan
+    /// columns.
     Fraction(f32),
 }
 
@@ -217,7 +215,6 @@ pub fn lay(section: &Section) -> Laid {
                 let (mut own, mut edge) = (Vec::new(), Vec::new());
                 for (order, piece) in all.into_iter().enumerate() {
                     let stage = match order.cmp(&done) {
-                        _ if matches!(piece, Piece::Opening { .. }) => Stage::Left,
                         std::cmp::Ordering::Less => Stage::In,
                         std::cmp::Ordering::Equal => Stage::Next,
                         std::cmp::Ordering::Greater => Stage::Ghost,
@@ -285,12 +282,8 @@ pub fn standing(base: &Base, kits: &Kits, fraction: f32) -> Base {
 }
 
 /// How far a piece is in on a base built by plans: by the cubes it stands in, or its roof
-/// cell's stage; lit where it stands in a cube in `next`. Doors and windows are left to
-/// the props fitted into them.
+/// cell's stage; lit where it stands in a cube in `next`.
 pub fn stage_by_cubes(base: &Base, piece: &Piece, next: &BTreeSet<[i32; 3]>) -> Stage {
-    if matches!(piece, Piece::Opening { .. }) {
-        return Stage::Left;
-    }
     // A piece of roof is up with its cell's stage; the stage after is next once nothing
     // of the walls is.
     if let Some(cell) = piece.roof_cell() {
@@ -523,7 +516,6 @@ pub struct Drawn {
     pub shell: Surface,
     pub far: Surface,
     pub proxy: Surface,
-    pub openings: Vec<(Piece, Stage)>,
 }
 
 /// Draws a laid section, as finely as `reach` asks and coarser: the game draws finer
@@ -575,10 +567,7 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
                     Stage::Ghost if first => {
                         drawn.ghosts.extend(ghost(piece, kit, count % 2 == 1));
                     }
-                    Stage::Ghost | Stage::Left => {}
-                }
-                if first && matches!(piece, Piece::Opening { .. }) && *stage != Stage::Left {
-                    drawn.openings.push((piece.clone(), *stage));
+                    Stage::Ghost => {}
                 }
             }
             if kit.pattern == Pattern::Masonry {
@@ -698,7 +687,6 @@ fn draw_blocks(
             // Far off, what goes in next is in.
             (Stage::Next, _) => 0,
             (Stage::Ghost, _) => 1,
-            (Stage::Left, _) => continue,
         };
         let cut = base.cube(*cube).is_some_and(|c| c.shape.is_cut());
         if cut {
@@ -1000,7 +988,7 @@ fn ghost(piece: &Piece, kit: &Kit, shade: bool) -> Option<Ghost> {
             };
             along(from, to, up, high, wide, Shape::Box)
         }
-        Piece::Opening { .. } | Piece::Block { .. } | Piece::Gable { .. } => None,
+        Piece::Block { .. } | Piece::Gable { .. } => None,
     }
 }
 

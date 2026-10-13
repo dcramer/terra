@@ -2,14 +2,14 @@
 //! and merged on the workers put on screen, a few sections a frame. Each section holds a
 //! mesh per kind and material of what is built, near; the next piece lit; a plan's pieces
 //! as ghosts, a unit box or prism each, all sharing one mesh and material so Bevy draws
-//! them as one batch; its doors and windows, fitted; and far off one mesh with its
+//! them as one batch; and far off one mesh with its
 //! textures baked into its colours, coarser again further still, switched by distance
 //! with `VisibilityRange`, as Unreal's HLOD does. Near detail is made only for sections
 //! near the camera and dropped when the camera leaves them.
 
 use super::layout::{Done, Drawing, Jobs, Outcome, reach};
 use super::store::{self, Drawn, Section, each};
-use super::{Build, BuildLook, Built, Site, pieces};
+use super::{Build, BuildLook, Built, Site};
 use crate::planet::MainCamera;
 use bevy::{
     asset::RenderAssetUsages,
@@ -23,9 +23,8 @@ use bevy::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use terra_build::kit::Kits;
-use terra_build::layout::Piece;
-use terra_build::sections::{Drawn as Merged, Ghost, Reach, Shape, Stage};
-use terra_build::{Kind, Material, Prop, Surface};
+use terra_build::sections::{Drawn as Merged, Ghost, Reach, Shape};
+use terra_build::{Kind, Material, Surface};
 
 /// Where each detail is seen, in metres from a section's middle, each fading into the
 /// next over a margin: full detail to here, a few metres off's to `MID_M`, far to `FAR_M`,
@@ -249,7 +248,6 @@ pub(super) struct Parts {
     ghosts: Vec<Ghost>,
     far: Option<Mesh>,
     proxy: Option<Mesh>,
-    openings: Vec<(Piece, Stage)>,
     centre: Vec3,
 }
 
@@ -279,7 +277,6 @@ pub(super) fn parts(drawn: Merged, centre: Vec3) -> Parts {
         ghosts: drawn.ghosts,
         far: plain(&drawn.far),
         proxy: plain(&drawn.proxy),
-        openings: drawn.openings,
         centre,
     }
 }
@@ -378,7 +375,7 @@ fn upload(
 impl Parts {
     /// Whether nothing of it is drawn.
     pub(super) fn is_empty(&self) -> bool {
-        self.corners() == 0 && self.ghosts.is_empty() && self.openings.is_empty()
+        self.corners() == 0 && self.ghosts.is_empty()
     }
 
     /// How many corners its meshes have.
@@ -535,45 +532,6 @@ fn show(
             NotShadowCaster,
             ChildOf(entity),
         ));
-    }
-    // Doors and windows the kit draws in its openings, and the props fitted into a build
-    // that is not the player's.
-    if let Some(kit) = look.kit_pieces.as_deref() {
-        for (piece, stage) in &parts.openings {
-            for (mesh, material, placed) in pieces::fitted_parts(kit, piece) {
-                let mut part = commands.spawn((
-                    Mesh3d(mesh),
-                    Transform::from_translation(-parts.centre) * placed,
-                    range(None, FAR_M),
-                    ChildOf(entity),
-                ));
-                match stage {
-                    Stage::Next => part.insert(MeshMaterial3d(looks.next.clone())),
-                    Stage::Ghost => part.insert(MeshMaterial3d(looks.ghost[0].clone())),
-                    _ => part.insert(MeshMaterial3d(material)),
-                };
-            }
-        }
-        if build.fitted_props && !build.by_plans {
-            let props: Vec<Prop> = build
-                .base
-                .props()
-                .filter(|prop| terra_build::cubes::section_of(IVec3::from_array(prop.min)) == at)
-                .copied()
-                .collect();
-            for prop in props {
-                let (_, parts_of) = super::props::parts(kit, &build.base, &prop);
-                for (mesh, material, placed) in parts_of {
-                    commands.spawn((
-                        Mesh3d(mesh),
-                        MeshMaterial3d(material),
-                        Transform::from_translation(-parts.centre) * placed,
-                        range(None, FAR_M),
-                        ChildOf(entity),
-                    ));
-                }
-            }
-        }
     }
     build.sections.drawn.insert(done.section, drawn);
 }

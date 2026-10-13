@@ -94,11 +94,6 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
             fail(format!("{material:?}: reflectance out of 0 to 1"));
         }
     }
-    for model in [&kit.models.door, &kit.models.window].into_iter().flatten() {
-        if !exists(model) {
-            fail(format!("no {model}"));
-        }
-    }
     // Life size, and numbers in range (D14: lightly stylised, true proportions).
     let t = &kit.timber;
     let r = &kit.roof;

@@ -14,7 +14,6 @@
 //! The kit's file is read again when it is saved, so the sheet can be left running while
 //! the look is tuned.
 
-use super::props::{DOOR, WINDOW};
 use super::{Build, BuildLook, Built, Shown, Site, frame_at, lifted, read_kits};
 use crate::planet::Planet;
 use crate::shell::Options;
@@ -24,8 +23,7 @@ use std::sync::Arc;
 use terra_build::kit::{Pattern, Profile};
 use terra_build::ops::Op;
 use terra_build::{
-    Base, BuildOp, Cube, Facing, Fill, Kind, Panel, Prop, RoofSection, RoofStyle, STOREY_CUBES,
-    Shape,
+    Base, BuildOp, Cube, Facing, Fill, Kind, Panel, RoofSection, RoofStyle, STOREY_CUBES, Shape,
 };
 use terra_core::Operation;
 
@@ -190,7 +188,7 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
     };
     let mut mixed = Vec::new();
     if let Some(stone) = stone {
-        // A house all of stone under a hip roof, with a door and windows.
+        // A house all of stone under a hip roof, with a doorway and windows.
         let mut house = vec![BuildOp::AddRoom {
             min: [0, 0, 0],
             max: [9, 0, 7],
@@ -333,7 +331,7 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
 
 /// A row whose three columns are each a state its cubes are in, rather than how far its
 /// pieces are in: the shortcuts' cubes, then each column's operations on them, drawn by what
-/// each cube holds, with the doors and windows fitted in them.
+/// each cube holds.
 struct Acted {
     name: &'static str,
     ops: Vec<BuildOp>,
@@ -406,8 +404,7 @@ fn acted_rows(kind: Kind, stone: Kind) -> Vec<Acted> {
         laid: true,
         kind,
     });
-    // A window cut into a log wall already built: marked, half out, and open with a
-    // window fitted.
+    // A window cut into a log wall already built: marked, half out, and open.
     let wall_ops: Vec<BuildOp> = east_west(0, 9, 0, kind).collect();
     let window: Vec<[i32; 3]> = [4, 5]
         .into_iter()
@@ -425,22 +422,6 @@ fn acted_rows(kind: Kind, stone: Kind) -> Vec<Acted> {
     cut.push(Op::Open {
         cubes: window.clone(),
     });
-    cut.push(Op::FitProp(Prop {
-        kind: WINDOW,
-        min: [4, 2, 0],
-        max: [5, 3, 0],
-        open: false,
-    }));
-    // A door, shut and open, and open from the other side.
-    let mut cabin = vec![room(kind)];
-    cabin.extend((3..=4).map(|x| wall([x, 0, 7], Panel::Door, kind)));
-    cabin.push(gable);
-    let door = |open: bool| Prop {
-        kind: DOOR,
-        min: [3, 0, 7],
-        max: [4, 3, 7],
-        open,
-    };
     vec![
         Acted {
             name: "stone floor",
@@ -462,17 +443,6 @@ fn acted_rows(kind: Kind, stone: Kind) -> Vec<Acted> {
             columns: [marked, half, cut],
             sloped: false,
             view: [Vec3::new(2.5, 2.4, 9.0), Vec3::new(2.5, 1.3, 0.0)],
-        },
-        Acted {
-            name: "door shut and open",
-            ops: cabin,
-            columns: [
-                vec![Op::FitProp(door(false))],
-                vec![Op::FitProp(door(true))],
-                vec![Op::FitProp(door(true))],
-            ],
-            sloped: false,
-            view: [Vec3::new(7.5, 2.4, 11.0), Vec3::new(2.2, 1.0, 3.0)],
         },
         // Last, as the ground cut away falls north beyond it.
         Acted {
@@ -763,7 +733,7 @@ pub(super) fn lay(
             let label = format!("Kit sheet: {}, {column}", row.name);
             let mut build = Build::new(&mut commands, &look, frame, &label);
             build.kits = Some(kits.clone());
-            build.fitted_props = true;
+            build.by_cubes = true;
             build.replace_with(&row.ops, &mut commands, &planet, &mut meshes);
             let cx = terra_build::ops::Context::free(&rules);
             if let Err(why) = build.base.act_all(acts, &cx) {

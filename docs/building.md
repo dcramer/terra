@@ -243,7 +243,7 @@ Because every wall is a whole number of cubes, the kit always fits: a stone wall
 
 - **On a plan**, an opening is planned into the wall: the parts it crosses are shortened or left out, so the wall needs less, and a frame is added to build.
 - **In a finished wall**, an opening is cut: it takes work with a tool, gives back the material of what was cut away, and leaves a frame to build.
-- **The door or the glass is its own item**, made at a station and fitted into the frame. A doorway without a door is just a gap; a window frame without glass is open to the weather. A plan never shows a door or glass in its openings, only the opening and its frame (2026-10-12).
+- **The door or the glass is its own item**, made at a station and fitted into the frame. A doorway without a door is just a gap; a window frame without glass is open to the weather. A plan never shows a door or glass in its openings, only the opening and its frame (2026-10-12). For now no door or window is fitted anywhere, the player's, the village's or the kit sheet's: openings stand as framed holes with their jambs, sills and lintels until better props are made (D225: "we have some of these ugly ass door and window props we can probably just remove for now").
 
 **Small things are not planned.** Furniture, storage, lights and stations are placed whole, as now: they are made, then set down. Open whether stations should be constructed too, being large.
 
@@ -290,7 +290,7 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 | A storey up, and stairs or a ladder to it | Storeys and stairs built (D220); ladders missing |
 | Footing under walls on the ground | Built: stone cubes down to the ground, laid first (D206) |
 | Fence, wall, gate and palisade, drawn as a line | Missing; needed once bases are attacked (D90) |
-| Door that opens, closes and locks | Fitted into an opening, opened and shut with F; no lock (D201) |
+| Door that opens, closes and locks | Taken out for now (D225): the fitting operations stay, nothing is fitted or drawn; no lock |
 | Stations: workbench, smelter, forge, campfire | Built |
 | Furniture, storage, lights | Built |
 | Claim stone | Built |

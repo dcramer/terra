@@ -75,7 +75,7 @@ fn haze(mut commands: Commands) {
         Haze,
         FogVolume {
             fog_color: Color::srgb(0.92, 0.95, 1.0),
-            density_factor: 0.008,
+            density_factor: 0.004,
             absorption: 0.05,
             scattering: 0.5,
             // Light scattered on forward, so a shaft shows best looking toward the sun.
@@ -207,9 +207,11 @@ fn style_camera(
         TemporalAntiAliasing::default(),
         // Soft shadow edges that TAA smooths over frames.
         ShadowFilteringMethod::Temporal,
-        // A soft glow round the sun and bright sky, not a haze over everything.
+        // A soft glow round the sun and bright sky, not a haze over everything: an
+        // energy-conserving bloom blends this much of a wide blur into every pixel, which at
+        // 0.1 washed the middle distance flat.
         Bloom {
-            intensity: 0.1,
+            intensity: 0.03,
             ..Bloom::NATURAL
         },
         // A film's response: highlights roll off and lose their colour as they brighten,

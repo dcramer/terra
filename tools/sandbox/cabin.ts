@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Builds a cabin from plan to door in the play experiment and walks in (D69, D139; step 4 of
+// Builds a cabin from plan to doorway in the play experiment and walks in (D69, D139; step 4 of
 // docs/building-plan.md), checking every step by the base's state, not only by picture:
 // a claim stone; a room's plan of log walls on a stone floor, on a stone footing down to the
 // ground (D194), a doorway and a window cut into it and a gable roof laid over it, all for
@@ -7,9 +7,9 @@
 // first and whole before anything else, then the floor, the walls course by course, the
 // roof by stages, taking exactly what the kits say from the pack; a cube taken out and the
 // taking undone; a refusal where the roof rests on a wall; a second window cut into the
-// built wall, a course at a time from under the logs over it, giving the logs back; a door
-// and windows fitted; the shut door keeping the player out, and opened with the interact
-// key, letting them in; the ground outside the cabin as it was before it was planned; a
+// built wall, a course at a time from under the logs over it, giving the logs back; the
+// player walking in through the open doorway, as no door or window is fitted for now (the
+// developers, 2026-10-13); the ground outside the cabin as it was before it was planned; a
 // deck a storey up on four posts beside it, reached by a flight of stairs (D193), built,
 // and walked up onto; and the game saved and loaded again, the base the same.
 //
@@ -273,46 +273,9 @@ async function build() {
     return `${done.length} steps: ${done.map((each) => each.what).join("; ")}; ${now.offcuts || "no"} offcuts`;
   });
 
-  await step("fit", async () => {
-    await game.give("fibre:2");
-    const door = await act("build.fit", { at: DOOR[0], door: true });
-    check(door.done, `the door was refused: ${door.refused}`);
-    const window = await act("build.fit", { at: [WINDOW[0][0], 2, WINDOW[0][2]], door: false });
-    check(window.done, `the window was refused: ${window.refused}`);
-    const second = await act("build.fit", { at: [CUT[0][0], 2, CUT[0][2]], door: false });
-    check(second.done, `the window in the cut was refused: ${second.refused}`);
-    const now = await base();
-    check(now.props.length === 3 && now.props.every((prop) => !prop.open), "not a shut door and two windows");
-    return `a door (${door.took}) and two windows (${window.took} each)`;
-  });
-
-  await step("shut", async () => {
-    // Outside the door, facing it, walking north: the shut door stops the player.
-    const outside = await point([4.5, 0, 7.6]);
-    const inside = await point([4.5, 0, 3.5]);
-    await game.warp(eastSouth(outside.from_start), eastSouth(inside.from_start));
-    await game.press("w:90");
-    await game.waitSeconds(2);
-    const at = (await game.state()).at;
-    check(at[1] > eastSouth(outside.from_start)[1] - 1.4, `the player went through the shut door to ${at}`);
-    return `stopped at ${at.map((n) => n.toFixed(2))}`;
-  });
-
-  await step("open", async () => {
-    // A step back from the door, out from under the eaves, to look at it and use it.
-    const door = (await base()).props.find((prop) => prop.kind === "door")!;
-    const back = await point([4.5, 0, 8.3]);
-    await game.warp(eastSouth(back.from_start), eastSouth(door.at));
-    await game.aim(eastSouth(door.at), 1.1);
-    await game.markNow();
-    await game.press("f");
-    const line = await game.waitFor("Build: open the door: done", { timeout: 20 });
-    check((await base()).props.find((prop) => prop.kind === "door")!.open, "the door is not open");
-    return line.text;
-  });
-
   await step("in", async () => {
-    // Straight at the doorway, as before, and in.
+    // Outside the doorway, facing it, walking north, and in: no door is fitted (the
+    // developers, 2026-10-13), so the doorway stands open.
     const outside = await point([4.5, 0, 7.6]);
     const inside = await point([4.5, 0, 3.5]);
     await game.warp(eastSouth(outside.from_start), eastSouth(inside.from_start));
@@ -324,7 +287,7 @@ async function build() {
     const south = (await point([0, 0, 5.5])).from_start[2];
     check(now.at[0] > west && now.at[0] < east && now.at[1] < south, `the player is at ${now.at}, not inside`);
     check(now.indoors, "the game does not count the player indoors");
-    // The cabin from the south-east, its door open.
+    // The cabin from the south-east, through its doorway.
     const look = await point([4.5, 1.2, 4.5]);
     const eye = await point([9.5, 3.0, 11.5]);
     await game.call("sandbox.look", { at: look.world, from: eye.world });

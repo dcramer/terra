@@ -230,7 +230,7 @@ pub fn plugin(app: &mut App) {
         .add_message::<ClearAround>()
         .add_systems(
             Update,
-            (make_way, clear_around, follow_digs).in_set(FloraSystems::Clear),
+            (make_way, clear_new, clear_around, follow_digs).in_set(FloraSystems::Clear),
         );
 }
 
@@ -921,6 +921,30 @@ fn make_way(
     }
 }
 
+/// What grows after something was built, as a forest grown later than a village is,
+/// keeps out of what is built as what grew before it does: a plant set down on a footprint,
+/// or within its clearance of one, is cleared at once.
+fn clear_new(
+    footprints: Query<&Footprint>,
+    mut obstacles: ResMut<Obstacles>,
+    mut growth: Query<(&Growth, &Transform, &mut Visibility), Added<Growth>>,
+) {
+    if footprints.is_empty() {
+        return;
+    }
+    for (growth, transform, mut visibility) in &mut growth {
+        if footprints
+            .iter()
+            .any(|footprint| footprint.covers(transform.translation, growth.clearance_m))
+        {
+            *visibility = Visibility::Hidden;
+            if let Some(stood) = growth.obstacle {
+                obstacles.remove(stood);
+            }
+        }
+    }
+}
+
 /// Where the ground has been dug or filled, what grew on it goes: the plants, rocks and
 /// trees whose foot is no longer on the ground, with what they blocked, and the grass
 /// over it, whose squares are grown again. The digs of a loaded game are followed the
@@ -1188,6 +1212,27 @@ mod tests {
             ..default()
         });
         world.run_system_cached(make_way).unwrap();
+        assert!(hidden(&world, near) && !blocked(&world, on));
+        assert!(!hidden(&world, far) && blocked(&world, off));
+    }
+
+    #[test]
+    fn what_grows_after_something_is_built_keeps_out_of_it() {
+        let mut world = World::new();
+        let frame = Transform::from_translation(Vec3::Y * 2000.0);
+        world.spawn(Footprint {
+            frame,
+            cell_m: 1.0,
+            standing: (0..4)
+                .flat_map(|x| (0..4).map(move |z| IVec2::new(x, z)))
+                .collect(),
+            ..default()
+        });
+        // Planted after it, one in it and one far off.
+        let on = frame.transform_point(Vec3::new(1.5, 0.0, 1.5));
+        let off = frame.transform_point(Vec3::new(40.0, 0.0, 0.0));
+        let (near, far) = two_trees(&mut world, on, off);
+        world.run_system_cached(clear_new).unwrap();
         assert!(hidden(&world, near) && !blocked(&world, on));
         assert!(!hidden(&world, far) && blocked(&world, off));
     }

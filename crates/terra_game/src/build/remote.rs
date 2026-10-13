@@ -1,5 +1,5 @@
 //! Building over the remote protocol (D69; tools/sandbox): a script lays plans, builds,
-//! takes apart, fits doors and windows, opens and shuts them, and reads the base, as this
+//! takes apart and undoes, and reads the base, as this
 //! machine's player, through the same operations and checks the hammer uses
 //! (`build::act::Building`). Each answers at once with what was done, or why it was
 //! refused in the words the player is shown, and is logged as `Build: …`.
@@ -21,8 +21,6 @@
 //! - `build.fill {part?, steps?}`: builds what goes in next, as holding the hammer does, so
 //!   many times (one if not given), stopping at the first refusal.
 //! - `build.take_apart {at, steps?}`: takes out what came last of the part a cube is in.
-//! - `build.fit {at, door?}`: fits a door or window into the opening a cube is part of.
-//! - `build.door {at, open}`: opens or shuts what is fitted at a cube.
 //! - `build.undo`: undoes the player's last change to the base.
 //! - `build.op {ops}`: any operations, as `terra_build::ops::Op` serialises them, as one act.
 //! - `build.point {at}`: where a place in the base, in metres, is in the world and from the
@@ -51,8 +49,6 @@ pub fn plugin(app: &mut App) {
     method(app, "build.opening", opening);
     method(app, "build.fill", fill);
     method(app, "build.take_apart", take_apart);
-    method(app, "build.fit", fit);
-    method(app, "build.door", door);
     method(app, "build.undo", undo);
     method(app, "build.op", ops);
     method(app, "build.point", point);
@@ -343,55 +339,6 @@ fn take_apart(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             }
         }
         Ok(Value::Array(done))
-    })
-}
-
-#[derive(Deserialize)]
-struct Fit {
-    at: [i32; 3],
-    door: Option<bool>,
-}
-
-fn fit(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
-    let fit: Fit = parse_some(params)?;
-    as_player(world, |building, player| {
-        let prop = plans::prop_for(&building.site.base, IVec3::from_array(fit.at), fit.door)
-            .ok_or_else(|| refused("that is not an opening"))?;
-        let what = format!("fit a {}", super::props::name(prop.kind));
-        let result = building.act(Some(player), &what, &[Op::FitProp(prop)]);
-        Ok(answer(&what, result))
-    })
-}
-
-#[derive(Deserialize)]
-struct Door {
-    at: [i32; 3],
-    open: bool,
-}
-
-fn door(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
-    let door: Door = parse_some(params)?;
-    as_player(world, |building, player| {
-        let at = building
-            .site
-            .base
-            .prop_in(IVec3::from_array(door.at))
-            .map(|prop| prop.min)
-            .ok_or_else(|| refused("nothing is fitted there"))?;
-        let what = if door.open {
-            "open the door"
-        } else {
-            "shut the door"
-        };
-        let result = building.act(
-            Some(player),
-            what,
-            &[Op::SetOpen {
-                at,
-                open: door.open,
-            }],
-        );
-        Ok(answer(what, result))
     })
 }
 

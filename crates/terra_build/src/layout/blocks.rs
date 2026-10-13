@@ -106,13 +106,6 @@ fn openings(
         let along_x = high.x > low.x
             || (high.z == low.z
                 && base.along(IVec3::new(low.x, crate::storey_of(low.y), low.z)) == IVec3::X);
-        let door = !solid(low - IVec3::Y);
-        pieces.push(Piece::Opening {
-            min: Place::near(min),
-            max: Place::near(max),
-            along_x,
-            door,
-        });
         let over = solid(IVec3::new(low.x, high.y + 1, low.z));
         // A timber lintel, into the wall either side, where the wall goes on over it.
         if lintels && over {
@@ -177,13 +170,6 @@ mod tests {
             });
         }
         let pieces = lay(&base, &kit(), &Kits(vec![kit()]), Scope::ALL);
-        assert_eq!(
-            pieces
-                .iter()
-                .filter(|p| matches!(p, Piece::Opening { door: true, .. }))
-                .count(),
-            1
-        );
         assert_eq!(
             pieces
                 .iter()

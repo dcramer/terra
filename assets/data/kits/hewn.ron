@@ -44,10 +44,6 @@
         cap: 0.3,
         fillet: 0.12,
     ),
-    models: (
-        door: Some("models/kits/Door.glb"),
-        window: Some("models/kits/Window.glb"),
-    ),
     textures: {
         Log: (path: "materials/rough_wood", metres: (0.6, 0.6)),
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),

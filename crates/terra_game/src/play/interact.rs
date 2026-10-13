@@ -29,8 +29,6 @@ pub enum Interactable {
     Prisoner,
     /// Someone to talk to.
     Talk,
-    /// A door fitted in a wall, to open or shut.
-    Door,
 }
 
 impl Interactable {
@@ -44,7 +42,6 @@ impl Interactable {
             Interactable::Carcass => (0.4, 0.9),
             Interactable::Prisoner => (0.6, 0.7),
             Interactable::Talk => (1.0, 0.6),
-            Interactable::Door => (1.1, 0.7),
         }
     }
 
@@ -59,7 +56,6 @@ impl Interactable {
             Interactable::Carcass => "butcher it".to_string(),
             Interactable::Prisoner => "free them".to_string(),
             Interactable::Talk => "talk".to_string(),
-            Interactable::Door => "open or shut the door".to_string(),
         }
     }
 }

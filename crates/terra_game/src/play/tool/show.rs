@@ -297,7 +297,6 @@ pub(super) fn highlight(
     if let Some(planned) = builder.planned.as_ref() {
         let colour = match (&planned.work.check, planned.doing) {
             (Err(_), _) | (_, Doing::TakeApart) => REFUSED_COLOUR,
-            (_, Doing::Fit) => OPENING_COLOUR,
             _ => BUILD_COLOUR,
         };
         let placed = matches!(builder.target, Target::Place { .. });

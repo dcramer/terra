@@ -670,8 +670,8 @@ fn plan_work(
         };
     }
     match (&builder.picked(builds).kind, builder.target) {
-        // An opening cut into a wall's plan; once the wall is up round it, a door or
-        // window fitted into it.
+        // An opening cut into a wall's plan or a wall already up. No door or window is
+        // fitted into it for now (the developers, 2026-10-13): it stays a framed hole.
         (Kind::Window(_) | Kind::Door, Target::Wall { .. }) if !builder.run.is_empty() => {
             let (panel, door) = match &builder.picked(builds).kind {
                 Kind::Window(shapes) => (shapes[builder.variant()].2, false),
@@ -680,9 +680,7 @@ fn plan_work(
             let cubes = plans::opening_cubes(&builder.run, panel);
             let opened = plans::opening(base, &cubes);
             if opened.is_empty() {
-                let prop = plans::prop_for(base, cubes[0], Some(door))?;
-                let what = format!("fit a {}", crate::build::props::name(prop.kind));
-                work(building, Doing::Fit, what, vec![Op::FitProp(prop)])
+                None
             } else {
                 let what = if door {
                     "cut a doorway"

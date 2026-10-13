@@ -49,7 +49,7 @@ pub fn draw_as(
         Piece::Covering { .. } | Piece::Roof { .. } => {
             crate::roofing::draw_as(piece, kit, plain, surfaces)
         }
-        Piece::Opening { .. } | Piece::Block { .. } | Piece::Gable { .. } => {}
+        Piece::Block { .. } | Piece::Gable { .. } => {}
     }
 }
 

@@ -133,14 +133,6 @@ pub enum Piece {
         ends: [End; 2],
         seed: u32,
     },
-    /// A door or window set into an opening, filling the box from `min` to `max`, its face
-    /// across the wall, which runs along X or along Z.
-    Opening {
-        min: Place,
-        max: Place,
-        along_x: bool,
-        door: bool,
-    },
     /// A sawn member of a deck from one end to the other along its middle (`floors`): a
     /// board, a joist or a rim beam, so wide across and so high, in ticks; its seed is its
     /// version.
@@ -215,7 +207,7 @@ impl Piece {
                 let low = cube.as_vec3() * CELL_M;
                 Some((low, low + Vec3::splat(CELL_M)))
             }
-            Piece::Opening { .. } | Piece::Covering { .. } | Piece::Roof { .. } => None,
+            Piece::Covering { .. } | Piece::Roof { .. } => None,
         }
     }
 
@@ -235,7 +227,7 @@ impl Piece {
             Piece::Log { from, to, .. }
             | Piece::Plank { from, to, .. }
             | Piece::Roof { from, to, .. } => middle(from, to),
-            Piece::Board { min, max } | Piece::Opening { min, max, .. } => middle(min, max),
+            Piece::Board { min, max } => middle(min, max),
             Piece::Covering { middle, .. } => middle.0,
         };
         IVec3::from_array(point.map(|p| p.div_euclid(TICKS)))
@@ -261,7 +253,7 @@ impl Piece {
             Piece::Plank { from, to, high, .. } => {
                 from.metres().y.min(to.metres().y) - metres(*high) * 0.5
             }
-            Piece::Board { min, .. } | Piece::Opening { min, .. } => min.metres().y,
+            Piece::Board { min, .. } => min.metres().y,
             Piece::Block { cube } | Piece::Gable { cube, .. } => cube.y as f32 * CELL_M,
             // Dressed once its cube is in.
             Piece::Trim { cube, .. } | Piece::Band { cube, .. } | Piece::Corner { cube, .. } => {
@@ -758,16 +750,12 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     layout
 }
 
-/// Bottom up, keeping walls together within a course; doors and windows last, fitted
-/// into their openings once the rest is up, as they are not part of the plan.
+/// Bottom up, keeping walls together within a course.
 fn sort(layout: &mut Layout) {
     layout.pieces.sort_by(|a, b| {
-        let fitted = |p: &Piece| matches!(p, Piece::Opening { .. });
-        fitted(a).cmp(&fitted(b)).then(
-            (a.bottom() * 100.0)
-                .round()
-                .total_cmp(&(b.bottom() * 100.0).round()),
-        )
+        (a.bottom() * 100.0)
+            .round()
+            .total_cmp(&(b.bottom() * 100.0).round())
     });
 }
 

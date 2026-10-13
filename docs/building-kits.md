@@ -19,7 +19,7 @@ So a corner looks the same in the blueprint as it does built, just ghosted. Noth
 
 ## How pieces are made (D177, D197, D200)
 
-**Props and trims are models from the art pipeline; code only arranges them** (D177). A kit's look starts as a concept of a whole building drawn to the guide and approved by the developers, [art/props/log-cabin](../art/props/log-cabin/concept.png); each prop is modelled from a concept of its own, drawn the same way, by `tools/props` (Tripo, then a clean-up in Blender to palette roles). Today those are the door and the shuttered window, set into openings of their size.
+**Props and trims are models from the art pipeline; code only arranges them** (D177). A kit's look starts as a concept of a whole building drawn to the guide and approved by the developers, [art/props/log-cabin](../art/props/log-cabin/concept.png); each prop is modelled from a concept of its own, drawn the same way, by `tools/props` (Tripo, then a clean-up in Blender to palette roles). There are none for now: the door and the shuttered window were taken out (D225, the developers on 2026-10-13: "we have some of these ugly ass door and window props we can probably just remove for now"), so every opening stands as a framed hole until better props are made.
 
 **Long members are generated** (D200): logs, beams and planks are a profile swept along each piece the layout gives (`terra_build::timber`), textured and displaced by real materials from the pipeline, so their shape fits their wall exactly and every one differs. The timber spike compared this with Tripo's log models and with timber as a surface, and the generated logs read most as a log cabin ([research/timber-walls.md](../research/timber-walls.md)). Two profiles from the same code:
 
@@ -30,7 +30,7 @@ So a corner looks the same in the blueprint as it does built, just ghosted. Noth
 
 Each log differs from the next by its seed, from its place, by as much as the kit says: thicker or thinner, more or less tapered and bowed, its section turned, its texture placed anew, a little lighter or darker and warmer or cooler. Lightly stylised (D14): the variation is a tree's, not a cartoon's. A pale lime daub (Poly Haven's `white_stucco`) is recessed in the groove under each log, for the value contrast the style guide asks for.
 
-**Block kinds are not pieces** (D197): stone, brick, plaster and earth are drawn as their cubes' own surface, each face a fine grid, rounded along every outside edge and pushed out by its material's height, so a wall of any shape, carved anywhere, is one wall with no seams (`terra_build::surface`; [research/block-modules.md](../research/block-modules.md)). The stone kit is rough fieldstone, Poly Haven's `stone_wall` (CC0); its file gives the bevel (4 cm) and how far the stone stands out (5 cm). A plan's progress counts its cubes from the bottom up, and the cubes in, the next and the rest are drawn as three surfaces, so the ghost and a wall going up work as for logs. Its edges are dressed by their role (below, D215); an end board stands where logs end against it (D210); doors and windows are fitted props (D193).
+**Block kinds are not pieces** (D197): stone, brick, plaster and earth are drawn as their cubes' own surface, each face a fine grid, rounded along every outside edge and pushed out by its material's height, so a wall of any shape, carved anywhere, is one wall with no seams (`terra_build::surface`; [research/block-modules.md](../research/block-modules.md)). The stone kit is rough fieldstone, Poly Haven's `stone_wall` (CC0); its file gives the bevel (4 cm) and how far the stone stands out (5 cm). A plan's progress counts its cubes from the bottom up, and the cubes in, the next and the rest are drawn as three surfaces, so the ghost and a wall going up work as for logs. Its edges are dressed by their role (below, D215); an end board stands where logs end against it (D210); doors and windows are fitted props (D193), none fitted for now (D225).
 
 **Every exposed edge is dressed by its role** (D215, [research/role-pieces.md](../research/role-pieces.md)), as Enshrouded's blocks change with what they touch. When a section is laid, each edge of a kind's cubes is given a role from what is round it and the ground's samples (`layout::roles`), never stored; each belongs to one cube, so a piece laid for it is in, planned or carved with that cube, and a part-built wall wears its dress on what is up. The kit's file says what each role takes:
 
@@ -147,7 +147,7 @@ A cube can be cut to a shape: a half (its lower half), a stair (two steps, each 
 
 **Door steps** are stone slabs from each ground-floor door in an outside wall down to the ground, a riser of no more than 18 cm each, set into the ground; none where the threshold is less than a step up.
 
-**Doors** are fitted props whose model is cut into a frame, which stays in the opening, and a leaf, which swings into the room on its hinge (D207).
+**Doors** are fitted props (D207); none is fitted or drawn for now (D225), so a doorway is its frame and steps.
 ## Roofs (D209)
 
 A kit lays its own roofs, from the shape the roof's sections make over the walls (`terra_build::layout::roofs`, drawn by `roofing`): a gable, a hip or a lean-to over any plan, an L, T or U getting its valleys and its ridges dying into one another from the sections alone. In the order a roof goes up, a stage of its cells at a time:
@@ -166,7 +166,7 @@ A ghost's covering is a plain sheet, without its courses, which costs a tenth as
 
 ## Checking it
 
-The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a door, windows and a gable roof, every shape in each kit (a platform on posts reached by stairs and a ramp, a step of halves, a post alone) and a floor alone, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71): To the east, every roof style (gable, hip, lean-to) over every plan (a rectangle, an L, a T, a U) in each kit and mixed, built, part-built and as a ghost; `--sheet-rows TEXT` lays only the rows whose names hold it, as `--sheet-rows "stone: L"`, since the whole sheet is heavy to lay.
+The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a doorway, windows and a gable roof, every shape in each kit (a platform on posts reached by stairs and a ramp, a step of halves, a post alone) and a floor alone, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71): To the east, every roof style (gable, hip, lean-to) over every plan (a rectangle, an L, a T, a U) in each kit and mixed, built, part-built and as a ghost; `--sheet-rows TEXT` lays only the rows whose names hold it, as `--sheet-rows "stone: L"`, since the whole sheet is heavy to lay.
 
 ```bash
 cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet --time 16 --vantage 13,9,-6,13,0.5,-26.5 --shot out/corners.png
@@ -187,7 +187,7 @@ What a part costs is set apart from its pieces (2026-10-12): "we dont need 1:1 t
 Built:
 
 1. **The stacked layout** in `terra_build::layout` (`runs`, `trims`, `ground`, `floors`, `blocks`): each wall's logs, from the runs of log cubes and what meets their ends, in the order they go in; openings framed; gable ends in logs that shorten under the roof.
-2. **Generated logs** (D200), `terra_build::timber`, from the kit file for pine, `assets/data/kits/logs.ron`; the door and window are models (`terra_game`'s `build/pieces.rs`).
+2. **Generated logs** (D200), `terra_build::timber`, from the kit file for pine, `assets/data/kits/logs.ron`.
 3. **In the game**: a build's walls drawn from the kit instead of the plain boxes, those in merged into one mesh, the rest a ghost with the next lit. Until plans come (step 3 of building-tech.md), the kit sheet sets how far each build is in.
 4. **The kit sheet** on the yard.
 
@@ -195,6 +195,6 @@ Built:
 
 **Not yet:** the late corner, which needs parts with their own history (step 3); a tool for carving cubes by hand, though the operation is there and the sheet shows it; saddle notches cut into the logs, rather than logs meeting; floors with kits of their own; seams between stone sections, which still show faintly.
 
-**Doors and windows are not part of a plan** (the developers, 2026-10-12: "when you're building blueprints/etc, they dont have doors attached ... showing a partial ghost with a door does not reflect how the game should work"). A plan and a building going up show the opening and its frame only; the door or window is its own item, fitted once the building is up (construction.md). They are laid last.
+**Doors and windows are not part of a plan** (the developers, 2026-10-12: "when you're building blueprints/etc, they dont have doors attached ... showing a partial ghost with a door does not reflect how the game should work"). A plan and a building going up show the opening and its frame only; the door or window is its own item, fitted once the building is up (construction.md). None is fitted for now (D225).
 
 **Logs stop at roofs.** A log that would pass through a roof or its eaves is cut back where the roof begins, as a builder saws the corner ends under a hip; one cut in the middle is left in two.

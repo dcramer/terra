@@ -30,7 +30,6 @@ mod draw;
 mod layout;
 mod light;
 mod maps;
-mod pieces;
 pub(crate) mod plans;
 pub(crate) mod props;
 mod remote;
@@ -71,12 +70,11 @@ pub(super) struct Build {
     refreshed: u64,
     /// The cubes lit as what goes in next.
     next: BTreeSet<[i32; 3]>,
-    /// Whether its doors and windows are props fitted into it (the player's base), rather
-    /// than drawn by its kit in every opening (a village's houses, the kit sheet).
-    pub fitted_props: bool,
+    /// Whether it is drawn as far as each of its cubes is built (the player's base, the
+    /// kit sheet's rows of cubes in states), rather than whole (a village's houses).
+    pub by_cubes: bool,
     /// Whether it is built by plans, as the player's base is, rather than laid whole by the
-    /// shortcuts: it lays its own footings as plans, and its doors and windows are drawn,
-    /// opened and shut by `props`.
+    /// shortcuts: it lays its own footings as plans.
     pub by_plans: bool,
     /// Stone steps from each ground-floor door down to the ground. A walker treats each
     /// flight as a ramp.
@@ -90,7 +88,7 @@ pub(super) struct Build {
     /// What stands of it while it goes up, which is what a walker meets: `None` once it is
     /// all built, when that is the base itself.
     standing: Option<Base>,
-    /// The base's entity, at `frame`: its sections, doors and windows are its children.
+    /// The base's entity, at `frame`: its sections are its children.
     pub root: Entity,
     /// Its sections: what is drawn of each, and what is to be laid again.
     sections: store::Sections,
@@ -132,6 +130,19 @@ fn keep_footprint(
     }
 }
 
+/// Gives the world the footprint of each build that is not the player's as it is set
+/// down, a village's houses and the kit sheet's, so what grows keeps out of it and a margin
+/// round it, as it does of the player's (D108): the same for every build, from where it
+/// stands, so a village is cleared the same way every time it is made from its seed.
+fn give_footprints(
+    mut commands: Commands,
+    added: Query<(Entity, &Built), bevy::ecs::query::Added<Built>>,
+) {
+    for (entity, built) in &added {
+        commands.entity(entity).insert(built.footprint.clone());
+    }
+}
+
 /// A build that is not the player's, such as a house in a village.
 #[derive(Component, Deref, DerefMut)]
 pub(super) struct Built(pub Build);
@@ -146,8 +157,6 @@ pub(super) struct BuildLook {
     pub kits: Option<Arc<Kits>>,
     /// The kind of construction walls, floors and roofs are laid in (`--walls`).
     pub laying: Kind,
-    /// The kits' doors' and windows' models, once loaded.
-    kit_pieces: Option<Arc<pieces::KitPieces>>,
     /// The height and colour maps the kits' pieces are made with, as they load.
     maps: Arc<Maps>,
     /// The kits' materials, textured (D14).
@@ -261,20 +270,10 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            keep_footprint.before(crate::play::FloraSystems::Clear),
+            (keep_footprint, give_footprints).before(crate::play::FloraSystems::Clear),
         )
-        .init_resource::<pieces::Loading>()
         .init_resource::<maps::Loading>()
-        .add_systems(
-            Update,
-            (
-                reload_kit,
-                sheet::lay,
-                village::lay,
-                pieces::load,
-                maps::load,
-            ),
-        );
+        .add_systems(Update, (reload_kit, sheet::lay, village::lay, maps::load));
     store::plugin(app);
     layout::plugin(app);
     draw::plugin(app);
@@ -290,12 +289,11 @@ pub fn plugin(app: &mut App) {
     );
 }
 
-/// The player's base, built by plans (docs/building-plan.md, step 4): acting on it, its
-/// fitted doors and windows, and drawing it again as it changes. Only where a player
+/// The player's base, built by plans (docs/building-plan.md, step 4): acting on it, and
+/// drawing it again as it changes. Only where a player
 /// builds, so a run of the build keys alone needs nothing of the player.
 pub(crate) fn player_plugin(app: &mut App) {
     act::plugin(app);
-    props::plugin(app);
     remote::plugin(app);
 }
 
@@ -327,7 +325,7 @@ impl Build {
             snapshot: None,
             since: Vec::new(),
             next: BTreeSet::new(),
-            fitted_props: false,
+            by_cubes: false,
             by_plans: false,
             revision: 0,
             refreshed: u64::MAX,
@@ -348,7 +346,7 @@ impl Build {
     /// How far its pieces are in, as its sections are laid.
     fn progress(&self) -> Progress {
         match self.shown {
-            Shown::Built if self.fitted_props => Progress::Cubes {
+            Shown::Built if self.by_cubes => Progress::Cubes {
                 next: self.next.clone(),
             },
             Shown::Built => Progress::Whole,
@@ -670,7 +668,6 @@ fn setup(
         looks: draw::Looks::new(&mut meshes, &mut materials, ghosts.as_deref_mut()),
         kits: read_kits().map(Arc::new),
         laying: Kind::PLAIN,
-        kit_pieces: None,
         maps: Arc::default(),
         materials: Arc::default(),
     };
@@ -695,8 +692,8 @@ fn setup(
         timer: Timer::from_seconds(1.0, TimerMode::Repeating),
     });
     let mut build = Build::new(&mut commands, &look, frame, "Base");
-    // The player's base is built by plans, its doors and windows fitted as props.
-    build.fitted_props = driven.is_some();
+    // The player's base is built by plans, drawn as far as each cube is in.
+    build.by_cubes = driven.is_some();
     build.by_plans = driven.is_some();
     if let Some(kits) = look.kits.as_deref() {
         commands.insert_resource(act::BuildRules {

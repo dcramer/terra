@@ -6,12 +6,11 @@
 //! an opening. The hammer and the remote both lay through these, so they lay the same. The
 //! ground under a plan is filled in by whoever acts, from the planet.
 
-use super::props::{DOOR, WINDOW};
 use std::collections::BTreeSet;
 use terra_build::ground::{cube_cm, footing as footing_cubes};
 use terra_build::ops::{Op, Planned};
 use terra_build::{
-    Base, Facing, Fill, Kind, Panel, PartId, Pending, Prop, RoofSection, STOREY_CUBES, Shape,
+    Base, Facing, Fill, Kind, Panel, PartId, Pending, RoofSection, STOREY_CUBES, Shape,
     floor_layer, storey_of, wall_layer,
 };
 
@@ -360,20 +359,6 @@ pub fn hole(base: &Base, cube: IVec3) -> Option<(IVec3, IVec3)> {
     Some((low, high))
 }
 
-/// A door, if the hole reaches the floor, else a window, to fit an opening, unless asked
-/// for one or the other.
-pub fn prop_for(base: &Base, cube: IVec3, door: Option<bool>) -> Option<Prop> {
-    let (min, max) = hole(base, cube)?;
-    // A hole from the foot of its storey's walls is a doorway.
-    let is_door = door.unwrap_or(min.y == wall_layer(terra_build::storey_of(min.y)));
-    Some(Prop {
-        kind: if is_door { DOOR } else { WINDOW },
-        min: min.to_array(),
-        max: max.to_array(),
-        open: false,
-    })
-}
-
 /// The tiles along a wall from one to another, in the grid's four directions only (D146):
 /// east and west, or north and south, whichever is further. Both ends included.
 pub fn wall_tiles(from: IVec2, to: IVec2, level: i32) -> Vec<IVec3> {
@@ -495,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn a_door_is_planned_into_a_wall_and_fits_the_hole_it_leaves() {
+    fn a_doorway_is_planned_into_a_wall_and_leaves_a_hole_of_its_size() {
         let rules = Rules::default();
         let cx = Context::free(&rules);
         let mut base = Base::default();
@@ -515,16 +500,17 @@ mod tests {
         let cubes = opening_cubes(&tiles, Panel::Door);
         assert_eq!(cubes.len(), 8);
         base.act_all(&opening(&base, &cubes), &cx).unwrap();
-        let prop = prop_for(&base, IVec3::new(5, 2, 7), None).unwrap();
-        assert_eq!(prop.kind, DOOR);
-        assert_eq!((prop.min, prop.max), ([4, 0, 7], [5, 3, 7]));
+        assert_eq!(
+            hole(&base, IVec3::new(5, 2, 7)),
+            Some((IVec3::new(4, 0, 7), IVec3::new(5, 3, 7)))
+        );
         // A window is cut from its sill to its head.
         let window = opening_cubes(&[IVec3::new(0, 0, 3)], Panel::WINDOW);
         assert_eq!(window.iter().map(|at| at.y).collect::<Vec<_>>(), vec![2, 3]);
         base.act_all(&opening(&base, &window), &cx).unwrap();
         assert_eq!(
-            prop_for(&base, IVec3::new(0, 2, 3), None).unwrap().kind,
-            WINDOW
+            hole(&base, IVec3::new(0, 2, 3)),
+            Some((IVec3::new(0, 2, 3), IVec3::new(0, 3, 3)))
         );
     }
 

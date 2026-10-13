@@ -203,14 +203,12 @@ fn drawn_wall(from: IVec2, to: IVec2, level: i32) -> Vec<IVec3> {
 }
 
 /// What the hammer does to the base (D139, D144): lays a plan, for nothing, at a click;
-/// builds what goes in next, takes apart what came last, or fits a door or window, each
-/// held for a moment.
+/// builds what goes in next, or takes apart what came last, each held for a moment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Doing {
     Lay,
     Build,
     TakeApart,
-    Fit,
 }
 
 /// What the hammer would do to the base now, worked out as it is aimed, and whether the

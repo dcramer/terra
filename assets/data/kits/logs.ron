@@ -41,7 +41,6 @@
 //   ridge       what caps ridges and hips: Boards, or a Roll of the covering; cap, how
 //               wide it is either side
 //   fillet      the size of the mortar fillet where the roof meets a wall above it
-// models      the props set into it, from tools/props (D177): a door and a window
 // textures    each material's textures (D14; assets/materials): where, how many metres
 //             one copy covers, and how deep its parallax reads. Log is the bark, LogEnd
 //             the sawn end's grain, Daub what fills the groove between courses, Board
@@ -97,10 +96,6 @@
         ridge: Boards,
         cap: 0.16,
         fillet: 0.1,
-    ),
-    models: (
-        door: Some("models/kits/Door.glb"),
-        window: Some("models/kits/Window.glb"),
     ),
     textures: {
         Log: (path: "materials/pine_bark", metres: (1.0, 1.0)),

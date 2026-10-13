@@ -47,8 +47,6 @@ pub struct Kit {
     pub timber: Timber,
     /// How a roof over its walls is made: its frame, battens, covering and trims.
     pub roof: Roofing,
-    /// The props set into its openings (D177), as asset paths.
-    pub models: KitModels,
     /// Its materials' textures (D14): where each is, how many metres across it is, and how
     /// deep its parallax reads; a material with none is drawn in its plain colour.
     pub textures: BTreeMap<Material, Texture>,
@@ -420,15 +418,6 @@ pub fn matte() -> f32 {
     0.35
 }
 
-/// The props a kit sets into its openings, as asset paths (docs/building-kits.md).
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields, default)]
-pub struct KitModels {
-    /// A door and a window in their frames, set into openings of their shape.
-    pub door: Option<String>,
-    pub window: Option<String>,
-}
-
 /// The plain colours of what a kit has no texture for yet: a floor, a flat roof and their
 /// sides, and the daub between courses, which tints its texture.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -489,7 +478,6 @@ impl Default for Kit {
             relief: 0.05,
             timber: Timber::default(),
             roof: Roofing::default(),
-            models: KitModels::default(),
             textures: BTreeMap::new(),
             cost: KitCost::default(),
             dress: Dressing::default(),
@@ -549,11 +537,10 @@ mod tests {
     #[test]
     fn the_default_kit_is_pine_as_its_file_has_it() {
         // What a kit's file leaves out is the default's, which is to be logs.ron's but
-        // for what it lays with: its models, textures and cost; and for how it is dressed,
+        // for what it lays with: its textures and cost; and for how it is dressed,
         // its ends run past the corners and its role members, so tests lay plain logs
         // inside their cubes.
         let pine = Kit {
-            models: KitModels::default(),
             textures: BTreeMap::new(),
             cost: KitCost::default(),
             overhang: 0.0,
