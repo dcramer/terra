@@ -1,0 +1,14 @@
+{
+  "subject": "small cube-shaped block of rough stone wall, exactly as wide as it is tall and as deep, half a metre each way, on its own: only three or four rough fieldstones in it, each almost as big as a face of the cube, seen at a three-quarter view showing its front, its side and its top, all three faces the same square size; its faces cut flat and square so blocks stack and butt edge to edge; the same rough grey fieldstone, ochre staining, lichen and pale lime mortar as the reference wall, its stones irregular and rough-faced, never neat bricks, the mortar recessed a little between them",
+  "file": "StoneHalf",
+  "size": 0.5,
+  "budget": 1200,
+  "roles": [],
+  "into": "kits",
+  "textured": true,
+  "generator": "h3.1",
+  "faces": 12000,
+  "reference": "kit-stone-wall-2",
+  "block": true,
+  "grade": "kit-stone-wall-2"
+}

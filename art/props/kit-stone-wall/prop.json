@@ -1,0 +1,14 @@
+{
+  "subject": "one-metre-square section of a house wall of rough stone, on its own: rough fieldstones of mixed middling sizes laid in rough, broken courses, one metre long, one metre tall and half a metre thick, the thickness plain at its ends, seen at a three-quarter view; its two ends, its top and its bottom cut flat and square so sections stack and butt edge to edge; the same rough grey fieldstone, ochre staining, lichen and pale lime mortar as the reference wall, its stones irregular and rough-faced, never neat bricks, the mortar recessed a little between them",
+  "file": "StoneWall",
+  "size": 1.0,
+  "budget": 2500,
+  "roles": [],
+  "into": "kits",
+  "textured": true,
+  "generator": "h3.1",
+  "faces": 20000,
+  "reference": "kit-stone-wall-2",
+  "block": true,
+  "grade": "kit-stone-wall-2"
+}

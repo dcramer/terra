@@ -1,11 +1,12 @@
 {
-  "subject": "square section of a cabin's roof covering, one metre by one metre, seen from above at an angle: thick split wooden shakes, dark grey-brown and weathered, in three staggered overlapping rows, each row's lower edge standing proud of the row below",
+  "subject": "square section of a cabin's roof covering, one metre by one metre, seen from above at an angle: thick hand-split cedar shakes weathered dark grey-brown with lighter worn edges, in three staggered overlapping rows, each row's lower edge standing proud of the row below, a little moss in the gaps",
   "file": "Shakes",
   "size": 1.0,
   "budget": 1500,
-  "roles": [
-    "Shingle",
-    "WoodDark"
-  ],
-  "into": "kits"
+  "roles": [],
+  "into": "kits",
+  "textured": true,
+  "generator": "h3.1",
+  "faces": 20000,
+  "along": true
 }

@@ -1,12 +1,11 @@
 {
-  "subject": "log cabin door in its frame, one metre wide and two metres tall: vertical weathered wooden planks with two black iron strap hinges and an iron ring handle, set in a heavy dark timber frame",
+  "subject": "log cabin door in its frame, one metre wide and two metres tall: vertical planks of old pine weathered to a deep warm brown with two black wrought-iron strap hinges and an iron ring handle, set in a heavy dark timber frame",
   "file": "Door",
   "size": 2.1,
   "budget": 1500,
-  "roles": [
-    "Wood",
-    "WoodDark",
-    "Metal"
-  ],
-  "into": "kits"
+  "roles": [],
+  "into": "kits",
+  "textured": true,
+  "generator": "h3.1",
+  "faces": 20000
 }

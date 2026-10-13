@@ -1,0 +1,14 @@
+{
+  "subject": "half-metre cube of a house wall of rough stone, on its own: one large rough fieldstone with two small ones beside it, half a metre long, tall and thick, seen at a three-quarter view; its sides, top and bottom cut flat and square so blocks stack and butt edge to edge; the same rough grey fieldstone, ochre staining, lichen and pale lime mortar as the reference wall, its stones irregular and rough-faced, never neat bricks, the mortar recessed a little between them",
+  "file": "StoneHalf2",
+  "size": 0.5,
+  "budget": 1200,
+  "roles": [],
+  "into": "kits",
+  "textured": true,
+  "generator": "h3.1",
+  "faces": 12000,
+  "reference": "kit-stone-wall-2",
+  "block": true,
+  "grade": "kit-stone-wall-2"
+}

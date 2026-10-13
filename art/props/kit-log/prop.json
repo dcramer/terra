@@ -1,14 +1,11 @@
 {
-  "subject": "single straight round pine log from the wall of an old log cabin, two metres long and thirty centimetres thick, lying on its side: its surface weathered to a deep mid brown, with long shallow split checks running along the grain, a few flat hewn patches where branches were trimmed off, slightly uneven and tapering a little toward one end; both ends sawn flat, each cut face pale cream with a thin ring of dark bark round its edge and a darker heart",
+  "subject": "single straight round log from the wall of an old log cabin, two and a half metres long and thirty centimetres thick, lying on its side: bark stripped, old pine weathered to a deep warm brown, fine grain, long shallow split checks along it, a few axe-hewn flats where branches were trimmed; both ends sawn, each cut face pale honey-coloured showing growth rings and radial cracks, with a thin rim of dark bark",
   "file": "Log",
-  "size": 2.0,
+  "size": 2.5,
   "budget": 1500,
-  "roles": [
-    "Log",
-    "WoodDark",
-    "EndGrain"
-  ],
+  "roles": [],
   "into": "kits",
+  "textured": true,
   "generator": "h3.1",
   "faces": 20000,
   "along": true

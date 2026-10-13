@@ -1,0 +1,12 @@
+{
+  "subject": "one-metre-square section of a house wall of rough stone, on its own: a few large roughly squared stones with smaller ones and thin pinning stones between them, in pale lime mortar, one metre long, one metre tall and half a metre thick, seen at a three-quarter view; its two ends, its top and its bottom cut flat and square so sections stack and butt edge to edge; weathered grey stone with a little warm ochre in it and faint patches of lichen, the mortar recessed a little between the stones so each stone stands out",
+  "file": "StoneWall2",
+  "size": 1.0,
+  "budget": 2500,
+  "roles": [],
+  "into": "kits",
+  "textured": true,
+  "generator": "h3.1",
+  "faces": 20000,
+  "block": true
+}
