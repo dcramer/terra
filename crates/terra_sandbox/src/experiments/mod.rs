@@ -40,6 +40,14 @@ pub const ALL: &[Experiment] = &[
         },
     },
     Experiment {
+        name: "walk",
+        about: "The world and a body to walk through it, and nothing else of the game: no building, items, creatures or sound. With lush, a walk through the forest.",
+        add: |app| {
+            use terra_game::play::{GamePlugins, GameplayPlugin};
+            app.add_plugins(GamePlugins.build().disable::<GameplayPlugin>());
+        },
+    },
+    Experiment {
         name: "play",
         about: "A player on the ground with a builder tool: walk, jump, go indoors, and build.",
         add: terra_game::play::plugin,
@@ -61,7 +69,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "lush",
-        about: "Spike: a forest as rich as big games make them, with trees grown in code and leaves as cards. Use with play on the yard.",
+        about: "Spike: a forest as rich as big games make them, with trees grown in code and leaves as cards. Use with walk, or play, on the yard.",
         add: lush::plugin,
     },
     Experiment {

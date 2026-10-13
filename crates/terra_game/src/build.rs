@@ -12,6 +12,8 @@
 
 use crate::planet::MainCamera;
 use crate::planet::Planet;
+use crate::start::Start;
+pub(crate) use crate::start::lifted;
 use bevy::{
     asset::RenderAssetUsages, light::NotShadowCaster, prelude::*,
     render::render_resource::PrimitiveTopology,
@@ -20,7 +22,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 use terra_build::logs::{self, Kits, LogKit, Pattern};
-use terra_build::{Base, BuildOp, CELL_M, Kind, Panel, STOREY_M, Side, Surface, Walker};
+use terra_build::{Base, BuildOp, CELL_M, Kind, Panel, STOREY_M, Surface, Walker, example};
 use terra_build::{Material, Surfaces};
 use terra_core::Operation;
 
@@ -29,8 +31,6 @@ mod relief;
 mod sheet;
 
 const REACH_M: f32 = 300.0;
-/// The base's floor clears the highest ground under it by this much.
-const FLOOR_CLEARANCE_M: f32 = 0.12;
 /// The foundation stands this far out from the walls, and reaches this far into the ground.
 const FOUNDATION_LEDGE_M: f32 = 0.14;
 const FOUNDATION_DEPTH_M: f32 = 0.7;
@@ -105,10 +105,6 @@ const ROOM_CLEARANCE_M: f32 = 0.2;
 pub(super) struct Site {
     #[deref]
     pub build: Build,
-    /// Where the base first stood, before any claim moved it: "the start", the fixed place
-    /// that every position given as metres east and south is measured from, by scripts,
-    /// the map and the log, wherever the base is later begun.
-    pub start: Transform,
     camera_placed: bool,
 }
 
@@ -481,62 +477,6 @@ impl Build {
     }
 }
 
-/// The example base: two rooms joined by a corridor, a small upper storey, windows on
-/// every side and a door. Written in metres, so it is the same base whatever the grid.
-fn example(kind: Kind) -> Vec<BuildOp> {
-    // A block of tiles from one outside corner in metres to the other, on a storey. Rooms
-    // that meet share the row of tiles between them, so they open into one another.
-    let room = |west: f32, east: f32, north: f32, south: f32, storey: i32| BuildOp::AddRoom {
-        min: [cells_from(west), storey, cells_from(north)],
-        max: [cells_from(east) - 1, storey, cells_from(south) - 1],
-        kind,
-    };
-    let mut ops = vec![
-        room(-6.0, 9.0, -6.0, 3.0, 0),
-        room(8.5, 15.5, -3.0, 0.0, 0),
-        room(15.0, 21.0, -6.0, 3.0, 0),
-        room(-3.0, 3.0, -6.0, 0.0, 1),
-    ];
-    // An opening in a wall: which way the wall faces, where the wall is, and the stretch
-    // of it to open, all in metres.
-    let mut cut = |side: Side, wall_at: f32, from: f32, to: f32, storey: i32, panel: Panel| {
-        // The tile of the wall, just inside its outer face.
-        let inside = match side {
-            Side::East | Side::South => cells_from(wall_at) - 1,
-            _ => cells_from(wall_at),
-        };
-        for along in cells_from(from)..cells_from(to) {
-            let cell = match side {
-                Side::East | Side::West => IVec3::new(inside, storey, along),
-                _ => IVec3::new(along, storey, inside),
-            };
-            ops.push(BuildOp::SetWall {
-                tile: cell.to_array(),
-                panel: Some(panel),
-                kind,
-            });
-        }
-    };
-    cut(Side::South, 3.0, -3.0, 6.0, 0, Panel::WINDOW);
-    cut(Side::South, 3.0, 7.0, 8.5, 0, Panel::Door);
-    cut(Side::West, -6.0, -2.5, -0.5, 0, Panel::WINDOW);
-    cut(Side::South, 0.0, -2.5, 2.5, 1, Panel::TALL_WINDOW);
-    cut(Side::South, 0.0, 12.5, 14.5, 0, Panel::WINDOW);
-    cut(Side::South, 3.0, 18.5, 20.5, 0, Panel::WINDOW);
-    cut(Side::East, 21.0, -2.5, -0.5, 0, Panel::TALL_WINDOW);
-    cut(Side::North, -6.0, -5.5, -3.5, 0, Panel::WINDOW);
-    cut(Side::North, -6.0, 6.5, 8.5, 0, Panel::WINDOW);
-    cut(Side::North, -6.0, 18.5, 20.5, 0, Panel::WINDOW);
-    cut(Side::North, -6.0, -2.5, -0.5, 1, Panel::WINDOW);
-    ops
-}
-
-/// The grid line a distance in metres falls on. Unlike [`cells`], which counts, this
-/// places, so it can be negative or zero.
-fn cells_from(metres: f32) -> i32 {
-    (metres / CELL_M).round() as i32
-}
-
 /// Axis-aligned boxes in the base's own space, as flat-faced triangles of one colour.
 #[derive(Default)]
 struct Blocks {
@@ -632,92 +572,6 @@ impl Blocks {
     }
 }
 
-/// Where to stand a base: the most level ground near the start that is clear of the sea,
-/// turned so its door looks out over the water if there is any.
-fn choose_site(planet: &Planet, base: &Base) -> Transform {
-    let start = planet.start();
-    let up = start.normalize();
-    let east = up.cross(Vec3::X).normalize();
-    let north = east.cross(up);
-    let sea = planet.sea_radius_m();
-
-    let ground_floor = || base.tiles().filter(|(tile, _)| tile.y == 0);
-    let low = ground_floor().fold(IVec3::MAX, |low, (tile, _)| low.min(tile));
-    let high = ground_floor().fold(IVec3::MIN, |high, (tile, _)| high.max(tile));
-    let (low, high) = (
-        low.as_vec3() * CELL_M - 3.0,
-        (high + 1).as_vec3() * CELL_M + 3.0,
-    );
-    let middle = (low + high) * 0.5;
-
-    let mut best: Option<(f32, Transform)> = None;
-    for ring in 3..22 {
-        for spoke in 0..24 {
-            let angle = spoke as f32 / 24.0 * std::f32::consts::TAU;
-            let offset =
-                (east * libm::cosf(angle) + north * libm::sinf(angle)) * (ring as f32 * 6.0);
-            let anchor = planet.ground_at(start + offset);
-            let anchor_up = anchor.normalize();
-            for turn in 0..8 {
-                let facing =
-                    Quat::from_axis_angle(anchor_up, turn as f32 * std::f32::consts::TAU / 8.0)
-                        * east.reject_from(anchor_up).normalize();
-                let mut frame = Transform::from_translation(anchor).looking_to(facing, anchor_up);
-                // Put the middle of the base, not its corner, on the chosen spot.
-                frame.translation -= frame.rotation * Vec3::new(middle.x, 0.0, middle.z);
-
-                // How far the ground under the base rises above and falls below the frame.
-                let (mut lowest, mut highest) = (f32::MAX, f32::MIN);
-                let mut x = low.x;
-                while x <= high.x {
-                    let mut z = low.z;
-                    while z <= high.z {
-                        let height = -planet.distance(frame.transform_point(Vec3::new(x, 0.0, z)));
-                        lowest = lowest.min(height);
-                        highest = highest.max(height);
-                        z += 3.0;
-                    }
-                    x += 3.0;
-                }
-                let above_sea = anchor.length() + lowest - sea;
-                if above_sea < 1.6 {
-                    continue;
-                }
-                if highest - lowest > 2.5 {
-                    continue;
-                }
-                // Doors are on the base's +Z side; water a short walk out that way is
-                // worth a little slope.
-                let water_ahead = [40.0, 60.0, 85.0]
-                    .iter()
-                    .filter(|&&ahead| {
-                        let point = frame.transform_point(Vec3::new(middle.x, 0.0, ahead));
-                        planet.under_sea(point)
-                    })
-                    .count();
-                // Grass to stand on, at the base and out in front of it.
-                let grassy: f32 = [0.0, 12.0, 24.0]
-                    .iter()
-                    .map(|&ahead| {
-                        let point = frame.transform_point(Vec3::new(middle.x, 0.0, ahead));
-                        let point = planet.ground_at(point);
-                        planet.cover(point, planet.normal(point)).grass
-                    })
-                    .sum();
-                let score = (highest - lowest) - 0.8 * water_ahead as f32 - 0.5 * grassy
-                    + 0.04 * (above_sea - 4.0).abs();
-                if best.as_ref().is_none_or(|(least, _)| score < *least) {
-                    best = Some((score, frame));
-                }
-            }
-        }
-    }
-    best.map(|(_, frame)| frame).unwrap_or_else(|| {
-        let anchor = planet.ground_at(start + east * 60.0);
-        Transform::from_translation(anchor).looking_to(north, anchor.normalize())
-    })
-}
-
 /// Where a base begun at a point on the ground stands: level there, its floor at the ground,
 /// and turned as `like` is, so its grid keeps the same heading wherever it is begun (D57).
 pub(super) fn frame_at(point: Vec3, like: &Transform) -> Transform {
@@ -729,53 +583,18 @@ pub(super) fn frame_at(point: Vec3, like: &Transform) -> Transform {
     }
 }
 
-/// Raises a build's frame until its floor clears the highest ground under it. The
-/// stand-in planet cannot be dug, so a build has to stay out of the ground's way; a
-/// foundation and steps make up the difference.
-pub(super) fn lifted(mut frame: Transform, base: &Base, planet: &Planet) -> Transform {
-    let highest_ground = base
-        .tiles()
-        .filter(|(tile, _)| tile.y == 0)
-        .flat_map(|(tile, _)| {
-            [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)].map(|(dx, dz)| {
-                let on_floor = Vec3::new(
-                    (tile.x as f32 + dx) * CELL_M,
-                    0.0,
-                    (tile.z as f32 + dz) * CELL_M,
-                );
-                -planet.distance(frame.transform_point(on_floor))
-            })
-        })
-        .fold(f32::MIN, f32::max);
-    let up = *frame.up();
-    frame.translation += up * (highest_ground + FLOOR_CLEARANCE_M);
-    frame
-}
-
 fn setup(
     mut commands: Commands,
     planet: Res<Planet>,
+    start: Res<Start>,
     options: Res<crate::shell::Options>,
     driven: Option<Res<DrivenByPlayer>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<AssetServer>,
 ) {
-    // The example base decides where the base stands, whether or not it is built: a
-    // player starts with nothing built, on the same spot. On the yard, the flat test
-    // level, the base's grid is laid at the start itself, facing east.
-    let mut example_base = Base::default();
-    for op in example(Kind::PLAIN) {
-        example_base.apply(op);
-    }
-    let frame = if options.yard() {
-        let start = planet.start();
-        let up = start.normalize();
-        let east = up.cross(Vec3::X).normalize();
-        Transform::from_translation(start + up * FLOOR_CLEARANCE_M).looking_to(east, up)
-    } else {
-        lifted(choose_site(&planet, &example_base), &example_base, &planet)
-    };
+    // The base is first laid at the start, whether or not anything is built there.
+    let frame = **start;
     let look = BuildLook {
         structure: materials.add(StandardMaterial {
             perceptual_roughness: 0.82,
@@ -845,7 +664,6 @@ fn setup(
     commands.insert_resource(look);
     commands.insert_resource(Site {
         build,
-        start: frame,
         camera_placed: false,
     });
 

@@ -1,0 +1,22 @@
+//! The world around a player: the kinds of thing from the data files, the light and air,
+//! the day, what grows, the game's tick and its levels of detail. It stands on the planet,
+//! the terrain and the start (`planet`, `terrain`, `start`), and needs nothing from the
+//! layers above it, so an experiment can put it on screen alone, to look at or walk
+//! through (`walk`), and test it there.
+
+use super::{data, daylight, flora, lod, scene, skylight, tick};
+use bevy::prelude::*;
+
+pub struct WorldPlugin;
+
+impl Plugin for WorldPlugin {
+    fn build(&self, app: &mut App) {
+        data::plugin(app);
+        scene::plugin(app);
+        skylight::plugin(app);
+        daylight::plugin(app);
+        flora::plugin(app);
+        tick::plugin(app);
+        lod::plugin(app);
+    }
+}

@@ -13,6 +13,7 @@ use super::scene::SUN_DIRECTION;
 use crate::build::Site;
 use crate::planet::{Planet, Tweaks};
 use crate::spatial::SpatialHash;
+use crate::start::Start;
 use bevy::{
     asset::RenderAssetUsages,
     light::NotShadowCaster,
@@ -159,7 +160,14 @@ pub fn plugin(app: &mut App) {
         // The yard, the flat test level, has nothing growing on it.
         .add_systems(PostStartup, plant.run_if(crate::shell::in_the_world))
         .add_message::<ClearAround>()
-        .add_systems(Update, (make_way, clear_around, follow_digs));
+        .add_systems(
+            Update,
+            (
+                make_way.run_if(resource_exists::<Site>),
+                clear_around,
+                follow_digs,
+            ),
+        );
 }
 
 /// A model ready to place: its mesh, and its size as modelled.
@@ -257,13 +265,14 @@ fn plant(
     mut commands: Commands,
     planet: Res<Planet>,
     tweaks: Res<Tweaks>,
-    site: Res<Site>,
+    site: Option<Res<Site>>,
+    start: Res<Start>,
     flora: Res<Flora>,
     mut obstacles: ResMut<Obstacles>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
 ) {
-    let middle = site.start.translation;
+    let middle = start.translation;
     let up = middle.normalize();
     let east = up.cross(Vec3::X).normalize();
     let ground = Patch {
@@ -321,7 +330,7 @@ fn plant(
     };
 
     let sea = planet.sea_radius_m();
-    let to_base = site.start.compute_affine().inverse();
+    let to_base = start.compute_affine().inverse();
     let woods = Noise::new(seed.derive("woods"));
     let species = Noise::new(seed.derive("species"));
     let blooms = Noise::new(seed.derive("blooms"));
@@ -347,7 +356,10 @@ fn plant(
                    clearance_m: f32,
                    cut: Option<Cuttable>,
                    stops: Option<(Vec3, f32)>| {
-        if site.covers(transform.translation, clearance_m) {
+        if site
+            .as_ref()
+            .is_some_and(|site| site.covers(transform.translation, clearance_m))
+        {
             return;
         }
         planted += 1;
@@ -509,7 +521,7 @@ fn plant(
         });
     for (kind, beside, size) in by_the_door {
         let model = &models[kind][0];
-        let point = planet.ground_at(site.start.transform_point(beside));
+        let point = planet.ground_at(start.transform_point(beside));
         let mut rng = seed.derive("props").rng();
         put(
             model,
@@ -530,12 +542,12 @@ fn plant(
         dry: tweaks.grass_dry.to_linear(),
         lush: tweaks.grass_lush.to_linear(),
         squares: HashMap::default(),
-        cleared_for: site.revision,
+        cleared_for: site.as_ref().map_or(0, |site| site.revision),
     };
     let squares = (GRASS_REACH_M / GRASS_SQUARE_M).ceil() as i32;
     // One thread per row of squares; working out where the ground is, is the slow part.
     let grown: Vec<((i32, i32), Option<Mesh>)> = std::thread::scope(|scope| {
-        let (meadow, planet, site) = (&meadow, &*planet, &*site);
+        let (meadow, planet, site) = (&meadow, &*planet, site.as_deref());
         let rows: Vec<_> = (-squares..squares)
             .map(|i| {
                 scope.spawn(move || {
@@ -574,7 +586,13 @@ fn plant(
 }
 
 /// One square of grass as a mesh, or nothing if no grass grows there.
-fn grass_square(meadow: &Meadow, planet: &Planet, site: &Site, i: i32, j: i32) -> Option<Mesh> {
+fn grass_square(
+    meadow: &Meadow,
+    planet: &Planet,
+    site: Option<&Site>,
+    i: i32,
+    j: i32,
+) -> Option<Mesh> {
     let corner = Vec2::new(i as f32, j as f32) * GRASS_SQUARE_M;
     let nearest = (corner + GRASS_SQUARE_M * 0.5).length() - GRASS_SQUARE_M * 0.71;
     if nearest > GRASS_REACH_M {
@@ -603,7 +621,7 @@ fn grass_square(meadow: &Meadow, planet: &Planet, site: &Site, i: i32, j: i32) -
             let cover = planet.cover(root, ground_normal);
             // Nothing grows on ground that has been dug or filled.
             if luck > smoothstep(0.3, 0.7, cover.grass) * thinning
-                || site.covers(root, 0.25)
+                || site.is_some_and(|site| site.covers(root, 0.25))
                 || planet.dug(root)
             {
                 continue;
@@ -678,7 +696,7 @@ fn make_way(
         if !site.covers(point, GRASS_SQUARE_M) {
             continue;
         }
-        match grass_square(&meadow, &planet, &site, i, j) {
+        match grass_square(&meadow, &planet, Some(&site), i, j) {
             Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
             None => commands.entity(entity).remove::<Mesh3d>(),
         };
@@ -692,7 +710,7 @@ fn make_way(
 fn follow_digs(
     mut commands: Commands,
     planet: Res<Planet>,
-    site: Res<Site>,
+    site: Option<Res<Site>>,
     meadow: Option<Res<Meadow>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut obstacles: ResMut<Obstacles>,
@@ -727,7 +745,7 @@ fn follow_digs(
         if !near(point, GRASS_SQUARE_M * 0.71) {
             continue;
         }
-        match grass_square(&meadow, &planet, &site, i, j) {
+        match grass_square(&meadow, &planet, site.as_deref(), i, j) {
             Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
             None => commands.entity(entity).remove::<Mesh3d>(),
         };

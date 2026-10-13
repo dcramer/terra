@@ -17,9 +17,9 @@ use super::interact::{CanInteract, Interactable, Interacted};
 use super::props::Prop;
 use super::tick::{Sim, Smoothed};
 use super::told::Told;
-use crate::build::Site;
 use crate::loading::Loading;
 use crate::planet::Planet;
+use crate::start::Start;
 use crate::{appearance, character};
 use bevy::{
     prelude::*,
@@ -201,7 +201,7 @@ fn arrive(
     mut commands: Commands,
     figure: Res<Figure>,
     planet: Res<Planet>,
-    site: Res<Site>,
+    start: Res<Start>,
     mut asked: MessageReader<Arrive>,
     mut waiting: Local<Vec<Arrive>>,
 ) {
@@ -222,7 +222,7 @@ fn arrive(
         let feet = planet.ground_at(arrival.at);
         let up = feet.normalize();
         // Where, in the terms --at and --face take, so a scripted run can go to them.
-        let local = site.start.compute_affine().inverse().transform_point3(feet);
+        let local = start.local(feet);
         info!(
             "{} is {:.1} m east and {:.1} m south of the start.",
             arrival.name, local.x, local.z

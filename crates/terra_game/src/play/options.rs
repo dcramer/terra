@@ -11,8 +11,6 @@
 use super::button::{button, left_click, pointer_on};
 use super::camera::grab_mouse;
 use super::controls::{Action, Binding, FIELD_OF_VIEW, LOOK_SPEED, Settings, VOLUME, capitalised};
-use super::inventory::InventoryScreen;
-use super::tool;
 use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::{
@@ -195,7 +193,7 @@ pub fn plugin(app: &mut App) {
             (listen, press, draw, apply, scroll_controls)
                 .chain()
                 .after(toggle)
-                .after(tool::Acting),
+                .in_set(MenuSystems),
         );
 }
 
@@ -456,14 +454,19 @@ fn setup(mut commands: Commands) {
         });
 }
 
-/// Esc: gives up waiting for a key, or closes the inventory, or opens or closes this
-/// menu. Opening it gives the pointer back; closing it with Esc takes it again. Runs
-/// before anything else in the game reads the mouse.
+/// The menu's own clicks and drawing, after the game has read the controls, so the click
+/// that closes the menu or sets a control to a mouse button is not also a click in the game.
+/// Whatever reads clicks in the game runs before this set.
+#[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct MenuSystems;
+
+/// Esc: gives up waiting for a key, or opens or closes this menu. Opening it gives the
+/// pointer back; closing it with Esc takes it again. Runs before anything else in the game
+/// reads the mouse. A screen above the walker that Esc should close, such as the inventory,
+/// closes itself first and takes the press (`ButtonInput::clear_just_pressed`).
 pub fn toggle(
     keys: Res<ButtonInput<KeyCode>>,
     mut menu: ResMut<OptionsMenu>,
-    mut inventory: ResMut<InventoryScreen>,
-    mut build_menu: ResMut<super::build_menu::BuildMenu>,
     window: Single<(&Window, &mut CursorOptions)>,
 ) {
     if !keys.just_pressed(KeyCode::Escape) {
@@ -473,14 +476,7 @@ pub fn toggle(
         menu.refused = false;
         return;
     }
-    if build_menu.open {
-        build_menu.open = false;
-    } else if inventory.open {
-        inventory.open = false;
-        inventory.at = None;
-    } else {
-        menu.open = !menu.open;
-    }
+    menu.open = !menu.open;
     let (window, mut cursor) = window.into_inner();
     grab_mouse(&mut cursor, !menu.open && window.focused);
 }

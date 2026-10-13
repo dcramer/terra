@@ -1,19 +1,14 @@
-//! A player in a meadow by the water, with a builder tool and nothing built yet.
+//! The game a player plays, in three layers of plugins (D198, docs/tech.md):
 //!
-//! You are a body in the world: an animated figure you steer in third person, which
-//! walks on the planet, is held up by a base's floors, stopped by its walls and windows,
-//! and let through its doors. The figure carries one tool, a builder: pick a part from
-//! its dial, and build it where you aim.
+//! - `world`: the world around a player, from the data files to what grows.
+//! - `walker`: a body this machine steers through it, its camera, controls and options.
+//! - `GameplayPlugin`, here: everything a player does there, from building to sound.
 //!
-//!   Mouse         look (click to capture the mouse)
-//!   W A S D       move          Shift   sprint       Space   jump
-//!   Hold right    the dial of parts to build; the rest of the builder is in `tool.rs`
-//!   Esc           options, where every control can be set to another key
-//!   F3            more frame timings
-//!
-//! The scene around the player is in the modules here: `scene` is the light and air,
-//! `flora` what grows, `props` what has been placed, `figure` the player's body, `tool`
-//! the builder, `dial` its menu and prompts, and `catalogue` what it can build. See docs/player.md and docs/building.md for the design.
+//! `GamePlugins` is all three, as the `play` experiment runs them; `walk` runs the first
+//! two alone. A module belongs to the lowest layer that can hold it, and never needs a
+//! system or resource above it to run. The player's own components (`Player`, `Motion`, `Stance`,
+//! `View`) are here, for every layer to read. See docs/player.md and docs/building.md for
+//! the design.
 
 mod archery;
 mod bag;
@@ -74,18 +69,20 @@ mod told;
 mod tool;
 mod torchlight;
 mod vitals;
+mod walker;
 mod wear;
 mod work;
+mod world;
 mod worn;
 mod zones;
 
 use super::build::{self, DrivenByPlayer, Site};
-use crate::planet::MainCamera;
-use crate::planet::Planet;
 use crate::shell::Options;
-use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
-use std::ops::Sub;
+use bevy::{app::PluginGroupBuilder, prelude::*, window::CursorOptions};
+use options::MenuSystems;
 use tick::Smoothed;
+pub use walker::{ArriveAt, Hands, PlayerInput, WalkerPlugin, WarpTo};
+pub use world::WorldPlugin;
 
 /// Someone playing. What they are doing is in the components beside this one: how they
 /// move (`Motion`), what their hands and feet are up to (`Stance`), and whether they are
@@ -176,187 +173,198 @@ struct View {
     pitch: f32,
 }
 
-pub fn plugin(app: &mut App) {
-    // A player needs something to build on, and takes over from the build keys.
-    build::plugin(app);
-    data::plugin(app);
-    scene::plugin(app);
-    skylight::plugin(app);
-    daylight::plugin(app);
-    torchlight::plugin(app);
-    wear::plugin(app);
-    pile::plugin(app);
-    zones::plugin(app);
-    flora::plugin(app);
-    props::plugin(app);
-    figure::plugin(app);
-    tool::plugin(app);
-    dial::plugin(app);
-    told::plugin(app);
-    bag::plugin(app);
-    gains::plugin(app);
-    build_menu::plugin(app);
-    crafting::plugin(app);
-    station_screen::plugin(app);
-    intent::plugin(app);
-    interact::plugin(app);
-    claim::plugin(app);
-    vitals::plugin(app);
-    death::plugin(app);
-    skills::plugin(app);
-    creatures::plugin(app);
-    bodies::plugin(app);
-    combat::plugin(app);
-    hits::plugin(app);
-    archery::plugin(app);
-    people::plugin(app);
-    pooling::plugin(app);
-    settlement::plugin(app);
-    map::plugin(app);
-    held::plugin(app);
-    worn::plugin(app);
-    save::plugin(app);
-    harvest::plugin(app);
-    dig::plugin(app);
-    options::plugin(app);
-    probe::plugin(app);
-    // Sound: noises from what happens, what they sound like, the place, and music.
-    noise::plugin(app);
-    noises::plugin(app);
-    sounds::plugin(app);
-    soundscape::plugin(app);
-    music::plugin(app);
-    tick::plugin(app);
-    lod::plugin(app);
-    camera::plugin(app);
-    movement::plugin(app);
-    app.insert_resource(DrivenByPlayer)
-        .add_systems(PostStartup, spawn)
-        .add_systems(
-            Update,
-            (
-                options::toggle,
-                camera::capture_mouse,
-                dial::steer,
-                warp,
-                camera::zoom,
-            )
-                .chain()
-                .before(tool::Acting),
-        )
-        // What this machine's player means to do, read before the frame's ticks.
-        .add_systems(
-            RunFixedMainLoop,
-            (camera::look, intent::read)
-                .chain()
-                .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
-        );
+/// The whole game, in three layers, each standing only on those before it:
+///
+/// - [`WorldPlugin`]: the world around a player, from the data files to what grows.
+/// - [`WalkerPlugin`]: a body this machine steers through it, and the camera.
+/// - [`GameplayPlugin`]: everything a player does there, from building to combat and sound.
+///
+/// A run can leave a layer out, `GamePlugins.build().disable::<GameplayPlugin>()`, to try
+/// the ones below it alone; the `walk` experiment does.
+pub struct GamePlugins;
+
+impl PluginGroup for GamePlugins {
+    fn build(self) -> PluginGroupBuilder {
+        PluginGroupBuilder::start::<Self>()
+            .add(WorldPlugin)
+            .add(WalkerPlugin)
+            .add(GameplayPlugin)
+    }
 }
 
-fn spawn(
+/// The whole game: [`GamePlugins`].
+pub fn plugin(app: &mut App) {
+    app.add_plugins(GamePlugins);
+}
+
+/// Everything a player does in the world: building, what they carry, make and wear,
+/// creatures and people, fighting, staying alive, the map, saving, the remote probe, and
+/// sound. It stands on the world and the walker, and tells the walker what the player's
+/// hands are on.
+pub struct GameplayPlugin;
+
+impl Plugin for GameplayPlugin {
+    fn build(&self, app: &mut App) {
+        // A player needs something to build on, and takes over from the build keys.
+        build::plugin(app);
+        torchlight::plugin(app);
+        wear::plugin(app);
+        pile::plugin(app);
+        zones::plugin(app);
+        props::plugin(app);
+        tool::plugin(app);
+        dial::plugin(app);
+        told::plugin(app);
+        bag::plugin(app);
+        gains::plugin(app);
+        build_menu::plugin(app);
+        crafting::plugin(app);
+        station_screen::plugin(app);
+        interact::plugin(app);
+        claim::plugin(app);
+        vitals::plugin(app);
+        death::plugin(app);
+        skills::plugin(app);
+        creatures::plugin(app);
+        bodies::plugin(app);
+        combat::plugin(app);
+        hits::plugin(app);
+        archery::plugin(app);
+        people::plugin(app);
+        pooling::plugin(app);
+        settlement::plugin(app);
+        map::plugin(app);
+        held::plugin(app);
+        worn::plugin(app);
+        save::plugin(app);
+        harvest::plugin(app);
+        dig::plugin(app);
+        probe::plugin(app);
+        // Sound: noises from what happens, what they sound like, the place, and music.
+        noise::plugin(app);
+        noises::plugin(app);
+        sounds::plugin(app);
+        soundscape::plugin(app);
+        music::plugin(app);
+        app.insert_resource(DrivenByPlayer)
+            .add_observer(equip)
+            .add_systems(PostStartup, arrive_by_the_door.before(walker::spawn))
+            .configure_sets(Update, tool::Acting.after(PlayerInput).before(MenuSystems))
+            .add_systems(
+                Update,
+                (
+                    close_screens.before(options::toggle),
+                    claim_hands
+                        .after(options::toggle)
+                        .before(camera::capture_mouse),
+                    dial::steer
+                        .after(camera::capture_mouse)
+                        .before(camera::zoom),
+                )
+                    .in_set(PlayerInput),
+            )
+            .add_systems(
+                RunFixedMainLoop,
+                claim_hands
+                    .before(camera::look)
+                    .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
+            );
+    }
+}
+
+/// Stands the player a little way out from the base's door, facing it.
+fn arrive_by_the_door(mut commands: Commands, site: Res<Site>) {
+    let (approach, facing) = site.approach();
+    commands.insert_resource(ArriveAt {
+        at: site.frame.transform_point(approach - facing * 5.0),
+        toward: site.frame.transform_point(approach + facing),
+    });
+}
+
+/// What a player brings to the game besides their body: where they come back to, how they
+/// are, what they know, and what they carry, from the items file and, for testing,
+/// `--give`.
+fn equip(
+    arrived: On<Add<LocalPlayer>>,
     mut commands: Commands,
     mut items: ResMut<inventory::Items>,
     options: Res<Options>,
-    site: Res<Site>,
-    planet: Res<Planet>,
-    camera: Single<Entity, With<MainCamera>>,
+    players: Query<(&Transform, &Motion)>,
 ) {
-    // The player steers the camera now.
-    commands.entity(*camera).remove::<FreeCamera>();
-
-    // Stand a little way out from the door, facing it.
-    let (approach, facing) = site.approach();
-    // For testing, a run can start somewhere else (--at).
-    let outside = match options.start_at {
-        Some((east, south)) => site.start.transform_point(Vec3::new(east, 0.0, south)),
-        None => site.frame.transform_point(approach - facing * 5.0),
+    let Ok((transform, motion)) = players.get(arrived.entity) else {
+        return;
     };
-    let feet = planet.ground_at(outside);
-    let up = feet.normalize();
-    // For testing, a run can start facing a given spot (--face).
-    let looking_at = match options.start_facing {
-        Some((east, south)) => Vec3::new(east, 0.0, south),
-        None => approach + facing,
-    };
-    let toward_door = site
-        .frame
-        .transform_point(looking_at)
-        .sub(outside)
-        .reject_from(up)
-        .normalize();
-    commands.spawn((
-        Name::new("Player"),
-        Player,
-        LocalPlayer,
-        View {
-            forward: toward_door,
-            pitch: -0.08,
-        },
+    let mut body = vitals::Vitals::default();
+    for (name, value) in &options.gives {
+        match name.as_str() {
+            "health" => body.health = *value as f32,
+            "fed" => body.fed = *value as f32,
+            "stamina" => body.stamina = *value as f32,
+            _ => {}
+        }
+    }
+    let mut kit = inventory::starting_kit(&mut items);
+    inventory::give_for_testing(
+        &mut items,
+        &mut kit.0.0,
+        &mut kit.1.0,
+        &mut kit.2.0,
+        &options.gives,
+    );
+    commands.entity(arrived.entity).insert((
         death::Arrival {
-            at: feet,
-            facing: toward_door,
+            at: transform.translation,
+            facing: motion.facing,
         },
-        Motion::facing(toward_door),
-        Stance::default(),
-        {
-            // For testing, --give can also set how the body starts.
-            let mut body = vitals::Vitals::default();
-            for (name, value) in &options.gives {
-                match name.as_str() {
-                    "health" => body.health = *value as f32,
-                    "fed" => body.fed = *value as f32,
-                    "stamina" => body.stamina = *value as f32,
-                    _ => {}
-                }
-            }
-            body
-        },
+        body,
         skills::Skills::default(),
-        {
-            let mut kit = inventory::starting_kit(&mut items);
-            inventory::give_for_testing(
-                &mut items,
-                &mut kit.0.0,
-                &mut kit.1.0,
-                &mut kit.2.0,
-                &options.gives,
-            );
-            kit
-        },
-        Transform::from_translation(feet).looking_to(toward_door, up),
-        Visibility::default(),
+        kit,
     ));
 }
 
-/// For testing, moves the player where a scripted run says, on the frame it says (--warp),
-/// or where a script asks over the remote protocol (`probe`).
-fn warp(
-    options: Res<Options>,
-    frame: Res<crate::shell::ScriptFrame>,
-    mut asked: ResMut<probe::Asked>,
-    site: Res<Site>,
-    planet: Res<Planet>,
-    player: Single<(&mut Transform, &mut Motion, &mut View), IsLocalPlayer>,
+/// Tells the walker what the screens and the builder have of the player's hands.
+fn claim_hands(
+    screen: Res<inventory::InventoryScreen>,
+    build_menu: Res<build_menu::BuildMenu>,
+    dial: Res<dial::Dial>,
+    builds: Res<catalogue::Builds>,
+    builder: Option<Single<&tool::Builder, IsLocalPlayer>>,
+    mut hands: ResMut<Hands>,
 ) {
-    let scripted = options
-        .warps
-        .iter()
-        .find(|warp| warp.frame == frame.0)
-        .map(|warp| (warp.at, Some(warp.facing)));
-    let Some((at, facing)) = scripted.or_else(|| asked.warp.take()) else {
+    let wheel = builder.is_some_and(|builder| builder.wants_wheel(&builds));
+    hands.set_if_neq(Hands {
+        busy: screen.open,
+        choosing: dial.open || build_menu.open,
+        pointer: screen.open || build_menu.open,
+        arrows: build_menu.open,
+        mouse: dial.open,
+        wheel: wheel || screen.open,
+    });
+}
+
+/// Esc closes the build menu, else the inventory, before it reaches the options menu,
+/// and takes the mouse back.
+fn close_screens(
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    menu: Res<options::OptionsMenu>,
+    mut inventory: ResMut<inventory::InventoryScreen>,
+    mut build_menu: ResMut<build_menu::BuildMenu>,
+    window: Single<(&Window, &mut CursorOptions)>,
+) {
+    if menu.open || !keys.just_pressed(KeyCode::Escape) {
         return;
-    };
-    let (mut transform, mut motion, mut view) = player.into_inner();
-    let place = |(east, south): (f32, f32)| site.start.transform_point(Vec3::new(east, 0.0, south));
-    let feet = planet.ground_at(place(at));
-    let up = feet.normalize();
-    let ahead = facing.map_or(view.forward, |facing| place(facing) - feet);
-    let facing = ahead.reject_from(up).normalize_or(view.forward);
-    transform.translation = feet;
-    motion.velocity = Vec3::ZERO;
-    motion.facing = facing;
-    view.forward = facing;
-    info!("Warped to {:.1} m east and {:.1} m south.", at.0, at.1);
+    }
+    if build_menu.open {
+        build_menu.open = false;
+    } else if inventory.open {
+        inventory.open = false;
+        inventory.at = None;
+    } else {
+        return;
+    }
+    keys.clear_just_pressed(KeyCode::Escape);
+    let (window, mut cursor) = window.into_inner();
+    camera::grab_mouse(&mut cursor, window.focused);
 }
 
 /// A world with what the play systems read and write that is not of any one entity: the

@@ -10,8 +10,8 @@
 use super::claim::Claim;
 use super::controls::{Action, Controls};
 use super::{IsLocalPlayer, LocalPlayer, Player};
-use crate::build::Site;
 use crate::planet::Planet;
+use crate::start::Start;
 use bevy::{
     asset::RenderAssetUsages,
     prelude::*,
@@ -68,19 +68,15 @@ pub fn plugin(app: &mut App) {
 }
 
 /// Where a pixel of the map is on the planet.
-fn pixel_to_planet(site: &Site, x: usize, y: usize) -> Vec3 {
+fn pixel_to_planet(start: &Start, x: usize, y: usize) -> Vec3 {
     let east = (x as f32 - PIXELS as f32 * 0.5) * METRES_PER_PIXEL;
     let south = (y as f32 - PIXELS as f32 * 0.5) * METRES_PER_PIXEL;
-    site.start.transform_point(Vec3::new(east, 0.0, south))
+    start.at(east, south)
 }
 
 /// Which pixel a point on the planet falls in, if it is on the map.
-fn planet_to_pixel(site: &Site, point: Vec3) -> Option<(usize, usize)> {
-    let local = site
-        .start
-        .compute_affine()
-        .inverse()
-        .transform_point3(point);
+fn planet_to_pixel(start: &Start, point: Vec3) -> Option<(usize, usize)> {
+    let local = start.local(point);
     let x = local.x / METRES_PER_PIXEL + PIXELS as f32 * 0.5;
     let y = local.z / METRES_PER_PIXEL + PIXELS as f32 * 0.5;
     let inside = (0.0..PIXELS as f32).contains(&x) && (0.0..PIXELS as f32).contains(&y);
@@ -90,7 +86,7 @@ fn planet_to_pixel(site: &Site, point: Vec3) -> Option<(usize, usize)> {
 /// Works out the colour of the land once, from the planet's rules.
 fn draw_land(
     mut commands: Commands,
-    site: Res<Site>,
+    start: Res<Start>,
     planet: Res<Planet>,
     mut images: ResMut<Assets<Image>>,
 ) {
@@ -99,7 +95,7 @@ fn draw_land(
     let mut land = vec![[0u8; 4]; PIXELS * PIXELS];
     for y in 0..PIXELS {
         for x in 0..PIXELS {
-            let point = planet.ground_at(pixel_to_planet(&site, x, y));
+            let point = planet.ground_at(pixel_to_planet(&start, x, y));
             heights[y * PIXELS + x] = point.length() - sea;
         }
     }
@@ -114,7 +110,7 @@ fn draw_land(
                 let deep = (-height / 6.0).clamp(0.0, 1.0);
                 [0.32 - 0.12 * deep, 0.5 - 0.15 * deep, 0.62 - 0.1 * deep]
             } else {
-                let point = planet.ground_at(pixel_to_planet(&site, x, y));
+                let point = planet.ground_at(pixel_to_planet(&start, x, y));
                 let cover = planet.cover(point, point.normalize());
                 let grass = cover.grass;
                 [
@@ -192,19 +188,19 @@ fn draw_land(
 /// Marks the land around each player as seen by them, and shows on the map what this
 /// machine's player has seen.
 fn explore(
-    site: Res<Site>,
+    start: Res<Start>,
     mut players: Query<(&Transform, &mut Explored, Has<LocalPlayer>), With<Player>>,
     chart: Option<Res<Chart>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     let Some(chart) = chart else { return };
     for (at, mut explored, ours) in &mut players {
-        let pixel = planet_to_pixel(&site, at.translation);
+        let pixel = planet_to_pixel(&start, at.translation);
         if pixel == explored.at {
             continue;
         }
         explored.at = pixel;
-        let newly = newly_seen(&site, at.translation, &explored.seen);
+        let newly = newly_seen(&start, at.translation, &explored.seen);
         if newly.is_empty() {
             continue;
         }
@@ -227,8 +223,8 @@ fn explore(
 }
 
 /// The pixels near a point not yet seen.
-fn newly_seen(site: &Site, point: Vec3, seen: &[bool]) -> Vec<usize> {
-    let Some((cx, cy)) = planet_to_pixel(site, point) else {
+fn newly_seen(start: &Start, point: Vec3, seen: &[bool]) -> Vec<usize> {
+    let Some((cx, cy)) = planet_to_pixel(start, point) else {
         return Vec::new();
     };
     let reach = (SEEN_M / METRES_PER_PIXEL).ceil() as i64;
@@ -268,7 +264,7 @@ fn toggle(
 /// Puts you and your claim where they are on the map, while it is open.
 #[allow(clippy::type_complexity)]
 fn place_marks(
-    site: Res<Site>,
+    start: Res<Start>,
     chart: Option<Res<Chart>>,
     claim: Single<&Claim, IsLocalPlayer>,
     player: Single<&Transform, IsLocalPlayer>,
@@ -287,11 +283,11 @@ fn place_marks(
             node.top = top;
         }
     };
-    if let Some(pixel) = planet_to_pixel(&site, player.translation) {
+    if let Some(pixel) = planet_to_pixel(&start, player.translation) {
         put(&mut you, pixel, 4.5);
     }
     let (mut yours, mut shown) = yours.into_inner();
-    match claim.stone.and_then(|(_, at)| planet_to_pixel(&site, at)) {
+    match claim.stone.and_then(|(_, at)| planet_to_pixel(&start, at)) {
         Some(pixel) => {
             put(&mut yours, pixel, 7.0);
             shown.set_if_neq(Visibility::Inherited);
@@ -308,21 +304,8 @@ mod tests {
 
     #[test]
     fn a_pixel_and_its_place_on_the_planet_agree() {
-        let site_frame = Transform::from_xyz(0.0, 2000.0, 0.0);
-        let to_pixel = |point: Vec3| {
-            let local = site_frame
-                .compute_affine()
-                .inverse()
-                .transform_point3(point);
-            (
-                local.x / METRES_PER_PIXEL + PIXELS as f32 * 0.5,
-                local.z / METRES_PER_PIXEL + PIXELS as f32 * 0.5,
-            )
-        };
-        let east = (30.0 - PIXELS as f32 * 0.5) * METRES_PER_PIXEL;
-        let south = (90.0 - PIXELS as f32 * 0.5) * METRES_PER_PIXEL;
-        let point = site_frame.transform_point(Vec3::new(east, 0.0, south));
-        let (x, y) = to_pixel(point);
-        assert!((x - 30.0).abs() < 1e-3 && (y - 90.0).abs() < 1e-3);
+        let start = Start(Transform::from_xyz(0.0, 2000.0, 0.0));
+        let point = pixel_to_planet(&start, 30, 90);
+        assert_eq!(planet_to_pixel(&start, point), Some((30, 90)));
     }
 }

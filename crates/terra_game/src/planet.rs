@@ -440,7 +440,9 @@ pub fn plugin(app: &mut App) {
         grass_lush: Color::srgb(0.3, 0.5, 0.2),
         sand: Color::srgb(0.84, 0.74, 0.55),
     };
+    let start = crate::start::Start::choose(&planet, yard);
     app.insert_resource(planet)
+        .insert_resource(start)
         .insert_resource(tweaks)
         .insert_resource(GlobalAmbientLight {
             brightness: 120.0,

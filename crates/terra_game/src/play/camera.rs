@@ -3,10 +3,12 @@
 //! zoomed with the wheel.
 
 use super::controls::{self, Action, Controls};
-use super::{IsLocalPlayer, View, build_menu, catalogue, dial, inventory, options, tool};
+use super::walker::Hands;
+use super::{IsLocalPlayer, View, options};
 use crate::build::{self, Site};
 use crate::planet::{MainCamera, Planet};
 use crate::shell::Options;
+use crate::start::Start;
 use bevy::{
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
     prelude::*,
@@ -60,13 +62,12 @@ pub(super) fn grab_mouse(cursor: &mut CursorOptions, take: bool) {
 /// it is left where it is.
 pub(super) fn capture_mouse(
     mouse: Res<ButtonInput<MouseButton>>,
-    screen: Res<inventory::InventoryScreen>,
     menu: Res<options::OptionsMenu>,
-    build_menu: Res<build_menu::BuildMenu>,
+    hands: Res<Hands>,
     window: Single<(&mut Window, &mut CursorOptions)>,
 ) {
     // While a menu or the inventory is open, the pointer is for pointing at it.
-    if screen.open || menu.open || build_menu.open {
+    if menu.open || hands.pointer {
         return;
     }
     let (mut window, mut cursor) = window.into_inner();
@@ -88,16 +89,15 @@ pub(super) fn look(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     cursor: Single<&CursorOptions>,
-    dial: Res<dial::Dial>,
     menu: Res<options::OptionsMenu>,
-    build_menu: Res<build_menu::BuildMenu>,
+    hands: Res<Hands>,
     player: Single<(&Transform, &mut View), IsLocalPlayer>,
 ) {
     let (player, mut view) = player.into_inner();
     let up = player.translation.normalize();
     // The arrow keys look about too, for keyboards and for scripted runs, except while
     // the build menu uses them.
-    if !menu.open && !build_menu.open {
+    if !menu.open && !hands.arrows {
         let held = |action| f32::from(settings.held(action, &keys, &mouse, true));
         let turn = KEY_LOOK_SPEED * time.delta_secs();
         let across = held(Action::LookRight) - held(Action::LookLeft);
@@ -106,7 +106,7 @@ pub(super) fn look(
         view.pitch = (view.pitch + rise * turn).clamp(-1.2, 1.2);
     }
     // While the dial is open the mouse steers it, not the view.
-    if cursor.grab_mode != CursorGrabMode::None && !dial.open {
+    if cursor.grab_mode != CursorGrabMode::None && !hands.mouse {
         let speed = LOOK_SPEED * settings.look_speed;
         let rise = if settings.invert_look { -1.0 } else { 1.0 };
         view.forward = Quat::from_axis_angle(up, -motion.delta.x * speed) * view.forward;
@@ -156,15 +156,13 @@ pub(super) fn zoom(
     time: Res<Time>,
     controls: Controls,
     scroll: Res<AccumulatedMouseScroll>,
-    builder: Single<&tool::Builder, IsLocalPlayer>,
-    builds: Res<catalogue::Builds>,
-    screen: Res<inventory::InventoryScreen>,
     menu: Res<super::options::OptionsMenu>,
+    hands: Res<Hands>,
     mut zoom: ResMut<Zoom>,
 ) {
     let dt = time.delta_secs();
     // With a panel open the wheel scrolls it instead.
-    let wheel = if builder.wants_wheel(&builds) || screen.open || menu.open {
+    let wheel = if hands.wheel || menu.open {
         0.0
     } else {
         match scroll.unit {
@@ -184,7 +182,8 @@ pub(super) fn zoom(
 pub(super) fn follow(
     player: Single<(&Transform, &View), (IsLocalPlayer, Without<MainCamera>)>,
     zoom: Res<Zoom>,
-    site: Res<Site>,
+    start: Res<Start>,
+    site: Option<Res<Site>>,
     builds: Query<&build::Built>,
     planet: Res<Planet>,
     options: Res<Options>,
@@ -192,9 +191,9 @@ pub(super) fn follow(
 ) {
     // A fixed camera, for taking pictures.
     if let Some((from, toward)) = options.vantage {
-        let from = site.frame.transform_point(from);
+        let from = start.transform_point(from);
         **camera = Transform::from_translation(from)
-            .looking_at(site.frame.transform_point(toward), from.normalize());
+            .looking_at(start.transform_point(toward), from.normalize());
         return;
     }
     let (player, view) = *player;
@@ -214,7 +213,10 @@ pub(super) fn follow(
     // The camera comes in front of any build's wall behind the player: theirs, or a
     // house they are in.
     let back = -looking;
-    let blocked = std::iter::once(&**site)
+    let blocked = site
+        .as_deref()
+        .map(|site| &site.build)
+        .into_iter()
         .chain(builds.iter().map(|built| &built.0))
         .filter_map(|build| {
             let to_base = build.frame.compute_affine().inverse();

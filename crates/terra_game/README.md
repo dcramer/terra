@@ -4,6 +4,13 @@ The game in Bevy (D28, D133): the world on screen, the player, what they carry a
 
 It is launched by the [sandbox](../terra_sandbox/README.md) for now, as its `play` and `build` experiments, so the sandbox's options, controls and scripted runs apply there.
 
+The game is three layers of plugins, `WorldPlugin`, `WalkerPlugin` and `GameplayPlugin`, bundled as `play::GamePlugins` ([docs/tech.md](../../docs/tech.md#layers-of-the-game-d198)). A new feature goes in the lowest layer it can, and never needs anything above it to run. The sandbox's `walk` runs the first two alone:
+
+```bash
+cargo run -p terra_sandbox -- --experiment walk                                     # the world and a body
+cargo run -p terra_sandbox -- --experiment walk --experiment lush --level yard --time 13   # the forest walk
+```
+
 ## Play
 
 ```bash

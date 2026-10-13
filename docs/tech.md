@@ -44,6 +44,29 @@ Why this split:
 
 The plain crates share one maths library with Bevy (`glam`), so positions pass between them without conversion.
 
+### Layers of the game (D198)
+
+Inside `terra_game` the game is three Bevy plugins, each standing only on those before it, bundled as the plugin group `GamePlugins`:
+
+| Layer | Plugin | What it holds |
+|---|---|---|
+| World | `WorldPlugin` | The kinds of thing from the data files, light and air, the day, what grows, the tick, levels of detail. Under it, always on: the planet, the terrain and **the start**, the fixed place every east-and-south position is measured from |
+| Walker | `WalkerPlugin` | A body this machine steers, its camera, the controls and the options menu |
+| Gameplay | `GameplayPlugin` | Everything a player does: building, items, crafting, creatures, people, combat, survival, the map, saving, the remote probe, sound |
+
+The full game turns on all three. A run can leave layers out to build and test the ones below alone: the sandbox's `walk` is the world and the walker, a walk through the forest with nothing else of the game (`GamePlugins.build().disable::<GameplayPlugin>()`).
+
+The layers are big on purpose: a few large, pluggable chunks, not a plugin per feature to pick from. Each feature is still its own plugin module inside its layer (AGENTS.md).
+
+How a lower layer stays free of a higher one, in the usual Bevy ways:
+
+- **It never orders itself by a system above it.** A higher layer orders itself against a lower one's system sets (`PlayerInput`, `MenuSystems`, `Grading`), never the other way.
+- **It publishes small types for the layer above to fill in.** The walker owns `Hands` (what the player's pointer, mouse, wheel and hands are on), `ArriveAt` and `WarpTo`; gameplay's screens and tools write them.
+- **It adds what it owns when an entity appears, with observers.** The walker spawns the body; gameplay adds what a player carries and feels when a `LocalPlayer` is added.
+- **What may be missing is optional.** A query over another layer's components is simply empty without it; a resource another layer may provide is `Option<Res<_>>`, or the system runs only when it exists (`run_if(resource_exists::<_>)`).
+
+All three are still one crate, so they compile together, and a lower layer still names a few types from above, though it runs without them: flora's kinds name the items they give (`Cuttable`), flora, movement and the camera look for the player's building (`Site`, `Built`) to keep clear of and stand on, and movement asks props, other bodies and stamina (`Prop`, `Body`, `Vitals`) what is in the way and what a jump costs. Splitting the world and walker into their own crate, so they build alone and Cargo enforces the boundary, means turning those into small shared types first: a "solid" for what stops a walker, a "surface" for what holds one up, and the yield of a cut kept with gameplay.
+
 ## State, and how it is shared
 
 The game is server-first (D51): it always talks to a server, which decides everything. When friends play together, that server runs inside one player's game. On a persistent world it runs alone on another machine. Both are the same code. What a thousand players ask of it is in [multiplayer.md](multiplayer.md).

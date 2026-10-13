@@ -21,8 +21,8 @@ use super::tick::{Sim, Smoothed};
 use super::told::Told;
 use super::zones::Zones;
 use super::{Downed, Player, Stance, View};
-use crate::build::Site;
 use crate::planet::Planet;
+use crate::start::Start;
 use bevy::prelude::*;
 
 /// Seconds to draw the bow fully.
@@ -219,7 +219,7 @@ fn fly(
     mut commands: Commands,
     time: Res<Time>,
     planet: Res<Planet>,
-    site: Res<Site>,
+    start: Res<Start>,
     skills: Query<&Skills>,
     mut arrows: Query<(Entity, &mut Arrow, &mut Transform), Without<Creature>>,
     mut creatures: Query<(Entity, &mut Creature, &Transform, &Body), Without<Arrow>>,
@@ -293,11 +293,7 @@ fn fly(
                 && let Ok((.., at, _)) = creatures.get(hit_entity)
             {
                 // Where, in the terms --at takes, so a scripted hunt can go to it.
-                let local = site
-                    .start
-                    .compute_affine()
-                    .inverse()
-                    .transform_point3(at.translation);
+                let local = start.local(at.translation);
                 info!(
                     "It fell {:.1} m east and {:.1} m south of the start.",
                     local.x, local.z

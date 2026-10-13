@@ -29,5 +29,6 @@ pub mod shell;
 pub mod skinning;
 pub mod sky;
 pub mod spatial;
+pub mod start;
 pub mod swing;
 pub mod terrain;

@@ -131,8 +131,8 @@ usage: terra_sandbox [options]
                         up and as a blueprint, to look at (docs/building-kits.md)
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
-                        east, up and south of the base's corner, for experiments
-                        that have one";
+                        east, up and south of the start, for experiments that have
+                        one";
 
 /// Engine messages that say what is normal, kept out of the log so what is left is worth
 /// reading. Warnings and errors still come through. `RUST_LOG` replaces all of this.

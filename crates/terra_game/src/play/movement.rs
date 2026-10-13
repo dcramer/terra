@@ -54,11 +54,12 @@ fn cramped(stand: Vec3, walker: &Walker, room: impl Fn(Vec3) -> f32) -> bool {
 }
 
 /// Moves every player by what they mean to do: walking, sprinting, rolling and jumping,
-/// held up by the ground and their base, and stopped by walls, bodies and the sea.
+/// held up by the ground and their base, and stopped by walls, bodies and the sea. A body
+/// with no vitals, as in the walker on its own, never tires.
 fn walk(
     time: Res<Time>,
     planet: Res<Planet>,
-    site: Res<Site>,
+    site: Option<Res<Site>>,
     builds: Query<&build::Built>,
     obstacles: Res<flora::Obstacles>,
     items: Query<(&props::Prop, &Transform, &Visibility), Without<Player>>,
@@ -68,7 +69,7 @@ fn walk(
             &mut Transform,
             &mut Motion,
             &mut Stance,
-            &mut vitals::Vitals,
+            Option<&mut vitals::Vitals>,
             &View,
             &Intent,
             Has<Downed>,
@@ -99,7 +100,7 @@ fn walk(
         if stance.dodging == 0.0
             && motion.on_ground
             && intent.pressed(Action::Dodge)
-            && vitals.spend(DODGE_STAMINA)
+            && vitals.as_mut().is_none_or(|body| body.spend(DODGE_STAMINA))
         {
             stance.dodging = DODGE_S;
             stance.dodge_direction = if wish == Vec3::ZERO {
@@ -112,7 +113,9 @@ fn walk(
             DODGE_SPEED
         } else if stance.guarding {
             JOG_SPEED * 0.5
-        } else if intent.held(Action::Sprint) && vitals.can_sprint() {
+        } else if intent.held(Action::Sprint)
+            && vitals.as_ref().is_none_or(|body| body.can_sprint())
+        {
             SPRINT_SPEED
         } else {
             JOG_SPEED
@@ -133,20 +136,24 @@ fn walk(
 
         // The build being walked at decides what blocks the way: the player's own, or someone
         // else's, such as a house in the village. Builds stand well apart, so it is the one
-        // the player is at or nearest. It works in its own space.
-        let site: &build::Build = builds
+        // the player is at or nearest. It works in its own space. With no building in the
+        // game, there is none.
+        let site: Option<&build::Build> = builds
             .iter()
             .map(|built| &built.0)
             .find(|built| built.covers(feet, 3.0))
-            .unwrap_or(&site);
-        let to_base = site.frame.compute_affine().inverse();
-        let from_base = site.frame.compute_affine();
-        let walked = site.walkable().walk(
-            to_base.transform_point3(feet),
-            to_base.transform_point3(target),
-            &walker,
-        );
-        target = from_base.transform_point3(walked);
+            .or(site.as_deref().map(|site| &site.build));
+        let frame = site.map_or(Transform::IDENTITY, |site| site.frame);
+        let to_base = frame.compute_affine().inverse();
+        let from_base = frame.compute_affine();
+        if let Some(site) = site {
+            let walked = site.walkable().walk(
+                to_base.transform_point3(feet),
+                to_base.transform_point3(target),
+                &walker,
+            );
+            target = from_base.transform_point3(walked);
+        }
         // Trees and boulders push the player round them.
         for (at, radius) in obstacles.near(target, walker.radius) {
             let apart = (target - at).reject_from(up);
@@ -188,7 +195,10 @@ fn walk(
         }
 
         motion.rising -= GRAVITY * dt;
-        if motion.on_ground && intent.pressed(Action::Jump) && vitals.spend(JUMP_STAMINA) {
+        if motion.on_ground
+            && intent.pressed(Action::Jump)
+            && vitals.as_mut().is_none_or(|body| body.spend(JUMP_STAMINA))
+        {
             motion.rising = JUMP_SPEED;
         }
         target += up * motion.rising * dt;
@@ -197,7 +207,9 @@ fn walk(
         // the ground and anything the base offers there, such as its steps or a roof.
         let local = to_base.transform_point3(target);
         let before = to_base.transform_point3(feet);
-        let offered = site.support(Vec3::new(local.x, before.y.max(local.y), local.z), &walker);
+        let offered = site.and_then(|site| {
+            site.support(Vec3::new(local.x, before.y.max(local.y), local.z), &walker)
+        });
         let offered = offered.map(|height| {
             from_base
                 .transform_point3(Vec3::new(local.x, height, local.z))
@@ -208,7 +220,9 @@ fn walk(
         // the true ground there sinks the player into the drawn one or lifts them off it.
         let ground = planet.ground_at(target).length();
         let held_at = match offered {
-            Some(floor) if site.walkable().ceiling(before).is_some() => floor,
+            Some(floor) if site.is_some_and(|site| site.walkable().ceiling(before).is_some()) => {
+                floor
+            }
             Some(surface) => surface.max(ground),
             None => ground,
         };
@@ -221,7 +235,7 @@ fn walk(
             motion.airborne += dt;
         }
         // A ceiling stops a jump.
-        if let Some(ceiling) = site.walkable().ceiling(before)
+        if let Some(ceiling) = site.and_then(|site| site.walkable().ceiling(before))
             && motion.rising > 0.0
             && to_base.transform_point3(target).y + walker.height > ceiling
         {
@@ -230,10 +244,11 @@ fn walk(
             motion.rising = 0.0;
         }
 
-        let indoors = site
-            .walkable()
-            .ceiling(to_base.transform_point3(target))
-            .is_some();
+        let indoors = site.is_some_and(|site| {
+            site.walkable()
+                .ceiling(to_base.transform_point3(target))
+                .is_some()
+        });
         if indoors != motion.indoors {
             motion.indoors = indoors;
             info!(

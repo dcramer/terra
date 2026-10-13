@@ -13,6 +13,7 @@ use crate::play::skills::{Did, ONCE, Skill};
 use crate::play::told::Told;
 use crate::play::work::Hold;
 use crate::play::{IsLocalPlayer, Stance};
+use crate::start::Start;
 use terra_build::{BuildOp, Panel, RoofSection};
 
 /// Starts, carries on and finishes building and taking apart. Both take a moment: the
@@ -29,6 +30,7 @@ pub(super) fn act(
     mut belongings: Belongings,
     mut told: MessageWriter<Told>,
     mut site: ResMut<Site>,
+    start: Res<Start>,
     mut did: MessageWriter<Did>,
     mut noise: MessageWriter<Noise>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -221,7 +223,7 @@ pub(super) fn act(
                         info!(
                             "Placed a {} at {}, {lift} up.",
                             item.name,
-                            from_start(&site, at)
+                            from_start(&site, &start, at)
                         );
                         did.write(Did(belongings.player(), Skill::Building, ONCE));
                         belongings.wear_in_hand(1);
@@ -367,7 +369,7 @@ pub(super) fn act(
                     info!(
                         "Placed a {} at {}, {lift} up.",
                         carried.item.name,
-                        from_start(&site, carried.at)
+                        from_start(&site, &start, carried.at)
                     );
                     stance.since_acting = 0.0;
                 }
@@ -625,12 +627,8 @@ pub(super) fn animate(
 
 /// A place in the base's own space as metres east, up and south of the start, which is how
 /// scripts and the log give places, wherever the base was begun.
-fn from_start(site: &Site, at: Vec3) -> Vec3 {
-    let world = site.frame.transform_point(at);
-    site.start
-        .compute_affine()
-        .inverse()
-        .transform_point3(world)
+fn from_start(site: &Site, start: &Start, at: Vec3) -> Vec3 {
+    start.local(site.frame.transform_point(at))
 }
 
 /// The two points of the grid a room, or the two tiles a wall, shown at its own size

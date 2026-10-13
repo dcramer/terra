@@ -14,9 +14,10 @@
 //! The kit's file is read again when it is saved, so the sheet can be left running while
 //! the look is tuned.
 
-use super::{Build, BuildLook, Built, FLOOR_CLEARANCE_M, Shown, Site, frame_at, lifted, read_kits};
+use super::{Build, BuildLook, Built, Shown, Site, frame_at, lifted, read_kits};
 use crate::planet::Planet;
 use crate::shell::Options;
+use crate::start::FLOOR_CLEARANCE_M;
 use bevy::prelude::*;
 use std::sync::Arc;
 use terra_build::logs::Pattern;

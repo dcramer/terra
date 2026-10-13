@@ -26,12 +26,14 @@
 //! Coordinates are local to the base: X and Z along the floor and Y up. Cubes are counted
 //! in cubes all three ways; tiles count X and Z in cubes and Y in storeys.
 
+mod example;
 pub mod logs;
 pub mod masonry;
 mod mesh;
 pub mod surface;
 mod walk;
 
+pub use example::example;
 pub use mesh::{BaseMesh, Surface};
 pub use walk::Walker;
 

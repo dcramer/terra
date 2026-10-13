@@ -25,9 +25,9 @@ use super::{
     people::Person,
     vitals::Vitals,
 };
-use crate::build::Site;
 use crate::planet::{MainCamera, Planet};
 use crate::remote::{method, refused};
+use crate::start::Start;
 use bevy::{
     prelude::*,
     remote::{BrpResult, builtin_methods::parse_some},
@@ -59,8 +59,6 @@ pub fn plugin(app: &mut App) {
 /// the command line.
 #[derive(Resource, Default)]
 pub(super) struct Asked {
-    /// Where to stand, and what to face if not straight ahead.
-    pub warp: Option<((f32, f32), Option<(f32, f32)>)>,
     gives: Vec<(String, u32)>,
     takes: Vec<(String, Option<u32>)>,
     /// Uses to wear the tool in hand by.
@@ -78,7 +76,7 @@ struct Warp {
 
 fn warp(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Warp { at, facing } = parse_some(params)?;
-    world.resource_mut::<Asked>().warp = Some(((at[0], at[1]), facing.map(|f| (f[0], f[1]))));
+    world.resource_mut::<super::WarpTo>().0 = Some(((at[0], at[1]), facing.map(|f| (f[0], f[1]))));
     Ok(json!("warping on the next frame"))
 }
 
@@ -162,7 +160,7 @@ fn ask_aim(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 /// until the middle of the view passes within a few centimetres of the spot.
 fn aim(
     mut asked: ResMut<Asked>,
-    site: Res<Site>,
+    start: Res<Start>,
     planet: Res<Planet>,
     mut view: Single<&mut View, IsLocalPlayer>,
     camera: Single<&Transform, With<MainCamera>>,
@@ -170,7 +168,7 @@ fn aim(
     let Some(((east, south), up_m, frames)) = asked.aim else {
         return;
     };
-    let ground = planet.ground_at(site.start.transform_point(Vec3::new(east, 0.0, south)));
+    let ground = planet.ground_at(start.at(east, south));
     let target = ground + ground.normalize() * up_m;
     let eye = camera.translation;
     let off = (target - eye).reject_from(*camera.forward()).length();
@@ -268,17 +266,14 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
     ), IsLocalPlayer>();
     let mut creatures = world.query::<(&Creature, &GlobalTransform, &super::lod::Detail)>();
     let mut people = world.query_filtered::<(&Name, &GlobalTransform), With<Person>>();
-    let site = world
-        .get_resource::<Site>()
-        .ok_or_else(|| refused("no site yet"))?
-        .start;
+    let start = *world.resource::<Start>();
     let (transform, motion, downed, body, backpack, gear, bar, view) = players
         .single(world)
         .map_err(|_| refused("no player yet"))?;
     let items = world.resource::<Items>();
     let feet = transform.translation;
-    let here = east_south(&site, feet);
-    let ahead = east_south(&site, feet + view.forward);
+    let here = east_south(&start, feet);
+    let ahead = east_south(&start, feet + view.forward);
     let carrying: serde_json::Map<String, Value> = items
         .catalogue
         .iter()
@@ -303,13 +298,13 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         let name = bestiary.name(creature.species);
         let distance = at.translation().distance(feet);
         if near(distance) {
-            let home = east_south(&site, creature.home());
+            let home = east_south(&start, creature.home());
             around.push((
                 distance,
                 format!("{name} {:.3} {:.3}", home[0], home[1]),
                 json!({
                     "what": name,
-                    "at": place(east_south(&site, at.translation())),
+                    "at": place(east_south(&start, at.translation())),
                     "distance": number(distance),
                     "health": number(creature.health),
                     "doing": format!("{:?}", creature.state),
@@ -326,7 +321,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
                 name.as_str().to_string(),
                 json!({
                     "who": name.as_str(),
-                    "at": place(east_south(&site, at.translation())),
+                    "at": place(east_south(&start, at.translation())),
                     "distance": number(distance),
                 }),
             ));

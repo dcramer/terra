@@ -21,10 +21,10 @@ use super::species::{Bestiary, Lives, Temper};
 use super::tick::{Sim, Smoothed, Ticks};
 use super::told::Told;
 use super::{Downed, Player};
-use crate::build::Site;
 use crate::loading::Loading;
 use crate::planet::Planet;
 use crate::spatial::SpatialHash;
+use crate::start::Start;
 use bevy::{
     prelude::*,
     world_serialization::{WorldAsset, WorldInstanceReady},
@@ -181,7 +181,7 @@ fn prepare(
     mut commands: Commands,
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
-    site: Res<Site>,
+    start: Res<Start>,
     planet: Res<Planet>,
     mut clear: MessageWriter<ClearAround>,
     mut kinds: ResMut<Kinds>,
@@ -240,10 +240,7 @@ fn prepare(
 
     // Herds in the meadow, and those that keep a lair in a hollow further off, each as
     // many as its kind says.
-    let on_ground = |east: f32, south: f32| {
-        let point = site.start.transform_point(Vec3::new(east, 0.0, south));
-        planet.ground_at(point)
-    };
+    let on_ground = |east: f32, south: f32| planet.ground_at(start.at(east, south));
     let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 0.6;
     let herd = [(-45.0, 30.0), (-55.0, -20.0), (40.0, 45.0), (-30.0, 60.0)]
         .into_iter()
@@ -253,12 +250,7 @@ fn prepare(
         .into_iter()
         .map(|(east, south)| on_ground(east, south))
         .find(|&point| dry(point));
-    let local = |point: Vec3| {
-        site.start
-            .compute_affine()
-            .inverse()
-            .transform_point3(point)
-    };
+    let local = |point: Vec3| start.local(point);
     if let Some(home) = herd {
         // They graze in the open, as the village says.
         clear.write(ClearAround(home, 16.0));

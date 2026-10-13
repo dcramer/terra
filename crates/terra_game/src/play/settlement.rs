@@ -19,6 +19,7 @@ use super::tick::Sim;
 use super::told::Told;
 use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
+use crate::start::Start;
 use bevy::prelude::*;
 use terra_build::{Base, BuildOp, CELL_M, Kind, Panel};
 
@@ -124,6 +125,7 @@ pub fn plugin(app: &mut App) {
 fn found(
     mut commands: Commands,
     site: Res<Site>,
+    start: Res<Start>,
     planet: Res<Planet>,
     lair: Res<Lair>,
     look: Res<BuildLook>,
@@ -133,9 +135,7 @@ fn found(
     mut arrive: MessageWriter<Arrive>,
     mut clear: MessageWriter<ClearAround>,
 ) {
-    let on_ground = |east: f32, south: f32| {
-        planet.ground_at(site.start.transform_point(Vec3::new(east, 0.0, south)))
-    };
+    let on_ground = |east: f32, south: f32| planet.ground_at(start.at(east, south));
     let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 1.0;
     let Some(middle) = [(-70.0, 55.0), (75.0, 60.0), (-60.0, -75.0), (60.0, -80.0)]
         .into_iter()

@@ -7,12 +7,10 @@
 //!
 //! Where a player looks is their `View`, which this machine's mouse turns (`look`).
 
-use super::build_menu::BuildMenu;
 use super::controls::{Action, Controls};
-use super::dial::Dial;
-use super::inventory::InventoryScreen;
 use super::options::OptionsMenu;
 use super::tick::Sim;
+use super::walker::Hands;
 use super::{IsLocalPlayer, Player};
 use crate::planet::MainCamera;
 use bevy::{input::mouse::AccumulatedMouseScroll, prelude::*};
@@ -94,16 +92,14 @@ fn spend(mut intents: Query<&mut Intent>) {
 pub fn read(
     controls: Controls,
     scroll: Res<AccumulatedMouseScroll>,
-    screen: Res<InventoryScreen>,
-    build_menu: Res<BuildMenu>,
     menu: Res<OptionsMenu>,
-    dial: Res<Dial>,
+    hands: Res<Hands>,
     camera: Single<&GlobalTransform, With<MainCamera>>,
     mut intent: Single<&mut Intent, IsLocalPlayer>,
 ) {
     let mut now = Intent {
-        busy: screen.open || menu.open,
-        choosing: dial.open || build_menu.open,
+        busy: hands.busy || menu.open,
+        choosing: hands.choosing,
         aim: Some(Ray3d::new(camera.translation(), camera.forward())),
         // One notch at a time, however the wheel reports it, kept with what is unspent.
         wheel: intent.wheel + (scroll.delta.y > 0.0) as i32 - (scroll.delta.y < 0.0) as i32,
