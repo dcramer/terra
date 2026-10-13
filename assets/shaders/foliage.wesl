@@ -26,6 +26,8 @@ import bevy_pbr::render::{
 struct Wind {
     direction: vec3<f32>,
     strength: f32,
+    // 1 for bark.
+    bark: f32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -55,6 +57,12 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv_b, globals.time), 1.0);
 @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
+    // Each tree's bark shifted by where it stands, so no two trunks of a kind show the same
+    // bark at the same place (D218).
+    if wind.bark > 0.5 {
+        let foot = world_from_local[3].xyz;
+        out.uv += fract(vec2<f32>(sin(dot(foot, vec3<f32>(12.9898, 78.233, 37.719))), sin(dot(foot, vec3<f32>(39.346, 11.135, 83.155)))) * 43758.547);
+    }
 @if(VERTEX_UVS_B)
     out.uv_b = vertex.uv_b;
     out.world_position = world;

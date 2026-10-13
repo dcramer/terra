@@ -34,7 +34,7 @@ use bevy::{
     image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     light::NotShadowCaster,
     mesh::{Indices, PrimitiveTopology},
-    pbr::{ExtendedMaterial, MaterialExtension},
+    pbr::{ExtendedMaterial, MaterialExtension, ParallaxMappingMethod},
     platform::collections::HashMap,
     prelude::*,
     render::render_resource::{AsBindGroup, TextureFormat},
@@ -111,6 +111,10 @@ pub struct FoliageExtension {
     direction: Vec3,
     #[uniform(100)]
     strength: f32,
+    /// 1 for bark: each tree's bark is shifted by where it stands, and weathered in patches
+    /// with moss and a wet foot (D218).
+    #[uniform(100)]
+    bark: f32,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -395,6 +399,7 @@ fn plant(
     let wind = FoliageExtension {
         direction: east,
         strength: 1.0,
+        bark: 0.0,
     };
     // Read at a slant, as leaves edge-on are, a picture blurs unless sampled along the
     // slant too (anisotropic filtering).
@@ -432,9 +437,18 @@ fn plant(
             perceptual_roughness: 1.0,
             metallic: 0.0,
             reflectance: 0.3,
+            // The furrows read as cut into the trunk, not painted on it: relief mapping from
+            // the bark's own height (D218).
+            depth_map: Some(bark_map("depth.jpg", false)),
+            parallax_depth_scale: 0.03,
+            parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 4 },
+            max_parallax_layer_count: 16.0,
             ..default()
         },
-        extension: wind.clone(),
+        extension: FoliageExtension {
+            bark: 1.0,
+            ..wind.clone()
+        },
     });
     let leaves = materials.add(Foliage {
         base: StandardMaterial {
@@ -962,7 +976,7 @@ fn grow(
 /// trunk and great limbs; rounder near the camera.
 fn wood(tree: &Tree, detail: usize, height: f32) -> Build {
     let deepest = [3, 2, 1][detail];
-    let sides = [[12, 8, 6, 4], [7, 5, 4, 3], [5, 4, 3, 3]][detail];
+    let sides = [[20, 8, 6, 4], [10, 5, 4, 3], [6, 4, 3, 3]][detail];
     let mut build = Build::default();
     for limb in tree.limbs.iter().filter(|limb| limb.depth <= deepest) {
         tube(&mut build, limb, sides[limb.depth.min(3) as usize], height);
@@ -970,19 +984,77 @@ fn wood(tree: &Tree, detail: usize, height: f32) -> Build {
     build
 }
 
+/// A limb's rings: as grown, and for a trunk also between, every 0.35 m near the ground
+/// and 1 m above, so its roots and lumps have rings to show on.
+fn rings(limb: &Limb) -> (Vec<Vec3>, Vec<f32>) {
+    if limb.depth > 0 {
+        return (limb.points.clone(), limb.radii.clone());
+    }
+    let (mut points, mut radii) = (vec![limb.points[0]], vec![limb.radii[0]]);
+    for k in 1..limb.points.len() {
+        let (a, b) = (limb.points[k - 1], limb.points[k]);
+        let spacing = if a.y < 3.0 { 0.35 } else { 1.0 };
+        let count = (a.distance(b) / spacing).ceil().max(1.0) as usize;
+        for n in 1..=count {
+            let t = n as f32 / count as f32;
+            points.push(a.lerp(b, t));
+            radii.push(limb.radii[k - 1] + (limb.radii[k] - limb.radii[k - 1]) * t);
+        }
+    }
+    (points, radii)
+}
+
+/// How a limb's radius varies round it and along it, as a share of its radius: shallow
+/// flutes running up the bark and broad lumps, and on a trunk five roots spreading at its
+/// foot, each tree its own by where it grew.
+struct Shape {
+    phase: f32,
+    trunk: bool,
+}
+
+impl Shape {
+    fn of(limb: &Limb) -> Self {
+        let p = limb.points[0];
+        let phase =
+            (libm::sinf(p.x * 12.9898 + p.z * 78.233 + p.y * 37.719) * 43_758.547).fract() * TAU;
+        Self {
+            phase,
+            trunk: limb.depth == 0,
+        }
+    }
+
+    fn at(&self, angle: f32, along: f32, up: f32) -> f32 {
+        let deep = if self.trunk { 1.0 } else { 0.5 };
+        let flutes = 0.035 * libm::cosf(7.0 * angle + self.phase + 0.25 * along)
+            + 0.02 * libm::cosf(13.0 * angle + 2.1 * self.phase - 0.4 * along);
+        let lumps = 0.05
+            * libm::sinf(3.0 * angle + 1.7 * along + self.phase)
+            * libm::sinf(0.9 * along + 2.0 * angle);
+        let mut shape = 1.0 + deep * (flutes + lumps);
+        if self.trunk {
+            let foot = 1.0 - smoothstep(0.0, 1.6, up);
+            let root = 0.5 + 0.5 * libm::cosf(5.0 * angle + self.phase);
+            shape *= 1.0 + foot * foot * (0.3 * root * root - 0.1);
+        }
+        shape
+    }
+}
+
 /// A limb as a tube with bark round it.
 fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
     let start = build.positions.len() as u32;
+    let (points, radii) = rings(limb);
+    let shape = Shape::of(limb);
     let mut along = 0.0;
-    let mut side = (limb.points[1] - limb.points[0]).any_orthonormal_vector();
-    for (i, (&point, &radius)) in limb.points.iter().zip(&limb.radii).enumerate() {
+    let mut side = (points[1] - points[0]).any_orthonormal_vector();
+    for (i, (&point, &radius)) in points.iter().zip(&radii).enumerate() {
         if i > 0 {
-            along += point.distance(limb.points[i - 1]);
+            along += point.distance(points[i - 1]);
         }
-        let forward = if i + 1 < limb.points.len() {
-            limb.points[i + 1] - point
+        let forward = if i + 1 < points.len() {
+            points[i + 1] - point
         } else {
-            point - limb.points[i - 1]
+            point - points[i - 1]
         }
         .normalize();
         // Carry the ring's orientation along the limb, so it does not twist.
@@ -994,10 +1066,19 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
         let flutter = if limb.depth >= 2 { 0.15 } else { 0.0 };
         for j in 0..=sides {
             let angle = j as f32 / sides as f32 * TAU;
-            let normal = side * libm::cosf(angle) + other * libm::sinf(angle);
+            let out = side * libm::cosf(angle) + other * libm::sinf(angle);
+            let round = side * -libm::sinf(angle) + other * libm::cosf(angle);
+            // The trunk's own shape: flutes, lumps and roots, and the normal that follows it
+            // round, from how fast the radius changes with the angle.
+            let r = radius * shape.at(angle, along, point.y);
+            let step = 0.01;
+            let slope = radius
+                * (shape.at(angle + step, along, point.y) - shape.at(angle - step, along, point.y))
+                / (2.0 * step);
+            let normal = (out * r - round * slope).normalize_or(out);
             let uv = Vec2::new(j as f32 / sides as f32 * wraps, along / BARK_M.y);
             let index = build.vertex(
-                point + normal * radius,
+                point + out * r,
                 normal,
                 uv,
                 Vec2::new(bend * bend, flutter),
@@ -1009,7 +1090,7 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
         }
     }
     let ring = sides + 1;
-    for i in 0..(limb.points.len() as u32 - 1) {
+    for i in 0..(points.len() as u32 - 1) {
         for j in 0..sides {
             let a = start + i * ring + j;
             let b = a + ring;

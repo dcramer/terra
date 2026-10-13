@@ -10,7 +10,7 @@ import bevy_pbr::render::{
     forward_io::{VertexOutput, FragmentOutput},
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
-    pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT,
+    pbr_types::{PbrInput, STANDARD_MATERIAL_FLAGS_UNLIT_BIT},
     mesh_view_bindings::{globals, view},
 };
 
@@ -18,6 +18,50 @@ import bevy_pbr::render::{
 // ground bounce: what a surface that sees none of the sky is lit by instead, as a share of
 // the sky's light (D216). Crysis bakes the same into its trees' vertices.
 const BOUNCE: vec3<f32> = vec3<f32>(0.55, 0.6, 0.4);
+
+// Field order must match FoliageExtension in lush.rs.
+struct Wind {
+    direction: vec3<f32>,
+    strength: f32,
+    bark: f32,
+}
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(100)
+var<uniform> wind: Wind;
+
+fn hash3(p: vec3<f32>) -> f32 {
+    return fract(sin(dot(p, vec3<f32>(127.1, 311.7, 74.7))) * 43758.5453);
+}
+
+// Smooth noise in the world, 0 to 1, for weathering that wanders over a trunk.
+fn wander(p: vec3<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let x00 = mix(hash3(i), hash3(i + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+    let x10 = mix(hash3(i + vec3<f32>(0.0, 1.0, 0.0)), hash3(i + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+    let x01 = mix(hash3(i + vec3<f32>(0.0, 0.0, 1.0)), hash3(i + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+    let x11 = mix(hash3(i + vec3<f32>(0.0, 1.0, 1.0)), hash3(i + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
+
+// Bark weathered as real trunks are (D218): each tree a little lighter or darker, greener or
+// greyer, by where it stands; moss where water runs and sits, on the side facing up and
+// toward the foot, in patches; and the foot darker, where it stays wet. `sky` is how much of
+// the sky the point sees, least low on the trunk.
+fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32) {
+    let up = normalize(world);
+    let facing_up = clamp(dot((*input).N, up), 0.0, 1.0);
+    let low = 1.0 - smoothstep(0.35, 0.75, sky);
+    var colour = (*input).material.base_color.rgb;
+    colour *= 0.82 + 0.36 * wander(world * 0.21);
+    let patches = wander(world * 0.9) * 0.65 + wander(world * 3.7 + 13.0) * 0.35;
+    let moss = smoothstep(0.62, 0.85, patches + 0.2 * facing_up + 0.25 * low - 0.15);
+    colour = mix(colour, vec3<f32>(0.085, 0.12, 0.03) * (0.8 + 0.4 * wander(world * 6.0)), moss * 0.9);
+    colour *= mix(1.0, 0.72, low * (1.0 - moss));
+    (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
+    (*input).material.perceptual_roughness = mix((*input).material.perceptual_roughness, 1.0, moss);
+}
 
 fn noise_at(frag_coord: vec4<f32>) -> f32 {
     let shifted = frag_coord.xy + 5.588238 * f32(globals.frame_count % 64u);
@@ -59,6 +103,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 @if(VERTEX_COLORS) {
     // Alpha is how much of the sky this point sees.
     let sky = in.color.a;
+    if wind.bark > 0.5 {
+        weather(&pbr_input, in.world_position.xyz, sky);
+    }
     pbr_input.diffuse_occlusion *= mix(BOUNCE, vec3<f32>(1.0), sky);
     pbr_input.specular_occlusion *= mix(0.35, 1.0, sky);
 }
