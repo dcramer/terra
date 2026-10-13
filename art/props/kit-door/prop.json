@@ -7,5 +7,6 @@
   "into": "kits",
   "textured": true,
   "generator": "h3.1",
-  "faces": 20000
+  "faces": 20000,
+  "leaf": [-0.512, 0.506, 1.915]
 }

@@ -121,7 +121,15 @@ export async function start(sandboxArgs: string[], { windows, realTime, foregrou
       if (!mine) throw new Error(`another sandbox answered on port ${port}; start again`);
       // The clock is held while the loading screen is up, so nothing a script does means
       // anything until it has gone.
-      await waitUntil("the loading screen to go", status, (now) => !now.loading, 300);
+      // A debug build can be too busy loading to answer for a while, which is not an end.
+      const settled = async () => {
+        try {
+          return await status();
+        } catch {
+          return { loading: true } as Awaited<ReturnType<typeof status>>;
+        }
+      };
+      await waitUntil("the loading screen to go", settled, (now) => !now.loading, 300);
       return port;
     }
     if (!ended) throw new Error("the sandbox did not answer within ten minutes; see shots/remote.log");

@@ -2,8 +2,8 @@
 //! block, drawn not as models but as the cubes' own surface, rounded and displaced by the
 //! kit's material (`surface.rs`, D197), so any shape is one wall with no seams.
 //!
-//! **The layout** is worked out from the cubes alone (D181): a block for each solid wall
-//! cube, from the bottom up, which is the order they go in and what a plan's progress
+//! **The layout** is worked out from the cubes alone (D181): a block for each solid cube,
+//! wall, floor or footing, from the bottom up, which is the order they go in and what a plan's progress
 //! counts; and for each hole, a cube cut open or glazed, the door or window set in it once
 //! the building is up (D193), with a timber lintel over it where the wall goes on above.
 
@@ -17,12 +17,13 @@ use std::collections::BTreeSet;
 const LINTEL_DEEP_M: f32 = 0.18;
 const LINTEL_BEARING_M: f32 = 0.2;
 
-/// Lays every wall of a base in the kit's kind as blocks.
+/// Lays every cube of a base in the kit's kind as blocks: its walls, floors and footings,
+/// one surface.
 pub fn lay(base: &Base, kit: &Kit) -> Vec<Piece> {
     let kind = kit.kind();
     let solid = |at: IVec3| {
         base.cube(at)
-            .is_some_and(|cube| cube.kind == kind && cube.fill == Fill::Solid && base.in_wall(at))
+            .is_some_and(|cube| cube.kind == kind && super::drawn_fill(&cube) == Fill::Solid)
     };
     let mut pieces: Vec<Piece> = base
         .cubes()
@@ -39,7 +40,9 @@ pub fn lay(base: &Base, kit: &Kit) -> Vec<Piece> {
 fn openings(base: &Base, kind: Kind, solid: &impl Fn(IVec3) -> bool, pieces: &mut Vec<Piece>) {
     let holes: BTreeSet<[i32; 3]> = base
         .cubes()
-        .filter(|(at, cube)| cube.kind == kind && cube.fill != Fill::Solid && base.in_wall(*at))
+        .filter(|(at, cube)| {
+            cube.kind == kind && super::drawn_fill(cube) != Fill::Solid && base.in_wall(*at)
+        })
         .map(|(at, _)| at.to_array())
         .collect();
     let mut seen = BTreeSet::new();
@@ -121,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn a_room_of_stone_is_a_block_for_every_wall_cube() {
+    fn a_room_of_stone_is_a_block_for_every_cube() {
         let mut base = Base::default();
         base.apply(BuildOp::AddRoom {
             min: [0, 0, 0],
@@ -129,13 +132,10 @@ mod tests {
             kind: kit().kind(),
         });
         let pieces = lay(&base, &kit());
-        let walls: BTreeSet<[i32; 3]> = base
-            .cubes()
-            .filter(|(at, _)| base.in_wall(*at))
-            .map(|(at, _)| at.to_array())
-            .collect();
-        assert_eq!(blocks(&pieces), walls);
-        assert_eq!(pieces.len(), walls.len());
+        // Its walls, its floor and its flat roof, one surface.
+        let all: BTreeSet<[i32; 3]> = base.cubes().map(|(at, _)| at.to_array()).collect();
+        assert_eq!(blocks(&pieces), all);
+        assert_eq!(pieces.len(), all.len());
     }
 
     #[test]
@@ -165,7 +165,7 @@ mod tests {
         );
         let solid: BTreeSet<[i32; 3]> = base
             .cubes()
-            .filter(|(at, cube)| cube.fill == Fill::Solid && base.in_wall(*at))
+            .filter(|(_, cube)| cube.fill == Fill::Solid)
             .map(|(at, _)| at.to_array())
             .collect();
         assert_eq!(blocks(&pieces), solid);

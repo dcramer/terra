@@ -51,11 +51,13 @@ const COMMANDS: Record<string, Command> = {
       print(await call("sandbox.place", { name, translation: triple(values.translation), rotation: triple(values.rotation), scale: number(values.scale) })),
   },
   look: {
-    usage: "look NAME|x,y,z [--distance m] [--around degrees] [--height m] [--aim m] [--from x,y,z]",
-    help: "hold the camera on an entity, following it, or on a point; around is from the model's front, aim how far above it to look",
-    options: { distance: { type: "string", help: "metres away (2.5)" }, around: { type: "string", help: "degrees round from the front (30)" }, height: { type: "string", help: "metres above (0.3)" }, aim: { type: "string", help: "metres above it to look at (0)" }, from: { type: "string", help: "the eye, a point in the world" } },
-    run: async ({ values, positionals: [at] }) =>
-      print(await call("sandbox.look", { at: /^-?[\d.]+,-?[\d.]+,-?[\d.]+$/.test(at) ? triple(at) : at, distance: number(values.distance), around: number(values.around), height: number(values.height), aim: number(values.aim), from: triple(values.from) })),
+    usage: "look NAME|x,y,z [--distance m] [--around degrees] [--height m] [--aim m] [--from x,y,z] | look --vantage x,y,z,x,y,z",
+    help: "hold the camera on an entity, following it, or on a point; around is from the model's front, aim how far above it to look; --vantage as the sandbox's own option and the kit sheet's log give it, from the start",
+    options: { distance: { type: "string", help: "metres away (2.5)" }, around: { type: "string", help: "degrees round from the front (30)" }, height: { type: "string", help: "metres above (0.3)" }, aim: { type: "string", help: "metres above it to look at (0)" }, from: { type: "string", help: "the eye, a point in the world" }, vantage: { type: "string", help: "the eye and what it looks at, in metres east, up and south of the start" } },
+    run: async ({ values, positionals: [at] }) => {
+      if (values.vantage) return print(await call("sandbox.look", { vantage: (values.vantage as string).split(",").map(Number) }));
+      print(await call("sandbox.look", { at: /^-?[\d.]+,-?[\d.]+,-?[\d.]+$/.test(at) ? triple(at) : at, distance: number(values.distance), around: number(values.around), height: number(values.height), aim: number(values.aim), from: triple(values.from) }));
+    },
   },
   release: { usage: "release", help: "let the camera go", run: async () => print(await call("sandbox.release")) },
   pause: { usage: "pause", help: "stop the clock, animations included", run: async () => print(await call("sandbox.pause", { paused: true })) },

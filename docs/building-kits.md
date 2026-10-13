@@ -73,11 +73,10 @@ The last row is what freezing a wall's layout once a piece is in means (building
 **Later, with roofs, floors and storeys:**
 
 - **Gable ends**: courses carry on up, each log cut at the roof's slope, the cut made when the mesh is made (building-tech.md).
-- **Floors**: split logs side by side on beams.
 - **Roofs**: poles under a covering.
 - **A second storey**: starts over a floor a cube thick (D181), so the split logs at the top of one storey and the foot of the next never show together.
 
-Until floors and flat roofs have a kit of their own, those of log cubes are drawn as slabs in the kit's colours.
+Floors and flat roofs of log cubes are drawn as decks (D206).
 
 ## Posts anywhere (D179)
 
@@ -103,6 +102,16 @@ Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 - **Drawing it** costs nothing extra: a finished building is one mesh per material already.
 
 Built 2026-10-12: a base is laid by every kit in `assets/data/kits/` at once, each its own kind's cubes, so mixing is per cube. Logs end flush against stone, as they end at anything not open air; stone runs through corners and T's. The kit sheet has stone and logs meeting every way walls meet: a stone house under a hip roof, a log cabin on a stone plinth a metre high, an L, a T each way round, in line, stone pillars in a log wall, and a log cabin with a stone end wall.
+
+## Between a building and the ground, and its floors (D206)
+
+**Footings** are stone cubes, the stone kit's, laid into every plan on the ground as a part of their own and built first: under each wall from the floor's layer, under a floor's edge from the layer below, down to the cube the ground passes through, so they are set into it all round and no gap shows on a slope. They are drawn as the stone's surface, one with any stone wall or floor they meet. A log cabin stands on a course of stone that rises to its floor on level ground and steps down the hill on a slope. The ground outside is never changed.
+
+**Floors** are drawn by their kind. A stone floor is the stone's surface, its top in flagstones (Poly Haven's `grey_stone_path`, CC0), flatter than its walls since it is walked on; a stone wall's top is capped in them too. A timber floor is a deck, made by the timber code: sawn boards two to a cube, as long as a tree gives, their joints staggered; each board drawn from one plank of `weathered_planks`, so no seam runs down a board; where the floor meets a wall standing on a footing, the boards run on to the logs' faces; a rim beam along any side left open, and joists under it where it is in the air.
+
+**Door steps** are stone slabs from each ground-floor door in an outside wall down to the ground, a riser of no more than 18 cm each, set into the ground; none where the threshold is less than a step up.
+
+**Doors** are fitted props whose model is cut into a frame, which stays in the opening, and a leaf, which swings into the room on its hinge (D207).
 
 ## Checking it
 

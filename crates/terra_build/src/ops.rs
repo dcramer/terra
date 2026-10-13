@@ -7,7 +7,10 @@
 //!
 //! - **In the claim**, and a plan **within the claim's budget** of planned cubes (D193).
 //! - **Built from the bottom**: nothing goes in over a cube partly in, and a cube comes
-//!   out only from under air or nothing in (D194: last in, first out).
+//!   out only from under air or nothing in (D194: last in, first out). A cube marked to be
+//!   carved out is the exception: an opening is cut into a wall already built, and what is
+//!   over it stays, held by the wall either side as a lintel spans it, so long as all of it
+//!   stays joined (construction-001, experience 4).
 //! - **Nothing floats**: a cube going in is joined, face to face, to the ground or to
 //!   cubes already in; one coming out leaves nothing unjoined (rule 11).
 //! - **Nothing taken while something rests on it**: a cube, a standing roof, a fitted
@@ -612,15 +615,17 @@ impl Base {
         let now = |at: IVec3| after.get(&at.to_array()).copied().or(self.cube(at));
         let partial =
             |cube: Option<Cube>| cube.is_some_and(|cube| cube.is_in() && !cube.is_built());
+        let carving = |cube: Option<Cube>| cube.is_some_and(|cube| cube.pending == Pending::Carve);
         for &at in &named {
             // Built from the bottom: nothing goes in over a cube partly in, and no cube is
             // left partly in under something already in, which nothing could then finish
-            // or take apart.
+            // or take apart; but a cube being carved out may be part in, as it comes out
+            // from under what stays, or is put back.
             let (under, over) = (at - IVec3::Y, at + IVec3::Y);
-            if partial(now(under)) {
+            if partial(now(under)) && !carving(now(under)) {
                 return Err(Refusal::BuildUnder(under));
             }
-            if partial(now(at)) && now(over).is_some_and(|cube| cube.is_in()) {
+            if partial(now(at)) && !carving(now(at)) && now(over).is_some_and(|cube| cube.is_in()) {
                 return Err(Refusal::Covered(over));
             }
         }
@@ -686,9 +691,13 @@ impl Base {
         }
         let now = |at: IVec3| after.get(&at.to_array()).copied().or(self.cube(at));
         for &at in &named {
-            // Last in, first out: nothing in the cube over it.
+            // Last in, first out: nothing in the cube over it; but a cube marked to be
+            // carved out comes out from under what stays, which must stay joined.
             let over = at + IVec3::Y;
-            if now(over).is_some_and(|cube| cube.is_in()) {
+            let carving = self
+                .cube(at)
+                .is_some_and(|cube| cube.pending == Pending::Carve);
+            if !carving && now(over).is_some_and(|cube| cube.is_in()) {
                 return Err(Refusal::Holds(vec![Holder::Cube(over)]));
             }
             // Nor a roof standing on it, nor a prop fitted against it (D193).
@@ -855,6 +864,11 @@ impl Base {
             let cube = self.there(at)?;
             match cube.pending {
                 Pending::None => return Err(Refusal::NotPending(at)),
+                // A cube part carved out from under what stays is put back or carved out
+                // first, as nothing may be left part in under it.
+                Pending::Carve if cube.is_in() && !cube.is_built() && self.is_in(at + IVec3::Y) => {
+                    return Err(Refusal::Covered(at + IVec3::Y));
+                }
                 Pending::Carve => carved.push(at.to_array()),
                 Pending::Replace => {
                     let to = self.replacing(at).ok_or(Refusal::NotPending(at))?;

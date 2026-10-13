@@ -28,6 +28,9 @@ pub struct Steps {
     pub width: f32,
 }
 
+/// Further than this from a footprint's origin, a point is on none of it.
+const FAR_M: f32 = 100_000.0;
+
 impl Footprint {
     /// Whether a point on the planet is on the footprint, or within a margin of it: in a
     /// room or on a floor, within the margin of anything standing, or on or by the steps.
@@ -38,6 +41,11 @@ impl Footprint {
             .compute_affine()
             .inverse()
             .transform_point3(point);
+        // Nowhere near it, or no point at all, as ground searched for under a dug cliff
+        // can give: not on it, and no sum below overflows.
+        if !local.is_finite() || local.abs().max_element() > FAR_M {
+            return false;
+        }
         let at = (local / self.cell_m).floor().as_ivec3();
         let reach = (margin / self.cell_m).ceil() as i32;
         self.ground.contains(&IVec2::new(at.x, at.z))

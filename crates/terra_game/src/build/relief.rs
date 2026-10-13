@@ -1,6 +1,7 @@
 //! The height maps kits' pieces are shaped by on the CPU (D197, D200): a block kind's
-//! `Masonry` material, which its surface is displaced by, and a timber kind's `Log`
-//! material, which its bark stands out by (`terra_build::relief`). Until one has loaded,
+//! `Masonry` material, which its surface is displaced by, and its `Floor` material, which
+//! its tops are, and a timber kind's `Log` material, which its bark stands out by
+//! (`terra_build::relief`). Until one has loaded,
 //! what it shapes is drawn without it; then every build is drawn again.
 
 use super::{BuildLook, Built, Site, redraw};
@@ -28,9 +29,24 @@ pub fn shaped_by(kit: &Kit) -> Option<&str> {
         .map(|texture| texture.path.as_str())
 }
 
+/// The folder of the material whose height shapes a block kind's tops, its floors'
+/// flagstones, if it has one.
+pub fn topped_by(kit: &Kit) -> Option<&str> {
+    (kit.pattern == Pattern::Masonry && kit.relief > 0.0)
+        .then(|| kit.textures.get(&Material::Floor))
+        .flatten()
+        .map(|texture| texture.path.as_str())
+}
+
 /// The height map that shapes a kit's pieces, once it has loaded.
 pub fn of<'a>(reliefs: Option<&'a Reliefs>, kit: &Kit) -> Option<&'a Relief> {
     let path = shaped_by(kit)?;
+    reliefs?.get(path).map(|relief| relief.as_ref())
+}
+
+/// The height map that shapes a block kind's tops, once it has loaded.
+pub fn of_top<'a>(reliefs: Option<&'a Reliefs>, kit: &Kit) -> Option<&'a Relief> {
+    let path = topped_by(kit)?;
     reliefs?.get(path).map(|relief| relief.as_ref())
 }
 
@@ -54,7 +70,8 @@ fn wanted(kits: &Kits) -> Vec<String> {
     let mut paths: Vec<String> = kits
         .0
         .iter()
-        .filter_map(shaped_by)
+        .flat_map(|kit| [shaped_by(kit), topped_by(kit)])
+        .flatten()
         .map(str::to_string)
         .collect();
     paths.sort();
@@ -157,6 +174,7 @@ mod tests {
                     metres: [1.0, 1.0],
                     depth: 0.0,
                     reflectance: terra_build::kit::matte(),
+                    strips: None,
                 },
             )]),
             ..Kit::default()

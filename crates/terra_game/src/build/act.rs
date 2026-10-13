@@ -46,6 +46,8 @@ pub struct BuildRules {
     /// How many cubes a claim may have planned and not built, by how many times it has
     /// grown (D193).
     pub budgets: Vec<usize>,
+    /// The kind footings are laid in under what is built on the ground (D194), if any.
+    pub footing: Option<Kind>,
 }
 
 impl BuildRules {
@@ -470,6 +472,12 @@ impl Building<'_, '_> {
         self.told.write(Told::new(player, text));
     }
 
+    /// The ground's height under a column of the base, in centimetres in its own space, as
+    /// a footing down to it is laid: the lowest under the column, a little lower.
+    pub fn ground_cm(&self, column: [i32; 2]) -> i16 {
+        super::ground_cm(&self.site.frame, &self.planet, column)
+    }
+
     /// Plans with the ground under their cubes sampled into them (construction-001, gap 3).
     pub fn with_ground(&self, ops: Vec<Op>) -> Vec<Op> {
         ops.into_iter()
@@ -548,8 +556,8 @@ impl Building<'_, '_> {
     }
 
     /// What building would put in next, for a builder at `near` (the base's own space):
-    /// whatever of the base near them can go in, lowest first and the part aimed at first
-    /// on its layer, and roofs once what holds them is up. The first allowed, or, if none
+    /// whatever of the base near them can go in, lowest first and the part aimed at, then
+    /// the part laid first, first on its layer, and roofs once what holds them is up. The first allowed, or, if none
     /// is, the first with why it is refused.
     pub fn next_work(
         &mut self,
@@ -568,10 +576,12 @@ impl Building<'_, '_> {
             })
             .collect();
         // Lowest first, as what a part rests on goes in before it; on a layer, the part
-        // aimed at, then the nearest.
+        // aimed at, then the part laid first, as a plan lays what holds the rest up first,
+        // its footing before its floor (D194), then the nearest.
         parts.sort_by(|a, b| {
             a.0.cmp(&b.0)
                 .then((Some(b.2) == aimed).cmp(&(Some(a.2) == aimed)))
+                .then(a.2.cmp(&b.2))
                 .then(a.1.total_cmp(&b.1))
         });
         let roofs: Vec<RoofId> = base
@@ -580,6 +590,20 @@ impl Building<'_, '_> {
             .map(|(id, _)| id)
             .collect();
         let mut candidates: Vec<(String, Vec<Op>)> = Vec::new();
+        // An opening being cut into what is built first, as it was asked for last.
+        if let Some(op) = base.next_carve(near, |kind| self.blocks(kind)) {
+            let what = match &op {
+                Op::Open { cubes } => format!("open {} carved cube{}", cubes.len(), plural(cubes)),
+                Op::Empty { cubes } => format!(
+                    "carve {} cube{} out ({} up)",
+                    cubes.len(),
+                    plural(cubes),
+                    cubes[0][1]
+                ),
+                _ => "carve".to_string(),
+            };
+            candidates.push((what, vec![op]));
+        }
         for (_, _, id) in parts {
             let Some(part) = self.site.base.part(id) else {
                 continue;
@@ -704,6 +728,11 @@ impl Building<'_, '_> {
         let check = self.check(by, &ops);
         Some(Work { what, ops, check })
     }
+}
+
+/// An "s" for more than one.
+fn plural<T>(items: &[T]) -> &'static str {
+    if items.len() == 1 { "" } else { "s" }
 }
 
 /// Sets what is left of an item in the offcuts, none at all when nothing is.

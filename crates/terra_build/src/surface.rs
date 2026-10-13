@@ -34,6 +34,17 @@ pub struct Look {
     pub steps: u32,
     /// How many metres across and down one copy of its texture covers.
     pub metres: [f32; 2],
+    /// Its tops, if they are drawn in a material of their own, as a stone floor's
+    /// flagstones are: how many metres one copy of that covers, and how far its relief
+    /// stands out.
+    pub top: Option<([f32; 2], f32)>,
+}
+
+/// What a surface is displaced by: its material's height where its texture is at a point,
+/// from 0 to 1, and its tops' material's, if they have one.
+pub struct Heights<'a> {
+    pub sides: &'a dyn Fn([f32; 2]) -> f32,
+    pub top: &'a dyn Fn([f32; 2]) -> f32,
 }
 
 /// How far an inside corner's relief fades out from it, in metres.
@@ -61,16 +72,17 @@ fn step(axis: usize, side: i32) -> IVec3 {
     v
 }
 
-/// Draws the cubes as one surface into `out`, in the base's own space. `hides` says which
-/// other cubes hide a face against them; the cubes drawn always hide one another.
-/// `height` gives the material's height, from 0 to 1, where its texture is at a point.
+/// Draws the cubes as one surface into `out`, in the base's own space, and their tops into
+/// `tops` if the look gives them a material of their own. `hides` says which other cubes
+/// hide a face against them; the cubes drawn always hide one another.
 pub fn draw(
     cubes: &BTreeSet<[i32; 3]>,
     hides: &dyn Fn(IVec3) -> bool,
     look: &Look,
-    height: &dyn Fn([f32; 2]) -> f32,
+    heights: &Heights,
     colour: [f32; 3],
     out: &mut Surface,
+    tops: &mut Surface,
 ) {
     let full = |at: IVec3| cubes.contains(&at.to_array()) || hides(at);
     let n = look.steps.max(1) as usize;
@@ -132,6 +144,7 @@ pub fn draw(
     };
     let mut triangles: Vec<[Vec3; 3]> = Vec::new();
     let mut uvs: Vec<[[f32; 2]; 3]> = Vec::new();
+    let mut on_top: Vec<bool> = Vec::new();
     for &cube in cubes {
         let cube = IVec3::from_array(cube);
         let low = cube.as_vec3() * CELL_M;
@@ -174,11 +187,15 @@ pub fn draw(
                 } else {
                     (p, normal)
                 };
-                let relief = (blended(p, outward, look, height) - 0.5) * look.relief * fade(p);
-                rounded + outward * relief
+                rounded + outward * (displaced(p, outward, look, heights) * fade(p))
             };
             // Wound so each triangle faces out along the face's normal.
             let flip = side < 0.0;
+            let top = axis == 1 && side > 0.0 && look.top.is_some();
+            let metres = match look.top {
+                Some((metres, _)) if top => metres,
+                _ => look.metres,
+            };
             for i in 0..n {
                 for j in 0..n {
                     let corners = [
@@ -188,11 +205,12 @@ pub fn draw(
                         point(i, j + 1),
                     ];
                     let placed = corners.map(place);
-                    let mapped = corners.map(|p| planar(p, normal, look.metres));
+                    let mapped = corners.map(|p| planar(p, normal, metres));
                     for [x, y, z] in [[0, 1, 2], [0, 2, 3]] {
                         let (y, z) = if flip { (z, y) } else { (y, z) };
                         triangles.push([placed[x], placed[y], placed[z]]);
                         uvs.push([mapped[x], mapped[y], mapped[z]]);
+                        on_top.push(top);
                     }
                 }
             }
@@ -208,22 +226,105 @@ pub fn draw(
             *sums.entry(key(*p)).or_default() += face;
         }
     }
-    for (t, uv) in triangles.iter().zip(&uvs) {
+    for ((t, uv), top) in triangles.iter().zip(&uvs).zip(on_top) {
         let face = (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero();
         let normals = t.map(|p| sums[&key(p)].normalize_or(face));
-        out.textured(*t, normals, *uv, colour);
+        let into = if top { &mut *tops } else { &mut *out };
+        into.textured(*t, normals, *uv, colour);
     }
 }
 
-/// The material's height at a point, its three planar mappings blended by which way the
-/// surface faces there, so the faces either side of an outside edge agree.
-fn blended(p: Vec3, outward: Vec3, look: &Look, height: &dyn Fn([f32; 2]) -> f32) -> f32 {
+/// How far the surface is pushed out at a point: its materials' heights there, their three
+/// planar mappings blended by which way the surface faces, so the faces either side of an
+/// outside edge agree; the tops' own material where they face up and have one.
+fn displaced(p: Vec3, outward: Vec3, look: &Look, heights: &Heights) -> f32 {
     let weights = outward.abs().powf(4.0);
     let total = weights.x + weights.y + weights.z;
     (0..3)
         .filter(|&axis| weights[axis] > 1e-4)
-        .map(|axis| weights[axis] / total * height(planar(p, unit(axis, 1.0), look.metres)))
+        .map(|axis| {
+            let (height, metres, relief) = match look.top {
+                Some((metres, relief)) if axis == 1 && outward.y > 0.0 => {
+                    (heights.top, metres, relief)
+                }
+                _ => (heights.sides, look.metres, look.relief),
+            };
+            let at = height(planar(p, unit(axis, 1.0), metres));
+            weights[axis] / total * (at - 0.5) * relief
+        })
         .sum()
+}
+
+/// A box of a block kind's material from one corner to the other, as its cubes' surface is
+/// drawn: rounded along every edge by the bevel and displaced by its material, each face
+/// divided about as finely as a cube's; its top in its tops' material if it has one. Door
+/// steps are drawn so.
+pub fn slab(
+    min: Vec3,
+    max: Vec3,
+    look: &Look,
+    heights: &Heights,
+    colour: [f32; 3],
+    out: &mut Surface,
+    tops: &mut Surface,
+) {
+    let size = max - min;
+    let bevel = look.bevel.min(size.min_element() * 0.45);
+    let (low, high) = (min + Vec3::splat(bevel), max - Vec3::splat(bevel));
+    let cell = CELL_M / look.steps.max(1) as f32;
+    for (axis, side) in FACES {
+        let normal = unit(axis, side);
+        let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+        let (na, nb) = (
+            ((size[a] / cell).ceil() as usize).max(1),
+            ((size[b] / cell).ceil() as usize).max(1),
+        );
+        let plane = if side > 0.0 { max[axis] } else { min[axis] };
+        let point = |i: usize, j: usize| {
+            let mut p = Vec3::ZERO;
+            p[axis] = plane;
+            p[a] = min[a] + size[a] * i as f32 / na as f32;
+            p[b] = min[b] + size[b] * j as f32 / nb as f32;
+            p
+        };
+        let place = |p: Vec3| -> (Vec3, Vec3) {
+            let nearest = p.clamp(low, high);
+            let outward = (p - nearest).normalize_or(normal);
+            let rounded = nearest + outward * bevel;
+            (
+                rounded + outward * displaced(p, outward, look, heights),
+                outward,
+            )
+        };
+        let top = axis == 1 && side > 0.0 && look.top.is_some();
+        let metres = match look.top {
+            Some((metres, _)) if top => metres,
+            _ => look.metres,
+        };
+        let into = if top { &mut *tops } else { &mut *out };
+        let flip = side < 0.0;
+        for i in 0..na {
+            for j in 0..nb {
+                let corners = [
+                    point(i, j),
+                    point(i + 1, j),
+                    point(i + 1, j + 1),
+                    point(i, j + 1),
+                ];
+                let placed = corners.map(place);
+                let mapped = corners.map(|p| planar(p, normal, metres));
+                for [x, y, z] in [[0, 1, 2], [0, 2, 3]] {
+                    let (y, z) = if flip { (z, y) } else { (y, z) };
+                    into.textured(
+                        [placed[x].0, placed[y].0, placed[z].0],
+                        [placed[x].1, placed[y].1, placed[z].1],
+                        [mapped[x], mapped[y], mapped[z]],
+                        colour,
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -236,6 +337,7 @@ mod tests {
             relief: 0.05,
             steps: 8,
             metres: [2.0, 2.0],
+            top: None,
         }
     }
 
@@ -252,10 +354,80 @@ mod tests {
     }
 
     fn drawn_as(cubes: &[[i32; 3]], look: &Look, height: &dyn Fn([f32; 2]) -> f32) -> Surface {
-        let set: BTreeSet<[i32; 3]> = cubes.iter().copied().collect();
-        let mut out = Surface::default();
-        draw(&set, &|_| false, look, height, [1.0; 3], &mut out);
+        let (out, tops) = drawn_with_tops(cubes, look, height);
+        assert!(tops.positions.is_empty());
         out
+    }
+
+    fn drawn_with_tops(
+        cubes: &[[i32; 3]],
+        look: &Look,
+        height: &dyn Fn([f32; 2]) -> f32,
+    ) -> (Surface, Surface) {
+        let set: BTreeSet<[i32; 3]> = cubes.iter().copied().collect();
+        let (mut out, mut tops) = (Surface::default(), Surface::default());
+        let heights = Heights {
+            sides: height,
+            top: &flat,
+        };
+        draw(
+            &set,
+            &|_| false,
+            look,
+            &heights,
+            [1.0; 3],
+            &mut out,
+            &mut tops,
+        );
+        (out, tops)
+    }
+
+    /// Both surfaces as one, for checking it is closed.
+    fn joined(a: Surface, b: &Surface) -> Surface {
+        let mut a = a;
+        a.positions.extend(&b.positions);
+        a.normals.extend(&b.normals);
+        a.colours.extend(&b.colours);
+        a.uvs.extend(&b.uvs);
+        a
+    }
+
+    #[test]
+    fn a_floor_of_stone_has_its_tops_in_their_own_material_and_stays_closed() {
+        let floor: Vec<[i32; 3]> = (0..3)
+            .flat_map(|x| (0..2).map(move |z| [x, 0, z]))
+            .collect();
+        let flagged = Look {
+            top: Some(([1.0, 1.0], 0.01)),
+            ..look()
+        };
+        let (sides, tops) = drawn_with_tops(&floor, &flagged, &bumpy);
+        assert!(!tops.positions.is_empty() && !sides.positions.is_empty());
+        // The tops face up, and none of the sides do but along the rounded edges.
+        assert!(tops.normals.iter().all(|n| n.y > 0.3));
+        let flat_sides = sides.normals.iter().filter(|n| n.y > 0.99).count();
+        assert_eq!(flat_sides, 0);
+        assert!(closed(&joined(sides, &tops)));
+    }
+
+    #[test]
+    fn a_slab_is_closed_rounded_and_its_own_size() {
+        let (mut out, mut tops) = (Surface::default(), Surface::default());
+        let heights = Heights {
+            sides: &bumpy,
+            top: &flat,
+        };
+        let (min, max) = (Vec3::new(0.0, -0.3, 0.0), Vec3::new(1.5, 0.12, 0.32));
+        slab(min, max, &look(), &heights, [1.0; 3], &mut out, &mut tops);
+        assert!(closed(&out));
+        let half = look().relief * 0.5 + 1e-4;
+        assert!(
+            out.positions
+                .iter()
+                .all(|p| p.cmpge(min - half).all() && p.cmple(max + half).all())
+        );
+        // Its corner is rounded off.
+        assert!(out.positions.iter().all(|p| p.distance(max) > 0.01));
     }
 
     /// There are triangles, and every edge of every one is shared by exactly one other

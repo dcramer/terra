@@ -288,7 +288,7 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 | Carving cubes by hand, any shape | Missing; the operation exists |
 | Post, a column of cubes (D179) | Missing |
 | A storey up, and stairs or a ladder to it | Storeys built; stairs missing |
-| Footing under walls on the ground | Built |
+| Footing under walls on the ground | Built: stone cubes down to the ground, laid first (D206) |
 | Fence, wall, gate and palisade, drawn as a line | Missing; needed once bases are attacked (D90) |
 | Door that opens, closes and locks | Fitted into an opening, opened and shut with F; no lock (D201) |
 | Stations: workbench, smelter, forge, campfire | Built |

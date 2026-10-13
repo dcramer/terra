@@ -36,7 +36,7 @@ r said                                   # everything said since the last action
 | `stop` | Close it |
 | `find NAME` | Entities whose name contains NAME: id, where they are, their local transform |
 | `place NAME [--translation x,y,z] [--rotation x,y,z] [--scale s]` | Set the local transform of the entity called exactly NAME |
-| `look NAME\|x,y,z [--distance m] [--around degrees] [--height m] [--aim m] [--from x,y,z]` | Hold the camera on an entity, following it, or a point; `around` is from the model's front, `aim` how far above it to look (a person's position is their feet); `from` puts the eye at a point in the world |
+| `look NAME\|x,y,z [--distance m] [--around degrees] [--height m] [--aim m] [--from x,y,z]`, `look --vantage x,y,z,x,y,z` | Hold the camera on an entity, following it, or a point; `around` is from the model's front, `aim` how far above it to look (a person's position is their feet); `from` puts the eye at a point in the world; `--vantage`, as the sandbox's option and the kit sheet's log give it, an eye and what it looks at from the start |
 | `release` | Let the camera go |
 | `pause`, `resume` | Stop and start the game's clock, animations included |
 | `step FRAMES` | Stop the clock, let it run that many frames, stop it again, and wait until it has |

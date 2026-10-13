@@ -15,13 +15,19 @@ use std::sync::Arc;
 use terra_build::kit::{Kit, KitModels, Kits};
 use terra_build::layout::Piece;
 
-/// A model, ready to place: each of its parts, and the box round it all, in its own space.
+/// A model, ready to place: each of its parts, and the box round it all, in its own space;
+/// for a door cut into its frame and its leaf (`tools/props/split.py`), which parts are the
+/// leaf, and the box round the leaf, whose low edge across is its hinge.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Model {
-    parts: Vec<(Handle<Mesh>, Handle<StandardMaterial>)>,
+    parts: Vec<(Handle<Mesh>, Handle<StandardMaterial>, bool)>,
     centre: Vec3,
     size: Vec3,
+    leaf: Option<(Vec3, Vec3)>,
 }
+
+/// What a door's leaf, which swings, is called in its model; the rest of it is its frame.
+const LEAF: &str = "Leaf";
 
 /// A kit's props' models, those that have loaded.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -132,11 +138,18 @@ fn resolve(
     let gltf = gltfs.get(handle)?;
     let mut parts = Vec::new();
     let (mut low, mut high) = (Vec3::MAX, Vec3::MIN);
+    let mut leaf: Option<(Vec3, Vec3)> = None;
     for mesh in &gltf.meshes {
-        for primitive in &gltf_meshes.get(mesh)?.primitives {
+        let gltf_mesh = gltf_meshes.get(mesh)?;
+        let is_leaf = gltf_mesh.name == LEAF;
+        for primitive in &gltf_mesh.primitives {
             let aabb = meshes.get(&primitive.mesh)?.get_aabb()?;
-            low = low.min(Vec3::from(aabb.min()));
-            high = high.max(Vec3::from(aabb.max()));
+            let (min, max) = (Vec3::from(aabb.min()), Vec3::from(aabb.max()));
+            low = low.min(min);
+            high = high.max(max);
+            if is_leaf {
+                leaf = Some(leaf.map_or((min, max), |(l, h)| (l.min(min), h.max(max))));
+            }
             // The loader keeps each material as a standard one too, under its label and
             // "/std".
             let label = match primitive
@@ -150,6 +163,7 @@ fn resolve(
             parts.push((
                 primitive.mesh.clone(),
                 assets.load(format!("{path}#{label}")),
+                is_leaf,
             ));
         }
     }
@@ -157,6 +171,7 @@ fn resolve(
         parts,
         centre: (low + high) * 0.5,
         size: (high - low).max(Vec3::splat(1e-3)),
+        leaf,
     })
 }
 
@@ -178,6 +193,25 @@ pub(super) fn place(
     for (&(_, pieces), states) in laid.iter().zip(states) {
         place_kit(commands, build, &kit, pieces, states);
     }
+    // Doors and windows fitted into a build not the player's, as the kit sheet's; the
+    // player's are drawn, opened and shut by `props`.
+    if build.fitted_props && !build.by_plans {
+        let props: Vec<_> = build.base.props().copied().collect();
+        for prop in props {
+            let (_, parts) = super::props::parts(&kit, &build.base, &prop);
+            for (mesh, material, at) in parts {
+                let entity = commands
+                    .spawn((
+                        Mesh3d(mesh),
+                        MeshMaterial3d(material),
+                        at,
+                        ChildOf(build.pieces),
+                    ))
+                    .id();
+                build.model_entities.push(entity);
+            }
+        }
+    }
 }
 
 fn place_kit(
@@ -194,7 +228,7 @@ fn place_kit(
             continue;
         }
         for (model, at) in fitted(kit, piece) {
-            for (mesh, material) in &model.parts {
+            for (mesh, material, _) in &model.parts {
                 let material = match state {
                     State::In => material.clone(),
                     State::Next => build.next_material.clone(),
@@ -216,13 +250,16 @@ fn place_kit(
 }
 
 /// The kit's door or window fitted to an opening's box, in the base's own space: each
-/// part's mesh and material, and where it goes.
+/// part's mesh and material, and where it goes. A door's leaf is turned `swing` radians
+/// about the up axis, on its hinge, the low edge of the leaf across the opening; its frame,
+/// and a door with no leaf of its own, stay as they are fitted.
 pub(super) fn opening(
     kit: &KitPieces,
     min: Vec3,
     max: Vec3,
     along_x: bool,
     door: bool,
+    swing: f32,
 ) -> Vec<(Handle<Mesh>, Handle<StandardMaterial>, Transform)> {
     let piece = Piece::Opening {
         min,
@@ -233,10 +270,20 @@ pub(super) fn opening(
     fitted(kit, &piece)
         .into_iter()
         .flat_map(|(model, at)| {
-            model
-                .parts
-                .iter()
-                .map(move |(mesh, material)| (mesh.clone(), material.clone(), at))
+            let turned = model.leaf.map_or(at, |(low, high)| {
+                let hinge = at.transform_point(Vec3::new(low.x, low.y, (low.z + high.z) * 0.5));
+                Transform::from_translation(hinge)
+                    * Transform::from_rotation(Quat::from_rotation_y(swing))
+                    * Transform::from_translation(-hinge)
+                    * at
+            });
+            model.parts.iter().map(move |(mesh, material, leaf)| {
+                (
+                    mesh.clone(),
+                    material.clone(),
+                    if *leaf { turned } else { at },
+                )
+            })
         })
         .collect()
 }

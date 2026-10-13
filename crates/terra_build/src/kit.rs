@@ -203,6 +203,11 @@ pub struct Texture {
     /// sheened every kit's material in shade and washed roofs pale at a slant.
     #[serde(default = "matte")]
     pub reflectance: f32,
+    /// For a texture of boards side by side, such as planks, where they lie across it: the
+    /// first board's edge and how far apart they are, as fractions of its width, so a board
+    /// made on its own is drawn from one board of it, not across a seam.
+    #[serde(default)]
+    pub strips: Option<[f32; 2]>,
 }
 
 /// A rough natural material's reflectance (see [`Texture::reflectance`]).

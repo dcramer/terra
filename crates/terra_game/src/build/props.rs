@@ -1,6 +1,7 @@
 //! Doors and windows fitted into the player's base (construction-001, rule 7 and gap 15;
 //! D192): each a prop the base holds in a hole of built cubes, drawn from its kit's door or
-//! window model fitted to the hole, a door swung open about one jamb when it is open. What a
+//! window model fitted to the hole, a door's leaf swung open on its hinge, its frame staying,
+//! when it is open. What a
 //! walker meets follows the base: a shut door's cubes stop them (`terra_build::walk`). The
 //! interact key opens and shuts a door, through the same operation the remote uses.
 
@@ -10,7 +11,7 @@ use crate::play::interact::{CanInteract, Interactable, Interacted};
 use bevy::prelude::*;
 use std::collections::BTreeMap;
 use terra_build::ops::Op;
-use terra_build::{CELL_M, Prop, PropKind};
+use terra_build::{Base, CELL_M, Prop, PropKind};
 
 /// The kinds of prop, as the operations number them.
 pub const DOOR: PropKind = PropKind(0);
@@ -56,7 +57,7 @@ fn show(
     let wanted: BTreeMap<[i32; 3], Prop> = site
         .base
         .props()
-        .filter(|_| site.fitted_props)
+        .filter(|_| site.by_plans)
         .map(|prop| (prop.min, *prop))
         .collect();
     let mut have: BTreeMap<[i32; 3], Prop> = BTreeMap::new();
@@ -74,44 +75,8 @@ fn show(
         if have.contains_key(&at) {
             continue;
         }
-        let (low, high) = (IVec3::from_array(prop.min), IVec3::from_array(prop.max));
-        let along_x = high.x > low.x
-            || (high.z == low.z
-                && site
-                    .base
-                    .along(IVec3::new(low.x, terra_build::storey_of(low.y), low.z))
-                    == IVec3::X);
-        let (min, max) = (
-            low.as_vec3() * CELL_M,
-            (high + IVec3::ONE).as_vec3() * CELL_M,
-        );
-        // As thick as a wall's logs, in the middle of the cubes.
-        let middle = (min + max) * 0.5;
-        let half_depth = Vec3::new(DEPTH_M * 0.5, 0.0, DEPTH_M * 0.5);
-        let across = if along_x { Vec3::Z } else { Vec3::X };
-        let (min, max) = (
-            min * (Vec3::ONE - across) + (middle - half_depth) * across,
-            max * (Vec3::ONE - across) + (middle + half_depth) * across,
-        );
-        let foot = Vec3::new(middle.x, min.y, middle.z);
         let door = prop.kind != WINDOW;
-        // Open, a door swings into the room about its jamb at the low end.
-        let swing = if door && prop.open {
-            let along = if along_x { Vec3::X } else { Vec3::Z };
-            let jamb = foot - along * ((max - min).dot(along) * 0.5);
-            let inward = site
-                .base
-                .outward(IVec3::new(low.x, terra_build::storey_of(low.y), low.z))
-                .map_or(1.0, |out| -out.as_vec3().dot(across).signum());
-            let sign = if along_x { -1.0 } else { 1.0 };
-            let turn = Quat::from_rotation_y((SWING_DEGREES * inward * sign).to_radians());
-            Transform::from_translation(jamb)
-                * Transform::from_rotation(turn)
-                * Transform::from_translation(-jamb)
-        } else {
-            Transform::IDENTITY
-        };
-        let parts = pieces::opening(kit, min, max, along_x, door);
+        let (foot, parts) = parts(kit, &site.base, &prop);
         let mut entity = commands.spawn((
             Name::new(if door { "Door" } else { "Window" }),
             Fitted { at, prop },
@@ -126,10 +91,51 @@ fn show(
             entity.with_child((
                 Mesh3d(mesh),
                 MeshMaterial3d(material),
-                Transform::from_translation(-foot) * swing * placed,
+                Transform::from_translation(-foot) * placed,
             ));
         }
     }
+}
+
+/// A fitted door's or window's model, fitted to its hole, in the base's own space: the
+/// middle of its foot, and each part with where it goes. Open, a door's leaf swings into the
+/// room on its hinge; its frame stays.
+pub(super) fn parts(
+    kit: &pieces::KitPieces,
+    base: &Base,
+    prop: &Prop,
+) -> (
+    Vec3,
+    Vec<(Handle<Mesh>, Handle<StandardMaterial>, Transform)>,
+) {
+    let (low, high) = (IVec3::from_array(prop.min), IVec3::from_array(prop.max));
+    let tile = IVec3::new(low.x, terra_build::storey_of(low.y), low.z);
+    let along_x = high.x > low.x || (high.z == low.z && base.along(tile) == IVec3::X);
+    let (min, max) = (
+        low.as_vec3() * CELL_M,
+        (high + IVec3::ONE).as_vec3() * CELL_M,
+    );
+    // As thick as a wall's logs, in the middle of the cubes.
+    let middle = (min + max) * 0.5;
+    let half_depth = Vec3::new(DEPTH_M * 0.5, 0.0, DEPTH_M * 0.5);
+    let across = if along_x { Vec3::Z } else { Vec3::X };
+    let (min, max) = (
+        min * (Vec3::ONE - across) + (middle - half_depth) * across,
+        max * (Vec3::ONE - across) + (middle + half_depth) * across,
+    );
+    let foot = Vec3::new(middle.x, min.y, middle.z);
+    let door = prop.kind != WINDOW;
+    // Open, a door swings into the room, away from the way out.
+    let swing = if door && prop.open {
+        let inward = base
+            .outward(tile)
+            .map_or(1.0, |out| -out.as_vec3().dot(across).signum());
+        let sign = if along_x { -1.0 } else { 1.0 };
+        (SWING_DEGREES * inward * sign).to_radians()
+    } else {
+        0.0
+    };
+    (foot, pieces::opening(kit, min, max, along_x, door, swing))
 }
 
 /// Opens or shuts a door a player uses.

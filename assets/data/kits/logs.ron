@@ -29,7 +29,9 @@
 // models      the props set into it, from tools/props (D177): a door and a window
 // textures    each material's textures (D14; assets/materials): where, how many metres
 //             one copy covers, and how deep its parallax reads. Log is the bark, LogEnd
-//             the sawn end's grain, Daub what fills the groove between courses
+//             the sawn end's grain, Daub what fills the groove between courses, Floor a
+//             deck's boards, each drawn from one of the planks side by side across its
+//             texture (strips: the first's edge and how far apart, as fractions of it)
 // colours     plain colours: boards behind a gable, floors, roofs and their sides until
 //             they have kits of their own, and the daub's tint
 // cost        what building it takes (D139): a cube fills in so many steps, each taking
@@ -71,8 +73,7 @@
         Daub: (path: "materials/white_stucco", metres: (1.0, 1.0)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Shakes: (path: "materials/shakes", metres: (3.2, 1.6), depth: 0.04),
-        Stone: (path: "materials/rustic_stone_wall", metres: (1.52, 1.52), depth: 0.03),
-        Floor: (path: "materials/old_wood_floor", metres: (3.0, 3.0)),
+        Floor: (path: "materials/weathered_planks", metres: (2.0, 2.0), strips: Some((0.0605, 0.1111))),
     },
     cost: (steps: 2, step: [("Wood", 1, 16)], roof: [("Wood", 1, 32)]),
     colours: (

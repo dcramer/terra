@@ -552,6 +552,11 @@ fn plan_work(
     use crate::build::plans;
     let base = &building.site.base;
     let kind = look.laying;
+    let ground = |column: [i32; 2]| building.ground_cm(column);
+    let footings = building.rules.footing.map(|kind| plans::Footings {
+        kind,
+        ground_cm: &ground,
+    });
     let work = |building: &mut Building, doing: Doing, what: String, ops: Vec<Op>| {
         let ops = building.with_ground(ops);
         let check = building.check(Some(player), &ops);
@@ -570,6 +575,7 @@ fn plan_work(
                 corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1),
                 kind,
                 kind,
+                footings,
             ),
         )),
         (Kind::Roof(shapes), Target::Ground { corner, tiles, .. }) => {
@@ -594,9 +600,10 @@ fn plan_work(
                 None => laying("lay a flat roof", plans::flat_roof(base, min, max, kind)),
             })
         }
-        (Kind::Wall(_), Target::Wall { .. }) => {
-            Some(laying("lay a wall", plans::wall(base, &builder.run, kind)))
-        }
+        (Kind::Wall(_), Target::Wall { .. }) => Some(laying(
+            "lay a wall",
+            plans::wall(base, &builder.run, kind, footings),
+        )),
         _ => None,
     };
     if let Some((what, ops)) = lay {

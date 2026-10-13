@@ -23,6 +23,8 @@
 //! - `build.op {ops}`: any operations, as `terra_build::ops::Op` serialises them, as one act.
 //! - `build.point {at}`: where a place in the base, in metres, is in the world and from the
 //!   start, to look at it or walk to it.
+//! - `build.ground {columns}`: the ground's height under the middle of each column, in metres
+//!   in the base's own space, as the planet has it now: to see what building changed of it.
 
 use super::act::{BuildRules, Building, Offcuts};
 use super::{Site, plans};
@@ -50,6 +52,27 @@ pub fn plugin(app: &mut App) {
     method(app, "build.undo", undo);
     method(app, "build.op", ops);
     method(app, "build.point", point);
+    method(app, "build.ground", ground);
+}
+
+#[derive(Deserialize)]
+struct Columns {
+    columns: Vec<[i32; 2]>,
+}
+
+/// The ground's height under columns of the base, in its own space.
+fn ground(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Columns { columns } = parse_some(params)?;
+    let frame = world.resource::<Site>().frame;
+    let planet = world.resource::<crate::planet::Planet>();
+    let heights: Vec<f32> = columns
+        .iter()
+        .map(|&[x, z]| {
+            let middle = Vec3::new((x as f32 + 0.5) * CELL_M, 0.0, (z as f32 + 0.5) * CELL_M);
+            -planet.distance(frame.transform_point(middle))
+        })
+        .collect();
+    Ok(json!(heights))
 }
 
 #[derive(Deserialize)]
@@ -107,6 +130,19 @@ fn answer(what: &str, result: Result<Done, Refusal>) -> Value {
     }
 }
 
+/// An answer with the cubes its operations named, so a script knows where it built.
+fn with_cubes(mut answer: Value, ops: &[Op]) -> Value {
+    let cubes: Vec<[i32; 3]> = ops
+        .iter()
+        .flat_map(|op| match op {
+            Op::Fill { cubes } | Op::Empty { cubes } | Op::Open { cubes } => cubes.clone(),
+            _ => Vec::new(),
+        })
+        .collect();
+    answer["cubes"] = json!(cubes);
+    answer
+}
+
 #[derive(Deserialize)]
 struct Lay {
     what: String,
@@ -137,13 +173,21 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let (low, high) = (min.min(max), min.max(max));
     as_player(world, |building, player| {
         let base = &building.site.base;
+        let ground = |column: [i32; 2]| building.ground_cm(column);
+        let footings = building.rules.footing.map(|kind| plans::Footings {
+            kind,
+            ground_cm: &ground,
+        });
         let (ops, room) = match lay.what.as_str() {
-            "room" => (plans::room(base, low, high, kind, floor), Some((low, high))),
+            "room" => (
+                plans::room(base, low, high, kind, floor, footings),
+                Some((low, high)),
+            ),
             "wall" => {
                 let tiles = plans::wall_tiles(min.xz(), max.xz(), min.y);
-                (plans::wall(base, &tiles, kind), None)
+                (plans::wall(base, &tiles, kind, footings), None)
             }
-            "floor" => (plans::floor(base, low, high, kind), None),
+            "floor" => (plans::floor(base, low, high, kind, footings), None),
             "flat_roof" => (plans::flat_roof(base, low, high, kind), None),
             "roof" => {
                 let section = RoofSection {
@@ -231,7 +275,7 @@ fn fill(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             }
             let result = building.act(Some(player), &work.what, &work.ops);
             let refused = result.is_err();
-            done.push(answer(&work.what, result));
+            done.push(with_cubes(answer(&work.what, result), &work.ops));
             if refused {
                 break;
             }
@@ -263,7 +307,7 @@ fn take_apart(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             };
             let result = building.act(Some(player), &work.what, &work.ops);
             let refused = result.is_err();
-            done.push(answer(&work.what, result));
+            done.push(with_cubes(answer(&work.what, result), &work.ops));
             if refused {
                 break;
             }

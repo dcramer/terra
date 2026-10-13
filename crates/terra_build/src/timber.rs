@@ -29,8 +29,11 @@ use std::f32::consts::{PI, TAU};
 /// Faces that meet at more than about 50 degrees are shaded apart, as a crease; less, smooth
 /// across (docs/art-style.md).
 const CREASE: f32 = 0.64;
-/// How far round a hewn beam's edges are rounded.
+/// How far round a hewn beam's edges are rounded, and a sawn plank's.
 const HEWN_EDGE_M: f32 = 0.03;
+const PLANK_EDGE_M: f32 = 0.006;
+/// How far apart a plank's rings are: its face waves only gently, and a floor has many.
+const PLANK_STEP_M: f32 = 0.4;
 
 /// Draws a log, a beam or a post, and the daub under it, into the kit's materials: its face
 /// in `Log`, its cut ends in `LogEnd`, its daub in `Daub`. `face` is the face material's
@@ -266,14 +269,60 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
     let thickness = 1.0 + t.variation.thickness * random.signed();
     let half_wide = kit.diameter * 0.45 * thickness;
     let half_high = kit.course * 0.39 * (1.0 + t.variation.thickness * 0.3 * random.signed());
-    let round = HEWN_EDGE_M;
+    let chamfer = match t.notch {
+        Notch::Saddle => 0.02,
+        Notch::Flush => 0.008,
+    };
+    let look = Squared {
+        half_wide,
+        half_high,
+        round: HEWN_EDGE_M,
+        metres,
+        strip: None,
+        bend: t.bend * 0.25,
+        adzed: true,
+        chamfer,
+        step: t.step,
+        corner_steps: 3,
+    };
+    let mut member = squared(frame, &look, split, random);
+    member.daub = (
+        half_wide * t.daub.0,
+        (kit.course - 2.0 * half_high + 0.02).max(t.daub.1),
+    );
+    member
+}
+
+/// How a squared member is made: its half width and height, how round its edges, its face's
+/// texture's size, the strip of it across the member if its texture is of boards side by
+/// side, how far it bows at most, whether an adze scalloped its faces, and how deep the
+/// chamfer at its ends.
+struct Squared {
+    half_wide: f32,
+    half_high: f32,
+    round: f32,
+    metres: [f32; 2],
+    strip: Option<[f32; 2]>,
+    bend: f32,
+    adzed: bool,
+    chamfer: f32,
+    /// How far apart its rings are along it, and how many steps round each edge.
+    step: f32,
+    corner_steps: usize,
+}
+
+/// A squared member along a frame: a rounded rectangle swept along it, its faces gently
+/// waved, scalloped by the adze if it was hewn, its edges wandering where the axe or saw
+/// met the tree's round.
+fn squared(frame: &Frame, look: &Squared, split: Split, random: &mut Random) -> Member {
+    let (half_wide, half_high, round) = (look.half_wide, look.half_high, look.round);
     let phases = [0; 4].map(|_| random.unit() * TAU);
     let shift = [random.unit() * 3.0, random.unit() * 3.0];
-    let bow = random.signed() * t.bend * 0.25;
+    let bow = random.signed() * look.bend;
     // The section: a rounded rectangle, walked round from under its middle, with a point
     // in the middle of each face so the face can wave.
     let mut section: Vec<(Vec3, Vec3)> = Vec::new();
-    let corner_steps = 3;
+    let corner_steps = look.corner_steps.max(1);
     for (cx, cy, start) in [
         (1.0f32, -1.0f32, -PI * 0.5),
         (1.0, 1.0, 0.0),
@@ -296,12 +345,21 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
         let step = section[j % columns].0.distance(section[j - 1].0);
         perimeter.push(perimeter[j - 1] + step);
     }
-    let chamfer = match t.notch {
-        Notch::Saddle => 0.02,
-        Notch::Flush => 0.008,
+    // How far across the texture each point of the section falls.
+    let across = |j: usize| match look.strip {
+        Some([from, wide]) => {
+            let x = section[j % columns].0.x / (2.0 * half_wide) + 0.5;
+            from + wide * x.clamp(0.0, 1.0)
+        }
+        None => shift[0] + perimeter[j] / look.metres[0],
     };
-    let at = stations(frame.length, t.step, chamfer);
+    let at = stations(frame.length, look.step, look.chamfer);
     let last = at.len() - 1;
+    let (wave_m, scallop_m, edge_m) = if look.adzed {
+        (1.0, 0.003, 0.01)
+    } else {
+        (0.4, 0.0, 0.002)
+    };
     let mut grid = Vec::with_capacity(at.len());
     let mut uvs = Vec::with_capacity(at.len());
     for (i, &along_t) in at.iter().enumerate() {
@@ -316,16 +374,17 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
         let ring = section
             .iter()
             .map(|&(p, n)| {
-                // The face waves gently along the beam, and the adze's scallops cut across
-                // it, deeper on the sides than on top and below.
-                let wave = 0.004 * libm::sinf(along * 1.7 + phases[0] + n.x * 2.0)
-                    + 0.003 * libm::sinf(along * 4.3 + phases[1] + n.y * 3.0);
+                // The face waves gently along the member, and an adze's scallops cut
+                // across it, deeper on the sides than on top and below.
+                let wave = wave_m
+                    * (0.004 * libm::sinf(along * 1.7 + phases[0] + n.x * 2.0)
+                        + 0.003 * libm::sinf(along * 4.3 + phases[1] + n.y * 3.0));
                 let bite =
                     libm::sinf(along * TAU / 0.13 + phases[2] + 0.8 * libm::sinf(along * 2.3));
-                let scallop = -0.003 * bite.abs() * n.x.abs();
-                // The edges, where the axe met the round of the tree, wander.
+                let scallop = -scallop_m * bite.abs() * n.x.abs();
+                // The edges, where the axe or saw met the round of the tree, wander.
                 let edge = (1.0 - n.x.abs().max(n.y.abs()))
-                    * 0.01
+                    * edge_m
                     * libm::sinf(along * 3.1 + phases[3] + p.x * 9.0);
                 let q = p + n * (wave + scallop - edge.abs());
                 let (x, y) = if on_cut(p.y, split) {
@@ -339,12 +398,7 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
         grid.push(ring);
         uvs.push(
             (0..=columns)
-                .map(|j| {
-                    [
-                        shift[0] + perimeter[j] / metres[0],
-                        shift[1] + along / metres[1],
-                    ]
-                })
+                .map(|j| [across(j), shift[1] + along / look.metres[1]])
                 .collect(),
         );
     }
@@ -352,10 +406,67 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
         grid,
         uvs,
         grain: [0.3, 0.24],
-        daub: (
-            half_wide * t.daub.0,
-            (kit.course - 2.0 * half_high + 0.02).max(t.daub.1),
-        ),
+        daub: (0.0, 0.0),
+    }
+}
+
+/// A deck's plank (`layout::floors`): a board, a joist or a rim beam, sawn square, its face
+/// in the kit's `Floor` material, drawn from one board of it where the texture is of boards
+/// side by side, a little lighter or darker by its seed; its sawn ends in `LogEnd`.
+pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
+    let Piece::Plank {
+        from,
+        to,
+        wide,
+        high,
+        seed,
+    } = *piece
+    else {
+        return;
+    };
+    if from.distance(to) < 0.02 {
+        return;
+    }
+    let frame = Frame::new(from, to);
+    let mut random = Random(seed);
+    let texture = kit.textures.get(&Material::Floor);
+    let strips = texture.and_then(|texture| texture.strips);
+    let strip = strips.map(|[first, apart]| {
+        let count = ((1.0 - first) / apart).floor().max(1.0);
+        let which = (random.unit() * count).floor().min(count - 1.0);
+        // Inside the board's edges, so its seams fall in the gaps.
+        [first + apart * (which + 0.06), apart * 0.88]
+    });
+    let look = Squared {
+        half_wide: wide * 0.5,
+        half_high: high * 0.5,
+        round: PLANK_EDGE_M.min(high * 0.3),
+        metres: texture.map_or([2.0, 2.0], |texture| texture.metres),
+        strip,
+        bend: 0.0,
+        adzed: false,
+        chamfer: 0.004,
+        step: PLANK_STEP_M,
+        corner_steps: 1,
+    };
+    let member = squared(&frame, &look, Split::Whole, &mut random);
+    let t = &kit.timber;
+    let shade = 1.0 - t.variation.shade * 0.8 * random.unit();
+    let warmth = t.variation.warmth * random.signed();
+    let colour = [
+        (shade * (1.0 + warmth)).clamp(0.0, 1.0),
+        shade.clamp(0.0, 1.0),
+        (shade * (1.0 - warmth)).clamp(0.0, 1.0),
+    ];
+    sweep(surfaces.of(Material::Floor), &member, colour);
+    let spin = random.unit() * TAU;
+    let last = member.grid.len() - 1;
+    let ends = surfaces.of(Material::LogEnd);
+    for (ring, outward) in [
+        (&member.grid[0], -frame.axis),
+        (&member.grid[last], frame.axis),
+    ] {
+        cap(ends, ring, outward, &frame, spin, member.grain, t.end_tint);
     }
 }
 

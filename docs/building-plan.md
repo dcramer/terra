@@ -21,7 +21,7 @@ How we build the construction system that [proposals/construction-001.md](propos
 |---|---|
 | `cubes` | The cube store: sections of 16 cubes a side (8 m), each a dense array of packed cubes, kept in a sorted map, with a dirty mark per section |
 | `ops` | The operations, what each needs to be valid, and each one's inverse for undo |
-| `ground` | The ground's height under each column, sampled into a plan when it is laid |
+| `ground` | The ground's height under each column, sampled into a plan when it is laid; the footings under a building, down to it (D206) |
 | `support` | What holds what: joined to the ground, and what rests on a cube |
 | `rooms` | Rooms and indoors, worked out per building (today's, moved) |
 | `cost` | What each cube costs and what went into it, in exact fractions |
@@ -30,9 +30,9 @@ How we build the construction system that [proposals/construction-001.md](propos
 | `timber` | A long member made from its piece: a profile (round, hewn) swept along it, shaped by the kit and its seed, displaced by its material's height (D200) |
 | `layout/blocks` | Block kinds drawn as their cubes' surface, rounded and displaced by their material (`surface`, D197) |
 | `layout/trims` | Jambs, sills and lintels round every opening, the doors and windows set in them, and caps where thicknesses differ |
-| `layout/floors` | Floors of rooms, in panels |
+| `layout/floors` | A timber kind's floors and flat roofs as decks: boards, rim beams, joists (D206) |
 | `layout/roofs` | Roof pieces from the height field: slope, eave, verge, ridge, hip, valley, flashing |
-| `layout/ground` | Footings down to the ground, and door steps |
+| `layout/ground` | Door steps down to the ground (D206); footings are cubes, laid by `ground` |
 | `walk` | Walking: each cube to its fill, as its kind's slab, and the shapes' table |
 | `save` | The snapshot format, and conversion of older saves |
 
@@ -106,9 +106,9 @@ Each step ends checked by script before the next (D69), and is committed as it g
 
 0. **Spike: block modules** (done, 2026-10-12, [research/block-modules.md](../research/block-modules.md)). Conformed Tripo pieces read as a grid and break at carved shapes; the cubes' surface, bevelled and displaced by a real stone material, reads as one natural wall and carves cleanly. Decided (D197) and built in `terra_build::surface`: a mesher for that surface, per section on workers, as the terrain's: outer faces, bevels, subdivision near the camera, the material's height displaced on the CPU, triplanar texturing.
 1. **The model** (done, 2026-10-12, D199). The cube store in sections; fill, shape and state per cube; operations with their checks and inverses; ground sampled into plans; support; snapshots; older saves converted. Property tests. The game unchanged on top: it still builds with the shortcuts, instantly, and saves them, until step 4.
-2. **Layouts** (under way, 2026-10-13). Done: `logs.rs` split into `layout/runs`, `trims`, `ground`, `floors` and `blocks`; timber generated from the kit (D200, `timber`), A as the log kit and B a second profile, the Tripo logs gone. Still to do: roof pieces; the kit checker; pieces in whole grid units rather than metres in the base's space.
+2. **Layouts** (under way, 2026-10-13). Done: `logs.rs` split into `layout/runs`, `trims`, `ground`, `floors` and `blocks`; timber generated from the kit (D200, `timber`), A as the log kit and B a second profile, the Tripo logs gone; footings, floors and door steps (D206): footings as stone cubes down to the ground, a block kind's floors as its surface with flagstone tops, a timber kind's as decks of boards, rims and joists, stone steps from each door; the grey slab gone. Still to do: roof pieces; the kit checker; pieces in whole grid units rather than metres in the base's space.
 3. **Drawing.** Sections as entities, layouts on the worker pool, merged meshes, instanced ghosts, far meshes, indoor light. The entity per piece goes. The `village` bench, measured on both GPUs.
-4. **Plans and building** (built, 2026-10-13, D201). Laying plans with the tools there are; building by fill; taking apart and undo with their refusals; the plan budget; doors and windows fitted, opening and shutting. The remote commands (`build.*`), and a scripted cabin from plan to door, `cargo xtask cabin`. Not yet: footings laid into a plan (D194), cutting an opening into a wall already built, which D199's last-in-first-out refuses under its lintel, a door split from its frame to swing alone.
+4. **Plans and building** (built, 2026-10-13, D201). Laying plans with the tools there are; building by fill; taking apart and undo with their refusals; the plan budget; doors and windows fitted, opening and shutting. The remote commands (`build.*`), and a scripted cabin from plan to door, `cargo xtask cabin`. Since: footings laid into plans and built first (D206); openings cut into walls already built, under the wall over them, and doors whose leaf swings in a fixed frame (D207).
 5. **Shapes and more parts**: stairs, slopes and halves (D193); floors drawn alone; posts.
 6. **Loss and repair**: collapse into debris with attacks (D90), repair.
 7. **The rest of D139 to D141**: carrying big materials, building from storage, recruits building.

@@ -74,12 +74,12 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | Diagonal and curved walls | Deferred (D146) | |
 | **Openings** | | |
 | A door or window of the default size | Cubes open or glazed; the kit frames it | Built |
-| Any carved shape, at an edge, a notch in the top | The same: framed along its own edges | Built for logs |
+| Any carved shape, at an edge, a notch in the top | The same: framed along its own edges | Built for logs; cut into a wall already built, under the wall over it (D207) |
 | An opening in stone | Lintel over it; blocks frame it with jamb and sill modules | Lintel built; modules not |
 | Doors and glass fitted | Items fitted after (rule 7) | Shown only when built |
 | **Floors** | | |
-| An inside floor | A layer of cubes; boards on top, joists below | Built (log kit's floor) |
-| A floor's exposed edge, outside the walls | Its edge pieces, or the footing below covers it | Wrong: the plain edge shows |
+| An inside floor | A layer of cubes; boards on top, joists below | Built (D206): timber decks, stone flagstones |
+| A floor's exposed edge, outside the walls | Its edge pieces, or the footing below covers it | Built (D206): a timber deck's rim beam; stone's own surface |
 | A floor over a wall below, a balcony, a hole for stairs | Modules round each, or edge pieces | Not built |
 | **Roofs** | | |
 | Gable, hip, lean-to, flat | Sections over the height field (D160) | Built |
@@ -91,12 +91,12 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | Stone and logs in an L, a T, in line | The heavier's corner runs through; the other ends at it | Built for logs ending at stone |
 | A floor or roof of another kind than its walls | Each by its own kit | Roofs take the walls' kit |
 | **Ground** | | |
-| Level ground | Footing pieces a little into it | Plain blocks stand in |
-| A slope | Footings fill down to the ground and stop there, taller where it falls away; the floor at the highest ground (rule 9) | Plain blocks stand in |
+| Level ground | Footing pieces a little into it | Built (D206): a course of stone cubes |
+| A slope | Footings fill down to the ground and stop there, taller where it falls away; the floor at the highest ground (rule 9) | Built (D206) |
 | Ground higher than the floor | Open: dig it (D131) or refuse | D131: dug |
 | A cellar, a terrace into a hill | Built below ground level: the ground dug there (D131) | Built |
 | Ground dug away under a building later | Open: the footing shows, or the building is undermined | Footing shows |
-| Door steps | Steps of the kit down to the ground | Plain blocks stand in |
+| Door steps | Steps of the kit down to the ground | Built (D206): stone slabs |
 | **Support** (rule 11) | | |
 | A wall, floor or post on the ground | Joined to the ground: built | Not checked |
 | A floor or wall built off something not yet built | Refused until what it rests on is in; the plan shows what is first | Not checked |

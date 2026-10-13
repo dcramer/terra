@@ -97,6 +97,10 @@ export type Prop = {
   // Another prop whose colour this one's texture is matched to when refined, its mean and
   // spread on the surface, so a kit's pieces share one grade. That one is refined first.
   grade?: string;
+  // A door in its frame: where its leaf's edges are across the refined model and how high
+  // its top is, in metres, so split.py cuts it into a Frame that stays and a Leaf that swings
+  // on its hinges (docs/building-kits.md).
+  leaf?: [number, number, number];
   // Another prop whose concept it is drawn after, so the pieces of a kit share one stone,
   // one wood and one grade (docs/art-style.md, "One kit, one grade").
   reference?: string;
@@ -182,6 +186,7 @@ function refine(name: string, prop: Prop) {
     args.push(`--grade=${colour.join(",")}`);
   }
   run(BLENDER, [join(HERE, "refine.py"), ...args]);
+  if (prop.leaf) run(BLENDER, [join(HERE, "split.py"), here(out), ...prop.leaf.map(String)]);
 }
 
 /** Every prop, tool and village model from the front, labelled, on one sheet. */

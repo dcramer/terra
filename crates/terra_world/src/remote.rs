@@ -11,7 +11,9 @@
 //! - `sandbox.look {at, distance?, around?, height?, aim?, from?}`: holds the camera on an
 //!   entity by name, or a point, following it; `around` is degrees round from the model's
 //!   front, `aim` how far above it to look, as at a person's chest rather than their feet;
-//!   `from` puts the eye at a point in the world instead.
+//!   `from` puts the eye at a point in the world instead; `vantage`, six numbers, puts the
+//!   eye at the first three and looks at the last three, in metres east, up and south of
+//!   the start, as `--vantage` and the kit sheet's log say.
 //!   `sandbox.release` lets the camera go.
 //! - `sandbox.pause {paused}`: stops or restarts the game's clock, animations included.
 //! - `sandbox.step {frames}`: lets a stopped clock run for so many frames, then stops it.
@@ -244,9 +246,17 @@ enum At {
     Point([f32; 3]),
 }
 
+impl Default for At {
+    fn default() -> Self {
+        At::Point([0.0; 3])
+    }
+}
+
 #[derive(Deserialize)]
 struct Look {
+    #[serde(default)]
     at: At,
+    vantage: Option<[f32; 6]>,
     aim: Option<f32>,
     distance: Option<f32>,
     around: Option<f32>,
@@ -257,12 +267,26 @@ struct Look {
 fn look(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Look {
         at,
+        vantage,
         aim,
         distance,
         around,
         height,
         from,
     } = parse_some(params)?;
+    let (at, from) = match vantage {
+        Some(v) => {
+            let start = world
+                .get_resource::<crate::start::Start>()
+                .ok_or_else(|| refused("there is no start to stand by"))?;
+            let place = |x: f32, y: f32, z: f32| start.transform_point(Vec3::new(x, y, z));
+            (
+                At::Point(place(v[3], v[4], v[5]).to_array()),
+                Some(place(v[0], v[1], v[2]).to_array()),
+            )
+        }
+        None => (at, from),
+    };
     let target = match at {
         At::Name(name) => Aim::Entity(
             named(world, &name).ok_or_else(|| refused(format!("nothing called {name}")))?,

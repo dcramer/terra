@@ -10,7 +10,8 @@
 // eaves       how far a roof over these walls overhangs them (D175)
 // bevel       the radius its outside edges are rounded to
 // relief      how far its stone stands out, from the deepest joint to the proudest stone
-// textures    its stone (assets/materials, CC0), and the roof over it as the log kit's
+// textures    its stone (assets/materials, CC0): its walls' and footings' fieldstone, its
+//             floors' and its walls' tops' flagstones, and the roof over it as the log kit's
 // cost        what building it takes (D139): a cube in one step, a quarter of a Stone
 //             each, and each stage of a roof cell over these walls
 (
@@ -21,6 +22,7 @@
     relief: 0.05,
     textures: {
         Masonry: (path: "materials/stone_wall", metres: (2.0, 2.0)),
+        Floor: (path: "materials/grey_stone_path", metres: (1.8, 1.8)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Shakes: (path: "materials/shakes", metres: (3.2, 1.6), depth: 0.04),
     },

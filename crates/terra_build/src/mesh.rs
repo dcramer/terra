@@ -261,7 +261,9 @@ pub(crate) fn build(base: &Base, kit: impl Fn(Kind) -> Option<KitLook>) -> BaseM
                 pane(&mut mesh, base, at);
                 continue;
             }
-            Fill::Solid if wall && look.is_some() => continue,
+            // A kit draws its kind's cubes itself: a block kind as its surface, a timber
+            // kind's walls as its members and its floors as decks.
+            Fill::Solid if look.is_some() => continue,
             Fill::Solid => {}
         }
         let low = at.as_vec3() * CELL_M;

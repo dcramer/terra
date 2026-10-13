@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 // Builds a cabin from plan to door in the play experiment and walks in (D69, D139; step 4 of
 // docs/building-plan.md), checking every step by the base's state, not only by picture:
-// a claim stone; a room's plan of log walls on a stone floor, a doorway and a window cut
-// into it and a gable roof laid over it, all for nothing; then built, what goes in next
-// each time as holding the hammer does, the floor first, the walls course by course, the
+// a claim stone; a room's plan of log walls on a stone floor, on a stone footing down to the
+// ground (D194), a doorway and a window cut into it and a gable roof laid over it, all for
+// nothing; then built, what goes in next each time as holding the hammer does, the footing
+// first and whole before anything else, then the floor, the walls course by course, the
 // roof by stages, taking exactly what the kits say from the pack; a cube taken out and the
-// taking undone; a refusal where the roof rests on a wall; a door and a window fitted; the
-// shut door keeping the player out, and opened with the interact key, letting them in; and
+// taking undone; a refusal where the roof rests on a wall; a second window cut into the
+// built wall, a course at a time from under the logs over it, giving the logs back; a door
+// and windows fitted; the shut door keeping the player out, and opened with the interact
+// key, letting them in; the ground outside the cabin as it was before it was planned; and
 // the game saved and loaded again, the base the same.
 //
 // One running game, driven live over the remote protocol (tools/sandbox, the `build.*`
@@ -31,7 +34,7 @@ type Part = { id: number; kind: string; cubes: number; built: number; started: n
 type Roof = { id: number; lowest: number; highest: number; covered: boolean };
 type Fitted = { kind: string; min: number[]; max: number[]; open: boolean; at: number[] };
 type Base = { origin: number[]; cubes: number; planned: number; openings: number; floating: number; room_tiles: number; parts: Part[]; roofs: Roof[]; props: Fitted[]; offcuts: string; since: number };
-type Answer = { done: boolean; what: string; took?: string; gave?: string; refused?: string };
+type Answer = { done: boolean; what: string; took?: string; gave?: string; refused?: string; cubes?: number[][] };
 
 const base = async () => (await game.call("build.state")) as Base;
 const act = async (method: string, params?: unknown) => (await game.call(method, params)) as Answer;
@@ -73,6 +76,18 @@ const WINDOW = [
 ];
 /// Where the builder stands, south of the cabin, in metres in the base's own space.
 const BUILDER: [number, number, number] = [4.5, 0, 8.6];
+/// A window cut into the north wall once it is built.
+const CUT = [
+  [8, 0, 4],
+  [9, 0, 4],
+];
+/// The columns round the cabin, a tile out from its walls: the ground there is not changed
+/// by building (D131, D193).
+const AROUND: [number, number][] = [];
+for (let x = MIN[0] - 1; x <= MAX[0] + 1; x++) AROUND.push([x, MIN[2] - 1], [x, MAX[2] + 1]);
+for (let z = MIN[2]; z <= MAX[2]; z++) AROUND.push([MIN[0] - 1, z], [MAX[0] + 1, z]);
+const groundAround = async () => (await game.call("build.ground", { columns: AROUND })) as number[];
+let groundBefore: number[] = [];
 
 /// A picture of the cabin from the south-east, a little above it, in shots/cabin-NAME.png;
 /// the camera is let go again after.
@@ -102,6 +117,7 @@ async function build() {
   await step("plan", async () => {
     const stand = await point(BUILDER);
     await game.warp(eastSouth(stand.from_start), eastSouth((await point([4.5, 0, 4])).from_start));
+    groundBefore = await groundAround();
     const room = await act("build.lay", { what: "room", min: MIN, max: MAX, kind: "logs", floor: "stone" });
     check(room.done, `the room's plan was refused: ${room.refused}`);
     const door = await act("build.opening", { tiles: DOOR, door: true });
@@ -111,15 +127,20 @@ async function build() {
     const roof = await act("build.lay", { what: "roof", min: MIN, max: MAX, kind: "logs", style: "Gable", pitch: 0.6 });
     check(roof.done, `the roof's plan was refused: ${roof.refused}`);
     const now = await base();
-    // A floor, four walls and a roof; the flat roof the room shortcut laid gave way.
-    check(now.parts.length === 5, `${now.parts.length} parts, not 5`);
+    // A footing, a floor, four walls and a roof; the flat roof the room shortcut laid gave
+    // way. The footing comes first, in stone, under every column of the walls; the floor
+    // inside them.
+    check(now.parts.length === 6, `${now.parts.length} parts, not 6`);
+    const [footing, floor] = now.parts;
+    check(footing.kind === "stone" && footing.cubes >= 32, `the first part is ${footing.cubes} cubes of ${footing.kind}, not a stone footing under 32 columns`);
+    check(floor.kind === "stone" && floor.cubes === 48, `the floor is ${floor.cubes} cubes of ${floor.kind}, not 48 of stone`);
     check(now.parts.every((part) => part.built === 0 && part.started === 0), "something of the plan is in");
     check(now.openings === 12, `${now.openings} open cubes, not a doorway of 8 and a window of 4`);
     check(now.room_tiles === 0, "a plan closes a room in");
     check(now.roofs.length === 1 && now.roofs[0].highest === 0, "the roof is not planned");
     check(!room.took && !roof.took, "laying a plan took something");
     await picture("plan");
-    return `${now.planned} cubes planned in ${now.parts.length} parts, a doorway, a window and a roof, for nothing`;
+    return `${now.planned} cubes planned in ${now.parts.length} parts, a footing of ${footing.cubes} cubes reaching ${footing.min[1]} down, a doorway, a window and a roof, for nothing`;
   });
 
   // What the cabin takes, by the kits: a stone floor of 80 cubes at a quarter of a Stone;
@@ -133,28 +154,46 @@ async function build() {
     if (have.length) await game.take(...have.map((name) => name.toLowerCase()));
   };
 
-  await step("floor", async () => {
+  await step("footing", async () => {
     await emptyPack();
-    await game.give("stone:20");
-    // What goes in first is the floor, whatever is aimed at: it holds the rest up.
+    const footing = (await base()).parts[0];
+    const stone = Math.ceil(footing.cubes / 4);
+    await game.give(`stone:${stone}`);
+    // What goes in first is the footing, whatever is aimed at: it holds the rest up.
     const [first] = await acts("build.fill", { steps: 1 });
     check(first?.done === true, `the first step was refused: ${first?.refused}`);
-    check(first.what.includes("stone"), `the first step was ${first.what}, not the stone floor`);
+    check(first.what.includes("part 0"), `the first step was ${first.what}, not the footing`);
     // Taken out again, it gives back what it took; undone, it is taken again.
-    const floor = (await base()).parts.find((part) => part.kind === "stone")!;
-    const [out] = await acts("build.take_apart", { at: floor.min, steps: 1 });
+    const [out] = await acts("build.take_apart", { at: first.cubes![0], steps: 1 });
     check(out?.done === true && out.gave === first.took, `taking it out gave ${out?.gave}, not ${first.took}: ${out?.refused}`);
     const undone = await act("build.undo");
     check(undone.done, `the undo was refused: ${undone.refused}`);
-    const rest = await acts("build.fill", { steps: 79 });
-    const refused = rest.find((each) => !each.done);
-    check(!refused, `refused: ${refused?.refused} (${refused?.what})`);
+    // The rest of it, a cube at a time, and nothing else until it is all in.
+    for (let i = 1; i < footing.cubes; i++) {
+      const [done] = await acts("build.fill", { steps: 1 });
+      check(done?.done === true, `refused: ${done?.refused} (${done?.what})`);
+      const now = await base();
+      const early = now.parts.slice(1).find((part) => part.built + part.started > 0);
+      check(!early, `part ${early?.id} went in before the footing was done`);
+    }
     const now = await base();
-    const after = now.parts.find((part) => part.kind === "stone")!;
-    check(after.done, `the floor is not done: ${after.built} of ${after.cubes}`);
-    const stone = 20 - (await carried("Stone"));
-    check(stone === 20 && now.offcuts === "", `the floor took ${stone} Stone, offcuts ${now.offcuts}, not 20 and none`);
-    return `${first.what} took ${first.took}; taken out it gave ${out.gave}; ${undone.what}; the floor took exactly ${stone} Stone`;
+    check(now.parts[0].done, `the footing is not done: ${now.parts[0].built} of ${now.parts[0].cubes}`);
+    check(now.floating === 0, `${now.floating} cubes float`);
+    const used = stone - (await carried("Stone"));
+    check(used === stone, `the footing took ${used} Stone, not ${stone}`);
+    return `${first.what} took ${first.took}; taken out it gave ${out.gave}; ${undone.what}; the footing's ${footing.cubes} cubes in first, from ${footing.min[1]} up, for ${used} Stone`;
+  });
+
+  await step("floor", async () => {
+    await game.give("stone:12");
+    const done = await acts("build.fill", { steps: 48 });
+    const refused = done.find((each) => !each.done);
+    check(!refused, `refused: ${refused?.refused} (${refused?.what})`);
+    check(done.every((each) => each.what.includes("part 1")), "something but the floor went in");
+    const now = await base();
+    check(now.parts[1].done, `the floor is not done: ${now.parts[1].built} of ${now.parts[1].cubes}`);
+    await emptyPack();
+    return `the floor's 48 cubes, for the rest of ${12 + Math.ceil(now.parts[0].cubes / 4)} Stone in all, offcuts ${now.offcuts || "none"}`;
   });
 
   await step("walls", async () => {
@@ -189,7 +228,7 @@ async function build() {
     check(now.roofs.every((roof) => roof.covered), "the roof is not covered");
     check(now.room_tiles > 0, "the finished cabin closes no room in");
     const wood = 40 - (await carried("Wood"));
-    check(wood === 30 && now.offcuts === "", `took ${wood} Wood, offcuts ${now.offcuts}, not 30 and none`);
+    check(wood === 30 && !now.offcuts.includes("Wood"), `took ${wood} Wood, offcuts ${now.offcuts}, not 30 and none of Wood`);
     return `${first.length + done.length} more steps, one refused: "${short!.refused}"; ${now.room_tiles} tiles indoors; the walls and roof took exactly ${wood} Wood`;
   });
 
@@ -201,15 +240,38 @@ async function build() {
     return `taking out a cube under the roof's eaves: "${out.refused}"`;
   });
 
+  await step("cut", async () => {
+    // A window cut into the north wall, built: marked, then carved out a course at a time
+    // from under the logs over it, which stay, held by the wall either side; the logs come
+    // back to the pack.
+    const before = await base();
+    const wood = await carried("Wood");
+    const cut = await act("build.opening", { tiles: CUT, door: false });
+    check(cut.done, `the cut was refused: ${cut.refused}`);
+    const done = await acts("build.fill", { steps: 20 });
+    const refused = done.find((each) => !each.done);
+    check(!refused, `refused: ${refused?.refused} (${refused?.what})`);
+    const now = await base();
+    check(now.openings === before.openings + 4, `${now.openings - before.openings} cubes opened, not 4`);
+    check(now.floating === 0, `${now.floating} cubes float`);
+    check(now.parts.every((part) => part.done), "the cut left part of the cabin unbuilt");
+    check(now.room_tiles === before.room_tiles, "the cut opened the room to the weather");
+    const back = (await carried("Wood")) - wood;
+    check(back >= 0, `the cut took ${-back} Wood`);
+    return `${done.length} steps: ${done.map((each) => each.what).join("; ")}; ${now.offcuts || "no"} offcuts`;
+  });
+
   await step("fit", async () => {
-    await game.give("fibre:1");
+    await game.give("fibre:2");
     const door = await act("build.fit", { at: DOOR[0], door: true });
     check(door.done, `the door was refused: ${door.refused}`);
     const window = await act("build.fit", { at: [WINDOW[0][0], 2, WINDOW[0][2]], door: false });
     check(window.done, `the window was refused: ${window.refused}`);
+    const second = await act("build.fit", { at: [CUT[0][0], 2, CUT[0][2]], door: false });
+    check(second.done, `the window in the cut was refused: ${second.refused}`);
     const now = await base();
-    check(now.props.length === 2 && now.props.every((prop) => !prop.open), "not a shut door and a window");
-    return `a door (${door.took}) and a window (${window.took})`;
+    check(now.props.length === 3 && now.props.every((prop) => !prop.open), "not a shut door and two windows");
+    return `a door (${door.took}) and two windows (${window.took} each)`;
   });
 
   await step("shut", async () => {
@@ -258,6 +320,16 @@ async function build() {
     await game.shot("shots/cabin-finished.png");
     await game.call("sandbox.release");
     return `inside at ${now.at.map((n) => n.toFixed(2))}, indoors`;
+  });
+
+  await step("ground", async () => {
+    // Round the cabin, a tile out from its walls, the ground is as it was before the plan
+    // was laid: building cut only within its walls, and its footing and steps stand on it.
+    const after = await groundAround();
+    const moved = AROUND.map((column, i) => ({ column, by: after[i] - groundBefore[i] })).filter(({ by }) => Math.abs(by) > 0.001);
+    check(groundBefore.length === AROUND.length && moved.length === 0, `the ground moved round the cabin: ${JSON.stringify(moved.slice(0, 6))}`);
+    const [low, high] = [Math.min(...after), Math.max(...after)];
+    return `${AROUND.length} columns round it unchanged, from ${low.toFixed(2)} to ${high.toFixed(2)} m`;
   });
 
   await step("reload", async () => {

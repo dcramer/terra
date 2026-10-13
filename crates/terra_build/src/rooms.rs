@@ -92,11 +92,13 @@ impl Base {
                 }
             }
             // What the open air never reached, and is not wall, is closed in: each group
-            // of it a room.
+            // of it a room. Below the ground storey, only where it has a floor: the space
+            // a building's footings close in under its floor is no room (D194).
+            let floored = |cell: IVec2| y >= 0 || self.has_floor(IVec3::new(cell.x, y, cell.y));
             for x in low.x..=high.x {
                 for z in low.y..=high.y {
                     let start = IVec2::new(x, z);
-                    if !open(start) || !reached.insert(start.to_array()) {
+                    if !open(start) || !floored(start) || !reached.insert(start.to_array()) {
                         continue;
                     }
                     let mut frontier = vec![start];
@@ -104,7 +106,7 @@ impl Base {
                         rooms.insert([cell.x, y, cell.y], next_room);
                         for side in LEVEL {
                             let next = step(cell, side);
-                            if open(next) && reached.insert(next.to_array()) {
+                            if open(next) && floored(next) && reached.insert(next.to_array()) {
                                 frontier.push(next);
                             }
                         }

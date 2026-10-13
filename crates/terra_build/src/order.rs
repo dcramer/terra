@@ -95,6 +95,43 @@ impl Base {
         Some(pick(layer, near, one_at_a_time))
     }
 
+    /// What carving out the cubes marked to be carved does next (construction-001,
+    /// experience 4): make those now empty an opening; else take a step out of the highest
+    /// with something in, those furthest in, all of them on that layer, a course across the
+    /// opening, or the nearest to `near` if its kind goes a cube at a time. `None` if none
+    /// is marked.
+    pub fn next_carve(
+        &self,
+        near: Vec3,
+        one_at_a_time: impl Fn(crate::Kind) -> bool,
+    ) -> Option<crate::ops::Op> {
+        let marked: Vec<(IVec3, Cube)> = self
+            .cubes()
+            .filter(|(_, cube)| cube.pending == Pending::Carve && cube.fill == Fill::Solid)
+            .collect();
+        let empty: Vec<[i32; 3]> = marked
+            .iter()
+            .filter(|(_, cube)| cube.level() == 0)
+            .map(|(at, _)| at.to_array())
+            .collect();
+        if !empty.is_empty() {
+            return Some(crate::ops::Op::Open { cubes: empty });
+        }
+        let highest = marked.iter().map(|(at, _)| at.y).max()?;
+        let most = marked
+            .iter()
+            .filter(|(at, _)| at.y == highest)
+            .map(|(_, cube)| cube.level())
+            .max()?;
+        let layer: Vec<(IVec3, Cube)> = marked
+            .into_iter()
+            .filter(|(at, cube)| at.y == highest && cube.level() == most)
+            .collect();
+        let one = layer.iter().any(|(_, cube)| one_at_a_time(cube.kind));
+        let cubes = pick(layer.into_iter().map(|(at, _)| at), near, one);
+        Some(crate::ops::Op::Empty { cubes })
+    }
+
     /// A part's plan that can be taken away for nothing: its cubes with nothing in them,
     /// and its openings with nothing fitted. Empty if any of it is in.
     pub fn plan_of(&self, part: PartId) -> Vec<[i32; 3]> {
@@ -229,6 +266,39 @@ mod tests {
             cx,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn a_window_cut_into_a_built_wall_comes_out_a_course_at_a_time_then_opens() {
+        let rules = rules();
+        let cx = Context::free(&rules);
+        let mut base = Base::default();
+        wall(&mut base, 0, LOGS, &cx);
+        while let Some(cubes) = base.next_in(PartId(0), Vec3::ZERO, false) {
+            base.act(&Op::Fill { cubes }, &cx).unwrap();
+        }
+        assert_eq!(base.next_carve(Vec3::ZERO, |_| false), None);
+        // The lower layer's middle two cubes, under the layer that stays.
+        let cut = vec![[1, 0, 0], [2, 0, 0]];
+        base.act(&Op::Carve { cubes: cut.clone() }, &cx).unwrap();
+        let mut steps = Vec::new();
+        while let Some(op) = base.next_carve(Vec3::ZERO, |_| false) {
+            steps.push(op.clone());
+            base.act(&op, &cx).unwrap();
+        }
+        assert_eq!(
+            steps,
+            vec![
+                Op::Empty { cubes: cut.clone() },
+                Op::Empty { cubes: cut.clone() },
+                Op::Open { cubes: cut.clone() },
+            ]
+        );
+        assert!(cut.iter().all(|&at| {
+            base.cube(IVec3::from_array(at))
+                .is_some_and(|cube| cube.fill == Fill::Open)
+        }));
+        assert!(base.floating().is_empty());
     }
 
     #[test]

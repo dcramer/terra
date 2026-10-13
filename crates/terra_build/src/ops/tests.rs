@@ -576,6 +576,155 @@ fn a_cube_carved_out_comes_out_step_by_step_and_its_undo_puts_it_back() {
     assert_eq!(base, before);
 }
 
+/// A log wall eight cubes long and six high, built course by course on level ground.
+fn log_wall(base: &mut Base, cx: &Context) {
+    for y in 0..6 {
+        base.act(&row(y as u32, LOGS, [0, y, 0], IVec3::X, 8), cx)
+            .unwrap();
+        let course = Op::Fill {
+            cubes: line([0, y, 0], IVec3::X, 8),
+        };
+        base.act(&course, cx).unwrap();
+        base.act(&course, cx).unwrap();
+    }
+}
+
+#[test]
+fn a_window_is_cut_into_a_built_wall_under_the_logs_that_span_it() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    log_wall(&mut base, &cx);
+    let before = base.clone();
+    // A window two cubes wide and two high, a metre up, with two layers of wall over it.
+    let window: Vec<[i32; 3]> = [3, 4]
+        .into_iter()
+        .flat_map(|x| [2, 3].map(|y| [x, y, 0]))
+        .collect();
+    base.act(
+        &Op::Carve {
+            cubes: window.clone(),
+        },
+        &cx,
+    )
+    .unwrap();
+    // Out from the top, a course at a time, under the logs that stay: each gives back
+    // what went in.
+    let mut gave = Bill::default();
+    let mut undos = Vec::new();
+    for layer in [3, 2] {
+        let cubes: Vec<[i32; 3]> = window.iter().copied().filter(|at| at[1] == layer).collect();
+        for _ in 0..2 {
+            let done = base
+                .act(
+                    &Op::Empty {
+                        cubes: cubes.clone(),
+                    },
+                    &cx,
+                )
+                .unwrap();
+            gave.add(&done.gave);
+            undos.push(done.undo);
+            assert!(base.floating().is_empty());
+        }
+    }
+    // Four cubes, each two courses of an eighth of a log.
+    assert_eq!(gave, Bill::of("Log", Amount::whole(1)));
+    assert!(base.is_in(IVec3::new(3, 4, 0)) && base.is_in(IVec3::new(4, 5, 0)));
+    // Each step undone puts it back, in turn.
+    let mut undone = base.clone();
+    for undo in undos.iter().rev() {
+        undone.act_all(undo, &cx).unwrap();
+    }
+    undone
+        .act(
+            &Op::Cancel {
+                cubes: window.clone(),
+            },
+            &cx,
+        )
+        .unwrap();
+    assert_eq!(undone, before);
+    // Made an opening, a window fits it, the wall either side and over it its frame.
+    base.act(
+        &Op::Open {
+            cubes: window.clone(),
+        },
+        &cx,
+    )
+    .unwrap();
+    let prop = Prop {
+        kind: DOOR,
+        min: [3, 2, 0],
+        max: [4, 3, 0],
+        open: false,
+    };
+    base.act(&Op::FitProp(prop), &cx).unwrap();
+}
+
+#[test]
+fn a_cut_is_refused_where_it_would_leave_the_wall_over_it_hanging_or_a_roof_unheld() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    log_wall(&mut base, &cx);
+    // Across the whole wall a metre up: what is over it would hang from nothing.
+    let across = line([0, 2, 0], IVec3::X, 8);
+    base.act(
+        &Op::Carve {
+            cubes: across.clone(),
+        },
+        &cx,
+    )
+    .unwrap();
+    let both = Op::Empty {
+        cubes: across.clone(),
+    };
+    base.act(&both, &cx).unwrap();
+    assert!(matches!(base.act(&both, &cx), Err(Refusal::Holds(_))));
+    // A cube with nothing over it but a roof's eaves: the roof holds it.
+    let mut roofed = Base::default();
+    log_wall(&mut roofed, &cx);
+    roofed
+        .act(
+            &Op::AddRoof {
+                roof: RoofId(0),
+                section: RoofSection {
+                    min: [0, 0, 0],
+                    max: [7, 0, 0],
+                    style: RoofStyle::LeanTo,
+                    along_x: true,
+                    pitch: 0.4,
+                },
+                kind: Some(LOGS),
+            },
+            &cx,
+        )
+        .unwrap();
+    roofed
+        .act(
+            &Op::RoofStage {
+                roof: RoofId(0),
+                cells: vec![[2, 0]],
+                up: true,
+            },
+            &cx,
+        )
+        .unwrap();
+    roofed
+        .act(
+            &Op::Carve {
+                cubes: vec![[2, 5, 0]],
+            },
+            &cx,
+        )
+        .unwrap();
+    assert!(matches!(
+        roofed.act(&Op::Empty { cubes: vec![[2, 5, 0]] }, &cx),
+        Err(Refusal::Holds(holders)) if holders.contains(&Holder::Roof(RoofId(0)))
+    ));
+}
+
 #[test]
 fn a_plan_on_a_slope_keeps_the_ground_it_was_laid_on() {
     let rules = rules();
@@ -909,7 +1058,9 @@ fn check_rules(base: &Base, at: &str) {
     for (cube, _) in base.cubes().filter(|(_, cube)| cube.is_in()) {
         let under = base.cube(cube - IVec3::Y);
         assert!(
-            under.is_none_or(|under| !under.is_in() || under.is_built()),
+            under.is_none_or(|under| {
+                !under.is_in() || under.is_built() || under.pending == Pending::Carve
+            }),
             "{at}: {cube} is in over a cube partly in"
         );
     }
@@ -1052,13 +1203,17 @@ fn random_operations_keep_every_rule() {
                     yard.stock.add(&done.gave);
                     paid.add(&done.took);
                     refunded.add(&done.gave);
-                    // Nothing was taken from under anything, or from under an item.
+                    // Nothing was taken from under anything, but a cube carved out from
+                    // under what stays joined, or from under an item.
                     for op in &ops {
                         if let Op::Empty { cubes } = op {
                             for &cube in cubes {
                                 let cube = IVec3::from_array(cube);
+                                let carved = base
+                                    .cube(cube)
+                                    .is_some_and(|cube| cube.pending == Pending::Carve);
                                 assert!(
-                                    !base.is_in(cube + IVec3::Y) || base.is_in(cube),
+                                    !base.is_in(cube + IVec3::Y) || base.is_in(cube) || carved,
                                     "{at}: {cube} taken from under what rests on it"
                                 );
                                 assert!(

@@ -1,5 +1,5 @@
-//! Pieces made into surfaces by material, ready to draw: long members by [`timber`], boards,
-//! footings and floors as boxes their texture is mapped onto. Doors and windows are props,
+//! Pieces made into surfaces by material, ready to draw: long members and a deck's planks by
+//! [`timber`], the boards round openings as boxes their texture is mapped onto. Doors and windows are props,
 //! and block kinds are drawn as their cubes' surface (`surface.rs`), so neither is here.
 //!
 //! [`timber`]: crate::timber
@@ -9,10 +9,6 @@ use crate::layout::Piece;
 use crate::mesh::{Material, Surface, Surfaces};
 use crate::relief::Relief;
 use glam::Vec3;
-
-/// How tall and deep a footing of stone is, its top at the wall's foot.
-const FOOTING_HIGH_M: f32 = 0.5;
-const FOOTING_DEEP_M: f32 = 0.6;
 
 /// The size in metres of a kit's texture for a material, or a metre square if it has none.
 fn metres(kit: &Kit, material: Material) -> [f32; 2] {
@@ -33,27 +29,7 @@ pub fn draw(piece: &Piece, kit: &Kit, face: Option<&Relief>, surfaces: &mut Surf
             metres(kit, Material::Board),
             [1.0; 3],
         ),
-        Piece::Footing { from, to, .. } => {
-            // A wall of stone under the wall's line, its top a little over the foot.
-            let along = (to - from).normalize_or_zero();
-            let across = Vec3::Y.cross(along) * FOOTING_DEEP_M * 0.5;
-            let low = from - across - Vec3::Y * (FOOTING_HIGH_M - 0.02);
-            let high = to + across + Vec3::Y * 0.02;
-            cuboid(
-                surfaces.of(Material::Stone),
-                low.min(high),
-                low.max(high),
-                metres(kit, Material::Stone),
-                [1.0; 3],
-            );
-        }
-        Piece::Floor { min, max } => cuboid(
-            surfaces.of(Material::Floor),
-            min - Vec3::Y * 0.03,
-            max + Vec3::Y * 0.005,
-            metres(kit, Material::Floor),
-            [1.0; 3],
-        ),
+        Piece::Plank { .. } => crate::timber::plank(piece, kit, surfaces),
         // A prop, or part of its kind's surface.
         Piece::Opening { .. } | Piece::Block { .. } => {}
     }
@@ -185,8 +161,8 @@ pub(crate) mod tests {
             "Log LogEnd",
             "Log Daub",
             "Board Board",
-            "Footing Stone",
-            "Floor Floor",
+            "Plank Floor",
+            "Plank LogEnd",
         ] {
             assert!(
                 drawn.get(each).is_some_and(|&n| n > 0),

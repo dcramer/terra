@@ -6,13 +6,14 @@
 //! - [`runs`]: long members, logs or beams, laid along each run of cubes, crossing at
 //!   corners, shortened under roofs, upright at posts.
 //! - [`trims`]: the boards round every opening, and the doors and windows set in them.
-//! - [`ground`]: footings under walls on the ground.
-//! - [`floors`]: the floors of rooms, in panels.
-//! - [`blocks`]: block kinds, a piece a cube, drawn as their surface (D197).
+//! - [`floors`]: a timber kind's floors and flat roofs, as a deck of boards.
+//! - [`blocks`]: block kinds, a piece a cube, drawn as their surface (D197): walls,
+//!   floors and footings alike.
+//! - [`ground`]: door steps down to the ground.
 
 pub mod blocks;
 mod floors;
-mod ground;
+pub mod ground;
 pub mod runs;
 mod trims;
 
@@ -56,11 +57,15 @@ pub enum Piece {
         along_x: bool,
         door: bool,
     },
-    /// A footing along the foot of a wall on the ground, its top along the line from one
-    /// end to the other.
-    Footing { from: Vec3, to: Vec3, seed: u32 },
-    /// A panel of floor, its top from one corner to the other.
-    Floor { min: Vec3, max: Vec3 },
+    /// A sawn member of a deck from one end to the other along its middle (`floors`): a
+    /// board, a joist or a rim beam, so wide across and so high; its seed is its version.
+    Plank {
+        from: Vec3,
+        to: Vec3,
+        wide: f32,
+        high: f32,
+        seed: u32,
+    },
     /// A block kind's cube (`blocks`), drawn as part of its kind's surface (`surface.rs`),
     /// counted in cubes.
     Block { cube: IVec3 },
@@ -68,19 +73,31 @@ pub enum Piece {
 
 impl Piece {
     /// The box it fills in a wall or floor, if it stands in the base's cubes: not a door
-    /// or window, which is not part of the plan, nor a footing in the ground.
+    /// or window, which is not part of the plan.
     pub fn bounds(&self) -> Option<(Vec3, Vec3)> {
         match *self {
             Piece::Log { from, to, .. } => {
                 let r = Vec3::splat(0.15);
                 Some((from.min(to) - r, from.max(to) + r))
             }
-            Piece::Board { min, max } | Piece::Floor { min, max } => Some((min, max)),
+            Piece::Plank {
+                from,
+                to,
+                wide,
+                high,
+                ..
+            } => {
+                let along = (to - from).normalize_or_zero();
+                let across = Vec3::Y.cross(along).abs() * (wide * 0.5);
+                let up = Vec3::Y * (high * 0.5);
+                Some((from.min(to) - across - up, from.max(to) + across + up))
+            }
+            Piece::Board { min, max } => Some((min, max)),
             Piece::Block { cube } => {
                 let low = cube.as_vec3() * CELL_M;
                 Some((low, low + Vec3::splat(CELL_M)))
             }
-            Piece::Opening { .. } | Piece::Footing { .. } => None,
+            Piece::Opening { .. } => None,
         }
     }
 
@@ -88,9 +105,8 @@ impl Piece {
     fn bottom(&self) -> f32 {
         match self {
             Piece::Log { from, to, .. } => from.y.min(to.y),
-            Piece::Footing { from, to, .. } => from.y.min(to.y) - 1.0,
+            Piece::Plank { from, to, high, .. } => from.y.min(to.y) - high * 0.5,
             Piece::Board { min, .. } | Piece::Opening { min, .. } => min.y,
-            Piece::Floor { min, .. } => min.y - 0.5,
             Piece::Block { cube } => cube.y as f32 * CELL_M,
         }
     }
@@ -191,7 +207,7 @@ impl Walls<'_> {
         self.base
             .cube(at)
             .filter(|cube| cube.kind == self.kind && self.base.in_wall(at))
-            .map(|cube| cube.fill)
+            .map(|cube| drawn_fill(&cube))
     }
 
     /// Whether a cube of ours runs along an axis: it has another of ours either side.
@@ -237,6 +253,16 @@ impl Walls<'_> {
     }
 }
 
+/// What fills a cube as a layout draws it: an opening already once any of it has been
+/// carved out, so a log is cut and framed at the saw's first cut.
+pub fn drawn_fill(cube: &crate::Cube) -> Fill {
+    if cube.pending == crate::Pending::Carve && !cube.is_built() {
+        Fill::Open
+    } else {
+        cube.fill
+    }
+}
+
 /// Lays every wall of a base in the kit's kind: as blocks, or as long members.
 pub fn lay(base: &Base, kit: &Kit) -> Layout {
     if kit.pattern == Pattern::Masonry {
@@ -257,6 +283,10 @@ pub fn lay(base: &Base, kit: &Kit) -> Layout {
         .collect();
     let mut layout = Layout::default();
     if ours.is_empty() {
+        if kit.textures.contains_key(&Material::Floor) {
+            floors::decks(base, kit, &mut layout);
+            sort(&mut layout);
+        }
         return layout;
     }
     for axis in [Axis::X, Axis::Z] {
@@ -288,13 +318,10 @@ pub fn lay(base: &Base, kit: &Kit) -> Layout {
         }
     }
     runs::posts(&walls, &ours, &mut layout);
-    if kit.textures.contains_key(&Material::Stone) {
-        ground::footings(&walls, &ours, &mut layout);
-    }
-    if kit.textures.contains_key(&Material::Floor) {
-        floors::floors(&walls, &mut layout);
-    }
     runs::under_roofs(base, kit, &mut layout);
+    if kit.textures.contains_key(&Material::Floor) {
+        floors::decks(base, kit, &mut layout);
+    }
     sort(&mut layout);
     layout
 }
@@ -424,19 +451,17 @@ pub(crate) mod tests {
             .count()
     }
 
-    /// A kit with a texture for footings and floors, so it lays them.
+    /// A kit with a texture for floors, so it lays them.
     pub(crate) fn textured() -> Kit {
         let texture = |path: &str| Texture {
             path: path.into(),
             metres: [1.0, 1.0],
             depth: 0.0,
             reflectance: crate::kit::matte(),
+            strips: None,
         };
         Kit {
-            textures: BTreeMap::from([
-                (Material::Stone, texture("stone")),
-                (Material::Floor, texture("floor")),
-            ]),
+            textures: BTreeMap::from([(Material::Floor, texture("floor"))]),
             ..kit()
         }
     }
@@ -455,6 +480,35 @@ pub(crate) mod tests {
         assert!(first.iter().all(|u| (0.0..1.0).contains(u)));
         let mut again = Random(42);
         assert_eq!(first, (0..3).map(|_| again.unit()).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_wall_being_carved_is_cut_and_framed_at_the_first_cut() {
+        use crate::ops::{Context, Op};
+        let rules = crate::Rules::default();
+        let cx = Context::free(&rules);
+        let mut base = cabin();
+        let whole = lay(&base, &kit());
+        let window = vec![[0, 2, 2], [0, 3, 2]];
+        base.act(
+            &Op::Carve {
+                cubes: window.clone(),
+            },
+            &cx,
+        )
+        .unwrap();
+        // Marked, nothing out yet: drawn as it was.
+        assert_eq!(lay(&base, &kit()).pieces, whole.pieces);
+        base.act(
+            &Op::Empty {
+                cubes: vec![[0, 3, 2]],
+            },
+            &cx,
+        )
+        .unwrap();
+        let cut = lay(&base, &kit());
+        assert!(boards(&cut) > boards(&whole), "framed");
+        assert!(logs(&cut).len() > logs(&whole).len(), "its logs cut in two");
     }
 
     #[test]

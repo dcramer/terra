@@ -1,14 +1,17 @@
 //! What laying a part means in operations (D139, D152; docs/building.md, planned then
 //! constructed): a room, a wall, a floor or a roof is laid as plans of its cubes, each its
-//! own part, where nothing is yet; an opening is planned cubes made open; a door or window
-//! is fitted into an opening. The hammer and the remote both lay through these, so they lay
-//! the same. The ground under a plan is filled in by whoever acts, from the planet.
+//! own part, where nothing is yet; on the ground, with footings under it down to the ground
+//! as a part of their own, laid first so they are built first (D194); an opening is planned
+//! cubes made open, or built cubes marked to be carved out; a door or window is fitted into
+//! an opening. The hammer and the remote both lay through these, so they lay the same. The
+//! ground under a plan is filled in by whoever acts, from the planet.
 
 use super::props::{DOOR, WINDOW};
 use std::collections::BTreeSet;
+use terra_build::ground::{cube_cm, footing as footing_cubes};
 use terra_build::ops::{Op, Planned};
 use terra_build::{
-    Base, Fill, Kind, Panel, PartId, Prop, RoofSection, STOREY_CUBES, Shape, floor_layer,
+    Base, Fill, Kind, Panel, PartId, Pending, Prop, RoofSection, STOREY_CUBES, Shape, floor_layer,
     wall_layer,
 };
 
@@ -39,6 +42,31 @@ fn plan(
     })
 }
 
+/// Footings under what is laid on the ground (D194): their kind, and the ground's height
+/// under a column, in centimetres in the base's own space.
+#[derive(Clone, Copy)]
+pub struct Footings<'a> {
+    pub kind: Kind,
+    pub ground_cm: &'a dyn Fn([i32; 2]) -> i16,
+}
+
+impl Footings<'_> {
+    /// A footing's plan under columns, each from its top layer down to the ground.
+    fn plan(
+        &self,
+        base: &Base,
+        part: PartId,
+        columns: impl IntoIterator<Item = ([i32; 2], i32)>,
+    ) -> Option<Op> {
+        plan(
+            base,
+            part,
+            self.kind,
+            footing_cubes(base, columns, self.ground_cm),
+        )
+    }
+}
+
 /// Numbers parts from the base's next, in the order they are laid.
 struct Numbers(u32);
 
@@ -61,15 +89,35 @@ fn column(tile: IVec3) -> impl Iterator<Item = IVec3> {
 
 /// The room shortcut (D152) over a block of tiles, its corners both included, on a storey:
 /// a floor under all of it, a wall along each side, and a flat roof over the inside, each
-/// its own part, where nothing is yet.
-pub fn room(base: &Base, min: IVec3, max: IVec3, walls: Kind, floor: Kind) -> Vec<Op> {
+/// its own part, where nothing is yet. On the ground storey with footings, a footing under
+/// its walls from the floor's layer down to the ground comes first, and the floor is laid
+/// inside them.
+pub fn room(
+    base: &Base,
+    min: IVec3,
+    max: IVec3,
+    walls: Kind,
+    floor: Kind,
+    footings: Option<Footings>,
+) -> Vec<Op> {
     let mut parts = Numbers::of(base);
     let y = min.y;
     let tiles = |x0: i32, x1: i32, z0: i32, z1: i32| {
         (x0..=x1).flat_map(move |x| (z0..=z1).map(move |z| IVec3::new(x, y, z)))
     };
     let mut ops = Vec::new();
-    let under = tiles(min.x, max.x, min.z, max.z).map(|tile| tile.with_y(floor_layer(y)));
+    let footings = footings.filter(|_| y == 0);
+    let edge =
+        |tile: IVec3| tile.x == min.x || tile.x == max.x || tile.z == min.z || tile.z == max.z;
+    if let Some(footings) = footings {
+        let columns = tiles(min.x, max.x, min.z, max.z)
+            .filter(|&tile| edge(tile))
+            .map(|tile| ([tile.x, tile.z], floor_layer(y)));
+        ops.extend(footings.plan(base, parts.next(), columns));
+    }
+    let under = tiles(min.x, max.x, min.z, max.z)
+        .filter(|&tile| footings.is_none() || !edge(tile))
+        .map(|tile| tile.with_y(floor_layer(y)));
     ops.extend(plan(base, parts.next(), floor, under));
     // North and south run the whole width; east and west between them.
     let sides = [
@@ -88,30 +136,57 @@ pub fn room(base: &Base, min: IVec3, max: IVec3, walls: Kind, floor: Kind) -> Ve
     ops
 }
 
-/// A wall along these tiles, a storey high, as one part.
-pub fn wall(base: &Base, tiles: &[IVec3], kind: Kind) -> Vec<Op> {
+/// A wall along these tiles, a storey high, as one part; on the ground storey with
+/// footings, a footing under it from the floor's layer down to the ground first.
+pub fn wall(base: &Base, tiles: &[IVec3], kind: Kind, footings: Option<Footings>) -> Vec<Op> {
     let mut parts = Numbers::of(base);
-    plan(
+    let mut ops = Vec::new();
+    if let Some(footings) = footings {
+        let columns = tiles
+            .iter()
+            .filter(|tile| tile.y == 0)
+            .map(|tile| ([tile.x, tile.z], floor_layer(0)));
+        ops.extend(footings.plan(base, parts.next(), columns));
+    }
+    ops.extend(plan(
         base,
         parts.next(),
         kind,
         tiles.iter().copied().flat_map(column),
-    )
-    .into_iter()
-    .collect()
+    ));
+    ops
 }
 
-/// A floor under a block of tiles on a storey, as one part.
-pub fn floor(base: &Base, min: IVec3, max: IVec3, kind: Kind) -> Vec<Op> {
+/// A floor under a block of tiles on a storey, as one part; on the ground storey with
+/// footings, a footing under its edges down to the ground first, where the ground is below
+/// it.
+pub fn floor(
+    base: &Base,
+    min: IVec3,
+    max: IVec3,
+    kind: Kind,
+    footings: Option<Footings>,
+) -> Vec<Op> {
     let mut parts = Numbers::of(base);
-    let cubes = (min.x..=max.x)
-        .flat_map(|x| (min.z..=max.z).map(move |z| IVec3::new(x, floor_layer(min.y), z)));
-    plan(base, parts.next(), kind, cubes).into_iter().collect()
+    let layer = floor_layer(min.y);
+    let mut ops = Vec::new();
+    if let Some(footings) = footings.filter(|_| min.y == 0) {
+        let edge = |x: i32, z: i32| x == min.x || x == max.x || z == min.z || z == max.z;
+        let columns = (min.x..=max.x)
+            .flat_map(|x| (min.z..=max.z).map(move |z| [x, z]))
+            .filter(|&[x, z]| edge(x, z))
+            .filter(|&column| layer * cube_cm() > i32::from((footings.ground_cm)(column)))
+            .map(|column| (column, layer - 1));
+        ops.extend(footings.plan(base, parts.next(), columns));
+    }
+    let cubes = (min.x..=max.x).flat_map(|x| (min.z..=max.z).map(move |z| IVec3::new(x, layer, z)));
+    ops.extend(plan(base, parts.next(), kind, cubes));
+    ops
 }
 
 /// A flat roof over a block of tiles on a storey, as one part.
 pub fn flat_roof(base: &Base, min: IVec3, max: IVec3, kind: Kind) -> Vec<Op> {
-    floor(base, min + IVec3::Y, max + IVec3::Y, kind)
+    floor(base, min + IVec3::Y, max + IVec3::Y, kind, None)
 }
 
 /// A pitched roof planned over a block of tiles, in a kind; a flat roof planned there, with
@@ -154,19 +229,28 @@ pub fn opening_cubes(tiles: &[IVec3], panel: Panel) -> Vec<IVec3> {
         .collect()
 }
 
-/// An opening planned into a wall: its planned cubes made open. Cubes already open are
-/// left as they are; what is built is refused by the operation, with its reason.
+/// An opening into a wall: its planned cubes with nothing in them made open, and those with
+/// something in marked to be carved out, which building then takes out a course at a time
+/// from under the wall over it and makes open (construction-001, experience 4). Cubes
+/// already open or marked are left as they are; what cannot be is refused by the
+/// operation, with its reason.
 pub fn opening(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
-    let cubes: Vec<[i32; 3]> = cubes
-        .iter()
-        .filter(|&&at| base.cube(at).is_none_or(|cube| cube.fill != Fill::Open))
-        .map(|at| at.to_array())
-        .collect();
-    if cubes.is_empty() {
-        Vec::new()
-    } else {
-        vec![Op::Open { cubes }]
+    let (mut open, mut carve) = (Vec::new(), Vec::new());
+    for &at in cubes {
+        match base.cube(at) {
+            Some(cube) if cube.fill == Fill::Open || cube.pending == Pending::Carve => {}
+            Some(cube) if cube.level() > 0 => carve.push(at.to_array()),
+            _ => open.push(at.to_array()),
+        }
     }
+    let mut ops = Vec::new();
+    if !open.is_empty() {
+        ops.push(Op::Open { cubes: open });
+    }
+    if !carve.is_empty() {
+        ops.push(Op::Carve { cubes: carve });
+    }
+    ops
 }
 
 /// The opening a cube is part of: every open cube joined to it, side by side and up and
@@ -237,7 +321,14 @@ mod tests {
         let rules = Rules::default();
         let cx = Context::free(&rules);
         let mut base = Base::default();
-        let ops = room(&base, IVec3::new(0, 0, 0), IVec3::new(9, 0, 7), LOGS, STONE);
+        let ops = room(
+            &base,
+            IVec3::new(0, 0, 0),
+            IVec3::new(9, 0, 7),
+            LOGS,
+            STONE,
+            None,
+        );
         assert_eq!(ops.len(), 6);
         base.act_all(&ops, &cx).unwrap();
         assert_eq!(base.parts().count(), 6);
@@ -254,7 +345,69 @@ mod tests {
                 .all(|(_, cube)| cube.state == State::Planned { level: 0 })
         );
         // Laid again over itself, it lays nothing.
-        assert!(room(&base, IVec3::new(0, 0, 0), IVec3::new(9, 0, 7), LOGS, STONE).is_empty());
+        assert!(
+            room(
+                &base,
+                IVec3::new(0, 0, 0),
+                IVec3::new(9, 0, 7),
+                LOGS,
+                STONE,
+                None
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_room_on_a_slope_stands_on_a_footing_laid_first_down_to_the_ground() {
+        let rules = Rules::default();
+        let cx = Context::free(&rules);
+        let mut base = Base::default();
+        // The ground falls away to the east, 20 cm a column, from the floor's level.
+        let ground = |column: [i32; 2]| (-20 * column[0]) as i16;
+        let footings = Footings {
+            kind: STONE,
+            ground_cm: &ground,
+        };
+        let (min, max) = (IVec3::new(0, 0, 0), IVec3::new(9, 0, 7));
+        let ops = room(&base, min, max, LOGS, LOGS, Some(footings));
+        assert_eq!(ops.len(), 7, "a footing, a floor, four walls and a roof");
+        base.act_all(&ops, &cx).unwrap();
+        // The footing is the first part, in stone, under every column of the walls.
+        let footing: Vec<IVec3> = base.cubes_of(PartId(0)).map(|(at, _)| at).collect();
+        assert_eq!(base.part(PartId(0)).unwrap().kind, STONE);
+        let columns: BTreeSet<[i32; 2]> = footing.iter().map(|at| [at.x, at.z]).collect();
+        assert_eq!(columns.len(), 32);
+        for column in columns {
+            let ys: Vec<i32> = footing
+                .iter()
+                .filter(|at| [at.x, at.z] == column)
+                .map(|at| at.y)
+                .collect();
+            let lowest = *ys.iter().min().unwrap();
+            assert_eq!(*ys.iter().max().unwrap(), -1, "from the floor's layer");
+            // Down to the cube the ground passes through, and no further.
+            let ground = i32::from(ground(column));
+            assert!(lowest * cube_cm() <= ground, "{column:?}");
+            assert!(
+                lowest == -1 || (lowest + 1) * cube_cm() > ground,
+                "{column:?}"
+            );
+        }
+        // The floor is inside the walls only, over nothing on the low side.
+        assert_eq!(base.progress(PartId(1)).cubes, 48);
+        // Laid again, nothing.
+        assert!(room(&base, min, max, LOGS, LOGS, Some(footings)).is_empty());
+        let upstairs = room(
+            &base,
+            min + IVec3::Y,
+            max + IVec3::Y,
+            LOGS,
+            LOGS,
+            Some(footings),
+        );
+        // Higher up, no footing, and its floor the flat roof below: four walls and a roof.
+        assert_eq!(upstairs.len(), 5);
     }
 
     #[test]
@@ -263,7 +416,14 @@ mod tests {
         let cx = Context::free(&rules);
         let mut base = Base::default();
         base.act_all(
-            &room(&base, IVec3::new(0, 0, 0), IVec3::new(9, 0, 7), LOGS, LOGS),
+            &room(
+                &base,
+                IVec3::new(0, 0, 0),
+                IVec3::new(9, 0, 7),
+                LOGS,
+                LOGS,
+                None,
+            ),
             &cx,
         )
         .unwrap();
@@ -290,7 +450,14 @@ mod tests {
         let cx = Context::free(&rules);
         let mut base = Base::default();
         base.act_all(
-            &room(&base, IVec3::new(0, 0, 0), IVec3::new(9, 0, 7), LOGS, LOGS),
+            &room(
+                &base,
+                IVec3::new(0, 0, 0),
+                IVec3::new(9, 0, 7),
+                LOGS,
+                LOGS,
+                None,
+            ),
             &cx,
         )
         .unwrap();

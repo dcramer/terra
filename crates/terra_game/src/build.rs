@@ -35,10 +35,10 @@ mod remote;
 mod sheet;
 
 use draw::redraw;
-use draw::{KitMaterials, Ramp, kit_materials};
+use draw::{KitMaterials, kit_materials};
+use terra_build::layout::ground::Flight;
 
 const REACH_M: f32 = 300.0;
-const CONCRETE: Color = Color::srgb(0.5, 0.48, 0.47);
 
 /// Present when something else is driving construction, such as a player holding a
 /// builder tool. The keys and camera here then stand aside.
@@ -69,15 +69,17 @@ pub(super) struct Build {
     /// Whether its doors and windows are props fitted into it (the player's base), rather
     /// than drawn by its kit in every opening (a village's houses, the kit sheet).
     pub fitted_props: bool,
-    /// Steps from each ground-floor door down to the ground. A walker treats each flight
-    /// as a ramp.
-    ramps: Vec<Ramp>,
+    /// Whether it is built by plans, as the player's base is, rather than laid whole by the
+    /// shortcuts: it lays its own footings as plans, and its doors and windows are drawn,
+    /// opened and shut by `props`.
+    pub by_plans: bool,
+    /// Stone steps from each ground-floor door down to the ground. A walker treats each
+    /// flight as a ramp.
+    flights: Vec<Flight>,
     /// Where it stands on the ground, as the world sees it, remade with every redraw.
     pub footprint: Footprint,
     structure: Entity,
     glass: Entity,
-    foundation: Entity,
-    steps: Entity,
     /// With kits, walls of their kinds are laid as their pieces (docs/building-kits.md), drawn as
     /// they stand.
     pub kits: Option<Arc<Kits>>,
@@ -113,9 +115,6 @@ pub enum Shown {
 /// How many operations are kept before they are folded into a snapshot.
 const FOLD_AFTER: usize = 400;
 
-/// How much ground a room set into it clears round its walls.
-const ROOM_CLEARANCE_M: f32 = 0.2;
-
 /// The build under construction by the player, and where it stands.
 #[derive(Resource, Deref, DerefMut)]
 pub(super) struct Site {
@@ -144,13 +143,12 @@ fn keep_footprint(
 #[derive(Component, Deref, DerefMut)]
 pub(super) struct Built(pub Build);
 
-/// What every build is drawn with: its structure, its glass, and the concrete of its
-/// foundations and steps. Colour comes from each triangle, so these serve every build.
+/// What every build is drawn with: its structure and its glass, whose colour comes from
+/// each triangle, so they serve every build, and its kits' materials.
 #[derive(Resource, Clone)]
 pub(super) struct BuildLook {
     structure: Handle<StandardMaterial>,
     glass: Handle<StandardMaterial>,
-    concrete: Handle<StandardMaterial>,
     /// A plan's pieces not yet in, and the next one.
     ghost: Handle<StandardMaterial>,
     next: Handle<StandardMaterial>,
@@ -316,8 +314,6 @@ impl Build {
                 .id()
         };
         let structure = part("structure", &look.structure);
-        let foundation = part("foundation", &look.concrete);
-        let steps = part("steps", &look.concrete);
         let glass = part("glass", &look.glass);
         let pieces = part("pieces", &look.structure);
         commands.entity(glass).insert(NotShadowCaster);
@@ -331,8 +327,9 @@ impl Build {
             next: BTreeSet::new(),
             stale: false,
             fitted_props: false,
+            by_plans: false,
             revision: 0,
-            ramps: Vec::new(),
+            flights: Vec::new(),
             footprint: Footprint {
                 frame,
                 cell_m: CELL_M,
@@ -340,8 +337,6 @@ impl Build {
             },
             structure,
             glass,
-            foundation,
-            steps,
             kits: look.kits.clone(),
             shown: Shown::Built,
             standing: None,
@@ -357,12 +352,15 @@ impl Build {
         }
     }
 
-    /// A point on the ground a little beyond the foot of the first door's ramp, facing
-    /// which a walker would climb the ramp into the base. Returns the point and the
-    /// direction to face, both in the base's own space.
+    /// A point on the ground a little beyond the foot of the first door's steps, facing
+    /// which a walker would climb them into the base. Returns the point and the direction
+    /// to face, both in the base's own space.
     pub(super) fn approach(&self) -> (Vec3, Vec3) {
-        match self.ramps.first() {
-            Some(ramp) => (ramp.top + ramp.outward * (ramp.length + 2.5), -ramp.outward),
+        match self.flights.first() {
+            Some(flight) => (
+                flight.top + flight.outward * (flight.length + 2.5),
+                -flight.outward,
+            ),
             None => (OUTSIDE_DOOR, Vec3::NEG_Z),
         }
     }
@@ -371,9 +369,9 @@ impl Build {
     /// floor, a roof or a ramp, whichever is highest within a step of the feet.
     pub(super) fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
         let ramp = self
-            .ramps
+            .flights
             .iter()
-            .filter_map(|ramp| ramp.height_at(point))
+            .filter_map(|flight| flight.height_at(point))
             .filter(|&height| height <= point.y + walker.step_up)
             .max_by(|a, b| a.total_cmp(b));
         match (self.walkable().support(point, walker), ramp) {
@@ -403,13 +401,7 @@ impl Build {
         meshes: &mut Assets<Mesh>,
     ) {
         self.frame = frame;
-        for part in [
-            self.structure,
-            self.glass,
-            self.foundation,
-            self.steps,
-            self.pieces,
-        ] {
+        for part in [self.structure, self.glass, self.pieces] {
             commands.entity(part).insert(frame);
         }
         self.revision += 1;
@@ -419,19 +411,20 @@ impl Build {
     /// Applies several operations as one act, and redraws the base once. Returns whether
     /// anything changed.
     /// The ground a room from one tile to another would cut away to stand in it: its
-    /// whole space from the floor to above the roof, and a little round its walls, so a
-    /// room set into a slope has room. What is under the floor stays, for the foundation.
+    /// whole space from the floor to above the roof, within its walls' outer faces and no
+    /// further, since the ground outside a building is not changed (D131, D193). What is
+    /// under the floor stays, for its footings.
     pub(super) fn cut_for_room(&self, min: IVec3, max: IVec3) -> Operation {
         let low = Vec3::new(
             min.x as f32 * CELL_M,
             min.y as f32 * STOREY_M,
             min.z as f32 * CELL_M,
-        ) - Vec3::new(ROOM_CLEARANCE_M, 0.05, ROOM_CLEARANCE_M);
+        ) - Vec3::new(0.0, 0.05, 0.0);
         let high = Vec3::new(
             (max.x + 1) as f32 * CELL_M,
             (max.y + 1) as f32 * STOREY_M + 0.6,
             (max.z + 1) as f32 * CELL_M,
-        ) + Vec3::new(ROOM_CLEARANCE_M, 0.0, ROOM_CLEARANCE_M);
+        );
         Operation::DigBox {
             centre: self.frame.transform_point((low + high) * 0.5),
             half: (high - low) * 0.5,
@@ -454,6 +447,7 @@ impl Build {
             }
         }
         if changed {
+            self.lay_footings(planet);
             self.revision += 1;
             info!("Applied {} operations, such as {:?}", ops.len(), ops[0]);
             redraw(commands, self, planet, meshes);
@@ -538,6 +532,7 @@ impl Build {
         let changed = self.base.apply(op);
         if changed {
             self.operations.push(op);
+            self.lay_footings(planet);
             self.revision += 1;
             info!("Applied {op:?}");
             redraw(commands, self, planet, meshes);
@@ -546,6 +541,51 @@ impl Build {
         }
         changed
     }
+
+    /// Footings under what the shortcuts built, down to the planet's ground (D194), as
+    /// built cubes of the footings' kind. The player's base, built by plans, lays its
+    /// footings as plans instead.
+    fn lay_footings(&mut self, planet: &Planet) {
+        if self.by_plans {
+            return;
+        }
+        let Some(kind) = self.kits.as_deref().and_then(footing_kind) else {
+            return;
+        };
+        let frame = self.frame;
+        self.base
+            .lay_footings(kind, |column| ground_cm(&frame, planet, column));
+    }
+}
+
+/// The kind footings are laid in (D194): stone, the first kit laid as blocks.
+pub(super) fn footing_kind(kits: &Kits) -> Option<Kind> {
+    kits.0
+        .iter()
+        .find(|kit| kit.pattern == Pattern::Masonry)
+        .map(|kit| kit.kind())
+}
+
+/// How far a footing reaches below the lowest ground under its column, so no gap shows
+/// under it on a slope.
+const FOOTING_INTO_GROUND_M: f32 = 0.04;
+
+/// The ground's height under a column of a build, in centimetres in its own space: the
+/// lowest under its corners and its middle, a little lower still, so a footing down to it
+/// is set into the ground all round.
+pub(super) fn ground_cm(frame: &Transform, planet: &Planet, column: [i32; 2]) -> i16 {
+    let lowest = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)]
+        .map(|(dx, dz)| {
+            let at = Vec3::new(
+                (column[0] as f32 + dx) * CELL_M,
+                0.0,
+                (column[1] as f32 + dz) * CELL_M,
+            );
+            -planet.distance(frame.transform_point(at))
+        })
+        .into_iter()
+        .fold(f32::MAX, f32::min);
+    terra_build::Sample::metres(column, lowest - FOOTING_INTO_GROUND_M).height_cm
 }
 
 /// Where a base begun at a point on the ground stands: level there, its floor at the ground,
@@ -584,11 +624,6 @@ fn setup(
             reflectance: 0.7,
             cull_mode: None,
             double_sided: true,
-            ..default()
-        }),
-        concrete: materials.add(StandardMaterial {
-            base_color: CONCRETE,
-            perceptual_roughness: 0.95,
             ..default()
         }),
         ghost: materials.add(StandardMaterial {
@@ -633,6 +668,7 @@ fn setup(
     let mut build = Build::new(&mut commands, &look, frame, "Base");
     // The player's base is built by plans, its doors and windows fitted as props.
     build.fitted_props = driven.is_some();
+    build.by_plans = driven.is_some();
     if let Some(kits) = look.kits.as_deref() {
         commands.insert_resource(act::BuildRules {
             rules: kits.rules(),
@@ -644,6 +680,7 @@ fn setup(
                 .collect(),
             names: kit_names(),
             budgets: Vec::new(),
+            footing: footing_kind(kits),
         });
     }
     let operations = if driven.is_some() {
