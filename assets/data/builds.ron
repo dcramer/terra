@@ -31,6 +31,12 @@
 //              Window   windows, by width in metres, and the glass's sill above the floor
 //                       and top below the ceiling, in metres: whole cubes, half a metre
 //                       each (D181)
+//              Floor    a floor drawn alone, on a storey
+//              Flight   stairs or a ramp up a storey (D193): its name, whether it is a
+//                       ramp of slopes rather than stairs, and how wide in metres
+//              Post     a post a storey high, carrying the floor above (D193)
+//              Block    one cube of a shape set against what is aimed at (D193): each
+//                       variant's name and shape, Whole, Half, Stair or Slope
 //              Door, Remove, Move   the hammer's other work
 (
     structure: (
@@ -71,6 +77,19 @@
             (name: "Flat", style: None),
         ])),
         (name: "Wall", tab: Structure, kind: Wall([("3 m", 3.0), ("1.5 m", 1.5), ("0.5 m", 0.5)])),
+        (name: "Floor", tab: Structure, kind: Floor),
+        (name: "Stairs", tab: Structure, kind: Flight([
+            (name: "Stairs, 1 m wide", ramp: false, wide: 1.0),
+            (name: "Stairs, 1.5 m wide", ramp: false, wide: 1.5),
+            (name: "Ramp, 1 m wide", ramp: true, wide: 1.0),
+        ])),
+        (name: "Post", tab: Structure, kind: Post),
+        (name: "Block", tab: Structure, kind: Block([
+            ("Cube", Whole),
+            ("Half", Half),
+            ("Stair", Stair),
+            ("Slope", Slope),
+        ])),
         (name: "Window", tab: Openings, kind: Window([
             ("1.5 m", 1.5, (1.0, 1.0)),
             ("3 m", 3.0, (1.0, 1.0)),

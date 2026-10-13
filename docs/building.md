@@ -59,7 +59,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Carrying big materials by hand, better transport later | The Forest | Missing; the direction (D140) |
 | A base level with the ground where it is begun | Ark Ascended's heights | Built: the base's grid is set where its claim stone goes |
 | Building on slopes | All, differently | Built: what is built cuts into the ground (D131) and stands on a footing below |
-| Floors above and below, and stairs | All | Storeys above and below the base's floor built; stairs missing |
+| Floors above and below, and stairs | All | Storeys above and below the base's floor built; stairs and ramps up a storey built (D220) |
 | Roofs | All | Built, a first version: gable, hip, lean-to and flat, over what walls enclose or drawn as a rectangle |
 | Doors that open, close and lock | All | Doorways only |
 | Fences, gates, palisades | Ark, The Forest, Rust | Missing |
@@ -286,8 +286,8 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 | Roof: gable, hip, lean-to, flat | Built, a first version ([building-tech.md](building-tech.md#roofs-a-height-field)) |
 | Window and doorway, cubes left open or glazed | Built |
 | Carving cubes by hand, any shape | Missing; the operation exists |
-| Post, a column of cubes (D179) | Missing |
-| A storey up, and stairs or a ladder to it | Storeys built; stairs missing |
+| Post, a column of cubes (D179) | Built: a column of post cubes, a storey high (D220) |
+| A storey up, and stairs or a ladder to it | Storeys and stairs built (D220); ladders missing |
 | Footing under walls on the ground | Built: stone cubes down to the ground, laid first (D206) |
 | Fence, wall, gate and palisade, drawn as a line | Missing; needed once bases are attacked (D90) |
 | Door that opens, closes and locks | Fitted into an opening, opened and shut with F; no lock (D201) |
@@ -423,7 +423,7 @@ For the developers to reorder. Each step is small enough to play and judge.
 1. **The controls, locked, and placing finished**: the keys above, drawing, what blocks a ghost shown through walls, and snapping as [Snapping and feel](#snapping-and-feel) says. These hold whatever comes after.
 2. **Plans, then constructing** (D139): walls, floors and roofs laid as plans, built part by part from the pack and from storage in the claim (D141); doors and windows carved out and fitted.
 3. **Large materials** (D140): logs that lie where trees fall, carried on the shoulder; a log pile to keep them, later unlocked.
-4. **Up and down**: floors drawn on their own, posts, stairs and ladders.
+4. **Up and down**: floors drawn on their own, posts, stairs and ramps (built, D220); ladders.
 5. **Doors and defences**: doors that open and lock by the claim; fences, walls and gates drawn as a line.
 6. **Damage and repair**, with the first attacks on a base (D90).
 7. **More kinds of construction**, and changing them in place; better transport, unlocked (D140).

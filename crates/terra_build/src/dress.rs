@@ -629,6 +629,77 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     }
 }
 
+/// A kit's masks laid over a roof's covering and its mortar, in its base's own space, as
+/// the role pieces' are (D215): toward its eaves, where the rain runs off and lingers, the
+/// covering greened by moss and lichen in blotches; up toward its ridge and hips greyed by
+/// the sun and weather, as timber is; along its eaves and verges, its edges worn lighter.
+pub fn roof_mask(surface: &mut Surface, kit: &Kit, base: &Base) {
+    let masks = &kit.dress.masks;
+    if masks.moss <= 0.0 && masks.weather <= 0.0 && masks.wear <= 0.0 {
+        return;
+    }
+    // Each roof: its sections, the walls' top under it and its highest rise.
+    let sections: Vec<(crate::RoofSection, f32, f32)> = base
+        .sections()
+        .iter()
+        .map(|section| {
+            let (low, high) = section.bounds();
+            let span = high - low;
+            let run = match (section.style, section.along_x) {
+                (crate::RoofStyle::Hip, _) => span.x.min(span.y) * 0.5,
+                (crate::RoofStyle::Gable, true) => span.y * 0.5,
+                (crate::RoofStyle::Gable, false) => span.x * 0.5,
+                (crate::RoofStyle::LeanTo, true) => span.y,
+                (crate::RoofStyle::LeanTo, false) => span.x,
+            };
+            let eaves = (section.storey() + 1) as f32 * crate::STOREY_M;
+            (*section, eaves, (run * section.pitch).max(0.1))
+        })
+        .collect();
+    let reach = kit.eaves + 0.3;
+    let shade = |p: Vec3, c: &mut [f32; 3]| {
+        let flat = glam::Vec2::new(p.x, p.z);
+        // The section whose covering is nearest the point's height.
+        let found = sections
+            .iter()
+            .filter_map(|(section, eaves, highest)| {
+                let rise = section.rise_beyond(flat, reach)?;
+                let (low, high) = section.bounds();
+                let inside = (flat - low).min(high - flat).min_element();
+                Some(((eaves + rise - p.y).abs(), rise / highest, inside))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        let Some((_, up, inside)) = found else {
+            return;
+        };
+        let up = up.clamp(-0.5, 1.0);
+        let mut colour = Vec3::from_array(*c);
+        if masks.moss > 0.0 {
+            let blotch = smooth(p, 0.6, 17) * 0.7 + smooth(p, 2.1, 19) * 0.6;
+            let low = libm::powf((1.0 - up).clamp(0.0, 1.5) / 1.5, 1.2);
+            let moss = (masks.moss * low * blotch * 1.4).clamp(0.0, 0.85);
+            colour = colour.lerp(colour * Vec3::from_array(masks.moss_tint), moss);
+        }
+        if masks.weather > 0.0 {
+            let grey = masks.weather * up.max(0.0) * (0.4 + smooth(p, 1.3, 23));
+            let luma = (colour.x + colour.y + colour.z) / 3.0;
+            colour = colour.lerp(Vec3::splat(luma * 1.08), grey.clamp(0.0, 1.0));
+        }
+        // Lighter along its open edges, which take the weather first.
+        let worn = masks.wear.max(masks.weather * 0.5);
+        let edge = (1.0 - (inside + kit.eaves) / 0.5).clamp(0.0, 1.0);
+        colour *= 1.0 + worn * edge * (0.5 + smooth(p, 0.4, 29));
+        *c = colour.to_array();
+    };
+    for (p, c) in surface.positions.iter().zip(surface.colours.iter_mut()) {
+        shade(*p, c);
+    }
+    let shared = &mut surface.shared;
+    for (p, c) in shared.positions.iter().zip(shared.colours.iter_mut()) {
+        shade(*p, c);
+    }
+}
+
 /// How many triangles a profile swept along a cube's edge has at most: along it in three
 /// lengths, between its joints' chamfers, and its two ends closed.
 pub fn trim_triangles(profile: &[[f32; 2]]) -> usize {

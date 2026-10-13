@@ -141,6 +141,42 @@ pub fn prompt(
             ),
         ),
         (Kind::Roof(_), _) => "Aim into a room, or draw over walls".to_string(),
+        (Kind::Floor, Target::Ground { adds: false, .. }) => "That has a floor already".to_string(),
+        (Kind::Floor, Target::Ground { .. }) => drawn(
+            "floor",
+            format!(
+                "Scroll  turn      Shift Scroll  storey{}",
+                storey(builder.storey)
+            ),
+        ),
+        (Kind::Floor, _) => "Aim at the ground or a floor".to_string(),
+        (Kind::Flight(shapes), Target::Place { .. }) => {
+            let what = if shapes[builder.variant()].ramp {
+                "this ramp's"
+            } else {
+                "these stairs'"
+            };
+            format!(
+                "{tap}  lay {what} plan, up a storey {}      Scroll  turn      {next}  kind",
+                rising(builder)
+            )
+        }
+        (Kind::Post, Target::Place { .. }) => {
+            format!("{tap}  lay this post's plan, a storey high")
+        }
+        (Kind::Block(shapes), Target::Place { .. }) => {
+            if shapes[builder.variant()].1.turns() {
+                format!(
+                    "{tap}  lay this block's plan, rising {}      Scroll  turn      {next}  shape",
+                    rising(builder)
+                )
+            } else {
+                format!("{tap}  lay this block's plan      {next}  shape")
+            }
+        }
+        (Kind::Flight(_) | Kind::Post | Kind::Block(_), _) => {
+            "Aim at the ground, a floor or a cube".to_string()
+        }
         (Kind::Items(_) | Kind::Move, Target::Spot { blocked, .. }) => match blocked {
             None if builder.is_carrying() => format!(
                 "{tap}  put it down      Scroll  turn      Shift Scroll  raise{}      {}  put it back",
@@ -176,6 +212,16 @@ pub fn prompt(
             )
         }
         _ => action,
+    }
+}
+
+/// Which way stairs, a ramp or a cut block would rise, to follow its key: "north".
+fn rising(builder: &Builder) -> &'static str {
+    match builder.facing() {
+        terra_build::Facing::North => "north",
+        terra_build::Facing::East => "east",
+        terra_build::Facing::South => "south",
+        terra_build::Facing::West => "west",
     }
 }
 

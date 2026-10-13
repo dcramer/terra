@@ -281,7 +281,13 @@ fn cost_of(builds: &Builds, items: &Items, part: usize, variant: usize) -> Strin
     match &builds.part(part).kind {
         Kind::Items(each) => wall(&each[variant.min(each.len() - 1)].cost),
         // A plan costs nothing; what goes into it, as its kind's kit says, piece by piece.
-        Kind::Room(_) | Kind::Roof(_) | Kind::Wall(_) => "Plan free, built piece by piece".into(),
+        Kind::Room(_)
+        | Kind::Roof(_)
+        | Kind::Wall(_)
+        | Kind::Floor
+        | Kind::Flight(_)
+        | Kind::Post
+        | Kind::Block(_) => "Plan free, built piece by piece".into(),
         Kind::Window(_) => format!("{} each, fitted", wall(builds.window())),
         Kind::Door => format!("{} each, fitted", wall(builds.door())),
         Kind::Remove | Kind::Move => String::new(),

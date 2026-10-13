@@ -640,6 +640,10 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
         for ((kind, material), surface) in built.iter_mut() {
             if let Some(kit) = kits.of(*kind) {
                 crate::dress::mask(surface, kit, *material, section.base);
+                // A roof's own, by where on the roof each point is.
+                if matches!(material, Material::Covering | Material::Flashing) {
+                    crate::dress::roof_mask(surface, kit, section.base);
+                }
             }
         }
         match detail {

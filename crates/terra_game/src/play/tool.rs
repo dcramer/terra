@@ -14,8 +14,8 @@
 //!   Drag left mouse    draw a room, a wall or a roof; let go and its plan is laid,
 //!                      a click laying its own size; hold still on a plan to build it
 //!   Left click         pick an item up and put it down, in move mode
-//!   Scroll wheel       turn an item, a room or a wall; switch a wall between
-//!                      pushing out and pulling in                        (or Z and C)
+//!   Scroll wheel       turn an item, a room, a wall, or which way stairs, a ramp or
+//!                      a cut block rises                                 (or Z and C)
 //!   R                  the next variant of the part
 //!   Q                  take-apart mode, and back
 //!   F                  move mode, and back
@@ -136,6 +136,11 @@ pub enum Target {
     /// A door or window fitted into the base, by its lowest cube.
     Fitted {
         at: [i32; 3],
+    },
+    /// Where a flight, a post or a block would start: the cube against the face aimed at,
+    /// or over the ground (D193).
+    Place {
+        at: IVec3,
     },
 }
 
@@ -293,6 +298,8 @@ pub struct Builder {
     room_turned: bool,
     /// Whether the next interior wall runs north and south instead of east and west.
     wall_turned: bool,
+    /// How many quarter turns clockwise from north the next flight, stair or slope rises.
+    facing: i32,
     /// The wall cells the thing aimed at would change. Empty when it would not fit.
     run: Vec<IVec3>,
     /// Whether items snap to the grid and turn in eighths.
@@ -344,6 +351,7 @@ impl Default for Builder {
             drag: None,
             room_turned: false,
             wall_turned: false,
+            facing: 0,
             run: Vec::new(),
             snap: true,
             snapping: true,
@@ -437,8 +445,22 @@ impl Builder {
     fn draws(&self, builds: &Builds) -> bool {
         matches!(
             self.picked(builds).kind,
-            Kind::Room(_) | Kind::Roof(_) | Kind::Wall(_)
+            Kind::Room(_) | Kind::Roof(_) | Kind::Wall(_) | Kind::Floor
         )
+    }
+
+    /// Which way the next flight, stair or slope rises.
+    pub fn facing(&self) -> terra_build::Facing {
+        terra_build::Facing::North.turned(self.facing)
+    }
+
+    /// Whether the wheel turns which way the part in hand rises.
+    fn faces(&self, builds: &Builds) -> bool {
+        match &self.picked(builds).kind {
+            Kind::Flight(_) => true,
+            Kind::Block(shapes) => shapes[self.variant()].1.turns(),
+            _ => false,
+        }
     }
 
     /// Whether the mouse wheel turns what is in hand, rather than moving the camera: while
@@ -447,6 +469,7 @@ impl Builder {
         !self.stowed
             && (self.item(builds).is_some()
                 || self.room(builds).is_some()
+                || self.faces(builds)
                 || matches!(self.picked(builds).kind, Kind::Wall(_)))
     }
 
@@ -486,6 +509,7 @@ impl Builder {
     fn room(&self, builds: &Builds) -> Option<IVec2> {
         match &self.picked(builds).kind {
             Kind::Roof(_) => Some(IVec2::splat(cells(3.0))),
+            Kind::Floor => Some(IVec2::splat(cells(2.0))),
             Kind::Room(shapes) => {
                 let [east, south] = shapes[self.variant()].metres.map(cells);
                 Some(if self.room_turned {
@@ -682,6 +706,8 @@ fn choose(
                     FREE_TURN
                 };
                 builder.turn = (builder.turn + step * builder.wheel as f32).rem_euclid(360.0);
+            } else if builder.faces(&builds) {
+                builder.facing = (builder.facing + builder.wheel).rem_euclid(4);
             } else if builder.room(&builds).is_some() {
                 builder.room_turned = !builder.room_turned;
             } else if matches!(builder.picked(&builds).kind, Kind::Wall(_)) {
@@ -712,7 +738,7 @@ fn target_point(target: &Target, props: &Query<&Prop>) -> Option<Vec3> {
         )),
         Target::Spot { at, .. } => Some(at.with_y(0.0)),
         Target::Prop(entity) => props.get(entity).ok().map(|prop| prop.at.with_y(0.0)),
-        Target::Structure { cube } => Some(tile(cube.to_array())),
+        Target::Structure { cube } | Target::Place { at: cube } => Some(tile(cube.to_array())),
         Target::Fitted { at } => Some(tile(at)),
     }
 }

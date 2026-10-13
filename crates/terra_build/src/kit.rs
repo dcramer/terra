@@ -124,6 +124,10 @@ pub struct Masks {
     pub wear: f32,
     /// How much greyer timber is three metres up, as a fraction.
     pub weather: f32,
+    /// How much a roof's covering is greened by moss and lichen toward its eaves, where the
+    /// rain runs off and lingers, as a fraction, and their colour (sRGB).
+    pub moss: f32,
+    pub moss_tint: [f32; 3],
 }
 
 impl Default for Masks {
@@ -134,6 +138,8 @@ impl Default for Masks {
             dirt_tint: [1.0; 3],
             wear: 0.0,
             weather: 0.0,
+            moss: 0.0,
+            moss_tint: [1.0; 3],
         }
     }
 }

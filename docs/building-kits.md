@@ -46,7 +46,7 @@ Each log differs from the next by its seed, from its place, by as much as the ki
 | Border | Along a floor a wall stands on | A border flag | | |
 | Inside | Up an inside corner | (nothing) | | |
 
-Profiles and corner stones are drawn in Blender from a source in numbers, `art/kits/<kit>/pieces.json`, into a file the kit names (`tools/kits`); a profile is swept a cube at a time, mitred out and back round corners, with a chamfered joint where it runs on and its ends closed; each piece stands out up to an eighth of a cube (D192) and casts the shadow line that makes a wall read as built. Masks shade what a kit draws: dirt rising unevenly from the ground, worn outside edges, timber greyed higher up. Dressed stone is Poly Haven's `rock_boulder_dry` (CC0), tinted toward the rubble; hewn members `rough_wood`. Far off the bands stay and the corner stones drop out. A kit's dress costs about 140 triangles a cube near for stone, 60 for logs, 90 for hewn, averaged over the checker's cabin; `cargo xtask kits` checks every role a kit dresses has its piece, each within an eighth of a cube, and their budgets (600 triangles a metre of profile, 320 a corner stone).
+Profiles and corner stones are drawn in Blender from a source in numbers, `art/kits/<kit>/pieces.json`, into a file the kit names (`tools/kits`); a profile is swept a cube at a time, mitred out and back round corners, with a chamfered joint where it runs on and its ends closed; each piece stands out up to an eighth of a cube (D192) and casts the shadow line that makes a wall read as built. Masks shade what a kit draws: dirt rising unevenly from the ground, worn outside edges, timber greyed higher up; and a roof's covering greened by moss and lichen in blotches toward its eaves, greyed toward its ridge and worn lighter along its eaves and verges (D220). Dressed stone is Poly Haven's `rock_boulder_dry` (CC0), tinted toward the rubble; hewn members `rough_wood`. Far off the bands stay and the corner stones drop out. A kit's dress costs about 140 triangles a cube near for stone, 60 for logs, 90 for hewn, averaged over the checker's cabin; `cargo xtask kits` checks every role a kit dresses has its piece, each within an eighth of a cube, and their budgets (600 triangles a metre of profile, 320 a corner stone).
 
 **A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for timber; masonry, for block kinds drawn as their surface), its sizes, its timber (profile, notch, sides, taper, bend, unevenness, bark relief, daub, tints and how much each log varies), its materials, its props' models, its cost and its dress. A pine cabin, an oak one and a hewn-timber one are three files; nothing about a kind of timber is code. The log kit is `logs.ron`, under shakes; `hewn.ron` is hewn beams under thatch; `stone.ron` is fieldstone under slate.
 
@@ -105,6 +105,8 @@ Asked on 2026-10-12: "add a pillar to break up walls… arbitrarily? … giving 
 - **In the open**, posts hold up a porch roof or a lean-to, or make a fence's ends.
 - **Its kind can differ from the wall's**: a squared timber post or a stone pillar in a log wall. That is the next section.
 
+**Posts cut as posts** (D193, D220): the hammer's *Post* lays a column of cubes cut as posts, a storey high to the floor over it, on a footing on the ground. Each kit draws it as its file dresses `Post`: the log kit a round log a little thinner than its wall's, the hewn kit a squared beam, each on a pad of boards where it stands on something and under a short bolster across its top where something rests on it; the stone kit a pillar 36 cm square of its rubble, a drum a cube, with its plinth round the foot and its coping round the cap. A post collides and holds as a whole cube: a deck or a beam laid on it is joined through it, and nothing of it comes out while they rest on it.
+
 Placing a post on a wall already built is like a late corner. The built logs stay as they are and the post stands over them, so a post can be added to a finished wall as a detail, without taking the wall down.
 
 This is the first of what the developers called adding "a detail": a part placed on the skeleton that the kits lay themselves round. Beams, trims and corner stones could follow the same way, later.
@@ -121,11 +123,27 @@ Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 
 Built 2026-10-12: a base is laid by every kit in `assets/data/kits/` at once, each its own kind's cubes, so mixing is per cube. Logs end flush against stone, as they end at anything not open air; stone runs through corners and T's. The kit sheet has stone and logs meeting every way walls meet: a stone house under a hip roof, a log cabin on a stone plinth a metre high, an L, a T each way round, in line, stone pillars in a log wall, and a log cabin with a stone end wall.
 
+## Stairs, slopes and halves (D193, D220)
+
+A cube can be cut to a shape: a half (its lower half), a stair (two steps, each a quarter of a metre high and deep, rising toward a side) or a slope (a ramp up to a side). The hammer lays a *Stairs* flight, stairs or a ramp a metre or a metre and a half wide, up a storey to the floor above, each column whole cubes under its cut top; or one *Block* of any shape against the face aimed at, joining the plan of its kind beside it. The wheel turns which way it rises. Walked, each shape holds a walker at its top under their feet: a stair's two steps, a slope's ramp, a half's top.
+
+| | Stone | Logs and hewn |
+|---|---|---|
+| Stair | A stone a tread, rounded and displaced like the wall, a tread with a rounded nose on each | Logs across the flight, a log along each step's nose, a board tread on each step, a stringer up each open side |
+| Slope | The stone's surface cut to the ramp, flagstones on it, a coping raking up each open side | Boards up the fall of the ramp, a cleat across them, a stringer up each open side |
+| Half | The stone's surface cut to half height, flagstones on it, a coping round its open top | A low deck: boards on a rim of beams, joists where it is in the air |
+
+**Slopes are not roofs.** A roof is laid by its kit from roof sections over walls (D209), a height field of courses, ridges and eaves; a slope is a ramp of its own kind's material, and under or beside a roof it is a cube like any other.
+
+**A solid mass of timber** (a platform, a slab: whole cubes of a timber kind side by side two by two on a layer) is laid as a framed deck, not as walls crossing: boards on top on joists where it is in the air, a rim of sawn beams stacked a course deep round its open sides, nothing inside it, and its sides below its top as walls.
+
 ## Between a building and the ground, and its floors (D206)
 
 **Footings** are stone cubes, the stone kit's, laid into every plan on the ground as a part of their own and built first: under each wall from the floor's layer, under a floor's edge from the layer below, down to the cube the ground passes through, so they are set into it all round and no gap shows on a slope. They are drawn as the stone's surface, one with any stone wall or floor they meet. A log cabin stands on a course of stone that rises to its floor on level ground and steps down the hill on a slope. The ground outside is never changed.
 
 **Floors** are drawn by their kind. A stone floor is the stone's surface, its top in flagstones (Poly Haven's `grey_stone_path`, CC0), flatter than its walls since it is walked on; a stone wall's top is capped in them too. A timber floor is a deck, made by the timber code: sawn boards two to a cube, as long as a tree gives, their joints staggered; each board drawn from one plank of `weathered_planks`, so no seam runs down a board; where the floor meets a wall standing on a footing, the boards run on to the logs' faces; a rim beam along any side left open, and joists under it where it is in the air.
+
+**A floor drawn alone**, with the hammer's *Floor* on any storey, with no walls on it, is finished at its edges: a timber deck with its rim of beams and its joists, a stone floor with its coping round the top and its plinth where it meets the ground.
 
 **Door steps** are stone slabs from each ground-floor door in an outside wall down to the ground, a riser of no more than 18 cm each, set into the ground; none where the threshold is less than a step up.
 
@@ -148,7 +166,7 @@ A ghost's covering is a plain sheet, without its courses, which costs a tenth as
 
 ## Checking it
 
-The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a door, windows and a gable roof, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71): To the east, every roof style (gable, hip, lean-to) over every plan (a rectangle, an L, a T, a U) in each kit and mixed, built, part-built and as a ghost; `--sheet-rows TEXT` lays only the rows whose names hold it, as `--sheet-rows "stone: L"`, since the whole sheet is heavy to lay.
+The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a door, windows and a gable roof, every shape in each kit (a platform on posts reached by stairs and a ramp, a step of halves, a post alone) and a floor alone, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71): To the east, every roof style (gable, hip, lean-to) over every plan (a rectangle, an L, a T, a U) in each kit and mixed, built, part-built and as a ghost; `--sheet-rows TEXT` lays only the rows whose names hold it, as `--sheet-rows "stone: L"`, since the whole sheet is heavy to lay.
 
 ```bash
 cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet --time 16 --vantage 13,9,-6,13,0.5,-26.5 --shot out/corners.png

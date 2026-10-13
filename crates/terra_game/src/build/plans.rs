@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 use terra_build::ground::{cube_cm, footing as footing_cubes};
 use terra_build::ops::{Op, Planned};
 use terra_build::{
-    Base, Fill, Kind, Panel, PartId, Pending, Prop, RoofSection, STOREY_CUBES, Shape, floor_layer,
-    wall_layer,
+    Base, Facing, Fill, Kind, Panel, PartId, Pending, Prop, RoofSection, STOREY_CUBES, Shape,
+    floor_layer, storey_of, wall_layer,
 };
 
 use bevy::math::{IVec2, IVec3};
@@ -24,14 +24,30 @@ fn plan(
     kind: Kind,
     cubes: impl IntoIterator<Item = IVec3>,
 ) -> Option<Op> {
+    shaped(
+        base,
+        part,
+        kind,
+        cubes.into_iter().map(|at| (at, Shape::Whole)),
+    )
+}
+
+/// A plan of these cubes, each cut to its shape (D193), in a part, leaving out any already
+/// there; none if all are.
+fn shaped(
+    base: &Base,
+    part: PartId,
+    kind: Kind,
+    cubes: impl IntoIterator<Item = (IVec3, Shape)>,
+) -> Option<Op> {
     let mut seen = BTreeSet::new();
     let cubes: Vec<Planned> = cubes
         .into_iter()
-        .filter(|&at| base.cube(at).is_none() && base.prop_in(at).is_none())
-        .filter(|at| seen.insert(at.to_array()))
-        .map(|at| Planned {
+        .filter(|&(at, _)| base.cube(at).is_none() && base.prop_in(at).is_none())
+        .filter(|(at, _)| seen.insert(at.to_array()))
+        .map(|(at, shape)| Planned {
             at: at.to_array(),
-            shape: Shape::Whole,
+            shape,
         })
         .collect();
     (!cubes.is_empty()).then(|| Op::LayPlan {
@@ -182,6 +198,74 @@ pub fn floor(
     let cubes = (min.x..=max.x).flat_map(|x| (min.z..=max.z).map(move |z| IVec3::new(x, layer, z)));
     ops.extend(plan(base, parts.next(), kind, cubes));
     ops
+}
+
+/// The layer of cubes the floor of the storey over a cube is: a flight climbs to it, a post
+/// carries it. A cube in a storey's floor layer, as one set into ground lower than the
+/// base's floor is, climbs to the floor over that storey.
+fn floor_over(cube: IVec3) -> i32 {
+    floor_layer(storey_of(cube.y + 1) + 1)
+}
+
+/// A flight of stairs or a ramp (D193), as one part, from its foot at `foot`, the first
+/// cube over the floor or ground it starts on, rising toward `facing` a cube a column up to
+/// the floor of the storey above, `wide` columns across: each column whole cubes under a
+/// stair or a slope. On the ground storey with footings, a footing under it first.
+pub fn flight(
+    base: &Base,
+    foot: IVec3,
+    facing: Facing,
+    wide: i32,
+    top: Shape,
+    kind: Kind,
+    footings: Option<Footings>,
+) -> Vec<Op> {
+    let mut parts = Numbers::of(base);
+    let rise = (floor_over(foot) - foot.y + 1).max(1);
+    let (forward, across) = (facing.step(), facing.turned(1).step());
+    let columns: Vec<IVec3> = (0..rise)
+        .flat_map(|i| (0..wide.max(1)).map(move |w| foot + forward * i + across * w + IVec3::Y * i))
+        .collect();
+    let mut ops = Vec::new();
+    if let Some(footings) = footings.filter(|_| storey_of(foot.y) == 0) {
+        let under = columns.iter().map(|top| ([top.x, top.z], foot.y - 1));
+        ops.extend(footings.plan(base, parts.next(), under));
+    }
+    let cubes = columns.iter().flat_map(|&top_cube| {
+        (foot.y..=top_cube.y).map(move |y| {
+            let at = top_cube.with_y(y);
+            (at, if y == top_cube.y { top } else { Shape::Whole })
+        })
+    });
+    ops.extend(shaped(base, parts.next(), kind, cubes));
+    ops
+}
+
+/// A post (D193), as one part: a column of post cubes from `foot` up to the floor of the
+/// storey above, which it carries. On the ground storey with footings, a footing under it.
+pub fn post(base: &Base, foot: IVec3, kind: Kind, footings: Option<Footings>) -> Vec<Op> {
+    let mut parts = Numbers::of(base);
+    let mut ops = Vec::new();
+    if let Some(footings) = footings.filter(|_| storey_of(foot.y) == 0) {
+        ops.extend(footings.plan(base, parts.next(), [([foot.x, foot.z], foot.y - 1)]));
+    }
+    let cubes = (foot.y..=floor_over(foot)).map(|y| (foot.with_y(y), Shape::Post));
+    ops.extend(shaped(base, parts.next(), kind, cubes));
+    ops
+}
+
+/// One cube of a shape, placed as Enshrouded's blocks are: in the part of a planned cube of
+/// its kind beside it, so a run of them is built as one; else a part of its own.
+pub fn block(base: &Base, at: IVec3, shape: Shape, kind: Kind) -> Vec<Op> {
+    let part = terra_build::support::FACES
+        .iter()
+        .filter_map(|&step| base.cube(at + step))
+        .find(|cube| cube.kind == kind && !cube.is_built() && cube.part.is_some())
+        .and_then(|cube| cube.part)
+        .unwrap_or_else(|| Numbers::of(base).next());
+    shaped(base, part, kind, [(at, shape)])
+        .into_iter()
+        .collect()
 }
 
 /// A flat roof over a block of tiles on a storey, as one part.
@@ -442,6 +526,60 @@ mod tests {
             prop_for(&base, IVec3::new(0, 2, 3), None).unwrap().kind,
             WINDOW
         );
+    }
+
+    #[test]
+    fn a_flight_climbs_a_storey_to_the_floor_above_and_a_post_carries_it() {
+        let rules = Rules::default();
+        let cx = Context::free(&rules);
+        let mut base = Base::default();
+        let ground = |_: [i32; 2]| 0i16;
+        let footings = Footings {
+            kind: STONE,
+            ground_cm: &ground,
+        };
+        let ops = flight(
+            &base,
+            IVec3::new(0, 0, 8),
+            Facing::North,
+            2,
+            Shape::Stair(Facing::North),
+            LOGS,
+            Some(footings),
+        );
+        assert_eq!(ops.len(), 2, "a footing and the flight");
+        base.act_all(&ops, &cx).unwrap();
+        // Six columns, two across, the last at the floor of the storey above.
+        let tops: Vec<(IVec3, Shape)> = base
+            .cubes()
+            .filter(|(_, cube)| cube.kind == LOGS && cube.shape != Shape::Whole)
+            .map(|(at, cube)| (at, cube.shape))
+            .collect();
+        assert_eq!(tops.len(), 12);
+        assert!(
+            tops.iter()
+                .all(|(_, shape)| *shape == Shape::Stair(Facing::North))
+        );
+        let highest = tops.iter().map(|(at, _)| at.y).max().unwrap();
+        assert_eq!(highest, floor_layer(1));
+        assert_eq!(tops.iter().map(|(at, _)| at.z).min(), Some(8 - 5));
+        // A post a storey high, to the floor over it, in a part of its own.
+        let post_ops = post(&base, IVec3::new(4, 0, 0), LOGS, None);
+        base.act_all(&post_ops, &cx).unwrap();
+        let column: Vec<i32> = base
+            .cubes()
+            .filter(|(_, cube)| cube.shape == Shape::Post)
+            .map(|(at, _)| at.y)
+            .collect();
+        assert_eq!(column, (0..=floor_layer(1)).collect::<Vec<_>>());
+        // A block beside a planned cube joins its part; one alone is a part of its own.
+        let parts = base.parts().count();
+        base.act_all(&block(&base, IVec3::new(5, 0, 0), Shape::Half, LOGS), &cx)
+            .unwrap();
+        assert_eq!(base.parts().count(), parts);
+        base.act_all(&block(&base, IVec3::new(9, 0, 0), Shape::Half, LOGS), &cx)
+            .unwrap();
+        assert_eq!(base.parts().count(), parts + 1);
     }
 
     #[test]

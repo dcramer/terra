@@ -24,8 +24,8 @@
 //             lintel, sill and jamb stones round every opening, a cap under a thinner wall
 //             standing on it, a fascia under an overhang, a tread on every step and a border
 //             round a floor; posts as pillars 36 cm square, a drum a cube, their base and cap
-//             dressed as a foot and a top are (D193); and the dirt rising from the ground
-//             and its corners worn
+//             dressed as a foot and a top are (D193); and the dirt rising from the ground,
+//             its corners worn, and its slates lichened toward the eaves
 (
     id: 2,
     pattern: Masonry,
@@ -80,7 +80,7 @@
             Post: Pillar(width: 0.36),
         },
         tint: (0.93, 0.91, 0.88),
-        masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14),
+        masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14, moss: 0.45, moss_tint: (0.72, 0.74, 0.58)),
     ),
     colours: (
         light: (0.62, 0.6, 0.56),

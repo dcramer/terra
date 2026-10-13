@@ -9,8 +9,9 @@
 // taking undone; a refusal where the roof rests on a wall; a second window cut into the
 // built wall, a course at a time from under the logs over it, giving the logs back; a door
 // and windows fitted; the shut door keeping the player out, and opened with the interact
-// key, letting them in; the ground outside the cabin as it was before it was planned; and
-// the game saved and loaded again, the base the same.
+// key, letting them in; the ground outside the cabin as it was before it was planned; a
+// deck a storey up on four posts beside it, reached by a flight of stairs (D193), built,
+// and walked up onto; and the game saved and loaded again, the base the same.
 //
 // One running game, driven live over the remote protocol (tools/sandbox, the `build.*`
 // methods in crates/terra_game/src/build/remote.rs). Screenshots of the plan, the cabin
@@ -30,10 +31,10 @@ const windows = game.onWsl && !here;
 class Done extends Error {}
 let failed = false;
 
-type Part = { id: number; kind: string; cubes: number; built: number; started: number; openings: number; done: boolean; min: number[]; max: number[] };
+type Part = { id: number; kind: string; cubes: number; shaped: number; built: number; started: number; openings: number; done: boolean; min: number[]; max: number[] };
 type Roof = { id: number; lowest: number; highest: number; covered: boolean };
 type Fitted = { kind: string; min: number[]; max: number[]; open: boolean; at: number[] };
-type Base = { origin: number[]; cubes: number; planned: number; openings: number; floating: number; room_tiles: number; parts: Part[]; roofs: Roof[]; props: Fitted[]; offcuts: string; since: number };
+type Base = { origin: number[]; cubes: number; planned: number; openings: number; floating: number; room_tiles: number; parts: Part[]; roofs: Roof[]; props: Fitted[]; offcuts: string; since: number; player: number[] | null };
 type Answer = { done: boolean; what: string; took?: string; gave?: string; refused?: string; cubes?: number[][] };
 
 const base = async () => (await game.call("build.state")) as Base;
@@ -86,6 +87,17 @@ const CUT = [
 const AROUND: [number, number][] = [];
 for (let x = MIN[0] - 1; x <= MAX[0] + 1; x++) AROUND.push([x, MIN[2] - 1], [x, MAX[2] + 1]);
 for (let z = MIN[2]; z <= MAX[2]; z++) AROUND.push([MIN[0] - 1, z], [MAX[0] + 1, z]);
+/// A deck a storey up east of the cabin, on a post at each corner, in tiles; and the foot of
+/// the flight of stairs up to it from the south, a metre wide, rising north.
+const POSTS = [
+  [17, 0, 5],
+  [22, 0, 5],
+  [17, 0, 10],
+  [22, 0, 10],
+];
+const DECK_MIN = [17, 1, 5];
+const DECK_MAX = [22, 1, 10];
+const FLIGHT_FOOT = [18, 0, 17];
 const groundAround = async () => (await game.call("build.ground", { columns: AROUND })) as number[];
 let groundBefore: number[] = [];
 
@@ -330,6 +342,70 @@ async function build() {
     check(groundBefore.length === AROUND.length && moved.length === 0, `the ground moved round the cabin: ${JSON.stringify(moved.slice(0, 6))}`);
     const [low, high] = [Math.min(...after), Math.max(...after)];
     return `${AROUND.length} columns round it unchanged, from ${low.toFixed(2)} to ${high.toFixed(2)} m`;
+  });
+
+  await step("upstairs", async () => {
+    // Laid from beside it: four posts, the deck over them, and the stairs.
+    const near = await point([9.5, 0, 10]);
+    await game.warp(eastSouth(near.from_start), eastSouth((await point([9.5, 0, 4])).from_start));
+    const before = (await base()).parts.length;
+    for (const at of POSTS) {
+      const post = await act("build.lay", { what: "post", min: at, max: at, kind: "logs" });
+      check(post.done, `the post at ${at} was refused: ${post.refused}`);
+    }
+    const deck = await act("build.lay", { what: "floor", min: DECK_MIN, max: DECK_MAX, kind: "logs" });
+    check(deck.done, `the deck was refused: ${deck.refused}`);
+    // Its foot the cube the ground passes through, as the hammer aims it: the ground here
+    // lies below the base's floor.
+    const [footGround] = (await game.call("build.ground", { columns: [[FLIGHT_FOOT[0], FLIGHT_FOOT[2]]] })) as number[];
+    const foot = [FLIGHT_FOOT[0], Math.floor(footGround / 0.5), FLIGHT_FOOT[2]];
+    const stairs = await act("build.lay", { what: "flight", min: foot, max: foot, kind: "logs", facing: "North", wide: 1.0 });
+    check(stairs.done, `the stairs were refused: ${stairs.refused}`);
+    const laid = (await base()).parts.slice(before);
+    const rise = 5 - foot[1] + 1;
+    const flight = laid.find((part) => part.kind === "logs" && part.shaped === 2 * rise && part.cubes > 2 * rise);
+    check(flight !== undefined, `no flight of ${2 * rise} stairs over whole cubes among ${JSON.stringify(laid)}`);
+    const posts = laid.filter((part) => part.kind === "logs" && part.shaped === part.cubes);
+    check(posts.length === 4 && posts.every((post) => post.cubes === 6), `the posts are ${JSON.stringify(posts)}, not four of six post cubes`);
+    // The deck waits for the posts it rests on: built, everything goes in in its order.
+    await emptyPack();
+    await game.give("wood:14", "stone:6");
+    let steps = 0;
+    for (let round = 0; round < 6; round++) {
+      const done = await acts("build.fill", { steps: 400 });
+      steps += done.filter((each) => each.done).length;
+      const refused = done.find((each) => !each.done);
+      if (!refused) break;
+      check(refused.refused?.startsWith("You need") === true, `refused: ${refused.refused} (${refused.what})`);
+      await emptyPack();
+      await game.give("wood:10", "stone:6");
+    }
+    const now = await base();
+    check(now.parts.every((part) => part.done), `not all built: ${JSON.stringify(now.parts.filter((part) => !part.done))}`);
+    check(now.floating === 0, `${now.floating} cubes float`);
+    await emptyPack();
+    // A picture of the deck and its stairs from the south-east.
+    const target = await point([9.8, 1.5, 4.5]);
+    const eye = await point([16.5, 4.5, 12.5]);
+    await game.call("sandbox.look", { at: target.world, from: eye.world });
+    await game.waitSeconds(2);
+    await game.shot("shots/cabin-deck.png");
+    await game.call("sandbox.release");
+    // Walked up from the south, onto the deck.
+    const below = await point([9.5, 0, 11]);
+    const onto = await point([9.5, 0, 3.5]);
+    await game.warp(eastSouth(below.from_start), eastSouth(onto.from_start));
+    await game.press("w:105");
+    await game.waitSeconds(3);
+    const feet = (await base()).player;
+    check(feet !== null, "the player is nowhere");
+    const [, up, south] = feet!;
+    check(up > 2.9 && south > 2.5 && south < 5.5, `the player stands ${up.toFixed(2)} m up, ${south.toFixed(2)} m south, not on the deck`);
+    await game.call("sandbox.look", { at: target.world, from: eye.world });
+    await game.waitSeconds(2);
+    await game.shot("shots/cabin-upstairs.png");
+    await game.call("sandbox.release");
+    return `${laid.length} parts laid and built in ${steps} steps: four posts, a deck and a flight of ${flight!.cubes} cubes; walked up to ${up.toFixed(2)} m`;
   });
 
   await step("reload", async () => {

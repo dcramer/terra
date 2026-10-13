@@ -319,8 +319,27 @@ pub(super) fn aim(
                     open: false,
                 }
             }
-            Kind::Room(_) | Kind::Roof(_) => {
+            // A flight, a post or a block: against the face of the base aimed at, or on the
+            // ground, whichever the view meets first.
+            Kind::Flight(_) | Kind::Post | Kind::Block(_) => {
+                let on_base = hull
+                    .filter(|hit| within(origin + direction * hit.distance, STRUCTURE_REACH_M))
+                    .filter(|hit| ground.is_none_or(|ground| hit.distance < ground.distance))
+                    .map(|hit| hit.cube + hit.normal);
+                let on_ground = ground
+                    .filter(|ground| within(ground.point, STRUCTURE_REACH_M))
+                    .map(|ground| {
+                        (to_base.transform_point3(ground.point) / CELL_M)
+                            .floor()
+                            .as_ivec3()
+                    });
+                on_base
+                    .or(on_ground)
+                    .map_or(Target::Nothing, |at| Target::Place { at })
+            }
+            Kind::Room(_) | Kind::Roof(_) | Kind::Floor => {
                 let roof = matches!(builder.picked(&builds).kind, Kind::Roof(_));
+                let floor = matches!(builder.picked(&builds).kind, Kind::Floor);
                 // Across a room already there, which it then extends or roofs; else on the
                 // level of the storey chosen.
                 let on_base = hull
@@ -374,6 +393,7 @@ pub(super) fn aim(
                     // metre or so.
                     let every = cells(1.0).max(1) as usize;
                     let fits = roof
+                        || floor
                         || builder.storey < 0
                         || (0..=size.x).step_by(every).chain([size.x]).all(|i| {
                             (0..=size.y).step_by(every).chain([size.y]).all(|j| {
@@ -419,7 +439,9 @@ pub(super) fn aim(
                     let adds = (0..size.x).any(|i| {
                         (0..size.y).any(|j| {
                             let cell = corner + IVec3::new(i, 0, j);
-                            if roof {
+                            if floor {
+                                !site.base.has_floor(cell)
+                            } else if roof {
                                 roofs_anew(
                                     &site.base,
                                     &builder.picked(&builds).kind,
@@ -604,6 +626,40 @@ fn plan_work(
             "lay a wall",
             plans::wall(base, &builder.run, kind, footings),
         )),
+        (Kind::Floor, Target::Ground { corner, tiles, .. }) => Some(laying(
+            "lay a floor",
+            plans::floor(
+                base,
+                corner,
+                corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1),
+                kind,
+                footings,
+            ),
+        )),
+        (Kind::Flight(shapes), Target::Place { at }) => {
+            let shape = &shapes[builder.variant()];
+            let facing = builder.facing();
+            let top = if shape.ramp {
+                terra_build::Shape::Slope(facing)
+            } else {
+                terra_build::Shape::Stair(facing)
+            };
+            Some(laying(
+                if shape.ramp {
+                    "lay a ramp"
+                } else {
+                    "lay stairs"
+                },
+                plans::flight(base, at, facing, cells(shape.wide), top, kind, footings),
+            ))
+        }
+        (Kind::Post, Target::Place { at }) => {
+            Some(laying("lay a post", plans::post(base, at, kind, footings)))
+        }
+        (Kind::Block(shapes), Target::Place { at }) => {
+            let shape = shapes[builder.variant()].1.shape(builder.facing());
+            Some(laying("lay a block", plans::block(base, at, shape, kind)))
+        }
         _ => None,
     };
     if let Some((what, ops)) = lay {

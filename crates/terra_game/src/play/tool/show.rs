@@ -209,6 +209,8 @@ pub(super) fn highlight(
                     };
                     ((corner.y + 1) as f32 * STOREY_M, rise.max(0.1))
                 }
+                // A floor: the layer of cubes under its storey.
+                Kind::Floor => (corner.y as f32 * STOREY_M - CELL_M, CELL_M),
                 _ => (corner.y as f32 * STOREY_M, STOREY_M),
             };
             let low = (corner.with_y(0).as_vec3() * CELL_M).with_y(bottom);
@@ -298,7 +300,8 @@ pub(super) fn highlight(
             (_, Doing::Fit) => OPENING_COLOUR,
             _ => BUILD_COLOUR,
         };
-        for cube in touched(&planned.work.ops).into_iter().take(400) {
+        let placed = matches!(builder.target, Target::Place { .. });
+        for cube in touched(&planned.work.ops, placed).into_iter().take(400) {
             let low = cube.as_vec3() * CELL_M;
             let middle = site.frame.transform_point(low + Vec3::splat(CELL_M * 0.5));
             gizmos.cube(
@@ -448,11 +451,16 @@ pub(super) fn highlight(
 }
 
 /// The cubes operations on the base would touch, for outlining; none for a whole plan
-/// being laid, which is outlined by what is drawn.
-fn touched(ops: &[terra_build::ops::Op]) -> Vec<IVec3> {
+/// being laid, which is outlined by what is drawn, unless `placed`: a flight, a post or a
+/// block, outlined a cube at a time.
+fn touched(ops: &[terra_build::ops::Op], placed: bool) -> Vec<IVec3> {
     use terra_build::ops::Op;
     ops.iter()
         .flat_map(|op| match op {
+            Op::LayPlan { cubes, .. } if placed => cubes
+                .iter()
+                .map(|cube| IVec3::from_array(cube.at))
+                .collect(),
             Op::Fill { cubes } | Op::Empty { cubes } | Op::Open { cubes } | Op::Close { cubes } => {
                 cubes.iter().map(|&at| IVec3::from_array(at)).collect()
             }

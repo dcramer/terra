@@ -7,11 +7,15 @@
 //! Places on the base are counted in its own cubes: east, up and south from its claim
 //! stone, half a metre each; a tile is a column of a storey, its `y` the storey.
 //!
-//! - `build.state`: the base: its parts and how far each is built, its roofs, fitted props,
-//!   planned cubes, rooms, the claim's offcuts, and where it stands.
+//! - `build.state`: the base: its parts and how far each is built and how many of their
+//!   cubes are cut to a shape, its roofs, fitted props, planned cubes, rooms, the claim's
+//!   offcuts, where it stands, and where the player's feet are in it.
 //! - `build.lay {what, min, max, kind?, floor?, style?, pitch?, along_x?}`: lays a plan over
 //!   tiles: a `room` (the shortcut: floor, four walls and a flat roof), a `wall` from `min`
-//!   to `max`, a `floor`, a `flat_roof`, or a pitched `roof` (`Hip`, `Gable`, `LeanTo`).
+//!   to `max`, a `floor`, a `flat_roof`, or a pitched `roof` (`Hip`, `Gable`, `LeanTo`);
+//!   or from the cube `min`, as the hammer places them (D193): a `flight` of stairs (a ramp
+//!   with `ramp: true`) up a storey toward `facing`, `wide` metres across, a `post` a
+//!   storey high, or one `block` of a `shape`.
 //! - `build.opening {tiles, door?}`: cuts a doorway (or, with `door: false`, a window) into a
 //!   wall's plan along those tiles.
 //! - `build.fill {part?, steps?}`: builds what goes in next, as holding the hammer does, so
@@ -39,7 +43,7 @@ use bevy::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 use terra_build::ops::{Done, Op, Refusal};
-use terra_build::{CELL_M, Fill, Panel, RoofSection, RoofStyle, STOREY_M};
+use terra_build::{CELL_M, Facing, Fill, Panel, RoofSection, RoofStyle, STOREY_M, Shape};
 
 pub fn plugin(app: &mut App) {
     method(app, "build.state", state);
@@ -153,6 +157,13 @@ struct Lay {
     style: Option<RoofStyle>,
     pitch: Option<f32>,
     along_x: Option<bool>,
+    /// For a flight or a cut block: which way it rises (D193).
+    facing: Option<Facing>,
+    /// For a flight: how many metres wide, and whether it is a ramp.
+    wide: Option<f32>,
+    ramp: Option<bool>,
+    /// For a block: its shape.
+    shape: Option<Shape>,
 }
 
 fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
@@ -199,6 +210,25 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
                 };
                 (plans::roof(base, section, kind), None)
             }
+            // From the foot cube `min`, up a storey toward `facing`.
+            "flight" => {
+                let facing = lay.facing.unwrap_or_default();
+                let top = if lay.ramp.unwrap_or(false) {
+                    Shape::Slope(facing)
+                } else {
+                    Shape::Stair(facing)
+                };
+                let wide = terra_build::cells(lay.wide.unwrap_or(1.0));
+                (
+                    plans::flight(base, min, facing, wide, top, kind, footings),
+                    None,
+                )
+            }
+            "post" => (plans::post(base, min, kind, footings), None),
+            "block" => (
+                plans::block(base, min, lay.shape.unwrap_or_default(), kind),
+                None,
+            ),
             other => return Err(refused(format!("cannot lay a {other}"))),
         };
         if ops.is_empty() {
@@ -388,6 +418,11 @@ fn ops(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 }
 
 fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let feet = world
+        .query_filtered::<&Transform, (With<Player>, With<LocalPlayer>)>()
+        .iter(world)
+        .next()
+        .map(|at| at.translation);
     let start = *world.resource::<Start>();
     let rules = world.resource::<BuildRules>().clone();
     let offcuts = world.resource::<Offcuts>().0.to_string();
@@ -402,10 +437,15 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
             let cubes: Vec<IVec3> = base.cubes_of(id).map(|(at, _)| at).collect();
             let low = cubes.iter().copied().reduce(IVec3::min).unwrap_or_default();
             let high = cubes.iter().copied().reduce(IVec3::max).unwrap_or_default();
+            let shaped = base
+                .cubes_of(id)
+                .filter(|(_, cube)| cube.shape != terra_build::Shape::Whole)
+                .count();
             json!({
                 "id": id.0,
                 "kind": rules.name(part.kind),
                 "cubes": progress.cubes,
+                "shaped": shaped,
                 "built": progress.built,
                 "started": progress.started,
                 "openings": progress.openings,
@@ -461,5 +501,7 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "props": props,
         "offcuts": offcuts,
         "since": site.since.len(),
+        // Where this machine's player's feet are, in metres in the base's own space.
+        "player": feet.map(|feet| frame.compute_affine().inverse().transform_point3(feet).to_array()),
     }))
 }

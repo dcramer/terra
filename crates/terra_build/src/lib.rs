@@ -489,6 +489,9 @@ pub struct BuildHit {
     pub distance: f32,
     /// Whether what was met is a wall, not a floor or roof.
     pub wall: bool,
+    /// The way out of the cube's face that was met: the cube beyond it is where something
+    /// set against it goes.
+    pub normal: IVec3,
 }
 
 const LEVEL: [Side; 4] = [Side::East, Side::West, Side::South, Side::North];
@@ -1042,6 +1045,7 @@ impl Base {
                     face,
                     distance,
                     wall,
+                    normal,
                 }
             })
     }

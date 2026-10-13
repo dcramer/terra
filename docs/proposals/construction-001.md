@@ -108,7 +108,7 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | Walls, glass, openings | Cubes block, openings pass | Built |
 | Ghosts | Walked through (rule 6) | Built |
 | Floors, roofs, steps | Stood on | Built |
-| Stairs and ladders | Not built (building.md step 4) | |
+| Stairs and ladders | Cubes cut as stairs and slopes, each with its walking from its top (D193) | Stairs and ramps built (D220); ladders not |
 | **Many** | | |
 | Fifty cabins in view | One mesh per building and material, rebuilt only where cubes changed; ghosts instanced; a stand-in far off (D160) | Not measured |
 

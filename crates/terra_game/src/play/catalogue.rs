@@ -77,6 +77,10 @@ enum KindFile {
     Items(Vec<ItemFile>),
     Remove,
     Move,
+    Floor,
+    Flight(Vec<FlightShape>),
+    Post,
+    Block(Vec<(String, BlockShape)>),
 }
 
 #[derive(Deserialize)]
@@ -146,6 +150,10 @@ impl Builds {
                     }
                     KindFile::Remove => Kind::Remove,
                     KindFile::Move => Kind::Move,
+                    KindFile::Floor => Kind::Floor,
+                    KindFile::Flight(shapes) => Kind::Flight(shapes),
+                    KindFile::Post => Kind::Post,
+                    KindFile::Block(shapes) => Kind::Block(shapes),
                 },
             })
             .collect();
@@ -297,6 +305,41 @@ pub struct RoofShape {
     pub pitch: f32,
 }
 
+/// A flight a storey up (D193): stairs or a ramp, so many metres wide.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FlightShape {
+    pub name: String,
+    pub ramp: bool,
+    pub wide: f32,
+}
+
+/// A shape one cube is cut to (D193).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+pub enum BlockShape {
+    Whole,
+    Half,
+    Stair,
+    Slope,
+}
+
+impl BlockShape {
+    /// The cube's shape, a stair or slope rising toward `facing`.
+    pub fn shape(self, facing: terra_build::Facing) -> terra_build::Shape {
+        match self {
+            BlockShape::Whole => terra_build::Shape::Whole,
+            BlockShape::Half => terra_build::Shape::Half,
+            BlockShape::Stair => terra_build::Shape::Stair(facing),
+            BlockShape::Slope => terra_build::Shape::Slope(facing),
+        }
+    }
+
+    /// Whether it faces a way, which the wheel turns.
+    pub fn turns(self) -> bool {
+        matches!(self, BlockShape::Stair | BlockShape::Slope)
+    }
+}
+
 pub enum Kind {
     Room(Vec<RoomShape>),
     /// A roof over a rectangle, drawn or over a room, resting on the walls of a storey.
@@ -312,6 +355,14 @@ pub enum Kind {
     Remove,
     /// Pick an item up and put it down somewhere else.
     Move,
+    /// A floor over a rectangle, drawn, on a storey, alone (D152).
+    Floor,
+    /// A flight of stairs or a ramp up a storey, turned by the wheel (D193).
+    Flight(Vec<FlightShape>),
+    /// A post a storey high, to carry the floor above (D193).
+    Post,
+    /// One cube of a shape, set against the face aimed at (D193).
+    Block(Vec<(String, BlockShape)>),
 }
 
 pub struct Part {
@@ -369,7 +420,9 @@ impl Part {
             Kind::Window(shapes) => shapes.len(),
             Kind::Wall(lengths) => lengths.len(),
             Kind::Items(items) => items.len(),
-            Kind::Door | Kind::Remove | Kind::Move => 1,
+            Kind::Flight(shapes) => shapes.len(),
+            Kind::Block(shapes) => shapes.len(),
+            Kind::Door | Kind::Remove | Kind::Move | Kind::Floor | Kind::Post => 1,
         }
     }
 
@@ -381,7 +434,9 @@ impl Part {
             Kind::Window(shapes) => Some(&shapes[variant].0),
             Kind::Wall(lengths) => Some(&lengths[variant].0),
             Kind::Items(items) => Some(&items[variant].name),
-            Kind::Door | Kind::Remove | Kind::Move => None,
+            Kind::Flight(shapes) => Some(&shapes[variant].name),
+            Kind::Block(shapes) => Some(&shapes[variant].0),
+            Kind::Door | Kind::Remove | Kind::Move | Kind::Floor | Kind::Post => None,
         }
     }
 }
