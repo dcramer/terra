@@ -2,7 +2,7 @@
 
 Status: provisional, like everything in pre-production. The direction below is our current answer. Library choices that have not been exercised yet are marked Leaning in [decisions.md](decisions.md).
 
-Terra is first and foremost a sandbox engine (D187): many procedural worlds, and a system for each part of the game acting on the others, so that the game is what they make together, for up to a thousand players (D52). Everything is written in Rust (D11), on Bevy, with our own voxel terrain (D12). The parts and where each stands are in [engine.md](engine.md); how to work in the repository is in [development.md](development.md). The Godot build that came first, and its numbers, still the bar (D12), are in [research/godot-spike.md](../research/godot-spike.md); the check of this toolchain is [research/rust-stack-spike.md](../research/rust-stack-spike.md).
+First and foremost, we are building an extremely ambitious sandbox engine, with multitudes of procedural worlds and intricate systems for each component of the game (D187). Everything is written in Rust (D11), on Bevy, with our own voxel terrain (D12). The parts and where each stands are in [engine.md](engine.md); how to work in the repository is in [development.md](development.md). The Godot build that came first, and its numbers, still the bar (D12), are in [research/godot-spike.md](../research/godot-spike.md); the check of this toolchain is [research/rust-stack-spike.md](../research/rust-stack-spike.md).
 
 ## Requirements
 

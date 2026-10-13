@@ -15,7 +15,7 @@ From 2026-10-12:
 - **Building help is useful for carrying things to a building** (D161). They must not start building a plan while you are still designing it. Recruits should potentially help build, too (Leaning). A plan is handed to them by switching from blueprint to build: Plan and Build modes, agreed for now, perhaps to revisit (D170, Leaning).
 - **They take their gear on their own** (D161). A container is either personal or the tribe's, and that is enough.
 - **Recruits are much like players** (D169): health, stamina and mana, hunger, thirst and body temperature. Cold or heat slows their work. They sleep at night, and need a bed: without one, their stamina stays very low, so they work very slowly all the time. Potentially they sleep on the ground, badly rested, getting a little stamina back.
-- **They help defend you in some situations** (D90, Leaning): if you are attacked near your claim, or in raids, if raids come later. Monsters will likely not form inside an outpost, but danger comes close to home, and protecting the outpost, with walls, guards or otherwise, is part of having one (D169).
+- **They help defend you in some situations** (D90): if you are attacked near your claim, or in raids, if raids come later. Monsters will likely not form inside an outpost, but danger comes close to home, and protecting the outpost, with walls, guards or otherwise, is part of having one (D169).
 - **They travel and fight beside you**, later (D161): a future to-do.
 - **They die when their health runs out** (D161, D169). They also die of hunger and thirst: an empty gauge weakens them and wears health away over a few days, not fast, the same as for players. A way to revive them may come later. For now they drop what they had; graves may come later.
 - **No ageing, for now** (D161). Families, as in Medieval Dynasty, would be neat but are wishful thinking.
@@ -197,7 +197,7 @@ Their skills, ranks and likings read on their own sheet, like yours (D93).
 
 ## Defence
 
-From the developers (D90, Leaning): they help defend you if you are attacked near your claim, and in raids if those come later. And (D169): monsters likely will not form inside an outpost, but **danger needs to be close to home**. Part of having an outpost is protecting it, with walls, guards or whatever else. Proposed:
+From the developers (D90): they help defend you if you are attacked near your claim, and in raids if those come later. And (D169): monsters likely will not form inside an outpost, but **danger needs to be close to home**. Part of having an outpost is protecting it, with walls, guards or whatever else. Proposed:
 
 - **Monsters do not form inside an outpost, but they come to it.** They form in the wild around it, roam, hunt and spill out ([creatures.md](creatures.md)), and an outpost is in their way. Walls, gates, light and a watch are what keep them out.
 - **When danger comes into the outpost, or you are attacked near it, everyone who can fight drops their work and fights.** The rest take shelter indoors. Afterwards, everyone goes back to what they were doing. This is the one switch every game in the research uses.

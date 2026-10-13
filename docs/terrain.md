@@ -6,7 +6,7 @@ The brief for track A of [engine.md](engine.md): the terrain core (A1), in `crat
 
 A plain Rust crate, with no Bevy dependency, that turns a description of shape and material at every point into the meshes of a round, diggable planet at several levels of detail. `terra_game` will draw what it produces.
 
-Voxels carry a material as well as a shape, because resources are harvested by digging (D39). That is part of the data model from the first version.
+Voxels carry a material as well as a shape, because resources are harvested by digging (D40). That is part of the data model from the first version.
 
 ## Scope of the first checkpoint (A1)
 

@@ -18,18 +18,18 @@ In their words, shortened.
 - **Everything has a collision box**, used for placing as well as walking (D53).
 - **A grid things snap to**, which can be switched off. One square grid for everything, "a little flexible": in some games each cell is huge, "so you have no freedom to build". Half a metre for now (D57).
 - **What is placed can be moved up and down**, not only turned, except what must stand on the ground.
-- **What is built into the ground cuts it away** (D131, Leaning). **Trees and rocks are cleared first** (D131, Leaning).
+- **What is built into the ground cuts it away** (D131). **Trees and rocks are cleared first** (D131).
 - **Details morph.** "Corners become rounded on the outside and inside, but when two segments are next to each other they're flat."
 - **It must be really easy to extend**, with pieces that "change their look based on what they're connected to" (D56).
 - **Building, taking apart and cutting take time**: click and hold, animated in and out.
-- **Building costs things you carry**: "you have the raw items, which allow you to build anything that you might have the capabilities to build" (D55).
+- **Building costs things you carry**: "you have the raw items, which allow you to build anything that you might have the capabilities to build" (D55, since replaced by D139 and D141).
 - **What does not fit in the inventory drops to the ground**.
-- **You build only inside a claim** (D94, Leaning), which starts small and grows (D104).
+- **You build only inside a claim** (D94), which starts small and grows (D104).
 - **Structures are planned, then constructed** (D139): "for structures, you place a blueprint/plan of it, and then you have to actually construct it somehow… it makes it more realistic. So each wall you'd have to do that, and then doors are like carve outs so it can be slightly diff? Same with windows? We'll wanna think this through."
 - **Constructing should feel immersive** (D139): "you'll actually go up and hit the thing with a hammer or similar? Or maybe it's like, you bring the resource and place it? Like you carry it, like The Forest / Grounded 2? We want it to feel a little immersive when you build up these structures."
 - **The controls and plans proposed here "feel good"** (D144).
 - **A blueprint shows its parts, and they can be small** (D139): "ideally a blueprint shows its 'parts' if you will, kind of like Forest shows the logs, and that can vary based on the type of construction".
-- **Large structures take large materials, carried** (D140, Leaning): "you probably need large materials and can carry them? And later in the game maybe you unlock ways to transport them more efficiently."
+- **Large structures take large materials, carried** (D140): "you probably need large materials and can carry them? And later in the game maybe you unlock ways to transport them more efficiently."
 - **Building draws on storage** (D141): "building from storage absolutely, but large items probably will need a special storage? And that probably would be unlocked later game (some of this)."
 - **No stability in the MVP, but wanted later** (D142).
 - **Rooms can be underground** (D143): "yes you can have underground rooms".
@@ -56,7 +56,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Change a piece's material in place | Rust, 7 Days to Die | Missing: one kind of construction so far, logs |
 | Plans that cost nothing, then constructed part by part | The Forest, Ark Ascended | Missing; decided (D139) |
 | Building from storage nearby, not only the pack | Subnautica 2, Valheim | Missing; decided (D141) |
-| Carrying big materials by hand, better transport later | The Forest | Missing; the direction (D140, Leaning) |
+| Carrying big materials by hand, better transport later | The Forest | Missing; the direction (D140) |
 | A base level with the ground where it is begun | Ark Ascended's heights | Built: the base's grid is set where its claim stone goes |
 | Building on slopes | All, differently | Built: what is built cuts into the ground (D131) and stands on a footing below |
 | Floors above and below, and stairs | All | Storeys above and below the base's floor built; stairs missing |
@@ -255,7 +255,7 @@ Because every wall is a whole number of cubes, the kit always fits: a stone wall
 
 ## Large materials and carrying
 
-The developers' direction (D140, Leaning; D141):
+The developers' direction (D140; D141):
 
 - **Big structures take big materials.** Logs for walls and posts, cut stone blocks for stone walls, beams for roofs. Small materials (fibre, nails, hide) still go in the pack.
 - **Big materials are carried, not packed.** A felled tree gives logs that lie where it fell. You carry one on your shoulder, slowly, or two with effort, with nothing else in your hands, as The Forest does. A big building becomes a project you can see: trees down, logs dragged home, walls rising. A second player has a job.
@@ -269,7 +269,7 @@ Open: which materials are big; how many a player carries; whether a log is cut i
 
 - **The grid** is half a metre (D57; see [The grid](#the-grid)). Things snap to it and turn in eighths; off it, they turn freely.
 - **A base stands level where its claim stone is put** (built): its grid is set there, level with the ground at the stone. Everything in a base shares its floor height and stands on a footing where the ground falls away (built). **Rooms can be underground** (D143): walls and floors may be placed a storey or more down, cutting the ground away, for cellars and for terraces down a slope.
-- **Into the ground**: what is built cuts the ground away where it stands, no deeper than its own height (D131, Leaning). Trees and rocks must be cleared first (D131, Leaning); small plants clear themselves.
+- **Into the ground**: what is built cuts the ground away where it stands, no deeper than its own height (D131). Trees and rocks must be cleared first (D131); small plants clear themselves.
 - **Up and down**: anything placed can be raised and lowered (asked for), on the grid in half-metre steps. What must stand on something says so: a chair on a floor, a station on the ground.
 - **What may not overlap**: an item may not go into another item or a wall (built); a structure may not go over a solid thing set down outdoors, such as the claim stone, which is outlined (built).
 - **What the ghost says**: blue when it can go, red when not, with one line saying why and what it costs; what is in the way outlined, through walls too (proposed, after Subnautica 2's first update).
@@ -351,7 +351,7 @@ Ours gives the same freedom of shape as Enshrouded's, any footprint, any length,
 
 ## Claims
 
-From the developers (D94, Leaning; D104): you build within areas you claim, so the world is not randomly destroyed everywhere, nor managed by anyone. Built: a claim stone, 40 metres across, grown to 80 and 160 for a price; nothing can be built outside one; the base is begun at it.
+From the developers (D94; D104): you build within areas you claim, so the world is not randomly destroyed everywhere, nor managed by anyone. Built: a claim stone, 40 metres across, grown to 80 and 160 for a price; nothing can be built outside one; the base is begun at it.
 
 Proposed, to react to:
 

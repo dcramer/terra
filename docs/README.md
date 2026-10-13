@@ -1,6 +1,6 @@
 # Terra design docs
 
-Working title: **Terra**. First and foremost an extremely ambitious sandbox engine: multitudes of procedural worlds, and intricate systems for each part of the game that act on one another (D187). The game, survival and RPG in a living world across realms reached through portals, is what those systems make together.
+Working title: **Terra**. First and foremost, we are building an extremely ambitious sandbox engine, with multitudes of procedural worlds and intricate systems for each component of the game (D187). The game is a multiplayer survival sandbox with RPG in it, across realms reached through portals, built toward a thousand players on one persistent server (D52, D89).
 
 The source of truth, then the docs about the game as a whole, then one doc per part of the game, then parked docs, then the engine and how we work.
 

@@ -4,7 +4,7 @@ Part of the game's design ([gameplay.md](gameplay.md), D89): one way for any rea
 
 ## What the developers have said
 
-- Realms may differ in setting, "like fantasy or primitive or futuristic", shown in their cultures, which may teach different things and from which you may recruit (D86, Leaning).
+- Realms may differ in setting, "like fantasy or primitive or futuristic", shown in their cultures, which may teach different things and from which you may recruit (D116, D161).
 - The art style is one guide for every setting, direction D ([art-style.md](art-style.md), D14): a realm brings its parts, palette and light, never a style of its own. The four settings below come from an earlier mood board of four worlds ([research](../research/art-explorations.md)).
 - On 2026-10-11, about a technological realm: no machine guns; advanced but on theme with magic, and not superior. Whether its makers are gone or still at work could be either. What matters is **ways to make different kinds of themes work, as the visual design goals do.**
 - Also on 2026-10-11: there will be **many generated realms**, with no fixed number (D17), so what is needed is **techniques that make each one fit the lore**, not a handful of hand-made worlds.

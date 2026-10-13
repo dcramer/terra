@@ -2,11 +2,11 @@
 
 Part of the game's design ([gameplay.md](gameplay.md), D89). This page owns how you grow: the three ways, skills, the rank ladder, crossing a rank, and how things are unlocked. Essences, powers, attributes, cores and mana are in [magic.md](magic.md).
 
-Status: the developers have said that the player has many skills that grow by doing (D88, Decided), that a research system unlocks things to make (D68, Decided, how it works Open), and where growth comes from (D124, Leaning). The ranks are the books' (D159, Decided), and a person's rank comes from their four attributes (D164, Decided). Everything else is a proposal. Skills by doing are in the tech demo; the rest is not built.
+Status: the developers have said that the player has many skills that grow by doing (D88, Decided), that a research system unlocks things to make (D68, Decided, how it works Open), and where growth comes from (D124). The ranks are the books' (D159, Decided), and a person's rank comes from their four attributes (D164, Decided). Everything else is a proposal. Skills by doing are in the tech demo; the rest is not built.
 
 ## Three layers
 
-From the developers on 2026-10-11 (D124, Leaning): **magic and special abilities come from essences; everything else comes from other sources**, some from just doing it, some from books. In the books some magic, such as astral magic, is a technique you study, and so are combat styles. So there are three ways to grow, not two. The books' mechanics can be used; which disciplines and styles there are, we invent (D125).
+From the developers on 2026-10-11 (D124): **magic and special abilities come from essences; everything else comes from other sources**, some from just doing it, some from books. In the books some magic, such as astral magic, is a technique you study, and so are combat styles. So there are three ways to grow, not two. The books' mechanics can be used; which disciplines and styles there are, we invent (D125).
 
 | | Skills | Studied techniques | Essences |
 |---|---|---|---|
@@ -58,7 +58,7 @@ Which keys a skill takes would differ: a craft might take a teacher or a feat, a
 
 ## Research and unlocks
 
-From the developers (D68): **a research system unlocks technology and things to make**; the build menu shows what you have unlocked (D55, D67). How something is researched is open. The design proposes learning by finding rather than a tree of technology ([crafting.md](crafting.md#learning-what-to-make)), with realms opening new things as Terraria's zones do (D85).
+From the developers (D68): **a research system unlocks technology and things to make**; the build menu shows what you have unlocked (D67). How something is researched is open. The design proposes learning by finding rather than a tree of technology ([crafting.md](crafting.md#learning-what-to-make)), with realms opening new things as Terraria's zones do (D85).
 
 Ways other games do it, to react to:
 

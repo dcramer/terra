@@ -6,7 +6,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 
 - A person in the world with tools in hand (D89); third person, with first person perhaps an option later (D97); the character swims (D74); gear is yours wherever you go (D86).
 - Rich systems, little on screen, somewhat realistic, with some on-screen display and character stats (D93). No hand-holding (D92).
-- Equipment slots (D64), a backpack (D65, D84) and an action bar (D66): see [items.md](items.md).
+- Equipment slots (D64), a pack (D106, D84) and an action bar (D66): see [items.md](items.md).
 - A map that shows only where you have been (D76), and an options menu (D80).
 
 ## Who you are

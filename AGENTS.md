@@ -1,6 +1,6 @@
 # Terra
 
-**First and foremost, an extremely ambitious sandbox engine** (D187): multitudes of procedural worlds, reached through portals, and intricate systems for each component of the game (ground, water, climate, plants, creatures, people and factions, magic, items, building) that act on one another. The game, survival and RPG in a living world shared by up to a thousand players on one persistent server (D52, D89), is what those systems make together. Build each system deep and general, so it runs on any world from data; reach the scope through procedural rules, data, agents and tools, not hand work. Pre-production: everything here is current thinking.
+**First and foremost, we are building an extremely ambitious sandbox engine, with multitudes of procedural worlds and intricate systems for each component of the game** (D187). The game is a multiplayer survival sandbox with RPG in it, across realms reached through portals, built toward a thousand players on one persistent server (D52, D89). Pre-production: everything here is current thinking.
 
 **Core tenet: realistic but fun** (D122). Things work as they would in the world, so players can reason about them: arrows ride in a quiver on your belt, and what you know you found out by looking (D93). Where realism would only be a chore, fun wins.
 

@@ -130,7 +130,7 @@ Kept, as in the books (D164): **Power, Speed, Spirit and Recovery.**
 
 | Attribute | Raises |
 |---|---|
-| **Power** | Blows and throws, carrying (D55), breaking, the stamina pool |
+| **Power** | Blows and throws, carrying (D140), breaking, the stamina pool |
 | **Speed** | Moving, striking, dodging, reacting |
 | **Spirit** | The mana pool (D102), the strength of powers, resisting magic, aura |
 | **Recovery** | The health pool, and how fast health, stamina and mana come back; resisting poison, sickness and cold or heat (D153) |

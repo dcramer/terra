@@ -1,6 +1,6 @@
 # Terra
 
-**An extremely ambitious sandbox engine**: multitudes of procedural worlds, realms reached through portals, each run by intricate systems for every component of the game (ground, water, climate, plants, creatures, people and factions, magic, items, building) that act on one another. The game is what those systems make together: survival and RPG in a living world, in the spirit of Kenshi and Enshrouded, on lore from *He Who Fights With Monsters*'s world-building, for up to a thousand players on one persistent server. Magic pools and makes monsters, settlements live with it, and you hold ground with your tribe and grow by rank. The design is [docs/gameplay.md](docs/gameplay.md); why and how ambitious is [docs/vision.md](docs/vision.md).
+**First and foremost, we are building an extremely ambitious sandbox engine, with multitudes of procedural worlds and intricate systems for each component of the game.** The game is a multiplayer survival sandbox with RPG in it, across realms reached through portals, in the spirit of Kenshi and Enshrouded, on lore from *He Who Fights With Monsters*'s world-building, for up to a thousand players on one persistent server. Magic pools and makes monsters, settlements live with it, and you hold ground with your tribe and grow by rank. The design is [docs/gameplay.md](docs/gameplay.md).
 
 It is in pre-production. Everything here records current thinking, and any of it may change.
 
@@ -8,7 +8,6 @@ It is in pre-production. Everything here records current thinking, and any of it
 
 | Goal | More |
 |---|---|
-| **Systems all the way down**: every part of a world is a system that works on any world from data, and the systems act on one another. | [docs/vision.md](docs/vision.md) |
 | **Many very different worlds**, each with its own terrain, caverns, water, plants, air, gravity, seasons and cultures, made from rules and a seed. | [docs/worlds.md](docs/worlds.md), [docs/settings.md](docs/settings.md) |
 | **A living world**: monsters form where magic pools, animals roam and hunt, settlements trade, grow and fall, whether or not you are there. | [docs/gameplay.md](docs/gameplay.md) |
 | **Always get better**: skills by doing, techniques by study, powers from essences, ranks over all of them. | [docs/progression.md](docs/progression.md), [docs/magic.md](docs/magic.md) |

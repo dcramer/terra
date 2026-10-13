@@ -2,11 +2,7 @@
 
 ## What we are building
 
-**First and foremost, an extremely ambitious sandbox engine** (D187): multitudes of procedural worlds, and intricate systems for each part of the game (ground, water, climate, plants, creatures, people and factions, magic, items, building) that act on one another. The game, survival and RPG in a living world shared by up to a thousand players (D52, D89), is what those systems make together.
-
-- **Depth in each system over breadth of content.** A system is modelled as the thing it stands for, so it holds up when players push it, rather than covered with hand-made content.
-- **Every system general and data-driven**, so it runs on any world from data, not code written for one (D59, D127), with variety kept to what players can tell apart (D182).
-- **Scope reached through procedural rules, data, agents and tools**, not hand work (D8, D69, D71).
+First and foremost, we are building an extremely ambitious sandbox engine, with multitudes of procedural worlds and intricate systems for each component of the game (D187).
 
 ## Pitch
 
@@ -20,13 +16,12 @@ The earlier pitches, of dead planets terraformed into living ones and of survivi
 
 A feature that serves none of these is cut. Set with the design (D89); each is as settled as the decisions it cites.
 
-1. **Systems all the way down.** Everything is generated and systemic, and each part is modelled in depth: the ground, the weather, a creature's day, a settlement's needs. A new world is new data for the same systems (D8, D127, D182, D187).
-2. **The world is the main character.** Persistent worlds, each unlike the others, that visibly change because of you.
-3. **Always getting better.** Many skills, gained by doing and improved by doing more, so there is always a sense of progression (D88).
-4. **Hold your ground.** Survival means establishing bases and outposts and keeping them, with recruited people to help defend them (D90).
-5. **The world goes on, and you change where it goes.** Monsters gather and surge, settlements rise and fall, whether or not you are there; what you do, and what you leave undone, sticks (D95).
-6. **Find your own way.** The game does not hold your hand. There may be quests, but no tracked quest log pointing you where to go and no journal: you are told, you look, you find (D92). The world is rich with systems, but you learn them by looking and doing, not from a display of every number (D93).
-7. **Seamless, and together.** No loading screens within a world. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
+1. **The world is the main character.** Persistent worlds, each unlike the others, that visibly change because of you.
+2. **Always getting better.** Many skills, gained by doing and improved by doing more, so there is always a sense of progression (D88).
+3. **Hold your ground.** Survival means establishing bases and outposts and keeping them, with recruited people to help defend them (D90).
+4. **The world goes on, and you change where it goes.** Monsters gather and surge, settlements rise and fall, whether or not you are there; what you do, and what you leave undone, sticks (D95).
+5. **Find your own way.** The game does not hold your hand. There may be quests, but no tracked quest log pointing you where to go and no journal: you are told, you look, you find (D92). The world is rich with systems, but you learn them by looking and doing, not from a display of every number (D93).
+6. **Seamless, and together.** No loading screens within a world. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
 
 ## Our inspirations
 
@@ -62,7 +57,7 @@ Astroneer is deliberately not a model (D15): it shows the tech is within reach o
 
 ## Tone
 
-Slightly harder than Planet Crafter, far gentler than Vintage Story (D3): challenging, with goals rather than punishment (D62). Threats are real, met by fighting, by building and by holding ground with recruits (D90). No fail state (D18).
+Challenging, with goals to prepare for rather than punishment: far gentler than Vintage Story, and never bleak (D3, D62). Threats are real, met by fighting, by building and by holding ground with recruits (D90). No fail state (D18).
 
 ## Non-goals
 

@@ -7,24 +7,22 @@ Status: the developers set Subnautica as the baseline on 2026-10-10 (D84), "for 
 From 2026-10-10:
 
 - **An equipment grid, a character sheet** (D64): slots for what you wear and carry as gear: head, chest (covering the arms), gloves, legs, feet, back and belt, with more later. Not every slot shows on the body. One piece per slot. Jewellery is open. There is no space suit or oxygen tank (D89): breath is only under water (D74).
-- **The inventory is the backpack** (D65, Leaning): probably very small at the start, made bigger by a better backpack in the backpack slot.
+- **What you carry is in your pack** (D106): a container worn in the pack slot, and a bigger pack holds more. See [Packs](#packs).
 - **An action bar** (D66): you put items on it to use them; whatever is in the picked slot is in your hand.
-- **You carry raw items, and they let you build what you are able to build** (D55, Leaning).
+- **Building takes materials brought to a plan**, from what you carry and from storage nearby (D139, D141).
 - **Subnautica is the baseline** (D84), and the game must stay modelled in ECS (D58).
 
-## A pack that holds things, after Stationeers
+## Packs
 
-From the developers, 2026-10-11 (D106, Leaning): Stationeers may have some influence, and its backpack model could replace ours, so that wearing a backpack is not growing magical slots: the pack is an item that holds the items in it.
+Decided (D106), by the developers on 2026-10-12: "a pack IS a container that holds things, a bigger pack holds more things". Without a pack you carry nothing but what is in your hands.
 
-Proposed, what that would mean:
+- **A pack is an item worn in the pack slot**, and its grid is part of it. Take it off and the things stay in it; put on another and you carry what is in that one.
+- **Bigger packs hold more** because they are bigger, not because they unlock slots.
+- **Death drops your pack** with everything in it, where you fell (D84, D171).
+- **Without a pack** you carry what is in your hands, perhaps two hand slots (Leaning). Proposed: the belt holds a few tools for the action bar (D66), and a quiver (D118), which is already a container the same way.
+- **Technically** (mine): a container's contents belong to the item that is the container, kept by its identity, so moving the pack moves what is in it. `terra_items` gains nested containers; nothing about a grid changes.
 
-- **A pack is a container you carry.** Its grid is part of the pack. Take it off and the things stay in it; put on another and you carry what is in that one.
-- **Death drops your pack** (D84) with everything in it, where you fell.
-- **Without a pack** you carry only what is in your hands and on your body: a belt, pockets. Proposed: the action bar is a belt of a few slots that holds tools (D66), with the pack for everything else.
-- **Bigger packs** hold more because they are bigger, not because they unlock slots (replacing D65's growth).
-- **Technically** (mine): a container's contents belong to the item that is the container, kept by its identity, so moving the pack moves what is in it. `terra_items` would gain nested containers; nothing about a grid changes.
-
-Open: **D65 and D106 disagree.** D65 (Leaning) has a worn pack make your one backpack bigger; D106 (Leaning) has the pack be a container that holds its own items. The quiver (D118) already works the second way. Until the developers choose, the demo follows D65.
+Not built: the game still grows one backpack.
 
 ## How it works
 
@@ -46,7 +44,7 @@ Picking something up puts it in the first place it fits, scanning from the top l
 - **A kind of item is an entry in a list**, as buildables are (D127): its name, its size in cells, and which equipment slot it goes in, if any. Adding an item is adding an entry, in [`assets/data/items.ron`](../assets/data/items.ron) (D136), which also says what it does in hand or worn; no code names an item. A realm's theme names which kinds are found there (D59); realms get no item code of their own.
 - **Items wear** (D99): tools, weapons and armour carry their condition, as one-of-a-kind items with state of their own; a broken one stops working but is kept, and is repaired at a station ([crafting.md](crafting.md#wear-and-repair)). In `terra_items`, an item carries how worn it is and a kind how much it lasts; wearing and mending are changes like any other, so the server can check them.
 - **Every item has an identity**, so the action bar can point at it and the server can say which one moved.
-- **Where raw items come from**: harvesting returns a yield in cubic metres, objects or square metres (D45). A table in data turns a yield into items. What the raw items are is design and still open (D43, D55).
+- **Where raw items come from**: harvesting returns a yield in cubic metres, objects or square metres (D45). A table in data turns a yield into items. What the raw items are is design and still open (D43).
 
 ## Item icons
 

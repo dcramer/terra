@@ -1,10 +1,10 @@
 # Engine: the parts and the order
 
-Terra is first and foremost a sandbox engine (D187): many procedural worlds, and a system for each part of the game acting on the others, so that the game is what they make together, for up to a thousand players (D52). This says what the engine's parts are, how the work divides, and where each part stands. It is a working plan, provisional like everything in pre-production. The stack and the reasons behind it are in [tech.md](tech.md).
+First and foremost, we are building an extremely ambitious sandbox engine, with multitudes of procedural worlds and intricate systems for each component of the game (D187). This says what the engine's parts are, how the work divides, and where each part stands. It is a working plan, provisional like everything in pre-production. The stack and the reasons behind it are in [tech.md](tech.md).
 
 ## What we expect to want
 
-Our current expectation, however the gameplay turns out (D39):
+Our current expectation, however the gameplay turns out (D8, D9, D40):
 
 - **Voxel worlds**: round, smooth, fully diggable.
 - **Organic harvesting**: resources are in the world and you get them by taking the world apart, not by clicking a node.

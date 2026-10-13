@@ -109,9 +109,9 @@ Proposed loops:
 | Session | Answer something the world is doing: clear a pooling place before it surges, defend a settlement, follow a migration, reach a new portal. Come back stronger. |
 | Long | Climb the ranks; hold a region; reach other worlds, each harder than the last. |
 
-**Why build?** From the developers, 2026-10-11 (D90, Leaning): part of survival is establishing bases and outposts; recruited NPCs might help defend them, and built defences might come later. In Enshrouded you build a home, and the people you rescue come to live and work in it. Proposed for us: a base is a **hold** on the world. It is where you make things, where recruited NPCs live and work, and a place the magic around you is kept down. Bigger holds take on bigger stretches of wild.
+**Why build?** From the developers, 2026-10-11 (D90): part of survival is establishing bases and outposts; recruited NPCs might help defend them, and built defences might come later. In Enshrouded you build a home, and the people you rescue come to live and work in it. Proposed for us: a base is a **hold** on the world. It is where you make things, where recruited NPCs live and work, and a place the magic around you is kept down. Bigger holds take on bigger stretches of wild.
 
-**Progression in three layers** (D124, Leaning): skills by doing (D88), many and small; techniques by study, from skill books and teachers; and powers from essences, rare and large, changing how you play. See [progression.md](progression.md#three-layers) and [magic.md](magic.md).
+**Progression in three layers** (D124): skills by doing (D88), many and small; techniques by study, from skill books and teachers; and powers from essences, rare and large, changing how you play. See [progression.md](progression.md#three-layers) and [magic.md](magic.md).
 
 **Ranks as the spine** (D159): iron, bronze, silver, gold and diamond rank monsters, places, portals, materials and people alike, so a bronze-rank portal leads somewhere bronze-rank things live. That gives worlds an order without a story to justify it.
 

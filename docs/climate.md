@@ -1,6 +1,6 @@
 # Climate: seasons, weather and what they do
 
-Status: Leaning, 2026-10-12. Seasons exist, change play and are fundamentals rather than flags (D149, Decided); weather differs by world (D78); body temperature is probably its own attribute (D153, Leaning). The rest proposes how they work. Grew out of [biomes.md](biomes.md), which keeps what seasons do to plants' looks.
+Status: Leaning, 2026-10-12. Seasons exist, change play and are fundamentals rather than flags (D149, Decided); weather differs by world (D78); body temperature is its own attribute (D153). The rest proposes how they work. Grew out of [biomes.md](biomes.md), which keeps what seasons do to plants' looks.
 
 ## The rule: fundamentals, not seasons
 
@@ -59,7 +59,7 @@ A number per world, in its theme, and so changeable at any time. Since our world
 
 ## Body temperature
 
-Probably an attribute of its own (D153, Leaning): "if you're too cold it could increase stamina usage (same with too hot) or increase thirst or something else". Proposed, after what a real body does:
+Probably an attribute of its own (D153): "if you're too cold it could increase stamina usage (same with too hot) or increase thirst or something else". Proposed, after what a real body does:
 
 - **What moves it:**
   - It drifts toward what the surroundings push it to: the air's temperature, the wind, being wet, the sun, shelter, a fire nearby.
