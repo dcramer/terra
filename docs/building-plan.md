@@ -102,7 +102,7 @@ First, as now: arithmetic on the cubes, each to its fill and its kind's slab, st
 
 Each step ends checked by script before the next (D69), and is committed as it goes.
 
-0. **Spike: block modules.** Can Tripo's stone, conformed to shared edges, look as good as the stone sections, with no seams? A straight wall, a carved cross, a stone and log join, a wall part-built, on the kit sheet beside today's stone house. The developers judge. If not, block kinds keep sections; nothing else changes.
+0. **Spike: block modules** (done, 2026-10-12, [research/block-modules.md](../research/block-modules.md)). Conformed Tripo pieces read as a grid and break at carved shapes; the cubes' surface, bevelled and displaced by a real stone material, reads as one natural wall and carves cleanly. If the developers agree (D197), `layout/blocks` becomes a mesher for that surface, per section on workers, as the terrain's: outer faces, bevels, subdivision near the camera, the material's height displaced on the CPU, triplanar texturing.
 1. **The model.** The cube store in sections; fill, shape and state per cube; operations with their checks and inverses; ground sampled into plans; support; snapshots; older saves converted. Property tests. The game unchanged on top.
 2. **Layouts.** `logs.rs` split into runs, trims and ground; block layout from the spike's answer; roof pieces; all in grid units; the kit checker. The kit sheet covers every case.
 3. **Drawing.** Sections as entities, layouts on the worker pool, merged meshes, instanced ghosts, far meshes, indoor light. The entity per piece goes. The `village` bench, measured on both GPUs.

@@ -8,6 +8,9 @@
 //! On the yard, the flat test level, to compare pieces; without `--level yard`, in the
 //! world, among its trees and on its slopes, to judge them in a whole scene.
 //!
+//! Any model given with `--model` stands in a row after the sheet's, on the ground and lit
+//! as the game is, so a piece or an experiment is judged beside what is built.
+//!
 //! The kit's file is read again when it is saved, so the sheet can be left running while
 //! the look is tuned.
 
@@ -202,6 +205,7 @@ pub(super) fn lay(
     planet: Res<Planet>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
+    assets: Res<AssetServer>,
 ) {
     if *done || !options.kit_sheet {
         return;
@@ -219,7 +223,23 @@ pub(super) fn lay(
         .iter()
         .find(|kit| kit.pattern == Pattern::Masonry)
         .map(|kit| kit.kind());
-    for (row, (name, ops)) in rows(laying, stone).into_iter().enumerate() {
+    // How high the ground is at a place, in the start's own space, the yard being round:
+    // what a vantage near it needs to stand on it.
+    let ground_at = |east: f32, north: f32| {
+        let point = site.frame.transform_point(Vec3::new(east, 0.0, north));
+        let ground = point - point.normalize() * planet.distance(point);
+        (
+            ground,
+            site.frame
+                .compute_affine()
+                .inverse()
+                .transform_point3(ground)
+                .y,
+        )
+    };
+    let rows = rows(laying, stone);
+    let count = rows.len();
+    for (row, (name, ops)) in rows.into_iter().enumerate() {
         let north = -FIRST_ROW_M - ROW_M * row as f32;
         for (column, shown) in [Shown::Built, Shown::Plan(GOING_UP), Shown::Plan(0.0)]
             .into_iter()
@@ -247,14 +267,37 @@ pub(super) fn lay(
             build.replace_with(&ops, &mut commands, &planet, &mut meshes);
             commands.spawn((Name::new(label), Built(build)));
         }
+        let (_, height) = ground_at(STATE_M, north);
         info!(
             "Kit sheet: {name}: --vantage {},{},{},{},{},{}",
             STATE_M + 2.0,
-            9.0,
+            height + 9.0,
             north + 22.0,
             STATE_M + 2.0,
-            0.5,
+            height + 0.5,
             north + 1.5
+        );
+    }
+    // Models to judge beside the sheet, each in a row of its own after it.
+    for (index, path) in options.models.iter().enumerate() {
+        let (east, north) = (0.0, -FIRST_ROW_M - ROW_M * (count + index) as f32);
+        let (ground, height) = ground_at(east, north);
+        commands.spawn((
+            Name::new(format!("Kit sheet: model {path}")),
+            frame_at(ground, &site.frame),
+            Visibility::default(),
+            bevy::world_serialization::WorldAssetRoot(
+                assets.load(GltfAssetLabel::Scene(0).from_asset(path.clone())),
+            ),
+        ));
+        info!(
+            "Kit sheet: model {path}: --vantage {},{},{},{},{},{}",
+            east + 2.0,
+            height + 2.2,
+            north + 7.0,
+            east + 2.0,
+            height + 1.0,
+            north
         );
     }
 }

@@ -208,4 +208,4 @@ Found by reading this proposal against the building docs, the decisions and the 
 
 ## Next
 
-One question to answer first, as a spike: **can a dual-grid stone kit, its modules Tripo's models conformed to shared edges, look as good as the Tripo sections, with no seams?** Built on the yard's kit sheet beside today's stone house, as a straight wall, a carved cross, a stone and log join and a part-built wall, and judged by the developers. If it can, block kinds go to the dual grid; if not, they stay on runs and sections, and the rules above still hold.
+Spiked on 2026-10-12 ([research/block-modules.md](../../research/block-modules.md)): conformed Tripo pieces read as a grid of metre blocks and break where a shape interrupts their tiling; the cubes' own surface, bevelled and displaced by a real stone material, reads as one natural wall, with no seams, and carves cleanly. Recommended: block kinds drawn as that surface, long members as modelled pieces, doors, windows and details as props. It cuts against D177 for block kinds, so it is the developers' call (D197).
