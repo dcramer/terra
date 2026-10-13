@@ -60,7 +60,7 @@ What a walker hits is the cube (D181), not the pieces drawn in it. Log ends stic
 
 Round logs, saddle-notched at the corners with their ends sticking out: the log cabin everyone pictures, and The Forest's. Squared logs dovetailed flush were the alternative: tidier, with less character.
 
-**Not cylinders.** The art is shape, a palette colour per face, and light, with no textures (art-style.md). A log is made to look hewn and grown, not turned:
+**Not cylinders.** The art is real materials in detailed textures on clean shapes (D14, art-style.md). A log is made to look hewn and grown, not turned:
 
 - **An uneven section**: seven to nine facets of different widths, never a regular polygon, slightly flattened top and bottom where it was scribed to sit on the log below, and turning a little along its length.
 - **A tree's shape**: tapered, the thick end alternating course by course, with a gentle bend and a swelling here and there.
