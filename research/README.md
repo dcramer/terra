@@ -28,6 +28,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [timber-walls.md](timber-walls.md) | Which way of drawing the timber kind from its cubes looks most beautiful and thematic: generated round logs, generated hewn timber, or a timber surface, against today's Tripo logs? |
 | [voxel-building-look.md](voxel-building-look.md) | How does Enshrouded draw its building so touching cubes blend and each cube's look changes by its neighbours, how do other good-looking grid builders do it, and what path takes Terra to D211's bar? |
 | [role-pieces.md](role-pieces.md) | Which way of giving each exposed face, edge and corner of a cube a look by its role and neighbours brings stone, logs and roofs on par with Enshrouded: role layers and masks, swept profiles and corner pieces, or modules? |
+| [enshrouded-parity.md](enshrouded-parity.md) | Feature by feature, how does Enshrouded's building compare with ours as built, and what closes each gap on our cube store, operations and layouts without rebuilding them? |
 | [tripo-studio-credits.md](tripo-studio-credits.md) | Can scripts spend our Tripo subscription's credits instead of API credits? |
 | [tripo-studio-api.md](tripo-studio-api.md) | What does each Studio operation take and return, so a script can do everything the web app does? |
 | [agents-playing-games.md](agents-playing-games.md) | How do AI agents play games, from the screen or through the game's state, and what would make them efficient at Terra? |
