@@ -1,131 +1,94 @@
 # Tech
 
-Status: provisional, like everything in pre-production. The direction below is our current answer. Everything is written in Rust (D11), on Bevy, with our own voxel terrain (D12). Library choices that have not been exercised yet are marked Leaning in [decisions.md](decisions.md).
+Status: provisional, like everything in pre-production. The direction below is our current answer. Library choices that have not been exercised yet are marked Leaning in [decisions.md](decisions.md).
 
-The earlier Godot build and its measurements are in [research/godot-spike.md](../research/godot-spike.md). Those numbers are the bar this build has to meet.
+Terra is first and foremost a sandbox engine (D187): many procedural worlds, and a system for each part of the game acting on the others, so that the game is what they make together, for up to a thousand players (D52). Everything is written in Rust (D11), on Bevy, with our own voxel terrain (D12). The parts and where each stands are in [engine.md](engine.md); how to work in the repository is in [development.md](development.md). The Godot build that came first, and its numbers, still the bar (D12), are in [research/godot-spike.md](../research/godot-spike.md); the check of this toolchain is [research/rust-stack-spike.md](../research/rust-stack-spike.md).
 
 ## Requirements
 
-- Several round worlds with no space between them, reached probably by portals (D4, D72).
+- Many round worlds with no space between them, reached probably by portals (D4, D72).
 - Fully diggable smooth terrain (D9). Only players reshape the ground (D20).
-- Multiplayer built around a server that decides everything (D51), for a handful of friends at first (D2) and without ruling out many more.
-- Performant: 60 fps at 1080p on a mid-range discrete GPU and a 4-core CPU, including while that machine also runs the server for three other players (D25).
+- Multiplayer built around a server that decides everything (D51), toward a thousand players on one persistent server (D52).
+- Performant: 60 fps at 1080p on a mid-range discrete GPU and a 4-core CPU, as a client of a server holding a thousand players, with dozens of them in view (D25).
 - Developed on Windows via WSL and on macOS (D7), with all code written by agents (D1).
 
 ## Stack
 
 | Layer | Choice | Status |
 |---|---|---|
-| Language | Rust for everything. No scripting language. | Decided |
+| Language | Rust for the game; TypeScript on Node for tooling outside it (D121). No scripting language in the game. | Decided |
 | Engine framework | Bevy 0.19: entity system, renderer, windowing, input, assets, audio, UI | Decided |
 | Graphics | Bevy's renderer on wgpu (Vulkan, Metal, DirectX 12). Our own shaders for ground, sea and sky. | Decided |
 | Voxel terrain | Our own crate, ported from the parts of Voxel Tools we need (MIT-licensed) | Decided |
-| Terrain meshing | The `transvoxel` crate to start | Leaning |
-| Simulation | Our own crate, already written and running on its own thread (D26) | Decided |
-| Physics | Avian for rigid bodies; the player walks on voxel data directly | Leaning |
-| Networking | Our own messages over `renet`; Steam transport later | Leaning |
-| UI | Bevy's UI for the game; `bevy_egui` for developer tools | Leaning |
+| Terrain meshing | The `transvoxel` crate | Decided (D32) |
+| Simulation | Our own crate, `terra_sim`, on its own thread; parked with terraforming (D26, D60) | Parked |
+| Physics | Avian for rigid bodies; the player walks on voxel data directly | Leaning (D33) |
+| Networking | Our own messages over `renet`; Steam transport later | Leaning (D34) |
+| UI | Bevy's UI for the game; `bevy_egui` for developer tools | Leaning (D35) |
 | Sound | Bevy's audio; ambience and music generated in code; recorded clips in named sets ([audio.md](audio.md)) | Decided (D113) |
-| Maths in shared state | The `libm` crate for sine and friends, not the system maths library | Decided |
-| Saves and messages | `serde` with `postcard` | Leaning |
+| Maths in shared state | The `libm` crate for sine and friends, not the system maths library | Decided (D30) |
+| Saves | `serde` with `ron`; network messages not chosen yet | Leaning |
 | Coordinates | One frame per world, relative to a moving origin; no `big_space` | Leaning (D36) |
 
-We write the terrain, the simulation, the networking model and the game. We do not write a renderer, an animation system, an asset pipeline or a windowing layer; Bevy supplies those.
+We write the terrain, the networking model and the game. We do not write a renderer, an animation system, an asset pipeline or a windowing layer; Bevy supplies those.
 
 ## How the code is split
 
-One Cargo workspace. The rule that shapes it: **anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy.**
-
-| Crate | What it holds | Depends on Bevy? |
-|---|---|---|
-| `terra_sim` | The planet simulation: cells, fields, machines' effects | No |
-| `terra_voxel` | Terrain: the density field, the tree of chunks at different detail levels, meshing, edits | No |
-| `terra_core` | The shared game state and the operations that change it | No |
-| `terra_net` | Network messages and the transport wrapper | No |
-| `terra_game` | The game in Bevy: drawing, input, the player, UI, audio, and the shell every build runs under | Yes |
-| `terra_sandbox` | A test environment on top of the game: it launches it, with testbeds and developer tools | Yes |
+One Cargo workspace. The rule that shapes it: **anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy** (D28). Only the applications, `terra_game` and `terra_sandbox`, may depend on Bevy, and `cargo xtask check` enforces it. The crates are listed in [crates/README.md](../crates/README.md).
 
 Why this split:
 
-- **Tests are fast and need no GPU.** The plain crates run under `cargo test` in seconds.
+- **Tests are fast and need no GPU.** The plain crates run under `cargo xtask check` in seconds.
 - **The server can run without a window.** The same crates are the server, whether it runs inside a player's game or alone on another machine.
-- **Bevy's releases only touch one crate.** Its API changes every few months; the game's rules do not live there.
-- **It was already working.** `terra_sim` moved from Godot to this plan without changing.
+- **Bevy's releases only touch the applications.** Its API changes every few months; the game's rules do not live there.
 
 The plain crates share one maths library with Bevy (`glam`), so positions pass between them without conversion.
 
 ## State, and how it is shared
 
-The game is server-first (D51): it always talks to a server, which decides everything. When friends play together, that server runs inside one player's game. On a persistent world it runs alone on another machine. Both are the same code. What a large persistent world would add on top is in [multiplayer.md](multiplayer.md).
-
-Three kinds of state, each shared differently:
+The game is server-first (D51): it always talks to a server, which decides everything. When friends play together, that server runs inside one player's game. On a persistent world it runs alone on another machine. Both are the same code. What a thousand players ask of it is in [multiplayer.md](multiplayer.md).
 
 | Kind | Examples | How it is shared |
 |---|---|---|
-| World changes | Digging, placing a machine | As operations, applied in the server's order by every player (D21) |
-| Simulation | Temperature, sea level, life | The server runs it and sends snapshots. It is about 10 thousand cells, so a snapshot is small. |
+| World changes | Digging, building | As operations, applied in the server's order by every player (D21) |
 | Moving things | Players, creatures | The server sends positions; players smooth between them |
 | Local only | Rendering, UI, sound, particles | Not shared |
 
-Only the server runs the simulation, so players never have to compute identical floating-point results for it. Terrain is generated on each machine from the same seed; small differences between machines would shift a mesh by a hair and are harmless. Using `libm` keeps even that from happening.
-
-A save is the seed, the operations, the simulation state and periodic snapshots of edited terrain.
+Terrain and everything placed by rule are generated on each machine from the same seed; using `libm` keeps machines from differing even by a hair. A save is the seed and the operations, with snapshots of edited areas once there are very many edits.
 
 ## Terrain
 
-The design follows Voxel Tools, which we measured and know works. Our port needs about a seventh of it; see [research/voxel-tools-port.md](../research/voxel-tools-port.md).
+The design follows Voxel Tools, which we measured and know works. Our port needs about a seventh of it; see [research/voxel-tools-port.md](../research/voxel-tools-port.md). The brief is [terrain.md](terrain.md).
 
-- **Density field.** A Rust function gives the distance to the ground at any point: the planet's large shape from the simulation's terrain waves, plus fine noise.
-- **Edits.** Stored as small blocks of changed voxels over the generated terrain, and changed only by operations.
-- **Chunk tree.** Each planet has a tree of chunks; chunks near a viewer are fine, distant ones coarse. The server tracks one viewer per player.
+- **Density field.** A Rust function gives the distance to the ground at any point: the world's large shape from its seed, plus fine noise.
+- **Edits.** Kept as the operations themselves, laid over the generated terrain (D21).
+- **Chunk tree.** Each world has a tree of chunks; chunks near a viewer are fine, distant ones coarse. The server tracks one viewer per player.
 - **Meshing.** Runs on worker threads, nearest chunks first. Finished meshes are handed to Bevy a few per frame.
 - **Seams.** Neighbouring chunks at different detail levels are stitched with the Transvoxel method.
-- **Collision.** The player and creatures query voxel data directly, so they never wait for a collision mesh. Rigid bodies get collision meshes for the finest chunks near them.
-
-While porting, the original keeps running headless next to the port, and the two are compared on the same density function.
+- **Collision.** The player and creatures query voxel data directly, so they never wait for a collision mesh. Rigid bodies would get collision meshes for the finest chunks near them (D33, D53).
 
 One known gap: the `transvoxel` crate bakes seam stitching into each mesh, so a chunk must be re-meshed when a neighbour changes detail level. Voxel Tools avoids that by switching seams in the shader. If re-meshing proves costly we port its mesher too (about 4,600 lines).
 
 ## Rendering
 
-- **Ground:** one material. Colour comes from the simulation as a map of the whole planet, refreshed a few times a second, with fine detail added in the shader.
-- **Sea:** one sphere per planet at the simulation's sea level.
-- **Sky:** driven by air pressure. Bevy has built-in atmospheric scattering; whether it suits our planets is untested, and our own sky shader from the Godot demo is the fallback.
-- **Plants and objects:** instanced. The Godot load test showed instancing is limited by the GPU, not the engine.
-
-## Development workflow
-
-- **One command tests everything:** `cargo test`, no GPU needed.
-- **Agents can see their own output anywhere.** The Linux build renders under WSL's software renderer, slowly but correctly, so screenshots do not need the Windows GPU.
-- **Performance is measured on real GPUs.** The Windows build is cross-compiled from WSL and launched from there; macOS builds natively.
-- **Every binary has scripted modes** that fly a camera path, print frame times and save screenshots, as the Godot demo did.
-- **Versions are pinned:** the Rust toolchain, Bevy, and every dependency through the lock file.
-- **Bevy upgrades are deliberate.** We move to a new release once the crates we depend on support it. Bevy 0.20 is in release-candidate now; we stay on 0.19 until they do.
-
-## What has been checked
-
-A throwaway app proved the toolchain end to end on 2026-10-06: Bevy 0.19 and `transvoxel` build from WSL for Linux and Windows, render under WSL with no GPU, and run on the RTX 5090 at a median 1.8 ms a frame. Details and numbers are in [research/rust-stack-spike.md](../research/rust-stack-spike.md).
-
-The workspace, the pinned compiler and the checks exist (see [development.md](development.md)). Of the crates, only `terra_sim` exists. The terrain port is next; its brief is [terrain.md](terrain.md).
+- **Ground:** one material, blending the voxel materials, with fine detail added in the shader.
+- **Sea:** one sphere per world at its sea level.
+- **Sky:** our own sky shader.
+- **Plants and objects:** instanced and baked together by area (D47).
 
 ## Risks
 
 | Risk | What we do about it |
 |---|---|
-| The terrain port takes longer than hoped, or is fragile | It is the first milestone, tested against the original, and measured against the Godot numbers before anything is built on it |
-| Bevy changes under us | Pinned version, one crate exposed to it, upgrades on our schedule |
+| Bevy changes under us | Pinned version, only the applications exposed to it, upgrades on our schedule (D31) |
 | A library we lean on falls behind | `big_space` already trails by one Bevy release; each such crate is either small enough to fork or not on the critical path |
-| Bevy's UI and animation are younger than Godot's | Neither is needed before the terrain and co-op milestones; reassess then |
+| Bevy's UI and animation are younger than other engines' | Reassess as the game needs real menus and more animation |
+| A thousand players is far beyond anything measured | Every decision is tested against it (D52); a handful of players work first, then larger worlds are measured (D51) |
 | Performance differs between the Windows build we cross-compile and a native one | Measure every benchmark on Windows, not only Linux; switch to the MSVC toolchain if the gap matters |
-
-## What happened to the Godot build
-
-`terra_sim` moved into the workspace unchanged. The rest was deleted on 2026-10-12 (D12); its numbers, in [research/godot-spike.md](../research/godot-spike.md), are still the ones to beat, and its code is in git history.
 
 ## Sources
 
 - [Bevy 0.19 release notes](https://bevy.org/news/bevy-0-19/)
-- [Bevy 0.18 release notes](https://bevy.org/news/bevy-0-18/)
 - [transvoxel crate](https://gnurfos.github.io/transvoxel_rs/)
 - [Voxel Tools](https://github.com/Zylann/godot_voxel)
 - [Avian](https://github.com/avianphysics/avian)

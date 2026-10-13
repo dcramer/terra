@@ -16,7 +16,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 
 ## Life in a settlement
 
-- **People have days**: work, eat, sleep, gather, keep watch. A settlement's needs ([README](gameplay.md#factions-and-settlements-after-kenshi)) show in what they do and say.
+- **People have days**: work, eat, sleep, gather, keep watch. A settlement's needs ([gameplay.md](gameplay.md#factions-and-settlements-after-kenshi)) show in what they do and say.
 - **Travellers** go between settlements: traders, patrols, pilgrims, refugees. You meet them on roads.
 
 ## Talking, and quests
@@ -31,7 +31,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 - **Who**: people you rescued, or who chose to follow you for what you did for their settlement. You bring them back to your claim safely (D161).
 - **Where**: they live in your claims (D94), and need a bed, food and safety.
 - **What they do**, by what they are good at: run a station ([crafting.md](crafting.md)), gather, farm, haul, guard (D90). They take work on their own, without being managed (D161, D162); how is in [tribe.md](tribe.md). They will travel and fight beside you, later (D161).
-- **What they become** (D123): they improve at their work by doing it, as you do (D88). Proposed: on the same ladder as your skills ([essences.md](essences.md#skills-on-the-rank-ladder)), so a recruit has a rank in what they do, such as Bren a bronze-rank smith, and what they can make follows it. A recruit you bring along grows; one you rescue arrives with what they had already learned. Their skills read on their own sheet, like yours (D93).
+- **What they become** (D123): they improve at their work by doing it, as you do (D88). Proposed: on the same ladder as your skills ([progression.md](progression.md#skills-on-the-rank-ladder)), so a recruit has a rank in what they do, such as Bren a bronze-rank smith, and what they can make follows it. A recruit you bring along grows; one you rescue arrives with what they had already learned. Their skills read on their own sheet, like yours (D93).
 - **How many**: limited by what your claims can house and feed.
 
 ## Essence users

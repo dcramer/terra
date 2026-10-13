@@ -3,7 +3,7 @@
 // variants. A part is what you pick from the build menu: a room, a window, a seat. A
 // variant is a kind of that part, cycled through once the part is picked: a chair, a
 // stool. The list is a stand-in. What can be built, what it costs and how it is unlocked
-// are design questions nobody has answered (docs/player.md).
+// are design questions nobody has answered (docs/construction.md).
 //
 // structure  what the pieces of a base cost, by items.ron's names. Sizes are measured,
 //            not counted in cells, so prices do not change if the grid does: floor by

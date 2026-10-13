@@ -17,7 +17,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 ## Resources
 
 - **Belong to places** (D91): a wood to one forest, a stone to one terrain, the best ores deep or far or in higher-rank lands. Each world has its own (D59).
-- **Come in tiers by rank**: an iron-rank land's materials make iron-rank things ([essences.md](essences.md)).
+- **Come in tiers by rank**: an iron-rank land's materials make iron-rank things (D159, [progression.md](progression.md#skills-on-the-rank-ladder)).
 - **Some are touched by magic**, found where it pools, guarded by what forms there ([creatures.md](creatures.md)).
 - **Are taken from the world itself** (D43): mined, chopped, dug, cut, hunted, gathered.
 
@@ -71,7 +71,7 @@ F at the station opens it, F or Esc leaves; click a tile, or use the arrows and 
 
 ## Expanding a station
 
-Asked for by the developers on 2026-10-12 (D151, Open): stations should be expandable, perhaps by slots, either Valheim's way, where an upgrade counts if it stands within a radius of the station, or Soulmask's, as the developers describe it, where a station has placeholder slots for its expansions. What they want different from both: **no fixed item for each expansion**; there should probably be variations, though they are not sure. Then (D151, Leaning): "crafting stations will vary in capabilities when they expand/upgrade, and we want things to visually look different but also organic … it might unlock new craftables, improve capacity or other attributes".
+Asked for by the developers on 2026-10-12 (D151, Leaning): stations should be expandable, perhaps by slots, either Valheim's way, where an upgrade counts if it stands within a radius of the station, or Soulmask's, as the developers describe it, where a station has placeholder slots for its expansions. What they want different from both: **no fixed item for each expansion**; there should probably be variations, though they are not sure. Then (D151, Leaning): "crafting stations will vary in capabilities when they expand/upgrade, and we want things to visually look different but also organic … it might unlock new craftables, improve capacity or other attributes".
 
 The two ways, as they would play here:
 

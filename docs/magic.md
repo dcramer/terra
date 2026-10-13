@@ -1,6 +1,6 @@
 # Magic: essences, books and old-school spellcraft
 
-Part of the game's design ([gameplay.md](gameplay.md), D89). Status: Open, a proposal for the developers (D163), 2026-10-12, partly answered the same day: attributes and monster cores are kept (D164, D165), there is no fast travel between claims (D72), and the old-school touches follow the books. Each item is as settled as the decision it cites. It builds on the lore ([lore.md](lore.md)) and on [essences.md](essences.md), and gives the examples each system needs. How the books do it is in [research/hwfwm-magic.md](../research/hwfwm-magic.md). We take the mechanics, never the content (D125): every essence, ability, style and working here is ours.
+Part of the game's design ([gameplay.md](gameplay.md), D89). Status: Open, a proposal for the developers (D163), 2026-10-12, partly answered the same day: attributes and monster cores are kept (D164, D165), there is no fast travel between claims (D72), and the old-school touches follow the books. Each item is as settled as the decision it cites. It builds on the lore ([lore.md](lore.md)) and gives the examples each system needs. This page owns essences, powers, attributes, cores, mana and studied crafts; skills, the rank ladder and crossing a rank are in [progression.md](progression.md). How the books do it is in [research/hwfwm-magic.md](../research/hwfwm-magic.md). We take the mechanics, never the content (D125): every essence, ability, style and working here is ours.
 
 ## What the developers asked for
 
@@ -49,13 +49,14 @@ What made magic in Ultima Online, EverQuest, RuneScape, Morrowind and tabletop D
 
 From the lore and the books' mechanics (D98), with our own essences:
 
-- **Three essences and a confluence.** You absorb up to three; the fourth forms from their combination and is yours alone ([essences.md](essences.md#how-essences-would-work)). The confluence keeps its working name until [naming.md](naming.md) is settled.
+- **Three essences and a confluence.** You absorb up to three; the fourth forms from their combination and is yours alone. The combination is your identity, chosen by what you absorb, with no class picked at the start. Confluence is the books' name for it (D125).
 - **Five powers to an essence.** The first wakes when you absorb it; each of the other four needs an awakening stone. Twenty powers in all, which is a whole character.
 - **Rarity:** common, uncommon, rare, epic, legendary. As in the books, rarity is relative to a place: a frozen pool mostly gives Frost and rarely something stranger. Where you hunt decides what you can become (D91).
 - **Where essences form:** in pools and in surges, and in monsters made there, so each realm's leaning decides what its pools give ([lore.md](lore.md#magic)).
 - **Absorbing one hurts,** and can only be done at rest, in safety. Proposed: also possible as a ritual (ritual magic), which is gentler.
 - **Each essence binds to one of your four attributes** when absorbed ([below](#attributes)).
 - **No essence is better than another.** They differ in how they play.
+- **Read on the character screen** (D93): your essences, powers, attributes and ranks. Others' ranks are judged by looking, and by their aura.
 
 ### Core essences
 
@@ -136,6 +137,10 @@ Kept, as in the books (D164): **Power, Speed, Spirit and Recovery.**
 
 - **A rank's gap shows in them:** a higher-rank attacker's attributes beat a lower-rank defender's resistance, which is why two ranks up is death ([combat.md](combat.md)).
 - **On the character screen** (D93), as the books show them.
+
+## Mana
+
+The books' fighters spend mana on powers. **There is mana as well as stamina** (D102): a pool of its own beside health and stamina (D61), shown with them, in blue, as the developers said on 2026-10-11. Spirit sets how large it is and Recovery how fast it comes back (D164). Proposed: it returns faster at rest, sitting still, and with food ([survival.md](survival.md)).
 
 ## Awakening stones: drawing a power
 
@@ -388,7 +393,7 @@ The numbers tell us when the library needs more mechanics or an essence needs mo
 ### Raising powers
 
 - **By use, under real pressure:** fighting, or using a power where it matters (D88). A power used only for practice barely grows.
-- **Capped at your own rank.** Your rank rises as your powers do ([essences.md](essences.md)).
+- **Capped at the rank of the attribute it is bound to.** Your rank comes from your four attributes, which rise as the powers bound to them do (D164, [above](#attributes)).
 - **Crossing a rank may need a key** (D126).
 - **Monster cores can hurry it** (D165), at the books' price:
   - absorbing cores raises your least-advanced powers first;
@@ -544,3 +549,4 @@ Procedural, like every realm. There is no fixed list: the starting realm's essen
 3. Answered: **money is magic,** as in the books (D167).
 4. Answered: **fragments of essences** are components (D168).
 5. Answered: **their names** are the books': spirit coins and quintessence (2026-10-12).
+6. **Can an essence be removed** or replaced? Maybe; the developers expect it to be complex and are not sure yet (2026-10-11).

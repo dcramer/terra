@@ -91,7 +91,7 @@ What the generator writes, beyond names, follows one chain, so every realm's sto
 
 **Nothing is told as text.** All of it is left in places and people for players to read (D92).
 
-**What a god is, in the generator:** a name in the people's tongue, a leaning drawn from the realm's magic, a shrine kind, and what the people believe it wants. Peoples of one realm may believe different things about the same tides.
+**What a god is, in the generator:** a name in the people's tongue, a leaning drawn from the realm's magic, a shrine kind, and what the people believe it wants. Peoples of one realm may believe different things about the same god.
 
 ## Open
 

@@ -123,7 +123,7 @@ WGPU_POWER_PREF=low WSLENV=WGPU_POWER_PREF cargo xtask win -p terra_sandbox --re
 cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/mannequin.glb --model models/character/base.glb --anim Jog_Fwd_Loop --sides 30,100 --moments 0.1,0.35,0.6,0.85 --sheet shots/wb/compare --clean --settle 60
 ```
 
-Models on a plain floor in the game's own light and renderer, playing animations (D71), holding and wearing things as they would in play (`--hold`, `--wear`, `--attach`, through the shared `character` module). It prints each model's clips, joints and sockets. Fly round by hand, drive it live with `--remote` ([tools/sandbox](../../tools/sandbox/README.md), which adds `pose CLIP FRACTION`), or give `--sheet` to save one contact sheet per clip and exit, which is how an agent checks a model. The command above puts the mannequin and the base body side by side through the jog, from two sides at four moments. Run sheets on the Windows GPU; the CPU renderer under WSL is far too slow. How characters are made and checked before they get here is in `.claude/skills/character/SKILL.md`.
+Models on a plain floor in the game's own light and renderer, playing animations (D71), holding and wearing things as they would in play (`--hold`, `--wear`, `--attach`, through the shared `character` module). It prints each model's clips, joints and sockets. Fly round by hand, drive it live with `--remote` ([tools/sandbox](../../tools/sandbox/README.md), which adds `pose CLIP FRACTION`), or give `--sheet` to save one contact sheet per clip and exit, which is how an agent checks a model. The command above puts the mannequin and the base body side by side through the jog, from two sides at four moments. Run sheets on the Windows GPU; the CPU renderer under WSL is far too slow. How characters are made and checked before they get here is in `.agents/skills/character/SKILL.md`.
 
 ## Item icons
 
@@ -131,7 +131,7 @@ Models on a plain floor in the game's own light and renderer, playing animations
 cargo xtask icons --sheet shots/icons/all
 ```
 
-The icon baker (D129): renders every item in the catalogue from its own look in the house style (D130) with the icon renderer (`terra_game`'s `icons.rs`), writes `assets/icons/<item>.png` sized to the item's cells and `assets/icons/manifest.txt`, lists items with no look yet, and exits; `--sheet` also saves the icons laid out on empty slots, at 96 and 48 pixels a cell. Icons painted by `tools/icons/paint.ts` are kept, never replaced by renders; `--renders <folder>` writes every render there too, for the painter. The play experiment loads the files. A test fails when an icon is stale. How to make, check and fix icons is in `.claude/skills/item-icons/SKILL.md`.
+The icon baker (D129): renders every item in the catalogue from its own look in the house style (D130) with the icon renderer (`terra_game`'s `icons.rs`), writes `assets/icons/<item>.png` sized to the item's cells and `assets/icons/manifest.txt`, lists items with no look yet, and exits; `--sheet` also saves the icons laid out on empty slots, at 96 and 48 pixels a cell. Icons painted by `tools/icons/paint.ts` are kept, never replaced by renders; `--renders <folder>` writes every render there too, for the painter. The play experiment loads the files. A test fails when an icon is stale. How to make, check and fix icons is in `.agents/skills/item-icons/SKILL.md`.
 
 ## Adding an experiment
 

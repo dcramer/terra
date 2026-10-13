@@ -1,8 +1,8 @@
 # Terra design docs
 
-Working title: **Terra**. A multiplayer survival sandbox across many procedural worlds, reached through portals.
+Working title: **Terra**. First and foremost an extremely ambitious sandbox engine: multitudes of procedural worlds, and intricate systems for each part of the game that act on one another (D187). The game, survival and RPG in a living world across realms reached through portals, is what those systems make together.
 
-The source of truth, then the docs about the game as a whole, then one doc per part of the game, then the engine and how we work.
+The source of truth, then the docs about the game as a whole, then one doc per part of the game, then parked docs, then the engine and how we work.
 
 | Doc | What it covers |
 |---|---|
@@ -12,44 +12,47 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 
 | Doc | What it covers |
 |---|---|
-| [vision.md](vision.md) | Pitch, pillars, tone, our inspirations, non-goals. |
+| [vision.md](vision.md) | What we are building (D187), the pitch, pillars, our inspirations, tone, non-goals, and how the scope is reached. |
 | [gameplay.md](gameplay.md) | **The game's design, and the source of truth for it** (D89): a living world, after Enshrouded and *He Who Fights With Monsters*; what goes on in the realms, the loops, factions and settlements, holding ground, no hand-holding. Links a page per system, below. |
 | [lore.md](lore.md) | The foundational lore: how the universe works, from *He Who Fights With Monsters*'s world-building, written in our own words. The basis for every system. |
-| [naming.md](naming.md) | Proposed rules for making names and lore: a shared tongue for how the universe works, with magic spoken of as water, and generated tongues for each realm's peoples. |
-| [proposals](proposals/README.md) | Numbered proposals, each one candidate. Game design 001 was adopted on 2026-10-12 and is now gameplay.md and its system pages. |
+| [naming.md](naming.md) | Proposed rules for making names and lore: a shared tongue for how the universe works, in the books' names and plain English, and generated tongues for each realm's peoples. |
+| [proposals](proposals/README.md) | Where new numbered proposals go. |
 
 **Parts of the game**
 
 | Doc | What it covers |
 |---|---|
-| [worlds.md](worlds.md) | The realms as places: themes, terrain, caverns, water, size, gravity, the starting realm, portals between them. |
+| [worlds.md](worlds.md) | The realms as physical worlds: what a world's theme sets, terrain, caverns, water, size, gravity, the starting realm, portals between them. |
 | [biomes.md](biomes.md) | Draft: how a world fills with life, from grass to canopy: goals, how placement and drawing could work on voxel terrain, open questions. |
-| [climate.md](climate.md) | Draft: seasons and weather as swings in temperature, daylight and precipitation that bodies, ground, plants and creatures respond to; the year's length. |
-| [survival.md](survival.md) | Needs, rhythms and death: hunger, thirst, warmth, breath, rest; day and night; coming back. |
-| [combat.md](combat.md) | Real time on stamina, after Enshrouded; weapon skills by doing; abilities from essences; rank decides more than skill. |
-| [creatures.md](creatures.md) | Wildlife with routines and a food chain; monsters that form where magic pools. |
-| [essences.md](essences.md) | Essences, abilities and ranks; skills, studied techniques and powers as three ways to grow; mana. |
-| [magic.md](magic.md) | Magic as a whole, with examples: core essences, confluences by rule, awakening as a weighted draw of generated powers, combat styles and studied crafts from skill books, old-school spellcraft (reagents, words of power, Mark and Recall, scrolls and wands), and magic beyond these. |
+| [climate.md](climate.md) | Leaning: seasons and weather as swings in temperature, daylight and precipitation that bodies, ground, plants and creatures respond to; the year's length. |
+| [survival.md](survival.md) | Needs, rhythms and death: hunger, thirst, warmth, breath, rest, mana; day and night; coming back at a hearth. |
+| [combat.md](combat.md) | A fast action RPG on stamina, after Enshrouded; weapon skills by doing; abilities from essences; rank decides more than skill. |
+| [creatures.md](creatures.md) | Wildlife with routines and a food chain; monsters that form where magic pools, and what they leave. |
+| [magic.md](magic.md) | Magic as a whole, with examples: core essences, attributes, mana, confluences by rule, awakening as a weighted draw of generated powers, combat styles and studied crafts from skill books, old-school spellcraft (reagents, words of power, Mark and Recall, scrolls and wands), and magic beyond these. |
 | [crafting.md](crafting.md) | Resources by region and rank, tools, stations run by recruits, learning what to make. |
 | [people.md](people.md) | Settlements with days, quests as what people say, recruits, trade. |
 | [tribe.md](tribe.md) | Your tribe: its players and recruits, and its claims as outposts; recruits who work, carry and defend on their own, without being managed. |
-| [your-character.md](your-character.md) | No class, getting around big round realms, what is on screen and what is not. |
-| [arc.md](arc.md) | The start without a tutorial, the long game by rank, playing together. |
-| [settings.md](settings.md) | How any realm's theme works: gameplay roles every setting fills, rank the only power axis. |
+| [your-character.md](your-character.md) | No class, creation (D111), moving and acting on the world, getting around big round realms, the map, what is on screen and what is not, options (D80). |
+| [arc.md](arc.md) | The fiction, the start without a tutorial, the long game by rank, playing together. |
+| [settings.md](settings.md) | How any realm's theme and cultures work: gameplay roles every setting fills, rank the only power axis, how generated realms fit the lore. |
 | [techno-realm.md](techno-realm.md) | One setting worked through: a realm of machines that run on magic, without guns. |
-| [player.md](player.md) | Draft: the player's body, tools, equipment, backpack and action bar, acting on the world, building. Open questions for the developers. |
-| [items.md](items.md) | Items and containers: equipment, backpack, action bar and storage, on a Subnautica baseline, and how they work in code. |
+| [items.md](items.md) | Items and containers: equipment, backpack, action bar and storage, on a Subnautica baseline; icons; how they work in code. |
 | [characters.md](characters.md) | How bodies, clothing, armour and weapons are made so every item fits every body without fitting each by hand (D128). Questions for the developers. |
 | [character-system-plan.md](character-system-plan.md) | The character system from scratch: the base body asset, bodies as shapes, gear made once, the game's side, tools, order of work and risks. |
 | [construction.md](construction.md) | Draft for the developers: the baseline building system, everything players will expect from Enshrouded, Rust, Ark, Subnautica 2 and The Forest, the controls, what is built, and open questions. |
 | [structures.md](structures.md) | The technical design for walls, floors and roofs: parts as shared state, walls laid from kits by rule, roofs as a height field, buildings and indoors, drawing many buildings, and the order of work. |
 | [kits.md](kits.md) | Draft for the developers: how each kind of construction looks and is drawn, planned, going up and built, with logs first: corners, joins and openings. |
-| [progression.md](progression.md) | Draft: player skills, the research system, and how things are unlocked. Mostly open questions. |
+| [progression.md](progression.md) | Three ways to grow (skills, studied techniques, essences), skills on the rank ladder, crossing a rank, and how things are unlocked. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
-| [planet-sim.md](planet-sim.md) | Parked with terraforming: the planetary simulation, cells, fields, how local feeds global. |
 | [art.md](art.md) | Art direction: direction D, what a realm brings to the look, how the renderer makes it, open questions. |
 | [art-style.md](art-style.md) | **The style guide for making anything the game draws**, the same in every realm and setting: shape, colour, light, budgets, the concept prompt and a checklist. |
 | [audio.md](audio.md) | Sound: how it is put together, what it sounds like now, and questions for the developers. |
+
+**Parked**
+
+| Doc | What it covers |
+|---|---|
+| [planet-sim.md](planet-sim.md) | Parked with terraforming (D6, D89): the planetary simulation, cells, fields, how local feeds global. |
 
 **The engine and how we work**
 

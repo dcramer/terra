@@ -70,7 +70,7 @@ Most things come in many variants (D182), so make them for it:
 
 ## The concept prompt
 
-Most models start as a concept image ([props](../tools/props/README.md), [characters](../.claude/skills/character/SKILL.md)). End the subject's description with this paragraph, word for word, so that every concept is drawn alike. `tools/props/props.ts` reads it from here, so keep it as the one quoted line under this heading:
+Most models start as a concept image ([props](../tools/props/README.md), [characters](../.agents/skills/character/SKILL.md)). End the subject's description with this paragraph, word for word, so that every concept is drawn alike. `tools/props/props.ts` reads it from here, so keep it as the one quoted line under this heading:
 
 > Stylised 3D render with a graphic, illustrative look: bold simplified shapes, large flat areas of colour from a limited palette, no texture, no outlines, no painted shading; strong, clear silhouette; true real-world proportions. Single subject, whole subject in frame and centred, lit evenly and softly from the upper left, on a plain light grey background, no ground, no text.
 

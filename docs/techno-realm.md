@@ -4,13 +4,13 @@ Part of the game's design ([gameplay.md](gameplay.md), D89), as a proposal: how 
 
 ## What the developers have said
 
-From 2026-10-11, asking how a "techno" realm would work: no machine guns; it should feel technologically advanced, but on theme with magic, and not superior. Earlier (D86, Leaning), realms may differ in setting, "like fantasy or primitive or futuristic", each with its own cultures and what they can teach. Also standing: one art style across the game (D14); your gear is your gear in every realm; no space, no oxygen tanks, no science fiction toolsets.
+From 2026-10-11: no machine guns; technologically advanced, but on theme with magic, and not superior. Its makers could be gone or still at work. Standing: realms may differ in setting (D86); one art style (D14); no science fiction (D89).
 
 ## Based on
 
 | Reference | What to take |
 |---|---|
-| *He Who Fights With Monsters* | As I recall the books, unchecked: force without magic does not scale against rank, so guns stop mattering past the lowest ranks; magic items such as Jason's cloud flask are already "technology", made of magic; and when Earth gains magic its technology is folded in rather than winning. |
+| *He Who Fights With Monsters* | Force without magic does not scale against rank, and magic items are already technology made of magic ([research/hwfwm-magic.md](../research/hwfwm-magic.md)). |
 | Eberron (Dungeons & Dragons) | Magic as industry: trains on lines of lightning, airships driven by bound elementals, built soldiers. Machines that are plainly magic. |
 | *Arcane* | Hextech: engineering shaped around a magic crystal. Precise, powerful, dangerous, never replacing the people who use it. |
 | Kenshi, Soulmask, Subnautica | An advanced people who are gone, known from their ruins, their guardians and what still runs. Technology as something you dig up and learn, not something you are behind. |
@@ -21,9 +21,9 @@ Proposed: **a fallen civilisation of magitech, whose machines run on magic, cann
 
 ## The rules
 
-**1. Everything runs on magic.** A device is powered by a **core**: crystallised magic taken from a monster, of the monster's rank, or charged where magic pools ([creatures.md](creatures.md), D103). There is no other power. Monsters, pooling places and machines become one economy.
+**1. Everything runs on magic.** A device is powered by a **core**: the crystallised magic monsters leave, of the monster's rank (D165, [magic.md](magic.md#raising-powers)). There is no other power. Monsters, pooling places and machines become one economy.
 
-**2. A machine is as strong as its core, and stays so.** A bronze-rank turret is a bronze-rank turret for as long as it stands. It does not learn, rank up or improve by use. You do (D88, [essences.md](essences.md)). So machines are strong early and in numbers, and are outgrown by a person who keeps climbing; they never stand in for that climb.
+**2. A machine is as strong as its core, and stays so.** A bronze-rank turret is a bronze-rank turret for as long as it stands. It does not learn, rank up or improve by use. You do (D88, D164, [progression.md](progression.md)). So machines are strong early and in numbers, and are outgrown by a person who keeps climbing; they never stand in for that climb.
 
 | | Machines | Your own skills and essences |
 |---|---|---|
@@ -50,15 +50,7 @@ Proposed: **a fallen civilisation of magitech, whose machines run on magic, cann
 
 That keeps the realm from feeling ahead of the others: its machines are the past, and something went wrong with them. If the makers are still at work, a living culture of tinkers, the same rules hold: their machines run on cores and are capped by them, and what they teach is the realm's speciality ([settings.md](settings.md)). A realm could have both, the living among the ruins of the old.
 
-**6. Each realm has a speciality.** If realms teach different things (D86), each should be needed and none should be the top. The general version, for every setting, is in [settings.md](settings.md):
-
-| Setting | What it teaches, proposed |
-|---|---|
-| Fantasy | Personal power: essences, abilities, enchanting |
-| Primitive | The land: taming, tracking, herbs, survival |
-| Machines | Holding a place: automation, defence, logistics |
-
-A hold that uses all three is stronger than one that uses one, which is a reason to go everywhere (D91) and, later, to trade.
+**6. Each realm has a speciality.** If realms teach different things (D86), each should be needed and none should be the top. Proposed for machines: holding a place, through automation, defence and logistics. The other settings' specialities are in [settings.md](settings.md#four-settings-from-the-earlier-mood-board). A hold that draws on several is stronger than one that uses one, which is a reason to go everywhere (D91) and to trade.
 
 **7. The look.** One art style (D14). Brass, bronze, carved stone and crystal, not chrome or plastic; machines that look built by hand and fitted together; runes and the glow of the magic showing where the power runs. Its cultures differ in models and details, as every realm's do.
 
@@ -81,8 +73,8 @@ A hold that uses all three is stronger than one that uses one, which is a reason
 ## Questions for the developers
 
 1. Answered: **gone or still at work** could be either (2026-10-11).
-2. **Cores from monsters, charge from pooling places, or both?**
+2. Answered: **cores come from monsters** (D165). Open: whether they can also be charged where magic pools.
 3. **Constructs:** in, and if so, what may they do?
 4. **Hand-held devices:** none at all, or charged tools like the bolt-thrower?
-5. **Does what happened to the makers tie into the long arc**, such as the spread (premise B in [arc.md](arc.md))?
+5. Superseded: there is no single long arc to tie into (D172). What happened to the makers is the realm's generated history ([settings.md](settings.md#making-generated-realms-fit-the-lore)).
 6. **Is "machines teach holding a place" the right speciality**, and do the other realms' specialities sound right?

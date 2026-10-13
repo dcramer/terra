@@ -3,7 +3,7 @@
 //! A part is what you pick from the dial: a room, a window, a seat. A variant is a kind
 //! of that part, cycled through once the part is picked: a chair, a stool. The list is
 //! data, in `assets/data/builds.ron` (D136), and a stand-in. What can be built, what it
-//! costs and how it is unlocked are design questions nobody has answered (docs/player.md).
+//! costs and how it is unlocked are design questions nobody has answered (docs/construction.md, docs/progression.md).
 
 use super::crafting::{Station, Stations};
 use super::data;

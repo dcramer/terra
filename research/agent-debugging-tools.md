@@ -6,7 +6,7 @@ Mostly read, not run: engine documentation, papers, studio write-ups and crate s
 
 ## Where we started
 
-Scripted runs (`--press` on given frames, `--shot`, `--bench`), workbench sheets, and a CLI over Bevy's remote protocol for placing things and framing shots ([tools/sandbox](../tools/sandbox/README.md)). The play experiment's loop is checked by [loop.sh](../crates/terra_sandbox/loop.sh), which starts the game afresh for every step, presses keys on fixed frame numbers, and searches the log afterwards. That works, but a change of timing breaks it, every step pays a cold start, and when a step fails all it says is that a line never appeared.
+Scripted runs (`--press` on given frames, `--shot`, `--bench`), workbench sheets, and a CLI over Bevy's remote protocol for placing things and framing shots ([tools/sandbox](../tools/sandbox/README.md)). The play experiment's loop is checked by [loop.sh](../tools/sandbox/loop.ts), which starts the game afresh for every step, presses keys on fixed frame numbers, and searches the log afterwards. That works, but a change of timing breaks it, every step pays a cold start, and when a step fails all it says is that a line never appeared.
 
 ## What every engine's agent tooling converges on
 

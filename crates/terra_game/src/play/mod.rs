@@ -13,7 +13,7 @@
 //!
 //! The scene around the player is in the modules here: `scene` is the light and air,
 //! `flora` what grows, `props` what has been placed, `figure` the player's body, `tool`
-//! the builder, `dial` its menu and prompts, and `catalogue` what it can build. See docs/player.md for the design this is a step toward.
+//! the builder, `dial` its menu and prompts, and `catalogue` what it can build. See docs/your-character.md and docs/construction.md for the design.
 
 mod archery;
 mod bag;

@@ -1,9 +1,10 @@
 name: CI
 
+# Off until we need it (D37): run by hand from the Actions tab. To turn it back on, add
+#   push:
+#     branches: [main]
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 # A newer push replaces an older run on a pull request. On main every run finishes, so
 # that each platform gets to save its build cache.

@@ -24,7 +24,7 @@ Each prop is a folder in [art/props](../../art/props), named as you like, holdin
 
 ## Making one
 
-Run from the repository root. The `models` skill (`.claude/skills/models`) gives the whole order of work around these steps, from choosing a model's size, budget and roles to putting it in the game's data. Tripo needs its setup ([tools/tripo](../tripo/README.md)); Blender runs through [tools/blender](../blender/README.md).
+Run from the repository root. The `models` skill (`.agents/skills/models`) gives the whole order of work around these steps, from choosing a model's size, budget and roles to putting it in the game's data. Tripo needs its setup ([tools/tripo](../tripo/README.md)); Blender runs through [tools/blender](../blender/README.md).
 
 ```bash
 node tools/props/props.ts concept forge   # free: draws art/props/forge/concept.png; look at it

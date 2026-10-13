@@ -25,7 +25,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 - **They form where magic pools.** The place decides the kind: a marsh makes marsh things, a ruin its own. The more it pools, the higher their rank.
 - **Left alone they grow**, spread, and surge: they spill into the land around, onto roads, settlements and claims.
 - **They fight**: they are what combat is mostly against ([combat.md](combat.md)).
-- **What they leave**: materials found nowhere else, sometimes essences ([essences.md](essences.md)), and the means to trade ([people.md](people.md)).
+- **What they leave**: materials found nowhere else; cores (D165), which hurry powers, run machines and calm pools; spirit coins, the money that is magic (D167); quintessence, fragments of their kind for workings and items (D168); and sometimes essences ([magic.md](magic.md#essences)). Culling them is a living ([people.md](people.md#trade)).
 - **Pooling places can be cleared**, and stay quieter for a while; holding one in a claim keeps it down (D94).
 
 ## Kinds, by rule
@@ -34,11 +34,11 @@ A small set of body plans (a four-legged runner, a flier, a crawler, a big lumbe
 
 ## What it asks of the engine
 
-Technical, mine. Creatures are the most expensive thing in the design: they walk round, diggable ground, find their way, animate and act. So: full behaviour only near players; a region's animals and a pooling place's strength as a few numbers when nobody is near; small behaviours that combine, rather than one large brain per creature.
+Technical, mine. Creatures are the most expensive thing in the design: they walk round, diggable ground, find their way, animate and act. So creatures are simulated by how near the nearest player is (D145): every tick close by, thinking less often further out, and waiting where they are beyond; a region's animals and a pooling place's strength are a few numbers when nobody is near; and small behaviours combine, rather than one large brain per creature.
 
 ## Questions
 
 1. Answered in part: **taming and mounts**, probably yes (D100). How taming works, and which animals, is open.
 2. **Monsters among themselves.** Do they fight each other and the wildlife where they meet?
-3. **Bosses.** Are there great monsters at the heart of the worst pooling places?
+3. **Bosses.** Are there great monsters at the heart of the worst pooling places? The organisation across realms may be behind some (D172).
 4. **Night.** Are monsters more active, or different, after dark ([survival.md](survival.md))?

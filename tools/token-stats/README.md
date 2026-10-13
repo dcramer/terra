@@ -1,9 +1,9 @@
 # Token stats
 
-Records how many Claude tokens and Tripo credits each of us spends on Terra (D82), shown at <https://terra-token-stats.dcramer.workers.dev>, and as JSON at [`/json`](https://terra-token-stats.dcramer.workers.dev/json). Two parts:
+Records how many Claude tokens and Tripo credits each of us spends on Terra (D82), shown at <https://terra-token-stats.dcramer.workers.dev>, and as JSON at [`/json`](https://terra-token-stats.dcramer.workers.dev/json). Its parts:
 
 - `worker/`: a Cloudflare Worker with a D1 database. It stores each message once, by the id the API gave it, with its person, conversation, day, model and input, output, cache-read and cache-write tokens, and keeps totals per person, day and model. It runs on Cloudflare's free plan, which costs nothing and stops rather than bills when a limit is reached. A year of five busy developers is a few hundred megabytes of the free 5 GB.
-- `report.mjs`: a script Claude Code runs as you work (see below). It reads Claude Code's transcripts under `~/.claude/projects` and the credits `spend.py` recorded, and sends what it has not sent before. It needs Node 18 or later and nothing else.
+- `report.mjs`: a script Claude Code runs as you work (see below). It reads Claude Code's transcripts under `~/.claude/projects` and the credits recorded for other services (below), and sends what it has not sent before. It needs Node 18 or later and nothing else.
 - `report.mjs --spend`: records the credits a task spent on another service, such as Tripo (below).
 
 ## What counts, and counting once

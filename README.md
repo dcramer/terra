@@ -1,103 +1,45 @@
 # Terra
 
-A survival sandbox across many procedural worlds, realms reached through portals, played from the ground with tools in your hands. A living world in the spirit of Kenshi and Enshrouded, built on lore from *He Who Fights With Monsters*'s world-building: magic pools and makes monsters, settlements live with it, and you hold ground and grow by rank. You start in the gentlest realm, which is still no freebie, and go on to harder ones. The design is [docs/gameplay.md](docs/gameplay.md).
+**An extremely ambitious sandbox engine**: multitudes of procedural worlds, realms reached through portals, each run by intricate systems for every component of the game (ground, water, climate, plants, creatures, people and factions, magic, items, building) that act on one another. The game is what those systems make together: survival and RPG in a living world, in the spirit of Kenshi and Enshrouded, on lore from *He Who Fights With Monsters*'s world-building, for up to a thousand players on one persistent server. Magic pools and makes monsters, settlements live with it, and you hold ground with your tribe and grow by rank. The design is [docs/gameplay.md](docs/gameplay.md); why and how ambitious is [docs/vision.md](docs/vision.md).
 
-This repository is where the project is thought through: design docs, research notes and experiments. It is in pre-production and there is no game to play yet. Everything here is provisional: it records current thinking, and any of it may change.
+It is in pre-production. Everything here records current thinking, and any of it may change.
 
 ## Goals
 
 | Goal | More |
 |---|---|
-| **Explore many very different worlds**, each with its own terrain, caverns, water, plants, air, gravity and cultures, reached through portals or something like them. | [docs/worlds.md](docs/worlds.md) |
-| **Always get better**: many skills, gained by doing and improved by doing more. | [docs/progression.md](docs/progression.md) |
-| **Survive each world**: health, stamina, oxygen, hunger and thirst, which each planet treats differently. | [docs/survival.md](docs/survival.md) |
-| **Play as a person in the world**, walking around with tools, gathering and building, in the manner of No Man's Sky or Subnautica. | [docs/player.md](docs/player.md) |
-| **Round planets you can dig into**, procedurally generated, with no loading screens within a world. | [docs/engine.md](docs/engine.md) |
-| **Take resources from the world itself**: mine the rock, chop the tree, cut the grass. | [docs/engine.md](docs/engine.md#harvesting) |
-| **Gear up and carry**: an equipment grid, a backpack that grows, and an action bar of things to use. | [docs/player.md](docs/player.md) |
-| **Research new technology** to unlock more to build and craft. | [docs/progression.md](docs/progression.md) |
-| **Meet NPCs** on the worlds. | [docs/gameplay.md](docs/gameplay.md) |
-| **Build bases you shape**, from a build menu on a tool you equip, as in Subnautica. | [docs/construction.md](docs/construction.md) |
-| **A fully procedural world**, computed from rules and very cheap to compute, send and store. | [docs/engine.md](docs/engine.md) |
-| **Look like a carefully lit model**: simple shapes, flat colour, warm light and cool shadow, and never chunky. | [docs/art.md](docs/art.md) |
-| **A thousand players on one persistent server**, with a few friends playing together as the small case. | [docs/multiplayer.md](docs/multiplayer.md) |
-| **Stay fast with very many things on screen**, any of which the player can interact with. | [research/forest-scale-test.md](research/forest-scale-test.md) |
-| **Write everything in Rust**, on Bevy, with the game modelled in ECS and our own voxel terrain. | [docs/tech.md](docs/tech.md) |
-| **Be buildable by two people working with coding agents**, with every asset free, bought or generated, developer tools to refine each system, and QA the agents can run themselves. | [docs/development.md](docs/development.md) |
-| **Playable by an agent alone**, headless, through an MCP server. | [docs/multiplayer.md](docs/multiplayer.md#agents-as-players) |
-| **Design before building**, and write down what was decided and why. | [docs/README.md](docs/README.md) |
+| **Systems all the way down**: every part of a world is a system that works on any world from data, and the systems act on one another. | [docs/vision.md](docs/vision.md) |
+| **Many very different worlds**, each with its own terrain, caverns, water, plants, air, gravity, seasons and cultures, made from rules and a seed. | [docs/worlds.md](docs/worlds.md), [docs/settings.md](docs/settings.md) |
+| **A living world**: monsters form where magic pools, animals roam and hunt, settlements trade, grow and fall, whether or not you are there. | [docs/gameplay.md](docs/gameplay.md) |
+| **Always get better**: skills by doing, techniques by study, powers from essences, ranks over all of them. | [docs/progression.md](docs/progression.md), [docs/magic.md](docs/magic.md) |
+| **Survive each world**: health, stamina, mana, breath, hunger, thirst and warmth, against seasons and weather. | [docs/survival.md](docs/survival.md), [docs/climate.md](docs/climate.md) |
+| **Hold your ground**: claims, buildings of walls, floors and roofs, and a tribe of recruits who work and defend on their own. | [docs/construction.md](docs/construction.md), [docs/tribe.md](docs/tribe.md) |
+| **Fight like an action RPG**, with Enshrouded as the baseline. | [docs/combat.md](docs/combat.md) |
+| **One art style for every realm**: bold simple shapes, flat colour by palette role, shading left to the light. | [docs/art-style.md](docs/art-style.md) |
+| **A thousand players on one persistent server**, with a few friends as the small case. | [docs/multiplayer.md](docs/multiplayer.md) |
+| **Built by two people and their coding agents**: Rust on Bevy, our own voxel terrain, everything procedural and data-driven, and QA the agents run themselves. | [docs/tech.md](docs/tech.md), [docs/development.md](docs/development.md) |
 
-How firm each of these is, and who decided it, is in [docs/decisions.md](docs/decisions.md).
-
-## Planned
-
-What the developers want in the game. **None of it is built yet.** A few pieces have stand-ins in the [sandbox](crates/terra_sandbox) to play with, marked *(stand-in)*.
-
-**Worlds** ([worlds.md](docs/worlds.md))
-- Procedurally generated terrain on real, round planets.
-- Many worlds, each different, with no fixed limit: realms, as in *He Who Fights With Monsters*. Not a promise to ship unlimited, but nothing constrains it.
-- Always round and finite, but large: walking all the way round should be ridiculous. About 30 km radius proposed for the starter planet.
-- Thematic variety on each: terrain, caverns, water features, foliage, palette.
-- A starter planet that is easy: normal, breathable air.
-- Gravity, toward each planet's centre.
-- A sea level on each planet with water, behaving as physics says: level all round, filling what the sea can reach, as deep as the ground makes it.
-- Digging into the ground, as in No Man's Sky.
-- Travelling between worlds, probably through portals. No space.
-- Weather, different on each world.
-- Probably no terraforming: the notes are kept ([planet-sim.md](docs/planet-sim.md)) but it is not a concern for now.
-
-**Surviving** ([survival.md](docs/survival.md))
-- Survival attributes: health, stamina, oxygen, hunger, thirst, and perhaps more. Each world can treat them differently.
-- Swimming, at any depth, using stamina. Under water you use up oxygen, as on a planet with thin or no air.
-
-**The player and their gear** ([player.md](docs/player.md))
-- An equipment grid: a character sheet.
-- A space suit made of parts, such as a suit and an oxygen tank, for breathing where you otherwise could not.
-- An inventory that is your backpack: small at first, bigger with a bigger backpack in the backpack slot *(stand-in: raw items as counts)*.
-- An action bar of things to use *(stand-in)*.
-- Tools for gathering, such as different kinds of cutter *(stand-in: one cutter)*.
-- A map. What it shows and its limits are not decided.
-- An options menu with the usual settings, including audio and key remapping.
-
-**Building** ([construction.md](docs/construction.md))
-- A build menu brought up by a building tool you equip, as in Subnautica *(stand-in: a dial)*.
-- Rooms you shape on a half-metre grid, interior walls, windows and doors *(stand-in)*.
-- Pieces whose look changes with what they connect to, such as rounded corners; fixed-size buildings such as round rooms, joined by connectors; materials.
-- Building, taking apart and cutting take time: hold to complete *(stand-in)*.
-
-**Progress** ([progression.md](docs/progression.md))
-- A research system that unlocks technology and things to craft and build. How you research is not decided.
-
-**People**
-- NPCs ([gameplay.md](docs/gameplay.md#npcs)).
-- A thousand players on one persistent server ([multiplayer.md](docs/multiplayer.md)).
-- Playing headless, as an agent only, through an MCP server ([multiplayer.md](docs/multiplayer.md#agents-as-players)).
-
-**How it is built** ([tech.md](docs/tech.md), [development.md](docs/development.md))
-- The game modelled in ECS.
-- QA our coding agents can run: drive the game, look at it, ask it what is true *(stand-in: scripted runs)*.
-- Developer tools for refining each system, starting with a model workbench.
-- An in-game debug menu behind a launch flag, opened with the backtick key, for things like warping.
-- Frame times on screen at all times against the budget, and logs that record how each session ran *(built in the sandbox)*.
+How firm each of these is, and who decided it, is in [docs/decisions.md](docs/decisions.md). What is built so far is in [docs/engine.md](docs/engine.md).
 
 ## What is here
 
 | Folder | What it is |
 |---|---|
-| [docs](docs) | Decisions and design docs. Start with [docs/decisions.md](docs/decisions.md). |
+| [docs](docs) | Decisions and design docs. Start with [docs/README.md](docs/README.md). |
 | [research](research) | What we looked into and found, one dated note per question. |
-| [assets](assets) | What the game loads: models, sounds, shaders and icons. Credits in [THIRD_PARTY.md](THIRD_PARTY.md). |
-| [art](art) | Source art: approved design sheets and the models made from them, which the asset pipeline turns into the game's files. |
-| [crates](crates) | The Rust workspace, including the [sandbox](crates/terra_sandbox) where experiments run. |
+| [assets](assets) | What the game loads: models, sounds, shaders, icons and data. Credits in [THIRD_PARTY.md](THIRD_PARTY.md). |
+| [art](art) | Source art the asset pipeline turns into the game's files. |
+| [crates](crates) | The Rust workspace: the game, its engine-free rules, and the [sandbox](crates/terra_sandbox) of testbeds. |
+| [tools](tools) | Team tooling outside the game. |
 | [spike](spike) | Throwaway experiments. |
 
-To play the tech demo, on the real GPU whatever the machine:
+To play the current build, on the real GPU whatever the machine:
 
 ```bash
 cargo xtask play
 ```
 
-`cargo xtask play --fresh` starts a new game; `cargo xtask` on its own lists the other tasks. To set up a machine, see [docs/development.md](docs/development.md). Coding agents should read [AGENTS.md](AGENTS.md).
+`cargo xtask play --fresh` starts a new game; `cargo xtask tools` lists the other tasks. To set up a machine, see [docs/development.md](docs/development.md). Coding agents should read [AGENTS.md](AGENTS.md).
 
 ## Licence
 

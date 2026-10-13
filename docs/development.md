@@ -18,7 +18,7 @@ It reads the pinned compiler version from `rust-toolchain.toml`, installs nothin
 | WSL, to use the Windows GPU | `mingw-w64`, and the `x86_64-pc-windows-gnu` Rust target |
 | macOS | Xcode command line tools |
 
-macOS has been checked only by CI, which builds and tests there. Nobody has run a window on a Mac yet.
+CI can build and test on Linux, macOS and Windows, run by hand for now. The game runs on macOS natively, and an Apple M4 Max is among the benchmark machines.
 
 ## Everyday commands
 
@@ -27,22 +27,28 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | Command | What it does |
 |---|---|
 | `cargo xtask tools` | Every task and tool, with what it does |
-| `cargo xtask play` | Play the tech demo on the real GPU, wherever you are; your game is kept between runs. `cargo xtask play --fresh` starts a new one. |
+| `cargo xtask play` | Play the MVP (D105) on the real GPU, wherever you are; your game is kept between runs. `cargo xtask play --fresh` starts a new one. |
 | `cargo xtask yard` | Play the yard: a flat test level for working on building. Smooth ground with nothing on it, building free and instant without a claim stone, the sun at noon, nothing saved. The same as `--level yard` on the play experiment, so the sandbox remote can drive it. |
-| `cargo xtask loop` | Play the demo's loop by script and check every step happened |
+| `cargo xtask loop` | Play the MVP's loop by script and check every step happened ([QA for agents](#checking-the-game-without-a-person-qa-for-agents)) |
+| `cargo xtask bench` | Time the benchmark scenes ([Measuring performance](#measuring-performance)) |
 | `cargo xtask check` | Formatting, lints, tests (the TypeScript tools' too) and the dependency rule. Must pass before a commit. |
-| `cargo test -p terra_sim` | One crate's tests |
+| `cargo test -p terra_items` | One crate's tests |
 | `cargo fmt --all` | Format everything |
-| `cargo xtask sandbox` | Open the sandbox, the test environment for graphics and utilities; anything after it goes to the sandbox. See its [README](../crates/terra_sandbox/README.md). |
+| `cargo xtask sandbox` | Open the sandbox, the test environment for graphics and utilities; anything after it goes to the sandbox, and `--list` lists its experiments. See its [README](../crates/terra_sandbox/README.md). |
+| `cargo xtask workbench` | Models in the game's renderer ([Developer tools](#developer-tools)) |
+| `cargo xtask remote <command>` | Drive a running sandbox live ([tools/sandbox](../tools/sandbox/README.md)) |
 | `cargo xtask models` | The model gallery in a browser, at `http://localhost:8765/` ([tools/models](../tools/models/README.md)) |
 | `cargo xtask doctor` | Check this machine |
 | `cargo xtask win -p <package>` | Under WSL, build for Windows and run on the real GPU |
+| `cargo xtask seed` | In a new worktree, copy the main checkout's compiled dependencies in ([Worktrees](#worktrees)) |
+
+The tasks that make art, `props`, `tripo`, `bodies`, `blender`, `icons` and `paint-icons`, are under [Developer tools](#developer-tools).
 
 A clean build of a Bevy application takes about two and a half minutes; a rebuild after a small change takes a few seconds.
 
 ## Worktrees
 
-Agents each work in a git worktree of their own, and each worktree has its own `target/`. To spare a new one from building all of Bevy, `cargo xtask seed` copies the main checkout's compiled dependencies into it, leaving out our own crates, which it then builds in about a minute (D185). A Claude Code hook starts it in the background when a session or subagent starts in a worktree with no `target/`. A `cargo` command started meanwhile prints "Blocking waiting for file lock" and waits a few seconds for the copy. In a worktree entered partway through a session, run `cargo xtask seed` before the first build. It only helps once the main checkout has built, and it never touches a worktree that has built already. Why it copies rather than sharing a cache is in [research/worktree-builds.md](../research/worktree-builds.md).
+Agents each work in a git worktree of their own, and each worktree has its own `target/`. To spare a new one from building all of Bevy, `cargo xtask seed` copies the main checkout's compiled dependencies into it, leaving out our own crates, which it then builds in about a minute (D183). A Claude Code hook starts it in the background when a session or subagent starts in a worktree with no `target/`. A `cargo` command started meanwhile prints "Blocking waiting for file lock" and waits a few seconds for the copy. In a worktree entered partway through a session, run `cargo xtask seed` before the first build. It only helps once the main checkout has built, and it never touches a worktree that has built already. Why it copies rather than sharing a cache is in [research/worktree-builds.md](../research/worktree-builds.md).
 
 ## Seeing and measuring
 
@@ -51,7 +57,7 @@ Sound is on in the sandbox except in scripted runs, which print what they would 
 WSL has no hardware Vulkan, which splits the work in two:
 
 - **To see output**, run the Linux build. It renders on the CPU, slowly but correctly, and can save screenshots. This works anywhere, including for agents.
-- **To measure performance**, build for Windows and run that build on the real GPU, in one step:
+- **To run on the real GPU**, build for Windows and run that build there. `cargo xtask play` and `cargo xtask bench` do this for you; for anything else:
 
 ```bash
 cargo xtask win -p <package> -- <program arguments>
@@ -60,8 +66,6 @@ cargo xtask win -p <package> -- <program arguments>
 It cross-compiles the package, copies the program and its assets to the Windows temp folder, runs it there and passes the output back. Windows will not replace a program that is running, so `--copy <name>` runs a separate copy from its own folder: an agent tests with `--copy test` while a person plays the default copy, and neither blocks the other. It runs from the temp folder because a Windows program started from a WSL folder gets an unusable working directory, so anything the program writes, such as screenshots, lands there; the command prints the path. Add `--release` for an optimised build.
 
 Keep debug builds on the workspace's default profile: full debug information produces a file Windows refuses to load.
-
-Every application we build gets scripted modes that fly a fixed camera path, print frame times and save screenshots, so results can be compared between machines and over time.
 
 ### Measuring performance
 
@@ -153,7 +157,7 @@ node tools/tripo/tripo.ts animate <project> walk run idle -o crate-anim.glb
 - **Set up** once: put the `ory_kratos_session` cookie of a browser signed in to Studio in `.env` as `TRIPO_STUDIO_COOKIE` (the README says where to find it). It lasts about 30 days; when a command says the login failed, copy it again.
 - **Every command prints one line of JSON** with the project, the credits spent and the files written, so commands chain. A project keeps every step done to it, and each command works on its latest.
 - **It costs credits**, listed command by command in [its README](../tools/tripo/README.md); images and preset animations are free. `balance` says what is left. Credits count in the token stats beside Claude's tokens ([tools/token-stats](../tools/token-stats/README.md)), read from Tripo's own history, so work done by hand in the web app counts too.
-- **Use the CLI, not the web app's API by hand, and not the bake-off's `tripo.py`**, which spends API credits. When Tripo changes its requests and a command breaks, fix the CLI; [research/tripo-studio-api.md](../research/tripo-studio-api.md) says how to capture what the web app sends now.
+- **Use the CLI, not the web app's API by hand.** When Tripo changes its requests and a command breaks, fix the CLI; [research/tripo-studio-api.md](../research/tripo-studio-api.md) says how to capture what the web app sends now.
 
 ## Checking the game without a person (QA for agents)
 
@@ -183,6 +187,6 @@ Playing the game as an agent, inside its rules rather than as a tester, is a sep
 
 ## Continuous integration
 
-Every push and pull request runs `cargo xtask check` on Linux, macOS and Windows, and a compile check for the Windows target we cross-compile from WSL. Nothing in CI uses a GPU.
+Off until we need it (D37): it runs only when started by hand from GitHub's Actions tab. It runs `cargo xtask check` on Linux, macOS and Windows, and a compile check for the Windows target we cross-compile from WSL. Nothing in CI uses a GPU.
 
 To run the tests on that cross-compiled Windows build yourself, from WSL: `cargo test --workspace --target x86_64-pc-windows-gnu`.

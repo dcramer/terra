@@ -4,13 +4,13 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 
 ## What the developers have said
 
-- Premises: not "you came from elsewhere"; the frontier (A) and a spreading threat (B) are interesting (game design 001).
+- The frontier is the everyday; not "you came from elsewhere" ([gameplay.md](gameplay.md#atmosphere)). No single long threat: threats vary by realm, with a dangerous organisation across them (D172).
 - Realms with no fixed number, reached by portals (D17, D72). A persistent world for many players (D52), with no PvP (D2) and no fail state (D18).
 - No hand-holding (D92).
 
 ## The fiction
 
-The fundamentals are in [lore.md](lore.md): what magic is and why it pools, where monsters and essences come from, ranks, and what the realms are and why portals join them, from the books' world-building in our own words (D125). Still open: whether there are gods, and, for premise B, what is spreading and why. My suggestion: say little and let players find it, in ruins, in what people believe, and in what the portals lead to.
+The fundamentals are in [lore.md](lore.md): what magic is and why it pools, where monsters and essences come from, ranks, and what the realms are and why portals join them, from the books' world-building in our own words (D125). Gods exist, each bound to one realm (D156), and each realm's threats come from its own conditions and monsters, with an organisation across them (D172). My suggestion: say little and let players find it, in ruins, in what people believe, and in what the portals lead to.
 
 ## The first hour
 
@@ -23,7 +23,7 @@ Without tutorials or markers (D92), the start has to teach by its shape.
 
 ## The long game
 
-- **Ranks are the ladder** ([essences.md](essences.md)): iron-rank lands and portals, then bronze, and up. A world, or a region of one, has a rank; portals lead to higher ones.
+- **Ranks are the ladder** (D159, [progression.md](progression.md)): iron-rank lands and portals, then bronze, and up. A world, or a region of one, has a rank; portals lead to higher ones.
 - **Each rank brings** new materials, new monsters, new essences, new peoples.
 - **No single long threat** (2026-10-12): each realm has its own pressures, from its conditions, monsters and events. **A dangerous organisation crosses them** (D172, [lore.md](lore.md#threats)), a recurring enemy across your journey, and the long game's direction without a fixed story.
 - **Holds grow**: from a camp, to an outpost, to a settlement of recruits, to a stretch of the wild kept safe.
@@ -38,7 +38,7 @@ Without tutorials or markers (D92), the start has to teach by its shape.
 ## Questions
 
 1. **The fiction**: who writes it, and how much is said?
-2. Answered: **premise B** is no single spreading threat; threats vary by realm, with an organisation across them (D172).
+2. Answered: **the long threat** is no single spreading threat; threats vary by realm, with an organisation across them (D172). Gods exist (D156).
 3. **Where you start**: one starting world for everyone, or each their own?
 4. **Rank of worlds**: whole worlds of one rank, or ranks by region within a world?
 5. **Server-wide events**: run by the world's systems, or by us?

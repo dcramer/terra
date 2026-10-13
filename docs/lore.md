@@ -2,6 +2,8 @@
 
 The foundation every system stands on: what magic is, where monsters come from, what makes a person powerful, and how the realms hang together. Written 2026-10-12 at the developers' request (D125), as part of the game's design ([gameplay.md](gameplay.md), D89).
 
+Status: taking the books' fundamentals and their names for them, and inventing every specific, is Decided (D125). Each item below is as settled as the decision it cites; the rest is a proposal in our own words.
+
 ## Where it comes from, and where it doesn't
 
 **The foundational lore is taken from *He Who Fights With Monsters*, as world-building.** We use the books' fundamental systems, the rules of how their universe works, and their names for those systems: ranks, essences, confluences, awakening stones, spirit coins, quintessence, auras, the astral. We do not use their content: the actual lists of essences, abilities, stones, confluences, monsters, peoples, places and gods are ours (D125). And we don't copy their text. Everything below is in our own words, and is ours to change.
@@ -10,14 +12,14 @@ The foundation every system stands on: what magic is, where monsters come from, 
 |---|---|
 | Magic everywhere, gathering in places | Which magics there are, and what each realm's is like ([settings.md](settings.md)) |
 | Monsters formed from gathered magic | Every kind of monster ([creatures.md](creatures.md)) |
-| Essences that give a person powers, a few to a person | Every essence and every ability ([essences.md](essences.md)) |
+| Essences that give a person powers, a few to a person | Every essence and every power ([magic.md](magic.md#essences)) |
 | Ranks that everything climbs | What each rank means in play, and how it is crossed |
 | An aura that betrays your power | How it is shown ([your-character.md](your-character.md)) |
 | Many worlds, and ways between them | Every realm, generated ([worlds.md](worlds.md), [settings.md](settings.md)) |
 | Magic that can be studied as well as held | Every discipline and style |
 | People whose work is keeping monsters down | Every people, faction, culture and settlement ([people.md](people.md)) |
 | Gods who are the greatest users of magic | Every god, each belonging to one realm |
-| | The history; the long threat; every name, by the rules in [naming.md](naming.md) |
+| | The history; each realm's threats and the organisation across them ([below](#threats), D172); every name, by the rules in [naming.md](naming.md) |
 
 **Not taken at all:**
 - the books' characters and their story;
@@ -47,14 +49,14 @@ A reader who knows the books should recognise how our universe works and what it
 - **A person can take an essence into themselves,** and it becomes part of who they are. It grants powers in its idea, which wake over time and grow by use. A person has room for only a few. Holding several, their ideas join into one more that is theirs alone, made from the combination.
 - **Powers are who you are, not what you know.** No one chooses a class. What you become is what you have absorbed and how you have used it.
 - **Using powers draws on a reserve of one's own,** refilled by rest (D102: mana).
-- **What it means for play:** essences are rare, found by hunting and by exploring strong places, and they are a player's identity ([essences.md](essences.md)).
+- **What it means for play:** essences are rare, found by hunting and by exploring strong places, and they are a player's identity ([magic.md](magic.md#essences)).
 
 ## Ranks
 
 - **Everything that holds magic has a rank:** a person, a monster, an essence, a power, a material, a place, a way between realms.
 - **Each rank is a different order of being,** not a little more of the same. One rank up is stronger by far more than numbers would suggest. Crossing a rank changes what a power does, and changes the person: they become harder to kill and slower to age.
 - **Strength comes from rank first.** A skilled fighter of a low rank loses to a clumsy one of a higher.
-- **Ranks are climbed by using one's powers,** and by taking in magic to feed them. Crossing to the next often needs more than practice ([essences.md](essences.md#crossing-to-the-next-rank)).
+- **Ranks are climbed by using one's powers,** which raise the four attributes a person's rank comes from (D164, [magic.md](magic.md#attributes)), and by taking in magic to feed them. Crossing to the next often needs more than practice ([progression.md](progression.md#crossing-to-the-next-rank)).
 - **What it means for play:** rank is the one power axis, in every realm (D116). It orders the world without a story: low-rank land and portals lead to higher ones ([arc.md](arc.md)).
 
 ## Aura
@@ -67,7 +69,7 @@ A reader who knows the books should recognise how our universe works and what it
 
 - **Not all magic is held.** Some is worked by knowledge: drawing on the magic of a place through circles, marks, wards and rites, without powers of one's own. Anyone can learn it, slowly, from teachers and texts.
 - **Fighting has its studied side too:** styles passed down by teachers and books.
-- **What it means for play:** the second way to grow, beside skills and essences ([essences.md](essences.md#three-layers), D124). It is where a realm's learned knowledge lives.
+- **What it means for play:** the second way to grow, beside skills and essences ([progression.md](progression.md#three-layers), D124). It is where a realm's learned knowledge lives.
 
 ## Realms and the ways between
 

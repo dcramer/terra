@@ -2,7 +2,7 @@
 //! item's own look by a camera of its own into an image. Held things lie along the icon's
 //! diagonal, square on, broad side to the front, working end up and to the right; anything
 //! else faces the front, seen from a little above. One rig for every icon, no background.
-//! Nothing here knows any one item. The playbook is `.claude/skills/item-icons/SKILL.md`.
+//! Nothing here knows any one item. The playbook is `.agents/skills/item-icons/SKILL.md`.
 //!
 //! Icons are baked during development, not rendered in play: `cargo xtask icons` runs the
 //! `icons` experiment, which renders every item with this and writes `assets/icons/<item>.png`

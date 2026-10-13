@@ -1,23 +1,32 @@
 # Vision
 
+## What we are building
+
+**First and foremost, an extremely ambitious sandbox engine** (D187): multitudes of procedural worlds, and intricate systems for each part of the game (ground, water, climate, plants, creatures, people and factions, magic, items, building) that act on one another. The game, survival and RPG in a living world shared by up to a thousand players (D52, D89), is what those systems make together.
+
+- **Depth in each system over breadth of content.** A system is modelled as the thing it stands for, so it holds up when players push it, rather than covered with hand-made content.
+- **Every system general and data-driven**, so it runs on any world from data, not code written for one (D59, D127), with variety kept to what players can tell apart (D182).
+- **Scope reached through procedural rules, data, agents and tools**, not hand work (D8, D69, D71).
+
 ## Pitch
 
-Draft, rewritten on 2026-10-12 when the developers adopted the game's design ([gameplay.md](gameplay.md), D89).
+The game's design was adopted on 2026-10-12 ([gameplay.md](gameplay.md), D89).
 
 **The world goes on whether or not you are there, and you join in.** A sandbox with survival and RPG in it, closer to Enshrouded, across many realms reached through portals (D17, D72, D87). Magic pools and makes monsters, animals roam and hunt, settlements trade, grow and get attacked, and what players do changes where it goes next. You grow by doing, by study and by the essences you find, climbing ranks (D88, D124), and you hold ground with bases, outposts and the people you recruit (D90). The universe works on lore taken from *He Who Fights With Monsters* as world-building, in our own words ([lore.md](lore.md), D125).
 
-The earlier pitches, of dead planets terraformed into living ones and of surviving across a dozen planets, are gone (D60, D17).
+The earlier pitches, of dead planets terraformed into living ones and of surviving across a dozen planets, are gone (D89, D17).
 
 ## Pillars
 
-Draft. A feature that serves none of these is cut.
+A feature that serves none of these is cut. Set with the design (D89); each is as settled as the decisions it cites.
 
-1. **The world is the main character.** Persistent worlds, each unlike the others, that visibly change because of you.
-2. **Always getting better.** Many skills, gained by doing and improved by doing more, so there is always a sense of progression (D88). (Replaces "dead to alive", parked with terraforming, D60.)
-3. **Hold your ground.** Survival means establishing bases and outposts and keeping them, with recruited people to help defend them (D90).
-4. **The world goes on, and you change where it goes.** Monsters gather and surge, settlements rise and fall, whether or not you are there; what you do, and what you leave undone, sticks (D95).
-5. **Find your own way.** The game does not hold your hand. There may be quests, but no tracked quest log pointing you where to go and no journal: you are told, you look, you find (D92). The world is rich with systems, but you learn them by looking and doing, not from a display of every number (D93).
-6. **Seamless, and together.** No loading screens within a world. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
+1. **Systems all the way down.** Everything is generated and systemic, and each part is modelled in depth: the ground, the weather, a creature's day, a settlement's needs. A new world is new data for the same systems (D8, D127, D182, D187).
+2. **The world is the main character.** Persistent worlds, each unlike the others, that visibly change because of you.
+3. **Always getting better.** Many skills, gained by doing and improved by doing more, so there is always a sense of progression (D88).
+4. **Hold your ground.** Survival means establishing bases and outposts and keeping them, with recruited people to help defend them (D90).
+5. **The world goes on, and you change where it goes.** Monsters gather and surge, settlements rise and fall, whether or not you are there; what you do, and what you leave undone, sticks (D95).
+6. **Find your own way.** The game does not hold your hand. There may be quests, but no tracked quest log pointing you where to go and no journal: you are told, you look, you find (D92). The world is rich with systems, but you learn them by looking and doing, not from a display of every number (D93).
+7. **Seamless, and together.** No loading screens within a world. Played through a persistent server that holds up to a thousand players (D51, D52), with a few friends as the small case.
 
 ## Our inspirations
 
@@ -39,21 +48,17 @@ Named by the developers on 2026-10-11 as the games and books we draw on (D85), w
 
 ### Earlier references
 
-Named before the developers' list, mostly for the earlier direction of terraformed planets in space. Kept for what they show; none is a main inspiration now.
+Named before the developers' list, when the game was terraformed planets in space. None is a main inspiration now, except No Man's Sky for how variety is generated.
 
 | Game | We take | We leave |
 |---|---|---|
-| Planet Crafter | Phased terraforming; the world visibly transforming (parked, D60) | Handcrafted map; numbers that only go up; life as decoration |
-| No Man's Sky | Procedural everything; a palette per planet | Infinite universe; shallow planets; space; variety for its own sake (D182) |
+| No Man's Sky | The model for generating variety: worlds and things made from parts by rules, with a palette per world (D14, D182) | Infinite universe; shallow worlds; space; variety for its own sake (D182) |
 | Minecraft | Dig and build anywhere | Blocky cubes; flat world |
 | Vintage Story | Survival systems with some depth | The punishing difficulty |
-| Space Engineers | Voxel planets with separately built structures | Engineering-grade physics; space |
 | Green Hell | The environment as the enemy | The intensity |
-| SimEarth | A coupled planetary simulation | Abstract god-game view |
-| Spore | Life arriving in stages, simple to complex | Creature editor |
 | Factorio | Your own output provokes the enemy; perhaps built defences later (D90) | 2D factory focus; automation as the main answer to threats |
 
-Astroneer is deliberately not on this list (D15). It shows the tech is achievable by a small team; its gameplay and art are not models for us.
+Astroneer is deliberately not a model (D15): it shows the tech is within reach of a small team, not how the game should play or look.
 
 ## Tone
 
@@ -67,7 +72,6 @@ Slightly harder than Planet Crafter, far gentler than Vintage Story (D3): challe
 - Infinite variety for its own sake: hundreds or thousands of variants that matter, not millions (D182).
 - A creature editor.
 
-## Constraints
+## How the scope is reached
 
-- Two developers.
-- Every asset is free, bought or LLM-generated, and code is LLM-written. This pushes us to procedural content and a code-first stack.
+Two developers and their agents (D1). Every asset is free, bought or generated, and code is written by agents. So the scope is reached by making everything procedural, data-driven and checkable by tools: a new kind of thing is data (D127), and a feature is done when an agent can drive it and see that it worked (D69, D71).

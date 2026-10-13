@@ -1,63 +1,89 @@
-# Progression: skills, research and unlocks
+# Progression: skills, ranks and unlocks
 
-Part of the game's design ([gameplay.md](gameplay.md), D89). You grow in three ways, set out in [essences.md](essences.md#three-layers): skills by doing, techniques by study, and powers from essences, all on the rank ladder. What you can make is unlocked by research (D68), which the design proposes be learning by finding rather than a tree of technology ([crafting.md](crafting.md#learning-what-to-make)), with realms opening new things as Terraria's zones do (D85).
+Part of the game's design ([gameplay.md](gameplay.md), D89). This page owns how you grow: the three ways, skills, the rank ladder, crossing a rank, and how things are unlocked. Essences, powers, attributes, cores and mana are in [magic.md](magic.md).
 
-Status: the developers said on 2026-10-10 that the player has skills that grow (D88), and that there is a research system that unlocks more technology and more things to craft, and that they are not yet sure how you actually research or unlock new nodes. Everything below the first section is a proposal. Nothing is built.
+Status: the developers have said that the player has many skills that grow by doing (D88, Decided), that a research system unlocks things to make (D68, Decided, how it works Open), and where growth comes from (D124, Leaning). The ranks are the books' (D159, Decided), and a person's rank comes from their four attributes (D164, Decided). Everything else is a proposal. Skills by doing are in the tech demo; the rest is not built.
+
+## Three layers
+
+From the developers on 2026-10-11 (D124, Leaning): **magic and special abilities come from essences; everything else comes from other sources**, some from just doing it, some from books. In the books some magic, such as astral magic, is a technique you study, and so are combat styles. So there are three ways to grow, not two. The books' mechanics can be used; which disciplines and styles there are, we invent (D125).
+
+| | Skills | Studied techniques | Essences |
+|---|---|---|---|
+| What | What you can do with your hands: swim, climb, chop, smith, a weapon | Techniques anyone can learn: combat styles, and crafts of working with magic such as astral magic | Powers: magic and special abilities, what makes you more than a person |
+| How you get one | By doing it (D88) | By study: from a skill book or a teacher (D92), then practice | By finding and absorbing an essence |
+| How many | Many, small | A few, each deep | A few, large |
+| How it grows | By doing it more | By practice, and the next rank's book or teacher | Powers by use, through ranks |
+| What it says about you | What you have practised | What you have learned | Who you are |
+
+Studied techniques are worked out with examples in [magic.md](magic.md#skill-books): combat styles and crafts, each learned from skill books in five forms, iron to diamond. Essences, powers and attributes are in [magic.md](magic.md#essences).
 
 ## Player skills
 
-From the developers, 2026-10-10 (D88): there is a player progress system, and they really like games with **a lot of skills, so you always have a sense of progression**. You might pick up new skills as you go. Much of it could be inspired by *He Who Fights With Monsters*.
+From the developers, 2026-10-10 (D88): there is a player progress system, and they really like games with **a lot of skills, so you always have a sense of progression**. Doing a thing gives you its skill automatically, and doing it more improves it.
 
-What the books do, as I recall them, unchecked: a person absorbs a few essences, and each essence grants a set of abilities themed on it; a final essence emerges from how the others combine. Abilities, and the person, climb through named ranks (iron, bronze, silver, gold, diamond), and each step changes what an ability does, not only how strong it is. Progress comes from using abilities and from fighting, and the story treats them as a system the character can read, as in other LitRPG.
+Proposed:
 
-Proposed, to react to:
-
-- **Skills are many and small**, so something is always about to improve. A skill is an entry in a list, like an item or a buildable (D56): its name, what it does at each rank, and what raises it.
-- **Two ways forward**, both visible: getting better at skills you have, by using them; and gaining new ones. Doing a thing gives you its skill automatically (said by the developers); finding one in the world, a culture (D86) or a teacher may be other ways.
-- **Ranks change kind, not only size.** A skill at a higher rank does something new, as in the books, so progress is felt in play and not only in numbers.
-- **Skills are yours.** They go with you to every world, as your gear does (D86). Research (below) may be shared; skills are personal.
+- **Skills are many and small**, so something is always about to improve. A skill is an entry in a list, like an item or a buildable (D127, D136): its name, what it does at each rank, and what raises it.
+- **Two ways forward**: getting better at skills you have, by using them; and gaining new ones, by doing, and perhaps by finding, a culture (D86) or a teacher.
+- **Skills are yours.** They go with you to every realm, as your gear does (D86).
+- **Felt rather than counted** (D93): a skill improving shows in how the action goes, and reads on the character screen.
 - **In the game's model** (D58): a player's skills are a component; using one is an action the server checks and credits (D51), so a thousand players cannot grant themselves ranks.
 
-Open:
+## Skills on the rank ladder
 
-6. Answered in part: **how is a skill gained?** Probably by a variety of means, not yet chosen. One is settled: **doing a thing gives you its skill automatically.** Swim and you can swim; cut down a tree and you have the skill for it. Others might be finding, being taught, or a culture (D86).
-7. Answered: **how is a skill raised?** By doing the thing more (D88). Whether anything else raises it too, such as milestones or teachers, is open.
-8. **What do skills cover?** Fighting (D85 names Enshrouded's combat), movement, gathering, building, survival, crafting, or all of them?
-9. **One rank for the player as well as for each skill?** The books rank the person as well as their abilities.
-10. **Are skills chosen?** A limited set, so players differ, or eventually everything?
-11. **How do skills and research divide the work?** Skills make you better at things; research unlocks things to build. Where does a new ability come from: a skill, research, or both?
+Asked by the developers on 2026-10-11: can skills rank up iron, bronze and so on? Proposed, Open: **yes, on the same ladder as everything else** (D159), so monsters, places, portals, materials, people and skills are all read one way.
 
-## What the developers want
+- **Each skill climbs iron, bronze, silver, gold, diamond**, with many small steps inside a rank that come often, and a rank-up now and then as a milestone. That is the feel of the grinding games with many skills: always a step coming, sometimes a big one.
+- **A rank-up opens something**, not only bigger numbers: a technique, a kind of recipe, a move.
+- **A skill's rank decides what rank of thing you can work.** An iron-rank smith cannot work silver-rank metal; an iron-rank miner chips at a bronze-rank vein slowly, if at all. Climbing a skill then has a place in the world to go to, the way level requirements pull a player along in RuneScape.
+- **Separate ladders.** Your rank as a person comes from your four attributes, which rise with the powers bound to them (D164, [magic.md](magic.md#attributes)); it decides what you can survive. Skills decide what you can make and do, and do not raise attributes. A gold-rank crafter can be an iron-rank fighter.
+- **Recommended: skills may run ahead of your own rank**, so a crafter or gatherer has a whole game of their own.
+- **Recruits climb the same ladder** in their work (D123, [tribe.md](tribe.md)).
+- **Grinding, but never a chore** (D122): every step should feel like progress.
 
-- **A research system** that unlocks technology and craftables (D68).
-- It is what "anything you are capable of building" means (D55): the build menu shows what you have unlocked (D67).
-- How research is done, and how a node is unlocked, is **open**.
+## Crossing to the next rank
 
-## Ways other games do it
+From the developers on 2026-10-11, unsure (D126, Leaning): you may often need a way to advance to the next rank, such as a book or someone to help you unlock it.
 
-To react to, not to choose from:
+Proposed, Open: **steps within a rank come from doing; crossing to the next rank needs a key**, one of:
+
+| Key | What it is | Why it is good for the game |
+|---|---|---|
+| **A book** | Found, bought or taken from a ruin: the next form of a style, a craft or a skill | A reason to explore (D91) and to bring things home |
+| **A teacher** | Someone who already stands at that rank: a villager, a recruit, a master in another realm | People matter: helping a settlement or rescuing someone can open your next rank (D90, D123) |
+| **A feat** | Something done once at the edge of what you can do: working a higher-rank material, a hard kill | Earned by daring, not by a list |
+
+Which keys a skill takes would differ: a craft might take a teacher or a feat, a style a book or a teacher. The rank-up should feel like an event, not a number ticking over, and it keeps the grind from being only repetition (D122): you can practise to the edge of a rank, but crossing it sends you out into the world. How powers cross a rank, and what monster cores do to it (D165), is in [magic.md](magic.md#raising-powers).
+
+## Research and unlocks
+
+From the developers (D68): **a research system unlocks technology and things to make**; the build menu shows what you have unlocked (D55, D67). How something is researched is open. The design proposes learning by finding rather than a tree of technology ([crafting.md](crafting.md#learning-what-to-make)), with realms opening new things as Terraria's zones do (D85).
+
+Ways other games do it, to react to:
 
 | Game | How you unlock |
 |---|---|
 | Subnautica | Scan things you find in the world, often in several fragments |
-| No Man's Sky | Spend a currency gathered in play on a tree of blueprints |
-| Planet Crafter | Unlocks arrive as the planet's terraforming values cross thresholds |
-| Factorio | Feed materials into labs over time |
 | Rust | Spend scrap at a workbench; learn by taking found items apart |
-| Satisfactory | Hand in materials at a hub to finish tiers and milestones |
-| Terraria | Go to other zones, find new materials, and they open new things to craft and build, many only for their look; a station nearby is often what is needed. Named by the developers as an inspiration (D85, 2026-10-12): ours would be realms (D87) |
+| Valheim | Pick up or stand near a new material, and what it makes appears |
+| Terraria | Go to other zones, find new materials, and they open new things to make, many only for their look; a station nearby is often what is needed. Named by the developers as an inspiration (D85): ours would be realms (D87) |
 
-## What any answer needs
+What any answer needs:
 
-- **A tree, or a web, of nodes.** Each unlocks buildables, items, tools or upgrades. Nodes are data, like buildables (D56).
-- **Something that opens a node**: scanning, spending, a planet's state, a discovery, or a mix.
-- **Whose it is.** With a thousand players on a server (D52), is research per player, shared by a group, or shared by everyone on the planet?
-- **Where it shows**: the build menu filters to what is unlocked, and the research itself needs a screen.
+- **Unlocks are data**, like buildables (D127, D136): each opens items, buildables or upgrades.
+- **Something that opens one**: finding a material, a skill book, a culture (D86), a skill's rank, or a mix.
+- **Whose it is.** With a thousand players on a server (D52): per player, or shared within a tribe (D166)?
 
-## Open questions
+## Questions
 
-1. **How is something researched?** Scanning, spending, time at a machine, the planet's progress, or a mix?
-2. **Per player, per group, or per server?**
-3. **Does research differ by realm?** Does a new realm open new things (D17, D59)? Leaning: finding a different culture in a realm might unlock different things (D86).
-4. **Can anything be lost** once unlocked?
-5. **How does it pace the game?** Is the starting realm the first tier, and do ranks (essences.md) pace the rest?
+1. **How is something unlocked?** Finding, a skill's rank, a station, a culture, or a mix?
+2. **Per player, or per tribe?**
+3. **Can anything be lost** once unlocked?
+4. **What rank does a player start at**, and how long is a rank? Do ranks pace the realms, with the starting realm the first?
+5. **What do skills cover?** Fighting, movement, gathering, building, survival, crafting, or all of them?
+6. **Are skills chosen?** A limited set, so players differ, or eventually everything?
+7. **Skills and powers together**: does a high skill change what a power does (a skilled archer's fire arrow)?
+8. **Skills on the rank ladder**, as proposed above, and **may a skill run ahead of your own rank**?
+9. **Which grinding games are the reference** for many skills: RuneScape, Ultima Online, Wurm Online, Star Wars Galaxies, the Elder Scrolls games, or others?
+10. **Crossing a rank**: does it need a key, and which: a book, a teacher, a feat?

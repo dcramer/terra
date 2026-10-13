@@ -187,7 +187,7 @@ Proposed, for how:
 - **Leaving**: a recruit kept badly for long enough goes, as in Medieval Dynasty, saying why first.
 ## Growing
 
-Recruits grow as you do (D123). Their work's skills rise by doing it, on the same rank ladder as yours ([essences.md](essences.md#skills-on-the-rank-ladder)). What they can make follows their rank: an iron-rank smith cannot work silver-rank metal.
+Recruits grow as you do (D123). Their work's skills rise by doing it, on the same rank ladder as yours ([progression.md](progression.md#skills-on-the-rank-ladder)). What they can make follows their rank: an iron-rank smith cannot work silver-rank metal.
 
 Crossing to the next rank may need a key (D126): a book, a teacher or a feat. You, or another recruit who already stands at that rank, can be the teacher, so a master in the tribe raises the others.
 

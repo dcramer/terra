@@ -4,7 +4,7 @@
 //! `assets/icons/manifest.txt`, saying what each was rendered from. An icon painted by
 //! `tools/icons/paint.ts` is kept, never replaced by its render. Items whose look does not
 //! exist yet are listed and skipped; icons for items no longer in the catalogue are
-//! removed. Run it as `cargo xtask icons`. The playbook is `.claude/skills/item-icons/SKILL.md`.
+//! removed. Run it as `cargo xtask icons`. The playbook is `.agents/skills/item-icons/SKILL.md`.
 //!
 //! `--renders <folder>` also writes every render there, for the painter. `--sheet <prefix>`
 //! also lays the icons out on empty slots and saves `<prefix>.png` at the size rendered and

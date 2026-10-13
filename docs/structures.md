@@ -1,6 +1,6 @@
 # Structures: the technical design
 
-How walls, floors and roofs work in code, for the building the developers agreed on 2026-10-12. The design is [construction.md](construction.md); the prior art is [research/procedural-buildings.md](../research/procedural-buildings.md). Technical choices here are mine (D160); nothing in it changes a design decision.
+How walls, floors and roofs work in code. The design is [construction.md](construction.md); the prior art is [research/procedural-buildings.md](../research/procedural-buildings.md). Technical choices here are mine (D160); nothing in it changes a design decision.
 
 ## What it rests on
 
@@ -12,7 +12,7 @@ How walls, floors and roofs work in code, for the building the developers agreed
 | D139 | Laid as a plan, then constructed part by part |
 | D146 | Each kind of construction is a kit of pieces on the grid, laid by its rule; walls in four directions |
 | D151 | A station's expansions count anywhere in its building |
-| D57, D48 | One half-metre grid; the voxel volume comes later and these become one way of writing it |
+| D57, D48, D181 | One half-metre grid, and everything built is cubes on it |
 | D21, D51 | Everything done is an operation, the same on every machine |
 | D127 | Many of everything: work out only what changed, and draw cheaply |
 
@@ -20,7 +20,7 @@ How walls, floors and roofs work in code, for the building the developers agreed
 
 Shared state, in `terra_build`, with no Bevy (the rule in AGENTS.md).
 
-**What stands is cubes** (D181): every half-metre cube of a base's grid is air or a kind of construction (logs, stone, planks, wattle and daub). This is strictly the voxel grid of D48. Step 1 was built with walls on the edges between cells, and rebuilt on cubes the same day.
+**What stands is cubes** (D181): every half-metre cube of a base's grid is air or a kind of construction (logs, stone, planks, wattle and daub). This is strictly the voxel grid of D48.
 
 | | As cubes |
 |---|---|
@@ -36,7 +36,7 @@ So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to
 
 **What is planned is parts** (step 3): each wall, floor or roof section the player lays, with an id that never changes, its kind of construction, and which of its pieces are in. When a part is finished, its edges and cells join what stands.
 
-**What is done is operations** (D21): fill a block of cubes with a kind or empty it; a roof section; the room shortcut (a ring of wall cubes round a footprint, a floor under it and a roof over it, opening into rooms it meets); with plans, lay a part, put a piece in, take one out. A base is saved and sent as its operations. Saves from before are read: a room becomes its walls, floor and roof, and a wall on an edge becomes the cubes on its outside, so rooms keep their size inside; a room's wall pushed or pulled is left out.
+**What is done is operations** (D21): fill a block of cubes with a kind or empty it; a roof section; the room shortcut (a ring of wall cubes round a footprint, a floor under it and a roof over it, opening into rooms it meets); with plans, lay a part, put a piece in, take one out. A base is saved and sent as its operations. Older saves, of rooms and then of walls on the edges between cells, are still read and turned into cubes: a room becomes its walls, floor and roof, and a wall on an edge becomes the cubes on its outside, so rooms keep their size inside; a room's wall pushed or pulled is left out.
 
 **Everything else is worked out from the parts**, by pure functions, so every machine gets the same answer and only the parts travel:
 
@@ -44,7 +44,7 @@ So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to
 - **Buildings**: parts that touch, grouped.
 - **Rooms and indoors**: the air cubes each building closes in, flood-filled.
 - **The roof's shape**: a height field over the grid.
-- **What stops a walker**: from walls, floors and roofs, as now from the hull.
+- **What stops a walker**: the cubes, read directly: their tops hold a walker up, solid and glass stop them, openings let them through.
 
 Each is recomputed for the building that changed, when a part is laid, a piece goes in or comes out, never per frame.
 
@@ -99,14 +99,6 @@ On the Bevy side, in `terra_game`:
 - **Indoors**: a room closed all round and covered. When it is not, the game knows which wall or roof is missing, to say so (D155).
 - **Natural shelter** under a cliff or in a cave is not a building, and is left to the weather's design.
 
-## From rooms to parts
-
-The base today is rooms of cells with a generated hull (`terra_build`). It is replaced, not kept beside:
-
-- **Saves**: a room's operation becomes its four walls, its floor and a flat roof on loading, so games in progress keep their bases.
-- **The tools**: the room tool's drawn rectangle lays walls and a floor (D152); the wall tool draws walls inside and out; a roof tool is new.
-- **Walking, raycasts and the meshing** move from the hull to the parts.
-
 ## Where it is worked on
 
 On the yard, a flat test level: `cargo xtask yard`, or `--level yard` on the play experiment for the sandbox remote. Nothing on it, building free and instant, nothing saved.
@@ -115,10 +107,10 @@ On the yard, a flat test level: `cargo xtask yard`, or `--level yard` on the pla
 
 Each step is played and checked by script before the next (D69):
 
-1. **The model** (built, 2026-10-12, on edges, then rebuilt on cubes, D181): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; rooms in saves converted; built whole, as before. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
-2. **Roofs** (a first version, 2026-10-12): the height field, the four styles, laid over a room by a click or drawn as a rectangle, gable ends closed with wall. Not yet: eaves, trims, the covering's pieces, valleys where sections meet walls, an automatic hip over any footprint.
+1. **The model** (built, on cubes, D181): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; older saves converted; built whole. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
+2. **Roofs** (a first version built): the height field, the four styles, laid over a room by a click or drawn as a rectangle, gable ends closed with wall. Not yet: eaves, trims, the covering's pieces, valleys where sections meet walls, an automatic hip over any footprint.
 3. **Plans and constructing** (D139): parts laid as plans; pieces put in one by one, from the pack and storage (D141).
-4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement. Logs first ([kits.md](kits.md), D177, D178): the stacked pattern, logs made in code, the three states and a kit sheet on the yard, built 2026-10-12.
+4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement. Logs first ([kits.md](kits.md), D177, D178): the stacked pattern, logs made in code, the three states and a kit sheet on the yard, built.
 5. **The art of the kits**, by the developers' art pipeline: about ten to fifteen pieces a material, a few versions each.
 
 ## Where the risk is

@@ -6,7 +6,7 @@ Status: the developers set Subnautica as the baseline on 2026-10-10 (D84), "for 
 
 From 2026-10-10:
 
-- **An equipment grid, a character sheet** (D64): slots for what you wear and carry as gear: head, chest (covering the arms), gloves, legs, feet, back and belt, with more later, such as the parts of a space suit. Not every slot shows on the body. One piece per slot. Jewellery is open.
+- **An equipment grid, a character sheet** (D64): slots for what you wear and carry as gear: head, chest (covering the arms), gloves, legs, feet, back and belt, with more later. Not every slot shows on the body. One piece per slot. Jewellery is open. There is no space suit or oxygen tank (D89): breath is only under water (D74).
 - **The inventory is the backpack** (D65, Leaning): probably very small at the start, made bigger by a better backpack in the backpack slot.
 - **An action bar** (D66): you put items on it to use them; whatever is in the picked slot is in your hand.
 - **You carry raw items, and they let you build what you are able to build** (D55, Leaning).
@@ -24,6 +24,8 @@ Proposed, what that would mean:
 - **Bigger packs** hold more because they are bigger, not because they unlock slots (replacing D65's growth).
 - **Technically** (mine): a container's contents belong to the item that is the container, kept by its identity, so moving the pack moves what is in it. `terra_items` would gain nested containers; nothing about a grid changes.
 
+Open: **D65 and D106 disagree.** D65 (Leaning) has a worn pack make your one backpack bigger; D106 (Leaning) has the pack be a container that holds its own items. The quiver (D118) already works the second way. Until the developers choose, the demo follows D65.
+
 ## How it works
 
 Subnautica's rules, with our backpack added:
@@ -31,7 +33,7 @@ Subnautica's rules, with our backpack added:
 | | What it is |
 |---|---|
 | Backpack | A grid. Each item fills a rectangle of cells, most of them one. Nothing stacks. Its size is set by the backpack worn. |
-| Equipment | One slot per kind of gear: backpack, suit, helmet, oxygen tank, and so on. A slot takes only gear of its kind. |
+| Equipment | One slot per kind of gear (D64): head, chest, gloves, legs, feet, back and belt. A slot takes only gear of its kind. |
 | Action bar | A few slots that point at items in the backpack. The item stays in the backpack; if it leaves, the slot empties. |
 | Storage | More grids, built in a base. Anyone may use them. |
 | Limits | Room in the grid only. No weight. |
@@ -41,41 +43,23 @@ Picking something up puts it in the first place it fits, scanning from the top l
 
 ## Items
 
-- **A kind of item is an entry in a list**, as buildables are (D56): its name, its size in cells, and which equipment slot it goes in, if any. Adding an item is adding an entry, in [`assets/data/items.ron`](../assets/data/items.ron) (D136), which also says what it does in hand or worn; no code names an item. A planet's theme names which kinds are found there (D59); planets get no item code of their own.
+- **A kind of item is an entry in a list**, as buildables are (D127): its name, its size in cells, and which equipment slot it goes in, if any. Adding an item is adding an entry, in [`assets/data/items.ron`](../assets/data/items.ron) (D136), which also says what it does in hand or worn; no code names an item. A realm's theme names which kinds are found there (D59); realms get no item code of their own.
 - **Items wear** (D99): tools, weapons and armour carry their condition, as one-of-a-kind items with state of their own; a broken one stops working but is kept, and is repaired at a station ([crafting.md](crafting.md#wear-and-repair)). In `terra_items`, an item carries how worn it is and a kind how much it lasts; wearing and mending are changes like any other, so the server can check them.
 - **Every item has an identity**, so the action bar can point at it and the server can say which one moved.
 - **Where raw items come from**: harvesting returns a yield in cubic metres, objects or square metres (D45). A table in data turns a yield into items. What the raw items are is design and still open (D43, D55).
 
 ## Item icons
 
-Every slot that holds an item shows its icon: the bar, the backpack and the equipment slots so far, and storage and the station screens when they show items. Icons are image files in `assets/icons`, loaded by the game; an item with none shows its name. How to make, check and fix them is in [the item-icons playbook](../.claude/skills/item-icons/SKILL.md); research in [research/item-icons.md](../research/item-icons.md).
+Every slot that holds an item shows its icon. Icons are image files in `assets/icons`, loaded by the game; an item with none shows its name.
 
-**How they are made** (D129, technical). As games with many generated items do it: an icon is authored per kind of item, and variation is shown on top of it rather than redrawn.
+- **How they are made** (D129, Decided): `cargo xtask icons` renders every item from its own look in one house style, sized to its cells; `tools/icons/paint.ts` repaints the render in the art style; a manifest records what each came from, and a test fails when one is stale. Variants (a dyed item, a quality frame) are to be shown on top of an icon, not redrawn.
+- **What they look like** (D130, Leaning): in the art style ([art-style.md](art-style.md)), a bold silhouette, warm light from the upper left, no background. Every icon is still painted in the earlier direction C, to be repainted in direction D.
 
-1. **Rendered**: `cargo xtask icons` renders every item from its own look in one fixed house style, sized to the cells it fills (96 pixels a cell). The render is the fallback icon and the underdrawing.
-2. **Painted**: `tools/icons/paint.ts` has the image model repaint the render in the art style, with the mood board's painted workbench and a few approved icons as references, cuts it out and fits it to the item's cells. Items with no look yet, such as materials, are painted from a line describing them in `tools/icons/icons.txt`. A person approves each on a review sheet.
-3. **Checked**: `assets/icons/manifest.txt` records the look and style each icon came from, and a test fails when a look has changed since its icon was made. The baker never replaces a painted icon.
-
-Not built: variants shown on top of an icon (a palette shift for a dyed item, a frame or badge for quality or state), until items carry them.
-
-**Which look**: a tool's held look, gear's look on the player's body, and for anything else the item's own look, `models/items/<item>.glb`: the thing on its own as it lies, life size, facing +Z. No item has one of those yet.
-
-**What they look like** (D130, Leaning): in the art style ([art-style.md](art-style.md), direction D). Every icon is still painted in direction C (hand-painted surfaces, chunky readable forms, slightly exaggerated proportions), to be repainted in D. A bold silhouette, warm light from the upper left, no background. Composed by the render: held things lie along the icon's diagonal, square on, working end up and to the right; everything else faces the front, seen from 15 degrees above, worn things as worn with no body in them.
-
-Every icon on 2026-10-12, renders above and paintings below (materials have no render), at 96 pixels a cell and at 48, a backpack cell's size:
+How to make, check and fix them is in [the item-icons playbook](../.agents/skills/item-icons/SKILL.md); how the approach was chosen is in [research/item-icons.md](../research/item-icons.md).
 
 ![Every item's render and painted icon, at 96 pixels a cell](images/item-icons.png)
 
-![The same at 48 pixels a cell](images/item-icons-half.png)
-
 ![In play: icons in the equipment slots, the backpack and the bar](images/item-icons-in-play.png)
-
-How it was chosen, on 2026-10-12. The developers wanted icons in the art style and left the rest to me. Every look was rendered five ways (three-quarter or square on, with or without an edge light, on a plate of the sky's colours, in a darker realm's light); square on with the edge light read best and the plate was ruled out. Icons were first rendered in play, then baked during development, the usual way. Asked whether rendering is what others do: games with many generated items author an icon per kind, and only render per item where the combinations are the point (Tarkov, Minecraft). Painting four items from their renders read clearly better at slot size than the renders and held one style; the full set followed. What still holds from the comparison:
-
-![The five render styles compared, a row per way](images/item-icons-compared-2026-10-12.png)
-
-- **A realm's own light loses detail** at slot size, so renders keep one rig.
-- **A painting can drift from its look**: an early stone axe gained a cord binding its model lacks. The reviewer checks each against its render.
 
 ## In the game's model
 
@@ -92,7 +76,7 @@ Technical, recorded as D83.
 
 The rules, in [`terra_items`](../crates/terra_items/src/lib.rs): the catalogue of kinds, the grid, equipment that resizes the backpack, and the action bar, with a test that random moves never make or lose an item.
 
-The sandbox's `play` experiment carries on it ([README](../crates/terra_sandbox/README.md)): the backpack, the worn pack and the bar are components on the player, building spends from the backpack, and whatever does not fit in the backpack, from cutting, digging, butchering or taking apart, drops in a pile at the player's feet to be picked up (asked for by the developers on 2026-10-12). It has a character sheet with a slot each for a pack, a helmet, a suit and an oxygen tank; clicking gear wears it and clicking a slot takes it off. Placeholders: those four slots; a bare backpack of 5 by 4; a starting small pack that makes it 6 by 5; suit parts that do nothing yet; six bar slots; tools two cells wide.
+The sandbox's `play` experiment carries on it ([README](../crates/terra_sandbox/README.md)): the backpack, the worn pack and the bar are components on the player, building spends from the backpack, and whatever does not fit in the backpack, from cutting, digging, butchering or taking apart, drops in a pile at the player's feet to be picked up (asked for by the developers on 2026-10-12). It has a character sheet with four slots, by the names the items file wears things in: Pack, Head, Body and Belt (a quiver, D118); clicking gear wears it and clicking a slot takes it off. Placeholders: those four slots, short of D64's seven; a bare backpack of 5 by 4; a starting small pack that makes it 6 by 5, and a large one 7 by 6; a leather cap and coat that take part of each blow; eight bar slots; tools two cells wide.
 
 Not covered: crafting, research, what the raw items are, item sizes, and how the inventory looks on screen beyond the stand-in.
 

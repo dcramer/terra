@@ -5,16 +5,17 @@ The game's code so far. The split below is the working plan and may change. One 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|
 | `terra_gen` | Generation toolkit: seeds, noise, repeatable random streams | No | Exists |
-| `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists; parked with terraforming (D60) |
-| `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits | No | Terrain A1 built: the field, edits, harvest, meshing and the tree of chunks. The sandbox draws and digs it (A2). Brief: [docs/terrain.md](../docs/terrain.md) |
-| `terra_core` | The shared contracts (ground, water, chunk mesh, operations) and a stand-in planet | No | Exists |
-| `terra_build` | Construction: walls, floors and roofs on a grid, the rooms they close in, windows and doors (docs/structures.md) | No | Exists |
+| `terra_core` | The shared contracts (ground, water, chunk mesh, operations) and the stand-in planet whose hills the terrain uses | No | Exists |
+| `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits. Brief: [docs/terrain.md](../docs/terrain.md) | No | Exists |
+| `terra_build` | Construction: half-metre cubes on a base's grid, the rooms they close in, roofs, and the kits that lay them ([docs/structures.md](../docs/structures.md)) | No | Exists |
 | `terra_items` | Items and containers: kinds, the backpack grid, equipment, the action bar. Brief: [docs/items.md](../docs/items.md) | No | Exists |
-| `terra_net` | Network messages and transport | No | Track D |
+| `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists; parked with terraforming (D60) |
+| `terra_net` | Network messages and transport | No | Not created yet (track D) |
+| `terra_body` | Appearance data into joints and morph weights ([docs/character-system-plan.md](../docs/character-system-plan.md)) | No | Not created yet |
 | `terra_game` | The game in Bevy: the world on screen, the player, items, building, creatures, people, sound, saving, and the shell every build runs under | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
 | `terra_sandbox` | A test environment on top of the game: it launches it, and holds testbeds and developer tools such as the workbench and the icon baker | Yes | Exists. [README](terra_sandbox/README.md) |
 
-Crates are created when their track starts, not before. The tracks are in [docs/engine.md](../docs/engine.md).
+Where each part of the engine stands is in [docs/engine.md](../docs/engine.md#tracks). Crates are created when their track starts, not before.
 
 ## Adding a crate
 

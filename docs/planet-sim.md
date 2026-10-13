@@ -1,6 +1,6 @@
 # Planet simulation
 
-Status: parked. The developers probably will not have terraforming and are not concerned with it now (D60); this is kept for reference. The local-plus-global model is Decided (D6). Field details are Leaning until the simulation toy tests them. It runs only on planets that can be terraformed (D60); elsewhere a planet's climate is fixed by its theme ([worlds.md](worlds.md)).
+Status: parked. There is no terraforming (D89), so the terraforming model (D6) and the terraform rating (D79) are superseded; this page and `terra_sim` are kept for reference, since the same shape of local values that add up to global ones may serve magic gathering by region ([gameplay.md](gameplay.md#what-makes-it-go-magic-as-the-worlds-weather)). A world's climate is set by its theme ([worlds.md](worlds.md), [climate.md](climate.md)).
 
 ## Two tiers
 
@@ -61,9 +61,9 @@ A first draft of these rules was implemented in `prototypes/sim_toy` (deleted on
 
 Moved here from the earlier gameplay page when the game's design was adopted (D89).
 
-Parked (D60): probably no terraforming. Kept for reference. Draft names and order. Phases are gated by global values; what a region looks like is set by its local values. See [planet-sim.md](planet-sim.md).
+Parked: there is no terraforming (D89). Kept for reference. Draft names and order. Phases are gated by global values; what a region looks like is set by its local values ([two tiers](#two-tiers)).
 
-The developers floated a **terraform rating** for each such planet (D79, Leaning): one measure of how far along it is, whose top might mean the air is breathable. It could be what those global values add up to, and what the phases and the weather (D78) follow.
+The developers floated a **terraform rating** for each such planet (D79, now superseded): one measure of how far along it is, whose top might mean the air is breathable. It could be what those global values add up to, and what the phases and the weather (D78) follow.
 
 | Phase | The planet | What threatens you |
 |---|---|---|

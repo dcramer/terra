@@ -17,7 +17,7 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 
 ### Bodies
 
-- **One base body, made once and checked**: one mesh in our T-pose (our own base male, made by Tripo from its sheet), our skeleton, skin weights made for it, the skin patches and the socket rules. It passes the rig checks before anything uses it.
+- **One base body, made once and checked**: one mesh in our T-pose (our own base male, made by Tripo from its sheet), wearing plain close-fitting underwear painted on with almost no relief (D186), our skeleton, skin weights made for it, the skin patches and the socket rules. It passes the rig checks before anything uses it.
 - **A body is a few parameters on it**, as in modern games ([research](../research/modern-character-variety.md)): proportions as bone scales (height, limb length, shoulders, hips, head), build as a few soft morphs (heavy, muscular, thin, chest, belly), the head as blends of head shapes, and a painted skin, tinted. Sex is a morph or a second base; the spike decides.
 - **A character is a few slider values** (D111): sex and build as morph weights, height as a uniform scale, skin colour as a tint, each clamped to what every item passes at. The named templates are presets of the same numbers, for people and tests; an NPC's values come from its seed.
 - **A template from a design**: Tripo makes the design's model, as now; the parameters that bring the base closest to it are estimated, and Tripo paints the base's layout in those proportions.
@@ -55,7 +55,7 @@ No layers (one piece per slot), but pieces from different slots overlap: a pack'
 
 - **A character's appearance is data**: its parameters, skin and tints, hairstyle and what it wears. A few bytes, saved and sent as they are; an NPC's comes from a seed.
 - **Bevy draws and animates**: one skinned mesh for the body and one per worn piece, sharing the skeleton; proportions are each body's joint rest positions and scales; build morphs are one set of weights the body and its pieces share. No mesh is built per character, so a crowd in the same jerkin draws one mesh.
-- A small Rust crate without Bevy turns appearance data into those joint positions, scales and morph weights. The build plan is [character-system-plan.md](character-system-plan.md).
+- A small Rust crate without Bevy, `terra_body` (not created yet), will turn appearance data into those joint positions, scales and morph weights. The build plan is [character-system-plan.md](character-system-plan.md).
 
 ## Checks, so a person isn't the test
 
@@ -66,29 +66,16 @@ Run on every item, on every base body, through clips that bend and reach:
 - **Rigid worn things:** how much of it rests on the body, and that it never sinks in (the first half built).
 - **Held things:** that it never passes through the body or the head through the swings.
 - **A sheet of every item on every body**, for a person to look at last, not first.
-- **Every item's icon**, rendered from its look in the house style (D130) and read at slot size: a look that breaks a contract shows it here too (built: the `icons` experiment, `.claude/skills/item-icons`).
+- **Every item's icon**, rendered from its look in the house style (D130) and read at slot size: a look that breaks a contract shows it here too (built: the `icons` experiment, `.agents/skills/item-icons`).
 
 An item that fails a check isn't used until it passes.
 
-## Against what we have, 2026-10-12 (before morphs)
+## Where it stands
 
-Superseded by the morphs, built the same day: one base body with its morphs, gear made once, every body a template in the game. Where it stands is in [research/body-morphs.md](../research/body-morphs.md#in-the-game-2026-10-12); still open there are the packs' straps on the biggest builds in a sword swing, and the sawtooth, dark-rimmed edges of the jerkin. What follows is how it stood before.
+One base body with its morphs, gear made once, every body a template in the game. What is built and measured is in [research/body-morphs.md](../research/body-morphs.md#in-the-game-2026-10-12); the build plan, its phases and the questions still open are in [character-system-plan.md](character-system-plan.md).
 
-Built: the bodies, their skeleton with twist bones, sockets, held looks, tints, one look per item per body, and a body that hides its skin under what it wears, by 1024 patches of about two centimetres its shader collapses (`patches.py`, `body_mask.wgsl`). Every piece is checked on every body through our clips (`gear_check.py`, the share of nearby skin that comes through it, at most 2%):
-
-| Piece | How it is made | Male | Female |
-|---|---|---|---|
-| Leather jerkin | On each body (`shell_garment.py`) | at most 1.6% (rolling) | at most 2% (crouching) |
-| Leather cap | On each body (`shell_garment.py`, `head_cap`) | 0.6% | 0.4% |
-| Packs | Bag at the back, top at the shoulders; straps made from the skin (`bands.py`) | at most 1.5% | at most 0.4% |
-| Quiver | At the belt socket, behind the hip | 0% | 0% |
-
-All pass. What comes through is at the hips in a roll or crouch, where the jerkin's hem meets a bending thigh. With 256 patches the strip of skin at a hem, under patches only partly covered and so still drawn, came through at 3%; finer patches made it thin enough. Making the hem flare out instead made it worse. A cap fitted as a rigid object cut into the head above the ears (7-8%); made on the head, it does not. A pack's straps fitted as part of a generated model clipped at the shoulders (5-8%); made from the skin, they do not.
-
-Still open: the edges of a made-on-body piece (armholes, neck) look ragged, where the bake catches the dressed model's own rim. Not built yet: pieces that hang loose (a coat's skirt, a cloak), and a third body to show the rules hold beyond the two they were made with.
-
-## Settled by the developers, 2026-10-12
+## Settled by the developers
 
 - **Slots** (D64): head, chest (covering the arms), gloves, legs, feet, back and belt; more may come. Not every slot shows: a quiver on the belt does, not every belt item does. Jewellery is open (two rings and a necklace, or trinket slots), probably unseen.
 - **One piece per slot, no layers** for now. The layer contract above waits.
-- **Each piece is made on each base body**, with Studio credits. Superseded the same day by the shared mesh: a piece is made once, from one dressed model.
+- **What a character starts in**, such as shorts and an undershirt, is ordinary worn items that can be taken off or replaced (D186).

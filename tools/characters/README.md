@@ -1,6 +1,6 @@
 # Characters
 
-The asset pipeline for bodies and what they wear and hold (D115, D128): Blender scripts that turn the source art in [art/](../../art/README.md) into the files the game loads in [assets/](../../assets). The step by step, with what to do when a check fails, is the `character` skill (`.claude/skills/character/SKILL.md`).
+The asset pipeline for bodies and what they wear and hold (D115, D128): Blender scripts that turn the source art in [art/](../../art/README.md) into the files the game loads in [assets/](../../assets). The step by step, with what to do when a check fails, is the `character` skill (`.agents/skills/character/SKILL.md`).
 
 Run everything from the repository root. Blender scripts run headless through [tools/blender/run.sh](../blender/README.md); paths given to them are relative to the root. What a script writes and we do not keep goes to `tools/characters/out/`, which is ignored.
 

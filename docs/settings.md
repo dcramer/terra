@@ -1,13 +1,13 @@
 # Settings: how any theme works
 
-Part of the game's design ([gameplay.md](gameplay.md), D89): one way for any realm's theme to work, medieval, machine, wild, gothic or another, so that each feels like itself, none is better than the others, a new one is data rather than new code, and dozens of generated realms still fit one lore. The developers called it roughly on point on 2026-10-11 (D116, Leaning); their answers are folded in below.
+Part of the game's design ([gameplay.md](gameplay.md), D89): one way for any realm's theme to work, medieval, machine, wild, gothic or another, so that each feels like itself, none is better than the others, a new one is data rather than new code, and any number of generated realms (D17) still fit one lore. This page owns realms' themes and cultures; their physical ground, water and size are in [worlds.md](worlds.md). The developers called it roughly on point on 2026-10-11 (D116, Leaning); their answers are folded in below.
 
 ## What the developers have said
 
 - Realms may differ in setting, "like fantasy or primitive or futuristic", shown in their cultures, which may teach different things and from which you may recruit (D86, Leaning).
 - The art style is one guide for every setting, direction D ([art-style.md](art-style.md), D14): a realm brings its parts, palette and light, never a style of its own. The four settings below come from an earlier mood board of four worlds ([research](../research/art-explorations.md)).
 - On 2026-10-11, about a technological realm: no machine guns; advanced but on theme with magic, and not superior. Whether its makers are gone or still at work could be either. What matters is **ways to make different kinds of themes work, as the visual design goals do.**
-- Also on 2026-10-11: there may be **dozens of generated realms**, so what is needed is **techniques that make each one fit the lore**, not a handful of hand-made worlds.
+- Also on 2026-10-11: there will be **many generated realms**, with no fixed number (D17), so what is needed is **techniques that make each one fit the lore**, not a handful of hand-made worlds.
 - Later the same day, reacting to this proposal: **roughly on point.** Some realms have **more magic or less**. A theme's **weapons should differ, as swords differ from staves: not better or worse, different ways to play.** **Loot**, procedural loot included, may become part of the game, though not a large part. **Mixing settings** within a realm, yes, carefully, as an advanced feature for later. The cosmology's premise and an ancient people who built everywhere are left to the generator: "this is procedural". Each setting's speciality is undecided.
 - Standing: one art style (D14), your gear is your gear in every realm (D86), no science fiction toolsets.
 
@@ -19,7 +19,7 @@ Proposed: **design works the same way.** The game defines a fixed set of **gamep
 
 Two rules keep settings equal:
 
-1. **Rank is the only power axis.** Every realm has iron to diamond ranks ([essences.md](essences.md)). A setting changes how things look and work, never how strong they are: a bronze-rank crossbow and a bronze-rank bow hit about as hard.
+1. **Rank is the only power axis.** Every realm has iron to diamond ranks (D159, [progression.md](progression.md#skills-on-the-rank-ladder)). A setting changes how things look and work, never how strong they are: a bronze-rank crossbow and a bronze-rank bow hit about as hard.
 2. **A setting is a way of using magic.** Nothing in any realm runs on anything else. "Advanced" is a style of using magic, not more of it: engineered in one realm, wild in another, corrupted in a third.
 
 ## The roles
@@ -67,7 +67,7 @@ The techno-punk street in more depth, with its risks, is [a realm of machines](t
 
 ## Making generated realms fit the lore
 
-Four hand-made settings do not reach dozens of generated realms. Proposed: a generator that **starts from a cause and derives the rest**, so every realm is explained by the same few ideas and none is a random pile of themes. After Dwarf Fortress and Caves of Qud, which generate histories that read as lore, and No Man's Sky, whose fiction explains why its worlds repeat.
+Four hand-made settings do not reach any number of generated realms. Proposed: a generator that **starts from a cause and derives the rest**, so every realm is explained by the same few ideas and none is a random pile of themes. After Dwarf Fortress and Caves of Qud, which generate histories that read as lore, and No Man's Sky, whose fiction explains why its worlds repeat.
 
 **1. One cosmology that expects variety.** Left to the generator by the developers. Proposed as the working premise: realms are many places in one cosmos, joined by portals, and **each is shaped by the magic that dominates it**. That one premise explains why realms differ so much, why their peoples use magic in different ways, and why portals lead from one to another, without a story written for each.
 
@@ -89,16 +89,16 @@ How much magic a realm has is apart from its rank: a low-magic realm can still b
 
 - **Peoples who travel**: traders, pilgrims or refugees found in many realms, carrying news and goods between them.
 - **An old people who built everywhere**: the same kind of ruin in many realms, from one ancient culture, a mystery that spans the game.
-- **The long threat**, if there is one (premise B in [arc.md](arc.md)), touching many realms in their own way.
+- **The organisation across realms** (D172, [lore.md](lore.md#threats)): a dangerous faction with a cell in each realm, generated from the same parts, so its trail leads from realm to realm.
 - **Your own mark**: claims, recruits and what you carry go with you between realms (D86).
 
 **5. Rules a generator must keep.** What makes a realm fit, checked whatever the seeds: everything runs on magic; nothing outclasses its rank; no science fiction toolsets; one art style; a culture builds with the same parts as everyone (D108); and a few combinations are refused where they would contradict each other, such as a fire affinity in a frozen climate without a reason in its history.
 
-**6. Hand-made anchors.** The starting realm, and perhaps a few landmark ones, are made by hand and set the tone. Generated realms are built from hand-written templates, names and history events, so what is generated is the combination, never the content from nothing. Names come from per-culture sound sets, so a gothic people and a growth people do not name things alike.
+**6. Hand-made anchors.** Open: whether the starting realm, and perhaps a few landmark ones, are made by hand to set the tone. That pulls against "no handcrafted maps" ([vision.md](vision.md#non-goals)); a middle way is a starting realm generated like any other under tighter rules, as [magic.md](magic.md#essences-in-the-starting-realm) does for its essences. Either way, generated realms are built from hand-written templates, names and history events, so what is generated is the combination, never the content from nothing. Names come from per-culture sound sets, so a gothic people and a growth people do not name things alike.
 
 ## Why roles
 
-- **A new setting is a template**, not new systems: it fills the roles, picks a palette and a kit, and the generator and the game run it. That is what makes dozens of realms (D17) possible.
+- **A new setting is a template**, not new systems: it fills the roles, picks a palette and a kit, and the generator and the game run it. That is what makes any number of realms (D17) possible.
 - **No setting outclasses another**, because power lives in rank and roles share numbers. A player moves between realms for what they teach and what they hold, not to trade up.
 - **It keeps themes on theme.** Every role is filled with a way of using magic, so a machine realm cannot drift into science fiction and a gothic one cannot drift into horror without rules.
 - **It matches how the art is being made**, so a setting's look and its play are one piece of data.

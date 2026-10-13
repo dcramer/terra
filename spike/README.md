@@ -6,4 +6,6 @@ Throwaway work that answers one question (D133). Each spike is a folder, `spike/
 - When its note is written, delete the spike. Git history keeps it.
 - Its scratch output goes in an ignored folder inside it, and nothing kept lives there.
 
-None are open.
+Open:
+
+- [realistic-textures](realistic-textures/README.md): do building pieces look real enough with a realistic concept and Tripo's own textures kept? Written up in [research/realistic-building-textures.md](../research/realistic-building-textures.md), so it is due for deletion.

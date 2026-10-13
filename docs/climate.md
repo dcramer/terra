@@ -1,6 +1,6 @@
 # Climate: seasons, weather and what they do
 
-Status: Open. A draft for the developers, 2026-10-12. Seasons exist and change play (D149), and weather exists and differs by world (D78). This proposes how both work. Grew out of [biomes.md](biomes.md), which keeps what seasons do to plants' looks.
+Status: Leaning, 2026-10-12. Seasons exist, change play and are fundamentals rather than flags (D149, Decided); weather differs by world (D78); body temperature is probably its own attribute (D153, Leaning). The rest proposes how they work. Grew out of [biomes.md](biomes.md), which keeps what seasons do to plants' looks.
 
 ## The rule: fundamentals, not seasons
 

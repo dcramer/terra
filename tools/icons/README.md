@@ -2,7 +2,7 @@
 
 Paints item icons in the art style (D130). Each icon is painted by the image model from the item's render (`cargo xtask icons`), which fixes its shape, angle and framing, with a style reference and approved icons as references so every icon keeps to one style. The painter cuts it out of a flat magenta background, fits it to the item's cells, writes `assets/icons/<item>.png`, records it in the manifest as painted, and saves a sheet of renders above paintings to review. The baker never replaces a painted icon; the sandbox's icons test fails when an item's look changes after its icon was painted, until it is painted again.
 
-The playbook is [.claude/skills/item-icons](../../.claude/skills/item-icons/SKILL.md).
+The playbook is [.agents/skills/item-icons](../../.agents/skills/item-icons/SKILL.md).
 
 ```bash
 node tools/icons/paint.ts stone_axe knife     # paint these

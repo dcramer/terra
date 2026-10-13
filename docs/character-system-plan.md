@@ -43,13 +43,14 @@ Each part names its technique (T1 to T9 in the industry note) and its state.
 | **Hair** | Hair as a part bound to the head; hide flags and hat-hair variants under helmets | A worn look, by name | Phase 5 |
 
 - **A character is a few slider values** (D111): sex and build as morph weights, height as a scale, skin colour as a tint, each clamped to what every item passes at. The named templates stay as presets for people and tests. An NPC is slider values from its seed, within its people's ranges.
-- **One crate turns appearance into numbers.** `terra_body`, without Bevy, turns appearance data into joint transforms and morph weights. It is tested without a GPU and shared by the tools and the game.
+- **The base bodies are being redrawn** in plain, close-fitting underwear (D186), and their rigs, morphs and gear rebuilt on them.
+- **One crate turns appearance into numbers.** `terra_body` (to be created in phase 2), without Bevy, will turn appearance data into joint transforms and morph weights. It is tested without a GPU and shared by the tools and the game.
 
 ### Gear
 
 | Kind | Technique | State |
 |---|---|---|
-| Garments cut from the body (coat, cap) | Faces of the base pushed out, keeping its weights | **Built**; edges ragged (phase 3) |
+| Garments cut from the body (coat, cap) | Faces of the base pushed out, keeping its weights | **Built**; edges cut smooth, with a rim turned in |
 | Garments from their own models (a boot, plate, a hood) | T4: weights copied from the body by Epic's inpainting method (MIT reference code); T2/T3: morphs by surface binding with rigid clusters | To build: phase 3 |
 | Every garment on every body | T2: the base's morphs carried onto each item | **Built** by nearest vertex; phase 3 moves to surface binding (Outfit Studio's averaging, Mutable's Reshape) |
 | Clipping per body shape | BodySlide's clipping fixer, through our clips, a round kept only while it helps | **Built** |
@@ -63,8 +64,8 @@ Each part names its technique (T1 to T9 in the industry note) and its state.
 | What | How | State |
 |---|---|---|
 | One mesh per item, shared by every wearer, re-bound to the body's joints | — | **Built** |
-| Each look's copied skeleton removed after re-binding | — | Phase 1 |
-| Each garment's skin cut down to the joints it uses | Joint matrices are per skinned mesh | Phase 1 |
+| Each look's copied skeleton removed after re-binding | — | **Built** |
+| Each garment's skin cut down to the joints it uses | Joint matrices are per skinned mesh | **Built** |
 | The body material made bindless | So bodies batch | Phase 1 |
 | Morph weights shared by reference, garments listing morphs in the body's order; body shape never animated by clips | — | Phase 1 check, phase 2 build |
 | Characters merged into one skinned mesh with a texture atlas, at a distance or always | T9: UMA's combiner, Mutable's packing; our own merge, since Bevy's doesn't do skins or morphs | Phase 6, if the crowd measurement asks for it |
@@ -76,8 +77,8 @@ Each phase ends when its checks pass in the build, and a person has looked at th
 
 | Phase | Builds | Done when |
 |---|---|---|
-| **0. Deformation and gear on morphs** | Everything marked built above | **Done** (2026-10-12): the build passes; the forearm squeeze through the libraries' 20 hardest clips is down from 70% to 0–13%; every item passes on every body |
-| **1. Scale foundations** | Copied skeletons removed; garment skins trimmed; a crowd benchmark (`--experiment crowd`). Still to do: `BodyMask` bindless | **Mostly done** (2026-10-12): entities per character 324 → 105, joint matrices 365 → 108; 1,000 characters on the RTX 5090 25.7 → 13.3 ms. The integrated GPU costs 2.5–4 ms per dressed character, and the world alone is 29.6 ms there, which brings LOD forward (phase 6). Numbers in [research/bevy-character-capabilities.md](../research/bevy-character-capabilities.md#measured-2026-10-12) |
+| **0. Deformation and gear on morphs** | Everything marked built above | **Done**: the build passes; the forearm squeeze through the libraries' 20 hardest clips is down from 70% to 0–13%; every item passes on every body |
+| **1. Scale foundations** | Copied skeletons removed; garment skins trimmed; a crowd benchmark (`--experiment crowd`). Still to do: `BodyMask` bindless | **Mostly done**: entities per character 324 → 105, joint matrices 365 → 108; 1,000 characters on the RTX 5090 25.7 → 13.3 ms. The integrated GPU costs 2.5–4 ms per dressed character, and the world alone is 29.6 ms there, which brings LOD forward (phase 6). Numbers in [research/bevy-character-capabilities.md](../research/bevy-character-capabilities.md#measured-2026-10-12) |
 | **2. Body parameters** | `terra_body`; height and proportions in the bones; skin tint; templates as data; the parameter grid in the build (each limit, and mixes such as half heavy and half strong) | Rig and gear checks pass at every limit and mix; joints in the game match the tools to the millimetre (`--joints`); workbench sheets of each template |
 | **3. Gear from any model** | Weight inpainting; morphs by surface binding with rigid clusters; per-triangle hiding from a pose sweep; garment edges (hem where the dressed model's garment ends, a turned-in rim, the bake masked); every clip in the rig and gear checks | A boot and a hood made from their own models pass on every template; a rendered hole check finds no holes; no ragged edges on the sheets |
 | **4. Contact** | Foot IK; pelvis offset by body size; a held tool's off hand | Feet within 1 cm of the ground while standing on every template; no body below the floor by more than 2 cm in any clip |
@@ -107,13 +108,12 @@ The likeliest replacement is computing joint matrices once per skeleton rather t
 
 ## Design questions for the developers
 
-Settled on 2026-10-12 (D111): sliders only; height varies widely, for other races later; no other proportions yet. Still open:
+Settled: sliders only, height varying widely, no other proportions yet (D111); the base body wears plain underwear, and starting clothes are items (D186). Still open:
 
 1. **Height range for humans,** and later per race.
 2. **Head and face variety:** blends of a few heads, or fixed faces?
 3. **Hair:** how many styles to start; long hair with physics, or short only at first?
 4. **Loose garments:** are long coats, robes and cloaks wanted early? They need phase 5.
-5. ~~What the base body wears~~: settled (D186), plain flat underwear; starting clothes are items.
 
 ## Why not something ready-made
 

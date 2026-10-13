@@ -1,6 +1,6 @@
 # Art direction
 
-Status: Decided (D14), 2026-10-12, to be tried. The style is **direction D, graphic layers**: bold simple shapes, big flat areas of colour, crisp shadow shapes and strong silhouettes, with atmospheric depth. One rule has held from the start: it must not look chunky or Minecraft-like.
+Status: Decided (D14), to be tried. The style is **direction D, graphic layers**: bold simple shapes, big flat areas of colour, crisp shadow shapes and strong silhouettes, with atmospheric depth. One rule has held from the start: it must not look chunky or Minecraft-like.
 
 - **Making anything the game draws** follows [art-style.md](art-style.md), the style guide. It is the same for every realm and setting.
 - **This page** is the world-level look: what a realm brings, how the renderer makes the look, and what is open.
@@ -37,26 +37,24 @@ The world is at real-world scale (D110, Decided). A broadleaf tree stands 15 to 
 |---|---|---|
 | Shapes and roles | Models made to [art-style.md](art-style.md): concept, Tripo, clean-up into palette roles (D147, D115) | Working for props; characters still carry Tripo's painted textures |
 | Banded light | A lighting shader that cuts light into a few crisp bands, the shadow band tinted cool | Not built. Shown in Blender in the bake-off; the game uses Bevy's standard lighting |
-| Crease-aware normals | Normals smooth across curves, split at creases over about 50 degrees | Not built. The prop clean-up flat-shades every face |
+| Crease-aware normals | Normals smooth across curves, split at creases over about 50 degrees | Working for props: the clean-up shades them so |
 | A palette per realm | Each role's colour, from the realm's data | Roles work; one palette, the starter's |
 | Haze and layered distance | Distance fog tinted toward the horizon | Working |
 | Sky | A gradient shader with soft clouds, day and night | Working |
 | Bloom and grading | Camera effects built into Bevy | Working |
 | Dense foliage and wind | Instanced plants, merged grass blades, one wind shader | Working near the start |
-| Ground cover | Each ground vertex says what grows there; the shader paints it | Working on the stand-in planet |
+| Ground cover | Each ground vertex says what grows there; the shader paints it | Working on the voxel terrain |
 | Water | A see-through surface mirroring the sky at a low angle | Working; no waves |
 | Shade in corners | Screen-space ambient occlusion | Working; to be checked against the bands |
 
 ## Principles
 
-- **The art is the simulation rendered.** Sky colour from air pressure, ground tint from moisture and life, plant density from the simulation.
 - **One material pipeline for everything.** Every model goes through the same roles, palette and shader, so the game reads as one thing.
 - **Effort goes into light and atmosphere**, which is shader code and shared by everything.
 - **Fullness comes from quantity.** Ground cover, undergrowth and canopy in layers, as in Sons of the Forest (D148), drawn in the same simple shapes.
 
 ## Open questions
 
-- **What does a dead planet look like?** It has to be beautiful too, with no life to fill it. Its palette and light have to carry it (D59, D17).
 - **How do the bands look on smooth voxel terrain?** Terrain is lit per vertex today; banded light on fine ground may look like contour lines.
 - **How does a palette change through seasons and phases** (D149)? Each realm needs a palette made by rule, and nobody has drawn one.
 - **Night.** Banded light from a moon and from lamps.

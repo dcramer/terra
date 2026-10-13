@@ -1,10 +1,10 @@
 # Sound
 
-Status: a first version is built in the sandbox's `play` experiment (D113, D114). How it is put together is decided, since that is technical; what the game should sound like is a proposal for the developers.
+Status: a first version is built in the game (D113, D114). How it is put together is decided, since that is technical; what the game should sound like is a proposal for the developers.
 
 ## What we are after
 
-From game design 001 ([character.md](your-character.md)): **sound carries information**. A monster's call, a settlement's bell, rain coming, a predator behind you. **Music sparse, and from the world where it can be.** That fits a game with little on screen (D93): the ear tells you what the screen does not.
+From the game's design ([your-character.md](your-character.md)): **sound carries information**. A monster's call, a settlement's bell, rain coming, a predator behind you. **Music sparse, and from the world where it can be.** That fits a game with little on screen (D93): the ear tells you what the screen does not.
 
 ## How it is put together
 
