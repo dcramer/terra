@@ -39,13 +39,30 @@ pub const CELL_M: f32 = 0.25;
 /// Cells to a side of a square.
 pub const CELLS: usize = (SQUARE_M / CELL_M) as usize;
 
-/// How a ring draws its blades: how many segments each has, how wide it is, and what share
-/// of the near ring's blades it keeps.
+/// How a ring draws its blades: how many segments each has, and what share of the near
+/// ring's blades it keeps.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Ring {
     pub segments: u32,
-    pub width_m: f32,
     pub share: f32,
+}
+
+/// How wide a blade is at its foot, before its own variation. The blades that stay out to
+/// the far rings are up to twice as wide, in every ring, so a ring changing never changes a
+/// blade's width.
+const BLADE_WIDTH_M: f32 = 0.03;
+
+/// What the grass shader needs to thin the blades one by one with distance, so that a
+/// blade a farther ring will not have is gone before its square changes ring: the share
+/// the second ring keeps and where the ones it does not have are gone, then the same for
+/// the third. A square changes ring by its nearest point, 2 m past these.
+pub fn thinning() -> Vec4 {
+    Vec4::new(
+        RINGS[1].0.share,
+        RINGS[0].1 - 2.0,
+        RINGS[2].0.share,
+        RINGS[1].1 - 2.0,
+    )
 }
 
 /// The rings of detail, nearest first, and where each ends, in metres from the camera.
@@ -53,7 +70,6 @@ pub const RINGS: [(Ring, f32); 3] = [
     (
         Ring {
             segments: 3,
-            width_m: 0.034,
             share: 1.0,
         },
         16.0,
@@ -61,7 +77,6 @@ pub const RINGS: [(Ring, f32); 3] = [
     (
         Ring {
             segments: 2,
-            width_m: 0.048,
             share: 0.3,
         },
         32.0,
@@ -69,7 +84,6 @@ pub const RINGS: [(Ring, f32); 3] = [
     (
         Ring {
             segments: 1,
-            width_m: 0.07,
             share: 0.11,
         },
         f32::MAX,
@@ -269,6 +283,8 @@ pub fn square(
             if rank > thick * ring.share {
                 continue;
             }
+            // Its rank among the blades that grow here, 0 to 1: the lowest last longest.
+            let rank = rank / thick;
             // Nothing grows through floors, footings and steps, or where they are planned.
             let root = centre + east * (at.x - middle.x) + up * rise + south * (at.y - middle.y);
             if clear
@@ -298,9 +314,12 @@ pub fn square(
                 Vec3::new(bend_way.x, 0.0, bend_way.y),
                 tall,
                 0.25 + 0.5 * h(8),
-                ring.width_m * (0.8 + 0.4 * h(9)),
+                BLADE_WIDTH_M
+                    * (0.8 + 0.4 * h(9))
+                    * (1.0 + (1.0 - rank) * (1.0 - rank) * (1.0 - rank)),
                 tip,
                 ring.segments,
+                rank,
             );
         }
     }
@@ -323,8 +342,9 @@ struct BladeMesh {
     /// From the vertex back to its blade's root, across: the root is this far east and
     /// south of it.
     to_root: Vec<[f32; 2]>,
-    /// How it moves in the wind: with the blade, and on its own.
-    sway: Vec<[f32; 2]>,
+    /// How far up its blade it is, 0 at the root to 1 at the tip, which is how much it moves
+    /// in the wind; and its blade's rank, which says how far off it thins out.
+    up_and_rank: Vec<[f32; 2]>,
     /// Its colour, and in alpha how far it stands above its root.
     colours: Vec<[f32; 4]>,
     indices: Vec<u32>,
@@ -332,7 +352,8 @@ struct BladeMesh {
 
 impl BladeMesh {
     /// A blade from `root`, `tall` metres, bending toward `way` by `bend` of its height,
-    /// `width` across at the foot, coloured `tip` at its tip and darker at the root.
+    /// `width` across at the foot, coloured `tip` at its tip and darker at the root, of
+    /// `rank` among its neighbours.
     fn blade(
         &mut self,
         root: Vec3,
@@ -342,6 +363,7 @@ impl BladeMesh {
         width: f32,
         tip: Vec3,
         segments: u32,
+        rank: f32,
     ) {
         let side = way.cross(Vec3::Y).normalize_or(Vec3::X);
         let control = root + Vec3::Y * tall * 0.65;
@@ -357,7 +379,7 @@ impl BladeMesh {
             self.positions.push(point.to_array());
             self.normals.push(normal.to_array());
             self.to_root.push([root.x - point.x, root.z - point.z]);
-            self.sway.push([t * t * 0.5, t * 0.6]);
+            self.up_and_rank.push([t, rank]);
             let colour = root_colour.lerp(tip, libm::powf(t, 0.8));
             self.colours
                 .push([colour.x, colour.y, colour.z, point.y - root.y]);
@@ -393,7 +415,7 @@ impl BladeMesh {
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals)
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.to_root)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.sway)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.up_and_rank)
         .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.colours)
         .with_inserted_indices(Indices::U32(self.indices))
     }

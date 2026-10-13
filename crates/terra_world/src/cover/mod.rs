@@ -103,6 +103,9 @@ pub struct GrassExtension {
     pub wind: Vec4,
     #[uniform(100)]
     pub fade: Vec4,
+    /// How blades thin out one by one with distance (`blades::thinning`).
+    #[uniform(100)]
+    pub thinning: Vec4,
 }
 
 impl MaterialExtension for GrassExtension {
@@ -175,6 +178,13 @@ fn square_middle((i, j): (i32, i32)) -> Vec2 {
     (Vec2::new(i as f32, j as f32) + 0.5) * SQUARE_M
 }
 
+/// How far a square's nearest point is: a square changes ring by it, so none of its
+/// blades is still near enough to show when its ring changes.
+fn square_nearest(key: (i32, i32), here: Vec2) -> f32 {
+    let corner = Vec2::new(key.0 as f32, key.1 as f32) * SQUARE_M;
+    here.clamp(corner, corner + SQUARE_M).distance(here)
+}
+
 /// Builds the squares round the camera, nearest first, each on another thread so moving
 /// never waits for one; rebuilds a square in another ring when the camera has moved far
 /// enough; and takes away those left behind.
@@ -210,6 +220,7 @@ fn grow(
             extension: GrassExtension {
                 wind: (start.rotation * Vec3::X).extend(1.0),
                 fade: Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0),
+                thinning: blades::thinning(),
             },
         });
         commands.insert_resource(Meadow {
@@ -310,10 +321,10 @@ fn grow(
     let mut wanted: Vec<(f32, (i32, i32), usize)> = (-reach..=reach)
         .flat_map(|di| (-reach..=reach).map(move |dj| (ci + di, cj + dj)))
         .filter_map(|key| {
-            let distance = square_middle(key).distance(here);
-            if distance >= REACH_M {
+            if square_middle(key).distance(here) >= REACH_M {
                 return None;
             }
+            let distance = square_nearest(key, here);
             let square = squares.get(&key);
             let current = square
                 .map(|s| s.building.as_ref().map_or(s.ring, |(ring, _)| *ring))
