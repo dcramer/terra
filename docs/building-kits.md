@@ -2,6 +2,8 @@
 
 How each kind of construction looks and is laid, starting with logs. It fills in step 4 of [building-tech.md](building-tech.md#order). How pieces are made and drawn is technical (D177), with block kinds (D197) and timber (D200) drawn from real materials by code; the look of log walls (D178), posts and mixing kinds (D179) are Decided; what a wall costs need not match its pieces one for one.
 
+**The bar is Enshrouded (D211):** cubes that touch blend into one structure, and each cube's look changes with what it touches and where it sits, as optimised cubes. Every kit here is judged side by side with Enshrouded against that, and changed where it falls short.
+
 ![The log kit: a corner, how walls meet, a doorway, and the three states](images/log-kit.svg)
 
 ## What a kit has to do
