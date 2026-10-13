@@ -548,9 +548,9 @@ impl Building<'_, '_> {
     }
 
     /// What building would put in next, for a builder at `near` (the base's own space):
-    /// the part aimed at, else whatever of the base near them can go in, lowest first, and
-    /// roofs once what holds them is up. The first allowed, or, if none is, the part aimed
-    /// at with why it is refused.
+    /// whatever of the base near them can go in, lowest first and the part aimed at first
+    /// on its layer, and roofs once what holds them is up. The first allowed, or, if none
+    /// is, the first with why it is refused.
     pub fn next_work(
         &mut self,
         by: Option<Entity>,
@@ -567,10 +567,11 @@ impl Building<'_, '_> {
                 (distance <= NEAR_WORK_M || Some(id) == aimed).then_some((at.y, distance, id))
             })
             .collect();
+        // Lowest first, as what a part rests on goes in before it; on a layer, the part
+        // aimed at, then the nearest.
         parts.sort_by(|a, b| {
-            (Some(b.2) == aimed)
-                .cmp(&(Some(a.2) == aimed))
-                .then(a.0.cmp(&b.0))
+            a.0.cmp(&b.0)
+                .then((Some(b.2) == aimed).cmp(&(Some(a.2) == aimed)))
                 .then(a.1.total_cmp(&b.1))
         });
         let roofs: Vec<RoofId> = base
