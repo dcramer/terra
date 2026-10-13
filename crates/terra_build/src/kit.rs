@@ -1,0 +1,484 @@
+//! A kind of construction's kit (docs/building-kits.md, D136, D177): a file in
+//! `assets/data/kits/` saying how its walls are laid, how big its pieces are, how each long
+//! member is shaped and varies (D200), its materials and what building in it costs. A new
+//! kind, a pine cabin or an oak one, round logs or hewn beams, is a new file, not code.
+
+use crate::Kind;
+use crate::cost::{Amount, Bill, Rules, Terms};
+use crate::mesh::Material;
+use std::collections::BTreeMap;
+
+/// A kind of construction's kit: how its walls are laid, its sizes, how its timber is
+/// shaped, and its colours and textures. Colours are as they should appear on screen
+/// (sRGB). What a file leaves out is pine's, as `logs.ron` has it.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Kit {
+    /// The kind of construction it lays (D181): the number the cubes it lays carry.
+    pub id: u16,
+    /// How its walls are laid: as long members, or as blocks.
+    pub pattern: Pattern,
+    /// How thick a log is, or how wide a beam.
+    pub diameter: f32,
+    /// How far apart the courses are; less than the diameter, as logs are scribed to sit
+    /// into one another. Must divide the storey.
+    pub course: f32,
+    /// How far a log runs past the corner cube it crosses at, beyond the grid. None, so
+    /// that every piece stays inside its cubes and anything can be built against it.
+    pub overhang: f32,
+    /// The longest wall one log spans, the longest a tree gives (D174).
+    pub longest: f32,
+    /// How far short of the others' a corner log's end may stop, in metres, with a saddle
+    /// notch; flush ends never do.
+    pub ragged: f32,
+    /// Whether there is daub in the groove between courses.
+    pub chinking: bool,
+    /// The boards round an opening: how wide and how far proud of the logs.
+    pub frame: f32,
+    /// How far a roof over its walls overhangs them, at the eaves and the gable ends (D175).
+    pub eaves: f32,
+    /// A block kind's surface: the radius its outside edges are rounded to, and how far
+    /// its material's relief stands out (`surface.rs`).
+    pub bevel: f32,
+    pub relief: f32,
+    /// How each long member is shaped, and how much one differs from the next (D200).
+    pub timber: Timber,
+    /// The props set into its openings (D177), as asset paths.
+    pub models: KitModels,
+    /// Its materials' textures (D14): where each is, how many metres across it is, and how
+    /// deep its parallax reads; a material with none is drawn in its plain colour.
+    pub textures: BTreeMap<Material, Texture>,
+    pub colours: KitColours,
+    /// What its cubes and roofs cost to build (D139).
+    pub cost: KitCost,
+}
+
+/// How a long member is made (D200): a profile swept along the piece the layout gives,
+/// tapered, bent and uneven as a tree grows, its face displaced by its material's height
+/// and its cut ends showing their grain. Every number varies a little by the piece's seed,
+/// so no two logs in a wall are the same.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Timber {
+    /// Its section: a round log in its bark, or a beam squared by the axe.
+    pub profile: Profile,
+    /// How its ends finish at a corner.
+    pub notch: Notch,
+    /// How many points round its section.
+    pub sides: u32,
+    /// How far apart its rings are along it, in metres.
+    pub step: f32,
+    /// How much thicker its butt is than its middle, and its top thinner, as a fraction.
+    pub taper: f32,
+    /// How far it bows from straight over its length, in metres, at most.
+    pub bend: f32,
+    /// How uneven its section is, and how much it swells here and there along it, as
+    /// fractions of its radius.
+    pub uneven: f32,
+    pub swell: f32,
+    /// How far its face's material stands out from it, from its deepest to its proudest,
+    /// in metres: the bark's height map, read on the CPU.
+    pub relief: f32,
+    /// The daub in the groove under it: how far out from the wall's middle its face is,
+    /// as a fraction of the member's half width, and how tall it is, in metres; a hewn
+    /// beam's fills the gap between it and the course below.
+    pub daub: (f32, f32),
+    /// What its face's and its ends' colours are multiplied by (sRGB).
+    pub tint: [f32; 3],
+    pub end_tint: [f32; 3],
+    /// How much each member differs from the next.
+    pub variation: Variation,
+}
+
+/// How much one member differs from the next, each by its seed: its thickness as a
+/// fraction either way, how much lighter or darker it is, and how much warmer or cooler.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Variation {
+    pub thickness: f32,
+    pub shade: f32,
+    pub warmth: f32,
+}
+
+/// A long member's section.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Profile {
+    /// A round log in its bark, a little flattened where it sits on the one below.
+    #[default]
+    Round,
+    /// A beam hewn square, its edges rounded where the axe met the tree's round, its faces
+    /// scalloped by the adze, a band of daub showing between courses.
+    Hewn,
+}
+
+/// How a member's ends finish where walls cross.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Notch {
+    /// Saddle-notched round logs: the ends stack at the corner, each sawn a little short
+    /// or long of the next, chamfered by the axe.
+    #[default]
+    Saddle,
+    /// Dovetailed square timber: every end flush with the corner's face, sawn square.
+    Flush,
+}
+
+/// What a kind costs to build (D139, D194): how many steps fill a cube, and what each
+/// step takes, by the items' names, in exact fractions (numerator, denominator); and what
+/// each stage of a roof cell over its walls takes. What is left out is free.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct KitCost {
+    pub steps: u8,
+    pub step: Vec<(String, u64, u64)>,
+    pub roof: Vec<(String, u64, u64)>,
+}
+
+impl KitCost {
+    fn bill(amounts: &[(String, u64, u64)]) -> Bill {
+        let mut bill = Bill::default();
+        for (material, num, den) in amounts {
+            bill.add(&Bill::of(material, Amount::new(*num, (*den).max(1))));
+        }
+        bill
+    }
+}
+
+/// How a kit lays its walls (D160: a few patterns in code, kits as data).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Pattern {
+    /// Courses of long members, crossing at the corners (`layout::runs`).
+    #[default]
+    Logs,
+    /// Blocks (`layout::blocks`): stone, brick, plaster or earth, drawn as the cubes' own
+    /// surface, rounded and displaced by the kit's `Masonry` material (D197). Where it
+    /// meets logs, it runs through and the logs end flush against it (D179).
+    Masonry,
+}
+
+/// Every kit a base is laid by, one for each kind of construction.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Kits(pub Vec<Kit>);
+
+impl Kits {
+    /// The kit that lays a kind, if any does.
+    pub fn of(&self, kind: Kind) -> Option<&Kit> {
+        self.0.iter().find(|kit| kit.kind() == kind)
+    }
+
+    /// What building in each kit's kind costs; props are not the kits' to say.
+    pub fn rules(&self) -> Rules {
+        let mut rules = Rules::default();
+        for kit in &self.0 {
+            let terms = Terms::new(kit.cost.steps.max(1), KitCost::bill(&kit.cost.step));
+            rules.kinds.insert(kit.kind(), terms);
+            rules
+                .roofs
+                .insert(kit.kind(), KitCost::bill(&kit.cost.roof));
+        }
+        rules
+    }
+
+    /// Whether a kind goes in a cube at a time, as blocks do, rather than a course across
+    /// every cube of a part, as long members do (D194).
+    pub fn one_at_a_time(&self, kind: Kind) -> bool {
+        self.of(kind)
+            .is_some_and(|kit| kit.pattern == Pattern::Masonry)
+    }
+}
+
+/// A material's textures: a folder under `assets` with `color.jpg`, `normal.jpg` and
+/// `arm.jpg` (occlusion, roughness, metal), and `height.jpg` for parallax or relief.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Texture {
+    pub path: String,
+    /// How many metres across and down one copy of it covers.
+    pub metres: [f32; 2],
+    /// How deep its parallax reads, as a fraction of its size; none if not given.
+    #[serde(default)]
+    pub depth: f32,
+    /// How much light it reflects as a mirror would, head on, as Bevy and Filament say it:
+    /// 0.5 is 4%, a generic dielectric; 0.35, 2%, which the kits' bark, stone, plaster and
+    /// weathered wood are given unless they say otherwise. At 4% the painted sky's blue
+    /// sheened every kit's material in shade and washed roofs pale at a slant.
+    #[serde(default = "matte")]
+    pub reflectance: f32,
+}
+
+/// A rough natural material's reflectance (see [`Texture::reflectance`]).
+pub fn matte() -> f32 {
+    0.35
+}
+
+/// The props a kit sets into its openings, as asset paths (docs/building-kits.md).
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct KitModels {
+    /// A door and a window in their frames, set into openings of their shape.
+    pub door: Option<String>,
+    pub window: Option<String>,
+}
+
+/// The plain colours of what a kit has no texture for yet: the boards behind a gable, a
+/// floor, a roof and its sides, and the daub between courses, which tints its texture.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KitColours {
+    pub board: [f32; 3],
+    pub light: [f32; 3],
+    pub dark: [f32; 3],
+    pub roof: [f32; 3],
+    pub chinking: [f32; 3],
+}
+
+impl Default for Timber {
+    /// Pine in its bark, as `logs.ron` has it.
+    fn default() -> Self {
+        Timber {
+            profile: Profile::Round,
+            notch: Notch::Saddle,
+            sides: 18,
+            step: 0.08,
+            taper: 0.07,
+            bend: 0.03,
+            uneven: 0.035,
+            swell: 0.02,
+            relief: 0.022,
+            daub: (0.7, 0.05),
+            tint: [1.0, 0.95, 0.89],
+            end_tint: [0.86, 0.82, 0.78],
+            variation: Variation::default(),
+        }
+    }
+}
+
+impl Default for Variation {
+    fn default() -> Self {
+        Variation {
+            thickness: 0.06,
+            shade: 0.16,
+            warmth: 0.05,
+        }
+    }
+}
+
+impl Default for Kit {
+    /// Pine, as `assets/data/kits/logs.ron` has it; for tests.
+    fn default() -> Self {
+        Kit {
+            id: 1,
+            pattern: Pattern::Logs,
+            diameter: 0.3,
+            course: 0.25,
+            overhang: 0.0,
+            longest: 4.0,
+            ragged: 0.04,
+            chinking: true,
+            frame: 0.08,
+            eaves: 0.5,
+            bevel: 0.04,
+            relief: 0.05,
+            timber: Timber::default(),
+            models: KitModels::default(),
+            textures: BTreeMap::new(),
+            cost: KitCost::default(),
+            colours: KitColours {
+                board: [0.45, 0.32, 0.22],
+                light: [0.74, 0.56, 0.37],
+                dark: [0.5, 0.34, 0.22],
+                roof: [0.47, 0.42, 0.37],
+                chinking: [0.8, 0.75, 0.66],
+            },
+        }
+    }
+}
+
+impl Kit {
+    /// How many courses fill a storey, and whether they fill it exactly.
+    pub fn courses(&self) -> (i32, bool) {
+        let count = (crate::STOREY_M / self.course).round();
+        (
+            count as i32,
+            (count * self.course - crate::STOREY_M).abs() < 1e-3,
+        )
+    }
+
+    /// The kind of construction it lays.
+    pub fn kind(&self) -> Kind {
+        Kind(self.id)
+    }
+
+    pub fn radius(&self) -> f32 {
+        self.diameter * 0.5
+    }
+
+    /// How far short of the corner's face an end may stop: by up to `ragged` when saddle
+    /// notched, never when flush.
+    pub fn ragged(&self) -> f32 {
+        match self.timber.notch {
+            Notch::Saddle => self.ragged,
+            Notch::Flush => 0.0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::CELL_M;
+    use std::collections::BTreeSet;
+
+    pub(crate) fn assets() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    }
+
+    fn shipped(name: &str) -> Kit {
+        let path = assets().join("data/kits").join(name);
+        let text = std::fs::read_to_string(&path).unwrap();
+        ron::from_str(&text).unwrap_or_else(|why| panic!("{}: {why}", path.display()))
+    }
+
+    #[test]
+    fn every_shipped_kit_reads_and_its_values_are_in_range() {
+        #[derive(serde::Deserialize)]
+        struct Items {
+            kinds: Vec<Item>,
+        }
+        #[derive(serde::Deserialize)]
+        struct Item {
+            name: String,
+        }
+        let items = std::fs::read_to_string(assets().join("data/items.ron")).unwrap();
+        let items: Items = ron::from_str(&items).unwrap();
+        let item = |name: &str| items.kinds.iter().any(|item| item.name == name);
+        let mut ids = BTreeSet::new();
+        let mut read = 0;
+        for entry in std::fs::read_dir(assets().join("data/kits")).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "ron") {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let kit = shipped(&name);
+            read += 1;
+            assert!(ids.insert(kit.id), "{name}: kind {} twice", kit.id);
+            assert!(
+                kit.kind() != Kind::PLAIN && kit.kind() <= Kind::LAST,
+                "{name}"
+            );
+            if kit.pattern == Pattern::Logs {
+                let (count, whole) = kit.courses();
+                assert!(
+                    whole && count > 0,
+                    "{name}: courses do not divide the storey"
+                );
+                // Scribed into one another, in a wall a cube thick.
+                assert!(
+                    kit.course <= kit.diameter && kit.diameter <= CELL_M,
+                    "{name}"
+                );
+                assert!(kit.longest >= CELL_M, "{name}");
+                let t = &kit.timber;
+                assert!(t.sides >= 6 && t.step > 0.01, "{name}");
+                assert!(t.daub.0 > 0.0 && t.daub.0 < 1.0 && t.daub.1 > 0.0, "{name}");
+                // Logs that vary, but still fit their courses (D14: lightly stylised).
+                let v = &t.variation;
+                assert!(
+                    v.thickness < 0.2 && v.shade < 0.5 && v.warmth < 0.2,
+                    "{name}"
+                );
+                assert!(kit.textures.contains_key(&Material::Log), "{name}: no face");
+                if t.relief > 0.0 {
+                    let face = &kit.textures[&Material::Log].path;
+                    assert!(
+                        assets().join(face).join("height.jpg").is_file(),
+                        "{name}: relief with no height map"
+                    );
+                }
+            }
+            let t = &kit.timber;
+            let sizes = [
+                kit.overhang,
+                kit.ragged,
+                kit.frame,
+                kit.eaves,
+                kit.bevel,
+                kit.relief,
+                t.taper,
+                t.bend,
+                t.uneven,
+                t.swell,
+                t.relief,
+                t.variation.thickness,
+                t.variation.shade,
+                t.variation.warmth,
+            ];
+            assert!(sizes.iter().all(|v| v.is_finite() && *v >= 0.0), "{name}");
+            assert!(t.taper < 0.5 && t.uneven < 0.3, "{name}");
+            assert!(kit.bevel < CELL_M * 0.5, "{name}");
+            let c = &kit.colours;
+            let colours = [
+                c.board, c.light, c.dark, c.roof, c.chinking, t.tint, t.end_tint,
+            ];
+            assert!(
+                colours.iter().flatten().all(|v| (0.0..=1.0).contains(v)),
+                "{name}"
+            );
+            // Everything it names is there.
+            for model in [&kit.models.door, &kit.models.window].into_iter().flatten() {
+                assert!(assets().join(model).is_file(), "{name}: no {model}");
+            }
+            for (material, texture) in &kit.textures {
+                let folder = assets().join(&texture.path);
+                let mut needs = vec!["color.jpg", "normal.jpg", "arm.jpg"];
+                if texture.depth > 0.0 {
+                    needs.push("height.jpg");
+                }
+                for file in needs {
+                    assert!(
+                        folder.join(file).is_file(),
+                        "{name}: {material:?} has no {file}"
+                    );
+                }
+                assert!(texture.metres.iter().all(|m| *m > 0.0), "{name}");
+                assert!((0.0..=1.0).contains(&texture.reflectance), "{name}");
+            }
+            let steps = kit.cost.steps;
+            assert!(
+                steps > 0 && crate::cubes::FULL.is_multiple_of(steps),
+                "{name}: {steps} steps"
+            );
+            // In amounts a base may keep, or no snapshot of what is built in it loads.
+            for (thing, num, den) in kit.cost.step.iter().chain(&kit.cost.roof) {
+                assert!(item(thing) && *den > 0, "{name}: {thing}");
+                assert!(Amount::new(*num, *den).in_bounds(), "{name}: {thing}");
+            }
+        }
+        assert!(read > 0);
+    }
+
+    #[test]
+    fn the_default_kit_is_pine_as_its_file_has_it() {
+        // What a kit's file leaves out is the default's, which is to be logs.ron's but
+        // for what it lays with: its models, textures and cost.
+        let pine = Kit {
+            models: KitModels::default(),
+            textures: BTreeMap::new(),
+            cost: KitCost::default(),
+            ..shipped("logs.ron")
+        };
+        assert_eq!(pine, Kit::default());
+    }
+
+    #[test]
+    fn a_hewn_kit_is_a_file_and_lays_flush() {
+        let hewn: Kit = ron::from_str(
+            "(id: 9, timber: (profile: Hewn, notch: Flush, relief: 0.0), \
+             textures: { Log: (path: \"materials/rough_wood\", metres: (0.6, 1.4)) })",
+        )
+        .unwrap();
+        assert_eq!(hewn.timber.profile, Profile::Hewn);
+        assert_eq!(hewn.ragged(), 0.0);
+        assert!(Kit::default().ragged() > 0.0);
+    }
+}

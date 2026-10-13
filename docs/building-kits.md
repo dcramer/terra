@@ -1,6 +1,6 @@
 # Building kits: how construction looks, logs first
 
-How each kind of construction looks and is laid, starting with logs. It fills in step 4 of [building-tech.md](building-tech.md#order). How pieces are made and drawn is technical (D177); the look of log walls (D178), posts and mixing kinds (D179) are Decided; what a wall costs need not match its pieces one for one.
+How each kind of construction looks and is laid, starting with logs. It fills in step 4 of [building-tech.md](building-tech.md#order). How pieces are made and drawn is technical (D177), with block kinds (D197) and timber (D200) drawn from real materials by code; the look of log walls (D178), posts and mixing kinds (D179) are Decided; what a wall costs need not match its pieces one for one.
 
 ![The log kit: a corner, how walls meet, a doorway, and the three states](images/log-kit.svg)
 
@@ -15,24 +15,22 @@ A wall is drawn as a line on the grid (D154), and the game lays its pieces (D146
 
 So a corner looks the same in the blueprint as it does built, just ghosted. Nothing is modelled twice.
 
-## How pieces are made (D177)
+## How pieces are made (D177, D197, D200)
 
-**Every piece is a model from the art pipeline; code only arranges them**. Logs drawn by code from numbers break the art direction (D14): their look was invented, not drawn to the style guide. Now a kit's look starts as a concept of a whole building drawn to the guide and approved by the developers, [art/props/log-cabin](../art/props/log-cabin/concept.png); each piece is modelled from a concept of its own, drawn the same way, by `tools/props` (Tripo, then a clean-up in Blender to palette roles). The layout (below) only places them: it repeats a piece, stretches a log along its length to fit its wall, cuts a piece by a plane where it must end, such as a split log or a shingle panel at a hip, and tiles panels over a roof. That is how shipped games build modular kits.
+**Props and trims are models from the art pipeline; code only arranges them** (D177). A kit's look starts as a concept of a whole building drawn to the guide and approved by the developers, [art/props/log-cabin](../art/props/log-cabin/concept.png); each prop is modelled from a concept of its own, drawn the same way, by `tools/props` (Tripo, then a clean-up in Blender to palette roles). Today those are the door and the shuttered window, set into openings of their size.
 
-The log kit's pieces, from the approved cabin:
+**Long members are generated** (D200): logs, beams and planks are a profile swept along each piece the layout gives (`terra_build::timber`), textured and displaced by real materials from the pipeline, so their shape fits their wall exactly and every one differs. The timber spike compared this with Tripo's log models and with timber as a surface, and the generated logs read most as a log cabin ([research/timber-walls.md](../research/timber-walls.md)). Two profiles from the same code:
 
-| Piece | Laid as |
-|---|---|
-| A straight log, a few versions | Every course, corner end, gable log and purlin, stretched along its length to fit; cut along its middle for a split log |
-| A panel of shakes | Tiled over each face of a roof, cut at its edges, hips and valleys |
-| A ridge cap | Along each ridge and hip |
-| A timber board | Round every opening, stretched to its edges |
-| A door, a shuttered window | Set into openings of their size |
-| A footing of fieldstones | Under walls on the ground |
+| Profile | What it is | Its ends |
+|---|---|---|
+| Round (the log kit) | A log in its bark: tapered from its butt, bowed, its section a little uneven and swelling, scribed flatter top and bottom; the bark stands out by its own height map (Poly Haven's `pine_bark`, CC0) | Sawn and chamfered by the axe, showing their grain (`log_end`), stacked at corners a little ragged (a saddle notch) |
+| Hewn | A beam squared by the axe: faces gently waved and scalloped by the adze, edges rounded and wandering, a little less tall than a course so daub shows between | Sawn square, flush at corners (a dovetail) |
+
+Each log differs from the next by its seed, from its place, by as much as the kit says: thicker or thinner, more or less tapered and bowed, its section turned, its texture placed anew, a little lighter or darker and warmer or cooler. Lightly stylised (D14): the variation is a tree's, not a cartoon's. A pale lime daub (Poly Haven's `white_stucco`) is recessed in the groove under each log, for the value contrast the style guide asks for.
 
 **Block kinds are not pieces** (D197): stone, brick, plaster and earth are drawn as their cubes' own surface, each face a fine grid, rounded along every outside edge and pushed out by its material's height, so a wall of any shape, carved anywhere, is one wall with no seams (`terra_build::surface`; [research/block-modules.md](../research/block-modules.md)). The stone kit is rough fieldstone, Poly Haven's `stone_wall` (CC0); its file gives the bevel (4 cm) and how far the stone stands out (5 cm). A plan's progress counts its cubes from the bottom up, and the cubes in, the next and the rest are drawn as three surfaces, so the ghost and a wall going up work as for logs. A timber lintel spans every opening with wall above it; doors and windows are fitted props (D193).
 
-**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for logs; masonry, for block kinds drawn as their surface), its sizes, its pieces' models, and its colours as palette roles (D14). A pine cabin and a dark-wood cabin are two files.
+**A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for timber; masonry, for block kinds drawn as their surface), its sizes, its timber (profile, notch, sides, taper, bend, unevenness, bark relief, daub, tints and how much each log varies), its materials, its props' models and its cost. A pine cabin, an oak one and a hewn-timber one are three files; nothing about a kind of timber is code. The log kit is `logs.ron`.
 
 ## Drawing them
 
@@ -51,16 +49,7 @@ What a walker hits is the cube (D181), not the pieces drawn in it. Log ends stic
 
 Round logs, saddle-notched at the corners with their ends sticking out: the log cabin everyone pictures, and The Forest's. Squared logs dovetailed flush were the alternative: tidier, with less character.
 
-**Not cylinders.** The art is real materials in detailed textures on clean shapes (D14, art-style.md). A log is made to look hewn and grown, not turned:
-
-- **An uneven section**: seven to nine facets of different widths, never a regular polygon, slightly flattened top and bottom where it was scribed to sit on the log below, and turning a little along its length.
-- **A tree's shape**: tapered, the thick end alternating course by course, with a gentle bend and a swelling here and there.
-- **Knots**: now and then the stub of a cut branch.
-- **Ends as cut by an axe**: a bark ring round a lighter face, a darker heart, the face a little off square.
-- **Colour per face** from the palette's wood roles (Bark, Wood, WoodDark, WoodLight): bark in two tones in streaks along the log, weathered lighter on top.
-- **Chinking**: a pale strip of daub in the groove between courses, for contrast.
-
-Today the log is made in code from the kit's numbers. A kit can name a log model instead, placed for each log and stretched to fit (D177); the log kit's model is in [art/props/kit-log](../art/props/kit-log), not yet named by the kit.
+**Not cylinders.** The art is real materials in detailed textures on clean shapes (D14, art-style.md). A log is made to look grown and cut, not turned: an uneven section, scribed flatter where it sits on the log below; a tree's taper, the butt alternating by seed, a gentle bend and a swelling here and there; bark that stands out from it; sawn ends with a bark ring, lighter sapwood and a darker heart; and a pale strip of daub in the groove between courses, for contrast.
 
 **Courses.** Logs 0.3 m thick (D175), centred in a wall a cube thick and laid 0.25 m apart, so they sit into one another: two courses to a cube, 12 in a 3 m storey, the dozen logs building.md expects. Walls running east to west and walls running north to south are half a course apart, which is how logs interlock at a corner. Walls on one axis start with a split log at the foot and finish with one on top, as real cabins do. Because it goes by axis, every corner, T and cross interlocks the same way, with nothing to work out between walls.
 
@@ -137,8 +126,8 @@ What a part costs is set apart from its pieces (2026-10-12): "we dont need 1:1 t
 
 Built:
 
-1. **The stacked layout** in `terra_build` (`logs.rs`): each wall's logs, from the runs of log cubes and what meets their ends, in the order they go in; openings framed; gable ends in logs that shorten under the roof.
-2. **The log made in code**, with the kit file for pine, `assets/data/kits/logs.ron`; a kit can name a log model instead (`terra_game`'s `build/pieces.rs`).
+1. **The stacked layout** in `terra_build::layout` (`runs`, `trims`, `ground`, `floors`, `blocks`): each wall's logs, from the runs of log cubes and what meets their ends, in the order they go in; openings framed; gable ends in logs that shorten under the roof.
+2. **Generated logs** (D200), `terra_build::timber`, from the kit file for pine, `assets/data/kits/logs.ron`; the door and window are models (`terra_game`'s `build/pieces.rs`).
 3. **In the game**: a build's walls drawn from the kit instead of the plain boxes, those in merged into one mesh, the rest a ghost with the next lit. Until plans come (step 3 of building-tech.md), the kit sheet sets how far each build is in.
 4. **The kit sheet** on the yard.
 

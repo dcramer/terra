@@ -1,13 +1,14 @@
 //! Block walls (docs/building-kits.md, D179, D197): a masonry kit's wall cubes, each a
 //! block, drawn not as models but as the cubes' own surface, rounded and displaced by the
-//! kit's material (`surface.rs`), so any shape is one wall with no seams.
+//! kit's material (`surface.rs`, D197), so any shape is one wall with no seams.
 //!
 //! **The layout** is worked out from the cubes alone (D181): a block for each solid wall
 //! cube, from the bottom up, which is the order they go in and what a plan's progress
 //! counts; and for each hole, a cube cut open or glazed, the door or window set in it once
 //! the building is up (D193), with a timber lintel over it where the wall goes on above.
 
-use crate::logs::{LogKit, Piece};
+use super::Piece;
+use crate::kit::Kit;
 use crate::{Base, CELL_M, Fill, Kind};
 use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
@@ -17,7 +18,7 @@ const LINTEL_DEEP_M: f32 = 0.18;
 const LINTEL_BEARING_M: f32 = 0.2;
 
 /// Lays every wall of a base in the kit's kind as blocks.
-pub fn lay(base: &Base, kit: &LogKit) -> Vec<Piece> {
+pub fn lay(base: &Base, kit: &Kit) -> Vec<Piece> {
     let kind = kit.kind();
     let solid = |at: IVec3| {
         base.cube(at)
@@ -98,14 +99,14 @@ fn openings(base: &Base, kind: Kind, solid: &impl Fn(IVec3) -> bool, pieces: &mu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logs::Pattern;
+    use crate::kit::Pattern;
     use crate::{BuildOp, Panel};
 
-    fn kit() -> LogKit {
-        LogKit {
+    fn kit() -> Kit {
+        Kit {
             id: 2,
             pattern: Pattern::Masonry,
-            ..LogKit::default()
+            ..Kit::default()
         }
     }
 

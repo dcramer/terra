@@ -6,7 +6,8 @@
 use super::*;
 use crate::cost::{Amount, PropKind, Terms};
 use crate::cubes::Facing;
-use crate::logs::{LogKit, Pattern, lay};
+use crate::kit::{Kit, Pattern};
+use crate::layout::lay;
 use crate::{RoofStyle, Walker};
 use glam::Vec3;
 use terra_gen::{Rng, Seed};
@@ -943,11 +944,11 @@ const SEEDS: u64 = 4;
 #[test]
 fn random_operations_keep_every_rule() {
     let rules = rules();
-    let kit = LogKit::default();
-    let stone_kit = LogKit {
+    let kit = Kit::default();
+    let stone_kit = Kit {
         id: STONE.0,
         pattern: Pattern::Masonry,
-        ..LogKit::default()
+        ..Kit::default()
     };
     let claim = Claim {
         min: [LOW.x, LOW.z],

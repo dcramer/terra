@@ -19,10 +19,10 @@ use bevy::{light::NotShadowCaster, prelude::*};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::SystemTime;
-use terra_build::logs::{Kits, LogKit, Pattern};
+use terra_build::kit::{Kit, Kits, Pattern};
 use terra_build::ops::{Context, Done, Op, Refusal};
 use terra_build::save::Snapshot;
-use terra_build::{Base, BuildOp, CELL_M, Kind, Material, Panel, Rules, STOREY_M, Walker, example};
+use terra_build::{Base, BuildOp, CELL_M, Kind, Panel, Rules, STOREY_M, Walker, example};
 use terra_core::Operation;
 
 pub(crate) mod act;
@@ -35,7 +35,7 @@ mod remote;
 mod sheet;
 
 use draw::redraw;
-use draw::{Ramp, kit_materials};
+use draw::{KitMaterials, Ramp, kit_materials};
 
 const REACH_M: f32 = 300.0;
 const CONCRETE: Color = Color::srgb(0.5, 0.48, 0.47);
@@ -87,16 +87,16 @@ pub(super) struct Build {
     standing: Option<Base>,
     /// What a kit's pieces and materials are drawn under.
     pieces: Entity,
-    /// The kit's pieces' models, once loaded, and the copies of them placed.
+    /// The kits' doors' and windows' models, once loaded, and the copies of them placed.
     kit_pieces: Option<Arc<pieces::KitPieces>>,
     model_entities: Vec<Entity>,
-    /// The block kinds' relief, once loaded.
-    relief: Option<Arc<relief::Relief>>,
+    /// The height maps the kits' pieces are shaped by, once loaded.
+    reliefs: Option<Arc<relief::Reliefs>>,
     /// What pieces not yet in, and the next, are drawn in.
     ghost_material: Handle<StandardMaterial>,
     next_material: Handle<StandardMaterial>,
     /// The kit's materials, textured, and what is drawn plain; and what is drawn in them.
-    materials: Arc<BTreeMap<Material, Handle<StandardMaterial>>>,
+    materials: Arc<KitMaterials>,
     plain_material: Handle<StandardMaterial>,
     textured_entities: Vec<Entity>,
 }
@@ -158,12 +158,12 @@ pub(super) struct BuildLook {
     pub kits: Option<Arc<Kits>>,
     /// The kind of construction walls, floors and roofs are laid in (`--walls`).
     pub laying: Kind,
-    /// The kits' pieces' models, once loaded.
+    /// The kits' doors' and windows' models, once loaded.
     kit_pieces: Option<Arc<pieces::KitPieces>>,
-    /// The block kinds' relief, once loaded.
-    relief: Option<Arc<relief::Relief>>,
+    /// The height maps the kits' pieces are shaped by, once loaded.
+    reliefs: Option<Arc<relief::Reliefs>>,
     /// The kits' materials, textured (D14).
-    materials: Arc<BTreeMap<Material, Handle<StandardMaterial>>>,
+    materials: Arc<KitMaterials>,
 }
 
 /// The kits' files, `assets/data/kits/`, read again when one is saved so a wall's look can
@@ -217,18 +217,18 @@ fn kit_names() -> BTreeMap<Kind, String> {
 /// Reads every kit. A mistake in one is said in the log and that kit left out; `None` if
 /// none could be read.
 fn read_kits() -> Option<Kits> {
-    let kits: Vec<LogKit> = kit_paths()
+    let kits: Vec<Kit> = kit_paths()
         .iter()
         .filter_map(|path| read_kit(path))
         .collect();
     (!kits.is_empty()).then_some(Kits(kits))
 }
 
-fn read_kit(path: &std::path::Path) -> Option<LogKit> {
+fn read_kit(path: &std::path::Path) -> Option<Kit> {
     let text = std::fs::read_to_string(path)
         .map_err(|problem| error!("Could not read {}: {problem}", path.display()))
         .ok()?;
-    let kit: LogKit = ron::from_str(&text)
+    let kit: Kit = ron::from_str(&text)
         .map_err(|problem| error!("{}: {problem}", path.display()))
         .ok()?;
     match (kit.pattern, kit.courses()) {
@@ -347,7 +347,7 @@ impl Build {
             standing: None,
             pieces,
             kit_pieces: look.kit_pieces.clone(),
-            relief: look.relief.clone(),
+            reliefs: look.reliefs.clone(),
             model_entities: Vec::new(),
             materials: look.materials.clone(),
             plain_material: look.structure.clone(),
@@ -607,7 +607,7 @@ fn setup(
         kits: read_kits().map(Arc::new),
         laying: Kind::PLAIN,
         kit_pieces: None,
-        relief: None,
+        reliefs: None,
         materials: Arc::default(),
     };
     let materials_of_kit = look

@@ -3,7 +3,7 @@
 Makes the game's materials (D14, D191): the tileable surfaces a model or the ground is drawn with, as `assets/materials/<name>/`, each a colour map, a normal map (OpenGL's convention, as Bevy reads it), an ARM map (occlusion, roughness and metal in red, green and blue) and, for parallax, a height map. Where every material came from is in [assets/materials/README.md](../../assets/materials/README.md), which each step keeps up to date.
 
 ```bash
-node tools/textures/textures.ts fetch rough_wood                        # a Poly Haven material, CC0, at 2K
+node tools/textures/textures.ts fetch pine_bark                         # a Poly Haven material, CC0, at 2K
 node tools/textures/textures.ts material shakes art/textures/shakes.png --tile y   # from a generated image
 node tools/textures/textures.ts stack ground forest_ground_04 leafy_grass rock_face_03 sand_01
 ```

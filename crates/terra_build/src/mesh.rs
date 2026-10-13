@@ -1,7 +1,7 @@
 //! Turning a base's cubes into triangles.
 //!
 //! Walls of a kind with a kit are left to the kit, which lays its own pieces
-//! (`logs.rs`); everything else is drawn here: walls of the plain kind as their cubes, a
+//! (`layout`, `timber`); everything else is drawn here: walls of the plain kind as their cubes, a
 //! floor or flat roof as its cubes with a floor's colour on top and a ceiling's under it,
 //! glass as a pane up the middle of its wall, the gable over a wall up to a pitched roof,
 //! and the roof itself.
@@ -108,6 +108,37 @@ pub struct Surface {
 impl Surface {
     pub fn triangle_count(&self) -> usize {
         self.positions.len() / 3
+    }
+
+    /// Each corner's tangent for its normal map: the way its texture's U runs across its
+    /// triangle, square to its normal, and in the fourth the side V runs to, as glTF and
+    /// Bevy take them. Worked out a triangle at a time from its corners and their places
+    /// on the texture (Lengyel's method), which, as no two triangles share a corner, is as
+    /// good as MikkTSpace here and a hundred times quicker on a log wall's 100,000.
+    pub fn tangents(&self) -> Vec<[f32; 4]> {
+        let mut out = Vec::with_capacity(self.positions.len());
+        for (corners, (normals, uvs)) in self
+            .positions
+            .chunks_exact(3)
+            .zip(self.normals.chunks_exact(3).zip(self.uvs.chunks_exact(3)))
+        {
+            let (e1, e2) = (corners[1] - corners[0], corners[2] - corners[0]);
+            let (du1, dv1) = (uvs[1][0] - uvs[0][0], uvs[1][1] - uvs[0][1]);
+            let (du2, dv2) = (uvs[2][0] - uvs[0][0], uvs[2][1] - uvs[0][1]);
+            let det = du1 * dv2 - du2 * dv1;
+            let (u, v) = if det.abs() > 1e-12 {
+                let r = 1.0 / det;
+                ((e1 * dv2 - e2 * dv1) * r, (e2 * du1 - e1 * du2) * r)
+            } else {
+                (e1, e1.cross(normals[0]))
+            };
+            for n in normals {
+                let t = (u - *n * n.dot(u)).normalize_or(n.any_orthonormal_vector());
+                let w = if n.cross(t).dot(v) < 0.0 { -1.0 } else { 1.0 };
+                out.push([t.x, t.y, t.z, w]);
+            }
+        }
+        out
     }
 
     /// A triangle seen from the side its normal points to, wound counter-clockwise from
@@ -476,6 +507,31 @@ fn pitched_roofs(mesh: &mut BaseMesh, base: &Base, kit: &impl Fn(Kind) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tangent_runs_the_way_the_texture_does_square_to_the_normal() {
+        // A triangle facing up, its texture's U along X and V along Z; and the same with V
+        // flipped. The bitangent, the normal crossed with the tangent and turned by its
+        // fourth, as glTF and Bevy make it, runs the way V does.
+        for flip in [1.0f32, -1.0] {
+            let mut surface = Surface::default();
+            let corners = [
+                Vec3::ZERO,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 1.0),
+            ];
+            let uvs = corners.map(|p| [p.x, p.z * flip]);
+            surface.textured(corners, [Vec3::Y; 3], uvs, [1.0; 3]);
+            for t in surface.tangents() {
+                assert!(
+                    (Vec3::new(t[0], t[1], t[2]) - Vec3::X).length() < 1e-5,
+                    "{t:?}"
+                );
+                let bitangent = Vec3::Y.cross(Vec3::new(t[0], t[1], t[2])) * t[3];
+                assert!((bitangent - Vec3::Z * flip).length() < 1e-5, "{t:?}");
+            }
+        }
+    }
     use crate::{BuildOp, Panel, RoofSection, RoofStyle};
 
     fn room() -> Base {

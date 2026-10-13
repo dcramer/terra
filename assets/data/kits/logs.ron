@@ -1,25 +1,37 @@
-// A log wall's kit (docs/building-kits.md, D177, D178): pine logs, peeled, with daub between the
-// courses. The game reads it again when it is saved, so the look can be tuned while it
-// runs. Sizes are in metres; colours as they appear on screen (sRGB), from the palette's
-// wood roles where they have one (tools/characters/look.py).
+// A log wall's kit (docs/building-kits.md, D178, D200): pine logs in their bark, saddle
+// notched, with daub between the courses. Every log is made from these numbers and its own
+// seed (crates/terra_build/src/timber.rs), so no two are alike. The game reads it again
+// when it is saved, so the look can be tuned while it runs. Sizes are in metres; colours
+// as they appear on screen (sRGB).
 //
 // id          the kind of construction it lays, the number its cubes carry (D181)
 // diameter    how thick a log is, in a wall a cube thick (D175, D181)
 // course      how far apart the courses are; it must divide the 3 m storey
 // overhang    how far a log runs past its corner cube; none, so it stays in the grid
 // longest     the longest wall one log spans, as long as a tree gives (D174)
-// facets      how many sides a log's section has, from the first to the second
-// taper       how much thicker one end is than the middle, as a fraction
-// bend        how far a log bows from straight, at most
-// roughness   how uneven a log's section is, as a fraction of its radius
-// knots       knots for every metre of log, on average
-// ragged      how far short of the others' a corner log's end may stop
+// ragged      how far short of the others' a saddle-notched corner log's end may stop
 // chinking    whether there is daub between the courses
 // frame       how wide the boards round an opening are
 // eaves       how far a roof over these walls overhangs them (D175)
+// timber      how each log is made (D200):
+//   profile     Round, a log in its bark; or Hewn, a beam squared by the axe
+//   notch       Saddle, ends stacked at corners a little ragged; or Flush, sawn square
+//   sides       points round a log's section; step, metres between its rings
+//   taper       how much thicker its butt is than its middle, as a fraction
+//   bend        how far it bows from straight, at most
+//   uneven      how uneven its section is; swell, how much it swells along it
+//   relief      how far the bark stands out, by the Log material's height map
+//   daub        the daub under it: how far out its face is, as a fraction of the log's
+//               radius, and how tall it is
+//   tint        what its face's colour is multiplied by; end_tint, its sawn ends'
+//   variation   how much each log differs by its seed: thickness (either way, as a
+//               fraction), shade (how much darker at most), warmth (redder or cooler)
 // models      the props set into it, from tools/props (D177): a door and a window
 // textures    each material's textures (D14; assets/materials): where, how many metres
-//             one copy covers, and how deep its parallax reads
+//             one copy covers, and how deep its parallax reads. Log is the bark, LogEnd
+//             the sawn end's grain, Daub what fills the groove between courses
+// colours     plain colours: boards behind a gable, floors, roofs and their sides until
+//             they have kits of their own, and the daub's tint
 // cost        what building it takes (D139): a cube fills in so many steps, each taking
 //             so much of each item, in fractions (item, numerator, denominator), so
 //             a log of Wood a sixteenth a step goes in two courses; and each stage of a
@@ -30,23 +42,33 @@
     course: 0.25,
     overhang: 0.0,
     longest: 4.0,
-    facets: (9, 11),
-    taper: 0.07,
-    bend: 0.035,
-    roughness: 0.07,
-    knots: 0.5,
     ragged: 0.04,
     chinking: true,
     frame: 0.08,
     eaves: 0.5,
+    timber: (
+        profile: Round,
+        notch: Saddle,
+        sides: 18,
+        step: 0.08,
+        taper: 0.07,
+        bend: 0.03,
+        uneven: 0.035,
+        swell: 0.02,
+        relief: 0.022,
+        daub: (0.7, 0.05),
+        tint: (1.0, 0.95, 0.89),
+        end_tint: (0.86, 0.82, 0.78),
+        variation: (thickness: 0.06, shade: 0.16, warmth: 0.05),
+    ),
     models: (
         door: Some("models/kits/Door.glb"),
         window: Some("models/kits/Window.glb"),
     ),
     textures: {
-        Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
+        Log: (path: "materials/pine_bark", metres: (1.0, 1.0)),
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
-        Daub: (path: "materials/clay_plaster", metres: (2.0, 2.0)),
+        Daub: (path: "materials/white_stucco", metres: (1.0, 1.0)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Shakes: (path: "materials/shakes", metres: (3.2, 1.6), depth: 0.04),
         Stone: (path: "materials/rustic_stone_wall", metres: (1.52, 1.52), depth: 0.03),
@@ -54,15 +76,10 @@
     },
     cost: (steps: 2, step: [("Wood", 1, 16)], roof: [("Wood", 1, 32)]),
     colours: (
-        wood: (0.62, 0.43, 0.26),
-        light: (0.74, 0.56, 0.37),   // WoodLight
-        dark: (0.5, 0.34, 0.22),
-        bark: (0.37, 0.26, 0.19),    // WoodDark
-        end: (0.8, 0.64, 0.44),
-        heart: (0.66, 0.47, 0.3),
-        knot: (0.33, 0.22, 0.15),
-        chinking: (0.66, 0.6, 0.5),
-        board: (0.45, 0.32, 0.22),   // boards round openings, and behind a gable
-        roof: (0.47, 0.42, 0.37),    // the roof, until roofs have kits of their own
+        board: (0.45, 0.32, 0.22),     // boards behind a gable
+        light: (0.74, 0.56, 0.37),     // WoodLight: floors
+        dark: (0.5, 0.34, 0.22),       // a roof's sides
+        roof: (0.47, 0.42, 0.37),      // the roof, until roofs have kits of their own
+        chinking: (0.8, 0.75, 0.66),   // the lime daub's tint
     ),
 )

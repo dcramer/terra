@@ -1,10 +1,7 @@
-//! A kit's pieces drawn from its models (D177; docs/building-kits.md): the layout says where each
-//! piece goes, and a copy of its model is placed there, fitted to its place. A log is
-//! stretched along its length and turned about it and end for end by its seed, so
-//! neighbours differ; a board fills its box; a door or window its opening; footings and
-//! ridge caps are laid along their lines a metre or so at a time; roof and floor panels
-//! fill their squares. Block kinds are not pieces but their cubes' surface (`terra_build::surface`). Pieces not yet in are the same models in the ghost's material, and
-//! the next one lit.
+//! A kit's props drawn from their models (D177; docs/building-kits.md): the layout says
+//! where each door and window goes, and a copy of its model is fitted to its opening. Long
+//! members and boards are made from the kit's numbers (`terra_build::timber`, D200) and
+//! block kinds are their cubes' surface (`terra_build::surface`, D197), so neither is here.
 
 use super::draw::State;
 use super::{Build, BuildLook, Built, Shown, Site, redraw};
@@ -14,17 +11,9 @@ use bevy::camera::primitives::MeshAabb;
 use bevy::gltf::{Gltf, GltfMesh};
 use bevy::prelude::*;
 use std::collections::BTreeMap;
-use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
-use terra_build::logs::{KitModels, LogKit, Piece, Split};
-
-/// How tall and deep a footing is, its top at the wall's foot.
-const FOOTING_HIGH_M: f32 = 0.5;
-const FOOTING_DEEP_M: f32 = 0.6;
-/// How thick a roof's covering of shakes is, its courses standing proud of one another.
-const SHAKES_THICK_M: f32 = 0.08;
-/// About how long each copy of a footing or ridge cap is, laid along its line.
-const STRETCH_M: f32 = 1.0;
+use terra_build::kit::{Kit, KitModels, Kits};
+use terra_build::layout::Piece;
 
 /// A model, ready to place: each of its parts, and the box round it all, in its own space.
 #[derive(Clone, Debug, PartialEq)]
@@ -34,30 +23,11 @@ pub struct Model {
     size: Vec3,
 }
 
-/// A kit's pieces' models, those that have loaded.
+/// A kit's props' models, those that have loaded.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct KitPieces {
-    logs: Vec<Model>,
-    long_log: Option<Model>,
-    long_from: f32,
-    board: Option<Model>,
     door: Option<Model>,
     window: Option<Model>,
-    footing: Vec<Model>,
-    shakes: Option<Model>,
-    ridge: Option<Model>,
-    floor: Option<Model>,
-}
-
-impl KitPieces {
-    /// Whether a model draws a piece, so code need not.
-    pub(super) fn draws(&self, piece: &Piece) -> bool {
-        match piece {
-            Piece::Log { .. } => !self.logs.is_empty(),
-            Piece::Board { .. } => self.board.is_some(),
-            _ => true,
-        }
-    }
 }
 
 /// The models being loaded, by path, for the kit's models as they were asked for.
@@ -68,7 +38,7 @@ pub(super) struct Loading {
     done: bool,
 }
 
-/// Loads the log kit's models when it names them, and when they are ready draws every
+/// Loads the kits' models when they name them, and when they are ready draws every
 /// build with them.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn load(
@@ -85,17 +55,7 @@ pub(super) fn load(
 ) {
     let wanted = look.kits.as_deref().map(merged).unwrap_or_default();
     if loading.wanted.as_ref() != Some(&wanted) {
-        let paths = wanted
-            .logs
-            .iter()
-            .chain(&wanted.footing)
-            .chain(wanted.long_log.iter())
-            .chain(wanted.board.iter())
-            .chain(wanted.door.iter())
-            .chain(wanted.window.iter())
-            .chain(wanted.shakes.iter())
-            .chain(wanted.ridge.iter())
-            .chain(wanted.floor.iter());
+        let paths = wanted.door.iter().chain(wanted.window.iter());
         loading.handles = paths
             .map(|path| (path.clone(), assets.load(path.clone())))
             .collect();
@@ -120,23 +80,9 @@ pub(super) fn load(
     }
     let wanted = loading.wanted.clone().unwrap_or_default();
     let one = |path: &Option<String>| path.as_ref().and_then(|path| models.get(path).cloned());
-    let many = |paths: &[String]| -> Vec<Model> {
-        paths
-            .iter()
-            .filter_map(|path| models.get(path).cloned())
-            .collect()
-    };
     let pieces = KitPieces {
-        logs: many(&wanted.logs),
-        long_log: one(&wanted.long_log),
-        long_from: wanted.long_from,
-        board: one(&wanted.board),
         door: one(&wanted.door),
         window: one(&wanted.window),
-        footing: many(&wanted.footing),
-        shakes: one(&wanted.shakes),
-        ridge: one(&wanted.ridge),
-        floor: one(&wanted.floor),
     };
     loading.done = true;
     info!("The kits draw their pieces with {} models.", models.len());
@@ -152,29 +98,15 @@ pub(super) fn load(
     }
 }
 
-/// Every kit's models as one set: lists joined, and of one model the first kit's to name
-/// it.
-fn merged(kits: &terra_build::logs::Kits) -> KitModels {
+/// Every kit's models as one set: of each, the first kit's to name it.
+fn merged(kits: &Kits) -> KitModels {
     let mut all = KitModels::default();
     for kit in &kits.0 {
         let m = &kit.models;
-        all.logs.extend(m.logs.iter().cloned());
-        all.footing.extend(m.footing.iter().cloned());
-        for (into, from) in [
-            (&mut all.long_log, &m.long_log),
-            (&mut all.board, &m.board),
-            (&mut all.door, &m.door),
-            (&mut all.window, &m.window),
-            (&mut all.shakes, &m.shakes),
-            (&mut all.ridge, &m.ridge),
-            (&mut all.floor, &m.floor),
-        ] {
+        for (into, from) in [(&mut all.door, &m.door), (&mut all.window, &m.window)] {
             if into.is_none() {
                 into.clone_from(from);
             }
-        }
-        if all.long_from == 0.0 {
-            all.long_from = m.long_from;
         }
     }
     all
@@ -228,13 +160,13 @@ fn resolve(
     })
 }
 
-/// Places a copy of a model for each piece a model draws, in the order they go in: those
+/// Places a copy of a model for each door and window, in the order they go in: those
 /// in drawn as the model is, the next lit and the rest a ghost. The copies are children of
 /// the entity the build's other pieces are drawn on.
 pub(super) fn place(
     commands: &mut Commands,
     build: &mut Build,
-    laid: &[(&LogKit, &[Piece])],
+    laid: &[(&Kit, &[Piece])],
     states: &[Vec<State>],
 ) {
     for entity in build.model_entities.drain(..) {
@@ -243,8 +175,8 @@ pub(super) fn place(
     let Some(kit) = build.kit_pieces.clone() else {
         return;
     };
-    for (&(own, pieces), states) in laid.iter().zip(states) {
-        place_kit(commands, build, &kit, pieces, states, own.diameter);
+    for (&(_, pieces), states) in laid.iter().zip(states) {
+        place_kit(commands, build, &kit, pieces, states);
     }
 }
 
@@ -254,7 +186,6 @@ fn place_kit(
     kit: &KitPieces,
     pieces: &[Piece],
     states: &[State],
-    diameter: f32,
 ) {
     for (piece, state) in pieces.iter().zip(states) {
         // A door or window is not part of the plan: it is fitted into its opening once
@@ -262,7 +193,7 @@ fn place_kit(
         if matches!(piece, Piece::Opening { .. }) && !matches!(build.shown, Shown::Built) {
             continue;
         }
-        for (model, at) in fitted(kit, piece, diameter) {
+        for (model, at) in fitted(kit, piece) {
             for (mesh, material) in &model.parts {
                 let material = match state {
                     State::In => material.clone(),
@@ -299,7 +230,7 @@ pub(super) fn opening(
         along_x,
         door,
     };
-    fitted(kit, &piece, 0.0)
+    fitted(kit, &piece)
         .into_iter()
         .flat_map(|(model, at)| {
             model
@@ -310,156 +241,36 @@ pub(super) fn opening(
         .collect()
 }
 
-/// The models a piece is drawn with, and where each copy goes.
-fn fitted<'a>(kit: &'a KitPieces, piece: &Piece, diameter: f32) -> Vec<(&'a Model, Transform)> {
-    match *piece {
-        Piece::Log {
-            from,
-            to,
-            split,
-            seed,
-            ..
-        } => {
-            let length = from.distance(to);
-            let model = match &kit.long_log {
-                Some(long) if length > kit.long_from => Some(long),
-                _ if kit.logs.is_empty() => None,
-                _ => Some(&kit.logs[seed as usize % kit.logs.len()]),
-            };
-            model
-                .map(|model| vec![(model, log(model, from, to, split, seed, diameter))])
-                .unwrap_or_default()
-        }
-        Piece::Board { min, max } => kit
-            .board
-            .iter()
-            .map(|model| (model, board(model, min, max)))
-            .collect(),
-        Piece::Opening {
-            min,
-            max,
-            along_x,
-            door,
-        } => {
-            let model = if door { &kit.door } else { &kit.window };
-            model
-                .iter()
-                .map(|model| {
-                    let x = if along_x { Vec3::X } else { Vec3::Z };
-                    let size = max - min;
-                    let width = if along_x { size.x } else { size.z };
-                    let depth = if along_x { size.z } else { size.x };
-                    (
-                        model,
-                        fill(
-                            model,
-                            (min + max) * 0.5,
-                            x,
-                            Vec3::Y,
-                            Vec3::new(width, size.y, depth),
-                        ),
-                    )
-                })
-                .collect()
-        }
-        Piece::Footing { from, to, seed } => {
-            if kit.footing.is_empty() {
-                return Vec::new();
-            }
-            along(from, to)
-                .into_iter()
-                .enumerate()
-                .map(|(step, (middle, x, length))| {
-                    let model = &kit.footing[(seed as usize + step) % kit.footing.len()];
-                    let centre = middle + Vec3::Y * (0.02 - FOOTING_HIGH_M * 0.5);
-                    (
-                        model,
-                        fill(
-                            model,
-                            centre,
-                            x,
-                            Vec3::Y,
-                            Vec3::new(length + 0.02, FOOTING_HIGH_M, FOOTING_DEEP_M),
-                        ),
-                    )
-                })
-                .collect()
-        }
-        Piece::Shakes {
-            corners: [a, b, c, d],
-        } => kit
-            .shakes
-            .iter()
-            .map(|model| {
-                // The panel's rows' lower edges, its +Z, down the slope.
-                let across = b - a;
-                let down = a - d;
-                let up = across.cross(-down).normalize_or_zero();
-                let up = if up.y < 0.0 { -up } else { up };
-                let centre = (a + b + c + d) * 0.25 + up * (SHAKES_THICK_M * 0.5);
-                (
-                    model,
-                    fill(
-                        model,
-                        centre,
-                        up.cross(down.normalize_or_zero()),
-                        up,
-                        Vec3::new(across.length() + 0.04, SHAKES_THICK_M, down.length() + 0.04),
-                    ),
-                )
-            })
-            .collect(),
-        Piece::Ridge { from, to } => kit
-            .ridge
-            .iter()
-            .flat_map(|model| {
-                along(from, to).into_iter().map(move |(middle, x, length)| {
-                    (
-                        model,
-                        fill(
-                            model,
-                            middle,
-                            x,
-                            Vec3::Y,
-                            Vec3::new(length + 0.02, model.size.y, model.size.z),
-                        ),
-                    )
-                })
-            })
-            .collect(),
-        Piece::Floor { min, max } => kit
-            .floor
-            .iter()
-            .map(|model| {
-                let size = max - min;
-                let centre = (min + max) * 0.5 - Vec3::Y * (model.size.y * 0.5 - 0.01);
-                (
-                    model,
-                    fill(
-                        model,
-                        centre,
-                        Vec3::X,
-                        Vec3::Y,
-                        Vec3::new(size.x, model.size.y, size.z),
-                    ),
-                )
-            })
-            .collect(),
-        Piece::Block { .. } => Vec::new(),
-    }
-}
-
-/// A line cut into about metre lengths: the middle of each, the way along, and its length.
-fn along(from: Vec3, to: Vec3) -> Vec<(Vec3, Vec3, f32)> {
-    let length = from.distance(to);
-    if length < 1e-3 {
+/// The model a door or window is drawn with, and where it goes.
+fn fitted<'a>(kit: &'a KitPieces, piece: &Piece) -> Vec<(&'a Model, Transform)> {
+    let Piece::Opening {
+        min,
+        max,
+        along_x,
+        door,
+    } = *piece
+    else {
         return Vec::new();
-    }
-    let x = (to - from) / length;
-    let count = (length / STRETCH_M).round().max(1.0) as usize;
-    let each = length / count as f32;
-    (0..count)
-        .map(|step| (from + x * (each * (step as f32 + 0.5)), x, each))
+    };
+    let model = if door { &kit.door } else { &kit.window };
+    model
+        .iter()
+        .map(|model| {
+            let x = if along_x { Vec3::X } else { Vec3::Z };
+            let size = max - min;
+            let width = if along_x { size.x } else { size.z };
+            let depth = if along_x { size.z } else { size.x };
+            (
+                model,
+                fill(
+                    model,
+                    (min + max) * 0.5,
+                    x,
+                    Vec3::Y,
+                    Vec3::new(width, size.y, depth),
+                ),
+            )
+        })
         .collect()
 }
 
@@ -474,49 +285,6 @@ fn fill(model: &Model, centre: Vec3, x: Vec3, y: Vec3, extents: Vec3) -> Transfo
     Transform {
         translation: centre - rotation * (model.centre * scale),
         rotation,
-        scale,
-    }
-}
-
-/// A board filling its box: its length along the box's longest side, its thickness its
-/// shortest.
-fn board(model: &Model, min: Vec3, max: Vec3) -> Transform {
-    let size = max - min;
-    let mut axes = [(size.x, Vec3::X), (size.y, Vec3::Y), (size.z, Vec3::Z)];
-    axes.sort_by(|a, b| b.0.total_cmp(&a.0));
-    let [(long, x), (middle, _), (short, y)] = axes;
-    fill(
-        model,
-        (min + max) * 0.5,
-        x,
-        y,
-        Vec3::new(long, short, middle),
-    )
-}
-
-/// Where a copy of a log goes from one point to another: its length along the log, as
-/// thick as the kit's logs, turned about its length and end for end by its seed. The split
-/// log at a wall's foot is a whole one sunk into the footing; the one on top, squashed to
-/// its half.
-fn log(model: &Model, from: Vec3, to: Vec3, split: Split, seed: u32, diameter: f32) -> Transform {
-    let length = from.distance(to).max(1e-3);
-    let axis = (to - from) / length;
-    let thick = model.size.y.max(model.size.z);
-    let mut scale = Vec3::new(length / model.size.x, diameter / thick, diameter / thick);
-    let flip = seed & 0x10000 != 0;
-    let mut spin = (seed & 0xffff) as f32 / 65536.0 * TAU;
-    let mut middle = (from + to) * 0.5;
-    if split == Split::Bottom {
-        scale.y *= 0.5;
-        middle.y -= diameter * 0.25;
-        spin = 0.0;
-    }
-    let turn = Quat::from_rotation_arc(Vec3::X, axis)
-        * Quat::from_rotation_x(spin)
-        * Quat::from_rotation_y(if flip { PI } else { 0.0 });
-    Transform {
-        translation: middle - turn * (model.centre * scale),
-        rotation: turn,
         scale,
     }
 }

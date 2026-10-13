@@ -1,6 +1,6 @@
 # Timber walls: generated logs, hewn timber, or a timber surface
 
-2026-10-12. Question (the spike [spike/timber-walls](../spike/timber-walls/README.md)): which way of drawing the timber kind procedurally from its cubes looks most beautiful and thematic, compared against today's Tripo logs? The developers: "it doesn't have to be a literal log if we can't make that work but it has to be thematic and look beautiful", and the whole system should be procedural and extend to many materials as data.
+2026-10-12. Question (the spike `spike/timber-walls`, deleted 2026-10-13 once judged; git keeps it): which way of drawing the timber kind procedurally from its cubes looks most beautiful and thematic, compared against today's Tripo logs? The developers: "it doesn't have to be a literal log if we can't make that work but it has to be thematic and look beautiful", and the whole system should be procedural and extend to many materials as data.
 
 ## What was built
 
@@ -39,3 +39,8 @@ Recommendation: **draw timber as generated long members**, A and B being one gen
 ## Limits
 
 One light (afternoon on the yard), one wood each, judged on stills by an agent; no forest or village around them. Not measured: the cost of generating every log of a large base, or how far the detail can drop at a distance. The Tripo logs were judged as the game places them today, not at their best.
+
+## Outcome
+
+2026-10-13: the developers chose A with B as a second profile (D200). The generator moved into the workspace, `terra_build::timber`, driven by the kit file (`assets/data/kits/logs.ron`'s `timber`), with more variation per log by seed; the spike and the Tripo log models were deleted. The daub became a pale lime strip (Poly Haven's `white_stucco`), recessed between the logs, rather than the brown clay strip.
+

@@ -20,7 +20,7 @@ use crate::shell::Options;
 use crate::start::FLOOR_CLEARANCE_M;
 use bevy::prelude::*;
 use std::sync::Arc;
-use terra_build::logs::Pattern;
+use terra_build::kit::Pattern;
 use terra_build::{Base, BuildOp, Cube, Fill, Kind, Panel, RoofSection, RoofStyle, STOREY_CUBES};
 
 /// How far apart the rows are, and the three states along each, in metres.

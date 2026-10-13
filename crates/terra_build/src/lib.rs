@@ -34,17 +34,20 @@
 
 pub mod cost;
 pub mod cubes;
+pub mod draw;
 mod example;
 pub mod ground;
-pub mod logs;
-pub mod masonry;
+pub mod kit;
+pub mod layout;
 mod mesh;
 pub mod ops;
 pub mod order;
+pub mod relief;
 pub mod rooms;
 pub mod save;
 pub mod support;
 pub mod surface;
+pub mod timber;
 mod walk;
 
 pub use cost::{Amount, Bill, PropKind, Rules, Terms};
@@ -1025,15 +1028,15 @@ impl Base {
 
     /// The base with its log walls laid as logs: everything else as triangles, and the
     /// logs, in the order they go in, to draw as they stand.
-    pub fn mesh_with_kits(&self, kits: &logs::Kits) -> (BaseMesh, Vec<logs::Layout>) {
+    pub fn mesh_with_kits(&self, kits: &kit::Kits) -> (BaseMesh, Vec<layout::Layout>) {
         let mesh = self.mesh_for_kits(kits);
-        let layouts = kits.0.iter().map(|kit| logs::lay(self, kit)).collect();
+        let layouts = kits.0.iter().map(|kit| layout::lay(self, kit)).collect();
         (mesh, layouts)
     }
 
     /// The base as triangles, its walls of a kind with a kit left to the kit, and its
     /// floors and roofs in the kits' colours.
-    pub fn mesh_for_kits(&self, kits: &logs::Kits) -> BaseMesh {
+    pub fn mesh_for_kits(&self, kits: &kit::Kits) -> BaseMesh {
         mesh::build(self, |kind| {
             kits.of(kind).map(|kit| mesh::KitLook {
                 gable: kit.colours.board,

@@ -6,7 +6,7 @@
 //! in metres, with `y` at the feet.
 
 use crate::cubes::{Cube, Cubes, FULL};
-use crate::logs::Piece;
+use crate::layout::Piece;
 use crate::{Base, CELL_M, STOREY_M};
 use glam::{IVec2, IVec3, Vec3};
 
@@ -233,7 +233,7 @@ mod tests {
 
     /// A wall of logs four metres long, as the log kit lays it, east and west.
     fn log_wall() -> (Base, Vec<Piece>) {
-        let kit = crate::logs::LogKit::default();
+        let kit = crate::kit::Kit::default();
         let mut base = Base::default();
         for x in 0..8 {
             base.apply(BuildOp::SetWall {
@@ -242,7 +242,7 @@ mod tests {
                 kind: kit.kind(),
             });
         }
-        let pieces = crate::logs::lay(&base, &kit).pieces;
+        let pieces = crate::layout::lay(&base, &kit).pieces;
         (base, pieces)
     }
 

@@ -11,8 +11,9 @@ use bevy::{
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use terra_build::logs::{self, Kits, LogKit, Pattern};
-use terra_build::{Base, CELL_M, Fill, Kind, Panel, ROOF_STAGES, Surface};
+use terra_build::kit::{Kit, Kits, Pattern};
+use terra_build::layout::{self, Piece};
+use terra_build::{Base, CELL_M, Fill, Kind, Panel, Surface};
 use terra_build::{Material, Surfaces};
 
 /// The foundation stands this far out from the walls, and reaches this far into the ground.
@@ -167,10 +168,19 @@ fn to_mesh(surface: &Surface) -> Option<Mesh> {
         return None;
     }
     // The base's colours are as they should look on screen; a mesh wants them linear.
+    // Runs of corners share a colour, a log's or a face's, so each is turned once.
+    let mut last: Option<([f32; 3], [f32; 4])> = None;
     let colours: Vec<[f32; 4]> = surface
         .colours
         .iter()
-        .map(|c| Color::srgb(c[0], c[1], c[2]).to_linear().to_f32_array())
+        .map(|c| match last {
+            Some((from, to)) if from == *c => to,
+            _ => {
+                let to = Color::srgb(c[0], c[1], c[2]).to_linear().to_f32_array();
+                last = Some((*c, to));
+                to
+            }
+        })
         .collect();
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -180,27 +190,41 @@ fn to_mesh(surface: &Surface) -> Option<Mesh> {
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, surface.normals.clone())
     .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours);
     // Textured: where each corner falls on its texture, and the tangents its normal map
-    // needs.
+    // needs, worked out per triangle (`Surface::tangents`), as MikkTSpace took a tenth of a
+    // second on a cabin.
     if surface.uvs.len() == surface.positions.len() {
-        let count = surface.positions.len() as u32;
         mesh = mesh
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, surface.uvs.clone())
-            .with_inserted_indices(bevy::mesh::Indices::U32((0..count).collect()));
-        if let Err(problem) = mesh.generate_tangents() {
-            warn!("No tangents for a textured surface: {problem}");
-        }
+            .with_inserted_attribute(Mesh::ATTRIBUTE_TANGENT, surface.tangents());
     }
     Some(mesh)
 }
 
+/// Each kit's materials, from its textures (D14), so two timber kinds can differ in bark:
+/// by kind, and for what is drawn for no one kind (a roof, a floor, a gable's boards) the
+/// first kit's to name the material. Kits naming the same textures share one material,
+/// so their pieces draw together.
+#[derive(Default)]
+pub(super) struct KitMaterials {
+    by_kind: BTreeMap<(Kind, Material), Handle<StandardMaterial>>,
+    first: BTreeMap<Material, Handle<StandardMaterial>>,
+}
+
+impl KitMaterials {
+    /// A kind's material, or the first kit's for no kind.
+    fn get(&self, kind: Option<Kind>, material: Material) -> Option<&Handle<StandardMaterial>> {
+        kind.and_then(|kind| self.by_kind.get(&(kind, material)))
+            .or_else(|| self.first.get(&material))
+    }
+}
+
 /// The kits' materials, each from its textures: colour, normal, roughness and occlusion,
-/// and parallax where it is given a depth (D14). Where two kits name the same material,
-/// the first's textures are used.
+/// and parallax where it is given a depth (D14).
 pub(super) fn kit_materials(
     kits: &Kits,
     assets: &AssetServer,
     materials: &mut Assets<StandardMaterial>,
-) -> Arc<BTreeMap<Material, Handle<StandardMaterial>>> {
+) -> Arc<KitMaterials> {
     let linear = |path: String| -> Handle<Image> {
         assets
             .load_builder()
@@ -209,37 +233,41 @@ pub(super) fn kit_materials(
             })
             .load(path)
     };
-    let mut textures = BTreeMap::new();
+    let mut made: BTreeMap<(String, [u32; 2]), Handle<StandardMaterial>> = BTreeMap::new();
+    let mut out = KitMaterials::default();
     for kit in &kits.0 {
         for (material, texture) in &kit.textures {
-            textures.entry(*material).or_insert(texture);
+            let path = &texture.path;
+            let handle = made
+                .entry((
+                    path.clone(),
+                    [texture.depth.to_bits(), texture.reflectance.to_bits()],
+                ))
+                .or_insert_with(|| {
+                    let arm: Handle<Image> = linear(format!("{path}/arm.jpg"));
+                    let parallax = texture.depth > 0.0;
+                    materials.add(StandardMaterial {
+                        base_color_texture: Some(assets.load(format!("{path}/color.jpg"))),
+                        normal_map_texture: Some(linear(format!("{path}/normal.jpg"))),
+                        metallic_roughness_texture: Some(arm.clone()),
+                        occlusion_texture: Some(arm),
+                        perceptual_roughness: 1.0,
+                        metallic: 1.0,
+                        reflectance: texture.reflectance,
+                        depth_map: parallax.then(|| linear(format!("{path}/height.jpg"))),
+                        parallax_depth_scale: texture.depth,
+                        parallax_mapping_method:
+                            bevy::pbr::ParallaxMappingMethod::DEFAULT_RELIEF_MAPPING,
+                        max_parallax_layer_count: 16.0,
+                        ..default()
+                    })
+                })
+                .clone();
+            out.by_kind.insert((kit.kind(), *material), handle.clone());
+            out.first.entry(*material).or_insert(handle);
         }
     }
-    Arc::new(
-        textures
-            .into_iter()
-            .map(|(material, texture)| {
-                let path = &texture.path;
-                let arm: Handle<Image> = linear(format!("{path}/arm.jpg"));
-                let parallax = texture.depth > 0.0;
-                let standard = StandardMaterial {
-                    base_color_texture: Some(assets.load(format!("{path}/color.jpg"))),
-                    normal_map_texture: Some(linear(format!("{path}/normal.jpg"))),
-                    metallic_roughness_texture: Some(arm.clone()),
-                    occlusion_texture: Some(arm),
-                    perceptual_roughness: 1.0,
-                    metallic: 1.0,
-                    depth_map: parallax.then(|| linear(format!("{path}/height.jpg"))),
-                    parallax_depth_scale: texture.depth,
-                    parallax_mapping_method:
-                        bevy::pbr::ParallaxMappingMethod::DEFAULT_RELIEF_MAPPING,
-                    max_parallax_layer_count: 16.0,
-                    ..default()
-                };
-                (material, materials.add(standard))
-            })
-            .collect(),
-    )
+    Arc::new(out)
 }
 
 /// Rebuilds everything drawn for a build from its current shape.
@@ -272,12 +300,12 @@ pub(super) fn redraw(
     let (mesh, states) = match site.kits.clone() {
         Some(kits) => {
             let mesh = in_view.mesh_for_kits(&kits);
-            let layouts: Vec<logs::Layout> = kits
+            let layouts: Vec<layout::Layout> = kits
                 .0
                 .iter()
-                .map(|kit| logs::lay(&site.base, kit))
+                .map(|kit| layout::lay(&site.base, kit))
                 .collect();
-            let laid: Vec<(&LogKit, &[logs::Piece])> = kits
+            let laid: Vec<(&Kit, &[Piece])> = kits
                 .0
                 .iter()
                 .zip(&layouts)
@@ -297,14 +325,7 @@ pub(super) fn redraw(
                     false,
                 )),
             };
-            let models = site.kit_pieces.clone();
-            let drawn = draw_pieces(
-                &laid,
-                &states,
-                models.as_deref(),
-                &site.base,
-                site.relief.as_deref(),
-            );
+            let drawn = draw_pieces(&laid, &states, &site.base, site.reliefs.as_deref());
             (mesh, drawn)
         }
         None => {
@@ -323,7 +344,7 @@ pub(super) fn redraw(
     for entity in site.textured_entities.drain(..) {
         commands.entity(entity).despawn();
     }
-    let [placed, mut ghost, next] = states;
+    let (placed, mut ghost, next) = states;
     if let Some(planned) = planned_mesh {
         let mut plain = Surfaces::default();
         *plain.of(Material::Plain) = planned.structure;
@@ -334,11 +355,15 @@ pub(super) fn redraw(
         }
         ghost = joined(ghost, planned);
     }
-    let built = [&mesh.textured, &placed];
-    for (surfaces, state) in built
-        .into_iter()
-        .map(|surfaces| (surfaces, 0))
-        .chain([(&ghost, 1), (&next, 2)])
+    // What is built in each kind's own materials, and the rest in the first kit's.
+    let built = std::iter::once((None, &mesh.textured)).chain(
+        placed
+            .iter()
+            .map(|(kind, surfaces)| (Some(*kind), surfaces)),
+    );
+    for (kind, surfaces, state) in built
+        .map(|(kind, surfaces)| (kind, surfaces, 0))
+        .chain([(None, &ghost, 1), (None, &next, 2)])
     {
         for (material, surface) in &surfaces.0 {
             let Some(drawn) = to_mesh(surface) else {
@@ -349,7 +374,7 @@ pub(super) fn redraw(
                 2 => site.next_material.clone(),
                 _ => site
                     .materials
-                    .get(material)
+                    .get(kind, *material)
                     .cloned()
                     .unwrap_or_else(|| site.plain_material.clone()),
             };
@@ -488,35 +513,27 @@ pub(super) fn redraw(
 /// Colour of a plan's pieces not yet in: each a shade apart, so they can be counted.
 const GHOST: [f32; 3] = [0.62, 0.84, 1.0];
 
-/// A kit's pieces as three sets of surfaces by material: those in, those still a ghost,
-/// and the next to go in. Pieces a model draws are left out, but for the daub under a log.
+/// The kits' pieces as surfaces by material: those in, by their kind, each drawn in its
+/// own kit's materials; those still a ghost, and the next to go in, which are drawn alike
+/// whatever their kind. Doors and windows are props, placed apart.
 fn draw_pieces(
-    laid: &[(&LogKit, &[logs::Piece])],
+    laid: &[(&Kit, &[Piece])],
     states: &[Vec<State>],
-    models: Option<&pieces::KitPieces>,
     base: &Base,
-    relief: Option<&relief::Relief>,
-) -> [Surfaces; 3] {
-    let [mut placed, mut ghost, mut next] = [
-        Surfaces::default(),
-        Surfaces::default(),
-        Surfaces::default(),
-    ];
+    reliefs: Option<&relief::Reliefs>,
+) -> (BTreeMap<Kind, Surfaces>, Surfaces, Surfaces) {
+    let mut placed = BTreeMap::new();
+    let (mut ghost, mut next) = (Surfaces::default(), Surfaces::default());
     for (&(kit, pieces), states) in laid.iter().zip(states) {
-        let [p, g, n] = draw_kit(pieces, kit, states, models);
-        let [bp, bg, bn] = draw_blocks(pieces, kit, states, base, relief);
-        let (p, g, n) = (joined(p, bp), joined(g, bg), joined(n, bn));
-        for (into, from) in [(&mut placed, p), (&mut ghost, g), (&mut next, n)] {
-            for (material, surface) in from.0 {
-                let to = into.of(material);
-                to.positions.extend(surface.positions);
-                to.normals.extend(surface.normals);
-                to.colours.extend(surface.colours);
-                to.uvs.extend(surface.uvs);
-            }
-        }
+        let shape = relief::of(reliefs, kit);
+        let [p, g, n] = draw_kit(pieces, kit, states, shape);
+        let [bp, bg, bn] = draw_blocks(pieces, kit, states, base, shape);
+        let own: &mut Surfaces = placed.entry(kit.kind()).or_default();
+        *own = joined(std::mem::take(own), joined(p, bp));
+        ghost = joined(ghost, joined(g, bg));
+        next = joined(next, joined(n, bn));
     }
-    [placed, ghost, next]
+    (placed, ghost, next)
 }
 
 /// Two sets of surfaces as one.
@@ -534,18 +551,18 @@ fn joined(mut a: Surfaces, b: Surfaces) -> Surfaces {
 /// A block kind's cubes as its surface (D197): those in, those not yet, and the next, each
 /// closed where it meets the others but for what is already built.
 fn draw_blocks(
-    pieces: &[logs::Piece],
-    kit: &LogKit,
+    pieces: &[Piece],
+    kit: &Kit,
     states: &[State],
     base: &Base,
-    relief: Option<&relief::Relief>,
+    relief: Option<&terra_build::relief::Relief>,
 ) -> [Surfaces; 3] {
     if kit.pattern != Pattern::Masonry {
         return Default::default();
     }
     let mut sets: [std::collections::BTreeSet<[i32; 3]>; 3] = Default::default();
     for (piece, state) in pieces.iter().zip(states) {
-        if let logs::Piece::Block { cube } = piece {
+        if let Piece::Block { cube } = piece {
             let set = match state {
                 State::In => 0,
                 State::Next => 2,
@@ -594,12 +611,13 @@ fn draw_blocks(
 /// How finely a block kind's cube faces are divided: a step every 5 cm or so.
 const SURFACE_STEPS: u32 = 10;
 
-/// One kit's pieces: those in, those not yet, and the next.
+/// One kit's pieces: those in, those not yet, and the next. `face` is the height map its
+/// logs' bark stands out by, once read.
 fn draw_kit(
-    pieces: &[logs::Piece],
-    kit: &LogKit,
+    pieces: &[Piece],
+    kit: &Kit,
     states: &[State],
-    models: Option<&pieces::KitPieces>,
+    face: Option<&terra_build::relief::Relief>,
 ) -> [Surfaces; 3] {
     let [mut placed, mut ghost, mut next] = [
         Surfaces::default(),
@@ -618,11 +636,7 @@ fn draw_kit(
             .iter()
             .map(|(material, surface)| (*material, surface.colours.len()))
             .collect();
-        if models.is_some_and(|models| models.draws(piece)) {
-            logs::draw_chinking(piece, kit, surfaces);
-        } else {
-            logs::draw(piece, kit, surfaces);
-        }
+        terra_build::draw::draw(piece, kit, face, surfaces);
         if *state == State::Ghost {
             let shade = if index % 2 == 0 { 1.0 } else { 0.86 };
             let colour = GHOST.map(|c| c * shade);
@@ -649,9 +663,8 @@ pub(super) enum State {
 
 /// How far each of a kit's pieces is in: by the cubes it stands in, on the player's base;
 /// as far as the kit sheet shows it, in the order they go in; or all of it.
-fn states(pieces: &[logs::Piece], build: &Build, by_cubes: bool) -> Vec<State> {
-    let opening =
-        |piece: &logs::Piece| build.fitted_props && matches!(piece, logs::Piece::Opening { .. });
+fn states(pieces: &[Piece], build: &Build, by_cubes: bool) -> Vec<State> {
+    let opening = |piece: &Piece| build.fitted_props && matches!(piece, Piece::Opening { .. });
     if !by_cubes {
         let done = pieces::done(pieces.len(), build.shown);
         return pieces
@@ -688,8 +701,7 @@ fn states(pieces: &[logs::Piece], build: &Build, by_cubes: bool) -> Vec<State> {
 const SLIVER_M: f32 = 0.05;
 
 /// Whether a piece is in, by the cubes it stands in, and those cubes.
-fn piece_in(base: &Base, piece: &logs::Piece) -> (bool, Vec<[i32; 3]>) {
-    use logs::Piece;
+fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
     let point_cube = |point: Vec3| (point / CELL_M).floor().as_ivec3();
     match *piece {
         // A footing is in with the wall it stands under.
@@ -697,12 +709,6 @@ fn piece_in(base: &Base, piece: &logs::Piece) -> (bool, Vec<[i32; 3]>) {
             let at = point_cube((from + to) * 0.5 + Vec3::Y * (CELL_M * 0.5));
             (base.is_in(at), vec![at.to_array()])
         }
-        // A roof's covering is in once the roof under it is covered.
-        Piece::Shakes { corners } => {
-            let middle = corners.iter().copied().sum::<Vec3>() * 0.25;
-            (roof_covered(base, middle), Vec::new())
-        }
-        Piece::Ridge { from, to } => (roof_covered(base, (from + to) * 0.5), Vec::new()),
         _ => {
             let Some((min, max)) = piece.bounds() else {
                 return (true, Vec::new());
@@ -738,21 +744,6 @@ fn piece_in(base: &Base, piece: &logs::Piece) -> (bool, Vec<[i32; 3]>) {
             }
             (is_in, cubes)
         }
-    }
-}
-
-/// Whether a roof over a point, in the base's own space, is covered there.
-fn roof_covered(base: &Base, point: Vec3) -> bool {
-    let column = [
-        (point.x / CELL_M).floor() as i32,
-        (point.z / CELL_M).floor() as i32,
-    ];
-    match base.roof_over(column).and_then(|roof| base.roof(roof)) {
-        Some(roof) => roof.stage(column) == Some(ROOF_STAGES),
-        // Past the walls, under the eaves: the nearest roof.
-        None => base
-            .roofs()
-            .any(|(_, roof)| roof.stages.iter().all(|&stage| stage == ROOF_STAGES)),
     }
 }
 

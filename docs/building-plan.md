@@ -11,11 +11,11 @@ How we build the construction system that [proposals/construction-001.md](propos
 | D58, D127, AGENTS.md | ECS, a plugin per feature, small systems; many of everything; work only where something changed; a new kind of thing is data |
 | D69, D71 | Every step checkable by an agent: tests, the kit sheet, scripted and live runs; tools for the work we repeat |
 | D25, D185 | Measured with `cargo xtask bench`, on the fast GPU and an integrated one, in the loop a player runs |
-| D14, D177 | Every piece a model from the art pipeline, textured, one grade a kit |
+| D14, D177, D197, D200 | Props and trims models from the art pipeline; block kinds their cubes' surface and timber generated long members, both from real materials; one grade a kit |
 
 ## Where it lives
 
-**`terra_build`**, shared, with no Bevy (D28), a module a concern. `cubes`, `ops`, `ground`, `support`, `rooms`, `cost`, `walk` and `save` are built (step 1, D199); the layouts are still `logs.rs`, `masonry.rs`, `surface.rs` and `mesh.rs`, split in step 2:
+**`terra_build`**, shared, with no Bevy (D28), a module a concern. `cubes`, `ops`, `ground`, `support`, `rooms`, `cost`, `walk` and `save` are built (step 1, D199); `kit`, `layout/runs`, `layout/trims`, `layout/ground`, `layout/floors` and `layout/blocks`, `timber` and `surface` are built (step 2, under way); roofs are still in `mesh.rs`:
 
 | Module | Holds |
 |---|---|
@@ -25,10 +25,12 @@ How we build the construction system that [proposals/construction-001.md](propos
 | `support` | What holds what: joined to the ground, and what rests on a cube |
 | `rooms` | Rooms and indoors, worked out per building (today's, moved) |
 | `cost` | What each cube costs and what went into it, in exact fractions |
-| `kit` | A kit's data: its pattern, sizes, pieces by role, textures; checked as it is read |
-| `layout/runs` | Long members: logs, beams, planks, wattle, laid along runs (today's `logs.rs`, split) |
+| `kit` | A kit's data: its pattern, sizes, timber, materials, props and cost; checked as it is read |
+| `layout/runs` | Long members: logs, beams, planks, wattle, laid along runs |
+| `timber` | A long member made from its piece: a profile (round, hewn) swept along it, shaped by the kit and its seed, displaced by its material's height (D200) |
 | `layout/blocks` | Block kinds drawn as their cubes' surface, rounded and displaced by their material (`surface`, D197) |
-| `layout/trims` | Jambs, sills and lintels round every opening, and caps where thicknesses differ |
+| `layout/trims` | Jambs, sills and lintels round every opening, the doors and windows set in them, and caps where thicknesses differ |
+| `layout/floors` | Floors of rooms, in panels |
 | `layout/roofs` | Roof pieces from the height field: slope, eave, verge, ridge, hip, valley, flashing |
 | `layout/ground` | Footings down to the ground, and door steps |
 | `walk` | Walking: each cube to its fill, as its kind's slab, and the shapes' table |
@@ -76,7 +78,7 @@ Iteration is always in sorted order, so every machine lays and floods the same w
 4. **Far off**: each section's lowest-detail pieces merged, faded in with `VisibilityRange`; further, a box per section in its kits' colours, later an impostor.
 5. **Light**: the sky's light dimmed indoors, from rooms; a probe per room later.
 
-Long members come in a few lengths with their texture repeating along them, cut faces showing end grain, so nothing is stretched. Block kinds are no pieces: their cubes' surface is meshed per section, rounded and displaced by their material (D197), finer near the camera and coarser far off.
+Long members are made to their length (D200), their texture repeating along them and cut faces showing end grain, so nothing is stretched. Block kinds are no pieces: their cubes' surface is meshed per section, rounded and displaced by their material (D197), finer near the camera and coarser far off.
 
 ## Collision
 
@@ -85,7 +87,7 @@ First, as now: arithmetic on the cubes, each to its fill and its kind's slab, st
 ## The art pipeline
 
 - **Kits are data**: a file per kind in `assets/data/kits/`, its pattern, roles and their models, textures and sizes (as now).
-- **Long members**: Tripo models per role, logs in lengths, refined along their length (as now).
+- **Long members** (D200): generated from the kit file, a profile swept along each piece; their materials (bark, end grain, daub) from the library like the blocks', the bark's height read on the CPU to displace it.
 - **Blocks**: a material each, from a library or generated (D191): colour, normal, roughness and the height the surface is displaced by (D197).
 - **Levels of detail**: `refine` writes each model at three budgets, for near, middle and far.
 - **A kit checker**, `cargo xtask kits`: every role a kit's pattern needs has a model; edges match the shared profile; sizes and budgets within the style guide's; textures present. Run by `cargo xtask check` on the kit files, and on the models when they change.
@@ -104,7 +106,7 @@ Each step ends checked by script before the next (D69), and is committed as it g
 
 0. **Spike: block modules** (done, 2026-10-12, [research/block-modules.md](../research/block-modules.md)). Conformed Tripo pieces read as a grid and break at carved shapes; the cubes' surface, bevelled and displaced by a real stone material, reads as one natural wall and carves cleanly. Decided (D197) and built in `terra_build::surface`: a mesher for that surface, per section on workers, as the terrain's: outer faces, bevels, subdivision near the camera, the material's height displaced on the CPU, triplanar texturing.
 1. **The model** (done, 2026-10-12, D199). The cube store in sections; fill, shape and state per cube; operations with their checks and inverses; ground sampled into plans; support; snapshots; older saves converted. Property tests. The game unchanged on top: it still builds with the shortcuts, instantly, and saves them, until step 4.
-2. **Layouts.** `logs.rs` split into runs, trims and ground; block layout from the spike's answer; roof pieces; all in grid units; the kit checker. The kit sheet covers every case.
+2. **Layouts** (under way, 2026-10-13). Done: `logs.rs` split into `layout/runs`, `trims`, `ground`, `floors` and `blocks`; timber generated from the kit (D200, `timber`), A as the log kit and B a second profile, the Tripo logs gone. Still to do: roof pieces; the kit checker; pieces in whole grid units rather than metres in the base's space.
 3. **Drawing.** Sections as entities, layouts on the worker pool, merged meshes, instanced ghosts, far meshes, indoor light. The entity per piece goes. The `village` bench, measured on both GPUs.
 4. **Plans and building** (built, 2026-10-13, D201). Laying plans with the tools there are; building by fill; taking apart and undo with their refusals; the plan budget; doors and windows fitted, opening and shutting. The remote commands (`build.*`), and a scripted cabin from plan to door, `cargo xtask cabin`. Not yet: footings laid into a plan (D194), cutting an opening into a wall already built, which D199's last-in-first-out refuses under its lintel, a door split from its frame to swing alone.
 5. **Shapes and more parts**: stairs, slopes and halves (D193); floors drawn alone; posts.
