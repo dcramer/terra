@@ -18,10 +18,10 @@
 //! the relief fades out, as the faces there push different ways; how near is measured to
 //! the edge itself, so every face at a point agrees.
 
-use crate::mesh::planar;
+use crate::mesh::{QuickMap, planar};
 use crate::{CELL_M, Surface};
 use glam::{IVec3, Vec3};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 /// How a block kind's surface is made: from its kit.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -110,10 +110,48 @@ pub fn draw_cut(
     out: &mut Surface,
     tops: &mut Surface,
 ) {
-    let full = |at: IVec3| cubes.contains(&at.to_array()) || hides(at);
+    draw_part(
+        cubes,
+        &|_| true,
+        hides,
+        look,
+        heights,
+        cut,
+        colour,
+        out,
+        tops,
+    );
+}
+
+/// As [`draw_cut`], keeping only the faces of the cubes `keep` says: the rest are worked
+/// out, so the edges and shading where they meet the kept ones come out as they would
+/// with all of them drawn, and left out. A section drawn with the cubes a step beyond its
+/// edge meets its neighbour's surface with no seam (docs/building-plan.md, drawing).
+#[allow(clippy::too_many_arguments)]
+pub fn draw_part(
+    cubes: &BTreeSet<[i32; 3]>,
+    keep: &dyn Fn(IVec3) -> bool,
+    hides: &dyn Fn(IVec3) -> bool,
+    look: &Look,
+    heights: &Heights,
+    cut: &dyn Fn(IVec3, Vec3) -> f32,
+    colour: [f32; 3],
+    out: &mut Surface,
+    tops: &mut Surface,
+) {
+    // Whether a cube is full, asked of each once: `hides` reads the base.
+    let known: std::cell::RefCell<QuickMap<IVec3, bool>> = Default::default();
+    let full = |at: IVec3| {
+        if let Some(&full) = known.borrow().get(&at) {
+            return full;
+        }
+        let full = cubes.contains(&at.to_array()) || hides(at);
+        known.borrow_mut().insert(at, full);
+        full
+    };
     let n = look.steps.max(1) as usize;
     // Each cube shrunk by the bevel on every side nothing hides.
-    let shrunk: HashMap<IVec3, (Vec3, Vec3)> = cubes
+    let shrunk: QuickMap<IVec3, (Vec3, Vec3)> = cubes
         .iter()
         .map(|&cube| {
             let cube = IVec3::from_array(cube);
@@ -132,7 +170,7 @@ pub fn draw_cut(
         .collect();
     // Every inside edge: a cube's edge with three of the four cubes round it full, kept by
     // the cell its middle is in, so a point looks only at those near it.
-    let mut inside: HashMap<IVec3, Vec<(Vec3, Vec3)>> = HashMap::new();
+    let mut inside: QuickMap<IVec3, Vec<(Vec3, Vec3)>> = QuickMap::default();
     for &cube in cubes {
         let cube = IVec3::from_array(cube);
         for axis in 0..3 {
@@ -155,12 +193,24 @@ pub fn draw_cut(
             }
         }
     }
-    let fade = |p: Vec3| {
-        let cell = (p / CELL_M).floor().as_ivec3();
-        (-1..=1)
-            .flat_map(|x| (-1..=1).flat_map(move |y| (-1..=1).map(move |z| IVec3::new(x, y, z))))
-            .filter_map(|offset| inside.get(&(cell + offset)))
-            .flatten()
+    // The inside edges near a cube, which a point of its faces may be near: those further
+    // off are further than the fade from it.
+    let near_inside = |cube: IVec3| -> Vec<(Vec3, Vec3)> {
+        let mut found = Vec::new();
+        for x in -1..=2 {
+            for y in -1..=2 {
+                for z in -1..=2 {
+                    if let Some(edges) = inside.get(&(cube + IVec3::new(x, y, z))) {
+                        found.extend(edges);
+                    }
+                }
+            }
+        }
+        found
+    };
+    let fade = |p: Vec3, edges: &[(Vec3, Vec3)]| {
+        edges
+            .iter()
             .map(|&(from, to)| {
                 let along = (to - from).normalize();
                 let t = (p - from).dot(along).clamp(0.0, CELL_M);
@@ -168,12 +218,20 @@ pub fn draw_cut(
             })
             .fold(1.0_f32, f32::min)
     };
-    let mut triangles: Vec<[Vec3; 3]> = Vec::new();
-    let mut uvs: Vec<[[f32; 2]; 3]> = Vec::new();
-    let mut on_top: Vec<bool> = Vec::new();
+    // Each face drawn: a grid of points, placed once each, and its triangles' corners in it.
+    let mut faces: Vec<Face> = Vec::new();
     for &cube in cubes {
         let cube = IVec3::from_array(cube);
+        let keeping = keep(cube);
+        // A cube left out matters only where it meets one kept, a step away.
+        if !keeping
+            && !(-1..=1)
+                .any(|x| (-1..=1).any(|y| (-1..=1).any(|z| keep(cube + IVec3::new(x, y, z)))))
+        {
+            continue;
+        }
         let low = cube.as_vec3() * CELL_M;
+        let edges = near_inside(cube);
         // The shrunk boxes of the cubes round this one, which any point of its faces may
         // be nearest.
         let round: Vec<(Vec3, Vec3)> = (-1..=1)
@@ -199,6 +257,23 @@ pub fn draw_cut(
                 p[b] = low[b] + CELL_M * j as f32 / n as f32;
                 p
             };
+            // Only the boxes that may be nearest a point of this face: none further from
+            // the face than its own cube's box can be, at most the bevel along every axis.
+            let (face_low, face_high) = {
+                let (mut l, mut h) = (low, low + Vec3::splat(CELL_M));
+                l[axis] = plane;
+                h[axis] = plane;
+                (l, h)
+            };
+            let reach = look.bevel * look.bevel * 3.0 + 1e-6;
+            let round: Vec<(Vec3, Vec3)> = round
+                .iter()
+                .copied()
+                .filter(|&(l, h)| {
+                    let gap = (l - face_high).max(face_low - h).max(Vec3::ZERO);
+                    gap.length_squared() <= reach
+                })
+                .collect();
             let place = |p: Vec3| -> Vec3 {
                 let nearest = round
                     .iter()
@@ -213,7 +288,7 @@ pub fn draw_cut(
                 } else {
                     (p, normal)
                 };
-                rounded + outward * (displaced(p, outward, look, heights) * fade(p))
+                rounded + outward * (displaced(p, outward, look, heights) * fade(p, &edges))
             };
             // Wound so each triangle faces out along the face's normal.
             let flip = side < 0.0;
@@ -222,57 +297,128 @@ pub fn draw_cut(
                 Some((metres, _)) if top => metres,
                 _ => look.metres,
             };
+            let mut face = Face {
+                points: Vec::with_capacity((n + 1) * (n + 1)),
+                uvs: Vec::with_capacity((n + 1) * (n + 1)),
+                triangles: Vec::with_capacity(n * n * 2),
+                top,
+                keeping,
+            };
+            for i in 0..=n {
+                for j in 0..=n {
+                    let p = point(i, j);
+                    let mut q = place(p);
+                    q.y = q.y.min(cut(cube, p));
+                    face.points.push(q);
+                    face.uvs.push(planar(p, normal, metres));
+                }
+            }
+            let at = |i: usize, j: usize| (i * (n + 1) + j) as u32;
             for i in 0..n {
                 for j in 0..n {
-                    let corners = [
-                        point(i, j),
-                        point(i + 1, j),
-                        point(i + 1, j + 1),
-                        point(i, j + 1),
-                    ];
-                    let mut placed = corners.map(place);
-                    for (q, p) in placed.iter_mut().zip(corners) {
-                        q.y = q.y.min(cut(cube, p));
-                    }
-                    let mapped = corners.map(|p| planar(p, normal, metres));
+                    let corners = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
                     for [x, y, z] in [[0, 1, 2], [0, 2, 3]] {
                         let (y, z) = if flip { (z, y) } else { (y, z) };
-                        let (a, b, c) = (placed[x], placed[y], placed[z]);
+                        let t = [corners[x], corners[y], corners[z]];
+                        let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
                         // Cut away to nothing.
-                        if (b - a).cross(c - a).length_squared() < 1e-12 {
+                        if (pb - pa).cross(pc - pa).length_squared() < 1e-12 {
                             continue;
                         }
-                        triangles.push([placed[x], placed[y], placed[z]]);
-                        uvs.push([mapped[x], mapped[y], mapped[z]]);
-                        on_top.push(top);
+                        face.triangles.push(t);
                     }
                 }
             }
+            faces.push(face);
         }
     }
     // Smooth across every edge the faces share: the normal at a point is the sum of its
-    // triangles' around it.
+    // triangles' around it. Inside a face that is its own triangles; on a face's edge,
+    // where other faces meet it, every triangle with a corner there, found by place.
+    let edge = |index: u32| {
+        let (i, j) = (index as usize / (n + 1), index as usize % (n + 1));
+        i == 0 || j == 0 || i == n || j == n
+    };
     let key = |p: Vec3| ((p * 2048.0).round()).as_ivec3();
-    let mut sums: HashMap<IVec3, Vec3> = HashMap::new();
-    for t in &triangles {
-        let face = (t[1] - t[0]).cross(t[2] - t[0]);
-        for p in t {
-            *sums.entry(key(*p)).or_default() += face;
+    let mut sums: QuickMap<IVec3, Vec3> = QuickMap::default();
+    let mut own: Vec<Vec<Vec3>> = Vec::with_capacity(faces.len());
+    for face in &faces {
+        let mut local = vec![Vec3::ZERO; face.points.len()];
+        for t in &face.triangles {
+            let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
+            let normal = (pb - pa).cross(pc - pa);
+            for &c in t {
+                if edge(c) {
+                    *sums.entry(key(face.points[c as usize])).or_default() += normal;
+                } else {
+                    local[c as usize] += normal;
+                }
+            }
+        }
+        own.push(local);
+    }
+    for (face, local) in faces.iter().zip(own) {
+        if !face.keeping {
+            continue;
+        }
+        let into = if face.top { &mut *tops } else { &mut *out };
+        let normal_at = |c: u32, fallback: Vec3| {
+            let sum = if edge(c) {
+                sums[&key(face.points[c as usize])]
+            } else {
+                local[c as usize]
+            };
+            sum.normalize_or(fallback)
+        };
+        if into.sharing {
+            // Each point of the grid once, with the triangles' corners shared.
+            let mut index: Vec<u32> = vec![u32::MAX; face.points.len()];
+            for t in &face.triangles {
+                let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
+                let fallback = (pb - pa).cross(pc - pa).normalize_or_zero();
+                for &c in t {
+                    let slot = &mut index[c as usize];
+                    if *slot == u32::MAX {
+                        *slot = into.shared.corner(
+                            face.points[c as usize],
+                            normal_at(c, fallback),
+                            face.uvs[c as usize],
+                            colour,
+                        );
+                    }
+                    into.shared.indices.push(*slot);
+                }
+            }
+            continue;
+        }
+        for t in &face.triangles {
+            let corners = t.map(|c| face.points[c as usize]);
+            let fallback = (corners[1] - corners[0])
+                .cross(corners[2] - corners[0])
+                .normalize_or_zero();
+            let normals = t.map(|c| normal_at(c, fallback));
+            into.textured(corners, normals, t.map(|c| face.uvs[c as usize]), colour);
         }
     }
-    for ((t, uv), top) in triangles.iter().zip(&uvs).zip(on_top) {
-        let face = (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero();
-        let normals = t.map(|p| sums[&key(p)].normalize_or(face));
-        let into = if top { &mut *tops } else { &mut *out };
-        into.textured(*t, normals, *uv, colour);
-    }
+}
+
+/// A cube's face as it is drawn: its grid of points, placed, where each falls on its
+/// texture, its triangles as three points of the grid each, whether it is a top in a
+/// material of its own, and whether it is kept.
+struct Face {
+    points: Vec<Vec3>,
+    uvs: Vec<[f32; 2]>,
+    triangles: Vec<[u32; 3]>,
+    top: bool,
+    keeping: bool,
 }
 
 /// How far the surface is pushed out at a point: its materials' heights there, their three
 /// planar mappings blended by which way the surface faces, so the faces either side of an
 /// outside edge agree; the tops' own material where they face up and have one.
 fn displaced(p: Vec3, outward: Vec3, look: &Look, heights: &Heights) -> f32 {
-    let weights = outward.abs().powf(4.0);
+    let weights = outward.abs();
+    let weights = weights * weights * weights * weights;
     let total = weights.x + weights.y + weights.z;
     (0..3)
         .filter(|&axis| weights[axis] > 1e-4)
@@ -468,7 +614,7 @@ mod tests {
     /// triangle: no cracks.
     fn closed(surface: &Surface) -> bool {
         let key = |p: Vec3| ((p * 2048.0).round()).as_ivec3().to_array();
-        let mut edges: HashMap<([i32; 3], [i32; 3]), i32> = HashMap::new();
+        let mut edges: std::collections::HashMap<([i32; 3], [i32; 3]), i32> = Default::default();
         for t in surface.positions.chunks(3) {
             for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
                 let (a, b) = (key(a), key(b));

@@ -21,7 +21,7 @@
 //! in the grid (D208) and knows the roof cell whose stage it waits for, so a server can lay
 //! them without any art.
 
-use super::{Piece, Place, hash, ticks};
+use super::{Piece, Place, Scope, hash, ticks};
 use crate::kit::{Kit, Kits};
 use crate::mesh::ROOF_THICK_M;
 use crate::{Base, CELL_M, Fill, Kind, RoofId, RoofSection, STOREY_CUBES, STOREY_M};
@@ -141,6 +141,30 @@ impl Field {
             }
         }
         best
+    }
+
+    /// Whether any of it, its eaves too, is over the columns of a scope.
+    pub(crate) fn reaches(&self, scope: Scope) -> bool {
+        self.sections.iter().any(|owner| {
+            let (low, high) = owner.section.bounds();
+            let reach = owner.eaves.max(0.0) + CELL_M;
+            let (low, high) = (
+                ((low - reach) / CELL_M).floor().as_ivec2(),
+                ((high + reach) / CELL_M).ceil().as_ivec2(),
+            );
+            // As high as it could rise over its widest span, its walls' tops below.
+            let span = (owner.section.bounds().1 - owner.section.bounds().0).max_element();
+            let (bottom, top) = (
+                ((self.top - 1.0) / CELL_M).floor() as i32,
+                ((self.top + owner.section.pitch * span + 1.0) / CELL_M).ceil() as i32,
+            );
+            low.x <= scope.high.x
+                && high.x >= scope.low.x
+                && low.y <= scope.high.z
+                && high.y >= scope.low.z
+                && bottom <= scope.high.y
+                && top >= scope.low.y
+        })
     }
 
     /// How far above the walls' tops the roof's top is at a point, if it is over it.
@@ -318,8 +342,13 @@ struct Segment {
 
 /// Lays the pitched roofs of a base built in a kit's kind: every piece of each square of
 /// them the kit owns, in the order they go up.
-pub fn lay(base: &Base, kit: &Kit, kits: &Kits, pieces: &mut Vec<Piece>) {
+pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mut Vec<Piece>) {
     for field in Field::all(base, kits).values() {
+        // A roof is laid whole, so its long pieces join as they do over the whole base,
+        // but only where it reaches the scope.
+        if !field.reaches(scope) || !field.sections.iter().any(|o| o.kind == kit.kind()) {
+            continue;
+        }
         let lattice = Lattice::new(base, field);
         let ours = |square: [i32; 2]| {
             lattice
@@ -702,9 +731,12 @@ fn rafters(
 /// the roof's underside, each with the underside's height over it, so its surface is cut
 /// to the slope. Over a gable end they rise to the ridge; along the eaves they close the
 /// wedge between the wall and the roof.
-pub fn gables(base: &Base, kit: &Kit, kits: &Kits, pieces: &mut Vec<Piece>) {
+pub(crate) fn gables(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mut Vec<Piece>) {
     let fields = Field::all(base, kits);
-    for (at, cube) in base.cubes() {
+    if fields.is_empty() {
+        return;
+    }
+    for (at, cube) in scope.cubes(base, None) {
         if cube.kind != kit.kind() || cube.fill == Fill::Open || !base.in_wall(at) {
             continue;
         }
@@ -795,7 +827,13 @@ mod tests {
     fn laid(base: &Base) -> Vec<Piece> {
         let kit = kit();
         let mut pieces = Vec::new();
-        lay(base, &kit, &Kits(vec![kit.clone()]), &mut pieces);
+        lay(
+            base,
+            &kit,
+            &Kits(vec![kit.clone()]),
+            Scope::ALL,
+            &mut pieces,
+        );
         pieces
     }
 
@@ -997,7 +1035,7 @@ mod tests {
         )));
         let kits = Kits(vec![stone.clone()]);
         let mut pieces = Vec::new();
-        gables(&base, &stone, &kits, &mut pieces);
+        gables(&base, &stone, &kits, Scope::ALL, &mut pieces);
         let cubes: Vec<IVec3> = pieces
             .iter()
             .filter_map(|p| match *p {

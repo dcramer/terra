@@ -11,7 +11,7 @@
 //! thinner wall of another kind stands on the blocks, as logs on a stone plinth, a dressed
 //! cap covers the blocks' top.
 
-use super::{Piece, Place, hash};
+use super::{Piece, Place, Scope, hash};
 use crate::kit::Kit;
 use crate::mesh::Material;
 use crate::{Base, CELL_M, Fill, Kind};
@@ -37,25 +37,30 @@ const CAP_OUT_M: f32 = 0.025;
 
 /// Lays every cube of a base in the kit's kind as blocks: its walls, floors and footings,
 /// one surface; and the dressed stone round its openings and over its tops.
-pub fn lay(base: &Base, kit: &Kit) -> Vec<Piece> {
+pub(crate) fn lay(base: &Base, kit: &Kit, scope: Scope) -> Vec<Piece> {
     let kind = kit.kind();
     let solid = |at: IVec3| {
         base.cube(at)
             .is_some_and(|cube| cube.kind == kind && super::drawn_fill(&cube) == Fill::Solid)
     };
-    let mut pieces: Vec<Piece> = base
-        .cubes()
-        .map(|(at, _)| at)
+    let cubes = scope.cubes(base, None);
+    let mut pieces: Vec<Piece> = cubes
+        .iter()
+        .map(|&(at, _)| at)
         .filter(|&at| solid(at))
         .map(|cube| Piece::Block { cube })
         .collect();
     let dressed = kit.textures.contains_key(&Material::Dressed);
-    openings(base, kind, dressed, &solid, &mut pieces);
+    openings(base, kind, dressed, &solid, scope, &mut pieces);
     if dressed {
-        caps(base, kind, &solid, &mut pieces);
+        caps(base, kind, &solid, &cubes, &mut pieces);
     }
     pieces
 }
+
+/// How far round a scope its openings are looked for, in cubes: more than an opening is
+/// across, so one reaching into it is found whole.
+const OPENING_REACH: i32 = 16;
 
 /// A dressed stone from one corner to the other, its version from where it is.
 fn stone(a: Vec3, b: Vec3) -> Piece {
@@ -68,8 +73,14 @@ fn stone(a: Vec3, b: Vec3) -> Piece {
 }
 
 /// A cap over every block with a wall of another, thinner kind standing on it.
-fn caps(base: &Base, kind: Kind, solid: &impl Fn(IVec3) -> bool, pieces: &mut Vec<Piece>) {
-    for (at, _) in base.cubes() {
+fn caps(
+    base: &Base,
+    kind: Kind,
+    solid: &impl Fn(IVec3) -> bool,
+    cubes: &[(IVec3, crate::Cube)],
+    pieces: &mut Vec<Piece>,
+) {
+    for &(at, _) in cubes {
         let above = at + IVec3::Y;
         let thinner = base.cube(above).is_some_and(|cube| {
             cube.kind != kind && cube.kind != Kind::PLAIN && base.in_wall(above)
@@ -101,10 +112,16 @@ fn openings(
     kind: Kind,
     dressed: bool,
     solid: &impl Fn(IVec3) -> bool,
+    scope: Scope,
     pieces: &mut Vec<Piece>,
 ) {
-    let holes: BTreeSet<[i32; 3]> = base
-        .cubes()
+    let wider = Scope {
+        low: scope.low - IVec3::splat(OPENING_REACH),
+        high: scope.high + IVec3::splat(OPENING_REACH),
+    };
+    let holes: BTreeSet<[i32; 3]> = wider
+        .cubes(base, None)
+        .into_iter()
         .filter(|(at, cube)| {
             cube.kind == kind && super::drawn_fill(cube) != Fill::Solid && base.in_wall(*at)
         })
@@ -137,6 +154,9 @@ fn openings(
         }
         let low = region.iter().copied().reduce(IVec3::min).unwrap_or(start);
         let high = region.iter().copied().reduce(IVec3::max).unwrap_or(start);
+        if !scope.reaches(low - IVec3::ONE, high + IVec3::ONE) {
+            continue;
+        }
         let (min, max) = (
             low.as_vec3() * CELL_M,
             (high + IVec3::ONE).as_vec3() * CELL_M,
@@ -264,7 +284,7 @@ mod tests {
             max: [7, 0, 5],
             kind: kit().kind(),
         });
-        let pieces = lay(&base, &kit());
+        let pieces = lay(&base, &kit(), Scope::ALL);
         // Its walls, its floor and its flat roof, one surface.
         let all: BTreeSet<[i32; 3]> = base.cubes().map(|(at, _)| at.to_array()).collect();
         assert_eq!(blocks(&pieces), all);
@@ -281,7 +301,7 @@ mod tests {
                 kind: kit().kind(),
             });
         }
-        let pieces = lay(&base, &kit());
+        let pieces = lay(&base, &kit(), Scope::ALL);
         assert_eq!(
             pieces
                 .iter()
@@ -338,7 +358,7 @@ mod tests {
                 kind: kit().kind(),
             });
         }
-        let stones = stones(&lay(&base, &dressed()));
+        let stones = stones(&lay(&base, &dressed(), Scope::ALL));
         // The window's cubes are 1 to 2 m up, a metre to a metre and a half along.
         let lintel = stones
             .iter()
@@ -383,7 +403,7 @@ mod tests {
             max: [3, 1, 0],
             cube: Some(crate::Cube::new(kit().kind(), Fill::Solid)),
         });
-        let stones = stones(&lay(&base, &dressed()));
+        let stones = stones(&lay(&base, &dressed(), Scope::ALL));
         assert_eq!(stones.len(), 4, "{stones:?}");
         for (a, b) in stones {
             assert!(a.y < 1.0 && b.y > 1.0 && b.y < 1.1, "{a} {b}");

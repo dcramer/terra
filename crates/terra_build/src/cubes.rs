@@ -469,6 +469,48 @@ impl Cubes {
         new <= held.free_places()
     }
 
+    /// Every cube that is not air within a box, from `low` to `high` inclusive, sorted by
+    /// `[x, y, z]`: only the sections the box reaches are read, so a layout of one section
+    /// does not walk a whole castle (docs/building-plan.md, drawing).
+    pub fn within(&self, low: IVec3, high: IVec3) -> Vec<(IVec3, Cube)> {
+        let (from, to) = (section_of(low), section_of(high));
+        let mut found = Vec::new();
+        for (&key, section) in self.sections.range(from.to_array()..=to.to_array()) {
+            let at = IVec3::from_array(key);
+            if at.cmplt(from).any() || at.cmpgt(to).any() {
+                continue;
+            }
+            let origin = at * SECTION;
+            let (a, b) = (
+                (low - origin).max(IVec3::ZERO),
+                (high - origin).min(IVec3::splat(SECTION - 1)),
+            );
+            for x in a.x..=b.x {
+                for y in a.y..=b.y {
+                    for z in a.z..=b.z {
+                        let local = IVec3::new(x, y, z);
+                        let index = (x * SECTION * SECTION + y * SECTION + z) as usize;
+                        if section.cubes[index] != 0
+                            && let Some(cube) = section.get(index)
+                        {
+                            found.push((origin + local, cube));
+                        }
+                    }
+                }
+            }
+        }
+        found.sort_by_key(|(at, _)| at.to_array());
+        found
+    }
+
+    /// The smallest box holding every section with cubes in it, in cubes, if any has.
+    pub fn bounds(&self) -> Option<(IVec3, IVec3)> {
+        let mut keys = self.sections.keys().map(|&key| IVec3::from_array(key));
+        let first = keys.next()?;
+        let (low, high) = keys.fold((first, first), |(lo, hi), at| (lo.min(at), hi.max(at)));
+        Some((low * SECTION, (high + IVec3::ONE) * SECTION - IVec3::ONE))
+    }
+
     /// Every cube that is not air, sorted by `[x, y, z]`.
     pub fn iter(&self) -> Iter<'_> {
         // Sections grouped by their x, then y, so that the cubes come out in the order of

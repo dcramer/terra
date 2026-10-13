@@ -466,7 +466,7 @@ fn plan(shape: &str, style: RoofStyle) -> (Vec<([i32; 3], [i32; 3])>, Vec<RoofSe
 /// The roof rows: every style of roof over every shape of plan, in a kind, or mixed: the
 /// main block in the second kind and its wings in the first, so their roofs meet. Each with
 /// a door in its north wall and a window in its west.
-fn roof_rows(kinds: &[Kind], mixed: bool) -> Vec<(String, Vec<BuildOp>)> {
+pub(super) fn roof_rows(kinds: &[Kind], mixed: bool) -> Vec<(String, Vec<BuildOp>)> {
     let mut rows = Vec::new();
     for shape in ["rectangle", "L", "T", "U"] {
         for (style, name) in [

@@ -12,10 +12,10 @@
 
 use crate::planet::MainCamera;
 use crate::planet::Planet;
-use crate::play::Footprint;
+use crate::play::{Footprint, Steps};
 use crate::start::Start;
 pub(crate) use crate::start::lifted;
-use bevy::{light::NotShadowCaster, prelude::*};
+use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -27,16 +27,21 @@ use terra_core::Operation;
 
 pub(crate) mod act;
 mod draw;
+mod layout;
+mod light;
+mod maps;
 mod pieces;
 pub(crate) mod plans;
 pub(crate) mod props;
-mod relief;
 mod remote;
 mod sheet;
+mod store;
+mod village;
 
-use draw::redraw;
 use draw::{KitMaterials, kit_materials};
 use terra_build::layout::ground::Flight;
+use terra_build::relief::Maps;
+use terra_build::sections::Progress;
 
 const REACH_M: f32 = 300.0;
 
@@ -46,8 +51,10 @@ const REACH_M: f32 = 300.0;
 pub(super) struct DrivenByPlayer;
 
 /// Something built from parts (D108): its shape, the operations that made it, where it
-/// stands, and what is drawn for it. The player's own is the [`Site`]; anyone else's,
-/// such as a village house, is [`Built`]. Both are made, drawn and walked on the same way.
+/// stands, and how it is drawn. The player's own is the [`Site`]; anyone else's, such as a
+/// village house, is [`Built`]. Both are made, drawn and walked on the same way: the base
+/// is an entity placed at `frame`, its sections of cubes its children, each laid and
+/// merged on the workers as it changes (`store`, `layout`, `draw`).
 pub(super) struct Build {
     pub base: Base,
     /// Places the build's own space on the planet.
@@ -60,12 +67,10 @@ pub(super) struct Build {
     pub since: Vec<Op>,
     /// Goes up by one every time the build changes shape.
     pub revision: u64,
-    /// The revision last drawn.
-    drawn: u64,
+    /// The revision its steps and footprint were last worked out for.
+    refreshed: u64,
     /// The cubes lit as what goes in next.
     next: BTreeSet<[i32; 3]>,
-    /// Whether it must be drawn again though its shape has not changed.
-    stale: bool,
     /// Whether its doors and windows are props fitted into it (the player's base), rather
     /// than drawn by its kit in every opening (a village's houses, the kit sheet).
     pub fitted_props: bool,
@@ -75,11 +80,9 @@ pub(super) struct Build {
     pub by_plans: bool,
     /// Stone steps from each ground-floor door down to the ground. A walker treats each
     /// flight as a ramp.
-    flights: Vec<Flight>,
-    /// Where it stands on the ground, as the world sees it, remade with every redraw.
+    flights: Arc<Vec<Flight>>,
+    /// Where it stands on the ground, as the world sees it, remade as it changes.
     pub footprint: Footprint,
-    structure: Entity,
-    glass: Entity,
     /// With kits, walls of their kinds are laid as their pieces (docs/building-kits.md), drawn as
     /// they stand.
     pub kits: Option<Arc<Kits>>,
@@ -87,20 +90,10 @@ pub(super) struct Build {
     /// What stands of it while it goes up, which is what a walker meets: `None` once it is
     /// all built, when that is the base itself.
     standing: Option<Base>,
-    /// What a kit's pieces and materials are drawn under.
-    pieces: Entity,
-    /// The kits' doors' and windows' models, once loaded, and the copies of them placed.
-    kit_pieces: Option<Arc<pieces::KitPieces>>,
-    model_entities: Vec<Entity>,
-    /// The height maps the kits' pieces are shaped by, once loaded.
-    reliefs: Option<Arc<relief::Reliefs>>,
-    /// What pieces not yet in, and the next, are drawn in.
-    ghost_material: Handle<StandardMaterial>,
-    next_material: Handle<StandardMaterial>,
-    /// The kit's materials, textured, and what is drawn plain; and what is drawn in them.
-    materials: Arc<KitMaterials>,
-    plain_material: Handle<StandardMaterial>,
-    textured_entities: Vec<Entity>,
+    /// The base's entity, at `frame`: its sections, doors and windows are its children.
+    pub root: Entity,
+    /// Its sections: what is drawn of each, and what is to be laid again.
+    sections: store::Sections,
 }
 
 /// How far a build's pieces are in (D139, D177): built, or a plan with so much of it in,
@@ -143,23 +136,20 @@ fn keep_footprint(
 #[derive(Component, Deref, DerefMut)]
 pub(super) struct Built(pub Build);
 
-/// What every build is drawn with: its structure and its glass, whose colour comes from
-/// each triangle, so they serve every build, and its kits' materials.
+/// What every build is drawn with: its kits and their materials and maps, what no kit
+/// draws, glass, a plan's ghosts and the next piece lit, far off sections, and the shapes
+/// a ghost is drawn as (`draw`).
 #[derive(Resource, Clone)]
 pub(super) struct BuildLook {
-    structure: Handle<StandardMaterial>,
-    glass: Handle<StandardMaterial>,
-    /// A plan's pieces not yet in, and the next one.
-    ghost: Handle<StandardMaterial>,
-    next: Handle<StandardMaterial>,
+    looks: draw::Looks,
     /// The kits, each drawing the cubes of its kind: logs, stone (D179).
     pub kits: Option<Arc<Kits>>,
     /// The kind of construction walls, floors and roofs are laid in (`--walls`).
     pub laying: Kind,
     /// The kits' doors' and windows' models, once loaded.
     kit_pieces: Option<Arc<pieces::KitPieces>>,
-    /// The height maps the kits' pieces are shaped by, once loaded.
-    reliefs: Option<Arc<relief::Reliefs>>,
+    /// The height and colour maps the kits' pieces are made with, as they load.
+    maps: Arc<Maps>,
     /// The kits' materials, textured (D14).
     materials: Arc<KitMaterials>,
 }
@@ -267,17 +257,30 @@ pub fn plugin(app: &mut App) {
             keep_footprint.before(crate::play::FloraSystems::Clear),
         )
         .init_resource::<pieces::Loading>()
-        .init_resource::<relief::Loading>()
-        .add_systems(Update, (reload_kit, sheet::lay, pieces::load, relief::load))
+        .init_resource::<maps::Loading>()
         .add_systems(
             Update,
             (
-                place_camera.run_if(free.clone()),
-                edit.run_if(free.clone()),
-                update_readout.run_if(free),
-            )
-                .chain(),
+                reload_kit,
+                sheet::lay,
+                village::lay,
+                pieces::load,
+                maps::load,
+            ),
         );
+    store::plugin(app);
+    layout::plugin(app);
+    draw::plugin(app);
+    light::plugin(app);
+    app.add_systems(
+        Update,
+        (
+            place_camera.run_if(free.clone()),
+            edit.run_if(free.clone()),
+            update_readout.run_if(free),
+        )
+            .chain(),
+    );
 }
 
 /// The player's base, built by plans (docs/building-plan.md, step 4): acting on it, its
@@ -287,69 +290,95 @@ pub(crate) fn player_plugin(app: &mut App) {
     act::plugin(app);
     props::plugin(app);
     remote::plugin(app);
-    app.add_systems(Update, draw::redraw_changed);
 }
 
 /// A point just outside the example base's door, in the base's own space.
 pub(super) const OUTSIDE_DOOR: Vec3 = Vec3::new(7.5, 0.0, 9.0);
 
 impl Build {
-    /// A build with nothing in it yet, standing at `frame`, with the entities its parts
-    /// are drawn on.
+    /// A build with nothing in it yet, standing at `frame`, with the entity it is drawn
+    /// under.
     pub(super) fn new(
         commands: &mut Commands,
         look: &BuildLook,
         frame: Transform,
         name: &str,
     ) -> Self {
-        let mut part = |what: &str, material: &Handle<StandardMaterial>| {
-            commands
-                .spawn((
-                    Name::new(format!("{name} {what}")),
-                    frame,
-                    // Seen, and so are what is drawn under it, with or without a mesh.
-                    Visibility::default(),
-                    MeshMaterial3d(material.clone()),
-                ))
-                .id()
-        };
-        let structure = part("structure", &look.structure);
-        let glass = part("glass", &look.glass);
-        let pieces = part("pieces", &look.structure);
-        commands.entity(glass).insert(NotShadowCaster);
+        let root = commands
+            .spawn((
+                Name::new(name.to_string()),
+                store::BaseRoot,
+                frame,
+                // Seen, and so are its sections, with or without a mesh.
+                Visibility::default(),
+            ))
+            .id();
         Self {
             base: Base::default(),
             frame,
             operations: Vec::new(),
             snapshot: None,
             since: Vec::new(),
-            drawn: 0,
             next: BTreeSet::new(),
-            stale: false,
             fitted_props: false,
             by_plans: false,
             revision: 0,
-            flights: Vec::new(),
+            refreshed: u64::MAX,
+            flights: Arc::default(),
             footprint: Footprint {
                 frame,
                 cell_m: CELL_M,
                 ..default()
             },
-            structure,
-            glass,
             kits: look.kits.clone(),
             shown: Shown::Built,
             standing: None,
-            pieces,
-            kit_pieces: look.kit_pieces.clone(),
-            reliefs: look.reliefs.clone(),
-            model_entities: Vec::new(),
-            materials: look.materials.clone(),
-            plain_material: look.structure.clone(),
-            textured_entities: Vec::new(),
-            ghost_material: look.ghost.clone(),
-            next_material: look.next.clone(),
+            root,
+            sections: store::Sections::default(),
         }
+    }
+
+    /// How far its pieces are in, as its sections are laid.
+    fn progress(&self) -> Progress {
+        match self.shown {
+            Shown::Built if self.fitted_props => Progress::Cubes {
+                next: self.next.clone(),
+            },
+            Shown::Built => Progress::Whole,
+            Shown::Plan(fraction) => Progress::Fraction(fraction),
+        }
+    }
+
+    /// Works out again what stands on the ground: its door steps and its footprint, now its
+    /// shape or place has changed. Its sections are laid again by `store`.
+    fn refresh(&mut self, planet: &Planet) {
+        self.refreshed = self.revision;
+        let frame = self.frame;
+        self.flights = Arc::new(terra_build::layout::ground::flights(&self.base, |at| {
+            -planet.distance(frame.transform_point(at.with_y(0.0)))
+        }));
+        self.footprint = Footprint {
+            frame: self.frame,
+            cell_m: CELL_M,
+            ground: self.base.ground_columns().collect(),
+            standing: self.base.occupied_columns().collect(),
+            steps: self
+                .flights
+                .iter()
+                .map(|flight| Steps {
+                    top: flight.top,
+                    outward: flight.outward,
+                    length: flight.length,
+                    width: flight.width,
+                })
+                .collect(),
+        };
+    }
+
+    /// Lays every section again, as when it has been replaced or its kits have changed.
+    pub(super) fn redraw_all(&mut self) {
+        self.sections.everything = true;
+        self.revision += 1;
     }
 
     /// A point on the ground a little beyond the foot of the first door's steps, facing
@@ -398,14 +427,12 @@ impl Build {
         frame: Transform,
         commands: &mut Commands,
         planet: &Planet,
-        meshes: &mut Assets<Mesh>,
+        _meshes: &mut Assets<Mesh>,
     ) {
         self.frame = frame;
-        for part in [self.structure, self.glass, self.pieces] {
-            commands.entity(part).insert(frame);
-        }
-        self.revision += 1;
-        redraw(commands, self, planet, meshes);
+        commands.entity(self.root).insert(frame);
+        self.redraw_all();
+        self.refresh(planet);
     }
 
     /// Applies several operations as one act, and redraws the base once. Returns whether
@@ -435,9 +462,9 @@ impl Build {
     pub(super) fn apply_all(
         &mut self,
         ops: &[BuildOp],
-        commands: &mut Commands,
+        _commands: &mut Commands,
         planet: &Planet,
-        meshes: &mut Assets<Mesh>,
+        _meshes: &mut Assets<Mesh>,
     ) -> bool {
         let mut changed = false;
         for &op in ops {
@@ -450,7 +477,7 @@ impl Build {
             self.lay_footings(planet);
             self.revision += 1;
             info!("Applied {} operations, such as {:?}", ops.len(), ops[0]);
-            redraw(commands, self, planet, meshes);
+            self.refresh(planet);
         }
         changed
     }
@@ -465,10 +492,9 @@ impl Build {
     ) {
         self.base = Base::default();
         self.operations.clear();
-        if !self.apply_all(ops, commands, planet, meshes) {
-            self.revision += 1;
-            redraw(commands, self, planet, meshes);
-        }
+        self.redraw_all();
+        self.apply_all(ops, commands, planet, meshes);
+        self.refresh(planet);
     }
 
     /// Does operations to the base as one act, checked against it as it is (D21): all of
@@ -484,11 +510,15 @@ impl Build {
         Ok(done)
     }
 
-    /// Lights these cubes as what goes in next, drawing it again if that changes them.
+    /// Lights these cubes as what goes in next, drawing their sections again if that
+    /// changes them.
     pub(super) fn light(&mut self, next: BTreeSet<[i32; 3]>) {
         if self.next != next {
+            self.sections
+                .relight
+                .extend(self.next.symmetric_difference(&next).copied());
             self.next = next;
-            self.stale = true;
+            self.revision += 1;
         }
     }
 
@@ -508,6 +538,7 @@ impl Build {
                 self.base = Base::default();
             }
         }
+        self.sections.everything = true;
         self.operations.clear();
         self.snapshot = Some(snapshot.clone());
         self.since.clear();
@@ -525,9 +556,9 @@ impl Build {
     pub(super) fn apply(
         &mut self,
         op: BuildOp,
-        commands: &mut Commands,
+        _commands: &mut Commands,
         planet: &Planet,
-        meshes: &mut Assets<Mesh>,
+        _meshes: &mut Assets<Mesh>,
     ) -> bool {
         let changed = self.base.apply(op);
         if changed {
@@ -535,7 +566,7 @@ impl Build {
             self.lay_footings(planet);
             self.revision += 1;
             info!("Applied {op:?}");
-            redraw(commands, self, planet, meshes);
+            self.refresh(planet);
         } else {
             info!("{op:?} changed nothing.");
         }
@@ -607,42 +638,17 @@ fn setup(
     driven: Option<Res<DrivenByPlayer>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut ghosts: Option<ResMut<Assets<draw::GhostMaterial>>>,
     assets: Res<AssetServer>,
 ) {
     // The base is first laid at the start, whether or not anything is built there.
     let frame = **start;
     let look = BuildLook {
-        structure: materials.add(StandardMaterial {
-            perceptual_roughness: 0.82,
-            reflectance: 0.3,
-            ..default()
-        }),
-        glass: materials.add(StandardMaterial {
-            base_color: Color::srgba(0.62, 0.86, 0.95, 0.3),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 0.06,
-            reflectance: 0.7,
-            cull_mode: None,
-            double_sided: true,
-            ..default()
-        }),
-        ghost: materials.add(StandardMaterial {
-            base_color: Color::srgba(1.0, 1.0, 1.0, 0.38),
-            emissive: LinearRgba::rgb(0.05, 0.12, 0.25),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 0.6,
-            ..default()
-        }),
-        next: materials.add(StandardMaterial {
-            base_color: Color::srgba(1.0, 0.78, 0.35, 0.75),
-            emissive: LinearRgba::rgb(0.6, 0.35, 0.05),
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        }),
+        looks: draw::Looks::new(&mut meshes, &mut materials, ghosts.as_deref_mut()),
         kits: read_kits().map(Arc::new),
         laying: Kind::PLAIN,
         kit_pieces: None,
-        reliefs: None,
+        maps: Arc::default(),
         materials: Arc::default(),
     };
     let materials_of_kit = look
@@ -732,16 +738,12 @@ fn setup(
 }
 
 /// Reads the kits again when one's file is saved, and draws every build in them again.
-#[allow(clippy::too_many_arguments)]
 fn reload_kit(
     time: Res<Time>,
     mut file: ResMut<KitFile>,
     mut look: ResMut<BuildLook>,
-    mut commands: Commands,
-    planet: Res<Planet>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
-    mut meshes: ResMut<Assets<Mesh>>,
     (assets, mut materials): (Res<AssetServer>, ResMut<Assets<StandardMaterial>>),
 ) {
     if !file.timer.tick(time.delta()).just_finished() {
@@ -756,8 +758,7 @@ fn reload_kit(
         return;
     };
     info!("Read the kits in {KITS} again.");
-    let textured = kit_materials(&kits, &assets, &mut materials);
-    look.materials = textured.clone();
+    look.materials = kit_materials(&kits, &assets, &mut materials);
     if look.kits.is_some() {
         look.kits = Some(kits.clone());
     }
@@ -766,8 +767,7 @@ fn reload_kit(
     {
         if build.kits.is_some() {
             build.kits = Some(kits.clone());
-            build.materials = textured.clone();
-            redraw(&mut commands, build, &planet, &mut meshes);
+            build.redraw_all();
         }
     }
 }
@@ -786,12 +786,12 @@ fn place_camera(mut site: ResMut<Site>, mut camera: Single<&mut Transform, With<
 
 fn edit(
     mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
     keys: Res<ButtonInput<KeyCode>>,
     camera: Single<&GlobalTransform, With<MainCamera>>,
     planet: Res<Planet>,
     mut site: ResMut<Site>,
     look: Res<BuildLook>,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut gizmos: Gizmos,
 ) {
     let site = &mut *site;

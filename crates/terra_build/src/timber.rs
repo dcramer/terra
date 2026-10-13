@@ -326,7 +326,8 @@ fn hewn(frame: &Frame, kit: &Kit, split: Split, random: &mut Random) -> Member {
         adzed: true,
         chamfer,
         step: t.step,
-        corner_steps: 3,
+        // Rounded edges only as finely as the kit draws a round log: fewer far off.
+        corner_steps: if t.sides < 12 { 1 } else { 3 },
     };
     let mut member = squared(frame, &look, split, random);
     member.daub = (
@@ -539,6 +540,40 @@ fn sweep(out: &mut Surface, member: &Member, colour: [f32; 3]) {
                 normals[r][col] += n;
             }
         }
+    }
+    if out.sharing {
+        // The same triangles, each corner shaded smooth shared by all that meet at it.
+        let mut smooth: Vec<u32> = vec![u32::MAX; rows * (columns + 1)];
+        for i in 0..rows - 1 {
+            for j in 0..columns {
+                let k = (j + 1) % columns;
+                let quad = [(i, j), (i + 1, j), (i + 1, k), (i, k)];
+                for tri in [[0, 1, 2], [0, 2, 3]] {
+                    let corners = tri.map(|index| grid[quad[index].0][quad[index].1]);
+                    let own = face(corners[0], corners[1], corners[2]);
+                    if own.length_squared() < 1e-14 {
+                        continue;
+                    }
+                    let own = own.normalize();
+                    let indices = tri.map(|index| {
+                        let (r, c) = quad[index];
+                        let column = if index >= 2 && k == 0 { columns } else { c };
+                        let normal = normals[r][c].normalize_or_zero();
+                        let uv = member.uvs[r][column];
+                        if normal.dot(own) < CREASE {
+                            return out.shared.corner(grid[r][c], own, uv, colour);
+                        }
+                        let slot = &mut smooth[r * (columns + 1) + column];
+                        if *slot == u32::MAX {
+                            *slot = out.shared.corner(grid[r][c], normal, uv, colour);
+                        }
+                        *slot
+                    });
+                    out.shared.indices.extend(indices);
+                }
+            }
+        }
+        return;
     }
     for i in 0..rows - 1 {
         for j in 0..columns {

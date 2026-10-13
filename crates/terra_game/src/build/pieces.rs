@@ -3,16 +3,14 @@
 //! members and boards are made from the kit's numbers (`terra_build::timber`, D200) and
 //! block kinds are their cubes' surface (`terra_build::surface`, D197), so neither is here.
 
-use super::draw::State;
-use super::{Build, BuildLook, Built, Shown, Site, redraw};
-use crate::planet::Planet;
+use super::{BuildLook, Built, Site};
 use bevy::asset::LoadState;
 use bevy::camera::primitives::MeshAabb;
 use bevy::gltf::{Gltf, GltfMesh};
 use bevy::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use terra_build::kit::{Kit, KitModels, Kits};
+use terra_build::kit::{KitModels, Kits};
 use terra_build::layout::{Piece, Place};
 
 /// A model, ready to place: each of its parts, and the box round it all, in its own space;
@@ -53,11 +51,9 @@ pub(super) fn load(
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
     gltf_meshes: Res<Assets<GltfMesh>>,
-    mut commands: Commands,
-    planet: Res<Planet>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    meshes: Res<Assets<Mesh>>,
 ) {
     let wanted = look.kits.as_deref().map(merged).unwrap_or_default();
     if loading.wanted.as_ref() != Some(&wanted) {
@@ -94,12 +90,9 @@ pub(super) fn load(
     info!("The kits draw their pieces with {} models.", models.len());
     let pieces = (!models.is_empty()).then(|| Arc::new(pieces));
     look.kit_pieces = pieces.clone();
-    for build in
-        std::iter::once(&mut site.build).chain(builds.iter_mut().map(|b| &mut b.into_inner().0))
-    {
+    for build in super::store::each(&mut site, &mut builds) {
         if build.kits.is_some() {
-            build.kit_pieces = pieces.clone();
-            redraw(&mut commands, build, &planet, &mut meshes);
+            build.redraw_all();
         }
     }
 }
@@ -116,14 +109,6 @@ fn merged(kits: &Kits) -> KitModels {
         }
     }
     all
-}
-
-/// How many of a kit's pieces are in, as it is shown.
-pub(super) fn done(count: usize, shown: Shown) -> usize {
-    match shown {
-        Shown::Built => count,
-        Shown::Plan(fraction) => ((count as f32 * fraction.clamp(0.0, 1.0)) as usize).min(count),
-    }
 }
 
 /// A glTF's parts and the box round them, once it and its meshes have loaded.
@@ -175,78 +160,21 @@ fn resolve(
     })
 }
 
-/// Places a copy of a model for each door and window, in the order they go in: those
-/// in drawn as the model is, the next lit and the rest a ghost. The copies are children of
-/// the entity the build's other pieces are drawn on.
-pub(super) fn place(
-    commands: &mut Commands,
-    build: &mut Build,
-    laid: &[(&Kit, &[Piece])],
-    states: &[Vec<State>],
-) {
-    for entity in build.model_entities.drain(..) {
-        commands.entity(entity).despawn();
-    }
-    let Some(kit) = build.kit_pieces.clone() else {
-        return;
-    };
-    for (&(_, pieces), states) in laid.iter().zip(states) {
-        place_kit(commands, build, &kit, pieces, states);
-    }
-    // Doors and windows fitted into a build not the player's, as the kit sheet's; the
-    // player's are drawn, opened and shut by `props`.
-    if build.fitted_props && !build.by_plans {
-        let props: Vec<_> = build.base.props().copied().collect();
-        for prop in props {
-            let (_, parts) = super::props::parts(&kit, &build.base, &prop);
-            for (mesh, material, at) in parts {
-                let entity = commands
-                    .spawn((
-                        Mesh3d(mesh),
-                        MeshMaterial3d(material),
-                        at,
-                        ChildOf(build.pieces),
-                    ))
-                    .id();
-                build.model_entities.push(entity);
-            }
-        }
-    }
-}
-
-fn place_kit(
-    commands: &mut Commands,
-    build: &mut Build,
+/// A door's or window's parts, fitted to the opening a piece is, each with its material and
+/// where it goes in the base's own space.
+pub(super) fn fitted_parts(
     kit: &KitPieces,
-    pieces: &[Piece],
-    states: &[State],
-) {
-    for (piece, state) in pieces.iter().zip(states) {
-        // A door or window is not part of the plan: it is fitted into its opening once
-        // the building is up, so a plan or a building going up shows only the opening.
-        if matches!(piece, Piece::Opening { .. }) && !matches!(build.shown, Shown::Built) {
-            continue;
-        }
-        for (model, at) in fitted(kit, piece) {
-            for (mesh, material, _) in &model.parts {
-                let material = match state {
-                    State::In => material.clone(),
-                    State::Next => build.next_material.clone(),
-                    State::Ghost => build.ghost_material.clone(),
-                    State::Left => continue,
-                };
-                let entity = commands
-                    .spawn((
-                        Mesh3d(mesh.clone()),
-                        MeshMaterial3d(material),
-                        at,
-                        ChildOf(build.pieces),
-                    ))
-                    .id();
-                build.model_entities.push(entity);
-            }
-        }
-    }
+    piece: &Piece,
+) -> Vec<(Handle<Mesh>, Handle<StandardMaterial>, Transform)> {
+    fitted(kit, piece)
+        .into_iter()
+        .flat_map(|(model, at)| {
+            model
+                .parts
+                .iter()
+                .map(move |(mesh, material, _)| (mesh.clone(), material.clone(), at))
+        })
+        .collect()
 }
 
 /// The kit's door or window fitted to an opening's box, in the base's own space: each

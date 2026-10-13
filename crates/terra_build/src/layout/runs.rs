@@ -117,14 +117,11 @@ pub(super) fn gables(
 ) {
     let radius = kit.radius();
     // Each storey whose walls' top layer this row reaches.
-    let tops: BTreeSet<i32> = walls
-        .base
-        .cubes()
+    let tops: BTreeSet<i32> = super::Scope::row_cubes(walls.base, axis, row)
+        .into_iter()
         .map(|(at, _)| at)
         .filter(|&at| {
-            axis.row_of(at).0 == row
-                && at.y - wall_layer(storey_of(at.y)) == STOREY_CUBES - 1
-                && walls.runs(at, axis)
+            at.y - wall_layer(storey_of(at.y)) == STOREY_CUBES - 1 && walls.runs(at, axis)
         })
         .map(|at| storey_of(at.y))
         .collect();

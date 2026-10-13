@@ -69,13 +69,23 @@ pub enum Material {
     Dressed,
 }
 
-/// Surfaces by what they are drawn in.
+/// Surfaces by what they are drawn in; the second, whether what is drawn into them may
+/// share its corners ([`Surface::sharing`]).
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Surfaces(pub BTreeMap<Material, Surface>);
+pub struct Surfaces(pub BTreeMap<Material, Surface>, pub bool);
 
 impl Surfaces {
+    /// Surfaces whose long members share their corners, as a GPU draws best.
+    pub fn sharing() -> Surfaces {
+        Surfaces(BTreeMap::new(), true)
+    }
+
     pub fn of(&mut self, material: Material) -> &mut Surface {
-        self.0.entry(material).or_default()
+        let sharing = self.1;
+        self.0.entry(material).or_insert_with(|| Surface {
+            sharing,
+            ..Surface::default()
+        })
     }
 }
 
@@ -93,7 +103,8 @@ pub(crate) fn planar(point: Vec3, normal: Vec3, metres: [f32; 2]) -> [f32; 2] {
     [a / metres[0], b / metres[1]]
 }
 
-/// Triangles with flat faces: three entries per triangle, no shared corners.
+/// Triangles with flat faces: three entries per triangle, no shared corners; and, where
+/// it is `sharing`, the long members swept into it with their corners shared (`shared`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Surface {
     pub positions: Vec<Vec3>,
@@ -101,11 +112,50 @@ pub struct Surface {
     pub colours: Vec<[f32; 3]>,
     /// Where each corner falls on its texture, if it has one.
     pub uvs: Vec<[f32; 2]>,
+    /// Triangles whose corners are shared, drawn with the others.
+    pub shared: Indexed,
+    /// Whether a long member swept into it shares its corners (`shared`), rather than
+    /// giving each triangle its own: a sixth as many to send to the GPU.
+    pub sharing: bool,
 }
 
 impl Surface {
     pub fn triangle_count(&self) -> usize {
-        self.positions.len() / 3
+        self.positions.len() / 3 + self.shared.triangle_count()
+    }
+
+    /// All of it as shared corners: the loose triangles each their own three, after the
+    /// shared ones.
+    pub fn indexed(&self) -> Indexed {
+        let mut out = self.shared.clone();
+        let first = out.positions.len() as u32;
+        out.positions.extend(&self.positions);
+        out.normals.extend(&self.normals);
+        out.colours.extend(&self.colours);
+        if self.uvs.len() == self.positions.len() {
+            out.uvs.extend(&self.uvs);
+        } else {
+            out.uvs
+                .extend(std::iter::repeat_n([0.0; 2], self.positions.len()));
+        }
+        out.indices
+            .extend((0..self.positions.len() as u32).map(|i| first + i));
+        out
+    }
+
+    /// Another surface added to this one.
+    pub fn append(&mut self, other: Surface) {
+        if self.positions.is_empty() && self.shared.positions.is_empty() {
+            let sharing = self.sharing;
+            *self = other;
+            self.sharing = sharing;
+            return;
+        }
+        self.positions.extend(other.positions);
+        self.normals.extend(other.normals);
+        self.colours.extend(other.colours);
+        self.uvs.extend(other.uvs);
+        self.shared.append(other.shared);
     }
 
     /// Each corner's tangent for its normal map: the way its texture's U runs across its
@@ -198,6 +248,160 @@ impl Surface {
         self.normals.extend([normal; 6]);
         self.colours.extend([colour; 6]);
         self.uvs.extend([[0.0; 2]; 6]);
+    }
+}
+
+/// A surface with its corners shared between the triangles that meet at them, as a GPU
+/// draws it best: a sixth as many corners as a log's triangles have, and the indices of
+/// each triangle's three.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Indexed {
+    pub positions: Vec<Vec3>,
+    pub normals: Vec<Vec3>,
+    pub colours: Vec<[f32; 3]>,
+    pub uvs: Vec<[f32; 2]>,
+    pub indices: Vec<u32>,
+}
+
+impl Indexed {
+    pub fn triangle_count(&self) -> usize {
+        self.indices.len() / 3
+    }
+
+    /// Another's triangles added to these.
+    pub fn append(&mut self, other: Indexed) {
+        if self.positions.is_empty() {
+            *self = other;
+            return;
+        }
+        let first = self.positions.len() as u32;
+        self.positions.extend(other.positions);
+        self.normals.extend(other.normals);
+        self.colours.extend(other.colours);
+        self.uvs.extend(other.uvs);
+        self.indices
+            .extend(other.indices.into_iter().map(|i| first + i));
+    }
+
+    /// A corner, and its index.
+    pub(crate) fn corner(&mut self, p: Vec3, n: Vec3, uv: [f32; 2], colour: [f32; 3]) -> u32 {
+        self.positions.push(p);
+        self.normals.push(n);
+        self.uvs.push(uv);
+        self.colours.push(colour);
+        (self.positions.len() - 1) as u32
+    }
+
+    /// Each corner's tangent for its normal map, as [`Surface::tangents`] gives them, the
+    /// triangles meeting at a corner each giving theirs and the corner taking their sum.
+    pub fn tangents(&self) -> Vec<[f32; 4]> {
+        let mut u = vec![Vec3::ZERO; self.positions.len()];
+        let mut v = vec![Vec3::ZERO; self.positions.len()];
+        for t in self.indices.chunks_exact(3) {
+            let [a, b, c] = [t[0] as usize, t[1] as usize, t[2] as usize];
+            let (e1, e2) = (
+                self.positions[b] - self.positions[a],
+                self.positions[c] - self.positions[a],
+            );
+            let (du1, dv1) = (
+                self.uvs[b][0] - self.uvs[a][0],
+                self.uvs[b][1] - self.uvs[a][1],
+            );
+            let (du2, dv2) = (
+                self.uvs[c][0] - self.uvs[a][0],
+                self.uvs[c][1] - self.uvs[a][1],
+            );
+            let det = du1 * dv2 - du2 * dv1;
+            if det.abs() <= 1e-12 {
+                continue;
+            }
+            let r = 1.0 / det;
+            let (tu, tv) = ((e1 * dv2 - e2 * dv1) * r, (e2 * du1 - e1 * du2) * r);
+            for i in [a, b, c] {
+                u[i] += tu;
+                v[i] += tv;
+            }
+        }
+        self.normals
+            .iter()
+            .zip(u.iter().zip(&v))
+            .map(|(n, (u, v))| {
+                let t = (*u - *n * n.dot(*u)).normalize_or(n.any_orthonormal_vector());
+                let w = if n.cross(t).dot(*v) < 0.0 { -1.0 } else { 1.0 };
+                [t.x, t.y, t.z, w]
+            })
+            .collect()
+    }
+}
+
+/// FNV-1a over a corner's numbers' bits: quick, and it needs no crate.
+#[derive(Default)]
+pub(crate) struct Corners(u64);
+
+/// A hash map keyed quickly ([`Corners`]): for places and cubes, never for anything a
+/// stranger chooses.
+pub(crate) type QuickMap<K, V> =
+    std::collections::HashMap<K, V, std::hash::BuildHasherDefault<Corners>>;
+
+impl std::hash::Hasher for Corners {
+    fn finish(&self) -> u64 {
+        // The low bits of FNV are weak; folded so a table's buckets spread.
+        self.0 ^ (self.0 >> 29)
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = (self.0 ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    fn write_u32(&mut self, n: u32) {
+        self.0 = (self.0 ^ u64::from(n)).wrapping_mul(0x0100_0000_01b3);
+    }
+    fn write_i32(&mut self, n: i32) {
+        self.write_u32(n as u32);
+    }
+}
+
+impl Surface {
+    /// The same triangles with every corner that is the same in every way, place, normal,
+    /// colour and place on the texture, shared.
+    pub fn weld(&self) -> Indexed {
+        let mut out = Indexed::default();
+        let mut seen: std::collections::HashMap<
+            [u32; 11],
+            u32,
+            std::hash::BuildHasherDefault<Corners>,
+        > = std::collections::HashMap::with_capacity_and_hasher(
+            self.positions.len() / 3,
+            Default::default(),
+        );
+        out.indices.reserve(self.positions.len());
+        let textured = self.uvs.len() == self.positions.len();
+        for i in 0..self.positions.len() {
+            let (p, n, c) = (self.positions[i], self.normals[i], self.colours[i]);
+            let uv = if textured { self.uvs[i] } else { [0.0; 2] };
+            let key = [
+                p.x.to_bits(),
+                p.y.to_bits(),
+                p.z.to_bits(),
+                n.x.to_bits(),
+                n.y.to_bits(),
+                n.z.to_bits(),
+                c[0].to_bits(),
+                c[1].to_bits(),
+                c[2].to_bits(),
+                uv[0].to_bits(),
+                uv[1].to_bits(),
+            ];
+            let index = *seen.entry(key).or_insert_with(|| {
+                out.positions.push(p);
+                out.normals.push(n);
+                out.colours.push(c);
+                out.uvs.push(uv);
+                (out.positions.len() - 1) as u32
+            });
+            out.indices.push(index);
+        }
+        out
     }
 }
 

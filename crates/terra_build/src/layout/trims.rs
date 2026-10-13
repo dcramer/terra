@@ -14,9 +14,9 @@ use std::collections::BTreeSet;
 /// it a sill, unless the opening is at the foot of its wall, as a doorway is.
 pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mut Layout) {
     let mut holes: BTreeSet<(i32, i32)> = BTreeSet::new();
-    for (at, cube) in walls.base.cubes() {
-        let (on_row, along) = axis.row_of(at);
-        if on_row == row && super::drawn_fill(&cube) != Fill::Solid && walls.runs(at, axis) {
+    for (at, cube) in super::Scope::row_cubes(walls.base, axis, row) {
+        let (_, along) = axis.row_of(at);
+        if super::drawn_fill(&cube) != Fill::Solid && walls.runs(at, axis) {
             holes.insert((along, at.y));
         }
     }

@@ -82,7 +82,7 @@ fn show(
             Fitted { at, prop },
             Transform::from_translation(foot),
             Visibility::default(),
-            ChildOf(site.pieces),
+            ChildOf(site.root),
         ));
         if door {
             entity.insert(CanInteract(Interactable::Door));

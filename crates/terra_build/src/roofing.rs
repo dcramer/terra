@@ -132,7 +132,7 @@ impl Square {
                     corners,
                     [n; 3],
                     corners.map(|p| planar(p, n, texture)),
-                    [1.0; 3],
+                    r.tint,
                 );
             }
         }
@@ -696,7 +696,13 @@ mod tests {
         for style in [RoofStyle::Gable, RoofStyle::Hip, RoofStyle::LeanTo] {
             let kit = Kit::default();
             let mut pieces = Vec::new();
-            roofs::lay(&cabin(style), &kit, &Kits(vec![kit.clone()]), &mut pieces);
+            roofs::lay(
+                &cabin(style),
+                &kit,
+                &Kits(vec![kit.clone()]),
+                crate::layout::Scope::ALL,
+                &mut pieces,
+            );
             let mut surfaces = Surfaces::default();
             for piece in &pieces {
                 draw(piece, &kit, &mut surfaces);

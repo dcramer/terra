@@ -30,7 +30,7 @@ const SPLIT: f32 = 0.08;
 const SIDES: [IVec3; 4] = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z];
 
 /// Lays a deck over every cube of the kit's kind that is not in a wall.
-pub(super) fn decks(base: &Base, kit: &Kit, layout: &mut Layout) {
+pub(super) fn decks(base: &Base, kit: &Kit, scope: super::Scope, layout: &mut Layout) {
     let kind = kit.kind();
     let deck: BTreeSet<[i32; 3]> = base
         .cubes()
@@ -55,6 +55,13 @@ pub(super) fn decks(base: &Base, kit: &Kit, layout: &mut Layout) {
                     next.push(at + side);
                 }
             }
+        }
+        // Only a deck that reaches the scope is laid, but all of it.
+        let cells = region.iter().map(|&at| IVec3::from_array(at));
+        let low = cells.clone().reduce(IVec3::min).unwrap_or_default();
+        let high = cells.reduce(IVec3::max).unwrap_or_default();
+        if !scope.reaches(low, high) {
+            continue;
         }
         // Boards run on under a wall as far as its members' faces, where it stands on
         // something else beside the deck, as a footing.

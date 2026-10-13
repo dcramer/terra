@@ -47,6 +47,7 @@ pub mod relief;
 pub mod roofing;
 pub mod rooms;
 pub mod save;
+pub mod sections;
 pub mod support;
 pub mod surface;
 pub mod timber;
@@ -56,7 +57,7 @@ pub use cost::{Amount, Bill, PropKind, Rules, Terms};
 pub use cubes::{Cube, Cubes, Facing, Fill, Kind, PartId, Pending, Replacement, Shape, State};
 pub use example::example;
 pub use ground::{Ground, Sample};
-pub use mesh::{BaseMesh, Surface};
+pub use mesh::{BaseMesh, Indexed, Surface};
 pub use order::Progress;
 pub use walk::Walker;
 
@@ -746,6 +747,11 @@ impl Base {
                 if !self.roofs.values().any(|roof| roof.section == section) {
                     let mut roof = Roof::planned(section, None, Bill::default());
                     roof.stages.fill(ROOF_STAGES);
+                    // What it is drawn over is drawn again, as an operation's roof is.
+                    let top = wall_layer(section.storey()) + STOREY_CUBES - 1;
+                    for [x, z] in roof.cells() {
+                        self.cubes.mark(IVec3::new(x, top, z));
+                    }
                     self.roofs.insert(self.next_roof(), roof);
                     changed = true;
                 }

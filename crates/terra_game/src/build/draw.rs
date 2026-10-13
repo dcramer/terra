@@ -1,62 +1,184 @@
-//! Drawing a build from its cubes: the plain mesh of floors, roofs and walls with no kit,
-//! each kit's pieces, block kinds' surfaces (walls, floors and footings alike), glass, and
-//! stone steps from each door down to the ground. Moved out of `build.rs` whole; how pieces
-//! are laid stays with `terra_build`.
+//! Drawing a base's sections (docs/building-plan.md, drawing; D211): what `layout` laid
+//! and merged on the workers put on screen, a few sections a frame. Each section holds a
+//! mesh per kind and material of what is built, near; the next piece lit; a plan's pieces
+//! as ghosts, a unit box or prism each, all sharing one mesh and material so Bevy draws
+//! them as one batch; its doors and windows, fitted; and far off one mesh with its
+//! textures baked into its colours, coarser again further still, switched by distance
+//! with `VisibilityRange`, as Unreal's HLOD does. Near detail is made only for sections
+//! near the camera and dropped when the camera leaves them.
 
-use super::{Build, Shown, pieces, relief};
-use crate::planet::Planet;
-use crate::play::{Footprint, Steps};
+use super::layout::{Done, Drawing, Jobs, NEAR_DROP_M, NEAR_LOAD_M, Outcome};
+use super::store::{self, Drawn, Section, each};
+use super::{Build, BuildLook, Built, Site, pieces};
+use crate::planet::MainCamera;
 use bevy::{
-    asset::RenderAssetUsages, light::NotShadowCaster, prelude::*,
-    render::render_resource::PrimitiveTopology,
+    asset::RenderAssetUsages,
+    camera::visibility::VisibilityRange,
+    light::NotShadowCaster,
+    mesh::Indices,
+    prelude::*,
+    render::render_resource::{AsBindGroup, PrimitiveTopology},
+    shader::ShaderRef,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use terra_build::kit::{Kit, Kits, Pattern};
-use terra_build::layout::{self, Piece};
-use terra_build::surface::{Heights, Look};
-use terra_build::{Base, CELL_M, Fill, Kind, Surface};
-use terra_build::{Material, Surfaces};
+use terra_build::kit::Kits;
+use terra_build::layout::Piece;
+use terra_build::sections::{Drawn as Merged, Ghost, Shape, Stage};
+use terra_build::{Kind, Material, Prop, Surface};
 
-/// How far a block kind's floors' flagstones stand out, as a fraction of its walls' stone:
-/// flatter, as they are walked on.
-const FLOOR_RELIEF: f32 = 0.3;
+/// Where each detail is seen, in metres from a section's middle, each fading into the
+/// next over a margin: near detail to here, far to `FAR_M`, the proxy to `PROXY_M`.
+pub(super) const NEAR_M: f32 = 60.0;
+const FAR_M: f32 = 180.0;
+const PROXY_M: f32 = 600.0;
+/// How far a plan's ghosts are seen.
+const GHOST_M: f32 = 90.0;
+/// Half the margin each detail fades over, as a share of where it changes.
+const FADE: f32 = 0.06;
 
-fn to_mesh(surface: &Surface) -> Option<Mesh> {
-    if surface.positions.is_empty() {
-        return None;
+fn fade(at: f32) -> std::ops::Range<f32> {
+    at * (1.0 - FADE)..at * (1.0 + FADE)
+}
+
+/// Near detail: from the camera to `NEAR_M`.
+fn near_range() -> VisibilityRange {
+    VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: fade(NEAR_M),
+        use_aabb: false,
     }
-    // The base's colours are as they should look on screen; a mesh wants them linear.
-    // Runs of corners share a colour, a log's or a face's, so each is turned once.
-    let mut last: Option<([f32; 3], [f32; 4])> = None;
-    let colours: Vec<[f32; 4]> = surface
-        .colours
-        .iter()
-        .map(|c| match last {
-            Some((from, to)) if from == *c => to,
-            _ => {
-                let to = Color::srgb(c[0], c[1], c[2]).to_linear().to_f32_array();
-                last = Some((*c, to));
-                to
-            }
-        })
-        .collect();
-    let mut mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, surface.positions.clone())
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, surface.normals.clone())
-    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours);
-    // Textured: where each corner falls on its texture, and the tangents its normal map
-    // needs, worked out per triangle (`Surface::tangents`), as MikkTSpace took a tenth of a
-    // second on a cabin.
-    if surface.uvs.len() == surface.positions.len() {
-        mesh = mesh
-            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, surface.uvs.clone())
-            .with_inserted_attribute(Mesh::ATTRIBUTE_TANGENT, surface.tangents());
+}
+
+/// Far detail: from where near detail ends, or from the camera while a section has none.
+fn far_range(after_near: bool) -> VisibilityRange {
+    VisibilityRange {
+        start_margin: if after_near { fade(NEAR_M) } else { 0.0..0.0 },
+        end_margin: fade(FAR_M),
+        use_aabb: false,
     }
-    Some(mesh)
+}
+
+fn proxy_range() -> VisibilityRange {
+    VisibilityRange {
+        start_margin: fade(FAR_M),
+        end_margin: fade(PROXY_M),
+        use_aabb: false,
+    }
+}
+
+fn ghost_range() -> VisibilityRange {
+    VisibilityRange::abrupt(0.0, GHOST_M)
+}
+
+/// A plan's pieces not yet built, as a blueprint in the air (`shaders/ghost.wesl`): a faint
+/// colour, each shape's edges drawn as lines and its outline brighter.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct GhostMaterial {
+    #[uniform(0)]
+    colour: LinearRgba,
+    /// How much an edge line and an outline add to how opaque it is.
+    #[uniform(0)]
+    edge: f32,
+    #[uniform(0)]
+    rim: f32,
+}
+
+impl bevy::pbr::Material for GhostMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/ghost.wesl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Blend
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+}
+
+/// What builds are drawn with beside their kits' materials: what no kit draws, glass, a
+/// plan's ghosts in two shades and its shell, the next piece lit, far off sections in
+/// their baked colours; and the shapes a ghost is drawn as.
+#[derive(Clone)]
+pub(super) struct Looks {
+    structure: Handle<StandardMaterial>,
+    glass: Handle<StandardMaterial>,
+    ghost: [Handle<GhostMaterial>; 2],
+    shell: Handle<GhostMaterial>,
+    pub next: Handle<StandardMaterial>,
+    far: Handle<StandardMaterial>,
+    cube: Handle<Mesh>,
+    prism: Handle<Mesh>,
+}
+
+/// A plan's ghosts' colour: a pale blue, clear enough to see what is built through it.
+/// Brighter than white, as its lines glow a little.
+const GHOST: [f32; 3] = [0.5, 0.75, 1.0];
+
+impl Looks {
+    pub fn new(
+        meshes: &mut Assets<Mesh>,
+        materials: &mut Assets<StandardMaterial>,
+        ghosts: Option<&mut Assets<GhostMaterial>>,
+    ) -> Self {
+        let mut ghosts = ghosts;
+        let mut ghost = |shade: f32, alpha: f32, edge: f32| {
+            ghosts.as_mut().map_or_else(Handle::default, |ghosts| {
+                ghosts.add(GhostMaterial {
+                    colour: Color::srgba(
+                        GHOST[0] * shade,
+                        GHOST[1] * shade,
+                        GHOST[2] * shade,
+                        alpha,
+                    )
+                    .into(),
+                    edge,
+                    rim: 0.25,
+                })
+            })
+        };
+        Looks {
+            ghost: [ghost(1.0, 0.07, 0.55), ghost(0.85, 0.07, 0.55)],
+            shell: ghost(1.0, 0.05, 0.45),
+            structure: materials.add(StandardMaterial {
+                perceptual_roughness: 0.82,
+                reflectance: 0.3,
+                ..default()
+            }),
+            glass: materials.add(StandardMaterial {
+                base_color: Color::srgba(0.62, 0.86, 0.95, 0.3),
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: 0.06,
+                reflectance: 0.7,
+                cull_mode: None,
+                double_sided: true,
+                ..default()
+            }),
+            next: materials.add(StandardMaterial {
+                base_color: Color::srgba(1.0, 0.78, 0.35, 0.75),
+                emissive: LinearRgba::rgb(0.6, 0.35, 0.05),
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            }),
+            far: materials.add(StandardMaterial {
+                perceptual_roughness: 0.88,
+                reflectance: 0.25,
+                ..default()
+            }),
+            cube: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+            // Eight sides round, along X as a log lies.
+            prism: meshes.add(
+                Mesh::from(Cylinder::new(0.5, 1.0).mesh().resolution(8))
+                    .rotated_by(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+            ),
+        }
+    }
 }
 
 /// Each kit's materials, from its textures (D14), so two timber kinds can differ in bark:
@@ -71,8 +193,9 @@ pub(super) struct KitMaterials {
 
 impl KitMaterials {
     /// A kind's material, or the first kit's for no kind.
-    fn get(&self, kind: Option<Kind>, material: Material) -> Option<&Handle<StandardMaterial>> {
-        kind.and_then(|kind| self.by_kind.get(&(kind, material)))
+    fn get(&self, kind: Kind, material: Material) -> Option<&Handle<StandardMaterial>> {
+        self.by_kind
+            .get(&(kind, material))
             .or_else(|| self.first.get(&material))
     }
 }
@@ -129,482 +252,410 @@ pub(super) fn kit_materials(
     Arc::new(out)
 }
 
-/// Rebuilds everything drawn for a build from its current shape.
-pub(super) fn redraw(
-    commands: &mut Commands,
-    site: &mut Build,
-    planet: &Planet,
-    meshes: &mut Assets<Mesh>,
-) {
-    site.drawn = site.revision;
-    site.stale = false;
-    // The player's base is drawn by what each cube holds: what is in solid, what is
-    // planned as the ghost, the next lit. Anything else is drawn whole, or, on the kit
-    // sheet, as far in as it is shown.
-    let by_cubes = site.fitted_props && site.shown == Shown::Built;
-    let (in_view, planned) = if by_cubes {
-        (
-            site.base.view(
-                |cube| cube.is_in() || cube.fill == Fill::Open,
-                |roof| roof.standing(),
-            ),
-            Some(site.base.view(
-                |cube| !cube.is_in() && cube.fill != Fill::Open,
-                |roof| !roof.standing(),
-            )),
-        )
-    } else {
-        (site.base.clone(), None)
-    };
-    let (mesh, states) = match site.kits.clone() {
-        Some(kits) => {
-            let mesh = in_view.mesh_for_kits(&kits);
-            let layouts: Vec<layout::Layout> = kits
-                .0
-                .iter()
-                .map(|kit| layout::lay_among(&site.base, kit, &kits))
-                .collect();
-            let laid: Vec<(&Kit, &[Piece])> = kits
-                .0
-                .iter()
-                .zip(&layouts)
-                .map(|(kit, layout)| (kit, layout.pieces.as_slice()))
-                .collect();
-            let states: Vec<Vec<State>> = laid
-                .iter()
-                .map(|&(_, pieces)| states(pieces, site, by_cubes))
-                .collect();
-            pieces::place(commands, site, &laid, &states);
-            site.standing = match site.shown {
-                Shown::Built => None,
-                shown => Some(site.base.standing(
-                    laid.iter().flat_map(|&(_, pieces)| {
-                        pieces[..pieces::done(pieces.len(), shown)].iter()
-                    }),
-                    false,
-                )),
-            };
-            let drawn = draw_pieces(&laid, &states, &site.base, site.reliefs.as_deref());
-            (mesh, drawn)
-        }
-        None => {
-            pieces::place(commands, site, &[], &[]);
-            site.standing = None;
-            (in_view.mesh(|_| None), Default::default())
-        }
-    };
-    // Planned floors, roofs and walls with no kit, as the ghost.
-    let planned_mesh = planned.map(|planned| match site.kits.as_deref() {
-        Some(kits) => planned.mesh_for_kits(kits),
-        None => planned.mesh(|_| None),
-    });
-    // What is drawn in each material, built and planned: a mesh for each, under the
-    // entity the pieces are drawn on.
-    for entity in site.textured_entities.drain(..) {
-        commands.entity(entity).despawn();
-    }
-    let (mut placed, mut ghost, next) = states;
-    // Stone steps from each door down to the ground, in the footings' own stone.
-    let frame = site.frame;
-    site.flights = layout::ground::flights(&site.base, |at| {
-        -planet.distance(frame.transform_point(at.with_y(0.0)))
-    });
-    if let Some(kits) = site.kits.as_deref()
-        && let Some(stone) = super::footing_kind(kits).and_then(|kind| kits.of(kind))
-    {
-        let steps = draw_steps(&site.flights, stone, site.reliefs.as_deref());
-        let own = placed.entry(stone.kind()).or_default();
-        *own = joined(std::mem::take(own), steps);
-    }
-    if let Some(planned) = planned_mesh {
-        let mut plain = Surfaces::default();
-        *plain.of(Material::Plain) = planned.structure;
-        let mut planned = joined(planned.textured, plain);
-        // In the ghost's own blue, as the kit's pieces not yet in are.
-        for surface in planned.0.values_mut() {
-            surface.colours.fill(GHOST);
-        }
-        ghost = joined(ghost, planned);
-    }
-    // What is built in each kind's own materials, and the rest in the first kit's.
-    let built = std::iter::once((None, &mesh.textured)).chain(
-        placed
-            .iter()
-            .map(|(kind, surfaces)| (Some(*kind), surfaces)),
-    );
-    for (kind, surfaces, state) in built
-        .map(|(kind, surfaces)| (kind, surfaces, 0))
-        .chain([(None, &ghost, 1), (None, &next, 2)])
-    {
-        for (material, surface) in &surfaces.0 {
-            let Some(drawn) = to_mesh(surface) else {
-                continue;
-            };
-            let look = match state {
-                1 => site.ghost_material.clone(),
-                2 => site.next_material.clone(),
-                _ => site
-                    .materials
-                    .get(kind, *material)
-                    .cloned()
-                    .unwrap_or_else(|| site.plain_material.clone()),
-            };
-            let entity = commands
-                .spawn((
-                    Mesh3d(meshes.add(drawn)),
-                    MeshMaterial3d(look),
-                    Transform::IDENTITY,
-                    ChildOf(site.pieces),
-                ))
-                .id();
-            if state == 1 {
-                commands.entity(entity).insert(NotShadowCaster);
-            }
-            site.textured_entities.push(entity);
-        }
-    }
-    let mut show = |entity: Entity, mesh: Option<Mesh>| {
-        match mesh {
-            Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
-            None => commands.entity(entity).remove::<Mesh3d>(),
-        };
-    };
-    show(site.structure, to_mesh(&mesh.structure));
-    show(site.glass, to_mesh(&mesh.glass));
+/// A section ready to put on screen, made on a worker: its meshes, about its middle.
+pub(super) struct Parts {
+    near: Vec<(Kind, Material, Mesh)>,
+    plain: Option<Mesh>,
+    glass: Option<Mesh>,
+    next: Vec<Mesh>,
+    shell: Option<Mesh>,
+    ghosts: Vec<Ghost>,
+    far: Option<Mesh>,
+    proxy: Option<Mesh>,
+    openings: Vec<(Piece, Stage)>,
+    centre: Vec3,
+}
 
-    site.footprint = Footprint {
-        frame: site.frame,
-        cell_m: CELL_M,
-        ground: site.base.ground_columns().collect(),
-        standing: site.base.occupied_columns().collect(),
-        steps: site
-            .flights
+/// Turns a section drawn into meshes, about its middle.
+pub(super) fn parts(drawn: Merged, centre: Vec3) -> Parts {
+    let textured = |surface: &Surface| mesh(surface, centre, Uvs::Mapped);
+    let plain = |surface: &Surface| mesh(surface, centre, Uvs::None);
+    Parts {
+        near: drawn
+            .near
             .iter()
-            .map(|flight| Steps {
-                top: flight.top,
-                outward: flight.outward,
-                length: flight.length,
-                width: flight.width,
+            .filter_map(|(&(kind, material), surface)| {
+                textured(surface).map(|mesh| (kind, material, mesh))
             })
             .collect(),
-    };
-}
-
-/// Colour of a plan's pieces not yet in: each a shade apart, so they can be counted.
-const GHOST: [f32; 3] = [0.62, 0.84, 1.0];
-
-/// The kits' pieces as surfaces by material: those in, by their kind, each drawn in its
-/// own kit's materials; those still a ghost, and the next to go in, which are drawn alike
-/// whatever their kind. Doors and windows are props, placed apart.
-fn draw_pieces(
-    laid: &[(&Kit, &[Piece])],
-    states: &[Vec<State>],
-    base: &Base,
-    reliefs: Option<&relief::Reliefs>,
-) -> (BTreeMap<Kind, Surfaces>, Surfaces, Surfaces) {
-    let mut placed = BTreeMap::new();
-    let (mut ghost, mut next) = (Surfaces::default(), Surfaces::default());
-    for (&(kit, pieces), states) in laid.iter().zip(states) {
-        let shape = relief::of(reliefs, kit);
-        let [p, g, n] = draw_kit(pieces, kit, states, shape);
-        let top = relief::of_top(reliefs, kit);
-        let [bp, bg, bn] = draw_blocks(pieces, kit, states, base, shape, top);
-        let own: &mut Surfaces = placed.entry(kit.kind()).or_default();
-        *own = joined(std::mem::take(own), joined(p, bp));
-        ghost = joined(ghost, joined(g, bg));
-        next = joined(next, joined(n, bn));
-    }
-    (placed, ghost, next)
-}
-
-/// A block kind's look as its surface is drawn (D197): from its kit, its tops in its
-/// `Floor` material where it has one.
-fn block_look(kit: &Kit) -> Look {
-    let metres = |material: Material| kit.textures.get(&material).map(|t| t.metres);
-    Look {
-        bevel: kit.bevel,
-        relief: kit.relief,
-        steps: SURFACE_STEPS,
-        metres: metres(Material::Masonry).unwrap_or([2.0, 2.0]),
-        top: metres(Material::Floor).map(|metres| (metres, kit.relief * FLOOR_RELIEF)),
+        plain: plain(&drawn.plain),
+        glass: plain(&drawn.glass),
+        next: drawn.next.0.values().filter_map(plain).collect(),
+        shell: mesh(&drawn.shell, centre, Uvs::Only),
+        ghosts: drawn.ghosts,
+        far: plain(&drawn.far),
+        proxy: plain(&drawn.proxy),
+        openings: drawn.openings,
+        centre,
     }
 }
 
-/// Flights of steps, each step a slab of a block kind's material, drawn as its surface.
-fn draw_steps(
-    flights: &[layout::ground::Flight],
-    kit: &Kit,
-    reliefs: Option<&relief::Reliefs>,
-) -> Surfaces {
-    let look = block_look(kit);
-    let (sides, top) = (relief::of(reliefs, kit), relief::of_top(reliefs, kit));
-    let sides = |uv: [f32; 2]| sides.map_or(0.5, |relief| relief.at(uv));
-    let top = |uv: [f32; 2]| top.map_or(0.5, |relief| relief.at(uv));
-    let heights = Heights {
-        sides: &sides,
-        top: &top,
-    };
-    let mut out = Surfaces::default();
-    let (mut faces, mut tops) = (Surface::default(), Surface::default());
-    for &(min, max) in flights.iter().flat_map(|flight| &flight.steps) {
-        terra_build::surface::slab(min, max, &look, &heights, [1.0; 3], &mut faces, &mut tops);
-    }
-    *out.of(Material::Masonry) = faces;
-    *out.of(Material::Floor) = tops;
-    out
+/// What a mesh is given of where its corners fall on a texture.
+#[derive(Clone, Copy, PartialEq)]
+enum Uvs {
+    None,
+    /// Where, for a ghost's lines.
+    Only,
+    /// Where, and the tangents a normal map needs.
+    Mapped,
 }
 
-/// Two sets of surfaces as one.
-fn joined(mut a: Surfaces, b: Surfaces) -> Surfaces {
-    for (material, surface) in b.0 {
-        let to = a.of(material);
-        to.positions.extend(surface.positions);
-        to.normals.extend(surface.normals);
-        to.colours.extend(surface.colours);
-        to.uvs.extend(surface.uvs);
+/// A surface as a mesh about a point, its corners shared, its colours linear.
+fn mesh(surface: &Surface, centre: Vec3, uvs: Uvs) -> Option<Mesh> {
+    let all = surface.indexed();
+    if all.indices.is_empty() {
+        return None;
     }
-    a
-}
-
-/// A block kind's cubes as its surface (D197): those in, those not yet, and the next, each
-/// closed where it meets the others but for what is already built.
-fn draw_blocks(
-    pieces: &[Piece],
-    kit: &Kit,
-    states: &[State],
-    base: &Base,
-    relief: Option<&terra_build::relief::Relief>,
-    top: Option<&terra_build::relief::Relief>,
-) -> [Surfaces; 3] {
-    if kit.pattern != Pattern::Masonry {
-        return Default::default();
-    }
-    let mut sets: [std::collections::BTreeSet<[i32; 3]>; 3] = Default::default();
-    // A gable's cubes, with the roof's underside over each, which cuts them.
-    let mut gables: BTreeMap<[i32; 3], [[i32; 3]; 3]> = BTreeMap::new();
-    for (piece, state) in pieces.iter().zip(states) {
-        let cube = match piece {
-            Piece::Block { cube } => cube,
-            Piece::Gable { cube, under } => {
-                gables.insert(cube.to_array(), *under);
-                cube
-            }
-            _ => continue,
-        };
-        let set = match state {
-            State::In => 0,
-            State::Next => 2,
-            State::Ghost => 1,
-            State::Left => continue,
-        };
-        sets[set].insert(cube.to_array());
-    }
-    let cut = |cube: IVec3, at: Vec3| {
-        gables
-            .get(&cube.to_array())
-            .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at))
-    };
-    let look = block_look(kit);
-    let sides = |uv: [f32; 2]| relief.map_or(0.5, |relief| relief.at(uv));
-    let top = |uv: [f32; 2]| top.map_or(0.5, |relief| relief.at(uv));
-    let heights = Heights {
-        sides: &sides,
-        top: &top,
-    };
-    // Floors, and walls of kinds drawn as boxes, hide a face; walls of other kits do not,
-    // being thinner than the cube.
-    let hides_always = |at: IVec3| {
-        base.cube(at).is_some_and(|cube| {
-            cube.fill != terra_build::Fill::Open
-                && cube.kind != kit.kind()
-                && (!base.in_wall(at) || cube.kind == Kind::PLAIN)
-        })
-    };
-    let mut out: [Surfaces; 3] = Default::default();
-    for (set, colour) in [(0, [1.0; 3]), (1, GHOST), (2, [1.0; 3])] {
-        // What is built hides what is not; the rest show their own faces.
-        let built = &sets[0];
-        let hides = |at: IVec3| hides_always(at) || (set != 0 && built.contains(&at.to_array()));
-        let mut tops = Surface::default();
-        terra_build::surface::draw_cut(
-            &sets[set],
-            &hides,
-            &look,
-            &heights,
-            &cut,
-            colour,
-            out[set].of(Material::Masonry),
-            &mut tops,
-        );
-        *out[set].of(Material::Floor) = tops;
-    }
-    out
-}
-
-/// How finely a block kind's cube faces are divided: a step every 5 cm or so.
-const SURFACE_STEPS: u32 = 10;
-
-/// One kit's pieces: those in, those not yet, and the next. `face` is the height map its
-/// logs' bark stands out by, once read.
-fn draw_kit(
-    pieces: &[Piece],
-    kit: &Kit,
-    states: &[State],
-    face: Option<&terra_build::relief::Relief>,
-) -> [Surfaces; 3] {
-    let [mut placed, mut ghost, mut next] = [
-        Surfaces::default(),
-        Surfaces::default(),
-        Surfaces::default(),
-    ];
-    for (index, (piece, state)) in pieces.iter().zip(states).enumerate() {
-        let surfaces = match state {
-            State::In => &mut placed,
-            State::Next => &mut next,
-            State::Ghost => &mut ghost,
-            State::Left => continue,
-        };
-        let before: BTreeMap<Material, usize> = surfaces
-            .0
-            .iter()
-            .map(|(material, surface)| (*material, surface.colours.len()))
-            .collect();
-        let plain = *state == State::Ghost;
-        terra_build::draw::draw_as(piece, kit, face, plain, surfaces);
-        if *state == State::Ghost {
-            let shade = if index % 2 == 0 { 1.0 } else { 0.86 };
-            let colour = GHOST.map(|c| c * shade);
-            for (material, surface) in surfaces.0.iter_mut() {
-                let from = before.get(material).copied().unwrap_or(0);
-                surface.colours[from..].fill(colour);
-            }
-        }
-    }
-    [placed, ghost, next]
-}
-
-/// How far a piece is in, as it is drawn.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum State {
-    In,
-    /// What goes in next, lit.
-    Next,
-    /// Not yet in: the ghost.
-    Ghost,
-    /// Not drawn: a door or window, which is a prop fitted into its opening.
-    Left,
-}
-
-/// How far each of a kit's pieces is in: by the cubes it stands in, on the player's base;
-/// as far as the kit sheet shows it, in the order they go in; or all of it.
-fn states(pieces: &[Piece], build: &Build, by_cubes: bool) -> Vec<State> {
-    let opening = |piece: &Piece| build.fitted_props && matches!(piece, Piece::Opening { .. });
-    if !by_cubes {
-        let done = pieces::done(pieces.len(), build.shown);
-        return pieces
-            .iter()
-            .enumerate()
-            .map(|(index, piece)| match index.cmp(&done) {
-                _ if opening(piece) => State::Left,
-                std::cmp::Ordering::Less => State::In,
-                std::cmp::Ordering::Equal => State::Next,
-                std::cmp::Ordering::Greater => State::Ghost,
-            })
-            .collect();
-    }
-    pieces
+    // The base's colours are as they should look on screen; a mesh wants them linear.
+    // Runs of corners share a colour, a log's or a face's, so each is turned once.
+    let mut last: Option<([f32; 3], [f32; 4])> = None;
+    let colours: Vec<[f32; 4]> = all
+        .colours
         .iter()
-        .map(|piece| {
-            if opening(piece) {
-                return State::Left;
-            }
-            // A piece of roof is up with its cell's stage; the stage after is next once
-            // nothing of the walls is.
-            if let Some(cell) = piece.roof_cell() {
-                let stage = build
-                    .base
-                    .roof(cell.roof)
-                    .and_then(|roof| roof.stage(cell.cell))
-                    .unwrap_or(0);
-                return if stage >= cell.stage {
-                    State::In
-                } else if stage + 1 == cell.stage && build.next.is_empty() {
-                    State::Next
-                } else {
-                    State::Ghost
-                };
-            }
-            let (is_in, cubes) = piece_in(&build.base, piece);
-            if is_in {
-                State::In
-            } else if cubes.iter().any(|at| build.next.contains(at)) {
-                State::Next
-            } else {
-                State::Ghost
+        .map(|c| match last {
+            Some((from, to)) if from == *c => to,
+            _ => {
+                let to = Color::srgb(c[0], c[1], c[2]).to_linear().to_f32_array();
+                last = Some((*c, to));
+                to
             }
         })
-        .collect()
+        .collect();
+    let positions: Vec<Vec3> = all.positions.iter().map(|p| *p - centre).collect();
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, all.normals.clone())
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours);
+    if uvs == Uvs::Mapped {
+        mesh = mesh.with_inserted_attribute(Mesh::ATTRIBUTE_TANGENT, all.tangents());
+    }
+    if uvs != Uvs::None {
+        mesh = mesh.with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, all.uvs);
+    }
+    Some(mesh.with_inserted_indices(Indices::U32(all.indices)))
 }
 
-/// How far a cube must be filled, in sixteenths, for a piece to be in it: up to the middle
-/// of the part of the piece within it, so a log is in once the fill reaches its middle.
-const SLIVER_M: f32 = 0.05;
-
-/// Whether a piece is in, by the cubes it stands in, and those cubes.
-fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
-    let point_cube = |point: Vec3| (point / CELL_M).floor().as_ivec3();
-    let Some((min, max)) = piece.bounds() else {
-        return (true, Vec::new());
-    };
-    let low = ((min + SLIVER_M) / CELL_M).floor().as_ivec3();
-    let high = ((max - SLIVER_M) / CELL_M).floor().as_ivec3();
-    let mut cubes = Vec::new();
-    let mut is_in = true;
-    for x in low.x..=high.x {
-        for y in low.y..=high.y {
-            for z in low.z..=high.z {
-                let at = IVec3::new(x, y, z);
-                let bottom = y as f32 * CELL_M;
-                let (from, to) = (min.y.max(bottom), max.y.min(bottom + CELL_M));
-                let middle = ((from + to) * 0.5 - bottom) / CELL_M;
-                let needed = (middle * 16.0).ceil().clamp(1.0, 16.0) as u8;
-                // Only the cubes it stands in count: not air its rough edge
-                // reaches into, nor an opening it frames, nor one being carved.
-                let Some(cube) = base
-                    .cube(at)
-                    .filter(|cube| layout::drawn_fill(cube) != Fill::Open)
-                else {
-                    continue;
-                };
-                is_in &= cube.level() >= needed;
-                cubes.push(at.to_array());
-            }
-        }
+pub fn plugin(app: &mut App) {
+    // Only where things are drawn: a run with no renderer has no materials.
+    if app.is_plugin_added::<bevy::pbr::PbrPlugin>() {
+        app.add_plugins(MaterialPlugin::<GhostMaterial>::default());
     }
-    if cubes.is_empty() {
-        // Flat, as a floor's boards on its top, or over a wall's top, as a gable is: in
-        // with the first cube under it.
-        let mut at = point_cube((min + max) * 0.5 - Vec3::Y * 0.01);
-        for _ in 0..terra_build::STOREY_CUBES * 2 {
-            if base.cube(at).is_some() {
-                break;
-            }
-            at -= IVec3::Y;
-        }
-        let is_in = base.cube(at).is_none_or(|cube| cube.is_in());
-        return (is_in, vec![at.to_array()]);
-    }
-    (is_in, cubes)
+    app.add_systems(Update, (upload, stream).chain().in_set(Drawing::Upload));
 }
 
-/// Draws the player's base again whenever it has changed since it was last drawn.
-pub(super) fn redraw_changed(
+/// How many corners are put on screen a frame, at most, beyond the first section: a
+/// section near is a few hundred thousand, far a few thousand.
+const UPLOAD_CORNERS: usize = 200_000;
+
+/// Puts what the workers have laid on screen, a few sections a frame.
+fn upload(
     mut commands: Commands,
-    mut site: ResMut<super::Site>,
-    planet: Res<Planet>,
+    mut jobs: ResMut<Jobs>,
+    look: Res<BuildLook>,
+    options: Res<crate::shell::Options>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut site: ResMut<Site>,
+    mut builds: Query<&mut Built>,
 ) {
-    if site.drawn != site.revision || site.stale {
-        redraw(&mut commands, &mut site, &planet, &mut meshes);
+    let all = options.scripted() && !options.bench;
+    let mut corners = 0;
+    while let Some(done) = jobs.ready.pop_front() {
+        let size = match &done.outcome {
+            Outcome::Drawn { parts, .. } => parts.corners(),
+            Outcome::Same => 0,
+        };
+        if !all && corners > 0 && corners + size > UPLOAD_CORNERS {
+            jobs.ready.push_front(done);
+            break;
+        }
+        corners += size;
+        let Some(build) = each(&mut site, &mut builds).find(|build| build.root == done.root) else {
+            continue;
+        };
+        show(&mut commands, &mut meshes, &look, build, done);
+    }
+    let waiting = each(&mut site, &mut builds).all(|build| build.sections.waiting.is_empty());
+    jobs.settle(waiting);
+}
+
+impl Parts {
+    /// Whether nothing of it is drawn.
+    fn is_empty(&self) -> bool {
+        self.corners() == 0 && self.ghosts.is_empty() && self.openings.is_empty()
+    }
+
+    /// How many corners its meshes have.
+    fn corners(&self) -> usize {
+        let count = |mesh: &Mesh| mesh.count_vertices();
+        self.near
+            .iter()
+            .map(|(_, _, mesh)| count(mesh))
+            .sum::<usize>()
+            + self.next.iter().map(count).sum::<usize>()
+            + [
+                &self.plain,
+                &self.glass,
+                &self.shell,
+                &self.far,
+                &self.proxy,
+            ]
+            .into_iter()
+            .flatten()
+            .map(count)
+            .sum::<usize>()
+    }
+}
+
+/// Puts a section laid on screen, in place of what was drawn of it.
+fn show(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    look: &BuildLook,
+    build: &mut Build,
+    done: Done,
+) {
+    // An answer to an older job is dropped: the section has been sent again since.
+    if build.sections.tickets.get(&done.section) != Some(&done.ticket) {
+        return;
+    }
+    let Outcome::Drawn {
+        key, near, parts, ..
+    } = done.outcome
+    else {
+        // Laid as it was: drawn as it is, and no longer being laid.
+        if let Some(drawn) = build.sections.drawn.get_mut(&done.section) {
+            drawn.ticket = done.ticket;
+        }
+        return;
+    };
+    if let Some(entity) = build
+        .sections
+        .drawn
+        .remove(&done.section)
+        .and_then(|old| old.entity)
+    {
+        commands.entity(entity).despawn();
+    }
+    let at = IVec3::from_array(done.section);
+    // Nothing in it: nothing drawn, but what it was laid as kept.
+    if parts.is_empty() {
+        build.sections.drawn.insert(
+            done.section,
+            Drawn {
+                entity: None,
+                ticket: done.ticket,
+                key,
+                near,
+                near_parts: Vec::new(),
+                far: Vec::new(),
+            },
+        );
+        return;
+    }
+    let looks = &look.looks;
+    let entity = commands
+        .spawn((
+            Name::new(format!("Section {at}")),
+            Section { at },
+            Transform::from_translation(parts.centre),
+            Visibility::default(),
+            ChildOf(build.root),
+        ))
+        .id();
+    let mut near_parts = Vec::new();
+    let mut far = Vec::new();
+    let mut add = |bundle: (Mesh3d, MeshMaterial3d<StandardMaterial>, VisibilityRange),
+                   shadow: bool| {
+        let mut child = commands.spawn((bundle, Transform::IDENTITY, ChildOf(entity)));
+        if !shadow {
+            child.insert(NotShadowCaster);
+        }
+        child.id()
+    };
+    for (kind, material, mesh) in parts.near {
+        let material = look
+            .materials
+            .get(kind, material)
+            .cloned()
+            .unwrap_or_else(|| looks.structure.clone());
+        near_parts.push(add(
+            (
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(material),
+                near_range(),
+            ),
+            true,
+        ));
+    }
+    for mesh in parts.next {
+        near_parts.push(add(
+            (
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(looks.next.clone()),
+                near_range(),
+            ),
+            true,
+        ));
+    }
+    if let Some(mesh) = parts.plain {
+        far.push(add(
+            (
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(looks.structure.clone()),
+                VisibilityRange::abrupt(0.0, FAR_M),
+            ),
+            true,
+        ));
+    }
+    if let Some(mesh) = parts.glass {
+        add(
+            (
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(looks.glass.clone()),
+                VisibilityRange::abrupt(0.0, FAR_M),
+            ),
+            false,
+        );
+    }
+    if let Some(mesh) = parts.far {
+        far.push(add(
+            (
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(looks.far.clone()),
+                far_range(near),
+            ),
+            true,
+        ));
+    }
+    if let Some(mesh) = parts.proxy {
+        add(
+            (
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(looks.far.clone()),
+                proxy_range(),
+            ),
+            true,
+        );
+    }
+    if let Some(mesh) = parts.shell {
+        commands.spawn((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(looks.shell.clone()),
+            ghost_range(),
+            NotShadowCaster,
+            Transform::IDENTITY,
+            ChildOf(entity),
+        ));
+    }
+    // A plan's pieces, each a unit shape stretched over it: one mesh and two materials
+    // for them all, which Bevy batches.
+    for ghost in &parts.ghosts {
+        let shape = match ghost.shape {
+            Shape::Box => looks.cube.clone(),
+            Shape::Round => looks.prism.clone(),
+        };
+        commands.spawn((
+            Mesh3d(shape),
+            MeshMaterial3d(looks.ghost[usize::from(ghost.shade)].clone()),
+            Transform {
+                translation: ghost.centre - parts.centre,
+                rotation: ghost.rotation,
+                scale: ghost.size,
+            },
+            ghost_range(),
+            NotShadowCaster,
+            ChildOf(entity),
+        ));
+    }
+    // Doors and windows the kit draws in its openings, and the props fitted into a build
+    // that is not the player's.
+    if let Some(kit) = look.kit_pieces.as_deref() {
+        for (piece, stage) in &parts.openings {
+            for (mesh, material, placed) in pieces::fitted_parts(kit, piece) {
+                let mut part = commands.spawn((
+                    Mesh3d(mesh),
+                    Transform::from_translation(-parts.centre) * placed,
+                    VisibilityRange::abrupt(0.0, FAR_M),
+                    ChildOf(entity),
+                ));
+                match stage {
+                    Stage::Next => part.insert(MeshMaterial3d(looks.next.clone())),
+                    Stage::Ghost => part.insert(MeshMaterial3d(looks.ghost[0].clone())),
+                    _ => part.insert(MeshMaterial3d(material)),
+                };
+            }
+        }
+        if build.fitted_props && !build.by_plans {
+            let props: Vec<Prop> = build
+                .base
+                .props()
+                .filter(|prop| terra_build::cubes::section_of(IVec3::from_array(prop.min)) == at)
+                .copied()
+                .collect();
+            for prop in props {
+                let (_, parts_of) = super::props::parts(kit, &build.base, &prop);
+                for (mesh, material, placed) in parts_of {
+                    commands.spawn((
+                        Mesh3d(mesh),
+                        MeshMaterial3d(material),
+                        Transform::from_translation(-parts.centre) * placed,
+                        VisibilityRange::abrupt(0.0, FAR_M),
+                        ChildOf(entity),
+                    ));
+                }
+            }
+        }
+    }
+    build.sections.drawn.insert(
+        done.section,
+        Drawn {
+            entity: Some(entity),
+            ticket: done.ticket,
+            key,
+            near,
+            near_parts,
+            far,
+        },
+    );
+}
+
+/// Keeps near detail to the sections near the camera: those coming near are laid again
+/// with it, and those gone far drop it, their far detail then seen from the camera.
+fn stream(
+    mut commands: Commands,
+    camera: Query<&GlobalTransform, With<MainCamera>>,
+    mut site: ResMut<Site>,
+    mut builds: Query<&mut Built>,
+    mut ranges: Query<&mut VisibilityRange>,
+) {
+    let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
+        return;
+    };
+    for build in each(&mut site, &mut builds) {
+        let frame = build.frame;
+        let sections = &mut build.sections;
+        for (&at, drawn) in sections.drawn.iter_mut() {
+            let distance = frame
+                .transform_point(store::centre(IVec3::from_array(at)))
+                .distance(eye);
+            let laying = sections.waiting.contains_key(&at)
+                || sections.tickets.get(&at) != Some(&drawn.ticket);
+            if !drawn.near && distance < NEAR_LOAD_M && !laying {
+                sections.waiting.insert(at, store::Waiting { force: true });
+            } else if drawn.near && distance > NEAR_DROP_M {
+                for entity in drawn.near_parts.drain(..) {
+                    commands.entity(entity).despawn();
+                }
+                drawn.near = false;
+                for &entity in &drawn.far {
+                    if let Ok(mut range) = ranges.get_mut(entity) {
+                        *range = far_range(false);
+                    }
+                }
+            }
+        }
     }
 }

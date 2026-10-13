@@ -141,6 +141,8 @@ usage: terra_sandbox [options]
                         up and as a blueprint, to look at (docs/building-kits.md)
   --sheet-rows <text>   only the kit sheet's rows whose names hold this, such as
                         hip or stone: L (repeatable)
+  --village             on the yard, lay fifty buildings of every kind, roof and plan,
+                        built, north of the start, to measure many in view
   --vantage <x,y,z,x,y,z[@frame]>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the start, for experiments that have
@@ -234,6 +236,8 @@ pub struct Options {
     pub kit_sheet: bool,
     /// The kit sheet's rows to lay, those whose names hold any of these; all if none.
     pub sheet_rows: Vec<String>,
+    /// On the yard: lay fifty buildings, every kind, roof and plan (docs/building-plan.md).
+    pub village: bool,
     /// The hour of the day the play experiment's clock is set to, if not its own.
     pub time: Option<f32>,
     /// Where the play experiment's player starts, east and south of the start in metres.
@@ -363,6 +367,7 @@ impl Options {
             walls: None,
             kit_sheet: false,
             sheet_rows: Vec::new(),
+            village: false,
             start_at: None,
             time: None,
             start_facing: None,
@@ -467,6 +472,7 @@ impl Options {
                 }
                 "--kit-sheet" => options.kit_sheet = true,
                 "--sheet-rows" => options.sheet_rows.push(value("--sheet-rows")?),
+                "--village" => options.village = true,
                 "--model" => options.models.push(value("--model")?),
                 "--prop" => options.props.push(value("--prop")?),
                 "--hold" => options.hold = Some(value("--hold")?),

@@ -2,6 +2,11 @@
 //! bark are displaced by when they are made, read from the same `height.jpg` the material's
 //! textures come with, so the shape and the picture on it agree.
 
+use crate::Material;
+use crate::kit::{Kit, Pattern};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
 /// A material's height, a byte a texel, row by row from the top, as its texture is read.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Relief {
@@ -36,6 +41,83 @@ impl Relief {
         let bottom = texel(x0, y0 + 1.0) * (1.0 - fx) + texel(x0 + 1.0, y0 + 1.0) * fx;
         top * (1.0 - fy) + bottom * fy
     }
+}
+
+/// A material's colour on the CPU, small: what a building far off is painted with, its
+/// textures baked into the colour of each corner (Unreal's HLOD bakes them so), each
+/// texel the average of a patch of the texture, linear, row by row from the top.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Swatch {
+    width: usize,
+    height: usize,
+    data: Vec<[f32; 3]>,
+}
+
+impl Swatch {
+    /// A swatch `width` by `height`; `None` if the colours are not that many.
+    pub fn new(width: usize, height: usize, data: Vec<[f32; 3]>) -> Option<Swatch> {
+        (width > 0 && height > 0 && data.len() == width * height).then_some(Swatch {
+            width,
+            height,
+            data,
+        })
+    }
+
+    /// The colour where the texture is at a point, repeating: the texel it falls in.
+    pub fn at(&self, uv: [f32; 2]) -> [f32; 3] {
+        let x = (uv[0].rem_euclid(1.0) * self.width as f32) as usize;
+        let y = (uv[1].rem_euclid(1.0) * self.height as f32) as usize;
+        self.data[y.min(self.height - 1) * self.width + x.min(self.width - 1)]
+    }
+}
+
+/// The maps kits' pieces are made with on the CPU, by the folder of the material they
+/// come from: heights to shape them by, and colours to paint them with far off.
+#[derive(Clone, Debug, Default)]
+pub struct Maps {
+    pub heights: BTreeMap<String, Arc<Relief>>,
+    pub colours: BTreeMap<String, Arc<Swatch>>,
+}
+
+impl Maps {
+    /// The height map that shapes a kit's pieces, once it has loaded: a block kind's
+    /// stone, or a timber kind's bark.
+    pub fn shape(&self, kit: &Kit) -> Option<&Relief> {
+        self.heights.get(shaped_by(kit)?).map(Arc::as_ref)
+    }
+
+    /// The height map that shapes a block kind's tops, its floors' flagstones.
+    pub fn top(&self, kit: &Kit) -> Option<&Relief> {
+        self.heights.get(topped_by(kit)?).map(Arc::as_ref)
+    }
+
+    /// The colours of a kit's material, once they have loaded.
+    pub fn colour(&self, kit: &Kit, material: Material) -> Option<&Swatch> {
+        let texture = kit.textures.get(&material)?;
+        self.colours.get(&texture.path).map(Arc::as_ref)
+    }
+}
+
+/// The folder of the material whose height shapes a kit's pieces, if any does: a block
+/// kind's stone, or a timber kind's bark.
+pub fn shaped_by(kit: &Kit) -> Option<&str> {
+    let (material, depth) = match kit.pattern {
+        Pattern::Masonry => (Material::Masonry, kit.relief),
+        Pattern::Logs => (Material::Log, kit.timber.relief),
+    };
+    (depth > 0.0)
+        .then(|| kit.textures.get(&material))
+        .flatten()
+        .map(|texture| texture.path.as_str())
+}
+
+/// The folder of the material whose height shapes a block kind's tops, its floors'
+/// flagstones, if it has one.
+pub fn topped_by(kit: &Kit) -> Option<&str> {
+    (kit.pattern == Pattern::Masonry && kit.relief > 0.0)
+        .then(|| kit.textures.get(&Material::Floor))
+        .flatten()
+        .map(|texture| texture.path.as_str())
 }
 
 #[cfg(test)]

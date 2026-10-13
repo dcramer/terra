@@ -25,7 +25,7 @@ use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Which half of a log is kept, where it is split along its length.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Split {
     Whole,
     /// The top half, its flat side down: the first course of a wall.
@@ -66,7 +66,7 @@ pub fn metres(ticks: i32) -> f32 {
 }
 
 /// One piece of a base, placed in its grid ([`Place`]); its seed is its version.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Piece {
     /// A long member from one end to the other along its middle; its seed is its version,
     /// from its place.
@@ -171,6 +171,31 @@ impl Piece {
             }
             Piece::Opening { .. } | Piece::Covering { .. } | Piece::Roof { .. } => None,
         }
+    }
+
+    /// The cube that owns it, which its middle is in, worked out exactly in ticks: a long
+    /// member crossing from one section into another belongs to one of them only, the
+    /// same on every machine (docs/building-plan.md, drawing).
+    pub fn anchor(&self) -> IVec3 {
+        let middle = |a: Place, b: Place| {
+            [0, 1, 2].map(|i| (i64::from(a.0[i]) + i64::from(b.0[i])).div_euclid(2) as i32)
+        };
+        let point = match *self {
+            Piece::Block { cube } | Piece::Gable { cube, .. } => return cube,
+            Piece::Log { from, to, .. }
+            | Piece::Plank { from, to, .. }
+            | Piece::Roof { from, to, .. } => middle(from, to),
+            Piece::Board { min, max }
+            | Piece::Dressed { min, max, .. }
+            | Piece::Opening { min, max, .. } => middle(min, max),
+            Piece::Covering { middle, .. } => middle.0,
+        };
+        IVec3::from_array(point.map(|p| p.div_euclid(TICKS)))
+    }
+
+    /// The section that owns it: the one its [`anchor`](Piece::anchor) is in.
+    pub fn section(&self) -> IVec3 {
+        crate::cubes::section_of(self.anchor())
     }
 
     /// The roof cell it goes up with, and in which stage, if it is part of a roof.
@@ -380,34 +405,157 @@ pub fn lay(base: &Base, kit: &Kit) -> Layout {
 /// Lays everything of a base built in one of `kits`' kinds, `kit`: its walls, as blocks or
 /// as long members, and their gables, and its roofs, which meet the other kits' (`roofs`).
 pub fn lay_among(base: &Base, kit: &Kit, kits: &Kits) -> Layout {
-    let mut layout = lay_walls(base, kit, kits);
-    roofs::lay(base, kit, kits, &mut layout.pieces);
+    lay_scoped(base, kit, kits, Scope::ALL)
+}
+
+/// The pieces of one section of a base (docs/building-plan.md, drawing): exactly those of
+/// [`lay_among`] whose [`Piece::section`] it is, in the order they go in, worked out from
+/// only the rows, roofs and decks that reach it, so laying a section never doubles or
+/// leaves out a piece another section owns, and does not lay the whole base.
+pub fn lay_section(base: &Base, kit: &Kit, kits: &Kits, section: IVec3) -> Layout {
+    let mut layout = lay_scoped(base, kit, kits, Scope::section(section));
+    layout.pieces.retain(|piece| piece.section() == section);
+    layout
+}
+
+/// As [`lay_section`], with the pieces a cube beyond its edges as well, in a second list:
+/// what a block kind's surface needs to round and shade its edge as its neighbour does.
+pub fn lay_section_and_edge(
+    base: &Base,
+    kit: &Kit,
+    kits: &Kits,
+    section: IVec3,
+) -> (Layout, Vec<Piece>) {
+    let mut layout = lay_scoped(base, kit, kits, Scope::section(section));
+    let low = section * crate::cubes::SECTION - IVec3::ONE;
+    let high = low + IVec3::splat(crate::cubes::SECTION + 1);
+    let (mut own, mut edge) = (Vec::new(), Vec::new());
+    for piece in layout.pieces.drain(..) {
+        let at = piece.anchor();
+        if crate::cubes::section_of(at) == section {
+            own.push(piece);
+        } else if at.cmpge(low).all() && at.cmple(high).all() {
+            edge.push(piece);
+        }
+    }
+    layout.pieces = own;
+    (layout, edge)
+}
+
+fn lay_scoped(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
+    let mut layout = lay_walls(base, kit, kits, scope);
+    roofs::lay(base, kit, kits, scope, &mut layout.pieces);
     sort(&mut layout);
     layout
 }
 
+/// The part of a base a layout is worked out for, in cubes, from `low` to `high`: a
+/// section and a margin round it, or everything. Each part of a layout takes in whatever
+/// could give a piece there (a whole row of logs, a whole roof, a whole deck), so what it
+/// lays there is what laying the whole base would.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Scope {
+    pub low: IVec3,
+    pub high: IVec3,
+}
+
+impl Scope {
+    pub const ALL: Scope = Scope {
+        low: IVec3::splat(i32::MIN / 4),
+        high: IVec3::splat(i32::MAX / 4),
+    };
+    /// How far round a section a layout looks, in cubes: further than any piece reaches
+    /// past the cube that owns it.
+    const MARGIN: i32 = 2;
+
+    fn section(section: IVec3) -> Scope {
+        let low = section * crate::cubes::SECTION;
+        Scope {
+            low: low - IVec3::splat(Self::MARGIN),
+            high: low + IVec3::splat(crate::cubes::SECTION - 1 + Self::MARGIN),
+        }
+    }
+
+    /// Whether a box of cubes reaches into it.
+    pub fn reaches(&self, low: IVec3, high: IVec3) -> bool {
+        low.cmple(self.high).all() && high.cmpge(self.low).all()
+    }
+
+    /// Its cubes in a base, sorted, within a box as well if given.
+    pub fn cubes(&self, base: &Base, within: Option<(IVec3, IVec3)>) -> Vec<(IVec3, crate::Cube)> {
+        let Some((low, high)) = base.store().bounds() else {
+            return Vec::new();
+        };
+        let (mut low, mut high) = (low.max(self.low), high.min(self.high));
+        if let Some((a, b)) = within {
+            (low, high) = (low.max(a), high.min(b));
+        }
+        if low.cmpgt(high).any() {
+            return Vec::new();
+        }
+        base.store().within(low, high)
+    }
+
+    /// A row's cubes of the base along an axis, wherever they are along it: the row
+    /// whose cross-coordinate is `row`.
+    fn row_cubes(base: &Base, axis: Axis, row: i32) -> Vec<(IVec3, crate::Cube)> {
+        let (low, high) = match axis {
+            Axis::X => (
+                IVec3::new(i32::MIN / 4, i32::MIN / 4, row),
+                IVec3::new(i32::MAX / 4, i32::MAX / 4, row),
+            ),
+            Axis::Z => (
+                IVec3::new(row, i32::MIN / 4, i32::MIN / 4),
+                IVec3::new(row, i32::MAX / 4, i32::MAX / 4),
+            ),
+        };
+        Scope::ALL.cubes(base, Some((low, high)))
+    }
+
+    /// Whether a row across an axis is one whose pieces may be ours.
+    fn has_row(&self, axis: Axis, row: i32) -> bool {
+        let (low, high) = match axis {
+            Axis::X => (self.low.z, self.high.z),
+            Axis::Z => (self.low.x, self.high.x),
+        };
+        (low..=high).contains(&row)
+    }
+}
+
 /// A kit's walls and their gables.
-fn lay_walls(base: &Base, kit: &Kit, kits: &Kits) -> Layout {
+fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     if kit.pattern == Pattern::Masonry {
         let mut layout = Layout {
-            pieces: blocks::lay(base, kit),
+            pieces: blocks::lay(base, kit, scope),
         };
-        roofs::gables(base, kit, kits, &mut layout.pieces);
+        roofs::gables(base, kit, kits, scope, &mut layout.pieces);
         return layout;
     }
     let walls = Walls {
         base,
         kind: kit.kind(),
     };
-    let ours: Vec<IVec3> = base
-        .cubes()
+    // Every cube on the rows that cross the scope, either way, whole.
+    let band = |axis: Axis| {
+        let (mut low, mut high) = (IVec3::splat(i32::MIN / 4), IVec3::splat(i32::MAX / 4));
+        match axis {
+            Axis::X => (low.z, high.z) = (scope.low.z, scope.high.z),
+            Axis::Z => (low.x, high.x) = (scope.low.x, scope.high.x),
+        }
+        Scope::ALL.cubes(base, Some((low, high)))
+    };
+    let mut ours: Vec<IVec3> = band(Axis::X)
+        .into_iter()
+        .chain(band(Axis::Z))
         .map(|(at, _)| at)
         .filter(|&at| walls.ours(at).is_some())
         .collect();
+    ours.sort_by_key(|at| at.to_array());
+    ours.dedup();
     let mut layout = Layout::default();
     if ours.is_empty() {
         if kit.textures.contains_key(&Material::Floor) {
-            floors::decks(base, kit, &mut layout);
+            floors::decks(base, kit, scope, &mut layout);
             sort(&mut layout);
         }
         return layout;
@@ -419,6 +567,9 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits) -> Layout {
         let mut rows: BTreeMap<i32, (i32, i32, i32, i32)> = BTreeMap::new();
         for &at in ours.iter().filter(|&&at| walls.runs(at, axis)) {
             let (row, along) = axis.row_of(at);
+            if !scope.has_row(axis, row) {
+                continue;
+            }
             let entry = rows.entry(row).or_insert((along, along, at.y, at.y));
             *entry = (
                 entry.0.min(along),
@@ -444,7 +595,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits) -> Layout {
     runs::posts(&walls, &ours, &mut layout);
     trims::ends(&walls, kit, &ours, &mut layout);
     if kit.textures.contains_key(&Material::Floor) {
-        floors::decks(base, kit, &mut layout);
+        floors::decks(base, kit, scope, &mut layout);
     }
     let fields = roofs::Field::all(base, kits);
     runs::under_roofs(&fields, kit, &mut layout);
