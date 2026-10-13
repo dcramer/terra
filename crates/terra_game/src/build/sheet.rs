@@ -1,4 +1,4 @@
-//! The kit sheet (docs/kits.md, D69, D71): on the yard, with `--kit-sheet`, one of each
+//! The kit sheet (docs/building-kits.md, D69, D71): on the yard, with `--kit-sheet`, one of each
 //! way log walls meet, laid in a row of three: built, going up and as a blueprint. Each
 //! row's vantage is written to the log, so a picture of it is one command:
 //!

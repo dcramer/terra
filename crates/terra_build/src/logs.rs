@@ -1,4 +1,4 @@
-//! Log walls (docs/kits.md, D177, D178): each wall of log cubes laid as logs by the stacked
+//! Log walls (docs/building-kits.md, D177, D178): each wall of log cubes laid as logs by the stacked
 //! pattern, and each log made from the kit's numbers and a seed, so it looks hewn and
 //! grown rather than turned.
 //!

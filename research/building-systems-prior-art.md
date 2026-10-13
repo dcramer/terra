@@ -85,19 +85,19 @@ Why it works: a building is made of things you went and got, so a big one is a p
 
 Suggestions for the developers, not decisions. Where one touches a decision, it says which.
 
-**A baseline that misses nothing.** Taken together, these are what a player arriving from these games will reach for. Ours has some already (see [construction.md](../docs/construction.md#the-baseline)):
+**A baseline that misses nothing.** Taken together, these are what a player arriving from these games will reach for. Ours has some already (see [building.md](../docs/building.md#the-baseline)):
 
 1. Choose a piece from a menu (D67), and its variant from a wheel (as now).
 2. A ghost that shows allowed or refused, and says why, with what is in the way outlined even through walls (Rust, Subnautica 2). Ours does most of this.
 3. Rotate, snap with a switch to go free, nudge and raise or lower before placing. Ours has the first two; nudging is in Enshrouded, Ark and the grid's half-metre step (D57) would make it simple.
 4. Take apart for a full refund, and undo for a short while (Enshrouded's Y, Rust's window). Full refund matches Subnautica and Valheim.
 5. Move what is placed (Subnautica 2's F); pick another of what you look at (ours, and 7 Days to Die's copy of shape).
-6. Repair, and change a piece's material in place (Rust, 7 Days to Die). With material a property of a block rather than a different buildable ([construction.md](../docs/construction.md#easy-to-extend)), upgrading is just changing that property and paying the difference.
-7. Stability shown only while building, if there is stability at all (an open question in [construction.md](../docs/construction.md#stability)). If there is, Valheim's colours and 7 Days to Die's strain warning show it plainly; Ark's hidden rules are the ones players complain about.
+6. Repair, and change a piece's material in place (Rust, 7 Days to Die). With material a property of a block rather than a different buildable ([building.md](../docs/building.md#easy-to-extend)), upgrading is just changing that property and paying the difference.
+7. Stability shown only while building, if there is stability at all (an open question in [building.md](../docs/building.md#stability)). If there is, Valheim's colours and 7 Days to Die's strain warning show it plainly; Ark's hidden rules are the ones players complain about.
 8. A claim that is one placed object with a radius, a list of who may build and who may open what, and something that keeps it alive. Every game with many players has one; Ark's lack of one is the clearest warning for a thousand players. This is D94 and D104 as proposed.
 9. Saved layouts. Ark added them in 2026 and the others have them as popular mods. Since a base is already a list of operations, a saved layout is that list, and D108's villages are the same thing.
 
-**The Forest's blueprints fit "realistic but fun" (D122).** The developers want building to cost raw items you carry and to take time ([construction.md](../docs/construction.md#what-the-developers-want)). The Forest is the strongest version of that:
+**The Forest's blueprints fit "realistic but fun" (D122).** The developers want building to cost raw items you carry and to take time ([building.md](../docs/building.md#what-the-developers-want)). The Forest is the strongest version of that:
 
 - **Place a ghost for nothing; it is built as materials go in.** Each thing added shows: a wall rising course by course. It doubles as Ark's planning mode, and as the way to see a whole base's cost before gathering. It is the same pay-as-you-go idea as crafting at stations (D109), where what is queued is paid and given back if cancelled; a ghost could keep what went in and give it back if taken down.
 - **Big materials are carried.** Logs and stone on the shoulder, two at a time, with sleds and carts for more, makes a large build a project with logistics, and a natural job for a second player. Recruits who work at a base (D90) could fill ghosts as Kelvin does.
@@ -112,7 +112,7 @@ Suggestions for the developers, not decisions. Where one touches a decision, it 
 
 ## Earlier: rooms
 
-Before walls, floors and roofs became the parts (D152) and everything built became half-metre cubes (D181), construction.md proposed rooms after Subnautica 2: rooms as plain boxes of any size, grown by placing one across another, with a hull generated round them; interior walls, windows and doors as panels on the edges between tiles; fixed-size buildables such as a round room joined by ports and connectors the game would build; a room's material as a skin; and corners that rounded by what they touched (D56, D57). Saves from then are still read and turned into cubes. The rest is in git history.
+Before walls, floors and roofs became the parts (D152) and everything built became half-metre cubes (D181), building.md proposed rooms after Subnautica 2: rooms as plain boxes of any size, grown by placing one across another, with a hull generated round them; interior walls, windows and doors as panels on the edges between tiles; fixed-size buildables such as a round room joined by ports and connectors the game would build; a room's material as a skin; and corners that rounded by what they touched (D56, D57). Saves from then are still read and turned into cubes. The rest is in git history.
 
 ## Limits
 

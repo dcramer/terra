@@ -32,7 +32,7 @@ import look
 
 # --flat: a thing that lies flat, such as a rug, laid on its plane and pressed thin.
 # --along: a building kit's piece laid along its length, such as a log or a board, which the
-# game stretches to fit (docs/kits.md): its length along X, its thinnest side up, its middle
+# game stretches to fit (docs/building-kits.md): its length along X, its thinnest side up, its middle
 # on the origin.
 args = look.args()
 flat = "--flat" in args

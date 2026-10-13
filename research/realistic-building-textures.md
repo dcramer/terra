@@ -35,7 +35,7 @@ What shipped games with built bases do, and what it would take here:
 | One look | Every piece of a kit made from one concept, one colour grade, the same light | The rest of the kit (shakes, boards, ridge, door, window, footing) modelled the same way |
 | Variety | Several models per piece, turned and flipped; materials varied by a tint | Three or four logs and footing stones; a tint per piece, by its seed |
 | Memory | Shared materials, 2K where it does not show, compression | A budget per kit, measured |
-| Many buildings | Normal maps for detail, levels of detail, instancing, merging, stand-ins far off | Instancing comes free in Bevy; the rest is in [structures.md](../docs/structures.md#drawing-many-buildings) |
+| Many buildings | Normal maps for detail, levels of detail, instancing, merging, stand-ins far off | Instancing comes free in Bevy; the rest is in [building-tech.md](../docs/building-tech.md#drawing-many-buildings) |
 
 ## What it means for the art direction
 

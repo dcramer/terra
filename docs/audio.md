@@ -4,7 +4,7 @@ Status: a first version is built in the game (D113, D114). How it is put togethe
 
 ## What we are after
 
-From the game's design ([your-character.md](your-character.md)): **sound carries information**. A monster's call, a settlement's bell, rain coming, a predator behind you. **Music sparse, and from the world where it can be.** That fits a game with little on screen (D93): the ear tells you what the screen does not.
+From the game's design ([player.md](player.md)): **sound carries information**. A monster's call, a settlement's bell, rain coming, a predator behind you. **Music sparse, and from the world where it can be.** That fits a game with little on screen (D93): the ear tells you what the screen does not.
 
 ## How it is put together
 

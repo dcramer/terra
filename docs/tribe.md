@@ -106,7 +106,7 @@ The first proposal, staking out each building before the tribe touches it, suits
 - **A slip in Build mode costs nothing.** Recruits take a moment to come, since they walk to the stores first. Undo (Y) within its minute takes the plan back, and anything carried for it returns to the stores. Moving or redrawing a plan nothing has been put into is allowed in either mode; the tribe follows the change.
 - **You never have to use Plan mode.** Playing alone, or without recruits, building is exactly as it is today.
 - **Then the tribe carries.** Recruits with nothing else to do bring what a plan needs from the stores and pile it beside the build: logs (D140), stone, beams. The prompt on a part says so: "Log: 3 of 12. 4 here, 5 on the way". You put the parts in without fetching anything.
-- **Then, later, they build.** A recruit who is a skilled builder (D88) puts parts in from the pile in the physical order, floor first and roof last ([construction.md](construction.md#planned-then-constructed)). You can work beside them.
+- **Then, later, they build.** A recruit who is a skilled builder (D88) puts parts in from the pile in the physical order, floor first and roof last ([building.md](building.md#planned-then-constructed)). You can work beside them.
 - **Several plans are worked in the order they were laid or made plans.** To have one done first, ask a recruit to work on it.
 - **Among players, a draft is someone's idea and a plan is the tribe's.** Any member may turn their own drafts into plans; a leader may do it to anyone's (see [ranks](#tribes-and-outposts)).
 - **What is needed counts plans, not drafts.** The outpost's list of what its plans still need leaves drafts out. Aiming at a draft still shows its own cost, so you can plan.
@@ -206,7 +206,7 @@ From the developers (D90, Leaning): they help defend you if you are attacked nea
 - **Raids are not a concern for now** ([gameplay.md](gameplay.md#questions-for-the-developers), question 2). When they come, they come to outposts. A raid should be something you can answer, not a summons that nags, as Fallout 4's settlement quests do.
 ## Coming with you
 
-From the developers (D161): recruits can travel and fight beside you, as a future to-do. Nothing is designed for it yet. When it comes, the questions are how many can come, how you ask them, and how they keep up on big round realms ([your-character.md](your-character.md)).
+From the developers (D161): recruits can travel and fight beside you, as a future to-do. Nothing is designed for it yet. When it comes, the questions are how many can come, how you ask them, and how they keep up on big round realms ([player.md](player.md)).
 
 ## When a recruit dies
 
@@ -234,7 +234,7 @@ Proposed:
 From the developers (D166):
 
 - **A tribe holds its claims, and each claim is an outpost of it.** All of a tribe's outposts are shared within it.
-- **Everyone in the tribe is part of it, players as well as recruits**, since you can recruit other players too. Whoever is in it may build in its outposts, use their stores and stations, and ask their recruits for something ([construction.md](construction.md#claims)).
+- **Everyone in the tribe is part of it, players as well as recruits**, since you can recruit other players too. Whoever is in it may build in its outposts, use their stores and stations, and ask their recruits for something ([building.md](building.md#claims)).
 - **Recruits are not shared between outposts.** Each lives and works at one. Different outposts may want different people: a miner at the one by the ore, a smith at home.
 - **A player is in one tribe at a time**, and **a player on their own is a tribe of one**, and its leader. Joining another tribe means leaving your own.
 - **Two ranks, member and leader**, as tribes in Ark and clans in Conan Exiles have (from memory, unchecked):
@@ -255,7 +255,7 @@ Proposed:
 
 From the developers (D166, Leaning): likely done at a station. You take them with you, or let them walk on their own and risk death. Proposed:
 
-- **The station is the claim stone, for now** (from the developers). Every outpost has one already ([construction.md](construction.md#claims)). It also shows who lives there and what they do, which is the roster ([Seeing what they do](#seeing-what-they-do)) as a thing in the world. A station of its own, such as a board, can come later.
+- **The station is the claim stone, for now** (from the developers). Every outpost has one already ([building.md](building.md#claims)). It also shows who lives there and what they do, which is the roster ([Seeing what they do](#seeing-what-they-do)) as a thing in the world. A station of its own, such as a board, can come later.
 - **At the claim stone, you pick a recruit and another outpost of the tribe**, and how they go:
   - **With you**: they follow you until you reach it, as a companion would (D161, later). Safer, but you must make the trip.
   - **On their own**: they pack up and set off on foot, by roads where there are any. There is no fast travel between claims (D72), so it takes the time it takes. They can meet what is on the way, and a weak recruit sent through dangerous country may not arrive.

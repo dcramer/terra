@@ -1,4 +1,4 @@
-// The public page at `/`: what building Terra has cost per person at list prices, in the look of docs/art.md:
+// The public page at `/`: what building Terra has cost per person at list prices, in the look of docs/art-style.md:
 // flat colour, distance as pastel layers, warm light and cool shadow.
 
 export function page(summary) {

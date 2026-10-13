@@ -63,7 +63,7 @@ From the developers: loot, procedural loot included, may become part of the game
 | Speciality | Trade and law: shops, prices, hiring | Holding a place: automation, defence, logistics | Personal power: essences, taming, herbs | Death itself: what you lose on dying, curses, wards |
 | Look | Timber, plaster, red tile, warm light | Brass, crystal, steam and glow, neon-like magic | Moss, bark, flowers, soft light | Grey stone, iron, mist, cold light |
 
-The techno-punk street in more depth, with its risks, is [a realm of machines](techno-realm.md).
+The techno-punk street is worked through [below](#a-worked-example-the-techno-realm).
 
 ## Making generated realms fit the lore
 
@@ -96,6 +96,44 @@ How much magic a realm has is apart from its rank: a low-magic realm can still b
 
 **6. Hand-made anchors.** Open: whether the starting realm, and perhaps a few landmark ones, are made by hand to set the tone. That pulls against "no handcrafted maps" ([vision.md](vision.md#non-goals)); a middle way is a starting realm generated like any other under tighter rules, as [magic.md](magic.md#essences-in-the-starting-realm) does for its essences. Either way, generated realms are built from hand-written templates, names and history events, so what is generated is the combination, never the content from nothing. Names come from per-culture sound sets, so a gothic people and a growth people do not name things alike.
 
+## A worked example: the techno realm
+
+The techno-punk street above, worked through as a proposal: how a realm can feel technologically advanced without guns, without science fiction, and without being better than magic. Open, for the developers to react to; nothing here is built or decided.
+
+| Based on | What to take |
+|---|---|
+| *He Who Fights With Monsters* | Force without magic does not scale against rank, and magic items are already technology made of magic ([research/hwfwm-magic.md](../research/hwfwm-magic.md)). |
+| Eberron (Dungeons & Dragons) | Magic as industry: trains on lines of lightning, airships driven by bound elementals, built soldiers. Machines that are plainly magic. |
+| *Arcane* | Hextech: engineering shaped around a magic crystal. Precise, powerful, dangerous, never replacing the people who use it. |
+| Kenshi, Soulmask, Subnautica | An advanced people who are gone, known from their ruins, their guardians and what still runs. Technology you dig up and learn, not something you are behind. |
+
+Proposed: **a civilisation of magitech whose machines run on magic, cannot grow, and are best at work that repeats.** Its devices are tools for holding ground; your own power is still what gets you anywhere new.
+
+**1. Everything runs on magic.** A device is powered by a **core**: the crystallised magic monsters leave, of the monster's rank (D165, [magic.md](magic.md#raising-powers)). There is no other power, so monsters, pooling places and machines become one economy.
+
+**2. A machine is as strong as its core, and stays so.** A bronze-rank turret is a bronze-rank turret for as long as it stands. It does not learn, rank up or improve by use. You do (D88, D164, [progression.md](progression.md)). So machines are strong early and in numbers, and are outgrown by a person who keeps climbing.
+
+| | Machines | Your own skills and essences |
+|---|---|---|
+| Grows | No: as strong as its core's rank | Yes, by use and through ranks |
+| Works without you | Yes, while powered | No |
+| Needs | Cores, repair (D99), and a claim to stand in (D94) | You |
+| Good at | Work that repeats: making, carrying, guarding, lighting | Fighting, exploring, anything new |
+
+**3. Machines hold and run a place.** Stations that work on their own (D109), faster or for longer, such as a core-fired smelter that runs all night. Infrastructure in a claim: lifts, pumps, lamps, doors, carts on rails, chutes between stations, all parts of a build or props from the catalogue (D108). Wards and sentries that defend an outpost while you are away, such as a turret firing bolts of its core's element. Constructs, perhaps: built workers and guards that do simple work tirelessly but do not trade, teach, talk or run a station that needs skill, so rescued people (D90) stay the heart of a hold.
+
+**4. What they are not.** No guns, no lasers, no vehicles that outrun everything, no machine that out-fights a person of its rank. A hand-held device is at most a charged tool: a bolt-thrower with a few shots from its core, slower than a bow in skilled hands, useful to someone without the skill.
+
+**5. Its makers, gone or still at work.** The developers said it could be either. If gone, what is left is ruins where the old works drew magic in, so magic pools there now and monsters form among the machines; guardians still keeping their posts at their cores' rank; perhaps descendants who keep some of the old knowledge and might teach it or join you (D86, D90). You learn a device by salvaging one or from people who know it, not from a research tree (D68). Its machines are the past, and something went wrong with them, which keeps the realm from feeling ahead of the others; what went wrong is the realm's generated history (D172). If the makers are still at work, a living culture of tinkers, the same rules hold. A realm could have both.
+
+**6. Its speciality is holding a place**: automation, defence and logistics, beside the other settings' in the table above. A hold that draws on several realms' specialities is stronger than one that uses one, which is a reason to go everywhere (D91) and to trade.
+
+**7. Its look** is one art style (D14): brass, bronze, carved stone and crystal, not chrome or plastic; machines built by hand and fitted together; runes and glow showing where the power runs.
+
+Combat is unchanged at its centre (melee, a bow, abilities), with turrets and constructs fighting beside you at their cores' rank. Machines you carry work in every realm, as all gear does; machines you build stay in the claim where they stand.
+
+The risks: **automation crowding out play**, as factory games show, which keeping machines in claims, on cores you must hunt, at their cores' rank, should hold back; **constructs crowding out recruits**, unless they are limited to simple work; and **looking like science fiction**, which the look and the rule that everything runs on magic keep away.
+
 ## Why roles
 
 - **A new setting is a template**, not new systems: it fills the roles, picks a palette and a kit, and the generator and the game run it. That is what makes any number of realms (D17) possible.
@@ -118,3 +156,4 @@ From the developers: settings may mix within a realm, such as a gothic quarter i
 3. Open: **each setting's speciality**, and what the primitive one would be. Undecided.
 4. Answered: **settings may mix**, carefully, later.
 5. Answered: **the cosmology and an ancient people** are left to the generator.
+6. **The techno realm:** constructs in, and if so, what may they do? Hand-held devices: none, or charged tools like the bolt-thrower? Can cores also be charged where magic pools, as well as taken from monsters (D165)?

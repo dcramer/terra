@@ -3,7 +3,7 @@
 //! A part is what you pick from the dial: a room, a window, a seat. A variant is a kind
 //! of that part, cycled through once the part is picked: a chair, a stool. The list is
 //! data, in `assets/data/builds.ron` (D136), and a stand-in. What can be built, what it
-//! costs and how it is unlocked are design questions nobody has answered (docs/construction.md, docs/progression.md).
+//! costs and how it is unlocked are design questions nobody has answered (docs/building.md, docs/progression.md).
 
 use super::crafting::{Station, Stations};
 use super::data;
@@ -350,7 +350,7 @@ pub struct Part {
     pub kind: Kind,
 }
 
-/// The build menu's tabs (docs/construction.md, the build menu).
+/// The build menu's tabs (docs/building.md, the build menu).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
 pub enum Tab {
     Claim,

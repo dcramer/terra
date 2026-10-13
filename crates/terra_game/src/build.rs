@@ -1,7 +1,7 @@
 //! Construction: a base you shape, drawn from the rules in `terra_build`.
 //!
 //! Everything built is half-metre cubes (D181), drawn plain or by its kind's kit
-//! (docs/kits.md): walls of logs as logs.
+//! (docs/building-kits.md): walls of logs as logs.
 //!
 //! Point the middle of the view at the base. V cycles the wall you are looking at through
 //! solid, window, tall window and door. Point at open ground and B adds a room there.
@@ -62,7 +62,7 @@ pub(super) struct Build {
     glass: Entity,
     foundation: Entity,
     steps: Entity,
-    /// With a kit, its walls are laid as its pieces (docs/kits.md), drawn as they stand.
+    /// With a kit, its walls are laid as its pieces (docs/building-kits.md), drawn as they stand.
     pub logs: Option<Arc<LogKit>>,
     pub shown: Shown,
     /// The pieces that are in, those still a ghost, and the next to go in.
@@ -79,7 +79,7 @@ pub(super) struct Build {
 
 /// How far a build's pieces are in (D139, D177): built, or a plan with so much of it in,
 /// from nothing, a blueprint, to all of it. Plans proper come with step 3 of
-/// docs/structures.md; until then, the kit sheet shows each state this way.
+/// docs/building-tech.md; until then, the kit sheet shows each state this way.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Shown {
     Built,

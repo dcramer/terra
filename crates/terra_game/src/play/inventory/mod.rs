@@ -7,7 +7,7 @@
 //! built from: the builder spends them, and taking a thing apart gives them back, if
 //! there is room for them.
 //!
-//! The content is a stand-in for a design nobody has made (docs/construction.md, D55):
+//! The content is a stand-in for a design nobody has made (docs/building.md, D55):
 //! the list of raw items, what you start with, what things cost, the sizes, and that
 //! everything is refunded in full.
 //!

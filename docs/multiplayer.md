@@ -25,7 +25,7 @@ Each player is a body in the same world, with their own tools and belongings. An
 - **The world is computed, not stored** (D47). Only what players change is kept, which is what makes a long-lived world affordable.
 - **The rules live in crates with no graphics** (D28), so a server with no window is the same code.
 - **Every machine generates the same world** (D30).
-- **Claims bound what is stored** to what players hold, not to everything they ever touched (D94, [construction.md](construction.md#claims)), and the world heals outside them.
+- **Claims bound what is stored** to what players hold, not to everything they ever touched (D94, [building.md](building.md#claims)), and the world heals outside them.
 
 ## Server-first
 

@@ -79,7 +79,7 @@ Each track lives in its own crates, so people and agents working in parallel do 
 - Collision (D53, below).
 - The simulation's rules, parked with terraforming (D60).
 
-Building is designed ([construction.md](construction.md), [structures.md](structures.md); D48, D152, D154, D181) and so is the art direction ([art-style.md](art-style.md), D14).
+Building is designed ([building.md](building.md), [building-tech.md](building-tech.md); D48, D152, D154, D181) and so is the art direction ([art-style.md](art-style.md), D14).
 
 ## Harvesting
 

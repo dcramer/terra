@@ -7,11 +7,11 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_gen` | Generation toolkit: seeds, noise, repeatable random streams | No | Exists |
 | `terra_core` | The shared contracts (ground, water, chunk mesh, operations) and the stand-in planet whose hills the terrain uses | No | Exists |
 | `terra_voxel` | Terrain: shape and material, chunks at several detail levels, meshing, edits. Brief: [docs/terrain.md](../docs/terrain.md) | No | Exists |
-| `terra_build` | Construction: half-metre cubes on a base's grid, the rooms they close in, roofs, and the kits that lay them ([docs/structures.md](../docs/structures.md)) | No | Exists |
+| `terra_build` | Construction: half-metre cubes on a base's grid, the rooms they close in, roofs, and the kits that lay them ([docs/building-tech.md](../docs/building-tech.md)) | No | Exists |
 | `terra_items` | Items and containers: kinds, the backpack grid, equipment, the action bar. Brief: [docs/items.md](../docs/items.md) | No | Exists |
 | `terra_sim` | The planet simulation: cells, fields, what machines do | No | Exists; parked with terraforming (D60) |
 | `terra_net` | Network messages and transport | No | Not created yet (track D) |
-| `terra_body` | Appearance data into joints and morph weights ([docs/character-system-plan.md](../docs/character-system-plan.md)) | No | Not created yet |
+| `terra_body` | Appearance data into joints and morph weights ([docs/characters.md](../docs/characters.md)) | No | Not created yet |
 | `terra_game` | The game in Bevy: the world on screen, the player, items, building, creatures, people, sound, saving, and the shell every build runs under | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
 | `terra_sandbox` | A test environment on top of the game: it launches it, and holds testbeds and developer tools such as the workbench and the icon baker | Yes | Exists. [README](terra_sandbox/README.md) |
 

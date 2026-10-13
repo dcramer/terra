@@ -1,4 +1,4 @@
-# Your character: body, movement and what is on screen
+# Player: body, movement and what is on screen
 
 Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of truth on 2026-10-12, D89). Each item is as settled as the decision it cites; the rest is a proposal for the developers to react to.
 

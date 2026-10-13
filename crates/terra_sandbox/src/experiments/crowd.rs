@@ -1,4 +1,4 @@
-//! A crowd of dressed characters, to measure what many cost (docs/character-system-plan.md,
+//! A crowd of dressed characters, to measure what many cost (docs/characters.md,
 //! phase 1): `--crowd <n>` bodies (100 by default) in a grid, every template in turn, each
 //! wearing `--wear` items (a coat, cap, pack and quiver by default) and playing an idle, walk
 //! or jog from its own point in the clip. Once all are dressed it prints what they add up to:

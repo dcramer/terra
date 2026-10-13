@@ -1,4 +1,4 @@
-//! A kit's pieces drawn from its models (D177; docs/kits.md): the layout says where each
+//! A kit's pieces drawn from its models (D177; docs/building-kits.md): the layout says where each
 //! log goes, and a copy of the kit's log model is placed there, stretched along its length
 //! to fit and turned about it and end for end by the log's seed, so neighbours differ.
 //! Pieces not yet in are the same model in the ghost's material, and the next one lit.

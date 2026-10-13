@@ -1,6 +1,6 @@
-# Kits: how construction looks, logs first
+# Building kits: how construction looks, logs first
 
-How each kind of construction looks and is laid, starting with logs. It fills in step 4 of [structures.md](structures.md#order). How pieces are made and drawn is technical (D177); the look of log walls (D178), posts and mixing kinds (D179) are Decided; what a wall costs need not match its pieces one for one.
+How each kind of construction looks and is laid, starting with logs. It fills in step 4 of [building-tech.md](building-tech.md#order). How pieces are made and drawn is technical (D177); the look of log walls (D178), posts and mixing kinds (D179) are Decided; what a wall costs need not match its pieces one for one.
 
 ![The log kit: a corner, how walls meet, a doorway, and the three states](images/log-kit.svg)
 
@@ -10,7 +10,7 @@ A wall is drawn as a line on the grid (D154), and the game lays its pieces (D146
 
 - **The blueprint** (D139) is those pieces drawn as a ghost, every log separately, so you can count what is needed, as The Forest's blueprint shows each log.
 - **Going up**, each piece is either in, drawn as it will stand, or still a ghost; the next one is lit.
-- **Built**, the same pieces, merged into one mesh per building (structures.md).
+- **Built**, the same pieces, merged into one mesh per building (building-tech.md).
 - **While drawing**, the ghost under the cursor is the same layout, laid again each time the line grows by a cube.
 
 So a corner looks the same in the blueprint as it does built, just ghosted. Nothing is modelled twice.
@@ -37,19 +37,19 @@ The log kit's pieces, from the approved cabin:
 | State | How | Why |
 |---|---|---|
 | Blueprint | Each piece in a pale, see-through blueprint material, edges brighter so each log reads apart; red where it cannot go. Drawn instanced, many pieces to one draw | Fifty cabins of blueprint are a few thousand pieces, which instancing makes cheap |
-| Going up | The pieces in are drawn solid, the rest ghost, the next outlined and pulsing | Says what to bring and where it goes (construction.md's prompt) |
-| Built | One mesh per building and material, rebuilt in the background when a part changes | Never an entity per log (structures.md) |
-| Far off | The plan's boxes in the wood's colour, faded in with `VisibilityRange` | As structures.md |
+| Going up | The pieces in are drawn solid, the rest ghost, the next outlined and pulsing | Says what to bring and where it goes (building.md's prompt) |
+| Built | One mesh per building and material, rebuilt in the background when a part changes | Never an entity per log (building-tech.md) |
+| Far off | The plan's boxes in the wood's colour, faded in with `VisibilityRange` | As building-tech.md |
 
 **A real preview, before a click** (asked for on 2026-10-12: "ideally it could be a real preview of whats happening? enshrouded is great at this"). Proposed: whatever the tool would do is applied to a copy of the base and laid again, and the difference drawn where it would be: pieces that would be added as the blueprint ghost, pieces that would be cut or taken away in red, the rest left as they are. A door aimed at a wall shows the logs it would shorten and the frame it would put in; a wall drawn across another shows its corner forming. It is laid again only when what the tool aims at changes, not every frame. This replaces today's outlines and films.
 
-What a walker hits is the cube (D181), not the pieces drawn in it. Log ends sticking out at corners do not block anyone. A blueprint blocks nothing (construction.md).
+What a walker hits is the cube (D181), not the pieces drawn in it. Log ends sticking out at corners do not block anyone. A blueprint blocks nothing (building.md).
 
 ## Logs (D178)
 
 Round logs, saddle-notched at the corners with their ends sticking out: the log cabin everyone pictures, and The Forest's. Squared logs dovetailed flush were the alternative: tidier, with less character.
 
-**Not cylinders.** The art is shape, a palette colour per face, and light, with no textures (art.md). A log is made to look hewn and grown, not turned:
+**Not cylinders.** The art is shape, a palette colour per face, and light, with no textures (art-style.md). A log is made to look hewn and grown, not turned:
 
 - **An uneven section**: seven to nine facets of different widths, never a regular polygon, slightly flattened top and bottom where it was scribed to sit on the log below, and turning a little along its length.
 - **A tree's shape**: tapered, the thick end alternating course by course, with a gentle bend and a swelling here and there.
@@ -60,7 +60,7 @@ Round logs, saddle-notched at the corners with their ends sticking out: the log 
 
 Today the log is made in code from the kit's numbers. A kit can name a log model instead, placed for each log and stretched to fit (D177); the log kit's model is in [art/props/kit-log](../art/props/kit-log), not yet named by the kit.
 
-**Courses.** Logs 0.3 m thick (D175), centred in a wall a cube thick and laid 0.25 m apart, so they sit into one another: two courses to a cube, 12 in a 3 m storey, the dozen logs construction.md expects. Walls running east to west and walls running north to south are half a course apart, which is how logs interlock at a corner. Walls on one axis start with a split log at the foot and finish with one on top, as real cabins do. Because it goes by axis, every corner, T and cross interlocks the same way, with nothing to work out between walls.
+**Courses.** Logs 0.3 m thick (D175), centred in a wall a cube thick and laid 0.25 m apart, so they sit into one another: two courses to a cube, 12 in a 3 m storey, the dozen logs building.md expects. Walls running east to west and walls running north to south are half a course apart, which is how logs interlock at a corner. Walls on one axis start with a split log at the foot and finish with one on top, as real cabins do. Because it goes by axis, every corner, T and cross interlocks the same way, with nothing to work out between walls.
 
 **How walls meet.** A wall is a straight run of log cubes (D181). A cube with runs both ways is a corner, a T or a cross; a run that stops is a free end. Logs run past a corner only into the open air, never into a room. Each end of a wall is one of these:
 
@@ -70,10 +70,10 @@ Today the log is made in code from the kit's numbers. A kit can name a log model
 | Corner (L) | Both walls run 0.25 m past the corner | The notched ends alternate, a course each |
 | T | The through wall runs on; the stem runs through it and sticks out the far side | |
 | Cross | Both run through | |
-| In line, at a post | The two meet end to end under an upright log covering the seam | As construction.md's splice |
+| In line, at a post | The two meet end to end under an upright log covering the seam | As building.md's splice |
 | Corner, the other wall built first | The built wall keeps its flush ends; the new wall runs past | A butt-and-pass corner, also real |
 
-The last row is what freezing a wall's layout once a piece is in means (structures.md). Walls on the two axes never share a course, so a wall laid later never has to move a log already built. A corner drawn in one go, as a room or a loop of walls is, always gets the notched corner.
+The last row is what freezing a wall's layout once a piece is in means (building-tech.md). Walls on the two axes never share a course, so a wall laid later never has to move a log already built. A corner drawn in one go, as a room or a loop of walls is, always gets the notched corner.
 
 **Long walls.** Logs are as long as the wall, up to four metres, the longest a tree gives (D174). Longer walls are joined end to end, with the joins staggered from course to course so no seam runs up the wall.
 
@@ -81,7 +81,7 @@ The last row is what freezing a wall's layout once a piece is in means (structur
 
 **Later, with roofs, floors and storeys:**
 
-- **Gable ends**: courses carry on up, each log cut at the roof's slope, the cut made when the mesh is made (structures.md).
+- **Gable ends**: courses carry on up, each log cut at the roof's slope, the cut made when the mesh is made (building-tech.md).
 - **Floors**: split logs side by side on beams.
 - **Roofs**: poles under a covering.
 - **A second storey**: starts over a floor a cube thick (D181), so the split logs at the top of one storey and the foot of the next never show together.
@@ -105,15 +105,15 @@ This is the first of what the developers called adding "a detail": a part placed
 
 Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 
-- **Every part has its kind.** A wall, post, floor or roof section is laid in the kind picked when it is drawn (Ctrl and the wheel, in construction.md's controls). Two walls side by side can be different kinds, and so can the walls and the floor of one room. Each cube keeps its kind, so mixing is per cube.
+- **Every part has its kind.** A wall, post, floor or roof section is laid in the kind picked when it is drawn (Ctrl and the wheel, in building.md's controls). Two walls side by side can be different kinds, and so can the walls and the floor of one room. Each cube keeps its kind, so mixing is per cube.
 - **Where kinds meet, the heavier one runs through.** Stone, then logs, then planks, then wattle. At a corner or a T of stone and logs, the stone wall's corner blocks run to its outer face, and the log wall ends flush against it, as a log cabin meets its stone chimney. In line, the log wall butts into the stone wall's end. Stone is thicker (0.5 m against 0.3), so the step between them shows, as it does on real buildings.
 - **One wall over another.** Log cubes over stone cubes a metre high are how a cabin gets a stone footing, each laid by its own kit.
-- **Changing a kind** is free on a plan nothing is in yet. Once pieces are in, the wall is frozen (structures.md), so it is taken down and laid again, as D146 says.
+- **Changing a kind** is free on a plan nothing is in yet. Once pieces are in, the wall is frozen (building-tech.md), so it is taken down and laid again, as D146 says.
 - **Drawing it** costs nothing extra: a finished building is one mesh per material already.
 
 ## Checking it
 
-The yard (structures.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a door, windows and a gable roof, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71):
+The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a door, windows and a gable roof, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71):
 
 ```bash
 cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet --time 16 --vantage 13,9,-6,13,0.5,-26.5 --shot out/corners.png
@@ -135,7 +135,7 @@ Built:
 
 1. **The stacked layout** in `terra_build` (`logs.rs`): each wall's logs, from the runs of log cubes and what meets their ends, in the order they go in; openings framed; gable ends in logs that shorten under the roof.
 2. **The log made in code**, with the kit file for pine, `assets/data/kits/logs.ron`; a kit can name a log model instead (`terra_game`'s `build/pieces.rs`).
-3. **In the game**: a build's walls drawn from the kit instead of the plain boxes, those in merged into one mesh, the rest a ghost with the next lit. Until plans come (step 3 of structures.md), the kit sheet sets how far each build is in.
+3. **In the game**: a build's walls drawn from the kit instead of the plain boxes, those in merged into one mesh, the rest a ghost with the next lit. Until plans come (step 3 of building-tech.md), the kit sheet sets how far each build is in.
 4. **The kit sheet** on the yard.
 
 ![A log cabin from the kit sheet, late in the day](images/log-cabin-2026-10-12.png)

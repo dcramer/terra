@@ -141,7 +141,7 @@ From the developers, 2026-10-12 (D174): trees behave as in The Forest. You chop 
 1. **Each blow leaves its mark.** A notch is cut into the trunk where the axe lands, deeper with each blow. How many blows a tree takes depends on its size and the tool (flora.ron's cut rules already say so).
 2. **It falls.** At the last blow it creaks, tips away from the side you cut, and falls, swaying through its arc. Its crown crashes through small plants, and it can hurt whoever stands where it lands.
 3. **It breaks where it lands.**
-   - The trunk lies in **logs**, as many as its length gives (up to about four metres each), where it fell, to be carried on the shoulder (D140) and built with ([construction.md](construction.md#large-materials-and-carrying)).
+   - The trunk lies in **logs**, as many as its length gives (up to about four metres each), where it fell, to be carried on the shoulder (D140) and built with ([building.md](building.md#large-materials-and-carrying)).
    - Branches and leaves scatter as litter and small materials: sticks and leaves.
 4. **A stump stays.** It is what regrows (D150) unless you dig it out, which stops it.
 5. **Logs can be cut further:** shorter lengths, and perhaps planks or beams with the axe as Sons of the Forest does, or at a sawbench.

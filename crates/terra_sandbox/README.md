@@ -98,7 +98,7 @@ cargo run -p terra_sandbox -- --experiment look --experiment build
 cargo run -p terra_sandbox -- --experiment look
 ```
 
-An early test of the art direction in [docs/art.md](../../docs/art.md): faceted ground, generated boulders and shrubs, a warm sun with cool shadows, haze, a gradient sky with clouds, and bloom. The play experiment has since gone further.
+An early test of the art direction in [docs/art-style.md](../../docs/art-style.md): faceted ground, generated boulders and shrubs, a warm sun with cool shadows, haze, a gradient sky with clouds, and bloom. The play experiment has since gone further.
 
 ## The forest experiment
 

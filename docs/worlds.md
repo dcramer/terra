@@ -67,7 +67,7 @@ Breathable, temperate, ordinary gravity, water and plants. The easiest world, bu
 <a id="breathable-planets-and-a-setting-per-planet"></a>
 ## Settings and cultures
 
-Realms may differ in setting, such as fantasy, primitive or futuristic, shown in the cultures found there, and more than one may be breathable (D86, Leaning). Whether the air can be breathed is one number in a world's theme. How a setting and its cultures work, every one filling the same gameplay roles with rank the only power axis (D116), is in [settings.md](settings.md); one setting is worked through in [a realm of machines](techno-realm.md).
+Realms may differ in setting, such as fantasy, primitive or futuristic, shown in the cultures found there, and more than one may be breathable (D86, Leaning). Whether the air can be breathed is one number in a world's theme. How a setting and its cultures work, every one filling the same gameplay roles with rank the only power axis (D116), is in [settings.md](settings.md); one setting is worked through in [a realm of machines](settings.md#a-worked-example-the-techno-realm).
 
 <a id="realms-and-portals"></a>
 ## Realms and portals

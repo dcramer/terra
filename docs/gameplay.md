@@ -43,12 +43,12 @@ This overview gives the idea, what drives the world, and the principles. Each sy
 | Survival | [survival.md](survival.md) | Needs that reward more than punish, day and night, death and coming back at a hearth (D171) |
 | Climate | [climate.md](climate.md) | Leaning: seasons (D149) and weather as swings in temperature, daylight and precipitation that everything responds to; body temperature (D153) |
 | Biomes | [biomes.md](biomes.md) | How a world fills with life, from grass to canopy (D148) |
-| Your character | [your-character.md](your-character.md) | No class, creation (D111), moving and getting around big round worlds, the map, what is on screen and what is not |
+| Your character | [player.md](player.md) | No class, creation (D111), moving and getting around big round worlds, the map, what is on screen and what is not |
 | Lore | [lore.md](lore.md) | How the universe works, from the books' world-building in our own words (D125); threats and an organisation across realms (D172) |
 | The arc | [arc.md](arc.md) | The fiction, the first hour without a tutorial, the long game by rank and the spread, playing together |
 | Settings | [settings.md](settings.md) | Leaning (D116): every realm's theme fills the same gameplay roles, as the art's palette roles do; rank is the only power axis; a setting is a way of using magic |
-| A realm of machines | [techno-realm.md](techno-realm.md) | Open, one setting worked through: magitech whose machines run on cores, cannot grow, and are best at holding a place; no guns |
-| Building and claims | [construction.md](construction.md) | Walls, floors and roofs of half-metre cubes on the base's grid (D152, D181), placed as The Sims does (D154); claims, outside which the world heals (D94), starting at a size that can be upgraded (D104) |
+| A realm of machines | [settings.md](settings.md#a-worked-example-the-techno-realm) | Open, one setting worked through: magitech whose machines run on cores, cannot grow, and are best at holding a place; no guns |
+| Building and claims | [building.md](building.md) | Walls, floors and roofs of half-metre cubes on the base's grid (D152, D181), placed as The Sims does (D154); claims, outside which the world heals (D94), starting at a size that can be upgraded (D104) |
 | The MVP | [prototypes.md](prototypes.md#mvp-the-first-playable) | Leaning (D105): the build order for a first playable that tests the core loop, not the game's scope |
 | Items | [items.md](items.md) | The backpack, equipment and action bar (D84) |
 
@@ -134,7 +134,7 @@ Proposed, for how quests and finding things then work:
 
 **Hundreds of variants, not millions** (D182, from the developers): a core tenet. Almost everything is modular and procedural, but thematic, as Borderlands' guns and No Man's Sky's planets are: made from parts by rules, with a theme (a realm, a maker, a people) shaping each. Hundreds or thousands of variants of a kind that each matter, not infinite low-value ones made to be numerous.
 
-**Rich systems, little on screen** (D93, from the developers): the game is rich with systems but somewhat realistic; you do not get a magic display of every piece of information, though some compromises keep it fun. What your body would feel is on screen, and your own skills, ranks and powers read on a character screen; the world's information you have not learned, such as a monster's rank or what an unknown plant does, is learned by looking, and skills sharpen it. What is shown and what is not is in [your-character.md](your-character.md#what-is-on-screen).
+**Rich systems, little on screen** (D93, from the developers): the game is rich with systems but somewhat realistic; you do not get a magic display of every piece of information, though some compromises keep it fun. What your body would feel is on screen, and your own skills, ranks and powers read on a character screen; the world's information you have not learned, such as a monster's rank or what an unknown plant does, is learned by looking, and skills sharpen it. What is shown and what is not is in [player.md](player.md#what-is-on-screen).
 
 ## Why explore, and why settle in more than one place
 

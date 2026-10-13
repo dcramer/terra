@@ -1,6 +1,6 @@
-# Structures: the technical design
+# Building: the technical design
 
-How walls, floors and roofs work in code. The design is [construction.md](construction.md); the prior art is [research/procedural-buildings.md](../research/procedural-buildings.md). Technical choices here are mine (D160); nothing in it changes a design decision.
+How walls, floors and roofs work in code. The design is [building.md](building.md); the prior art is [research/procedural-buildings.md](../research/procedural-buildings.md). Technical choices here are mine (D160); nothing in it changes a design decision.
 
 ## What it rests on
 
@@ -32,7 +32,7 @@ Shared state, in `terra_build`, with no Bevy (the rule in AGENTS.md).
 
 So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to reconcile. Height is counted in cubes; a storey is only the default height of a wall.
 
-**A kit draws cubes** ([kits.md](kits.md)): it finds the runs of cubes of its kind and lays its pieces along them, its corners where runs meet and its cut ends where cubes are empty. A piece is as thick as its kind, logs 0.3 to 0.4 m and stone the whole cube, centred in the cube; what stops a walker is the cube.
+**A kit draws cubes** ([building-kits.md](building-kits.md)): it finds the runs of cubes of its kind and lays its pieces along them, its corners where runs meet and its cut ends where cubes are empty. A piece is as thick as its kind, logs 0.3 to 0.4 m and stone the whole cube, centred in the cube; what stops a walker is the cube.
 
 **What is planned is parts** (step 3): each wall, floor or roof section the player lays, with an id that never changes, its kind of construction, and which of its pieces are in. When a part is finished, its edges and cells join what stands.
 
@@ -50,7 +50,7 @@ Each is recomputed for the building that changed, when a part is laid, a piece g
 
 ## Sizes
 
-The sizes every part should have are in [construction.md](construction.md#sizes) (D175). Each kit is checked against them as it is read: its course heights divide the storey, its wall is as thick as its kind says, its doors and windows are the agreed sizes.
+The sizes every part should have are in [building.md](building.md#sizes) (D175). Each kit is checked against them as it is read: its course heights divide the storey, its wall is as thick as its kind says, its doors and windows are the agreed sizes.
 
 ## Walls: laid by a rule, from a kit
 
@@ -61,7 +61,7 @@ A wall's layout is a pure function of its plan, how it meets its neighbours, its
 3. Lay its courses by the kit's pattern, choosing each piece by its role: a whole block, a half, a corner (alternating by course), a jamb, a sill, a lintel, a cap.
 4. Pick a version of each piece by a hash of where it is, so long walls do not repeat.
 
-**Patterns are code, kits are data.** Four patterns cover the kinds of construction in construction.md: coursed (cut stone), stacked (logs), framed (posts, rails and planks), staked (wattle and daub). A kit is a file in `assets/data/` (D136): the pattern, its sizes, and each piece's model, size, role and versions. A new material on a pattern is a new file and its models, with no code; that is what makes many variants cheap. Rule tables, not wave function collapse: WFC can fail or need backtracking, which the research found Townscaper accepts and a building game cannot.
+**Patterns are code, kits are data.** Four patterns cover the kinds of construction in building.md: coursed (cut stone), stacked (logs), framed (posts, rails and planks), staked (wattle and daub). A kit is a file in `assets/data/` (D136): the pattern, its sizes, and each piece's model, size, role and versions. A new material on a pattern is a new file and its models, with no code; that is what makes many variants cheap. Rule tables, not wave function collapse: WFC can fail or need backtracking, which the research found Townscaper accepts and a building game cannot.
 
 **A course must divide the storey**, or a top plate takes what is left; each kit is checked for it as it is read.
 
@@ -110,7 +110,7 @@ Each step is played and checked by script before the next (D69):
 1. **The model** (built, on cubes, D181): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; older saves converted; built whole. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
 2. **Roofs** (a first version built): the height field, the four styles, laid over a room by a click or drawn as a rectangle, gable ends closed with wall. Not yet: eaves, trims, the covering's pieces, valleys where sections meet walls, an automatic hip over any footprint.
 3. **Plans and constructing** (D139): parts laid as plans; pieces put in one by one, from the pack and storage (D141).
-4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement. Logs first ([kits.md](kits.md), D177, D178): the stacked pattern, logs made in code, the three states and a kit sheet on the yard, built.
+4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement. Logs first ([building-kits.md](building-kits.md), D177, D178): the stacked pattern, logs made in code, the three states and a kit sheet on the yard, built.
 5. **The art of the kits**, by the developers' art pipeline: about ten to fifteen pieces a material, a few versions each.
 
 ## Where the risk is

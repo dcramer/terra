@@ -1,4 +1,4 @@
-// A log wall's kit (docs/kits.md, D177, D178): pine logs, peeled, with daub between the
+// A log wall's kit (docs/building-kits.md, D177, D178): pine logs, peeled, with daub between the
 // courses. The game reads it again when it is saved, so the look can be tuned while it
 // runs. Sizes are in metres; colours as they appear on screen (sRGB), from the palette's
 // wood roles where they have one (tools/characters/look.py).

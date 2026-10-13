@@ -126,9 +126,9 @@ usage: terra_sandbox [options]
                         on that frame, move the play experiment's player to the first
                         spot, facing the second, for testing (repeatable)
   --walls plain         lay walls, floors and roofs plain rather than in logs, the
-                        first kit (docs/kits.md)
+                        first kit (docs/building-kits.md)
   --kit-sheet           on the yard, lay one of each way log walls meet, built, going
-                        up and as a blueprint, to look at (docs/kits.md)
+                        up and as a blueprint, to look at (docs/building-kits.md)
   --vantage <x,y,z,x,y,z>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the base's corner, for experiments
@@ -210,9 +210,9 @@ pub struct Options {
     /// Which level the play experiment is on: the world, or a test level.
     pub level: Level,
     /// What walls, floors and roofs are laid in: `logs`, the default, or `plain`
-    /// (docs/kits.md).
+    /// (docs/building-kits.md).
     pub walls: Option<String>,
-    /// On the yard: lay one of each way log walls meet, in each state (docs/kits.md).
+    /// On the yard: lay one of each way log walls meet, in each state (docs/building-kits.md).
     pub kit_sheet: bool,
     /// The hour of the day the play experiment's clock is set to, if not its own.
     pub time: Option<f32>,

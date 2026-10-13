@@ -1,4 +1,4 @@
-//! An art-direction test, aiming at the look of Forever Ago (docs/art.md).
+//! An art-direction test, aiming at the look of Forever Ago (docs/art-style.md).
 //!
 //! What that look is made of, as far as rendering goes: simple faceted shapes in flat
 //! colours with no textures, a warm sun against cool shadows, haze that turns distance

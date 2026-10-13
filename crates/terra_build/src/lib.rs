@@ -1,5 +1,5 @@
 //! Construction: everything built is half-metre cubes on a base's grid (D48, D181;
-//! docs/structures.md).
+//! docs/building-tech.md).
 //!
 //! - **A cube is air or a kind of construction** ([`Kind`]): logs, stone, planks. What
 //!   fills it ([`Fill`]) is solid, glass, or open: an opening cut in a wall, part of the
@@ -231,7 +231,7 @@ impl Panel {
     }
 }
 
-/// How a pitched roof slopes (docs/structures.md, roofs).
+/// How a pitched roof slopes (docs/building-tech.md, roofs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RoofStyle {
     /// Sloping up from every side to a ridge or a point.

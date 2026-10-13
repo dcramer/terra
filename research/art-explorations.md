@@ -1,6 +1,6 @@
 # Art explorations before direction D
 
-2026-10-10 to 2026-10-12, collected on 2026-10-12. Question: what looks did we try or point at before settling on direction D (graphic layers, D14), and what did each teach? This is reference, not guidance: the guide is [docs/art-style.md](../docs/art-style.md). Taken mostly from what [docs/art.md](../docs/art.md) said before D was chosen.
+2026-10-10 to 2026-10-12, collected on 2026-10-12. Question: what looks did we try or point at before settling on direction D (graphic layers, D14), and what did each teach? This is reference, not guidance: the guide is [docs/art-style.md](../docs/art-style.md). Taken mostly from what the art direction notes said before D was chosen.
 
 ## The order of directions
 

@@ -1,7 +1,7 @@
 #![enable(implicit_some)]
 // Every kind of item there is, and what a player starts with (docs/items.md, D127, D136).
 // A new kind is an entry here, with its icon in assets/icons and its looks in
-// assets/models; no code names one. The numbers are stand-ins (docs/construction.md, D55).
+// assets/models; no code names one. The numbers are stand-ins (docs/building.md, D55).
 //
 // Each kind:
 //   name       what it is called; its icon, looks and saved copies are found by it

@@ -135,7 +135,7 @@ There are three ways to choose a piece:
 
 ## What it means for us
 
-Inferred, for [construction.md](../docs/construction.md); it decides nothing. The difficulty is my estimate for one developer with agents; the developers' art time is separate.
+Inferred, for [building.md](../docs/building.md); it decides nothing. The difficulty is my estimate for one developer with agents; the developers' art time is separate.
 
 ### Roofs
 
@@ -169,7 +169,7 @@ Inferred, for [construction.md](../docs/construction.md); it decides nothing. Th
   4. Pick a version of each by a hash of its position.
 
   This is the same on every machine, in shared code, so the server sends only plans and which parts are built.
-- **Patterns are code, kits are data.** Four patterns cover the table in construction.md: coursed bond, stacked logs, posts and panels, stakes and panels. A new material on an existing pattern is a data file: piece models with sizes and roles, and the pattern's parameters. A new pattern is code, rarely.
+- **Patterns are code, kits are data.** Four patterns cover the table in building.md: coursed bond, stacked logs, posts and panels, stakes and panels. A new material on an existing pattern is a data file: piece models with sizes and roles, and the pattern's parameters. A new pattern is code, rarely.
 - **Pitfalls to design for:**
   - **Course heights:** a log's diameter or a course's height must divide a storey, or a top plate takes up the rest.
   - **Gable walls have sloped tops**, so pieces must be cut by a plane. Cut them at bake time in code, not by modelling a piece per pitch.

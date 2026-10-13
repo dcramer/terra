@@ -38,7 +38,7 @@ The developers doubted rendering icons in play, and on reflection the evidence a
 ## Limits
 
 - Nothing was built or measured. How many icons a frame can draw on an integrated GPU, and how big the atlas should be, are unknown.
-- Whether our painted look (D110's mood board, style C) survives at 64 pixels without an outline or a stronger light is untested; the world has no outlines (art.md), and the developers want the icons in the same style (D130), so a stronger rim light is the first thing to try if they do not read.
+- Whether our painted look (D110's mood board, style C) survives at 64 pixels without an outline or a stronger light is untested; the world has no outlines (art-style.md), and the developers want the icons in the same style (D130), so a stronger rim light is the first thing to try if they do not read.
 - The Tarkov icon cache is known from players clearing it and from a fan tool that reads it, not from its developers.
 - Icons for things that are not models, such as a skill or an effect, are not covered.
 

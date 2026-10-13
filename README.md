@@ -13,7 +13,7 @@ It is in pre-production. Everything here records current thinking, and any of it
 | **A living world**: monsters form where magic pools, animals roam and hunt, settlements trade, grow and fall, whether or not you are there. | [docs/gameplay.md](docs/gameplay.md) |
 | **Always get better**: skills by doing, techniques by study, powers from essences, ranks over all of them. | [docs/progression.md](docs/progression.md), [docs/magic.md](docs/magic.md) |
 | **Survive each world**: health, stamina, mana, breath, hunger, thirst and warmth, against seasons and weather. | [docs/survival.md](docs/survival.md), [docs/climate.md](docs/climate.md) |
-| **Hold your ground**: claims, buildings of walls, floors and roofs, and a tribe of recruits who work and defend on their own. | [docs/construction.md](docs/construction.md), [docs/tribe.md](docs/tribe.md) |
+| **Hold your ground**: claims, buildings of walls, floors and roofs, and a tribe of recruits who work and defend on their own. | [docs/building.md](docs/building.md), [docs/tribe.md](docs/tribe.md) |
 | **Fight like an action RPG**, with Enshrouded as the baseline. | [docs/combat.md](docs/combat.md) |
 | **One art style for every realm**: bold simple shapes, flat colour by palette role, shading left to the light. | [docs/art-style.md](docs/art-style.md) |
 | **A thousand players on one persistent server**, with a few friends as the small case. | [docs/multiplayer.md](docs/multiplayer.md) |

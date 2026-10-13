@@ -31,7 +31,7 @@ One tool to a job, carried on the action bar (D66):
 | Pickaxe | Rock, ore |
 | Shovel | Earth, sand, digging and filling ground |
 | Knife or sickle | Plants, fibres, hides |
-| Hammer | Building and repair ([construction.md](construction.md)) |
+| Hammer | Building and repair ([building.md](building.md)) |
 | Rod, net, bow | Fish, game |
 
 **A tool's material decides what it can work**: a stone pickaxe will not break iron ore. Better tools are made from what the last tool let you reach, which is the Valheim ladder.

@@ -87,7 +87,7 @@ How long each takes follows from the thing: what it costs to build, and how toug
 
 Building starts from a part. Pick one from the dial, cycle through its variants, and aim. What would be built is shown before you commit: the outline of a room or wall, the cut of a window, or a ghost of the item where it would stand. It is red where it cannot go.
 
-A base is half-metre cubes (D152, D181): walls are rows of them a storey high, floors and flat roofs layers, doors and windows cubes cut open or glazed; a room is whatever walls close in, worked out as they change. The room part is a shortcut that lays walls round a rectangle, with a floor and a roof inside. Walls are laid in logs, drawn log by log by their kit (docs/kits.md); `--walls plain` lays them plain. Rooms and walls are drawn by pressing, dragging and letting go, or clicked to lay at their own size; holding on what is laid builds it.
+A base is half-metre cubes (D152, D181): walls are rows of them a storey high, floors and flat roofs layers, doors and windows cubes cut open or glazed; a room is whatever walls close in, worked out as they change. The room part is a shortcut that lays walls round a rectangle, with a floor and a roof inside. Walls are laid in logs, drawn log by log by their kit (docs/building-kits.md); `--walls plain` lays them plain. Rooms and walls are drawn by pressing, dragging and letting go, or clicked to lay at their own size; holding on what is laid builds it.
 
 ![The dial of parts](../../docs/images/outpost-dial-2026-10-10.png)
 
@@ -171,4 +171,4 @@ cargo run -p terra_sandbox -- --experiment play --vantage -52,14,74,-69,0,52 --s
 cargo run -p terra_sandbox -- --experiment look --experiment build
 ```
 
-A base of walls, floors and roofs (D152). It stands on the most level ground near the start, on a foundation, with steps up to its door. Aim with the mark in the middle of the view: V cycles the wall cell you are looking at through solid, three sizes of window and a door, and B adds a room on open ground. The rules live in `terra_build`; the design is [docs/structures.md](../../docs/structures.md).
+A base of walls, floors and roofs (D152). It stands on the most level ground near the start, on a foundation, with steps up to its door. Aim with the mark in the middle of the view: V cycles the wall cell you are looking at through solid, three sizes of window and a door, and B adds a room on open ground. The rules live in `terra_build`; the design is [docs/building-tech.md](../../docs/building-tech.md).

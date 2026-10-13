@@ -1,4 +1,4 @@
-//! The build menu (docs/construction.md, the build menu; D67): with the hammer in hand,
+//! The build menu (docs/building.md, the build menu; D67): with the hammer in hand,
 //! tap the build menu key for a panel of tabs, each a grid of what can be built, with
 //! what each costs. Pick one and it is in hand; hold R for its variants (`dial`). The
 //! world does not pause.

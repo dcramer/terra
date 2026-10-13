@@ -14,7 +14,7 @@ Status: taking the books' fundamentals and their names for them, and inventing e
 | Monsters formed from gathered magic | Every kind of monster ([creatures.md](creatures.md)) |
 | Essences that give a person powers, a few to a person | Every essence and every power ([magic.md](magic.md#essences)) |
 | Ranks that everything climbs | What each rank means in play, and how it is crossed |
-| An aura that betrays your power | How it is shown ([your-character.md](your-character.md)) |
+| An aura that betrays your power | How it is shown ([player.md](player.md)) |
 | Many worlds, and ways between them | Every realm, generated ([worlds.md](worlds.md), [settings.md](settings.md)) |
 | Magic that can be studied as well as held | Every discipline and style |
 | People whose work is keeping monsters down | Every people, faction, culture and settlement ([people.md](people.md)) |
