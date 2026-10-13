@@ -20,7 +20,7 @@ The developers' agenda, above everything below: building takes **an approach to 
 
 ## Where it lives
 
-**`terra_build`**, shared, with no Bevy (D28), a module a concern. `cubes`, `ops`, `ground`, `support`, `rooms`, `cost`, `walk` and `save` are built (step 1, D199); `kit`, `layout/runs`, `layout/trims`, `layout/ground`, `layout/floors`, `layout/blocks` and `layout/roofs`, `timber`, `surface` and `roofing` are built (step 2, under way):
+**`terra_build`**, shared, with no Bevy (D28), a module a concern. `cubes`, `ops`, `ground`, `support`, `rooms`, `cost`, `walk` and `save` are built (step 1, D199); `kit`, `layout/runs`, `layout/trims`, `layout/ground`, `layout/floors`, `layout/blocks` and `layout/roofs`, `timber`, `surface` and `roofing` are built (step 2, under way); `sections` is built (step 3, D213):
 
 | Module | Holds |
 |---|---|
@@ -40,21 +40,23 @@ The developers' agenda, above everything below: building takes **an approach to 
 | `layout/ground` | Door steps down to the ground (D206); footings are cubes, laid by `ground` |
 | `walk` | Walking: each cube to its fill, as its kind's slab, and the shapes' table |
 | `save` | The snapshot format, and conversion of older saves |
+| `sections` | A section laid alone and drawn: its pieces and how far each is in, merged by kind and material near, baked into one coarse surface far off and coarser further, the plan's pieces as ghosts; which sections a change reaches |
 
-A layout is a pure function of a section of cubes, its neighbours' edges, the kits and the base's seed. Its output is **piece instances in grid units**: a role (a log of 3 m, an outer corner's eighth, a ridge cap), a version and a place. No model sizes, so the server needs no art, and nothing floating that machines could disagree on. Versions come from a fixed hash of the base's seed and the cube's place, held to known values by a test.
+A layout is a pure function of a section of cubes and what reaches it (the whole of a row of logs, a roof or a deck that crosses into it), the kits and the base's seed (`layout::lay_section`). Every piece belongs to one section, the one the cube its middle is in (`Piece::anchor`), so a log crossing a section's edge is laid by one section only, and the sections laid one by one are exactly the base laid whole, held by a test. Its output is **piece instances in grid units**: a role (a log of 3 m, an outer corner's eighth, a ridge cap), a version and a place. No model sizes, so the server needs no art, and nothing floating that machines could disagree on. Versions come from a fixed hash of the base's seed and the cube's place, held to known values by a test.
 
-**`terra_game`**, the Bevy side, as plugins under `build/`, each owning its components and systems (`build.rs`, 1,330 lines today, split the same way):
+**`terra_game`**, the Bevy side, as plugins under `build/`, each owning its components and systems (`build.rs` split the same way; `store`, `layout`, `draw`, `maps` and `light` built, step 3):
 
 | Plugin | Does |
 |---|---|
-| `store` | A base is an entity; its sections are child entities with a `Section` component; applying an operation marks sections dirty |
-| `layout` | Lays dirty sections on the async compute pool, at most a few a frame, nearest first |
-| `draw` | Merges each section's built pieces into one mesh per material; draws planned pieces as instanced ghosts and the next part lit; far off, a mesh per section of the pieces' lowest detail, with `VisibilityRange` |
-| `models` | Loads each kit's models and their levels of detail, keyed by role and version |
+| `store` | A base is an entity; its sections are child entities with a `Section` component; a change sets the sections it reaches waiting |
+| `layout` | Lays and merges waiting sections on the async compute pool, as many at once as it has threads, nearest the camera first |
+| `draw` | Puts each section on screen a few a frame: a mesh per kind and material near, the plan's pieces as ghosts and the next part lit, far off one baked mesh and further a coarser one, with `VisibilityRange`; near detail only near the camera |
+| `models`, `maps` | Load each kit's door and window models (`pieces`), and the height and colour maps its pieces are made with on the CPU (`maps`) |
 | `props` | Doors and windows: entities fitted into holes, opening, shutting, lit within, and later broken and mended |
 | `act` | Laying plans, building by fill (hold the key), taking apart with the reason it is refused, undo, fitting props; driven by the hammer's existing aim and act |
 | `light` | Rooms dim the sky's light from inside (D155) |
 | `sheet` | The kit sheet: a row for every case in construction-001's table, in every state |
+| `village` | Fifty buildings of every kind, roof and plan, for the `village` bench |
 
 **Networking** (track D, `terra_net`, not started) carries the operations as they are. Nothing here waits for it, and nothing here may assume a client is also the server.
 
@@ -77,11 +79,13 @@ Iteration is always in sorted order, so every machine lays and floods the same w
 
 ## Drawing
 
-1. **Laying** a dirty section gives its piece instances. Changing one cube marks its section, and its neighbours when it is on an edge.
-2. **Merging**: built instances become one mesh per section and material, on a worker thread, uploaded a few a frame. A kit's textures are an array per material, so a section is a few draws whatever its kinds.
-3. **Ghosts**: planned instances are drawn instanced in the ghost material, Bevy batching the same mesh and material; the next part lit. Plans are sent only to the claim's tribe, near (D193).
-4. **Far off**: each section's lowest-detail pieces merged, faded in with `VisibilityRange`; further, a box per section in its kits' colours, later an impostor.
-5. **Light**: the sky's light dimmed indoors, from rooms; a probe per room later.
+As built in step 3 (D213):
+
+1. **Laying**: a change marks its sections (a cube's own, and its neighbours' when it is on an edge), and every section of the building they are in waits to be laid again, as a layout reaches across a building: a log's joins along its wall, a roof's kind from the walls under it. Sections are laid and merged on the workers, nearest the camera first; one that lays as it was, its pieces and their states the same (`Laid::key`), is left as it is drawn, so a change merges again only what it changed. A test checks a change never alters a section it did not set waiting.
+2. **Merging**: built pieces become a mesh per section, kind and material, their long members' and block surfaces' corners shared, uploaded a few a frame. A section's block surface is worked out with the cubes a step past its edge, so it meets its neighbour's with no seam. Texture arrays per material were not needed: near, a section is ten or so draws, and far off one.
+3. **Ghosts**: a plan's pieces are a unit box or eight-sided prism each, stretched over the piece, all in two ghost materials (`shaders/ghost.wesl`: a faint blue, each face's edges drawn as fine lines, its outline brighter), so Bevy batches them and a plan reads as its pieces, not a pale sheet; a block kind's plan is a plain shell lined at its cubes. The next part is drawn as it will be, lit. Ghosts are seen to 90 m.
+4. **Detail by distance**: every piece as it is made to 25 m; to 60 m, still textured, members of ten sides with rings 25 cm apart, the stone's surface in four steps a face and half displaced, no battens; past 60 m one mesh a section: members with eight sides, the stone in two steps, roofs a plain covering, no battens or rafters, its textures baked into its corners' colours from each material's colour and occlusion (as Unreal's HLOD bakes them); past 180 m coarser again, walls, floors and roofs only, to 600 m; each fading into the next with `VisibilityRange`. Finer detail is made only for sections near the camera (all of it within 40 m, kept to 55 m; textured within 95 m, kept to 140 m), so the far majority of a village costs the workers and the GPU little.
+5. **Light**: a room closed all round and covered holds a light probe of the sky's light dimmed (D155), which Bevy uses in place of the sky inside it; a probe lit from the room itself later.
 
 Long members are made to their length (D200), their texture repeating along them and cut faces showing end grain, so nothing is stretched. Block kinds are no pieces: their cubes' surface is meshed per section, rounded and displaced by their material (D197), finer near the camera and coarser far off.
 

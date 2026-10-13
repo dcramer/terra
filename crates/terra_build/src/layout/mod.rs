@@ -332,15 +332,24 @@ enum Spot {
 struct Walls<'a> {
     base: &'a Base,
     kind: Kind,
+    /// What each cube asked about is, asked of the base once: a row's courses ask of each
+    /// of its cubes many times.
+    known: std::cell::RefCell<crate::mesh::QuickMap<IVec3, Option<Fill>>>,
 }
 
 impl Walls<'_> {
     /// A cube of the kit's kind that is part of a wall.
     fn ours(&self, at: IVec3) -> Option<Fill> {
-        self.base
+        if let Some(&known) = self.known.borrow().get(&at) {
+            return known;
+        }
+        let ours = self
+            .base
             .cube(at)
             .filter(|cube| cube.kind == self.kind && self.base.in_wall(at))
-            .map(|cube| drawn_fill(&cube))
+            .map(|cube| drawn_fill(&cube));
+        self.known.borrow_mut().insert(at, ours);
+        ours
     }
 
     /// Whether a cube of ours runs along an axis: it has another of ours either side.
@@ -534,6 +543,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     let walls = Walls {
         base,
         kind: kit.kind(),
+        known: Default::default(),
     };
     // Every cube on the rows that cross the scope, either way, whole.
     let band = |axis: Axis| {

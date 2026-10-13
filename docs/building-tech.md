@@ -80,12 +80,13 @@ Because walls run in four directions only (D146), a hip roof over any footprint,
 
 ## Drawing many buildings
 
-On the Bevy side, in `terra_game`:
+On the Bevy side, in `terra_game` (D213; [building-plan.md](building-plan.md#drawing)):
 
-- **Built pieces are merged** into meshes per fixed section of cubes and material, rebuilt in a background task only where cubes changed. Never an entity per stone.
-- **Pieces being built are drawn on their own**, instanced, with the ghost of what is still to go in, until the part is finished.
-- **Far off, a simplified mesh per section** with its texture baked, as Unreal's HLOD, faded in with Bevy's `VisibilityRange`.
-- **Measured before relying on it**: a village of fifty cabins, on the fast GPU and the integrated one, in the loop a player runs.
+- **A base is an entity, its sections of 16 cubes a side its children.** A change sets the sections of its building waiting; they are laid and merged on worker threads, nearest the camera first, and put on screen a few a frame. A section laid the same as before is left alone. Never an entity per stone.
+- **Built pieces are merged** into a mesh per section, kind and material, their corners shared.
+- **Pieces not yet built are ghosts**, a unit box or prism each in one ghost material, which Bevy batches, drawn as a blueprint; the next piece is drawn as it will be, lit.
+- **Far off, one mesh per section** with its textures baked into its colours, as Unreal's HLOD, coarser again further, switched with Bevy's `VisibilityRange`; near detail is made only near the camera.
+- **Measured**: the `village` bench, fifty buildings in view, against `village-bare`, the same view with nothing built, on the fast GPU and the integrated one.
 
 ## Constructing
 

@@ -23,7 +23,7 @@
 
 use super::{Piece, Place, Scope, hash, ticks};
 use crate::kit::{Kit, Kits};
-use crate::mesh::ROOF_THICK_M;
+use crate::mesh::{QuickMap, ROOF_THICK_M};
 use crate::{Base, CELL_M, Fill, Kind, RoofId, RoofSection, STOREY_CUBES, STOREY_M};
 use glam::{IVec3, Vec2, Vec3};
 use std::collections::BTreeMap;
@@ -200,18 +200,21 @@ struct Square {
 struct Lattice<'a> {
     field: &'a Field,
     /// Each corner's rise, by its place on the lattice.
-    nodes: BTreeMap<[i32; 2], f32>,
-    middles: BTreeMap<[i32; 2], f32>,
+    nodes: QuickMap<[i32; 2], f32>,
+    middles: QuickMap<[i32; 2], f32>,
+    /// The squares, in order, and the same to look up quickly.
     squares: BTreeMap<[i32; 2], Square>,
+    found: QuickMap<[i32; 2], Square>,
 }
 
 impl<'a> Lattice<'a> {
     fn new(base: &Base, field: &'a Field) -> Lattice<'a> {
         let mut lattice = Lattice {
             field,
-            nodes: BTreeMap::new(),
-            middles: BTreeMap::new(),
+            nodes: QuickMap::default(),
+            middles: QuickMap::default(),
             squares: BTreeMap::new(),
+            found: QuickMap::default(),
         };
         for owner in &field.sections {
             let (low, high) = owner.section.bounds();
@@ -220,24 +223,28 @@ impl<'a> Lattice<'a> {
             let to = ((high + reach) / STEP_M).ceil().as_ivec2();
             for i in from.x..to.x {
                 for j in from.y..to.y {
-                    if lattice.squares.contains_key(&[i, j]) {
+                    if lattice.found.contains_key(&[i, j]) {
                         continue;
                     }
                     let middle = (Vec2::new(i as f32, j as f32) + 0.5) * STEP_M;
                     let Some((rise, owner)) = field.at(middle) else {
                         continue;
                     };
-                    let corners: Option<Vec<f32>> = [[0, 0], [1, 0], [0, 1], [1, 1]]
-                        .iter()
-                        .map(|[di, dj]| {
-                            let node = [i + di, j + dj];
-                            let rise =
-                                field.rise(Vec2::new(node[0] as f32, node[1] as f32) * STEP_M)?;
-                            lattice.nodes.insert(node, rise);
-                            Some(rise)
-                        })
-                        .collect();
-                    if corners.is_none() {
+                    // Each corner's rise, worked out once for the squares that share it.
+                    let mut corners = true;
+                    for [di, dj] in [[0, 0], [1, 0], [0, 1], [1, 1]] {
+                        let node = [i + di, j + dj];
+                        if lattice.nodes.contains_key(&node) {
+                            continue;
+                        }
+                        match field.rise(Vec2::new(node[0] as f32, node[1] as f32) * STEP_M) {
+                            Some(rise) => {
+                                lattice.nodes.insert(node, rise);
+                            }
+                            None => corners = false,
+                        }
+                    }
+                    if !corners {
                         continue;
                     }
                     // A wall standing up through the roof here.
@@ -251,6 +258,7 @@ impl<'a> Lattice<'a> {
                         .is_some_and(|c| c.fill != Fill::Open && base.in_wall(cube));
                     lattice.middles.insert([i, j], rise);
                     lattice.squares.insert([i, j], Square { owner, blocked });
+                    lattice.found.insert([i, j], Square { owner, blocked });
                 }
             }
         }
@@ -275,7 +283,7 @@ impl<'a> Lattice<'a> {
 
     /// A square with covering on it: under the roof, and no wall through it.
     fn covered(&self, square: [i32; 2]) -> Option<Square> {
-        self.squares.get(&square).copied().filter(|s| !s.blocked)
+        self.found.get(&square).copied().filter(|s| !s.blocked)
     }
 
     /// One of a square's four triangles, on a side: its middle and the side's two corners.
@@ -288,7 +296,7 @@ impl<'a> Lattice<'a> {
     /// The cell of a roof's section a square goes up with: the one it is over, or the
     /// nearest, for eaves.
     fn cell(&self, square: [i32; 2], stage: u8) -> RoofCell {
-        let owner = &self.field.sections[self.squares[&square].owner];
+        let owner = &self.field.sections[self.found[&square].owner];
         let (min, max) = (owner.section.min, owner.section.max);
         RoofCell {
             roof: owner.id,
@@ -352,7 +360,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
         let lattice = Lattice::new(base, field);
         let ours = |square: [i32; 2]| {
             lattice
-                .squares
+                .found
                 .get(&square)
                 .is_some_and(|s| field.sections[s.owner].kind == kit.kind())
         };
@@ -385,7 +393,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                 let (step, _, _) = SIDES[side];
                 let beyond = [square[0] + step[0], square[1] + step[1]];
                 let (p, q) = (triangle[1], triangle[2]);
-                let part = match lattice.squares.get(&beyond) {
+                let part = match lattice.found.get(&beyond) {
                     Some(there) if !there.blocked => {
                         // Each shared side once, from the square to its west or north.
                         if side == 0 || side == 3 {
@@ -533,17 +541,25 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
 
 /// Where a level plane crosses a triangle, if it does: the two ends of the line.
 fn level_cut(t: &[Vec3; 3], height: f32) -> Option<(Vec3, Vec3)> {
-    let mut found: Vec<Vec3> = Vec::new();
+    let mut found = [Vec3::ZERO; 3];
+    let mut count = 0;
     for i in 0..3 {
         let (a, b) = (t[i], t[(i + 1) % 3]);
-        if (a.y - height) * (b.y - height) < 0.0 {
-            found.push(a + (b - a) * ((height - a.y) / (b.y - a.y)));
+        let point = if (a.y - height) * (b.y - height) < 0.0 {
+            a + (b - a) * ((height - a.y) / (b.y - a.y))
         } else if (a.y - height).abs() < 1e-6 {
-            found.push(a);
+            a
+        } else {
+            continue;
+        };
+        // Points that follow one another the same are one.
+        if count > 0 && found[count - 1].distance(point) < 1e-6 {
+            continue;
         }
+        found[count] = point;
+        count += 1;
     }
-    found.dedup_by(|a, b| a.distance(*b) < 1e-6);
-    (found.len() >= 2).then(|| (found[0], found[found.len() - 1]))
+    (count >= 2).then(|| (found[0], found[count - 1]))
 }
 
 /// The normal of the plane through a line and a point beside it, facing up.

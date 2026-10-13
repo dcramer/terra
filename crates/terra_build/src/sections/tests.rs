@@ -238,7 +238,7 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                 progress: &Progress::Whole,
                 flights: &[],
             };
-            let drawn = draw(&section, &lay(&section), true);
+            let drawn = draw(&section, &lay(&section), Reach::Near);
             merged.extend(drawn.near.into_values());
         }
         // The pieces drawn one by one, and each block kind's cubes as one surface.
@@ -320,14 +320,14 @@ fn far_off_a_section_is_far_fewer_triangles_and_one_surface() {
         progress: &Progress::Whole,
         flights: &[],
     };
-    let drawn = draw(&section, &lay(&section), true);
+    let drawn = draw(&section, &lay(&section), Reach::Near);
     let near: usize = drawn.near.values().map(Surface::triangle_count).sum();
     let (far, proxy) = (drawn.far.triangle_count(), drawn.proxy.triangle_count());
     assert!(near > 0 && far > 0 && proxy > 0);
     assert!(far * 5 < near, "far {far} against near {near}");
     assert!(proxy < far, "proxy {proxy} against far {far}");
     // Far off only, nothing near is drawn.
-    assert!(draw(&section, &lay(&section), false).near.is_empty());
+    assert!(draw(&section, &lay(&section), Reach::Far).near.is_empty());
 }
 
 #[test]
@@ -357,7 +357,7 @@ fn a_plan_is_drawn_as_ghosts_a_piece_each_and_the_next_lit() {
             progress: &Progress::Fraction(0.0),
             flights: &[],
         };
-        let drawn = draw(&section, &lay(&section), true);
+        let drawn = draw(&section, &lay(&section), Reach::Near);
         assert!(drawn.near.values().all(|s| s.triangle_count() == 0) || drawn.near.is_empty());
         ghosts += drawn.ghosts.len();
         lit += drawn
@@ -496,7 +496,7 @@ fn far_off_the_textures_are_baked_into_the_colours() {
         progress: &Progress::Whole,
         flights: &[],
     };
-    let drawn = draw(&section, &lay(&section), false);
+    let drawn = draw(&section, &lay(&section), Reach::Far);
     assert!(drawn.far.triangle_count() > 0);
     assert!(
         drawn

@@ -368,11 +368,22 @@ fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
     (is_in, cubes)
 }
 
+/// How near a section is drawn for: the finest detail it is given, and all coarser.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Reach {
+    Far,
+    Mid,
+    Near,
+}
+
 /// How finely a section is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Detail {
     /// Every piece as it is made, textured: near.
     Near,
+    /// Textured still, members with fewer sides and rings further apart, the stone's
+    /// surface in fewer steps and less displaced, no battens: a few metres off.
+    Mid,
     /// Coarser members, the stone's surface in fewer steps, roofs as a plain covering, no
     /// battens or rafters under it; its textures baked into its corners' colours.
     Far,
@@ -386,6 +397,10 @@ impl Detail {
         let mut kit = kit.clone();
         match self {
             Detail::Near => {}
+            Detail::Mid => {
+                kit.timber.sides = kit.timber.sides.min(10);
+                kit.timber.step = kit.timber.step.max(0.25);
+            }
             Detail::Far => {
                 kit.timber.sides = kit.timber.sides.min(8);
                 kit.timber.step = kit.timber.step.max(0.45);
@@ -402,6 +417,7 @@ impl Detail {
     fn steps(self) -> u32 {
         match self {
             Detail::Near => SURFACE_STEPS,
+            Detail::Mid => MID_STEPS,
             Detail::Far => 2,
             Detail::Proxy => 1,
         }
@@ -411,6 +427,14 @@ impl Detail {
     fn shows(self, piece: &Piece) -> bool {
         match (self, piece) {
             (Detail::Near, _) => true,
+            (
+                Detail::Mid,
+                Piece::Roof {
+                    part: RoofPart::Batten,
+                    ..
+                },
+            ) => false,
+            (Detail::Mid, _) => true,
             (
                 Detail::Far,
                 Piece::Roof {
@@ -431,8 +455,10 @@ impl Detail {
     }
 }
 
-/// How finely a block kind's cube faces are divided near: a step every 5 cm or so.
+/// How finely a block kind's cube faces are divided near: a step every 5 cm or so; and a
+/// few metres off, every 12.5 cm.
 pub const SURFACE_STEPS: u32 = 10;
+const MID_STEPS: u32 = 4;
 
 /// How far a block kind's floors' flagstones stand out, as a fraction of its walls' stone:
 /// flatter, as they are walked on.
@@ -442,8 +468,11 @@ const FLOOR_RELIEF: f32 = 0.3;
 /// `Floor` material where it has one, its faces divided in so many steps.
 pub fn block_look(kit: &Kit, steps: u32) -> Look {
     let metres = |material: Material| kit.textures.get(&material).map(|t| t.metres);
+    // Displaced as finely as its steps can show.
     let relief = if steps >= SURFACE_STEPS {
         kit.relief
+    } else if steps >= MID_STEPS {
+        kit.relief * 0.5
     } else {
         0.0
     };
@@ -481,6 +510,8 @@ pub struct Ghost {
 #[derive(Clone, Debug, Default)]
 pub struct Drawn {
     pub near: BTreeMap<(Kind, Material), Surface>,
+    /// What is in, a few metres off.
+    pub mid: BTreeMap<(Kind, Material), Surface>,
     pub plain: Surface,
     pub glass: Surface,
     pub next: Surfaces,
@@ -491,17 +522,20 @@ pub struct Drawn {
     pub openings: Vec<(Piece, Stage)>,
 }
 
-/// Draws a laid section: near only if `near`, as the game draws near detail only for
-/// sections near the camera.
-pub fn draw(section: &Section, laid: &Laid, near: bool) -> Drawn {
+/// Draws a laid section, as finely as `reach` asks and coarser: the game draws finer
+/// detail only for the sections near the camera. A plan's ghosts, the next part and the
+/// doors and windows come with the finest textured detail drawn.
+pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
     let mut drawn = Drawn::default();
     let kits = section.kits;
-    let details: &[Detail] = if near {
-        &[Detail::Near, Detail::Far, Detail::Proxy]
-    } else {
-        &[Detail::Far, Detail::Proxy]
+    let details: &[Detail] = match reach {
+        Reach::Near => &[Detail::Near, Detail::Mid, Detail::Far, Detail::Proxy],
+        Reach::Mid => &[Detail::Mid, Detail::Far, Detail::Proxy],
+        Reach::Far => &[Detail::Far, Detail::Proxy],
     };
+    let finest = details[0];
     for &detail in details {
+        let first = detail == finest && detail != Detail::Far;
         let mut built: BTreeMap<(Kind, Material), Surface> = BTreeMap::new();
         let mut next = Surfaces::sharing();
         for (index, kit) in kits.0.iter().enumerate() {
@@ -526,37 +560,34 @@ pub fn draw(section: &Section, laid: &Laid, near: bool) -> Drawn {
                         piece,
                         &coarse,
                         face,
-                        detail != Detail::Near,
+                        matches!(detail, Detail::Far | Detail::Proxy),
                         &mut mine,
                     ),
-                    Stage::Next if detail == Detail::Near => {
-                        crate::draw::draw_as(piece, kit, face, false, &mut next)
+                    Stage::Next if first => {
+                        crate::draw::draw_as(piece, &coarse, face, false, &mut next)
                     }
                     // Far off, what goes in next is drawn as though it were in.
                     Stage::Next => crate::draw::draw_as(piece, &coarse, None, true, &mut mine),
-                    Stage::Ghost if detail == Detail::Near => {
+                    Stage::Ghost if first => {
                         drawn.ghosts.extend(ghost(piece, kit, count % 2 == 1));
                     }
                     Stage::Ghost | Stage::Left => {}
                 }
-                if detail == Detail::Near
-                    && matches!(piece, Piece::Opening { .. })
-                    && *stage != Stage::Left
-                {
+                if first && matches!(piece, Piece::Opening { .. }) && *stage != Stage::Left {
                     drawn.openings.push((piece.clone(), *stage));
                 }
             }
             if kit.pattern == Pattern::Masonry {
-                let blocks = draw_blocks(section, kit, &own, &edge, detail);
+                let blocks = draw_blocks(section, kit, &own, &edge, detail, first);
                 for (set, surfaces) in blocks.into_iter().enumerate() {
                     match set {
                         0 => join(&mut mine, surfaces),
-                        1 if detail == Detail::Near => {
+                        1 if first => {
                             for (_, surface) in surfaces.0 {
                                 drawn.shell.append(surface);
                             }
                         }
-                        2 if detail == Detail::Near => join(&mut next, surfaces),
+                        2 if first => join(&mut next, surfaces),
                         2 => join(&mut mine, surfaces),
                         _ => {}
                     }
@@ -598,11 +629,12 @@ pub fn draw(section: &Section, laid: &Laid, near: bool) -> Drawn {
                 .or_default()
                 .append(tops);
         }
+        if first {
+            drawn.next = next;
+        }
         match detail {
-            Detail::Near => {
-                drawn.near = built;
-                drawn.next = next;
-            }
+            Detail::Near => drawn.near = built,
+            Detail::Mid => drawn.mid = built,
             Detail::Far => drawn.far = bake(section, built),
             Detail::Proxy => drawn.proxy = bake(section, built),
         }
@@ -628,6 +660,7 @@ fn draw_blocks(
     own: &[&Placed],
     edge: &[&Placed],
     detail: Detail,
+    first: bool,
 ) -> [Surfaces; 3] {
     let base = section.base;
     let mut sets: [BTreeSet<[i32; 3]>; 3] = Default::default();
@@ -644,7 +677,7 @@ fn draw_blocks(
         };
         let set = match (stage, detail) {
             (Stage::In, _) => 0,
-            (Stage::Next, Detail::Near) => 2,
+            (Stage::Next, _) if first => 2,
             // Far off, what goes in next is in.
             (Stage::Next, _) => 0,
             (Stage::Ghost, _) => 1,
@@ -658,7 +691,7 @@ fn draw_blocks(
             .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at))
     };
     let look = block_look(kit, detail.steps());
-    let (relief, top) = if detail == Detail::Near {
+    let (relief, top) = if matches!(detail, Detail::Near | Detail::Mid) {
         (section.maps.shape(kit), section.maps.top(kit))
     } else {
         (None, None)
@@ -699,7 +732,7 @@ fn draw_blocks(
         Surfaces::sharing(),
     ];
     for set in 0..3 {
-        if sets[set].is_empty() || (set == 1 && detail != Detail::Near) {
+        if sets[set].is_empty() || (set == 1 && !first) {
             continue;
         }
         // What is built hides what is not; the rest show their own faces.

@@ -7,7 +7,7 @@
 //! with `VisibilityRange`, as Unreal's HLOD does. Near detail is made only for sections
 //! near the camera and dropped when the camera leaves them.
 
-use super::layout::{Done, Drawing, Jobs, NEAR_DROP_M, NEAR_LOAD_M, Outcome};
+use super::layout::{Done, Drawing, Jobs, Outcome, reach};
 use super::store::{self, Drawn, Section, each};
 use super::{Build, BuildLook, Built, Site, pieces};
 use crate::planet::MainCamera;
@@ -24,12 +24,14 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use terra_build::kit::Kits;
 use terra_build::layout::Piece;
-use terra_build::sections::{Drawn as Merged, Ghost, Shape, Stage};
+use terra_build::sections::{Drawn as Merged, Ghost, Reach, Shape, Stage};
 use terra_build::{Kind, Material, Prop, Surface};
 
 /// Where each detail is seen, in metres from a section's middle, each fading into the
-/// next over a margin: near detail to here, far to `FAR_M`, the proxy to `PROXY_M`.
-pub(super) const NEAR_M: f32 = 60.0;
+/// next over a margin: full detail to here, a few metres off's to `MID_M`, far to `FAR_M`,
+/// the proxy to `PROXY_M`.
+const NEAR_M: f32 = 25.0;
+const MID_M: f32 = 60.0;
 const FAR_M: f32 = 180.0;
 const PROXY_M: f32 = 600.0;
 /// How far a plan's ghosts are seen.
@@ -41,28 +43,12 @@ fn fade(at: f32) -> std::ops::Range<f32> {
     at * (1.0 - FADE)..at * (1.0 + FADE)
 }
 
-/// Near detail: from the camera to `NEAR_M`.
-fn near_range() -> VisibilityRange {
+/// A detail seen from where a finer one ends, or from the camera if there is none, to
+/// where it ends.
+fn range(after: Option<f32>, end: f32) -> VisibilityRange {
     VisibilityRange {
-        start_margin: 0.0..0.0,
-        end_margin: fade(NEAR_M),
-        use_aabb: false,
-    }
-}
-
-/// Far detail: from where near detail ends, or from the camera while a section has none.
-fn far_range(after_near: bool) -> VisibilityRange {
-    VisibilityRange {
-        start_margin: if after_near { fade(NEAR_M) } else { 0.0..0.0 },
-        end_margin: fade(FAR_M),
-        use_aabb: false,
-    }
-}
-
-fn proxy_range() -> VisibilityRange {
-    VisibilityRange {
-        start_margin: fade(FAR_M),
-        end_margin: fade(PROXY_M),
+        start_margin: after.map_or(0.0..0.0, fade),
+        end_margin: fade(end),
         use_aabb: false,
     }
 }
@@ -255,6 +241,7 @@ pub(super) fn kit_materials(
 /// A section ready to put on screen, made on a worker: its meshes, about its middle.
 pub(super) struct Parts {
     near: Vec<(Kind, Material, Mesh)>,
+    mid: Vec<(Kind, Material, Mesh)>,
     plain: Option<Mesh>,
     glass: Option<Mesh>,
     next: Vec<Mesh>,
@@ -273,6 +260,13 @@ pub(super) fn parts(drawn: Merged, centre: Vec3) -> Parts {
     Parts {
         near: drawn
             .near
+            .iter()
+            .filter_map(|(&(kind, material), surface)| {
+                textured(surface).map(|mesh| (kind, material, mesh))
+            })
+            .collect(),
+        mid: drawn
+            .mid
             .iter()
             .filter_map(|(&(kind, material), surface)| {
                 textured(surface).map(|mesh| (kind, material, mesh))
@@ -383,7 +377,7 @@ fn upload(
 
 impl Parts {
     /// Whether nothing of it is drawn.
-    fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.corners() == 0 && self.ghosts.is_empty() && self.openings.is_empty()
     }
 
@@ -392,6 +386,7 @@ impl Parts {
         let count = |mesh: &Mesh| mesh.count_vertices();
         self.near
             .iter()
+            .chain(&self.mid)
             .map(|(_, _, mesh)| count(mesh))
             .sum::<usize>()
             + self.next.iter().map(count).sum::<usize>()
@@ -422,7 +417,7 @@ fn show(
         return;
     }
     let Outcome::Drawn {
-        key, near, parts, ..
+        key, reach, parts, ..
     } = done.outcome
     else {
         // Laid as it was: drawn as it is, and no longer being laid.
@@ -440,19 +435,15 @@ fn show(
         commands.entity(entity).despawn();
     }
     let at = IVec3::from_array(done.section);
+    let mut drawn = Drawn {
+        entity: None,
+        ticket: done.ticket,
+        key,
+        reach,
+    };
     // Nothing in it: nothing drawn, but what it was laid as kept.
     if parts.is_empty() {
-        build.sections.drawn.insert(
-            done.section,
-            Drawn {
-                entity: None,
-                ticket: done.ticket,
-                key,
-                near,
-                near_parts: Vec::new(),
-                far: Vec::new(),
-            },
-        );
+        build.sections.drawn.insert(done.section, drawn);
         return;
     }
     let looks = &look.looks;
@@ -465,80 +456,55 @@ fn show(
             ChildOf(build.root),
         ))
         .id();
-    let mut near_parts = Vec::new();
-    let mut far = Vec::new();
-    let mut add = |bundle: (Mesh3d, MeshMaterial3d<StandardMaterial>, VisibilityRange),
-                   shadow: bool| {
-        let mut child = commands.spawn((bundle, Transform::IDENTITY, ChildOf(entity)));
-        if !shadow {
-            child.insert(NotShadowCaster);
-        }
-        child.id()
+    drawn.entity = Some(entity);
+    // Each detail is seen from where the finer one drawn ends.
+    let near = reach == Reach::Near;
+    let mid_from = near.then_some(NEAR_M);
+    let far_from = (reach >= Reach::Mid).then_some(MID_M);
+    let mut add = |mesh: Mesh, material: Handle<StandardMaterial>, range: VisibilityRange| {
+        commands.spawn((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(material),
+            range,
+            Transform::IDENTITY,
+            ChildOf(entity),
+        ));
     };
-    for (kind, material, mesh) in parts.near {
-        let material = look
-            .materials
+    let material = |kind: Kind, material: Material| {
+        look.materials
             .get(kind, material)
             .cloned()
-            .unwrap_or_else(|| looks.structure.clone());
-        near_parts.push(add(
-            (
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(material),
-                near_range(),
-            ),
-            true,
-        ));
+            .unwrap_or_else(|| looks.structure.clone())
+    };
+    for (kind, which, mesh) in parts.near {
+        add(mesh, material(kind, which), range(None, NEAR_M));
     }
+    for (kind, which, mesh) in parts.mid {
+        add(mesh, material(kind, which), range(mid_from, MID_M));
+    }
+    // What goes in next, as long as the finest detail drawn is seen.
+    let next_to = if near { NEAR_M } else { MID_M };
     for mesh in parts.next {
-        near_parts.push(add(
-            (
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(looks.next.clone()),
-                near_range(),
-            ),
-            true,
-        ));
+        add(mesh, looks.next.clone(), range(None, next_to));
     }
     if let Some(mesh) = parts.plain {
-        far.push(add(
-            (
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(looks.structure.clone()),
-                VisibilityRange::abrupt(0.0, FAR_M),
-            ),
-            true,
-        ));
-    }
-    if let Some(mesh) = parts.glass {
-        add(
-            (
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(looks.glass.clone()),
-                VisibilityRange::abrupt(0.0, FAR_M),
-            ),
-            false,
-        );
+        add(mesh, looks.structure.clone(), range(None, FAR_M));
     }
     if let Some(mesh) = parts.far {
-        far.push(add(
-            (
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(looks.far.clone()),
-                far_range(near),
-            ),
-            true,
-        ));
+        add(mesh, looks.far.clone(), range(far_from, FAR_M));
     }
     if let Some(mesh) = parts.proxy {
-        add(
-            (
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(looks.far.clone()),
-                proxy_range(),
-            ),
-            true,
-        );
+        add(mesh, looks.far.clone(), range(Some(FAR_M), PROXY_M));
+    }
+    if let Some(mesh) = parts.glass {
+        commands.spawn((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(looks.glass.clone()),
+            range(None, FAR_M),
+            NotShadowCaster,
+            Transform::IDENTITY,
+            ChildOf(entity),
+        ));
     }
     if let Some(mesh) = parts.shell {
         commands.spawn((
@@ -578,7 +544,7 @@ fn show(
                 let mut part = commands.spawn((
                     Mesh3d(mesh),
                     Transform::from_translation(-parts.centre) * placed,
-                    VisibilityRange::abrupt(0.0, FAR_M),
+                    range(None, FAR_M),
                     ChildOf(entity),
                 ));
                 match stage {
@@ -602,34 +568,23 @@ fn show(
                         Mesh3d(mesh),
                         MeshMaterial3d(material),
                         Transform::from_translation(-parts.centre) * placed,
-                        VisibilityRange::abrupt(0.0, FAR_M),
+                        range(None, FAR_M),
                         ChildOf(entity),
                     ));
                 }
             }
         }
     }
-    build.sections.drawn.insert(
-        done.section,
-        Drawn {
-            entity: Some(entity),
-            ticket: done.ticket,
-            key,
-            near,
-            near_parts,
-            far,
-        },
-    );
+    build.sections.drawn.insert(done.section, drawn);
 }
 
-/// Keeps near detail to the sections near the camera: those coming near are laid again
-/// with it, and those gone far drop it, their far detail then seen from the camera.
+/// Keeps each section drawn as finely as the camera's distance asks: one coming nearer
+/// is laid again with finer detail, one gone further off with coarser, a little after it
+/// crosses, so one on the line is not laid over and over.
 fn stream(
-    mut commands: Commands,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
-    mut ranges: Query<&mut VisibilityRange>,
 ) {
     let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
         return;
@@ -637,24 +592,21 @@ fn stream(
     for build in each(&mut site, &mut builds) {
         let frame = build.frame;
         let sections = &mut build.sections;
-        for (&at, drawn) in sections.drawn.iter_mut() {
+        for (&at, drawn) in &sections.drawn {
             let distance = frame
                 .transform_point(store::centre(IVec3::from_array(at)))
                 .distance(eye);
             let laying = sections.waiting.contains_key(&at)
                 || sections.tickets.get(&at) != Some(&drawn.ticket);
-            if !drawn.near && distance < NEAR_LOAD_M && !laying {
-                sections.waiting.insert(at, store::Waiting { force: true });
-            } else if drawn.near && distance > NEAR_DROP_M {
-                for entity in drawn.near_parts.drain(..) {
-                    commands.entity(entity).despawn();
-                }
-                drawn.near = false;
-                for &entity in &drawn.far {
-                    if let Ok(mut range) = ranges.get_mut(entity) {
-                        *range = far_range(false);
-                    }
-                }
+            let wanted = reach(distance, Some(drawn.reach));
+            if wanted != drawn.reach && !laying {
+                sections.waiting.insert(
+                    at,
+                    store::Waiting {
+                        force: true,
+                        reach: Some(wanted),
+                    },
+                );
             }
         }
     }

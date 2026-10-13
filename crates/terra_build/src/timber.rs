@@ -244,9 +244,25 @@ fn round(
             shift[1] + t_along * frame.length / metres[1],
         ]
     };
+    // What each point round the section needs that does not change along the log, worked
+    // out once: its angle's sine and cosine, and its unevenness's.
+    let round: Vec<[f32; 5]> = (0..columns)
+        .map(|j| {
+            // From underneath, where the texture's seam is out of sight.
+            let angle = -PI * 0.5 + TAU * j as f32 / columns as f32;
+            [
+                libm::sinf(angle),
+                libm::cosf(angle),
+                libm::sinf(2.0 * angle + phases[1]),
+                libm::cosf(2.0 * angle + phases[1]),
+                libm::sinf(3.0 * angle + phases[2]),
+            ]
+        })
+        .collect();
     let mut grid = Vec::with_capacity(at.len());
     let mut uvs = Vec::with_capacity(at.len());
     for (i, &along) in at.iter().enumerate() {
+        let (shift_sin, shift_cos) = (libm::sinf(along * 1.3), libm::cosf(along * 1.3));
         let arc = libm::sinf(PI * along);
         let centre = frame.from
             + frame.axis * (frame.length * along)
@@ -268,28 +284,25 @@ fn round(
         };
         let mut ring = Vec::with_capacity(columns);
         let mut ring_uv = Vec::with_capacity(columns + 1);
-        for j in 0..=columns {
+        for (j, &[sin, cos, sin2, cos2, sin3]) in round.iter().enumerate() {
             ring_uv.push(uv(along, j));
-            if j == columns {
-                break;
-            }
-            // From underneath, where the texture's seam is out of sight.
-            let angle = -PI * 0.5 + TAU * j as f32 / columns as f32;
-            let uneven = 1.0
-                + t.uneven * libm::sinf(2.0 * angle + phases[1] + along * 1.3)
-                + t.uneven * 0.6 * libm::sinf(3.0 * angle + phases[2]);
+            // sin(2a + phase + along * 1.3), by the sum of angles.
+            let wave = sin2 * shift_cos + cos2 * shift_sin;
+            let uneven = 1.0 + t.uneven * wave + t.uneven * 0.6 * sin3;
             let relief = face.map_or(0.0, |face| (face.at(uv(along, j)) - 0.5) * t.relief * fade);
             let r = radius * (1.0 + taper * butt) * swell * uneven * end + relief;
             // Scribed a little flatter top and bottom, to sit on the log below.
-            let height = libm::sinf(angle) * r * 0.94;
+            let height = sin * r * 0.94;
             let (across, height) = if on_cut(height, split) {
                 let plain = radius * (1.0 + taper * butt) * end;
-                (libm::cosf(angle) * plain, 0.0)
+                (cos * plain, 0.0)
             } else {
-                (libm::cosf(angle) * r, height)
+                (cos * r, height)
             };
             ring.push(centre + frame.side * across + frame.up * height);
         }
+        // The seam's last column, where the texture comes round to its start.
+        ring_uv.push(uv(along, columns));
         grid.push(ring);
         uvs.push(ring_uv);
     }
@@ -722,8 +735,8 @@ mod tests {
         assert_eq!(
             sums,
             [
-                0xd6dc_9fb9_a050_4ab5,
-                0x3503_1b69_4d79_58c8,
+                0xa939_fdd9_58fe_fd8f,
+                0xcc2a_4462_31ac_4122,
                 0xae55_c81f_31d4_b99f
             ],
             "drawn differently from the machine these were taken on (D30)"

@@ -225,6 +225,9 @@ struct Scene {
     frames: &'static str,
 }
 
+/// Where the village scenes look from and at, east, up and south of the start.
+const VILLAGE_VIEW: &str = "-85,16,10,-5,0,-50";
+
 /// The scenes, at the hour whose long shadows cost the most.
 const SCENES: &[Scene] = &[
     Scene {
@@ -272,6 +275,37 @@ const SCENES: &[Scene] = &[
             "-191,-130",
             "--press",
             "w@200-2000",
+        ],
+        frames: "600",
+    },
+    Scene {
+        name: "village",
+        about: "fifty buildings of every kind, roof and plan on the yard, seen from its corner (docs/building-plan.md)",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--village",
+            "--vantage",
+            VILLAGE_VIEW,
+        ],
+        frames: "600",
+    },
+    Scene {
+        name: "village-bare",
+        about: "the yard from the village's corner with nothing built: what the village is measured against",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--vantage",
+            VILLAGE_VIEW,
         ],
         frames: "600",
     },
@@ -375,6 +409,15 @@ fn parse_sustained(line: &str) -> Option<(f32, u32, f32)> {
 
 /// Reads `SANDBOX frames on <gpu> at <size>: median 1.00 ms, 99th percentile 2.00 ms,
 /// worst 3.00 ms` (crates/terra_world/src/shell.rs).
+/// What a scene's run says about itself that a benchmark reports beside its frames: how
+/// long building's sections took to lay on the workers, and its operations to apply.
+fn worth_saying(line: &str) -> Option<&str> {
+    ["Builds drawn: ", "Village: "]
+        .iter()
+        .find_map(|key| line.find(key))
+        .map(|at| line[at..].trim_end())
+}
+
 fn parse_timing(line: &str) -> Option<Timing> {
     let rest = line.strip_prefix("SANDBOX frames on ")?;
     let (who, numbers) = rest.split_once(": ")?;
@@ -645,15 +688,26 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
     }
     let mut child = command
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .ok()?;
     let stdout = child.stdout.take()?;
+    // The log, read only for what is worth saying beside the frames.
+    let stderr = child.stderr.take()?;
+    let said = std::thread::spawn(move || {
+        BufReader::new(stderr)
+            .lines()
+            .map_while(Result::ok)
+            .filter_map(|line| worth_saying(&line).map(str::to_string))
+            .collect::<Vec<String>>()
+    });
     let reader = std::thread::spawn(move || {
         let mut timing: Option<Timing> = None;
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             if let Some(read) = parse_timing(&line) {
                 timing = Some(read);
+            } else if let Some(said) = worth_saying(&line) {
+                println!("  {said}");
             } else if let (Some(timing), Some((over, hitches, drift))) =
                 (&mut timing, parse_sustained(&line))
             {
@@ -675,6 +729,9 @@ fn time_scene(program: &Path, folder: &Path, scene: &Scene) -> Option<Timing> {
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(200)),
             Err(_) => break,
         }
+    }
+    for line in said.join().unwrap_or_default() {
+        println!("  {line}");
     }
     let timing = reader.join().ok()??;
     println!(

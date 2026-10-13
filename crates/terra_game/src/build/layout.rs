@@ -18,7 +18,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Instant;
 use terra_build::kit::Kits;
-use terra_build::sections::{self, Section};
+use terra_build::sections::{self, Reach, Section};
 
 /// The steps of drawing builds, in order.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -40,13 +40,13 @@ pub(super) struct Jobs {
     pub ready: VecDeque<Done>,
     tickets: u64,
     /// How long sections took on their workers, in milliseconds, laid and merged with
-    /// their near detail, and far only, for the bench.
+    /// textured detail, and far only, for the bench.
     pub timings: Timings,
     /// Whether everything waiting was drawn when last looked.
     idle: bool,
 }
 
-/// How long sections took to lay and merge.
+/// How long sections with anything in them took to lay and merge.
 #[derive(Default)]
 pub(super) struct Timings {
     pub near: Vec<f32>,
@@ -72,19 +72,28 @@ pub(super) struct Done {
 pub(super) enum Outcome {
     /// Its pieces as they were: left as it is drawn.
     Same,
-    /// Drawn anew: what it was laid as, whether with its near detail, and what to show.
+    /// Drawn anew: what it was laid as, how finely, and what to show.
     Drawn {
         key: u64,
-        near: bool,
+        reach: Reach,
         parts: Box<Parts>,
         took_ms: f32,
     },
 }
 
-/// How near the camera a section's near detail is made, and how far it must go before it
-/// is dropped, in metres: past where it is seen (`draw::NEAR_M`), so it is ready in time.
-pub(super) const NEAR_LOAD_M: f32 = 95.0;
-pub(super) const NEAR_DROP_M: f32 = 140.0;
+/// How finely a section is drawn for a camera so far from its middle, in metres: finer
+/// detail is made a little before it is seen (`draw::NEAR_M`, `draw::MID_M`), and kept until
+/// the camera is further off again, so a section near a boundary is not laid over and over.
+pub(super) fn reach(distance: f32, now: Option<Reach>) -> Reach {
+    let kept = |reach: Reach| now.is_some_and(|now| now >= reach);
+    if distance < 40.0 || (kept(Reach::Near) && distance < 55.0) {
+        Reach::Near
+    } else if distance < 95.0 || (kept(Reach::Mid) && distance < 140.0) {
+        Reach::Mid
+    } else {
+        Reach::Far
+    }
+}
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Jobs>()
@@ -99,7 +108,31 @@ pub fn plugin(app: &mut App) {
                 .chain(),
         )
         .add_systems(Update, launch.in_set(Drawing::Launch))
-        .add_systems(Update, collect.in_set(Drawing::Collect));
+        .add_systems(Update, collect.in_set(Drawing::Collect))
+        .add_systems(Update, track.in_set(crate::loading::Track));
+}
+
+/// The loading screen waits for the buildings there are to be laid and drawn, so the first
+/// thing seen is the finished scene (D135).
+fn track(
+    jobs: Res<Jobs>,
+    progress: Option<ResMut<crate::loading::Progress>>,
+    mut site: ResMut<Site>,
+    mut builds: Query<&mut Built>,
+) {
+    let Some(mut progress) = progress else {
+        return;
+    };
+    let (mut waiting, mut drawn) = (0, 0);
+    for build in each(&mut site, &mut builds) {
+        waiting += build.sections.waiting.len();
+        drawn += build.sections.drawn.len();
+    }
+    progress.report(
+        "Laying buildings",
+        waiting + jobs.running.len() + jobs.ready.len(),
+        drawn,
+    );
 }
 
 /// Sends the waiting sections nearest the camera to the workers, as many as they have
@@ -167,8 +200,10 @@ fn launch(
                 .sections
                 .drawn
                 .get(&at)
-                .map(|drawn| (drawn.key, drawn.near));
-            let near = distance < NEAR_LOAD_M;
+                .map(|drawn| (drawn.key, drawn.reach));
+            let wanted = waiting
+                .reach
+                .unwrap_or_else(|| reach(distance, previous.map(|(_, reach)| reach)));
             let force = waiting.force;
             let task = pool.spawn(async move {
                 let started = Instant::now();
@@ -182,14 +217,14 @@ fn launch(
                 };
                 let laid = sections::lay(&section);
                 let key = laid.key();
-                if !force && previous == Some((key, near)) {
+                if !force && previous == Some((key, wanted)) {
                     return Outcome::Same;
                 }
-                let drawn = sections::draw(&section, &laid, near);
+                let drawn = sections::draw(&section, &laid, wanted);
                 let parts = draw::parts(drawn, store::centre(section.at));
                 Outcome::Drawn {
                     key,
-                    near,
+                    reach: wanted,
                     parts: Box::new(parts),
                     took_ms: started.elapsed().as_secs_f32() * 1000.0,
                 }
@@ -217,8 +252,16 @@ fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
         };
         match outcome {
             Some(outcome) => {
-                if let Outcome::Drawn { near, took_ms, .. } = &outcome {
-                    let list = if *near {
+                // Only sections with something in them are timed.
+                if let Outcome::Drawn {
+                    reach,
+                    took_ms,
+                    parts,
+                    ..
+                } = &outcome
+                    && !parts.is_empty()
+                {
+                    let list = if *reach > Reach::Far {
                         &mut jobs.timings.near
                     } else {
                         &mut jobs.timings.far
@@ -247,14 +290,15 @@ impl Jobs {
     /// waits for before a picture.
     pub fn settle(&mut self, nothing_waiting: bool) {
         let idle = nothing_waiting && self.quiet();
-        if idle && !self.idle {
+        let any = !self.timings.near.is_empty() || !self.timings.far.is_empty();
+        if idle && !self.idle && any {
             let median = |list: &Vec<f32>| {
                 let mut sorted = list.clone();
                 sorted.sort_by(f32::total_cmp);
                 sorted.get(sorted.len() / 2).copied().unwrap_or(0.0)
             };
             info!(
-                "Builds drawn: {} sections laid and merged near in a median {:.2} ms, far only in {:.2} ms on a worker.",
+                "Builds drawn: {} sections laid and merged, textured in a median {:.2} ms, far only in {:.2} ms, on a worker.",
                 self.timings.near.len() + self.timings.far.len(),
                 median(&self.timings.near),
                 median(&self.timings.far),

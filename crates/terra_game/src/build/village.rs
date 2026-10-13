@@ -93,13 +93,23 @@ pub(super) fn lay(
         let north = -NORTH_M - APART_M * row as f32;
         let point = site.frame.transform_point(Vec3::new(east, 0.0, north));
         let ground = point - point.normalize() * planet.distance(point);
-        let mut frame = frame_at(ground + ground.normalize() * FLOOR_CLEARANCE_M, &site.frame);
-        // Turned every way, a quarter at a time.
-        frame.rotate_local_y(std::f32::consts::FRAC_PI_2 * (index % 4) as f32);
+        let frame = frame_at(ground + ground.normalize() * FLOOR_CLEARANCE_M, &site.frame);
         let mut base = Base::default();
         for &op in &ops {
             base.apply(op);
         }
+        // Turned every way, a quarter at a time, about its middle.
+        let cubes: Vec<IVec3> = base.cubes().map(|(at, _)| at).collect();
+        let low = cubes.iter().copied().reduce(IVec3::min).unwrap_or_default();
+        let high = cubes.iter().copied().reduce(IVec3::max).unwrap_or_default();
+        let middle = ((low + high + IVec3::ONE).as_vec3() * 0.5 * terra_build::CELL_M).with_y(0.0);
+        let turn = Transform::from_rotation(Quat::from_rotation_y(
+            std::f32::consts::FRAC_PI_2 * (index % 4) as f32,
+        ));
+        let frame = frame
+            * Transform::from_translation(middle)
+            * turn
+            * Transform::from_translation(-middle);
         let frame = lifted(frame, &base, &planet);
         let label = format!("Village: {name}");
         let mut build = Build::new(&mut commands, &look, frame, &label);

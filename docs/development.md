@@ -89,6 +89,8 @@ It builds the sandbox for release and runs each **scene**, a scripted run that c
 | `world` | The game where a new one starts: ground, sea, trees, grass, creatures |
 | `forest` | The lush forest spike, standing still ([research/lush-forest-spike.md](../research/lush-forest-spike.md)) |
 | `forest-walk` | The same, walking down a path: grass built as the player goes, trees changing detail |
+| `village` | Fifty buildings on the yard, every kind, roof and plan (`--village`), seen from the village's corner: what building costs to draw ([building-plan.md](building-plan.md#checking-it)). It also says how long its sections took to lay and merge on the workers, and its operations to apply |
+| `village-bare` | The yard from the same place with nothing built, which `village` is measured against |
 | `walk` | 40 seconds' walk through the lush forest, out from the clearing and round through the trees, steered by `--route` as a player would; the world and the walker alone (`--experiment walk`), so it is the environment's cost |
 
 Each run draws offscreen at 1920x1080 (`--offscreen`), with one frame in flight as a window has; skips 240 frames for shaders and streaming to settle; and times the scene's frames against the real clock (600, 2,400 for `walk`; `--bench-frames`). A scene's result is the middle run's median and 99th percentile and the worst frame of any.

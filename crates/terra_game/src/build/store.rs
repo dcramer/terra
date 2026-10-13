@@ -12,7 +12,7 @@ use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use terra_build::Base;
-use terra_build::sections::{affected, drawable};
+use terra_build::sections::{Reach, affected, drawable};
 
 /// A base's entity: where it stands, its sections its children.
 #[derive(Component)]
@@ -33,18 +33,16 @@ pub(super) struct Drawn {
     pub ticket: u64,
     /// What it was laid as (`terra_build::sections::Laid::key`).
     pub key: u64,
-    /// Whether it has its near detail, and the entities that draw that.
-    pub near: bool,
-    pub near_parts: Vec<Entity>,
-    /// What draws it far off, whose range starts nearer while it has no near detail.
-    pub far: Vec<Entity>,
+    /// How finely it is drawn.
+    pub reach: Reach,
 }
 
 /// A section waiting to be laid: whether it must be merged again even if it lays the same,
-/// as one whose cubes changed or whose look has must.
+/// as one whose cubes changed or whose look has must; and how finely, if that is decided.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) struct Waiting {
     pub force: bool,
+    pub reach: Option<Reach>,
 }
 
 /// A base's sections: what is drawn of each, and what waits to be laid again.
