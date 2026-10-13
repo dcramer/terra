@@ -260,11 +260,13 @@ impl Grid {
     /// Take so many of each kind, all or nothing: what building spends (D55). Stacks in
     /// containers are drawn on first, then loose items, which are returned.
     pub fn take(&mut self, cost: &[(ItemKind, u32)]) -> Result<Vec<Item>, Refused> {
+        // Totalled first, so a kind the cost names twice is checked for both at once.
+        let cost = crate::by_kind(cost);
         if cost.iter().any(|&(kind, count)| self.count(kind) < count) {
             return Err(Refused::NotEnough);
         }
         let mut taken = Vec::new();
-        for &(kind, count) in cost {
+        for &(kind, count) in &cost {
             let mut left = count;
             for stack in self
                 .placed
@@ -398,14 +400,10 @@ mod tests {
             grid.shift(tank.id, Cell { x: 2, y: 0 }),
             Err(Refused::NoRoom)
         );
-    }
-
-    #[test]
-    fn a_full_grid_refuses() {
-        let (catalogue, ore, _, mut ids) = setup();
-        let mut grid = Grid::new(2, 1);
-        grid.insert(&catalogue, ids.make(ore), None).unwrap();
-        grid.insert(&catalogue, ids.make(ore), None).unwrap();
+        // The column the tank left fills, and then the grid refuses.
+        for _ in 0..3 {
+            grid.insert(&catalogue, ids.make(ore), None).unwrap();
+        }
         assert_eq!(
             grid.insert(&catalogue, ids.make(ore), None),
             Err(Refused::NoRoom)
@@ -424,6 +422,25 @@ mod tests {
         assert_eq!(grid, before);
         assert_eq!(grid.take(&[(ore, 2)]).unwrap().len(), 2);
         assert_eq!(grid.count(ore), 1);
+    }
+
+    /// A cost that names a kind twice wants both. Refused, it takes nothing, not even what
+    /// the first naming would have paid for, from a container or loose.
+    #[test]
+    fn a_kind_named_twice_is_paid_for_both_or_not_at_all() {
+        let mut catalogue = Catalogue::default();
+        let ore = catalogue.add(KindDef::new("Ore"));
+        let bucket = catalogue.add(KindDef::new("Bucket").holds(ore, 2));
+        let mut ids = IdSource::default();
+        let mut grid = Grid::new(4, 4);
+        grid.insert(&catalogue, ids.make(bucket), None).unwrap();
+        assert_eq!(grid.stow(ore, 2), 2);
+        grid.insert(&catalogue, ids.make(ore), None).unwrap();
+        let before = grid.clone();
+        assert_eq!(grid.take(&[(ore, 2), (ore, 2)]), Err(Refused::NotEnough));
+        assert_eq!(grid, before);
+        assert_eq!(grid.take(&[(ore, 1), (ore, 2)]).unwrap().len(), 1);
+        assert_eq!(grid.count(ore), 0);
     }
 
     #[test]

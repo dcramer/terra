@@ -64,6 +64,18 @@ impl Item {
     }
 }
 
+/// A cost totalled by kind, each kind once, in the order it is first named.
+pub fn by_kind(cost: &[(ItemKind, u32)]) -> Vec<(ItemKind, u32)> {
+    let mut totals: Vec<(ItemKind, u32)> = Vec::new();
+    for &(kind, count) in cost {
+        match totals.iter_mut().find(|(each, _)| *each == kind) {
+            Some((_, total)) => *total += count,
+            None => totals.push((kind, count)),
+        }
+    }
+    totals
+}
+
 /// Hands out item identities. The server owns the one source for a world, so no two items
 /// ever share an id.
 #[derive(Clone, Debug, Default)]
@@ -163,6 +175,26 @@ mod tests {
         assert_eq!(gear.worn(BODY).unwrap().wear, 0);
     }
 
+    /// Paints every item's cells, at its kind's size, onto an occupancy map of its own,
+    /// failing if one lands outside the grid or on another: a check that does not ask the
+    /// grid whether things fit.
+    fn assert_laid_out(catalogue: &Catalogue, grid: &Grid, what: &str) {
+        let size = grid.size();
+        let (w, h) = (size.w as usize, size.h as usize);
+        let mut filled = vec![false; w * h];
+        for placed in grid.iter() {
+            let cells = catalogue.get(placed.item.kind).unwrap().size;
+            let (x0, y0) = (placed.at.x as usize, placed.at.y as usize);
+            for y in y0..y0 + cells.h as usize {
+                for x in x0..x0 + cells.w as usize {
+                    assert!(x < w && y < h, "{what}: an item hangs outside the grid");
+                    assert!(!filled[y * w + x], "{what}: two items overlap");
+                    filled[y * w + x] = true;
+                }
+            }
+        }
+    }
+
     /// Random moves between a backpack, a locker and what is worn never make or lose an
     /// item, never overlap two, and never leave one outside its grid.
     #[test]
@@ -170,13 +202,19 @@ mod tests {
         const PACK: GearSlot = GearSlot(0);
         const TANK: GearSlot = GearSlot(1);
         const BARE: Size = Size { w: 3, h: 3 };
+        const PACKED: Size = Size { w: 5, h: 4 };
         let mut catalogue = Catalogue::default();
         let kinds = [
             catalogue.add(KindDef::new("Ore")),
             catalogue.add(KindDef::new("Plank").size(2, 1)),
             catalogue.add(KindDef::new("Crate").size(2, 2)),
             catalogue.add(KindDef::new("Tank").size(1, 2).gear(TANK)),
-            catalogue.add(KindDef::new("Pack").size(2, 2).gear(PACK).backpack(5, 4)),
+            catalogue.add(
+                KindDef::new("Pack")
+                    .size(2, 2)
+                    .gear(PACK)
+                    .backpack(PACKED.w, PACKED.h),
+            ),
         ];
         let mut rng = Seed(7).derive("items").rng();
         let mut ids = IdSource::default();
@@ -206,6 +244,7 @@ mod tests {
         let mut expected = made.clone();
         expected.sort();
 
+        let mut accepted = [0u32; 6];
         for _ in 0..5000 {
             let pick = |grid: &Grid, roll: u32| {
                 let index = roll as usize % grid.len().max(1);
@@ -217,7 +256,8 @@ mod tests {
             };
             let at = if rng.below(2) == 0 { Some(cell) } else { None };
             let roll = rng.below(1000);
-            let _ = match rng.below(6) {
+            let op = rng.below(6) as usize;
+            let done = match op {
                 0 => pick(&locker, roll)
                     .map(|id| transfer(&catalogue, &mut locker, &mut backpack, id, at).map(drop)),
                 1 => pick(&backpack, roll)
@@ -238,30 +278,40 @@ mod tests {
                 ),
                 _ => pick(&locker, roll).map(|id| locker.shift(id, cell)),
             };
+            if matches!(done, Some(Ok(()))) {
+                accepted[op] += 1;
+            }
 
             assert_eq!(all(&backpack, &locker, &gear), expected);
+            let size = if gear.worn(PACK).is_some() {
+                PACKED
+            } else {
+                BARE
+            };
             assert_eq!(
                 backpack.size(),
-                gear.backpack_size(&catalogue, BARE),
+                size,
                 "the backpack is the size what is worn makes it"
             );
-            for grid in [&backpack, &locker] {
-                for placed in grid.iter() {
-                    assert!(grid.fits(placed.at, placed.size, Some(placed.item.id)));
-                }
-            }
+            assert_laid_out(&catalogue, &backpack, "the backpack");
+            assert_laid_out(&catalogue, &locker, "the locker");
         }
+        assert!(
+            accepted.iter().all(|&count| count >= 50),
+            "too few moves were made to mean anything: {accepted:?}"
+        );
     }
 
     /// Random stowing, paying, drawing, moving and wearing of things that stack never
     /// change how many there are except by what was put in or taken out, never overfill
-    /// a container, and pay all or nothing. A failure names its seed and step, so it can
-    /// be run again exactly.
+    /// a container, and pay all or nothing, also for a cost that names a kind twice. A
+    /// failure names its seed and step, so it can be run again exactly.
     #[test]
     fn counts_change_only_by_what_goes_in_or_out() {
         const BELT: GearSlot = GearSlot(0);
         let mut catalogue = Catalogue::default();
         let arrow = catalogue.add(KindDef::new("Arrow"));
+        let stone = catalogue.add(KindDef::new("Stone"));
         let quiver = catalogue.add(
             KindDef::new("Quiver")
                 .size(1, 2)
@@ -269,9 +319,11 @@ mod tests {
                 .holds(arrow, 12),
         );
         let pouch = catalogue.add(KindDef::new("Pouch").holds(arrow, 5));
-        let carried = |backpack: &Grid, locker: &Grid, gear: &Equipment| {
-            backpack.count(arrow) + locker.count(arrow) + gear.stacked(arrow)
+        let carried = |kind, backpack: &Grid, locker: &Grid, gear: &Equipment| {
+            backpack.count(kind) + locker.count(kind) + gear.stacked(kind)
         };
+        let mut accepted = [0u32; 7];
+        let mut refused_for_naming_twice = 0;
         for seed in 0..20 {
             let mut rng = Seed(seed).derive("counts").rng();
             let mut ids = IdSource::default();
@@ -281,7 +333,7 @@ mod tests {
             for kind in [quiver, quiver, pouch, pouch] {
                 locker.insert(&catalogue, ids.make(kind), None).unwrap();
             }
-            let mut expected = 0;
+            let (mut arrows, mut stones) = (0, 0);
             for step in 0..2000 {
                 let roll = rng.below(1000);
                 let some = 1 + rng.below(8);
@@ -289,49 +341,109 @@ mod tests {
                     let index = roll as usize % grid.len().max(1);
                     grid.iter().nth(index).map(|placed| placed.item.id)
                 };
-                let op = rng.below(7);
-                match op {
+                let op = rng.below(7) as usize;
+                let done = match op {
                     0 => {
-                        if backpack.insert(&catalogue, ids.make(arrow), None).is_ok() {
-                            expected += 1;
+                        let kind = if roll.is_multiple_of(2) { arrow } else { stone };
+                        let put = backpack.insert(&catalogue, ids.make(kind), None).is_ok();
+                        if put && kind == arrow {
+                            arrows += 1;
+                        } else if put {
+                            stones += 1;
                         }
+                        put
                     }
-                    1 => expected += backpack.stow(arrow, some),
-                    2 => expected += gear.stow(arrow, some),
+                    1 => {
+                        let put = backpack.stow(arrow, some);
+                        arrows += put;
+                        put > 0
+                    }
+                    2 => {
+                        let put = gear.stow(arrow, some);
+                        arrows += put;
+                        put > 0
+                    }
                     3 => {
-                        let before = backpack.count(arrow);
-                        match backpack.take(&[(arrow, some)]) {
-                            Ok(_) => expected -= some,
-                            Err(_) => assert!(
-                                before < some && backpack.count(arrow) == before,
-                                "seed {seed} step {step}: a refused payment took something"
-                            ),
+                        // One to three lines, of either kind, so a kind is often named twice.
+                        let cost: Vec<(ItemKind, u32)> = (0..1 + rng.below(3))
+                            .map(|_| {
+                                let kind = if rng.below(2) == 0 { arrow } else { stone };
+                                (kind, 1 + rng.below(4))
+                            })
+                            .collect();
+                        let wants = |kind| {
+                            cost.iter()
+                                .filter(|&&(each, _)| each == kind)
+                                .map(|&(_, count)| count)
+                                .sum::<u32>()
+                        };
+                        let enough = [arrow, stone]
+                            .iter()
+                            .all(|&kind| backpack.count(kind) >= wants(kind));
+                        let before = backpack.clone();
+                        match backpack.take(&cost) {
+                            Ok(_) => {
+                                assert!(enough, "seed {seed} step {step}: paid without enough");
+                                arrows -= wants(arrow);
+                                stones -= wants(stone);
+                                true
+                            }
+                            Err(_) => {
+                                assert!(
+                                    !enough,
+                                    "seed {seed} step {step}: refused though there was enough"
+                                );
+                                assert_eq!(
+                                    backpack, before,
+                                    "seed {seed} step {step}: a refused payment took something"
+                                );
+                                if cost
+                                    .iter()
+                                    .all(|&(kind, count)| before.count(kind) >= count)
+                                {
+                                    refused_for_naming_twice += 1;
+                                }
+                                false
+                            }
                         }
                     }
-                    4 => expected -= gear.draw(arrow, some),
+                    4 => {
+                        let drawn = gear.draw(arrow, some);
+                        arrows -= drawn;
+                        drawn > 0
+                    }
                     5 => {
                         let (from, to) = if roll.is_multiple_of(2) {
                             (&mut locker, &mut backpack)
                         } else {
                             (&mut backpack, &mut locker)
                         };
-                        if let Some(id) = pick(from) {
-                            let _ = transfer(&catalogue, from, to, id, None);
-                        }
+                        pick(from)
+                            .is_some_and(|id| transfer(&catalogue, from, to, id, None).is_ok())
                     }
                     _ => {
                         let bare = Size { w: 4, h: 3 };
-                        let _ = match (roll % 2, pick(&backpack)) {
-                            (0, Some(id)) => equip(&catalogue, &mut backpack, &mut gear, bare, id),
+                        match (roll % 2, pick(&backpack)) {
+                            (0, Some(id)) => {
+                                equip(&catalogue, &mut backpack, &mut gear, bare, id).is_ok()
+                            }
                             _ => unequip(&catalogue, &mut backpack, &mut gear, bare, BELT, None)
-                                .map(drop),
-                        };
+                                .is_ok(),
+                        }
                     }
+                };
+                if done {
+                    accepted[op] += 1;
                 }
                 assert_eq!(
-                    carried(&backpack, &locker, &gear),
-                    expected,
+                    carried(arrow, &backpack, &locker, &gear),
+                    arrows,
                     "seed {seed} step {step}, after op {op}: arrows made or lost"
+                );
+                assert_eq!(
+                    carried(stone, &backpack, &locker, &gear),
+                    stones,
+                    "seed {seed} step {step}, after op {op}: stones made or lost"
                 );
                 let stacks = backpack
                     .iter()
@@ -346,5 +458,14 @@ mod tests {
                 }
             }
         }
+        assert!(
+            accepted.iter().all(|&count| count >= 100),
+            "too few changes were made to mean anything: {accepted:?}"
+        );
+        assert!(
+            refused_for_naming_twice >= 50,
+            "too few payments named a kind twice and were refused for it: \
+             {refused_for_naming_twice}"
+        );
     }
 }
