@@ -299,6 +299,9 @@ pub struct GroundExtension {
     /// Whether the ground is drawn with its textures, or in flat colours.
     #[uniform(100)]
     textured: u32,
+    /// How many metres the fifth layer, leaf litter, covers.
+    #[uniform(100)]
+    litter_metres: f32,
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     color: Option<Handle<Image>>,
@@ -338,8 +341,10 @@ pub struct GroundTextures {
 
 /// The layers of `materials/ground`, in order, and how many metres each covers
 /// (assets/materials/README.md).
-const GROUND_LAYERS: u32 = 4;
+const GROUND_LAYERS: u32 = 5;
 const GROUND_LAYER_METRES: Vec4 = Vec4::new(3.15, 2.0, 2.7, 1.5);
+/// The fifth layer, fallen leaves for the forest floor.
+const GROUND_LITTER_METRES: f32 = 3.0;
 
 impl GroundTextures {
     fn load(assets: &AssetServer) -> Self {
@@ -397,6 +402,7 @@ impl GroundExtension {
             sand: tweaks.sand.into(),
             sea_deep: tweaks.sea_deep.into(),
             layer_metres: GROUND_LAYER_METRES,
+            litter_metres: GROUND_LITTER_METRES,
             // Textures are for ground that is covered; the bare stand-in stays flat.
             textured: (tweaks.ground_cover > 0.0) as u32,
             color: Some(textures.color.clone()),

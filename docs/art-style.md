@@ -135,7 +135,7 @@ Models carry their own materials; the light, the sky and the air are shared shad
 | Sky | Bevy's physical atmosphere (Hillaire's model, as Unreal's), with our clouds, stars and moon drawn over it, and the dusk and night in chosen colours, since it goes dark at sunset (D212) | Working |
 | Exposure, bloom and grading | A fixed exposure for sunlit ground, opening a little through the dusk; AgX tone mapping, a film's response; soft bloom (D212) | Working |
 | Dense foliage and wind | Instanced plants, merged grass blades, one wind shader | Working near the start; its models are still direction D |
-| Ground cover | Grass as clumped blades round the camera, fading into ground of its own colour; leaf litter and moss painted onto the ground under trees (D202) | Working in the lush forest; litter is still the soil texture tinted |
+| Ground cover | Grass as clumped blades round the camera, fading into ground of its own colour; leaf litter and moss painted onto the ground under trees (D202) | Working in the lush forest; litter is Poly Haven's Forest Leaves 02, a fifth layer of the ground |
 | Water | A see-through surface mirroring the sky at a low angle | Working; no waves |
 | Shade in corners | Screen-space ambient occlusion over about a metre (D212), and contact shadows where things meet (D204) | Working |
 | Trees, bushes and rocks | Their parts drawn in real materials, bark, leaves and lichen-covered rock, projected triplanar and tinted by their kind, normals smoothed across curves (D212) | Working on the free models, which are still crude in shape; see below |

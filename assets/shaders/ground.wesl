@@ -48,6 +48,7 @@ struct Ground {
     sea_deep: vec4<f32>,
     layer_metres: vec4<f32>,
     textured: u32,
+    litter_metres: f32,
     // From a point in the world to its place on the cover map, and whether there is one.
     cover_from_world: mat4x4<f32>,
     cover_on: u32,
@@ -73,6 +74,7 @@ const SOIL: u32 = 0u;
 const GRASS: u32 = 1u;
 const ROCK: u32 = 2u;
 const SAND: u32 = 3u;
+const LITTER: u32 = 4u;
 
 struct Layer {
     colour: vec3<f32>,
@@ -90,7 +92,11 @@ fn facing(n: vec3<f32>) -> vec3<f32> {
 // average swapped for `tint`, and the surface's normal bent by its relief. The position's
 // gradients are given so that this can be called where only some pixels need it.
 fn layer(index: u32, scale: f32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<f32>, gy: vec3<f32>, n: vec3<f32>) -> Layer {
-    let k = 1.0 / (ground.layer_metres[index] * scale);
+    var metres = ground.litter_metres;
+    if index < 4u {
+        metres = ground.layer_metres[index];
+    }
+    let k = 1.0 / (metres * scale);
     let p = world * k;
     let dx = gx * k;
     let dy = gy * k;
@@ -223,6 +229,17 @@ fn fragment(
                 0.3 + 0.4 * fleck,
             );
             ground_is = over(ground_is, cliff, steep);
+        }
+        // Under trees the ground is fallen leaves, in soft-edged drifts.
+        let leaves = smoothstep(0.2, 0.75, litter + (blotch - 0.5) * 0.45) * (1.0 - steep);
+        if leaves > 0.0 {
+            let leaf_tint = litter_colour * (0.85 + 0.3 * fleck);
+            let fallen = over(
+                layer(LITTER, 1.0, leaf_tint, world, gx, gy, n),
+                layer(LITTER, 2.6, leaf_tint, world + 41.0, gx, gy, n),
+                0.2 + 0.4 * blotch,
+            );
+            ground_is = over(ground_is, fallen, leaves);
         }
 
         // Grass sits in the soil's hollows first: where the soil is lighter it is higher,
