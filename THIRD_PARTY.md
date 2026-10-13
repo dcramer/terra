@@ -26,6 +26,14 @@ All by [Quaternius](https://quaternius.com), who releases everything under [CC0 
 
 The individual model files were fetched from [quaternius-showcase](https://github.com/trebeljahr/quaternius-showcase), which republishes the packs one model to a file, and, until 2026-10-12, the animation library from [gltf-universal-animation-library](https://github.com/J-Ponzo/gltf-universal-animation-library), a copy of its 2025-06-10 release that missed three updates, one of them a fix for the very twist we were chasing; it is now from Quaternius directly. The mirror's models are its own FBX2glTF conversions of Quaternius's FBX files, not his exports; none of those packs has been updated since it copied them (checked 2026-10-12). Take a pack from Quaternius's own pages, at its current version, when it is next needed. The licence was checked against Quaternius's own [FAQ](https://quaternius.com/faq.html) on 2026-10-10. The creatures, village pieces, tools and workbench were fetched from quaternius-showcase on 2026-10-11.
 
+## Scanned models
+
+From [Poly Haven](https://polyhaven.com), under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): free for any use, no attribution required. We credit them anyway.
+
+| Where | From | Changes |
+|---|---|---|
+| `assets/models/nature/forest/` | [Rock Moss Set 01](https://polyhaven.com/a/rock_moss_set_01) (`mossy_rock_a_*`), [Rock Moss Set 02](https://polyhaven.com/a/rock_moss_set_02) (`mossy_rock_b_*`), [Boulder 01](https://polyhaven.com/a/boulder_01), [Fern 02](https://polyhaven.com/a/fern_02), [Tree Stump 01](https://polyhaven.com/a/tree_stump_01), at 1k, fetched 2026-10-13 | Split into one file a piece, welded, cut to 700 to 1,800 triangles, foot at the origin, by `tools/blender/scan.py`; their textures kept |
+
 ## Made with AI
 
 Made by us with generators on paid plans, whose terms leave what they make with the subscriber. We say so openly (D107).

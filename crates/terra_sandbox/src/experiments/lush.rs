@@ -28,6 +28,7 @@
 //!
 //! Its cost is measured by `cargo xtask bench forest forest-walk`.
 
+use bevy::gltf::GltfMaterial;
 use bevy::{
     asset::RenderAssetUsages,
     camera::visibility::{RenderLayers, VisibilityRange},
@@ -71,6 +72,8 @@ const FADE: f32 = 0.2;
 /// cheaply, to the end of the second level; beyond, none. They switch where the tree does,
 /// so a shadow never changes when its tree does not.
 const SHADOW_LEVELS: [usize; 2] = [0, 1];
+/// How many kinds of fallen log there are; each is drawn many times.
+const LOG_KINDS: u64 = 5;
 /// How much of a trunk one repeat of the bark's picture covers: round it, and along it.
 const BARK_M: Vec2 = Vec2::new(2.15, 2.15);
 /// The solid shadow lumps are this much of the crown's size, so a low sun, which looks
@@ -140,10 +143,48 @@ impl MaterialExtension for FoliageExtension {
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Foliage>::default())
         .init_resource::<Unmipped>()
+        .init_resource::<Scanned>()
         .add_systems(
             Update,
-            (plant.run_if(not(resource_exists::<Forest>)), add_mipmaps),
+            (
+                plant.run_if(not(resource_exists::<Forest>)),
+                add_mipmaps,
+                dress_scans,
+            ),
         );
+}
+
+/// Scans' glTF materials still to be copied into the materials their meshes are drawn with.
+#[derive(Resource, Default)]
+struct Scanned(Vec<(Handle<GltfMaterial>, Handle<StandardMaterial>)>);
+
+/// Copies each scan's glTF material, once loaded, into the material it is drawn with: its
+/// scanned colour, normal, roughness and occlusion maps.
+fn dress_scans(
+    mut scanned: ResMut<Scanned>,
+    gltf: Res<Assets<GltfMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    scanned.0.retain(|(from, to)| {
+        let (Some(from), Some(mut to)) = (gltf.get(from), materials.get_mut(to)) else {
+            return true;
+        };
+        *to = StandardMaterial {
+            base_color: from.base_color,
+            base_color_texture: from.base_color_texture.clone(),
+            normal_map_texture: from.normal_map_texture.clone(),
+            metallic_roughness_texture: from.metallic_roughness_texture.clone(),
+            occlusion_texture: from.occlusion_texture.clone(),
+            perceptual_roughness: from.perceptual_roughness,
+            metallic: from.metallic,
+            reflectance: 0.3,
+            alpha_mode: from.alpha_mode,
+            double_sided: from.double_sided,
+            cull_mode: from.cull_mode,
+            ..default()
+        };
+        false
+    });
 }
 
 /// Pictures still to be given smaller copies of themselves once loaded, and the alpha a
@@ -380,6 +421,7 @@ fn plant(
     mut materials: ResMut<Assets<Foliage>>,
     mut plain: ResMut<Assets<StandardMaterial>>,
     mut unmipped: ResMut<Unmipped>,
+    mut scanned: ResMut<Scanned>,
 ) {
     let (Some(planet), Some(flora), Some(sun)) = (planet, flora, sun) else {
         return;
@@ -688,6 +730,128 @@ fn plant(
             });
         bushed += 1;
     }
+
+    // The forest floor (D219): scanned rocks and boulders, ferns in the shade, stumps, and
+    // logs fallen from trees of the forest's own kind, each drawn out to its own distance.
+    // A scan's mesh, and a material of our own that its glTF material is copied into once
+    // loaded (`dress_scans`), as Bevy 0.20 loads a glTF's material as a `GltfMaterial`.
+    let mut scan = |file: &str| -> (Handle<Mesh>, Handle<StandardMaterial>) {
+        let path = format!("models/nature/forest/{file}.glb");
+        let material = plain.add(StandardMaterial::default());
+        scanned.0.push((
+            assets.load(
+                GltfAssetLabel::Material {
+                    index: 0,
+                    is_scale_inverted: false,
+                }
+                .from_asset(path.clone()),
+            ),
+            material.clone(),
+        ));
+        (
+            assets.load(
+                GltfAssetLabel::Primitive {
+                    mesh: 0,
+                    primitive: 0,
+                }
+                .from_asset(path),
+            ),
+            material,
+        )
+    };
+    let rocks: Vec<_> = (1..=7)
+        .map(|n| scan(&format!("mossy_rock_b_{n}")))
+        .collect();
+    let mut boulders: Vec<_> = (1..=6)
+        .map(|n| scan(&format!("mossy_rock_a_{n}")))
+        .collect();
+    boulders.push(scan("boulder_1"));
+    let fern = scan("fern");
+    let stump = scan("stump");
+    let logs: Vec<Handle<Mesh>> = (0..LOG_KINDS)
+        .map(|kind| {
+            let mut dice = seed.derive("log").index(kind).rng();
+            let mut mesh = fallen_log(&mut dice).mesh();
+            mesh.generate_tangents()
+                .expect("a log has normals and texture places");
+            meshes.add(mesh)
+        })
+        .collect();
+    let within = |m: f32| VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: m * (1.0 - FADE)..m,
+        use_aabb: false,
+    };
+    let mut floor_dice = seed.derive("floor").rng();
+    let mut laid = [0; 5];
+    // What, how many tries, how far it is drawn, its size, how far it sinks, whether it stops a
+    // walker, and how it likes the shade: 1 under trees only, 0 anywhere, -1 the open.
+    for (what, tries, seen_m, size, sink, solid, shade) in [
+        (0, 1100, 80.0, (0.7, 1.6), 0.15, false, -0.3),
+        (1, 60, 160.0, (0.6, 1.3), 0.3, true, 0.0),
+        (2, 2600, 35.0, (0.9, 1.8), 0.02, false, 1.0),
+        (3, 70, 90.0, (0.8, 1.3), 0.08, true, 0.6),
+        (4, 160, 110.0, (0.8, 1.2), 0.0, false, 0.8),
+    ] {
+        for _ in 0..tries {
+            let angle = floor_dice.range(0.0, TAU);
+            let distance =
+                libm::sqrtf(floor_dice.range(CLEARING_M * CLEARING_M, FOREST_M * FOREST_M));
+            let at = Vec2::new(libm::cosf(angle), libm::sinf(angle)) * distance;
+            let trunk = nearest(&feet, at, 8.0);
+            let under = 1.0 - smoothstep(3.0, 8.0, trunk);
+            let likes = if shade >= 0.0 {
+                1.0 - shade + shade * under
+            } else {
+                1.0 + shade * under
+            };
+            if path.edge_distance(at) < 1.2 || trunk < 1.6 || floor_dice.unit() > likes {
+                continue;
+            }
+            let scale = floor_dice.range(size.0, size.1);
+            let mut place = place_on(at, &mut floor_dice, sink * scale, scale);
+            let (mesh, material) = match what {
+                0 => rocks[floor_dice.below(rocks.len() as u32) as usize].clone(),
+                1 => boulders[floor_dice.below(boulders.len() as u32) as usize].clone(),
+                2 => fern.clone(),
+                3 => stump.clone(),
+                _ => {
+                    // A log lies along the ground, half sunk at its ends.
+                    place.translation -= place.rotation * Vec3::Y * 0.1;
+                    (
+                        logs[floor_dice.below(LOG_KINDS as u32) as usize].clone(),
+                        Handle::default(),
+                    )
+                }
+            };
+            let mut thing = if what == 4 {
+                commands.spawn((
+                    Mesh3d(mesh),
+                    MeshMaterial3d(bark.clone()),
+                    place,
+                    within(seen_m),
+                ))
+            } else {
+                commands.spawn((
+                    Mesh3d(mesh),
+                    MeshMaterial3d(material),
+                    place,
+                    within(seen_m),
+                ))
+            };
+            if what == 2 {
+                thing.insert(NotShadowCaster);
+            }
+            if solid {
+                obstacles.add(place.translation, 0.6 * scale);
+            }
+            laid[what] += 1;
+        }
+    }
+    info!(
+        "lush: the floor has {} rocks, {} boulders, {} ferns, {} stumps and {} fallen logs.",
+        laid[0], laid[1], laid[2], laid[3], laid[4]
+    );
     info!(
         "lush: {} grown trees, {} young ones and {bushed} bushes planted. The nearest stand at \
          {:.1},{:.1} and {:.1},{:.1} (east, south).",
@@ -984,6 +1148,69 @@ fn wood(tree: &Tree, detail: usize, height: f32) -> Build {
     build
 }
 
+/// A log fallen and lying along the ground, from the forest's own kind of tree: a trunk's
+/// length, tapering and a little bent, its ends cut (D219).
+fn fallen_log(dice: &mut Rng) -> Build {
+    let length = dice.range(4.0, 9.0);
+    let radius = dice.range(0.22, 0.42);
+    let bend = dice.range(-0.4, 0.4);
+    let steps = 8;
+    let points: Vec<Vec3> = (0..=steps)
+        .map(|k| {
+            let t = k as f32 / steps as f32;
+            Vec3::new(
+                (t - 0.5) * length,
+                radius * (1.0 - 0.25 * t),
+                bend * libm::sinf(t * std::f32::consts::PI),
+            )
+        })
+        .collect();
+    let radii: Vec<f32> = (0..=steps)
+        .map(|k| radius * (1.0 - 0.3 * k as f32 / steps as f32))
+        .collect();
+    let limb = Limb {
+        points: points.clone(),
+        radii: radii.clone(),
+        depth: 1,
+    };
+    let mut build = Build::default();
+    // Lying still: a height so tall that nothing of it sways.
+    tube(&mut build, &limb, 14, 1.0e4);
+    // Each end cut flat: a disc of the bark's picture, facing out along the log.
+    for (end, inward) in [
+        (0, points[1] - points[0]),
+        (steps, points[steps - 1] - points[steps]),
+    ] {
+        let normal = -inward.normalize();
+        let side = normal.any_orthonormal_vector();
+        let other = normal.cross(side);
+        let centre = build.vertex(
+            points[end],
+            normal,
+            Vec2::splat(0.5),
+            Vec2::ZERO,
+            Vec3::splat(0.7),
+        );
+        let ring: Vec<u32> = (0..12)
+            .map(|j| {
+                let angle = j as f32 / 12.0 * TAU;
+                let out = side * libm::cosf(angle) + other * libm::sinf(angle);
+                build.vertex(
+                    points[end] + out * radii[end],
+                    normal,
+                    Vec2::new(0.5 + 0.2 * libm::cosf(angle), 0.5 + 0.2 * libm::sinf(angle)),
+                    Vec2::ZERO,
+                    Vec3::splat(0.7),
+                )
+            })
+            .collect();
+        for j in 0..12 {
+            build.indices.extend([centre, ring[j], ring[(j + 1) % 12]]);
+        }
+    }
+    build
+}
+
 /// A limb's rings: as grown, and for a trunk also between, every 0.35 m near the ground
 /// and 1 m above, so its roots and lumps have rings to show on.
 fn rings(limb: &Limb) -> (Vec<Vec3>, Vec<f32>) {
@@ -1060,8 +1287,10 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
         // Carry the ring's orientation along the limb, so it does not twist.
         side = (side - forward * side.dot(forward)).normalize_or(forward.any_orthonormal_vector());
         let other = forward.cross(side);
-        // One repeat of the bark's picture is BARK_M round the trunk and along it.
-        let wraps = (TAU * radius / BARK_M.x).round().max(1.0);
+        // One repeat of the bark's picture is about BARK_M round the limb, as many times
+        // all the way up as at its foot: a count that changed from ring to ring cut the bark
+        // into bands.
+        let wraps = (TAU * radii[0] / BARK_M.x).round().max(1.0);
         let bend = (point.y / height).clamp(0.0, 1.0);
         let flutter = if limb.depth >= 2 { 0.15 } else { 0.0 };
         for j in 0..=sides {
