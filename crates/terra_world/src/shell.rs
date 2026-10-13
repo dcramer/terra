@@ -41,6 +41,11 @@ usage: terra_sandbox [options]
   --list                list the experiments and exit
   --radius <metres>     planet radius (default 2000)
   --shot <file.png>     save a screenshot once the scene has settled, then exit
+  --shots <prefix>@<frames>
+                        save a screenshot on each of those frames, counted as --press
+                        counts them, as <prefix>-<frame>.png, then exit: a list and
+                        ranges, like out/walk@300-320,600, so what pops in or out shows
+                        between one frame and the next
   --clean               leave the frame-time readout off the screen, for pictures
   --mute                no sound
   --sound               sound under WSL too, where it is off by default
@@ -179,6 +184,8 @@ pub struct Options {
     pub list: bool,
     pub radius_m: f32,
     pub shot: Option<PathBuf>,
+    /// Screenshots on chosen frames of one run (`--shots`).
+    pub shots: Option<Shots>,
     pub settle_frames: u32,
     pub bench: bool,
     /// Listen for a script driving the run (`remote`), and on which port.
@@ -269,6 +276,49 @@ pub struct Warp {
     pub facing: (f32, f32),
 }
 
+/// A sequence of screenshots from one scripted run: the frames, counted as `--press`
+/// counts them, each saved as `<prefix>-<frame>.png`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shots {
+    pub prefix: PathBuf,
+    pub frames: Vec<u32>,
+}
+
+impl Shots {
+    fn parse(text: &str) -> Result<Self, String> {
+        let problem = || {
+            format!("--shots wants a prefix and frames, like out/walk@300-320,600, not `{text}`")
+        };
+        let (prefix, list) = text.rsplit_once('@').ok_or_else(problem)?;
+        let mut frames = Vec::new();
+        for part in list.split(',') {
+            let number = |n: &str| n.trim().parse::<u32>().map_err(|_| problem());
+            match part.split_once('-') {
+                Some((from, to)) => frames.extend(number(from)?..=number(to)?),
+                None => frames.push(number(part)?),
+            }
+        }
+        frames.sort_unstable();
+        frames.dedup();
+        if prefix.is_empty() || frames.is_empty() || frames.len() > 2000 {
+            return Err(problem());
+        }
+        Ok(Self {
+            prefix: PathBuf::from(prefix),
+            frames,
+        })
+    }
+
+    /// Where the screenshot of a frame goes.
+    pub fn path(&self, frame: u32) -> PathBuf {
+        let name = self
+            .prefix
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        self.prefix.with_file_name(format!("{name}-{frame:05}.png"))
+    }
+}
+
 /// Which frame of a scripted run this is, counted as `--press` counts them.
 #[derive(Resource, Default)]
 pub struct ScriptFrame(pub u32);
@@ -280,6 +330,7 @@ impl Options {
             list: false,
             radius_m: 2000.0,
             shot: None,
+            shots: None,
             settle_frames: SETTLE_FRAMES,
             bench: false,
             remote: false,
@@ -397,6 +448,7 @@ impl Options {
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--trace" => options.trace = Some(PathBuf::from(value("--trace")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
+                "--shots" => options.shots = Some(Shots::parse(&value("--shots")?)?),
                 "--walls" => {
                     options.walls = match value("--walls")?.as_str() {
                         kind @ ("logs" | "plain") => Some(kind.to_string()),
@@ -463,7 +515,7 @@ impl Options {
 
     /// Whether this run drives itself and exits, rather than waiting for a person.
     pub fn scripted(&self) -> bool {
-        self.shot.is_some() || self.bench || self.sheet.is_some()
+        self.shot.is_some() || self.shots.is_some() || self.bench || self.sheet.is_some()
     }
 
     /// Whether this run belongs to a script rather than a person, so it keeps out of the
@@ -853,6 +905,16 @@ fn scripted_run(
         return;
     }
     *frame += 1;
+    if let Some(shots) = &options.shots {
+        take_shots(
+            shots,
+            *frame,
+            &mut commands,
+            picture.as_deref(),
+            &options,
+            &mut exit,
+        );
+    }
     let settle = options.settle_frames;
     if *frame <= settle {
         return;
@@ -970,6 +1032,50 @@ fn scripted_run(
             );
             finish(&mut exit, AppExit::Success);
         }
+    }
+}
+
+/// Takes the sequence's screenshot on each of its frames, and ends a run that is only for
+/// them once every file is there. Files left from an earlier run go first, since the run
+/// ends when the files are there.
+fn take_shots(
+    shots: &Shots,
+    frame: u32,
+    commands: &mut Commands,
+    picture: Option<&Picture>,
+    options: &Options,
+    exit: &mut MessageWriter<AppExit>,
+) {
+    if frame == 1 {
+        if let Some(folder) = shots.path(0).parent() {
+            std::fs::create_dir_all(folder).ok();
+        }
+        for &at in &shots.frames {
+            std::fs::remove_file(shots.path(at)).ok();
+        }
+    }
+    if shots.frames.binary_search(&frame).is_ok() {
+        commands
+            .spawn(screenshot(picture))
+            .observe(save_to_disk(shots.path(frame)));
+    }
+    let last = *shots.frames.last().expect("a sequence has frames");
+    if frame <= last || options.bench || options.shot.is_some() {
+        return;
+    }
+    if shots.frames.iter().all(|&at| shots.path(at).exists()) {
+        println!(
+            "SANDBOX saved {} screenshots as {}-*.png",
+            shots.frames.len(),
+            shots.prefix.display()
+        );
+        finish(exit, AppExit::Success);
+    } else if frame > last + 3000 {
+        println!(
+            "SANDBOX could not save every screenshot of {}",
+            shots.prefix.display()
+        );
+        finish(exit, AppExit::error());
     }
 }
 
@@ -1152,6 +1258,23 @@ mod tests {
         assert!(parse(&["--press", "F13@10"]).is_err());
         assert!(options.scripted());
         assert!(!parse(&[]).unwrap().scripted());
+        let sequence = parse(&["--shots", "out/walk@300-302,600,301"]).unwrap();
+        let shots = sequence.shots.unwrap();
+        assert_eq!(shots.frames, [300, 301, 302, 600]);
+        assert_eq!(shots.path(301), PathBuf::from("out/walk-00301.png"));
+        assert!(
+            sequence.shot.is_none() && parse(&["--shots", "out/walk@300-302"]).unwrap().scripted()
+        );
+        assert!(
+            parse(&["--shots", "out/walk"])
+                .unwrap_err()
+                .contains("--shots")
+        );
+        assert!(
+            parse(&["--shots", "out/walk@x"])
+                .unwrap_err()
+                .contains("--shots")
+        );
         let fixed = parse(&["--vantage", "4,3,20,6,2,0"]).unwrap();
         assert_eq!(
             fixed.vantage,
