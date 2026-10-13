@@ -24,7 +24,7 @@ The developers, 2026-10-12:
 6. **Plans are the same cubes, not yet built.** A plan, a building going up and a finished one are one set of cubes in three states, drawn by the same rule: what is in, solid; what is not, as the ghost; the next part lit. Only what is built collides, holds a walker up or encloses a room.
 7. **Openings are cubes left open.** A door or window is an item fitted into an opening of its size once the wall is up, never part of a plan (2026-10-12). The kit frames every opening along its edges, whatever its shape.
 8. **Roofs are the one surface.** A roof is drawn from its height field, not its cubes, and its pieces are chosen by the field's shape round each point: slope, eave, verge, ridge, hip, valley, where it meets a wall. Walls under it end at its underside.
-9. **The ground is not changed by building.** Footings reach down into the ground as pieces, however far it falls away; nothing is flattened or filled. Only building below the ground's level, a cellar or a terrace into a slope, digs it, as D131 says (an [open question](#open-for-the-developers)).
+9. **The ground is not changed by building.** Footings fill the space between the floor and the ground and stop where they meet it, set a few centimetres in so no gap shows; nothing is flattened or filled. Only building below the ground's level, a cellar or a terrace into a slope, digs it, as D131 says (an [open question](#open-for-the-developers)).
 10. **Pieces are models** (D177): made by the art pipeline, one concept to a kit, one grade, several versions of every common piece, every side alike (building-kits.md).
 
 ## Drawing by neighbours
@@ -91,7 +91,7 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | A floor or roof of another kind than its walls | Each by its own kit | Roofs take the walls' kit |
 | **Ground** | | |
 | Level ground | Footing pieces a little into it | Plain blocks stand in |
-| A slope | Footings reach down as far as the ground falls; the floor at the highest ground (rule 9) | Plain blocks stand in |
+| A slope | Footings fill down to the ground and stop there, taller where it falls away; the floor at the highest ground (rule 9) | Plain blocks stand in |
 | Ground higher than the floor | Open: dig it (D131) or refuse | D131: dug |
 | A cellar, a terrace into a hill | Built below ground level: the ground dug there (D131) | Built |
 | Ground dug away under a building later | Open: the footing shows, or the building is undermined | Footing shows |
@@ -106,7 +106,7 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 
 ## Open for the developers
 
-1. **Foundations.** Recommend: footings of the kit's stone reach down into the ground as pieces, however far it falls, and the ground is left as it is; the floor sits at the highest ground under the building. Only building below ground level digs (D131). Whether a deep footing costs more, and what happens when the ground under a building is dug later, are yours to say.
+1. **Foundations.** Leaning, the developers, 2026-10-12: "ideally foundations just stop at the ground? but im not really sure". So footings of the kit's stone fill the space between the floor and the ground and stop where they meet it, taller where the ground falls away; the ground is left as it is, and the floor sits at the highest ground under the building. Only building below ground level digs (D131). Still to say: whether a tall footing costs more, and what happens when the ground under a building is dug later.
 2. **The unit of building.** Recommend a piece for long members (a log), and a cube for blocks, or a metre of them, so a stone wall goes up in about the steps a real one does.
 3. **Round or crisp corners**, per kind: the developers asked for rounded outside and inside corners. Recommend crisp for cut stone, round for plaster and earth, as real ones are.
 4. **Walls thicker than a cube**, for castles and retaining walls. Recommend yes for block kinds; it costs nothing on the dual grid.
