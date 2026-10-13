@@ -398,16 +398,17 @@ impl Detail {
         match self {
             Detail::Near => {}
             Detail::Mid => {
-                kit.timber.sides = kit.timber.sides.min(10);
-                kit.timber.step = kit.timber.step.max(0.25);
-            }
-            Detail::Far => {
                 kit.timber.sides = kit.timber.sides.min(8);
-                kit.timber.step = kit.timber.step.max(0.45);
+                kit.timber.step = kit.timber.step.max(0.4);
+            }
+            // A log far off a few pixels across: six sides, a ring at each end.
+            Detail::Far => {
+                kit.timber.sides = kit.timber.sides.min(6);
+                kit.timber.step = kit.timber.step.max(8.0);
             }
             Detail::Proxy => {
-                kit.timber.sides = kit.timber.sides.min(5);
-                kit.timber.step = kit.timber.step.max(4.0);
+                kit.timber.sides = kit.timber.sides.min(4);
+                kit.timber.step = kit.timber.step.max(8.0);
             }
         }
         kit

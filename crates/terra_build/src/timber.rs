@@ -184,10 +184,17 @@ struct Member {
     daub: (f32, f32),
 }
 
+/// Rings this far apart, or further, are a member drawn far off, with no more than its ends.
+const COARSE_STEP_M: f32 = 4.0;
+
 /// Where the rings are along a member, as fractions of its length: close at its ends for
 /// the axe's chamfer, then every `step`.
 fn stations(length: f32, step: f32, chamfer: f32) -> Vec<f32> {
     let c = (chamfer / length).min(0.2);
+    // Rings further apart than a log is long, as one is drawn far off: its ends only.
+    if step >= COARSE_STEP_M {
+        return vec![0.0, c, 1.0 - c, 1.0];
+    }
     let steps = ((length / step).ceil() as usize).max(2);
     let mut at = vec![0.0, c * 0.4, c];
     for s in 1..steps {

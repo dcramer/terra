@@ -15,11 +15,11 @@ use std::collections::BTreeMap;
 use terra_build::{CELL_M, STOREY_CUBES, wall_layer};
 
 /// How much of the sky's light reaches inside a room.
-const INDOORS: f32 = 0.15;
+const INDOORS: f32 = 0.6;
 /// How far a room's probe reaches past its tiles, into its walls' inner faces and up
 /// under its ceiling, in metres; and how much of it fades out at its edges.
-const INTO_WALLS_M: f32 = 0.2;
-const FALLOFF: f32 = 0.1;
+const INTO_WALLS_M: f32 = 0.3;
+const FALLOFF: f32 = 0.03;
 
 /// A light probe dimming the sky inside a room of a base.
 #[derive(Component)]
@@ -71,7 +71,7 @@ fn place(
             let ceiling = (wall_layer(low.y) + STOREY_CUBES) as f32 * CELL_M;
             let min = Vec3::new(
                 low.x as f32 * CELL_M - INTO_WALLS_M,
-                floor - 0.05,
+                floor - INTO_WALLS_M,
                 low.z as f32 * CELL_M - INTO_WALLS_M,
             );
             let max = Vec3::new(
