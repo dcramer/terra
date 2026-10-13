@@ -190,6 +190,7 @@ fn fragment(
         // the mesh's own answer at the map's edge.
         var litter = 0.0;
         var moss = 0.0;
+        var blades = 0.0;
         if ground.cover_on != 0u {
             let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
             let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
@@ -198,6 +199,7 @@ fn fragment(
             grows.g = mix(grows.g, map.g, inside);
             litter = map.b * inside;
             moss = map.a * inside;
+            blades = map.r * inside;
         }
         let n = normalize(in.world_normal);
         let gx = dpdx(world);
@@ -228,6 +230,10 @@ fn fragment(
             let moss_colour = vec3<f32>(0.05, 0.09, 0.02) * (0.8 + 0.4 * fleck);
             ground_is = over(ground_is, layer(GRASS, 0.55, moss_colour, world + 5.0, gx, gy, n), mossy);
         }
+
+        // The ground under thick grass is in the blades' own shade, so what shows between
+        // them is dark, as their roots are, rather than a lawn.
+        ground_is.colour *= 1.0 - 0.6 * smoothstep(0.1, 0.7, blades);
 
         let rock = smoothstep(0.2, 0.4, grows.b);
         if rock > 0.0 {

@@ -71,6 +71,9 @@ const FADE: f32 = 0.2;
 /// cheaply, to the end of the second level; beyond, none. They switch where the tree does,
 /// so a shadow never changes when its tree does not.
 const SHADOW_LEVELS: [usize; 2] = [0, 1];
+/// The solid shadow lumps are this much of the crown's size, so a low sun, which looks
+/// through many crowns, still comes through in places.
+const SHADOW_LUMP: f32 = 0.6;
 /// The render layer only the sun sees, which the stand-ins are on.
 const SUN_ONLY: usize = 1;
 /// How many kinds of grown tree, young tree and bush there are; each is drawn many times.
@@ -342,6 +345,9 @@ struct TreeModel {
     crown: [Handle<Mesh>; 3],
     shadow: Handle<Mesh>,
     clumps: Handle<Mesh>,
+    /// The solid lumps the crown's shadow is cast from beyond the cards: smaller than the
+    /// crown, so a low sun still finds gaps between its branches.
+    lumps: Handle<Mesh>,
     height: f32,
     trunk_m: f32,
 }
@@ -451,7 +457,8 @@ fn plant(
             let wood = [0, 1, 2].map(|detail| wood(&tree, detail, height));
             let crown = [0, 1, 2].map(|detail| crown(&mut dice, &tree, detail, height));
             let shadow = crown_stand_in(&mut dice, &tree, height);
-            let clumps = crown_clumps(&tree);
+            let clumps = crown_clumps(&tree, 1.0);
+            let lumps = crown_clumps(&tree, SHADOW_LUMP);
             info!(
                 "lush: tree {kind}, {height:.0} m: wood {} {} {} triangles, crown {} {} {}, shadows {} {}",
                 wood[0].triangles(),
@@ -468,6 +475,7 @@ fn plant(
                 crown: crown.map(|build| meshes.add(build.mesh())),
                 shadow: meshes.add(shadow.mesh()),
                 clumps: meshes.add(clumps.mesh()),
+                lumps: meshes.add(lumps.mesh()),
                 height,
                 trunk_m: tree.trunk_m,
             }
@@ -587,7 +595,7 @@ fn plant(
                         RenderLayers::layer(SUN_ONLY),
                     ));
                     tree.spawn((
-                        Mesh3d(model.clumps.clone()),
+                        Mesh3d(model.lumps.clone()),
                         MeshMaterial3d(solid.clone()),
                         detail(SHADOW_LEVELS[0] + 1, SHADOW_LEVELS[1], size),
                         RenderLayers::layer(SUN_ONLY),
@@ -1043,7 +1051,7 @@ fn crown_stand_in(dice: &mut Rng, tree: &Tree, height: f32) -> Build {
 /// What a crown's shadow is cast from farther off: a rounded lump for each branch, as
 /// big as most of its leaves, solid so the GPU can skip what is hidden. The light no
 /// longer comes through in flecks, which nobody sees at that distance.
-fn crown_clumps(tree: &Tree) -> Build {
+fn crown_clumps(tree: &Tree, scale: f32) -> Build {
     let mut build = Build::default();
     for branch in 0..tree.branches {
         let tips: Vec<(Vec3, f32)> = tree
@@ -1062,7 +1070,7 @@ fn crown_clumps(tree: &Tree) -> Build {
             .iter()
             .map(|(tip, _)| (*tip - centre).abs())
             .fold(Vec3::ZERO, Vec3::max);
-        let radii = (spread * 0.8 + Vec3::splat(size * 0.6)) * Vec3::new(1.0, 0.75, 1.0);
+        let radii = (spread * 0.8 + Vec3::splat(size * 0.6)) * Vec3::new(1.0, 0.75, 1.0) * scale;
         lump(&mut build, centre, radii);
     }
     build

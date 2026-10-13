@@ -22,6 +22,10 @@ use std::f32::consts::TAU;
 /// How long a whole day and night lasts, in seconds of play. Proposed: half an hour, as
 /// Valheim's and Enshrouded's are.
 pub const DAY_SECONDS: f32 = 30.0 * 60.0;
+/// The sun's direction moves on in this many steps an hour: a twentieth of a degree each,
+/// a few times a second at the game's pace.
+const SUN_STEPS: f32 = 300.0;
+
 /// The hour a new game starts at: morning, the sun low in the east.
 pub const MORNING: f32 = 7.5;
 /// Where the start is on its world, and where the sun is in its year, which together
@@ -280,7 +284,9 @@ fn shine(
     mut fog: Query<&mut DistanceFog, With<MainCamera>>,
 ) {
     let Some(path) = path else { return };
-    let sun = path.sun(clock.hour);
+    // The sun's shadows move in small steps rather than every frame: a light turning by a
+    // sliver each frame redraws every shadow edge a little differently, and they crawl.
+    let sun = path.sun((clock.hour * SUN_STEPS).round() / SUN_STEPS);
     let height = path.height(clock.hour);
     let light = light_at(height);
     let colour = |rgb: Vec3| Color::srgb(rgb.x, rgb.y, rgb.z);

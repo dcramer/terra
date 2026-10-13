@@ -25,9 +25,9 @@ use bevy::{
 use std::f32::consts::TAU;
 use terra_gen::Seed;
 
-/// Blades are tried on a grid this fine, in metres: about 150 a square metre where the
+/// Blades are tried on a grid this fine, in metres: about 280 a square metre where the
 /// grass is thickest.
-const BLADE_SPACING_M: f32 = 0.08;
+const BLADE_SPACING_M: f32 = 0.06;
 /// Clumps are scattered one to a cell this wide.
 const CLUMP_M: f32 = 0.45;
 /// What grows is sampled on a grid this fine and blended between, rather than asked of
@@ -61,7 +61,7 @@ pub const RINGS: [(Ring, f32); 3] = [
         Ring {
             segments: 2,
             width_m: 0.048,
-            share: 0.45,
+            share: 0.3,
         },
         32.0,
     ),
@@ -69,7 +69,7 @@ pub const RINGS: [(Ring, f32); 3] = [
         Ring {
             segments: 1,
             width_m: 0.07,
-            share: 0.2,
+            share: 0.11,
         },
         f32::MAX,
     ),
@@ -251,20 +251,25 @@ pub fn square(
             // Its rank decides whether it grows at all, and in which rings: the far rings
             // keep the lowest ranks, a subset of the near ring.
             let rank = h(3);
-            if rank > grass || grass < 0.02 {
+            // Grass half as thick still covers the ground with most of its blades, only
+            // shorter; thin grass stays thin.
+            let thick = libm::sqrtf(grass);
+            if rank > thick || grass < 0.02 {
                 continue;
             }
             // Measured as grown at full detail: a far ring draws fewer blades, wider, over
             // the same ground.
             built.covered[index] = true;
-            if rank > grass * ring.share {
+            if rank > thick * ring.share {
                 continue;
             }
             let (clump, from_middle) = nearest_clump(at);
             let tall = (0.12 + 0.42 * libm::powf(grass, 0.7) * (0.6 + 0.4 * lush))
                 * clump.height
                 * (1.0 - 0.35 * from_middle.min(1.0))
-                * (0.8 + 0.25 * h(4));
+                * (0.8 + 0.25 * h(4))
+                // A third are short, filling in under the rest.
+                * if h(10) < 0.33 { 0.35 + 0.25 * h(11) } else { 1.0 };
             let away = (at - clump.at).normalize_or(Vec2::X);
             let facing = clump.facing + (h(5) - 0.5) * 1.8;
             let bend_way =
@@ -278,7 +283,7 @@ pub fn square(
                 local,
                 Vec3::new(bend_way.x, 0.0, bend_way.y),
                 tall,
-                0.15 + 0.4 * h(8),
+                0.25 + 0.5 * h(8),
                 ring.width_m * (0.8 + 0.4 * h(9)),
                 tip,
                 ring.segments,

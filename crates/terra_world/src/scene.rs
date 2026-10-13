@@ -8,7 +8,7 @@ use bevy::{
     anti_alias::smaa::Smaa,
     core_pipeline::tonemapping::Tonemapping,
     light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
-    pbr::ScreenSpaceAmbientOcclusion,
+    pbr::{ContactShadows, ScreenSpaceAmbientOcclusion},
     post_process::bloom::Bloom,
     prelude::*,
     render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
@@ -57,6 +57,8 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
     // taken to shade themselves.
     light.shadow_depth_bias = 0.06;
     light.shadow_normal_bias = 2.6;
+    // Where things meet the ground, finer than the shadow map can draw (D204).
+    light.contact_shadows_enabled = true;
     // Sharp shadows close up, and shadows at all out to the far trees.
     commands.entity(sun).insert(
         CascadeShadowConfigBuilder {
@@ -76,6 +78,12 @@ fn style_camera(mut commands: Commands, camera: Single<Entity, With<MainCamera>>
         // Ambient occlusion works on single samples, so edges are smoothed afterwards.
         Msaa::Off,
         ScreenSpaceAmbientOcclusion::default(),
+        // Short shadows marched through the depth buffer, where a foot, a root or a blade
+        // meets the ground.
+        ContactShadows {
+            length: 0.4,
+            ..default()
+        },
         Smaa::default(),
         Bloom {
             intensity: 0.2,
