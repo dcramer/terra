@@ -139,10 +139,11 @@ usage: terra_sandbox [options]
                         first kit (docs/building-kits.md)
   --kit-sheet           on the yard, lay one of each way log walls meet, built, going
                         up and as a blueprint, to look at (docs/building-kits.md)
-  --vantage <x,y,z,x,y,z>
+  --vantage <x,y,z,x,y,z[@frame]>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the start, for experiments that have
-                        one";
+                        one; repeatable, each from its frame on, counted as --press
+                        counts them, to picture several views in one run";
 
 /// Engine messages that say what is normal, kept out of the log so what is left is worth
 /// reading. Warnings and errors still come through. `RUST_LOG` replaces all of this.
@@ -211,6 +212,9 @@ pub struct Options {
     pub presses: Vec<(KeyCode, u32, u32)>,
     /// A fixed camera: where it stands and what it looks at, in an experiment's own space.
     pub vantage: Option<(Vec3, Vec3)>,
+    /// Every fixed camera a scripted run was given, with the frame it moves there on,
+    /// counted as `--press` counts them; one for frame 0 is where it starts.
+    pub vantages: Vec<(u32, (Vec3, Vec3))>,
     /// Things to start carrying, by name, for testing.
     pub gives: Vec<(String, u32)>,
     /// Where the play experiment keeps its saved game, if not the usual place.
@@ -346,6 +350,7 @@ impl Options {
             sound: false,
             presses: Vec::new(),
             vantage: None,
+            vantages: Vec::new(),
             gives: Vec::new(),
             save: None,
             trace: None,
@@ -498,14 +503,22 @@ impl Options {
                     options.gives.push((name, count));
                 }
                 "--vantage" => {
-                    let numbers: Vec<f32> = value("--vantage")?
+                    let text = value("--vantage")?;
+                    let (place, frame) = text.split_once('@').unwrap_or((&text, "0"));
+                    let numbers: Vec<f32> = place
                         .split(',')
                         .filter_map(|number| number.trim().parse().ok())
                         .collect();
-                    let [a, b, c, d, e, f] = numbers[..] else {
-                        return Err("--vantage needs six numbers, like 4,3,20,6,2,0".to_string());
+                    let (&[a, b, c, d, e, f], Ok(frame)) =
+                        (numbers.as_slice(), frame.trim().parse::<u32>())
+                    else {
+                        return Err("--vantage needs six numbers, and may say from which frame, like 4,3,20,6,2,0 or 4,3,20,6,2,0@300".to_string());
                     };
-                    options.vantage = Some((Vec3::new(a, b, c), Vec3::new(d, e, f)));
+                    let view = (Vec3::new(a, b, c), Vec3::new(d, e, f));
+                    if frame == 0 {
+                        options.vantage = Some(view);
+                    }
+                    options.vantages.push((frame, view));
                 }
                 other => return Err(format!("Unknown option `{other}`")),
             }
@@ -735,7 +748,12 @@ impl Plugin for ShellPlugin {
             .add_plugins(
                 WorldInspectorPlugin::new().run_if(input_toggle_active(false, KeyCode::F1)),
             )
-            .add_systems(PreUpdate, scripted_presses.after(InputSystems))
+            .add_systems(
+                PreUpdate,
+                (scripted_presses, move_the_vantage)
+                    .chain()
+                    .after(InputSystems),
+            )
             .add_systems(Update, scripted_run)
             .add_systems(PostUpdate, keep_the_mouse_free);
         if self.0.remote {
@@ -859,6 +877,22 @@ pub(crate) fn scripted_presses(
                 keys.clear_just_pressed(key);
             }
         }
+    }
+}
+
+/// A scripted run given several fixed cameras moves to each on its frame, so one run can
+/// picture several views.
+fn move_the_vantage(frame: Res<ScriptFrame>, mut options: ResMut<Options>) {
+    if !frame.is_changed() {
+        return;
+    }
+    let next = options
+        .vantages
+        .iter()
+        .find(|(at, _)| *at == frame.0 && *at > 0)
+        .map(|(_, view)| *view);
+    if let Some(view) = next {
+        options.vantage = Some(view);
     }
 }
 
@@ -1281,6 +1315,18 @@ mod tests {
             Some((Vec3::new(4.0, 3.0, 20.0), Vec3::new(6.0, 2.0, 0.0)))
         );
         assert!(parse(&["--vantage", "1,2"]).unwrap_err().contains("six"));
+        let moving = parse(&["--vantage", "1,2,3,4,5,6", "--vantage", "7,8,9,1,2,3@300"]).unwrap();
+        assert_eq!(
+            moving.vantage,
+            Some((Vec3::new(1.0, 2.0, 3.0), Vec3::new(4.0, 5.0, 6.0)))
+        );
+        assert_eq!(moving.vantages.len(), 2);
+        assert_eq!(moving.vantages[1].0, 300);
+        assert!(
+            parse(&["--vantage", "1,2,3,4,5,6@x"])
+                .unwrap_err()
+                .contains("six")
+        );
         let placed = parse(&["--at", "-40,30", "--face", "-45, 31"]).unwrap();
         assert_eq!(placed.start_at, Some((-40.0, 30.0)));
         assert_eq!(placed.start_facing, Some((-45.0, 31.0)));

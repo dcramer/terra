@@ -52,6 +52,17 @@ const TASKS: &[Task] = &[
         },
     },
     Task {
+        name: "vantage",
+        takes: "[--time 13,17]",
+        does: "the vantage sheet: the lush forest from fixed views, side by side, to judge how the world looks (tools/sandbox)",
+        group: "Play and check",
+        run: |args| {
+            let mut all = vec!["tools/sandbox/vantage.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "bench",
         takes: "[scene…] [--runs N] [--record] [--debug]",
         does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded",

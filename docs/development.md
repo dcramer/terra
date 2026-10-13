@@ -29,6 +29,7 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | `cargo xtask tools` | Every task and tool, with what it does |
 | `cargo xtask play` | Play the MVP (D105) on the real GPU, wherever you are; your game is kept between runs. `cargo xtask play --fresh` starts a new one. |
 | `cargo xtask yard` | Play the yard: a flat test level for working on building. Smooth ground with nothing on it, building free and instant without a claim stone, the sun at noon, nothing saved. The same as `--level yard` on the play experiment, so the sandbox remote can drive it. |
+| `cargo xtask vantage` | The vantage sheet: the lush forest from fixed views at 13:00 and 17:00, side by side in `shots/vantage/sheet.jpg` ([tools/sandbox](../tools/sandbox/README.md#scripts)) |
 | `cargo xtask loop` | Play the MVP's loop by script and check every step happened ([QA for agents](#checking-the-game-without-a-person-qa-for-agents)) |
 | `cargo xtask bench` | Time the benchmark scenes ([Measuring performance](#measuring-performance)) |
 | `cargo xtask check` | Run by git before every commit (`.githooks/pre-commit`). Formatting, lints, tests (the TypeScript tools' too), the docs check ([tools/docs](../tools/docs/README.md)), the Blender scripts' check (skipped with no Blender) and the dependency rule. Must pass before a commit. |
