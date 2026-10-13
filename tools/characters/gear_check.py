@@ -38,7 +38,8 @@ import patches
 GEAR = look.GEAR_MADE
 CLIPS = look.game_clips()
 LIMITS = {
-    "near_m": 0.06,          # skin this close to a look at rest is watched
+    "near_m": 0.06,          # skin this close to a look at rest is watched,
+    "under_m": 0.06,         # if the look is over it at rest, this far out along its facing
     "depth_m": 0.03,         # the look's surface this far beneath the skin means it is through
     "through_share": 0.02,   # share of the watched skin allowed through, in any frame
     "covered_m": 0.3,        # the look's surface this far outward hides skin that is through it
@@ -183,8 +184,12 @@ for item in items:
     pts, nrm = evaluated(body)
     rest_pts = list(pts)
     bvh = tree(piece)
+    # The skin the look covers at rest and does not hide: only that can come through it. Skin
+    # beyond its edge, a thigh below a hem, can pass in front of it in a pose (the hem tucked
+    # behind a raised thigh, as on a real body), which is not skin through the look.
     watch = [i for i in range(len(pts)) if patch_of.get(i) not in covers
-             and bvh.find_nearest(pts[i], LIMITS["near_m"])[0] is not None]
+             and bvh.find_nearest(pts[i], LIMITS["near_m"])[0] is not None
+             and bvh.ray_cast(pts[i] + nrm[i] * 0.001, nrm[i], LIMITS["under_m"])[0] is not None]
     # The skin it hides, every few vertices: a hole wherever the look stops covering it.
     hidden = [i for i in range(0, len(pts), 3) if patch_of.get(i) in covers
               and bvh.find_nearest(pts[i], LIMITS["hidden_near_m"])[0] is not None]

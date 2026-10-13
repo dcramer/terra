@@ -607,6 +607,7 @@ fn dress(
         .and_then(|value| serde_json::from_value(value).ok())
         .unwrap_or_default();
     commands.entity(look).insert(Covers(covered));
+
     if !own.iter().any(|each| skins.contains(*each)) {
         let socket = own
             .iter()

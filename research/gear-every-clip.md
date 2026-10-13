@@ -38,19 +38,21 @@ Locomotion lifts for a different reason: the longer feet reach lower than the ma
 - Hiding now comes from a sweep of poses (T6, conservative): a patch is hidden only while it stays covered in every frame of every clip on every body.
 - Each pack gave up 3 patches, and the holes went to none.
 
-**The coat lets the thigh through its hem**, whenever the hip bends deeply:
+**The coat seemed to let the thigh through its hem** whenever the hip bent deeply:
 
-| Body | Clip | Skin through |
+| Body | Clip | Counted as through |
 |---|---|---|
 | Base | Crouch-walk | 2.2% |
 | Heavy | Crouch-walk | 2.5% |
 | Strong | Getting up from sitting | 2.3% |
 
-The skin coming through lies at the hem line itself (0.82–0.89 m up, the hem at about 0.84 m). That tells us three things:
+The clipping fixer could not clear it: its first push made it worse (3.4%), and it stopped. Three fixes were tried, and the third found the cause:
 
-- **Finer hiding cannot fix it:** any hiding safe from holes must leave that skin drawn.
-- **The clipping fixer cannot fix it either:** its first push made it worse (3.4%), and it stopped. A push baked into the shape moves the hem in every pose, not only when the thigh is up.
-- **The fix shipped games use is a pose-driven corrective:** a corrective shape on the garment, its weight set each frame from the thigh's angle, as Unreal's Pose Driver and MetaHuman's correctives do.
+1. **A corrective shape** weighted by the thigh's turn, as Unreal's Pose Driver does. Taught from a thigh raised in a rest pose, it had nothing to fix. Taught from the clips' own poses, every push made it worse: in a deep bend the hem sits in the crease between belly and thigh, and a push out of one part goes into the other.
+2. **The hem at the hip joint**, where the dressed vest ends, 12 cm above the cut. Worse, up to 10.5% in the roll: an edge in the crease is folded over by the belly.
+3. **Looking at it.** Rendered, the crouch looked as a crouch does: the hem tucked behind the raised thigh, as on a real body.
+
+The check had been watching any uncovered skin near the garment, including the thigh below the hem. Skin that was never under a garment cannot come through it; it can only pass in front of it. The check now watches only the skin the garment covers at rest (a ray out along the skin's facing meets it). With that, the coat as cut passes every clip, worst 1.1%; the hem at the hip still fails, so the hem stays where it was. The corrective code was removed, nothing needing it; long coats may (phase 5).
 
 **The base's own looks were never pushed clear.** The clipping fixer ran on every morph but not on the base itself. Now the base gets the same rounds, carried onto itself as a morph of nothing.
 
@@ -60,4 +62,4 @@ The skin coming through lies at the hem line itself (0.82–0.89 m up, the hem a
 
 - **Checks:** every clip; the floor judged against the mannequin; hiding from the pose sweep; the base fixed as the morphs are.
 - **Bodies:** the hips lifted by body size, baked for the base and mixed in the game for the morphs.
-- **The plan:** pose-driven correctives (docs/characters.md, phase 5) are the next fix, first for the coat's hem.
+- **The plan:** pose-driven correctives stay in phase 5, for long coats and robes, if they need them.

@@ -193,25 +193,35 @@ def carried(o, delta):
 piece = load(look_path)
 skinned = [o for o in piece if o.type == "MESH" and any(m.type == "ARMATURE" for m in o.modifiers)]
 deltas = {m: morph_delta(m) for m in (MORPHS if MORPHS is not None else [APPLY])}
+def shift(o, moves, inv):
+    """Moves each vertex of `o` by `moves` (world space), every shape key it already has with
+    it, so a shape on the look keeps its place on it."""
+    keys = o.data.shape_keys.key_blocks if o.data.shape_keys else []
+    for v, m in zip(o.data.vertices, moves):
+        d = inv @ Vector(m)
+        v.co = v.co + d
+        for k in keys:
+            k.data[v.index].co = k.data[v.index].co + d
+
+
 for o in skinned:
     inv = o.matrix_world.inverted().to_3x3()
     # The base's own pushes first, where its skin came through the look in our clips: they are
     # part of the look on every body. (Carried onto the base itself, they are its morph's.)
-    if APPLY != BASE_NAME and o.data.shape_keys is None:
-        for v, m in zip(o.data.vertices, pushes(o, BASE_NAME, np.zeros((len(o.data.vertices), 3)))):
-            v.co = v.co + inv @ Vector(m)
+    if APPLY != BASE_NAME:
+        shift(o, pushes(o, BASE_NAME, np.zeros((len(o.data.vertices), 3))), inv)
     if APPLY is not None:
         moved = carried(o, deltas[APPLY])
-        for v, m in zip(o.data.vertices, moved + pushes(o, APPLY, moved)):
-            v.co = v.co + inv @ Vector(m)
+        shift(o, moved + pushes(o, APPLY, moved), inv)
     else:
         if o.data.shape_keys is None:
             o.shape_key_add(name="Basis", from_mix=False)
+        basis = o.data.shape_keys.key_blocks[0].data
         for name in MORPHS:
             key = o.shape_key_add(name=name, from_mix=False)
             moved = carried(o, deltas[name])
             for v, m in zip(o.data.vertices, moved + pushes(o, name, moved)):
-                key.data[v.index].co = v.co + inv @ Vector(m)
+                key.data[v.index].co = basis[v.index].co + inv @ Vector(m)
     print("CARRIED", o.name, len(o.data.vertices), "vertices", "onto " + APPLY if APPLY else "with morphs " + ",".join(MORPHS))
 # A look hung on a socket: its socket moves with each morph already; it moves the rest of
 # the way to keep its clearance.
