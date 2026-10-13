@@ -171,7 +171,7 @@ impl GeneratedPlanet {
     const DETAIL_M: f32 = 0.8;
     const DETAIL_SCALE_M: f32 = 24.0;
     /// How deep the top layer of soil or sand goes.
-    const TOPSOIL_M: f32 = 1.5;
+    pub(crate) const TOPSOIL_M: f32 = 1.5;
     /// Sand instead of soil this close above the sea.
     const BEACH_M: f32 = 1.5;
     /// How big ore veins are, and how much of the stone they fill: a vein where the noise
@@ -351,6 +351,7 @@ impl Field for GeneratedPlanet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use terra_core::StandInPlanet;
     use terra_gen::Seed;
 
     fn planet() -> GeneratedPlanet {
@@ -365,13 +366,33 @@ mod tests {
     }
 
     #[test]
-    fn above_is_air_below_is_ground() {
+    fn the_ground_is_the_stand_ins_with_finer_detail_on_it() {
+        // The same seed gives the stand-in's lie of the land, give or take the detail, and
+        // the smooth planet is the stand-in itself.
         let planet = planet();
-        let up = Vec3::Y;
-        let surface = up * (2000.0 + planet.height_m(up));
-        assert!(planet.sample(surface + up * 5.0).distance > 4.9);
-        assert!(planet.sample(surface - up * 5.0).distance < -4.9);
-        assert!(planet.sample(surface).distance.abs() < 1e-2);
+        let smooth = planet.clone().smooth();
+        let stand_in = StandInPlanet::new(planet.spec(), 150.0, Some(-20.0));
+        let mut rng = Seed(8).rng();
+        let mut most_detail: f32 = 0.0;
+        for _ in 0..500 {
+            let up = rng.unit_vector();
+            let height = stand_in.height_m(up);
+            let detail = planet.height_m(up) - height;
+            assert!(
+                detail.abs() <= GeneratedPlanet::DETAIL_M + 0.02,
+                "{detail} at {up}"
+            );
+            assert!((smooth.height_m(up) - height).abs() < 0.02);
+            most_detail = most_detail.max(detail.abs());
+            // Clear of the detail, above the stand-in's ground is air and below is ground.
+            let clear = GeneratedPlanet::DETAIL_M + 0.1;
+            assert!(!planet.sample(up * (2000.0 + height + clear)).solid());
+            assert!(planet.sample(up * (2000.0 + height - clear)).solid());
+        }
+        assert!(
+            most_detail > GeneratedPlanet::DETAIL_M * 0.25,
+            "{most_detail}"
+        );
     }
 
     #[test]
@@ -414,8 +435,22 @@ mod tests {
     }
 
     #[test]
-    fn the_same_seed_gives_the_same_ground() {
-        let point = Vec3::new(13.0, 2101.0, -40.0);
-        assert_eq!(planet().sample(point), planet().sample(point));
+    fn the_ground_is_pinned() {
+        // Exact bits: the same on every machine, or players would dig different ground
+        // (D41).
+        let planet = planet();
+        let sampled = [
+            Vec3::new(13.0, 1.0, -40.0),
+            Vec3::new(-0.3, -0.8, 0.5),
+            Vec3::new(0.9, 0.2, 0.4),
+        ]
+        .map(|direction| {
+            let sample = planet.sample(direction.normalize() * 2000.0);
+            (sample.distance.to_bits(), sample.material.0)
+        });
+        assert_eq!(sampled, PINNED_GROUND);
     }
+
+    const PINNED_GROUND: [(u32, u16); 3] =
+        [(1_101_221_632, 4), (3_253_984_704, 2), (1_088_236_800, 1)];
 }

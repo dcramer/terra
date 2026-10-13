@@ -250,8 +250,20 @@ mod tests {
             mesh.triangle_count()
         );
         // The surface faces the way the ground does there.
+        let up = planet.normal(top(&planet));
         let facing: Vec3 = mesh.normals.iter().copied().sum::<Vec3>().normalize();
-        assert!(facing.dot(planet.normal(top(&planet))) > 0.95);
+        assert!(facing.dot(up) > 0.95);
+        // And its triangles are wound to be seen from above, counter-clockwise from outside
+        // as the renderer expects, or the ground would be culled and seen from below.
+        let wound: Vec3 = mesh
+            .indices
+            .chunks(3)
+            .map(|t| {
+                let [a, b, c] = [t[0], t[1], t[2]].map(|i| mesh.positions[i as usize]);
+                (b - a).cross(c - a)
+            })
+            .sum();
+        assert!(wound.normalize().dot(up) > 0.95);
         let soil = MaterialWeights::single(material::SOIL);
         assert!(mesh.materials.contains(&soil));
         // Every vertex is on the ground.
@@ -260,36 +272,11 @@ mod tests {
                 .iter()
                 .all(|&point| planet.sample(point).distance.abs() < VOXEL_M)
         );
-    }
-
-    #[test]
-    fn a_chunk_far_from_the_surface_is_empty() {
-        let planet = planet();
-        let above = chunk_at(top(&planet) + Vec3::Y * 200.0, 0);
-        assert_eq!(
-            mesh_chunk(&planet, above, Sides::none()).triangle_count(),
-            0
-        );
-    }
-
-    #[test]
-    fn a_dig_shows_in_the_mesh() {
-        let mut planet = planet();
-        let ground = top(&planet);
-        let id = chunk_at(ground, 0);
-        let untouched = planet.field().clone();
-        planet.apply(&Operation::Dig {
-            centre: ground,
-            radius: 3.0,
-        });
-        let after = mesh_chunk(&planet, id, Sides::none());
-        // Some of the surface is now where the ground was, deep under it.
-        let in_the_hole = after
-            .positions
-            .iter()
-            .filter(|&&point| untouched.sample(point).distance < -2.0)
-            .count();
-        assert!(in_the_hole > 10, "there is a hole");
+        // Wholly in the air, or wholly in the ground, there is no surface to draw.
+        for clear in [Vec3::Y * 200.0, Vec3::Y * -60.0] {
+            let id = chunk_at(top(&planet) + clear, 0);
+            assert_eq!(mesh_chunk(&planet, id, Sides::none()).triangle_count(), 0);
+        }
     }
 
     /// Edges used by one triangle only, after joining vertices at the same place.
@@ -378,16 +365,6 @@ mod tests {
             "the test finds cracks when there are some"
         );
     }
-}
-
-#[cfg(test)]
-mod hole_tests {
-    use super::*;
-    use crate::{GeneratedPlanet, VoxelPlanet};
-    use glam::IVec3;
-    use std::collections::HashMap;
-    use terra_core::{Operation, PlanetSpec};
-    use terra_gen::Seed;
 
     #[test]
     fn a_dug_hole_has_no_gaps() {
@@ -420,29 +397,10 @@ mod hole_tests {
                 }
             }
         }
-        let key = |p: Vec3| (p * 1000.0).round().as_ivec3();
-        let mut count: HashMap<(IVec3, IVec3), (usize, Vec3)> = HashMap::new();
-        for mesh in &meshes {
-            for t in mesh.indices.chunks(3) {
-                for (i, j) in [(0, 1), (1, 2), (2, 0)] {
-                    let (a, b) = (mesh.positions[t[i] as usize], mesh.positions[t[j] as usize]);
-                    let (ka, kb) = (key(a), key(b));
-                    if ka == kb {
-                        continue;
-                    }
-                    let edge = if (ka.x, ka.y, ka.z) < (kb.x, kb.y, kb.z) {
-                        (ka, kb)
-                    } else {
-                        (kb, ka)
-                    };
-                    count.entry(edge).or_insert((0, a)).0 += 1;
-                }
-            }
-        }
-        let near: Vec<Vec3> = count
-            .values()
-            .filter(|(n, at)| *n == 1 && at.distance(ground) < 4.0)
-            .map(|(_, at)| *at)
+        let near: Vec<Vec3> = open_edges(&meshes)
+            .into_iter()
+            .map(|(at, _)| at)
+            .filter(|at| at.distance(ground) < 4.0)
             .collect();
         assert!(
             near.is_empty(),

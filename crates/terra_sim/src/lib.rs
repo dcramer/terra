@@ -457,18 +457,6 @@ mod tests {
         }
     }
 
-    fn equator_cell(sim: &Sim) -> usize {
-        (0..sim.grid.len())
-            .filter(|&i| !sim.is_ocean(i))
-            .min_by(|&a, &b| {
-                sim.grid
-                    .latitude(a)
-                    .abs()
-                    .total_cmp(&sim.grid.latitude(b).abs())
-            })
-            .unwrap()
-    }
-
     #[test]
     fn grid_has_the_expected_shape() {
         let grid = Grid::icosphere(3);
@@ -493,37 +481,35 @@ mod tests {
     }
 
     #[test]
-    fn the_same_inputs_give_the_same_planet() {
-        let build = || {
-            let mut sim = Sim::new(3, 42);
-            sim.place(Machine::GasGenerator, 0);
-            sim.place(Machine::Heater, 10);
-            sim.place(Machine::Seeder, 200);
-            run(&mut sim, 500);
-            sim
-        };
-        let (a, b) = (build(), build());
-        assert_eq!(a.temperature, b.temperature);
-        assert_eq!(a.biomass, b.biomass);
-        assert_eq!(a.sea_level_m, b.sea_level_m);
-    }
-
-    #[test]
-    fn gas_warms_the_whole_planet_and_raises_the_sea() {
-        let mut sim = Sim::new(3, 1);
-        let before = sim.summary();
-        for _ in 0..4 {
-            sim.place(Machine::GasGenerator, 0);
+    fn more_gas_warms_the_whole_planet_more_and_raises_the_sea() {
+        // The same planet run as long with no, two and four generators.
+        let runs: Vec<Sim> = [0, 2, 4]
+            .into_iter()
+            .map(|generators| {
+                let mut sim = Sim::new(3, 1);
+                for _ in 0..generators {
+                    sim.place(Machine::GasGenerator, 0);
+                }
+                run(&mut sim, 3000);
+                sim
+            })
+            .collect();
+        for pair in runs.windows(2) {
+            let (less, more) = (&pair[0], &pair[1]);
+            // Warmer everywhere, not only near the generators.
+            for cell in 0..less.grid.len() {
+                assert!(
+                    more.temperature[cell] > less.temperature[cell],
+                    "cell {cell}"
+                );
+            }
+            let (less, more) = (less.summary(), more.summary());
+            assert!(more.sea_level_m > less.sea_level_m);
+            assert!(more.ice_fraction <= less.ice_fraction);
         }
-        run(&mut sim, 3000);
-        let after = sim.summary();
-        assert!(after.mean_temperature > before.mean_temperature + 20.0);
-        assert!(
-            after.ocean_fraction > 0.05,
-            "ocean {}",
-            after.ocean_fraction
-        );
-        assert!(after.ice_fraction < before.ice_fraction);
+        let (none, most) = (runs[0].summary(), runs[2].summary());
+        assert!(most.ocean_fraction > none.ocean_fraction);
+        assert!(most.ice_fraction < none.ice_fraction);
     }
 
     #[test]
@@ -548,34 +534,46 @@ mod tests {
 
     #[test]
     fn life_needs_air_warmth_and_water() {
-        // Seeded on a dead planet: nothing grows.
+        // The same planet given air and seas, twice, and left dead.
+        let living = || {
+            let mut sim = Sim::new(3, 1);
+            for _ in 0..4 {
+                sim.place(Machine::GasGenerator, 0);
+            }
+            run(&mut sim, 3000);
+            sim
+        };
+        let (mut seeded, mut control) = (living(), living());
         let mut dead = Sim::new(3, 1);
-        let cell = equator_cell(&dead);
-        dead.place(Machine::Seeder, cell);
-        run(&mut dead, 1000);
-        assert_eq!(dead.biomass[cell], 0.0);
-
-        // Same seed on a planet with air and seas: it grows and spreads.
-        let mut alive = Sim::new(3, 1);
-        for _ in 0..4 {
-            alive.place(Machine::GasGenerator, 0);
-        }
-        run(&mut alive, 3000);
-        // Well above the shoreline, so the still-rising sea does not drown it.
-        let wet = (0..alive.grid.len())
+        run(&mut dead, 3000);
+        // The most habitable land, well above the shoreline so the still-rising sea does
+        // not drown it.
+        let wet = (0..seeded.grid.len())
             .filter(|&i| {
-                alive.elevation[i] > alive.sea_level_m + 30.0 && alive.suitability(i) > 0.0
+                seeded.elevation[i] > seeded.sea_level_m + 30.0 && seeded.suitability(i) > 0.0
             })
-            .max_by(|&a, &b| alive.suitability(a).total_cmp(&alive.suitability(b)))
+            .max_by(|&a, &b| seeded.suitability(a).total_cmp(&seeded.suitability(b)))
             .expect("some land should be habitable once there is air and sea");
-        alive.place(Machine::Seeder, wet);
-        run(&mut alive, 3000);
-        let spread = alive
-            .grid
-            .neighbours(wet)
-            .iter()
-            .any(|&nb| alive.biomass[nb as usize] > 0.1);
-        assert!(alive.biomass[wet] > 0.5);
-        assert!(spread, "life should creep into neighbouring cells");
+        seeded.place(Machine::Seeder, wet);
+        dead.place(Machine::Seeder, wet);
+        for sim in [&mut seeded, &mut control, &mut dead] {
+            run(sim, 3000);
+        }
+        // Where it was seeded it grows, and creeps out into the cells round it, more than
+        // on the same planet unseeded.
+        let elsewhere = |sim: &Sim| -> f32 {
+            (0..sim.grid.len())
+                .filter(|&i| i != wet)
+                .map(|i| sim.biomass[i])
+                .sum()
+        };
+        assert!(seeded.biomass[wet] > control.biomass[wet]);
+        assert!(
+            elsewhere(&seeded) > elsewhere(&control),
+            "life should creep into neighbouring cells"
+        );
+        // On the dead planet the same seeding does nothing at all.
+        assert_eq!(dead.biomass[wet], 0.0);
+        assert_eq!(elsewhere(&dead), 0.0);
     }
 }

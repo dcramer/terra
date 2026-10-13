@@ -171,11 +171,17 @@ impl<F: Field> VoxelPlanet<F> {
     }
 
     /// The edits that reach a point, in the order they were made.
+    ///
+    /// A fill counts everywhere: the ground it adds is nearer some points in the air than
+    /// the ground under them, and leaving it out there would say the ground is farther
+    /// than it is, so a ray could step clean over it. Beyond its reach a fill only lowers
+    /// a distance that was more than the margin, and never below it, so nothing near the
+    /// surface changes there and nothing there needs drawing again.
     fn edits_at(&self, point: Vec3) -> impl Iterator<Item = &Edit> {
         self.edits.iter().filter(move |edit| {
             let (centre, radius) = edit.centre_and_radius();
             let reach = radius + EDIT_MARGIN_M;
-            point.distance_squared(centre) <= reach * reach
+            matches!(edit, Edit::Fill { .. }) || point.distance_squared(centre) <= reach * reach
         })
     }
 
@@ -336,55 +342,86 @@ mod tests {
     }
 
     #[test]
-    fn a_dig_at_the_surface_splits_by_material_and_takes_no_air() {
+    fn a_dig_at_the_surface_takes_the_ground_below_it_by_layer() {
         let mut planet = planet();
-        let (ground, _) = surface(&planet);
+        // On level ground, where the layers lie flat.
+        let ground = (0..400)
+            .map(|i| {
+                let up = Vec3::new(i as f32 * 0.003, 1.0, i as f32 * 0.002).normalize();
+                up * (2000.0 + planet.field().height_m(up))
+            })
+            .find(|&at| planet.normal(at).dot(at.normalize()) > 0.998)
+            .expect("somewhere level");
+        let radius = 2.5;
         let taken = planet.apply(&Operation::Dig {
             centre: ground,
-            radius: 2.5,
+            radius,
         });
+        let amount = |materials: &[MaterialId]| -> f32 {
+            materials
+                .iter()
+                .map(|&m| taken.amount(Harvested::Material(m)))
+                .sum()
+        };
+        // Ground through the middle of a ball halves it, however it slopes: the half
+        // above was air, and none of that is taken.
+        let half = volume(radius) / 2.0;
         let total: f32 = taken.iter().map(|(_, amount)| amount).sum();
-        // About half the sphere was above ground.
-        assert!(total > volume(2.5) * 0.35 && total < volume(2.5) * 0.65);
-        let topsoil = taken.amount(Harvested::Material(material::SOIL))
-            + taken.amount(Harvested::Material(material::SAND));
-        assert!(topsoil > 0.0, "the top layer is in it");
-        assert!(taken.amount(Harvested::Material(material::AIR)) == 0.0);
+        assert!(
+            (total - half).abs() < half * 0.03,
+            "took {total} m³ of {half}"
+        );
+        // Under the topsoil is stone: the cap of the ball deeper than the topsoil goes.
+        let deep = radius - GeneratedPlanet::TOPSOIL_M;
+        let cap = std::f32::consts::PI * deep * deep * (3.0 * radius - deep) / 3.0;
+        let stone = amount(&[material::STONE, material::ORE]);
+        let topsoil = amount(&[material::SOIL, material::SAND]);
+        assert!(
+            (stone - cap).abs() < cap * 0.05,
+            "{stone} m³ of stone, not {cap}"
+        );
+        assert!(
+            (topsoil - (half - cap)).abs() < (half - cap) * 0.03,
+            "{topsoil} m³ of topsoil"
+        );
     }
 
     #[test]
-    fn digging_then_filling_puts_the_ground_back() {
+    fn digging_then_filling_puts_the_ground_back_in_the_new_material() {
         let mut planet = planet();
         let (ground, up) = surface(&planet);
         let deep = ground - up * 30.0;
-        let before: Vec<bool> = (0..64)
-            .map(|i| {
-                planet
-                    .sample(deep + Vec3::new(i as f32 * 0.1 - 3.2, 0.3, 0.1))
-                    .solid()
-            })
-            .collect();
+        let line = |planet: &VoxelPlanet<GeneratedPlanet>| -> Vec<bool> {
+            (0..64)
+                .map(|i| {
+                    planet
+                        .sample(deep + Vec3::new(i as f32 * 0.1 - 3.2, 0.3, 0.1))
+                        .solid()
+                })
+                .collect()
+        };
+        let before = line(&planet);
+        let beside = deep + Vec3::X * 2.5;
+        let was = planet.material(beside);
         planet.apply(&Operation::Dig {
             centre: deep,
             radius: 2.0,
         });
+        // Sand, which is never found this deep, so it can only be the fill's.
         planet.apply(&Operation::Fill {
             centre: deep,
             radius: 2.0,
-            material: material::STONE,
+            material: material::SAND,
         });
-        let after: Vec<bool> = (0..64)
-            .map(|i| {
-                planet
-                    .sample(deep + Vec3::new(i as f32 * 0.1 - 3.2, 0.3, 0.1))
-                    .solid()
-            })
-            .collect();
-        assert_eq!(before, after);
+        assert_eq!(line(&planet), before);
+        for offset in [Vec3::ZERO, up * 1.8, Vec3::X * -1.8] {
+            assert_eq!(planet.material(deep + offset), material::SAND);
+        }
+        assert_eq!(planet.material(beside), was, "outside the fill as it was");
     }
 
     #[test]
-    fn the_same_operations_in_the_same_order_give_the_same_ground() {
+    fn replaying_the_operations_gives_the_same_ground_and_their_order_matters() {
         let (ground, up) = surface(&planet());
         let operations = [
             Operation::Dig {
@@ -396,32 +433,137 @@ mod tests {
                 radius: 1.5,
                 material: material::ORE,
             },
-            Operation::Dig {
-                centre: ground - up,
-                radius: 1.0,
+            Operation::DigBox {
+                centre: ground + Vec3::X,
+                half: Vec3::new(0.5, 1.0, 1.5),
+                rotation: Quat::from_rotation_y(0.4),
             },
         ];
-        let (mut one, mut two) = (planet(), planet());
+        let mut one = planet();
         for operation in &operations {
             one.apply(operation);
-            two.apply(operation);
         }
-        for i in 0..100 {
-            let point = ground + Vec3::new(i as f32 * 0.07 - 3.5, i as f32 * 0.05 - 2.5, 0.2);
-            assert_eq!(one.sample(point), two.sample(point));
-        }
-        // Replaying what one kept gives the same ground again.
+        // Replaying what it kept gives the same ground, everywhere the edits reached.
         let mut replayed = planet();
         for operation in one.operations() {
             replayed.apply(&operation);
         }
-        assert_eq!(replayed.sample(ground), one.sample(ground));
-        // And in another order, another ground: the order is part of the history.
-        let mut three = planet();
-        for operation in operations.iter().rev() {
-            three.apply(operation);
+        let untouched = planet();
+        let mut edited = 0;
+        for i in 0..200 {
+            let point = ground + Vec3::new(i as f32 * 0.035 - 3.5, i as f32 * 0.025 - 2.5, 0.2);
+            assert_eq!(replayed.sample(point), one.sample(point), "at {point}");
+            edited += usize::from(one.sample(point) != untouched.sample(point));
         }
-        assert_ne!(one.sample(ground + up), three.sample(ground + up));
+        assert!(
+            edited > 100,
+            "the edits reach the points compared: {edited}"
+        );
+        // In another order, another ground: the order is part of the history.
+        let mut reversed = planet();
+        for operation in operations.iter().rev() {
+            reversed.apply(operation);
+        }
+        assert_ne!(one.sample(ground + up), reversed.sample(ground + up));
+    }
+
+    #[test]
+    fn what_to_draw_again_holds_everything_the_edits_changed_near_the_surface() {
+        let mut planet = planet();
+        let (ground, up) = surface(&planet);
+        // An earlier edit, already drawn.
+        planet.apply(&Operation::Dig {
+            centre: ground - up * 30.0,
+            radius: 2.0,
+        });
+        let before = planet.clone();
+        let first = planet.edit_count();
+        let operations = [
+            Operation::Dig {
+                centre: ground - up * 0.5,
+                radius: 1.5,
+            },
+            Operation::Fill {
+                centre: ground + Vec3::X * 3.0,
+                radius: 1.0,
+                material: material::STONE,
+            },
+            Operation::DigBox {
+                centre: ground - up * 20.0,
+                half: Vec3::splat(1.0),
+                rotation: Quat::IDENTITY,
+            },
+        ];
+        for operation in &operations {
+            planet.apply(operation);
+        }
+        let regions: Vec<(Vec3, f32)> = planet.edits_since(first).collect();
+        assert_eq!(regions.len(), operations.len());
+        assert!(planet.edits_since(planet.edit_count()).next().is_none());
+        // Every point whose ground changed, where a mesh would see it, is in a region.
+        let mut changed = 0;
+        for centre in [ground, ground - up * 20.0] {
+            for x in -24..=24 {
+                for y in -24..=24 {
+                    for z in -24..=24 {
+                        let point = centre + Vec3::new(x as f32, y as f32, z as f32) * 0.25;
+                        let (was, now) = (before.sample(point), planet.sample(point));
+                        let near_surface = was.distance.abs().min(now.distance.abs()) < 2.0;
+                        let differs = was.solid() != now.solid()
+                            || (now.solid() && was.material != now.material)
+                            || (near_surface && was.distance != now.distance);
+                        if differs {
+                            changed += 1;
+                            assert!(
+                                regions
+                                    .iter()
+                                    .any(|&(at, reach)| point.distance(at) <= reach),
+                                "{point} changed outside every region"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        assert!(changed > 1000, "{changed} points changed");
+    }
+
+    #[test]
+    fn filled_ground_is_walked_on_and_made_of_the_fill() {
+        let mut planet = planet();
+        let (ground, up) = surface(&planet);
+        let centre = ground + up * 1.5;
+        planet.apply(&Operation::Fill {
+            centre,
+            radius: 1.0,
+            material: material::ORE,
+        });
+        // A ray straight down lands on top of the fill, which faces up there.
+        let hit = planet.raycast(ground + up * 10.0, -up, 20.0).unwrap();
+        assert!((hit.point.distance(centre) - 1.0).abs() < 0.05, "{hit:?}");
+        assert!(planet.normal(hit.point).dot(up) > 0.95);
+        assert_eq!(planet.material(hit.point - up * 0.1), material::ORE);
+    }
+
+    #[test]
+    fn a_ray_does_not_pass_through_a_fill_high_above_the_ground() {
+        // A fill well above the ground, as the end of a bridge would be: a ray toward it
+        // meets it however far off it starts.
+        let mut planet = planet();
+        let (ground, up) = surface(&planet);
+        let centre = ground + up * 20.0;
+        planet.apply(&Operation::Fill {
+            centre,
+            radius: 0.6,
+            material: material::STONE,
+        });
+        let across = up.any_orthonormal_vector();
+        for i in 0..40 {
+            let start = 20.0 + i as f32 * 0.37;
+            let hit = planet.raycast(centre - across * start, across, 40.0);
+            let hit = hit.unwrap_or_else(|| panic!("a ray from {start} m off missed"));
+            assert!((hit.distance - (start - 0.6)).abs() < 0.05, "{hit:?}");
+        }
     }
 
     #[test]

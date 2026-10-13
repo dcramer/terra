@@ -86,15 +86,23 @@ mod tests {
     }
 
     #[test]
-    fn the_ground_is_where_the_height_says() {
+    fn the_ground_lies_within_its_relief_and_distance_is_in_metres() {
         let planet = planet();
+        let (mut lowest, mut highest) = (f32::MAX, f32::MIN);
         for dir in directions() {
-            let surface = 2000.0 + planet.height_m(dir);
-            assert!(planet.height_m(dir).abs() <= 150.0);
-            assert!(planet.distance(dir * (surface + 10.0)) > 0.0);
-            assert!(planet.distance(dir * (surface - 10.0)) < 0.0);
-            assert!(planet.distance(dir * surface).abs() < 0.01);
+            // Over the highest hill is always air, under the deepest valley always ground.
+            assert!(planet.distance(dir * 2150.1) > 0.0);
+            assert!(planet.distance(dir * 1849.9) < 0.0);
+            // A metre further out is a metre further from the ground, so where the ground
+            // is follows from one ask.
+            let near = planet.distance(dir * 2040.0);
+            assert!((planet.distance(dir * 2041.0) - near - 1.0).abs() < 1e-3);
+            let surface = 2040.0 - near;
+            lowest = lowest.min(surface);
+            highest = highest.max(surface);
         }
+        // The hills use a good part of their relief, not a sliver of it.
+        assert!(highest - lowest > 75.0, "{lowest}..{highest}");
         assert!(planet.distance(Vec3::ZERO) < 0.0);
     }
 
@@ -120,12 +128,14 @@ mod tests {
     #[test]
     fn a_grazing_ray_does_not_tunnel_through_a_hill() {
         let planet = planet();
+        let mut hits = 0;
         for dir in directions() {
             let surface = 2000.0 + planet.height_m(dir);
             let origin = dir * (surface + 2.0);
             let along = dir.cross(Vec3::new(0.3, 1.0, 0.2)).normalize();
             let ray = (along - dir * 0.05).normalize();
             if let Some(hit) = planet.raycast(origin, ray, 800.0) {
+                hits += 1;
                 // Everything before the hit is above ground.
                 for step in 1..40 {
                     let travelled = hit.distance * step as f32 / 40.0;
@@ -133,6 +143,8 @@ mod tests {
                 }
             }
         }
+        // Most of the rays meet a hill, so the check above is made.
+        assert!(hits > 250, "{hits} of 500 rays hit");
     }
 
     #[test]
@@ -147,22 +159,34 @@ mod tests {
     }
 
     #[test]
-    fn the_sea_is_level_and_optional() {
-        let planet = planet();
-        assert_eq!(planet.level(Vec3::X), Some(2000.0));
-        assert_eq!(planet.level(Vec3::Y), Some(2000.0));
+    fn the_sea_covers_the_low_ground_and_only_that() {
+        // A sea 20 m under the nominal radius: the water's surface is over the ground where
+        // the ground is lower than that, and under it elsewhere.
+        let planet = StandInPlanet::new(planet().spec(), 150.0, Some(-20.0));
+        let (mut sea, mut land) = (0, 0);
+        for dir in directions() {
+            let level = planet.level(dir).expect("there is a sea");
+            let low = planet.distance(dir * 1980.0) > 0.0;
+            assert_eq!(planet.distance(dir * level) > 0.0, low);
+            if low { sea += 1 } else { land += 1 }
+        }
+        assert!(sea > 50 && land > 50, "{sea} at sea, {land} on land");
         let dry = StandInPlanet::new(planet.spec(), 150.0, None);
-        assert_eq!(dry.level(Vec3::X), None);
+        assert!(directions().all(|dir| dry.level(dir).is_none()));
     }
 
     #[test]
-    fn the_same_spec_gives_the_same_planet_and_works_as_a_trait_object() {
-        let (a, b) = (planet(), planet());
-        let ground: Box<dyn Ground> = Box::new(b);
-        for dir in directions() {
-            let p = dir * 2050.0;
-            assert_eq!(a.distance(p), ground.distance(p));
-        }
+    fn the_ground_is_pinned() {
+        // Exact bits: the same on every machine, or players would walk different ground.
+        let planet = planet();
+        let sampled = [
+            Vec3::X,
+            Vec3::new(0.3, -0.8, 0.5).normalize(),
+            Vec3::new(-0.6, 0.1, -0.7).normalize(),
+        ]
+        .map(|dir| planet.distance(dir * 2050.0).to_bits());
+        assert_eq!(sampled, PINNED_GROUND);
+        // And another seed gives another planet.
         let other = StandInPlanet::new(
             PlanetSpec {
                 seed: Seed(2),
@@ -171,6 +195,8 @@ mod tests {
             150.0,
             None,
         );
-        assert!(directions().any(|d| a.height_m(d) != other.height_m(d)));
+        assert!(directions().any(|d| planet.height_m(d) != other.height_m(d)));
     }
+
+    const PINNED_GROUND: [u32; 3] = [1_116_665_920, 1_108_580_736, 3_179_773_952];
 }

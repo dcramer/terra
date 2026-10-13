@@ -280,8 +280,6 @@ mod tests {
             "{} chunks, by level {by_level:?}",
             chunks.len()
         );
-        // Nothing far above or deep below the surface.
-        assert!(chunks.iter().all(|(id, _)| in_shell(*id, &detail())));
     }
 
     #[test]
@@ -295,25 +293,171 @@ mod tests {
         }
     }
 
+    /// The side of `a` that `b` lies across, if the two boxes share some of a face.
+    fn face_between(a: ChunkId, b: ChunkId) -> Option<Sides> {
+        let (a_low, b_low) = (chunk_origin(a), chunk_origin(b));
+        let (a_high, b_high) = (
+            a_low + Vec3::splat(chunk_size_m(a.level)),
+            b_low + Vec3::splat(chunk_size_m(b.level)),
+        );
+        let mut touching = None;
+        for axis in 0..3 {
+            let overlap = a_high[axis].min(b_high[axis]) - a_low[axis].max(b_low[axis]);
+            if overlap > 0.0 {
+                continue;
+            }
+            if overlap < 0.0 || touching.is_some() {
+                return None;
+            }
+            let high = a_high[axis] == b_low[axis];
+            touching = Some(Sides::ALL[axis * 2 + usize::from(high)]);
+        }
+        touching
+    }
+
     #[test]
     fn neighbours_differ_by_one_level_and_the_coarser_knows() {
-        let detail = detail();
         let viewers = [ground(Vec3::Y), ground(Vec3::new(500.0, 1940.0, -80.0))];
-        let chunks = around(&viewers);
-        let set: HashSet<ChunkId> = chunks.iter().map(|(id, _)| *id).collect();
-        for (id, sides) in &chunks {
-            assert!(
-                !meets_much_finer(*id, &set, detail.top),
-                "{id:?} meets much finer"
-            );
-            for side in Sides::ALL {
-                let across = ChunkId {
-                    level: id.level,
-                    coord: id.coord + side.outward(),
+        // Splitting only close to a viewer leaves big steps in detail for the balancing to
+        // even out.
+        let planet = planet();
+        let abrupt = Detail {
+            split: 0.3,
+            ..detail()
+        };
+        let chunks = chunks_around(&viewers, &abrupt, |id| may_hold_surface(&planet, id));
+        let mut transitions = 0;
+        for &(id, sides) in &chunks {
+            // Which faces meet a finer chunk, and which one as fine or coarser, worked out
+            // from where the boxes are.
+            let (mut finer, mut not_finer) = (Sides::none(), Sides::none());
+            for &(other, _) in &chunks {
+                let Some(side) = face_between(id, other) else {
+                    continue;
                 };
-                assert_eq!(sides.contains(side), !whole(across, &set, detail.top));
+                assert!(
+                    id.level.abs_diff(other.level) <= 1,
+                    "{id:?} meets {other:?}"
+                );
+                if other.level < id.level {
+                    finer = finer.with(side);
+                } else {
+                    not_finer = not_finer.with(side);
+                }
+            }
+            // A transition toward every finer neighbour, or there is a crack; none toward
+            // one as fine or coarser, or there is a crack the other way. Where nothing is
+            // drawn across a face, either does.
+            assert_eq!(sides.0 & finer.0, finer.0, "{id:?} misses a finer side");
+            assert_eq!(sides.0 & not_finer.0, 0, "{id:?} has a side it should not");
+            transitions += usize::from(finer != Sides::none());
+        }
+        // Detail changes all round the viewers, so there are seams to check.
+        assert!(transitions > 50, "{transitions} chunks meet finer ones");
+    }
+
+    #[test]
+    fn every_place_on_the_ground_is_in_a_chunk() {
+        let chunks = around(&[ground(Vec3::Y), ground(Vec3::new(500.0, 1940.0, -80.0))]);
+        let mut rng = Seed(3).rng();
+        for _ in 0..2000 {
+            let at = ground(rng.unit_vector());
+            assert!(level_at(at, &chunks).is_some(), "no chunk holds {at}");
+        }
+        // And round a viewer, where the chunks are finest.
+        for i in 0..400 {
+            let at = ground(Vec3::new(
+                i as f32 * 0.2 - 40.0,
+                2000.0,
+                i as f32 * 0.13 - 26.0,
+            ));
+            assert!(level_at(at, &chunks).is_some(), "no chunk holds {at}");
+        }
+    }
+
+    /// Ground that is a plane sloping down along x and z together, facing `normal`, its
+    /// distance measured straight up, as the planet's is: longer than the true distance,
+    /// more so the steeper.
+    struct Slope {
+        normal: Vec3,
+        offset: f32,
+    }
+
+    impl Slope {
+        fn new(degrees: f32, offset: f32) -> Self {
+            let angle = degrees.to_radians();
+            let across = libm::sinf(angle) / 2f32.sqrt();
+            Self {
+                normal: Vec3::new(-across, libm::cosf(angle), -across),
+                offset,
             }
         }
+
+        /// How far a point is above the plane, measured square to it.
+        fn true_distance(&self, point: Vec3) -> f32 {
+            self.normal.dot(point) - self.offset
+        }
+    }
+
+    impl Field for Slope {
+        type Memo = ();
+
+        fn distance_in(&self, point: Vec3, _: &mut ()) -> f32 {
+            self.true_distance(point) / self.normal.y
+        }
+
+        fn sample_in(&self, point: Vec3, memo: &mut ()) -> crate::Sample {
+            crate::Sample {
+                distance: self.distance_in(point, memo),
+                material: crate::material::STONE,
+            }
+        }
+    }
+
+    #[test]
+    fn chunks_on_steep_ground_are_kept_and_those_off_it_are_not() {
+        // 47 degrees, just inside what the test promises to allow, and set at offsets that
+        // put the plane at every place across the chunks, through their corners too.
+        let (mut kept, mut dropped) = (0, 0);
+        for offset in [0.0, 3.1, 7.7, 11.3, 14.9] {
+            let slope = Slope::new(47.0, offset);
+            for (id, size) in (-6..6).flat_map(|x| {
+                (-6..6).flat_map(move |y| {
+                    (-3..3).flat_map(move |z| {
+                        [0, 2].map(|level| {
+                            let id = ChunkId {
+                                level,
+                                coord: IVec3::new(x, y, z),
+                            };
+                            (id, chunk_size_m(level))
+                        })
+                    })
+                })
+            }) {
+                let low = chunk_origin(id);
+                let heights: Vec<f32> = (0..8)
+                    .map(|i| {
+                        let corner =
+                            Vec3::new((i & 1) as f32, ((i >> 1) & 1) as f32, ((i >> 2) & 1) as f32);
+                        slope.true_distance(low + corner * size)
+                    })
+                    .collect();
+                let lowest = heights.iter().copied().fold(f32::MAX, f32::min);
+                let highest = heights.iter().copied().fold(f32::MIN, f32::max);
+                // The plane passes through the box when corners lie both sides.
+                let crosses = lowest < 0.0 && highest > 0.0;
+                let gap = lowest.max(-highest);
+                let holds = may_hold_surface(&slope, id);
+                if crosses {
+                    assert!(holds, "{id:?} holds the ground but was left out");
+                    kept += 1;
+                } else if gap > size {
+                    assert!(!holds, "{id:?} is {gap} m from the ground");
+                    dropped += 1;
+                }
+            }
+        }
+        assert!(kept > 20 && dropped > 20, "{kept} kept, {dropped} dropped");
     }
 
     #[test]

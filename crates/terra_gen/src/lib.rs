@@ -4,7 +4,9 @@
 //! changes are ever stored or sent (D41). That only works if every machine computes the
 //! same thing, so nothing here depends on the platform: the arithmetic is integer mixing
 //! and plain floating-point add and multiply, which behave identically everywhere. The
-//! tests pin exact outputs, and CI runs them on Linux, macOS and Windows.
+//! tests pin exact outputs, so any machine that runs `cargo xtask check` checks them; CI,
+//! which is off and runs only when started by hand (D37), runs them on Linux, macOS and
+//! Windows.
 
 mod noise;
 mod rng;

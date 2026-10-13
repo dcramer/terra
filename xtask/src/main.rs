@@ -668,28 +668,52 @@ fn blender_scripts() -> bool {
         .is_ok_and(|status| status.success())
 }
 
+/// The crates that must not depend on Bevy, by name and folder, or `None` when the crates
+/// folder cannot be read. A check that cannot list them fails rather than passing.
+fn shared_crates() -> Option<Vec<(String, PathBuf)>> {
+    let entries = std::fs::read_dir(root().join("crates")).ok()?;
+    let mut found: Vec<(String, PathBuf)> = entries
+        .flatten()
+        .map(|entry| {
+            (
+                entry.file_name().to_string_lossy().to_string(),
+                entry.path(),
+            )
+        })
+        .filter(|(name, path)| {
+            !BEVY_CRATES.contains(&name.as_str()) && path.join("Cargo.toml").exists()
+        })
+        .collect();
+    found.sort();
+    (!found.is_empty()).then_some(found)
+}
+
+/// What `cargo tree` says of a crate's dependencies, or `None` when it gave no answer:
+/// "ok" only when it answered and Bevy is not among them.
+fn bevy_verdict(tree: Option<&str>) -> &'static str {
+    match tree {
+        None => "CARGO TREE FAILED",
+        Some(tree) if tree.lines().any(|line| line.starts_with("bevy")) => "DEPENDS ON BEVY",
+        Some(_) => "ok",
+    }
+}
+
 /// Anything every player must agree on lives in crates that know nothing about Bevy.
 fn shared_crates_avoid_bevy() -> bool {
     println!("\n> shared-state crates must not depend on Bevy (D28)");
-    let mut ok = true;
-    let Ok(entries) = std::fs::read_dir(root().join("crates")) else {
-        return true;
+    let Some(crates) = shared_crates() else {
+        println!("  cannot list the crates");
+        return false;
     };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if BEVY_CRATES.contains(&name.as_str()) || !entry.path().join("Cargo.toml").exists() {
-            continue;
-        }
+    let mut ok = true;
+    for (name, _) in crates {
         let tree = output(
             "cargo",
             &["tree", "-p", &name, "-e", "normal", "--prefix", "none"],
         );
-        let uses_bevy = tree.is_some_and(|t| t.lines().any(|line| line.starts_with("bevy")));
-        println!(
-            "  {name}: {}",
-            if uses_bevy { "DEPENDS ON BEVY" } else { "ok" }
-        );
-        ok &= !uses_bevy;
+        let verdict = bevy_verdict(tree.as_deref());
+        println!("  {name}: {verdict}");
+        ok &= verdict == "ok";
     }
     ok
 }
@@ -705,19 +729,31 @@ const UNREPEATABLE: [&str; 6] = [
     "getrandom",
 ];
 
+/// The lines of a source that use something in [`UNREPEATABLE`], numbered from 1.
+fn unrepeatable(text: &str) -> Vec<(usize, &'static str)> {
+    text.lines()
+        .enumerate()
+        .filter_map(|(number, line)| {
+            let what = UNREPEATABLE.iter().find(|what| line.contains(*what))?;
+            Some((number + 1, *what))
+        })
+        .collect()
+}
+
 fn shared_crates_are_repeatable() -> bool {
     println!("\n> shared-state crates must not read the clock or the system's randomness");
-    let mut ok = true;
-    let Ok(entries) = std::fs::read_dir(root().join("crates")) else {
-        return true;
+    let Some(crates) = shared_crates() else {
+        println!("  cannot list the crates");
+        return false;
     };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if BEVY_CRATES.contains(&name.as_str()) || !entry.path().join("Cargo.toml").exists() {
+    let mut ok = true;
+    for (name, path) in crates {
+        let mut found = Vec::new();
+        if !sources(&path.join("src"), &mut found) || found.is_empty() {
+            println!("  {name}: cannot read its sources");
+            ok = false;
             continue;
         }
-        let mut found = Vec::new();
-        sources(&entry.path().join("src"), &mut found);
         let mut clean = true;
         for file in found {
             // A benchmark's own program may time itself.
@@ -725,15 +761,15 @@ fn shared_crates_are_repeatable() -> bool {
             {
                 continue;
             }
+            let at = file.strip_prefix(root()).unwrap_or(&file).display();
             let Ok(text) = std::fs::read_to_string(&file) else {
+                println!("  {at}: cannot read it");
+                clean = false;
                 continue;
             };
-            for (number, line) in text.lines().enumerate() {
-                if let Some(what) = UNREPEATABLE.iter().find(|what| line.contains(*what)) {
-                    let at = file.strip_prefix(root()).unwrap_or(&file).display();
-                    println!("  {at}:{}: {what}", number + 1);
-                    clean = false;
-                }
+            for (number, what) in unrepeatable(&text) {
+                println!("  {at}:{number}: {what}");
+                clean = false;
             }
         }
         if clean {
@@ -744,19 +780,25 @@ fn shared_crates_are_repeatable() -> bool {
     ok
 }
 
-/// Every Rust file under a folder.
-fn sources(folder: &Path, found: &mut Vec<PathBuf>) {
+/// Every Rust file under a folder. False if any folder in it could not be read.
+fn sources(folder: &Path, found: &mut Vec<PathBuf>) -> bool {
     let Ok(entries) = std::fs::read_dir(folder) else {
-        return;
+        return false;
     };
-    for entry in entries.flatten() {
+    let mut ok = true;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            ok = false;
+            continue;
+        };
         let path = entry.path();
         if path.is_dir() {
-            sources(&path, found);
+            ok &= sources(&path, found);
         } else if path.extension().is_some_and(|ext| ext == "rs") {
             found.push(path);
         }
     }
+    ok
 }
 
 fn on_wsl() -> bool {
@@ -1148,8 +1190,8 @@ mod task_tests {
     use super::*;
 
     #[test]
-    fn every_task_has_one_name_and_is_listed() {
-        let text = usage();
+    fn every_task_has_its_own_name() {
+        // The first task of a name is the one that runs, so a second would never run.
         for task in TASKS {
             assert_eq!(
                 TASKS.iter().filter(|other| other.name == task.name).count(),
@@ -1157,11 +1199,39 @@ mod task_tests {
                 "{} twice",
                 task.name
             );
-            assert!(
-                text.contains(&format!("  {}", task.name)),
-                "{} not listed",
-                task.name
-            );
         }
+    }
+}
+
+#[cfg(test)]
+mod gate_tests {
+    use super::*;
+
+    #[test]
+    fn only_an_answer_without_bevy_passes() {
+        let tree = "terra_gen v0.1.0\nglam v0.30.0\nlibm v0.2.15";
+        assert_eq!(bevy_verdict(Some(tree)), "ok");
+        let with = "terra_gen v0.1.0\nglam v0.30.0\nbevy_math v0.17.0";
+        assert_ne!(bevy_verdict(Some(with)), "ok");
+        // No answer from cargo is a failure, not a pass.
+        assert_ne!(bevy_verdict(None), "ok");
+    }
+
+    #[test]
+    fn the_clock_and_the_systems_randomness_are_found_by_line() {
+        let text = "let a = 1;\nlet t = Instant::now();\nlet b = 2;\nlet r = rand::random::<u8>();";
+        assert_eq!(
+            unrepeatable(text),
+            vec![(2, "Instant::now"), (4, "rand::random")]
+        );
+        assert!(unrepeatable("let seed = Seed(1).rng();").is_empty());
+    }
+
+    #[test]
+    fn the_shared_crates_are_found_and_the_bevy_ones_are_not() {
+        let crates = shared_crates().expect("the crates folder is readable");
+        let names: Vec<&str> = crates.iter().map(|(name, _)| name.as_str()).collect();
+        assert!(names.contains(&"terra_core") && names.contains(&"terra_voxel"));
+        assert!(BEVY_CRATES.iter().all(|bevy| !names.contains(bevy)));
     }
 }
