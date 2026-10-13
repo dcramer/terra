@@ -10,10 +10,11 @@ publish.workspace = true
 glam.workspace = true
 serde.workspace = true
 libm.workspace = true
+# A kit's dressed pieces are RON (`kit::Dressing::read`), as the kits are; and saves are
+# RON (the game's save file), which tests read as they were written.
+ron.workspace = true
 
 [dev-dependencies]
-# Saves are RON (the game's save file); tests read old ones as they were written.
-ron.workspace = true
 # Seeded random streams for the property tests over random operations.
 terra_gen.workspace = true
 

@@ -18,6 +18,12 @@
 //             mortar where a roof meets a wall
 // cost        what building it takes (D139): a cube in one step, a quarter of a Stone
 //             each, and each stage of a roof cell over these walls
+// dress       each exposed edge dressed by its role (D215): its pieces, made by
+//             tools/kits/pieces.py from art/kits/stone; a coping on every top, a plinth
+//             along every foot stepping with the ground, quoins up every outside corner, a
+//             lintel, sill and jamb stones round every opening, a cap under a thinner wall
+//             standing on it, a fascia under an overhang, a tread on every step and a border
+//             round a floor; and the dirt rising from the ground and its corners worn
 (
     id: 2,
     pattern: Masonry,
@@ -47,7 +53,7 @@
     ),
     textures: {
         Masonry: (path: "materials/stone_wall", metres: (2.0, 2.0)),
-        Dressed: (path: "materials/rock_boulder_dry", metres: (1.2, 1.2)),
+        Dressed: (path: "materials/worn_rock_natural_01", metres: (1.6, 1.6)),
         Floor: (path: "materials/grey_stone_path", metres: (1.8, 1.8)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
@@ -56,6 +62,23 @@
         Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
     },
     cost: (steps: 1, step: [("Stone", 1, 4)], roof: [("Wood", 1, 32)]),
+    dress: (
+        pieces: Some("data/kits/pieces/stone.ron"),
+        roles: {
+            Crest: Profile(name: "coping"),
+            Nose: Profile(name: "nose"),
+            Sill: Profile(name: "sill", extend: 0.06),
+            Head: Profile(name: "lintel", extend: 0.2, joints: false),
+            Soffit: Profile(name: "fascia"),
+            Foot: Profile(name: "plinth"),
+            Meet: Profile(name: "cap"),
+            Border: Profile(name: "border"),
+            Arris: Corners(set: "quoin"),
+            Jamb: Corners(set: "jamb"),
+        },
+        tint: (0.74, 0.76, 0.82),
+        masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14),
+    ),
     colours: (
         light: (0.62, 0.6, 0.56),
         dark: (0.4, 0.38, 0.35),

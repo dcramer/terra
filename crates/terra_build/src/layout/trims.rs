@@ -20,6 +20,38 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
             holes.insert((along, at.y));
         }
     }
+    // Posts up every opening's sides, where the kit dresses jambs with them (D215): from
+    // the opening's foot to its head and on into the course over it.
+    if let Some(width) = super::runs::post_width(kit) {
+        let solid =
+            |along: i32, layer: i32| walls.ours(axis.cube(row, along, layer)) == Some(Fill::Solid);
+        for outward in [-1, 1] {
+            let edges: BTreeSet<(i32, i32)> = holes
+                .iter()
+                .copied()
+                .filter(|&(along, layer)| solid(along + outward, layer))
+                .collect();
+            for (along, low, high) in runs_of(&edges, |(along, layer)| (along, layer)) {
+                let face = (along + i32::from(outward > 0)) as f32 * CELL_M;
+                let middle = face + outward as f32 * width * 0.5;
+                let over = if solid(along, high + 1) {
+                    kit.course
+                } else {
+                    0.0
+                };
+                let mut post = super::runs::log(
+                    axis.point(row, middle, low as f32 * CELL_M),
+                    axis.point(row, middle, (high + 1) as f32 * CELL_M + over),
+                    super::Split::Whole,
+                    super::hash(&[row as u32, along as u32, low as u32, outward as u32, 11]),
+                    None,
+                );
+                super::runs::set_role(&mut post, Some(super::roles::Role::Jamb));
+                layout.pieces.push(post);
+            }
+        }
+    }
+    let posts = super::runs::post_width(kit).is_some();
     // A door or window the kit has a model of fills its opening, when the opening is the
     // shape of one: a rectangle, at the foot of its wall for a door, above it for a window.
     let mut framed: BTreeSet<(i32, i32)> = BTreeSet::new();
@@ -76,8 +108,12 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
             max: Place::near((low - out).max(high + out)),
         });
     };
-    // Up each side: a jamb along every run of hole cubes with wall beside them.
+    // Up each side: a jamb along every run of hole cubes with wall beside them, unless a
+    // post stands there.
     for outward in [-1, 1] {
+        if posts {
+            continue;
+        }
         let edges: BTreeSet<(i32, i32)> = holes
             .iter()
             .copied()

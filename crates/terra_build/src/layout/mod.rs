@@ -12,16 +12,20 @@
 //! - [`ground`]: door steps down to the ground.
 
 pub mod blocks;
+mod dressing;
 mod floors;
 pub mod ground;
+pub mod roles;
 pub mod roofs;
 pub mod runs;
+mod stairs;
 mod trims;
 
 use crate::kit::{Kit, Kits, Pattern};
 use crate::mesh::Material;
 use crate::{Base, CELL_M, Fill, Kind};
 use glam::{IVec3, Vec3};
+pub use roles::{Dir, End, Role};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Which half of a log is kept, where it is split along its length.
@@ -82,13 +86,39 @@ pub enum Piece {
         /// a gable's logs are: how many ticks the slope rises for each cube it runs in from
         /// that end, from the log's foot there; none, sawn square.
         lean: [i32; 2],
+        /// The role it is laid for, drawn as the kit dresses that role (`kit::Dress::Member`):
+        /// a plate along a wall's top, a sill on what it stands on, a post up an opening's
+        /// side or a free end, a step's tread; none, a course of the wall.
+        role: Option<Role>,
     },
     /// A board round an opening: a jamb, a head or a sill.
     Board { min: Place, max: Place },
-    /// A dressed stone filling a box: a lintel, a sill or a jamb's stone round an opening in
-    /// a block kind's wall, or a cap where a thinner wall stands on it; its seed which part
-    /// of the stone's texture it shows.
-    Dressed { min: Place, max: Place, seed: u32 },
+    /// A profile of the kit's pieces along one edge of one cube, as the kit dresses the
+    /// edge's role (`roles`, `dress`, D215): a coping, a plinth, a sill, a lintel. `side`
+    /// is the face it looks out of, `other` the edge's other face; `ends` how it meets the
+    /// next, low end first along its axis; a foot is raised `lift` ticks to step with the
+    /// ground and goes on down `sink` more to reach it.
+    Trim {
+        cube: IVec3,
+        role: Role,
+        side: Dir,
+        other: Dir,
+        ends: [End; 2],
+        lift: i32,
+        sink: i32,
+        seed: u32,
+    },
+    /// Corner stones of the kit's up one upright edge of one cube, a stone a course, in the
+    /// courses it shows: quoins up an outside corner, jamb stones up an opening's side.
+    /// `faces` are the two it stands out of, the first the face of its first course's
+    /// longer side.
+    Corner {
+        cube: IVec3,
+        role: Role,
+        faces: [Dir; 2],
+        courses: [bool; 2],
+        seed: u32,
+    },
     /// A door or window set into an opening, filling the box from `min` to `max`, its face
     /// across the wall, which runs along X or along Z.
     Opening {
@@ -162,10 +192,11 @@ impl Piece {
                 let up = Vec3::Y * (metres(high) * 0.5);
                 Some((from.min(to) - across - up, from.max(to) + across + up))
             }
-            Piece::Board { min, max } | Piece::Dressed { min, max, .. } => {
-                Some((min.metres(), max.metres()))
-            }
-            Piece::Block { cube } | Piece::Gable { cube, .. } => {
+            Piece::Board { min, max } => Some((min.metres(), max.metres())),
+            Piece::Block { cube }
+            | Piece::Gable { cube, .. }
+            | Piece::Trim { cube, .. }
+            | Piece::Corner { cube, .. } => {
                 let low = cube.as_vec3() * CELL_M;
                 Some((low, low + Vec3::splat(CELL_M)))
             }
@@ -181,13 +212,14 @@ impl Piece {
             [0, 1, 2].map(|i| (i64::from(a.0[i]) + i64::from(b.0[i])).div_euclid(2) as i32)
         };
         let point = match *self {
-            Piece::Block { cube } | Piece::Gable { cube, .. } => return cube,
+            Piece::Block { cube }
+            | Piece::Gable { cube, .. }
+            | Piece::Trim { cube, .. }
+            | Piece::Corner { cube, .. } => return cube,
             Piece::Log { from, to, .. }
             | Piece::Plank { from, to, .. }
             | Piece::Roof { from, to, .. } => middle(from, to),
-            Piece::Board { min, max }
-            | Piece::Dressed { min, max, .. }
-            | Piece::Opening { min, max, .. } => middle(min, max),
+            Piece::Board { min, max } | Piece::Opening { min, max, .. } => middle(min, max),
             Piece::Covering { middle, .. } => middle.0,
         };
         IVec3::from_array(point.map(|p| p.div_euclid(TICKS)))
@@ -213,10 +245,10 @@ impl Piece {
             Piece::Plank { from, to, high, .. } => {
                 from.metres().y.min(to.metres().y) - metres(*high) * 0.5
             }
-            Piece::Board { min, .. } | Piece::Opening { min, .. } | Piece::Dressed { min, .. } => {
-                min.metres().y
-            }
+            Piece::Board { min, .. } | Piece::Opening { min, .. } => min.metres().y,
             Piece::Block { cube } | Piece::Gable { cube, .. } => cube.y as f32 * CELL_M,
+            // Dressed once its cube is in.
+            Piece::Trim { cube, .. } | Piece::Corner { cube, .. } => cube.y as f32 * CELL_M + 0.01,
             // A roof after the walls under it, a stage at a time, each from its eaves up.
             Piece::Covering { corners, cell, .. } => {
                 let low = corners
@@ -335,11 +367,16 @@ struct Walls<'a> {
     /// What each cube asked about is, asked of the base once: a row's courses ask of each
     /// of its cubes many times.
     known: std::cell::RefCell<crate::mesh::QuickMap<IVec3, Option<Fill>>>,
+    /// Its flights' cubes (`stairs`), which are laid as steps, not walls.
+    stairs: BTreeSet<[i32; 3]>,
 }
 
 impl Walls<'_> {
     /// A cube of the kit's kind that is part of a wall.
     fn ours(&self, at: IVec3) -> Option<Fill> {
+        if self.stairs.contains(&at.to_array()) {
+            return None;
+        }
         if let Some(&known) = self.known.borrow().get(&at) {
             return known;
         }
@@ -535,15 +572,17 @@ impl Scope {
 fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     if kit.pattern == Pattern::Masonry {
         let mut layout = Layout {
-            pieces: blocks::lay(base, kit, scope),
+            pieces: blocks::lay(base, kit, kits, scope),
         };
         roofs::gables(base, kit, kits, scope, &mut layout.pieces);
         return layout;
     }
+    let steps = stairs::find(base, kit, kits);
     let walls = Walls {
         base,
         kind: kit.kind(),
         known: Default::default(),
+        stairs: stairs::cubes(&steps),
     };
     // Every cube on the rows that cross the scope, either way, whole.
     let band = |axis: Axis| {
@@ -563,6 +602,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     ours.sort_by_key(|at| at.to_array());
     ours.dedup();
     let mut layout = Layout::default();
+    stairs::lay(kit, &steps, &mut layout);
     if ours.is_empty() {
         if kit.textures.contains_key(&Material::Floor) {
             floors::decks(base, kit, scope, &mut layout);
@@ -603,6 +643,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
         }
     }
     runs::posts(&walls, &ours, &mut layout);
+    runs::corner_posts(&walls, kit, kits, &ours, &mut layout);
     trims::ends(&walls, kit, &ours, &mut layout);
     if kit.textures.contains_key(&Material::Floor) {
         floors::decks(base, kit, scope, &mut layout);

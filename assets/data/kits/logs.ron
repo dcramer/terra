@@ -7,7 +7,8 @@
 // id          the kind of construction it lays, the number its cubes carry (D181)
 // diameter    how thick a log is, in a wall a cube thick (D175, D181)
 // course      how far apart the courses are; it must divide the 3 m storey
-// overhang    how far a log runs past its corner cube; none, so it stays in the grid
+// overhang    how far a log runs past its corner cube, sawn a little short or long:
+//             up to an eighth of a cube, drawn only (D192)
 // longest     the longest wall one log spans, as long as a tree gives (D174)
 // ragged      how far short of the others' a saddle-notched corner log's end may stop
 // chinking    whether there is daub between the courses
@@ -53,11 +54,15 @@
 //             so much of each item, in fractions (item, numerator, denominator), so
 //             a log of Wood a sixteenth a step goes in two courses; and each stage of a
 //             roof cell over these walls
+// dress       each exposed edge dressed by its role (D215): a hewn plate along every
+//             wall's top, a hewn sill on what it stands on, hewn posts up every opening's
+//             sides, a log along every step's nose; and the dirt rising from the ground
+//             and the upper logs weathered grey
 (
     id: 1,
     diameter: 0.3,
     course: 0.25,
-    overhang: 0.0,
+    overhang: 0.06,
     longest: 4.0,
     ragged: 0.04,
     chinking: true,
@@ -104,8 +109,18 @@
         Covering: (path: "materials/shakes", metres: (3.2, 1.6)),
         Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
         Floor: (path: "materials/weathered_planks", metres: (2.0, 2.0), strips: Some((0.0605, 0.1111))),
+        Hewn: (path: "materials/rough_wood", metres: (0.6, 0.6)),
     },
     cost: (steps: 2, step: [("Wood", 1, 16)], roof: [("Wood", 1, 32)]),
+    dress: (
+        roles: {
+            Crest: Member(profile: Hewn, scale: 1.12, material: Hewn),
+            Foot: Member(profile: Hewn, scale: 1.2, material: Hewn),
+            Jamb: Member(profile: Hewn, scale: 0.6, material: Hewn),
+            Nose: Member(profile: Round, scale: 1.1, material: Log),
+        },
+        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.3),
+    ),
     colours: (
         light: (0.74, 0.56, 0.37),     // WoodLight: floors
         dark: (0.5, 0.34, 0.22),       // a floor's sides

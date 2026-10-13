@@ -57,6 +57,43 @@ fn wall(tile: [i32; 3], panel: Panel, kind: Kind) -> BuildOp {
     }
 }
 
+/// Keen's test piece, as the Enshrouded wiki's galleries show every block in it
+/// (research/role-pieces.md): a platform two cubes high reached by a flight of steps, a
+/// wall with a window hole on it and a post beside, and a slab over them overhanging the
+/// front; every role an edge can have. Solid, of blocks; of timber, walls round a deck, as
+/// one is built, and a flight a cube wide.
+fn keen(kind: Kind, solid: bool) -> Vec<BuildOp> {
+    let fill = |min: [i32; 3], max: [i32; 3], fill: Fill| BuildOp::Fill {
+        min,
+        max,
+        cube: Some(Cube::new(kind, fill)),
+    };
+    let mut ops = Vec::new();
+    if solid {
+        ops.push(fill([0, 0, 0], [7, 2, 5], Fill::Solid));
+    } else {
+        ops.push(fill([0, 0, 0], [7, 1, 0], Fill::Solid));
+        ops.push(fill([0, 0, 5], [7, 1, 5], Fill::Solid));
+        ops.push(fill([0, 0, 0], [0, 1, 5], Fill::Solid));
+        ops.push(fill([7, 0, 0], [7, 1, 5], Fill::Solid));
+        ops.push(fill([0, 2, 0], [7, 2, 5], Fill::Solid));
+    }
+    // The steps up the west side, from the front to the back, each a cube higher.
+    let wide = if solid { -3 } else { -2 };
+    for step in 0..7 {
+        let z = 6 - step;
+        ops.push(fill([wide, 0, z], [-1, step, z], Fill::Solid));
+    }
+    // The wall along the back, with a window a cube wide and two high, a cube from its end.
+    ops.push(fill([0, 3, 0], [4, 7, 0], Fill::Solid));
+    ops.push(fill([1, 5, 0], [2, 6, 0], Fill::Open));
+    // A post at the back corner, and the slab over them, overhanging the steps and the
+    // front.
+    ops.push(fill([7, 3, 0], [7, 7, 0], Fill::Solid));
+    ops.push(fill([-2, 8, -1], [8, 8, 3], Fill::Solid));
+    ops
+}
+
 /// Each row: its name, and the operations that make it, in cubes of half a metre. Laid
 /// in `kind`, with rows mixing in `stone` where there is a stone kit (D179).
 fn rows(kind: Kind, stone: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
@@ -196,6 +233,7 @@ fn rows(kind: Kind, stone: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
             pitch: 0.7,
         }));
         mixed = vec![
+            ("Keen's piece in stone", keen(stone, true)),
             ("stone house", house),
             ("stone plinth", plinth),
             ("stone and logs: L", ell),
@@ -207,6 +245,7 @@ fn rows(kind: Kind, stone: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
         ];
     }
     let mut rows = vec![
+        ("Keen's piece", keen(kind, false)),
         ("free end", east_west(0, 5, 0, kind).collect()),
         (
             "corner",

@@ -10,6 +10,7 @@
 //! cube with nothing beside it either way is a post. Under a pitched roof the courses carry
 //! on up, shortening to the ridge, and any log a roof would pass through is cut back.
 
+use super::roles::Role;
 use super::roofs::Field;
 use super::{Axis, Layout, Piece, Place, Split, Spot, TICKS, Walls, hash, metres, ticks, unit};
 use crate::kit::Kit;
@@ -32,6 +33,11 @@ pub(super) fn courses(
     layout: &mut Layout,
 ) {
     let per_cube = (CELL_M / kit.course).round() as i32;
+    // A plate along the top course and a sill under the first, where the kit dresses its
+    // walls' tops and feet with them (D215); posts up its openings' sides.
+    let plate = kit.dress.member(Role::Crest).is_some();
+    let sill = kit.dress.member(Role::Foot).is_some();
+    let beside_hole = post_width(kit).unwrap_or(kit.frame);
     for course in lowest * per_cube - 1..=(highest + 1) * per_cube + 1 {
         let spots: Vec<Spot> = (first..=last)
             .map(|along| walls.spot(kit, axis, row, along, course))
@@ -64,7 +70,7 @@ pub(super) fn courses(
                 let corner = walls.runs(cube, axis.other());
                 let open = walls.open_beyond(axis.cube(row, beyond, cube.y));
                 match next {
-                    Spot::Hole => -kit.frame,
+                    Spot::Hole => -beside_hole,
                     // Uneven, but never past the overhang: short of it by up to `ragged`.
                     Spot::Nothing if corner && open => {
                         kit.overhang - unit(hash(&[seed, end as u32, which])) * kit.ragged()
@@ -79,17 +85,96 @@ pub(super) fn courses(
             let daub = kit.chinking && split != Split::Top && matches!(below, Spot::Log(_));
             let (wall_from, wall_to) = (low as f32 * CELL_M, (high + 1) as f32 * CELL_M);
             let limit = kit.longest + 2.0 * (kit.overhang + kit.ragged());
+            let every = |course: i32, what: &dyn Fn(Spot) -> bool| {
+                (low..=high).all(|along| what(walls.spot(kit, axis, row, along, course)))
+            };
+            let bottom = layer_of_split(centre, split);
+            let role = if plate && every(course + 1, &|spot| spot == Spot::Nothing) {
+                Some(Role::Crest)
+            } else if sill
+                && every(course - 1, &|spot| spot == Spot::Nothing)
+                && (low..=high).all(|along| walls.ours(axis.cube(row, along, bottom - 1)).is_none())
+            {
+                Some(Role::Foot)
+            } else {
+                None
+            };
             for (part, (a, b)) in joined(from, to, limit, course).into_iter().enumerate() {
                 let chinking = daub.then(|| (wall_from.max(a) - a, wall_to.min(b) - a));
-                layout.pieces.push(log(
+                let mut piece = log(
                     axis.point(row, a, centre),
                     axis.point(row, b, centre),
                     split,
                     hash(&[seed, part as u32, (a * 100.0) as i32 as u32]),
                     chinking.filter(|(near, far)| far > near),
-                ));
+                );
+                set_role(&mut piece, role);
+                layout.pieces.push(piece);
             }
         }
+    }
+}
+
+/// Posts up every outside corner, where the kit dresses arrises with them (D215): a
+/// squared post at the corner, a little proud of both faces, over the courses' ends.
+pub(super) fn corner_posts(
+    walls: &Walls,
+    kit: &Kit,
+    kits: &crate::kit::Kits,
+    ours: &[IVec3],
+    layout: &mut Layout,
+) {
+    let Some((_, scale, _)) = kit.dress.member(Role::Arris) else {
+        return;
+    };
+    let width = kit.diameter * scale;
+    let roles = super::roles::Roles::new(walls.base, walls.kind, kits);
+    for &at in ours {
+        for edge in roles.edges(at) {
+            if edge.role != Role::Arris || roles.edges(at - IVec3::Y).contains(&edge) {
+                continue;
+            }
+            let mut top = at;
+            while roles.edges(top + IVec3::Y).contains(&edge) {
+                top += IVec3::Y;
+            }
+            let mut corner = at.as_vec3() * CELL_M;
+            let mut inward = Vec3::ZERO;
+            for dir in [edge.side, edge.other] {
+                if dir.sign() > 0 {
+                    corner[dir.axis()] += CELL_M;
+                }
+                inward -= dir.step().as_vec3();
+            }
+            let middle = corner + inward * (width * 0.5 - CORNER_POST_PROUD_M);
+            let mut post = log(
+                Vec3::new(middle.x, at.y as f32 * CELL_M, middle.z),
+                Vec3::new(middle.x, (top.y + 1) as f32 * CELL_M, middle.z),
+                Split::Whole,
+                hash(&[at.x as u32, at.y as u32, at.z as u32, edge.side as u32, 13]),
+                None,
+            );
+            set_role(&mut post, Some(Role::Arris));
+            layout.pieces.push(post);
+        }
+    }
+}
+
+/// How far a corner post stands out of the faces it covers: within an eighth of a cube
+/// (D192).
+const CORNER_POST_PROUD_M: f32 = 0.03;
+
+/// How wide a post up an opening's side is, where the kit dresses jambs with one.
+pub(super) fn post_width(kit: &Kit) -> Option<f32> {
+    kit.dress
+        .member(Role::Jamb)
+        .map(|(_, scale, _)| kit.diameter * scale)
+}
+
+/// A long member laid for a role.
+pub(super) fn set_role(piece: &mut Piece, to: Option<Role>) {
+    if let Piece::Log { role, .. } = piece {
+        *role = to;
     }
 }
 
@@ -243,6 +328,7 @@ pub(super) fn under_roofs(fields: &BTreeMap<i32, Field>, kit: &Kit, layout: &mut
             split,
             seed,
             chinking,
+            role,
             ..
         } = piece
         else {
@@ -286,7 +372,7 @@ pub(super) fn under_roofs(fields: &BTreeMap<i32, Field>, kit: &Kit, layout: &mut
             if b - a < 0.15 {
                 continue;
             }
-            layout.pieces.push(log(
+            let mut piece = log(
                 from + along * a,
                 from + along * b,
                 split,
@@ -299,7 +385,9 @@ pub(super) fn under_roofs(fields: &BTreeMap<i32, Field>, kit: &Kit, layout: &mut
                     let (c0, c1) = (c0.max(a) - a, c1.min(b) - a);
                     (c1 > c0).then_some((c0, c1))
                 }),
-            ));
+            );
+            set_role(&mut piece, role);
+            layout.pieces.push(piece);
         }
     }
 }
@@ -357,6 +445,7 @@ pub(super) fn log(
         seed,
         chinking: chinking.map(|(near, far)| (along(near), along(far))),
         lean: [0, 0],
+        role: None,
     }
 }
 

@@ -65,8 +65,11 @@ pub enum Material {
     Masonry,
     /// Mortar where a roof meets a wall standing above it.
     Flashing,
-    /// Dressed stone: lintels, sills and jambs round a block kind's openings, and caps.
+    /// Dressed stone: the pieces a block kind's edges are dressed with by role (D215).
     Dressed,
+    /// Squared timber: the plates, sills and posts a timber kind's edges are dressed with
+    /// by role (D215).
+    Hewn,
 }
 
 /// Surfaces by what they are drawn in; the second, whether what is drawn into them may

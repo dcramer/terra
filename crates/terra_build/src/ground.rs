@@ -117,6 +117,29 @@ pub fn footing(
 }
 
 impl Base {
+    /// Keeps samples of the ground's height under columns, as a plan carries them, for what
+    /// the shortcuts build: the ground beside a building's walls, which its roles are read
+    /// from (`layout::roles`), and under them.
+    pub fn sample_ground(&mut self, samples: impl IntoIterator<Item = Sample>) {
+        for sample in samples {
+            self.ground.set(sample.column, Some(sample.height_cm));
+        }
+    }
+
+    /// Every column of the base's cubes and those round them, sorted: where its ground is
+    /// sampled.
+    pub fn ground_ring(&self) -> Vec<[i32; 2]> {
+        let mut columns = BTreeSet::new();
+        for column in self.occupied_columns() {
+            for dx in -1..=1 {
+                for dz in -1..=1 {
+                    columns.insert([column.x + dx, column.y + dz]);
+                }
+            }
+        }
+        columns.into_iter().collect()
+    }
+
     /// Where footings go under a building's ground storey (D194), as each column and the
     /// layer its footing's top is at: the floor's layer under every column of its walls,
     /// the layer under the floor under its floor's edges, in order.

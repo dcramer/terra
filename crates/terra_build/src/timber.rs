@@ -46,11 +46,55 @@ pub fn draw(piece: &Piece, kit: &Kit, face: Option<&Relief>, surfaces: &mut Surf
         seed,
         chinking,
         lean,
+        role,
     } = *piece
     else {
         return;
     };
     let chinking = chinking.map(|(near, far)| (layout::metres(near), layout::metres(far)));
+    // A member laid for a role, as the kit dresses it: its own section, size and face.
+    if let Some(crate::kit::Dress::Member {
+        profile,
+        scale,
+        material,
+    }) = role.and_then(|role| kit.dress.roles.get(&role)).cloned()
+    {
+        let mut dressed = kit.clone();
+        if let Some(texture) = kit.textures.get(&material) {
+            dressed.textures.insert(Material::Log, texture.clone());
+        }
+        dressed.timber.profile = profile;
+        dressed.diameter *= scale;
+        if profile == Profile::Hewn {
+            dressed.timber.relief = 0.0;
+            dressed.timber.taper = dressed.timber.taper.min(0.02);
+        }
+        let mut own = Surfaces(Default::default(), surfaces.1);
+        member(
+            from.metres(),
+            to.metres(),
+            split,
+            seed,
+            chinking,
+            lean.map(|rise| rise as f32 / layout::TICKS as f32),
+            &dressed,
+            if profile == Profile::Round {
+                face
+            } else {
+                None
+            },
+            &mut own,
+        );
+        for (each, surface) in own.0 {
+            let into = if each == Material::Log {
+                material
+            } else {
+                each
+            };
+            surfaces.of(into).append(surface);
+        }
+        return;
+    }
     member(
         from.metres(),
         to.metres(),
@@ -689,6 +733,7 @@ mod tests {
             seed,
             chinking: Some((0, crate::layout::ticks(3.0))),
             lean: [0, 0],
+            role: None,
         }
     }
 
@@ -821,6 +866,7 @@ mod tests {
             seed: 1,
             chinking: None,
             lean: [0, 0],
+            role: None,
         };
         let mut surfaces = Surfaces::default();
         draw(&post, &pinned(Profile::Round), None, &mut surfaces);

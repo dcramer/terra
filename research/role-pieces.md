@@ -1,6 +1,6 @@
 # Role pieces: a look for every exposed part of a cube
 
-2026-10-13. Question (the spike `spike/role-pieces`, step 2a of [building-plan.md](../docs/building-plan.md), following [voxel-building-look.md](voxel-building-look.md)): which way of giving each exposed face, edge and corner of a cube a look chosen by its role and neighbours brings our stone, logs and roofs on par with Enshrouded's blending (D211)?
+2026-10-13. Question (the spike `spike/role-pieces`, since deleted, step 2a of [building-plan.md](../docs/building-plan.md), following [voxel-building-look.md](voxel-building-look.md)): which way of giving each exposed face, edge and corner of a cube a look chosen by its role and neighbours brings our stone, logs and roofs on par with Enshrouded's blending (D211)?
 
 ## What was built
 
@@ -77,4 +77,8 @@ Proposed wording for the developers, **Open**:
 
 ## Limits
 
-One light (14:00 on the yard), one stone, one dressed stone, one log kit; judged on stills by an agent. Not measured: frame time on the `village` bench, either GPU, or the cost of laying roles per section (the function is a few lookups per cube). 3's triangles are as first built, not tuned. The Enshrouded comparison is with gallery images, not the game. The developers judge first; the spike stays until they have.
+One light (14:00 on the yard), one stone, one dressed stone, one log kit; judged on stills by an agent. Not measured: frame time on the `village` bench, either GPU, or the cost of laying roles per section (the function is a few lookups per cube). 3's triangles are as first built, not tuned. The Enshrouded comparison is with gallery images, not the game.
+
+## Since
+
+Candidate 3 was built into the game as a technical choice (D215, 2026-10-13), and the spike deleted once its code had moved (D133); its history keeps it. The role function is `terra_build::layout::roles`, with tests for every role; the pieces are laid by `layout::dressing` and drawn by `terra_build::dress`, timber's by role in `layout::runs`, `trims` and `stairs`; the profiles and corner stones are made from `art/kits/stone/pieces.json` by [tools/kits](../tools/kits/README.md). Both weak points were fixed there: a foot steps with the ground a course at a time and runs on down into it, and a timber flight is laid as steps across it, a log along each nose, treads over it and a stringer up each side. The quoins now stand out 4.5 cm as dressed blocks, not a band.

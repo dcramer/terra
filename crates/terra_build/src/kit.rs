@@ -5,8 +5,10 @@
 
 use crate::Kind;
 use crate::cost::{Amount, Bill, Rules, Terms};
+use crate::layout::roles::Role;
 use crate::mesh::Material;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// A kind of construction's kit: how its walls are laid, its sizes, how its timber is
 /// shaped, and its colours and textures. Colours are as they should appear on screen
@@ -53,6 +55,124 @@ pub struct Kit {
     pub colours: KitColours,
     /// What its cubes and roofs cost to build (D139).
     pub cost: KitCost,
+    /// How each exposed edge of its cubes is dressed by its role (D215, `layout::roles`):
+    /// its pieces, what each role takes, and its masks.
+    pub dress: Dressing,
+}
+
+/// How a kit dresses its cubes' exposed edges by their roles (D215, docs/building-kits.md):
+/// profiles swept along them and corner stones up them, from the kit's pieces, made in
+/// Blender from their source under `art/kits/` (`tools/kits`); long members of its timber;
+/// and the masks that ground and weather it. A new look is a kit file and its source.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Dressing {
+    /// Its pieces' file under `assets/`, as `tools/kits/pieces.py` makes it.
+    pub pieces: Option<String>,
+    /// What each role is dressed with; a role not named is left as the cubes are.
+    pub roles: BTreeMap<Role, Dress>,
+    /// What its pieces' colour is multiplied by (sRGB): its dressed stone greyed towards the
+    /// rough stone round it, one grade a kit (docs/art-style.md).
+    pub tint: [f32; 3],
+    pub masks: Masks,
+    /// Its pieces, once read ([`Dressing::read`]).
+    #[serde(skip)]
+    pub made: Option<Arc<crate::dress::Pieces>>,
+}
+
+/// What a role is dressed with.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Dress {
+    /// A profile of the kit's pieces swept along the edge, a stone a cube long with a joint
+    /// between, or, without joints, as one stone however long; run on past each end that
+    /// stops square by `extend` metres, as a lintel bears on the wall either side.
+    Profile {
+        name: String,
+        #[serde(default)]
+        extend: f32,
+        #[serde(default = "joints")]
+        joints: bool,
+    },
+    /// Corner stones of one of the kit's sets up the edge, a stone a course.
+    Corners { set: String },
+    /// A long member of the kit's timber along the edge's run (D200): its section, how much
+    /// thicker than a log, and its face's material.
+    Member {
+        profile: Profile,
+        scale: f32,
+        material: Material,
+    },
+}
+
+fn joints() -> bool {
+    true
+}
+
+/// How a kit's walls weather (research/role-pieces.md, candidate 2's masks): dirt and damp
+/// rising unevenly from the ground, outside edges worn lighter, and timber greyed higher up
+/// where the weather reaches it. Shades of what is drawn, as each corner's colour.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Masks {
+    /// How high the dirt rises from the ground, in metres, and what it darkens to (sRGB).
+    pub dirt: f32,
+    pub dirt_tint: [f32; 3],
+    /// How much lighter its outside edges are worn, as a fraction.
+    pub wear: f32,
+    /// How much greyer timber is three metres up, as a fraction.
+    pub weather: f32,
+}
+
+impl Default for Masks {
+    /// None: drawn as it is.
+    fn default() -> Self {
+        Masks {
+            dirt: 0.0,
+            dirt_tint: [1.0; 3],
+            wear: 0.0,
+            weather: 0.0,
+        }
+    }
+}
+
+impl Default for Dressing {
+    /// Nothing dressed.
+    fn default() -> Self {
+        Dressing {
+            pieces: None,
+            roles: BTreeMap::new(),
+            tint: [1.0; 3],
+            masks: Masks::default(),
+            made: None,
+        }
+    }
+}
+
+impl Dressing {
+    /// The long member a role is dressed with, if any: its section, how much thicker than a
+    /// log, and its face's material.
+    pub fn member(&self, role: Role) -> Option<(Profile, f32, Material)> {
+        match self.roles.get(&role)? {
+            Dress::Member {
+                profile,
+                scale,
+                material,
+            } => Some((*profile, *scale, *material)),
+            _ => None,
+        }
+    }
+
+    /// Reads its pieces' file, `read` giving a file under `assets/` as text.
+    pub fn read(&mut self, read: &dyn Fn(&str) -> Result<String, String>) -> Result<(), String> {
+        let Some(path) = &self.pieces else {
+            return Ok(());
+        };
+        let text = read(path)?;
+        let pieces: crate::dress::Pieces =
+            ron::from_str(&text).map_err(|why| format!("{path}: {why}"))?;
+        self.made = Some(Arc::new(pieces));
+        Ok(())
+    }
 }
 
 /// How a long member is made (D200): a profile swept along the piece the layout gives,
@@ -362,6 +482,7 @@ impl Default for Kit {
             models: KitModels::default(),
             textures: BTreeMap::new(),
             cost: KitCost::default(),
+            dress: Dressing::default(),
             colours: KitColours {
                 light: [0.74, 0.56, 0.37],
                 dark: [0.5, 0.34, 0.22],
@@ -418,11 +539,15 @@ mod tests {
     #[test]
     fn the_default_kit_is_pine_as_its_file_has_it() {
         // What a kit's file leaves out is the default's, which is to be logs.ron's but
-        // for what it lays with: its models, textures and cost.
+        // for what it lays with: its models, textures and cost; and for how it is dressed,
+        // its ends run past the corners and its role members, so tests lay plain logs
+        // inside their cubes.
         let pine = Kit {
             models: KitModels::default(),
             textures: BTreeMap::new(),
             cost: KitCost::default(),
+            overhang: 0.0,
+            dress: Dressing::default(),
             ..shipped("logs.ron")
         };
         assert_eq!(pine, Kit::default());

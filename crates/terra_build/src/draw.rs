@@ -1,11 +1,12 @@
 //! Pieces made into surfaces by material, ready to draw: long members and a deck's planks by
-//! [`timber`], the boards round openings as boxes their texture is mapped onto. Doors and windows are props,
+//! [`timber`], the boards round openings as boxes their texture is mapped onto, a kit's
+//! dress by [`dress`](crate::dress). Doors and windows are props,
 //! and block kinds are drawn as their cubes' surface (`surface.rs`), so neither is here.
 //!
 //! [`timber`]: crate::timber
 
 use crate::kit::Kit;
-use crate::layout::{Piece, hash, unit};
+use crate::layout::Piece;
 use crate::mesh::{Material, Surface, Surfaces};
 use crate::relief::Relief;
 use glam::Vec3;
@@ -42,28 +43,7 @@ pub fn draw_as(
             [1.0; 3],
         ),
         Piece::Plank { .. } => crate::timber::plank(piece, kit, surfaces),
-        Piece::Dressed { min, max, seed } => {
-            // Each stone a part of the texture of its own, a little lighter or darker.
-            let mut stone = Surface::default();
-            let shade = 0.84 + 0.12 * unit(hash(&[seed, 3]));
-            cuboid(
-                &mut stone,
-                min.metres(),
-                max.metres(),
-                metres(kit, Material::Dressed),
-                [shade, shade * 0.96, shade * 0.9],
-            );
-            let shift = [unit(hash(&[seed, 1])), unit(hash(&[seed, 2]))];
-            for uv in &mut stone.uvs {
-                uv[0] += shift[0];
-                uv[1] += shift[1];
-            }
-            let out = surfaces.of(Material::Dressed);
-            out.positions.extend(stone.positions);
-            out.normals.extend(stone.normals);
-            out.colours.extend(stone.colours);
-            out.uvs.extend(stone.uvs);
-        }
+        Piece::Trim { .. } | Piece::Corner { .. } => crate::dress::draw(piece, kit, surfaces),
         Piece::Covering { .. } | Piece::Roof { .. } => {
             crate::roofing::draw_as(piece, kit, plain, surfaces)
         }

@@ -443,6 +443,9 @@ impl Detail {
                     ..
                 },
             ) => false,
+            // Far off a kit's dress keeps its bands, which shape the silhouette, and drops
+            // its corner stones (D215).
+            (Detail::Far, Piece::Corner { .. }) => false,
             (Detail::Far, _) => true,
             (Detail::Proxy, piece) => matches!(
                 piece,
@@ -632,6 +635,12 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
         }
         if first {
             drawn.next = next;
+        }
+        // Each kit's masks over what it drew: dirt from the ground, worn edges (D215).
+        for ((kind, material), surface) in built.iter_mut() {
+            if let Some(kit) = kits.of(*kind) {
+                crate::dress::mask(surface, kit, *material, section.base);
+            }
         }
         match detail {
             Detail::Near => drawn.near = built,
@@ -825,9 +834,26 @@ fn ghost(piece: &Piece, kit: &Kit, shade: bool) -> Option<Ghost> {
             layout::metres(wide),
             Shape::Box,
         ),
-        Piece::Board { min, max } | Piece::Dressed { min, max, .. } => {
-            Some(boxed(min.metres(), max.metres()))
+        Piece::Board { min, max } => Some(boxed(min.metres(), max.metres())),
+        // A plan's trims as a band along their edge, standing out of its face.
+        Piece::Trim {
+            cube,
+            role,
+            side,
+            other,
+            ..
+        } => {
+            let (from, to) = layout::roles::line(cube, layout::roles::Edge { role, side, other });
+            let at = |p: [i32; 3]| {
+                glam::IVec3::from_array(p).as_vec3() * (CELL_M / layout::TICKS as f32)
+            };
+            let (from, to) = (at(from), at(to));
+            let out = side.step().as_vec3();
+            let up = if other == layout::Dir::Up { -0.1 } else { 0.25 };
+            let (a, b) = (from - out * 0.05, to + out * 0.06 + Vec3::Y * up);
+            Some(boxed(a.min(b), a.max(b)))
         }
+        Piece::Corner { .. } => None,
         Piece::Covering {
             corners, middle, ..
         } => {

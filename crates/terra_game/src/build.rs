@@ -216,9 +216,16 @@ fn read_kit(path: &std::path::Path) -> Option<Kit> {
     let text = std::fs::read_to_string(path)
         .map_err(|problem| error!("Could not read {}: {problem}", path.display()))
         .ok()?;
-    let kit: Kit = ron::from_str(&text)
+    let mut kit: Kit = ron::from_str(&text)
         .map_err(|problem| error!("{}: {problem}", path.display()))
         .ok()?;
+    // Its dressed pieces (D215), made from their source under art/kits.
+    let assets = bevy::asset::io::file::FileAssetReader::get_base_path().join("assets");
+    if let Err(problem) = kit.dress.read(&|file| {
+        std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
+    }) {
+        error!("{}: {problem}", path.display());
+    }
     match (kit.pattern, kit.courses()) {
         (Pattern::Masonry, _) | (_, (_, true)) => Some(kit),
         _ => {
@@ -586,6 +593,22 @@ impl Build {
         let frame = self.frame;
         self.base
             .lay_footings(kind, |column| ground_cm(&frame, planet, column));
+        // The ground under every column, as a plan samples it, which the roles a building's
+        // edges are dressed by are read from (D215): where its feet are, how its plinth steps.
+        let samples: Vec<terra_build::Sample> = self
+            .base
+            .occupied_columns()
+            .map(|column| {
+                let middle = Vec3::new(
+                    (column.x as f32 + 0.5) * CELL_M,
+                    0.0,
+                    (column.y as f32 + 0.5) * CELL_M,
+                );
+                let height = -planet.distance(frame.transform_point(middle));
+                terra_build::Sample::metres([column.x, column.y], height)
+            })
+            .collect();
+        self.base.sample_ground(samples);
     }
 }
 

@@ -36,6 +36,7 @@ pub mod checker;
 pub mod cost;
 pub mod cubes;
 pub mod draw;
+pub mod dress;
 mod example;
 pub mod ground;
 pub mod kit;
