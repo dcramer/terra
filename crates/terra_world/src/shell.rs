@@ -45,7 +45,7 @@ usage: terra_sandbox [options]
                         save a screenshot on each of those frames, counted as --press
                         counts them, as <prefix>-<frame>.png, then exit: a list and
                         ranges, like out/walk@300-320,600, so what pops in or out shows
-                        between one frame and the next
+                        between one frame and the next; a range may step, 600-2400/2
   --clean               leave the frame-time readout off the screen, for pictures
   --mute                no sound
   --sound               sound under WSL too, where it is off by default
@@ -305,14 +305,17 @@ impl Shots {
         let mut frames = Vec::new();
         for part in list.split(',') {
             let number = |n: &str| n.trim().parse::<u32>().map_err(|_| problem());
-            match part.split_once('-') {
-                Some((from, to)) => frames.extend(number(from)?..=number(to)?),
-                None => frames.push(number(part)?),
+            // A range may take every so many frames: 600-2400/2.
+            let (range, step) = part.split_once('/').unwrap_or((part, "1"));
+            let step = number(step)?.max(1) as usize;
+            match range.split_once('-') {
+                Some((from, to)) => frames.extend((number(from)?..=number(to)?).step_by(step)),
+                None => frames.push(number(range)?),
             }
         }
         frames.sort_unstable();
         frames.dedup();
-        if prefix.is_empty() || frames.is_empty() || frames.len() > 2000 {
+        if prefix.is_empty() || frames.is_empty() || frames.len() > 4000 {
             return Err(problem());
         }
         Ok(Self {
@@ -1320,6 +1323,11 @@ mod tests {
         let sequence = parse(&["--shots", "out/walk@300-302,600,301"]).unwrap();
         let shots = sequence.shots.unwrap();
         assert_eq!(shots.frames, [300, 301, 302, 600]);
+        let every_other = parse(&["--shots", "out/film@10-16/2"])
+            .unwrap()
+            .shots
+            .unwrap();
+        assert_eq!(every_other.frames, [10, 12, 14, 16]);
         assert_eq!(shots.path(301), PathBuf::from("out/walk-00301.png"));
         assert!(
             sequence.shot.is_none() && parse(&["--shots", "out/walk@300-302"]).unwrap().scripted()

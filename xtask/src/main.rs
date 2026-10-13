@@ -74,6 +74,17 @@ const TASKS: &[Task] = &[
         },
     },
     Task {
+        name: "film",
+        takes: "[--frames 300-2700] [--time 15] [--out shots/film.mp4] [-- sandbox args]",
+        does: "a video of a scripted run, by default the forest walk, at the game's own speed (tools/sandbox)",
+        group: "Look at things",
+        run: |args| {
+            let mut all = vec!["tools/sandbox/film.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "bench",
         takes: "[scene…] [--runs N] [--record] [--debug]",
         does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded",
