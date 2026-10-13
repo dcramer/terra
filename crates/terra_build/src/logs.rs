@@ -1420,6 +1420,11 @@ fn log(surfaces: &mut Surfaces, kit: &LogKit, from: Vec3, to: Vec3, split: Split
     let shade = 0.82 + random.unit() * 0.18;
     let colour = [shade; 3];
     let around = TAU * radius;
+    let kept = match split {
+        Split::Whole => 0.0,
+        Split::Top => radius * 0.4,
+        Split::Bottom => -radius * 0.4,
+    };
     let surface = surfaces.of(Material::Log);
     for (ring, pair) in rings.windows(2).enumerate() {
         let (near, far) = (&pair[0], &pair[1]);
@@ -1448,7 +1453,9 @@ fn log(surfaces: &mut Surfaces, kit: &LogKit, from: Vec3, to: Vec3, split: Split
                     [uv(i, ring), uv(i + 1, ring + 1), uv(i + 1, ring)],
                 ),
             ] {
-                let middle = (near_centre + far_centre) * 0.5;
+                // Inside what is kept of it, so a split log's flat face, through its
+                // middle, faces out of it too.
+                let middle = (near_centre + far_centre) * 0.5 + up * kept;
                 let normal = facing(corners, middle);
                 if normal == Vec3::ZERO {
                     continue;
@@ -2038,17 +2045,24 @@ mod tests {
         assert!(!whole.is_empty() && !top.is_empty());
         assert_eq!(
             [checksum(&whole), checksum(&top)],
-            [0xd07c_efcf_87f9_1dad, 0x263b_8671_6b9c_9eef],
+            [0xd07c_efcf_87f9_1dad, 0x8baa_ccf7_56a6_0033],
             "drawn differently from the machine these were taken on (D30)"
         );
         // The same log with another seed is another log.
         assert_ne!(corners(&log(8, Split::Whole)), whole);
     }
 
-    /// Each triangle's corners wind the way its normals point; how many there were.
+    /// Each triangle of a shape with no hollows in it faces away from its middle, and its
+    /// corners wind the way its normals point; how many there were.
     fn facing_out(surface: &Surface, what: &str) -> usize {
+        let middle = surface.positions.iter().sum::<Vec3>() / surface.positions.len() as f32;
         for (corners, normals) in surface.positions.chunks(3).zip(surface.normals.chunks(3)) {
             let own = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
+            let centre = (corners[0] + corners[1] + corners[2]) / 3.0;
+            assert!(
+                own.dot(centre - middle) > 0.0,
+                "{what}: {corners:?} faces in"
+            );
             assert!(
                 normals.iter().all(|n| own.dot(*n) > 0.0),
                 "{what}: {corners:?} is wound against its normals {normals:?}"
