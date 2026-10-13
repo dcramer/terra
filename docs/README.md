@@ -39,6 +39,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [characters.md](characters.md) | Bodies and what they wear: how every item fits every body without fitting each by hand (D112, D128), the base body, the game's side, tools and checks, order of work, risks and questions for the developers. |
 | [building.md](building.md) | Building as the player meets it: walls, floors and roofs of half-metre cubes (D152, D181), drawn the Sims way (D154), planned then constructed (D139), claims, the controls, sizes, and open questions. |
 | [building-tech.md](building-tech.md) | The technical design for building: cubes as shared state (D160, D181), walls laid from kits by rule, roofs as a height field, buildings and indoors, drawing many buildings, and the order of work. |
+| [building-plan.md](building-plan.md) | The technology plan for building (D195): where each part lives, what is stored, operations, drawing, collision, the art pipeline, how it is checked and measured, and the order of work. |
 | [building-kits.md](building-kits.md) | How each kind of construction looks and is drawn, planned, going up and built, logs first: corners, joins and openings (D177 to D179). |
 | [progression.md](progression.md) | Three ways to grow (skills, studied techniques, essences), skills on the rank ladder, crossing a rank, and how things are unlocked. |
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
