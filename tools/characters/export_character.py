@@ -26,6 +26,7 @@ from mathutils import Matrix, Vector
 import look
 import patches
 import lift
+import pace
 import twist
 
 # --clips=FILE: the clips from another mannequin file cut by clips.py, such as a set of the
@@ -202,6 +203,9 @@ if MORPHS:
     arm["lifts"] = {"fps": scene.render.fps / scene.render.fps_base,
                     "clips": {c: dict(curves, first=first[c]) for c, curves in by_clip.items()}}
     print("LIFTS", ", ".join(f"{c}: {', '.join(curves)}" for c, curves in by_clip.items()) or "none")
+# Each travelling clip's pace, so the game plays it at the speed the body moves (pace.py).
+arm["paces"] = pace.paces(arm, actions)
+print("PACES", ", ".join(f"{c} {p:.2f} m/s" for c, p in arm["paces"].items()))
 # The measuring set-up taken off again: the file carries plain skins.
 for o in bpy.data.objects:
     for m in [m for m in o.modifiers if m.type == "ARMATURE" and m.name == "Armature DQS"]:

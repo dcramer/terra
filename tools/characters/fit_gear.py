@@ -45,7 +45,7 @@ OUT = look.GEAR_MADE
 PIECES = {
     "small_pack": ("small_pack", 90, "back", 0.23, "Pack"),
     "large_pack": ("large_pack", 90, "back", 0.31, "Pack"),
-    "quiver": ("quiver", 90, "belt", 0.4, "Leather"),
+    "quiver": ("quiver", 90, "belt", 0.34, "Leather"),  # 61 cm with its arrows, to the top of the thigh
 }
 # Where a piece hung from the belt hangs from, as a share of its height from its foot: a
 # quiver's mouth, the top of its leather tube, below the arrows standing in it. Read off the
@@ -62,7 +62,9 @@ HARNESS_LOOK_M = 0.04  # how far out and in from a strap the bake looks for the 
 # How a loose piece swings from where it hangs (crates/terra_game/src/swing.rs): pulled back
 # toward where it rests, losing some of its motion each step, and falling. Its tail, where
 # it rests, is measured from the piece itself.
-SWINGS = {"quiver": {"stiffness": 0.8, "drag": 0.4, "gravity": 0.6}}
+# Tuned live on a jogging body over the remote (Swing is reflected): 0.8 and 0.4 swung 1-9
+# degrees, stiff; 0.1 and 0.05 swung 9-14, loose. A quiver on a strap swings freely.
+SWINGS = {"quiver": {"stiffness": 0.2, "drag": 0.1, "gravity": 0.6}}
 # A loose piece hangs nearly plumb from where it hangs, its foot a little back, resting on
 # the seat.
 HANG_TILT_DEG = 8

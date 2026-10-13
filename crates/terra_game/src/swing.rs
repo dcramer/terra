@@ -18,8 +18,9 @@ use serde::Deserialize;
 
 use crate::character::Body;
 
-/// How a loose look swings, from its glTF extras.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+/// How a loose look swings, from its glTF extras. Reflected, so it can be read and set live
+/// over the remote protocol while tuning (`tools/sandbox`).
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Reflect)]
 pub struct Springiness {
     /// Where its tail rests, from its pivot, in its own space (glTF's axes).
     pub tail: [f32; 3],
@@ -46,14 +47,20 @@ impl Springiness {
 }
 
 /// A part of a look that swings, about its own origin, within the look on its socket.
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Reflect)]
+#[reflect(Component)]
 pub struct Swing {
     pub spring: Springiness,
+    /// How far it now hangs from where it rests, in degrees: what tuning watches.
+    pub swung: f32,
     /// Its tail now and a step before, in world space, once it has been placed.
+    #[reflect(ignore)]
     tail: Option<(Vec3, Vec3)>,
     /// Its turn at rest in its parent's space.
+    #[reflect(ignore)]
     rest: Option<Quat>,
     /// The body's capsules, as joints and a radius, once found.
+    #[reflect(ignore)]
     capsules: Option<Vec<(Entity, Entity, f32)>>,
 }
 
@@ -61,6 +68,7 @@ impl Swing {
     pub fn new(spring: Springiness) -> Self {
         Swing {
             spring,
+            swung: 0.0,
             tail: None,
             rest: None,
             capsules: None,
@@ -93,6 +101,7 @@ pub fn plugin(app: &mut App) {
         Colliders { capsules: vec![] }
     });
     app.insert_resource(BodyCapsules(colliders.capsules))
+        .register_type::<Swing>()
         .add_systems(Update, swing);
 }
 
@@ -210,6 +219,7 @@ fn swing(
         let toward = socket_turn.inverse() * (next - pivot).normalize_or(rest_dir);
         let resting = socket_turn.inverse() * rest_dir;
         transform.rotation = Quat::from_rotation_arc(resting, toward) * rest;
+        swing.swung = resting.angle_between(toward).to_degrees();
     }
 }
 

@@ -20,6 +20,7 @@ pub mod icons;
 pub mod lift;
 pub mod loading;
 pub mod mipmaps;
+pub mod pace;
 pub mod planet;
 pub mod play;
 pub mod record;

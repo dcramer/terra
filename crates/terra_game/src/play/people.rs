@@ -91,6 +91,9 @@ struct Clips {
     kneel: AnimationNodeIndex,
     sit: AnimationNodeIndex,
     work: AnimationNodeIndex,
+    /// The walk's and jog's own paces (`pace.rs`), so their feet do not slide.
+    walk_pace: f32,
+    jog_pace: f32,
 }
 
 /// On a person's animation player: whose it is, and what it plays.
@@ -143,6 +146,7 @@ fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Lo
 fn prepare(
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
+    gltf_nodes: Res<Assets<bevy::gltf::GltfNode>>,
     mut figure: ResMut<Figure>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
@@ -155,16 +159,19 @@ fn prepare(
     let Some(scene) = gltf.default_scene.clone() else {
         return;
     };
-    figure.ready = Some(prepared(gltf, scene, &mut graphs));
+    figure.ready = Some(prepared(gltf, &gltf_nodes, scene, &mut graphs));
 }
 
 /// A body's scene, and the clips people use built into a graph.
 fn prepared(
     gltf: &Gltf,
+    gltf_nodes: &Assets<bevy::gltf::GltfNode>,
     scene: Handle<WorldAsset>,
     graphs: &mut Assets<AnimationGraph>,
 ) -> (Handle<WorldAsset>, Handle<AnimationGraph>, Clips) {
     let clip = |name: &str| gltf.named_animations[name].clone();
+    let paces = crate::pace::paces(gltf, gltf_nodes);
+    let pace = |name: &str| paces.get(name).copied().unwrap_or(0.0);
     let (graph, nodes) = AnimationGraph::from_clips([
         clip("Idle_Loop"),
         clip("Walk_Loop"),
@@ -183,6 +190,8 @@ fn prepared(
             kneel: nodes[3],
             sit: nodes[4],
             work: nodes[5],
+            walk_pace: pace("Walk_Loop"),
+            jog_pace: pace("Jog_Fwd_Loop"),
         },
     )
 }
@@ -501,14 +510,17 @@ fn sit(
 }
 
 fn animate(
+    time: Res<Time>,
     people: Query<(&Person, &Transform)>,
     mut animators: Query<(
         &mut Animates,
         &mut AnimationPlayer,
         &mut AnimationTransitions,
+        &GlobalTransform,
     )>,
 ) {
-    for (mut animates, mut player, mut transitions) in &mut animators {
+    let dt = time.delta_secs();
+    for (mut animates, mut player, mut transitions, place) in &mut animators {
         let Ok((person, at)) = people.get(animates.person) else {
             continue;
         };
@@ -523,6 +535,20 @@ fn animate(
             Doing::Working(_) => clips.work,
             _ => clips.idle,
         };
+        // A walk or jog at the speed they move, so their feet do not slide.
+        let pace = if wanted == clips.walk {
+            clips.walk_pace
+        } else if wanted == clips.jog {
+            clips.jog_pace
+        } else {
+            0.0
+        };
+        if pace > 0.0
+            && dt > 0.0
+            && let Some(playing) = player.animation_mut(wanted)
+        {
+            playing.set_speed(crate::pace::rate(step / dt, pace, place.scale().y));
+        }
         if animates.playing == Some(wanted) {
             continue;
         }

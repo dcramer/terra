@@ -67,6 +67,9 @@ struct Moves {
     flinch: AnimationNodeIndex,
     roll: AnimationNodeIndex,
     guard: AnimationNodeIndex,
+    /// The jog's and sprint's own paces (`pace.rs`), so their feet do not slide.
+    jog_pace: f32,
+    sprint_pace: f32,
 }
 
 /// On a figure's animation player: whose figure it is, its hand, and what it is
@@ -106,6 +109,7 @@ fn prepare(
     model: Res<FigureModel>,
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
+    gltf_nodes: Res<Assets<bevy::gltf::GltfNode>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     if !assets.is_loaded_with_dependencies(&model.0) {
@@ -115,6 +119,7 @@ fn prepare(
         return;
     };
     let clip = |name: &str| gltf.named_animations[name].clone();
+    let paces = crate::pace::paces(gltf, &gltf_nodes);
     let (graph, nodes) = AnimationGraph::from_clips(
         [
             Doing::Idle,
@@ -142,6 +147,8 @@ fn prepare(
         flinch: nodes[7],
         roll: nodes[8],
         guard: nodes[9],
+        jog_pace: paces.get(Doing::Jog.clip()).copied().unwrap_or(0.0),
+        sprint_pace: paces.get(Doing::Sprint.clip()).copied().unwrap_or(0.0),
     });
 }
 
@@ -231,15 +238,28 @@ fn animate(
         &mut AnimationPlayer,
         &mut AnimationTransitions,
         &mut Animated,
+        &GlobalTransform,
     )>,
     mut hands: Query<&mut Carrying, With<Grip>>,
 ) {
     let Some(moves) = moves else { return };
-    for (mut animator, mut transitions, mut animated) in &mut figures {
+    for (mut animator, mut transitions, mut animated, place) in &mut figures {
         let Ok((motion, stance, downed)) = players.get(animated.player) else {
             continue;
         };
         let doing = doing(motion, stance, downed);
+        // The jog and sprint at the speed the player moves, so their feet do not slide.
+        let pace = match doing {
+            Doing::Jog => Some((moves.jog, moves.jog_pace)),
+            Doing::Sprint => Some((moves.sprint, moves.sprint_pace)),
+            _ => None,
+        };
+        if let Some((node, pace)) = pace
+            && let Some(playing) = animator.animation_mut(node)
+        {
+            let scale = place.scale().y;
+            playing.set_speed(crate::pace::rate(motion.velocity.length(), pace, scale));
+        }
         if animated.doing == doing {
             continue;
         }
