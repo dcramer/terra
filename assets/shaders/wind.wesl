@@ -5,23 +5,25 @@
 // bends with the whole plant, y is how much it flutters on its own. Roots and trunks at
 // ground level carry zero and stay put.
 
-#import bevy_pbr::{
+import bevy_pbr::render::{
     mesh_functions,
     view_transformations::position_world_to_clip,
-}
+};
 
 // The clock comes from the renderer, which keeps it in a different place for the depth
 // and shadow passes than for the main one.
-#ifdef PREPASS_PIPELINE
-#import bevy_pbr::prepass_io::{Vertex, VertexOutput}
-#import bevy_render::globals::Globals
-@group(0) @binding(1) var<uniform> globals: Globals;
-#else
-#import bevy_pbr::{
-    forward_io::{Vertex, VertexOutput},
+@if(PREPASS_PIPELINE)
+import bevy_pbr::prepass::io::{Vertex, VertexOutput, decompress_vertex};
+@if(PREPASS_PIPELINE)
+import bevy_render::globals::Globals;
+@if(!PREPASS_PIPELINE)
+import bevy_pbr::render::{
+    forward_io::{Vertex, VertexOutput, decompress_vertex},
     mesh_view_bindings::globals,
-}
-#endif
+};
+
+@if(PREPASS_PIPELINE)
+@group(0) @binding(1) var<uniform> globals: Globals;
 
 // Field order must match WindExtension in flora.rs.
 struct Wind {
@@ -30,7 +32,7 @@ struct Wind {
     strength: f32,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(100)
+@group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> wind: Wind;
 
 fn hash(p: vec3<f32>) -> f32 {
@@ -55,46 +57,38 @@ fn sway(world: vec3<f32>, weights: vec2<f32>) -> vec3<f32> {
 }
 
 @vertex
-fn vertex(vertex: Vertex) -> VertexOutput {
+fn vertex(vertex_in: Vertex) -> VertexOutput {
     var out: VertexOutput;
-    let world_from_local = mesh_functions::get_world_from_local(vertex.instance_index);
+    let vertex = decompress_vertex(vertex_in, vertex_in.instance_index);
+    let world_from_local = mesh_functions::get_world_from_local(vertex_in.instance_index);
     var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(vertex.position, 1.0));
-#ifdef VERTEX_UVS_A
+@if(VERTEX_UVS_A) {
     world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv), 1.0);
     out.uv = vertex.uv;
-#endif
+}
     out.world_position = world;
     out.position = position_world_to_clip(world.xyz);
 
-#ifdef PREPASS_PIPELINE
-
-#ifdef UNCLIPPED_DEPTH_ORTHO_EMULATION
+@if(PREPASS_PIPELINE) {
+@if(UNCLIPPED_DEPTH_ORTHO_EMULATION) {
     out.unclipped_depth = out.position.z;
     out.position.z = min(out.position.z, 1.0);
-#endif
-#ifdef NORMAL_PREPASS_OR_DEFERRED_PREPASS
-#ifdef VERTEX_NORMALS
-    out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex.instance_index);
-#endif
-#endif
-#ifdef VERTEX_COLORS
+}
+@if(NORMAL_PREPASS_OR_DEFERRED_PREPASS && VERTEX_NORMALS)
+    out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
+@if(VERTEX_COLORS)
     out.color = vertex.color;
-#endif
-#ifdef MOTION_VECTOR_PREPASS
-    let previous_from_local = mesh_functions::get_previous_world_from_local(vertex.instance_index);
+@if(MOTION_VECTOR_PREPASS) {
+    let previous_from_local = mesh_functions::get_previous_world_from_local(vertex_in.instance_index);
     var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(vertex.position, 1.0));
-#ifdef VERTEX_UVS_A
+@if(VERTEX_UVS_A)
     previous = vec4<f32>(previous.xyz + sway(previous.xyz, vertex.uv), 1.0);
-#endif
     out.previous_world_position = previous;
-#endif
-
-#else // PREPASS_PIPELINE
-
-#ifdef VERTEX_NORMALS
-    out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex.instance_index);
-#endif
-#ifdef VERTEX_COLORS
+}
+} @else {
+@if(VERTEX_NORMALS)
+    out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
+@if(VERTEX_COLORS) {
     // Each plant is a slightly different shade, decided by where it stands. Grass is
     // drawn many tufts to a mesh and is shaded tuft by tuft when the mesh is made.
     let origin = world_from_local[3].xyz;
@@ -103,16 +97,13 @@ fn vertex(vertex: Vertex) -> VertexOutput {
         shade = 0.86 + 0.28 * hash(origin * 7.3);
     }
     out.color = vec4<f32>(vertex.color.rgb * shade, 1.0);
-#endif
+}
+}
 
-#endif // PREPASS_PIPELINE
-
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
-    out.instance_index = vertex.instance_index;
-#endif
-#ifdef VISIBILITY_RANGE_DITHER
+@if(VERTEX_OUTPUT_INSTANCE_INDEX)
+    out.instance_index = vertex_in.instance_index;
+@if(VISIBILITY_RANGE_DITHER)
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
-        vertex.instance_index, world_from_local[3]);
-#endif
+        vertex_in.instance_index, world_from_local[3]);
     return out;
 }

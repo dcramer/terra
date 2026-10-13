@@ -8,6 +8,7 @@
 //!   Backspace          put the hammer's part away
 
 use super::IsLocalPlayer;
+use super::button::{left_click, pointer_on};
 use super::camera::grab_mouse;
 use super::catalogue::{Builds, Kind, Tab};
 use super::controls::{Action, Settings};
@@ -16,7 +17,9 @@ use super::options::OptionsMenu;
 use super::tiles::{self, PICKED, PLAIN, TILE};
 use super::tool::{self, Builder};
 use bevy::{
+    picking::hover::Hovered,
     prelude::*,
+    ui::Pressed,
     window::{CursorGrabMode, CursorOptions},
 };
 
@@ -248,27 +251,23 @@ fn pick(menu: &mut BuildMenu, builder: &mut Builder, builds: &Builds, part: usiz
 
 /// A click on a tile picks it; on a tab, shows that tab.
 fn click(
-    tiles: Query<(&Interaction, &Tile), Changed<Interaction>>,
-    tabs: Query<(&Interaction, &TabButton), Changed<Interaction>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    tiles: Query<&Tile, Added<Pressed>>,
+    tabs: Query<&TabButton, Added<Pressed>>,
     window: Single<(&Window, &mut CursorOptions)>,
     builds: Res<Builds>,
     mut menu: ResMut<BuildMenu>,
     mut builder: Single<&mut Builder, IsLocalPlayer>,
 ) {
-    if !menu.open {
+    if !menu.open || !left_click(&mouse) {
         return;
     }
-    for (interaction, tab) in &tabs {
-        if *interaction == Interaction::Pressed {
-            menu.tab = tab.0;
-            menu.cursor = 0;
-            menu.stale = true;
-        }
+    for tab in &tabs {
+        menu.tab = tab.0;
+        menu.cursor = 0;
+        menu.stale = true;
     }
-    let picked = tiles
-        .iter()
-        .find(|(interaction, _)| **interaction == Interaction::Pressed)
-        .map(|(_, tile)| tile.part);
+    let picked = tiles.iter().next().map(|tile| tile.part);
     if let Some(part) = picked {
         pick(&mut menu, &mut builder, &builds, part);
         let (window, mut cursor) = window.into_inner();
@@ -350,7 +349,13 @@ fn draw(
     mut panel: Single<&mut Visibility, With<Panel>>,
     mut tabs: Query<(&TabButton, &mut BackgroundColor), Without<Tile>>,
     mut tiles: Query<
-        (&Tile, &Interaction, &mut BorderColor, &mut BackgroundColor),
+        (
+            &Tile,
+            &Hovered,
+            Has<Pressed>,
+            &mut BorderColor,
+            &mut BackgroundColor,
+        ),
         Without<TabButton>,
     >,
 ) {
@@ -368,10 +373,10 @@ fn draw(
         );
     }
     let cursor_part = menu.parts(&builds).get(menu.cursor).copied();
-    for (tile, interaction, mut border, mut background) in &mut tiles {
-        let pointed =
-            *interaction != Interaction::None || (!tile.recent && Some(tile.part) == cursor_part);
-        tiles::outline(&mut border, pointed);
+    for (tile, hovered, pressed, mut border, mut background) in &mut tiles {
+        let outlined =
+            pointer_on(hovered, pressed) || (!tile.recent && Some(tile.part) == cursor_part);
+        tiles::outline(&mut border, outlined);
         // Greyed when its current kind cannot be paid for.
         let short = match &builds.part(tile.part).kind {
             Kind::Items(items) => {

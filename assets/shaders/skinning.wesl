@@ -10,23 +10,20 @@
 // to one plus the share; weights that sum to one, as any mesh it did not touch has, are skinned
 // with the linear blend alone, as Bevy would.
 //
-// Bevy's own skinning.wgsl with only `skin_model` and `skin_prev_model` changed; the rest, and
-// every binding, as it has them. A joint matrix here may carry a uniform scale (a skeleton
-// scaled as an object, a body made taller), blended on its own; never a shear.
+// Bevy's own render/skinning.wesl with only `skin_model` and `skin_prev_model` changed; the
+// rest, and every binding, as it has them. It stands in for Bevy's as the module
+// `bevy_pbr::render::skinning`, so `package` here is `bevy_pbr`. A joint matrix here may carry
+// a uniform scale (a skeleton scaled as an object, a body made taller), blended on its own;
+// never a shear.
 // TERRA_DUAL_QUATERNION_SKINNING (skinning.rs looks for this to know the shader is ours)
 
-#define_import_path bevy_pbr::skinning
+import package::render::mesh_types::SkinnedMesh;
+import package::render::mesh_bindings::mesh;
 
-#import bevy_pbr::mesh_types::SkinnedMesh
-#import bevy_pbr::mesh_bindings::mesh
-
-#ifdef SKINNED
-
-#ifdef SKINS_USE_UNIFORM_BUFFERS
+@if(SKINNED && SKINS_USE_UNIFORM_BUFFERS)
 @group(2) @binding(1) var<uniform> joint_matrices: SkinnedMesh;
-#else   // SKINS_USE_UNIFORM_BUFFERS
+@if(SKINNED && !SKINS_USE_UNIFORM_BUFFERS)
 @group(2) @binding(1) var<storage> joint_matrices: array<mat4x4<f32>>;
-#endif  // SKINS_USE_UNIFORM_BUFFERS
 
 // An array of matrices specifying the joint positions from the previous frame.
 //
@@ -34,13 +31,13 @@
 //
 // If this is the first frame, or we're otherwise prevented from using data from
 // the previous frame, this is simply the same as `joint_matrices` above.
-#ifdef SKINS_USE_UNIFORM_BUFFERS
+@if(SKINNED && SKINS_USE_UNIFORM_BUFFERS)
 @group(2) @binding(6) var<uniform> prev_joint_matrices: SkinnedMesh;
-#else   // SKINS_USE_UNIFORM_BUFFERS
+@if(SKINNED && !SKINS_USE_UNIFORM_BUFFERS)
 @group(2) @binding(6) var<storage> prev_joint_matrices: array<mat4x4<f32>>;
-#endif  // SKINS_USE_UNIFORM_BUFFERS
 
 // The rotation of a rotation matrix as a unit quaternion (x, y, z, w).
+@if(SKINNED)
 fn quat_from_rotation(m: mat3x3<f32>) -> vec4<f32> {
     let trace = m[0].x + m[1].y + m[2].z;
     if trace > 0.0 {
@@ -60,12 +57,14 @@ fn quat_from_rotation(m: mat3x3<f32>) -> vec4<f32> {
 }
 
 // One joint's matrix as a dual quaternion (real, dual) and its uniform scale.
+@if(SKINNED)
 struct Joint {
     real: vec4<f32>,
     dual: vec4<f32>,
     scale: f32,
 }
 
+@if(SKINNED)
 fn joint_of(m: mat4x4<f32>) -> Joint {
     let scale = length(m[0].xyz);
     let q = quat_from_rotation(mat3x3<f32>(m[0].xyz / scale, m[1].xyz / scale, m[2].xyz / scale));
@@ -77,6 +76,7 @@ fn joint_of(m: mat4x4<f32>) -> Joint {
 
 // The blend of four joints, as a matrix: each joint's dual quaternion weighted, the shorter way
 // round from the first (q and -q are the same rotation), then normalised.
+@if(SKINNED)
 fn blend(a: Joint, b: Joint, c: Joint, d: Joint, weights: vec4<f32>) -> mat4x4<f32> {
     let wb = select(weights.y, -weights.y, dot(a.real, b.real) < 0.0);
     let wc = select(weights.z, -weights.z, dot(a.real, c.real) < 0.0);
@@ -103,6 +103,7 @@ fn blend(a: Joint, b: Joint, c: Joint, d: Joint, weights: vec4<f32>) -> mat4x4<f
 
 // The skin matrix of four joints by `weights`: their linear blend, mixed with their dual
 // quaternion blend by the share the weights carry (see above).
+@if(SKINNED)
 fn skinned(m0: mat4x4<f32>, m1: mat4x4<f32>, m2: mat4x4<f32>, m3: mat4x4<f32>, weights: vec4<f32>) -> mat4x4<f32> {
     let total = weights.x + weights.y + weights.z + weights.w;
     let w = weights / total;
@@ -115,12 +116,13 @@ fn skinned(m0: mat4x4<f32>, m1: mat4x4<f32>, m2: mat4x4<f32>, m3: mat4x4<f32>, w
     return linear * (1.0 - share) + dual * share;
 }
 
+@if(SKINNED)
 fn skin_model(
     indexes: vec4<u32>,
     weights: vec4<f32>,
     instance_index: u32,
 ) -> mat4x4<f32> {
-#ifdef SKINS_USE_UNIFORM_BUFFERS
+@if(SKINS_USE_UNIFORM_BUFFERS)
     return skinned(
         joint_matrices.data[indexes.x],
         joint_matrices.data[indexes.y],
@@ -128,8 +130,9 @@ fn skin_model(
         joint_matrices.data[indexes.w],
         weights,
     );
-#else   // SKINS_USE_UNIFORM_BUFFERS
-    var skin_index = mesh[instance_index].current_skin_index;
+@if(!SKINS_USE_UNIFORM_BUFFERS)
+    let skin_index = mesh[instance_index].current_skin_index;
+@if(!SKINS_USE_UNIFORM_BUFFERS)
     return skinned(
         joint_matrices[skin_index + indexes.x],
         joint_matrices[skin_index + indexes.y],
@@ -137,19 +140,19 @@ fn skin_model(
         joint_matrices[skin_index + indexes.w],
         weights,
     );
-#endif  // SKINS_USE_UNIFORM_BUFFERS
 }
 
 // Returns the skinned position of a vertex with the given weights from the
 // previous frame.
 //
 // This is used for motion vector computation.
+@if(SKINNED)
 fn skin_prev_model(
     indexes: vec4<u32>,
     weights: vec4<f32>,
     instance_index: u32,
 ) -> mat4x4<f32> {
-#ifdef SKINS_USE_UNIFORM_BUFFERS
+@if(SKINS_USE_UNIFORM_BUFFERS)
     return skinned(
         prev_joint_matrices.data[indexes.x],
         prev_joint_matrices.data[indexes.y],
@@ -157,8 +160,9 @@ fn skin_prev_model(
         prev_joint_matrices.data[indexes.w],
         weights,
     );
-#else   // SKINS_USE_UNIFORM_BUFFERS
+@if(!SKINS_USE_UNIFORM_BUFFERS)
     let skin_index = mesh[instance_index].current_skin_index;
+@if(!SKINS_USE_UNIFORM_BUFFERS)
     return skinned(
         prev_joint_matrices[skin_index + indexes.x],
         prev_joint_matrices[skin_index + indexes.y],
@@ -166,9 +170,9 @@ fn skin_prev_model(
         prev_joint_matrices[skin_index + indexes.w],
         weights,
     );
-#endif  // SKINS_USE_UNIFORM_BUFFERS
 }
 
+@if(SKINNED)
 fn inverse_transpose_3x3m(in: mat3x3<f32>) -> mat3x3<f32> {
     let x = cross(in[1], in[2]);
     let y = cross(in[2], in[0]);
@@ -181,6 +185,7 @@ fn inverse_transpose_3x3m(in: mat3x3<f32>) -> mat3x3<f32> {
     );
 }
 
+@if(SKINNED)
 fn skin_normals(
     world_from_local: mat4x4<f32>,
     normal: vec3<f32>,
@@ -195,5 +200,3 @@ fn skin_normals(
         ) * normal
     );
 }
-
-#endif

@@ -49,6 +49,8 @@ r said                                   # everything said since the last action
 | `warp EAST,SOUTH [--facing EAST,SOUTH]` | In play: move the player, as `--warp` does, and wait until they are there |
 | `take ITEM[:COUNT] …` | In play: take raw items away, all of a kind if no count (`meat`, `stone:5`), so a test starts from a known pack |
 | `unpress` | Let go of every key held or queued by `press` |
+| `point X,Y` | Move the pointer to a place in the window, in pixels from its top left, so what is there is hovered |
+| `click X,Y [--right] [--frames N]` | Move the pointer there and click, with the left button unless `--right`, held one frame unless `--frames`: what a person's click on a menu's button does |
 | `aim EAST,SOUTH [--up m]` | In play: turn the view until its middle, where a bow shoots and a tool reaches, is on a spot so far above the ground (1 m), and wait until it is |
 | `give ITEM[:COUNT] …` | In play: carry something, as `--give` does, or set the body (`health:20`), and wait until it is given; fails if it did not fit |
 | `pose CLIP [FRACTION]` | In the workbench: hold every model that far through a clip given with `--anim`, or play it |

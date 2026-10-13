@@ -5,6 +5,7 @@
 //! Anything that walks gets `Footsteps` and is heard stepping, whatever it is.
 
 use super::build_menu::BuildMenu;
+use super::button::left_click;
 use super::crafting::{Stations, Works};
 use super::creatures::{Bitten, Creature, State};
 use super::death::WentDown;
@@ -19,7 +20,7 @@ use super::species::{Bestiary, Voice};
 use super::tool::Builder;
 use super::{Downed, IsLocalPlayer, Motion, Player, Stance, View};
 use crate::planet::Planet;
-use bevy::{platform::collections::HashMap, prelude::*};
+use bevy::{platform::collections::HashMap, prelude::*, ui::Pressed, ui_widgets};
 
 /// Seconds between strokes of an axe or pick, and of a hammer building.
 const STRIKE_EVERY_S: f32 = 0.5;
@@ -320,7 +321,8 @@ fn panels_heard(
     inventory: Res<InventoryScreen>,
     build: Res<BuildMenu>,
     options: Res<OptionsMenu>,
-    buttons: Query<&Interaction, (Changed<Interaction>, With<Button>)>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    pressed: Query<(), (Added<Pressed>, With<ui_widgets::Button>)>,
     mut was: Local<Option<[bool; 3]>>,
     mut noise: MessageWriter<Noise>,
 ) {
@@ -331,10 +333,7 @@ fn panels_heard(
             noise.write(Noise::near(if now { Cue::Open } else { Cue::Close }));
         }
     }
-    if buttons
-        .iter()
-        .any(|interaction| *interaction == Interaction::Pressed)
-    {
+    if left_click(&mouse) && !pressed.is_empty() {
         noise.write(Noise::near(Cue::Click));
     }
 }

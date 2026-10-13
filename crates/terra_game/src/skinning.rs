@@ -1,4 +1,4 @@
-//! Weight-blended skinning for every skinned mesh (`assets/shaders/skinning.wgsl`): each vertex
+//! Weight-blended skinning for every skinned mesh (`assets/shaders/skinning.wesl`): each vertex
 //! skinned partly with Bevy's linear blend and partly with dual quaternions, as Maya's "weight
 //! blended" skinning does. Our clips roll a forearm up to half a turn about its length, and
 //! the linear blend collapses the skin across such a turn into a thin neck; dual quaternions
@@ -7,10 +7,11 @@
 //! Which joints keep the linear blend is data, `models/character/skinning.json`, read by the
 //! character tools too, which measure bodies skinned the same way.
 //!
-//! Bevy has no switch for this, so its own skinning shader, `bevy_pbr::skinning`, is replaced
-//! by ours with the same functions and bindings: every mesh shader that imports it, Bevy's and
-//! our body's alike, then skins this way. Bevy loads its shader from an embedded file, so ours
-//! is put in its place once that has loaded, and again if it ever reloads.
+//! Bevy has no switch for this, so its own skinning shader, the WESL module
+//! `bevy_pbr::render::skinning`, is replaced by ours with the same functions and bindings:
+//! every mesh shader that imports it, Bevy's and our body's alike, then skins this way. Bevy
+//! loads its shader from an embedded file, which names the module, so ours is put in its place
+//! under the same path once that has loaded, and again if it ever reloads.
 //!
 //! A vertex's share of dual quaternions travels in its joint weights, which then sum to one
 //! plus the share (`carry_share`): no new vertex attribute, so every material's pipeline is
@@ -26,9 +27,10 @@ use bevy::{
 use serde::Deserialize;
 use std::collections::HashSet;
 
-/// Where Bevy keeps its skinning shader (`bevy_pbr/src/render/skinning.wgsl`).
-const BEVY_SKINNING: &str = "embedded://bevy_pbr/render/skinning.wgsl";
-const OURS: &str = include_str!("../../../assets/shaders/skinning.wgsl");
+/// Where Bevy keeps its skinning shader (`bevy_pbr/src/render/skinning.wesl`); a shader at
+/// this path is the module `bevy_pbr::render::skinning`.
+const BEVY_SKINNING: &str = "embedded://bevy_pbr/render/skinning.wesl";
+const OURS: &str = include_str!("../../../assets/shaders/skinning.wesl");
 /// A line only our shader has.
 const MARK: &str = "TERRA_DUAL_QUATERNION_SKINNING";
 
@@ -134,14 +136,14 @@ fn replace_skinning(
         return;
     }
     let path = shader.path.clone();
-    match shaders.insert(id, Shader::from_wgsl(OURS, path)) {
+    match shaders.insert(id, Shader::from_wesl(OURS, path)) {
         Ok(()) => info!("skinning: weight-blended, in place of Bevy's linear blend"),
         Err(problem) => error!("could not replace the skinning shader: {problem}"),
     }
 }
 
 fn is_ours(shader: &Shader) -> bool {
-    matches!(&shader.source, bevy::shader::Source::Wgsl(source) if source.contains(MARK))
+    matches!(&shader.source, bevy::shader::Source::Wesl(source) if source.contains(MARK))
 }
 
 /// Every skinned mesh as it appears is marked to be given its shares.
@@ -212,12 +214,25 @@ mod tests {
 
     #[test]
     fn ours_stands_in_for_bevys_skinning() {
-        let shader = Shader::from_wgsl(OURS, BEVY_SKINNING);
+        let shader = Shader::from_wesl(OURS, BEVY_SKINNING);
         assert!(is_ours(&shader));
         assert_eq!(
             shader.import_path,
-            bevy::shader::ShaderImport::Custom("bevy_pbr::skinning".into())
+            bevy::shader::ShaderImport::Custom("bevy_pbr::render::skinning".into())
         );
+        // What it imports, as Bevy's own does, so the shader cache can resolve it.
+        for import in [
+            "bevy_pbr::render::mesh_types::SkinnedMesh",
+            "bevy_pbr::render::mesh_bindings::mesh",
+        ] {
+            assert!(
+                shader
+                    .imports
+                    .contains(&bevy::shader::ShaderImport::Custom(import.into())),
+                "{import} missing from {:?}",
+                shader.imports
+            );
+        }
         // Every function Bevy's shaders call from it.
         for f in [
             "fn skin_model(",

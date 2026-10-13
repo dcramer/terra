@@ -34,7 +34,7 @@ const GRASS_SPACING_M: f32 = 0.34;
 
 type WindMaterial = ExtendedMaterial<StandardMaterial, WindExtension>;
 
-/// What the wind shader is told. Field order must match the struct in wind.wgsl.
+/// What the wind shader is told. Field order must match the struct in wind.wesl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct WindExtension {
     #[uniform(100)]
@@ -45,11 +45,11 @@ pub struct WindExtension {
 
 impl MaterialExtension for WindExtension {
     fn vertex_shader() -> ShaderRef {
-        "shaders/wind.wgsl".into()
+        "shaders/wind.wesl".into()
     }
 
     fn prepass_vertex_shader() -> ShaderRef {
-        "shaders/wind.wgsl".into()
+        "shaders/wind.wesl".into()
     }
 }
 

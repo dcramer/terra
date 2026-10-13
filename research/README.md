@@ -55,3 +55,4 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [worktree-builds.md](worktree-builds.md) | Agents work in many worktrees, each building Bevy from nothing. What makes a new one quick, and what is safe? |
 | [character-systems-industry.md](character-systems-industry.md) | How do shipped games and public tools let players shape a body and wear gear that fits every body, at the level of mechanisms we can rebuild? |
 | [bevy-character-capabilities.md](bevy-character-capabilities.md) | What does Bevy 0.19 give a character system, at what cost, and what is ours to build? |
+| [bevy-0-20-upgrade.md](bevy-0-20-upgrade.md) | What does moving from Bevy 0.19 to 0.20 take, and does the game look, skin and run the same afterwards? |

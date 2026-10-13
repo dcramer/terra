@@ -114,7 +114,7 @@ Heightmap games sample a height. We have digs, overhangs and caves, so:
 
 ### Drawing
 
-Bevy 0.19, as pinned, has:
+Bevy 0.20, as pinned, has:
 
 - GPU-driven instancing and culling;
 - GPU occlusion culling;

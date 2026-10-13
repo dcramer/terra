@@ -17,7 +17,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 | Layer | Choice | Status |
 |---|---|---|
 | Language | Rust for the game; TypeScript on Node for tooling outside it (D121). No scripting language in the game. | Decided |
-| Engine framework | Bevy 0.19: entity system, renderer, windowing, input, assets, audio, UI | Decided |
+| Engine framework | Bevy 0.20: entity system, renderer, windowing, input, assets, audio, UI | Decided |
 | Graphics | Bevy's renderer on wgpu (Vulkan, Metal, DirectX 12). Our own shaders for ground, sea and sky. | Decided |
 | Voxel terrain | Our own crate, ported from the parts of Voxel Tools we need (MIT-licensed) | Decided |
 | Terrain meshing | The `transvoxel` crate | Decided (D32) |
@@ -88,6 +88,7 @@ One known gap: the `transvoxel` crate bakes seam stitching into each mesh, so a 
 
 ## Sources
 
+- [Bevy 0.20 release notes](https://bevy.org/news/bevy-0-20/) and [migration guide](https://bevy.org/learn/migration-guides/0-19-to-0-20/)
 - [Bevy 0.19 release notes](https://bevy.org/news/bevy-0-19/)
 - [transvoxel crate](https://gnurfos.github.io/transvoxel_rs/)
 - [Voxel Tools](https://github.com/Zylann/godot_voxel)

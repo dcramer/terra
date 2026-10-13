@@ -9,11 +9,12 @@
 //!   Click the queue   take one off it, and get back what it took
 
 use super::bag::Shown;
+use super::button::{button, left_click, pointer_on};
 use super::crafting::{self, Crafts, Recipes, Staff, Station, Works};
 use super::inventory::{Belongings, InventoryScreen, Items, Made};
 use super::tiles::{self, PICKED, PLAIN, TILE};
 use super::told::Notice;
-use bevy::prelude::*;
+use bevy::{picking::hover::Hovered, prelude::*, ui::Pressed};
 
 const COLUMNS: usize = 2;
 const QUEUE_TILE: Vec2 = Vec2::new(96.0, 44.0);
@@ -162,7 +163,7 @@ fn choose(
     screen: Res<InventoryScreen>,
     staff: Staff,
     crafts: Crafts,
-    backpack: Query<&Interaction, With<Shown>>,
+    backpack: Query<(&Hovered, Has<Pressed>), With<Shown>>,
     mut stations: Query<&mut Works>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
@@ -187,7 +188,7 @@ fn choose(
     ];
     let on_backpack = backpack
         .iter()
-        .any(|interaction| *interaction != Interaction::None);
+        .any(|(hovered, pressed)| pointer_on(hovered, pressed));
     let tabs = crafts.recipes.families(station, belongings.items()).len();
     if !on_backpack
         && let Some(tab) = NUMBERS.iter().position(|&key| keys.just_pressed(key))
@@ -221,9 +222,10 @@ fn click(
     screen: Res<InventoryScreen>,
     staff: Staff,
     crafts: Crafts,
-    recipes: Query<(&Interaction, &Tile), Changed<Interaction>>,
-    queued: Query<(&Interaction, &Queued), Changed<Interaction>>,
-    tabs: Query<(&Interaction, &TabButton), Changed<Interaction>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    recipes: Query<&Tile, Added<Pressed>>,
+    queued: Query<&Queued, Added<Pressed>>,
+    tabs: Query<&TabButton, Added<Pressed>>,
     mut stations: Query<&mut Works>,
     mut belongings: Belongings,
     mut notice: ResMut<Notice>,
@@ -235,16 +237,18 @@ fn click(
     let Some((entity, station)) = screen.at else {
         return;
     };
+    if !left_click(&mouse) {
+        return;
+    }
     let staffed = staff.works(entity, station);
-    let pressed = |interaction: &Interaction| *interaction == Interaction::Pressed;
-    for (_, tab) in tabs.iter().filter(|(interaction, _)| pressed(interaction)) {
+    for tab in &tabs {
         state.tab = tab.0;
         state.cursor = 0;
     }
     let Ok(mut works) = stations.get_mut(entity) else {
         return;
     };
-    if let Some((_, tile)) = recipes.iter().find(|(interaction, _)| pressed(interaction)) {
+    if let Some(tile) = recipes.iter().next() {
         let kinds = (&*crafts.recipes, &*crafts.stations);
         crafting::queue(
             &mut works,
@@ -255,7 +259,7 @@ fn click(
             &mut notice,
         );
     }
-    if let Some((_, place)) = queued.iter().find(|(interaction, _)| pressed(interaction)) {
+    if let Some(place) = queued.iter().next() {
         let recipes = &crafts.recipes;
         crafting::cancel(&mut works, place.0, recipes, &mut belongings, &mut notice);
     }
@@ -321,7 +325,7 @@ fn lay_out(
                 for (place, &index) in works.queue.iter().enumerate() {
                     row.spawn((
                         Queued(place),
-                        Button,
+                        button(),
                         Node {
                             width: px(QUEUE_TILE.x),
                             height: px(QUEUE_TILE.y),
@@ -404,11 +408,17 @@ fn draw(
     mut panel: Single<&mut Visibility, With<Panel>>,
     mut tabs: Query<(&TabButton, &mut BackgroundColor), (Without<Tile>, Without<Queued>)>,
     mut tiles_shown: Query<
-        (&Tile, &Interaction, &mut BorderColor, &mut BackgroundColor),
+        (
+            &Tile,
+            &Hovered,
+            Has<Pressed>,
+            &mut BorderColor,
+            &mut BackgroundColor,
+        ),
         (Without<TabButton>, Without<Queued>),
     >,
     mut queued: Query<
-        (&Interaction, &mut BorderColor),
+        (&Hovered, Has<Pressed>, &mut BorderColor),
         (With<Queued>, Without<Tile>, Without<TabButton>),
     >,
     mut texts: ParamSet<(
@@ -448,8 +458,8 @@ fn draw(
 
     let list = shown(recipes, station, state.tab, belongings.items());
     let mut pointed = list.get(state.cursor).copied();
-    for (tile, interaction, mut border, mut background) in &mut tiles_shown {
-        let hovered = *interaction != Interaction::None;
+    for (tile, hovered, pressed, mut border, mut background) in &mut tiles_shown {
+        let hovered = pointer_on(hovered, pressed);
         if hovered {
             pointed = Some(tile.0);
         }
@@ -507,8 +517,8 @@ fn draw(
         };
         set(&mut text, status);
     }
-    for (interaction, mut border) in &mut queued {
-        tiles::outline(&mut border, *interaction != Interaction::None);
+    for (hovered, pressed, mut border) in &mut queued {
+        tiles::outline(&mut border, pointer_on(hovered, pressed));
     }
     let footer = if works.queue.is_empty() {
         "Click a recipe, or use the arrows and Enter, to queue one. F to leave."

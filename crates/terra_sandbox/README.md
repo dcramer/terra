@@ -73,7 +73,7 @@ The camera is Bevy's free camera, which treats +Y as up. The start is at the pla
 
 ## Working on graphics
 
-The ground's look is in `assets/shaders/ground.wgsl`, the sea's in `water.wgsl`, the sky's in `sky.wgsl`, and the wind that moves plants in `wind.wgsl`. Save one while the sandbox is running and it updates. The F2 panel changes the colours and the sun without touching code, and F1 lets you edit any material.
+The ground's look is in `assets/shaders/ground.wesl`, the sea's in `water.wesl`, the sky's in `sky.wesl`, and the wind that moves plants in `wind.wesl`. Save one while the sandbox is running and it updates. The F2 panel changes the colours and the sun without touching code, and F1 lets you edit any material.
 
 To check a change without watching it, take a screenshot and read it:
 

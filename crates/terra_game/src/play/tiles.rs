@@ -2,6 +2,7 @@
 //! tabs and a grid of tiles, each a name with a line beneath, moved over with the arrows.
 //! Each screen owns what its tiles are; this is only how they look and move.
 
+use super::button::button;
 use bevy::{ecs::hierarchy::ChildSpawnerCommands, prelude::*};
 
 pub const TILE: Vec2 = Vec2::new(170.0, 66.0);
@@ -43,7 +44,7 @@ pub fn tab(parent: &mut ChildSpawnerCommands, marker: impl Bundle, index: usize,
     parent
         .spawn((
             marker,
-            Button,
+            button(),
             Node {
                 padding: UiRect::axes(px(12), px(6)),
                 border_radius: BorderRadius::all(px(6)),
@@ -63,7 +64,7 @@ pub fn tile(parent: &mut ChildSpawnerCommands, marker: impl Bundle, name: &str, 
     parent
         .spawn((
             marker,
-            Button,
+            button(),
             Node {
                 width: px(TILE.x),
                 height: px(TILE.y),

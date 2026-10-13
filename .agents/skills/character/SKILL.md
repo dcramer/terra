@@ -139,7 +139,7 @@ Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. 
 tools/blender/run.sh tools/characters/gear_check.py tools/characters/out/base-male-game.glb leather_coat leather_cap small_pack quiver
 ```
 
-It plays our clips and reports, per clip, the share of skin near each piece that shows through it (the piece just beneath the skin, and nothing of it covering the skin from outside), and `where` on the body. Then look, live, with the body hidden if need be ([tools/sandbox](../../../tools/sandbox/README.md)): a picture through the body hid a coat full of holes. Each piece also lists the patches of skin it covers, which the game does not draw under it (`patches.py`, `body_mask.wgsl`).
+It plays our clips and reports, per clip, the share of skin near each piece that shows through it (the piece just beneath the skin, and nothing of it covering the skin from outside), and `where` on the body. Then look, live, with the body hidden if need be ([tools/sandbox](../../../tools/sandbox/README.md)): a picture through the body hid a coat full of holes. Each piece also lists the patches of skin it covers, which the game does not draw under it (`patches.py`, `body_mask.wesl`).
 
 Then add a row for it to `THIRD_PARTY.md`.
 

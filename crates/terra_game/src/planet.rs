@@ -3,7 +3,7 @@
 //!
 //! The ground is voxel terrain from `terra_voxel` (docs/terrain.md): a generated planet
 //! that can be dug and filled. It is drawn in chunks by `terrain`. The ground's look is in
-//! `assets/shaders/ground.wgsl` and the sea's in `assets/shaders/water.wgsl`; both reload
+//! `assets/shaders/ground.wesl` and the sea's in `assets/shaders/water.wesl`; both reload
 //! when saved.
 
 use crate::shell::Options;
@@ -265,7 +265,7 @@ pub type GroundMaterial = ExtendedMaterial<StandardMaterial, GroundExtension>;
 pub struct GroundLook(pub Handle<GroundMaterial>);
 type WaterMaterial = ExtendedMaterial<StandardMaterial, WaterExtension>;
 
-/// What the ground shader is told. Field order must match the struct in ground.wgsl.
+/// What the ground shader is told. Field order must match the struct in ground.wesl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, PartialEq)]
 pub struct GroundExtension {
     #[uniform(100)]
@@ -296,7 +296,7 @@ pub struct GroundExtension {
 
 impl MaterialExtension for GroundExtension {
     fn fragment_shader() -> ShaderRef {
-        "shaders/ground.wgsl".into()
+        "shaders/ground.wesl".into()
     }
 }
 
@@ -325,7 +325,7 @@ impl GroundExtension {
     }
 }
 
-/// What the water shader is told. Field order must match the struct in water.wgsl.
+/// What the water shader is told. Field order must match the struct in water.wesl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct WaterExtension {
     /// The sky at the horizon and overhead, which is what the water reflects.
@@ -339,7 +339,7 @@ pub struct WaterExtension {
 
 impl MaterialExtension for WaterExtension {
     fn fragment_shader() -> ShaderRef {
-        "shaders/water.wgsl".into()
+        "shaders/water.wesl".into()
     }
 }
 

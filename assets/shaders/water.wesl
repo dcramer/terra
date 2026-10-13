@@ -4,12 +4,12 @@
 // What is under the water is coloured by the ground's own shader, which fades the bed
 // into the deep; this only adds the surface.
 
-#import bevy_pbr::{
+import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
     forward_io::{VertexOutput, FragmentOutput},
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
     mesh_view_bindings::{globals, view},
-}
+};
 
 // Field order must match WaterExtension in planet.rs.
 struct Water {
@@ -18,7 +18,7 @@ struct Water {
     sky_brightness: f32,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(100)
+@group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> water: Water;
 
 fn hash(p: vec3<f32>) -> f32 {

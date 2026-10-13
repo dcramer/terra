@@ -19,6 +19,11 @@ const eastSouth = (text: string) => {
   if (numbers.length !== 2 || numbers.some(Number.isNaN)) throw new Error(`wanted metres east and south like 70,-55, not ${text}`);
   return numbers as [number, number];
 };
+const pixels = (text: string | undefined) => {
+  const numbers = (text ?? "").split(",").map(Number);
+  if (numbers.length !== 2 || numbers.some(Number.isNaN)) throw new Error(`wanted pixels across and down like 640,360, not ${text}`);
+  return numbers as [number, number];
+};
 const number = (text: string | undefined) => (text === undefined ? undefined : Number(text));
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 1));
 
@@ -69,6 +74,23 @@ const COMMANDS: Record<string, Command> = {
     },
   },
   unpress: { usage: "unpress", help: "let go of every key held or queued by press", run: async () => print(await sandbox.unpress()) },
+  point: {
+    usage: "point X,Y",
+    help: "move the pointer to a place in the window, in pixels from its top left, so what is there is hovered",
+    run: async ({ positionals: [at] }) => {
+      const [x, y] = pixels(at);
+      print(await call("sandbox.point", { x, y }));
+    },
+  },
+  click: {
+    usage: "click X,Y [--right] [--frames N]",
+    help: "move the pointer to a place in the window, in pixels from its top left, and click there, with the left button unless --right, held for one frame unless --frames",
+    options: { right: { type: "boolean", help: "the right button" }, frames: { type: "string", help: "frames held (1)" } },
+    run: async ({ values, positionals: [at] }) => {
+      const [x, y] = pixels(at);
+      print(await call("sandbox.click", { x, y, button: values.right ? "right" : "left", frames: number(values.frames) }));
+    },
+  },
   status: { usage: "status", help: "the frame, the game's time, whether it is stopped, and the number of the next line the run will say", run: async () => print(await sandbox.status()) },
   mark: { usage: "mark", help: "start `said` and `wait` from now", run: async () => void (await sandbox.markNow()) },
   said: {

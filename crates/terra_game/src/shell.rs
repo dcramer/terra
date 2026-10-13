@@ -749,7 +749,7 @@ pub fn screenshot(picture: Option<&Picture>) -> Screenshot {
 /// In an unattended run, the keyboard and mouse are whatever the script says and nothing
 /// else. The window is a real one, so without this, anything typed while it has focus
 /// would steer the run.
-fn scripted_presses(
+pub(crate) fn scripted_presses(
     options: Res<Options>,
     screen: Res<State<Screen>>,
     mut frame: ResMut<ScriptFrame>,

@@ -99,7 +99,7 @@ const LEAF_OUTLINE: [(f32, f32); 8] = [
 /// Paths are filed in squares this wide, to find the nearest quickly.
 const PATH_SQUARE_M: f32 = 12.0;
 
-/// What the foliage shader is told. Field order must match the struct in foliage.wgsl.
+/// What the foliage shader is told. Field order must match the struct in foliage.wesl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct FoliageExtension {
     #[uniform(100)]
@@ -110,11 +110,11 @@ pub struct FoliageExtension {
 
 impl MaterialExtension for FoliageExtension {
     fn vertex_shader() -> ShaderRef {
-        "shaders/foliage.wgsl".into()
+        "shaders/foliage.wesl".into()
     }
 
     fn prepass_vertex_shader() -> ShaderRef {
-        "shaders/foliage.wgsl".into()
+        "shaders/foliage.wesl".into()
     }
 }
 

@@ -12,7 +12,7 @@ Not yet measured on Windows or on an integrated GPU, which D25 asks for.
 
 The sandbox's `lush` experiment ([lush.rs](../crates/terra_sandbox/src/experiments/lush.rs)), on the yard:
 
-- **Trees grown in code.** A trunk splits into limbs, branches and twigs, each a tube with bark on it; clumps of leaf cards, each a picture of a spray of oak leaves, sit at the twigs. Normals lean out of the crown so it lights as one, leaves deep and low in it are darker, light passes through them, and everything moves in the wind ([foliage.wgsl](../assets/shaders/foliage.wgsl)). Six mature kinds of 16 to 25 m and three young of 7 to 11 m, each drawn many times.
+- **Trees grown in code.** A trunk splits into limbs, branches and twigs, each a tube with bark on it; clumps of leaf cards, each a picture of a spray of oak leaves, sit at the twigs. Normals lean out of the crown so it lights as one, leaves deep and low in it are darker, light passes through them, and everything moves in the wind ([foliage.wesl](../assets/shaders/foliage.wesl)). Six mature kinds of 16 to 25 m and three young of 7 to 11 m, each drawn many times.
 - **The game's trees.** Each tree is an entity with the game's `Growth`, so it stops the player and is cut as the flora file's leafy trees are: young ones with a stone axe, grown ones only with an iron axe (D96). Checked by script: a young oak gave 3 wood to a stone axe; a grown one refused the stone axe and gave 8 to an iron one. Bushes cut for fibre.
 - **Undergrowth.** Grass in tufts of solid blades, thinner under trees and none on the paths; bushes along the paths and in glades; paths as strips of earth over the ground: a ring through the forest and two ways out.
 

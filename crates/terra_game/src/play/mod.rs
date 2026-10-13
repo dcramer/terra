@@ -19,6 +19,7 @@ mod archery;
 mod bag;
 mod bodies;
 mod build_menu;
+mod button;
 mod camera;
 mod catalogue;
 mod claim;

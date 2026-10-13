@@ -77,10 +77,7 @@ pub(super) fn load(
         .filter_map(|mesh| gltf_meshes.get(mesh))
         .flat_map(|mesh| &mesh.primitives)
     {
-        let Some(aabb) = meshes
-            .get(&primitive.mesh)
-            .and_then(|mesh| mesh.compute_aabb())
-        else {
+        let Some(aabb) = meshes.get(&primitive.mesh).and_then(|mesh| mesh.get_aabb()) else {
             return;
         };
         low = low.min(Vec3::from(aabb.min()));

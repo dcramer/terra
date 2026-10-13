@@ -117,7 +117,7 @@ Each phase ends when its checks pass in the build and a person has looked at the
 | **4. Contact** | Two-bone foot IK after animation; the pelvis offset by body size; a held tool's off hand | Feet within 1 cm of the ground while standing on every template; no body below the floor by more than 2 cm in any clip | Not yet |
 | **5. Loose parts and hair** | Helper bones turned by the thighs, then spring bones with capsule colliders (T7, the VRM spring-bone model); hair as parts; hide flags and short-hair variants under helmets | A long coat and long hair pass the gear check through every clip on every template; no hair through a helmet | Not yet |
 | **6. Crowds** (LOD may come forward, as the integrated GPU needs it) | LOD meshes for bodies and gear, and fewer shadow passes for far characters; animation at a lower rate for far characters (as Unreal's Animation Budget Allocator); a merge and atlas per character if still needed; NPC looks from a seed | The crowd budget is met on the integrated GPU | Not yet |
-| **7. Bevy 0.20** | Shaders in WESL; the skinning override redone, after `bevy-inspector-egui` supports it (D31) | Every check passes and the sheets match the 0.19 ones | Not yet |
+| **7. Bevy 0.20** | Shaders in WESL; the skinning override redone | Every check passes and the sheets match the 0.19 ones | **Done** (2026-10-12), sooner than planned at the developers' request, with the inspector on its open port (D31): the forearm and gear sheets match 0.19's pixel for pixel ([research/bevy-0-20-upgrade.md](../research/bevy-0-20-upgrade.md)) |
 
 ## Risks
 
@@ -129,7 +129,6 @@ Each phase ends when its checks pass in the build and a person has looked at the
 | Weight inpainting is slow or unstable on generated meshes | The rig check on the transferred weights | Fall back to nearest weights with smoothing for the parts it fails on |
 | Pose-only clipping on loose parts, which no push can fix | The gear check | Helper and spring bones (phase 5), not pushes |
 | A third-party clip misbehaves | The clip check | Check the author's current version first; replace the clip |
-| Bevy 0.20 breaks the skinning override | A spike at the start of phase 7 | Stay on 0.19 (D31) until it works |
 
 ## Open questions
 

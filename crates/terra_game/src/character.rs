@@ -13,7 +13,7 @@
 //!
 //! A body hides the skin under what it wears: a look lists the patches of skin it covers
 //! (`{"covers": [..]}`, worked out by `fit_gear.py`), and the body's material collapses those
-//! patches while it is worn (`BodyMask`, `body_mask.wgsl`). Bodies with the same mask share
+//! patches while it is worn (`BodyMask`, `body_mask.wesl`). Bodies with the same mask share
 //! one material.
 //!
 //! Something held is used at one angle and carried at another: swung, the grip holds it as
@@ -126,7 +126,7 @@ pub type BodyMaterial = ExtendedMaterial<StandardMaterial, BodyMask>;
 pub const PATCHES: u32 = 1024;
 
 /// Which of a body's patches are hidden, one bit each. Field order must match
-/// body_mask.wgsl.
+/// body_mask.wesl.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Copy, Default, PartialEq)]
 pub struct BodyMask {
     #[uniform(100)]
@@ -155,11 +155,11 @@ impl BodyMask {
 
 impl MaterialExtension for BodyMask {
     fn vertex_shader() -> ShaderRef {
-        "shaders/body_mask.wgsl".into()
+        "shaders/body_mask.wesl".into()
     }
 
     fn prepass_vertex_shader() -> ShaderRef {
-        "shaders/body_mask.wgsl".into()
+        "shaders/body_mask.wesl".into()
     }
 }
 

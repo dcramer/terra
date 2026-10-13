@@ -8,6 +8,7 @@
 //! What can be set, and how it is saved, is in `controls.rs`. Every change is saved as
 //! it is made.
 
+use super::button::{button, left_click, pointer_on};
 use super::camera::grab_mouse;
 use super::controls::{Action, Binding, FIELD_OF_VIEW, LOOK_SPEED, Settings, VOLUME, capitalised};
 use super::inventory::InventoryScreen;
@@ -16,7 +17,9 @@ use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::{
     input::mouse::{AccumulatedMouseScroll, MouseScrollUnit},
+    picking::hover::Hovered,
     prelude::*,
+    ui::Pressed,
     window::{CursorOptions, MonitorSelection, PresentMode, PrimaryWindow, WindowMode},
 };
 
@@ -215,7 +218,7 @@ fn setup(mut commands: Commands) {
     let button = |control: Control, width: f32| {
         (
             control,
-            Button,
+            button(),
             Node {
                 width: px(width),
                 height: px(ROW_HEIGHT - 3.0),
@@ -523,8 +526,8 @@ fn listen(
 /// Clicks on the menu. A right-click on a control clears it.
 fn press(
     mouse: Res<ButtonInput<MouseButton>>,
-    clicked: Query<(&Interaction, &Control), Changed<Interaction>>,
-    pointed: Query<(&Interaction, &Control)>,
+    clicked: Query<&Control, Added<Pressed>>,
+    pointed: Query<(&Hovered, &Control)>,
     saving: Res<Saving>,
     mut menu: ResMut<OptionsMenu>,
     mut settings: ResMut<Settings>,
@@ -533,8 +536,8 @@ fn press(
         return;
     }
     if mouse.just_pressed(MouseButton::Right) {
-        for (interaction, &control) in &pointed {
-            if let (Interaction::Hovered, Control::Bind(action, slot)) = (interaction, control) {
+        for (hovered, &control) in &pointed {
+            if let (true, Control::Bind(action, slot)) = (hovered.get(), control) {
                 settings.bind(action, slot, None);
                 if saving.0 {
                     settings.save();
@@ -542,10 +545,10 @@ fn press(
             }
         }
     }
-    for (interaction, &control) in &clicked {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    if !left_click(&mouse) {
+        return;
+    }
+    for &control in &clicked {
         match control {
             Control::Change(general, up) => general.change(&mut settings, up),
             Control::Bind(action, slot) => {
@@ -572,7 +575,7 @@ fn draw(
     menu: Res<OptionsMenu>,
     settings: Res<Settings>,
     mut screen: Single<&mut Visibility, With<Screen>>,
-    mut buttons: Query<(&Interaction, &Control, &mut BackgroundColor)>,
+    mut buttons: Query<(&Hovered, Has<Pressed>, &Control, &mut BackgroundColor)>,
     mut texts: Query<(&Shows, &mut Text)>,
 ) {
     let wanted = if menu.open {
@@ -586,11 +589,11 @@ fn draw(
     if !menu.open {
         return;
     }
-    for (interaction, control, mut background) in &mut buttons {
+    for (hovered, pressed, control, mut background) in &mut buttons {
         let waiting = matches!(control, Control::Bind(action, slot) if menu.listening == Some((*action, *slot)));
         let colour = if waiting {
             PICKED
-        } else if *interaction != Interaction::None {
+        } else if pointer_on(hovered, pressed) {
             POINTED
         } else {
             PLAIN

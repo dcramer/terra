@@ -11,6 +11,7 @@
 
 use super::IsLocalPlayer;
 use super::build_menu::BuildMenu;
+use super::button::{button, left_click, pointer_on};
 use super::camera::grab_mouse;
 use super::controls::{Action, Settings};
 use super::dial::Dial;
@@ -20,7 +21,9 @@ use super::told::Notice;
 use super::vitals::Vitals;
 use crate::{character, icons};
 use bevy::{
+    picking::hover::Hovered,
     prelude::*,
+    ui::Pressed,
     window::{CursorGrabMode, CursorOptions},
 };
 use std::collections::HashMap;
@@ -318,7 +321,7 @@ fn setup(mut commands: Commands) {
                                     sheet
                                         .spawn((
                                             GearBox(slot),
-                                            Button,
+                                            button(),
                                             Node {
                                                 width: px(170),
                                                 min_height: px(54),
@@ -412,7 +415,7 @@ fn use_keys(
     menu: Res<OptionsMenu>,
     dial: Res<Dial>,
     build_menu: Res<BuildMenu>,
-    shown: Query<(&Interaction, &Shown)>,
+    shown: Query<(&Hovered, Has<Pressed>, &Shown)>,
     window: Single<(&Window, &mut CursorOptions)>,
     mut screen: ResMut<InventoryScreen>,
     mut belongings: Belongings,
@@ -439,8 +442,8 @@ fn use_keys(
     }
     let pointed = shown
         .iter()
-        .find(|(interaction, _)| **interaction != Interaction::None)
-        .map(|(_, shown)| shown.0);
+        .find(|(hovered, pressed, _)| pointer_on(hovered, *pressed))
+        .map(|(_, _, shown)| shown.0);
     for (slot, key) in NUMBERS.into_iter().enumerate() {
         if !keys.just_pressed(key) {
             continue;
@@ -457,8 +460,9 @@ fn use_keys(
 /// when it is clicked. What cannot be done is said above the bar.
 fn click(
     screen: Res<InventoryScreen>,
-    shown: Query<(&Interaction, &Shown), Changed<Interaction>>,
-    boxes: Query<(&Interaction, &GearBox), Changed<Interaction>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    shown: Query<&Shown, Added<Pressed>>,
+    boxes: Query<&GearBox, Added<Pressed>>,
     mut belongings: Belongings,
     mut vitals: Single<&mut Vitals, IsLocalPlayer>,
     mut notice: ResMut<Notice>,
@@ -466,14 +470,14 @@ fn click(
     let Some(mut belongings) = belongings.mine() else {
         return;
     };
-    if !screen.open {
+    if !screen.open || !left_click(&mouse) {
         return;
     }
     let mut result = None;
-    for (interaction, shown) in &shown {
+    for shown in &shown {
         // Food is eaten.
         let filling = belongings.items().food(shown.1);
-        if *interaction == Interaction::Pressed && filling > 0.0 && belongings.eat(shown.1) {
+        if filling > 0.0 && belongings.eat(shown.1) {
             vitals.eat(filling);
             let name = belongings.items().name(shown.1).to_lowercase();
             notice.say(format!("Ate {name}"));
@@ -484,12 +488,12 @@ fn click(
             .catalogue
             .get(shown.1)
             .is_ok_and(|def| def.gear.is_some());
-        if *interaction == Interaction::Pressed && is_gear {
+        if is_gear {
             result = Some(belongings.wear(shown.0));
         }
     }
-    for (interaction, gear_box) in &boxes {
-        if *interaction == Interaction::Pressed && belongings.gear().worn(gear_box.0).is_some() {
+    for gear_box in &boxes {
+        if belongings.gear().worn(gear_box.0).is_some() {
             result = Some(belongings.take_off(gear_box.0));
         }
     }
@@ -600,7 +604,7 @@ fn lay_out(
             };
             area.spawn((
                 Shown(placed.item.id, kind),
-                Button,
+                button(),
                 cell(
                     placed.at.x as f32,
                     placed.at.y as f32,
@@ -660,8 +664,14 @@ fn draw(
         (&Slot, &mut BackgroundColor, &mut BorderColor),
         (Without<Shown>, Without<GearBox>),
     >,
-    mut shown: Query<(&Interaction, &Shown, &mut BorderColor), (Without<Slot>, Without<GearBox>)>,
-    mut boxes: Query<(&Interaction, &GearBox, &mut BorderColor), (Without<Slot>, Without<Shown>)>,
+    mut shown: Query<
+        (&Hovered, Has<Pressed>, &Shown, &mut BorderColor),
+        (Without<Slot>, Without<GearBox>),
+    >,
+    mut boxes: Query<
+        (&Hovered, Has<Pressed>, &GearBox, &mut BorderColor),
+        (Without<Slot>, Without<Shown>),
+    >,
     mut icons: ResMut<ItemIcons>,
     assets: Res<AssetServer>,
     mut icon_nodes: Query<(&IconAt, &mut ImageNode, &mut Node)>,
@@ -769,8 +779,8 @@ fn draw(
     }
 
     let mut about = " ".to_string();
-    for (interaction, shown, mut border) in &mut shown {
-        let pointed = *interaction != Interaction::None;
+    for (hovered, pressed, shown, mut border) in &mut shown {
+        let pointed = pointer_on(hovered, pressed);
         outline(&mut border, pointed);
         if !pointed {
             continue;
@@ -801,8 +811,8 @@ fn draw(
             (None, None) => format!("{name}.  A raw item, for building."),
         };
     }
-    for (interaction, gear_box, mut border) in &mut boxes {
-        let pointed = *interaction != Interaction::None;
+    for (hovered, pressed, gear_box, mut border) in &mut boxes {
+        let pointed = pointer_on(hovered, pressed);
         outline(&mut border, pointed);
         if pointed && let Some(item) = gear.worn(gear_box.0) {
             about = format!("{}.  Click to take it off.", items.name(item.kind));

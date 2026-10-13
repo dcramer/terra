@@ -1,24 +1,26 @@
 // Moves textured foliage in the wind: leaf cards, fern fronds and the trees they hang on,
 // for the lush-forest spike (crates/terra_sandbox/src/experiments/lush.rs). The same as
-// wind.wgsl, except that how much a vertex moves comes from its second texture coordinate,
+// wind.wesl, except that how much a vertex moves comes from its second texture coordinate,
 // so the first is free for the leaf or bark texture: x is how far it bends with the whole
 // plant, y how much it flutters on its own.
 
-#import bevy_pbr::{
+import bevy_pbr::render::{
     mesh_functions,
     view_transformations::position_world_to_clip,
-}
+};
 
-#ifdef PREPASS_PIPELINE
-#import bevy_pbr::prepass_io::{Vertex, VertexOutput}
-#import bevy_render::globals::Globals
-@group(0) @binding(1) var<uniform> globals: Globals;
-#else
-#import bevy_pbr::{
-    forward_io::{Vertex, VertexOutput},
+@if(PREPASS_PIPELINE)
+import bevy_pbr::prepass::io::{Vertex, VertexOutput, decompress_vertex};
+@if(PREPASS_PIPELINE)
+import bevy_render::globals::Globals;
+@if(!PREPASS_PIPELINE)
+import bevy_pbr::render::{
+    forward_io::{Vertex, VertexOutput, decompress_vertex},
     mesh_view_bindings::globals,
-}
-#endif
+};
+
+@if(PREPASS_PIPELINE)
+@group(0) @binding(1) var<uniform> globals: Globals;
 
 // Field order must match FoliageExtension in lush.rs.
 struct Wind {
@@ -26,7 +28,7 @@ struct Wind {
     strength: f32,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(100)
+@group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> wind: Wind;
 
 fn sway(world: vec3<f32>, weights: vec2<f32>) -> vec3<f32> {
@@ -44,59 +46,45 @@ fn sway(world: vec3<f32>, weights: vec2<f32>) -> vec3<f32> {
 }
 
 @vertex
-fn vertex(vertex: Vertex) -> VertexOutput {
+fn vertex(vertex_in: Vertex) -> VertexOutput {
     var out: VertexOutput;
-    let world_from_local = mesh_functions::get_world_from_local(vertex.instance_index);
+    let vertex = decompress_vertex(vertex_in, vertex_in.instance_index);
+    let world_from_local = mesh_functions::get_world_from_local(vertex_in.instance_index);
     var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(vertex.position, 1.0));
-#ifdef VERTEX_UVS_B
+@if(VERTEX_UVS_B)
     world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv_b), 1.0);
-#endif
-#ifdef VERTEX_UVS_A
+@if(VERTEX_UVS_A)
     out.uv = vertex.uv;
-#endif
-#ifdef VERTEX_UVS_B
+@if(VERTEX_UVS_B)
     out.uv_b = vertex.uv_b;
-#endif
     out.world_position = world;
     out.position = position_world_to_clip(world.xyz);
 
-#ifdef PREPASS_PIPELINE
-
-#ifdef UNCLIPPED_DEPTH_ORTHO_EMULATION
+@if(PREPASS_PIPELINE) {
+@if(UNCLIPPED_DEPTH_ORTHO_EMULATION) {
     out.unclipped_depth = out.position.z;
     out.position.z = min(out.position.z, 1.0);
-#endif
-#ifdef NORMAL_PREPASS_OR_DEFERRED_PREPASS
-#ifdef VERTEX_NORMALS
-    out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex.instance_index);
-#endif
-#endif
-#ifdef MOTION_VECTOR_PREPASS
-    let previous_from_local = mesh_functions::get_previous_world_from_local(vertex.instance_index);
+}
+@if(NORMAL_PREPASS_OR_DEFERRED_PREPASS && VERTEX_NORMALS)
+    out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
+@if(MOTION_VECTOR_PREPASS) {
+    let previous_from_local = mesh_functions::get_previous_world_from_local(vertex_in.instance_index);
     var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(vertex.position, 1.0));
-#ifdef VERTEX_UVS_B
+@if(VERTEX_UVS_B)
     previous = vec4<f32>(previous.xyz + sway(previous.xyz, vertex.uv_b), 1.0);
-#endif
     out.previous_world_position = previous;
-#endif
-
-#else // PREPASS_PIPELINE
-
-#ifdef VERTEX_NORMALS
-    out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex.instance_index);
-#endif
-#ifdef VERTEX_COLORS
+}
+} @else {
+@if(VERTEX_NORMALS)
+    out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
+@if(VERTEX_COLORS)
     out.color = vertex.color;
-#endif
+}
 
-#endif // PREPASS_PIPELINE
-
-#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
-    out.instance_index = vertex.instance_index;
-#endif
-#ifdef VISIBILITY_RANGE_DITHER
+@if(VERTEX_OUTPUT_INSTANCE_INDEX)
+    out.instance_index = vertex_in.instance_index;
+@if(VISIBILITY_RANGE_DITHER)
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
-        vertex.instance_index, world_from_local[3]);
-#endif
+        vertex_in.instance_index, world_from_local[3]);
     return out;
 }

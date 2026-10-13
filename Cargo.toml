@@ -18,13 +18,16 @@ terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
 terra_sim = { path = "crates/terra_sim" }
 terra_voxel = { path = "crates/terra_voxel" }
-# The same version Bevy 0.19 uses, so vectors pass between our crates and Bevy unchanged.
+# The same version Bevy 0.20 uses, so vectors pass between our crates and Bevy unchanged.
 # `libm` routes its trigonometry through the portable maths library (D30).
-glam = { version = "0.32", features = ["libm"] }
+glam = { version = "0.33", features = ["libm"] }
 # Pinned by policy (D31): upgrade once the crates we depend on support the new release.
 # `jpeg`: models made with Tripo carry JPEG textures.
-bevy = { version = "0.19", features = ["free_camera", "bevy_dev_tools", "file_watcher", "jpeg"] }
-bevy-inspector-egui = "0.37"
+bevy = { version = "0.20", features = ["free_camera", "bevy_dev_tools", "file_watcher", "jpeg"] }
+# No release of the inspector supports Bevy 0.20 yet (0.37 is for 0.19), so this is the
+# open pull request that ports it (jakobhellermann/bevy-inspector-egui#324), pinned to an
+# exact commit. Return to a crates.io release as soon as one supports Bevy 0.20 (D31).
+bevy-inspector-egui = { git = "https://github.com/taboky-dev/bevy-inspector-egui", rev = "9a5b0866ec764ab9baec0f1361f4edac2ea0e764" }
 libm = "0.2"
 # Already built for Bevy; used to save worlds and, later, to send operations (D21).
 serde = { version = "1", features = ["derive"] }

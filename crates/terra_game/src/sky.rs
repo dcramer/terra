@@ -1,5 +1,5 @@
 //! A sky: the inside of a large sphere around the camera, drawn by
-//! `assets/shaders/sky.wgsl`, which reloads when saved.
+//! `assets/shaders/sky.wesl`, which reloads when saved.
 //!
 //! An experiment that wants one adds [`SkyPlugin`] and a [`Sky`] saying what it looks like.
 //! The sun's place in it follows the sandbox's tweaks.
@@ -79,7 +79,7 @@ struct SkyMaterial {
 
 impl Material for SkyMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/sky.wgsl".into()
+        "shaders/sky.wesl".into()
     }
 }
 

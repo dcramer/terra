@@ -2,10 +2,10 @@
 // sun, thinning to black as the camera climbs out of the air. At night, stars that turn
 // with the sky, and a moon opposite the sun.
 
-#import bevy_pbr::{
+import bevy_pbr::render::{
     forward_io::VertexOutput,
     mesh_view_bindings::{globals, view},
-}
+};
 
 // Field order must match SkyMaterial in sky.rs.
 struct Sky {
@@ -21,7 +21,7 @@ struct Sky {
     spin: f32,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> sky: Sky;
 
 // Cheap smooth noise for clouds: random values on a grid, blended between.
