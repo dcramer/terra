@@ -674,6 +674,9 @@ fn draw_blocks(
 ) -> [Surfaces; 3] {
     let base = section.base;
     let mut sets: [BTreeSet<[i32; 3]>; 3] = Default::default();
+    // Cubes cut to a shape (D193), drawn apart from the whole ones: halves and slopes as
+    // the surface cut down to their tops, stairs as a stone a tread, posts as drums.
+    let mut shaped: [BTreeSet<[i32; 3]>; 3] = Default::default();
     // A gable's cubes, with the roof's underside over each, which cuts them.
     let mut gables: BTreeMap<[i32; 3], [[i32; 3]; 3]> = BTreeMap::new();
     for (_, piece, stage) in own.iter().chain(edge).copied() {
@@ -693,12 +696,26 @@ fn draw_blocks(
             (Stage::Ghost, _) => 1,
             (Stage::Left, _) => continue,
         };
-        sets[set].insert(cube.to_array());
+        let cut = base.cube(*cube).is_some_and(|c| c.shape.is_cut());
+        if cut {
+            shaped[set].insert(cube.to_array());
+        } else {
+            sets[set].insert(cube.to_array());
+        }
     }
+    let shape_of = |cube: IVec3| base.cube(cube).map_or(crate::Shape::Whole, |c| c.shape);
     let cut = |cube: IVec3, at: Vec3| {
-        gables
+        let roof = gables
             .get(&cube.to_array())
-            .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at))
+            .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at));
+        let (u, v) = (at.x / CELL_M - cube.x as f32, at.z / CELL_M - cube.z as f32);
+        let own = match shape_of(cube) {
+            crate::Shape::Half | crate::Shape::Slope(_) => {
+                (cube.y as f32 + shape_of(cube).top(u, v)) * CELL_M
+            }
+            _ => f32::MAX,
+        };
+        roof.min(own)
     };
     let look = block_look(kit, detail.steps());
     let (relief, top) = if matches!(detail, Detail::Near | Detail::Mid) {
@@ -742,7 +759,7 @@ fn draw_blocks(
         Surfaces::sharing(),
     ];
     for set in 0..3 {
-        if sets[set].is_empty() || (set == 1 && !first) {
+        if (sets[set].is_empty() && shaped[set].is_empty()) || (set == 1 && !first) {
             continue;
         }
         // What is built hides what is not; the rest show their own faces.
@@ -768,6 +785,75 @@ fn draw_blocks(
             out[set].of(Material::Masonry),
             &mut tops,
         );
+        // Halves and slopes: the surface of each run of them cut down to its tops, hidden
+        // where whole cubes are against them.
+        let ours_whole = |at: IVec3| {
+            base.cube(at)
+                .is_some_and(|c| c.kind == kit.kind() && c.fill == Fill::Solid && !c.shape.is_cut())
+        };
+        let cut_down: BTreeSet<[i32; 3]> = shaped[set]
+            .iter()
+            .copied()
+            .filter(|&at| {
+                matches!(
+                    shape_of(IVec3::from_array(at)),
+                    crate::Shape::Half | crate::Shape::Slope(_)
+                )
+            })
+            .collect();
+        if !cut_down.is_empty() {
+            let hides = |at: IVec3| hides(at) || ours_whole(at);
+            crate::surface::draw_part(
+                &cut_down,
+                &keep,
+                &hides,
+                look,
+                heights,
+                &cut,
+                [1.0; 3],
+                out[set].of(Material::Masonry),
+                &mut tops,
+            );
+        }
+        // Stairs, a stone a tread, and posts, a drum a cube.
+        let pillar = match kit.dress.roles.get(&layout::Role::Post) {
+            Some(crate::kit::Dress::Pillar { width }) => *width,
+            _ => CELL_M,
+        };
+        let mut faces = Surface {
+            sharing: true,
+            ..Surface::default()
+        };
+        for &at in &shaped[set] {
+            let cube = IVec3::from_array(at);
+            if !keep(cube) {
+                continue;
+            }
+            let low = cube.as_vec3() * CELL_M;
+            let half = CELL_M * 0.5;
+            let boxes: Vec<(Vec3, Vec3)> = match shape_of(cube) {
+                crate::Shape::Stair(facing) => {
+                    let mut back = (low.with_y(low.y + half), low + Vec3::splat(CELL_M));
+                    let a = if facing.step().x != 0 { 0 } else { 2 };
+                    if facing.step()[a] > 0 {
+                        back.0[a] += half;
+                    } else {
+                        back.1[a] -= half;
+                    }
+                    vec![(low, low + Vec3::new(CELL_M, half, CELL_M)), back]
+                }
+                crate::Shape::Post => {
+                    let middle = low + Vec3::new(half, 0.0, half);
+                    let reach = Vec3::new(pillar * 0.5, 0.0, pillar * 0.5);
+                    vec![(middle - reach, middle + reach + Vec3::Y * CELL_M)]
+                }
+                _ => Vec::new(),
+            };
+            for (min, max) in boxes {
+                crate::surface::slab(min, max, look, heights, [1.0; 3], &mut faces, &mut tops);
+            }
+        }
+        out[set].of(Material::Masonry).append(faces);
         out[set].of(Material::Floor).append(tops);
     }
     out
@@ -854,6 +940,21 @@ fn ghost(piece: &Piece, kit: &Kit, shade: bool) -> Option<Ghost> {
             Some(boxed(a.min(b), a.max(b)))
         }
         Piece::Corner { .. } => None,
+        // A cut cube's band along its line, out of its face and up from it.
+        Piece::Band { from, to, side, .. } => {
+            let (from, to) = (from.metres(), to.metres());
+            let out = side.step().as_vec3();
+            let up = (to - from).normalize_or(Vec3::X).cross(out);
+            let up = up * up.y.signum();
+            along(
+                from + out * 0.01,
+                to + out * 0.01,
+                up,
+                0.1,
+                0.12,
+                Shape::Box,
+            )
+        }
         Piece::Covering {
             corners, middle, ..
         } => {

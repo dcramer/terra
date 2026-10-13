@@ -270,6 +270,16 @@ fn dress(kit: &Kit, fail: &mut dyn FnMut(String)) {
                     fail(format!("{role:?}'s member is {scale} times a log"));
                 }
             }
+            Dress::Pillar { width } => {
+                if *role != crate::layout::Role::Post {
+                    fail(format!(
+                        "dresses {role:?} with a pillar, which only posts are"
+                    ));
+                }
+                if !(0.1..=CELL_M).contains(width) {
+                    fail(format!("its pillars are {width} m wide, not within a cube"));
+                }
+            }
         }
     }
 }

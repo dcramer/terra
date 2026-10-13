@@ -13,6 +13,10 @@ use glam::{IVec2, IVec3, Vec3};
 /// How far into a cube a piece must reach to stand in it.
 const SLIVER_M: f32 = 0.05;
 
+/// How far from the middle of a walker's feet, as a fraction of their radius, what is
+/// under them holds them up.
+const FOOT_REACH: f32 = 0.6;
+
 /// The size of something walking through a base.
 #[derive(Clone, Copy, Debug)]
 pub struct Walker {
@@ -74,9 +78,15 @@ impl Base {
     }
 
     /// The layers of a column of cubes that hold a walker up or stop them, with their
-    /// bottoms and tops: each cube to its fill, as high as its shape reaches. Openings and
-    /// planned cubes with nothing in them are walked through.
-    fn solid_layers(&self, column: IVec2) -> impl Iterator<Item = (f32, f32)> + '_ {
+    /// bottoms and tops at a point over it: each cube to its fill, as high as its shape's
+    /// top there (a stair's step, a slope's ramp, a half). Openings and planned cubes with
+    /// nothing in them are walked through.
+    fn solid_layers(&self, at: Vec3) -> impl Iterator<Item = (f32, f32)> + '_ {
+        let column = column_at(at);
+        let (u, v) = (
+            (at.x / CELL_M - column.x as f32).clamp(0.0, 1.0),
+            (at.z / CELL_M - column.y as f32).clamp(0.0, 1.0),
+        );
         // A door or shutters fitted and shut stops a walker; open, it lets them by.
         let shut = self
             .props()
@@ -99,7 +109,7 @@ impl Base {
                 }
                 let bottom = layer as f32 * CELL_M;
                 let fill = f32::from(cube.level()) / f32::from(FULL);
-                Some((bottom, bottom + CELL_M * fill.min(cube.shape.height())))
+                Some((bottom, bottom + CELL_M * fill.min(cube.shape.top(u, v))))
             })
             .chain(shut)
     }
@@ -108,7 +118,19 @@ impl Base {
     /// a pitched roof, in that column that is no more than a step above them. `None` if
     /// the base offers nothing there, in which case the ground decides.
     pub fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
-        let tops = self.solid_layers(column_at(point)).map(|(_, top)| top);
+        // Under the feet, which are as wide as the body is near enough: a step's edge a
+        // little ahead is stood on as the body reaches it, as a capsule climbs a stair.
+        let reach = walker.radius * FOOT_REACH;
+        let feet = [
+            Vec3::ZERO,
+            Vec3::X * reach,
+            Vec3::NEG_X * reach,
+            Vec3::Z * reach,
+            Vec3::NEG_Z * reach,
+        ];
+        let tops = feet
+            .into_iter()
+            .flat_map(move |offset| self.solid_layers(point + offset).map(|(_, top)| top));
         // A pitched roof is stood on where it is.
         let pitched = self.sections().iter().filter_map(|section| {
             let rise = section.rise(glam::Vec2::new(point.x, point.z))?;
@@ -123,9 +145,7 @@ impl Base {
     /// underside, over it.
     pub fn ceiling(&self, point: Vec3) -> Option<f32> {
         let above = point.y + 0.1;
-        let bottoms = self
-            .solid_layers(column_at(point))
-            .map(|(bottom, _)| bottom);
+        let bottoms = self.solid_layers(point).map(|(bottom, _)| bottom);
         let pitched = self.sections().iter().filter_map(|section| {
             let rise = section.rise(glam::Vec2::new(point.x, point.z))?;
             Some((section.storey() + 1) as f32 * STOREY_M + rise - crate::mesh::ROOF_THICK_M)
@@ -157,9 +177,10 @@ impl Base {
                 let stopped = [-walker.radius, 0.0, walker.radius].iter().any(|&shift| {
                     let mut beside = at;
                     beside[sideways] += shift;
-                    let mut next = column_at(beside);
-                    next[index] += direction as i32;
-                    self.blocks(next, at.y, walker)
+                    // Just over the edge into the next column, where its shape's top is
+                    // met: a stair's lower step, a slope's foot.
+                    beside[axis] = edge + direction * 0.01;
+                    self.blocks(beside, at.y, walker)
                 });
                 if reaches_edge && stopped {
                     wanted = edge - direction * (walker.radius + 0.01);
@@ -175,11 +196,11 @@ impl Base {
         at
     }
 
-    /// Whether a column of cubes has something solid where a walker's body would be,
-    /// above what they can step up.
-    fn blocks(&self, column: IVec2, feet: f32, walker: &Walker) -> bool {
+    /// Whether the column of cubes at a point has something solid there where a walker's
+    /// body would be, above what they can step up.
+    fn blocks(&self, at: Vec3, feet: f32, walker: &Walker) -> bool {
         let (low, high) = (feet + walker.step_up, feet + walker.height);
-        self.solid_layers(column)
+        self.solid_layers(at)
             .any(|(bottom, top)| top > low && bottom < high)
     }
 }
@@ -383,36 +404,108 @@ mod tests {
         assert_eq!(base.ceiling(Vec3::new(6.0, 0.0, 1.0)), None);
     }
 
+    /// A base of one cube of a shape at the origin.
+    fn shaped(shape: crate::Shape) -> Base {
+        use crate::{Cube, Fill};
+        let mut base = Base::default();
+        base.apply(BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [0, 0, 0],
+            cube: Some(Cube {
+                shape,
+                ..Cube::new(Kind::PLAIN, Fill::Solid)
+            }),
+        });
+        base
+    }
+
     #[test]
-    fn a_half_cube_is_stepped_onto_and_a_whole_stair_or_slope_is_not() {
-        use crate::{Cube, Facing, Fill, Shape};
+    fn a_half_cube_is_stepped_onto_and_a_whole_one_or_a_stair_or_slope_from_its_top_is_not() {
+        use crate::{Facing, Shape};
         let w = walker();
-        for shape in [
-            Shape::Half,
-            Shape::Whole,
-            Shape::Stair(Facing::East),
-            Shape::Slope(Facing::West),
+        // Each walked at from the west; the stair and slope rise toward the west, so their
+        // high side faces the walker.
+        for (shape, top) in [
+            (Shape::Half, CELL_M * 0.5),
+            (Shape::Whole, CELL_M),
+            (Shape::Post, CELL_M),
+            (Shape::Stair(Facing::West), CELL_M),
+            (Shape::Slope(Facing::West), CELL_M),
         ] {
-            let mut base = Base::default();
-            base.apply(BuildOp::Fill {
-                min: [0, 0, 0],
-                max: [0, 0, 0],
-                cube: Some(Cube {
-                    shape,
-                    ..Cube::new(Kind::PLAIN, Fill::Solid)
-                }),
-            });
-            let top = if shape == Shape::Half {
-                CELL_M * 0.5
-            } else {
-                CELL_M
-            };
-            let over = Vec3::new(CELL_M * 0.5, 0.3, CELL_M * 0.5);
-            assert_eq!(base.support(over, &w), Some(top), "{shape:?}");
-            // Walked at from the west: passed over if it is lower than a step.
+            let base = shaped(shape);
+            let near = Vec3::new(0.0, 0.3, CELL_M * 0.5);
+            assert_eq!(base.support(near, &w), Some(top), "{shape:?}");
             let (from, to) = (Vec3::new(-1.0, 0.0, 0.25), Vec3::new(1.5, 0.0, 0.25));
             let passed = (stroll(&base, from, to) - to).length() < 0.01;
             assert_eq!(passed, top <= w.step_up, "{shape:?}");
+        }
+    }
+
+    #[test]
+    fn a_stair_holds_a_walker_on_its_two_steps_and_a_slope_on_its_ramp() {
+        use crate::{Facing, Shape};
+        let w = walker();
+        // Rising east: the west half is the lower step, the east half the upper.
+        let stair = shaped(Shape::Stair(Facing::East));
+        let at = |u: f32, y: f32| Vec3::new(u * CELL_M, y, CELL_M * 0.5);
+        assert_eq!(stair.support(at(0.2, 0.0), &w), Some(CELL_M * 0.5));
+        assert_eq!(stair.support(at(0.8, 0.25), &w), Some(CELL_M));
+        // Walked at from the low side, it is stepped onto.
+        let (from, to) = (Vec3::new(-1.0, 0.0, 0.25), Vec3::new(0.1, 0.0, 0.25));
+        assert!((stroll(&stair, from, to) - to).length() < 0.01);
+        let slope = shaped(Shape::Slope(Facing::South));
+        // Under a point, not the width of feet.
+        let point = Walker { radius: 0.0, ..w };
+        for v in [0.1, 0.5, 0.9] {
+            let height = slope
+                .support(Vec3::new(0.25, CELL_M, v * CELL_M), &point)
+                .unwrap();
+            assert!((height - v * CELL_M).abs() < 1e-5, "{v}: {height}");
+        }
+        // Under a stair's upper step there is nothing to hold a walker, and nothing over.
+        assert_eq!(stair.ceiling(at(0.8, -2.0)), Some(0.0));
+    }
+
+    /// Walks a flight in small steps, each frame stood on what holds the feet up, as the
+    /// game does.
+    fn climb(base: &Base, from: Vec3, to: Vec3) -> Vec3 {
+        let w = walker();
+        let mut at = from;
+        for i in 1..=600 {
+            let target = from.lerp(to, i as f32 / 600.0);
+            at = base.walk(at, Vec3::new(target.x, at.y, target.z), &w);
+            at.y = base.support(at, &w).unwrap_or(0.0).max(0.0);
+        }
+        at
+    }
+
+    #[test]
+    fn a_flight_of_stairs_or_a_ramp_is_walked_up_a_storey() {
+        use crate::{Cube, Facing, Fill, Shape};
+        for top in [Shape::Stair(Facing::North), Shape::Slope(Facing::North)] {
+            // Six columns rising north, each a cube higher, whole cubes under each top.
+            let mut base = Base::default();
+            for i in 0..6 {
+                let z = -i;
+                if i > 0 {
+                    base.apply(BuildOp::Fill {
+                        min: [0, 0, z],
+                        max: [1, i - 1, z],
+                        cube: Some(Cube::new(Kind::PLAIN, Fill::Solid)),
+                    });
+                }
+                base.apply(BuildOp::Fill {
+                    min: [0, i, z],
+                    max: [1, i, z],
+                    cube: Some(Cube {
+                        shape: top,
+                        ..Cube::new(Kind::PLAIN, Fill::Solid)
+                    }),
+                });
+            }
+            let end = climb(&base, Vec3::new(0.5, 0.0, 1.5), Vec3::new(0.5, 0.0, -2.45));
+            assert!(end.y > STOREY_M - 0.1, "{top:?}: up to {end}");
+            assert!(end.z < -2.3, "{top:?}: stopped at {end}");
         }
     }
 

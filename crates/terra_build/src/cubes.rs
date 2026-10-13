@@ -7,7 +7,7 @@
 //! | Bits | Holds |
 //! |---|---|
 //! | 0 to 11 | Its kind, plus one, so 0 is air |
-//! | 12 to 15 | Its shape: whole, half, stair, slope, and, until windows are props, glass and an opening |
+//! | 12 to 15 | Its shape: whole, half, stair, slope, post, and, until windows are props, glass and an opening |
 //! | 16 to 19 | Its fill level while planned, in sixteenths of the cube |
 //! | 20 | Built: all of it in |
 //! | 21 to 23 | The change pending on it |
@@ -76,19 +76,54 @@ pub enum Facing {
 }
 
 impl Facing {
-    const ALL: [Facing; 4] = [Facing::North, Facing::East, Facing::South, Facing::West];
+    pub const ALL: [Facing; 4] = [Facing::North, Facing::East, Facing::South, Facing::West];
+
+    /// A step toward this side, along the floor.
+    pub fn step(self) -> glam::IVec3 {
+        match self {
+            Facing::North => glam::IVec3::NEG_Z,
+            Facing::East => glam::IVec3::X,
+            Facing::South => glam::IVec3::Z,
+            Facing::West => glam::IVec3::NEG_X,
+        }
+    }
+
+    /// Turned a quarter clockwise, seen from above, so many times.
+    pub fn turned(self, quarters: i32) -> Facing {
+        Facing::ALL[(self as i32 + quarters).rem_euclid(4) as usize]
+    }
+
+    pub fn opposite(self) -> Facing {
+        self.turned(2)
+    }
+
+    /// How far a point of a cube's footprint is toward this side, from 0 at the far side to
+    /// 1 at this one, given as fractions of the cube east (`u`) and south (`v`).
+    pub fn toward(self, u: f32, v: f32) -> f32 {
+        match self {
+            Facing::North => 1.0 - v,
+            Facing::East => u,
+            Facing::South => v,
+            Facing::West => 1.0 - u,
+        }
+    }
 }
 
 /// A cube's shape (D193): whole, a stair, a slope or a half, each with its collision from
-/// a table (`walk.rs`).
+/// its top ([`Shape::top`], `walk.rs`); and a post, a column's cube drawn as an upright as
+/// narrow as its kit says, which collides and holds as a whole cube.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Shape {
     #[default]
     Whole,
     /// The lower half.
     Half,
+    /// Two steps, each half the cube's height and half its depth, rising toward the side.
     Stair(Facing),
+    /// A ramp, rising across the cube to its top at the side.
     Slope(Facing),
+    /// A post: a column's cube drawn as an upright, as narrow as its kit says.
+    Post,
 }
 
 impl Shape {
@@ -97,6 +132,38 @@ impl Shape {
         match self {
             Shape::Half => 0.5,
             _ => 1.0,
+        }
+    }
+
+    /// How high its top is over a point of its footprint, as a fraction of the cube, the
+    /// point given as fractions of the cube east (`u`) and south (`v`): what holds a walker
+    /// up there (`walk.rs`).
+    pub fn top(self, u: f32, v: f32) -> f32 {
+        match self {
+            Shape::Whole | Shape::Post => 1.0,
+            Shape::Half => 0.5,
+            Shape::Stair(facing) => {
+                if facing.toward(u, v) < 0.5 {
+                    0.5
+                } else {
+                    1.0
+                }
+            }
+            Shape::Slope(facing) => facing.toward(u, v).clamp(0.0, 1.0),
+        }
+    }
+
+    /// Whether it is a cube cut to a shape, drawn apart from its kind's whole cubes.
+    pub fn is_cut(self) -> bool {
+        !matches!(self, Shape::Whole)
+    }
+
+    /// Turned a quarter clockwise, seen from above, so many times.
+    pub fn turned(self, quarters: i32) -> Shape {
+        match self {
+            Shape::Stair(facing) => Shape::Stair(facing.turned(quarters)),
+            Shape::Slope(facing) => Shape::Slope(facing.turned(quarters)),
+            other => other,
         }
     }
 }
@@ -218,6 +285,7 @@ impl Cube {
             (Fill::Solid, Shape::Half) => 1,
             (Fill::Solid, Shape::Stair(facing)) => 2 + facing as u32,
             (Fill::Solid, Shape::Slope(facing)) => 6 + facing as u32,
+            (Fill::Solid, Shape::Post) => 10,
         };
         let (level, built) = match self.state {
             State::Built => (0, 1),
@@ -244,6 +312,7 @@ impl Cube {
             1 => (Fill::Solid, Shape::Half),
             code @ 2..=5 => (Fill::Solid, Shape::Stair(Facing::ALL[code as usize - 2])),
             code @ 6..=9 => (Fill::Solid, Shape::Slope(Facing::ALL[code as usize - 6])),
+            10 => (Fill::Solid, Shape::Post),
             _ => (Fill::Solid, Shape::Whole),
         };
         let state = if (word >> 20) & 1 == 1 {
@@ -704,7 +773,7 @@ mod tests {
 
     fn every_cube() -> Vec<Cube> {
         let mut all = Vec::new();
-        let shapes = [Shape::Whole, Shape::Half]
+        let shapes = [Shape::Whole, Shape::Half, Shape::Post]
             .into_iter()
             .chain(Facing::ALL.map(Shape::Stair))
             .chain(Facing::ALL.map(Shape::Slope));

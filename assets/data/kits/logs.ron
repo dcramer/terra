@@ -56,8 +56,8 @@
 //             roof cell over these walls
 // dress       each exposed edge dressed by its role (D215): a hewn plate along every
 //             wall's top, a hewn sill on what it stands on, hewn posts up every opening's
-//             sides, a log along every step's nose; and the dirt rising from the ground
-//             and the upper logs weathered grey
+//             sides, a log along every step's nose, a log up every post (D193); and the
+//             dirt rising from the ground and the upper logs weathered grey
 (
     id: 1,
     diameter: 0.3,
@@ -118,6 +118,7 @@
             Foot: Member(profile: Hewn, scale: 1.2, material: Hewn),
             Jamb: Member(profile: Hewn, scale: 0.6, material: Hewn),
             Nose: Member(profile: Round, scale: 1.1, material: Log),
+            Post: Member(profile: Round, scale: 0.9, material: Log),
         },
         masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.3),
     ),

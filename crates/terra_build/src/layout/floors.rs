@@ -20,6 +20,8 @@ const BOARD_PROUD_M: f32 = 0.008;
 const GAP_M: f32 = 0.006;
 /// How wide a rim beam is, and a joist and how deep.
 const RIM_WIDE_M: f32 = 0.08;
+/// How deep each beam of a rim is at most: a deeper rim is built up of beams stacked.
+const RIM_COURSE_M: f32 = 0.24;
 const JOIST_WIDE_M: f32 = 0.1;
 const JOIST_DEEP_M: f32 = 0.2;
 /// How far either way of the middle of a cube the line between its two boards falls, as a
@@ -29,17 +31,31 @@ const SPLIT: f32 = 0.08;
 /// The four ways along the floor.
 const SIDES: [IVec3; 4] = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z];
 
-/// Lays a deck over every cube of the kit's kind that is not in a wall.
-pub(super) fn decks(base: &Base, kit: &Kit, scope: super::Scope, layout: &mut Layout) {
-    let kind = kit.kind();
+/// Lays a deck over every cube of the kit's kind laid as one (`Walls::cell`): its floors and
+/// flat roofs, and the tops of its solid masses.
+pub(super) fn decks(walls: &super::Walls, kit: &Kit, scope: super::Scope, layout: &mut Layout) {
+    let (base, kind) = (walls.base, kit.kind());
     let deck: BTreeSet<[i32; 3]> = base
         .cubes()
-        .filter(|(at, cube)| cube.kind == kind && cube.fill == Fill::Solid && !base.in_wall(*at))
+        .filter(|(at, cube)| cube.kind == kind && walls.cell(*at) == Some(super::Cell::Deck))
         .map(|(at, _)| at.to_array())
         .collect();
+    regions(base, kit, &deck, CELL_M, scope, layout);
+}
+
+/// Lays a deck over each region of cubes joined side by side on a layer, its top so high
+/// over the layer's foot: a cube's height, or half for halves.
+pub(super) fn regions(
+    base: &Base,
+    kit: &Kit,
+    deck: &BTreeSet<[i32; 3]>,
+    height: f32,
+    scope: super::Scope,
+    layout: &mut Layout,
+) {
     let longest = kit.longest.max(CELL_M);
     let mut seen = BTreeSet::new();
-    for &start in &deck {
+    for &start in deck {
         if seen.contains(&start) {
             continue;
         }
@@ -66,7 +82,7 @@ pub(super) fn decks(base: &Base, kit: &Kit, scope: super::Scope, layout: &mut La
         // Boards run on under a wall as far as its members' faces, where it stands on
         // something else beside the deck, as a footing.
         let under_wall = ((CELL_M - kit.diameter) * 0.5).max(0.0);
-        lay_deck(base, &region, longest, under_wall, layout);
+        lay_deck(base, &region, longest, under_wall, height, layout);
     }
 }
 
@@ -76,13 +92,14 @@ fn lay_deck(
     region: &BTreeSet<[i32; 3]>,
     longest: f32,
     under_wall: f32,
+    height: f32,
     layout: &mut Layout,
 ) {
     let cells: Vec<IVec3> = region.iter().map(|&at| IVec3::from_array(at)).collect();
     let low = cells.iter().copied().reduce(IVec3::min).unwrap_or_default();
     let high = cells.iter().copied().reduce(IVec3::max).unwrap_or_default();
     let y = low.y;
-    let top = (y + 1) as f32 * CELL_M;
+    let top = y as f32 * CELL_M + height;
     // Boards along the longer way, joists across them.
     let along_x = high.x - low.x >= high.z - low.z;
     let (along, across) = if along_x {
@@ -176,7 +193,7 @@ fn lay_deck(
         }
     }
     // Rims along every side of it left open, the length of each run of that side.
-    let beam_high = CELL_M - BOARD_THICK_M;
+    let beam_high = height - BOARD_THICK_M;
     for side in SIDES {
         let runs_along = if side.dot(along) != 0 { across } else { along };
         let open = |at: IVec3| {
@@ -193,23 +210,29 @@ fn lay_deck(
             for (from, to) in runs(first..=last, |k| open(at_of(k))) {
                 let face = (line as f32 + 0.5 + side.dot(side.abs()) as f32 * 0.5) * CELL_M
                     - side.dot(side.abs()) as f32 * RIM_WIDE_M * 0.5;
-                let height = y as f32 * CELL_M + beam_high * 0.5;
-                let on = |k: f32| {
-                    side.abs().as_vec3() * face + runs_along.as_vec3() * k + Vec3::Y * height
-                };
-                layout.pieces.push(Piece::Plank {
-                    from: Place::near(on(from as f32 * CELL_M)),
-                    to: Place::near(on((to + 1) as f32 * CELL_M)),
-                    wide: ticks(RIM_WIDE_M),
-                    high: ticks(beam_high),
-                    seed: hash(&[
-                        0x41b,
-                        line as u32,
-                        from as u32,
-                        side.x as u32,
-                        side.z as u32,
-                    ]),
-                });
+                // In beams a course deep, stacked, as a deep rim is built up.
+                let beams = ((beam_high / RIM_COURSE_M).round() as i32).max(1);
+                let deep = beam_high / beams as f32;
+                for beam in 0..beams {
+                    let height = y as f32 * CELL_M + deep * (beam as f32 + 0.5);
+                    let on = |k: f32| {
+                        side.abs().as_vec3() * face + runs_along.as_vec3() * k + Vec3::Y * height
+                    };
+                    layout.pieces.push(Piece::Plank {
+                        from: Place::near(on(from as f32 * CELL_M)),
+                        to: Place::near(on((to + 1) as f32 * CELL_M)),
+                        wide: ticks(RIM_WIDE_M),
+                        high: ticks(deep - GAP_M),
+                        seed: hash(&[
+                            0x41b,
+                            line as u32,
+                            from as u32,
+                            side.x as u32,
+                            side.z as u32,
+                            beam as u32,
+                        ]),
+                    });
+                }
             }
         }
     }
@@ -367,10 +390,10 @@ mod tests {
         let all = planks(&layout);
         let rims: Vec<_> = all.iter().filter(|p| p.2 == ticks(RIM_WIDE_M)).collect();
         let joists: Vec<_> = all.iter().filter(|p| p.2 == ticks(JOIST_WIDE_M)).collect();
-        // A rim along each of its four sides, their outer faces on its edges.
-        assert_eq!(rims.len(), 4, "{rims:?}");
+        // A rim along each of its four sides, their outer faces on its edges, two beams deep.
+        assert_eq!(rims.len(), 4 * 2, "{rims:?}");
         let rim_length: f32 = rims.iter().map(|(f, t, ..)| f.distance(*t)).sum();
-        assert!((rim_length - 2.0 * (3.0 + 2.0)).abs() < 1e-4);
+        assert!((rim_length - 2.0 * 2.0 * (3.0 + 2.0)).abs() < 1e-4);
         // A joist under each row of cubes along the boards, across the deck.
         assert_eq!(joists.len(), 6);
         // Everything within its cubes.

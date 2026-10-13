@@ -24,7 +24,8 @@ use std::sync::Arc;
 use terra_build::kit::{Pattern, Profile};
 use terra_build::ops::Op;
 use terra_build::{
-    Base, BuildOp, Cube, Fill, Kind, Panel, Prop, RoofSection, RoofStyle, STOREY_CUBES,
+    Base, BuildOp, Cube, Facing, Fill, Kind, Panel, Prop, RoofSection, RoofStyle, STOREY_CUBES,
+    Shape,
 };
 use terra_core::Operation;
 
@@ -92,6 +93,47 @@ fn keen(kind: Kind, solid: bool) -> Vec<BuildOp> {
     ops.push(fill([7, 3, 0], [7, 7, 0], Fill::Solid));
     ops.push(fill([-2, 8, -1], [8, 8, 3], Fill::Solid));
     ops
+}
+
+/// Every shape a cube can be cut to (D193), in a kind: a platform on four posts, reached by
+/// a flight of stairs a metre wide and a ramp beside it, each column whole cubes under its
+/// cut top; a step of halves on the ground; and a post standing alone.
+fn shapes(kind: Kind) -> Vec<BuildOp> {
+    let put = |min: [i32; 3], max: [i32; 3], shape: Shape| BuildOp::Fill {
+        min,
+        max,
+        cube: Some(Cube {
+            shape,
+            ..Cube::new(kind, Fill::Solid)
+        }),
+    };
+    let mut ops = Vec::new();
+    for [x, z] in [[0, 0], [5, 0], [0, 3], [5, 3]] {
+        ops.push(put([x, 0, z], [x, 3, z], Shape::Post));
+    }
+    ops.push(put([0, 4, 0], [5, 4, 3], Shape::Whole));
+    // Up from the south, rising north onto the platform.
+    for step in 0..5 {
+        let z = 8 - step;
+        if step > 0 {
+            ops.push(put([0, 0, z], [3, step - 1, z], Shape::Whole));
+        }
+        ops.push(put([0, step, z], [1, step, z], Shape::Stair(Facing::North)));
+        ops.push(put([2, step, z], [3, step, z], Shape::Slope(Facing::North)));
+    }
+    ops.push(put([-4, 0, 4], [-2, 0, 8], Shape::Half));
+    ops.push(put([7, 0, 6], [7, 5, 6], Shape::Post));
+    ops
+}
+
+/// A floor laid alone on the ground, with no walls: its edges finished as they are.
+fn floor_alone(kind: Kind) -> Vec<BuildOp> {
+    vec![BuildOp::SetFloor {
+        min: [0, 0, 0],
+        max: [7, 0, 5],
+        laid: true,
+        kind,
+    }]
 }
 
 /// Each row: its name, and the operations that make it, in cubes of half a metre. Laid
@@ -234,6 +276,8 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
         }));
         mixed = vec![
             ("Keen's piece in stone", keen(stone, true)),
+            ("shapes in stone", shapes(stone)),
+            ("floor alone in stone", floor_alone(stone)),
             ("stone house", house),
             ("stone plinth", plinth),
             ("stone and logs: L", ell),
@@ -246,6 +290,8 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
     }
     let mut rows = vec![
         ("Keen's piece", keen(kind, false)),
+        ("shapes in logs", shapes(kind)),
+        ("floor alone in logs", floor_alone(kind)),
         ("free end", east_west(0, 5, 0, kind).collect()),
         (
             "corner",
@@ -278,7 +324,10 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
         ("lean-to", roofed(RoofStyle::LeanTo, true)),
     ];
     rows.extend(mixed);
-    rows.extend(hewn.map(|hewn| ("Keen's piece in hewn timber", keen(hewn, false))));
+    if let Some(hewn) = hewn {
+        rows.push(("Keen's piece in hewn timber", keen(hewn, false)));
+        rows.push(("shapes in hewn timber", shapes(hewn)));
+    }
     rows
 }
 

@@ -104,6 +104,16 @@ impl Dir {
     pub fn level(self) -> bool {
         self.axis() != 1
     }
+
+    /// The level way a stair or slope rises toward.
+    pub fn facing(facing: crate::Facing) -> Dir {
+        match facing {
+            crate::Facing::North => Dir::North,
+            crate::Facing::East => Dir::East,
+            crate::Facing::South => Dir::South,
+            crate::Facing::West => Dir::West,
+        }
+    }
 }
 
 /// What is beyond a face.
@@ -115,6 +125,8 @@ pub enum Beyond {
     Air,
     /// The air in a hole: an opening's cube.
     Hole,
+    /// A cube of the kind cut to a shape (D193), which dresses its own edges (`shaped`).
+    Cut,
 }
 
 impl Beyond {
@@ -139,10 +151,13 @@ pub enum Role {
     Foot,
     Border,
     Meet,
+    /// Not an edge: a post's shaft, up a column of cubes cut as posts (D193), as the kit
+    /// dresses it: a member of its timber, or a pillar of its stone.
+    Post,
 }
 
 impl Role {
-    pub const ALL: [Role; 11] = [
+    pub const ALL: [Role; 12] = [
         Role::Arris,
         Role::Jamb,
         Role::Inside,
@@ -154,6 +169,7 @@ impl Role {
         Role::Foot,
         Role::Border,
         Role::Meet,
+        Role::Post,
     ];
 
     /// Whether it runs up and down, rather than level.
@@ -248,8 +264,11 @@ impl<'a> Roles<'a> {
             .map(|cube| cube.kind)
     }
 
+    /// A whole solid cube of the kind: one whose edges are worked out here.
     fn ours(&self, at: IVec3) -> bool {
-        self.solid(at) == Some(self.kind)
+        self.base.cube(at).is_some_and(|cube| {
+            cube.kind == self.kind && drawn_fill(&cube) == Fill::Solid && !cube.shape.is_cut()
+        })
     }
 
     /// The ground's height under a column, in ticks of the base's grid: its sample, or
@@ -268,7 +287,9 @@ impl<'a> Roles<'a> {
     pub fn beyond(&self, at: IVec3) -> Beyond {
         match self.base.cube(at) {
             Some(cube) if drawn_fill(&cube) == Fill::Solid => {
-                if cube.kind == self.kind {
+                if cube.kind == self.kind && cube.shape.is_cut() {
+                    Beyond::Cut
+                } else if cube.kind == self.kind {
                     Beyond::Same
                 } else {
                     Beyond::Other(cube.kind)

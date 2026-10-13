@@ -18,6 +18,7 @@ pub mod ground;
 pub mod roles;
 pub mod roofs;
 pub mod runs;
+mod shapes;
 mod stairs;
 mod trims;
 
@@ -119,6 +120,19 @@ pub enum Piece {
         courses: [bool; 2],
         seed: u32,
     },
+    /// A profile of the kit's pieces swept along a line of a cube cut to a shape (D193,
+    /// `dressing`): a stair's noses, a half's or a slope's coping, a pillar's base and cap.
+    /// It looks out of `side`'s face, the profile's up square to the line and to `side`;
+    /// its ends meet the next as a trim's do. It belongs to `cube`.
+    Band {
+        cube: IVec3,
+        role: Role,
+        from: Place,
+        to: Place,
+        side: Dir,
+        ends: [End; 2],
+        seed: u32,
+    },
     /// A door or window set into an opening, filling the box from `min` to `max`, its face
     /// across the wall, which runs along X or along Z.
     Opening {
@@ -196,6 +210,7 @@ impl Piece {
             Piece::Block { cube }
             | Piece::Gable { cube, .. }
             | Piece::Trim { cube, .. }
+            | Piece::Band { cube, .. }
             | Piece::Corner { cube, .. } => {
                 let low = cube.as_vec3() * CELL_M;
                 Some((low, low + Vec3::splat(CELL_M)))
@@ -215,6 +230,7 @@ impl Piece {
             Piece::Block { cube }
             | Piece::Gable { cube, .. }
             | Piece::Trim { cube, .. }
+            | Piece::Band { cube, .. }
             | Piece::Corner { cube, .. } => return cube,
             Piece::Log { from, to, .. }
             | Piece::Plank { from, to, .. }
@@ -248,7 +264,9 @@ impl Piece {
             Piece::Board { min, .. } | Piece::Opening { min, .. } => min.metres().y,
             Piece::Block { cube } | Piece::Gable { cube, .. } => cube.y as f32 * CELL_M,
             // Dressed once its cube is in.
-            Piece::Trim { cube, .. } | Piece::Corner { cube, .. } => cube.y as f32 * CELL_M + 0.01,
+            Piece::Trim { cube, .. } | Piece::Band { cube, .. } | Piece::Corner { cube, .. } => {
+                cube.y as f32 * CELL_M + 0.01
+            }
             // A roof after the walls under it, a stage at a time, each from its eaves up.
             Piece::Covering { corners, cell, .. } => {
                 let low = corners
@@ -371,7 +389,83 @@ struct Walls<'a> {
     stairs: BTreeSet<[i32; 3]>,
 }
 
+/// What a timber kind's cube is laid as.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Cell {
+    /// Courses of its members, as a wall.
+    Wall,
+    /// A deck of boards on joists (`floors`): a floor, a flat roof, or the top of a solid
+    /// mass of the kind, as a platform or a slab is.
+    Deck,
+    /// Inside a solid mass, hidden by what is round it: nothing.
+    Inside,
+}
+
 impl Walls<'_> {
+    /// Whether a cube is a whole, solid cube of the kind: what a wall or a deck is made of.
+    fn whole(&self, at: IVec3) -> bool {
+        self.base.cube(at).is_some_and(|cube| {
+            cube.kind == self.kind && drawn_fill(&cube) == Fill::Solid && !cube.shape.is_cut()
+        })
+    }
+
+    /// Whether a cube is in a wall: its tile is a wall tile (`Base::in_wall`), but for the
+    /// top layer over a post or another cube cut to a shape, which is what it carries: a
+    /// deck or a beam, not a wall's top.
+    fn walled(&self, at: IVec3) -> bool {
+        if !self.base.in_wall(at) {
+            return false;
+        }
+        let top = at.y - crate::wall_layer(crate::storey_of(at.y)) == crate::STOREY_CUBES - 1;
+        !(top
+            && self
+                .base
+                .cube(at - IVec3::Y)
+                .is_some_and(|cube| cube.fill == Fill::Solid && cube.shape.is_cut()))
+    }
+
+    /// Whether a whole cube of a wall is part of a solid mass of the kind: in a block of
+    /// two by two of them side by side on its layer, as a platform or a slab is and a wall
+    /// a cube thick never is; a wall's top beside a flat roof is no mass.
+    fn mass(&self, at: IVec3) -> bool {
+        let walled = |at: IVec3| self.whole(at) && self.walled(at);
+        walled(at)
+            && [(1, 1), (1, -1), (-1, 1), (-1, -1)].iter().any(|&(x, z)| {
+                walled(at + IVec3::new(x, 0, 0))
+                    && walled(at + IVec3::new(0, 0, z))
+                    && walled(at + IVec3::new(x, 0, z))
+            })
+    }
+
+    /// What a cube of the kind is laid as, if it is one this layout lays: a floor or flat
+    /// roof is a deck; a solid mass's top is a deck, its inside nothing and its sides walls,
+    /// so a platform is boards on a frame, not a pile of log ends; the rest of a wall's
+    /// cubes are walls. Cubes cut to a shape and a flight's are laid apart (`shapes`,
+    /// `stairs`).
+    pub(crate) fn cell(&self, at: IVec3) -> Option<Cell> {
+        if self.stairs.contains(&at.to_array()) || !self.whole(at) {
+            return None;
+        }
+        if !self.walled(at) {
+            return Some(Cell::Deck);
+        }
+        if !self.mass(at) {
+            return Some(Cell::Wall);
+        }
+        let covered = self
+            .base
+            .cube(at + IVec3::Y)
+            .is_some_and(|cube| cube.fill != Fill::Open);
+        let inside = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z]
+            .iter()
+            .all(|&side| self.whole(at + side));
+        Some(match (covered, inside) {
+            (false, _) => Cell::Deck,
+            (true, true) => Cell::Inside,
+            (true, false) => Cell::Wall,
+        })
+    }
+
     /// A cube of the kit's kind that is part of a wall.
     fn ours(&self, at: IVec3) -> Option<Fill> {
         if self.stairs.contains(&at.to_array()) {
@@ -383,7 +477,12 @@ impl Walls<'_> {
         let ours = self
             .base
             .cube(at)
-            .filter(|cube| cube.kind == self.kind && self.base.in_wall(at))
+            .filter(|cube| {
+                cube.kind == self.kind
+                    && self.walled(at)
+                    && !cube.shape.is_cut()
+                    && (drawn_fill(cube) != Fill::Solid || self.cell(at) == Some(Cell::Wall))
+            })
             .map(|cube| drawn_fill(&cube));
         self.known.borrow_mut().insert(at, ours);
         ours
@@ -605,9 +704,10 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     stairs::lay(kit, &steps, &mut layout);
     if ours.is_empty() {
         if kit.textures.contains_key(&Material::Floor) {
-            floors::decks(base, kit, scope, &mut layout);
-            sort(&mut layout);
+            floors::decks(&walls, kit, scope, &mut layout);
         }
+        shapes::lay(&walls, kit, kits, scope, &mut layout);
+        sort(&mut layout);
         return layout;
     }
     let mut gabled = Vec::new();
@@ -646,8 +746,9 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     runs::corner_posts(&walls, kit, kits, &ours, &mut layout);
     trims::ends(&walls, kit, &ours, &mut layout);
     if kit.textures.contains_key(&Material::Floor) {
-        floors::decks(base, kit, scope, &mut layout);
+        floors::decks(&walls, kit, scope, &mut layout);
     }
+    shapes::lay(&walls, kit, kits, scope, &mut layout);
     let fields = roofs::Field::all(base, kits);
     runs::under_roofs(&fields, kit, &mut layout);
     // Gables after, as their logs are cut to the roof already.

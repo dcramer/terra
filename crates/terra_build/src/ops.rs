@@ -1172,6 +1172,7 @@ impl ShapeKey {
             Shape::Half => 1,
             Shape::Stair(facing) => 2 + facing as u8,
             Shape::Slope(facing) => 6 + facing as u8,
+            Shape::Post => 10,
         }
     }
 }

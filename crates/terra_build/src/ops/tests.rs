@@ -779,6 +779,152 @@ fn a_plan_on_a_slope_keeps_the_ground_it_was_laid_on() {
     assert_eq!(base, before);
 }
 
+/// A flight of stairs in stone, a cube wide, rising north from the ground three cubes,
+/// planned as one part: each column whole cubes under a stair.
+fn flight(part: u32, top: Shape) -> Op {
+    let mut cubes = Vec::new();
+    for i in 0..3 {
+        for y in 0..=i {
+            cubes.push(Planned {
+                at: [0, y, -i],
+                shape: if y == i { top } else { Shape::Whole },
+            });
+        }
+    }
+    let ground = (0..3)
+        .map(|i| Sample {
+            column: [0, -i],
+            height_cm: 0,
+        })
+        .collect();
+    Op::LayPlan {
+        part: Some(PartId(part)),
+        kind: STONE,
+        cubes,
+        ground,
+    }
+}
+
+#[test]
+fn shaped_cubes_are_built_held_and_taken_apart_as_whole_ones_are() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    for top in [
+        Shape::Stair(Facing::North),
+        Shape::Slope(Facing::North),
+        Shape::Half,
+    ] {
+        let mut base = Base::default();
+        base.act(&flight(0, top), &cx).unwrap();
+        // Bottom up, a cube at a time, each joined to the ground or to cubes in.
+        let mut took = Bill::default();
+        while let Some((at, _)) = base
+            .cubes()
+            .filter(|(_, cube)| !cube.is_built())
+            .min_by_key(|(at, _)| (at.y, at.z))
+        {
+            let done = base
+                .act(
+                    &Op::Fill {
+                        cubes: vec![at.to_array()],
+                    },
+                    &cx,
+                )
+                .unwrap_or_else(|why| panic!("{top:?} at {at}: {why:?}"));
+            took.add(&done.took);
+            assert!(base.floating().is_empty(), "{top:?}");
+        }
+        // A shaped cube costs what a whole one of its kind does: six cubes of stone.
+        assert_eq!(took, rules.kinds[&STONE].per_step.times(6), "{top:?}");
+        // The whole cube under the top step holds it, so it is not taken out.
+        let under = Op::Empty {
+            cubes: vec![[0, 1, -2]],
+        };
+        assert!(base.act(&under, &cx).is_err(), "{top:?}");
+        // The top step comes out, and gives back what it took.
+        let out = base
+            .act(
+                &Op::Empty {
+                    cubes: vec![[0, 2, -2]],
+                },
+                &cx,
+            )
+            .unwrap();
+        assert_eq!(out.gave, rules.kinds[&STONE].per_step, "{top:?}");
+        assert_eq!(base.cube(IVec3::new(0, 2, -2)).unwrap().shape, top);
+    }
+}
+
+#[test]
+fn a_post_holds_up_what_rests_on_it() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    // A post three cubes high, and a beam of stone across its top, out into the air.
+    let post: Vec<Planned> = (0..3)
+        .map(|y| Planned {
+            at: [0, y, 0],
+            shape: Shape::Post,
+        })
+        .collect();
+    base.act(
+        &Op::LayPlan {
+            part: Some(PartId(0)),
+            kind: STONE,
+            cubes: post,
+            ground: vec![Sample {
+                column: [0, 0],
+                height_cm: 0,
+            }],
+        },
+        &cx,
+    )
+    .unwrap();
+    base.act(&row(1, STONE, [0, 3, 0], IVec3::X, 3), &cx)
+        .unwrap();
+    // The beam waits for the post under it.
+    assert!(
+        base.act(
+            &Op::Fill {
+                cubes: vec![[0, 3, 0]]
+            },
+            &cx
+        )
+        .is_err()
+    );
+    for y in 0..3 {
+        base.act(
+            &Op::Fill {
+                cubes: vec![[0, y, 0]],
+            },
+            &cx,
+        )
+        .unwrap();
+    }
+    base.act(
+        &Op::Fill {
+            cubes: line([0, 3, 0], IVec3::X, 3),
+        },
+        &cx,
+    )
+    .unwrap();
+    assert!(base.floating().is_empty());
+    // Nothing of the post comes out while the beam rests on it.
+    let refused = base.act(
+        &Op::Empty {
+            cubes: vec![[0, 2, 0]],
+        },
+        &cx,
+    );
+    assert!(refused.is_err(), "{refused:?}");
+    // A walker meets it as a whole cube.
+    let walker = Walker::default();
+    assert_eq!(
+        base.support(Vec3::new(0.25, 0.3, 0.25), &walker),
+        Some(crate::CELL_M)
+    );
+}
+
 // Random operations.
 
 /// The ground's height under a column for a seed, in centimetres: a slope with bumps.

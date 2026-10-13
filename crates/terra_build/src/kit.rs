@@ -102,6 +102,9 @@ pub enum Dress {
         scale: f32,
         material: Material,
     },
+    /// A block kind's post (`Role::Post`): a pillar of its stone so wide, in metres, a drum a
+    /// cube, its base and its cap dressed as its foot and its crest are.
+    Pillar { width: f32 },
 }
 
 fn joints() -> bool {

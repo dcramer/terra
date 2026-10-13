@@ -43,7 +43,9 @@ pub fn draw_as(
             [1.0; 3],
         ),
         Piece::Plank { .. } => crate::timber::plank(piece, kit, surfaces),
-        Piece::Trim { .. } | Piece::Corner { .. } => crate::dress::draw(piece, kit, surfaces),
+        Piece::Trim { .. } | Piece::Band { .. } | Piece::Corner { .. } => {
+            crate::dress::draw(piece, kit, surfaces)
+        }
         Piece::Covering { .. } | Piece::Roof { .. } => {
             crate::roofing::draw_as(piece, kit, plain, surfaces)
         }

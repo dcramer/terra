@@ -103,11 +103,49 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
                 from: at(from),
                 to: at(to),
                 side: unit(side),
+                up: Vec3::Y,
                 ends,
                 extend: *extend,
                 joints: *joints,
                 lift: layout::metres(lift),
                 sink: layout::metres(sink),
+                tint: kit.dress.tint,
+            };
+            sweep.draw(profile, metres, seed, &mut made);
+        }
+        Piece::Band {
+            role,
+            from,
+            to,
+            side,
+            ends,
+            seed,
+            ..
+        } => {
+            let Some(Dress::Profile {
+                name,
+                extend,
+                joints,
+            }) = kit.dress.roles.get(&role)
+            else {
+                return;
+            };
+            let Some(profile) = pieces.profiles.get(name) else {
+                return;
+            };
+            let (from, to) = (from.metres(), to.metres());
+            let along = (to - from).normalize_or(Vec3::X);
+            let side = unit(side);
+            let sweep = Sweep {
+                from,
+                to,
+                side,
+                up: along.cross(side).normalize_or(Vec3::Y) * along.cross(side).y.signum(),
+                ends,
+                extend: *extend,
+                joints: *joints,
+                lift: 0.0,
+                sink: 0.0,
                 tint: kit.dress.tint,
             };
             sweep.draw(profile, metres, seed, &mut made);
@@ -178,8 +216,10 @@ fn stone_look(seed: u32, tint: [f32; 3]) -> ([f32; 3], [f32; 2]) {
 struct Sweep {
     from: Vec3,
     to: Vec3,
-    /// Out from the face it looks out of.
+    /// Out from the face it looks out of, and up from the line, square to both it and the
+    /// way out: straight up along a level edge, square to a slope along a raking one.
     side: Vec3,
+    up: Vec3,
     ends: [End; 2],
     extend: f32,
     joints: bool,
@@ -237,7 +277,7 @@ impl Sweep {
             rings.push((length - JOINT_M, false));
         }
         rings.push((f32::MAX, joint[1]));
-        let world = |o: f32, u: f32, a: f32| self.from + along * a + self.side * o + Vec3::Y * u;
+        let world = |o: f32, u: f32, a: f32| self.from + along * a + self.side * o + self.up * u;
         let (colour, shift) = stone_look(seed, self.tint);
         let shift = if self.joints { shift } else { [0.0; 2] };
         let uv = |p: Vec3, normal: Vec3| {
@@ -253,7 +293,14 @@ impl Sweep {
                 o -= nn[0] * JOINT_DEPTH_M;
                 u -= nn[1] * JOINT_DEPTH_M;
             }
-            let a = at.clamp(start(points[i][0]), end(points[i][0]));
+            // Mitred at both ends of a short line, a point far in from the face would
+            // pass itself: it meets its mirror in the middle.
+            let (low, high) = (start(points[i][0]), end(points[i][0]));
+            let a = if low <= high {
+                at.clamp(low, high)
+            } else {
+                (low + high) * 0.5
+            };
             world(o, u, a)
         };
         for ring in 0..rings.len() - 1 {
@@ -272,9 +319,9 @@ impl Sweep {
                     continue;
                 }
                 let world_normal =
-                    |nn: [f32; 2]| (self.side * nn[0] + Vec3::Y * nn[1]).normalize_or(Vec3::Y);
+                    |nn: [f32; 2]| (self.side * nn[0] + self.up * nn[1]).normalize_or(self.up);
                 let flat =
-                    (self.side * normals[seg][0] + Vec3::Y * normals[seg][1]).normalize_or(Vec3::Y);
+                    (self.side * normals[seg][0] + self.up * normals[seg][1]).normalize_or(self.up);
                 let corners =
                     quad.map(|(p, nn)| out.corner(p, world_normal(nn), uv(p, flat), colour));
                 // Wound to face out.
@@ -299,7 +346,7 @@ impl Sweep {
                 .iter()
                 .map(|p| {
                     let rel = *p - self.from;
-                    [rel.dot(self.side), rel.y]
+                    [rel.dot(self.side), rel.dot(self.up)]
                 })
                 .collect();
             for tri in ears(&flat) {
