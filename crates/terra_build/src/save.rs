@@ -35,6 +35,9 @@ pub enum BadSnapshot {
     Section(BadSection),
     /// A cube is in a part the snapshot does not have.
     Part(PartId),
+    /// What a part, a roof or a prop cost is an amount no cost could be
+    /// ([`crate::Amount::in_bounds`]).
+    Amount(crate::Amount),
 }
 
 impl Base {
@@ -68,6 +71,14 @@ impl Base {
     pub fn from_snapshot(snapshot: &Snapshot) -> Result<Base, BadSnapshot> {
         if snapshot.version != VERSION {
             return Err(BadSnapshot::Version(snapshot.version));
+        }
+        // What it says things cost arrives over the network: an amount past what any real
+        // cost comes to, where working with it could overflow, is refused.
+        let bills = (snapshot.parts.iter().map(|(_, part)| &part.terms.per_step))
+            .chain(snapshot.roofs.iter().map(|(_, roof)| &roof.per_stage))
+            .chain(snapshot.prop_paid.iter().map(|(_, paid)| paid));
+        if let Some(amount) = bills.filter_map(crate::Bill::out_of_bounds).next() {
+            return Err(BadSnapshot::Amount(amount));
         }
         let mut base = Base {
             cubes: Cubes::load(&snapshot.sections).map_err(BadSnapshot::Section)?,
@@ -306,6 +317,68 @@ mod tests {
             ..snapshot
         };
         assert_eq!(Base::from_snapshot(&old), Err(BadSnapshot::Version(0)));
+    }
+
+    #[test]
+    fn a_snapshot_with_a_cost_past_any_real_one_is_refused() {
+        use crate::ops::{Context, Op, Planned};
+        use crate::{Amount, Bill, RoofId, Rules, Terms};
+        // Costs as a kit's are, and a prop paid for in whole items.
+        let rules = Rules {
+            kinds: BTreeMap::from([(Kind(1), Terms::new(2, Bill::of("Wood", Amount::new(1, 16))))]),
+            roofs: BTreeMap::from([(Kind(1), Bill::of("Wood", Amount::new(1, 32)))]),
+            ..Rules::default()
+        };
+        let cx = Context::free(&rules);
+        let mut base = Base::default();
+        let plan = Op::LayPlan {
+            part: Some(PartId(0)),
+            kind: Kind(1),
+            cubes: vec![Planned {
+                at: [0, 0, 0],
+                shape: crate::Shape::Whole,
+            }],
+            ground: Vec::new(),
+        };
+        base.act(&plan, &cx).unwrap();
+        let section = RoofSection {
+            min: [0, 0, 0],
+            max: [1, 0, 1],
+            style: RoofStyle::Gable,
+            along_x: true,
+            pitch: 0.7,
+        };
+        let roof = Op::AddRoof {
+            roof: RoofId(0),
+            section,
+            kind: Some(Kind(1)),
+        };
+        base.act(&roof, &cx).unwrap();
+        let mut real = base.snapshot();
+        real.prop_paid = vec![([0, 0, 0], Bill::of("Door", Amount::whole(12)))];
+        assert!(Base::from_snapshot(&real).is_ok());
+        // A share whose denominator times another such is past 64 bits, a share so fine
+        // and an amount so large that adding a whole item to either overflows.
+        let hostile = [
+            Amount::new(1, (1 << 32) + 1),
+            Amount::new(1, 1 << 63),
+            Amount::whole(1 << 63),
+        ];
+        for amount in hostile {
+            let bill = Bill::of("Wood", amount);
+            let mut part = real.clone();
+            part.parts[0].1.terms.per_step = bill.clone();
+            let mut roof = real.clone();
+            roof.roofs[0].1.per_stage = bill.clone();
+            let mut prop = real.clone();
+            prop.prop_paid[0].1.add(&bill);
+            for snapshot in [part, roof, prop] {
+                assert_eq!(
+                    Base::from_snapshot(&snapshot),
+                    Err(BadSnapshot::Amount(amount))
+                );
+            }
+        }
     }
 
     #[test]

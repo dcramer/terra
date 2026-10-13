@@ -9,6 +9,14 @@
 use crate::Kind;
 use std::collections::BTreeMap;
 
+/// The finest share of an item an amount kept in a base may be: a power of two, as a
+/// kit's costs are (a quarter of a stone, a thirty-second of wood) and a cube's steps
+/// are sixteenths. Shares of powers of two add up without their denominator growing.
+pub const FINEST_SHARE: u64 = 1 << 16;
+
+/// The most of one item an amount kept in a base may be, in whole items.
+pub const MOST_OF_ONE: u64 = 1 << 24;
+
 /// An exact amount of a material: a fraction, kept in lowest terms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "(u64, u64)", try_from = "(u64, u64)")]
@@ -41,6 +49,13 @@ impl Amount {
     /// The top and bottom of the fraction, in lowest terms.
     pub fn parts(self) -> (u64, u64) {
         (self.num, self.den)
+    }
+
+    /// Whether a base may keep it: a share no finer than [`FINEST_SHARE`] and no more
+    /// than [`MOST_OF_ONE`], so what a base's costs come to cannot overflow. What a
+    /// snapshot holds that is not is refused.
+    pub fn in_bounds(self) -> bool {
+        self.den.is_power_of_two() && self.den <= FINEST_SHARE && self.num <= MOST_OF_ONE * self.den
     }
 
     /// So many times this.
@@ -131,6 +146,11 @@ impl Bill {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// The first of its amounts a base may not keep ([`Amount::in_bounds`]), if any.
+    pub fn out_of_bounds(&self) -> Option<Amount> {
+        self.0.values().copied().find(|amount| !amount.in_bounds())
     }
 
     fn add_one(&mut self, material: &str, amount: Amount) {

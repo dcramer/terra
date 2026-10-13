@@ -1773,8 +1773,10 @@ mod tests {
                 steps > 0 && crate::cubes::FULL.is_multiple_of(steps),
                 "{name}: {steps} steps"
             );
-            for (thing, _, den) in kit.cost.step.iter().chain(&kit.cost.roof) {
+            // In amounts a base may keep, or no snapshot of what is built in it loads.
+            for (thing, num, den) in kit.cost.step.iter().chain(&kit.cost.roof) {
                 assert!(item(thing) && *den > 0, "{name}: {thing}");
+                assert!(Amount::new(*num, *den).in_bounds(), "{name}: {thing}");
             }
         }
         assert!(read > 0);

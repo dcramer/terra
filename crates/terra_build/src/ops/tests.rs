@@ -17,7 +17,7 @@ const DOOR: PropKind = PropKind(1);
 
 fn rules() -> Rules {
     let mut stone = Bill::of("Stone", Amount::whole(1));
-    stone.add(&Bill::of("Mortar", Amount::new(1, 3)));
+    stone.add(&Bill::of("Mortar", Amount::new(3, 8)));
     Rules {
         kinds: BTreeMap::from([
             // A log fills a cube in two courses, and spans eight cubes.
