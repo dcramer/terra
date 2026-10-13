@@ -249,11 +249,63 @@ pub(super) fn follow(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::play::{LocalPlayer, Player};
+    use bevy::ecs::system::RunSystemOnce;
+    use terra_core::{PlanetSpec, Seed};
+
+    /// Where the camera follows a player standing on flat ground, looking up or down by
+    /// `pitch`, and where the player's head is, and the ground.
+    fn follow_one(pitch: f32) -> (Vec3, Vec3, Planet) {
+        let planet = Planet::smooth(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        let feet = planet.ground_at(Vec3::Y * 2100.0);
+        let mut world = World::new();
+        world.insert_resource(Options::from_args(std::iter::empty()).unwrap());
+        world.insert_resource(Start(Transform::from_translation(feet)));
+        world.insert_resource(planet.clone());
+        world.init_resource::<Zoom>();
+        world.spawn((
+            Player,
+            LocalPlayer,
+            Transform::from_translation(feet),
+            View {
+                forward: Vec3::X,
+                pitch,
+            },
+        ));
+        let camera = world.spawn((MainCamera, Transform::default())).id();
+        world.run_system_once(follow).unwrap();
+        let camera = *world.get::<Transform>(camera).unwrap();
+        let head = feet + feet.normalize() * HEAD_M;
+        // The player is in the middle of the view: in front, and near the line it looks
+        // along.
+        let to_head = head - camera.translation;
+        let along = to_head.dot(*camera.forward());
+        assert!(along > 0.0, "the player is behind the camera");
+        let off = (to_head - *camera.forward() * along).length();
+        assert!(
+            off < 1.0,
+            "the player is {off} m off the middle of the view"
+        );
+        (camera.translation, head, planet)
+    }
 
     #[test]
-    fn the_camera_comes_no_nearer_or_further_than_it_may() {
-        assert_eq!(zoomed(CAMERA_BACK_M, 1.0), CAMERA_BACK_M - 1.0);
-        assert_eq!(zoomed(CAMERA_BACK_M, 100.0), NEAREST_M);
-        assert_eq!(zoomed(CAMERA_BACK_M, -100.0), FURTHEST_M);
+    fn the_camera_sits_back_as_far_as_it_is_zoomed() {
+        let (camera, head, _) = follow_one(0.0);
+        assert!(camera.distance(head) >= CAMERA_BACK_M);
+    }
+
+    #[test]
+    fn looking_up_brings_the_camera_in_over_the_ground_behind() {
+        // Behind and below the player, the ground is nearer than the camera would sit.
+        let (camera, head, planet) = follow_one(1.0);
+        assert!(camera.distance(head) < CAMERA_BACK_M);
+        assert!(
+            camera.length() > planet.ground_at(camera).length(),
+            "the camera is in the ground"
+        );
     }
 }

@@ -10,8 +10,8 @@ use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_build::Walker;
 
-const JOG_SPEED: f32 = 4.3;
-const SPRINT_SPEED: f32 = 7.4;
+pub(super) const JOG_SPEED: f32 = 4.3;
+pub(super) const SPRINT_SPEED: f32 = 7.4;
 const JUMP_SPEED: f32 = 6.0;
 const GRAVITY: f32 = 16.0;
 /// What a jump costs in stamina, out of 100.

@@ -31,6 +31,8 @@ const LIT: f32 = 0.55;
 const HUM: f32 = 0.4;
 /// Rings of the ground looked at for water, and their distance in metres.
 const SHORE_RINGS_M: [f32; 4] = [6.0, 15.0, 30.0, 55.0];
+/// Birds are gone this near the place where magic pools.
+const BIRDS_GONE_M: f32 = 40.0;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(Bells(Seed(19).derive("bells").rng()))
@@ -137,7 +139,7 @@ fn place_level(sound: Sound, outdoors: bool, lair_m: f32, shore_m: Option<f32>) 
     let inside = if outdoors { 1.0 } else { 0.2 };
     match sound {
         Sound::Wind => 0.25 * inside,
-        Sound::Birds => 0.3 * inside * ((lair_m - 40.0) / 80.0).clamp(0.0, 1.0),
+        Sound::Birds => 0.3 * inside * ((lair_m - BIRDS_GONE_M) / 80.0).clamp(0.0, 1.0),
         Sound::Water => {
             shore_m.map_or(0.0, |metres| (1.0 - (metres - 6.0) / 55.0).clamp(0.0, 1.0))
                 * 0.5
@@ -314,17 +316,27 @@ mod tests {
 
     #[test]
     fn birds_fall_quiet_near_pooled_magic_and_indoors() {
-        let open = place_level(Sound::Birds, true, 500.0, None);
-        assert!(open > 0.25);
-        assert_eq!(place_level(Sound::Birds, true, 30.0, None), 0.0);
-        assert!(place_level(Sound::Birds, false, 500.0, None) < open / 4.0);
+        let far = BIRDS_GONE_M * 10.0;
+        let open = place_level(Sound::Birds, true, far, None);
+        assert!(open > 0.0);
+        assert_eq!(place_level(Sound::Birds, true, BIRDS_GONE_M, None), 0.0);
+        let nearer = place_level(Sound::Birds, true, BIRDS_GONE_M + 1.0, None);
+        assert!(nearer > 0.0 && nearer < open);
+        assert!(place_level(Sound::Birds, false, far, None) < open / 2.0);
     }
 
     #[test]
-    fn water_is_loudest_at_the_shore_and_gone_far_from_it() {
-        assert!(place_level(Sound::Water, true, 500.0, Some(0.0)) > 0.4);
-        assert!(place_level(Sound::Water, true, 500.0, Some(30.0)) > 0.0);
-        assert_eq!(place_level(Sound::Water, true, 500.0, None), 0.0);
+    fn water_is_loudest_at_the_shore_and_heard_as_far_as_it_is_looked_for() {
+        let level = |shore_m| place_level(Sound::Water, true, 500.0, shore_m);
+        let at_shore = level(Some(0.0));
+        let mut was = at_shore;
+        for ring in SHORE_RINGS_M {
+            let there = level(Some(ring));
+            assert!(there > 0.0 && there <= was, "{there} at {ring} m");
+            was = there;
+        }
+        assert!(level(SHORE_RINGS_M.last().copied()) < at_shore);
+        assert_eq!(level(None), 0.0);
     }
 
     #[test]

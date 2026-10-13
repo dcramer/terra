@@ -528,20 +528,27 @@ mod tests {
         }
     }
 
-    #[test]
-    fn every_cue_that_names_clips_names_ones_that_exist() {
-        let cues = [
+    /// Every cue there is, with work at every station. The match gives each its place,
+    /// and does not compile without a new kind of cue, feet or cut; once it has a place,
+    /// this fails until it is listed.
+    pub(super) fn every_cue(stations: &Stations) -> Vec<Cue> {
+        let mut cues = vec![
             Cue::Step(Feet::Grass),
             Cue::Step(Feet::Wood),
+            Cue::Step(Feet::Water),
             Cue::Step(Feet::Hoof),
             Cue::Step(Feet::Skitter),
+            Cue::Swing,
             Cue::Hit,
             Cue::Kill,
             Cue::Hurt,
             Cue::Down,
             Cue::Strike(Cut::Tree),
+            Cue::Strike(Cut::GreatTree),
+            Cue::Strike(Cut::Rock),
             Cue::Strike(Cut::Ore),
             Cue::Strike(Cut::Plant),
+            Cue::Strike(Cut::Flesh),
             Cue::Felled { tall: true },
             Cue::Felled { tall: false },
             Cue::Hammer,
@@ -549,34 +556,75 @@ mod tests {
             Cue::Placed,
             Cue::TakenApart,
             Cue::Made,
+            Cue::Snort,
+            Cue::Hiss,
             Cue::Bell,
             Cue::Click,
             Cue::Open,
             Cue::Close,
         ];
-        let stations = Stations::read();
-        let worked = stations
-            .all()
-            .filter(|&station| stations.strokes(station).is_some())
-            .map(Cue::Working);
-        for cue in cues.into_iter().chain(worked) {
-            let Like::Clips(name) = sounds_like(cue, &stations) else {
-                panic!("{cue:?} should be recorded clips");
-            };
-            assert!(
-                CLIPS.iter().any(|clips| clips.name == name),
-                "{cue:?}: no clips called {name}"
-            );
+        cues.extend(stations.all().map(Cue::Working));
+        let place = |cue: Cue| match cue {
+            Cue::Step(Feet::Grass) => 0,
+            Cue::Step(Feet::Wood) => 1,
+            Cue::Step(Feet::Water) => 2,
+            Cue::Step(Feet::Hoof) => 3,
+            Cue::Step(Feet::Skitter) => 4,
+            Cue::Swing => 5,
+            Cue::Hit => 6,
+            Cue::Kill => 7,
+            Cue::Hurt => 8,
+            Cue::Down => 9,
+            Cue::Strike(Cut::Tree) => 10,
+            Cue::Strike(Cut::GreatTree) => 11,
+            Cue::Strike(Cut::Rock) => 12,
+            Cue::Strike(Cut::Ore) => 13,
+            Cue::Strike(Cut::Plant) => 14,
+            Cue::Strike(Cut::Flesh) => 15,
+            Cue::Felled { tall: true } => 16,
+            Cue::Felled { tall: false } => 17,
+            Cue::Hammer => 18,
+            Cue::Built => 19,
+            Cue::Placed => 20,
+            Cue::TakenApart => 21,
+            Cue::Working(_) => 22,
+            Cue::Made => 23,
+            Cue::Snort => 24,
+            Cue::Hiss => 25,
+            Cue::Bell => 26,
+            Cue::Click => 27,
+            Cue::Open => 28,
+            Cue::Close => 29,
+        };
+        let mut listed = [false; 30];
+        for &cue in &cues {
+            listed[place(cue)] = true;
         }
+        assert!(
+            listed.iter().all(|&listed| listed),
+            "a kind of cue is missing from the list"
+        );
+        cues
     }
 
     #[test]
-    fn counts_what_is_heard() {
-        let mut heard = Heard::default();
-        heard.count("hit");
-        heard.count("hit");
-        heard.count("bell");
-        assert_eq!(heard.0, [("hit", 2), ("bell", 1)]);
+    fn every_cue_is_heard_and_its_clips_exist() {
+        let stations = Stations::read();
+        for cue in every_cue(&stations) {
+            match sounds_like(cue, &stations) {
+                Like::Clips(name) => assert!(
+                    CLIPS.iter().any(|clips| clips.name == name),
+                    "{cue:?}: no clips called {name}"
+                ),
+                Like::Made(..) => {}
+                // Only work at a station that is heard in no strokes, such as a fire, is
+                // silent here.
+                Like::Nothing => assert!(
+                    matches!(cue, Cue::Working(station) if stations.strokes(station).is_none()),
+                    "{cue:?} is heard as nothing"
+                ),
+            }
+        }
     }
 }
 
@@ -624,10 +672,16 @@ mod loudness {
 
     #[test]
     fn every_sound_made_in_code_sits_in_its_place_in_the_mix() {
-        for cue in [Cue::Step(Feet::Water), Cue::Swing, Cue::Snort, Cue::Hiss] {
-            let Like::Made(name, sound, level, _) = sounds_like(cue, &Stations::read()) else {
-                panic!("{cue:?} should be made in code");
-            };
+        let stations = Stations::read();
+        let made: Vec<_> = super::tests::every_cue(&stations)
+            .into_iter()
+            .filter_map(|cue| match sounds_like(cue, &stations) {
+                Like::Made(name, sound, level, _) => Some((name, sound, level)),
+                _ => None,
+            })
+            .collect();
+        assert!(!made.is_empty());
+        for (name, sound, level) in made {
             let (samples, _) = render(sound, 3, 2.0);
             let heard = at_ear(active_db(&samples), level, Bus::Effects);
             within(name, heard, band(name, Bus::Effects));

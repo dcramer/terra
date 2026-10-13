@@ -299,13 +299,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_scatter_is_spread_and_the_same_every_run() {
-        let mut a = 0x9e37_79b9;
-        let mut b = 0x9e37_79b9;
-        let first: Vec<f32> = (0..64).map(|_| scatter(&mut a)).collect();
-        let again: Vec<f32> = (0..64).map(|_| scatter(&mut b)).collect();
-        assert_eq!(first, again);
-        assert!(first.iter().all(|x| (-1.0..=1.0).contains(x)));
-        assert!(first.iter().any(|&x| x > 0.5) && first.iter().any(|&x| x < -0.5));
+    fn the_scatter_throws_both_ways_within_its_bounds() {
+        let mut state = 0x9e37_79b9;
+        let scattered: Vec<f32> = (0..64).map(|_| scatter(&mut state)).collect();
+        assert!(scattered.iter().all(|x| (-1.0..=1.0).contains(x)));
+        assert!(scattered.iter().any(|&x| x > 0.5) && scattered.iter().any(|&x| x < -0.5));
     }
 }

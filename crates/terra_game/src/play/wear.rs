@@ -131,23 +131,29 @@ mod tests {
         let items = Items::default();
         let stations = Stations::read();
         let recipes = Recipes::read(&stations, &items);
-        let at = |name| mended_at(&items, &stations, &recipes, items.kind(name));
-        let station = |name| stations.named(name);
-        assert_eq!(at("Stone axe"), station("Workbench"));
-        assert_eq!(at("Iron axe"), station("Forge"));
-        assert_eq!(at("Torch"), station("Campfire"));
-        assert_eq!(at("Hammer"), station("Workbench"));
-        assert_eq!(at("Leather coat"), station("Workbench"));
-        // Every thing that wears can be mended somewhere.
-        for kind in items
+        let wearing: Vec<_> = items
             .kinds()
             .filter(|&kind| items.def(kind).lasts.is_some())
-        {
-            assert!(
-                mended_at(&items, &stations, &recipes, kind).is_some(),
-                "{}",
-                items.name(kind)
-            );
+            .collect();
+        assert!(!wearing.is_empty());
+        let mut made = 0;
+        for kind in wearing {
+            let name = items.name(kind);
+            let mended = mended_at(&items, &stations, &recipes, kind);
+            assert!(mended.is_some(), "{name} can be mended nowhere");
+            let makers: Vec<_> = recipes
+                .iter()
+                .filter(|recipe| recipe.makes.kind == kind)
+                .map(|recipe| recipe.station)
+                .collect();
+            if !makers.is_empty() {
+                made += 1;
+                assert!(
+                    makers.contains(&mended.unwrap()),
+                    "{name} is mended where it is not made"
+                );
+            }
         }
+        assert!(made > 0, "nothing that wears is made anywhere");
     }
 }

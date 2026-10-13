@@ -273,12 +273,68 @@ mod tests {
     }
 
     #[test]
-    fn the_same_files_read_twice_are_the_same_kinds() {
-        let kinds = Registries::read(&Flora::read()).kinds();
-        assert_eq!(
-            same_kinds(&kinds, &Registries::read(&Flora::read()).kinds()),
-            Ok(())
-        );
+    fn every_registry_is_among_the_kinds_in_its_own_order() {
+        let registries = Registries::read(&Flora::read());
+        let kinds = registries.kinds();
+        let Registries {
+            items,
+            stations,
+            recipes,
+            builds,
+            bestiary,
+            flora_gives: _,
+            yields,
+        } = &registries;
+        let each: [(&str, Vec<String>); 7] = [
+            (
+                "items",
+                items.kinds().map(|kind| items.name(kind).into()).collect(),
+            ),
+            (
+                "stations",
+                stations.all().map(|at| stations.name(at).into()).collect(),
+            ),
+            (
+                "recipes",
+                recipes
+                    .iter()
+                    .map(|recipe| recipe.makes.name(items))
+                    .collect(),
+            ),
+            (
+                "parts",
+                builds
+                    .parts()
+                    .iter()
+                    .map(|part| part.name.clone())
+                    .collect(),
+            ),
+            (
+                "placed items",
+                builds.items().map(|item| item.file.clone()).collect(),
+            ),
+            (
+                "creatures",
+                bestiary
+                    .all()
+                    .map(|kind| bestiary.name(kind).into())
+                    .collect(),
+            ),
+            ("ground", yields.names().map(Into::into).collect()),
+        ];
+        // Each registry's kinds stand together and in order, so moving one is noticed.
+        for (registry, names) in &each {
+            assert!(names.len() > 1, "{registry} has too few kinds to move one");
+            assert!(
+                kinds.windows(names.len()).any(|window| window
+                    .iter()
+                    .zip(names)
+                    .all(|(kind, name)| kind.ends_with(name.as_str()))),
+                "the {registry} are not among the kinds in order"
+            );
+        }
+        let all: usize = each.iter().map(|(_, names)| names.len()).sum();
+        assert_eq!(kinds.len(), all);
     }
 
     #[test]

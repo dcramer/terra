@@ -31,6 +31,9 @@ pub struct Intent {
     pub choosing: bool,
 }
 
+// Every action has a bit of its own.
+const _: () = assert!(Action::ALL.len() <= 64);
+
 impl Intent {
     fn bit(action: Action) -> u64 {
         1 << action as u64
@@ -122,20 +125,97 @@ pub fn read(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::play::LocalPlayer;
+    use crate::play::controls::{Binding, Settings};
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::window::CursorOptions;
+
+    /// A world with this machine's player, its keys, mouse and camera, and the screens
+    /// `read` looks at, all closed.
+    fn world() -> (World, Entity) {
+        let mut world = World::new();
+        world.init_resource::<Settings>();
+        world.init_resource::<ButtonInput<KeyCode>>();
+        world.init_resource::<ButtonInput<MouseButton>>();
+        world.init_resource::<AccumulatedMouseScroll>();
+        world.init_resource::<OptionsMenu>();
+        world.init_resource::<Hands>();
+        world.spawn(CursorOptions::default());
+        world.spawn((MainCamera, GlobalTransform::default()));
+        let player = world.spawn((Player, LocalPlayer, Intent::default())).id();
+        (world, player)
+    }
+
+    /// An action bound to a key, and the key.
+    fn keyed() -> (Action, KeyCode) {
+        let settings = Settings::default();
+        Action::ALL
+            .into_iter()
+            .find_map(|action| {
+                settings
+                    .bindings(action)
+                    .into_iter()
+                    .flatten()
+                    .find_map(|binding| match binding {
+                        Binding::Key(key) => Some((action, key)),
+                        Binding::Mouse(_) => None,
+                    })
+            })
+            .unwrap()
+    }
+
+    /// One frame: the keys as they are, read into the intent, and then whether a tick ran.
+    fn frame(world: &mut World, player: Entity, tick: bool) -> Intent {
+        world.run_system_once(read).unwrap();
+        let seen = world.get::<Intent>(player).unwrap().clone();
+        if tick {
+            world.run_system_once(spend).unwrap();
+        }
+        // The keys' presses last the frame they happened in.
+        world.resource_mut::<ButtonInput<KeyCode>>().clear();
+        world.resource_mut::<AccumulatedMouseScroll>().delta = Vec2::ZERO;
+        seen
+    }
 
     #[test]
-    fn holding_presses_once_and_busy_hands_do_nothing_in_the_world() {
-        let mut intent = Intent::default();
-        intent.hold(Action::Use);
-        assert!(intent.held(Action::Use) && intent.pressed(Action::Use));
-        assert!(intent.working(Action::Use) && intent.starts(Action::Use));
-        assert!(!intent.held(Action::Jump));
-        intent.busy = true;
-        assert!(!intent.working(Action::Use) && !intent.starts(Action::Use));
-        intent.busy = false;
-        intent.choosing = true;
-        assert!(!intent.working(Action::Use) && intent.held(Action::Use));
-        // Every action has a bit of its own.
-        assert!(Action::ALL.len() <= 64);
+    fn a_press_lasts_until_a_tick_has_seen_it() {
+        let (mut world, player) = world();
+        let (action, key) = keyed();
+        world.resource_mut::<ButtonInput<KeyCode>>().press(key);
+        // Pressed on a frame with no tick, it is still pressed on the next frame's tick.
+        let first = frame(&mut world, player, false);
+        assert!(first.pressed(action) && first.held(action));
+        let ticked = frame(&mut world, player, true);
+        assert!(ticked.pressed(action) && ticked.held(action));
+        // Once a tick has seen it, it is spent, though the key is still held.
+        let after = frame(&mut world, player, true);
+        assert!(!after.pressed(action) && after.held(action));
+        world.resource_mut::<ButtonInput<KeyCode>>().release(key);
+        assert!(!frame(&mut world, player, true).held(action));
+    }
+
+    #[test]
+    fn the_wheel_counts_notches_until_a_tick_spends_them() {
+        let (mut world, player) = world();
+        let turn = |world: &mut World, by: f32, tick: bool| {
+            world.resource_mut::<AccumulatedMouseScroll>().delta.y = by;
+            frame(world, player, tick).wheel
+        };
+        // However far it reports turning, a frame's turn is one notch.
+        assert_eq!(turn(&mut world, 3.0, false), 1);
+        assert_eq!(turn(&mut world, 0.5, true), 2);
+        assert_eq!(turn(&mut world, 0.0, true), 0);
+        assert_eq!(turn(&mut world, -2.0, true), -1);
+    }
+
+    #[test]
+    fn hands_on_a_screen_start_nothing_in_the_world() {
+        let (mut world, player) = world();
+        let (action, key) = keyed();
+        world.resource_mut::<Hands>().busy = true;
+        world.resource_mut::<ButtonInput<KeyCode>>().press(key);
+        let intent = frame(&mut world, player, true);
+        assert!(intent.pressed(action), "the press is still seen");
+        assert!(!intent.starts(action) && !intent.working(action));
     }
 }

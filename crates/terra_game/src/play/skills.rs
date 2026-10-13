@@ -276,13 +276,22 @@ mod tests {
         assert_eq!(skills.step(Skill::Chopping), None);
         assert_eq!(skills.did(Skill::Chopping, ONCE), Learned::New);
         assert_eq!(skills.step(Skill::Chopping), Some(0));
-        let mut steps = Vec::new();
-        for _ in 0..40 {
+        // How many times it is done to reach each of the first few steps.
+        let mut took = Vec::new();
+        let mut times = 0;
+        while took.len() < 4 && times < 10_000 {
+            times += 1;
             if let Learned::Step(step) = skills.did(Skill::Chopping, ONCE) {
-                steps.push(step);
+                assert_eq!(step as usize, took.len() + 1, "steps come one at a time");
+                took.push(times);
+                times = 0;
             }
         }
-        assert_eq!(steps, [1, 2, 3], "each step takes longer");
+        assert_eq!(took.len(), 4);
+        assert!(
+            took.windows(2).all(|pair| pair[1] > pair[0]),
+            "each step takes longer: {took:?}"
+        );
         assert!(skills.speed(Skill::Chopping) > skills.speed(Skill::Mining));
     }
 

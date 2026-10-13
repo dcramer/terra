@@ -341,16 +341,19 @@ fn panels_heard(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::play::movement::{JOG_SPEED, SPRINT_SPEED};
 
     #[test]
     fn running_quickens_steps_less_than_it_quickens_the_feet() {
         let per_second = |speed: f32| speed / Walker::Player.stride_m(speed);
-        let (jog, sprint) = (per_second(4.3), per_second(7.4));
+        let (jog, sprint) = (per_second(JOG_SPEED), per_second(SPRINT_SPEED));
+        // A runner takes between two and three and a half steps a second.
         assert!(jog > 2.0 && jog < 3.2, "{jog} steps a second jogging");
         assert!(
             sprint > jog && sprint < 3.6,
             "{sprint} steps a second sprinting"
         );
+        assert!(sprint / jog < SPRINT_SPEED / JOG_SPEED);
         // A spider's legs go far quicker than a person's.
         let bestiary = Bestiary::read(&Default::default());
         let spider = bestiary.get(bestiary.named("Spider").unwrap());
