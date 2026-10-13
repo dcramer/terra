@@ -57,15 +57,30 @@ fn shaped(
     })
 }
 
-/// Footings under what is laid on the ground (D194): their kind, and the ground's height
-/// under a column, in centimetres in the base's own space.
+/// Footings under what is laid on the ground (D194): their kind, the ground's height
+/// under a column, in centimetres in the base's own space, and the block kinds, whose
+/// floors stand on footings of their own kind.
 #[derive(Clone, Copy)]
 pub struct Footings<'a> {
     pub kind: Kind,
     pub ground_cm: &'a dyn Fn([i32; 2]) -> i16,
+    pub blocks: &'a BTreeSet<Kind>,
 }
 
 impl Footings<'_> {
+    /// The footings under a floor of a kind: of the floor's kind where it is a block kind,
+    /// as a stone floor stands on stone; else of their own.
+    fn under(self, floor: Kind) -> Self {
+        Footings {
+            kind: if self.blocks.contains(&floor) {
+                floor
+            } else {
+                self.kind
+            },
+            ..self
+        }
+    }
+
     /// A footing's plan under columns, each from its top layer down to the ground.
     fn plan(
         &self,
@@ -121,7 +136,7 @@ pub fn room(
         (x0..=x1).flat_map(move |x| (z0..=z1).map(move |z| IVec3::new(x, y, z)))
     };
     let mut ops = Vec::new();
-    let footings = footings.filter(|_| y == 0);
+    let footings = footings.filter(|_| y == 0).map(|f| f.under(floor));
     let edge =
         |tile: IVec3| tile.x == min.x || tile.x == max.x || tile.z == min.z || tile.z == max.z;
     if let Some(footings) = footings {
@@ -185,7 +200,7 @@ pub fn floor(
     let mut parts = Numbers::of(base);
     let layer = floor_layer(min.y);
     let mut ops = Vec::new();
-    if let Some(footings) = footings.filter(|_| min.y == 0) {
+    if let Some(footings) = footings.filter(|_| min.y == 0).map(|f| f.under(kind)) {
         let edge = |x: i32, z: i32| x == min.x || x == max.x || z == min.z || z == max.z;
         let columns = (min.x..=max.x)
             .flat_map(|x| (min.z..=max.z).map(move |z| [x, z]))
@@ -437,6 +452,7 @@ mod tests {
         let footings = Footings {
             kind: STONE,
             ground_cm: &ground,
+            blocks: &BTreeSet::from([STONE]),
         };
         let (min, max) = (IVec3::new(0, 0, 0), IVec3::new(9, 0, 7));
         let ops = room(&base, min, max, LOGS, LOGS, Some(footings));
@@ -477,6 +493,27 @@ mod tests {
         );
         // Higher up, no footing, and its floor the flat roof below: four walls and a roof.
         assert_eq!(upstairs.len(), 5);
+    }
+
+    #[test]
+    fn a_floor_of_a_block_kind_stands_on_footings_of_its_own_kind() {
+        // Stone by default; a floor of another block kind, brick, on brick.
+        const BRICK: Kind = Kind(3);
+        let ground = |_: [i32; 2]| -60i16;
+        let blocks = BTreeSet::from([STONE, BRICK]);
+        let footings = Footings {
+            kind: STONE,
+            ground_cm: &ground,
+            blocks: &blocks,
+        };
+        let (min, max) = (IVec3::new(0, 0, 0), IVec3::new(5, 0, 5));
+        let kind_of_footing =
+            |floor: Kind| match &room(&Base::default(), min, max, LOGS, floor, Some(footings))[0] {
+                Op::LayPlan { kind, .. } => *kind,
+                other => panic!("{other:?}"),
+            };
+        assert_eq!(kind_of_footing(BRICK), BRICK);
+        assert_eq!(kind_of_footing(LOGS), STONE);
     }
 
     #[test]
@@ -523,6 +560,7 @@ mod tests {
         let footings = Footings {
             kind: STONE,
             ground_cm: &ground,
+            blocks: &BTreeSet::from([STONE]),
         };
         let ops = flight(
             &base,

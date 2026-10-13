@@ -416,6 +416,8 @@ Tabs: Claim; Structure; Openings; Crafting; Furniture; Storage; Light and fire. 
 
 D108: everything built in the world, by anyone, is made of the same parts as what a player builds. A village's houses are walls, floors, roofs and doors from the build catalogue, put up by the same operations. A well is a buildable thing, a station rather than a structure. The test of a building system is that a settlement can be described in it; if something in a village cannot be, the catalogue grows.
 
+The MVP's village is laid out from its seed by rules (`terra_build::village`, D229): a street village, the houses along both sides of a street with a green and a well, their doors to the street, each of a plan (a rectangle, an L, a T, a U, two storeys with an outside stair, a woodshed, a lookout deck on posts, a low garden wall), a scheme of the kits' kinds (logs, stone, hewn timber, logs on a stone plinth, stone under timber, log walls with stone ends) and a roof (gable, hip, lean-to), each stood on the ground where it goes on its footings, with steps from its door. About two hundred buildings can be told apart by those three and their width; the village has eleven of them and its garden walls, every plan and scheme at least once. What grows keeps out of every building and a margin round it, and off the street.
+
 ## Proposed order
 
 For the developers to reorder. Each step is small enough to play and judge.

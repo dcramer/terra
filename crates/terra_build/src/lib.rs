@@ -52,6 +52,7 @@ pub mod sections;
 pub mod support;
 pub mod surface;
 pub mod timber;
+pub mod village;
 mod walk;
 
 pub use cost::{Amount, Bill, PropKind, Rules, Terms};
@@ -615,8 +616,14 @@ impl Base {
             for x in min[0]..=max[0] {
                 for z in min[2]..=max[2] {
                     let tile = IVec3::new(x, min[1], z);
+                    // The kind of the top of the wall, which carries the roof: a log
+                    // cabin on a stone plinth is roofed as logs are.
+                    let top = wall_layer(tile.y);
                     if self.walls.contains_key(&tile.to_array())
-                        && let Some(kind) = self.kind(tile)
+                        && let Some(kind) = (top..top + STOREY_CUBES)
+                            .rev()
+                            .find_map(|layer| self.cube(IVec3::new(tile.x, layer, tile.z)))
+                            .map(|cube| cube.kind)
                     {
                         *counts.entry(kind).or_default() += 1;
                     }

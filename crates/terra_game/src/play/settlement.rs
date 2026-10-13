@@ -4,10 +4,14 @@
 //! they know. Bring the smith home to your claim and the elder says so.
 //!
 //! Everything in it is built from the same parts as the player's things (D108): each
-//! house is a build put up by the same operations as a player's rooms, doors and windows,
-//! and the well and stall are catalogue items, placed as a player places one. They are
-//! the villagers', not the player's. The people go about their day where they stand.
+//! building is laid out from the village's seed by `terra_build::village`, a street of
+//! houses of every kind of construction, a shed, a lookout and garden walls, and put up by
+//! the same shortcuts as a player's rooms; the well and stall are catalogue items, placed
+//! as a player places one. They are the villagers', not the player's. What grows keeps out
+//! of every building and a margin round it, and off the street. The people go about their
+//! day where they stand.
 
+use super::Footprint;
 use super::catalogue::Builds;
 use super::creatures::Lair;
 use super::daylight::{Clock, SkyPath};
@@ -21,55 +25,13 @@ use crate::build::{self, Build, BuildLook, Built, Site};
 use crate::planet::Planet;
 use crate::start::Start;
 use bevy::prelude::*;
-use terra_build::{Base, BuildOp, CELL_M, Kind, Panel};
-
-/// A house: where the middle of its door stands from the village's middle, in metres
-/// east and south, and how wide and deep it is. Its door faces the well.
-struct House {
-    east: f32,
-    south: f32,
-    wide: f32,
-    deep: f32,
-    /// Whether it has a room upstairs as well.
-    upstairs: bool,
-}
-
-const HOUSES: [House; 4] = [
-    House {
-        east: -6.0,
-        south: -5.0,
-        wide: 5.0,
-        deep: 4.0,
-        upstairs: false,
-    },
-    House {
-        east: 6.5,
-        south: -5.5,
-        wide: 6.0,
-        deep: 4.5,
-        upstairs: true,
-    },
-    House {
-        east: 0.0,
-        south: -9.5,
-        wide: 4.0,
-        deep: 4.0,
-        upstairs: false,
-    },
-    House {
-        east: -8.5,
-        south: 5.5,
-        wide: 5.0,
-        deep: 4.0,
-        upstairs: false,
-    },
-];
+use terra_build::{Base, CELL_M};
 
 /// An item from the catalogue the village has: what it is, where it stands from the
 /// middle in metres east and south, and how many degrees it is turned.
 const ITEMS: [(&str, f32, f32, f32); 3] = [
-    ("../village/Well", 0.0, 0.0, 0.0),
-    ("../village/MarketStand_1", 6.0, 4.0, -60.0),
+    ("../village/Well", 0.5, -1.5, 0.0),
+    ("../village/MarketStand_1", 7.0, 3.5, -60.0),
     // Ilse's stool.
     ("Stool", -3.5, 2.5, 0.0),
 ];
@@ -142,40 +104,6 @@ pub(super) const PEOPLE: [Villager; 4] = [
     },
 ];
 
-/// The operations that put a house up in a kind of construction, in its own space: the
-/// door in the wall along z = 0, facing +Z, and the house behind it, its middle on x = 0.
-fn house(house: &House, kind: Kind) -> Vec<BuildOp> {
-    let cells = |metres: f32| (metres / CELL_M).round() as i32;
-    let (half, deep) = (cells(house.wide * 0.5), cells(house.deep));
-    let mut ops = vec![BuildOp::AddRoom {
-        min: [-half, 0, -deep],
-        max: [half - 1, 0, -1],
-        kind,
-    }];
-    if house.upstairs {
-        ops.push(BuildOp::AddRoom {
-            min: [-half, 1, -deep],
-            max: [half - 1, 1, -cells(1.5)],
-            kind,
-        });
-    }
-    let wall = |x: i32, z: i32, panel: Panel| BuildOp::SetWall {
-        tile: [x, 0, z],
-        panel: Some(panel),
-        kind,
-    };
-    // A door a metre wide, and a window in each end wall.
-    for x in -1..1 {
-        ops.push(wall(x, -1, Panel::Door));
-    }
-    let middle = -deep / 2;
-    for z in middle - 1..middle + 1 {
-        ops.push(wall(half - 1, z, Panel::WINDOW));
-        ops.push(wall(-half, z, Panel::WINDOW));
-    }
-    ops
-}
-
 #[derive(Resource)]
 pub struct Village(pub Vec3);
 
@@ -187,8 +115,14 @@ pub fn plugin(app: &mut App) {
         );
 }
 
+/// How far the street runs east and west of the green's middle, and how wide it is, in
+/// metres: kept clear of what grows, and trodden bare.
+const STREET_M: (f32, f32) = (42.0, 5.0);
+
 /// Once the lair is chosen, sets the village down somewhere else, dry and level enough,
-/// and builds it.
+/// and builds it from its seed (`terra_build::village`, D108): each building put up by the
+/// same shortcuts as the player's, stood on the ground where it goes, its door to the
+/// street.
 #[allow(clippy::too_many_arguments)]
 fn found(
     mut commands: Commands,
@@ -215,34 +149,72 @@ fn found(
         return;
     };
     commands.insert_resource(Village(middle));
-    clear.write(ClearAround(middle, 20.0));
     let up = middle.normalize();
     let east = up.cross(Vec3::Y).normalize_or(up.any_orthonormal_vector());
     let south = east.cross(up);
+    let at = |e: f32, s: f32| planet.ground_at(middle + east * e + south * s);
+    // The street, its plants cleared and trodden bare.
+    let (long, wide) = STREET_M;
+    let mut step = -long;
+    while step <= long {
+        clear.write(ClearAround(at(step, 0.0), wide + 1.5));
+        step += 4.0;
+    }
+    let street = Transform::from_matrix(Mat4::from_cols(
+        east.extend(0.0),
+        up.extend(0.0),
+        south.extend(0.0),
+        middle.extend(1.0),
+    ));
+    let cells = |metres: f32| (metres / CELL_M).round() as i32;
+    commands.spawn((
+        Name::new("Village street"),
+        Footprint {
+            frame: street,
+            cell_m: CELL_M,
+            ground: (-cells(long)..cells(long))
+                .flat_map(|x| (-cells(wide)..cells(wide)).map(move |z| IVec2::new(x, z)))
+                .collect(),
+            ..default()
+        },
+    ));
 
     let to_site = site.frame.compute_affine().inverse();
-    // The houses, each its own build, standing upright where it is, its door to the well.
-    for (index, plan) in HOUSES.iter().enumerate() {
-        let door = planet.ground_at(middle + east * plan.east + south * plan.south);
+    let kinds = look.kits.as_deref().and_then(build::village_kinds);
+    let Some(kinds) = kinds else {
+        warn!("The village needs a log, a stone and a hewn timber kit.");
+        return;
+    };
+    let seed = planet.seed().derive("village").0 as u32;
+    for building in terra_build::village::village(seed, kinds) {
+        let [e, s] = building.at;
+        let door = at(e, s);
         let up = door.normalize();
-        let away = (door - middle).reject_from(up).normalize_or(south);
-        let ops = house(plan, look.laying);
+        let east = up.cross(Vec3::Y).normalize_or(up.any_orthonormal_vector());
+        let south = east.cross(up);
+        // Its own +Z turned to look the way its door does, its X along the street.
+        let rotation = Quat::from_mat3(&Mat3::from_cols(east, up, south))
+            * Quat::from_rotation_y(building.facing);
         let mut shape = Base::default();
-        for &op in &ops {
+        for &op in &building.ops {
             shape.apply(op);
         }
         let frame = build::lifted(
-            Transform::from_translation(door).looking_to(away, up),
+            Transform::from_translation(door).with_rotation(rotation),
             &shape,
             &planet,
         );
-        let mut built = Build::new(&mut commands, &look, frame, &format!("House {index}"));
-        built.replace_with(&ops, &mut commands, &planet, &mut meshes);
-        commands.spawn((Name::new(format!("House {index}")), Built(built)));
+        let label = format!("Settlement: {}", building.name);
+        let mut built = Build::new(&mut commands, &look, frame, &label);
+        built.replace_with(&building.ops, &mut commands, &planet, &mut meshes);
+        commands.spawn((Name::new(label), Built(built)));
         let local = to_site.transform_point3(door);
         info!(
-            "House {index}'s door is {:.1} m east and {:.1} m south of the start.",
-            local.x, local.z
+            "Settlement: {}: its door {:.1} m east and {:.1} m south of the start, looking {:.0} degrees from south.",
+            building.name,
+            local.x,
+            local.z,
+            building.facing.to_degrees()
         );
     }
 

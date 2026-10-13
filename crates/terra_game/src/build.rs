@@ -585,7 +585,10 @@ impl Build {
         if self.by_plans {
             return;
         }
-        let Some(kind) = self.kits.as_deref().and_then(footing_kind) else {
+        let Some(kits) = self.kits.as_deref() else {
+            return;
+        };
+        let Some(kind) = floor_footing(&self.base, kits).or_else(|| footing_kind(kits)) else {
             return;
         };
         let frame = self.frame;
@@ -608,6 +611,45 @@ impl Build {
             .collect();
         self.base.sample_ground(samples);
     }
+}
+
+/// The kind a build's floor on the ground asks its footings to be (D194): its own, where
+/// most of it is of a block kind, as a stone floor stands on stone; none where it is timber
+/// or there is none, so the footings take their default.
+fn floor_footing(base: &Base, kits: &Kits) -> Option<Kind> {
+    let floor = terra_build::floor_layer(0);
+    let mut counts: BTreeMap<Kind, usize> = BTreeMap::new();
+    for (at, cube) in base.cubes().filter(|(at, _)| at.y == floor) {
+        if !base.in_wall(at.with_y(terra_build::wall_layer(0))) {
+            *counts.entry(cube.kind).or_default() += 1;
+        }
+    }
+    let (kind, _) = counts
+        .into_iter()
+        .max_by_key(|&(kind, count)| (count, kind))?;
+    kits.of(kind)
+        .is_some_and(|kit| kit.pattern == Pattern::Masonry)
+        .then_some(kind)
+}
+
+/// The kinds a village is built of (`terra_build::village`): the log kit's, the stone
+/// kit's and the hewn timber kit's.
+pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Kinds> {
+    let find = |pattern: Pattern, profile: terra_build::kit::Profile| {
+        kits.0
+            .iter()
+            .find(|kit| {
+                kit.pattern == pattern
+                    && (pattern == Pattern::Masonry || kit.timber.profile == profile)
+            })
+            .map(|kit| kit.kind())
+    };
+    use terra_build::kit::Profile;
+    Some(terra_build::village::Kinds {
+        logs: find(Pattern::Logs, Profile::Round)?,
+        stone: find(Pattern::Masonry, Profile::Round)?,
+        hewn: find(Pattern::Logs, Profile::Hewn)?,
+    })
 }
 
 /// The kind footings are laid in (D194): stone, the first kit laid as blocks.

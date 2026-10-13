@@ -141,8 +141,9 @@ impl Base {
     }
 
     /// Where footings go under a building's ground storey (D194), as each column and the
-    /// layer its footing's top is at: the floor's layer under every column of its walls,
-    /// the layer under the floor under its floor's edges, in order.
+    /// layer its footing's top is at: the floor's layer under every column of its walls and
+    /// of anything else standing on the ground storey's foot, the layer under the floor
+    /// under its floor's edges, in order.
     pub fn footing_columns(&self) -> Vec<([i32; 2], i32)> {
         let floor = floor_layer(0);
         let walls: BTreeSet<[i32; 2]> = self
@@ -160,6 +161,14 @@ impl Base {
                 .any(|[dx, dz]| !floored([at.x + dx, at.z + dz]));
             if edge {
                 columns.push(([at.x, at.z], floor - 1));
+            }
+        }
+        // Whatever else stands on the ground storey's foot, a post, a flight of steps, a
+        // low wall, from the floor's layer, as a wall does.
+        let foot = crate::wall_layer(0);
+        for (&[x, z], layers) in &self.columns {
+            if !walls.contains(&[x, z]) && layers.first() == Some(&foot) && !floored([x, z]) {
+                columns.push(([x, z], floor));
             }
         }
         columns.sort();

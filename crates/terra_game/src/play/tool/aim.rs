@@ -575,9 +575,11 @@ fn plan_work(
     let base = &building.site.base;
     let kind = look.laying;
     let ground = |column: [i32; 2]| building.ground_cm(column);
+    let blocks = building.rules.blocks.clone();
     let footings = building.rules.footing.map(|kind| plans::Footings {
         kind,
         ground_cm: &ground,
+        blocks: &blocks,
     });
     let work = |building: &mut Building, doing: Doing, what: String, ops: Vec<Op>| {
         let ops = building.with_ground(ops);
