@@ -50,6 +50,13 @@ CROSSED_M = 0.018      # and above the waist, where straps cross the chest, a ch
                        # off the skin, which they clear (fit_gear.py, docs/characters.md)
 MATCH_M = 0.03         # skin this close lines the dressed model up
 TEXTURE = 1024
+CUT_SMOOTH_ROUNDS = 3  # rounds of smoothing the field the piece's edge is cut along
+CUT_CLEAR = 0.1        # the field kept this far from the cut at the body's vertices, so the cut
+                       # never passes a hair from one and leaves a sliver of a triangle
+EDGE_RELAX_ROUNDS = 4  # rounds of evening out the edge along itself, kept on the skin
+TAPER_M = 0.02         # over this far in from its edge above the waist, the piece comes down
+                       # to OFFSET_M, so an armhole or neckline lies on the body as a real one does
+RIM_M = 0.0015         # the rim turned in from the edge stops this far off the skin
 COVERED = 1.0          # a patch wholly under the piece is hidden; part-covered ones stay, or a band of skin vanishes below a hem or rim
 # What each kind of piece covers: the bones whose skin it covers, and the heights of its
 # hems, as shares of the way from one joint to the next (0 at the first, 1 at the second):
@@ -238,9 +245,58 @@ for isl in found:
         marked[isl] = False
 print("SHELL", item, f"marks {int(marked.sum())} of {len(marked)} faces of the body")
 
-# 3. The piece: those faces of the body, pushed out.
-bmesh.ops.delete(bm, geom=[f for f in bm.faces if not marked[f.index]], context="FACES")
+# 3. The piece: those faces of the body, cut out along a smooth line and pushed out. The faces
+# kept have a stepped border along the body's triangles; instead, a smooth field over the
+# vertices (the share of each one's faces kept, averaged with its neighbours') is cut at one
+# half, through the triangles, as sculpting tools extract a garment from a body. What each
+# vertex was on the body (its stand-off, its normal, which vertex) goes with it in layers, and
+# the cut's new vertices take theirs, and their weights, between the two ends of their edge.
+bm.verts.ensure_lookup_table()
+stand_l = bm.verts.layers.float.new("stand")
+normal_l = [bm.verts.layers.float.new(f"normal_{k}") for k in "xyz"]
+body_l = bm.verts.layers.int.new("body_vertex")
+field_l = bm.verts.layers.float.new("field")
+field = np.array([sum(marked[f.index] for f in v.link_faces) / max(1, len(v.link_faces)) for v in bm.verts])
+for _ in range(CUT_SMOOTH_ROUNDS):
+    total, count = np.zeros(len(field)), np.zeros(len(field))
+    np.add.at(total, edges[:, 0], field[edges[:, 1]])
+    np.add.at(total, edges[:, 1], field[edges[:, 0]])
+    np.add.at(count, edges[:, 0], 1)
+    np.add.at(count, edges[:, 1], 1)
+    field = (total + field) / (count + 1)
+field = np.where(np.abs(field - 0.5) < CUT_CLEAR, np.where(field >= 0.5, 0.5 + CUT_CLEAR, 0.5 - CUT_CLEAR), field)
+for v in bm.verts:
+    v[stand_l] = stand[v.index]
+    for k in range(3):
+        v[normal_l[k]] = skin_nrm[v.index][k]
+    v[body_l] = v.index
+    v[field_l] = field[v.index]
+made = set()
+for e in [e for e in bm.edges if (e.verts[0][field_l] - 0.5) * (e.verts[1][field_l] - 0.5) < 0]:
+    a, b = e.verts
+    _, v = bmesh.utils.edge_split(e, a, (0.5 - a[field_l]) / (b[field_l] - a[field_l]))
+    v[field_l] = 0.5
+    v[body_l] = -1
+    made.add(v)
+for f in list(bm.faces):
+    on = [v for v in f.verts if v in made]
+    if len(on) == 2:
+        bmesh.ops.connect_verts(bm, verts=on)
+bmesh.ops.delete(bm, geom=[f for f in bm.faces if sum(v[field_l] for v in f.verts) / len(f.verts) < 0.5], context="FACES")
 bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+bmesh.ops.dissolve_degenerate(bm, dist=1e-4, edges=bm.edges[:])
+# The edge evened out along itself, each round put back on the skin.
+for _ in range(EDGE_RELAX_ROUNDS):
+    rim = [v for v in bm.verts if v.is_boundary]
+    moved = {}
+    for v in rim:
+        along = [e.other_vert(v) for e in v.link_edges if e.is_boundary]
+        if len(along) == 2:
+            p = mw @ (v.co * 0.5 + (along[0].co + along[1].co) * 0.25)
+            hit = skin.find_nearest(p)
+            moved[v] = mw.inverted() @ (hit[0] if hit[0] is not None else p)
+    for v, co in moved.items():
+        v.co = co
 # Onto a copy of the body's own mesh, which carries the names of its vertex groups.
 piece = body.copy()
 piece.data = body.data.copy()
@@ -249,21 +305,57 @@ bm.free()
 piece.name = item
 bpy.context.scene.collection.objects.link(piece)
 piece.modifiers.clear()
-# Which body vertex each piece vertex came from, by place, to take its weights and stand-off.
-piece_pts = [mw @ v.co for v in piece.data.vertices]
-from mathutils.kdtree import KDTree
+# What each vertex was on the body, from the layers the cut carried.
+attrs = piece.data.attributes
 
-kd = KDTree(len(skin_pts))
-for i, p in enumerate(skin_pts):
-    kd.insert(p, i)
-kd.balance()
-origin = [kd.find(p)[1] for p in piece_pts]
+
+def layer(name):
+    values = np.zeros(len(piece.data.vertices), dtype=np.int32 if name == "body_vertex" else np.float32)
+    attrs[name].data.foreach_get("value", values)
+    return values
+
+
+piece_stand = layer("stand")
+piece_normal = np.stack([layer(f"normal_{k}") for k in "xyz"], axis=1)
+under = {int(i) for i in layer("body_vertex") if i >= 0}
+for name in ("stand", "normal_x", "normal_y", "normal_z", "body_vertex", "field"):
+    attrs.remove(attrs[name])
+on_skin = [mw @ v.co for v in piece.data.vertices]
+normals = [Vector(n).normalized() for n in piece_normal]
+# How far each vertex is from the piece's edge, along the piece.
+import heapq
+
+near = {i: [] for i in range(len(piece.data.vertices))}
+for e in piece.data.edges:
+    a, b = e.vertices
+    d = (on_skin[a] - on_skin[b]).length
+    near[a].append((b, d))
+    near[b].append((a, d))
+counts = {}
+for poly in piece.data.polygons:
+    for key in poly.edge_keys:
+        counts[key] = counts.get(key, 0) + 1
+border = {i for key, n in counts.items() if n == 1 for i in key}
+from_edge = {i: 0.0 for i in border}
+queue = [(0.0, i) for i in border]
+while queue:
+    d, i = heapq.heappop(queue)
+    if d > from_edge.get(i, math.inf) or d > TAPER_M:
+        continue
+    for j, step in near[i]:
+        if d + step < from_edge.get(j, math.inf):
+            from_edge[j] = d + step
+            heapq.heappush(queue, (d + step, j))
 inv = mw.inverted()
 waist = joint("spine_01").z
-for v, i in zip(piece.data.vertices, origin):
-    most = CROSSED_M if skin_pts[i].z > waist else BULK_M
-    out = min(max(OFFSET_M, stand[i] + 0.004), most)
-    v.co = inv @ (skin_pts[i] + skin_nrm[i] * out)
+for v in piece.data.vertices:
+    i = v.index
+    most = CROSSED_M if on_skin[i].z > waist else BULK_M
+    out = min(max(OFFSET_M, piece_stand[i] + 0.004), most)
+    # Above the waist only: an armhole or a neckline lies on the body, a hem hangs free.
+    t = min(1.0, from_edge.get(i, math.inf) / TAPER_M) if on_skin[i].z > waist else 1.0
+    out = OFFSET_M + (out - OFFSET_M) * t * t * (3 - 2 * t)
+    v.co = inv @ (on_skin[i] + normals[i] * out)
 piece.data.update()
 # 4. Weights: the vertex groups came with the copy of the body, so each vertex keeps its own.
 
@@ -307,10 +399,40 @@ bpy.context.view_layer.objects.active = piece
 bpy.ops.object.bake(type="DIFFUSE")
 baked.pack()
 
+# A rim turned in from the edge to just off the skin, so the edge reads as the material's
+# thickness and nothing shows into the gap between piece and skin. Its faces take the colour
+# along the edge (their texture coordinates are the edge's), and the edge is kept sharp.
+bm = bmesh.new()
+bm.from_mesh(piece.data)
+bm.verts.ensure_lookup_table()
+uv = bm.loops.layers.uv.active
+edge = [e for e in bm.edges if e.is_boundary]
+# Keyed by the elements themselves: the extrusion leaves new elements' indices unset.
+edge_uv = {}
+for e in edge:
+    face = e.link_faces[0]
+    edge_uv[e] = {l.vert: l[uv].uv.copy() for l in face.loops if l.vert in e.verts}
+    e.smooth = False
+old = set(bm.verts)
+index = {v: v.index for v in bm.verts}
+grown = bmesh.ops.extrude_edge_only(bm, edges=edge)
+source = {}
+for v in [g for g in grown["geom"] if isinstance(g, bmesh.types.BMVert)]:
+    source[v] = next(e.other_vert(v) for e in v.link_edges if e.other_vert(v) in old)
+    i = index[source[v]]
+    v.co = inv @ (on_skin[i] + normals[i] * RIM_M)
+for f in [g for g in grown["geom"] if isinstance(g, bmesh.types.BMFace)]:
+    e = next(e for e in f.edges if e in edge_uv)
+    for l in f.loops:
+        l[uv].uv = edge_uv[e][l.vert if l.vert in old else source[l.vert]]
+bm.normal_update()
+bm.to_mesh(piece.data)
+bm.free()
+piece.data.update()
+
 # The patches it hides.
 covered_by = {}
 total = {}
-under = set(origin)
 for i in range(len(skin_pts)):
     p = patch_of.get(i)
     if p is None:

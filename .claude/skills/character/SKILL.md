@@ -13,7 +13,7 @@ Costs per character, on the Studio subscription: design sheets are free (100 ima
 
 ## 1. Design sheet (a person approves it)
 
-A turnaround sheet: the same character three times, front, side and back, **in a T-pose** (arms straight out at shoulder height, palms down, legs straight and a little apart), plain light grey background. A base body wears plain underclothes and has a shaved head: hair and clothes are separate parts (D111, D112).
+A turnaround sheet: the same character three times, front, side and back, **in a T-pose** (arms straight out at shoulder height, palms down, legs straight and a little apart), plain light grey background. A base body wears plain, close-fitting underwear with no relief (D186) and has a shaved head: hair and clothes are separate parts (D111, D112).
 
 Draw it in the art style, [docs/art-style.md](../../../docs/art-style.md) (D14, direction D), which every character, creature and piece of gear follows: big simple shapes, flat areas of colour, true proportions, no painted shading. End the prompt with the guide's concept paragraph, keeping the sheet's own framing (three views, T-pose, light grey background):
 

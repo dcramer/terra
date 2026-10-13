@@ -242,6 +242,8 @@ def close_up(rig, bone, span, sides=(0, 90, 180, 270), size=400):
 
     for o in hidden:
         o.hide_render = not worn_by_rig(o)
+    # Evaluated now: a pose just cleared or set is not in the bones until the scene updates.
+    bpy.context.view_layer.update()
     at = rig.matrix_world @ rig.pose.bones[bone].head
     paths = []
     for side in sides:

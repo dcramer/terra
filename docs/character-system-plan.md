@@ -113,6 +113,7 @@ Settled on 2026-10-12 (D111): sliders only; height varies widely, for other race
 2. **Head and face variety:** blends of a few heads, or fixed faces?
 3. **Hair:** how many styles to start; long hair with physics, or short only at first?
 4. **Loose garments:** are long coats, robes and cloaks wanted early? They need phase 5.
+5. ~~What the base body wears~~: settled (D186), plain flat underwear; starting clothes are items.
 
 ## Why not something ready-made
 
