@@ -126,10 +126,10 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
 
 /// What the eye adapts round: the log brightness a scene meters at when it is as bright as
 /// the day's exposure for the hour expects (D214).
-const METERED_AS_SET: f32 = -3.0;
-/// How far the eye adapts from the day's exposure: up to two stops brighter in deep shade,
+const METERED_AS_SET: f32 = -3.6;
+/// How far the eye adapts from the day's exposure: up to one and a half stops brighter in deep shade,
 /// as under a canopy, and one darker in glare, as every game with a forest clamps it.
-const ADAPT_BRIGHTER: f32 = 2.0;
+const ADAPT_BRIGHTER: f32 = 1.5;
 const ADAPT_DARKER: f32 = 1.0;
 
 /// Eye adaptation clamped round the day's exposure: Bevy's auto exposure meters the frame
@@ -206,7 +206,7 @@ fn style_camera(
         // contrast through the middle and shadows, as a print's look adds.
         ColorGrading {
             global: ColorGradingGlobal {
-                post_saturation: 1.12,
+                post_saturation: 1.0,
                 ..default()
             },
             // No extra contrast in the shadows, which crushed the shade under a canopy to
