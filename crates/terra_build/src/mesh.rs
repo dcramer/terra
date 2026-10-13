@@ -302,14 +302,16 @@ fn gable(mesh: &mut BaseMesh, base: &Base, tile: IVec3, look: Option<KitLook>) {
     let [origin, right_end, ..] = crate::corners(tile, base.along(tile));
     let right = right_end - origin;
     let normal = right.normalize().cross(Vec3::Y);
-    let rise = |across: f32| {
-        let at = origin + right * across;
+    // The roof's underside over a line along the wall so far out from its middle: each
+    // face meets the slope where it stands, not where the wall's middle does.
+    let rise = |across: f32, out: f32| {
+        let at = origin + right * across + normal * out;
         base.roof_rise(tile.y, glam::Vec2::new(at.x, at.z))
             .map(|rise| (rise - ROOF_THICK_M).max(0.0))
     };
-    let (Some(start), Some(middle), Some(end)) = (rise(0.0), rise(0.5), rise(1.0)) else {
+    if rise(0.5, 0.0).is_none() {
         return;
-    };
+    }
     let (depth, front, back) = match look {
         Some(look) => (GABLE_BACKING_M, look.gable, look.gable),
         None => {
@@ -325,32 +327,33 @@ fn gable(mesh: &mut BaseMesh, base: &Base, tile: IVec3, look: Option<KitLook>) {
     };
     let height = origin.y + STOREY_M;
     let at = |across: f32, up: f32, out: f32| (origin + right * across).with_y(up) + normal * out;
-    for (left, right, rise_left, rise_right) in [(0.0, 0.5, start, middle), (0.5, 1.0, middle, end)]
-    {
-        if rise_left.max(rise_right) < 0.01 {
+    for (out, colour) in [(depth, front), (-depth, back)] {
+        let (Some(start), Some(middle), Some(end)) =
+            (rise(0.0, out), rise(0.5, out), rise(1.0, out))
+        else {
             continue;
+        };
+        for (left, right, rise_left, rise_right) in
+            [(0.0, 0.5, start, middle), (0.5, 1.0, middle, end)]
+        {
+            if rise_left.max(rise_right) < 0.01 {
+                continue;
+            }
+            let (top_left, top_right) = (height + rise_left, height + rise_right);
+            let corners = [
+                at(left, height, out),
+                at(right, height, out),
+                at(right, top_right, out),
+                at(left, top_left, out),
+            ];
+            // Wound counter-clockwise as seen from the side it faces.
+            if out > 0.0 {
+                mesh.structure.polygon(&corners, normal, colour);
+            } else {
+                let [a, b, c, d] = corners;
+                mesh.structure.polygon(&[b, a, d, c], -normal, colour);
+            }
         }
-        let (top_left, top_right) = (height + rise_left, height + rise_right);
-        mesh.structure.polygon(
-            &[
-                at(left, height, depth),
-                at(right, height, depth),
-                at(right, top_right, depth),
-                at(left, top_left, depth),
-            ],
-            normal,
-            front,
-        );
-        mesh.structure.polygon(
-            &[
-                at(right, height, -depth),
-                at(left, height, -depth),
-                at(left, top_left, -depth),
-                at(right, top_right, -depth),
-            ],
-            -normal,
-            back,
-        );
     }
 }
 
@@ -497,6 +500,43 @@ mod tests {
         base
     }
 
+    /// The top of `room`'s roof at a distance south, worked out by hand: it is 3 m by
+    /// 2.5, its gable rising from the north and south.
+    fn room_roof(z: f32) -> f32 {
+        STOREY_M + z.min(2.5 - z) * 0.7
+    }
+
+    /// Checks the walls drawn in `colours` are carried up to the roof's underside over
+    /// them and no further, at the gable ends and along the eaves, each face where it
+    /// stands; returns their corners and normals.
+    fn up_to_the_roof(mesh: &BaseMesh, colours: &[[f32; 3]]) -> Vec<(Vec3, Vec3)> {
+        let walls: Vec<(Vec3, Vec3)> = mesh
+            .structure
+            .positions
+            .iter()
+            .zip(&mesh.structure.normals)
+            .zip(&mesh.structure.colours)
+            .filter(|((_, n), colour)| colours.contains(colour) && n.y == 0.0)
+            .map(|((p, n), _)| (*p, *n))
+            .collect();
+        for (p, n) in &walls {
+            let under = room_roof(p.z) - ROOF_THICK_M;
+            assert!(
+                p.y <= STOREY_M + 1e-4 || (p.y - under).abs() < 1e-4,
+                "{p} {n} against {under}"
+            );
+        }
+        // Above the walls' tops at the gable ends, and along the eaves.
+        for end in [true, false] {
+            let above = walls
+                .iter()
+                .filter(|(p, n)| (n.x.abs() > 0.5) == end && p.y > STOREY_M + 1e-4)
+                .count();
+            assert!(above > 0, "nothing above the walls, end {end}");
+        }
+        walls
+    }
+
     #[test]
     fn every_triangle_faces_the_way_its_normal_says() {
         let mesh = room().mesh(|_| None);
@@ -519,6 +559,11 @@ mod tests {
         });
         // Two cubes side by side: ten faces, not twelve.
         assert_eq!(base.mesh(|_| None).structure.triangle_count(), 20);
+    }
+
+    #[test]
+    fn plain_walls_are_carried_up_to_the_roof_and_no_further() {
+        up_to_the_roof(&room().mesh(|_| None), &[HULL, INNER_WALL]);
     }
 
     #[test]
@@ -550,9 +595,7 @@ mod tests {
         };
         let e = look.eaves;
         let mesh = room().mesh(|_| Some(look.clone()));
-        // The room is 3 m by 2.5, its gable rising from the north and south, worked out
-        // by hand.
-        let roof = |z: f32| STOREY_M + z.min(2.5 - z) * 0.7;
+        let roof = room_roof;
         // Covered all over, eaves and all, on the roof, its rows along the ridge.
         let covering = &mesh.textured.0[&Material::Shakes];
         let mut area = 0.0;
@@ -594,29 +637,12 @@ mod tests {
             let top = roof(p.z);
             assert!(p.y <= top + 1e-4 && p.y >= top - ROOF_THICK_M - 1e-4, "{p}");
         }
-        // The gables' boards, up the middle of their walls; at the gable ends, under the
-        // roof.
-        let gable: Vec<(Vec3, Vec3)> = mesh
-            .structure
-            .positions
-            .iter()
-            .zip(&mesh.structure.normals)
-            .zip(&mesh.structure.colours)
-            .filter(|(_, colour)| **colour == look.gable)
-            .map(|((p, n), _)| (*p, *n))
-            .collect();
-        let ends = gable.iter().filter(|(_, n)| n.x.abs() > 0.5).count();
-        assert!(ends > 0);
-        for (p, n) in gable {
-            assert_eq!(n.y, 0.0);
-            let end = n.x.abs() > 0.5;
-            let across = if end { p.x } else { p.z };
+        // The gables' boards, up the middle of their walls and up to the roof.
+        for (p, n) in up_to_the_roof(&mesh, &[look.gable]) {
+            let across = if n.x.abs() > 0.5 { p.x } else { p.z };
             let off_middle = across - ((across / CELL_M).floor() + 0.5) * CELL_M;
             assert!((off_middle.abs() - GABLE_BACKING_M).abs() < 1e-4, "{p} {n}");
             assert!(p.y >= STOREY_M - 1e-4, "{p}");
-            if end {
-                assert!(p.y <= roof(p.z) - ROOF_THICK_M + 1e-4, "{p}");
-            }
         }
     }
 }
