@@ -39,7 +39,7 @@ import twist
 
 FIGURE = look.FIGURE
 OUT = os.path.join(HERE, "out")
-ACTIONS = ("Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Sword_Attack", "Crouch_Idle_Loop", "Punch_Cross", "Roll")
+ACTIONS = look.game_clips()
 # Thresholds: what a usable rig must meet.
 LIMITS = {
     "rest_angle_deg": 3.0,          # largest difference in any bone's direction
@@ -57,7 +57,8 @@ LIMITS = {
     "vs_mannequin": 3.5,            # or this many times the hand-rigged mannequin's share: set by eye on 2026-10-11, where a Tripo rig at 3.3x crouched cleanly
     "pinch": 0.2,                   # how much a ring of skin round an elbow, knee or wrist may shrink, in any frame
     "foot_gap_m": 0.05,             # standing feet within this of the ground
-    "sink_m": 0.06,                 # nothing below the ground by more than this
+    "sink_over_m": 0.02,            # nothing below the ground by more than this deeper than the mannequin goes in the same clip
+                                    # (a roll, a kneel and a fall touch the ground by design)
 }
 
 
@@ -245,6 +246,7 @@ for name in ACTIONS:
         ad.action_slot = action.slots[0]
     start, end = action.frame_range
     bad_max = 0.0
+    clip_sink = 0.0
     for k in range(9):
         bpy.context.scene.frame_set(int(start + (end - start) * k / 8))
         depsgraph.update()
@@ -259,6 +261,7 @@ for name in ACTIONS:
         bad_max = max(bad_max, float(bad))
         for e in np.nonzero(badmask)[0]:
             where[main_bone[edges[e][0]] or "none"] = where.get(main_bone[edges[e][0]] or "none", 0) + 1
+        clip_sink = max(clip_sink, float(-cur[:, 2].min()))
         if -cur[:, 2].min() > sink:
             low = int(np.argmin(cur[:, 2]))
             sink, sink_at = float(-cur[low, 2]), f"{name} {k}/8 {main_bone[low]}"
@@ -266,7 +269,7 @@ for name in ACTIONS:
             thin = 1.0 - ring_radius(cur[near]) / rest
             if thin > pinch.get(name, (0, ""))[0]:
                 pinch[name] = (thin, ring)
-    motion[name] = {"worst_bad_edge_share": round(bad_max, 4), "pinched": round(pinch.get(name, (0, ""))[0], 3), "pinched_at": pinch.get(name, (0, ""))[1]}
+    motion[name] = {"worst_bad_edge_share": round(bad_max, 4), "sink_m": round(clip_sink, 3), "pinched": round(pinch.get(name, (0, ""))[0], 3), "pinched_at": pinch.get(name, (0, ""))[1]}
     worst_bad = max(worst_bad, bad_max)
 top = sorted(where.items(), key=lambda t: -t[1])[:6]
 report["motion"] = {"actions": motion, "worst_places": top, "sink_m": round(sink, 3), "sink_at": sink_at, "standing_foot_gap_m": round(standing_gap, 3)}
@@ -275,15 +278,24 @@ report["motion"] = {"actions": motion, "worst_places": top, "sink_m": round(sink
 baseline_path = os.path.join(look.ART, "characters", "rig-baseline.json")
 baseline = json.load(open(baseline_path)) if os.path.exists(baseline_path) else {}
 moves_ok = True
+sink_over, sink_over_at = 0.0, ""
 for a, v in motion.items():
-    limit = max(LIMITS["bad_edge_share"] * 0.5, LIMITS["vs_mannequin"] * baseline[a]) if a in baseline else LIMITS["bad_edge_share"]
+    base = baseline.get(a, {})
+    if not isinstance(base, dict):  # a baseline from before it held each clip's sink
+        base = {"bad_edge_share": base}
+    limit = max(LIMITS["bad_edge_share"] * 0.5, LIMITS["vs_mannequin"] * base["bad_edge_share"]) if base else LIMITS["bad_edge_share"]
+    over = v["sink_m"] - base.get("sink_m", 0.0)
+    if over > sink_over:
+        sink_over, sink_over_at = over, a
     v["limit"] = round(limit, 4)
     v["ok"] = v["worst_bad_edge_share"] <= limit and v["pinched"] <= LIMITS["pinch"]
     moves_ok &= v["ok"]
 if os.path.basename(look.args()[0]) == os.path.basename(FIGURE):
     with open(baseline_path, "w") as f:
-        json.dump({a: v["worst_bad_edge_share"] for a, v in motion.items()}, f, indent=2)
-ok["motion"] = moves_ok and sink <= LIMITS["sink_m"] and standing_gap <= LIMITS["foot_gap_m"]
+        json.dump({a: {"bad_edge_share": v["worst_bad_edge_share"], "sink_m": v["sink_m"]} for a, v in motion.items()}, f, indent=2)
+report["motion"]["sink_over_mannequin_m"] = round(sink_over, 3)
+report["motion"]["sink_over_at"] = sink_over_at
+ok["motion"] = moves_ok and sink_over <= LIMITS["sink_over_m"] and standing_gap <= LIMITS["foot_gap_m"]
 
 result = {"file": look.args()[0], "pass": all(ok.values()), "checks": ok, "report": report, "limits": LIMITS}
 os.makedirs(OUT, exist_ok=True)

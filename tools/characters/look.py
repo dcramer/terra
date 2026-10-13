@@ -178,6 +178,13 @@ def material(name):
 # Rendering ------------------------------------------------------------------------------
 
 
+def game_clips():
+    """The clips the game plays (art/animation/clips.txt), which every check plays through
+    every body and item, so a clip added to the game is checked with no other change."""
+    with open(os.path.join(ART, "animation", "clips.txt")) as f:
+        return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+
+
 def fit_textures(flags):
     """Scales every image down to the budget a `--textures=PIXELS` flag in `flags` names, as
     games keep their source art large and give each kind of asset a texture budget: the game's

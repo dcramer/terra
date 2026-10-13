@@ -35,7 +35,7 @@ from mathutils import Vector
 
 import look
 
-CLIPS = ("Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Sword_Attack", "Punch_Cross", "Crouch_Idle_Loop", "Roll")
+CLIPS = look.game_clips()
 SLAB_M = 0.012  # half the thickness of a ring
 SHEET_SQUEEZE = 0.12  # a ring this much thinner is drawn on the sheet
 SHEET_ROWS = 8

@@ -1,9 +1,102 @@
 {
-  "Idle_Loop": 0.0014,
-  "Walk_Loop": 0.0024,
-  "Jog_Fwd_Loop": 0.0078,
-  "Sword_Attack": 0.0109,
-  "Crouch_Idle_Loop": 0.0085,
-  "Punch_Cross": 0.0059,
-  "Roll": 0.0141
+  "Idle_Loop": {
+    "bad_edge_share": 0.0014,
+    "sink_m": 0.0
+  },
+  "Idle_Talking_Loop": {
+    "bad_edge_share": 0.0058,
+    "sink_m": 0.0
+  },
+  "Walk_Loop": {
+    "bad_edge_share": 0.0024,
+    "sink_m": 0.013
+  },
+  "Jog_Fwd_Loop": {
+    "bad_edge_share": 0.0078,
+    "sink_m": 0.006
+  },
+  "Sprint_Loop": {
+    "bad_edge_share": 0.007,
+    "sink_m": 0.018
+  },
+  "Crouch_Idle_Loop": {
+    "bad_edge_share": 0.0086,
+    "sink_m": 0.002
+  },
+  "Crouch_Fwd_Loop": {
+    "bad_edge_share": 0.0088,
+    "sink_m": 0.008
+  },
+  "Jump_Start": {
+    "bad_edge_share": 0.0068,
+    "sink_m": 0.148
+  },
+  "Jump_Loop": {
+    "bad_edge_share": 0.0023,
+    "sink_m": 0.141
+  },
+  "Jump_Land": {
+    "bad_edge_share": 0.0075,
+    "sink_m": 0.001
+  },
+  "Roll": {
+    "bad_edge_share": 0.0141,
+    "sink_m": 0.014
+  },
+  "Interact": {
+    "bad_edge_share": 0.0033,
+    "sink_m": 0.0
+  },
+  "PickUp_Table": {
+    "bad_edge_share": 0.0035,
+    "sink_m": 0.0
+  },
+  "Fixing_Kneeling": {
+    "bad_edge_share": 0.0127,
+    "sink_m": 0.046
+  },
+  "Sitting_Enter": {
+    "bad_edge_share": 0.0095,
+    "sink_m": 0.0
+  },
+  "Sitting_Exit": {
+    "bad_edge_share": 0.0105,
+    "sink_m": 0.0
+  },
+  "Sitting_Idle_Loop": {
+    "bad_edge_share": 0.0085,
+    "sink_m": 0.0
+  },
+  "Sitting_Talking_Loop": {
+    "bad_edge_share": 0.0081,
+    "sink_m": 0.0
+  },
+  "Hit_Chest": {
+    "bad_edge_share": 0.0016,
+    "sink_m": 0.0
+  },
+  "Hit_Head": {
+    "bad_edge_share": 0.0016,
+    "sink_m": 0.0
+  },
+  "Death01": {
+    "bad_edge_share": 0.0072,
+    "sink_m": 0.064
+  },
+  "Punch_Jab": {
+    "bad_edge_share": 0.006,
+    "sink_m": 0.0
+  },
+  "Punch_Cross": {
+    "bad_edge_share": 0.0059,
+    "sink_m": 0.001
+  },
+  "Sword_Idle": {
+    "bad_edge_share": 0.0035,
+    "sink_m": 0.0
+  },
+  "Sword_Attack": {
+    "bad_edge_share": 0.0111,
+    "sink_m": 0.005
+  }
 }

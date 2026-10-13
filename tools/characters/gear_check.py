@@ -36,7 +36,7 @@ import look
 import patches
 
 GEAR = look.GEAR_MADE
-CLIPS = ("Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Sword_Attack", "Crouch_Idle_Loop", "Roll")
+CLIPS = look.game_clips()
 LIMITS = {
     "near_m": 0.06,          # skin this close to a look at rest is watched
     "depth_m": 0.03,         # the look's surface this far beneath the skin means it is through
