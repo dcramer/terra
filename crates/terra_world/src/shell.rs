@@ -41,6 +41,8 @@ usage: terra_sandbox [options]
   --list                list the experiments and exit
   --radius <metres>     planet radius (default 2000)
   --shot <file.png>     save a screenshot once the scene has settled, then exit
+  --rolling             with --level yard: the ground rolls gently, a few metres of swell and
+                        smaller bumps, rather than flat, for a forest
   --detail-sweep <from>-<to>@<frame>-<frame>
                         hold the clock and the wind still and sweep how far detail reaches,
                         every distance at which something changes its level of detail,
@@ -200,6 +202,8 @@ pub struct Options {
     pub shots: Option<Shots>,
     /// Detail swept over frames, the clock held still (`--detail-sweep`, D230).
     pub detail_sweep: Option<crate::detail::Sweep>,
+    /// The yard's ground rolling gently rather than flat, for a forest (`--rolling`).
+    pub rolling: bool,
     pub settle_frames: u32,
     pub bench: bool,
     /// Listen for a script driving the run (`remote`), and on which port.
@@ -358,6 +362,7 @@ impl Options {
             shot: None,
             shots: None,
             detail_sweep: None,
+            rolling: false,
             settle_frames: SETTLE_FRAMES,
             bench: false,
             remote: false,
@@ -487,6 +492,7 @@ impl Options {
                 "--trace" => options.trace = Some(PathBuf::from(value("--trace")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--shots" => options.shots = Some(Shots::parse(&value("--shots")?)?),
+                "--rolling" => options.rolling = true,
                 "--detail-sweep" => {
                     options.detail_sweep =
                         Some(crate::detail::Sweep::parse(&value("--detail-sweep")?)?)

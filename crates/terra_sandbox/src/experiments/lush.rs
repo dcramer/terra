@@ -447,12 +447,14 @@ impl Map {
             0.5 + 0.5 * self.patches.sample(Vec3::new(at.x, height, at.y) / across)
         };
         // In the shade grass grows only where some light gets through, in patches.
-        let shade_grass = smoothstep(0.6, 0.8, noise(19.0, 4.0));
+        let shade_grass = smoothstep(0.35, 0.7, noise(19.0, 4.0));
         // Moss round a tree's foot, its edge wandering, and in patches on the leaves.
         let foot = 1.0 - smoothstep(0.5, 2.4, trunk + (noise(53.0, 1.3) - 0.5) * 2.2);
         let mossy = noise(31.0, 3.5);
         Growing {
-            grass: off_path * patch * (0.9 * open + 0.6 * (1.0 - open) * shade_grass),
+            grass: off_path
+                * patch
+                * (1.0 * open + 0.75 * (1.0 - open) * (0.25 + 0.75 * shade_grass)),
             lush: noise(7.0, 20.0),
             path: self.path.edge_distance(at) < 0.0,
             litter: off_path * shaded,
@@ -1129,12 +1131,12 @@ fn plant(
 
     // Bushes: along the paths and in the glades more than under the trees.
     let mut bushed = 0;
-    for _ in 0..9_000 {
+    for _ in 0..16_000 {
         let angle = dice.range(0.0, TAU);
         let distance = libm::sqrtf(dice.range(9.0, (FOREST_M + 10.0) * (FOREST_M + 10.0)));
         let at = Vec2::new(libm::cosf(angle), libm::sinf(angle)) * distance;
         let path = path.edge_distance(at);
-        let chance = if path < 6.0 { 0.55 } else { 0.18 };
+        let chance = if path < 6.0 { 0.6 } else { 0.3 };
         if path < 0.6 || nearest(&feet, at, 2.0) < 1.6 || dice.unit() > chance {
             continue;
         }
@@ -1231,7 +1233,7 @@ fn plant(
     for (what, tries, seen_m, size, sink, solid, shade) in [
         (0, 1100, 80.0, (0.7, 1.6), 0.15, false, -0.3),
         (1, 60, 160.0, (0.6, 1.3), 0.3, true, 0.0),
-        (2, 2600, 35.0, (0.9, 1.8), 0.02, false, 1.0),
+        (2, 4200, 35.0, (0.9, 1.8), 0.02, false, 1.0),
         (3, 70, 90.0, (0.8, 1.3), 0.08, true, 0.6),
         (4, 160, 110.0, (0.8, 1.2), 0.0, false, 0.8),
     ] {

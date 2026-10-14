@@ -21,7 +21,7 @@ import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { ROOT } from "./client.ts";
 
-const WALK = ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", "17", "--route", "-58,-39", "--route", "-40,-69", "--route", "-6,-80", "--route", "30,-74", "--route", "59,-54"];
+const WALK = ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--rolling", "--time", "17", "--route", "-58,-39", "--route", "-40,-69", "--route", "-6,-80", "--route", "30,-74", "--route", "59,-54"];
 /// Frames are compared this small, blurred this much, and a pixel counts as changed past
 /// this much of full brightness.
 const SMALL = "240x135";

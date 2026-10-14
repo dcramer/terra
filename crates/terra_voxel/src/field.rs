@@ -202,6 +202,12 @@ impl GeneratedPlanet {
         self
     }
 
+    /// The same planet with its finer detail this tall, for gently uneven ground.
+    pub fn with_detail_m(mut self, detail_m: f32) -> Self {
+        self.detail_m = detail_m;
+        self
+    }
+
     pub fn spec(&self) -> PlanetSpec {
         self.spec
     }

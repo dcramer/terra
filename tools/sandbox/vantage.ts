@@ -46,7 +46,7 @@ for (const hour of hours) {
   const started = Date.now();
   const run = spawnSync(
     resolve(ROOT, "target/release/terra_sandbox"),
-    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...vantages, "--shots", `${prefix}@${frames}`],
+    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--rolling", "--time", hour, ...vantages, "--shots", `${prefix}@${frames}`],
     // Run outside Cargo, so told where assets/ is, as Cargo would.
     { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT } },
   );

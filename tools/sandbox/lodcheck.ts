@@ -96,7 +96,7 @@ const runs = await Promise.all(
     return run(
       resolve(ROOT, "target/release/terra_sandbox"),
       [
-        "--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour,
+        "--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--rolling", "--time", hour,
         "--vantage", VIEWS[view], "--detail-sweep", `${SWEEP.from}-${SWEEP.to}@${SWEEP.first}-${SWEEP.last}`,
         "--shots", `${dir}/f@${SWEEP.first + SETTLE - 1}-${SWEEP.last}`,
       ],

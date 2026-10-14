@@ -26,6 +26,9 @@ use terra_voxel::{GeneratedPlanet, VoxelPlanet};
 
 /// Height of the tallest hills, in metres.
 const RELIEF_M: f32 = 150.0;
+/// Rolling ground's swells and the bumps on them, in metres.
+const ROLLING_M: f32 = 6.0;
+const ROLLING_DETAIL_M: f32 = 1.1;
 /// Sea level relative to the planet's nominal radius, in metres.
 const SEA_LEVEL_M: f32 = -20.0;
 /// The camera starts here. The free camera treats +Y as up, so the pole is the one place
@@ -88,6 +91,18 @@ impl Planet {
                 GeneratedPlanet::new(spec, 0.0, None).smooth(),
             )),
             relief_m: 0.0,
+            cover: Noise::new(spec.seed.derive("ground cover")),
+        }
+    }
+
+    /// The yard's ground rolling gently, for a forest to stand on: swells a few metres high
+    /// and smaller bumps on them, no sea (`--rolling`).
+    pub fn rolling(spec: PlanetSpec) -> Self {
+        Planet {
+            ground: Arc::new(VoxelPlanet::new(
+                GeneratedPlanet::new(spec, ROLLING_M, None).with_detail_m(ROLLING_DETAIL_M),
+            )),
+            relief_m: ROLLING_M,
             cover: Noise::new(spec.seed.derive("ground cover")),
         }
     }
@@ -460,7 +475,10 @@ pub fn plugin(app: &mut App) {
         radius_m,
     };
     let yard = app.world().resource::<Options>().yard();
-    let planet = if yard {
+    let rolling = app.world().resource::<Options>().rolling;
+    let planet = if yard && rolling {
+        Planet::rolling(spec)
+    } else if yard {
         Planet::smooth(spec)
     } else {
         Planet::new(spec)
