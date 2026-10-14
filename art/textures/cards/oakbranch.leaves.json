@@ -1,0 +1,16 @@
+{
+  "scan": "LeafSet016",
+  "form": "spray",
+  "leaves": 34,
+  "length": [0.19, 0.26],
+  "shoots": 6,
+  "twig": [0.42, 0.38, 0.32],
+  "thickness": 0.011,
+  "tone": 0.32,
+  "young": 0.15,
+  "old": 0.35,
+  "underside": 0.12,
+  "saturation": 0.9,
+  "value": 0.58,
+  "seed": 11
+}

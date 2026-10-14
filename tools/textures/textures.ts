@@ -6,7 +6,7 @@
 //   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px]
 //                                            [--strength s] [--roughness r]
 //   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
-//   node tools/textures/textures.ts cards <name> <card>=<image>… [--size px] [--columns n]
+//   node tools/textures/textures.ts cards <name> <card>=<image | recipe.leaves.json | keep>… [--size px] [--columns n]
 //   node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m]
 //                                         [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
 //   node tools/textures/textures.ts ends <name> <ambientCG id…> [--size px] [--weather f]
@@ -25,10 +25,12 @@
 // occlusion is multiplied into the colour, by --occlusion (0.6), since a stack has no
 // ARM map of its own.
 //
-// **cards** cuts leaves, fronds and flowers drawn on a flat blue background out of it and
-// lays them in one atlas, assets/materials/<name>/cards.png, a grid of --columns (4) cells
-// across --size (2048), and writes the table the game reads, assets/data/<name>.ron: each
-// card's cell and the octagon round its leaves, so a card is cut to them.
+// **cards** lays leaves, fronds and flowers in one atlas, assets/materials/<name>/cards.png,
+// a grid of --columns (4) cells across --size (2048), with its normal map, normal.png, and
+// writes the table the game reads, assets/data/<name>.ron: each card's cell and the octagon
+// round its leaves, so a card is cut to them. Each card is a picture drawn on a flat blue
+// background, cut out of it; a recipe, `<card>.leaves.json`, composed from scanned leaves
+// (leaves.ts); or `keep`, its cell as the atlas has it.
 //
 // **material** writes color.jpg, normal.jpg, arm.jpg and height.jpg for parallax:
 //
@@ -50,6 +52,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { compose, type Recipe, type Scan } from "./leaves.ts";
 
 const ROOT = resolve(import.meta.dirname, "..", "..");
 
@@ -421,56 +424,128 @@ export function outline(data: Buffer, width: number, height: number, cut: number
   ]);
 }
 
-/** Cuts each picture out of its blue background and lays them in a square atlas, a grid
- * of `columns` cells, writing the atlas and the card table the game reads, which gives
- * each card's cell and outline in the atlas's coordinates. */
-function cards(name: string, entries: string[], size: number, columns: number, cut: number) {
+/** A card's picture cut out of its blue background, `cell` pixels square, four bytes a pixel. */
+function pictureCell(image: string, cell: number): Buffer {
+  const source = rgba(resolve(image));
+  // A picture already cut out, with its own transparency, is taken as it is.
+  let cutAlready = false;
+  for (let i = 3; i < source.data.length && !cutAlready; i += 4) cutAlready = source.data[i] < 255;
+  const keyed = cutAlready ? source.data : keyOut(source.data, source.width, source.height);
+  return execFileSync("convert", ["-size", `${source.width}x${source.height}`, "-depth", "8", "rgba:-", "-resize", `${cell}x${cell}!`, "rgba:-"], {
+    input: keyed,
+    maxBuffer: 1 << 28,
+  });
+}
+
+/** An ambientCG leaf set's maps at 2K, downloaded once into the system's temporary folder
+ * and unpacked in a folder of its own, outside the repository. */
+async function leafScan(id: string): Promise<Scan> {
+  const file = `${id}_2K-PNG`;
+  const cache = join(tmpdir(), "terra-ambientcg");
+  mkdirSync(cache, { recursive: true });
+  const zip = join(cache, `${file}.zip`);
+  if (!existsSync(zip)) await download(`https://ambientcg.com/get?file=${file}.zip`, zip);
+  const work = mkdtempSync(join(tmpdir(), "leafset-"));
+  try {
+    execFileSync("unzip", ["-q", "-o", zip, "-d", work]);
+    const map = (kind: string) => join(work, `${file}_${kind}.png`);
+    const n = 2048;
+    const read = (kind: string, format: string) =>
+      execFileSync("convert", [map(kind), "-resize", `${n}x${n}!`, "-depth", "8", format], { maxBuffer: 1 << 28 });
+    return { width: n, height: n, colour: read("Color", "rgb:-"), normal: read("NormalGL", "rgb:-"), alpha: read("Opacity", "gray:-") };
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+/** Where each card's cell is in the card table as it stands, by name. */
+export function cellsOf(ron: string): Map<string, [number, number]> {
+  const cells = new Map<string, [number, number]>();
+  for (const [, card, u, v] of ron.matchAll(/"(\w+)": \(\s*cell: \(([\d.]+), ([\d.]+)\)/g)) cells.set(card, [Number(u), Number(v)]);
+  return cells;
+}
+
+/** Lays each card in a square atlas, a grid of `columns` cells, with a normal map beside it,
+ * and writes the card table the game reads, which gives each card's cell and outline in the
+ * atlas's coordinates. A card is one of: a picture, cut out of its blue background (flat in
+ * the normal map); a recipe (`.leaves.json`), composed from scanned leaves (leaves.ts); or
+ * `keep`, its cell as the atlas has it now, for one touched by hand since. */
+async function cards(name: string, entries: string[], size: number, columns: number, cut: number) {
   const out = join(ROOT, "assets", "materials", name);
   mkdirSync(out, { recursive: true });
   const cell = Math.floor(size / columns);
-  const tmp = join(out, ".cells");
-  mkdirSync(tmp, { recursive: true });
-  const placed: string[] = [];
+  const atlas = Buffer.alloc(size * size * 4);
+  const normals = Buffer.alloc(size * size * 3);
+  for (let i = 0; i < size * size; i++) normals.set([128, 128, 255], i * 3);
+  const ronFile = join(ROOT, "assets", "data", `${name}.ron`);
+  const before = existsSync(ronFile) ? cellsOf(readFileSync(ronFile, "utf8")) : new Map();
+  const old = existsSync(join(out, "cards.png")) ? rgba(join(out, "cards.png")) : undefined;
+  const oldNormals = existsSync(join(out, "normal.png"))
+    ? execFileSync("convert", [join(out, "normal.png"), "-depth", "8", "rgb:-"], { maxBuffer: 1 << 28 })
+    : undefined;
   const table: string[] = [];
-  entries.forEach((entry, index) => {
-    const [card, image] = entry.split("=");
-    if (!card || !image) throw new Error(`a card is name=image, not ${entry}`);
-    const source = rgba(resolve(image));
-    // A picture already cut out, with its own transparency, is taken as it is.
-    let cutAlready = false;
-    for (let i = 3; i < source.data.length && !cutAlready; i += 4) cutAlready = source.data[i] < 255;
-    const keyed = cutAlready ? source.data : keyOut(source.data, source.width, source.height);
-    const file = join(tmp, `${card}.png`);
-    execFileSync("convert", ["-size", `${source.width}x${source.height}`, "-depth", "8", "rgba:-", "-resize", `${cell}x${cell}!`, file], {
-      input: keyed,
-    });
-    // Resizing leaves what is clear black, and the edge a pale rim, which filtering at a
-    // card's edge mixes in as a fringe; the colour inside is grown out over both.
-    const small = rgba(file);
-    small.data = bleed(small.data, small.width, small.height);
-    execFileSync("convert", ["-size", `${small.width}x${small.height}`, "-depth", "8", "rgba:-", file], { input: small.data });
-    const shape = outline(small.data, small.width, small.height, cut);
-    const colour = meanColour(small.data, cut);
+  const scans = new Map<string, Scan>();
+  const composed: string[] = [];
+  const kept: string[] = [];
+  const pictured: string[] = [];
+  for (const [index, entry] of entries.entries()) {
+    const [card, source] = entry.split("=");
+    if (!card || !source) throw new Error(`a card is name=image, name=recipe.leaves.json or name=keep, not ${entry}`);
+    let pixels: Buffer;
+    let normal: Buffer | undefined;
+    if (source === "keep") {
+      const at = before.get(card);
+      if (!at || !old || old.width !== size) throw new Error(`${card} is not in the atlas as it stands, at this size, to keep`);
+      const [ox, oy] = [Math.round(at[0] * size), Math.round(at[1] * size)];
+      pixels = Buffer.alloc(cell * cell * 4);
+      normal = Buffer.alloc(cell * cell * 3);
+      for (let y = 0; y < cell; y++) {
+        old.data.copy(pixels, y * cell * 4, ((oy + y) * size + ox) * 4, ((oy + y) * size + ox + cell) * 4);
+        if (oldNormals) oldNormals.copy(normal, y * cell * 3, ((oy + y) * size + ox) * 3, ((oy + y) * size + ox + cell) * 3);
+        else for (let x = 0; x < cell; x++) normal.set([128, 128, 255], (y * cell + x) * 3);
+      }
+      kept.push(card);
+    } else if (source.endsWith(".leaves.json")) {
+      const recipe: Recipe = JSON.parse(readFileSync(resolve(source), "utf8"));
+      if (!scans.has(recipe.scan)) scans.set(recipe.scan, await leafScan(recipe.scan));
+      const made = compose(scans.get(recipe.scan)!, recipe, cell);
+      // The colour grown out over its edge, as for a picture.
+      pixels = bleed(made.rgba, cell, cell);
+      normal = made.normal;
+      composed.push(`${card} (${recipe.scan})`);
+    } else {
+      // Resizing leaves what is clear black, and the edge a pale rim, which filtering at a
+      // card's edge mixes in as a fringe; the colour inside is grown out over both.
+      pixels = bleed(pictureCell(source, cell), cell, cell);
+      pictured.push(card);
+    }
     const [col, row] = [index % columns, Math.floor(index / columns)];
-    placed.push(file, "-geometry", `+${col * cell}+${row * cell}`, "-compose", "Copy", "-composite");
+    for (let y = 0; y < cell; y++) {
+      pixels.copy(atlas, ((row * cell + y) * size + col * cell) * 4, y * cell * 4, (y + 1) * cell * 4);
+      if (normal) normal.copy(normals, ((row * cell + y) * size + col * cell) * 3, y * cell * 3, (y + 1) * cell * 3);
+    }
+    const shape = outline(pixels, cell, cell, cut);
+    const colour = meanColour(pixels, cut);
     const corner = (u: number, v: number) => `(${((col + u) / columns).toFixed(4)}, ${((row + v) / columns).toFixed(4)})`;
     table.push(`        "${card}": (`);
     table.push(`            cell: ${corner(0, 0)},`);
     table.push(`            outline: [${shape.map(([u, v]) => corner(u, v)).join(", ")}],`);
     table.push(`            colour: (${colour.map((c) => c.toFixed(3)).join(", ")}),`);
     table.push(`        ),`);
-    console.log(`${card}: cell ${col},${row}, its octagon ${(100 * area(shape)).toFixed(0)}% of the cell`);
-  });
-  execFileSync("convert", ["-size", `${size}x${size}`, "xc:none", ...placed, "-depth", "8", join(out, "cards.png")]);
-  execFileSync("rm", ["-r", tmp]);
+    console.log(`${card}: cell ${col},${row}, its octagon ${(100 * area(shape)).toFixed(0)}% of the cell, colour ${colour.map((c) => c.toFixed(2))}`);
+  }
+  execFileSync("convert", ["-size", `${size}x${size}`, "-depth", "8", "rgba:-", join(out, "cards.png")], { input: atlas });
+  execFileSync("convert", ["-size", `${size}x${size}`, "-depth", "8", "rgb:-", join(out, "normal.png")], { input: normals });
   const ron = [
     `// The leaf, frond and flower cards in assets/materials/${name}/cards.png, made from their`,
-    `// pictures by \`node tools/textures/textures.ts cards\`; don't edit by hand. Each card's cell`,
-    `// is the top-left corner of its square in the atlas, a ${columns}th of it across, and its outline`,
-    `// the octagon round what it covers past the cut, in the atlas's coordinates (0 to 1), and`,
-    `// its colour the average of what it covers, in sRGB.`,
+    `// pictures and recipes by \`node tools/textures/textures.ts cards\`; don't edit by hand. Each`,
+    `// card's cell is the top-left corner of its square in the atlas, a ${columns}th of it across, and`,
+    `// its outline the octagon round what it covers past the cut, in the atlas's coordinates (0 to`,
+    `// 1), and its colour the average of what it covers, in sRGB. The normal map beside it is each`,
+    `// leaf's relief and tilt, in OpenGL's convention; flat for cards made from pictures.`,
     `(`,
     `    atlas: "materials/${name}/cards.png",`,
+    `    normals: "materials/${name}/normal.png",`,
     `    cut: ${cut},`,
     `    across: ${(1 / columns).toFixed(4)},`,
     `    cards: {`,
@@ -479,9 +554,14 @@ function cards(name: string, entries: string[], size: number, columns: number, c
     `)`,
     ``,
   ];
-  writeFileSync(join(ROOT, "assets", "data", `${name}.ron`), ron.join("\n"));
-  const names = entries.map((e) => e.split("=")[0]).join(", ");
-  record(name, `cards of ${names}, each cut out of a generated picture on a blue background (art/textures/cards) by \`textures.ts cards\`, ${cell} pixels each.`);
+  writeFileSync(ronFile, ron.join("\n"));
+  const scanned = [...scans.keys()].map((id) => `[${id}](https://ambientcg.com/a/${id})`).join(", ");
+  const parts = [
+    composed.length && `${composed.join(", ")} composed by \`textures.ts cards\` from leaves scanned by ambientCG, ${scanned}, CC0, each with its normal map`,
+    pictured.length && `${pictured.join(", ")} each cut out of a generated picture on a blue background (art/textures/cards)`,
+    kept.length && `${kept.join(", ")} kept from the atlas as it stood`,
+  ].filter(Boolean);
+  record(name, `cards, ${cell} pixels each: ${parts.join("; ")}.`);
 }
 
 /** The average colour of what a card covers, in sRGB from 0 to 1, averaged as light adds:
@@ -805,7 +885,7 @@ async function main() {
   } else if (step === "stack" && name && rest.length) {
     stack(name, rest, values.size === "2048" ? 1024 : Number(values.size), Number(values.occlusion));
   } else if (step === "cards" && name && rest.length) {
-    cards(name, rest, Number(values.size), Number(values.columns), Number(values.cut));
+    await cards(name, rest, Number(values.size), Number(values.columns), Number(values.cut));
   } else if (step === "blend" && name && rest.length === 2) {
     blend(name, rest[0], rest[1], {
       around: Number(values.around),
@@ -826,7 +906,7 @@ async function main() {
   node tools/textures/textures.ts fetch <polyhaven id | ambientcg:Id> [--name n] [--size 1k|2k|4k]
   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px] [--strength s] [--roughness r]
   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
-  node tools/textures/textures.ts cards <name> <card>=<image>… [--size px] [--columns n] [--cut a]
+  node tools/textures/textures.ts cards <name> <card>=<image | recipe.leaves.json | keep>… [--size px] [--columns n] [--cut a]
   node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m] [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
   node tools/textures/textures.ts ends <name> <ambientCG TreeEnd id…> [--size px] [--weather f]`);
     process.exit(values.help ? 0 : 2);

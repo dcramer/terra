@@ -1,0 +1,16 @@
+{
+  "scan": "LeafSet014",
+  "form": "compound",
+  "leaves": 7,
+  "length": [0.24, 0.3],
+  "shoots": 0,
+  "twig": [0.38, 0.2, 0.2],
+  "thickness": 0.013,
+  "tone": 0.25,
+  "young": 0.1,
+  "old": 0.4,
+  "underside": 0.12,
+  "saturation": 0.85,
+  "value": 0.68,
+  "seed": 9
+}

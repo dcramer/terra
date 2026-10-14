@@ -164,6 +164,7 @@ pub struct Card {
 #[serde(deny_unknown_fields)]
 struct CardFile {
     atlas: String,
+    normals: String,
     cut: f32,
     across: f32,
     cards: HashMap<String, CardEntry>,
@@ -177,10 +178,12 @@ struct CardEntry {
     colour: (f32, f32, f32),
 }
 
-/// The cards there are (`assets/data/foliage.ron`), and the atlas they are in.
+/// The cards there are (`assets/data/foliage.ron`), the atlas they are in, and its normal
+/// map: each leaf's relief and tilt, in OpenGL's convention, flat for cards drawn from pictures.
 #[derive(Resource)]
 pub struct Cards {
     pub atlas: String,
+    pub normals: String,
     pub cut: f32,
     cards: HashMap<String, Card>,
 }
@@ -210,6 +213,7 @@ impl Cards {
             .collect();
         Self {
             atlas: file.atlas,
+            normals: file.normals,
             cut: file.cut,
             cards,
         }
