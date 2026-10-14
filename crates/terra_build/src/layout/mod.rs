@@ -427,8 +427,13 @@ struct Walls<'a> {
     /// What each cube asked about is, asked of the base once: a row's courses ask of each
     /// of its cubes many times.
     known: std::cell::RefCell<crate::mesh::QuickMap<IVec3, Option<Fill>>>,
-    /// Its flights' cubes (`stairs`), which are laid as steps, not walls.
+    /// Its flights' cubes (`stairs`), which are laid as steps, not walls: those of the
+    /// columns `stairs_known` holds, and beyond them found a column at a time when asked,
+    /// as a deck reaching out of a layout's scope asks.
     stairs: BTreeSet<[i32; 3]>,
+    stairs_known: Scope,
+    stairs_beyond: std::cell::RefCell<crate::mesh::QuickMap<[i32; 2], BTreeSet<i32>>>,
+    kits: &'a Kits,
 }
 
 /// What a timber kind's cube is laid as.
@@ -484,8 +489,36 @@ impl Walls<'_> {
     /// so a platform is boards on a frame, not a pile of log ends; the rest of a wall's
     /// cubes are walls. Cubes cut to a shape and a flight's are laid apart (`shapes`,
     /// `stairs`).
+    /// Whether a cube is one of a flight's, which is laid as a step.
+    fn stair(&self, at: IVec3) -> bool {
+        let known = &self.stairs_known;
+        if at.x > known.low.x && at.x < known.high.x && at.z > known.low.z && at.z < known.high.z {
+            return self.stairs.contains(&at.to_array());
+        }
+        let column = [at.x, at.z];
+        if let Some(layers) = self.stairs_beyond.borrow().get(&column) {
+            return layers.contains(&at.y);
+        }
+        let Some(kit) = self.kits.of(self.kind) else {
+            return false;
+        };
+        let around = Scope {
+            low: IVec3::new(at.x - 1, 0, at.z - 1),
+            high: IVec3::new(at.x + 1, 0, at.z + 1),
+        };
+        let steps = stairs::find(self.base, kit, self.kits, around);
+        let layers: BTreeSet<i32> = stairs::cubes(&steps)
+            .into_iter()
+            .filter(|c| [c[0], c[2]] == column)
+            .map(|c| c[1])
+            .collect();
+        let here = layers.contains(&at.y);
+        self.stairs_beyond.borrow_mut().insert(column, layers);
+        here
+    }
+
     pub(crate) fn cell(&self, at: IVec3) -> Option<Cell> {
-        if self.stairs.contains(&at.to_array()) || !self.whole(at) {
+        if self.stair(at) || !self.whole(at) {
             return None;
         }
         if !self.walled(at) {
@@ -521,7 +554,7 @@ impl Walls<'_> {
     /// A cube of the kit's kind that is part of a wall, or a roof's cube its wall is carried
     /// up into.
     fn ours(&self, at: IVec3) -> Option<Fill> {
-        if self.stairs.contains(&at.to_array()) {
+        if self.stair(at) {
             return None;
         }
         if let Some(&known) = self.known.borrow().get(&at) {
@@ -798,16 +831,27 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
         roofs::gables(base, kit, scope, &mut layout.pieces);
         return layout;
     }
-    let steps = stairs::find(base, kit, kits);
+    // Every cube on the rows that cross the scope, either way, as far along each as a log
+    // laid in the scope depends on (`runs::reach_cubes`), of every height; and the flights
+    // a little further.
+    let along = runs::reach_cubes(kit);
+    let stairs_known = Scope {
+        low: scope.low - (along + 2),
+        high: scope.high + (along + 2),
+    };
+    let steps = stairs::find(base, kit, kits, stairs_known);
     let walls = Walls {
         base,
         kind: kit.kind(),
         known: Default::default(),
         stairs: stairs::cubes(&steps),
+        stairs_known,
+        stairs_beyond: Default::default(),
+        kits,
     };
-    // Every cube on the rows that cross the scope, either way, whole.
     let band = |axis: Axis| {
-        let (mut low, mut high) = (IVec3::splat(i32::MIN / 4), IVec3::splat(i32::MAX / 4));
+        let (mut low, mut high) = (scope.low - along, scope.high + along);
+        (low.y, high.y) = (i32::MIN / 4, i32::MAX / 4);
         match axis {
             Axis::X => (low.z, high.z) = (scope.low.z, scope.high.z),
             Axis::Z => (low.x, high.x) = (scope.low.x, scope.high.x),

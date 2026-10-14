@@ -221,17 +221,17 @@ impl Whole {
                 .collect(),
             counts: self.counts.clone(),
         };
-        // Laid together, once a kit: a layout takes in whole every row crossing what it
-        // lays, so laying a row's sections apart would look at most of the base again
-        // for each.
-        for (index, kit) in kits.0.iter().enumerate() {
-            let pieces = layout::lay_sections(base, kit, kits, &again).pieces;
-            for (order, piece) in pieces.into_iter().enumerate() {
-                whole
-                    .by_section
-                    .entry(piece.section().to_array())
-                    .or_default()
-                    .push((index, order, piece));
+        // A group at a time, each a box no bigger than a piece's reach round the edit.
+        for group in &groups {
+            for (index, kit) in kits.0.iter().enumerate() {
+                let pieces = layout::lay_sections(base, kit, kits, group).pieces;
+                for (order, piece) in pieces.into_iter().enumerate() {
+                    whole
+                        .by_section
+                        .entry(piece.section().to_array())
+                        .or_default()
+                        .push((index, order, piece));
+                }
             }
         }
         whole
@@ -276,35 +276,25 @@ pub fn reach(
         return vec![whole];
     }
     let mut groups = vec![near.clone()];
-    let mut taken = near.clone();
-    // Rows of logs and bands of dress are laid a row at a time, every row whole, either
-    // way along the floor.
-    if kits
+    // A row of logs is jointed at places fixed along it (`layout::runs`), so an edit
+    // changes its logs no further along it than a log's reach: the sections that far either
+    // way along the floor from the marks, at the heights round them.
+    let along = kits
         .0
         .iter()
-        .any(|kit| kit.pattern != Pattern::Roof && here(kit))
-    {
-        let lines = |pick: fn(IVec3) -> (i32, i32)| {
-            let wanted: BTreeSet<(i32, i32)> =
-                near.iter().map(|&at| pick(IVec3::from_array(at))).collect();
-            wanted
-                .into_iter()
-                .map(|line| {
-                    drawn
-                        .iter()
-                        .copied()
-                        .filter(|&at| pick(IVec3::from_array(at)) == line)
-                        .collect::<BTreeSet<[i32; 3]>>()
-                })
-                .collect::<Vec<_>>()
-        };
-        // Along X a row is all the sections at its z, of every height, as a wall's courses
-        // are laid from its lowest to its highest; and along Z at its x.
-        for line in lines(|at| (0, at.z))
-            .into_iter()
-            .chain(lines(|at| (0, at.x)))
-        {
-            let line: BTreeSet<[i32; 3]> = line.difference(&taken).copied().collect();
+        .filter(|kit| kit.pattern == Pattern::Logs && here(kit))
+        .map(layout::runs::reach_cubes)
+        .max();
+    if let Some(along) = along {
+        let far = (along + crate::cubes::SECTION - 1) / crate::cubes::SECTION;
+        let mut taken = near.clone();
+        for step in [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z] {
+            let line: BTreeSet<[i32; 3]> = near
+                .iter()
+                .flat_map(|&at| (1..far).map(move |n| IVec3::from_array(at) + step * n))
+                .map(|at| at.to_array())
+                .filter(|at| drawn.contains(at) && !taken.contains(at))
+                .collect();
             if !line.is_empty() {
                 taken.extend(line.iter().copied());
                 groups.push(line);

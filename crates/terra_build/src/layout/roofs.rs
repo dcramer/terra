@@ -588,7 +588,16 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
         return;
     }
     let roofs = Roofs::whole(base, kits, scope);
-    let ours = |q: usize| roofs.squares[q].kind == kit.kind();
+    // Only the squares near the scope: a long piece is joined only within a section
+    // (`join`), so none further off is part of one laid in it.
+    let near = |q: usize| {
+        let at = roofs.squares[q].cube;
+        at.x >= scope.low.x - NEAR_SCOPE
+            && at.x <= scope.high.x + NEAR_SCOPE
+            && at.z >= scope.low.z - NEAR_SCOPE
+            && at.z <= scope.high.z + NEAR_SCOPE
+    };
+    let ours = |q: usize| roofs.squares[q].kind == kit.kind() && near(q);
     let count = roofs.squares.len();
     let mut segments: Vec<Segment> = Vec::new();
     for q in (0..count).filter(|&q| ours(q)) {
@@ -939,11 +948,22 @@ pub(crate) fn planar_normal(from: Vec3, to: Vec3, beside: Vec3) -> Vec3 {
 
 /// Lines of roof in a line joined end to end: each ridge, hip, valley, eave, verge and
 /// flashing one piece from end to end.
+/// How far round a layout's scope a roof's squares are worked on, in cubes: past the reach
+/// of a square's pieces, its eaves included.
+const NEAR_SCOPE: i32 = crate::cubes::SECTION + 4;
+
+/// Segments joined end to end along each line into long pieces, as a builder runs a board
+/// or a ridge's cap on, jointed where a line passes a section's edge but for within two
+/// metres of its ends, so a long piece is the same whichever part of the roof is laid and an edit
+/// reaches no further than a section along it (D281).
 fn join(segments: Vec<Segment>) -> Vec<Segment> {
     // By what each is, the line it is on in plan and its height where that line crosses
     // the plan's origin, then along it. Heights are to the nearest tick, so a line's slope
     // is compared, not its direction in ticks.
     type Line = (RoofPart, [i64; 2], i64, i64);
+    // A run of a line's segments end to end: how far it reaches, the run as one, by whose
+    // slope the next is joined, and its segments with where each starts and ends along it.
+    type Run = (i64, Segment, Vec<(i64, i64, Segment)>);
     let slope = |s: &Segment| {
         let (a, b) = (s.from.metres(), s.to.metres());
         (b.y - a.y) / Vec2::new(b.x - a.x, b.z - a.z).length().max(1e-6)
@@ -970,34 +990,65 @@ fn join(segments: Vec<Segment>) -> Vec<Segment> {
             .or_default()
             .push((a.dot(d), b.dot(d), segment));
     }
+    // Each line's runs of segments end to end, then each run jointed.
     let mut out = Vec::new();
-    for (_, mut on_line) in lines {
+    for ((_, d, _, _), mut on_line) in lines {
+        // A line is measured along it in ticks times its direction's length.
+        let clear =
+            (JOINT_CLEAR as f32 * glam::Vec2::new(d[0] as f32, d[1] as f32).length()) as i64;
         on_line.sort_by_key(|(start, end, _)| (*start, *end));
-        let mut current: Option<(i64, Segment)> = None;
+        let mut runs: Vec<Run> = Vec::new();
         for (start, end, segment) in on_line {
-            match &mut current {
-                Some((reach, joined))
+            match runs.last_mut() {
+                Some((reach, joined, run))
                     if start <= *reach && (slope(joined) - slope(&segment)).abs() < 0.02 =>
                 {
                     if end > *reach {
                         *reach = end;
                         joined.to = segment.to;
                     }
+                    run.push((start, end, segment));
                 }
-                _ => {
-                    if let Some((_, done)) = current.take() {
-                        out.push(done);
-                    }
-                    current = Some((end, segment));
-                }
+                _ => runs.push((end, segment.clone(), vec![(start, end, segment)])),
             }
         }
-        if let Some((_, done)) = current {
-            out.push(done);
+        for (reach, _, run) in runs {
+            let first = run[0].0;
+            let mut current: Option<(i64, Segment)> = None;
+            let mut last_start = first;
+            for (start, end, segment) in run {
+                let crossed = start.div_euclid(JOINT_EVERY) > last_start.div_euclid(JOINT_EVERY)
+                    && start - first >= clear
+                    && reach - start >= clear;
+                last_start = start;
+                match &mut current {
+                    Some((joined_reach, joined)) if !crossed => {
+                        if end > *joined_reach {
+                            *joined_reach = end;
+                            joined.to = segment.to;
+                        }
+                    }
+                    _ => {
+                        if let Some((_, done)) = current.take() {
+                            out.push(done);
+                        }
+                        current = Some((end, segment));
+                    }
+                }
+            }
+            if let Some((_, done)) = current {
+                out.push(done);
+            }
         }
     }
     out
 }
+
+/// Where a long piece of a roof is jointed, along its line: at every section's edge, in the
+/// units a line is measured in (ticks along it, across both axes for a diagonal), but for
+/// within two metres, in ticks, of its ends, so no short piece is left at an end.
+const JOINT_EVERY: i64 = (crate::cubes::SECTION * super::TICKS) as i64;
+const JOINT_CLEAR: i64 = 4 * super::TICKS as i64;
 
 fn gcd(a: i32, b: i32) -> i32 {
     if b == 0 { a } else { gcd(b, a % b) }

@@ -70,7 +70,12 @@ const CLEAT_M: (f32, f32) = (0.05, 0.03);
 /// Every step of a base's flights in a kit's kind, by column: every column topped by a cube
 /// cut as a stair or a slope, and where the kit dresses a nose with a member, every stack
 /// stepping up.
-pub(super) fn find(base: &Base, kit: &Kit, kits: &Kits) -> BTreeMap<[i32; 2], Step> {
+pub(super) fn find(
+    base: &Base,
+    kit: &Kit,
+    kits: &Kits,
+    within: super::Scope,
+) -> BTreeMap<[i32; 2], Step> {
     let mut steps = BTreeMap::new();
     let ours = |at: IVec3| {
         base.cube(at)
@@ -93,9 +98,16 @@ pub(super) fn find(base: &Base, kit: &Kit, kits: &Kits) -> BTreeMap<[i32; 2], St
             cap,
         }
     };
+    // Only the columns in `within`, of every height: a step is its column's, and a nose
+    // the column it leads up onto's too.
+    let cubes = super::Scope {
+        low: within.low.with_y(i32::MIN / 4),
+        high: within.high.with_y(i32::MAX / 4),
+    }
+    .cubes(base, None);
     // A cube cut as a stair or a slope is a step whatever is on it: something set on its
     // top hides part of it, but it is drawn as what it is. The highest in a column tops it.
-    for (at, cube) in base.cubes() {
+    for &(at, cube) in &cubes {
         if cube.kind != kit.kind() || cube.fill != Fill::Solid {
             continue;
         }
@@ -118,7 +130,7 @@ pub(super) fn find(base: &Base, kit: &Kit, kits: &Kits) -> BTreeMap<[i32; 2], St
         return steps;
     }
     let roles = Roles::new(base, kit.kind(), kits);
-    for (at, cube) in base.cubes() {
+    for &(at, cube) in &cubes {
         if cube.kind != kit.kind() || cube.shape != Shape::Whole || ours(at + IVec3::Y) {
             continue;
         }
@@ -417,7 +429,7 @@ mod tests {
             });
         }
         let kits = Kits(vec![kit()]);
-        let steps = find(&base, &kit(), &kits);
+        let steps = find(&base, &kit(), &kits, crate::layout::Scope::ALL);
         assert_eq!(steps.len(), 8, "{steps:?}");
         assert!(steps.values().all(|step| step.out == Dir::South));
         let layout = lay(&base, &kit());

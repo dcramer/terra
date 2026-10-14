@@ -82,32 +82,43 @@ pub(super) fn courses(
             };
             let from = low as f32 * CELL_M - reach(low, -1, 0);
             let to = (high + 1) as f32 * CELL_M + reach(high, 1, 1);
-            // Daub between this course and the one under it, along the wall itself.
-            let below = walls.spot(kit, axis, row, low, course - 1);
-            let daub = kit.chinking && split != Split::Top && matches!(below, Spot::Log(_));
             let (wall_from, wall_to) = (low as f32 * CELL_M, (high + 1) as f32 * CELL_M);
             let limit = kit.longest + 2.0 * (kit.overhang + kit.ragged());
-            let every = |course: i32, what: &dyn Fn(Spot) -> bool| {
-                (low..=high).all(|along| what(walls.spot(kit, axis, row, along, course)))
-            };
             let bottom = layer_of_split(centre, split);
-            let role = if plate && every(course + 1, &|spot| spot == Spot::Nothing) {
-                Some(Role::Crest)
-            } else if sill
-                && every(course - 1, &|spot| spot == Spot::Nothing)
-                && (low..=high).all(|along| walls.ours(axis.cube(row, along, bottom - 1)).is_none())
-            {
-                Some(Role::Foot)
-            } else {
-                None
-            };
-            for (part, (a, b)) in joined(from, to, limit, course).into_iter().enumerate() {
+            // Joints at places fixed along the row, a log's length apart and staggered
+            // course to course, so a log is laid the same wherever its row ends.
+            let span = (kit.longest - JOINT_CLEAR_M).max(CELL_M);
+            let phase = span
+                * (0.5 * course.rem_euclid(2) as f32
+                    + 0.25 * unit(hash(&[axis as u32, row as u32, 17])));
+            for (a, b) in joined(from, to, limit, span, phase) {
+                // Each log by the cubes it lies along, so it is the same whatever else of
+                // the row is laid: daub under it where it starts on a course of logs, and
+                // a plate or a sill where it has nothing over it, or under it.
+                let first = ((a / CELL_M).floor() as i32).clamp(low, high);
+                let last = ((b / CELL_M).ceil() as i32 - 1).clamp(low, high);
+                let below = walls.spot(kit, axis, row, first, course - 1);
+                let daub = kit.chinking && split != Split::Top && matches!(below, Spot::Log(_));
+                let every = |course: i32, what: &dyn Fn(Spot) -> bool| {
+                    (first..=last).all(|along| what(walls.spot(kit, axis, row, along, course)))
+                };
+                let role = if plate && every(course + 1, &|spot| spot == Spot::Nothing) {
+                    Some(Role::Crest)
+                } else if sill
+                    && every(course - 1, &|spot| spot == Spot::Nothing)
+                    && (first..=last)
+                        .all(|along| walls.ours(axis.cube(row, along, bottom - 1)).is_none())
+                {
+                    Some(Role::Foot)
+                } else {
+                    None
+                };
                 let chinking = daub.then(|| (wall_from.max(a) - a, wall_to.min(b) - a));
                 let mut piece = log(
                     axis.point(row, a, centre),
                     axis.point(row, b, centre),
                     split,
-                    hash(&[seed, part as u32, (a * 100.0) as i32 as u32]),
+                    hash(&[seed, 0, (a * 100.0) as i32 as u32]),
                     chinking.filter(|(near, far)| far > near),
                 );
                 set_role(&mut piece, role);
@@ -426,29 +437,40 @@ pub(super) fn log(
     }
 }
 
-/// A stretch of a course in logs no longer than `longest`, the joins staggered from one
-/// course to the next so no seam runs up the wall.
-fn joined(start: f32, end: f32, longest: f32, course: i32) -> Vec<(f32, f32)> {
-    let length = end - start;
-    if length <= longest {
+/// A stretch of a course in logs: whole if it is no longer than `limit`, else jointed at
+/// every place `span` apart from `phase` along the row that is more than a hand's width
+/// from either end, as a builder joins logs where they end, wherever the stretch starts.
+/// Where the joints fall depends on nothing but the row and the course, so a log is the
+/// same whichever part of a wall is laid (D281), and an edit reaches a log's length along it.
+fn joined(start: f32, end: f32, limit: f32, span: f32, phase: f32) -> Vec<(f32, f32)> {
+    if end - start <= limit {
         return vec![(start, end)];
     }
-    let count = (length / longest).ceil();
-    let each = length / count;
-    // Every other course moves its joins along by half a log, with a short log at each end.
-    let shift = if course.rem_euclid(2) == 1 {
-        each * 0.5
-    } else {
-        0.0
-    };
     let mut cuts = vec![start];
-    let mut at = start + if shift > 0.0 { shift } else { each };
-    while at < end - 0.3 {
-        cuts.push(at);
-        at += each;
+    let mut k = ((start + JOINT_CLEAR_M - phase) / span).floor() + 1.0;
+    loop {
+        let at = phase + k * span;
+        if at >= end - JOINT_CLEAR_M {
+            break;
+        }
+        if at > start + JOINT_CLEAR_M {
+            cuts.push(at);
+        }
+        k += 1.0;
     }
     cuts.push(end);
     cuts.windows(2).map(|pair| (pair[0], pair[1])).collect()
+}
+
+/// How near a stretch's end a joint is not made, in metres: no stub of a log.
+const JOINT_CLEAR_M: f32 = 0.3;
+
+/// How far along a row, in cubes, laying a log depends on its cubes: a log is at most a
+/// stretch's limit long, and where its stretch is jointed depends on its stretch's ends,
+/// that far again. An edit reaches no further along a row than this (D281).
+pub(crate) fn reach_cubes(kit: &Kit) -> i32 {
+    let limit = kit.longest + 2.0 * (kit.overhang + kit.ragged());
+    (2.0 * limit / CELL_M).ceil() as i32 + 2
 }
 
 #[cfg(test)]

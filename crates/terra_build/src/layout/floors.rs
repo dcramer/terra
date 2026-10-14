@@ -35,11 +35,28 @@ const SIDES: [IVec3; 4] = [IVec3::X, IVec3::NEG_X, IVec3::Z, IVec3::NEG_Z];
 /// flat roofs, and the tops of its solid masses.
 pub(super) fn decks(walls: &super::Walls, kit: &Kit, scope: super::Scope, layout: &mut Layout) {
     let (base, kind) = (walls.base, kit.kind());
-    let deck: BTreeSet<[i32; 3]> = base
-        .cubes()
-        .filter(|(at, cube)| cube.kind == kind && walls.cell(*at) == Some(super::Cell::Deck))
-        .map(|(at, _)| at.to_array())
+    let is_deck = |at: IVec3| {
+        base.cube(at).is_some_and(|cube| cube.kind == kind)
+            && walls.cell(at) == Some(super::Cell::Deck)
+    };
+    // Every region with a cube in the scope, whole: found from those, not from every cube.
+    let mut deck: BTreeSet<[i32; 3]> = BTreeSet::new();
+    let mut next: Vec<IVec3> = scope
+        .cubes(base, None)
+        .into_iter()
+        .filter(|&(at, cube)| cube.kind == kind && is_deck(at))
+        .map(|(at, _)| at)
         .collect();
+    deck.extend(next.iter().map(|at| at.to_array()));
+    while let Some(at) = next.pop() {
+        for side in SIDES {
+            let beside = at + side;
+            if !deck.contains(&beside.to_array()) && is_deck(beside) {
+                deck.insert(beside.to_array());
+                next.push(beside);
+            }
+        }
+    }
     regions(base, kit, &deck, CELL_M, scope, layout);
 }
 
