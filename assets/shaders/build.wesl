@@ -26,7 +26,7 @@ import bevy_pbr::ssao::utils::ssao_multibounce;
 // Field order must match BuildArrays in crates/terra_game/src/build/arrays/mod.rs.
 struct Layers {
     // For each layer: x its slot in the arrays, y its parallax depth (0 for none), z its
-    // reflectance, w unused.
+    // reflectance, w how many layers relief mapping steps through at the preset (0: none).
     table: array<vec4<f32>, 512>,
 }
 
@@ -43,8 +43,7 @@ var arm_array: texture_2d_array<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(105)
 var height_array: texture_2d_array<f32>;
 
-// As StandardMaterial's: up to 16 layers, steeper views fewer, then 5 halvings.
-const MAX_LAYERS: f32 = 16.0;
+// As StandardMaterial's: up to the preset's layers, steeper views fewer, then 5 halvings.
 const RELIEF_STEPS: u32 = 5u;
 
 fn sample_depth(uv: vec2<f32>, slot: i32) -> f32 {
@@ -53,10 +52,10 @@ fn sample_depth(uv: vec2<f32>, slot: i32) -> f32 {
 }
 
 /// Relief mapping (Bevy's `parallaxed_uv`): where the view ray meets the height field.
-fn parallaxed_uv(depth_scale: f32, original_uv: vec2<f32>, Vt: vec3<f32>, slot: i32) -> vec2<f32> {
+fn parallaxed_uv(depth_scale: f32, max_layers: f32, original_uv: vec2<f32>, Vt: vec3<f32>, slot: i32) -> vec2<f32> {
     var uv = original_uv;
     let view_steepness = abs(Vt.z);
-    let layer_count = mix(MAX_LAYERS, 1.0, view_steepness);
+    let layer_count = mix(max_layers, 1.0, view_steepness);
     let layer_depth = 1.0 / layer_count;
     var delta_uv = depth_scale * layer_depth * Vt.xy * vec2(1.0, -1.0) / view_steepness;
     var current_layer_depth = 0.0;
@@ -98,10 +97,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let B = TBN[1];
     let N = TBN[2];
     var uv = in.uv;
-    if depth > 0.0 {
+    // None at the low preset: its frame is its pixels' shading, and a step costs a fetch each.
+    if depth > 0.0 && entry.w > 0.0 {
         let V = pbr_input.V;
         let Vt = vec3(dot(V, T), dot(V, B), dot(V, N));
-        uv = parallaxed_uv(depth, uv, -Vt, slot);
+        uv = parallaxed_uv(depth, entry.w, uv, -Vt, slot);
     }
 
     let bias = view.mip_bias;

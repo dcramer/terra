@@ -43,6 +43,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use terra_build::kit::Kits;
 use terra_build::{Kind, Material};
+use terra_world::quality::Quality;
 
 /// The texture budget: every texture set is this many texels square in the arrays, with its
 /// mipmaps down to 4 by 4.
@@ -61,7 +62,8 @@ pub type BuildMaterial = ExtendedMaterial<StandardMaterial, BuildArrays>;
 /// What `shaders/build.wesl` is given. Field order must match the struct there.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct BuildArrays {
-    /// For each layer: its slot, its parallax depth and its reflectance.
+    /// For each layer: its slot, its parallax depth, its reflectance and how many layers
+    /// relief mapping steps through at the preset (none: flat but for its normal map).
     #[uniform(100)]
     pub table: [Vec4; MAX_LAYERS],
     #[texture(101, dimension = "2d_array")]
@@ -108,7 +110,7 @@ impl Layers {
                 }
                 let set = Set {
                     path: texture.path.clone(),
-                    depth: texture.depth,
+                    depth: kit.depth(*material),
                     reflectance: texture.reflectance,
                 };
                 let id = match out.sets.iter().position(|s| *s == set) {
@@ -204,6 +206,9 @@ pub struct Arrays {
     loading: BTreeMap<String, Loading>,
     uploads: Uploads,
     table_dirty: bool,
+    /// How many layers relief mapping steps through at the preset (`Quality::relief_layers`):
+    /// none at the low preset, which draws every material flat but for its normal map.
+    relief: f32,
     /// Whether a file is there, by its path under `assets/`.
     exists: Arc<dyn Fn(&str) -> bool + Send + Sync>,
     /// Texture sets made resident and let go, and how long the slowest took from asked to
@@ -302,6 +307,7 @@ impl Arrays {
             loading: BTreeMap::new(),
             uploads: Uploads::default(),
             table_dirty: true,
+            relief: Quality::High.relief_layers(),
             exists,
             made: 0,
             dropped: 0,
@@ -391,7 +397,7 @@ impl Arrays {
         for (i, set) in self.layers.sets.iter().enumerate() {
             let slot = self.slots.get(&set.path).map_or(0, |slot| slot.slot);
             if let Some(entry) = table.get_mut(i + 1) {
-                *entry = Vec4::new(slot as f32, set.depth, set.reflectance, 0.0);
+                *entry = Vec4::new(slot as f32, set.depth, set.reflectance, self.relief);
             }
         }
         table
@@ -468,9 +474,14 @@ pub fn stream(
     mut materials: ResMut<Assets<BuildMaterial>>,
     assets: Res<AssetServer>,
     time: Res<Time<Real>>,
+    quality: Res<Quality>,
 ) {
     let arrays = &mut *arrays;
     let now = time.elapsed_secs();
+    if arrays.relief != quality.relief_layers() {
+        arrays.relief = quality.relief_layers();
+        arrays.table_dirty = true;
+    }
     // Written last frame: ready now.
     for slot in arrays.slots.values_mut() {
         if slot.ready_in > 0 {
