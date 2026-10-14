@@ -82,9 +82,9 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | A floor's exposed edge, outside the walls | Its edge pieces, or the footing below covers it | Built (D206): a timber deck's rim beam; stone's own surface |
 | A floor over a wall below, a balcony, a hole for stairs | Modules round each, or edge pieces | Not built |
 | **Roofs** | | |
-| Gable, hip, lean-to, flat | Sections over the height field (D160) | Built |
-| Eaves, verges, ridges, hips | Pieces chosen by the field's shape | Covering built; ridges and hips are plain |
-| Valleys, a roof against a taller wall | The field's shape; flashing pieces where it meets a wall | Not built |
+| Gable, hip, lean-to, flat | Roof cubes, by hand or by "add a roof" (D226, D241) | Built |
+| Eaves, verges, ridges, hips | Modules chosen by the roof cubes' neighbours (D258) | Built |
+| Valleys, a roof against a taller wall | Valley linings and flashing where it meets a wall (D258) | Built |
 | Logs or stone through a roof | Never: cut to its underside | Built for logs |
 | **Mixing kinds** | | |
 | Logs on a stone plinth | Each kind its own cubes | Built |
@@ -110,7 +110,7 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | Floors, roofs, steps | Stood on | Built |
 | Stairs and ladders | Cubes cut as stairs and slopes, each with its walking from its top (D193) | Stairs and ramps built (D220); ladders not |
 | **Many** | | |
-| Fifty cabins in view | One mesh per building and material, rebuilt only where cubes changed; ghosts instanced; a stand-in far off (D160) | Not measured |
+| Fifty cabins in view | One mesh per section, kind and material, laid again only where a change reached; ghosts instanced; a stand-in far off (D213) | Measured (D185): the village bench, and three hundred buildings ([building-scale.md](../../research/building-scale.md)) |
 
 ## Player experiences
 
