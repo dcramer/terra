@@ -165,7 +165,7 @@ The hammer's *Block* has the upper half and the stair and slope upside down; *Co
 
 **Slopes of a wall's kind are not roofs.** A roof is cubes of a roof kind (D241), drawn as a roof from their neighbours; a slope of stone or logs is a ramp of its own material, and under or beside a roof it is a cube like any other.
 
-**A solid mass of timber** (a platform, a slab: whole cubes of a timber kind side by side two by two on a layer) is laid as a framed deck, not as walls crossing: boards on top on joists where it is in the air, a rim of sawn beams stacked a course deep round its open sides, nothing inside it, and its sides below its top as walls.
+**A solid mass of timber** (a platform, a slab: whole cubes of a timber kind side by side two by two on a layer) is laid as a framed deck, not as walls crossing: boards on top on joists where it is in the air, a rim of sawn beams stacked a course deep round its open sides, nothing inside it, and its sides below its top as walls. **A wall two or three cubes thick** is laid as skins of logs along its faces, one a cube of its thickness, its courses crossing only at its ends and where it turns or another meets it, so its faces show logs as a wall a cube thick does and never a grid of sawn ends (D263); a pier lays as a crib, its logs crossing at every corner. The kit sheet's *thick walls and piers* row shows them.
 
 ## Between a building and the ground, and its floors (D206)
 

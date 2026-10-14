@@ -67,7 +67,7 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | An L corner, outside and inside | Runs: courses interlock, ends at the corner cube's face; blocks: outer and inner corner modules | Built for logs (within the grid since 2026-10-12) |
 | A T and a cross | Runs: the through wall runs on, the stem ends at its face; blocks: modules | Built for logs |
 | A post: a column alone | Runs: an upright; blocks: a column of end modules | Built for logs |
-| A wall two or more cubes thick | Blocks: drawn like any solid; runs: one run per row, faces hidden between | Not built |
+| A wall two or more cubes thick | Blocks: drawn like any solid; runs: one run per row, faces hidden between | Built (D263): timber two or three cubes thick lays a skin of logs along each face, crossing only at its ends; the kit sheet's *thick walls and piers* row |
 | Walls of different heights side by side | Each run or module sees its own column; tops drawn where nothing is above | Partly |
 | A wall's top with nothing on it | A cap: the top course, or top modules | Built for logs |
 | A wall meeting a roof | Ends at the roof's underside: logs shortened (gable logs, trimmed ends), blocks cut by the roof's plane | Built for logs; stone gables not |

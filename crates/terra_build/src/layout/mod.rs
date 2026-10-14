@@ -400,6 +400,10 @@ impl Axis {
     }
 }
 
+/// How many cubes thick a wall may be and still be laid as skins along its faces, each
+/// course a log a skin, rather than as crossing walls.
+const THICK: i32 = 3;
+
 /// What a course of logs is at one cube of a row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Spot {
@@ -531,10 +535,38 @@ impl Walls<'_> {
         ours
     }
 
-    /// Whether a cube of ours runs along an axis: it has another of ours either side.
+    /// Whether a cube of ours runs along an axis: it has another of ours either side, and
+    /// is not across a thick wall, a wall two or three cubes thick, whose courses lie along
+    /// its faces only, as two skins of logs side by side, so its faces show logs and not a
+    /// grid of sawn ends (research/goals-review-2026-10-13.md, finding 6). At a thick wall's
+    /// end, or where it turns or another meets it, its cubes cross as any corner does.
     fn runs(&self, at: IVec3, axis: Axis) -> bool {
+        let beside = |at: IVec3, axis: Axis| {
+            self.ours(at + axis.step()).is_some() || self.ours(at - axis.step()).is_some()
+        };
         self.ours(at).is_some()
-            && (self.ours(at + axis.step()).is_some() || self.ours(at - axis.step()).is_some())
+            && beside(at, axis)
+            && !(beside(at, axis.other()) && self.across_thick(at, axis))
+    }
+
+    /// Whether the run of ours along an axis through a cube is across a thick wall: no more
+    /// than [`THICK`] cubes, each with ours either side of it the other way, along the wall.
+    fn across_thick(&self, at: IVec3, axis: Axis) -> bool {
+        let step = axis.step();
+        let along = axis.other().step();
+        let mut run = vec![at];
+        for dir in [step, -step] {
+            let mut next = at + dir;
+            while self.ours(next).is_some() {
+                if run.len() >= THICK as usize {
+                    return false;
+                }
+                run.push(next);
+                next += dir;
+            }
+        }
+        run.iter()
+            .all(|&c| self.ours(c + along).is_some() && self.ours(c - along).is_some())
     }
 
     /// What a course is at a cube of a row: a log where the cubes it lies in are solid and

@@ -103,6 +103,24 @@ fn keen(kind: Kind, solid: bool) -> Vec<BuildOp> {
     ops
 }
 
+/// Timber more than a cube thick, which lays as skins of logs along its faces, crossing only
+/// at its ends: a wall two cubes thick and one three, a storey high, and piers two cubes
+/// square and three by two.
+fn thick(kind: Kind) -> Vec<BuildOp> {
+    let block = |min: [i32; 3], max: [i32; 3]| BuildOp::Fill {
+        min,
+        max,
+        cube: Some(Cube::new(kind, Fill::Solid)),
+    };
+    let top = STOREY_CUBES - 1;
+    vec![
+        block([0, 0, 0], [9, top, 1]),
+        block([0, 0, 4], [9, top, 6]),
+        block([12, 0, 0], [13, top, 1]),
+        block([12, 0, 4], [14, top, 5]),
+    ]
+}
+
 /// Every shape a cube can be cut to (D193), in a kind: a platform on four posts, reached by
 /// a flight of stairs a metre wide and a ramp beside it, each column whole cubes under its
 /// cut top; a step of halves on the ground, and halves beside the ramp's foot; and a post
@@ -356,6 +374,7 @@ fn rows(
                 .collect(),
         ),
         ("long wall", east_west(0, 19, 0, kind).collect()),
+        ("thick walls and piers", thick(kind)),
         (
             "posts",
             [0, 3, 6]

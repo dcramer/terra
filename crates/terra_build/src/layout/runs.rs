@@ -534,6 +534,37 @@ mod tests {
     }
 
     #[test]
+    fn a_thick_wall_shows_logs_along_its_faces_and_sawn_ends_only_at_its_ends() {
+        for thick in 2..=3 {
+            let mut base = Base::default();
+            base.apply(BuildOp::Fill {
+                min: [0, 0, 0],
+                max: [9, crate::STOREY_CUBES - 1, thick - 1],
+                cube: Some(Cube::new(kit().kind(), Fill::Solid)),
+            });
+            let logs = logs(&lay(&base, &kit()));
+            // Logs run along both its faces...
+            for face in [0.25, (thick as f32 - 0.5) * CELL_M] {
+                assert!(
+                    logs.iter()
+                        .any(|(from, to, _)| from.z == face && to.z == face && to.x - from.x > 1.0),
+                    "{thick} thick: no log along the face at {face}"
+                );
+            }
+            // ...and none across it but at its two ends, so no face but an end shows a
+            // log's sawn end.
+            for (from, to, _) in &logs {
+                if from.z != to.z {
+                    assert!(
+                        from.x < CELL_M || from.x > 9.0 * CELL_M,
+                        "{thick} thick: a log across it at {from} {to}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn a_free_end_is_cut_flush() {
         let mut base = Base::default();
         wall(&mut base, (0..4).map(|x| [x, 0, 0]), Panel::Solid);
