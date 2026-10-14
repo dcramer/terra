@@ -844,6 +844,24 @@ impl Plugin for ShellPlugin {
         if self.0.remote {
             crate::remote::plugin(app);
         }
+        // Meshes share slabs of GPU memory, each grown by copying it into a bigger one,
+        // after which every mesh in it is prepared and batched again: tens of
+        // milliseconds a time with a town's gigabytes of buildings streaming in. Slabs start
+        // at 64 MiB and double, so one grows three times on its way to Bevy's 512 MiB
+        // rather than a dozen from 1 MiB.
+        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+            use bevy::render::{
+                mesh::allocator::MeshAllocatorSettings, slab_allocator::SlabAllocatorSettings,
+            };
+            render_app.insert_resource(MeshAllocatorSettings {
+                slab_allocator_settings: SlabAllocatorSettings {
+                    min_slab_size: 64 * 1024 * 1024,
+                    growth_factor: 2.0,
+                    ..default()
+                },
+                ..default()
+            });
+        }
         if self.0.offscreen && self.0.unattended() {
             app.add_systems(Startup, make_picture)
                 .add_systems(PostUpdate, draw_into_picture.before(CameraUpdateSystems));
