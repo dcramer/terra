@@ -104,8 +104,11 @@ pub(super) const PEOPLE: [Villager; 4] = [
     },
 ];
 
+/// Where the village's green is, its middle; and points on the ground along its street and
+/// at each building's door, back and corners, which no claim comes within a margin of
+/// (D193, D265).
 #[derive(Resource)]
-pub struct Village(pub Vec3);
+pub struct Village(pub Vec3, pub Vec<Vec3>);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Update, found.run_if(resource_added::<Lair>))
@@ -148,10 +151,11 @@ fn found(
         warn!("No dry ground for the village.");
         return;
     };
-    commands.insert_resource(Village(middle));
     let up = middle.normalize();
     let south = east.cross(up);
     let at = |e: f32, s: f32| planet.ground_at(middle + east * e + south * s);
+    let reach = reaches(&buildings).iter().map(|&[e, s]| at(e, s)).collect();
+    commands.insert_resource(Village(middle, reach));
     // The street, its plants cleared and trodden bare.
     let (long, wide) = STREET_M;
     let mut step = -long;
@@ -290,24 +294,7 @@ fn site_for(
     buildings: &[terra_build::village::Building],
 ) -> Option<(Vec3, Vec3)> {
     let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 1.5;
-    // Where to sample, in the village's own metres east and south: along the street, and
-    // at each building's door and a few metres behind it.
-    let mut samples: Vec<[f32; 2]> = (-5..=5).map(|i| [i as f32 * 8.0, 0.0]).collect();
-    for building in buildings {
-        let [e, s] = building.at;
-        let (sin, cos) = (libm::sinf(building.facing), libm::cosf(building.facing));
-        // Its door, its back and its corners, as far as a house reaches.
-        for (back, aside) in [
-            (0.0, 0.0),
-            (5.0, 0.0),
-            (0.0, 4.5),
-            (0.0, -4.5),
-            (6.0, 4.5),
-            (6.0, -4.5),
-        ] {
-            samples.push([e - sin * back + cos * aside, s - cos * back - sin * aside]);
-        }
-    }
+    let samples = reaches(buildings);
     let mut best: Option<(f32, Vec3, Vec3)> = None;
     for radius in [75.0_f32, 95.0, 115.0] {
         for step in 0..16 {
@@ -344,6 +331,28 @@ fn site_for(
         }
     }
     best.map(|(_, middle, east)| (middle, east))
+}
+
+/// Where the village reaches, in its own metres east and south: along the street, and at
+/// each building's door, a few metres behind it and its corners.
+fn reaches(buildings: &[terra_build::village::Building]) -> Vec<[f32; 2]> {
+    let mut samples: Vec<[f32; 2]> = (-5..=5).map(|i| [i as f32 * 8.0, 0.0]).collect();
+    for building in buildings {
+        let [e, s] = building.at;
+        let (sin, cos) = (libm::sinf(building.facing), libm::cosf(building.facing));
+        // Its door, its back and its corners, as far as a house reaches.
+        for (back, aside) in [
+            (0.0, 0.0),
+            (5.0, 0.0),
+            (0.0, 4.5),
+            (0.0, -4.5),
+            (6.0, 4.5),
+            (6.0, -4.5),
+        ] {
+            samples.push([e - sin * back + cos * aside, s - cos * back - sin * aside]);
+        }
+    }
+    samples
 }
 
 /// Which way a place lies from another, as someone there would say it: by the sun, or at

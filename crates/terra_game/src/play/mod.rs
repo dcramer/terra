@@ -51,7 +51,7 @@ pub(crate) mod props;
 mod registries;
 pub use props::{Look as PropLook, glowing as prop_glowing, lit as prop_lit, looks as prop_looks};
 mod save;
-mod settlement;
+pub(crate) mod settlement;
 mod skills;
 mod sounds;
 mod soundscape;

@@ -492,6 +492,7 @@ pub(super) fn afford(
     look: Res<crate::build::BuildLook>,
     props: Query<&Prop>,
     mut building: Building,
+    village: Option<Res<crate::play::settlement::Village>>,
     mut players: Query<
         (
             Entity,
@@ -503,6 +504,17 @@ pub(super) fn afford(
         With<Player>,
     >,
 ) {
+    // Every claim there is, by whose it is, and the village, which a new claim keeps clear
+    // of (D193, D265).
+    let claims: Vec<(Entity, crate::play::claim::Keeps)> = players
+        .iter()
+        .filter_map(|(player, _, claim, ..)| claim.keeps().map(|keeps| (player, keeps)))
+        .collect();
+    let villages: Vec<crate::play::claim::Keeps> = village
+        .iter()
+        .flat_map(|village| village.1.iter().map(|&point| (point, 0.0)))
+        .collect();
+    let first_across = builds.claim.across_m[0];
     for (player, at, claim, mut builder, local) in &mut players {
         if builder.work.is_some() {
             continue;
@@ -521,7 +533,15 @@ pub(super) fn afford(
             Some(_) if placing_claim && claim.stone.is_some() => {
                 Some("You already have a claim; take its stone away to move it")
             }
-            Some(_) if placing_claim => None,
+            Some(point) if placing_claim => crate::play::claim::too_near(
+                point,
+                first_across,
+                claims
+                    .iter()
+                    .filter(|(owner, _)| *owner != player)
+                    .map(|(_, keeps)| *keeps),
+                villages.iter().copied(),
+            ),
             Some(point) if !claim.covers(point) => Some(if claim.stone.is_none() {
                 "Place a claim stone to build here: it is under Claim in the build menu"
             } else {

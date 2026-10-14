@@ -3,18 +3,52 @@
 //! it starts 40 metres across and grows to 80 and then 160 when you pay at the stone with
 //! the interact key (D104). One claim each, for now: it is a component of each player.
 //!
+//! Claims do not overlap and keep a margin (D193): a stone is refused, and a claim does not
+//! grow, where its edge would come within [`MARGIN_M`] of another claim's or of a village's
+//! (D265).
+//!
 //! While the hammer is in hand, its edge is drawn on the ground.
 
 use super::catalogue::{Builds, ClaimRule};
 use super::interact::{Interactable, Interacted};
 use super::inventory::{Belongings, Cost, describe};
 use super::props::{PlacedBy, Prop};
+use super::settlement::Village;
 use super::tick::Sim;
 use super::told::Told;
 use super::{IsLocalPlayer, Player};
 use crate::build::{Site, frame_at};
 use crate::planet::Planet;
 use bevy::prelude::*;
+
+/// How far apart claims keep, edge to edge, and from a village's reach, in metres (D193,
+/// D265): room to walk round a base, and for what is built at a claim's edge, its eaves
+/// and footings, not to touch a neighbour's.
+pub const MARGIN_M: f32 = 10.0;
+
+/// Something a claim keeps clear of: where its middle is, and how far round it it reaches
+/// across the ground, in metres.
+pub type Keeps = (Vec3, f32);
+
+/// Why a claim so far across round a centre would be too near something else: another
+/// claim, or a village, within the margin of its edge; `None` if it keeps clear of all of
+/// them. Distance is across the ground, as [`Claim::covers`] measures it.
+pub fn too_near(
+    centre: Vec3,
+    across_m: f32,
+    claims: impl IntoIterator<Item = Keeps>,
+    villages: impl IntoIterator<Item = Keeps>,
+) -> Option<&'static str> {
+    let apart = |other: Vec3| (other - centre).reject_from(centre.normalize()).length();
+    let near = |(other, reach): Keeps| apart(other) < across_m * 0.5 + reach + MARGIN_M;
+    if claims.into_iter().any(near) {
+        Some("Too near another claim: claims keep 10 m apart")
+    } else if villages.into_iter().any(near) {
+        Some("Too near the village: a claim keeps 10 m from it")
+    } else {
+        None
+    }
+}
 
 /// A player's claim, if they have placed one: its stone, how many times it has grown, and
 /// how far across that makes it (`ClaimRule`, in `assets/data/builds.ron`).
@@ -47,6 +81,11 @@ impl Claim {
     pub fn set_step(&mut self, step: usize, rule: &ClaimRule) {
         self.step = step.min(rule.across_m.len() - 1);
         self.across_m = rule.across_m[self.step];
+    }
+
+    /// What it keeps clear of others: its stone and half its width, if it has a stone.
+    pub fn keeps(&self) -> Option<Keeps> {
+        self.stone.map(|(_, centre)| (centre, self.across_m * 0.5))
     }
 
     /// What growing it costs, if it can grow.
@@ -136,11 +175,21 @@ fn grow(
     mut interacted: MessageReader<Interacted>,
     mut claims: Query<&mut Claim>,
     builds: Res<Builds>,
+    village: Option<Res<Village>>,
     mut belongings: Belongings,
     mut told: MessageWriter<Told>,
 ) {
     let rule = &builds.claim;
+    let villages: Vec<Keeps> = village
+        .iter()
+        .flat_map(|village| village.1.iter().map(|&point| (point, 0.0)))
+        .collect();
     for used in interacted.read() {
+        let others: Vec<Keeps> = claims
+            .iter()
+            .filter(|other| other.stone.map(|(own, _)| own) != used.on(Interactable::ClaimStone))
+            .filter_map(Claim::keeps)
+            .collect();
         let Some(stone) = used.on(Interactable::ClaimStone) else {
             continue;
         };
@@ -152,7 +201,16 @@ fn grow(
         let said = if claim.stone.map(|(own, _)| own) != Some(stone) {
             "That is not your claim stone".to_string()
         } else if let Some(cost) = claim.next(rule) {
-            if let Some((kind, more)) = inventory.missing(cost, 1) {
+            let grown = rule.across_m[(claim.step + 1).min(rule.across_m.len() - 1)];
+            let centre = claim.stone.map_or(Vec3::ZERO, |(_, at)| at);
+            if let Some(why) = too_near(
+                centre,
+                grown,
+                others.iter().copied(),
+                villages.iter().copied(),
+            ) {
+                format!("Your claim can't grow to {grown} metres here. {why}")
+            } else if let Some((kind, more)) = inventory.missing(cost, 1) {
                 let items = inventory.items();
                 format!(
                     "Growing your claim takes {}: you need {more} more {}",
@@ -222,6 +280,34 @@ mod tests {
     use super::*;
     use crate::play::crafting::Stations;
     use crate::play::inventory::Items;
+
+    #[test]
+    fn claims_keep_apart_and_clear_of_the_village() {
+        let up = Vec3::new(0.0, 2000.0, 0.0);
+        let east = |metres: f32| up + Vec3::X * metres;
+        // Another claim 40 m across: a new one 40 m across keeps 10 m from its edge, so its
+        // stone 50 m from the other's or more.
+        let other = [(east(0.0), 20.0)];
+        assert!(
+            too_near(east(49.0), 40.0, other, []).is_some(),
+            "within the margin"
+        );
+        assert!(
+            too_near(east(30.0), 40.0, other, []).is_some(),
+            "overlapping"
+        );
+        assert_eq!(too_near(east(51.0), 40.0, other, []), None);
+        // Only distance across the ground counts, not height.
+        assert_eq!(too_near(east(51.0) + Vec3::Y * 30.0, 40.0, other, []), None);
+        // A village keeps claims off its street and houses, and the margin past them: the
+        // nearest point it reaches 200 m west.
+        let village = [(east(-260.0), 0.0), (east(-200.0), 0.0)];
+        let edge = -200.0 + MARGIN_M + 20.0;
+        assert!(too_near(east(edge - 1.0), 40.0, [], village).is_some());
+        assert_eq!(too_near(east(edge + 1.0), 40.0, [], village), None);
+        // Grown, a claim reaches further, and may come too near what it kept clear of.
+        assert!(too_near(east(51.0), 80.0, other, []).is_some());
+    }
 
     #[test]
     fn a_claim_covers_what_is_within_half_its_width_and_grows() {
