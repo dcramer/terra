@@ -24,6 +24,11 @@ export type Look = {
   contrast: number;
   /// The share of the lower third that is lit orange litter: orange, saturated and bright.
   litLitter: number;
+  /// The shade's colour: red and blue against green over the pixels darker than 0.08; and
+  /// blue against green in the middle third's mid-tones (0.05 to 0.3), the middle distance.
+  shadeRedOverGreen: number;
+  shadeBlueOverGreen: number;
+  middleBlueOverGreen: number;
 };
 
 /// Sons of the Forest's twenty daytime forest frames, measured so (the research note's
@@ -39,6 +44,9 @@ export const SOTF: Look = {
   blueOverGreen: 0.637,
   contrast: 0.426,
   litLitter: 0.034,
+  shadeRedOverGreen: 1.261,
+  shadeBlueOverGreen: 0.377,
+  middleBlueOverGreen: 0.514,
 };
 
 /// The picture's look; `masked` pixels (such as the placeholder player in a film) are left
@@ -48,6 +56,7 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
   const luma = new Float32Array(W * H);
   const ys: number[] = [];
   let r = 0, g = 0, b = 0, dark = 0, bright = 0, lower = 0, litter = 0;
+  const shade = [0, 0, 0], middle = [0, 0, 0];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
@@ -62,7 +71,16 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
       r += cr;
       g += cg;
       b += cb;
-      if (v < 0.08) dark++;
+      if (v < 0.08) {
+        dark++;
+        shade[0] += cr;
+        shade[1] += cg;
+        shade[2] += cb;
+      }
+      if (y >= H / 3 && y < (H * 2) / 3 && v > 0.05 && v < 0.3) {
+        middle[1] += cg;
+        middle[2] += cb;
+      }
       if (v > 0.85) bright++;
       if (y >= (H * 2) / 3) {
         lower++;
@@ -111,6 +129,9 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
     blueOverGreen: b / g,
     contrast: squares ? spread / squares : 0,
     litLitter: lower ? litter / lower : 0,
+    shadeRedOverGreen: shade[1] ? shade[0] / shade[1] : 0,
+    shadeBlueOverGreen: shade[1] ? shade[2] / shade[1] : 0,
+    middleBlueOverGreen: middle[1] ? middle[2] / middle[1] : 0,
   };
 }
 
@@ -123,5 +144,5 @@ export function meanOf(looks: Look[]): Look {
 /// One line for a look: each number, and Sons of the Forest's beside it.
 export function line(name: string, l: Look): string {
   const f = (v: number) => v.toFixed(3);
-  return `${name}: mean ${f(l.mean)} (SotF ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%)`;
+  return `${name}: mean ${f(l.mean)} (SotF ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%), shade red/green ${f(l.shadeRedOverGreen)} (${f(SOTF.shadeRedOverGreen)}), shade blue/green ${f(l.shadeBlueOverGreen)} (${f(SOTF.shadeBlueOverGreen)}), middle blue/green ${f(l.middleBlueOverGreen)} (${f(SOTF.middleBlueOverGreen)})`;
 }

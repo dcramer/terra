@@ -32,8 +32,22 @@ use bevy::{
     render::sync_world::SyncToRenderWorld,
 };
 
-/// How many times longer every distance through the air is than in the world.
+/// How many times longer every distance through the air is than in the world, in the open.
 pub const HAZE_SCALE: f32 = 18.0;
+/// And under a closed canopy (D299): the air between the trunks is in the canopy's shade, not
+/// the sunlit sky's, so a trunk fifty metres off is not as blue as a mountain nine hundred
+/// off. At the open air's scale the forest's shade measured blue over green 0.68 where Sons of
+/// the Forest's is 0.38; at this, 0.32 to 0.4.
+const FOREST_HAZE_SCALE: f32 = 9.0;
+
+/// How long the air's distances are for an eye under so much open sky (`OpenOverhead`): the
+/// forest's under the trees, the open air's out of them, as the forest's haze gives way to the
+/// open air's (D279), between them evenly by ratio.
+pub fn haze_scale(open: f32) -> f32 {
+    let t = ((open - 0.55) / (0.98 - 0.55)).clamp(0.0, 1.0);
+    let t = t * t * (3.0 - 2.0 * t);
+    libm::expf(libm::logf(FOREST_HAZE_SCALE) * (1.0 - t) + libm::logf(HAZE_SCALE) * t)
+}
 /// The air's planet, as Earth's, in metres of the air's own space.
 const INNER_RADIUS_M: f32 = 6_360_000.0;
 const OUTER_RADIUS_M: f32 = 6_460_000.0;
@@ -205,22 +219,27 @@ fn settings(
     });
 }
 
-/// Where the air's centre is for a camera: straight below it, so far that the camera is
-/// at the air's ground when it is at the sea, and higher as it climbs.
-fn centre(camera: Vec3, sea_radius_m: f32) -> Vec3 {
+/// Where the air's centre is for a camera, its distances `scale` times the world's: straight
+/// below it, so far that the camera is at the air's ground when it is at the sea, and higher
+/// as it climbs.
+fn centre(camera: Vec3, sea_radius_m: f32, scale: f32) -> Vec3 {
     let up = camera.normalize_or(Vec3::Y);
-    up * (sea_radius_m - INNER_RADIUS_M / HAZE_SCALE)
+    up * (sea_radius_m - INNER_RADIUS_M / scale)
 }
 
 fn follow(
     planet: Res<Planet>,
+    open: Option<Res<crate::sky_occlusion::OpenOverhead>>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut air: Query<(&mut Transform, &mut GlobalTransform), (With<Air>, Without<MainCamera>)>,
 ) {
     let Ok(camera) = camera.single() else { return };
-    let at = centre(camera.translation(), planet.sea_radius_m());
+    // A world with no canopy to stand under keeps the open air's.
+    let scale = open.map_or(HAZE_SCALE, |open| haze_scale(open.0));
+    let at = centre(camera.translation(), planet.sea_radius_m(), scale);
     for (mut transform, mut global) in &mut air {
         transform.translation = at;
+        transform.scale = Vec3::splat(1.0 / scale);
         *global = GlobalTransform::from(*transform);
     }
 }
@@ -235,11 +254,23 @@ mod tests {
         for up in [Vec3::Y, Vec3::new(0.3, 0.9, -0.2).normalize()] {
             for above in [0.0, 40.0] {
                 let camera = up * (sea + above);
-                let inside = (camera - centre(camera, sea)) * HAZE_SCALE;
+                let inside = (camera - centre(camera, sea, HAZE_SCALE)) * HAZE_SCALE;
                 let height = inside.length() - INNER_RADIUS_M;
                 assert!((height - above * HAZE_SCALE).abs() < 2.0, "{height}");
                 assert!(inside.normalize().dot(up) > 0.9999);
             }
+        }
+    }
+
+    #[test]
+    fn under_trees_the_airs_distances_are_shorter_and_lengthen_evenly_into_the_open() {
+        assert!((haze_scale(0.1) - FOREST_HAZE_SCALE).abs() < 1e-4);
+        assert!((haze_scale(1.0) - HAZE_SCALE).abs() < 1e-3);
+        let mut last = haze_scale(0.0);
+        for k in 1..=40 {
+            let now = haze_scale(k as f32 / 40.0);
+            assert!(now >= last && now < last * 1.15, "{last} then {now}");
+            last = now;
         }
     }
 }
