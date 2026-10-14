@@ -1,0 +1,231 @@
+//! How long a base's sections take to lay and merge, `cargo xtask sections`
+//! (docs/building-plan.md, checking it): the village's fifty buildings, every section of
+//! each laid and merged at every detail as the game's workers do, on one thread, timed.
+//! The bar is a section laid and merged in under 2 ms. Height maps are stand-ins of the
+//! real ones' size, as the cost of shaping by them does not depend on what is in them.
+
+use std::path::Path;
+use std::process::ExitCode;
+use std::sync::Arc;
+use std::time::Instant;
+use terra_build::Base;
+use terra_build::kit::{Kit, Kits, Pattern, Profile};
+use terra_build::relief::{Maps, Relief, Swatch, shaped_by, topped_by};
+use terra_build::sections::{self, Progress, Reach, Section};
+
+/// The bar for a section laid and merged on a worker, in milliseconds.
+const BAR_MS: f32 = 2.0;
+
+fn main() -> ExitCode {
+    let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let Some(kits) = read_kits(&assets) else {
+        return ExitCode::FAILURE;
+    };
+    let find = |pattern: Pattern, profile: Profile| {
+        kits.0
+            .iter()
+            .find(|kit| {
+                kit.pattern == pattern
+                    && (pattern == Pattern::Masonry || kit.timber.profile == profile)
+            })
+            .map(Kit::kind)
+    };
+    let (Some(logs), Some(stone), Some(hewn)) = (
+        find(Pattern::Logs, Profile::Round),
+        find(Pattern::Masonry, Profile::Round),
+        find(Pattern::Logs, Profile::Hewn),
+    ) else {
+        println!("sections: the village needs a log, a stone and a hewn kit");
+        return ExitCode::FAILURE;
+    };
+    let maps = stand_in_maps(&kits);
+    let only: Option<String> = std::env::args().nth(1);
+    let mut times: [Vec<(f32, f32)>; 3] = Default::default();
+    let mut slowest: Vec<(f32, String)> = Vec::new();
+    let mut whole_ms: Vec<f32> = Vec::new();
+    // Triangles of every section at each detail: near, mid, far and proxy.
+    let mut triangles = [0usize; 4];
+    let mut by_kind: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
+    for (name, ops) in terra_build::bench_village(logs, stone, hewn) {
+        if only
+            .as_ref()
+            .is_some_and(|only| !name.contains(only.as_str()))
+        {
+            continue;
+        }
+        let mut base = Base::default();
+        for op in ops {
+            base.apply(op);
+        }
+        let progress = Progress::Whole;
+        // Laid whole once, as the game's first job for a change does.
+        let started = Instant::now();
+        let whole = sections::Whole::lay(&base, &kits);
+        whole_ms.push(started.elapsed().as_secs_f32() * 1000.0);
+        for at in sections::drawable(&base) {
+            let section = Section {
+                base: &base,
+                kits: &kits,
+                maps: &maps,
+                at: glam::IVec3::from_array(at),
+                progress: &progress,
+                flights: &[],
+            };
+            for (slot, reach) in [Reach::Near, Reach::Mid, Reach::Far]
+                .into_iter()
+                .enumerate()
+            {
+                let started = Instant::now();
+                let laid = sections::lay(&section, &whole);
+                let lay_ms = started.elapsed().as_secs_f32() * 1000.0;
+                if laid.pieces.is_empty() {
+                    continue;
+                }
+                let drawn = sections::draw(&section, &laid, reach);
+                let total_ms = started.elapsed().as_secs_f32() * 1000.0;
+                let count = |surfaces: &std::collections::BTreeMap<_, terra_build::Surface>| {
+                    surfaces
+                        .values()
+                        .map(terra_build::Surface::triangle_count)
+                        .sum::<usize>()
+                };
+                let finest = match reach {
+                    Reach::Near => count(&drawn.near),
+                    Reach::Mid => count(&drawn.mid),
+                    Reach::Far => drawn.far.triangle_count(),
+                };
+                triangles[slot] += finest;
+                if reach == Reach::Far {
+                    triangles[3] += drawn.proxy.triangle_count();
+                    if std::env::var_os("BY_KIND").is_some() {
+                        let mut kinds: std::collections::BTreeSet<String> = Default::default();
+                        for p in &laid.pieces {
+                            kinds.insert(
+                                format!("{:?}", p.1)
+                                    .split([' ', '{', '('])
+                                    .next()
+                                    .unwrap()
+                                    .to_string(),
+                            );
+                        }
+                        for kind in kinds {
+                            let mut only = laid.clone();
+                            only.pieces
+                                .retain(|p| format!("{:?}", p.1).starts_with(&kind));
+                            let d = sections::draw(&section, &only, Reach::Far);
+                            let e = by_kind.entry(kind).or_insert((0, 0));
+                            e.0 += d.far.triangle_count();
+                            e.1 += d.proxy.triangle_count();
+                        }
+                    }
+                }
+                times[slot].push((lay_ms, total_ms));
+                slowest.push((total_ms, format!("{name}, section {at:?}, {reach:?}")));
+            }
+        }
+    }
+    let median = |values: &mut Vec<f32>| {
+        values.sort_by(f32::total_cmp);
+        values.get(values.len() / 2).copied().unwrap_or(0.0)
+    };
+    let mut met = true;
+    let buildings = whole_ms.len();
+    println!(
+        "{buildings} buildings laid whole in a median {:.2} ms",
+        median(&mut whole_ms)
+    );
+    println!("Sections with anything in them, cut from them and merged on one thread, in ms:");
+    for (slot, name) in ["near", "mid", "far"].into_iter().enumerate() {
+        let mut lay: Vec<f32> = times[slot].iter().map(|t| t.0).collect();
+        let mut total: Vec<f32> = times[slot].iter().map(|t| t.1).collect();
+        let count = total.len();
+        let (lay, total) = (median(&mut lay), median(&mut total));
+        let p90 = total_at(&times[slot], 0.9);
+        println!(
+            "  {name:5} {count:4} sections: cut in a median {lay:.2}, cut and merged {total:.2}, 90th percentile {p90:.2}"
+        );
+        met &= total < BAR_MS;
+    }
+    println!(
+        "Triangles of them all, near {}, mid {}, far {}, proxy {}",
+        triangles[0], triangles[1], triangles[2], triangles[3]
+    );
+    for (kind, (far, proxy)) in &by_kind {
+        println!("  {kind:12} far {far:9} proxy {proxy:9}");
+    }
+    slowest.sort_by(|a, b| b.0.total_cmp(&a.0));
+    println!("The slowest:");
+    for (ms, what) in slowest.iter().take(6) {
+        println!("  {ms:6.2}  {what}");
+    }
+    println!(
+        "The bar: a section laid and merged in under {BAR_MS} ms (median): {}",
+        if met { "met" } else { "MISSED" }
+    );
+    if met {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// The time below which this share of sections were laid and merged.
+fn total_at(times: &[(f32, f32)], share: f32) -> f32 {
+    let mut total: Vec<f32> = times.iter().map(|t| t.1).collect();
+    total.sort_by(f32::total_cmp);
+    total
+        .get(((total.len().max(1) - 1) as f32 * share) as usize)
+        .copied()
+        .unwrap_or(0.0)
+}
+
+/// Every kit under `assets/data/kits`, with its dressed pieces, as the game reads them.
+fn read_kits(assets: &Path) -> Option<Kits> {
+    let read = |path: &Path| {
+        std::fs::read_to_string(path).map_err(|why| format!("{}: {why}", path.display()))
+    };
+    let mut paths: Vec<_> = std::fs::read_dir(assets.join("data/kits"))
+        .map(|entries| entries.flatten().map(|entry| entry.path()).collect())
+        .unwrap_or_default();
+    paths.sort();
+    let mut kits = Vec::new();
+    for path in paths
+        .into_iter()
+        .filter(|p| p.extension().is_some_and(|e| e == "ron"))
+    {
+        let kit = read(&path)
+            .and_then(|text| ron::from_str::<Kit>(&text).map_err(|why| why.to_string()))
+            .and_then(|mut kit| {
+                kit.dress.read(&|file| read(&assets.join(file)))?;
+                Ok(kit)
+            });
+        match kit {
+            Ok(kit) => kits.push(kit),
+            Err(why) => {
+                println!("sections: {} does not read: {why}", path.display());
+                return None;
+            }
+        }
+    }
+    Some(Kits(kits))
+}
+
+/// Height maps and swatches of the real ones' sizes, in a pattern, for every kit.
+fn stand_in_maps(kits: &Kits) -> Maps {
+    const SIDE: usize = 1024;
+    let heights: Vec<u8> = (0..SIDE * SIDE)
+        .map(|i| ((i * 2_654_435_761) >> 13) as u8)
+        .collect();
+    let relief = Arc::new(Relief::new(SIDE, SIDE, heights).expect("a full map"));
+    let swatch = Arc::new(Swatch::new(16, 16, vec![[0.4, 0.35, 0.3]; 256]).expect("a swatch"));
+    let mut maps = Maps::default();
+    for kit in &kits.0 {
+        for path in [shaped_by(kit), topped_by(kit)].into_iter().flatten() {
+            maps.heights.insert(path.to_string(), relief.clone());
+        }
+        for texture in kit.textures.values() {
+            maps.colours.insert(texture.path.clone(), swatch.clone());
+        }
+    }
+    maps
+}

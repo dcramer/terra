@@ -128,6 +128,13 @@ const TASKS: &[Task] = &[
         run: |_| kits(),
     },
     Task {
+        name: "sections",
+        takes: "[building]",
+        does: "time laying and merging the village's sections, as the game's workers do, against the 2 ms bar",
+        group: "Play and check",
+        run: sections,
+    },
+    Task {
         name: "sandbox",
         takes: "[args]",
         does: "the sandbox, the test environment; --list for its experiments (crates/terra_sandbox)",
@@ -432,12 +439,19 @@ fn parse_sustained(line: &str) -> Option<(f32, u32, f32)> {
 /// Reads `SANDBOX frames on <gpu> at <size>: median 1.00 ms, 99th percentile 2.00 ms,
 /// worst 3.00 ms` (crates/terra_world/src/shell.rs).
 /// What a scene's run says about itself that a benchmark reports beside its frames: how
-/// long building's sections took to lay on the workers, and its operations to apply.
+/// long building's sections took to lay on the workers, and its operations to apply; and
+/// where its frames went: the game, the render passes on the CPU and the GPU, and the GPU
+/// by pass.
 fn worth_saying(line: &str) -> Option<&str> {
-    ["Builds drawn: ", "Village: "]
-        .iter()
-        .find_map(|key| line.find(key))
-        .map(|at| line[at..].trim_end())
+    [
+        "Builds drawn: ",
+        "Village: ",
+        "frame parts, ",
+        "GPU passes, ",
+    ]
+    .iter()
+    .find_map(|key| line.find(key))
+    .map(|at| line[at..].trim_end())
 }
 
 fn parse_timing(line: &str) -> Option<Timing> {
@@ -930,6 +944,23 @@ fn kits() -> bool {
         "cargo",
         &["run", "-q", "-p", "terra_build", "--example", "kits"],
     )
+}
+
+/// How long the village's buildings take to lay whole and their sections to cut and merge,
+/// on one thread, as the game's workers do (docs/building-plan.md, checking it); a name
+/// times only the buildings whose names hold it.
+fn sections(args: &[String]) -> bool {
+    let mut cargo = vec![
+        "run",
+        "-q",
+        "--release",
+        "-p",
+        "terra_build",
+        "--example",
+        "sections",
+    ];
+    cargo.extend(args.iter().map(String::as_str));
+    run("cargo", &cargo)
 }
 
 /// The tests of the TypeScript tools (D121), which Node runs as they are.

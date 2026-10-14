@@ -16,6 +16,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions},
 };
 use std::path::PathBuf;
+use terra_world::quality::Quality;
 
 /// Something the player does, which a key or a mouse button is set to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -360,6 +361,8 @@ pub struct Settings {
     pub field_of_view: f32,
     pub full_screen: bool,
     pub vsync: bool,
+    /// The quality preset, or `None` for the one chosen for the GPU (D239).
+    pub graphics: Option<Quality>,
     /// How loud everything is, and each part of it, from 0 to 1.
     pub master_volume: f32,
     pub music_volume: f32,
@@ -378,6 +381,7 @@ impl Default for Settings {
             field_of_view: 55.0,
             full_screen: false,
             vsync: true,
+            graphics: None,
             master_volume: 1.0,
             // Music is meant to sit under the world, not over it.
             music_volume: 0.7,
@@ -462,6 +466,10 @@ impl Settings {
         text += &format!("field_of_view = {}\n", self.field_of_view);
         text += &format!("full_screen = {}\n", self.full_screen);
         text += &format!("vsync = {}\n", self.vsync);
+        text += &format!(
+            "graphics = {}\n",
+            self.graphics.map_or("auto", Quality::name)
+        );
         text += &format!("master_volume = {}\n", self.master_volume);
         text += &format!("music_volume = {}\n", self.music_volume);
         text += &format!("ambience_volume = {}\n", self.ambience_volume);
@@ -500,6 +508,7 @@ impl Settings {
                 "invert_look" => settings.invert_look = value == "true",
                 "full_screen" => settings.full_screen = value == "true",
                 "vsync" => settings.vsync = value != "false",
+                "graphics" => settings.graphics = Quality::from_name(value),
                 "master_volume" => settings.master_volume = number(&VOLUME).unwrap_or(1.0),
                 "music_volume" => settings.music_volume = number(&VOLUME).unwrap_or(0.7),
                 "ambience_volume" => settings.ambience_volume = number(&VOLUME).unwrap_or(1.0),

@@ -13,7 +13,7 @@ use super::{Build, BuildLook, Built, Site};
 use crate::planet::MainCamera;
 use bevy::{
     asset::RenderAssetUsages,
-    camera::visibility::VisibilityRange,
+    camera::visibility::{RenderLayers, VisibilityRange},
     light::NotShadowCaster,
     mesh::Indices,
     prelude::*,
@@ -25,10 +25,14 @@ use std::sync::Arc;
 use terra_build::kit::Kits;
 use terra_build::sections::{Drawn as Merged, Ghost, Reach, Shape};
 use terra_build::{Kind, Material, Surface};
+use terra_world::detail::DetailScale;
+use terra_world::grown::SUN_ONLY;
+use terra_world::quality::Quality;
 
 /// Where each detail is seen, in metres from a section's middle, each fading into the
 /// next over a margin: full detail to here, a few metres off's to `MID_M`, far to `FAR_M`,
-/// the proxy to `PROXY_M`.
+/// the proxy to `PROXY_M`; each times the detail scale (D230), which a lower quality preset
+/// makes nearer.
 const NEAR_M: f32 = 25.0;
 const MID_M: f32 = 60.0;
 const FAR_M: f32 = 180.0;
@@ -43,7 +47,7 @@ fn fade(at: f32) -> std::ops::Range<f32> {
 }
 
 /// A detail seen from where a finer one ends, or from the camera if there is none, to
-/// where it ends.
+/// where it ends; as authored, which the detail scale then scales (D230).
 fn range(after: Option<f32>, end: f32) -> VisibilityRange {
     VisibilityRange {
         start_margin: after.map_or(0.0..0.0, fade),
@@ -336,7 +340,12 @@ pub fn plugin(app: &mut App) {
     if app.is_plugin_added::<bevy::pbr::PbrPlugin>() {
         app.add_plugins(MaterialPlugin::<GhostMaterial>::default());
     }
-    app.add_systems(Update, (upload, stream).chain().in_set(Drawing::Upload));
+    app.add_systems(
+        Update,
+        (follow_quality, upload, stream)
+            .chain()
+            .in_set(Drawing::Upload),
+    );
 }
 
 /// How many corners are put on screen a frame, at most, beyond the first section: a
@@ -348,6 +357,7 @@ fn upload(
     mut commands: Commands,
     mut jobs: ResMut<Jobs>,
     look: Res<BuildLook>,
+    quality: Res<Quality>,
     options: Res<crate::shell::Options>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut site: ResMut<Site>,
@@ -368,7 +378,7 @@ fn upload(
         let Some(build) = each(&mut site, &mut builds).find(|build| build.root == done.root) else {
             continue;
         };
-        show(&mut commands, &mut meshes, &look, build, done);
+        show(&mut commands, &mut meshes, &look, build, done, *quality);
     }
     let waiting = each(&mut site, &mut builds).all(|build| build.sections.waiting.is_empty());
     jobs.settle(waiting);
@@ -410,7 +420,9 @@ fn show(
     look: &BuildLook,
     build: &mut Build,
     done: Done,
+    quality: Quality,
 ) {
+    let coarse_shadows = quality != Quality::High;
     // An answer to an older job is dropped: the section has been sent again since.
     if build.sections.tickets.get(&done.section) != Some(&done.ticket) {
         return;
@@ -461,13 +473,17 @@ fn show(
     let mid_from = near.then_some(NEAR_M);
     let far_from = (reach >= Reach::Mid).then_some(MID_M);
     let mut add = |mesh: Mesh, material: Handle<StandardMaterial>, range: VisibilityRange| {
-        commands.spawn((
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(material),
-            range,
-            Transform::IDENTITY,
-            ChildOf(entity),
-        ));
+        let mesh = meshes.add(mesh);
+        let id = commands
+            .spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material),
+                range,
+                Transform::IDENTITY,
+                ChildOf(entity),
+            ))
+            .id();
+        (id, mesh)
     };
     let material = |kind: Kind, material: Material| {
         look.materials
@@ -475,11 +491,20 @@ fn show(
             .cloned()
             .unwrap_or_else(|| looks.structure.clone())
     };
+    // Below the high preset the sun sees each section at its middle detail from the
+    // camera out, as shipped games cast shadows from a coarser level of detail: the
+    // finest detail casts none, and the middle one's shadow is cast by a copy of it only
+    // the sun sees, in a plain material.
+    let mut quiet: Vec<Entity> = Vec::new();
+    let mut casters: Vec<Handle<Mesh>> = Vec::new();
     for (kind, which, mesh) in parts.near {
-        add(mesh, material(kind, which), range(None, NEAR_M));
+        let (id, _) = add(mesh, material(kind, which), range(None, NEAR_M));
+        quiet.push(id);
     }
     for (kind, which, mesh) in parts.mid {
-        add(mesh, material(kind, which), range(mid_from, MID_M));
+        let (id, mesh) = add(mesh, material(kind, which), range(mid_from, MID_M));
+        quiet.push(id);
+        casters.push(mesh);
     }
     // What goes in next, as long as the finest detail drawn is seen.
     let next_to = if near { NEAR_M } else { MID_M };
@@ -494,6 +519,21 @@ fn show(
     }
     if let Some(mesh) = parts.proxy {
         add(mesh, looks.far.clone(), range(Some(FAR_M), PROXY_M));
+    }
+    if coarse_shadows {
+        for id in quiet {
+            commands.entity(id).insert(NotShadowCaster);
+        }
+        for mesh in casters {
+            commands.spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(looks.far.clone()),
+                range(None, MID_M),
+                RenderLayers::layer(SUN_ONLY),
+                Transform::IDENTITY,
+                ChildOf(entity),
+            ));
+        }
     }
     if let Some(mesh) = parts.glass {
         commands.spawn((
@@ -542,6 +582,7 @@ fn show(
 /// is laid again with finer detail, one gone further off with coarser, a little after it
 /// crosses, so one on the line is not laid over and over.
 fn stream(
+    scale: Res<DetailScale>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
@@ -558,7 +599,7 @@ fn stream(
                 .distance(eye);
             let laying = sections.waiting.contains_key(&at)
                 || sections.tickets.get(&at) != Some(&drawn.ticket);
-            let wanted = reach(distance, Some(drawn.reach));
+            let wanted = reach(distance / scale.0, Some(drawn.reach));
             if wanted != drawn.reach && !laying {
                 sections.waiting.insert(
                     at,
@@ -569,5 +610,16 @@ fn stream(
                 );
             }
         }
+    }
+}
+
+/// Draws every build again when the quality preset changes, so each detail is seen as far
+/// as the new one has it.
+fn follow_quality(quality: Res<Quality>, mut site: ResMut<Site>, mut builds: Query<&mut Built>) {
+    if !quality.is_changed() || quality.is_added() {
+        return;
+    }
+    for build in each(&mut site, &mut builds) {
+        build.redraw_all();
     }
 }

@@ -1,7 +1,8 @@
-//! Laying a base's sections on the workers (docs/building-plan.md, drawing; D211): the
-//! sections `store` sets waiting are laid and merged on Bevy's async compute pool, as many
-//! at once as it has threads, nearest the camera first; what comes back waits for `draw`
-//! to put it on screen, a few a frame. Nothing heavy is done on the main thread.
+//! Laying a base's sections on the workers (docs/building-plan.md, drawing; D211): a base
+//! changed is laid whole once on Bevy's async compute pool (`sections::Whole`); then the
+//! sections `store` sets waiting are cut from it and merged there, as many at once as it
+//! has threads, nearest the camera first; what comes back waits for `draw` to put it on
+//! screen, a few a frame. Nothing heavy is done on the main thread.
 //!
 //! A section laid as it was, its pieces the same, comes back as that alone and is left as
 //! it is drawn. A scripted run waits for every section, so its pictures are the same every
@@ -46,9 +47,11 @@ pub(super) struct Jobs {
     idle: bool,
 }
 
-/// How long sections with anything in them took to lay and merge.
+/// How long bases took to lay whole, and sections with anything in them to cut from them
+/// and merge.
 #[derive(Default)]
 pub(super) struct Timings {
+    pub whole: Vec<f32>,
     pub near: Vec<f32>,
     pub far: Vec<f32>,
 }
@@ -83,10 +86,12 @@ pub(super) enum Outcome {
 
 /// How finely a section is drawn for a camera so far from its middle, in metres: finer
 /// detail is made a little before it is seen (`draw::NEAR_M`, `draw::MID_M`), and kept until
-/// the camera is further off again, so a section near a boundary is not laid over and over.
+/// the camera is further off again, so a section near a boundary is not laid over and over;
+/// but laid coarser before the detail it fades into is seen (`draw::MID_M` less its fade),
+/// as a section drawn near has nothing coarser than its middle detail.
 pub(super) fn reach(distance: f32, now: Option<Reach>) -> Reach {
     let kept = |reach: Reach| now.is_some_and(|now| now >= reach);
-    if distance < 40.0 || (kept(Reach::Near) && distance < 55.0) {
+    if distance < 40.0 || (kept(Reach::Near) && distance < 50.0) {
         Reach::Near
     } else if distance < 95.0 || (kept(Reach::Mid) && distance < 140.0) {
         Reach::Mid
@@ -138,6 +143,7 @@ fn track(
 /// Sends the waiting sections nearest the camera to the workers, as many as they have
 /// threads for.
 fn launch(
+    scale: Res<terra_world::detail::DetailScale>,
     mut jobs: ResMut<Jobs>,
     look: Res<BuildLook>,
     options: Res<Options>,
@@ -159,14 +165,54 @@ fn launch(
         .iter()
         .next()
         .map_or(Vec3::ZERO, GlobalTransform::translation);
-    // The nearest waiting sections of every build.
+    // Each build with sections waiting laid whole first, once a change, on a worker; a
+    // scripted run waits for it.
+    let wait = options.scripted() && !options.bench;
+    let no_kits: Arc<Kits> = Arc::new(Kits(Vec::new()));
+    for build in each(&mut site, &mut builds) {
+        let sections = &mut build.sections;
+        if sections.waiting.is_empty() || sections.whole.is_some() {
+            continue;
+        }
+        if sections.laying.is_none() {
+            let snapshot = sections
+                .snapshot
+                .get_or_insert_with(|| Arc::new(build.base.clone()))
+                .clone();
+            let kits = build.kits.clone().unwrap_or_else(|| no_kits.clone());
+            sections.laying = Some(pool.spawn(async move {
+                let started = Instant::now();
+                let whole = sections::Whole::lay(&snapshot, &kits);
+                (whole, started.elapsed().as_secs_f32() * 1000.0)
+            }));
+        }
+        let Some(task) = sections.laying.as_mut() else {
+            continue;
+        };
+        let laid = if wait {
+            Some(block_on(task))
+        } else {
+            block_on(poll_once(task))
+        };
+        if let Some((whole, took_ms)) = laid {
+            sections.whole = Some(Arc::new(whole));
+            sections.laying = None;
+            jobs.timings.whole.push(took_ms);
+        }
+    }
+    // The nearest waiting sections of every build laid whole.
     let mut nearest: Vec<(f32, Entity, [i32; 3])> = Vec::new();
     for build in each(&mut site, &mut builds) {
+        if build.sections.whole.is_none() {
+            continue;
+        }
         for &at in build.sections.waiting.keys() {
             let middle = build
                 .frame
                 .transform_point(store::centre(IVec3::from_array(at)));
-            nearest.push((middle.distance(eye), build.root, at));
+            // Measured against distances as the detail scale has them (D230).
+            let distance = middle.distance(eye) / scale.0;
+            nearest.push((distance, build.root, at));
         }
     }
     if nearest.is_empty() {
@@ -174,9 +220,11 @@ fn launch(
     }
     nearest.sort_by(|a, b| a.0.total_cmp(&b.0));
     nearest.truncate(room);
-    let no_kits: Arc<Kits> = Arc::new(Kits(Vec::new()));
     let maps = look.maps.clone();
     for build in each(&mut site, &mut builds) {
+        let Some(whole) = build.sections.whole.clone() else {
+            continue;
+        };
         for &(distance, root, at) in &nearest {
             if root != build.root {
                 continue;
@@ -205,6 +253,7 @@ fn launch(
                 .reach
                 .unwrap_or_else(|| reach(distance, previous.map(|(_, reach)| reach)));
             let force = waiting.force;
+            let whole = whole.clone();
             let task = pool.spawn(async move {
                 let started = Instant::now();
                 let section = Section {
@@ -215,7 +264,7 @@ fn launch(
                     progress: &progress,
                     flights: &flights,
                 };
-                let laid = sections::lay(&section);
+                let laid = sections::lay(&section, &whole);
                 let key = laid.key();
                 if !force && previous == Some((key, wanted)) {
                     return Outcome::Same;
@@ -298,7 +347,9 @@ impl Jobs {
                 sorted.get(sorted.len() / 2).copied().unwrap_or(0.0)
             };
             info!(
-                "Builds drawn: {} sections laid and merged, textured in a median {:.2} ms, far only in {:.2} ms, on a worker.",
+                "Builds drawn: {} bases laid whole in a median {:.2} ms, then {} sections cut from them and merged, textured in a median {:.2} ms, far only in {:.2} ms, on a worker.",
+                self.timings.whole.len(),
+                median(&self.timings.whole),
                 self.timings.near.len() + self.timings.far.len(),
                 median(&self.timings.near),
                 median(&self.timings.far),

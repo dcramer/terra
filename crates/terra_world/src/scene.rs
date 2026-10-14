@@ -4,11 +4,13 @@
 
 use crate::planet::MainCamera;
 use crate::planet::Tweaks;
+use crate::quality::Quality;
 use crate::sky::{Sky, SkyPlugin};
 use bevy::light::{FogVolume, ShadowFilteringMethod, VolumetricFog, VolumetricLight};
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
     camera::{Exposure, visibility::RenderLayers},
+    core_pipeline::prepass::NormalPrepass,
     core_pipeline::tonemapping::Tonemapping,
     light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
     pbr::{ContactShadows, DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
@@ -42,7 +44,8 @@ pub fn plugin(app: &mut App) {
         .insert_resource(DirectionalLightShadowMap { size: 4096 })
         .add_systems(Startup, preset)
         .add_systems(PostStartup, (style_camera, style_sun, haze))
-        .add_systems(Update, haze_follows);
+        .init_resource::<Indoors>()
+        .add_systems(Update, (haze_follows, follow_quality, adapt_indoors));
 }
 
 fn preset(mut tweaks: ResMut<Tweaks>) {
@@ -108,20 +111,12 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
     // taken to shade themselves.
     light.shadow_depth_bias = 0.06;
     light.shadow_normal_bias = 2.6;
-    // Where things meet the ground, finer than the shadow map can draw (D204).
-    light.contact_shadows_enabled = true;
-    // Sharp shadows close up, and shadows at all out to the far trees. The sun sees the
-    // stand-ins plants cast their shadows from as well as everything the camera sees.
-    commands.entity(sun).insert((
-        CascadeShadowConfigBuilder {
-            num_cascades: 4,
-            first_cascade_far_bound: 24.0,
-            maximum_distance: 300.0,
-            ..default()
-        }
-        .build(),
-        RenderLayers::from_layers(&[0, crate::grown::SUN_ONLY]),
-    ));
+    // The sun sees the stand-ins plants cast their shadows from as well as everything the
+    // camera sees. Its cascades and contact shadows follow the quality preset
+    // (`follow_quality`).
+    commands
+        .entity(sun)
+        .insert(RenderLayers::from_layers(&[0, crate::grown::SUN_ONLY]));
 }
 
 /// How far one sees between the trees before the haze swallows what is there.
@@ -134,21 +129,35 @@ const METERED_AS_SET: f32 = -3.6;
 /// as under a canopy, and one darker in glare, as every game with a forest clamps it.
 const ADAPT_BRIGHTER: f32 = 1.5;
 const ADAPT_DARKER: f32 = 1.0;
+/// How far it adapts brighter with the camera in a room closed and covered (D240): a room
+/// lit through its doors and windows is four to six stops darker than the day outside,
+/// and games with interiors let the eye open that far once inside, as Unreal's auto
+/// exposure does over its range.
+const ADAPT_BRIGHTER_INDOORS: f32 = 5.0;
 
-/// Eye adaptation clamped round the day's exposure: Bevy's auto exposure meters the frame
-/// and corrects by `curve(metered) - metered`, so a curve flat at the expected brightness
-/// over the band, and following the metering beyond it, holds the correction in the band.
-fn adaptation(curves: &mut Assets<AutoExposureCompensationCurve>) -> AutoExposure {
+/// Whether the camera is in a room closed and covered, which the game says (D155).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Indoors(pub bool);
+
+/// The curve the eye adapts by, holding its correction to so many stops brighter and
+/// darker: Bevy's auto exposure meters the frame and corrects by `curve(metered) -
+/// metered`, so a curve flat at the expected brightness over the band, and following the
+/// metering beyond it, holds the correction in the band.
+fn compensation(brighter: f32, darker: f32) -> AutoExposureCompensationCurve {
     let at = METERED_AS_SET;
-    let curve = AutoExposureCompensationCurve::from_curve(LinearSpline::new([
-        Vec2::new(at - 8.0, at - 8.0 + ADAPT_BRIGHTER),
-        Vec2::new(at - ADAPT_BRIGHTER, at),
-        Vec2::new(at + ADAPT_DARKER, at),
-        Vec2::new(at + 8.0, at + 8.0 - ADAPT_DARKER),
+    AutoExposureCompensationCurve::from_curve(LinearSpline::new([
+        Vec2::new(at - 8.0, at - 8.0 + brighter),
+        Vec2::new(at - brighter, at),
+        Vec2::new(at + darker, at),
+        Vec2::new(at + 8.0, at + 8.0 - darker),
     ]))
-    .expect("a valid curve");
+    .expect("a valid curve")
+}
+
+/// Eye adaptation clamped round the day's exposure.
+fn adaptation(curves: &mut Assets<AutoExposureCompensationCurve>) -> AutoExposure {
     AutoExposure {
-        compensation_curve: curves.add(curve),
+        compensation_curve: curves.add(compensation(ADAPT_BRIGHTER, ADAPT_DARKER)),
         // An eye takes a few seconds to open up in the shade, and less to close in the sun.
         speed_brighten: 1.2,
         speed_darken: 2.0,
@@ -174,46 +183,17 @@ fn style_camera(
         directional_light_exponent: 16.0,
         falloff: FogFalloff::from_visibility_squared(HAZE_VISIBLE_M),
     });
-    commands.entity(camera).insert(VolumetricFog {
-        // The sky's light in the haze, roughly its colour.
-        ambient_color: Color::srgb(0.7, 0.8, 1.0),
-        ambient_intensity: 0.05,
-        // Each frame's march starts a little differently, for TAA to smooth.
-        jitter: 0.5,
-        step_count: 48,
-    });
     commands.entity(camera).insert((
         Exposure {
             ev100: EXPOSURE_EV100,
         },
         // Ambient occlusion works on single samples, so edges are smoothed afterwards.
         Msaa::Off,
-        // Shade in corners, under eaves and where things stand on the ground, over a reach
-        // the size of a building's details.
-        ScreenSpaceAmbientOcclusion {
-            radius: 1.2,
-            ..default()
-        },
-        // Short shadows marched through the depth buffer, where a foot, a root or a blade
-        // meets the ground.
-        ContactShadows {
-            length: 0.4,
-            ..default()
-        },
         // Each frame jittered and blended with the last, as every game with dense foliage
         // does: it resolves the dithered crossfades between levels of detail, which
         // otherwise crawl, and stops leaves and blades shimmering (D214). The wind shaders
         // give it last frame's positions.
         TemporalAntiAliasing::default(),
-        // Soft shadow edges that TAA smooths over frames.
-        ShadowFilteringMethod::Temporal,
-        // A soft glow round the sun and bright sky, not a haze over everything: an
-        // energy-conserving bloom blends this much of a wide blur into every pixel, which at
-        // 0.1 washed the middle distance flat.
-        Bloom {
-            intensity: 0.03,
-            ..Bloom::NATURAL
-        },
         // A film's response: highlights roll off and lose their colour as they brighten,
         // as on film, rather than turning saturated and flat (ACES does both).
         Tonemapping::AgX,
@@ -233,4 +213,116 @@ fn style_camera(
             ..default()
         },
     ));
+}
+
+/// Puts the quality preset into effect (D239), at the start and whenever it changes: the
+/// sun's shadow map and cascades, shade in corners and contact shadows, and the haze's
+/// shafts of light.
+fn follow_quality(
+    quality: Res<Quality>,
+    mut applied: Local<Option<Quality>>,
+    mut commands: Commands,
+    camera: Query<Entity, With<MainCamera>>,
+    mut sun: Query<(Entity, &mut DirectionalLight)>,
+    mut map: ResMut<DirectionalLightShadowMap>,
+) {
+    let (Some(camera), Ok((sun, mut light))) = (camera.iter().next(), sun.single_mut()) else {
+        return;
+    };
+    if *applied == Some(*quality) {
+        return;
+    }
+    *applied = Some(*quality);
+    let shadows = quality.shadows();
+    if map.size != shadows.map {
+        map.size = shadows.map;
+    }
+    // Sharp shadows close up, and shadows at all out to the far trees.
+    commands.entity(sun).insert(
+        CascadeShadowConfigBuilder {
+            num_cascades: shadows.cascades,
+            first_cascade_far_bound: shadows.first_m,
+            maximum_distance: shadows.most_m,
+            ..default()
+        }
+        .build(),
+    );
+    // Where things meet the ground, finer than the shadow map can draw (D204).
+    light.contact_shadows_enabled = quality.occlusion();
+    let mut camera = commands.entity(camera);
+    if quality.occlusion() {
+        camera.insert((
+            // Shade in corners, under eaves and where things stand on the ground, over a
+            // reach the size of a building's details.
+            ScreenSpaceAmbientOcclusion {
+                radius: 1.2,
+                ..default()
+            },
+            // Short shadows marched through the depth buffer, where a foot, a root or a
+            // blade meets the ground.
+            ContactShadows {
+                length: 0.4,
+                ..default()
+            },
+        ));
+    } else {
+        // Without them nothing reads the prepass's normals, so they are not drawn.
+        camera.remove::<(ScreenSpaceAmbientOcclusion, ContactShadows, NormalPrepass)>();
+    }
+    // Soft shadow edges that TAA smooths over frames, or the hardware's own.
+    camera.insert(if quality.soft_shadows() {
+        ShadowFilteringMethod::Temporal
+    } else {
+        ShadowFilteringMethod::Hardware2x2
+    });
+    if quality.bloom() {
+        // A soft glow round the sun and bright sky, not a haze over everything.
+        // An energy-conserving bloom blends this much of a wide blur into every pixel,
+        // which at 0.1 washed the middle distance flat.
+        camera.insert(Bloom {
+            intensity: 0.03,
+            ..Bloom::NATURAL
+        });
+    } else {
+        camera.remove::<Bloom>();
+    }
+    match quality.haze_steps() {
+        Some(steps) => {
+            camera.insert(VolumetricFog {
+                // The sky's light in the haze, roughly its colour.
+                ambient_color: Color::srgb(0.7, 0.8, 1.0),
+                ambient_intensity: 0.05,
+                // Each frame's march starts a little differently, for TAA to smooth.
+                jitter: 0.5,
+                step_count: steps,
+            });
+        }
+        None => {
+            camera.remove::<VolumetricFog>();
+        }
+    }
+}
+
+/// Lets the eye open further with the camera indoors, and back to the outdoor band when it
+/// leaves; it adapts there at its own speed, as an eye does stepping through a door.
+fn adapt_indoors(
+    indoors: Res<Indoors>,
+    camera: Query<&AutoExposure, With<MainCamera>>,
+    mut curves: ResMut<Assets<AutoExposureCompensationCurve>>,
+) {
+    let Some(adapting) = camera.iter().next() else {
+        return;
+    };
+    // Changed, or the camera's adaptation newly set up.
+    if !indoors.is_changed() {
+        return;
+    }
+    let brighter = if indoors.0 {
+        ADAPT_BRIGHTER_INDOORS
+    } else {
+        ADAPT_BRIGHTER
+    };
+    if let Some(mut curve) = curves.get_mut(&adapting.compensation_curve) {
+        *curve = compensation(brighter, ADAPT_DARKER);
+    }
 }

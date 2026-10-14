@@ -119,6 +119,56 @@ fn bases(kits: &Kits) -> Vec<Base> {
     out
 }
 
+/// A section's pieces, cut from its base laid whole.
+fn laid(section: &Section) -> Laid {
+    lay(section, &Whole::lay(section.base, section.kits))
+}
+
+#[test]
+fn a_section_cut_from_its_base_laid_whole_is_the_section_laid_alone() {
+    let kits = shipped();
+    let maps = Maps::default();
+    for (index, base) in bases(&kits).iter().enumerate() {
+        let whole = Whole::lay(base, &kits);
+        let mut cut = 0;
+        for at in drawable(base) {
+            let section = Section {
+                base,
+                kits: &kits,
+                maps: &maps,
+                at: IVec3::from_array(at),
+                progress: &Progress::Whole,
+                flights: &[],
+            };
+            let laid = lay(&section, &whole);
+            // Laid alone, kit by kit, from only what reaches the section.
+            let (mut own, mut edge) = (Vec::new(), Vec::new());
+            for kit in &kits.0 {
+                let (alone, beyond) =
+                    layout::lay_section_and_edge(base, kit, &kits, IVec3::from_array(at));
+                own.extend(alone.pieces);
+                edge.extend(
+                    beyond
+                        .into_iter()
+                        .filter(|p| matches!(p, Piece::Block { .. } | Piece::Gable { .. })),
+                );
+            }
+            cut += laid.pieces.len();
+            assert_eq!(
+                sorted(laid.pieces.iter().map(|p| p.1.clone())),
+                sorted(own),
+                "base {index}, section {at:?}"
+            );
+            assert_eq!(
+                sorted(laid.edge.iter().map(|p| p.1.clone())),
+                sorted(edge),
+                "base {index}, section {at:?}, a cube beyond it"
+            );
+        }
+        assert!(cut > 0, "base {index} has pieces");
+    }
+}
+
 fn sorted(pieces: impl IntoIterator<Item = Piece>) -> Vec<String> {
     let mut out: Vec<String> = pieces.into_iter().map(|p| format!("{p:?}")).collect();
     out.sort();
@@ -239,7 +289,7 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                 progress: &Progress::Whole,
                 flights: &[],
             };
-            let drawn = draw(&section, &lay(&section), Reach::Near);
+            let drawn = draw(&section, &laid(&section), Reach::Near);
             merged.extend(drawn.near.into_values());
         }
         // The pieces drawn one by one, and each block kind's cubes as one surface.
@@ -322,14 +372,20 @@ fn far_off_a_section_is_far_fewer_triangles_and_one_surface() {
         progress: &Progress::Whole,
         flights: &[],
     };
-    let drawn = draw(&section, &lay(&section), Reach::Near);
+    let laid = laid(&section);
+    let drawn = draw(&section, &laid, Reach::Near);
     let near: usize = drawn.near.values().map(Surface::triangle_count).sum();
-    let (far, proxy) = (drawn.far.triangle_count(), drawn.proxy.triangle_count());
+    let far_off = draw(&section, &laid, Reach::Far);
+    let (far, proxy) = (far_off.far.triangle_count(), far_off.proxy.triangle_count());
     assert!(near > 0 && far > 0 && proxy > 0);
     assert!(far * 5 < near, "far {far} against near {near}");
     assert!(proxy < far, "proxy {proxy} against far {far}");
-    // Far off only, nothing near is drawn.
-    assert!(draw(&section, &lay(&section), Reach::Far).near.is_empty());
+    // Far off, nothing finer is drawn; near, nothing coarser than it fades into.
+    assert!(far_off.near.is_empty() && far_off.mid.is_empty());
+    assert!(drawn.far.triangle_count() == 0 && drawn.proxy.triangle_count() == 0);
+    let mid_off = draw(&section, &laid, Reach::Mid);
+    assert!(mid_off.near.is_empty() && !mid_off.mid.is_empty());
+    assert!(mid_off.far.triangle_count() > 0 && mid_off.proxy.triangle_count() == 0);
 }
 
 #[test]
@@ -359,7 +415,7 @@ fn a_plan_is_drawn_as_ghosts_a_piece_each_and_the_next_lit() {
             progress: &Progress::Fraction(0.0),
             flights: &[],
         };
-        let drawn = draw(&section, &lay(&section), Reach::Near);
+        let drawn = draw(&section, &laid(&section), Reach::Near);
         assert!(drawn.near.values().all(|s| s.triangle_count() == 0) || drawn.near.is_empty());
         ghosts += drawn.ghosts.len();
         lit += drawn
@@ -414,7 +470,7 @@ fn whatever_changes_a_section_is_in_what_a_change_redraws() {
             progress: &Progress::Whole,
             flights: &[],
         };
-        lay(&section).key()
+        laid(&section).key()
     };
     // A long building, then changes far from parts of it: a cube at one end, a window,
     // a wall's kind, a roof.
@@ -498,7 +554,7 @@ fn far_off_the_textures_are_baked_into_the_colours() {
         progress: &Progress::Whole,
         flights: &[],
     };
-    let drawn = draw(&section, &lay(&section), Reach::Far);
+    let drawn = draw(&section, &laid(&section), Reach::Far);
     assert!(drawn.far.triangle_count() > 0);
     assert!(
         drawn
@@ -549,7 +605,7 @@ fn every_shape_is_drawn_in_every_kit_within_its_cut() {
                 progress: &Progress::Whole,
                 flights: &[],
             };
-            let laid = lay(&section);
+            let laid = laid(&section);
             let low = IVec3::new(3, 1, 3).as_vec3() * CELL_M;
             // Within its cut, but for relief, bevels and trims proud of it.
             let within = |p: Vec3| {

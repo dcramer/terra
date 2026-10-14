@@ -32,7 +32,7 @@ struct Placed(BTreeMap<Entity, (u64, Vec<(IVec3, IVec3)>)>);
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Placed>()
-        .add_systems(Update, (place, follow).chain());
+        .add_systems(Update, (place, follow, inside).chain());
 }
 
 /// Places a probe in every room indoors, again whenever a base changes.
@@ -120,5 +120,25 @@ fn follow(
         {
             *probe = sky.clone();
         }
+    }
+}
+
+/// Says whether the camera is in a room closed and covered, so the eye can open further
+/// there (`terra_world::scene::Indoors`).
+fn inside(
+    camera: Query<&GlobalTransform, With<MainCamera>>,
+    rooms: Query<&GlobalTransform, (With<Indoors>, Without<MainCamera>)>,
+    mut indoors: ResMut<terra_world::scene::Indoors>,
+) {
+    let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
+        return;
+    };
+    // Each room's probe spans it, a unit box stretched over it.
+    let within = rooms.iter().any(|room| {
+        let local = room.affine().inverse().transform_point3(eye);
+        local.abs().cmple(Vec3::splat(0.5)).all()
+    });
+    if indoors.0 != within {
+        indoors.0 = within;
     }
 }

@@ -59,6 +59,10 @@ pub(super) struct Sections {
     /// The revision last noticed, and what its sections are laid from.
     pub noticed: Option<u64>,
     pub snapshot: Option<Arc<Base>>,
+    /// The snapshot laid whole, which its sections are cut from, once a worker has laid it;
+    /// and the worker laying it.
+    pub whole: Option<Arc<terra_build::sections::Whole>>,
+    pub laying: Option<bevy::tasks::Task<(terra_build::sections::Whole, f32)>>,
     /// What a walker meets of a plan shown so far through, being worked out.
     pub standing: Option<bevy::tasks::Task<Base>>,
 }
@@ -110,6 +114,8 @@ fn noticed(build: &mut Build) {
     let sections = &mut build.sections;
     sections.noticed = Some(build.revision);
     sections.snapshot = None;
+    sections.whole = None;
+    sections.laying = None;
     let marked = build.base.take_dirty();
     let mut wait = |at: [i32; 3], force: bool| {
         let waiting = sections.waiting.entry(at).or_default();

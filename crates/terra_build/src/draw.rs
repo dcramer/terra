@@ -131,6 +131,69 @@ pub(crate) fn cuboid(
     }
 }
 
+/// A long member far off, as a plain box from one end to the other along its middle, so
+/// wide across and so high, its texture mapped from each face's plane: what a log or a
+/// deck's plank comes to a few pixels across, where its round or chamfered section and its
+/// rings cannot be seen.
+pub(crate) fn member_box(
+    surface: &mut Surface,
+    from: Vec3,
+    to: Vec3,
+    half: [f32; 2],
+    metres: [f32; 2],
+    colour: [f32; 3],
+) {
+    let along = (to - from).normalize_or(Vec3::X);
+    let across = along.cross(Vec3::Y).normalize_or(Vec3::Z) * half[0];
+    let up = across
+        .normalize_or(Vec3::Z)
+        .cross(along)
+        .normalize_or(Vec3::Y)
+        * half[1];
+    let at = |end: Vec3, a: f32, b: f32| end + across * a + up * b;
+    let side = |a: f32, b: f32, c: f32, d: f32| {
+        [at(from, a, b), at(to, a, b), at(to, c, d), at(from, c, d)]
+    };
+    let faces = [
+        (up, side(1.0, 1.0, -1.0, 1.0)),
+        (-up, side(-1.0, -1.0, 1.0, -1.0)),
+        (across, side(1.0, -1.0, 1.0, 1.0)),
+        (-across, side(-1.0, 1.0, -1.0, -1.0)),
+        (
+            -along,
+            [
+                at(from, 1.0, -1.0),
+                at(from, 1.0, 1.0),
+                at(from, -1.0, 1.0),
+                at(from, -1.0, -1.0),
+            ],
+        ),
+        (
+            along,
+            [
+                at(to, -1.0, -1.0),
+                at(to, -1.0, 1.0),
+                at(to, 1.0, 1.0),
+                at(to, 1.0, -1.0),
+            ],
+        ),
+    ];
+    for (normal, corners) in faces {
+        let normal = normal.normalize_or(Vec3::Y);
+        // Wound to face out, whichever way the frame turned.
+        let wound = (corners[1] - corners[0])
+            .cross(corners[2] - corners[0])
+            .dot(normal)
+            > 0.0;
+        let corners = if wound {
+            corners
+        } else {
+            [corners[0], corners[3], corners[2], corners[1]]
+        };
+        surface.planar_quad(corners, normal, metres, colour);
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

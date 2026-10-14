@@ -20,6 +20,7 @@ use bevy::{
     ui::Pressed,
     window::{CursorOptions, MonitorSelection, PresentMode, PrimaryWindow, WindowMode},
 };
+use terra_world::quality::{Asked, Forced, Quality};
 
 const PLAIN: Color = Color::srgba(0.07, 0.08, 0.1, 0.6);
 const PICKED: Color = Color::srgba(0.9, 0.46, 0.17, 0.95);
@@ -52,6 +53,7 @@ enum General {
     FieldOfView,
     FullScreen,
     Vsync,
+    Graphics,
     Volume(Part),
 }
 
@@ -85,12 +87,13 @@ impl Part {
 }
 
 impl General {
-    const ALL: [General; 9] = [
+    const ALL: [General; 10] = [
         General::LookSpeed,
         General::InvertLook,
         General::FieldOfView,
         General::FullScreen,
         General::Vsync,
+        General::Graphics,
         General::Volume(Part::Master),
         General::Volume(Part::Music),
         General::Volume(Part::Ambience),
@@ -104,6 +107,7 @@ impl General {
             General::FieldOfView => "Field of view",
             General::FullScreen => "Full screen",
             General::Vsync => "Vsync",
+            General::Graphics => "Graphics",
             General::Volume(Part::Master) => "Master volume",
             General::Volume(Part::Music) => "Music",
             General::Volume(Part::Ambience) => "Ambience",
@@ -119,6 +123,10 @@ impl General {
             General::FieldOfView => format!("{}", settings.field_of_view),
             General::FullScreen => on_off(settings.full_screen),
             General::Vsync => on_off(settings.vsync),
+            General::Graphics => match settings.graphics {
+                Some(quality) => capitalised(quality.name().to_string()),
+                None => "Automatic".to_string(),
+            },
             General::Volume(part) => format!("{}%", libm::roundf(part.get(settings) * 100.0)),
         }
     }
@@ -140,6 +148,18 @@ impl General {
             General::InvertLook => settings.invert_look = !settings.invert_look,
             General::FullScreen => settings.full_screen = !settings.full_screen,
             General::Vsync => settings.vsync = !settings.vsync,
+            // Automatic, then each preset from low to high, round again.
+            General::Graphics => {
+                let order: Vec<Option<Quality>> = std::iter::once(None)
+                    .chain(Quality::ALL.into_iter().map(Some))
+                    .collect();
+                let at = order
+                    .iter()
+                    .position(|q| *q == settings.graphics)
+                    .unwrap_or(0);
+                let step = if up { 1 } else { order.len() - 1 };
+                settings.graphics = order[(at + step) % order.len()];
+            }
             General::Volume(part) => {
                 let volume = part.of(settings);
                 *volume = VOLUME.nudge(*volume, up);
@@ -631,12 +651,18 @@ fn apply(
     options: Res<Options>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     mut projection: Single<&mut Projection, With<MainCamera>>,
+    (mut asked, forced): (ResMut<Asked>, Res<Forced>),
 ) {
     if !settings.is_changed() {
         return;
     }
     if let Projection::Perspective(perspective) = &mut **projection {
         perspective.fov = settings.field_of_view.to_radians();
+    }
+    // The preset `--quality` asked for stands; a scripted run otherwise draws at the
+    // GPU's own, so its pictures and timings do not depend on the machine's settings.
+    if !forced.0 && !options.scripted() && asked.0 != settings.graphics {
+        asked.0 = settings.graphics;
     }
     // A scripted run keeps the window it was given, so its pictures and timings compare.
     if options.scripted() {

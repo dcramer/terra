@@ -182,11 +182,45 @@ pub fn affected(base: &Base, marked: &BTreeSet<[i32; 3]>) -> BTreeSet<[i32; 3]> 
     out
 }
 
+/// A base laid whole, every kit's pieces, filed by the section that owns each: what its
+/// sections are cut from ([`lay`]). A change lays the base once, on a worker, rather than
+/// once for every section it reaches, since what a section holds depends on its whole
+/// building: a roof's lattice and creases, a row of logs' joins, a deck's boards. Laid
+/// once, a roof is cut into its sections as a shipped game's building is chunked.
+#[derive(Clone, Debug, Default)]
+pub struct Whole {
+    /// Each section's pieces: the kit each is of, by its place in the kits, where it comes
+    /// in the order its kit's pieces go in, and the piece.
+    by_section: BTreeMap<[i32; 3], Vec<(usize, usize, Piece)>>,
+    /// How many pieces each kit laid.
+    counts: Vec<usize>,
+}
+
+impl Whole {
+    /// Lays every kit's pieces of a base.
+    pub fn lay(base: &Base, kits: &Kits) -> Whole {
+        let mut whole = Whole::default();
+        for (index, kit) in kits.0.iter().enumerate() {
+            let pieces = layout::lay_among(base, kit, kits).pieces;
+            whole.counts.push(pieces.len());
+            for (order, piece) in pieces.into_iter().enumerate() {
+                whole
+                    .by_section
+                    .entry(piece.section().to_array())
+                    .or_default()
+                    .push((index, order, piece));
+            }
+        }
+        whole
+    }
+}
+
 /// How far a section's cubes are searched for the kinds whose kits may lay pieces in it.
 const KINDS_REACH: i32 = 4;
 
-/// Lays a section: every kit's pieces in it, with how far each is in.
-pub fn lay(section: &Section) -> Laid {
+/// A section's pieces, cut from its base laid whole, with how far each is in: its own,
+/// and a cube beyond its edges, as `layout::lay_section_and_edge` lays them.
+pub fn lay(section: &Section, whole: &Whole) -> Laid {
     let (base, kits) = (section.base, section.kits);
     let origin = section.at * crate::cubes::SECTION;
     // Only the kits whose kinds are there, in its cubes or round them, or roof it.
@@ -200,57 +234,65 @@ pub fn lay(section: &Section) -> Laid {
         .map(|(_, cube)| cube.kind)
         .collect();
     kinds.extend(base.roofs().filter_map(|(_, roof)| base.roof_kind(roof)));
-    let mut out = Laid::default();
+    let present: Vec<bool> = kits
+        .0
+        .iter()
+        .map(|kit| kinds.contains(&kit.kind()))
+        .collect();
     let low = origin - IVec3::ONE;
     let high = origin + IVec3::splat(crate::cubes::SECTION);
-    for (index, kit) in kits.0.iter().enumerate() {
-        if !kinds.contains(&kit.kind()) {
-            continue;
+    let stage = |index: usize, order: usize, piece: &Piece| match section.progress {
+        // In the order the whole base goes in.
+        Progress::Fraction(fraction) => {
+            let done = done(whole.counts[index], *fraction);
+            match order.cmp(&done) {
+                std::cmp::Ordering::Less => Stage::In,
+                std::cmp::Ordering::Equal => Stage::Next,
+                std::cmp::Ordering::Greater => Stage::Ghost,
+            }
         }
-        let (own, edge) = match section.progress {
-            Progress::Fraction(fraction) => {
-                // In the order the whole base goes in, so all of it.
-                let all = layout::lay_among(base, kit, kits).pieces;
-                let done = done(all.len(), *fraction);
-                let (mut own, mut edge) = (Vec::new(), Vec::new());
-                for (order, piece) in all.into_iter().enumerate() {
-                    let stage = match order.cmp(&done) {
-                        std::cmp::Ordering::Less => Stage::In,
-                        std::cmp::Ordering::Equal => Stage::Next,
-                        std::cmp::Ordering::Greater => Stage::Ghost,
-                    };
-                    let at = piece.anchor();
-                    if crate::cubes::section_of(at) == section.at {
-                        own.push((index, piece, stage));
-                    } else if at.cmpge(low).all() && at.cmple(high).all() {
-                        edge.push((index, piece, stage));
-                    }
-                }
-                (own, edge)
-            }
-            progress => {
-                let (own, edge) = layout::lay_section_and_edge(base, kit, kits, section.at);
-                let stage = |piece: &Piece| match progress {
-                    Progress::Cubes { next } => stage_by_cubes(base, piece, next),
-                    _ => Stage::In,
-                };
-                (
-                    own.pieces
-                        .into_iter()
-                        .map(|piece| (index, stage(&piece), piece))
-                        .map(|(index, stage, piece)| (index, piece, stage))
-                        .collect(),
-                    edge.into_iter()
-                        .filter(|piece| matches!(piece, Piece::Block { .. } | Piece::Gable { .. }))
-                        .map(|piece| (index, stage(&piece), piece))
-                        .map(|(index, stage, piece)| (index, piece, stage))
-                        .collect(),
-                )
-            }
+        Progress::Cubes { next } => stage_by_cubes(base, piece, next),
+        Progress::Whole => Stage::In,
+    };
+    // Its own, then those of the sections round it a cube past its edges: a block kind's
+    // surface needs them to round its edge as its neighbour does.
+    let mut own: Vec<(usize, usize, Placed)> = Vec::new();
+    let mut edge: Vec<(usize, usize, Placed)> = Vec::new();
+    let fraction = matches!(section.progress, Progress::Fraction(_));
+    for offset in NEIGHBOURS.iter().chain([&IVec3::ZERO]) {
+        let at = section.at + *offset;
+        let Some(pieces) = whole.by_section.get(&at.to_array()) else {
+            continue;
         };
-        out.pieces.extend(own);
-        out.edge.extend(edge);
+        for (index, order, piece) in pieces {
+            if !present[*index] {
+                continue;
+            }
+            let placed = |piece: &Piece| {
+                (
+                    *index,
+                    *order,
+                    (*index, piece.clone(), stage(*index, *order, piece)),
+                )
+            };
+            if at == section.at {
+                own.push(placed(piece));
+            } else if (fraction || matches!(piece, Piece::Block { .. } | Piece::Gable { .. }))
+                && piece.anchor().cmpge(low).all()
+                && piece.anchor().cmple(high).all()
+            {
+                edge.push(placed(piece));
+            }
+        }
     }
+    // Kit by kit, each in the order its pieces go in.
+    own.sort_by_key(|(index, order, _)| (*index, *order));
+    edge.sort_by_key(|(index, order, _)| (*index, *order));
+    let mut out = Laid {
+        pieces: own.into_iter().map(|(_, _, placed)| placed).collect(),
+        edge: edge.into_iter().map(|(_, _, placed)| placed).collect(),
+        steps: Vec::new(),
+    };
     for flight in section.flights {
         for &(min, max) in &flight.steps {
             let middle = ((min + max) * 0.5 / CELL_M).floor().as_ivec3();
@@ -374,7 +416,8 @@ fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
     (is_in, cubes)
 }
 
-/// How near a section is drawn for: the finest detail it is given, and all coarser.
+/// How near a section is drawn for: the finest detail it is given, and the next coarser,
+/// which it fades into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Reach {
     Far,
@@ -407,10 +450,18 @@ impl Detail {
                 kit.timber.sides = kit.timber.sides.min(8);
                 kit.timber.step = kit.timber.step.max(0.4);
             }
-            // A log far off a few pixels across: six sides, a ring at each end.
+            // A log far off a few pixels across: six sides, a ring at each end; a band of
+            // dress its outline's three furthest corners, which keep its silhouette.
             Detail::Far => {
                 kit.timber.sides = kit.timber.sides.min(6);
                 kit.timber.step = kit.timber.step.max(8.0);
+                if let Some(made) = &kit.dress.made {
+                    let mut coarse = (**made).clone();
+                    for profile in coarse.profiles.values_mut() {
+                        *profile = outline(profile);
+                    }
+                    kit.dress.made = Some(std::sync::Arc::new(coarse));
+                }
             }
             Detail::Proxy => {
                 kit.timber.sides = kit.timber.sides.min(4);
@@ -464,6 +515,20 @@ impl Detail {
                     | Piece::Plank { .. }
             ),
         }
+    }
+}
+
+/// A profile cut to its ends and the point that stands furthest from the line between them.
+fn outline(profile: &[[f32; 2]]) -> Vec<[f32; 2]> {
+    let (Some(&first), Some(&last)) = (profile.first(), profile.last()) else {
+        return profile.to_vec();
+    };
+    let (a, b) = (glam::Vec2::from(first), glam::Vec2::from(last));
+    let along = (b - a).normalize_or(glam::Vec2::X);
+    let off = |p: &[f32; 2]| (glam::Vec2::from(*p) - a).perp_dot(along).abs();
+    match profile.iter().max_by(|p, q| off(p).total_cmp(&off(q))) {
+        Some(&far) if profile.len() > 3 && far != first && far != last => vec![first, far, last],
+        _ => profile.to_vec(),
     }
 }
 
@@ -539,9 +604,12 @@ pub struct Drawn {
 pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
     let mut drawn = Drawn::default();
     let kits = section.kits;
+    // Only the details that can be seen while it is drawn for this reach: what it fades
+    // into further off is made when the camera has gone far enough for it to be laid
+    // again coarser, before that detail is seen.
     let details: &[Detail] = match reach {
-        Reach::Near => &[Detail::Near, Detail::Mid, Detail::Far, Detail::Proxy],
-        Reach::Mid => &[Detail::Mid, Detail::Far, Detail::Proxy],
+        Reach::Near => &[Detail::Near, Detail::Mid],
+        Reach::Mid => &[Detail::Mid, Detail::Far],
         Reach::Far => &[Detail::Far, Detail::Proxy],
     };
     let finest = details[0];
@@ -567,6 +635,7 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
                     continue;
                 }
                 match stage {
+                    Stage::In if far_box(piece, &coarse, detail, &mut mine) => {}
                     Stage::In => crate::draw::draw_as(
                         piece,
                         &coarse,
@@ -659,6 +728,63 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
     }
     plain(section, laid, &mut drawn);
     drawn
+}
+
+/// Draws a long member far off as a plain box, if it is one that is (`draw::member_box`):
+/// a deck's plank past the middle detail, and an undressed log at the proxy's distance,
+/// each its own shade as near. Their rounded and chamfered sections and their rings are
+/// most of a far building's triangles and cannot be seen there.
+fn far_box(piece: &Piece, kit: &Kit, detail: Detail, surfaces: &mut Surfaces) -> bool {
+    let shade = |seed: u32| {
+        let mut random = layout::Random(seed);
+        [1.0 - kit.timber.variation.shade * 0.8 * random.unit(); 3]
+    };
+    let metres = |material: Material| kit.textures.get(&material).map_or([2.0, 2.0], |t| t.metres);
+    match (detail, piece) {
+        (
+            Detail::Far | Detail::Proxy,
+            Piece::Plank {
+                from,
+                to,
+                wide,
+                high,
+                seed,
+            },
+        ) => {
+            let half = [layout::metres(*wide) * 0.5, layout::metres(*high) * 0.5];
+            crate::draw::member_box(
+                surfaces.of(Material::Floor),
+                from.metres(),
+                to.metres(),
+                half,
+                metres(Material::Floor),
+                shade(*seed),
+            );
+            true
+        }
+        (
+            Detail::Proxy,
+            Piece::Log {
+                from,
+                to,
+                seed,
+                role: None,
+                ..
+            },
+        ) => {
+            let half = kit.diameter * 0.5;
+            crate::draw::member_box(
+                surfaces.of(Material::Log),
+                from.metres(),
+                to.metres(),
+                [half, half],
+                metres(Material::Log),
+                shade(*seed),
+            );
+            true
+        }
+        _ => false,
+    }
 }
 
 /// Surfaces added to others.
@@ -1148,13 +1274,22 @@ fn srgb_table() -> &'static [f32] {
     })
 }
 
-/// An sRGB colour's value, linear.
+/// An sRGB colour's value, linear, from a table finer than a byte.
 fn to_linear(c: f32) -> f32 {
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        libm::powf((c + 0.055) / 1.055, 2.4)
-    }
+    static TABLE: std::sync::OnceLock<Vec<f32>> = std::sync::OnceLock::new();
+    let table = TABLE.get_or_init(|| {
+        (0..SRGB_STEPS)
+            .map(|i| {
+                let c = i as f32 / (SRGB_STEPS - 1) as f32;
+                if c <= 0.04045 {
+                    c / 12.92
+                } else {
+                    libm::powf((c + 0.055) / 1.055, 2.4)
+                }
+            })
+            .collect()
+    });
+    table[((c.clamp(0.0, 1.0) * (SRGB_STEPS - 1) as f32) + 0.5) as usize]
 }
 
 /// A material's colour, linear, before its texture has loaded.

@@ -45,6 +45,21 @@ pub const CELLS: usize = (SQUARE_M / CELL_M) as usize;
 pub struct Ring {
     pub segments: u32,
     pub share: f32,
+    /// How much wider each blade is than its own width, so fewer blades, at a lower
+    /// quality preset, still cover the ground (`with_density`).
+    pub widen: f32,
+}
+
+impl Ring {
+    /// The ring with only this share of its blades, each wider by as much as covers the
+    /// same ground, as Ghost of Tsushima's lower settings thin its grass.
+    pub fn with_density(self, density: f32) -> Ring {
+        Ring {
+            share: self.share * density,
+            widen: self.widen / density.max(0.05),
+            ..self
+        }
+    }
 }
 
 /// How wide a blade is at its foot, before its own variation. The blades that stay out to
@@ -56,11 +71,11 @@ const BLADE_WIDTH_M: f32 = 0.03;
 /// blade a farther ring will not have is gone before its square changes ring: the share
 /// the second ring keeps and where the ones it does not have are gone, then the same for
 /// the third. A square changes ring by its nearest point, 2 m past these.
-pub fn thinning() -> Vec4 {
+pub fn thinning(density: f32) -> Vec4 {
     Vec4::new(
-        RINGS[1].0.share,
+        RINGS[1].0.share * density,
         RINGS[0].1 - 2.0,
-        RINGS[2].0.share,
+        RINGS[2].0.share * density,
         RINGS[1].1 - 2.0,
     )
 }
@@ -71,6 +86,7 @@ pub const RINGS: [(Ring, f32); 3] = [
         Ring {
             segments: 3,
             share: 1.0,
+            widen: 1.0,
         },
         22.0,
     ),
@@ -78,6 +94,7 @@ pub const RINGS: [(Ring, f32); 3] = [
         Ring {
             segments: 2,
             share: 0.6,
+            widen: 1.0,
         },
         42.0,
     ),
@@ -85,6 +102,7 @@ pub const RINGS: [(Ring, f32); 3] = [
         Ring {
             segments: 1,
             share: 0.35,
+            widen: 1.0,
         },
         f32::MAX,
     ),
@@ -315,6 +333,7 @@ pub fn square(
                 tall,
                 0.25 + 0.5 * h(8),
                 BLADE_WIDTH_M
+                    * ring.widen
                     * (0.8 + 0.4 * h(9))
                     * (1.0 + (1.0 - rank) * (1.0 - rank) * (1.0 - rank)),
                 tip,

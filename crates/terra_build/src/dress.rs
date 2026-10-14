@@ -630,7 +630,8 @@ fn masked(
         c *= 1.0 + masks.strata * (own * 1.4 + speckle * 0.5 - seam);
     }
     let height = p.y - ground;
-    if masks.dirt > 0.0 {
+    // Dirt rises at most 1.4 times its height, so above that it is not worked out.
+    if masks.dirt > 0.0 && height < masks.dirt * 1.4 {
         let rise = masks.dirt * (0.6 + 0.8 * smooth(p, 0.45, 3));
         let dirt = libm::powf((1.0 - height / rise).clamp(0.0, 1.0), 1.5);
         c = c.lerp(Vec3::from_array(masks.dirt_tint), dirt);
@@ -659,16 +660,25 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
         Material::Log | Material::LogEnd | Material::Board | Material::Daub
     );
     let layered = material == Material::Masonry;
-    // The ground's height by column, looked up once each.
+    // The ground's height by column, looked up once each; corners come in runs over a
+    // column, so the last is kept to hand.
     let mut known: BTreeMap<[i32; 2], f32> = BTreeMap::new();
+    let mut last: Option<([i32; 2], f32)> = None;
     let mut ground = |p: Vec3| {
         let column = [
             libm::floorf(p.x / CELL_M) as i32,
             libm::floorf(p.z / CELL_M) as i32,
         ];
-        *known
+        if let Some((at, height)) = last
+            && at == column
+        {
+            return height;
+        }
+        let height = *known
             .entry(column)
-            .or_insert_with(|| layout::metres(layout::roles::ground_ticks(base, column)))
+            .or_insert_with(|| layout::metres(layout::roles::ground_ticks(base, column)));
+        last = Some((column, height));
+        height
     };
     let mut shade = |p: Vec3, n: Vec3, c: &mut [f32; 3]| {
         let k = masked(masks, (timber, layered), p, n, ground(p));

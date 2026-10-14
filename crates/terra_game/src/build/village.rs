@@ -8,7 +8,6 @@
 //! Laying it also times operations on each house, as a player's are applied and checked,
 //! and says how long they took.
 
-use super::sheet::roof_rows;
 use super::{Build, BuildLook, Built, Site, frame_at, lifted, read_kits};
 use crate::planet::Planet;
 use crate::shell::Options;
@@ -18,34 +17,14 @@ use std::sync::Arc;
 use std::time::Instant;
 use terra_build::kit::{Pattern, Profile};
 use terra_build::ops::{Context, Op};
-use terra_build::{Base, BuildOp, Kind, Rules};
+use terra_build::{Base, Rules};
 
-/// How many buildings, how many to a row, and how far apart, in metres.
-const HOUSES: usize = 50;
+/// How many buildings to a row, and how far apart, in metres.
 const PER_ROW: usize = 10;
 const APART_M: f32 = 15.0;
 /// How far north of the start the first row is, and west the first in a row.
 const NORTH_M: f32 = 20.0;
 const WEST_M: f32 = 68.0;
-
-/// The village's plans: every roof over every plan in each kind, and mixed, fifty.
-fn plans(kinds: [Kind; 3]) -> Vec<(String, Vec<BuildOp>)> {
-    let [logs, stone, hewn] = kinds;
-    let mut all = Vec::new();
-    for (name, group, mixed) in [
-        ("logs", vec![logs], false),
-        ("stone", vec![stone], false),
-        ("hewn", vec![hewn], false),
-        ("stone and logs", vec![logs, stone], true),
-        ("stone and hewn", vec![hewn, stone], true),
-    ] {
-        for (row, ops) in roof_rows(&group, mixed) {
-            all.push((format!("{name}: {row}"), ops));
-        }
-    }
-    all.truncate(HOUSES);
-    all
-}
 
 /// Lays the village once the base is there.
 pub(super) fn lay(
@@ -87,7 +66,10 @@ pub(super) fn lay(
     };
     let rules = rules.map(|rules| rules.rules.clone()).unwrap_or_default();
     let mut took: Vec<f32> = Vec::new();
-    for (index, (name, ops)) in plans([logs, stone, hewn]).into_iter().enumerate() {
+    for (index, (name, ops)) in terra_build::bench_village(logs, stone, hewn)
+        .into_iter()
+        .enumerate()
+    {
         let (row, column) = (index / PER_ROW, index % PER_ROW);
         let east = -WEST_M + APART_M * column as f32;
         let north = -NORTH_M - APART_M * row as f32;

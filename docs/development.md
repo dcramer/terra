@@ -37,6 +37,7 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | `cargo xtask loop` | Play the MVP's loop by script and check every step happened ([QA for agents](#checking-the-game-without-a-person-qa-for-agents)) |
 | `cargo xtask bench` | Time the benchmark scenes ([Measuring performance](#measuring-performance)) |
 | `cargo xtask check` | Run by git before every commit (`.githooks/pre-commit`). Formatting, lints, tests (the TypeScript tools' too), the kit checker (`cargo xtask kits`), the docs check ([tools/docs](../tools/docs/README.md)), the Blender scripts' check (skipped with no Blender) and the dependency rule. Must pass before a commit. |
+| `cargo xtask sections` | How long the bench's village takes to lay whole and its sections to cut and merge, on one thread as the game's workers do, against building's 2 ms bar, with the triangles of each detail and the slowest sections; a name times only the buildings whose names hold it, and `BY_KIND=1` splits the far details' triangles by kind of piece (D238) |
 | `cargo xtask kits` | The kit checker: every building kit file in `assets/data/kits/` has the materials its pattern needs with all their maps, life-size numbers, and keeps to the style guide's budgets, measured on a cabin laid in it (`terra_build::checker`). |
 | `cargo test -p terra_items` | One crate's tests |
 | `cargo fmt --all` | Format everything |
@@ -107,11 +108,13 @@ Each run draws offscreen at 1920x1080 (`--offscreen`), with one frame in flight 
 
 The table also compares each median with the last one recorded for the same GPU, size and build, and marks it `SLOWER` past 10%: look into it before committing. Record a baseline when a change makes something faster or slower on purpose, and when a new machine first runs it. The task prints the machine's load before each run and says so when it was busy: a benchmark shares the machine, and others' work makes it slower and less even. Scenes stay short, under a minute each, since a benchmark is something run often.
 
-For each run the sandbox also prints its frames and the game's own work by tenths of the run, so a climb or a jump shows where it starts, and what the world held at the first and last timed frame (entities, meshes, images), so something that keeps growing shows. On macOS a scripted run tells the system it is latency-critical: a hidden window, as a scripted run's is, is put into App Nap after about 40 s, which made every frame three times as long from then on.
+For each run the sandbox also prints the medians of the game's work, the render passes on the CPU and the GPU, and of each render pass on the GPU, costliest first, which the task shows beside the frames; its frames and the game's own work by tenths of the run, so a climb or a jump shows where it starts, and what the world held at the first and last timed frame (entities, meshes, images), so something that keeps growing shows. On macOS a scripted run tells the system it is latency-critical: a hidden window, as a scripted run's is, is put into App Nap after about 40 s, which made every frame three times as long from then on.
 
 Read the 99th percentile and worst frame as well as the median: a stutter hides in a good median. Each run also prints `SANDBOX slowest frames`, which frames were slowest, counted as `--press` counts them; slow frames at a steady interval point at something periodic. Benchmarks stream the ground as play does, so they include its cost; screenshot runs wait for every chunk instead, so they see the same ground every time.
 
 Under WSL the task builds and runs the Windows program, the only one with a real GPU. On macOS `--offscreen` is what makes numbers trustworthy: the window server draws nothing of a window that is covered, or when the screen is asleep or locked, and a Retina screen draws a 1600x900 window at 3200x1800. Report the integrated GPU too (D25) when a machine has one. Software rendering's numbers mean nothing.
+
+**Quality presets.** Each run draws at the preset chosen for its GPU, an integrated one low and any other high (D239); `--quality low|medium|high` asks for another. The integrated GPU is measured at the low preset, whose target is 30 fps (a median under 33.3 ms), though the task still judges it against the 16.7 ms budget. To measure it, under WSL: `WGPU_POWER_PREF=low WSLENV=WGPU_POWER_PREF cargo xtask bench`.
 
 To find what a scene spends its time on, switch things off and run it again. A temporary environment variable read by the code under test is enough, removed before committing.
 

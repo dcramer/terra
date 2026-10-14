@@ -72,6 +72,8 @@ usage: terra_sandbox [options]
                         screen asleep or locked, covers nothing, measures every machine at
                         the same size, and waits for the GPU each frame so a benchmark
                         times the GPU's work too
+  --quality <preset>    draw at the low, medium or high quality preset, rather than the
+                        one chosen for the GPU (an integrated GPU low, any other high)
   --steady              advance the game a sixtieth of a second every frame, however
                         fast frames are drawn, as scripted runs do
   --remote-token <text> what this run answers sandbox.whoami with, so a script knows it is
@@ -214,6 +216,8 @@ pub struct Options {
     pub remote_token: String,
     /// No readout on screen.
     pub clean: bool,
+    /// The quality preset asked for, rather than the GPU's (`--quality`).
+    pub quality: Option<crate::quality::Quality>,
     /// Keep the loading screen up, to look at it.
     pub hold_loading: bool,
     /// No sound, and sound under WSL, where it is off unless asked for.
@@ -401,6 +405,7 @@ impl Options {
             sheet: None,
             renders: None,
             keeps: Vec::new(),
+            quality: None,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -422,6 +427,13 @@ impl Options {
                 "--on-top" => options.on_top = true,
                 "--offscreen" => options.offscreen = true,
                 "--clean" => options.clean = true,
+                "--quality" => {
+                    let name = value("--quality")?;
+                    options.quality = Some(
+                        crate::quality::Quality::from_name(&name)
+                            .ok_or(format!("--quality is low, medium or high, not `{name}`"))?,
+                    );
+                }
                 "--loading" => options.hold_loading = true,
                 "--mute" => options.mute = true,
                 "--sound" => options.sound = true,
@@ -953,6 +965,10 @@ fn scripted_run(
         Local<Option<[usize; 3]>>,
         Option<Res<crate::cover::BareGround>>,
     ),
+    (store, mut pass_ms): (
+        Res<bevy::diagnostic::DiagnosticsStore>,
+        Local<std::collections::BTreeMap<String, Vec<f32>>>,
+    ),
     mut exit: MessageWriter<AppExit>,
 ) {
     if !options.scripted() {
@@ -1016,6 +1032,17 @@ fn scripted_run(
             part_ms[1].extend(parts.render_ms);
             part_ms[2].extend(parts.gpu_ms);
         }
+        // Each render pass's time on the GPU, to say which passes the frame goes on.
+        for diagnostic in store.iter() {
+            let path = diagnostic.path().as_str();
+            if let (Some(pass), Some(ms)) = (
+                path.strip_prefix("render/")
+                    .and_then(|p| p.strip_suffix("/elapsed_gpu")),
+                diagnostic.value(),
+            ) {
+                pass_ms.entry(pass.to_string()).or_default().push(ms as f32);
+            }
+        }
         let frames = options.bench_frames;
         if frame_ms.len() == frames {
             let in_order: Vec<f32> = frame_ms.iter().map(|(_, ms)| *ms).collect();
@@ -1075,6 +1102,26 @@ fn scripted_run(
                 median(&mut part_ms[1]),
                 median(&mut part_ms[2])
             );
+            // The costliest passes on the GPU, by their medians.
+            let mut passes: Vec<(f32, &str)> = pass_ms
+                .iter_mut()
+                .map(|(pass, ms)| {
+                    ms.sort_by(f32::total_cmp);
+                    (ms[ms.len() / 2], pass.as_str())
+                })
+                .collect();
+            passes.sort_by(|a, b| b.0.total_cmp(&a.0));
+            if !passes.is_empty() {
+                let costliest: Vec<String> = passes
+                    .iter()
+                    .take(20)
+                    .map(|(ms, pass)| format!("{pass} {ms:.2}"))
+                    .collect();
+                println!(
+                    "SANDBOX GPU passes, medians in ms: {}",
+                    costliest.join(", ")
+                );
+            }
             // When the slowest frames came, counted as --press counts, to find what they
             // have in common.
             let slowest: Vec<String> = frame_ms

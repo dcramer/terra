@@ -200,7 +200,9 @@ pub fn plugin(app: &mut App) {
                 dress_scans,
                 follow_detail,
             ),
-        );
+        )
+        // The bark's relief at the quality preset's depth.
+        .add_systems(PostUpdate, terra_world::quality::follow_relief::<Foliage>);
 }
 
 /// The near crowns' cards drop out between distances scaled as every other level of

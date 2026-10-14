@@ -186,6 +186,8 @@ struct Meadow {
     squares: HashMap<(i32, i32), Entity>,
     /// When the grass was last cleared for what is built.
     cleared_at: Tick,
+    /// The share of its tufts grown, at the quality preset (D239).
+    density: f32,
 }
 
 /// A flat map laid over the ground around the scene: east and north of its middle, in
@@ -416,6 +418,7 @@ fn plant(
     mut plain: ResMut<Assets<StandardMaterial>>,
     cards: Res<grown::Cards>,
     assets: Res<AssetServer>,
+    quality: Res<crate::quality::Quality>,
 ) {
     let middle = start.translation;
     let up = middle.normalize();
@@ -735,6 +738,7 @@ fn plant(
         lush: tweaks.grass_lush.to_linear(),
         squares: HashMap::default(),
         cleared_at: ticks.this_run(),
+        density: quality.grass(),
     };
     let squares = (GRASS_REACH_M / GRASS_SQUARE_M).ceil() as i32;
     // One thread per row of squares; working out where the ground is, is the slow part.
@@ -805,7 +809,8 @@ fn grass_square(
             let at =
                 corner + Vec2::new(a as f32 + rng.unit(), b as f32 + rng.unit()) * GRASS_SPACING_M;
             // Thinner toward the edge of what is planted, so it has no edge.
-            let thinning = 1.0 - smoothstep(GRASS_REACH_M * 0.55, GRASS_REACH_M, at.length());
+            let thinning = (1.0 - smoothstep(GRASS_REACH_M * 0.55, GRASS_REACH_M, at.length()))
+                * meadow.density;
             let (luck, turn, vigour) = (rng.unit(), rng.unit(), rng.unit());
             if luck > thinning {
                 continue;
@@ -1154,6 +1159,7 @@ mod tests {
             lush: LinearRgba::WHITE,
             squares: HashMap::default(),
             cleared_at: Tick::new(0),
+            density: 1.0,
         }
     }
 

@@ -43,7 +43,7 @@ struct Air;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, spawn)
-        .add_systems(PostStartup, settings)
+        .add_systems(Update, settings)
         .add_systems(Update, discs)
         .add_systems(PostUpdate, follow.after(TransformSystems::Propagate));
 }
@@ -127,11 +127,38 @@ fn discs(
     }
 }
 
-fn settings(mut commands: Commands, camera: Single<Entity, With<MainCamera>>) {
-    commands.entity(*camera).insert(AtmosphereSettings {
+/// The air's tables, worked out every frame, at the quality preset (D239): at the low one
+/// each is half as fine and marched in half the steps, as the sky is smooth.
+fn settings(
+    quality: Res<crate::quality::Quality>,
+    mut applied: Local<Option<crate::quality::Quality>>,
+    mut commands: Commands,
+    camera: Query<Entity, With<MainCamera>>,
+) {
+    let Some(camera) = camera.iter().next() else {
+        return;
+    };
+    if *applied == Some(*quality) {
+        return;
+    }
+    *applied = Some(*quality);
+    let full = AtmosphereSettings::default();
+    let settings = if *quality == crate::quality::Quality::Low {
+        AtmosphereSettings {
+            multiscattering_lut_dirs: full.multiscattering_lut_dirs / 2,
+            multiscattering_lut_samples: full.multiscattering_lut_samples / 2,
+            sky_view_lut_size: full.sky_view_lut_size / 2,
+            sky_view_lut_samples: full.sky_view_lut_samples / 2,
+            aerial_view_lut_samples: full.aerial_view_lut_samples / 2,
+            ..full
+        }
+    } else {
+        full
+    };
+    commands.entity(camera).insert(AtmosphereSettings {
         // The haze reaches across the whole planet, in the air's longer distances.
         aerial_view_lut_max_distance: 2_500.0 * HAZE_SCALE,
-        ..default()
+        ..settings
     });
 }
 

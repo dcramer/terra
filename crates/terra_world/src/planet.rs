@@ -314,6 +314,9 @@ pub struct GroundExtension {
     /// Whether there is a cover map to read.
     #[uniform(100)]
     cover_on: u32,
+    /// Each layer at one size rather than two blended, at the low quality preset (D239).
+    #[uniform(100)]
+    one_size: u32,
     #[texture(104)]
     #[sampler(105)]
     cover_map: Option<Handle<Image>>,
@@ -381,6 +384,7 @@ impl GroundExtension {
         tweaks: &Tweaks,
         textures: &GroundTextures,
         cover: &GroundCoverMap,
+        quality: crate::quality::Quality,
     ) -> Self {
         let radius_m = planet.radius_m();
         GroundExtension {
@@ -409,6 +413,7 @@ impl GroundExtension {
             normal: Some(textures.normal.clone()),
             cover_from_world: cover.from_world,
             cover_on: cover.image.is_some() as u32,
+            one_size: (quality == crate::quality::Quality::Low) as u32,
             // Bevy's blank picture stands in for a map until there is one.
             cover_map: Some(cover.image.clone().unwrap_or_default()),
         }
@@ -501,7 +506,8 @@ pub fn plugin(app: &mut App) {
             apply_tweaks.run_if(
                 resource_changed::<Tweaks>
                     .or_eager(resource_exists_and_changed::<Sky>)
-                    .or_eager(resource_changed::<GroundCoverMap>),
+                    .or_eager(resource_changed::<GroundCoverMap>)
+                    .or_eager(resource_changed::<crate::quality::Quality>),
             ),
         );
 }
@@ -524,7 +530,13 @@ fn setup(
             reflectance: 0.2,
             ..default()
         },
-        extension: GroundExtension::new(&planet, &tweaks, &textures, &GroundCoverMap::default()),
+        extension: GroundExtension::new(
+            &planet,
+            &tweaks,
+            &textures,
+            &GroundCoverMap::default(),
+            crate::quality::Quality::default(),
+        ),
     });
     commands.insert_resource(textures);
     // The ground itself is drawn in chunks, by `terrain`, with this look.
@@ -587,6 +599,7 @@ fn apply_tweaks(
     mut water_materials: ResMut<Assets<WaterMaterial>>,
     textures: Res<GroundTextures>,
     cover: Res<GroundCoverMap>,
+    quality: Res<crate::quality::Quality>,
 ) {
     let toward_sun = tweaks.sun_direction.normalize_or(Vec3::Y);
     sun.0.color = tweaks.sun_color;
@@ -602,7 +615,7 @@ fn apply_tweaks(
 
     // The ground changes only when its tweaks do, not with the sun, so it is left alone
     // otherwise: a changed material is prepared again, and every chunk drawn with it.
-    let ground = GroundExtension::new(&planet, &tweaks, &textures, &cover);
+    let ground = GroundExtension::new(&planet, &tweaks, &textures, &cover, *quality);
     let stale: Vec<_> = ground_materials
         .iter()
         .filter(|(_, material)| material.extension != ground)

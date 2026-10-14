@@ -200,7 +200,9 @@ fn grow(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<GrassMaterial>>,
     detail: Res<DetailScale>,
+    quality: Res<crate::quality::Quality>,
 ) {
+    let density = quality.grass();
     let Some(camera) = camera.iter().next() else {
         return;
     };
@@ -211,7 +213,8 @@ fn grow(
         && let Some(mut material) = materials.get_mut(&meadow.material)
     {
         material.extension.fade = Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0) * detail.0;
-        material.extension.thinning = blades::thinning() * Vec4::new(1.0, detail.0, 1.0, detail.0);
+        material.extension.thinning =
+            blades::thinning(density) * Vec4::new(1.0, detail.0, 1.0, detail.0);
     }
     let Some(mut meadow) = meadow else {
         let material = materials.add(GrassMaterial {
@@ -231,7 +234,7 @@ fn grow(
             extension: GrassExtension {
                 wind: (start.rotation * Vec3::X).extend(1.0),
                 fade: Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0),
-                thinning: blades::thinning(),
+                thinning: blades::thinning(density),
             },
         });
         commands.insert_resource(Meadow {
@@ -273,6 +276,17 @@ fn grow(
                 square.building = None;
                 square.ring = usize::MAX;
             }
+        }
+    }
+    // A new quality preset grows every square again at its density.
+    if quality.is_changed() && !quality.is_added() {
+        for square in squares.values_mut() {
+            square.building = None;
+            square.ring = usize::MAX;
+        }
+        if let Some(mut grass) = materials.get_mut(&*material) {
+            grass.extension.thinning =
+                blades::thinning(density) * Vec4::new(1.0, detail.0, 1.0, detail.0);
         }
     }
     let local = start.local(camera.translation());
@@ -354,7 +368,7 @@ fn grow(
             rules.seed,
             clear.clone(),
         );
-        let shape: Ring = RINGS[ring].0;
+        let shape: Ring = RINGS[ring].0.with_density(density);
         let task = threads.spawn(async move {
             blades::square(source.as_ref(), &planet, &start, seed, key, shape, &clear)
         });

@@ -57,7 +57,7 @@ mod walk;
 
 pub use cost::{Amount, Bill, PropKind, Rules, Terms};
 pub use cubes::{Cube, Cubes, Facing, Fill, Kind, PartId, Pending, Replacement, Shape, State};
-pub use example::example;
+pub use example::{VILLAGE_HOUSES, bench_village, example, roof_rows};
 pub use ground::{Ground, Sample};
 pub use mesh::{BaseMesh, Indexed, Surface};
 pub use order::Progress;

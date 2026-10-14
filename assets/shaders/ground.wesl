@@ -52,6 +52,8 @@ struct Ground {
     // From a point in the world to its place on the cover map, and whether there is one.
     cover_from_world: mat4x4<f32>,
     cover_on: u32,
+    // Each layer at one size, at the low quality preset.
+    one_size: u32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -142,6 +144,16 @@ fn layer(index: u32, scale: f32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<f32
     return Layer(colour * tint / max(average, vec3<f32>(0.02)), normal);
 }
 
+// A layer at two sizes, the second `scale` times the first and laid over it `amount` of
+// the way, so its repeat does not show across a field; at one only, at the low preset.
+fn sizes(index: u32, scale: f32, offset: f32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<f32>, gy: vec3<f32>, n: vec3<f32>, amount: f32) -> Layer {
+    let first = layer(index, 1.0, tint, world, gx, gy, n);
+    if ground.one_size != 0u {
+        return first;
+    }
+    return over(first, layer(index, scale, tint, world + offset, gx, gy, n), amount);
+}
+
 // `under` with `top` laid on it, `amount` of the way, colour and relief alike.
 fn over(under: Layer, top: Layer, amount: f32) -> Layer {
     return Layer(mix(under.colour, top.colour, amount), normalize(mix(under.normal, top.normal, amount)));
@@ -230,29 +242,17 @@ fn fragment(
         // Soil and rock each at two sizes, blended in patches, so their repeat does not
         // show across a field or a hillside.
         let soil_tint = mix(colour, litter_colour, litter) * (0.9 + 0.2 * blotch);
-        var ground_is = over(
-            layer(SOIL, 1.0, soil_tint, world, gx, gy, n),
-            layer(SOIL, 2.9, soil_tint, world + 23.0, gx, gy, n),
-            0.2 + 0.45 * blotch,
-        );
+        var ground_is = sizes(SOIL, 2.9, 23.0, soil_tint, world, gx, gy, n, 0.2 + 0.45 * blotch);
         if steep > 0.0 {
             let rock_tint = ground.steep.rgb * (0.85 + 0.3 * blotch);
-            let cliff = over(
-                layer(ROCK, 1.0, rock_tint, world, gx, gy, n),
-                layer(ROCK, 3.3, rock_tint, world + 37.0, gx, gy, n),
-                0.3 + 0.4 * fleck,
-            );
+            let cliff = sizes(ROCK, 3.3, 37.0, rock_tint, world, gx, gy, n, 0.3 + 0.4 * fleck);
             ground_is = over(ground_is, cliff, steep);
         }
         // Under trees the ground is fallen leaves, in soft-edged drifts.
         let leaves = smoothstep(0.2, 0.75, litter + (blotch - 0.5) * 0.45) * (1.0 - steep);
         if leaves > 0.0 {
             let leaf_tint = litter_colour * (0.85 + 0.3 * fleck);
-            let fallen = over(
-                layer(LITTER, 1.0, leaf_tint, world, gx, gy, n),
-                layer(LITTER, 2.6, leaf_tint, world + 41.0, gx, gy, n),
-                0.2 + 0.4 * blotch,
-            );
+            let fallen = sizes(LITTER, 2.6, 41.0, leaf_tint, world, gx, gy, n, 0.2 + 0.4 * blotch);
             ground_is = over(ground_is, fallen, leaves);
         }
 
@@ -264,9 +264,8 @@ fn fragment(
             let lush = smoothstep(0.2, 0.8, grows.g + (blotch - 0.5) * 0.45);
             let tint = mix(ground.grass_dry.rgb, ground.grass_lush.rgb, lush) * (0.92 + 0.16 * fleck);
             // Two sizes of the same grass, so its repeat does not show across a field.
-            let near = layer(GRASS, 1.0, tint, world, gx, gy, n);
-            let far = layer(GRASS, 3.7, tint, world + 11.0, gx, gy, n);
-            ground_is = over(ground_is, over(near, far, 0.25 + 0.4 * blotch), grass);
+            let lawn = sizes(GRASS, 3.7, 11.0, tint, world, gx, gy, n, 0.25 + 0.4 * blotch);
+            ground_is = over(ground_is, lawn, grass);
         }
 
         let mossy = smoothstep(0.25, 0.75, moss + (blotch - 0.5) * 0.5) * (1.0 - steep);
