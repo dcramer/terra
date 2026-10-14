@@ -51,9 +51,9 @@ A frame shows a fault only from some views; the meshes show all of them. `cargo 
 | **Strays** | Lit pieces lying about a plan | Each kit's next piece lit at once on the kit sheet | One piece of a base is next, the lowest |
 | **Buried** | A piece showing in dashes, or not at all | A piece laid flush with, or inside, a block surface whose relief then stands out over it, as wattle's frame under its daub | A piece over a surface stands proud of its relief |
 
-The checker is a **ratchet**: the faults of each kind in each kit's bases are kept in `crates/terra_build/examples/artifacts-baseline.tsv`, and `cargo xtask check` inspects each kit's and each two kits' rectangle under a gable on every commit (about 20 s) and fails if any count rises; `cargo xtask artifacts --ratchet` holds the whole set (about 4 minutes). As fixes land, `--record` (with `--quick` for the commit check's set) lowers the baseline.
+The checker is a **ratchet** (D287): the faults of each kind in each kit's bases are kept in `crates/terra_build/examples/artifacts-baseline.tsv`, and `cargo xtask check` inspects each kit's and each two kits' rectangle under a gable on every commit (about 20 s) and fails if any count rises; `cargo xtask artifacts --ratchet` holds the whole set (about 4 minutes). As fixes land, `--record` (with `--quick` for the commit check's set) lowers the baseline.
 
-Faults only a frame shows are checked from frames on the GPU, at the high and the low preset, with `cargo xtask artifacts --frames`: scripted runs on the Windows build under WSL, their frames compared pixel by pixel (`tools/sandbox/artifacts.ts`), the worst frame of each check saved with what changed marked red.
+Faults only a frame shows are checked from frames on the GPU, at the high and the low preset, with `cargo xtask artifacts --frames` (D287): scripted runs on the Windows build under WSL, their frames compared pixel by pixel (`tools/sandbox/artifacts.ts`), the worst frame of each check saved with what changed marked red.
 
 | Check | The run | What it finds | Found, 2026-10-14 |
 |---|---|---|---|
