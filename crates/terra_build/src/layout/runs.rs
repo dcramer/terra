@@ -7,20 +7,23 @@
 //! rows both ways is a corner, a T or a cross, and its logs run through it to its outer
 //! face, no further, so nothing leaves the grid; a row ending with nothing across it is cut
 //! flush. Openings cut the courses through them, which end at their frame (`trims`). A
-//! cube with nothing beside it either way is a post. Under a pitched roof the courses carry
-//! on up, shortening to the ridge, and any log a roof would pass through is cut back.
+//! cube with nothing beside it either way is a post. Into a roof cube over a wall the
+//! courses carry on up, shortening to the ridge, and any log a roof comes down over is cut
+//! back (D241).
 
 use super::roles::Role;
-use super::roofs::Field;
+use super::roofs::Roofs;
 use super::{Axis, Layout, Piece, Place, Split, Spot, TICKS, Walls, hash, metres, ticks, unit};
-use crate::kit::Kit;
+use crate::kit::{Kit, Kits};
 use crate::mesh::ROOF_THICK_M;
-use crate::{CELL_M, Fill, STOREY_CUBES, storey_of, wall_layer};
+use crate::{CELL_M, Fill};
 use glam::{IVec3, Vec3};
-use std::collections::{BTreeMap, BTreeSet};
 
 /// How finely a gable's logs are fitted under its roof, in metres along the wall.
 const GABLE_STEP_M: f32 = 0.02;
+/// How far under a log's foot a roof is still one it may meet: one further down it stands
+/// clear over.
+const NEAR_ROOF_M: f32 = 1.0;
 
 /// The courses of one row, each split into logs where it runs unbroken.
 pub(super) fn courses(
@@ -188,138 +191,38 @@ fn layer_of_split(centre: f32, split: Split) -> i32 {
     }
 }
 
-/// Under a pitched roof, a row's courses carry on up, each log as long as its foot is under
-/// the roof and each end cut to the roof's slope over it, so they shorten toward the ridge
-/// and close the gable to the roof, as a gable of logs is built.
-pub(super) fn gables(
-    walls: &Walls,
-    kit: &Kit,
-    fields: &BTreeMap<i32, Field>,
-    axis: Axis,
-    row: i32,
-    (first, last): (i32, i32),
-    layout: &mut Layout,
-) {
-    let radius = kit.radius();
-    // Each storey whose walls' top layer this row reaches.
-    let tops: BTreeSet<i32> = super::Scope::row_cubes(walls.base, axis, row)
-        .into_iter()
-        .map(|(at, _)| at)
-        .filter(|&at| {
-            at.y - wall_layer(storey_of(at.y)) == STOREY_CUBES - 1 && walls.runs(at, axis)
+/// Cuts every log a roof comes down over at the roof's underside, its eaves too: a log
+/// carried up into a roof cube over its wall, as a gable's courses are (`Walls::ours`), is
+/// as long as its foot is under the roof, each end cut to the slope over it, so the courses
+/// shorten toward the ridge and close the gable to the roof; and the ends of the top
+/// courses that run past a corner, under the eaves, end where the roof begins, as a builder
+/// saws them. A log the roof cuts in the middle is left in two.
+pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &mut Layout) {
+    // Every roof near any of the logs, whole, so a log is cut the same whichever section
+    // lays it.
+    let logs = layout.pieces.iter().filter_map(|piece| match piece {
+        Piece::Log { from, to, .. } => Some([from.0, to.0]),
+        _ => None,
+    });
+    let Some((low, high)) = logs
+        .flatten()
+        .fold(None, |bounds: Option<(IVec3, IVec3)>, p| {
+            let at = IVec3::from_array(p.map(|t| t.div_euclid(TICKS)));
+            Some(bounds.map_or((at, at), |(low, high)| (low.min(at), high.max(at))))
         })
-        .map(|at| storey_of(at.y))
-        .collect();
-    for storey in tops {
-        let Some(field) = fields.get(&storey) else {
-            continue;
-        };
-        let eaves = field.top;
-        // The roof's underside over the row's middle, so far along it.
-        let under = |distance: f32| {
-            let point = axis.point(row, distance, 0.0);
-            field.under(glam::Vec2::new(point.x, point.z))
-        };
-        // The lower of the underside over the log's two faces, so a log along the eaves,
-        // where the roof falls across the wall, is not laid through it.
-        let lowest = |distance: f32| {
-            let point = axis.point(row, distance, 0.0);
-            [-1.0, 1.0]
-                .map(|side| point + axis.across() * radius * side)
-                .into_iter()
-                .map(|p| field.under(glam::Vec2::new(p.x, p.z)))
-                .try_fold(f32::MAX, |low, under| under.map(|u| low.min(u)))
-        };
-        let (from, to) = (first as f32 * CELL_M, (last + 1) as f32 * CELL_M);
-        let samples = ((to - from) / GABLE_STEP_M).round() as i32;
-        let at = |sample: i32| from + sample as f32 * GABLE_STEP_M;
-        for step in 0.. {
-            let centre = eaves + kit.course * (step as f32 + 0.5);
-            let foot = centre - radius;
-            // How far the underside is over the log's foot at each sample.
-            let clear: Vec<Option<f32>> = (0..=samples)
-                .map(|sample| lowest(at(sample)).map(|under| under - foot))
-                .collect();
-            let fits = |sample: i32| clear[sample as usize].is_some_and(|c| c > 0.0);
-            // Where the roof comes down to the log's foot between two samples.
-            let crossing = |inside: i32, outside: i32| {
-                let (a, b) = (
-                    clear[inside as usize].unwrap_or(0.0),
-                    clear[outside as usize].unwrap_or(-1.0),
-                );
-                let t = (a / (a - b).max(1e-6)).clamp(0.0, 1.0);
-                at(inside) + (at(outside) - at(inside)) * t
-            };
-            let mut spans: Vec<(f32, f32)> = Vec::new();
-            let mut sample = 0;
-            while sample <= samples {
-                if !fits(sample) {
-                    sample += 1;
-                    continue;
-                }
-                let start = if sample == 0 {
-                    from
-                } else {
-                    crossing(sample, sample - 1)
-                };
-                while sample < samples && fits(sample + 1) {
-                    sample += 1;
-                }
-                let end = if sample == samples {
-                    to
-                } else {
-                    crossing(sample, sample + 1)
-                };
-                spans.push((start, end));
-                sample += 1;
-            }
-            spans.retain(|(a, b)| b - a > 0.15);
-            if spans.is_empty() {
-                break;
-            }
-            let seed = hash(&[axis as u32, row as u32, storey as u32, 100 + step as u32]);
-            for (index, (a, b)) in spans.into_iter().enumerate() {
-                // Each end cut to the slope where the roof comes down over it; sawn
-                // square where the wall ends under it.
-                let slope = |end: f32, inward: f32| {
-                    let (Some(here), Some(there)) = (under(end), under(end + inward * 0.05)) else {
-                        return 0;
-                    };
-                    if here >= centre + radius {
-                        return 0;
-                    }
-                    let rise = ((there - here) / 0.05).max(0.0);
-                    (rise * TICKS as f32).round() as i32
-                };
-                let mut piece = log(
-                    axis.point(row, a, centre),
-                    axis.point(row, b, centre),
-                    Split::Whole,
-                    hash(&[seed, index as u32]),
-                    kit.chinking.then_some((0.0, b - a)),
-                );
-                if let Piece::Log { lean, .. } = &mut piece {
-                    *lean = [slope(a, 1.0), slope(b, -1.0)];
-                }
-                layout.pieces.push(piece);
-            }
-        }
-    }
-}
-
-/// Cuts back every log that would pass through a roof, its eaves too: the ends of the top
-/// courses that run past a corner, under a hip's slope, end where the roof begins, as a
-/// builder saws them. A log the roof cuts in the middle is left in two.
-pub(super) fn under_roofs(fields: &BTreeMap<i32, Field>, kit: &Kit, layout: &mut Layout) {
-    let radius = kit.radius() + kit.ragged();
-    // Where the slab of a roof is at a point, its underside and its top, if one is there.
-    let slab = |at: Vec3| {
-        fields.values().find_map(|field| {
-            let rise = field.rise(glam::Vec2::new(at.x, at.z))?;
-            let top = field.top + rise;
-            (at.y + radius > top - ROOF_THICK_M && at.y - radius < top).then_some(())
-        })
+    else {
+        return;
     };
+    let near = super::Scope {
+        low: low - IVec3::splat(2),
+        high: high + IVec3::splat(2),
+    };
+    let roofs = Roofs::whole(base, kits, near);
+    if roofs.is_empty() {
+        return;
+    }
+    let radius = kit.radius();
+    let reach = radius + kit.ragged();
     let pieces = std::mem::take(&mut layout.pieces);
     for piece in pieces {
         let Piece::Log {
@@ -329,50 +232,103 @@ pub(super) fn under_roofs(fields: &BTreeMap<i32, Field>, kit: &Kit, layout: &mut
             seed,
             chinking,
             role,
-            ..
+            lean,
         } = piece
         else {
             layout.pieces.push(piece);
             continue;
         };
         let (from, to) = (from.metres(), to.metres());
-        let chinking = chinking.map(|(near, far)| (metres(near), metres(far)));
         let length = from.distance(to);
-        if fields.is_empty() || from.y != to.y || length < 1e-3 {
+        if from.y != to.y || length < 1e-3 {
             layout.pieces.push(piece);
             continue;
         }
+        let chinking = chinking.map(|(near, far)| (metres(near), metres(far)));
         let along = (to - from) / length;
-        let samples = (length / GABLE_STEP_M).ceil() as i32;
-        let clear: Vec<bool> = (0..=samples)
-            .map(|i| slab(from + along * (length * i as f32 / samples as f32)).is_none())
-            .collect();
-        if clear.iter().all(|&c| c) {
+        let across = Vec3::Y.cross(along).normalize_or(Vec3::X);
+        let foot = from.y - radius;
+        // The roof's underside over the log's middle line, of the lowest roof over it or
+        // a little under its foot.
+        let under = |at: f32| {
+            let p = from + along * at;
+            roofs.under_over(p.x, p.z, foot - NEAR_ROOF_M)
+        };
+        // How far the roof's underside is over the log's foot, over its middle line and
+        // either face, the lowest, so a log along the eaves, where the roof falls across it,
+        // is not laid through it: none where no roof is near, or the log stands clear over
+        // it, as a wall built on a roof does.
+        let clearance = |at: f32| -> Option<f32> {
+            let p = from + along * at;
+            // A log carried up into a roof's cube is under that roof, never over it.
+            let in_roof = base
+                .cube((p.with_y(foot + 0.01) / CELL_M).floor().as_ivec3())
+                .is_some_and(|cube| cube.kind.is_roof());
+            let (mut lowest, mut over, mut any) = (f32::MAX, !in_roof, false);
+            for side in [-1.0, 0.0, 1.0] {
+                let q = p + across * reach * side;
+                let Some(top) = roofs.top_over(q.x, q.z, foot - NEAR_ROOF_M) else {
+                    continue;
+                };
+                any = true;
+                over &= foot >= top - 1e-3;
+                lowest = lowest.min(top - ROOF_THICK_M - foot);
+            }
+            (any && !over).then_some(lowest)
+        };
+        let samples = libm::ceilf(length / GABLE_STEP_M) as i32;
+        let at = |i: i32| length * i as f32 / samples as f32;
+        let clear: Vec<Option<f32>> = (0..=samples).map(|i| clearance(at(i))).collect();
+        let fits = |i: i32| clear[i as usize].is_none_or(|c| c > 0.0);
+        if (0..=samples).all(|i| fits(i) && clear[i as usize].is_none_or(|c| c > 2.0 * radius)) {
             layout.pieces.push(piece);
             continue;
         }
-        // The runs of it that are clear of every roof.
-        let mut start = None;
-        let mut spans = Vec::new();
-        for (i, &c) in clear.iter().enumerate() {
-            let at = length * i as f32 / samples as f32;
-            match (c, start) {
-                (true, None) => start = Some(at),
-                (false, Some(a)) => {
-                    spans.push((a, at - length / samples as f32));
-                    start = None;
-                }
-                _ => {}
+        // Where the roof comes down to the log's foot between two samples.
+        let crossing = |inside: i32, outside: i32| {
+            let (a, b) = (
+                clear[inside as usize].unwrap_or(1.0),
+                clear[outside as usize].unwrap_or(-1.0),
+            );
+            let t = (a / (a - b).max(1e-6)).clamp(0.0, 1.0);
+            at(inside) + (at(outside) - at(inside)) * t
+        };
+        let mut spans: Vec<(f32, f32)> = Vec::new();
+        let mut i = 0;
+        while i <= samples {
+            if !fits(i) {
+                i += 1;
+                continue;
             }
+            let start = if i == 0 { 0.0 } else { crossing(i, i - 1) };
+            while i < samples && fits(i + 1) {
+                i += 1;
+            }
+            let end = if i == samples {
+                length
+            } else {
+                crossing(i, i + 1)
+            };
+            spans.push((start, end));
+            i += 1;
         }
-        if let Some(a) = start {
-            spans.push((a, length));
-        }
+        // Each end cut to the slope where the roof comes down over it: how many ticks the
+        // underside rises a cube in from it; sawn square where it is clear of the roof.
+        let slope = |end: f32, inward: f32| {
+            let (Some(here), Some(there)) = (under(end), under(end + inward * 0.05)) else {
+                return 0;
+            };
+            if here >= foot + 2.0 * radius {
+                return 0;
+            }
+            let rise = ((there - here) / 0.05).max(0.0);
+            libm::roundf(rise * TICKS as f32) as i32
+        };
         for (index, (a, b)) in spans.into_iter().enumerate() {
             if b - a < 0.15 {
                 continue;
             }
-            let mut piece = log(
+            let mut cut = log(
                 from + along * a,
                 from + along * b,
                 split,
@@ -386,8 +342,22 @@ pub(super) fn under_roofs(fields: &BTreeMap<i32, Field>, kit: &Kit, layout: &mut
                     (c1 > c0).then_some((c0, c1))
                 }),
             );
-            set_role(&mut piece, role);
-            layout.pieces.push(piece);
+            set_role(&mut cut, role);
+            if let Piece::Log { lean: cut_lean, .. } = &mut cut {
+                *cut_lean = [
+                    if a < 1e-4 {
+                        lean[0].max(slope(a, 1.0))
+                    } else {
+                        slope(a, 1.0)
+                    },
+                    if b > length - 1e-4 {
+                        lean[1].max(slope(b, -1.0))
+                    } else {
+                        slope(b, -1.0)
+                    },
+                ];
+            }
+            layout.pieces.push(cut);
         }
     }
 }
@@ -479,7 +449,41 @@ mod tests {
     use super::super::lay;
     use super::super::tests::{cabin, kit, logs, wall};
     use super::*;
-    use crate::{Base, BuildOp, Panel, RoofSection, RoofStyle, STOREY_M};
+    use crate::kit::Kits;
+    use crate::roofer::{self, Style};
+    use crate::{Base, BuildOp, Cube, Kind, Panel, STOREY_M};
+    use std::collections::BTreeSet;
+
+    /// The cabin under a roof of cubes the roofer lays, its gables of logs.
+    fn roofed_cabin(style: Style) -> Base {
+        let mut base = cabin();
+        base.apply(BuildOp::Fill {
+            min: [1, 5, 1],
+            max: [6, 5, 4],
+            cube: None,
+        });
+        let footprint: BTreeSet<[i32; 2]> =
+            (0..8).flat_map(|x| (0..6).map(move |z| [x, z])).collect();
+        let plan = roofer::over(&footprint, 6, style, None);
+        for (at, shape) in plan.roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        }
+        for at in plan.gables {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube::new(kit().kind(), Fill::Solid)),
+            });
+        }
+        base
+    }
 
     #[test]
     fn a_room_has_a_log_a_course_on_every_wall_and_stays_inside_its_cubes() {
@@ -545,43 +549,33 @@ mod tests {
 
     #[test]
     fn a_gable_end_is_logs_that_shorten_toward_the_ridge() {
-        let mut base = cabin();
-        base.apply(BuildOp::AddRoof(RoofSection {
-            min: [0, 0, 0],
-            max: [7, 0, 5],
-            style: RoofStyle::Gable,
-            along_x: true,
-            pitch: 0.7,
-        }));
-        // The west gable, on the row of cubes along x = 0, above the walls.
+        let base = roofed_cabin(Style::Gable);
+        // The west gable, on the row of cubes along x = 0, above the walls: its whole logs,
+        // the split ones at each step's top being cut short under the roof.
         let gable: Vec<_> = logs(&lay(&base, &kit()))
             .into_iter()
-            .filter(|(from, to, _)| from.x == 0.25 && to.x == 0.25 && from.y > STOREY_M)
+            .filter(|(from, to, split)| {
+                from.x == 0.25 && to.x == 0.25 && from.y > STOREY_M && *split == Split::Whole
+            })
             .map(|(from, to, _)| (from.y, from.distance(to)))
             .collect();
         assert!(gable.len() >= 3, "{gable:?}");
         assert!(
             gable
                 .windows(2)
-                .all(|pair| pair[1].0 > pair[0].0 && pair[1].1 < pair[0].1)
+                .all(|pair| pair[1].0 > pair[0].0 && pair[1].1 < pair[0].1),
+            "{gable:?}"
         );
-        // Under the roof: the ridge is 1.5 m from the eaves, rising 1.05 m.
-        assert!(gable.iter().all(|(y, _)| *y < STOREY_M + 1.05));
+        // Under the roof: the ridge is 1.5 m from the eaves, rising 1.5 m.
+        assert!(gable.iter().all(|(y, _)| *y < STOREY_M + 1.5));
     }
 
     #[test]
     fn no_log_passes_through_a_roof() {
         let kit = kit();
-        for style in [RoofStyle::Hip, RoofStyle::Gable, RoofStyle::LeanTo] {
-            let mut base = cabin();
-            base.apply(BuildOp::AddRoof(RoofSection {
-                min: [0, 0, 0],
-                max: [7, 0, 5],
-                style,
-                along_x: true,
-                pitch: 0.7,
-            }));
-            let section = base.sections()[0];
+        for style in [Style::Hip, Style::Gable, Style::LeanTo] {
+            let base = roofed_cabin(style);
+            let roofs = Roofs::whole(&base, &Kits(vec![kit.clone()]), super::super::Scope::ALL);
             let r = kit.radius();
             let laid = lay(&base, &kit);
             for piece in &laid.pieces {
@@ -589,27 +583,26 @@ mod tests {
                     continue;
                 };
                 let (from, to) = (from.metres(), to.metres());
+                if from.y != to.y {
+                    continue;
+                }
                 if lean != [0, 0] {
                     // A gable's log cut to the roof: its foot under the roof at each end,
-                    // and the roof over its end rising the way it is cut.
+                    // and the roof over its end rising the way it is cut, a cube a cube.
                     for (end, cut) in [(from, lean[0]), (to, lean[1])] {
-                        let rise = section.rise(glam::Vec2::new(end.x, end.z)).unwrap();
-                        let under = STOREY_M + rise - ROOF_THICK_M;
+                        let under = roofs.under_over(end.x, end.z, end.y - r - 1.0).unwrap();
                         assert!(end.y - r <= under + 0.01, "{style:?}: {end} under {under}");
-                        assert!(cut == 0 || (cut as f32 / TICKS as f32 - 0.7).abs() < 0.01);
+                        assert!(cut == 0 || (cut - TICKS).abs() <= 2, "{style:?}: {cut}");
                     }
                     continue;
                 }
                 for i in 0..=20 {
                     let at = from.lerp(to, i as f32 / 20.0);
-                    let Some(rise) = section.rise_beyond(glam::Vec2::new(at.x, at.z), kit.eaves)
-                    else {
+                    let Some(top) = roofs.top_over(at.x, at.z, at.y - r) else {
                         continue;
                     };
-                    let top = STOREY_M + rise;
-                    let r = kit.radius();
                     assert!(
-                        at.y + r <= top - ROOF_THICK_M + 3e-3 || at.y - r >= top - 3e-3,
+                        at.y + r <= top - ROOF_THICK_M + 3e-3,
                         "{style:?}: a log at {at} meets the roof at {top}"
                     );
                 }

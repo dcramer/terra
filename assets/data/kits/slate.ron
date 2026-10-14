@@ -1,0 +1,41 @@
+// A roof of grey slates on hewn rafters (docs/building-kits.md, D241), a ridge of rolled
+// slate: a roof kind, as shakes.ron says what each number is. The roof over stone walls
+// unless another is in hand.
+(
+    id: 2049,
+    pattern: Roof,
+    eaves: 0.4,
+    timber: (
+        profile: Hewn,
+        notch: Flush,
+        relief: 0.0,
+        tint: (0.9, 0.84, 0.76),
+        end_tint: (0.86, 0.82, 0.78),
+    ),
+    roof: (
+        rows: 11.0,
+        phase: 0.0,
+        butt: 0.016,
+        thick: 0.02,
+        uneven: 0.25,
+        tint: (0.6, 0.62, 0.66),
+        rafter: (Hewn, 0.13),
+        batten: (0.05, 0.025),
+        board: (0.16, 0.035),
+        board_tint: (1.36, 1.34, 1.3),
+        ridge: Roll,
+        cap: 0.11,
+        fillet: 0.1,
+    ),
+    textures: {
+        Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
+        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
+        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
+        Covering: (path: "materials/grey_roof_tiles_02", metres: (1.5, 1.5)),
+        Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
+    },
+    cost: (steps: 4, step: [("Stone", 1, 32)]),
+    dress: (
+        masks: (wear: 0.14, moss: 0.5, moss_tint: (1.2, 1.18, 0.9)),
+    ),
+)

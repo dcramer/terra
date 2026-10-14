@@ -343,6 +343,9 @@ pub struct Builder {
     /// How many cubes across the brush is that blocks are laid, changed and carved with,
     /// and cubes taken out (D226): 1, 2, 4 or 8, half a metre to four.
     pub brush: i32,
+    /// The columns a roof aimed into a room would cover, walls and all: the room's shape,
+    /// not the rectangle round it (D241). Empty when a roof is drawn.
+    pub footprint: std::collections::BTreeSet<[i32; 2]>,
 }
 
 impl Default for Builder {
@@ -380,6 +383,7 @@ impl Default for Builder {
             aimed: None,
             planned: None,
             material: None,
+            footprint: Default::default(),
             brush: 1,
         }
     }

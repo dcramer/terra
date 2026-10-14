@@ -7,11 +7,15 @@
 
 use crate::cubes::{Cube, Cubes, FULL};
 use crate::layout::Piece;
-use crate::{Base, CELL_M, STOREY_M};
+use crate::{Base, CELL_M};
 use glam::{IVec2, IVec3, Vec3};
 
 /// How far into a cube a piece must reach to stand in it.
 const SLIVER_M: f32 = 0.05;
+
+/// How thick a roof's cube is under its top, as a fraction of the cube: the roof's own
+/// thickness (`mesh::ROOF_THICK_M`), so its underside is where it is drawn.
+const ROOF_SHELL: f32 = crate::mesh::ROOF_THICK_M / CELL_M;
 
 /// How far from the middle of a walker's feet, as a fraction of their radius, what is
 /// under them holds them up.
@@ -52,10 +56,19 @@ fn column_at(point: Vec3) -> IVec2 {
 impl Base {
     /// The base as far as it stands while it goes up: only the cubes the pieces in so far
     /// stand in, so a plan's ghost is walked through and what is built stops a walker
-    /// (docs/building-kits.md). Its roofs only once they are up.
-    pub fn standing<'a>(&self, done: impl IntoIterator<Item = &'a Piece>, roofs: bool) -> Base {
+    /// (docs/building-kits.md); a roof's cube once any piece of it is in.
+    pub fn standing<'a>(&self, done: impl IntoIterator<Item = &'a Piece>) -> Base {
         let mut cubes = Cubes::default();
-        for (min, max) in done.into_iter().filter_map(Piece::bounds) {
+        let mut bounds = Vec::new();
+        for piece in done {
+            if let Some(cell) = piece.roof_cell() {
+                let low = cell.cube.as_vec3() * CELL_M;
+                bounds.push((low, low + glam::Vec3::splat(CELL_M)));
+            } else if let Some(found) = piece.bounds() {
+                bounds.push(found);
+            }
+        }
+        for (min, max) in bounds {
             // The cubes it fills more than a sliver of.
             let low = ((min + SLIVER_M) / CELL_M).floor().as_ivec3();
             let high = ((max - SLIVER_M) / CELL_M).floor().as_ivec3();
@@ -72,20 +85,14 @@ impl Base {
                 }
             }
         }
-        Base::from_cubes(
-            cubes,
-            if roofs {
-                self.roofs.clone()
-            } else {
-                Default::default()
-            },
-        )
+        Base::from_cubes(cubes)
     }
 
     /// The layers of a column of cubes that hold a walker up or stop them, with their
     /// bottoms and tops at a point over it: each cube to its fill, as high as its shape's
-    /// top there (a stair's step, a slope's ramp, a half). Openings and planned cubes with
-    /// nothing in them are walked through.
+    /// top there (a stair's step, a slope's ramp, a half); a roof's cube only its shell, as
+    /// thick as a roof under its top, so a walker stands under a roof's slope inside it
+    /// (D241). Openings and planned cubes with nothing in them are walked through.
     fn solid_layers(&self, at: Vec3) -> impl Iterator<Item = (f32, f32)> + '_ {
         let column = column_at(at);
         let (u, v) = (
@@ -118,15 +125,18 @@ impl Base {
                 let fill = f32::from(cube.level()) / f32::from(FULL);
                 // From its underside, an upper half's or an inverted slope's (D231), up
                 // to its top or as far as it is filled.
-                let (bottom, top) = (cube.shape.bottom(u, v), fill.min(cube.shape.top(u, v)));
+                let (mut bottom, top) = (cube.shape.bottom(u, v), fill.min(cube.shape.top(u, v)));
+                if cube.kind.is_roof() {
+                    bottom = bottom.max(cube.shape.top(u, v) - ROOF_SHELL);
+                }
                 (top > bottom).then_some((foot + CELL_M * bottom, foot + CELL_M * top))
             })
             .chain(shut)
     }
 
-    /// The height of whatever would hold up feet at `point`: the highest top of a cube, or
-    /// a pitched roof, in that column that is no more than a step above them. `None` if
-    /// the base offers nothing there, in which case the ground decides.
+    /// The height of whatever would hold up feet at `point`: the highest top of a cube in
+    /// that column that is no more than a step above them. `None` if the base offers
+    /// nothing there, in which case the ground decides.
     pub fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
         // Under the feet, which are as wide as the body is near enough: a step's edge a
         // little ahead is stood on as the body reaches it, as a capsule climbs a stair.
@@ -141,27 +151,16 @@ impl Base {
         let tops = feet
             .into_iter()
             .flat_map(move |offset| self.solid_layers(point + offset).map(|(_, top)| top));
-        // A pitched roof is stood on where it is.
-        let pitched = self.sections().iter().filter_map(|section| {
-            let rise = section.rise(glam::Vec2::new(point.x, point.z))?;
-            Some((section.storey() + 1) as f32 * STOREY_M + rise)
-        });
-        tops.chain(pitched)
-            .filter(|&surface| surface <= point.y + walker.step_up)
+        tops.filter(|&surface| surface <= point.y + walker.step_up)
             .max_by(|a, b| a.total_cmp(b))
     }
 
-    /// The height of the ceiling over a point: the lowest cube, or pitched roof's
-    /// underside, over it.
+    /// The height of the ceiling over a point: the lowest cube's underside over it, a
+    /// roof's too.
     pub fn ceiling(&self, point: Vec3) -> Option<f32> {
         let above = point.y + 0.1;
-        let bottoms = self.solid_layers(point).map(|(bottom, _)| bottom);
-        let pitched = self.sections().iter().filter_map(|section| {
-            let rise = section.rise(glam::Vec2::new(point.x, point.z))?;
-            Some((section.storey() + 1) as f32 * STOREY_M + rise - crate::mesh::ROOF_THICK_M)
-        });
-        bottoms
-            .chain(pitched)
+        self.solid_layers(point)
+            .map(|(bottom, _)| bottom)
             .filter(|&bottom| bottom >= above)
             .min_by(|a, b| a.total_cmp(b))
     }
@@ -272,7 +271,7 @@ impl Base {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BuildOp, Kind, Panel, cells};
+    use crate::{BuildOp, Kind, Panel, STOREY_M, cells};
 
     /// A room nine metres square outside on the ground, with a doorway a metre wide in its
     /// south wall and a window in its east wall. These tests are written in metres and
@@ -335,9 +334,9 @@ mod tests {
     fn a_planned_wall_is_walked_through_and_a_built_one_stops_you() {
         let (base, pieces) = log_wall();
         let (from, to) = (Vec3::new(2.0, 0.0, 0.5), Vec3::new(2.0, 0.0, 4.0));
-        let plan = base.standing([], false);
+        let plan = base.standing([]);
         assert!((stroll(&plan, from, to) - to).length() < 0.05);
-        let built = base.standing(&pieces, true);
+        let built = base.standing(&pieces);
         assert!(stroll(&built, from, to).z < 2.0);
         assert_eq!(built.cubes().count(), base.cubes().count());
         // With only its first course in, it stands in the bottom layer of cubes alone.
@@ -346,7 +345,7 @@ mod tests {
             .filter(|p| p.bounds().is_some_and(|(_, max)| max.y < 0.45))
             .collect();
         assert!(
-            base.standing(low.iter().copied(), false)
+            base.standing(low.iter().copied())
                 .cubes()
                 .all(|(at, _)| at.y == 0)
         );
@@ -438,34 +437,66 @@ mod tests {
     }
 
     #[test]
-    fn a_pitched_roof_is_stood_on_and_is_the_ceiling_under_it() {
-        // A room four metres by three, under a gable rising half a metre for each metre
-        // in from its north and south sides.
+    fn a_roof_of_cubes_is_stood_on_and_its_underside_is_the_ceiling_under_it() {
+        use crate::{Cube, Fill};
+        // A room four metres by three, under a gable of roof cubes rising a cube a cube in
+        // from its north and south sides, its flat roof off.
         let mut base = Base::default();
         base.apply(BuildOp::AddRoom {
             min: [0, 0, 0],
             max: [7, 0, 5],
             kind: Kind::PLAIN,
         });
-        base.apply(BuildOp::AddRoof(crate::RoofSection {
-            min: [0, 0, 0],
-            max: [7, 0, 5],
-            style: crate::RoofStyle::Gable,
-            along_x: true,
-            pitch: 0.5,
-        }));
+        base.apply(BuildOp::Fill {
+            min: [1, 5, 1],
+            max: [6, 5, 4],
+            cube: None,
+        });
+        let footprint = (0..8).flat_map(|x| (0..6).map(move |z| [x, z])).collect();
+        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+        for (at, shape) in plan.roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        }
         let w = walker();
         // A metre in from the north side, and at the ridge, a metre and a half in.
-        let (side, ridge) = (STOREY_M + 0.5, STOREY_M + 0.75);
-        assert_eq!(base.support(Vec3::new(2.0, side, 1.0), &w), Some(side));
-        assert_eq!(base.support(Vec3::new(2.0, ridge, 1.5), &w), Some(ridge));
+        let (side, ridge) = (STOREY_M + 1.0, STOREY_M + 1.5);
+        let near = |a: Option<f32>, b: f32| a.is_some_and(|a| (a - b).abs() < 0.02);
+        // Stood on as far up the slope as the feet reach, as a ramp is.
+        let feet = w.radius * FOOT_REACH;
+        let stood = base.support(Vec3::new(2.0, side, 1.0), &w).unwrap();
+        assert!(
+            stood >= side - 1e-3 && stood <= side + feet + 1e-3,
+            "{stood}"
+        );
+        assert!(near(base.support(Vec3::new(2.0, ridge, 1.5), &w), ridge));
         // Inside, the floor holds you up, and the roof's underside is over you.
         let thick = crate::mesh::ROOF_THICK_M;
         assert_eq!(base.support(Vec3::new(2.0, 0.0, 1.0), &w), Some(0.0));
-        assert_eq!(base.ceiling(Vec3::new(2.0, 0.0, 1.0)), Some(side - thick));
-        assert_eq!(base.ceiling(Vec3::new(2.0, 0.0, 1.5)), Some(ridge - thick));
+        assert!(near(
+            base.ceiling(Vec3::new(2.0, 0.0, 0.9)),
+            STOREY_M + 0.9 - thick
+        ));
+        assert!(near(
+            base.ceiling(Vec3::new(2.0, 0.0, 1.45)),
+            ridge - 0.05 - thick
+        ));
         // Beyond its walls, nothing.
         assert_eq!(base.ceiling(Vec3::new(6.0, 0.0, 1.0)), None);
+        // Walking up it from the eave, a slope a cube a cube, as up a ramp.
+        let mut at = Vec3::new(2.0, STOREY_M, 0.05);
+        for i in 1..=60 {
+            let to = Vec3::new(2.0, at.y, 0.05 + 1.4 * i as f32 / 60.0);
+            at = base.walk(at, to, &w);
+            at.y = base.support(at, &w).unwrap_or(at.y);
+        }
+        assert!(at.z > 1.4 && (at.y - (STOREY_M + at.z)).abs() < 0.1, "{at}");
     }
 
     /// A base of one cube of a shape at the origin.

@@ -109,6 +109,7 @@ pub fn shaped_by(kit: &Kit) -> Option<&str> {
     let (material, depth) = match kit.pattern {
         Pattern::Masonry => (Material::Masonry, kit.relief),
         Pattern::Logs => (Material::Log, kit.timber.relief),
+        Pattern::Roof => return None,
     };
     (depth > 0.0)
         .then(|| kit.textures.get(&material))

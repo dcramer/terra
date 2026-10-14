@@ -90,8 +90,7 @@ The last row is what freezing a wall's layout once a piece is in means (building
 
 **Later, with roofs, floors and storeys:**
 
-- **Gable ends**: courses carry on up, each log cut at the roof's slope, the cut made when the mesh is made (building-tech.md).
-- **Roofs**: poles under a covering.
+- **Gable ends**: courses carry on up into the roof cubes over them, each log cut at the roof's slope (D241).
 - **A second storey**: starts over a floor a cube thick (D181), so the split logs at the top of one storey and the foot of the next never show together.
 
 Floors and flat roofs of log cubes are drawn as decks (D206).
@@ -115,7 +114,7 @@ This is the first of what the developers called adding "a detail": a part placed
 
 Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 
-- **Every part has its kind.** A wall, post, floor or roof section is laid in the kind picked when it is drawn (Ctrl and the wheel, in building.md's controls). Two walls side by side can be different kinds, and so can the walls and the floor of one room. Each cube keeps its kind, so mixing is per cube.
+- **Every part has its kind.** A wall, post, floor or roof is laid in the kind picked when it is drawn (Ctrl and the wheel, in building.md's controls). Two walls side by side can be different kinds, and so can the walls and the floor of one room. Each cube keeps its kind, so mixing is per cube.
 - **Where kinds meet, the heavier one runs through.** Stone, then logs, then planks, then wattle. At a corner or a T of stone and logs, the stone wall's corner blocks run to its outer face, and the log wall ends flush against it, as a log cabin meets its stone chimney. In line, the log wall butts into the stone wall's end. Stone is thicker (0.5 m against 0.3), so the step between them shows, as it does on real buildings.
 - **One wall over another.** Log cubes over stone cubes a metre high are how a cabin gets a stone footing, each laid by its own kit.
 - **Changing a kind** is free on a plan nothing is in yet. Once pieces are in, the wall is frozen (building-tech.md), so it is taken down and laid again, as D146 says.
@@ -157,9 +156,9 @@ A cube can be cut to a shape: a half (its lower half), a stair (two steps, each 
 | Stair or slope upside down (D231) | A stone a step; the surface cut up to the ramp, a fascia raking under its open sides | The same box, its underside boarded raking or stepped, a riser under the step |
 | Outer and inner corner slopes (D231) | The surface cut to the two ramps, the lower of them for an outer corner (a hip's), the higher for an inner (a valley's), a coping raking up each open side or level along a high one | Boards up each ramp, each cut at the crease, its open sides clad, each course as long as the shape is wide there |
 
-The hammer's *Block* has the upper half and the stair and slope upside down; *Corner slope* the two corners; the wheel turns them. A brush (Alt and the wheel) lays a box of them a metre, two or four across, its top layer cut to the shape (its bottom layer for one upside down), the rest whole, so a box of slopes is a ramp on a block. The kit sheet's "more shapes" rows show each kit's: a mound hipped all round, an L hipped with an inner corner where its arms meet, and a wall with a doorway under a lintel of upper halves, corbelled out on inverted slopes to the north and inverted stairs to the south. A later step lays roof kinds on slope and corner cubes (D226); these shapes are the cubes they go on.
+The hammer's *Block* has the upper half and the stair and slope upside down; *Corner slope* the two corners; the wheel turns them. A brush (Alt and the wheel) lays a box of them a metre, two or four across, its top layer cut to the shape (its bottom layer for one upside down), the rest whole, so a box of slopes is a ramp on a block. The kit sheet's "more shapes" rows show each kit's: a mound hipped all round, an L hipped with an inner corner where its arms meet, and a wall with a doorway under a lintel of upper halves, corbelled out on inverted slopes to the north and inverted stairs to the south. Roof kinds are laid on the same shapes (D241).
 
-**Slopes are not roofs.** A roof is laid by its kit from roof sections over walls (D209), a height field of courses, ridges and eaves; a slope is a ramp of its own kind's material, and under or beside a roof it is a cube like any other.
+**Slopes of a wall's kind are not roofs.** A roof is cubes of a roof kind (D241), drawn as a roof from their neighbours; a slope of stone or logs is a ramp of its own material, and under or beside a roof it is a cube like any other.
 
 **A solid mass of timber** (a platform, a slab: whole cubes of a timber kind side by side two by two on a layer) is laid as a framed deck, not as walls crossing: boards on top on joists where it is in the air, a rim of sawn beams stacked a course deep round its open sides, nothing inside it, and its sides below its top as walls.
 
@@ -174,25 +173,32 @@ The hammer's *Block* has the upper half and the stair and slope upside down; *Co
 **Door steps** are stone slabs from each ground-floor door in an outside wall down to the ground, a riser of no more than 18 cm each, set into the ground; none where the threshold is less than a step up.
 
 **Doors** are fitted props (D207); none is fitted or drawn for now (D225), so a doorway is its frame and steps.
-## Roofs (D209)
+## Roofs (D241)
 
-A kit lays its own roofs, from the shape the roof's sections make over the walls (`terra_build::layout::roofs`, drawn by `roofing`): a gable, a hip or a lean-to over any plan, an L, T or U getting its valleys and its ridges dying into one another from the sections alone. A lean-to suits a rectangle or a shed: over an L, T or U it stands each wing's high side up as a tall, tower-like gable wall, so the kit sheet and the village give those gables, hips, or a hip over the main block with gabled wings. A block kind's wall top under a pitched roof takes no coping (D215), which would stand up through the covering along the wall's line. In the order a roof goes up, a stage of its cells at a time:
+A roof is cubes of a roof kind: shakes, slate or thatch, each a kit file (`assets/data/kits/shakes.ron`, `slate.ron`, `thatch.ron`, `pattern: Roof`, numbered from 2048), laid by hand like any cube, cut to slopes, outer and inner corners, halves and wholes (D231), with the material picker and brushes (D232, D233), or as a plan by the hammer's *Roof*, "add a roof with this material" (D226): over the space walls close in, or a rectangle drawn, a gable, a hip, a lean-to or flat, in the roof material in hand or the roof the walls' kit names (`roof_kind`: shakes over logs, slate over stone, thatch over hewn timber). Its look comes from each roof cube's place among its neighbours (`terra_build::layout::roofs`, drawn by `roofing`), as a wall's edges are dressed by their roles (D215):
 
-| Stage | Pieces |
+| Where | What it is drawn as |
 |---|---|
-| Frame | A rafter up the slope at every cube, in the kit's timber (round poles for logs and thatch, hewn for stone), and a beam under every ridge, hip and valley |
-| Battens | One under the foot of each course, along the face |
-| Covering | The covering a square at a time, from the eaves up; boards along the eaves (fascia) and the verges (bargeboards); then caps over ridges and hips (two boards, or a roll of the covering), an open valley (the covering cut back either side of it, its courses' cut ends facing a channel lined with boards), and a mortar fillet where a wall stands up through the roof. The boards are the kit's planks weathered lighter (`board_tint`), so a roof's edges read against its covering |
+| A slope's top | The covering in courses |
+| Where two slopes meet at the top | A ridge, capped (two boards, or a roll of the covering); a ridge a cube wide, flat on whole cubes, one cap down its middle |
+| An outer corner | A hip, capped |
+| An inner corner | A valley, an open channel: the covering cut back either side of a lining of boards |
+| An open level edge | An eave: the covering carried on down the slope by the kit's `eaves`, drawn only, a fascia along it |
+| An open sloping edge | A verge: carried on level, a bargeboard along it |
+| Against a wall or a higher roof | Flashing, a fillet of mortar |
+| Underneath | Rafters at every cube and beams under the creases, battens, and boards, seen from inside |
 
-The covering is courses, level up the slope so they run round a hip, each stepping out at its butt by the kit's amount, wandering a little along it; the texture is laid so its rows sit on the steps, each course shifted along so no two rows repeat. Shakes over pine logs, slates (Poly Haven's `grey_roof_tiles_02`) over stone, a foot of thatch (`riet_01`) over hewn timber: each kit's `roof` numbers and its `Covering` material, so a roof is data too.
+Each cube goes up in four steps of its fill, as its kit's cost says: its frame, its battens, its covering, its trims. The covering is courses, level up the slope so they run round a hip, each stepping out at its butt by the kit's amount, wandering a little along it; the texture is laid so its rows sit on the steps, each course shifted along so no two rows repeat; slates are Poly Haven's `grey_roof_tiles_02`, thatch `riet_01`, a foot thick. The boards are the kit's planks weathered lighter (`board_tint`), so a roof's edges read against its covering.
 
-**Gables close to the roof.** Over a timber wall the courses carry on up, each log's ends cut to the slope over it; over a block kind's wall its cubes carry on up as its own surface, cut off at the roof's underside, so a stone end wall is stone to the ridge.
+**Gables are walls.** A gable is wall cubes of any kind built up under the slope; a wall cube with a roof cube on it is carried up into it, cut at the roof's underside: over a timber wall its courses carry on up, each log's ends cut to the slope over it; over a block kind its surface, so a stone end wall is stone to the ridge. "Add a roof" lays a gable's walls with it, in the kind of each wall's top. A block kind's wall top under a roof takes no coping.
+
+**Any shape.** A roof is whatever its cubes are: a gable, a hip, an L, T or U, a dormer on a slope, a roof against a taller wall, a storey built over or beside one with its own roof. A roof's cubes are no wall or floor, and a room under them is indoors.
 
 A ghost's covering is a plain sheet, without its courses, which costs a tenth as much to draw.
 
 ## Checking it
 
-The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a doorway, windows and a gable roof, every shape in each kit (a platform on posts reached by stairs and a ramp, a step of halves, a post alone) and a floor alone, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71): To the east, every sensible roof over every plan (a rectangle under a gable, a hip or a lean-to; an L, a T and a U under gables, hips, or a hip with gabled wings) in each kit and mixed, built, part-built and as a ghost; `--sheet-rows TEXT` lays only the rows whose names hold it, as `--sheet-rows "stone: L"`, since the whole sheet is heavy to lay.
+The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a doorway, windows and a gable roof, every shape in each kit (a platform on posts reached by stairs and a ramp, a step of halves, a post alone) and a floor alone, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71): To the east, each roof kind over the walls that take it, shakes over logs, slate over stone and thatch over hewn timber: a gable, a hip, an L, a T and a U, a dormer, two storeys with a roof over a roof, and a lean-to against a taller wall, built, part-built and as a ghost; and logs and stone mixed under every sensible roof over every plan. `--sheet-rows TEXT` lays only the rows whose names hold it, as `--sheet-rows "slate: L"`, since the whole sheet is heavy to lay.
 
 ```bash
 cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet --time 16 --vantage 13,9,-6,13,0.5,-26.5 --shot out/corners.png

@@ -28,24 +28,24 @@ Shared state, in `terra_build`, with no Bevy (the rule in AGENTS.md).
 | Openings | Cubes left empty in a wall, of any size and shape. The door tool's default is 1 m by 2 m, the window tool's a sill at 1 m and a head at 2 m, Enshrouded's way; anything else is carved. A fitted door, shutters or glass is a piece set into an opening it fits |
 | Posts | A column of cubes, alone or in a wall (D179) |
 | Floors | A layer of cubes, so a 3 m storey is a floor cube and 2.5 m clear above it |
-| Roofs | The one thing not cubes: a surface from the height field, over the cubes it covers, which count as covered |
+| Roofs | Cubes of a roof kind cut to slopes and corners (D241), by hand or laid by "add a roof"; drawn as a roof from their neighbours, no wall or floor, and what is under them is covered |
 
 So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to reconcile. Height is counted in cubes; a storey is only the default height of a wall.
 
 **A kit draws cubes** ([building-kits.md](building-kits.md)): it finds the runs of cubes of its kind and lays its pieces along them, its corners where runs meet and its cut ends where cubes are empty. A piece is as thick as its kind, logs 0.3 to 0.4 m and stone the whole cube, centred in the cube; what stops a walker is the cube.
 
-**What is planned is cubes too** (D192): each cube is air, planned, or built to a **fill level** (a log fills a cube in two courses, a block in one), with at most one change pending on it: replace, carve, take away. Fill is the unit of progress, cost and collision: a cube collides from its foot to its fill. A part, a wall or floor or roof section the player lays, is only how the interface groups cubes. Ground heights under a plan are sampled when it is laid and kept with it, so every machine agrees on its footings and support.
+**What is planned is cubes too** (D192): each cube is air, planned, or built to a **fill level** (a log fills a cube in two courses, a block in one), with at most one change pending on it: replace, carve, take away. Fill is the unit of progress, cost and collision: a cube collides from its foot to its fill. A part, a wall or floor or roof the player lays, is only how the interface groups cubes. Ground heights under a plan are sampled when it is laid and kept with it, so every machine agrees on its footings and support.
 
-**What is done is operations** (D21): fill a block of cubes with a kind or empty it; a roof section; the room shortcut (a ring of wall cubes round a footprint, a floor under it and a roof over it, opening into rooms it meets); with plans, lay a part, fill a cube, empty one. The server checks each against the state when it arrives, undo included as its inverse. A base is saved and sent as a snapshot of its cubes and roofs, and the operations since. Older saves, of rooms and then of walls on the edges between cells, are still read and turned into cubes: a room becomes its walls, floor and roof, and a wall on an edge becomes the cubes on its outside, so rooms keep their size inside; a room's wall pushed or pulled is left out.
+**What is done is operations** (D21): fill a block of cubes with a kind or empty it; the room shortcut (a ring of wall cubes round a footprint, a floor under it and a roof over it, opening into rooms it meets); with plans, lay a part, fill a cube, empty one. The server checks each against the state when it arrives, undo included as its inverse. A base is saved and sent as a snapshot of its cubes, and the operations since; roof sections in older saves become roof cubes as they are read (D241). Older saves, of rooms and then of walls on the edges between cells, are still read and turned into cubes: a room becomes its walls, floor and roof, and a wall on an edge becomes the cubes on its outside, so rooms keep their size inside; a room's wall pushed or pulled is left out.
 
 **Everything else is worked out from the parts**, by pure functions, so every machine gets the same answer and only the parts travel:
 
 - **The layout**: the pieces of each part, in the order they go in.
 - **Buildings**: parts that touch, grouped.
 - **Rooms and indoors**: the air cubes each building closes in, flood-filled.
-- **The roof's shape**: a height field over the grid.
+- **The roof's shape**: its cubes' tops, sampled every half cube (D241).
 - **What stops a walker**: the built cubes, read directly, each to its fill: their tops hold a walker up, solid ones stop them, openings and plans let them through.
-- **Support**: every built cube joined, face to face, to the ground or a footing that reaches it; a roof section held by the cubes or posts under its eaves (D194). Nothing is taken away while anything rests on it (D193).
+- **Support**: every built cube joined, face to face, or a roof's slope along its ramp to the cube a layer below it, to the ground or a footing that reaches it (D194, D241). Nothing is taken away while anything rests on it (D193).
 
 Each is recomputed for the building that changed, when a part is laid, a piece goes in or comes out, never per frame.
 
@@ -70,15 +70,13 @@ A wall's layout is a pure function of its plan, how it meets its neighbours, its
 
 **Layouts follow the cubes and the current kit.** Progress is kept per cube, not per piece, so a layout can always be worked out again: a kit tuned later redraws what is built, and a corner looks the same whichever wall went up first, with nothing lost (since 2026-10-12; layouts were frozen once a piece was in). Layouts are in grid units from kit data only, so the server needs no art, and versions are picked by a fixed hash of the base's seed and the cube's place.
 
-## Roofs: a height field
+## Roofs: cubes (D241)
 
-Because walls run in four directions only (D146), a hip roof over any footprint, L, U, T or a courtyard, is simply: **height = pitch × how far the point is from outside**, measured as the larger of the two axis distances. Every face is flat, and every ridge, hip and valley falls on the grid's lines or diagonals, so there are no rounding errors to chase and no skeleton solver; none in Rust fits our licence anyway. A test checks it on L, T, U and courtyard plans before anything is drawn from it.
+A roof is cubes of a roof kind cut to slopes, outer and inner corners, halves and wholes, built by hand as Enshrouded's roof blocks are (D226), so a roof has any shape and storeys go over or beside it. Its look comes from its cubes' neighbourhood (`layout::roofs`): every roof cube with nothing over it gives its top, sampled every half cube in four triangles a square, a square carrying on into the next where their corners are at the same heights; creases are ridges, hips and valleys, open edges eaves and verges carried on by the kit's eaves, edges against something standing up flashing. Laid per section from the whole roof that reaches it, so its long pieces join as laying the whole base would.
 
-**Sections**, The Sims' way: a roof is one or more rectangles, each hip, gable, lean-to or flat at the roof's pitch, and the roof is the highest of them at each point, which makes valleys and gable ends by itself. The roof tool's first offer over enclosed walls is one hip over the whole footprint; the player can draw sections instead, for gables.
+**"Add a roof"** (`terra_build::roofer`) lays a plan of roof cubes over a footprint from a height field rising a cube a cube from its edges: a hip's is the chessboard distance to what is outside it, which gives hips at outer corners and valleys at inner ones over any plan whose walls run the two ways (the straight skeleton of such a plan); a gable's, over each largest rectangle the footprint holds, how far a point is from its nearer long side, the highest where they overlap; each cube cut to the shape its corners' heights make. Walls under its gable ends are carried up to it.
 
-**Read off the height field**: the covering, a surface per face in its material; trims along eaves, ridges, hips and valleys; rafters on the grid lines and hip and valley rafters on the diagonals; gable walls, a wall's raked top, cut by a plane when the pieces are baked.
-
-**Deferred**: mixed pitches in one roof, dormers, curved and conical roofs, splitting a footprint into gables automatically.
+**Deferred**: other pitches than a cube a cube, curved and conical roofs.
 
 ## Drawing many buildings
 
@@ -94,12 +92,12 @@ On the Bevy side, in `terra_game` (D213; [building-plan.md](building-plan.md#dra
 
 - **A part's progress is its cubes' fill**, built from the bottom, as what each rests on is in (D194).
 - **The next piece** is the lowest not yet in, nearest the builder, so holding the key builds a wall up course by course, and two players can work from both ends.
-- **Roofs go in by stages per face**, frame, then battens, then covering, not tile by tile.
+- **A roof's cubes go in a layer at a time from the eaves**, each in four steps: frame, battens, covering, trims (D241).
 
 ## Buildings and indoors
 
 - **Buildings**: parts that touch, by a flood fill over parts, when one is laid, finished or removed. Each building is an entity in the game with its rooms, so stations (D151) and weather (D78) read it.
-- **Rooms**: air cubes flood-filled within the building's walls; open doorways and windows let weather through, a shut door does not. A cell is covered if a roof's height field or a floor is over it.
+- **Rooms**: air cubes flood-filled within the building's walls; open doorways and windows let weather through, a shut door does not. A cell is covered if a roof's cubes or a floor is over it.
 - **Indoors**: a room closed all round and covered. When it is not, the game knows which wall or roof is missing, to say so (D155).
 - **Natural shelter** under a cliff or in a cave is not a building, and is left to the weather's design.
 
@@ -112,7 +110,7 @@ On the yard, a flat test level: `cargo xtask yard`, or `--level yard` on the pla
 Each step is played and checked by script before the next (D69):
 
 1. **The model** (built, on cubes, D181): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; older saves converted; built whole. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
-2. **Roofs** (a first version built): the height field, the four styles, laid over a room by a click or drawn as a rectangle, gable ends closed with wall. Not yet: eaves, trims, the covering's pieces, valleys where sections meet walls, an automatic hip over any footprint.
+2. **Roofs** (built, D241): roof cubes by hand, and "add a roof" laying them in four styles over a room or a rectangle drawn; eaves, verges, ridges, hips, valleys and flashing from their neighbours.
 3. **Plans and constructing** (D139): parts laid as plans; pieces put in one by one, from the pack and storage (D141).
 4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement. Logs first ([building-kits.md](building-kits.md), D177, D178): the stacked pattern, logs made in code, the three states and a kit sheet on the yard, built.
 5. **The art of the kits**, by the developers' art pipeline: about ten to fifteen pieces a material, a few versions each.
@@ -121,4 +119,4 @@ Each step is played and checked by script before the next (D69):
 
 | Routine | Hard | Deferred |
 |---|---|---|
-| The model, buildings, indoors; straight walls; one hip roof over any plan; progress bits; merging | Where roofs meet walls and other roofs; joins and openings across four patterns; the art of each kit, where looks are won or lost | Diagonal and round walls, carving, mixed pitches, dormers, curved roofs, impostors |
+| The model, buildings, indoors; straight walls; roofs of cubes over any plan; progress bits; merging | Where roofs meet walls and other roofs; joins and openings across four patterns; the art of each kit, where looks are won or lost | Diagonal and round walls, other pitches, curved roofs, impostors |

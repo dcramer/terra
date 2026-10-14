@@ -2,18 +2,21 @@
 // Builds a cabin from plan to doorway in the play experiment and walks in (D69, D139; step 4 of
 // docs/building-plan.md), checking every step by the base's state, not only by picture:
 // a claim stone; a room's plan of log walls on a stone floor, on a stone footing down to the
-// ground (D194), a doorway and a window cut into it and a gable roof laid over it, all for
-// nothing; then built, what goes in next each time as holding the hammer does, the footing
-// first and whole before anything else, then the floor, the walls course by course, the
-// roof by stages, taking exactly what the kits say from the pack; a cube taken out and the
-// taking undone; a refusal where the roof rests on a wall; a second window cut into the
+// ground (D194), a doorway and a window cut into it and "add a roof" laying a gable of
+// shakes over it, roof cubes on gable ends of logs (D241), all for nothing; then built,
+// what goes in next each time as holding the hammer does, the footing first and whole
+// before anything else, then the floor, the walls course by course, the roof a layer at a
+// time a stage at a time, taking exactly what the kits say from the pack; a cube taken out
+// and the taking undone; a refusal where the roof rests on a wall; a second window cut into the
 // built wall, a course at a time from under the logs over it, giving the logs back; the
 // player walking in through the open doorway, as no door or window is fitted for now (the
 // developers, 2026-10-13); the ground outside the cabin as it was before it was planned; a
 // deck a storey up on four posts beside it, reached by a flight of stairs (D193), built,
 // and walked up onto; stone picked in the hammer, a wall laid and built in it, a cube in
 // its middle changed to logs in place and an outer corner slope laid on its end (D231,
-// D232); and the game saved and loaded again, the base the same.
+// D232); a shed whose roof is built by hand, a cube at a time cut to slopes, over half of
+// it, a storey added over its other half and "add a roof" laying a hip over that (D226,
+// D241); and the game saved and loaded again, the base the same.
 //
 // One running game, driven live over the remote protocol (tools/sandbox, the `build.*`
 // methods in crates/terra_game/src/build/remote.rs). Screenshots of the plan, the cabin
@@ -34,9 +37,9 @@ class Done extends Error {}
 let failed = false;
 
 type Part = { id: number; kind: string; cubes: number; shaped: number; built: number; started: number; openings: number; done: boolean; min: number[]; max: number[] };
-type Roof = { id: number; lowest: number; highest: number; covered: boolean };
+type Roof = { cubes: number; built: number; stages: number[]; shapes: Record<string, number> };
 type Fitted = { kind: string; min: number[]; max: number[]; open: boolean; at: number[] };
-type Base = { origin: number[]; cubes: number; planned: number; openings: number; floating: number; room_tiles: number; parts: Part[]; roofs: Roof[]; props: Fitted[]; offcuts: string; since: number; player: number[] | null };
+type Base = { origin: number[]; cubes: number; planned: number; openings: number; floating: number; room_tiles: number; parts: Part[]; roofs: Roof; props: Fitted[]; offcuts: string; since: number; player: number[] | null };
 type Answer = { done: boolean; what: string; took?: string; gave?: string; refused?: string; cubes?: number[][] };
 
 const base = async () => (await game.call("build.state")) as Base;
@@ -100,6 +103,10 @@ const POSTS = [
 const DECK_MIN = [17, 1, 5];
 const DECK_MAX = [22, 1, 10];
 const FLIGHT_FOOT = [18, 0, 17];
+/// A shed west of the stone wall, in tiles, and where the storey over its east half starts.
+const SHED_MIN = [-24, 0, 12];
+const SHED_MAX = [-15, 0, 17];
+const STOREY_X = -19;
 const groundAround = async () => (await game.call("build.ground", { columns: AROUND })) as number[];
 let groundBefore: number[] = [];
 
@@ -138,28 +145,35 @@ async function build() {
     check(door.done, `the doorway was refused: ${door.refused}`);
     const window = await act("build.opening", { tiles: WINDOW, door: false });
     check(window.done, `the window was refused: ${window.refused}`);
-    const roof = await act("build.lay", { what: "roof", min: MIN, max: MAX, kind: "logs", style: "Gable", pitch: 0.6 });
+    // "Add a roof" over the room aimed into, in the roof its log walls take: shakes.
+    const inside = [MIN[0] + 4, 0, MIN[2] + 3];
+    const roof = await act("build.lay", { what: "roof", over: inside, kind: "logs", style: "Gable" });
     check(roof.done, `the roof's plan was refused: ${roof.refused}`);
     const now = await base();
-    // A footing, a floor, four walls and a roof; the flat roof the room shortcut laid gave
-    // way. The footing comes first, in stone, under every column of the walls; the floor
-    // inside them.
-    check(now.parts.length === 6, `${now.parts.length} parts, not 6`);
+    // A footing, a floor, four walls, the gable ends and the roof's cubes; the flat roof the
+    // room shortcut laid gave way. The footing comes first, in stone, under every column of
+    // the walls; the floor inside them.
+    check(now.parts.length === 8, `${now.parts.length} parts, not 8`);
     const [footing, floor] = now.parts;
     check(footing.kind === "stone" && footing.cubes >= 32, `the first part is ${footing.cubes} cubes of ${footing.kind}, not a stone footing under 32 columns`);
     check(floor.kind === "stone" && floor.cubes === 48, `the floor is ${floor.cubes} cubes of ${floor.kind}, not 48 of stone`);
     check(now.parts.every((part) => part.built === 0 && part.started === 0), "something of the plan is in");
     check(now.openings === 12, `${now.openings} open cubes, not a doorway of 8 and a window of 4`);
     check(now.room_tiles === 0, "a plan closes a room in");
-    check(now.roofs.length === 1 && now.roofs[0].highest === 0, "the roof is not planned");
+    const shakes = now.parts.find((part) => part.kind === "shakes");
+    const gables = now.parts.filter((part) => part.kind === "logs" && part.min[1] >= 6);
+    check(shakes?.cubes === 80 && now.roofs.cubes === 80 && now.roofs.built === 0, `the roof is ${JSON.stringify(now.roofs)}, not 80 cubes of shakes planned`);
+    check(shakes!.shaped === 80 && now.roofs.shapes["Slope"] === 80, `the roof's cubes are ${JSON.stringify(now.roofs.shapes)}, not 80 slopes`);
+    check(gables.length === 1 && gables[0].cubes === 24, `the gable ends are ${JSON.stringify(gables)}, not 24 cubes of logs`);
     check(!room.took && !roof.took, "laying a plan took something");
     await picture("plan");
     return `${now.planned} cubes planned in ${now.parts.length} parts, a footing of ${footing.cubes} cubes reaching ${footing.min[1]} down, a doorway, a window and a roof, for nothing`;
   });
 
   // What the cabin takes, by the kits: a stone floor of 80 cubes at a quarter of a Stone;
-  // log walls of 192 cubes less 12 open, each in two courses of a sixteenth of a Wood; a
-  // roof of 80 cells in three stages at a thirty-second of a Wood: 20 Stone and 30 Wood.
+  // log walls of 192 cubes less 12 open, and gable ends of 24, each in two courses of a
+  // sixteenth of a Wood; a roof of 80 cubes of shakes in four stages at a thirty-second of
+  // a Wood: 20 Stone and 35 and a half Wood.
   // A pack holds about twenty raw things, so they are brought as they are needed.
   const RAW = ["Wood", "Stone", "Fibre"];
   const emptyPack = async () => {
@@ -221,9 +235,9 @@ async function build() {
     const walls = now.parts.filter((part) => part.kind === "logs");
     check(walls.every((wall) => wall.built > 0), "a wall has nothing in it");
     check(now.floating === 0, `${now.floating} cubes float`);
-    // The roof can't go on half-built walls: every cube under its eaves holds it.
-    const early = await act("build.op", { ops: [{ RoofStage: { roof: now.roofs[0].id, cells: [[MIN[0] + 1, MIN[2] + 1]], up: true } }] });
-    check(early.done === false, "a roof went on before the walls under it were up");
+    // The roof can't go on half-built walls: its cubes rest on them, and climb from those.
+    const early = await act("build.op", { ops: [{ Fill: { cubes: [[MIN[0] + 2, 7, MIN[2] + 1]] } }] });
+    check(early.done === false, "a roof's cube went in before the walls under it were up");
     await picture("going-up");
     return `${done.length} courses in; walls ${walls.map((wall) => `${wall.built}/${wall.cubes - wall.openings}`).join(", ")}; the roof too early: "${early.refused}"`;
   });
@@ -239,10 +253,11 @@ async function build() {
     check(!refused, `refused: ${refused?.refused} (${refused?.what})`);
     const now = await base();
     check(now.parts.every((part) => part.done), `not all built: ${JSON.stringify(now.parts)}`);
-    check(now.roofs.every((roof) => roof.covered), "the roof is not covered");
+    check(now.roofs.built === 80 && now.roofs.stages[4] === 80, `the roof is ${JSON.stringify(now.roofs)}, not 80 cubes with their trims on`);
     check(now.room_tiles > 0, "the finished cabin closes no room in");
+    check(now.floating === 0, `${now.floating} cubes float`);
     const wood = 40 - (await carried("Wood"));
-    check(wood === 30 && !now.offcuts.includes("Wood"), `took ${wood} Wood, offcuts ${now.offcuts}, not 30 and none of Wood`);
+    check(wood === 36 && now.offcuts.includes("1/2 Wood"), `took ${wood} Wood, offcuts ${now.offcuts}, not 36 and half a Wood over`);
     return `${first.length + done.length} more steps, one refused: "${short!.refused}"; ${now.room_tiles} tiles indoors; the walls and roof took exactly ${wood} Wood`;
   });
 
@@ -427,6 +442,73 @@ async function build() {
     await game.call("sandbox.release");
     await emptyPack();
     return `a wall laid in stone, its middle changed to logs in ${steps.length} steps (${steps.map((each) => each.what).join("; ")}), offcuts ${now.offcuts}; a stone outer corner on its end`;
+  });
+
+  await step("by-hand", async () => {
+    // A shed of logs on a stone floor, five metres by three, west of the stone wall; over
+    // its west half a gable of shakes built by hand, a cube at a time cut to slopes, its
+    // west end a gable of logs, its east end against the storey added over the shed's east
+    // half; and "add a roof" laying a hip of shakes over that storey.
+    const near = await point([-7.5, 0, 9.8]);
+    await game.warp(eastSouth(near.from_start), eastSouth((await point([-7.5, 0, 7.5])).from_start));
+    const before = (await base()).parts.length;
+    const shed = await act("build.lay", { what: "room", min: SHED_MIN, max: SHED_MAX, kind: "logs", floor: "stone" });
+    check(shed.done, `the shed's plan was refused: ${shed.refused}`);
+    const storey = await act("build.lay", { what: "room", min: [STOREY_X, 1, SHED_MIN[2]], max: [SHED_MAX[0], 1, SHED_MAX[2]], kind: "logs" });
+    check(storey.done, `the storey's plan was refused: ${storey.refused}`);
+    // By hand: rows of slopes climbing from the eaves either side to the ridge, a block at
+    // a time in shakes, and the west gable's cubes in logs under them.
+    const rows = SHED_MAX[2] - SHED_MIN[2] + 1;
+    let blocks = 0;
+    for (let x = SHED_MIN[0]; x < STOREY_X; x++) {
+      for (let row = 0; row < rows; row++) {
+        const up = Math.min(row, rows - 1 - row);
+        const facing = row < rows / 2 ? "South" : "North";
+        const at = [x, 6 + up, SHED_MIN[2] + row];
+        const block = await act("build.lay", { what: "block", min: at, max: at, kind: "shakes", shape: { Slope: facing } });
+        check(block.done, `the roof's cube at ${at} was refused: ${block.refused}`);
+        blocks++;
+        if (x === SHED_MIN[0]) {
+          for (let y = 6; y < 6 + up; y++) {
+            const gable = await act("build.lay", { what: "block", min: [x, y, at[2]], max: [x, y, at[2]], kind: "logs", shape: "Whole" });
+            check(gable.done, `the gable's cube was refused: ${gable.refused}`);
+          }
+        }
+      }
+    }
+    const byHand = await base();
+    check(byHand.roofs.cubes === 80 + blocks && byHand.roofs.built === 80, `the roof's cubes are ${JSON.stringify(byHand.roofs)}`);
+    // "Add a roof" over the storey, aimed into it.
+    const hip = await act("build.lay", { what: "roof", over: [STOREY_X + 2, 1, SHED_MIN[2] + 2], kind: "logs", style: "Hip" });
+    check(hip.done, `the storey's roof was refused: ${hip.refused}`);
+    const laid = (await base()).parts.slice(before);
+    const upper = (STOREY_X <= SHED_MAX[0] ? SHED_MAX[0] - STOREY_X + 1 : 0) * rows;
+    check((await base()).roofs.cubes === 80 + blocks + upper, `${(await base()).roofs.cubes} roof cubes, not ${80 + blocks + upper}`);
+    // Built: walls, the storey on them, the roof by hand and the hip, in their order.
+    await emptyPack();
+    await game.give("wood:16", "stone:8");
+    let steps = 0;
+    for (let round = 0; round < 12; round++) {
+      const done = await acts("build.fill", { steps: 400 });
+      steps += done.filter((each) => each.done).length;
+      const refused = done.find((each) => !each.done);
+      if (!refused) break;
+      check(refused.refused?.startsWith("You need") === true, `refused: ${refused.refused} (${refused.what})`);
+      await emptyPack();
+      await game.give("wood:16", "stone:8");
+    }
+    const now = await base();
+    check(now.parts.every((part) => part.done), `not all built: ${JSON.stringify(now.parts.filter((part) => !part.done))}`);
+    check(now.floating === 0, `${now.floating} cubes float`);
+    check(now.roofs.built === now.roofs.cubes, `the roofs are ${JSON.stringify(now.roofs)}`);
+    await emptyPack();
+    const target = await point([-7.5, 2.5, 7.5]);
+    const eye = await point([-1.5, 6.0, 14.5]);
+    await game.call("sandbox.look", { at: target.world, from: eye.world });
+    await game.waitSeconds(2);
+    await game.shot("shots/cabin-roofs.png");
+    await game.call("sandbox.release");
+    return `${laid.length} parts: a shed, a storey over its east half, ${blocks} roof cubes laid by hand over its west half and a hip of ${upper} added over the storey, built in ${steps} steps; ${now.roofs.cubes} roof cubes in all, ${JSON.stringify(now.roofs.shapes)}`;
   });
 
   await step("reload", async () => {

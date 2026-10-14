@@ -7,10 +7,10 @@
 //! outside stair, a shed, a deck on posts, a length of low wall), built in a scheme of the
 //! kits' kinds (all logs; all stone; hewn timber; logs on a stone plinth a metre high; a
 //! stone ground floor with timber over it; log walls with stone gable ends; cob; wattle and daub;
-//! a stone ground floor under wattle and daub), under a roof
-//! (a gable, a hip or a lean-to), at a size, with its windows where its seed puts them, a
-//! pitch and a lean of its own. Eight plans, nine schemes, three roofs and three widths,
-//! less what does not go together, is about three hundred buildings a player can tell apart
+//! a stone ground floor under wattle and daub), under a roof of cubes (a gable, a hip or a
+//! lean-to, D241) of the roof kind its walls take, at a size, with its windows where its
+//! seed puts them, and a lean of its own. Eight plans, nine schemes, three roofs and three
+//! widths, less what does not go together, is about three hundred buildings a player can tell apart
 //! ([`variants`]); a village picks a dozen or so, each scheme and plan at least once.
 //!
 //! **How it is laid out.** As a street village: a street running east and west through
@@ -23,11 +23,12 @@
 //! south (+Z), so the game turns and stands it where it goes.
 
 use crate::layout::{hash, unit};
-use crate::{
-    BuildOp, Cube, Facing, Fill, Kind, Panel, RoofSection, RoofStyle, STOREY_CUBES, Shape,
-};
+use crate::roofer::{self, Rectangle, Style};
+use crate::{Base, BuildOp, Cube, Facing, Fill, Kind, Panel, STOREY_CUBES, Shape};
+use glam::Vec2;
+use std::collections::BTreeSet;
 
-/// The kinds a village is built of: its kits'.
+/// The kinds a village is built of: its kits', and the roofs over each kind of wall.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Kinds {
     pub logs: Kind,
@@ -36,6 +37,10 @@ pub struct Kinds {
     /// Cob earth, and wattle and daub in a timber frame (D227, D236).
     pub earth: Kind,
     pub wattle: Kind,
+    /// Shakes over logs, slate over stone, thatch over hewn timber.
+    pub shakes: Kind,
+    pub slate: Kind,
+    pub thatch: Kind,
 }
 
 /// One of a village's buildings: what it is, where it stands and which way it looks, and
@@ -159,14 +164,19 @@ impl Draft {
         });
     }
 
-    fn roof(&mut self, min: [i32; 3], max: [i32; 3], style: RoofStyle, along_x: bool, pitch: f32) {
-        self.ops.push(BuildOp::AddRoof(RoofSection {
-            min,
-            max,
-            style,
-            along_x,
-            pitch,
-        }));
+    /// A roof of cubes over a footprint on a storey, in a kind, its height over each point
+    /// `height` gives (`roofer`), in the place of the flat roof the rooms laid there, the
+    /// walls under its gable ends carried up to it in their own kind.
+    fn roof(
+        &mut self,
+        footprint: &BTreeSet<[i32; 2]>,
+        storey: i32,
+        kind: Kind,
+        height: &dyn Fn(Vec2) -> f32,
+    ) {
+        let walls = Base::from_shortcuts(&self.ops);
+        let ops = roofer::put_up(&walls, footprint, storey, kind, height);
+        self.ops.extend(ops);
     }
 
     /// The doorway in the front wall, a metre wide, at the origin.
@@ -215,6 +225,10 @@ impl Block {
 
     fn wide(&self) -> i32 {
         self.x1 - self.x0 + 1
+    }
+
+    fn columns(&self) -> impl Iterator<Item = [i32; 2]> + '_ {
+        (self.x0..=self.x1).flat_map(move |x| (self.z0..=self.z1).map(move |z| [x, z]))
     }
 
     fn deep(&self) -> i32 {
@@ -312,57 +326,59 @@ fn house(draft: &mut Draft, blocks: &[Block], scheme: Scheme, kinds: Kinds) {
     }
 }
 
-/// A roof over a house's blocks, as a builder would choose for its plan: a rectangle under
-/// a gable, a hip or a lean-to; an L, a T or a U under gables or hips over each block, a
-/// wing's ridge dying into the main block's, so no wing stands up as a tall gable.
-fn roof(draft: &mut Draft, blocks: &[Block], roof: Roof, storey: i32) {
-    let pitch = 0.62 + 0.14 * draft.roll(3);
+/// The roof kind over a scheme's walls: shakes over logs, slate over stone, thatch over
+/// hewn timber, cob and wattle and daub; over stone under timber, the timber's.
+fn roof_kind(scheme: Scheme, kinds: Kinds) -> Kind {
+    match scheme {
+        Scheme::Logs | Scheme::LogsOnPlinth | Scheme::StoneEnds => kinds.shakes,
+        Scheme::Stone => kinds.slate,
+        Scheme::Hewn
+        | Scheme::StoneUnderTimber
+        | Scheme::Earth
+        | Scheme::Wattle
+        | Scheme::StoneUnderWattle => kinds.thatch,
+    }
+}
+
+/// A roof of cubes over a house's blocks (D241), as a builder would choose for its plan: a
+/// rectangle under a gable, a hip or a lean-to; an L, a T or a U under gables over each
+/// block, a wing's ridge dying into the main block's so no wing stands up as a tall
+/// gable, or hipped all round.
+fn roof(draft: &mut Draft, blocks: &[Block], roof: Roof, storey: i32, kind: Kind) {
     let main = blocks[0];
+    let footprint: BTreeSet<[i32; 2]> = blocks.iter().flat_map(Block::columns).collect();
+    let rectangle = |x0: i32, x1: i32, z0: i32, z1: i32| Rectangle {
+        min: [x0, z0],
+        max: [x1, z1],
+    };
     match roof {
-        Roof::LeanTo => draft.roof(
-            main.min(storey),
-            main.max(storey),
-            RoofStyle::LeanTo,
-            true,
-            0.36,
-        ),
-        Roof::Gable | Roof::Hip => {
-            let style = if roof == Roof::Gable {
-                RoofStyle::Gable
-            } else {
-                RoofStyle::Hip
-            };
-            draft.roof(main.min(storey), main.max(storey), style, true, pitch);
+        Roof::LeanTo => {
+            let height = roofer::field(&footprint, Style::LeanTo, Some(true));
+            draft.roof(&footprint, storey, kind, &height);
+        }
+        Roof::Hip => {
+            let height = roofer::field(&footprint, Style::Hip, None);
+            draft.roof(&footprint, storey, kind, &height);
+        }
+        Roof::Gable => {
+            // The main block's ridge along its front; each wing's across it, reaching in to
+            // the main ridge.
             let middle = (main.z0 + main.z1 + 1) / 2;
+            let mut parts = vec![(
+                rectangle(main.x0, main.x1, main.z0, main.z1),
+                Style::Gable,
+                true,
+            )];
             for wing in &blocks[1..] {
-                // A gable wing reaches in to the main block's ridge, a hip wing across it.
                 let (z0, z1) = if wing.z0 >= main.z0 {
-                    (
-                        if style == RoofStyle::Gable {
-                            middle
-                        } else {
-                            main.z0
-                        },
-                        wing.z1,
-                    )
+                    (middle, wing.z1)
                 } else {
-                    (
-                        wing.z0,
-                        if style == RoofStyle::Gable {
-                            middle - 1
-                        } else {
-                            main.z1
-                        },
-                    )
+                    (wing.z0, middle - 1)
                 };
-                draft.roof(
-                    [wing.x0, storey, z0],
-                    [wing.x1, storey, z1],
-                    style,
-                    false,
-                    pitch,
-                );
+                parts.push((rectangle(wing.x0, wing.x1, z0, z1), Style::Gable, false));
             }
+            let (_, height) = roofer::sections(&parts);
+            draft.roof(&footprint, storey, kind, &height);
         }
     }
 }
@@ -426,7 +442,7 @@ fn one_storey(
         _ => vec![main],
     };
     house(&mut draft, &blocks, scheme, kinds);
-    roof(&mut draft, &blocks, roofed, 0);
+    roof(&mut draft, &blocks, roofed, 0, roof_kind(scheme, kinds));
     draft.ops
 }
 
@@ -484,7 +500,7 @@ fn two_storeys(seed: u32, scheme: Scheme, roofed: Roof, kinds: Kinds) -> Vec<Bui
         draft.wall([main.x1, 1, z], Panel::Door, high);
     }
     let _ = low;
-    roof(&mut draft, &[main], roofed, 1);
+    roof(&mut draft, &[main], roofed, 1, roof_kind(scheme, kinds));
     draft.ops
 }
 
@@ -502,7 +518,7 @@ fn shed(seed: u32, kinds: Kinds) -> Vec<BuildOp> {
     for x in -2..=1 {
         draft.wall([x, 0, -1], Panel::Door, kinds.logs);
     }
-    roof(&mut draft, &[block], Roof::LeanTo, 0);
+    roof(&mut draft, &[block], Roof::LeanTo, 0, kinds.shakes);
     draft.ops
 }
 
@@ -770,7 +786,26 @@ mod tests {
         hewn: Kind(3),
         earth: Kind(4),
         wattle: Kind(5),
+        shakes: Kind(0x800),
+        slate: Kind(0x801),
+        thatch: Kind(0x802),
     };
+
+    #[test]
+    fn every_building_is_roofed_in_cubes_that_hold() {
+        for building in village(7, KINDS) {
+            let base = Base::from_shortcuts(&building.ops);
+            let roofed = base.cubes().filter(|(_, c)| c.kind.is_roof()).count();
+            let wants = !matches!(building.plan, Plan::Wall | Plan::Deck);
+            assert_eq!(roofed > 0, wants, "{}", building.name);
+            assert!(
+                base.floating().is_empty(),
+                "{}: {:?}",
+                building.name,
+                base.floating()
+            );
+        }
+    }
 
     /// A building's cubes' columns where they stand in the village, in metres east and
     /// south, a cube's middle each.

@@ -534,25 +534,41 @@ impl Build {
     }
 
     /// Starts the base again from a snapshot and the operations since, as when a saved
-    /// game is loaded. Operations that no longer apply are left out, and said.
-    pub(super) fn restore(&mut self, snapshot: &Snapshot, since: &[Op], rules: &Rules) {
-        match Base::from_snapshot(snapshot) {
-            Ok(base) => self.base = base,
+    /// game is loaded. Operations that no longer apply are left out, and said; roofs from
+    /// before roofs were cubes are laid as roof cubes in the roof `roof_for` gives their
+    /// walls' kind (D241), and folded into a snapshot at once.
+    pub(super) fn restore(
+        &mut self,
+        snapshot: &Snapshot,
+        since: &[terra_build::save::Change],
+        rules: &Rules,
+        roof_for: &dyn Fn(Kind) -> Kind,
+    ) {
+        let cx = Context::free(rules);
+        let old_roofs = !snapshot.roofs.is_empty()
+            || since
+                .iter()
+                .any(|change| matches!(change, terra_build::save::Change::Roof(_)));
+        match terra_build::save::restore(snapshot, since, &cx, roof_for) {
+            Ok((base, applied, left_out)) => {
+                self.base = base;
+                self.snapshot = Some(snapshot.clone());
+                self.since = applied;
+                for why in left_out {
+                    warn!("A saved change to the base no longer applies: {why}");
+                }
+            }
             Err(problem) => {
                 warn!("The saved base could not be read: {problem:?}");
                 self.base = Base::default();
+                self.snapshot = Some(snapshot.clone());
+                self.since.clear();
             }
         }
         self.sections.everything = true;
         self.operations.clear();
-        self.snapshot = Some(snapshot.clone());
-        self.since.clear();
-        let cx = Context::free(rules);
-        for op in since {
-            match self.base.act(op, &cx) {
-                Ok(_) => self.since.push(op.clone()),
-                Err(why) => warn!("A saved change to the base no longer applies: {why:?}"),
-            }
+        if old_roofs {
+            self.fold();
         }
         self.revision += 1;
     }
@@ -633,7 +649,7 @@ fn floor_footing(base: &Base, kits: &Kits) -> Option<Kind> {
 }
 
 /// The kinds a village is built of (`terra_build::village`): the log kit's, the stone
-/// kit's and the hewn timber kit's.
+/// kit's and the hewn timber kit's, and the roof each takes.
 pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Kinds> {
     let find = |pattern: Pattern, profile: terra_build::kit::Profile| {
         kits.0
@@ -655,12 +671,16 @@ pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Kinds> 
             .find(|(_, n)| n.as_str() == name)
             .map(|(k, _)| *k)
     };
+    let logs = find(Pattern::Logs, Profile::Round)?;
     Some(terra_build::village::Kinds {
-        logs: find(Pattern::Logs, Profile::Round)?,
+        logs,
         stone,
         hewn,
         earth: named("earth").unwrap_or(stone),
         wattle: named("wattle").unwrap_or(hewn),
+        shakes: kits.roof_for(logs)?,
+        slate: kits.roof_for(stone)?,
+        thatch: kits.roof_for(hewn)?,
     })
 }
 

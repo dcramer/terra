@@ -1,0 +1,41 @@
+// A thatched roof of reed on round poles (docs/building-kits.md, D241), a thick coat with
+// a rolled ridge: a roof kind, as shakes.ron says what each number is. The roof over hewn
+// timber walls unless another is in hand.
+(
+    id: 2050,
+    pattern: Roof,
+    eaves: 0.5,
+    timber: (
+        profile: Round,
+        notch: Flush,
+        relief: 0.0,
+        tint: (1.0, 0.86, 0.7),
+        end_tint: (0.9, 0.8, 0.7),
+    ),
+    roof: (
+        rows: 4.0,
+        phase: 0.0,
+        butt: 0.05,
+        thick: 0.22,
+        uneven: 0.45,
+        tint: (1.0, 0.92, 0.8),
+        rafter: (Round, 0.12),
+        batten: (0.05, 0.03),
+        board: (0.2, 0.04),
+        board_tint: (1.4, 1.34, 1.24),
+        ridge: Roll,
+        cap: 0.3,
+        fillet: 0.12,
+    ),
+    textures: {
+        Log: (path: "materials/rough_wood", metres: (0.6, 0.6)),
+        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
+        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
+        Covering: (path: "materials/riet_01", metres: (2.5, 2.5)),
+        Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
+    },
+    cost: (steps: 4, step: [("Fibre", 1, 32)]),
+    dress: (
+        masks: (weather: 0.25, moss: 0.5, moss_tint: (0.66, 0.7, 0.46)),
+    ),
+)

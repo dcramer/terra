@@ -1,12 +1,13 @@
 //! What holds what (construction-001, rule 11; D193, D194): every cube with anything in
-//! it is joined, face to face through others with anything in them, to the ground; a
-//! roof stands on built cubes under each of its eaves; a prop is fitted into a hole of
+//! it is joined, face to face through others with anything in them, to the ground; or
+//! along a ramp, where one cube's sloping top runs on from another's edge a cube lower
+//! and over, as a roof's slopes climb a cube a cube (D241); a prop is fitted into a hole of
 //! built cubes. Nothing is taken out while anything rests on it or is attached to it.
 //!
 //! This is not load or span (D142): a tower on one post is allowed, a house in the air is
 //! not.
 
-use crate::{Base, Prop, Roof, RoofId, RoofStyle, STOREY_CUBES, wall_layer};
+use crate::{Base, Prop, Shape};
 use glam::IVec3;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -20,13 +21,55 @@ pub const FACES: [IVec3; 6] = [
     IVec3::NEG_Z,
 ];
 
+/// The eight ways along the floor, square on and corner to corner, a ramp may run.
+const LEVEL_WAYS: [[i32; 2]; 8] = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+];
+
+/// Whether a cube's sloping top runs on from the edge of the one a cube lower and `way`
+/// over from it, so the two are joined though no face of theirs is shared (D241): the lower
+/// full height along the edge or corner they meet at, the upper cut to a plane that starts
+/// there from nothing, as each slope of a roof climbs from the one below it.
+pub fn ramp(lower: Shape, upper: Shape, way: [i32; 2]) -> bool {
+    if !upper.planed_top() {
+        return false;
+    }
+    // Points along where they meet, in each one's own fractions of its footprint.
+    let points: Vec<([f32; 2], [f32; 2])> = match way {
+        [dx, 0] => [0.0, 0.5, 1.0]
+            .map(|v| {
+                let (a, b) = if dx > 0 { (1.0, 0.0) } else { (0.0, 1.0) };
+                ([a, v], [b, v])
+            })
+            .to_vec(),
+        [0, dz] => [0.0, 0.5, 1.0]
+            .map(|u| {
+                let (a, b) = if dz > 0 { (1.0, 0.0) } else { (0.0, 1.0) };
+                ([u, a], [u, b])
+            })
+            .to_vec(),
+        [dx, dz] => {
+            let a = [f32::from(dx > 0), f32::from(dz > 0)];
+            vec![(a, [1.0 - a[0], 1.0 - a[1]])]
+        }
+    };
+    points
+        .iter()
+        .all(|(low, high)| lower.top(low[0], low[1]) > 0.999 && upper.top(high[0], high[1]) < 0.001)
+}
+
 /// Something resting on a cube or attached to it, which keeps it from being taken.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Holder {
     /// A cube resting on it, or joined to the ground only through it.
     Cube(IVec3),
-    /// A roof standing on it.
-    Roof(RoofId),
     /// A prop fitted against it, by its lowest cube.
     Prop(IVec3),
     /// An item standing on it or hanging from it.
@@ -48,6 +91,32 @@ impl Base {
     /// Whether the ground reaches a cube.
     pub fn grounded(&self, at: IVec3) -> bool {
         self.ground.reaches(at)
+    }
+
+    /// The places a cube is joined through, whatever is in them: its six faces, and a cube
+    /// a layer up or down and over whose top runs on from its own along a ramp ([`ramp`]).
+    pub fn joins(&self, at: IVec3) -> Vec<IVec3> {
+        let mut out: Vec<IVec3> = FACES.iter().map(|&step| at + step).collect();
+        let Some(here) = self.cube(at) else {
+            return out;
+        };
+        for way in LEVEL_WAYS {
+            let over = IVec3::new(way[0], 0, way[1]);
+            for (other, lower, upper) in [
+                (at + over + IVec3::Y, Some(here.shape), None),
+                (at - over - IVec3::Y, None, Some(here.shape)),
+            ] {
+                let Some(there) = self.cube(other) else {
+                    continue;
+                };
+                let (lower, upper) = (lower.unwrap_or(there.shape), upper.unwrap_or(there.shape));
+                // Either way round, the upper is `way` over from the lower.
+                if ramp(lower, upper, way) {
+                    out.push(other);
+                }
+            }
+        }
+        out
     }
 
     /// Every cube with something in it that is not joined to the ground, sorted: none,
@@ -72,10 +141,9 @@ impl Base {
             .collect();
         reached.extend(frontier.iter().map(|at| at.to_array()));
         while let Some(at) = frontier.pop() {
-            for step in FACES {
-                let next = (at + step).to_array();
-                if ins.contains(&next) && reached.insert(next) {
-                    frontier.push(at + step);
+            for next in self.joins(at) {
+                if ins.contains(&next.to_array()) && reached.insert(next.to_array()) {
+                    frontier.push(next);
                 }
             }
         }
@@ -92,8 +160,7 @@ impl Base {
         let mut joined: BTreeSet<[i32; 3]> = BTreeSet::new();
         let mut lost: BTreeSet<[i32; 3]> = BTreeSet::new();
         for &at in gone {
-            for step in FACES {
-                let start = IVec3::from_array(at) + step;
+            for start in self.joins(IVec3::from_array(at)) {
                 let key = start.to_array();
                 if !stays(start) || joined.contains(&key) || lost.contains(&key) {
                     continue;
@@ -106,8 +173,7 @@ impl Base {
                         found = true;
                         break;
                     }
-                    for step in FACES {
-                        let next = here + step;
+                    for next in self.joins(here) {
                         if stays(next) && seen.insert(next.to_array()) {
                             frontier.push(next);
                         }
@@ -121,40 +187,6 @@ impl Base {
             }
         }
         lost.into_iter().map(IVec3::from_array).collect()
-    }
-
-    /// The rows of cubes a roof's eaves rest on, at the top of its storey's walls: all
-    /// four sides of a hip, the two long sides of a gable or a lean-to.
-    pub fn eaves(&self, roof: &Roof) -> Vec<Vec<IVec3>> {
-        let section = &roof.section;
-        let top = wall_layer(section.storey()) + STOREY_CUBES - 1;
-        let (low, high) = (section.min, section.max);
-        let along_x = |z: i32| {
-            (low[0]..=high[0])
-                .map(move |x| IVec3::new(x, top, z))
-                .collect()
-        };
-        let along_z = |x: i32| {
-            (low[2]..=high[2])
-                .map(move |z| IVec3::new(x, top, z))
-                .collect()
-        };
-        match (section.style, section.along_x) {
-            (RoofStyle::Hip, _) => vec![
-                along_x(low[2]),
-                along_x(high[2]),
-                along_z(low[0]),
-                along_z(high[0]),
-            ],
-            (_, true) => vec![along_x(low[2]), along_x(high[2])],
-            (_, false) => vec![along_z(low[0]), along_z(high[0])],
-        }
-    }
-
-    /// Whether a roof is held: every cube along its eaves built, so the walls under it
-    /// are up before any of it goes on.
-    pub fn roof_held(&self, roof: &Roof) -> bool {
-        self.eaves(roof).iter().flatten().all(|&at| self.bears(at))
     }
 
     /// The cubes a prop's hole is made of, if it fits one: built cubes across its top,
@@ -201,16 +233,11 @@ impl Base {
     }
 
     /// What rests on a cube or is attached to it, other than items, sorted: the cube over
-    /// it if anything is in that, roofs standing on it, props fitted against it.
+    /// it if anything is in that, props fitted against it.
     pub fn resting_on(&self, at: IVec3) -> Vec<Holder> {
         let mut found = Vec::new();
         if self.is_in(at + IVec3::Y) {
             found.push(Holder::Cube(at + IVec3::Y));
-        }
-        for (id, roof) in self.roofs() {
-            if roof.standing() && self.eaves(roof).iter().flatten().any(|&eave| eave == at) {
-                found.push(Holder::Roof(id));
-            }
         }
         for prop in self.props() {
             if self
@@ -227,14 +254,6 @@ impl Base {
     /// over it; for checking the rules held.
     pub fn attachments(&self) -> BTreeMap<[i32; 3], Vec<Holder>> {
         let mut found: BTreeMap<[i32; 3], Vec<Holder>> = BTreeMap::new();
-        for (id, roof) in self.roofs().filter(|(_, roof)| roof.standing()) {
-            for at in self.eaves(roof).into_iter().flatten() {
-                found
-                    .entry(at.to_array())
-                    .or_default()
-                    .push(Holder::Roof(id));
-            }
-        }
         for prop in self.props() {
             for at in self.hole_for(prop).unwrap_or_default() {
                 let holder = Holder::Prop(IVec3::from_array(prop.min));
@@ -279,5 +298,49 @@ mod tests {
         // and the first still on the ground.
         let gone = BTreeSet::from([[2, 5, 0]]);
         assert_eq!(base.unjoined_without(&gone).len(), 4);
+    }
+
+    #[test]
+    fn slopes_climbing_a_cube_a_cube_are_joined_along_their_ramp() {
+        use crate::{Facing, Shape};
+        let put = |base: &mut Base, at: [i32; 3], shape: Shape| {
+            base.apply(BuildOp::Fill {
+                min: at,
+                max: at,
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        };
+        // A wall two high, and a roof's slopes climbing south from its top, a cube a cube,
+        // touching only along their edges.
+        let mut base = Base::default();
+        post(&mut base, 0, 0, 1);
+        for step in 0..3 {
+            put(&mut base, [0, 2 + step, step], Shape::Slope(Facing::South));
+        }
+        assert!(base.floating().is_empty(), "{:?}", base.floating());
+        // Without the lowest, the rest hang from nothing.
+        let gone = BTreeSet::from([[0, 2, 0]]);
+        assert_eq!(base.unjoined_without(&gone).len(), 2);
+        // Slopes rising the other way meet at their low edges, which is no joint: whole
+        // cubes climbing are not joined either.
+        let mut wrong = Base::default();
+        post(&mut wrong, 0, 0, 1);
+        put(&mut wrong, [0, 2, 0], Shape::Slope(Facing::South));
+        put(&mut wrong, [0, 3, 1], Shape::Slope(Facing::North));
+        assert_eq!(wrong.floating(), vec![IVec3::new(0, 3, 1)]);
+        let mut whole = Base::default();
+        post(&mut whole, 0, 0, 1);
+        put(&mut whole, [0, 2, 1], Shape::Whole);
+        assert_eq!(whole.floating().len(), 1);
+        // A hip's outer corner climbs corner to corner from the one below it.
+        assert!(ramp(
+            Shape::OuterCorner(Facing::East),
+            Shape::OuterCorner(Facing::East),
+            [1, 1]
+        ));
+        assert!(!ramp(Shape::Whole, Shape::Whole, [1, 0]));
     }
 }

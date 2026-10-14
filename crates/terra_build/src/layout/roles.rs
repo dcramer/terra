@@ -242,12 +242,17 @@ pub struct Roles<'a> {
 impl<'a> Roles<'a> {
     /// Roles of `kind`'s cubes in a base, the kits saying how it meets the others (D232):
     /// its faces show beside a kind of long members, drawn thinner than a cube, that does
-    /// not run through it; it carries a cap under a kind it runs through, if its table says.
+    /// not run through it, and beside a roof's cubes; it carries a cap under a kind it runs
+    /// through, if its table says.
     pub fn new(base: &'a Base, kind: Kind, kits: &Kits) -> Roles<'a> {
+        // A roof's cubes are thin too: a roof over them, not a cube (D241).
         let thin = kits
             .0
             .iter()
-            .filter(|kit| kit.pattern == Pattern::Logs && !kits.through(kit.kind(), kind))
+            .filter(|kit| {
+                kit.pattern == Pattern::Roof
+                    || (kit.pattern == Pattern::Logs && !kits.through(kit.kind(), kind))
+            })
             .map(|kit| kit.kind())
             .collect();
         let capped = kits
@@ -285,17 +290,6 @@ impl<'a> Roles<'a> {
     /// those beside it, square on before diagonally, or the base's level.
     pub fn ground(&self, column: [i32; 2]) -> i32 {
         ground_ticks(self.base, column)
-    }
-
-    /// Whether a cube is the top of a storey's wall with a pitched roof over its tile.
-    fn roofed(&self, cube: IVec3) -> bool {
-        let storey = crate::storey_of(cube.y);
-        cube.y == crate::wall_layer(storey) + crate::STOREY_CUBES - 1
-            && self
-                .base
-                .sections()
-                .iter()
-                .any(|section| section.covers(IVec3::new(cube.x, storey, cube.z)))
     }
 
     /// Whether a cell is in the ground: its middle below the ground's height there.
@@ -360,14 +354,6 @@ impl<'a> Roles<'a> {
                     let role = match (vertical, hole) {
                         (Dir::Up, true) => Role::Sill,
                         (Dir::Up, false) if self.ours(cube - side.step() + IVec3::Y) => Role::Nose,
-                        // A block kind's wall top under a pitched roof is no crest: the
-                        // roof is over it, and a coping would stand up through the covering.
-                        // A timber wall keeps its plate, which carries the rafters.
-                        (Dir::Up, false)
-                            if !self.thin.contains(&self.kind) && self.roofed(cube) =>
-                        {
-                            continue;
-                        }
                         (Dir::Up, false) => Role::Crest,
                         (_, true) => Role::Head,
                         (_, false) => Role::Soffit,
@@ -616,7 +602,7 @@ mod tests {
     }
 
     #[test]
-    fn a_wall_top_under_a_pitched_roof_is_no_crest_and_one_open_to_the_sky_is() {
+    fn a_wall_top_under_a_roofs_cubes_is_no_crest_and_one_open_to_the_sky_is() {
         let mut base = Base::default();
         base.apply(BuildOp::AddRoom {
             min: [0, 0, 0],
@@ -631,14 +617,23 @@ mod tests {
             kind: STONE,
         });
         assert!(count(&all(&base), Role::Crest) > 0);
-        // Under a gable, none: a coping there would stand up through the roof.
-        base.apply(BuildOp::AddRoof(crate::RoofSection {
-            min: [0, 0, 0],
-            max: [7, 0, 5],
-            style: crate::RoofStyle::Gable,
-            along_x: true,
-            pitch: 0.7,
-        }));
+        // Under a gable of roof cubes, none: the roof is over them, and a coping there
+        // would stand up through it.
+        let footprint = (0..8).flat_map(|x| (0..6).map(move |z| [x, z])).collect();
+        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+        for (at, shape) in plan.roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        }
+        for at in plan.gables {
+            fill(&mut base, at.to_array(), at.to_array(), STONE);
+        }
         assert_eq!(count(&all(&base), Role::Crest), 0);
     }
 

@@ -1,17 +1,19 @@
 //! What laying a part means in operations (D139, D152; docs/building.md, planned then
-//! constructed): a room, a wall, a floor or a roof is laid as plans of its cubes, each its
+//! constructed): a room, a wall, a floor or a roof of cubes (D241) is laid as plans of its
+//! cubes, each its
 //! own part, where nothing is yet; on the ground, with footings under it down to the ground
 //! as a part of their own, laid first so they are built first (D194); an opening is planned
 //! cubes made open, or built cubes marked to be carved out; a door or window is fitted into
 //! an opening. The hammer and the remote both lay through these, so they lay the same. The
 //! ground under a plan is filled in by whoever acts, from the planet.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use terra_build::ground::{cube_cm, footing as footing_cubes};
 use terra_build::ops::{Op, Planned};
+use terra_build::roofer::{self, Style};
 use terra_build::{
-    Base, Facing, Fill, Kind, Panel, PartId, Pending, RoofSection, STOREY_CUBES, Shape,
-    floor_layer, storey_of, wall_layer,
+    Base, Facing, Fill, Kind, Panel, PartId, Pending, STOREY_CUBES, Shape, floor_layer, storey_of,
+    wall_layer,
 };
 
 use bevy::math::{IVec2, IVec3};
@@ -392,12 +394,24 @@ pub fn flat_roof(base: &Base, min: IVec3, max: IVec3, kind: Kind) -> Vec<Op> {
     floor(base, min + IVec3::Y, max + IVec3::Y, kind, None)
 }
 
-/// A pitched roof planned over a block of tiles, in a kind; a flat roof planned there, with
-/// nothing in it, gives way to it.
-pub fn roof(base: &Base, section: RoofSection, kind: Kind) -> Vec<Op> {
-    let top = floor_layer(section.storey() + 1);
-    let flat: Vec<[i32; 3]> = (section.min[0]..=section.max[0])
-        .flat_map(|x| (section.min[2]..=section.max[2]).map(move |z| IVec3::new(x, top, z)))
+/// "Add a roof with this material" (D226, D241): a roof of cubes in a roof kind planned over
+/// a footprint of columns on a storey, as the roofer lays it in a style (`roofer::over`),
+/// resting on the tops of the storey's walls; the walls under its gable ends carried up to
+/// it, planned in the kind of each wall's top, a part a kind, laid first as they hold it;
+/// and a flat roof planned there, with nothing in it, giving way to it. A plan like any
+/// other, built a cube a stage at a time, and changed or built over by hand.
+pub fn roof(
+    base: &Base,
+    footprint: &BTreeSet<[i32; 2]>,
+    storey: i32,
+    style: Style,
+    along_x: Option<bool>,
+    kind: Kind,
+) -> Vec<Op> {
+    let top = floor_layer(storey + 1);
+    let flat: Vec<[i32; 3]> = footprint
+        .iter()
+        .map(|&[x, z]| IVec3::new(x, top, z))
         .filter(|&at| {
             !base.in_wall(at)
                 && base
@@ -408,15 +422,88 @@ pub fn roof(base: &Base, section: RoofSection, kind: Kind) -> Vec<Op> {
         .collect();
     let mut ops = Vec::new();
     if !flat.is_empty() {
-        ops.push(Op::Unplan { cubes: flat });
+        ops.push(Op::Unplan {
+            cubes: flat.clone(),
+        });
     }
-    ops.push(Op::AddRoof {
-        roof: base.next_roof(),
-        section,
-        kind: Some(kind),
-    });
+    // What is there once the flat roof's plan has gone.
+    let gone: BTreeSet<[i32; 3]> = flat.into_iter().collect();
+    let free = |at: IVec3| base.cube(at).is_none() || gone.contains(&at.to_array());
+    let layer = wall_layer(storey) + STOREY_CUBES;
+    let plan = roofer::over(footprint, layer, style, along_x);
+    let mut parts = Numbers::of(base);
+    // The gables, by the kind of the wall's top under each.
+    let mut gables: BTreeMap<Kind, Vec<IVec3>> = BTreeMap::new();
+    for at in plan.gables {
+        let wall = (layer - STOREY_CUBES..layer)
+            .rev()
+            .find_map(|y| base.cube(IVec3::new(at.x, y, at.z)));
+        if let Some(wall) = wall.filter(|wall| !wall.kind.is_roof())
+            && free(at)
+        {
+            gables.entry(wall.kind).or_default().push(at);
+        }
+    }
+    let lay = |part: PartId, kind: Kind, cubes: Vec<(IVec3, Shape)>| {
+        let cubes: Vec<Planned> = cubes
+            .into_iter()
+            .filter(|&(at, _)| free(at) && base.prop_in(at).is_none())
+            .map(|(at, shape)| Planned {
+                at: at.to_array(),
+                shape,
+            })
+            .collect();
+        (!cubes.is_empty()).then(|| Op::LayPlan {
+            part: Some(part),
+            kind,
+            cubes,
+            ground: Vec::new(),
+        })
+    };
+    for (wall, cubes) in gables {
+        let cubes = cubes.into_iter().map(|at| (at, Shape::Whole)).collect();
+        ops.extend(lay(parts.next(), wall, cubes));
+    }
+    ops.extend(lay(parts.next(), kind, plan.roof));
     ops
 }
+
+/// The footprint a roof over an enclosed space has: every column of it on its storey from
+/// the tile aimed into, as far as the walls round it, planned or built, the walls and their
+/// corners too; none if it is not closed in within `ROOF_REACH` tiles.
+pub fn room_footprint(base: &Base, tile: IVec3) -> BTreeSet<[i32; 2]> {
+    let wall = |x: i32, z: i32| base.filling(IVec3::new(x, tile.y, z)).is_some();
+    if wall(tile.x, tile.z) {
+        return BTreeSet::new();
+    }
+    let mut inside = BTreeSet::from([[tile.x, tile.z]]);
+    let mut frontier = vec![[tile.x, tile.z]];
+    while let Some([x, z]) = frontier.pop() {
+        if (x - tile.x).abs() > ROOF_REACH || (z - tile.z).abs() > ROOF_REACH {
+            return BTreeSet::new();
+        }
+        for [dx, dz] in [[1, 0], [-1, 0], [0, 1], [0, -1]] {
+            let next = [x + dx, z + dz];
+            if !wall(next[0], next[1]) && inside.insert(next) {
+                frontier.push(next);
+            }
+        }
+    }
+    let mut footprint = inside.clone();
+    for &[x, z] in &inside {
+        for dx in -1..=1 {
+            for dz in -1..=1 {
+                if wall(x + dx, z + dz) {
+                    footprint.insert([x + dx, z + dz]);
+                }
+            }
+        }
+    }
+    footprint
+}
+
+/// How far from the tile aimed into a space may reach and still be roofed as enclosed.
+pub const ROOF_REACH: i32 = 48;
 
 /// The cubes of an opening of a panel's shape cut along a stretch of wall tiles: a door's
 /// from the floor, a window's from its sill to its head.
@@ -504,6 +591,7 @@ mod tests {
 
     const LOGS: Kind = Kind(1);
     const STONE: Kind = Kind(2);
+    const SHAKES: Kind = Kind(0x800);
 
     #[test]
     fn a_room_is_a_floor_four_walls_and_a_roof_each_its_own_part() {
@@ -712,7 +800,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pitched_roof_takes_the_place_of_a_flat_one_planned() {
+    fn a_roof_of_cubes_takes_the_place_of_a_flat_one_planned_and_gables_its_ends() {
         let rules = Rules::default();
         let cx = Context::free(&rules);
         let mut base = Base::default();
@@ -728,16 +816,25 @@ mod tests {
             &cx,
         )
         .unwrap();
-        let section = RoofSection {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            style: terra_build::RoofStyle::Gable,
-            along_x: true,
-            pitch: 0.6,
-        };
-        base.act_all(&roof(&base, section, LOGS), &cx).unwrap();
+        // Over the room aimed into: its tiles and walls, corners too.
+        let footprint = room_footprint(&base, IVec3::new(4, 0, 4));
+        assert_eq!(footprint.len(), 80);
+        let ops = roof(&base, &footprint, 0, Style::Gable, None, SHAKES);
+        base.act_all(&ops, &cx).unwrap();
         assert_eq!(base.part(PartId(5)), None, "the flat roof's plan is gone");
-        assert_eq!(base.roofs().count(), 1);
+        let roofed: Vec<_> = base.cubes().filter(|(_, c)| c.kind == SHAKES).collect();
+        assert_eq!(roofed.len(), 80);
+        assert!(
+            roofed
+                .iter()
+                .all(|(_, c)| c.level() == 0 && c.part.is_some())
+        );
+        // The gable ends of logs, a part of their own laid first.
+        let gable = base.cube(IVec3::new(0, 8, 3)).unwrap();
+        assert_eq!(gable.kind, LOGS);
+        assert!(gable.part < roofed[0].1.part);
+        // Over nothing, nothing.
+        assert!(room_footprint(&base, IVec3::new(40, 0, 40)).is_empty());
     }
 
     #[test]

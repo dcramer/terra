@@ -4,16 +4,17 @@
 //! failure names its seed and step, so it can be run again exactly.
 
 use super::*;
+use crate::Walker;
 use crate::cost::{Amount, PropKind, Terms};
 use crate::cubes::Facing;
 use crate::kit::{Kit, Pattern};
 use crate::layout::lay;
-use crate::{RoofStyle, Walker};
 use glam::Vec3;
 use terra_gen::{Rng, Seed};
 
 const LOGS: Kind = Kind(1);
 const STONE: Kind = Kind(2);
+const THATCH: Kind = Kind::FIRST_ROOF;
 const DOOR: PropKind = PropKind(1);
 
 fn rules() -> Rules {
@@ -24,8 +25,9 @@ fn rules() -> Rules {
             // A log fills a cube in two courses, and spans eight cubes.
             (LOGS, Terms::new(2, Bill::of("Log", Amount::new(1, 8)))),
             (STONE, Terms::new(1, stone)),
+            // A roof's cube in four stages: frame, battens, covering, trims.
+            (THATCH, Terms::new(4, Bill::of("Thatch", Amount::new(1, 4)))),
         ]),
-        roofs: BTreeMap::from([(LOGS, Bill::of("Thatch", Amount::new(1, 4)))]),
         props: BTreeMap::from([(DOOR, Bill::of("Door", Amount::whole(1)))]),
     }
 }
@@ -252,7 +254,7 @@ fn a_roof_goes_up_on_built_walls_and_holds_them_while_it_stands() {
     let rules = rules();
     let cx = Context::free(&rules);
     let mut base = Base::default();
-    // Two walls a storey high, north and south, under a gable running east and west.
+    // Two walls a storey high, north and south, under a gable of roof cubes.
     for (i, z) in [0, 3].into_iter().enumerate() {
         let part = PartId(i as u32);
         let cubes = (0..4)
@@ -271,30 +273,27 @@ fn a_roof_goes_up_on_built_walls_and_holds_them_while_it_stands() {
         };
         base.act(&plan, &cx).unwrap();
     }
-    let section = RoofSection {
-        min: [0, 0, 0],
-        max: [3, 0, 3],
-        style: RoofStyle::Gable,
-        along_x: true,
-        pitch: 0.7,
+    let footprint = (0..4).flat_map(|x| (0..4).map(move |z| [x, z])).collect();
+    let roof = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+    let plan = Op::LayPlan {
+        part: Some(PartId(2)),
+        kind: THATCH,
+        cubes: roof
+            .roof
+            .iter()
+            .map(|&(at, shape)| Planned {
+                at: at.to_array(),
+                shape,
+            })
+            .collect(),
+        ground: Vec::new(),
     };
-    let roof = RoofId(0);
-    base.act(
-        &Op::AddRoof {
-            roof,
-            section,
-            kind: Some(LOGS),
-        },
-        &cx,
-    )
-    .unwrap();
-    let frame = Op::RoofStage {
-        roof,
-        cells: vec![[1, 1], [2, 1]],
-        up: true,
+    base.act(&plan, &cx).unwrap();
+    let eaves = Op::Fill {
+        cubes: (0..4).flat_map(|x| [[x, 6, 0], [x, 6, 3]]).collect(),
     };
-    assert_eq!(base.act(&frame, &cx), Err(Refusal::RoofNotHeld(roof)));
-    // One end of each wall up to the eaves is not enough: the whole wall top bears it.
+    assert!(matches!(base.act(&eaves, &cx), Err(Refusal::Floats(_))));
+    // One end of each wall up is not enough for the whole eave.
     let fill = |base: &mut Base, columns: std::ops::Range<i32>| {
         for y in 0..6 {
             let course = Op::Fill {
@@ -306,22 +305,16 @@ fn a_roof_goes_up_on_built_walls_and_holds_them_while_it_stands() {
             base.act(&course, &cx).unwrap();
         }
     };
-    fill(&mut base, 0..1);
-    assert_eq!(base.act(&frame, &cx), Err(Refusal::RoofNotHeld(roof)));
-    fill(&mut base, 1..4);
-    let done = base.act(&frame, &cx).unwrap();
-    assert_eq!(done.took, Bill::of("Thatch", Amount::new(1, 2)));
+    fill(&mut base, 0..4);
+    let done = base.act(&eaves, &cx).unwrap();
+    assert_eq!(done.took, Bill::of("Thatch", Amount::whole(2)));
     // The wall top under an eave holds the roof now.
     let eave = Op::Empty {
         cubes: vec![[2, 5, 3]],
     };
     assert_eq!(
         base.act(&eave, &cx),
-        Err(Refusal::Holds(vec![Holder::Roof(roof)]))
-    );
-    assert_eq!(
-        base.act(&Op::RemoveRoof { roof }, &cx),
-        Err(Refusal::RoofUp(roof))
+        Err(Refusal::Holds(vec![Holder::Cube(IVec3::new(2, 6, 3))]))
     );
     // Down again, and the walls can come apart.
     base.act_all(&done.undo, &cx).unwrap();
@@ -809,47 +802,49 @@ fn a_cut_is_refused_where_it_would_leave_the_wall_over_it_hanging_or_a_roof_unhe
     };
     base.act(&both, &cx).unwrap();
     assert!(matches!(base.act(&both, &cx), Err(Refusal::Holds(_))));
-    // A cube with nothing over it but a roof's eaves: the roof holds it.
+    // The top of a wall under a roof's eaves: a cube of it may come out from under the
+    // roof, which its neighbours hold, but not the whole top, which would leave the roof
+    // hanging.
     let mut roofed = Base::default();
     log_wall(&mut roofed, &cx);
+    let eaves: Vec<[i32; 3]> = (0..8).map(|x| [x, 6, 0]).collect();
     roofed
         .act(
-            &Op::AddRoof {
-                roof: RoofId(0),
-                section: RoofSection {
-                    min: [0, 0, 0],
-                    max: [7, 0, 0],
-                    style: RoofStyle::LeanTo,
-                    along_x: true,
-                    pitch: 0.4,
-                },
-                kind: Some(LOGS),
+            &Op::LayPlan {
+                part: Some(PartId(9)),
+                kind: THATCH,
+                cubes: eaves
+                    .iter()
+                    .map(|&at| Planned {
+                        at,
+                        shape: Shape::Slope(Facing::South),
+                    })
+                    .collect(),
+                ground: Vec::new(),
             },
             &cx,
         )
         .unwrap();
-    roofed
-        .act(
-            &Op::RoofStage {
-                roof: RoofId(0),
-                cells: vec![[2, 0]],
-                up: true,
-            },
-            &cx,
-        )
-        .unwrap();
-    roofed
-        .act(
-            &Op::Carve {
-                cubes: vec![[2, 5, 0]],
-            },
-            &cx,
-        )
-        .unwrap();
+    roofed.act(&Op::Fill { cubes: eaves }, &cx).unwrap();
+    let top = line([0, 5, 0], IVec3::X, 8);
+    roofed.act(&Op::Carve { cubes: top.clone() }, &cx).unwrap();
+    // Its first course out, then the last would leave the roof hanging.
+    let out = Op::Empty { cubes: top };
+    roofed.act(&out, &cx).unwrap();
     assert!(matches!(
-        roofed.act(&Op::Empty { cubes: vec![[2, 5, 0]] }, &cx),
-        Err(Refusal::Holds(holders)) if holders.contains(&Holder::Roof(RoofId(0)))
+        roofed.act(&out, &cx),
+        Err(Refusal::Holds(holders)) if holders.contains(&Holder::Cube(IVec3::new(2, 6, 0)))
     ));
+    assert!(
+        roofed
+            .act(
+                &Op::Empty {
+                    cubes: vec![[2, 5, 0]]
+                },
+                &cx
+            )
+            .is_ok()
+    );
 }
 
 #[test]
@@ -1096,7 +1091,6 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
             .map(|&(at, _)| at)
             .collect()
     };
-    let roofs: Vec<RoofId> = base.roofs().map(|(id, _)| id).collect();
     let props: Vec<[i32; 3]> = base.props().map(|prop| prop.min).collect();
     let fallback = Op::Unplan {
         cubes: vec![somewhere(rng).to_array()],
@@ -1198,40 +1192,54 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
                 _ => Op::Swap { cubes },
             }
         }
-        15 => {
+        15 | 16 => {
+            // A roof's cubes as the roofer lays them over a small block, on whatever layer.
             let low = somewhere(rng);
-            let size = IVec3::new(1 + rng.below(5) as i32, 0, 1 + rng.below(4) as i32);
-            let section = RoofSection {
-                min: [low.x, 0, low.z],
-                max: [low.x + size.x, 0, low.z + size.z],
-                style: [RoofStyle::Hip, RoofStyle::Gable, RoofStyle::LeanTo][rng.below(3) as usize],
-                along_x: rng.below(2) == 0,
-                pitch: 0.7,
-            };
-            Op::AddRoof {
-                roof: base.next_roof(),
-                section,
-                kind: Some(LOGS),
+            let size = [1 + rng.below(4) as i32, 1 + rng.below(4) as i32];
+            let footprint = (0..size[0])
+                .flat_map(|x| (0..size[1]).map(move |z| [low.x + x, low.z + z]))
+                .collect();
+            let style = [
+                crate::roofer::Style::Hip,
+                crate::roofer::Style::Gable,
+                crate::roofer::Style::LeanTo,
+            ][rng.below(3) as usize];
+            let roof = crate::roofer::over(&footprint, low.y, style, None);
+            Op::LayPlan {
+                part: Some(base.next_part()),
+                kind: THATCH,
+                cubes: roof
+                    .roof
+                    .iter()
+                    .filter(|(at, _)| base.cube(*at).is_none())
+                    .map(|&(at, shape)| Planned {
+                        at: at.to_array(),
+                        shape,
+                    })
+                    .collect(),
+                ground: Vec::new(),
             }
         }
-        16 => match pick(rng, &roofs) {
-            Some(roof) => Op::RemoveRoof { roof },
-            None => fallback,
-        },
         17 => {
-            let Some(id) = pick(rng, &roofs) else {
+            // Slopes climbing a cube a cube from one already there, by hand.
+            let Some(&from) = pick(rng, &with(&|cube| cube.kind == THATCH)).as_ref() else {
                 return fallback;
             };
-            let cells: Vec<[i32; 2]> = base
-                .roof(id)
-                .map(|roof| roof.cells().collect())
-                .unwrap_or_default();
-            let first = rng.below(cells.len() as u32) as usize;
-            let count = 1 + rng.below(3) as usize;
-            Op::RoofStage {
-                roof: id,
-                cells: cells.into_iter().skip(first).take(count).collect(),
-                up: rng.below(3) > 0,
+            let facing = Facing::ALL[rng.below(4) as usize];
+            let cubes = (1..=1 + rng.below(3) as i32)
+                .map(|k| from + (facing.step() + IVec3::Y) * k)
+                .take_while(|&at| base.cube(at).is_none())
+                .map(|at| Planned {
+                    at: at.to_array(),
+                    shape: Shape::Slope(facing),
+                })
+                .collect();
+            let part = base.cube(from).and_then(|cube| cube.part);
+            Op::LayPlan {
+                part,
+                kind: THATCH,
+                cubes,
+                ground: Vec::new(),
             }
         }
         18 => {
@@ -1300,17 +1308,13 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
     }
 }
 
-/// What is in a base: each cube's steps, each roof cell's stages, each prop.
+/// What is in a base: each cube's steps, each prop.
 fn value(base: &Base, rules: &Rules) -> Bill {
     let mut bill = Bill::default();
     for (_, cube) in base.cubes().filter(|(_, cube)| cube.fill != Fill::Open) {
         let terms = base.terms(&cube);
         let steps = u64::from(cube.level() / terms.step());
         bill.add(&terms.per_step.times(steps));
-    }
-    for (_, roof) in base.roofs() {
-        let stages: u64 = roof.stages.iter().map(|&stage| u64::from(stage)).sum();
-        bill.add(&roof.per_stage.times(stages));
     }
     for prop in base.props() {
         bill.add(&rules.prop(prop.kind));
@@ -1330,9 +1334,6 @@ fn check_rules(base: &Base, at: &str) {
             }),
             "{at}: {cube} is in over a cube partly in"
         );
-    }
-    for (id, roof) in base.roofs().filter(|(_, roof)| roof.standing()) {
-        assert!(base.roof_held(roof), "{at}: roof {id:?} stands on nothing");
     }
     for prop in base.props() {
         assert!(
@@ -1389,8 +1390,9 @@ fn random_operations_keep_every_rule() {
         let mut base = Base::default();
         let mut log: Vec<Op> = Vec::new();
         let (mut again, mut replayed) = (Base::default(), 0);
-        // A stone wall a storey high with a doorway in it and a roof planned along its top
-        // to begin with, so doors are fitted and roofs go up and are held.
+        // A stone wall a storey high with a doorway in it and a roof's cubes planned along
+        // its top and climbing from it to begin with, so doors are fitted and roofs go up
+        // and are held.
         let wall: Vec<[i32; 3]> = (13..18)
             .flat_map(|x| (-1..6).map(move |y| [x, y, 2]))
             .filter(|&[x, y, _]| !(x == 15 && (0..2).contains(&y)))
@@ -1416,16 +1418,17 @@ fn random_operations_keep_every_rule() {
             let cubes = wall.iter().copied().filter(|at| at[1] == y).collect();
             start.push(Op::Fill { cubes });
         }
-        start.push(Op::AddRoof {
-            roof: RoofId(0),
-            section: RoofSection {
-                min: [13, 0, 2],
-                max: [17, 0, 2],
-                style: RoofStyle::Gable,
-                along_x: true,
-                pitch: 0.7,
-            },
-            kind: Some(LOGS),
+        start.push(Op::LayPlan {
+            part: Some(PartId(1)),
+            kind: THATCH,
+            cubes: (13..18)
+                .flat_map(|x| [[x, 6, 2], [x, 7, 3]])
+                .map(|at| Planned {
+                    at,
+                    shape: Shape::Slope(Facing::South),
+                })
+                .collect(),
+            ground: Vec::new(),
         });
         let free = Context::free(&rules);
         let begun = base.act_all(&start, &free).unwrap();
@@ -1570,9 +1573,6 @@ fn random_operations_keep_every_rule() {
         "Swap",
         "Carve",
         "Cancel",
-        "AddRoof",
-        "RemoveRoof",
-        "RoofStage",
         "FitProp",
         "RemoveProp",
         "SetOpen",

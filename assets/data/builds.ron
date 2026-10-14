@@ -25,8 +25,10 @@
 //                       (seat, metres).
 //              Room     rooms, by footprint in metres east by south, outside their
 //                       walls, which are half a metre thick (D181)
-//              Roof     roofs: a style (Hip, Gable, LeanTo, or None for flat) and how far it
-//                       rises for each metre it runs
+//              Roof     "add a roof with this material" (D226, D241): roof cubes laid
+//                       over the room aimed into, or a rectangle drawn, in a style (Hip,
+//                       Gable, LeanTo, or None for flat), in the roof material in hand or
+//                       the walls' own roof; built and changed as any cubes are
 //              Wall     lengths of wall, in metres, drawn by dragging or laid at a length
 //              Window   windows, by width in metres, and the glass's sill above the floor
 //                       and top below the ceiling, in metres: whole cubes, half a metre
@@ -76,9 +78,9 @@
             (name: "Corridor, 2 by 5 m", metres: (2.0, 5.0)),
         ])),
         (name: "Roof", tab: Structure, kind: Roof([
-            (name: "Gable", style: Some(Gable), pitch: 0.7),
-            (name: "Hip", style: Some(Hip), pitch: 0.7),
-            (name: "Lean-to", style: Some(LeanTo), pitch: 0.4),
+            (name: "Gable", style: Some(Gable)),
+            (name: "Hip", style: Some(Hip)),
+            (name: "Lean-to", style: Some(LeanTo)),
             (name: "Flat", style: None),
         ])),
         (name: "Wall", tab: Structure, kind: Wall([("3 m", 3.0), ("1.5 m", 1.5), ("0.5 m", 0.5)])),

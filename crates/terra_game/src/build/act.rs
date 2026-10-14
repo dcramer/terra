@@ -26,7 +26,7 @@ use crate::shell::Options;
 use bevy::{ecs::system::SystemParam, prelude::*};
 use std::collections::{BTreeMap, BTreeSet};
 use terra_build::ops::{self, Context, Done, Op, Refusal};
-use terra_build::{Amount, Bill, CELL_M, Kind, PartId, RoofId, Rules, Sample, Walker};
+use terra_build::{Amount, Bill, CELL_M, Kind, PartId, Rules, Sample, Walker};
 
 /// How long after doing something to the base it can be undone, in seconds (D144).
 pub const UNDO_S: f32 = 60.0;
@@ -257,13 +257,6 @@ impl Building<'_, '_> {
                     .kinds
                     .values()
                     .flat_map(|terms| terms.per_step.0.keys())
-                    .chain(
-                        self.rules
-                            .rules
-                            .roofs
-                            .values()
-                            .flat_map(|bill| bill.0.keys()),
-                    )
                     .chain(
                         self.rules
                             .rules
@@ -560,8 +553,8 @@ impl Building<'_, '_> {
 
     /// What building would put in next, for a builder at `near` (the base's own space):
     /// whatever of the base near them can go in, lowest first and the part aimed at, then
-    /// the part laid first, first on its layer, and roofs once what holds them is up. The first allowed, or, if none
-    /// is, the first with why it is refused.
+    /// the part laid first, first on its layer, a roof's a stage at a time as any part's
+    /// steps. The first allowed, or, if none is, the first with why it is refused.
     pub fn next_work(
         &mut self,
         by: Option<Entity>,
@@ -587,11 +580,6 @@ impl Building<'_, '_> {
                 .then(a.2.cmp(&b.2))
                 .then(a.1.total_cmp(&b.1))
         });
-        let roofs: Vec<RoofId> = base
-            .roofs()
-            .filter(|(id, _)| base.next_stage(*id).is_some())
-            .map(|(id, _)| id)
-            .collect();
         let mut candidates: Vec<(String, Vec<Op>)> = Vec::new();
         // An opening being cut into what is built first, as it was asked for last.
         if let Some(op) = base.next_carve(near, |kind| self.blocks(kind)) {
@@ -648,38 +636,37 @@ impl Building<'_, '_> {
                 vec![layer]
             };
             for cubes in goes_in {
-                let what = format!(
-                    "put {} into part {} ({} cube{}, {} up)",
-                    self.rules.name(kind),
-                    id.0,
-                    cubes.len(),
-                    if cubes.len() == 1 { "" } else { "s" },
-                    cubes[0][1]
-                );
+                // A roof's cubes go up a stage at a time: frame, battens, covering, trims.
+                let stage = kind.is_roof().then(|| {
+                    let at = IVec3::from_array(cubes[0]);
+                    let cube = self
+                        .site
+                        .base
+                        .cube(at)
+                        .unwrap_or(terra_build::Cube::planned(kind, None));
+                    let next = terra_build::layout::roofs::stage_of(&cube);
+                    ["frame", "battens", "covering", "trims"][usize::from(next.min(3))]
+                });
+                let what = match stage {
+                    Some(stage) => format!(
+                        "put {}'s {stage} on part {} ({} cube{}, {} up)",
+                        self.rules.name(kind),
+                        id.0,
+                        cubes.len(),
+                        plural(&cubes),
+                        cubes[0][1]
+                    ),
+                    None => format!(
+                        "put {} into part {} ({} cube{}, {} up)",
+                        self.rules.name(kind),
+                        id.0,
+                        cubes.len(),
+                        plural(&cubes),
+                        cubes[0][1]
+                    ),
+                };
                 candidates.push((what, vec![Op::Fill { cubes }]));
             }
-        }
-        for roof in roofs {
-            let cells = self.site.base.next_stage(roof).unwrap_or_default();
-            let stage = self
-                .site
-                .base
-                .roof(roof)
-                .and_then(|each| each.stage(cells[0]))
-                .unwrap_or(0);
-            let what = format!(
-                "put roof {} up to its {}",
-                roof.0,
-                ["frame", "battens", "covering"][usize::from(stage.min(2))]
-            );
-            candidates.push((
-                what,
-                vec![Op::RoofStage {
-                    roof,
-                    cells,
-                    up: true,
-                }],
-            ));
         }
         let mut first: Option<Work> = None;
         for (what, ops) in candidates {
@@ -694,24 +681,13 @@ impl Building<'_, '_> {
     }
 
     /// What taking apart the part a builder aims at would take out first: the last of it
-    /// put in, or, with nothing of it in, its whole plan, for nothing; a roof standing on
-    /// it comes down first.
+    /// put in, or, with nothing of it in, its whole plan, for nothing.
     pub fn last_work(&mut self, by: Option<Entity>, cube: IVec3, near: Vec3) -> Option<Work> {
         let base = &self.site.base;
         let found = base.cube(cube)?;
-        let column = [cube.x, cube.z];
         let mut ops = Vec::new();
         let what;
-        if let Some(roof) = base.roof_over(column)
-            && let Some(cells) = base.last_stage(roof)
-        {
-            what = format!("take roof {} down a stage", roof.0);
-            ops.push(Op::RoofStage {
-                roof,
-                cells,
-                up: false,
-            });
-        } else if let Some(part) = found.part {
+        if let Some(part) = found.part {
             let kind = base.part(part).map_or(found.kind, |part| part.kind);
             match base.last_in(part, near, self.blocks(kind)) {
                 Some(cubes) => {
@@ -729,10 +705,6 @@ impl Building<'_, '_> {
                     ops.push(Op::Unplan {
                         cubes: base.plan_of(part),
                     });
-                    // A roof planned over it goes with it.
-                    if let Some(roof) = base.roof_over(column) {
-                        ops.push(Op::RemoveRoof { roof });
-                    }
                 }
             }
         } else {

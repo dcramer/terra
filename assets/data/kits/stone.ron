@@ -2,22 +2,20 @@
 // drawn not as models but as its cubes' own surface, its outside edges rounded and its
 // face displaced by the stone's height, so a wall of any shape is one wall with no seams
 // (crates/terra_build/src/surface.rs). Where it meets logs it runs through, and the logs
-// end flush against it. Its gables are stone up to the roof, under a roof of slates on
-// hewn rafters. What this leaves out is the log kit's.
+// end flush against it. Its gables are stone up to the roof, under slate unless another
+// roof is in hand. What this leaves out is the log kit's.
 //
 // id          the kind of construction it lays, the number its cubes carry (D181)
 // pattern     how its walls are laid: Masonry, as its cubes' surface
-// eaves       how far a roof over these walls overhangs them (D175)
+// roof_kind   the roof over these walls, as logs.ron says: slate
 // bevel       the radius its outside edges are rounded to
 // relief      how far its stone stands out, from the deepest joint to the proudest stone
-// timber      its roof's rafters' timber, as logs.ron says
-// roof        how a roof over these walls is made, as logs.ron says: slates
+// timber      its lintels' timber, as logs.ron says
 // textures    its stone (assets/materials, CC0): its walls' and footings' fieldstone, its
 //             floors' and its walls' tops' flagstones, the Dressed stone round its openings
-//             and over its tops; its roof's boards, its rafters' wood, its slates and the
-//             mortar where a roof meets a wall
+//             and over its tops; its lintels' wood
 // cost        what building it takes (D139): a cube in one step, a quarter of a Stone
-//             each, and each stage of a roof cell over these walls
+//             each
 // dress       each exposed edge dressed by its role (D215): its pieces, made by
 //             tools/kits/pieces.py from art/kits/stone; a coping on every top, a plinth
 //             along every foot stepping with the ground, quoins up every outside corner, a
@@ -25,13 +23,13 @@
 //             standing on it, a fascia under an overhang, a tread on every step and a border
 //             round a floor; posts as pillars 36 cm square, a drum a cube, their base and cap
 //             dressed as a foot and a top are (D193); and the dirt rising from the ground,
-//             its corners worn, and its slates lichened toward the eaves
+//             and its corners worn
 // meets       as logs.ron says (D232): heavier than timber, so it runs through a joint with
 //             it, quoined up its end, and caps its top where timber stands on it
 (
     id: 2,
     pattern: Masonry,
-    eaves: 0.5,
+    roof_kind: Some(2049),
     bevel: 0.04,
     relief: 0.05,
     timber: (
@@ -41,32 +39,14 @@
         tint: (0.9, 0.84, 0.76),
         end_tint: (0.86, 0.82, 0.78),
     ),
-    roof: (
-        rows: 11.0,
-        phase: 0.0,
-        butt: 0.016,
-        thick: 0.02,
-        uneven: 0.25,
-        tint: (0.6, 0.62, 0.66),
-        rafter: (Hewn, 0.13),
-        batten: (0.05, 0.025),
-        board: (0.16, 0.035),
-        board_tint: (1.36, 1.34, 1.3),
-        ridge: Roll,
-        cap: 0.11,
-        fillet: 0.1,
-    ),
     textures: {
         Masonry: (path: "materials/stone_wall", metres: (2.0, 2.0)),
         Dressed: (path: "materials/rock_boulder_dry", metres: (1.4, 1.4)),
         Floor: (path: "materials/grey_stone_path", metres: (1.8, 1.8)),
-        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
         Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
-        Covering: (path: "materials/grey_roof_tiles_02", metres: (1.5, 1.5)),
-        Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
     },
-    cost: (steps: 1, step: [("Stone", 1, 4)], roof: [("Wood", 1, 32)]),
+    cost: (steps: 1, step: [("Stone", 1, 4)]),
     dress: (
         pieces: Some("data/kits/pieces/stone.ron"),
         roles: {
@@ -83,7 +63,7 @@
             Post: Pillar(width: 0.36),
         },
         tint: (0.93, 0.91, 0.88),
-        masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14, moss: 0.5, moss_tint: (1.2, 1.18, 0.9)),
+        masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14),
     ),
     meets: Some((weight: 3, end: None, carries: Cap)),
     colours: (

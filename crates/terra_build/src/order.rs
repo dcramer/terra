@@ -2,13 +2,14 @@
 //! part goes up from the bottom, its lowest cubes not yet built first, and comes down
 //! last in, first out. A long-member kind puts a course into every cube of the part on
 //! that layer at once, as a log spans its wall; a block kind a cube at a time, the one
-//! nearest the builder (D194). Roofs go up a stage at a time over every cell.
+//! nearest the builder (D194). A roof kind goes up a layer at a time, a stage at a time:
+//! frame, battens, covering and trims over every cube of the layer (D241).
 //!
 //! These only choose; the operations they make are checked like any other, so what they
 //! choose may still be refused, and the refusal says why.
 
 use crate::cubes::{Cube, Fill, PartId, Pending};
-use crate::{Base, CELL_M, ROOF_STAGES, RoofId};
+use crate::{Base, CELL_M};
 use glam::{IVec3, Vec3};
 
 /// How far a part has gone: its cubes, those built, and those with something in.
@@ -215,54 +216,16 @@ impl Base {
             .collect()
     }
 
-    /// The cells of a roof that would go up a stage next: those least far up. `None` once
-    /// it is all covered.
-    pub fn next_stage(&self, roof: RoofId) -> Option<Vec<[i32; 2]>> {
-        let roof = self.roof(roof)?;
-        let least = *roof.stages.iter().min()?;
-        (least < ROOF_STAGES).then(|| {
-            roof.cells()
-                .filter(|&cell| roof.stage(cell) == Some(least))
-                .collect()
-        })
-    }
-
-    /// The cells of a roof that would come down a stage first: those furthest up. `None`
-    /// if none of it is up.
-    pub fn last_stage(&self, roof: RoofId) -> Option<Vec<[i32; 2]>> {
-        let roof = self.roof(roof)?;
-        let most = *roof.stages.iter().max()?;
-        (most > 0).then(|| {
-            roof.cells()
-                .filter(|&cell| roof.stage(cell) == Some(most))
-                .collect()
-        })
-    }
-
-    /// The roof over a column, if one covers it: the latest put up.
-    pub fn roof_over(&self, column: [i32; 2]) -> Option<RoofId> {
-        self.roofs()
-            .filter(|(_, roof)| roof.stage(column).is_some())
-            .map(|(id, _)| id)
-            .last()
-    }
-
-    /// The same base with only some of its cubes and roofs, and no props or parts, for
-    /// drawing what is built apart from what is planned.
-    pub fn view(&self, cube: impl Fn(&Cube) -> bool, roof: impl Fn(&crate::Roof) -> bool) -> Base {
+    /// The same base with only some of its cubes, and no props or parts, for drawing what
+    /// is built apart from what is planned.
+    pub fn view(&self, cube: impl Fn(&Cube) -> bool) -> Base {
         let mut cubes = crate::Cubes::default();
         for (at, kept) in self.cubes().filter(|(_, each)| cube(each)) {
             cubes
                 .set(at, Some(Cube { part: None, ..kept }))
                 .expect("no parts");
         }
-        let roofs = self
-            .roofs
-            .iter()
-            .filter(|(_, each)| roof(each))
-            .map(|(&id, each)| (id, each.clone()))
-            .collect();
-        Base::from_cubes(cubes, roofs)
+        Base::from_cubes(cubes)
     }
 }
 
@@ -291,7 +254,6 @@ mod tests {
     use crate::cubes::{Kind, Shape};
     use crate::ground::Sample;
     use crate::ops::{Context, Op, Planned};
-    use crate::{RoofSection, RoofStyle};
     use std::collections::BTreeMap;
 
     const LOGS: Kind = Kind(1);
@@ -437,52 +399,78 @@ mod tests {
     }
 
     #[test]
-    fn a_roof_goes_up_a_stage_over_every_cell() {
-        let rules = rules();
+    fn a_roof_goes_up_a_layer_at_a_time_a_stage_at_a_time() {
+        const ROOF: Kind = Kind::FIRST_ROOF;
+        let mut rules = rules();
+        rules
+            .kinds
+            .insert(ROOF, Terms::new(4, Bill::of("Wood", Amount::new(1, 32))));
         let cx = Context::free(&rules);
         let mut base = Base::default();
-        // Walls along both eaves of a block of tiles to hold it, built.
-        for z in [0, 2] {
+        // Walls along both eaves of a gable, built, and its roof's cubes planned over them.
+        for z in [0, 3] {
             base.apply(crate::BuildOp::Fill {
                 min: [0, 0, z],
                 max: [3, 5, z],
                 cube: Some(Cube::new(STONE, Fill::Solid)),
             });
         }
-        let roof = RoofId(0);
+        let footprint = (0..4).flat_map(|x| (0..4).map(move |z| [x, z])).collect();
+        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+        let cubes: Vec<Planned> = plan
+            .roof
+            .iter()
+            .map(|&(at, shape)| Planned {
+                at: at.to_array(),
+                shape,
+            })
+            .collect();
         base.act(
-            &Op::AddRoof {
-                roof,
-                section: RoofSection {
-                    min: [0, 0, 0],
-                    max: [3, 0, 2],
-                    style: RoofStyle::Gable,
-                    along_x: true,
-                    pitch: 0.7,
-                },
-                kind: Some(LOGS),
+            &Op::LayPlan {
+                part: Some(PartId(1)),
+                kind: ROOF,
+                cubes,
+                ground: Vec::new(),
             },
             &cx,
         )
         .unwrap();
-        assert_eq!(base.roof_over([1, 1]), Some(roof));
-        assert_eq!(base.last_stage(roof), None);
-        let mut stages = 0;
-        while let Some(cells) = base.next_stage(roof) {
-            assert_eq!(cells.len(), 12);
-            base.act(
-                &Op::RoofStage {
-                    roof,
-                    cells,
-                    up: true,
-                },
-                &cx,
-            )
-            .unwrap();
-            stages += 1;
+        // The eaves' layer first, a stage at a time over all of it, then the next up, held
+        // by its ramp from the one below.
+        let mut steps = Vec::new();
+        while let Some(cubes) = base.next_in(PartId(1), Vec3::ZERO, false) {
+            steps.push((cubes[0][1], cubes.len()));
+            base.act(&Op::Fill { cubes }, &cx).unwrap();
         }
-        assert_eq!(stages, ROOF_STAGES);
-        assert_eq!(base.last_stage(roof).map(|cells| cells.len()), Some(12));
+        assert_eq!(
+            steps,
+            vec![
+                (6, 8),
+                (6, 8),
+                (6, 8),
+                (6, 8),
+                (7, 8),
+                (7, 8),
+                (7, 8),
+                (7, 8)
+            ]
+        );
+        assert!(base.floating().is_empty());
+        // And down the other way: the ridge's layer first.
+        let first = base.last_in(PartId(1), Vec3::ZERO, false).unwrap();
+        assert!(first.iter().all(|at| at[1] == 7));
+        // The eaves' cubes hold up the slopes over them: not taken while those are in.
+        let eaves = Op::Empty {
+            cubes: (0..4).flat_map(|x| [[x, 6, 0], [x, 6, 3]]).collect(),
+        };
+        for _ in 0..3 {
+            base.act(&eaves, &cx).unwrap();
+        }
+        let refused = base.check(&eaves, &cx);
+        assert!(
+            matches!(refused, Err(crate::ops::Refusal::Holds(_))),
+            "{refused:?}"
+        );
     }
 
     #[test]
@@ -493,40 +481,15 @@ mod tests {
         wall(&mut base, 0, LOGS, &cx);
         let cubes = base.next_in(PartId(0), Vec3::ZERO, false).unwrap();
         base.act(&Op::Fill { cubes }, &cx).unwrap();
-        // A roof up, by the shortcut, and one planned beside it.
-        let section = |x: i32| RoofSection {
-            min: [x, 0, 0],
-            max: [x + 1, 0, 1],
-            style: RoofStyle::Gable,
-            along_x: true,
-            pitch: 0.7,
-        };
-        base.apply(crate::BuildOp::AddRoof(section(0)));
-        let planned_roof = base.next_roof();
-        base.act(
-            &Op::AddRoof {
-                roof: planned_roof,
-                section: section(4),
-                kind: Some(LOGS),
-            },
-            &cx,
-        )
-        .unwrap();
-        let built = base.view(|cube| cube.is_in(), crate::Roof::standing);
+        let built = base.view(|cube| cube.is_in());
         assert_eq!(built.cubes().count(), 4);
         assert!(
             built
                 .cubes()
                 .all(|(at, cube)| at.y == 0 && cube.part.is_none())
         );
-        assert_eq!(built.sections(), &[section(0)]);
-        let planned = base.view(|cube| !cube.is_in(), |roof| !roof.standing());
+        let planned = base.view(|cube| !cube.is_in());
         assert_eq!(planned.cubes().count(), 4);
         assert!(planned.cubes().all(|(at, _)| at.y == 1));
-        assert_eq!(planned.sections(), &[section(4)]);
-        assert_eq!(
-            planned.roofs().map(|(id, _)| id).collect::<Vec<_>>(),
-            [planned_roof]
-        );
     }
 }

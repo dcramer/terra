@@ -10,7 +10,6 @@ use crate::play::claim::Claim;
 use crate::play::flora::Obstacles;
 use crate::play::props::{self, Blocked, Models, Prop, Standing};
 use crate::shell::Options;
-use terra_build::RoofSection;
 use terra_build::{CELL_M, DOOR_WIDTH_M, Panel, STOREY_M, Side, cells};
 
 pub(super) fn aim(
@@ -349,29 +348,30 @@ pub(super) fn aim(
                 let aimed = on_base.unwrap_or_else(|| on_level(floor_m).with_y(0.0));
                 let storey = builder.storey;
                 let drawn = draw_to(&mut builder, aimed, storey);
+                // The space aimed into, a roof covering it whole.
+                let space = if roof && drawn.is_none() {
+                    crate::build::plans::room_footprint(
+                        &site.base,
+                        (aimed / CELL_M).floor().as_ivec3().with_y(builder.storey),
+                    )
+                } else {
+                    Default::default()
+                };
+                builder.footprint = space.clone();
                 builder.room(&builds).map_or(Target::Nothing, |size| {
                     let (snapped, size) = match drawn {
                         // Drawn by dragging, or laid: the rectangle between two corners.
                         Some((from, to, _)) => drawn_room(from, to),
-                        // A roof over the whole of the room aimed into.
-                        None if roof
-                            && site.base.contains(
-                                (aimed / CELL_M).floor().as_ivec3().with_y(builder.storey),
-                            ) =>
-                        {
-                            let tile = (aimed / CELL_M).floor().as_ivec3().with_y(builder.storey);
-                            let room = site.base.room(tile);
-                            let cells = site
-                                .base
-                                .tiles()
-                                .filter(|&(_, each)| Some(each) == room)
-                                .map(|(cell, _)| IVec2::new(cell.x, cell.z));
-                            let (low, high) = cells
-                                .fold((IVec2::MAX, IVec2::MIN), |(lo, hi), c| {
-                                    (lo.min(c), hi.max(c))
-                                });
-                            // Over its walls too, which are a tile thick (D181).
-                            (low - IVec2::ONE, high - low + IVec2::splat(3))
+                        // A roof over the whole of the space the walls close in, planned or
+                        // built, aimed into: its own shape, walls and all (D241).
+                        None if roof && !space.is_empty() => {
+                            let (low, high) =
+                                space
+                                    .iter()
+                                    .fold((IVec2::MAX, IVec2::MIN), |(lo, hi), &[x, z]| {
+                                        (lo.min(IVec2::new(x, z)), hi.max(IVec2::new(x, z)))
+                                    });
+                            (low, high - low + IVec2::ONE)
                         }
                         // The variant's own size, centred on the place aimed at, sticking
                         // to where it last snapped until the aim has moved well off it.
@@ -442,12 +442,13 @@ pub(super) fn aim(
                             if floor {
                                 !site.base.has_floor(cell)
                             } else if roof {
-                                roofs_anew(
-                                    &site.base,
-                                    &builder.picked(&builds).kind,
-                                    builder.variant(),
-                                    cell,
-                                )
+                                (space.is_empty() || space.contains(&[cell.x, cell.z]))
+                                    && roofs_anew(
+                                        &site.base,
+                                        &builder.picked(&builds).kind,
+                                        builder.variant(),
+                                        cell,
+                                    )
                             } else {
                                 !site.base.contains(cell) && site.base.filling(cell).is_none()
                             }
@@ -577,8 +578,15 @@ fn plan_work(
 ) -> Option<Planned> {
     use crate::build::plans;
     let base = &building.site.base;
-    // The material in hand (D232), or the first kit's.
-    let kind = builder.material.unwrap_or(look.laying);
+    // The material in hand (D232), or the first kit's: a roof's covering lays blocks by
+    // hand, roof cubes (D241), and changes cubes to it; a room, a wall or a floor of it is
+    // the first kit's.
+    let held = builder.material.unwrap_or(look.laying);
+    let kind = match builder.picked(builds).kind {
+        Kind::Block(_) | Kind::Replace => held,
+        _ if held.is_roof() => look.laying,
+        _ => held,
+    };
     let ground = |column: [i32; 2]| building.ground_cm(column);
     let blocks = building.rules.footed.clone();
     let footings = building.rules.footing.map(|kind| plans::Footings {
@@ -611,21 +619,26 @@ fn plan_work(
             let (min, max) = (corner, corner + IVec3::new(tiles.x - 1, 0, tiles.y - 1));
             let shape = &shapes[builder.variant()];
             Some(match shape.style {
-                // A gable's ridge runs along its longer side, unless turned.
-                Some(style) => laying(
-                    "lay a roof",
-                    plans::roof(
-                        base,
-                        RoofSection {
-                            min: min.to_array(),
-                            max: max.to_array(),
-                            style,
-                            along_x: (tiles.x >= tiles.y) != builder.room_turned,
-                            pitch: shape.pitch,
-                        },
-                        kind,
-                    ),
-                ),
+                // "Add a roof with this material" (D226, D241): roof cubes over the space
+                // aimed into, each arm's ridge along its length, or over the rectangle drawn,
+                // its ridge along its longer side unless turned; in the roof material in
+                // hand, or the walls' own roof.
+                Some(style) => {
+                    let drawn = builder.footprint.is_empty();
+                    let footprint: std::collections::BTreeSet<[i32; 2]> = if drawn {
+                        (min.x..=max.x)
+                            .flat_map(|x| (min.z..=max.z).map(move |z| [x, z]))
+                            .collect()
+                    } else {
+                        builder.footprint.clone()
+                    };
+                    let along_x = drawn.then_some((tiles.x >= tiles.y) != builder.room_turned);
+                    let roof = roof_kind(look, base, &footprint, corner.y, builder.material);
+                    laying(
+                        "lay a roof",
+                        plans::roof(base, &footprint, corner.y, style, along_x, roof),
+                    )
+                }
                 None => laying("lay a flat roof", plans::flat_roof(base, min, max, kind)),
             })
         }
@@ -791,12 +804,41 @@ fn plan_work(
     }
 }
 
-/// Whether a roof of this kind would roof a cell anew: a pitched one where no pitched roof
-/// is yet, taking the place of a flat one; a flat one where there is no roof at all.
+/// Whether a roof of this kind would roof a cell anew: one of roof cubes where none is over
+/// it yet, taking the place of a flat one; a flat one where there is no roof at all.
 fn roofs_anew(base: &terra_build::Base, kind: &Kind, variant: usize, cell: IVec3) -> bool {
-    let pitched = base.sections().iter().any(|section| section.covers(cell));
+    let pitched = base.covered(cell, false) && !base.has_roof(cell);
     match kind {
         Kind::Roof(shapes) if shapes[variant].style.is_some() => !pitched,
-        _ => !base.covered(cell),
+        _ => !base.covered(cell, false),
     }
+}
+
+/// The roof kind "add a roof" lays in (D241): the roof material in hand, or the roof of the
+/// kind most of the walls' tops under the footprint are, or of the first kit's.
+fn roof_kind(
+    look: &crate::build::BuildLook,
+    base: &terra_build::Base,
+    footprint: &std::collections::BTreeSet<[i32; 2]>,
+    storey: i32,
+    material: Option<terra_build::Kind>,
+) -> terra_build::Kind {
+    if let Some(roof) = material.filter(|kind| kind.is_roof()) {
+        return roof;
+    }
+    let top = terra_build::wall_layer(storey) + terra_build::STOREY_CUBES - 1;
+    let mut counts: std::collections::BTreeMap<terra_build::Kind, usize> = Default::default();
+    for &[x, z] in footprint {
+        if let Some(cube) = base.cube(IVec3::new(x, top, z)) {
+            *counts.entry(cube.kind).or_default() += 1;
+        }
+    }
+    let walls = counts
+        .iter()
+        .max_by_key(|&(kind, n)| (*n, std::cmp::Reverse(*kind)))
+        .map_or(material.unwrap_or(look.laying), |(kind, _)| *kind);
+    look.kits
+        .as_ref()
+        .and_then(|kits| kits.roof_for(walls))
+        .unwrap_or(terra_build::Kind::FIRST_ROOF)
 }

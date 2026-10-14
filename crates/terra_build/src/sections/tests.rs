@@ -1,13 +1,21 @@
 use super::*;
 use crate::kit::Kits;
 use crate::layout::lay_among;
-use crate::{BuildOp, Cube, Panel, RoofSection, RoofStyle, STOREY_CUBES};
+use crate::roofer::{self, Style};
+use crate::{BuildOp, Cube, Panel, STOREY_CUBES};
 
 /// The kits the game ships, as it reads them.
 fn shipped() -> Kits {
     let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/data/kits");
     let mut kits = Vec::new();
-    for name in ["logs.ron", "hewn.ron", "stone.ron"] {
+    for name in [
+        "logs.ron",
+        "hewn.ron",
+        "stone.ron",
+        "shakes.ron",
+        "slate.ron",
+        "thatch.ron",
+    ] {
         let text = std::fs::read_to_string(folder.join(name)).unwrap();
         kits.push(ron::from_str::<Kit>(&text).unwrap_or_else(|why| panic!("{name}: {why}")));
     }
@@ -24,9 +32,25 @@ fn kind(kits: &Kits, pattern: Pattern, profile: Profile) -> Kind {
         .kind()
 }
 
+/// A roof of cubes put up over the columns from one to another, on the ground storey, in
+/// the roof kind of the walls under it.
+fn roof(base: &mut Base, kits: &Kits, min: [i32; 2], max: [i32; 2], style: Style, along_x: bool) {
+    let footprint: BTreeSet<[i32; 2]> = (min[0]..=max[0])
+        .flat_map(|x| (min[1]..=max[1]).map(move |z| [x, z]))
+        .collect();
+    let walls = base
+        .cube(IVec3::new(min[0], 5, min[1]))
+        .map_or(Kind::PLAIN, |cube| cube.kind);
+    let kind = kits.roof_for(walls).unwrap();
+    let height = roofer::field(&footprint, style, Some(along_x));
+    for op in roofer::put_up(base, &footprint, 0, kind, &height) {
+        base.apply(op);
+    }
+}
+
 /// A room from one tile to another under a roof, with a door and a window, its corner at
 /// `at`: placed so it crosses sections' edges.
-fn house(at: [i32; 2], size: [i32; 2], walls: Kind, style: RoofStyle) -> Vec<BuildOp> {
+fn house(base: &mut Base, kits: &Kits, at: [i32; 2], size: [i32; 2], walls: Kind, style: Style) {
     let [x, z] = at;
     let (min, max) = ([x, 0, z], [x + size[0], 0, z + size[1]]);
     let mut ops = vec![BuildOp::AddRoom {
@@ -44,14 +68,10 @@ fn house(at: [i32; 2], size: [i32; 2], walls: Kind, style: RoofStyle) -> Vec<Bui
         panel: Some(Panel::WINDOW),
         kind: walls,
     }));
-    ops.push(BuildOp::AddRoof(RoofSection {
-        min,
-        max,
-        style,
-        along_x: true,
-        pitch: if style == RoofStyle::LeanTo { 0.4 } else { 0.7 },
-    }));
-    ops
+    for op in ops {
+        base.apply(op);
+    }
+    roof(base, kits, [x, z], [x + size[0], z + size[1]], style, true);
 }
 
 /// Bases of every kind and roof, and mixed, each across sections' edges, some on the
@@ -62,23 +82,19 @@ fn bases(kits: &Kits) -> Vec<Base> {
     let stone = kind(kits, Pattern::Masonry, Profile::Round);
     let mut out = Vec::new();
     for (walls, style, at) in [
-        (logs, RoofStyle::Gable, [10, 12]),
-        (stone, RoofStyle::Hip, [-6, 9]),
-        (hewn, RoofStyle::LeanTo, [12, -4]),
-        (logs, RoofStyle::Hip, [-20, -20]),
+        (logs, Style::Gable, [10, 12]),
+        (stone, Style::Hip, [-6, 9]),
+        (hewn, Style::LeanTo, [12, -4]),
+        (logs, Style::Hip, [-20, -20]),
     ] {
         let mut base = Base::default();
-        for op in house(at, [11, 9], walls, style) {
-            base.apply(op);
-        }
+        house(&mut base, kits, at, [11, 9], walls, style);
         base.lay_footings(stone, |_| -40);
         out.push(base);
     }
     // Logs on a stone plinth, an L with a wing in stone, and a wall carved through.
     let mut mixed = Base::default();
-    for op in house([9, 9], [9, 7], logs, RoofStyle::Gable) {
-        mixed.apply(op);
-    }
+    house(&mut mixed, kits, [9, 9], [9, 7], logs, Style::Gable);
     mixed.apply(BuildOp::Fill {
         min: [9, 0, 9],
         max: [18, 1, 9],
@@ -89,13 +105,7 @@ fn bases(kits: &Kits) -> Vec<Base> {
         max: [15, 0, 26],
         kind: stone,
     });
-    mixed.apply(BuildOp::AddRoof(RoofSection {
-        min: [9, 0, 16],
-        max: [15, 0, 26],
-        style: RoofStyle::Gable,
-        along_x: false,
-        pitch: 0.7,
-    }));
+    roof(&mut mixed, kits, [9, 17], [15, 26], Style::Gable, false);
     for x in 0..40 {
         mixed.apply(BuildOp::SetWall {
             tile: [x - 20, 0, -3],
@@ -326,6 +336,7 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                     base.cube(at).is_some_and(|cube| {
                         cube.fill != Fill::Open
                             && cube.kind != kit.kind()
+                            && !cube.kind.is_roof()
                             && (!base.in_wall(at) || cube.kind == Kind::PLAIN)
                     })
                 };
@@ -475,15 +486,13 @@ fn whatever_changes_a_section_is_in_what_a_change_redraws() {
     // A long building, then changes far from parts of it: a cube at one end, a window,
     // a wall's kind, a roof.
     let mut base = Base::default();
-    for op in house([2, 2], [40, 7], logs, RoofStyle::Gable) {
-        base.apply(op);
-    }
+    house(&mut base, &kits, [2, 2], [40, 7], logs, Style::Gable);
     // And a second building apart from it.
-    for op in house([2, 40], [7, 7], logs, RoofStyle::Hip) {
-        base.apply(op);
-    }
+    house(&mut base, &kits, [2, 40], [7, 7], logs, Style::Hip);
     base.lay_footings(stone, |_| -40);
     base.take_dirty();
+    // A roof's cube at its far end taken off, and put back as a corner.
+    let corner = base.cube(IVec3::new(42, 6, 2)).unwrap();
     let changes = [
         BuildOp::Fill {
             min: [42, 3, 2],
@@ -500,13 +509,14 @@ fn whatever_changes_a_section_is_in_what_a_change_redraws() {
             max: [2, 5, 9],
             cube: Some(Cube::new(stone, Fill::Solid)),
         },
-        BuildOp::AddRoof(RoofSection {
-            min: [2, 0, 2],
-            max: [42, 0, 9],
-            style: RoofStyle::Hip,
-            along_x: true,
-            pitch: 0.5,
-        }),
+        BuildOp::Fill {
+            min: [42, 6, 2],
+            max: [42, 6, 2],
+            cube: Some(Cube {
+                shape: crate::Shape::OuterCorner(crate::Facing::South),
+                ..corner
+            }),
+        },
     ];
     for op in changes {
         let before = base.clone();
@@ -580,7 +590,7 @@ fn every_shape_is_drawn_in_every_kit_within_its_cut() {
         Shape::OuterCorner(Facing::North),
         Shape::InnerCorner(Facing::West),
     ];
-    for kit in &kits.0 {
+    for kit in kits.0.iter().filter(|kit| kit.pattern != Pattern::Roof) {
         for shape in shapes {
             // The shape on a cube of its kind, nothing round them.
             let mut base = Base::default();

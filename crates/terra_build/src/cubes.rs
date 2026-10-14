@@ -52,6 +52,15 @@ impl Kind {
     pub const PLAIN: Kind = Kind(0);
     /// The highest kind a cube can hold: twelve bits, less the one for air.
     pub const LAST: Kind = Kind(0xFFE);
+    /// The first roof kind (D241): kinds from here up are a roof's covering, laid on cubes
+    /// as any kind is but drawn as a roof over them, with no wall tile, floor or room of
+    /// their own. Known by number, as the cubes alone say what holds and where rooms are.
+    pub const FIRST_ROOF: Kind = Kind(0x800);
+
+    /// Whether it is a roof's covering (D241): shakes, slate, thatch.
+    pub fn is_roof(self) -> bool {
+        self >= Kind::FIRST_ROOF && self <= Kind::LAST
+    }
 }
 
 /// What fills a cube that is not air.

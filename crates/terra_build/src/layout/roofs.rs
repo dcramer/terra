@@ -1,45 +1,57 @@
-//! Roofs (docs/building-plan.md, docs/building-kits.md): a base's pitched roofs laid as
-//! pieces, from the height field their sections make over each storey.
+//! Roofs (docs/building-kits.md, D226, D241): a roof kind's cubes laid as a roof, each
+//! cube's look from its place among its neighbours, as a wall's edges are dressed by their
+//! roles (D215).
 //!
-//! **The field.** A storey's roof is, at each point, the highest of the sections over it
-//! (`RoofSection::rise`), so a gable meeting a hip makes its own valley and L, T and U plans
-//! need nothing more. Each section is carried on down past its edges by its kit's eaves,
-//! but only where no other section is: a wing's eaves stop where another wing's roof begins,
-//! so a ridge dies into the roof it meets instead of standing out of it.
+//! **The surface.** Every roof cube with nothing over it is the roof there: its top, a
+//! slope's ramp, a corner's two, a whole cube's flat, sampled every half cube in four
+//! triangles a square from the square's middle, so every ridge, hip and valley of cubes cut
+//! to slopes falls on a square's side or diagonal. A square carries on into the square
+//! beside it where their shared corners are at the same heights, whichever cube or layer
+//! it is in: so a roof climbs a layer a cube, and two roofs at different heights in one
+//! column, a storey's over another's, are apart.
 //!
-//! **The lattice.** The field is sampled every half cube, each square in four triangles
-//! from its middle; every ridge, hip and valley over walls on the grid falls on a square's
-//! side or diagonal, so the triangles are as flat as the roof (research/procedural-
-//! buildings.md). Where two triangles meet at an angle is a crease: a ridge (level and
-//! convex), a hip (sloping and convex) or a valley (concave). Where the roof stops is an
-//! edge: an eave (level), a verge (sloping), or flashing where a wall stands up through it.
+//! **What each edge is.** Where two squares meet at an angle is a crease: a ridge (level
+//! and convex), a hip (sloping and convex) or a valley (concave). Where no square carries
+//! on, the roof stops: an eave (level), a verge (sloping), or flashing where something
+//! stands beyond it, a wall or a higher roof. Past an eave or a verge the covering is
+//! carried on by the kit's `eaves`, drawn only (D192 as amended): down the slope at an
+//! eave, level past a verge, round a hip's corner and meeting the next in a valley at an
+//! inside corner, each square of it the plane of the cube it runs on from.
 //!
-//! **The pieces**, in the order a roof goes up (`Roof::stages`): its frame (rafters up the
-//! slopes at every cube, a beam under every ridge, hip and valley), its battens and its
-//! covering a square at a time, then the boards along its eaves and verges, the caps over
-//! its ridges and hips, its valleys' linings and the flashing against walls. Each is placed
-//! in the grid (D208) and knows the roof cell whose stage it waits for, so a server can lay
-//! them without any art.
+//! **The pieces**, in the order a roof cube goes up, a stage a step of its fill
+//! ([`stage_of`]): its frame (rafters up the slopes at every cube, a beam under every
+//! ridge, hip and valley), its battens, its covering, then its trims, the boards along its
+//! eaves and verges, the caps over its ridges and hips, its valleys' linings and the
+//! flashing against walls. Each is placed in the grid (D208) and knows the roof cube whose
+//! stage it waits for, so a server lays them without any art.
 
 use super::{Piece, Place, Scope, hash, ticks};
 use crate::kit::{Kit, Kits};
 use crate::mesh::{QuickMap, ROOF_THICK_M};
-use crate::{Base, CELL_M, Fill, Kind, RoofId, RoofSection, STOREY_CUBES, STOREY_M};
+use crate::{Base, CELL_M, Cube, Fill, Kind, Shape};
 use glam::{IVec3, Vec2, Vec3};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// How finely a roof is sampled, in metres: half a cube.
 pub const STEP_M: f32 = CELL_M * 0.5;
-/// How far a roof overhangs its walls where no kit says (D175).
+/// How far a roof of a kind with no kit is carried on past its edges.
 pub const EAVES_M: f32 = 0.5;
+/// How many stages a roof cube goes up in: its frame, its battens, its covering and its
+/// trims, a step of its fill each (`kit.cost.steps`).
+pub const ROOF_STAGES: u8 = 4;
 
-/// Which roof cell a piece of roof goes up with, and in which of its stages: 1 its frame,
-/// 2 its battens, 3 its covering and trims.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// How far a roof cube is up, by its fill: nothing, then its frame, battens, covering and
+/// trims, a quarter of the cube each.
+pub fn stage_of(cube: &Cube) -> u8 {
+    let level = u16::from(cube.level());
+    (level * u16::from(ROOF_STAGES)).div_ceil(16) as u8
+}
+
+/// Which roof cube a piece of roof goes up with, and in which of its stages: 1 its frame,
+/// 2 its battens, 3 its covering, 4 its trims.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RoofCell {
-    pub roof: RoofId,
-    /// Counted in cubes east and south, within the roof's section.
-    pub cell: [i32; 2],
+    pub cube: IVec3,
     pub stage: u8,
 }
 
@@ -60,126 +72,47 @@ pub enum RoofPart {
     Hip,
     /// The lining of a valley.
     Valley,
-    /// Mortar where the roof meets a wall standing up through it.
+    /// Mortar where the roof meets a wall standing up beside it.
     Flashing,
 }
 
 impl RoofPart {
-    /// The stage of its roof cell it goes up in.
+    /// The stage of its roof cube it goes up in.
     pub fn stage(self) -> u8 {
         match self {
             RoofPart::Rafter => 1,
             RoofPart::Batten => 2,
-            _ => 3,
+            _ => 4,
         }
     }
 }
 
-/// A storey's roof as heights: every section over its walls, with its eaves.
-pub struct Field {
-    /// How high its walls' tops are, in metres.
-    pub top: f32,
-    sections: Vec<Owner>,
-}
+/// The stage a square of covering goes up in.
+const COVERING: u8 = 3;
 
-/// A section of a roof, and what it is built in.
-#[derive(Clone, Copy, Debug)]
-struct Owner {
-    id: RoofId,
-    section: RoofSection,
-    eaves: f32,
-    kind: Kind,
-}
-
-impl Field {
-    /// Every storey's roof in a base, by storey, each section's eaves its kit's.
-    pub fn all(base: &Base, kits: &Kits) -> BTreeMap<i32, Field> {
-        let mut fields: BTreeMap<i32, Field> = BTreeMap::new();
-        for (id, roof) in base.roofs() {
-            let section = roof.section;
-            let kind = base.roof_kind(roof).unwrap_or(Kind::PLAIN);
-            let eaves = kits.of(kind).map_or(EAVES_M, |kit| kit.eaves);
-            let storey = section.storey();
-            fields
-                .entry(storey)
-                .or_insert_with(|| Field {
-                    top: (storey + 1) as f32 * STOREY_M,
-                    sections: Vec::new(),
-                })
-                .sections
-                .push(Owner {
-                    id,
-                    section,
-                    eaves,
-                    kind,
-                });
-        }
-        fields
-    }
-
-    /// How far above the walls' tops the roof is at a point, east and south in metres, and
-    /// which of its sections makes it there.
-    fn at(&self, at: Vec2) -> Option<(f32, usize)> {
-        let inside = |section: &RoofSection| {
-            let (low, high) = section.bounds();
-            at.cmpge(low - 1e-4).all() && at.cmple(high + 1e-4).all()
-        };
-        let within = self.sections.iter().any(|owner| inside(&owner.section));
-        let mut best: Option<(f32, usize)> = None;
-        for (index, owner) in self.sections.iter().enumerate() {
-            let rise = if inside(&owner.section) {
-                owner.section.rise_beyond(at, 0.0)
-            } else if !within {
-                owner.section.rise_beyond(at, owner.eaves)
-            } else {
-                None
-            };
-            if let Some(rise) = rise
-                && best.is_none_or(|(highest, _)| rise > highest + 1e-6)
-            {
-                best = Some((rise, index));
-            }
-        }
-        best
-    }
-
-    /// Whether any of it, its eaves too, is over the columns of a scope.
-    pub(crate) fn reaches(&self, scope: Scope) -> bool {
-        self.sections.iter().any(|owner| {
-            let (low, high) = owner.section.bounds();
-            let reach = owner.eaves.max(0.0) + CELL_M;
-            let (low, high) = (
-                ((low - reach) / CELL_M).floor().as_ivec2(),
-                ((high + reach) / CELL_M).ceil().as_ivec2(),
-            );
-            // As high as it could rise over its widest span, its walls' tops below.
-            let span = (owner.section.bounds().1 - owner.section.bounds().0).max_element();
-            let (bottom, top) = (
-                ((self.top - 1.0) / CELL_M).floor() as i32,
-                ((self.top + owner.section.pitch * span + 1.0) / CELL_M).ceil() as i32,
-            );
-            low.x <= scope.high.x
-                && high.x >= scope.low.x
-                && low.y <= scope.high.z
-                && high.y >= scope.low.z
-                && bottom <= scope.high.y
-                && top >= scope.low.y
-        })
-    }
-
-    /// How far above the walls' tops the roof's top is at a point, if it is over it.
-    pub fn rise(&self, at: Vec2) -> Option<f32> {
-        self.at(at).map(|(rise, _)| rise)
-    }
-
-    /// The height of the roof's underside at a point, in metres, if it is over it.
-    pub fn under(&self, at: Vec2) -> Option<f32> {
-        self.rise(at).map(|rise| self.top + rise - ROOF_THICK_M)
+/// A roof cube's top over a point of its footprint, as a fraction of the cube: a planed
+/// shape's top, else the cube's own.
+fn surface(shape: Shape, u: f32, v: f32) -> f32 {
+    if shape.planed_top() {
+        shape.top(u, v)
+    } else {
+        1.0
     }
 }
 
-/// The four sides of a square, as the steps to its neighbour across each and the corners
-/// along each, from the square's own corner: north, east, south, west.
+/// A roof cube's top carried on past its footprint, as the plane or planes it is cut to.
+fn plane(shape: Shape, u: f32, v: f32) -> f32 {
+    match shape {
+        Shape::Half => 0.5,
+        Shape::Slope(f) => f.toward(u, v),
+        Shape::OuterCorner(f) => f.toward(u, v).min(f.turned(1).toward(u, v)),
+        Shape::InnerCorner(f) => f.toward(u, v).max(f.turned(1).toward(u, v)),
+        _ => 1.0,
+    }
+}
+
+/// The four sides of a square, north, east, south and west: the step to the square beyond
+/// each, and the corners along it, from the square's own north-west corner.
 const SIDES: [([i32; 2], [i32; 2], [i32; 2]); 4] = [
     ([0, -1], [0, 0], [1, 0]),
     ([1, 0], [1, 0], [1, 1]),
@@ -187,123 +120,410 @@ const SIDES: [([i32; 2], [i32; 2], [i32; 2]); 4] = [
     ([-1, 0], [0, 1], [0, 0]),
 ];
 
-/// A square of the lattice under a roof.
+/// A square's corners, north-west, north-east, south-east and south-west, from its own
+/// north-west.
+const CORNERS: [[i32; 2]; 4] = [[0, 0], [1, 0], [1, 1], [0, 1]];
+
+/// A square of a roof, half a cube across.
 #[derive(Clone, Copy, Debug)]
 struct Square {
-    /// The section highest over its middle.
-    owner: usize,
-    /// Whether a wall stands up through it, so it has no covering.
-    blocked: bool,
+    /// Where it is, in half cubes east and south.
+    place: [i32; 2],
+    /// The roof cube it is drawn for: the one it is over, or, past an edge, the one whose
+    /// eaves it carries on.
+    cube: IVec3,
+    kind: Kind,
+    /// Its corners' heights, as [`CORNERS`], and its middle's, in metres.
+    corners: [f32; 4],
+    middle: f32,
 }
 
-/// A storey's roof sampled on the lattice.
-struct Lattice<'a> {
-    field: &'a Field,
-    /// Each corner's rise, by its place on the lattice.
-    nodes: QuickMap<[i32; 2], f32>,
-    middles: QuickMap<[i32; 2], f32>,
-    /// The squares, in order, and the same to look up quickly.
-    squares: BTreeMap<[i32; 2], Square>,
-    found: QuickMap<[i32; 2], Square>,
+/// What is beyond a side of a square.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Beside {
+    /// A square the roof carries on into.
+    Square(usize),
+    /// Nothing: an eave or a verge.
+    Open,
+    /// A wall, or a roof standing higher: flashing.
+    Against,
 }
 
-impl<'a> Lattice<'a> {
-    fn new(base: &Base, field: &'a Field) -> Lattice<'a> {
-        let mut lattice = Lattice {
-            field,
-            nodes: QuickMap::default(),
-            middles: QuickMap::default(),
-            squares: BTreeMap::new(),
-            found: QuickMap::default(),
-        };
-        for owner in &field.sections {
-            let (low, high) = owner.section.bounds();
-            let reach = owner.eaves.max(0.0);
-            let from = ((low - reach) / STEP_M).floor().as_ivec2();
-            let to = ((high + reach) / STEP_M).ceil().as_ivec2();
-            for i in from.x..to.x {
-                for j in from.y..to.y {
-                    if lattice.found.contains_key(&[i, j]) {
-                        continue;
-                    }
-                    let middle = (Vec2::new(i as f32, j as f32) + 0.5) * STEP_M;
-                    let Some((rise, owner)) = field.at(middle) else {
-                        continue;
-                    };
-                    // Each corner's rise, worked out once for the squares that share it.
-                    let mut corners = true;
-                    for [di, dj] in [[0, 0], [1, 0], [0, 1], [1, 1]] {
-                        let node = [i + di, j + dj];
-                        if lattice.nodes.contains_key(&node) {
-                            continue;
+/// A base's roofs near a place: every square of their surface and of their eaves, and what
+/// is beyond each side of each.
+pub struct Roofs {
+    squares: Vec<Square>,
+    by_place: QuickMap<[i32; 2], Vec<usize>>,
+    beside: Vec<[Beside; 4]>,
+    /// Each square's roof: which squares carry on into one another.
+    roof: Vec<usize>,
+    /// Each roof's lowest and highest point, in metres.
+    span: Vec<(f32, f32)>,
+    /// How far each square is from the nearest open edge, in squares.
+    inside: Vec<u16>,
+}
+
+impl Roofs {
+    /// The roofs of a base's roof cubes within `near` and every roof cube joined to them,
+    /// whole, so every piece of them is laid as laying the whole base would.
+    pub(crate) fn whole(base: &Base, kits: &Kits, near: Scope) -> Roofs {
+        let mut found: BTreeSet<[i32; 3]> = BTreeSet::new();
+        let mut frontier: Vec<IVec3> = near
+            .cubes(base, None)
+            .into_iter()
+            .filter(|(_, cube)| cube.kind.is_roof())
+            .map(|(at, _)| at)
+            .collect();
+        found.extend(frontier.iter().map(|at| at.to_array()));
+        while let Some(at) = frontier.pop() {
+            for x in -1..=1 {
+                for y in -1..=1 {
+                    for z in -1..=1 {
+                        let next = at + IVec3::new(x, y, z);
+                        if base.cube(next).is_some_and(|cube| cube.kind.is_roof())
+                            && found.insert(next.to_array())
+                        {
+                            frontier.push(next);
                         }
-                        match field.rise(Vec2::new(node[0] as f32, node[1] as f32) * STEP_M) {
-                            Some(rise) => {
-                                lattice.nodes.insert(node, rise);
-                            }
-                            None => corners = false,
-                        }
                     }
-                    if !corners {
-                        continue;
-                    }
-                    // A wall standing up through the roof here.
-                    let cube = IVec3::new(
-                        (middle.x / CELL_M).floor() as i32,
-                        ((field.top + rise + 0.05) / CELL_M).floor() as i32,
-                        (middle.y / CELL_M).floor() as i32,
-                    );
-                    let blocked = base
-                        .cube(cube)
-                        .is_some_and(|c| c.fill != Fill::Open && base.in_wall(cube));
-                    lattice.middles.insert([i, j], rise);
-                    lattice.squares.insert([i, j], Square { owner, blocked });
-                    lattice.found.insert([i, j], Square { owner, blocked });
                 }
             }
         }
-        lattice
+        let cubes: Vec<(IVec3, Cube)> = found
+            .into_iter()
+            .filter_map(|at| {
+                let at = IVec3::from_array(at);
+                base.cube(at).map(|cube| (at, cube))
+            })
+            .collect();
+        Roofs::of(base, kits, &cubes)
     }
 
-    fn point(&self, node: [i32; 2]) -> Vec3 {
+    /// Whether there is no roof at all.
+    pub fn is_empty(&self) -> bool {
+        self.squares.is_empty()
+    }
+
+    /// The roofs of these roof cubes, sorted.
+    fn of(base: &Base, kits: &Kits, cubes: &[(IVec3, Cube)]) -> Roofs {
+        let mut roofs = Roofs {
+            squares: Vec::new(),
+            by_place: QuickMap::default(),
+            beside: Vec::new(),
+            roof: Vec::new(),
+            span: Vec::new(),
+            inside: Vec::new(),
+        };
+        // The top of every roof cube with nothing over it.
+        for &(at, cube) in cubes {
+            if cube.fill == Fill::Open || base.cube(at + IVec3::Y).is_some() {
+                continue;
+            }
+            for sub in [[0, 0], [1, 0], [0, 1], [1, 1]] {
+                let height = |du: f32, dv: f32| {
+                    let (u, v) = ((sub[0] as f32 + du) * 0.5, (sub[1] as f32 + dv) * 0.5);
+                    (at.y as f32 + surface(cube.shape, u, v)) * CELL_M
+                };
+                roofs.squares.push(Square {
+                    place: [at.x * 2 + sub[0], at.z * 2 + sub[1]],
+                    cube: at,
+                    kind: cube.kind,
+                    corners: CORNERS.map(|[dx, dz]| height(dx as f32, dz as f32)),
+                    middle: height(0.5, 0.5),
+                });
+            }
+        }
+        roofs.index();
+        roofs.link(base);
+        // Carried on past every open edge by its kit's eaves, each square of it on the
+        // planes of the cube it runs on from; where two run on into the same square, the
+        // higher, so eaves meeting round an inside corner make a valley.
+        let real = roofs.squares.len();
+        let mut past: BTreeMap<[i32; 2], Square> = BTreeMap::new();
+        for q in 0..real {
+            let square = roofs.squares[q];
+            let reach = kits.of(square.kind).map_or(EAVES_M, |kit| kit.eaves);
+            let n = libm::roundf(reach / STEP_M) as i32;
+            if n <= 0 {
+                continue;
+            }
+            let open: [bool; 4] = roofs.beside[q].map(|b| b == Beside::Open);
+            let shape = base.cube(square.cube).map_or(Shape::Whole, |c| c.shape);
+            let mut out: Vec<[i32; 2]> = Vec::new();
+            for side in 0..4 {
+                if !open[side] {
+                    continue;
+                }
+                let (step, _, _) = SIDES[side];
+                for k in 1..=n {
+                    out.push([step[0] * k, step[1] * k]);
+                }
+                // Round the corner, where the next side is open too.
+                let next = (side + 1) % 4;
+                if open[next] {
+                    let (turn, _, _) = SIDES[next];
+                    for a in 1..=n {
+                        for b in 1..=n {
+                            out.push([step[0] * a + turn[0] * b, step[1] * a + turn[1] * b]);
+                        }
+                    }
+                }
+            }
+            for [dx, dz] in out {
+                let place = [square.place[0] + dx, square.place[1] + dz];
+                let height = |x: f32, z: f32| {
+                    // A point in half cubes, in the owning cube's fractions.
+                    let (u, v) = (
+                        x * 0.5 - square.cube.x as f32,
+                        z * 0.5 - square.cube.z as f32,
+                    );
+                    (square.cube.y as f32 + plane(shape, u, v)) * CELL_M
+                };
+                let corners =
+                    CORNERS.map(|[cx, cz]| height((place[0] + cx) as f32, (place[1] + cz) as f32));
+                let middle = height(place[0] as f32 + 0.5, place[1] as f32 + 0.5);
+                // Not where the roof's cubes are, near it, nor into a wall or anything else
+                // beside the roof.
+                let roofed = roofs.by_place.get(&place).is_some_and(|on| {
+                    on.iter()
+                        .any(|&r| (roofs.squares[r].middle - middle).abs() < 1.0)
+                });
+                if roofed {
+                    continue;
+                }
+                let inside = IVec3::new(
+                    libm::floorf((place[0] as f32 + 0.5) * 0.5) as i32,
+                    libm::floorf(middle / CELL_M + 0.05) as i32,
+                    libm::floorf((place[1] as f32 + 0.5) * 0.5) as i32,
+                );
+                if base.cube(inside).is_some_and(|c| c.fill != Fill::Open) {
+                    continue;
+                }
+                let candidate = Square {
+                    place,
+                    cube: square.cube,
+                    kind: square.kind,
+                    corners,
+                    middle,
+                };
+                past.entry(place)
+                    .and_modify(|there| {
+                        if candidate.middle > there.middle + 1e-4 {
+                            there.cube = candidate.cube;
+                            there.kind = candidate.kind;
+                        }
+                        for k in 0..4 {
+                            there.corners[k] = there.corners[k].max(candidate.corners[k]);
+                        }
+                        there.middle = there.middle.max(candidate.middle);
+                    })
+                    .or_insert(candidate);
+            }
+        }
+        roofs.squares.extend(past.into_values());
+        roofs.index();
+        roofs.link(base);
+        roofs.group();
+        roofs
+    }
+
+    fn index(&mut self) {
+        self.by_place.clear();
+        for (q, square) in self.squares.iter().enumerate() {
+            self.by_place.entry(square.place).or_default().push(q);
+        }
+    }
+
+    /// What is beyond each side of each square.
+    fn link(&mut self, base: &Base) {
+        self.beside = (0..self.squares.len())
+            .map(|q| {
+                [0, 1, 2, 3].map(|side| {
+                    let square = &self.squares[q];
+                    let (step, _, _) = SIDES[side];
+                    let place = [square.place[0] + step[0], square.place[1] + step[1]];
+                    let along = |r: &usize| {
+                        let other = &self.squares[*r];
+                        (square.corners[side] - other.corners[(side + 3) % 4]).abs() < 1e-3
+                            && (square.corners[(side + 1) % 4] - other.corners[(side + 2) % 4])
+                                .abs()
+                                < 1e-3
+                    };
+                    if let Some(r) = self
+                        .by_place
+                        .get(&place)
+                        .and_then(|on| on.iter().copied().find(|r| along(r)))
+                    {
+                        return Beside::Square(r);
+                    }
+                    // Just past the edge and a little over it: something there stands up
+                    // beside the roof.
+                    let (a, b) = (self.point(q, side), self.point(q, (side + 1) % 4));
+                    let out = Vec3::new(step[0] as f32, 0.0, step[1] as f32);
+                    let probe = (a + b) * 0.5 + out * 0.05 + Vec3::Y * 0.05;
+                    let cube = (probe / CELL_M).floor().as_ivec3();
+                    if base.cube(cube).is_some_and(|c| c.fill != Fill::Open) {
+                        Beside::Against
+                    } else {
+                        Beside::Open
+                    }
+                })
+            })
+            .collect();
+    }
+
+    /// Groups the squares into roofs, each its height and how far each square is from its
+    /// open edges.
+    fn group(&mut self) {
+        let count = self.squares.len();
+        let mut parent: Vec<usize> = (0..count).collect();
+        fn root(parent: &mut [usize], mut q: usize) -> usize {
+            while parent[q] != q {
+                parent[q] = parent[parent[q]];
+                q = parent[q];
+            }
+            q
+        }
+        for q in 0..count {
+            for b in self.beside[q] {
+                if let Beside::Square(r) = b {
+                    let (a, b) = (root(&mut parent, q), root(&mut parent, r));
+                    if a != b {
+                        parent[a.max(b)] = a.min(b);
+                    }
+                }
+            }
+        }
+        self.roof = (0..count).map(|q| root(&mut parent, q)).collect();
+        self.span = vec![(f32::MAX, f32::MIN); count];
+        for q in 0..count {
+            let r = self.roof[q];
+            let square = &self.squares[q];
+            for h in square.corners.iter().chain([&square.middle]) {
+                self.span[r] = (self.span[r].0.min(*h), self.span[r].1.max(*h));
+            }
+        }
+        // From the squares on an open edge in.
+        self.inside = vec![u16::MAX; count];
+        let mut frontier = std::collections::VecDeque::new();
+        for q in 0..count {
+            if self.beside[q].contains(&Beside::Open) {
+                self.inside[q] = 0;
+                frontier.push_back(q);
+            }
+        }
+        while let Some(q) = frontier.pop_front() {
+            for b in self.beside[q] {
+                if let Beside::Square(r) = b
+                    && self.inside[r] == u16::MAX
+                {
+                    self.inside[r] = self.inside[q] + 1;
+                    frontier.push_back(r);
+                }
+            }
+        }
+    }
+
+    fn point(&self, q: usize, corner: usize) -> Vec3 {
+        let square = &self.squares[q];
+        let [dx, dz] = CORNERS[corner];
         Vec3::new(
-            node[0] as f32 * STEP_M,
-            self.field.top + self.nodes[&node],
-            node[1] as f32 * STEP_M,
+            (square.place[0] + dx) as f32 * STEP_M,
+            square.corners[corner],
+            (square.place[1] + dz) as f32 * STEP_M,
         )
     }
 
-    fn middle(&self, square: [i32; 2]) -> Vec3 {
+    fn middle(&self, q: usize) -> Vec3 {
+        let square = &self.squares[q];
         Vec3::new(
-            (square[0] as f32 + 0.5) * STEP_M,
-            self.field.top + self.middles[&square],
-            (square[1] as f32 + 0.5) * STEP_M,
+            (square.place[0] as f32 + 0.5) * STEP_M,
+            square.middle,
+            (square.place[1] as f32 + 0.5) * STEP_M,
         )
-    }
-
-    /// A square with covering on it: under the roof, and no wall through it.
-    fn covered(&self, square: [i32; 2]) -> Option<Square> {
-        self.found.get(&square).copied().filter(|s| !s.blocked)
     }
 
     /// One of a square's four triangles, on a side: its middle and the side's two corners.
-    fn triangle(&self, square: [i32; 2], side: usize) -> [Vec3; 3] {
-        let (_, a, b) = SIDES[side];
-        let at = |d: [i32; 2]| self.point([square[0] + d[0], square[1] + d[1]]);
-        [self.middle(square), at(a), at(b)]
+    fn triangle(&self, q: usize, side: usize) -> [Vec3; 3] {
+        [
+            self.middle(q),
+            self.point(q, side),
+            self.point(q, (side + 1) % 4),
+        ]
     }
 
-    /// The cell of a roof's section a square goes up with: the one it is over, or the
-    /// nearest, for eaves.
-    fn cell(&self, square: [i32; 2], stage: u8) -> RoofCell {
-        let owner = &self.field.sections[self.found[&square].owner];
-        let (min, max) = (owner.section.min, owner.section.max);
+    /// The height of a square's top over a point in it.
+    fn height(&self, q: usize, x: f32, z: f32) -> f32 {
+        let square = &self.squares[q];
+        let (fx, fz) = (
+            x / STEP_M - square.place[0] as f32 - 0.5,
+            z / STEP_M - square.place[1] as f32 - 0.5,
+        );
+        let side = if fz.abs() >= fx.abs() {
+            if fz < 0.0 { 0 } else { 2 }
+        } else if fx > 0.0 {
+            1
+        } else {
+            3
+        };
+        let [m, a, b] = self.triangle(q, side);
+        let p = Vec2::new(x, z);
+        let (m2, a2, b2) = (
+            Vec2::new(m.x, m.z),
+            Vec2::new(a.x, a.z),
+            Vec2::new(b.x, b.z),
+        );
+        let area = (a2 - m2).perp_dot(b2 - m2);
+        if area.abs() < 1e-9 {
+            return m.y;
+        }
+        let wa = (p - m2).perp_dot(b2 - m2) / area;
+        let wb = (a2 - m2).perp_dot(p - m2) / area;
+        m.y + (a.y - m.y) * wa + (b.y - m.y) * wb
+    }
+
+    /// The squares over a point, east and south in metres.
+    fn over(&self, x: f32, z: f32) -> &[usize] {
+        let place = [
+            libm::floorf(x / STEP_M) as i32,
+            libm::floorf(z / STEP_M) as i32,
+        ];
+        self.by_place.get(&place).map_or(&[], Vec::as_slice)
+    }
+
+    /// The top of the lowest roof over a point that is no lower than `above`, eaves too.
+    pub fn top_over(&self, x: f32, z: f32, above: f32) -> Option<f32> {
+        self.over(x, z)
+            .iter()
+            .map(|&q| self.height(q, x, z))
+            .filter(|&h| h >= above - 1e-3)
+            .min_by(|a, b| a.total_cmp(b))
+    }
+
+    /// The underside of the lowest roof over a point whose top is no lower than `above`.
+    pub fn under_over(&self, x: f32, z: f32, above: f32) -> Option<f32> {
+        self.top_over(x, z, above).map(|top| top - ROOF_THICK_M)
+    }
+
+    /// Where a point is on the roof whose top is nearest it: how far up from its lowest to
+    /// its highest, as a fraction, and how far in from an open edge, in metres.
+    pub fn place_of(&self, p: Vec3) -> Option<(f32, f32)> {
+        self.over(p.x, p.z)
+            .iter()
+            .map(|&q| (q, (self.height(q, p.x, p.z) - p.y).abs()))
+            .filter(|(_, off)| *off < 0.6)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(q, _)| {
+                let (low, high) = self.span[self.roof[q]];
+                let up = (self.height(q, p.x, p.z) - low) / (high - low).max(0.1);
+                (up, f32::from(self.inside[q].min(64)) * STEP_M)
+            })
+    }
+
+    /// The cell of a square's cube a piece goes up with.
+    fn cell(&self, q: usize, stage: u8) -> RoofCell {
         RoofCell {
-            roof: owner.id,
-            cell: [
-                square[0].div_euclid(2).clamp(min[0], max[0]),
-                square[1].div_euclid(2).clamp(min[2], max[2]),
-            ],
+            cube: self.squares[q].cube,
             stage,
         }
     }
@@ -345,198 +565,245 @@ struct Segment {
     from: Place,
     to: Place,
     sides: [Place; 2],
-    square: [i32; 2],
+    square: usize,
 }
 
-/// Lays the pitched roofs of a base built in a kit's kind: every piece of each square of
-/// them the kit owns, in the order they go up.
+/// Lays a roof kind's roofs: every piece of each square of them of the kit's kind, in the
+/// order they go up.
 pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mut Vec<Piece>) {
-    for field in Field::all(base, kits).values() {
-        // A roof is laid whole, so its long pieces join as they do over the whole base,
-        // but only where it reaches the scope.
-        if !field.reaches(scope) || !field.sections.iter().any(|o| o.kind == kit.kind()) {
-            continue;
-        }
-        let lattice = Lattice::new(base, field);
-        let ours = |square: [i32; 2]| {
-            lattice
-                .found
-                .get(&square)
-                .is_some_and(|s| field.sections[s.owner].kind == kit.kind())
-        };
-        if !lattice.squares.keys().any(|&square| ours(square)) {
-            continue;
-        }
-        let mut segments: Vec<Segment> = Vec::new();
-        for (&square, here) in &lattice.squares {
-            if here.blocked || !ours(square) {
-                continue;
-            }
-            let triangles: [[Vec3; 3]; 4] = [0, 1, 2, 3].map(|side| lattice.triangle(square, side));
-            let centroid = |t: &[Vec3; 3]| Place::near((t[0] + t[1] + t[2]) / 3.0);
-            // Its diagonals, between its own triangles.
-            for side in 0..4 {
-                let (a, b) = (&triangles[side], &triangles[(side + 1) % 4]);
-                let (p, q) = (a[0], a[2]);
-                if let Some(part) = crease(a, b, p, q) {
-                    segments.push(Segment {
-                        part,
-                        from: Place::near(p),
-                        to: Place::near(q),
-                        sides: [centroid(a), centroid(b)],
-                        square,
-                    });
-                }
-            }
-            // Its sides: shared with the square beyond, or an edge of the roof.
-            for (side, triangle) in triangles.iter().enumerate() {
-                let (step, _, _) = SIDES[side];
-                let beyond = [square[0] + step[0], square[1] + step[1]];
-                let (p, q) = (triangle[1], triangle[2]);
-                let part = match lattice.found.get(&beyond) {
-                    Some(there) if !there.blocked => {
-                        // Each shared side once, from the square to its west or north.
-                        if side == 0 || side == 3 {
-                            continue;
-                        }
-                        let other = lattice.triangle(beyond, (side + 2) % 4);
-                        let Some(part) = crease(triangle, &other, p, q) else {
-                            continue;
-                        };
-                        segments.push(Segment {
-                            part,
-                            from: Place::near(p),
-                            to: Place::near(q),
-                            sides: [centroid(triangle), centroid(&other)],
-                            square,
-                        });
-                        continue;
-                    }
-                    Some(_) => RoofPart::Flashing,
-                    None if (p.y - q.y).abs() < 1e-4 => RoofPart::Fascia,
-                    None => RoofPart::Verge,
-                };
-                let out = Vec3::new(step[0] as f32, 0.0, step[1] as f32) * STEP_M;
+    if kit.pattern != crate::kit::Pattern::Roof {
+        return;
+    }
+    // Only the roofs with a cube of the kind near the scope, whole, so their long pieces
+    // join as they do over the whole base.
+    let mine = scope
+        .cubes(base, None)
+        .iter()
+        .any(|(_, cube)| cube.kind == kit.kind());
+    if !mine {
+        return;
+    }
+    let roofs = Roofs::whole(base, kits, scope);
+    let ours = |q: usize| roofs.squares[q].kind == kit.kind();
+    let count = roofs.squares.len();
+    let mut segments: Vec<Segment> = Vec::new();
+    for q in (0..count).filter(|&q| ours(q)) {
+        let triangles: [[Vec3; 3]; 4] = [0, 1, 2, 3].map(|side| roofs.triangle(q, side));
+        let centroid = |t: &[Vec3; 3]| Place::near((t[0] + t[1] + t[2]) / 3.0);
+        // Its diagonals, between its own triangles.
+        for side in 0..4 {
+            let (a, b) = (&triangles[side], &triangles[(side + 1) % 4]);
+            let (p, r) = (a[0], a[2]);
+            if let Some(part) = crease(a, b, p, r) {
                 segments.push(Segment {
                     part,
                     from: Place::near(p),
-                    to: Place::near(q),
-                    sides: [centroid(triangle), Place::near((p + q) * 0.5 + out)],
-                    square,
+                    to: Place::near(r),
+                    sides: [centroid(a), centroid(b)],
+                    square: q,
                 });
             }
         }
-        let joined = join(segments);
-        let r = &kit.roof;
-        let (rafter, batten) = (r.rafter.1 * 0.5, r.batten.1);
-        // The beams under the creases, then every long piece in its own stage.
-        for segment in &joined {
-            let cell = lattice.cell(segment.square, segment.part.stage());
-            let seed = hash(&[
-                segment.from.0[0] as u32,
-                segment.from.0[2] as u32,
-                segment.part as u32,
-            ]);
-            if matches!(
-                segment.part,
-                RoofPart::Ridge | RoofPart::Hip | RoofPart::Valley
-            ) {
-                let (a, b) = (segment.sides[0].metres(), segment.sides[1].metres());
-                let (from, to) = (segment.from.metres(), segment.to.metres());
-                let down = (planar_normal(from, to, a) + planar_normal(from, to, b))
-                    .normalize_or(Vec3::Y)
-                    * (batten + rafter);
-                pieces.push(Piece::Roof {
-                    part: RoofPart::Rafter,
-                    from: Place::near(from - down),
-                    to: Place::near(to - down),
-                    sides: segment.sides,
-                    seed: hash(&[seed, 1]),
-                    cell: lattice.cell(segment.square, 1),
-                });
-            }
-            pieces.push(Piece::Roof {
-                part: segment.part,
-                from: segment.from,
-                to: segment.to,
-                sides: segment.sides,
-                seed,
-                cell,
-            });
-        }
-        rafters(&lattice, &ours, batten + rafter, pieces);
-        // Battens and covering, a square at a time.
-        let texture = kit
-            .textures
-            .get(&crate::Material::Covering)
-            .map_or(1.0, |texture| texture.metres[1]);
-        let exposure = r.exposure(texture);
-        let mut battens: Vec<Segment> = Vec::new();
-        for (&square, here) in &lattice.squares {
-            if here.blocked || !ours(square) {
-                continue;
-            }
-            let owner = &field.sections[here.owner];
-            let pitch = owner.section.pitch;
-            // The courses' lower edges: the first at the eaves, then a course's rise up.
-            let eave = field.top - owner.eaves * pitch;
-            let rise = exposure * pitch / (1.0 + pitch * pitch).sqrt();
-            let corners = [[0, 0], [1, 0], [1, 1], [0, 1]]
-                .map(|[di, dj]| Place::near(lattice.point([square[0] + di, square[1] + dj])));
-            let open = [0, 1, 2, 3].map(|side| {
-                let (step, _, _) = SIDES[side];
-                lattice
-                    .covered([square[0] + step[0], square[1] + step[1]])
-                    .is_none()
-            });
-            let courses = (ticks(eave), ticks(rise).max(1));
-            pieces.push(Piece::Covering {
-                corners,
-                middle: Place::near(lattice.middle(square)),
-                courses,
-                open,
-                cell: lattice.cell(square, 3),
-            });
-            // A batten under the foot of every course across the square, each joined to
-            // the next square's into one along the face.
-            let (base, step) = (super::metres(courses.0), super::metres(courses.1));
-            for side in 0..4 {
-                let t = lattice.triangle(square, side);
-                let n = normal(&t);
-                let upslope = n.cross(Vec3::Y.cross(n).normalize_or(Vec3::X));
-                let low = t.iter().map(|p| p.y).fold(f32::MAX, f32::min);
-                let high = t.iter().map(|p| p.y).fold(f32::MIN, f32::max);
-                let first = ((low - base) / step).ceil() as i32;
-                let last = ((high - base) / step).floor() as i32;
-                for course in first..=last {
-                    let Some((p, q)) = level_cut(&t, base + course as f32 * step) else {
-                        continue;
-                    };
-                    if p.distance(q) < 1e-3 {
+        // Its sides: shared with the square beyond, or an edge of the roof.
+        for (side, triangle) in triangles.iter().enumerate() {
+            let (step, _, _) = SIDES[side];
+            let (p, r) = (triangle[1], triangle[2]);
+            let part = match roofs.beside[q][side] {
+                Beside::Square(other) => {
+                    // Each shared side once, from the square to its west or north.
+                    if side == 0 || side == 3 {
                         continue;
                     }
-                    let beside = Place::near((p + q) * 0.5 + upslope * 0.1);
-                    battens.push(Segment {
-                        part: RoofPart::Batten,
+                    let theirs = roofs.triangle(other, (side + 2) % 4);
+                    let Some(part) = crease(triangle, &theirs, p, r) else {
+                        continue;
+                    };
+                    segments.push(Segment {
+                        part,
                         from: Place::near(p),
-                        to: Place::near(q),
-                        sides: [beside, beside],
-                        square,
+                        to: Place::near(r),
+                        sides: [centroid(triangle), centroid(&theirs)],
+                        square: q,
                     });
+                    continue;
                 }
-            }
-        }
-        for segment in join(battens) {
-            pieces.push(Piece::Roof {
-                part: RoofPart::Batten,
-                from: segment.from,
-                to: segment.to,
-                sides: segment.sides,
-                seed: 0,
-                cell: lattice.cell(segment.square, 2),
+                Beside::Against => RoofPart::Flashing,
+                Beside::Open if (p.y - r.y).abs() < 1e-4 => RoofPart::Fascia,
+                Beside::Open => RoofPart::Verge,
+            };
+            let out = Vec3::new(step[0] as f32, 0.0, step[1] as f32) * STEP_M;
+            segments.push(Segment {
+                part,
+                from: Place::near(p),
+                to: Place::near(r),
+                sides: [centroid(triangle), Place::near((p + r) * 0.5 + out)],
+                square: q,
             });
         }
     }
+    let joined = ridges_a_cube_wide(join(segments));
+    let r = &kit.roof;
+    let (rafter, batten) = (r.rafter.1 * 0.5, r.batten.1);
+    // The beams under the creases, then every long piece in its own stage.
+    for segment in &joined {
+        let cell = roofs.cell(segment.square, segment.part.stage());
+        let seed = hash(&[
+            segment.from.0[0] as u32,
+            segment.from.0[2] as u32,
+            segment.part as u32,
+        ]);
+        if matches!(
+            segment.part,
+            RoofPart::Ridge | RoofPart::Hip | RoofPart::Valley
+        ) {
+            let (a, b) = (segment.sides[0].metres(), segment.sides[1].metres());
+            let (from, to) = (segment.from.metres(), segment.to.metres());
+            let down = (planar_normal(from, to, a) + planar_normal(from, to, b))
+                .normalize_or(Vec3::Y)
+                * (batten + rafter);
+            pieces.push(Piece::Roof {
+                part: RoofPart::Rafter,
+                from: Place::near(from - down),
+                to: Place::near(to - down),
+                sides: segment.sides,
+                seed: hash(&[seed, 1]),
+                cell: roofs.cell(segment.square, 1),
+            });
+        }
+        pieces.push(Piece::Roof {
+            part: segment.part,
+            from: segment.from,
+            to: segment.to,
+            sides: segment.sides,
+            seed,
+            cell,
+        });
+    }
+    rafters(&roofs, &ours, batten + rafter, pieces);
+    // Battens and covering, a square at a time, the courses' lower edges level lines a
+    // course's rise apart up from each roof's lowest edge.
+    let texture = kit
+        .textures
+        .get(&crate::Material::Covering)
+        .map_or(1.0, |texture| texture.metres[1]);
+    let exposure = r.exposure(texture);
+    // Every slope rises a cube a cube: a course's rise is its exposure up a 45° slope.
+    let rise = exposure * std::f32::consts::FRAC_1_SQRT_2;
+    let mut battens: Vec<Segment> = Vec::new();
+    for q in (0..count).filter(|&q| ours(q)) {
+        let eave = roofs.span[roofs.roof[q]].0;
+        let corners = [0, 1, 2, 3].map(|k| Place::near(roofs.point(q, k)));
+        let open = roofs.beside[q].map(|b| !matches!(b, Beside::Square(_)));
+        let courses = (ticks(eave), ticks(rise).max(1));
+        pieces.push(Piece::Covering {
+            corners,
+            middle: Place::near(roofs.middle(q)),
+            courses,
+            open,
+            cell: roofs.cell(q, COVERING),
+        });
+        // A batten under the foot of every course across the square, each joined to the
+        // next square's into one along the face.
+        let (base_m, step) = (super::metres(courses.0), super::metres(courses.1));
+        for side in 0..4 {
+            let t = roofs.triangle(q, side);
+            let n = normal(&t);
+            let upslope = n.cross(Vec3::Y.cross(n).normalize_or(Vec3::X));
+            let low = t.iter().map(|p| p.y).fold(f32::MAX, f32::min);
+            let high = t.iter().map(|p| p.y).fold(f32::MIN, f32::max);
+            let first = libm::ceilf((low - base_m) / step) as i32;
+            let last = libm::floorf((high - base_m) / step) as i32;
+            for course in first..=last {
+                let Some((p, r)) = level_cut(&t, base_m + course as f32 * step) else {
+                    continue;
+                };
+                if p.distance(r) < 1e-3 {
+                    continue;
+                }
+                let beside = Place::near((p + r) * 0.5 + upslope * 0.1);
+                battens.push(Segment {
+                    part: RoofPart::Batten,
+                    from: Place::near(p),
+                    to: Place::near(r),
+                    sides: [beside, beside],
+                    square: q,
+                });
+            }
+        }
+    }
+    for segment in join(battens) {
+        pieces.push(Piece::Roof {
+            part: RoofPart::Batten,
+            from: segment.from,
+            to: segment.to,
+            sides: segment.sides,
+            seed: 0,
+            cell: roofs.cell(segment.square, 2),
+        });
+    }
+}
+
+/// A ridge a cube wide, the flat top of whole cubes along a roof's middle where its span
+/// is odd, capped as one: its two ridges, level, as long as each other, a cube apart and at
+/// one height, are one cap along its middle as wide as it, over the slopes either side.
+fn ridges_a_cube_wide(mut segments: Vec<Segment>) -> Vec<Segment> {
+    let wide = super::TICKS;
+    let mut gone = vec![false; segments.len()];
+    let mut merged = Vec::new();
+    for i in 0..segments.len() {
+        let a = &segments[i];
+        if gone[i] || a.part != RoofPart::Ridge || a.from.0[1] != a.to.0[1] {
+            continue;
+        }
+        for j in i + 1..segments.len() {
+            let b = &segments[j];
+            if gone[j] || b.part != RoofPart::Ridge || b.from.0[1] != a.from.0[1] {
+                continue;
+            }
+            let across = IVec3::from_array(b.from.0) - IVec3::from_array(a.from.0);
+            let along = IVec3::from_array(a.to.0) - IVec3::from_array(a.from.0);
+            let same = IVec3::from_array(b.to.0) - IVec3::from_array(b.from.0) == along;
+            let square = across.y == 0
+                && across.x * along.x + across.z * along.z == 0
+                && across.x.abs() + across.z.abs() == wide;
+            if !(same && square) {
+                continue;
+            }
+            // The side of each away from the other.
+            let away = |s: &Segment, from: IVec3| {
+                *s.sides
+                    .iter()
+                    .max_by_key(|p| {
+                        let d = IVec3::from_array(p.0) - from;
+                        (d.x * across.x + d.z * across.z).abs()
+                    })
+                    .expect("two sides")
+            };
+            let middle =
+                |p: Place, q: Place| Place([0, 1, 2].map(|k| (p.0[k] + q.0[k]).div_euclid(2)));
+            merged.push(Segment {
+                part: RoofPart::Ridge,
+                from: middle(a.from, b.from),
+                to: middle(a.to, b.to),
+                sides: [
+                    away(a, IVec3::from_array(b.from.0)),
+                    away(b, IVec3::from_array(a.from.0)),
+                ],
+                square: a.square,
+            });
+            gone[i] = true;
+            gone[j] = true;
+            break;
+        }
+    }
+    let mut out: Vec<Segment> = segments
+        .drain(..)
+        .zip(gone)
+        .filter(|(_, gone)| !gone)
+        .map(|(segment, _)| segment)
+        .collect();
+    out.extend(merged);
+    out
 }
 
 /// Where a level plane crosses a triangle, if it does: the two ends of the line.
@@ -571,9 +838,14 @@ pub(crate) fn planar_normal(from: Vec3, to: Vec3, beside: Vec3) -> Vec3 {
 /// Lines of roof in a line joined end to end: each ridge, hip, valley, eave, verge and
 /// flashing one piece from end to end.
 fn join(segments: Vec<Segment>) -> Vec<Segment> {
-    // By what each is and the line it is on in plan, then along it. Heights are to the
-    // nearest tick, so a line's slope is compared, not its direction in ticks.
-    type Line = (RoofPart, [i64; 2], i64);
+    // By what each is, the line it is on in plan and its height where that line crosses
+    // the plan's origin, then along it. Heights are to the nearest tick, so a line's slope
+    // is compared, not its direction in ticks.
+    type Line = (RoofPart, [i64; 2], i64, i64);
+    let slope = |s: &Segment| {
+        let (a, b) = (s.from.metres(), s.to.metres());
+        (b.y - a.y) / Vec2::new(b.x - a.x, b.z - a.z).length().max(1e-6)
+    };
     let mut lines: BTreeMap<Line, Vec<(i64, i64, Segment)>> = BTreeMap::new();
     for mut segment in segments {
         let plan = |p: Place| glam::I64Vec2::new(i64::from(p.0[0]), i64::from(p.0[2]));
@@ -585,16 +857,17 @@ fn join(segments: Vec<Segment>) -> Vec<Segment> {
             std::mem::swap(&mut segment.from, &mut segment.to);
         }
         let (a, b) = (plan(segment.from), plan(segment.to));
-        let key = (segment.part, d.to_array(), a.perp_dot(d));
+        // Its height where it would cross the line's start, to the centimetre.
+        let along =
+            a.as_vec2().dot(d.as_vec2().normalize_or_zero()) * (CELL_M / super::TICKS as f32);
+        let level =
+            libm::roundf((segment.from.metres().y - slope(&segment) * along) * 100.0) as i64;
+        let key = (segment.part, d.to_array(), a.perp_dot(d), level);
         lines
             .entry(key)
             .or_default()
             .push((a.dot(d), b.dot(d), segment));
     }
-    let slope = |s: &Segment| {
-        let (a, b) = (s.from.metres(), s.to.metres());
-        (b.y - a.y) / Vec2::new(b.x - a.x, b.z - a.z).length().max(1e-6)
-    };
     let mut out = Vec::new();
     for (_, mut on_line) in lines {
         on_line.sort_by_key(|(start, end, _)| (*start, *end));
@@ -628,171 +901,98 @@ fn gcd(a: i32, b: i32) -> i32 {
     if b == 0 { a } else { gcd(b, a % b) }
 }
 
-/// The rafters: one up every slope at every cube, from its foot at the eaves to the ridge,
-/// hip or valley it meets, under the battens.
-fn rafters(
-    lattice: &Lattice,
-    ours: &dyn Fn([i32; 2]) -> bool,
-    below: f32,
-    pieces: &mut Vec<Piece>,
-) {
-    // Lines north and south at every cube, for slopes falling north or south; lines east
-    // and west, for slopes falling east or west.
-    let (mut low, mut high) = ([i32::MAX; 2], [i32::MIN; 2]);
-    for square in lattice.squares.keys() {
-        for axis in 0..2 {
-            low[axis] = low[axis].min(square[axis]);
-            high[axis] = high[axis].max(square[axis] + 1);
+/// The rafters: one up every slope along every cube's edge, from its foot at the eaves to
+/// the ridge, hip or valley it meets, under the battens.
+fn rafters(roofs: &Roofs, ours: &dyn Fn(usize) -> bool, below: f32, pieces: &mut Vec<Piece>) {
+    let mut segments = Vec::new();
+    for q in (0..roofs.squares.len()).filter(|&q| ours(q)) {
+        let place = roofs.squares[q].place;
+        // Its east side on a cube's edge, a line north and south; its south side, east and
+        // west.
+        for (side, on_edge, along) in [
+            (1, (place[0] + 1).rem_euclid(2) == 0, 2),
+            (2, (place[1] + 1).rem_euclid(2) == 0, 0),
+        ] {
+            let Beside::Square(other) = roofs.beside[q][side] else {
+                continue;
+            };
+            if !on_edge || !ours(other) {
+                continue;
+            }
+            let across = 2 - along;
+            let mine = roofs.triangle(q, side);
+            let theirs = roofs.triangle(other, (side + 2) % 4);
+            // Each falls along the line, the same way.
+            let fall = |n: Vec3| {
+                (n[along].abs() > n[across].abs() + 1e-4 && n.y < 1.0 - 1e-4)
+                    .then_some(n[along] > 0.0)
+            };
+            let n = normal(&mine);
+            match (fall(n), fall(normal(&theirs))) {
+                (Some(a), Some(b)) if a == b => {}
+                _ => continue,
+            }
+            let down = n * below;
+            let centre = Place::near((mine[0] + mine[1] + mine[2]) / 3.0);
+            segments.push(Segment {
+                part: RoofPart::Rafter,
+                from: Place::near(mine[1] - down),
+                to: Place::near(mine[2] - down),
+                sides: [centre, centre],
+                square: q,
+            });
         }
     }
-    if low[0] > high[0] {
-        return;
+    for segment in join(segments) {
+        let seed = hash(&[
+            segment.from.0[0] as u32,
+            segment.from.0[2] as u32,
+            segment.from.0[1] as u32,
+            3,
+        ]);
+        pieces.push(Piece::Roof {
+            part: RoofPart::Rafter,
+            from: segment.from,
+            to: segment.to,
+            sides: segment.sides,
+            seed,
+            cell: roofs.cell(segment.square, 1),
+        });
     }
-    for across in 0..2 {
-        let along = 1 - across;
-        let first = low[across] + low[across].rem_euclid(2);
-        for line in (first..=high[across]).step_by(2) {
-            // The run of squares along the line whose triangles beside it fall along it,
-            // one way: (its first square, its last, which way it falls).
-            let mut run: Option<([i32; 2], [i32; 2], bool)> = None;
-            let mut done: Vec<([i32; 2], [i32; 2])> = Vec::new();
-            for at in low[along]..=high[along] {
-                // The squares either side of the line here, and their triangles against it.
-                let mut sides = Vec::new();
-                for before in [true, false] {
-                    let mut square = [0; 2];
-                    square[across] = if before { line - 1 } else { line };
-                    square[along] = at;
-                    if lattice.covered(square).is_none() || !ours(square) {
-                        continue;
-                    }
-                    // The side of the square on the line.
-                    let side = match (across, before) {
-                        (0, true) => 1,
-                        (0, false) => 3,
-                        (_, true) => 2,
-                        (_, false) => 0,
-                    };
-                    sides.push((square, normal(&lattice.triangle(square, side))));
-                }
-                let falls: Vec<Option<bool>> = sides
-                    .iter()
-                    .map(|(_, n)| {
-                        let (a, c) = (
-                            n[if along == 0 { 0 } else { 2 }],
-                            n[if across == 0 { 0 } else { 2 }],
-                        );
-                        (a.abs() > c.abs() + 1e-4 && n.y < 1.0 - 1e-4).then_some(a > 0.0)
-                    })
-                    .collect();
-                let way = match falls.as_slice() {
-                    [Some(a), Some(b)] if a == b => Some(*a),
-                    _ => None,
-                };
-                let square = sides.first().map(|(square, _)| *square);
-                match (way, &mut run, square) {
-                    (Some(way), Some((_, last, running)), Some(square)) if *running == way => {
-                        *last = square;
-                    }
-                    (Some(way), _, Some(square)) => {
-                        if let Some((a, b, _)) = run.take() {
-                            done.push((a, b));
-                        }
-                        run = Some((square, square, way));
-                    }
-                    _ => {
-                        if let Some((a, b, _)) = run.take() {
-                            done.push((a, b));
-                        }
-                    }
-                }
-            }
-            if let Some((a, b, _)) = run.take() {
-                done.push((a, b));
-            }
-            for (a, b) in done {
-                // From the first square's near corner on the line to the last's far one.
-                let node = |square: [i32; 2], end: i32| {
-                    let mut node = [0; 2];
-                    node[across] = line;
-                    node[along] = square[along] + end;
-                    node
-                };
-                let (from, to) = (lattice.point(node(a, 0)), lattice.point(node(b, 1)));
-                let face = lattice.triangle(
-                    a,
-                    match (across, a[across] < line) {
-                        (0, true) => 1,
-                        (0, false) => 3,
-                        (_, true) => 2,
-                        (_, false) => 0,
-                    },
-                );
-                let down = normal(&face) * below;
-                let centre = (face[0] + face[1] + face[2]) / 3.0;
-                pieces.push(Piece::Roof {
-                    part: RoofPart::Rafter,
-                    from: Place::near(from - down),
-                    to: Place::near(to - down),
-                    sides: [Place::near(centre), Place::near(centre)],
-                    seed: hash(&[line as u32, a[along] as u32, across as u32, 3]),
-                    cell: lattice.cell(a, 1),
-                });
-            }
+}
+
+/// A block kind's cubes carried up into the roof over its walls (`Piece::Gable`): every
+/// roof cube standing on one of its whole cubes, its surface cut at the roof's underside, as
+/// a gable end rises to its verges and a wall's top closes the wedge under its eaves.
+pub(crate) fn gables(base: &Base, kit: &Kit, scope: Scope, pieces: &mut Vec<Piece>) {
+    for (at, cube) in scope.cubes(base, None) {
+        if !cube.kind.is_roof() || cube.fill == Fill::Open {
+            continue;
+        }
+        let under_it = base.cube(at - IVec3::Y);
+        if !under_it.is_some_and(|c| {
+            c.kind == kit.kind() && super::drawn_fill(&c) == Fill::Solid && !c.shape.is_cut()
+        }) {
+            continue;
+        }
+        if let Some(under) = underside(base, at, cube) {
+            pieces.push(Piece::Gable { cube: at, under });
         }
     }
 }
 
-/// The cubes a block kind's gable fills: over each of its walls' tops a roof covers, up to
-/// the roof's underside, each with the underside's height over it, so its surface is cut
-/// to the slope. Over a gable end they rise to the ridge; along the eaves they close the
-/// wedge between the wall and the roof.
-pub(crate) fn gables(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mut Vec<Piece>) {
-    let fields = Field::all(base, kits);
-    if fields.is_empty() {
-        return;
-    }
-    for (at, cube) in scope.cubes(base, None) {
-        if cube.kind != kit.kind() || cube.fill == Fill::Open || !base.in_wall(at) {
-            continue;
-        }
-        let storey = crate::storey_of(at.y);
-        if at.y != crate::wall_layer(storey) + STOREY_CUBES - 1 {
-            continue;
-        }
-        let Some(field) = fields.get(&storey) else {
-            continue;
-        };
-        let mut above = at + IVec3::Y;
-        while base.cube(above).is_none() {
-            let bottom = above.y as f32 * CELL_M;
-            let under: Option<Vec<i32>> = (0..9)
-                .map(|n| {
-                    let corner = Vec2::new(
-                        (above.x as f32 + (n % 3) as f32 * 0.5) * CELL_M,
-                        (above.z as f32 + (n / 3) as f32 * 0.5) * CELL_M,
-                    );
-                    field.under(corner).map(ticks)
-                })
-                .collect();
-            let Some(under) = under else {
-                break;
-            };
-            let highest = under.iter().copied().max().unwrap_or(i32::MIN);
-            if super::metres(highest) < bottom + 0.02 {
-                break;
-            }
-            pieces.push(Piece::Gable {
-                cube: above,
-                under: [
-                    [under[0], under[1], under[2]],
-                    [under[3], under[4], under[5]],
-                    [under[6], under[7], under[8]],
-                ],
-            });
-            above += IVec3::Y;
-        }
-    }
+/// The underside of a roof cube's roof over its corners, the middles of its sides and its
+/// middle, west to east and north to south, in ticks, if any of it is over the cube's
+/// bottom: what a wall carried up into it is cut at.
+pub(crate) fn underside(base: &Base, at: IVec3, cube: Cube) -> Option<[[i32; 3]; 3]> {
+    let covered = base.cube(at + IVec3::Y).is_some();
+    let under = |u: f32, v: f32| {
+        let top = (at.y as f32 + surface(cube.shape, u, v)) * CELL_M;
+        ticks(if covered { top } else { top - ROOF_THICK_M })
+    };
+    let rows = [0.0, 0.5, 1.0].map(|v| [0.0, 0.5, 1.0].map(|u| under(u, v)));
+    let highest = rows.iter().flatten().copied().max().unwrap_or(i32::MIN);
+    (super::metres(highest) > at.y as f32 * CELL_M + 0.02).then_some(rows)
 }
 
 /// How high a gable's cube may go at a point of it, in metres: the roof's underside over the
@@ -812,36 +1012,66 @@ pub fn gable_cut(cube: IVec3, under: &[[i32; 3]; 3], at: Vec3) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::tests::kit;
-    use crate::{BuildOp, RoofStyle};
+    use crate::kit::Pattern;
+    use crate::roofer::{self, Style};
+    use crate::{BuildOp, STOREY_M};
 
-    fn roofed(rooms: &[([i32; 3], [i32; 3])], roofs: &[RoofSection]) -> Base {
+    const ROOF: Kind = Kind::FIRST_ROOF;
+
+    fn roof_kit() -> Kit {
+        Kit {
+            id: ROOF.0,
+            pattern: Pattern::Roof,
+            ..Kit::default()
+        }
+    }
+
+    /// A room of plain walls over a footprint of rectangles, roofed by the roofer in a
+    /// style.
+    fn roofed(rooms: &[([i32; 3], [i32; 3])], style: Style) -> Base {
         let mut base = Base::default();
+        let mut footprint = BTreeSet::new();
         for &(min, max) in rooms {
             base.apply(BuildOp::AddRoom {
                 min,
                 max,
-                kind: kit().kind(),
+                kind: Kind::PLAIN,
+            });
+            for x in min[0]..=max[0] {
+                for z in min[2]..=max[2] {
+                    footprint.insert([x, z]);
+                }
+            }
+        }
+        // The flat roof the room tool lays, off.
+        base.apply(BuildOp::Fill {
+            min: [-50, 5, -50],
+            max: [50, 5, 50],
+            cube: None,
+        });
+        let plan = roofer::over(&footprint, 6, style, None);
+        for (at, shape) in plan.roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(ROOF, Fill::Solid)
+                }),
             });
         }
-        for &section in roofs {
-            base.apply(BuildOp::AddRoof(section));
+        for at in plan.gables {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube::new(Kind::PLAIN, Fill::Solid)),
+            });
         }
         base
     }
 
-    fn section(min: [i32; 3], max: [i32; 3], style: RoofStyle, along_x: bool) -> RoofSection {
-        RoofSection {
-            min,
-            max,
-            style,
-            along_x,
-            pitch: 0.7,
-        }
-    }
-
     fn laid(base: &Base) -> Vec<Piece> {
-        let kit = kit();
+        let kit = roof_kit();
         let mut pieces = Vec::new();
         lay(
             base,
@@ -873,17 +1103,14 @@ mod tests {
     }
 
     #[test]
-    fn a_gable_roof_has_one_ridge_two_eaves_and_four_verges() {
-        // Five metres by four, the ridge along X two metres in, rising 1.4 m.
-        let base = roofed(
-            &[([0, 0, 0], [9, 0, 7])],
-            &[section([0, 0, 0], [9, 0, 7], RoofStyle::Gable, true)],
-        );
+    fn a_gable_of_cubes_has_one_ridge_two_eaves_and_four_verges() {
+        // Five metres by four, the ridge along X two metres in, rising two metres.
+        let base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Gable);
         let pieces = laid(&base);
         let ridges = parts(&pieces, RoofPart::Ridge);
         assert_eq!(ridges.len(), 1, "{ridges:?}");
         let (a, b) = ridges[0];
-        let top = STOREY_M + 2.0 * 0.7;
+        let top = STOREY_M + 2.0;
         // From verge to verge, over the gables' overhang.
         assert!(
             close(a, Vec3::new(-0.5, top, 2.0)) && close(b, Vec3::new(5.5, top, 2.0)),
@@ -893,15 +1120,15 @@ mod tests {
         assert_eq!(parts(&pieces, RoofPart::Verge).len(), 4);
         assert!(parts(&pieces, RoofPart::Hip).is_empty());
         assert!(parts(&pieces, RoofPart::Valley).is_empty());
-        // The eaves overhang by half a metre, carried on down at the pitch.
+        // The eaves overhang by half a metre, carried on down the slope.
         for (a, b) in parts(&pieces, RoofPart::Fascia) {
             assert!(
-                (a.y - (STOREY_M - 0.35)).abs() < 0.01 && a.y == b.y,
+                (a.y - (STOREY_M - 0.5)).abs() < 0.01 && a.y == b.y,
                 "{a} {b}"
             );
             assert!((a.z + 0.5).abs() < 0.01 || (a.z - 4.5).abs() < 0.01, "{a}");
         }
-        // A covering and battens over every square, eaves and all, each with its stage.
+        // A covering over every square, eaves and all, each with its stage.
         let squares = pieces
             .iter()
             .filter(|p| matches!(p, Piece::Covering { .. }))
@@ -909,20 +1136,23 @@ mod tests {
         assert_eq!(squares, 24 * 20);
         for piece in &pieces {
             let (stage, want) = match piece {
-                Piece::Covering { cell, .. } => (cell.stage, 3),
+                Piece::Covering { cell, .. } => (cell.stage, COVERING),
                 Piece::Roof { part, cell, .. } => (cell.stage, part.stage()),
                 _ => continue,
             };
             assert_eq!(stage, want, "{piece:?}");
+            // Every piece waits on a roof cube.
+            let cube = piece.roof_cell().unwrap().cube;
+            assert!(base.cube(cube).is_some_and(|c| c.kind == ROOF), "{piece:?}");
         }
+        // Rafters along every cube's edge up each slope, eleven between the verges a side,
+        // and a beam under the ridge.
+        assert_eq!(parts(&pieces, RoofPart::Rafter).len(), 2 * 11 + 1);
     }
 
     #[test]
-    fn a_hip_roof_has_four_hips_and_a_short_ridge() {
-        let base = roofed(
-            &[([0, 0, 0], [9, 0, 7])],
-            &[section([0, 0, 0], [9, 0, 7], RoofStyle::Hip, true)],
-        );
+    fn a_hip_of_cubes_has_four_hips_and_a_short_ridge() {
+        let base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Hip);
         let pieces = laid(&base);
         let hips = parts(&pieces, RoofPart::Hip);
         assert_eq!(hips.len(), 4, "{hips:?}");
@@ -933,10 +1163,10 @@ mod tests {
         assert!((a.distance(b) - 1.0).abs() < 0.01, "{a} {b}");
         assert!(parts(&pieces, RoofPart::Verge).is_empty());
         assert_eq!(parts(&pieces, RoofPart::Fascia).len(), 4);
-        // Hips run from the eaves' corners up to the ridge's ends.
+        // Hips run from the eaves' corners, past the walls, up to the ridge's ends.
         for (a, b) in hips {
             let (low, high) = if a.y < b.y { (a, b) } else { (b, a) };
-            assert!((low.y - (STOREY_M - 0.35)).abs() < 0.01, "{low}");
+            assert!((low.y - (STOREY_M - 0.5)).abs() < 0.01, "{low}");
             assert!(
                 close(high, ridges[0].0) || close(high, ridges[0].1),
                 "{high}"
@@ -945,136 +1175,130 @@ mod tests {
     }
 
     #[test]
-    fn an_l_has_a_valley_where_its_wings_meet_and_no_eaves_inside_the_other() {
-        // Two wings four metres wide, one along X and one along Z, meeting in a corner.
+    fn an_l_of_cubes_has_a_valley_where_its_wings_meet_and_eaves_that_meet_in_it() {
         let base = roofed(
-            &[([0, 0, 0], [11, 0, 7]), ([0, 0, 8], [7, 0, 15])],
-            &[
-                section([0, 0, 0], [11, 0, 7], RoofStyle::Gable, true),
-                section([0, 0, 4], [7, 0, 15], RoofStyle::Gable, false),
-            ],
+            &[([0, 0, 0], [11, 0, 7]), ([0, 0, 7], [7, 0, 15])],
+            Style::Hip,
         );
         let pieces = laid(&base);
         let valleys = parts(&pieces, RoofPart::Valley);
-        assert!(!valleys.is_empty());
-        // The valley runs from the inside corner of the L's eaves up to where the ridges meet.
-        let top = STOREY_M + 2.0 * 0.7;
-        let meet = Vec3::new(2.0, top, 2.0);
-        assert!(
-            valleys
-                .iter()
-                .any(|&(a, b)| close(a, meet) || close(b, meet)),
-            "{valleys:?}"
-        );
-        // Nothing of either wing's roof stands above the other's: every covering square's
-        // middle is on the field.
-        let fields = Field::all(&base, &Kits(vec![kit()]));
-        let field = &fields[&0];
-        for piece in &pieces {
-            if let Piece::Covering { middle, .. } = piece {
-                let m = middle.metres();
-                let rise = field.rise(Vec2::new(m.x, m.z)).unwrap();
-                assert!((m.y - field.top - rise).abs() < 0.01, "{m}");
-            }
-        }
-        // Two ridges, each from its gable's verge to where they meet.
-        let ridges = parts(&pieces, RoofPart::Ridge);
-        assert_eq!(ridges.len(), 2, "{ridges:?}");
+        assert_eq!(valleys.len(), 1, "{valleys:?}");
+        // From the inside corner of the L's eaves, past the walls, up to the hips.
+        let (a, b) = valleys[0];
+        let low = if a.y < b.y { a } else { b };
+        assert!(close(low, Vec3::new(4.5, STOREY_M - 0.5, 4.5)), "{low}");
+        // Every eave is one board, the inside corner's two meeting in the valley.
+        assert_eq!(parts(&pieces, RoofPart::Fascia).len(), 6);
     }
 
     #[test]
-    fn a_lean_to_has_no_ridge_and_a_board_along_its_high_edge() {
-        let base = roofed(
-            &[([0, 0, 0], [9, 0, 7])],
-            &[RoofSection {
-                pitch: 0.4,
-                ..section([0, 0, 0], [9, 0, 7], RoofStyle::LeanTo, true)
-            }],
-        );
+    fn an_odd_span_is_capped_by_one_ridge_down_its_flat_middle() {
+        let base = roofed(&[([0, 0, 0], [9, 0, 8])], Style::Gable);
         let pieces = laid(&base);
-        assert!(parts(&pieces, RoofPart::Ridge).is_empty());
-        assert_eq!(parts(&pieces, RoofPart::Fascia).len(), 2);
-        assert_eq!(parts(&pieces, RoofPart::Verge).len(), 2);
+        let ridges = parts(&pieces, RoofPart::Ridge);
+        assert_eq!(ridges.len(), 1, "{ridges:?}");
+        assert!((ridges[0].0.z - 2.25).abs() < 0.01, "{ridges:?}");
     }
 
     #[test]
-    fn a_roof_against_a_wall_standing_up_through_it_is_flashed() {
+    fn a_roof_against_a_taller_wall_is_flashed_and_its_cubes_hold_by_their_ramp() {
         // A lean-to rising south to a wall two storeys high.
-        let mut base = roofed(&[([0, 0, 0], [9, 0, 5])], &[]);
-        for x in -2..12 {
-            for storey in 0..2 {
-                base.apply(BuildOp::SetWall {
-                    tile: [x, storey, 6],
-                    panel: Some(crate::Panel::Solid),
-                    kind: kit().kind(),
-                });
-            }
-        }
-        base.apply(BuildOp::AddRoof(RoofSection {
-            pitch: 0.4,
-            ..section([0, 0, 0], [9, 0, 5], RoofStyle::LeanTo, true)
-        }));
+        let mut base = roofed(&[([0, 0, 0], [9, 0, 5])], Style::LeanTo);
+        // Its own gables and high side off, and the tall wall where its high side was.
+        base.apply(BuildOp::Fill {
+            min: [-2, 0, 6],
+            max: [11, 13, 6],
+            cube: Some(Cube::new(Kind::PLAIN, Fill::Solid)),
+        });
         let pieces = laid(&base);
         let flashing = parts(&pieces, RoofPart::Flashing);
-        // One fillet all along the wall's face, the eaves too.
         assert_eq!(flashing.len(), 1, "{flashing:?}");
         let (a, b) = flashing[0];
         assert!(
             (a.z - 3.0).abs() < 0.01 && (b.z - 3.0).abs() < 0.01,
             "{a} {b}"
         );
-        assert!((a.distance(b) - 6.0).abs() < 0.01, "{a} {b}");
-        // No covering inside the wall.
-        for piece in &pieces {
-            if let Piece::Covering { middle, .. } = piece {
-                assert!(middle.metres().z < 3.0, "{middle:?}");
-            }
-        }
+        assert!(base.floating().is_empty());
     }
 
     #[test]
-    fn a_stone_gable_rises_to_the_roof_and_no_further() {
-        let mut stone = kit();
-        stone.id = 2;
-        stone.pattern = crate::kit::Pattern::Masonry;
-        let mut base = Base::default();
-        base.apply(BuildOp::AddRoom {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            kind: stone.kind(),
-        });
-        base.apply(BuildOp::AddRoof(section(
-            [0, 0, 0],
-            [9, 0, 7],
-            RoofStyle::Gable,
-            true,
-        )));
-        let kits = Kits(vec![stone.clone()]);
+    fn a_storey_built_over_a_roof_stops_it_and_a_second_roof_over_it_is_apart() {
+        let mut base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Gable);
+        // A second roof two storeys up over the same footprint, by itself.
+        let upper = roofer::over(
+            &(0..10).flat_map(|x| (0..8).map(move |z| [x, z])).collect(),
+            18,
+            Style::Hip,
+            None,
+        );
+        for (at, shape) in upper.roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(ROOF, Fill::Solid)
+                }),
+            });
+        }
+        let pieces = laid(&base);
+        assert_eq!(parts(&pieces, RoofPart::Hip).len(), 4);
+        assert_eq!(parts(&pieces, RoofPart::Ridge).len(), 2);
+    }
+
+    #[test]
+    fn a_stone_gable_rises_into_the_roof_cubes_over_it() {
+        let stone = Kit {
+            id: 2,
+            pattern: Pattern::Masonry,
+            ..Kit::default()
+        };
+        let mut base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Gable);
+        // Its walls of stone, the gables too.
+        let walls: Vec<IVec3> = base
+            .cubes()
+            .filter(|(_, c)| c.kind == Kind::PLAIN)
+            .map(|(at, _)| at)
+            .collect();
+        for at in walls {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube::new(stone.kind(), Fill::Solid)),
+            });
+        }
         let mut pieces = Vec::new();
-        gables(&base, &stone, &kits, Scope::ALL, &mut pieces);
-        let cubes: Vec<IVec3> = pieces
+        gables(&base, &stone, Scope::ALL, &mut pieces);
+        // Over the west gable's middle, the roof cube at its top, cut at the underside.
+        let tops: Vec<IVec3> = pieces
             .iter()
             .filter_map(|p| match *p {
                 Piece::Gable { cube, .. } => Some(cube),
                 _ => None,
             })
             .collect();
-        // Over the west wall's middle, up to the ridge 1.4 m over the walls, less the
-        // roof's thickness: three cubes.
-        let middle: Vec<i32> = cubes
-            .iter()
-            .filter(|c| c.x == 0 && c.z == 4)
-            .map(|c| c.y)
-            .collect();
-        assert_eq!(middle, vec![6, 7, 8], "{cubes:?}");
+        assert!(tops.contains(&IVec3::new(0, 9, 3)), "{tops:?}");
         for piece in &pieces {
             if let Piece::Gable { cube, under } = piece {
-                assert!(base.cube(*cube).is_none());
-                assert!(
-                    super::super::metres(*under.iter().flatten().max().unwrap())
-                        > cube.y as f32 * CELL_M
-                );
+                assert!(base.cube(*cube).is_some_and(|c| c.kind.is_roof()));
+                let highest = super::super::metres(*under.iter().flatten().max().unwrap());
+                assert!(highest > cube.y as f32 * CELL_M && highest < (cube.y + 1) as f32 * CELL_M);
             }
         }
+    }
+
+    #[test]
+    fn a_point_under_a_roof_finds_its_underside() {
+        let base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Gable);
+        let kit = roof_kit();
+        let roofs = Roofs::whole(&base, &Kits(vec![kit]), Scope::ALL);
+        // A metre in from the eave, a metre up the slope.
+        let top = roofs.top_over(2.0, 1.0, 0.0).unwrap();
+        assert!((top - (STOREY_M + 1.0)).abs() < 1e-3, "{top}");
+        // Past the eave, the overhang.
+        let eave = roofs.top_over(2.0, -0.25, 0.0).unwrap();
+        assert!((eave - (STOREY_M - 0.25)).abs() < 1e-3, "{eave}");
+        let (up, inside) = roofs.place_of(Vec3::new(2.0, 4.99, 2.0 - 0.01)).unwrap();
+        assert!(up > 0.9 && inside > 1.0, "{up} {inside}");
     }
 }

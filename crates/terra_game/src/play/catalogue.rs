@@ -298,15 +298,14 @@ pub struct RoomShape {
     pub metres: [f32; 2],
 }
 
-/// A kind of roof: pitched in a style, rising so much for each metre it runs, or flat.
+/// A kind of roof the hammer adds: of roof cubes in a style, as the roofer lays them
+/// (D241), or flat.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RoofShape {
     pub name: String,
     /// `None` for a flat roof.
-    pub style: Option<terra_build::RoofStyle>,
-    #[serde(default)]
-    pub pitch: f32,
+    pub style: Option<terra_build::roofer::Style>,
 }
 
 /// A flight a storey up (D193): stairs or a ramp, so many metres wide.

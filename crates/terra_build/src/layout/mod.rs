@@ -11,6 +11,7 @@
 //!   floors and footings alike.
 //! - [`frames`]: a framed block kind's timber frame over its infill (D236).
 //! - [`ground`]: door steps down to the ground.
+//! - [`roofs`]: roof kinds' cubes as a roof, from their neighbours (D241).
 
 pub mod blocks;
 mod dressing;
@@ -163,10 +164,10 @@ pub enum Piece {
         deep: i32,
         seed: u32,
     },
-    /// A block kind's cube over the top of its wall, under a roof (`roofs::gables`): its
-    /// surface cut off at the roof's underside, whose height in ticks over the cube's top,
-    /// at its corners, the middles of its sides and its middle, west to east and north to
-    /// south, is `under`.
+    /// A block kind's wall carried up into a roof cube standing on it (`roofs::gables`):
+    /// the roof cube's surface of the wall's stone, cut off at the roof's underside, whose
+    /// height in ticks at the cube's corners, the middles of its sides and its middle, west
+    /// to east and north to south, is `under`.
     Gable { cube: IVec3, under: [[i32; 3]; 3] },
     /// A square of a roof's covering (`roofs`), half a cube across: its
     /// corners on the roof's top, north-west, north-east, south-east and south-west, and
@@ -272,7 +273,7 @@ impl Piece {
         crate::cubes::section_of(self.anchor())
     }
 
-    /// The roof cell it goes up with, and in which stage, if it is part of a roof.
+    /// The roof cube it goes up with, and in which stage, if it is part of a roof.
     pub fn roof_cell(&self) -> Option<roofs::RoofCell> {
         match *self {
             Piece::Covering { cell, .. } | Piece::Roof { cell, .. } => Some(cell),
@@ -498,7 +499,18 @@ impl Walls<'_> {
         })
     }
 
-    /// A cube of the kit's kind that is part of a wall.
+    /// Whether a cube is a roof's standing on a whole cube of a wall of the kind: the wall
+    /// is carried up into it to the roof's underside, as a gable is (D241).
+    fn gable(&self, at: IVec3) -> bool {
+        self.base
+            .cube(at)
+            .is_some_and(|cube| cube.kind.is_roof() && cube.fill != Fill::Open)
+            && self.whole(at - IVec3::Y)
+            && self.walled(at - IVec3::Y)
+    }
+
+    /// A cube of the kit's kind that is part of a wall, or a roof's cube its wall is carried
+    /// up into.
     fn ours(&self, at: IVec3) -> Option<Fill> {
         if self.stairs.contains(&at.to_array()) {
             return None;
@@ -515,7 +527,8 @@ impl Walls<'_> {
                     && !cube.shape.is_cut()
                     && (drawn_fill(cube) != Fill::Solid || self.cell(at) == Some(Cell::Wall))
             })
-            .map(|cube| drawn_fill(&cube));
+            .map(|cube| drawn_fill(&cube))
+            .or_else(|| self.gable(at).then_some(Fill::Solid));
         self.known.borrow_mut().insert(at, ours);
         ours
     }
@@ -620,7 +633,11 @@ pub fn lay_section_and_edge(
 }
 
 fn lay_scoped(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
-    let mut layout = lay_walls(base, kit, kits, scope);
+    let mut layout = if kit.pattern == Pattern::Roof {
+        Layout::default()
+    } else {
+        lay_walls(base, kit, kits, scope)
+    };
     roofs::lay(base, kit, kits, scope, &mut layout.pieces);
     sort(&mut layout);
     layout
@@ -705,7 +722,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
         let mut layout = Layout {
             pieces: blocks::lay(base, kit, kits, scope),
         };
-        roofs::gables(base, kit, kits, scope, &mut layout.pieces);
+        roofs::gables(base, kit, scope, &mut layout.pieces);
         return layout;
     }
     let steps = stairs::find(base, kit, kits);
@@ -742,7 +759,6 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
         sort(&mut layout);
         return layout;
     }
-    let mut gabled = Vec::new();
     for axis in [Axis::X, Axis::Z] {
         // Each row of cubes running this way, with how far along it and how high its
         // cubes go.
@@ -771,7 +787,6 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
                 &mut layout,
             );
             trims::frames(&walls, kit, axis, row, &mut layout);
-            gabled.push((axis, row, (first, last)));
         }
     }
     runs::posts(&walls, &ours, &mut layout);
@@ -781,12 +796,8 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
         floors::decks(&walls, kit, scope, &mut layout);
     }
     shapes::lay(&walls, kit, kits, scope, &mut layout);
-    let fields = roofs::Field::all(base, kits);
-    runs::under_roofs(&fields, kit, &mut layout);
-    // Gables after, as their logs are cut to the roof already.
-    for (axis, row, ends) in gabled {
-        runs::gables(&walls, kit, &fields, axis, row, ends, &mut layout);
-    }
+    // Last, as every log a roof comes down over is cut to it.
+    runs::under_roofs(base, kits, kit, &mut layout);
     layout
 }
 

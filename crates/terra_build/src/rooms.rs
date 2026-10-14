@@ -54,12 +54,7 @@ impl Base {
         for (&tile, &room) in &self.rooms {
             rooms.entry(room).or_default().insert(tile);
         }
-        let roofed = |tile: IVec3| {
-            self.has_roof(tile)
-                || self
-                    .roofs()
-                    .any(|(_, roof)| roof.standing() && roof.section.covers(tile))
-        };
+        let roofed = |tile: IVec3| self.covered(tile, true);
         let mut boxes = Vec::new();
         for tiles in rooms.values() {
             if !tiles.iter().all(|&tile| roofed(IVec3::from_array(tile))) {
@@ -170,8 +165,10 @@ impl Base {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Base, BuildOp, Kind, RoofSection, RoofStyle};
+    use crate::roofer::{self, Style};
+    use crate::{Base, BuildOp, Cube, Fill, Kind};
     use glam::IVec3;
+    use std::collections::BTreeSet;
 
     fn room(base: &mut Base, min: [i32; 3], max: [i32; 3]) {
         base.apply(BuildOp::AddRoom {
@@ -181,14 +178,23 @@ mod tests {
         });
     }
 
+    /// A hip roof's cubes over the columns from one to another on the ground storey,
+    /// built.
     fn roof(base: &mut Base, min: [i32; 3], max: [i32; 3]) {
-        base.apply(BuildOp::AddRoof(RoofSection {
-            min,
-            max,
-            style: RoofStyle::Hip,
-            along_x: true,
-            pitch: 0.7,
-        }));
+        let footprint: BTreeSet<[i32; 2]> = (min[0]..=max[0])
+            .flat_map(|x| (min[2]..=max[2]).map(move |z| [x, z]))
+            .filter(|&[x, z]| base.occupied(x, z))
+            .collect();
+        for (at, shape) in roofer::over(&footprint, 6, Style::Hip, None).roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        }
     }
 
     /// How many tiles a set of boxes covers, each once.

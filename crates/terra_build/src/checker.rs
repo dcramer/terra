@@ -2,7 +2,8 @@
 //! `cargo xtask check` say of the kit files in `assets/data/kits/`. Every material a kit's
 //! pattern needs is there, with every map its textures need; its sizes are life size and its
 //! numbers in range; and what it draws keeps to the style guide's budgets (D14,
-//! docs/art-style.md), measured on a cabin under a roof laid in it.
+//! docs/art-style.md), measured on a cabin laid in it, or for a roof kind, a gable of it
+//! over one.
 //!
 //! It reads no files itself: it is given whether a file under `assets/` is there, and the
 //! items there are, so it runs as a test and as a tool alike.
@@ -10,7 +11,7 @@
 use crate::kit::{Kit, Pattern};
 use crate::layout::{self, Piece};
 use crate::mesh::Material;
-use crate::{Base, BuildOp, CELL_M, Kind, RoofSection, RoofStyle, Surfaces};
+use crate::{Base, BuildOp, CELL_M, Cube, Fill, Kind, Surfaces};
 use std::collections::BTreeMap;
 
 /// The style guide's budgets for what kits draw (docs/art-style.md, Budgets): triangles in
@@ -42,12 +43,19 @@ pub struct Report {
     pub measured: Measured,
 }
 
-/// The materials a kit laying in a pattern cannot do without: what its walls, their trims,
-/// its roofs' frame and covering and their flashing are drawn in.
+/// The materials a kit laying in a pattern cannot do without: what its walls and their
+/// trims are drawn in, or a roof's frame, covering, boards and flashing.
 pub fn needs(kit: &Kit) -> Vec<Material> {
     let mut needs = match kit.pattern {
         Pattern::Logs => vec![Material::Log, Material::LogEnd, Material::Board],
         Pattern::Masonry => vec![Material::Masonry, Material::Log, Material::LogEnd],
+        Pattern::Roof => vec![
+            Material::Covering,
+            Material::Board,
+            Material::Flashing,
+            Material::Log,
+            Material::LogEnd,
+        ],
     };
     if kit.pattern == Pattern::Logs && kit.chinking {
         needs.push(Material::Daub);
@@ -57,7 +65,6 @@ pub fn needs(kit: &Kit) -> Vec<Material> {
         needs.push(framing.material);
         needs.extend(framing.core);
     }
-    needs.extend([Material::Board, Material::Covering, Material::Flashing]);
     needs.dedup();
     needs
 }
@@ -69,6 +76,20 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
     let mut fail = |problem: String| problems.push(problem);
     if kit.kind() == Kind::PLAIN || kit.kind() > Kind::LAST {
         fail(format!("its kind {} is not a kit's", kit.id));
+    }
+    // A roof's kind is numbered as one (D241), and only a roof's.
+    if (kit.pattern == Pattern::Roof) != kit.kind().is_roof() {
+        fail(format!(
+            "its kind {} is {}a roof's, but it lays {:?}",
+            kit.id,
+            if kit.kind().is_roof() { "" } else { "not " },
+            kit.pattern
+        ));
+    }
+    if let Some(roof) = kit.roof_kind
+        && !Kind(roof).is_roof()
+    {
+        fail(format!("its roofs' kind {roof} is not a roof's"));
     }
     // Every material its pattern needs, and every map of each.
     for material in needs(kit) {
@@ -169,7 +190,13 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
     if steps == 0 || !crate::cubes::FULL.is_multiple_of(steps) {
         fail(format!("{steps} steps do not fill a cube"));
     }
-    for (thing, num, den) in kit.cost.step.iter().chain(&kit.cost.roof) {
+    if kit.pattern == Pattern::Roof && steps != crate::layout::roofs::ROOF_STAGES {
+        fail(format!(
+            "a roof goes up in {} stages, not {steps} steps",
+            crate::layout::roofs::ROOF_STAGES
+        ));
+    }
+    for (thing, num, den) in &kit.cost.step {
         if !items.iter().any(|item| item == thing) {
             fail(format!("costs {thing}, which is no item"));
         }
@@ -360,34 +387,44 @@ pub fn check_all(
     reports
 }
 
-/// What a kit draws on a cabin five metres by four under a gable roof, with a door and a
-/// window: triangles a metre of its long members and a square metre of its roof.
+/// What a kit draws on a cabin five metres by four with a door and a window, of its kind,
+/// or for a roof kind, of plain walls under a gable of it: triangles a metre of its long
+/// members and a square metre of its roof.
 pub fn measure(kit: &Kit) -> Measured {
+    let roof = kit.pattern == Pattern::Roof;
+    let walls = if roof { Kind::PLAIN } else { kit.kind() };
     let mut base = Base::default();
     base.apply(BuildOp::AddRoom {
         min: [0, 0, 0],
         max: [9, 0, 7],
-        kind: kit.kind(),
+        kind: walls,
     });
     for x in 3..=4 {
         base.apply(BuildOp::SetWall {
             tile: [x, 0, 7],
             panel: Some(crate::Panel::Door),
-            kind: kit.kind(),
+            kind: walls,
         });
     }
     base.apply(BuildOp::SetWall {
         tile: [0, 0, 3],
         panel: Some(crate::Panel::WINDOW),
-        kind: kit.kind(),
+        kind: walls,
     });
-    base.apply(BuildOp::AddRoof(RoofSection {
-        min: [0, 0, 0],
-        max: [9, 0, 7],
-        style: RoofStyle::Gable,
-        along_x: true,
-        pitch: 0.7,
-    }));
+    if roof {
+        let footprint = (0..10).flat_map(|x| (0..8).map(move |z| [x, z])).collect();
+        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+        for (at, shape) in plan.roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(kit.kind(), Fill::Solid)
+                }),
+            });
+        }
+    }
     let layout = layout::lay(&base, kit);
     let (mut logs, mut length, mut roof, mut squares, mut all) = (0, 0.0, 0, 0, 0);
     let mut dress = 0;
@@ -422,7 +459,14 @@ pub fn measure(kit: &Kit) -> Measured {
         per_metre: (length > 0.0).then(|| (logs as f32 / length).round() as usize),
         per_square_metre: (roof as f32 / area.max(1e-3)).round() as usize,
         triangles: all,
-        dress_per_cube: (dress > 0).then(|| dress / base.cubes().count().max(1)),
+        dress_per_cube: (dress > 0).then(|| {
+            dress
+                / base
+                    .cubes()
+                    .filter(|(_, c)| c.kind == kit.kind())
+                    .count()
+                    .max(1)
+        }),
     }
 }
 
@@ -472,7 +516,10 @@ mod tests {
         let exists = |path: &str| assets.join(path).is_file();
         for (name, report) in check_all(&kits, &exists, &items) {
             assert!(report.problems.is_empty(), "{name}: {:?}", report.problems);
-            assert!(report.measured.per_square_metre > 0, "{name}: no roof");
+            let roof = kits
+                .iter()
+                .any(|(n, kit)| *n == name && kit.pattern == Pattern::Roof);
+            assert_eq!(report.measured.per_square_metre > 0, roof, "{name}");
         }
     }
 
@@ -484,16 +531,31 @@ mod tests {
             .find(|(name, _)| name == "logs.ron")
             .map(|(_, kit)| kit.clone())
             .unwrap();
-        kit.textures.remove(&Material::Covering);
+        kit.textures.remove(&Material::Daub);
         kit.diameter = 2.0;
         kit.cost.step = vec![("Gold".into(), 1, 3)];
+        kit.roof_kind = Some(2);
         let report = check(&kit, &|_| true, &items);
         let said = report.problems.join("; ");
         for words in [
-            "no Covering material",
+            "no Daub material",
             "diameter 2",
             "Gold, which is no item",
+            "its roofs' kind 2 is not a roof's",
         ] {
+            assert!(said.contains(words), "{said}");
+        }
+        // A roof kind numbered as a wall's, in three steps, without its covering.
+        let mut thatch = kits
+            .iter()
+            .find(|(name, _)| name == "thatch.ron")
+            .map(|(_, kit)| kit.clone())
+            .unwrap();
+        thatch.id = 7;
+        thatch.cost.steps = 2;
+        thatch.textures.remove(&Material::Covering);
+        let said = check(&thatch, &|_| true, &items).problems.join("; ");
+        for words in ["is not a roof's", "not 2 steps", "no Covering material"] {
             assert!(said.contains(words), "{said}");
         }
         // The stone kit dressing a role with a piece it has not, and one past its budget.

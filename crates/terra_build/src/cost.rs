@@ -1,6 +1,6 @@
-//! What building costs (D193, construction-001 gap 25): what each step of a cube, each
-//! stage of a roof and each fitted prop takes, in exact fractions, so taking apart gives
-//! back exactly what went in, no more and no less.
+//! What building costs (D193, construction-001 gap 25): what each step of a cube and each
+//! fitted prop takes, in exact fractions, so taking apart gives back exactly what went in,
+//! no more and no less.
 //!
 //! A log fills its course in every cube it spans (D194), so a cube's share of it is a
 //! fraction of a log; fractions add up exactly here, where floats would drift and could be
@@ -264,14 +264,11 @@ impl Terms {
 )]
 pub struct PropKind(pub u16);
 
-/// What everything costs: the terms of each kind of construction, each stage of a roof
-/// of each kind, and each kind of prop. What is not listed is free, in one step, as in
-/// the yard (docs/building-tech.md).
+/// What everything costs: the terms of each kind of construction, and each kind of prop.
+/// What is not listed is free, in one step, as in the yard (docs/building-tech.md).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Rules {
     pub kinds: BTreeMap<Kind, Terms>,
-    /// A roof cell's every stage: frame, battens, covering.
-    pub roofs: BTreeMap<Kind, Bill>,
     pub props: BTreeMap<PropKind, Bill>,
 }
 
@@ -279,11 +276,6 @@ impl Rules {
     /// The terms a kind is built on.
     pub fn of(&self, kind: Kind) -> Terms {
         self.kinds.get(&kind).cloned().unwrap_or_default()
-    }
-
-    /// What one stage of a roof cell of a kind takes.
-    pub fn roof(&self, kind: Kind) -> Bill {
-        self.roofs.get(&kind).cloned().unwrap_or_default()
     }
 
     /// What a prop takes to fit.

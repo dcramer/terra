@@ -66,7 +66,11 @@ pub(super) fn lay(
     };
     let rules = rules.map(|rules| rules.rules.clone()).unwrap_or_default();
     let mut took: Vec<f32> = Vec::new();
-    for (index, (name, ops)) in terra_build::bench_village(logs, stone, hewn)
+    let roof = |walls: terra_build::Kind| {
+        kits.roof_for(walls)
+            .unwrap_or(terra_build::Kind::FIRST_ROOF)
+    };
+    for (index, (name, ops)) in terra_build::bench_village(logs, stone, hewn, &roof)
         .into_iter()
         .enumerate()
     {

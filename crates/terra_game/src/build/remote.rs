@@ -8,11 +8,14 @@
 //! stone, half a metre each; a tile is a column of a storey, its `y` the storey.
 //!
 //! - `build.state`: the base: its parts and how far each is built and how many of their
-//!   cubes are cut to a shape, its roofs, fitted props, planned cubes, rooms, the claim's
-//!   offcuts, where it stands, and where the player's feet are in it.
-//! - `build.lay {what, min, max, kind?, floor?, style?, pitch?, along_x?}`: lays a plan over
+//!   cubes are cut to a shape, its roof cubes and how far up each is (D241), fitted props,
+//!   planned cubes, rooms, the claim's offcuts, where it stands, and where the player's
+//!   feet are in it.
+//! - `build.lay {what, min, max, kind?, floor?, style?, along_x?, over?}`: lays a plan over
 //!   tiles: a `room` (the shortcut: floor, four walls and a flat roof), a `wall` from `min`
-//!   to `max`, a `floor`, a `flat_roof`, or a pitched `roof` (`Hip`, `Gable`, `LeanTo`);
+//!   to `max`, a `floor`, a `flat_roof`, or "add a roof" (`roof`, D241): roof cubes in a
+//!   style (`Hip`, `Gable`, `LeanTo`) over the tiles, or over the space closing in the tile
+//!   `over`, in a roof material, or the roof of the walls' `kind`;
 //!   or from the cube `min`, as the hammer places them (D193): a `flight` of stairs (a ramp
 //!   with `ramp: true`) up a storey toward `facing`, `wide` metres across, a `post` a
 //!   storey high, or one `block` of a `shape`.
@@ -51,7 +54,8 @@ use bevy::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 use terra_build::ops::{Done, Op, Refusal};
-use terra_build::{CELL_M, Facing, Fill, Panel, RoofSection, RoofStyle, STOREY_M, Shape};
+use terra_build::roofer::Style;
+use terra_build::{CELL_M, Facing, Fill, Panel, STOREY_M, Shape};
 
 pub fn plugin(app: &mut App) {
     method(app, "build.state", state);
@@ -165,9 +169,10 @@ struct Lay {
     max: [i32; 3],
     kind: Option<String>,
     floor: Option<String>,
-    style: Option<RoofStyle>,
-    pitch: Option<f32>,
+    style: Option<Style>,
     along_x: Option<bool>,
+    /// For a roof: a tile in the space it covers, closed in by walls, its shape its own.
+    over: Option<[i32; 3]>,
     /// For a flight or a cut block: which way it rises (D193).
     facing: Option<Facing>,
     /// For a flight: how many metres wide, and whether it is a ramp.
@@ -196,6 +201,7 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     };
     let (min, max) = (IVec3::from_array(lay.min), IVec3::from_array(lay.max));
     let (low, high) = (min.min(max), min.max(max));
+    let kits = world.resource::<super::BuildLook>().kits.clone();
     as_player(world, |building, player| {
         let base = &building.site.base;
         let ground = |column: [i32; 2]| building.ground_cm(column);
@@ -217,14 +223,28 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             "floor" => (plans::floor(base, low, high, kind, footings), None),
             "flat_roof" => (plans::flat_roof(base, low, high, kind), None),
             "roof" => {
-                let section = RoofSection {
-                    min: low.to_array(),
-                    max: high.to_array(),
-                    style: lay.style.unwrap_or(RoofStyle::Gable),
-                    along_x: lay.along_x.unwrap_or(high.x - low.x >= high.z - low.z),
-                    pitch: lay.pitch.unwrap_or(0.6),
+                let (footprint, along_x) = match lay.over {
+                    Some(tile) => (
+                        plans::room_footprint(base, IVec3::from_array(tile)),
+                        lay.along_x,
+                    ),
+                    None => (
+                        (low.x..=high.x)
+                            .flat_map(|x| (low.z..=high.z).map(move |z| [x, z]))
+                            .collect(),
+                        Some(lay.along_x.unwrap_or(high.x - low.x >= high.z - low.z)),
+                    ),
                 };
-                (plans::roof(base, section, kind), None)
+                let storey = lay.over.map_or(low.y, |tile| tile[1]);
+                let roof = kits
+                    .as_ref()
+                    .and_then(|kits| kits.roof_for(kind))
+                    .unwrap_or(terra_build::Kind::FIRST_ROOF);
+                let style = lay.style.unwrap_or(Style::Gable);
+                (
+                    plans::roof(base, &footprint, storey, style, along_x, roof),
+                    None,
+                )
             }
             // From the foot cube `min`, up a storey toward `facing`.
             "flight" => {
@@ -546,20 +566,22 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
             })
         })
         .collect();
-    let roofs: Vec<Value> = base
-        .roofs()
-        .map(|(id, roof)| {
-            json!({
-                "id": id.0,
-                "min": roof.section.min,
-                "max": roof.section.max,
-                "style": format!("{:?}", roof.section.style),
-                "lowest": roof.stages.iter().min(),
-                "highest": roof.stages.iter().max(),
-                "covered": roof.stages.iter().all(|&stage| stage == terra_build::ROOF_STAGES),
-            })
-        })
-        .collect();
+    // Its roof cubes (D241): how many, of what shapes, how many built, and how many at each
+    // stage, nothing in to trims on.
+    let mut stages = [0usize; 1 + terra_build::layout::roofs::ROOF_STAGES as usize];
+    let mut shapes: std::collections::BTreeMap<String, usize> = Default::default();
+    for (_, cube) in base.cubes().filter(|(_, cube)| cube.kind.is_roof()) {
+        stages[usize::from(terra_build::layout::roofs::stage_of(&cube))] += 1;
+        let shape = format!("{:?}", cube.shape);
+        let shape = shape.split('(').next().unwrap_or("").to_string();
+        *shapes.entry(shape).or_default() += 1;
+    }
+    let roofs = json!({
+        "cubes": stages.iter().sum::<usize>(),
+        "built": stages[stages.len() - 1],
+        "stages": stages,
+        "shapes": shapes,
+    });
     let props: Vec<Value> = base
         .props()
         .map(|prop| {

@@ -46,7 +46,11 @@ fn main() -> ExitCode {
     // Triangles of every section at each detail: near, mid, far and proxy.
     let mut triangles = [0usize; 4];
     let mut by_kind: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
-    for (name, ops) in terra_build::bench_village(logs, stone, hewn) {
+    let roof = |walls: terra_build::Kind| {
+        kits.roof_for(walls)
+            .unwrap_or(terra_build::Kind::FIRST_ROOF)
+    };
+    for (name, ops) in terra_build::bench_village(logs, stone, hewn, &roof) {
         if only
             .as_ref()
             .is_some_and(|only| !name.contains(only.as_str()))

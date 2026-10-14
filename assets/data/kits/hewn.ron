@@ -1,8 +1,8 @@
 // A hewn-timber wall's kit (docs/building-kits.md, D178, D200): beams squared by the axe,
-// dovetailed flush at the corners, with a band of lime daub between the courses, under a
-// thatched roof on round poles. The same code as the log kit's round logs, another profile
-// (crates/terra_build/src/timber.rs): a kind of timber is a file, not code (D136). What
-// this leaves out is the log kit's; logs.ron says what each number is.
+// dovetailed flush at the corners, with a band of lime daub between the courses, under
+// thatch unless another roof is in hand. The same code as the log kit's round logs,
+// another profile (crates/terra_build/src/timber.rs): a kind of timber is a file, not
+// code (D136). What this leaves out is the log kit's; logs.ron says what each number is.
 // Dressed by role (D215) with a heavier plate and sill, posts up its openings and squared
 // posts at its corners, as framed squared-log buildings are.
 (
@@ -14,7 +14,7 @@
     ragged: 0.0,
     chinking: true,
     frame: 0.08,
-    eaves: 0.5,
+    roof_kind: Some(2050),
     timber: (
         profile: Hewn,
         notch: Flush,
@@ -30,32 +30,15 @@
         end_tint: (0.9, 0.8, 0.7),
         variation: (thickness: 0.05, shade: 0.14, warmth: 0.06),
     ),
-    roof: (
-        rows: 4.0,
-        phase: 0.0,
-        butt: 0.05,
-        thick: 0.22,
-        uneven: 0.45,
-        tint: (1.0, 0.92, 0.8),
-        rafter: (Round, 0.12),
-        batten: (0.05, 0.03),
-        board: (0.2, 0.04),
-        board_tint: (1.4, 1.34, 1.24),
-        ridge: Roll,
-        cap: 0.3,
-        fillet: 0.12,
-    ),
     textures: {
         Log: (path: "materials/rough_wood", metres: (0.6, 0.6)),
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
         Daub: (path: "materials/white_stucco", metres: (1.0, 1.0)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
-        Covering: (path: "materials/riet_01", metres: (2.5, 2.5)),
-        Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
         Floor: (path: "materials/weathered_planks", metres: (2.0, 2.0), strips: Some((0.0605, 0.1111))),
         Hewn: (path: "materials/rough_wood", metres: (0.5, 0.5)),
     },
-    cost: (steps: 2, step: [("Wood", 1, 16)], roof: [("Fibre", 1, 32)]),
+    cost: (steps: 2, step: [("Wood", 1, 16)]),
     dress: (
         roles: {
             Crest: Member(profile: Hewn, scale: 1.15, material: Hewn),
@@ -65,7 +48,7 @@
             Nose: Member(profile: Hewn, scale: 1.0, material: Hewn),
             Post: Member(profile: Hewn, scale: 0.85, material: Hewn),
         },
-        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.25, moss: 0.5, moss_tint: (0.66, 0.7, 0.46)),
+        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.25),
     ),
     meets: Some((weight: 2, end: Board, carries: None)),
     colours: (

@@ -14,8 +14,9 @@
 //!   the next storey's floor, or a flat roof. A cell of a storey, a *tile*, is a column of
 //!   six cubes.
 //! - **Rooms are worked out**, storey by storey ([`rooms`]).
-//! - **Pitched roofs are the one thing not cubes**: surfaces over the tiles they cover
-//!   ([`RoofSection`]), each cell going up in stages ([`Roof`]).
+//! - **A roof is cubes too** (D241): cubes of a roof kind ([`Kind::is_roof`]) cut to
+//!   slopes and corners, laid by hand or by the roofer ([`roofer`]) and drawn as a roof
+//!   from their neighbours (`layout::roofs`): no wall tile, floor or room of their own.
 //! - **Doors and windows are props** ([`Prop`]) fitted into holes in built walls.
 //! - **Everything a player does is an operation** ([`ops::Op`]), checked by one pure
 //!   function against the state when it arrives, and undone by its inverse: nothing
@@ -23,7 +24,7 @@
 //! - **Shortcuts** ([`BuildOp`]) lay built cubes as a player means them, instantly, as
 //!   the yard and the game do today: a wall tile as a panel says, solid or with a window
 //!   or doorway of a default size ([`BuildOp::SetWall`]); a floor or flat roof over a
-//!   block; and the room tool, walls round a footprint with a floor inside and a roof
+//!   block; and the room tool, walls round a footprint with a floor inside and a flat roof
 //!   over it.
 //!
 //! A base is saved and sent as a snapshot ([`save`]), and before that as the list of
@@ -45,6 +46,7 @@ mod mesh;
 pub mod ops;
 pub mod order;
 pub mod relief;
+pub mod roofer;
 pub mod roofing;
 pub mod rooms;
 pub mod save;
@@ -57,7 +59,10 @@ mod walk;
 
 pub use cost::{Amount, Bill, PropKind, Rules, Terms};
 pub use cubes::{Cube, Cubes, Facing, Fill, Kind, PartId, Pending, Replacement, Shape, State};
-pub use example::{VILLAGE_HOUSES, bench_village, example, roof_rows};
+pub use example::{
+    RoofParts, VILLAGE_HOUSES, bench_village, example, plan as roof_plan, roof_over, roof_rows,
+    with_roof,
+};
 pub use ground::{Ground, Sample};
 pub use mesh::{BaseMesh, Indexed, Surface};
 pub use order::Progress;
@@ -222,142 +227,6 @@ impl Panel {
     }
 }
 
-/// How a pitched roof slopes (docs/building-tech.md, roofs).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum RoofStyle {
-    /// Sloping up from every side to a ridge or a point.
-    Hip,
-    /// Sloping up from two sides to a ridge, with upright gable ends.
-    Gable,
-    /// One slope, up from one side to the other.
-    LeanTo,
-}
-
-/// A pitched roof over a block of tiles on one storey, resting on the top of its walls.
-/// Where sections overlap, the roof is the highest of them at each point, so a gable
-/// meeting a hip makes its own valley.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct RoofSection {
-    /// The tiles it covers; both on its storey.
-    pub min: [i32; 3],
-    pub max: [i32; 3],
-    pub style: RoofStyle,
-    /// For a gable, whether its ridge runs east and west; for a lean-to, whether its high
-    /// side runs east and west, rising to the south.
-    pub along_x: bool,
-    /// How far it rises for each metre it runs.
-    pub pitch: f32,
-}
-
-impl RoofSection {
-    /// How far above the tops of its walls it is at a point, in metres east and south in
-    /// the base's own space, if it is over that point.
-    pub fn rise(&self, at: glam::Vec2) -> Option<f32> {
-        self.rise_beyond(at, 0.0).map(|rise| rise.max(0.0))
-    }
-
-    /// Its corners in metres along the floor, east and south: the lowest and the highest.
-    pub fn bounds(&self) -> (glam::Vec2, glam::Vec2) {
-        (
-            glam::Vec2::new(self.min[0] as f32, self.min[2] as f32) * CELL_M,
-            glam::Vec2::new((self.max[0] + 1) as f32, (self.max[2] + 1) as f32) * CELL_M,
-        )
-    }
-
-    /// As [`RoofSection::rise`], but carried on down past its edges as far as `beyond`
-    /// metres, for eaves that overhang the walls: below the walls' tops there.
-    pub fn rise_beyond(&self, at: glam::Vec2, beyond: f32) -> Option<f32> {
-        let (low, high) = self.bounds();
-        let edge = beyond + 1e-4;
-        if at.cmplt(low - edge).any() || at.cmpgt(high + edge).any() {
-            return None;
-        }
-        let (west, east) = (at.x - low.x, high.x - at.x);
-        let (north, south) = (at.y - low.y, high.y - at.y);
-        let run = match (self.style, self.along_x) {
-            // As far as the nearest side, so every face is flat and every hip a diagonal.
-            (RoofStyle::Hip, _) => west.min(east).min(north).min(south),
-            (RoofStyle::Gable, true) => north.min(south),
-            (RoofStyle::Gable, false) => west.min(east),
-            (RoofStyle::LeanTo, true) => north,
-            (RoofStyle::LeanTo, false) => west,
-        };
-        Some(run * self.pitch)
-    }
-
-    /// The storey whose walls it rests on.
-    pub fn storey(&self) -> i32 {
-        self.min[1]
-    }
-
-    /// Whether it is over a tile.
-    pub fn covers(&self, tile: IVec3) -> bool {
-        tile.y == self.min[1]
-            && (self.min[0]..=self.max[0]).contains(&tile.x)
-            && (self.min[2]..=self.max[2]).contains(&tile.z)
-    }
-}
-
-/// How many stages a roof cell goes up in: its frame, its battens, its covering
-/// (docs/building-tech.md, constructing).
-pub const ROOF_STAGES: u8 = 3;
-
-/// A roof section's number in its base, given by whoever puts it up, so putting it up
-/// again after an undo gives the same number.
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
-pub struct RoofId(pub u32);
-
-/// A roof section and how far each of its cells is up.
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Roof {
-    pub section: RoofSection,
-    /// The kind it is built of; for a roof the shortcuts put up, the kind of the walls
-    /// under it.
-    pub kind: Option<Kind>,
-    /// What a stage of one of its cells takes, as it was when it was put up.
-    pub per_stage: Bill,
-    /// Each cell's stage, from 0, planned, to [`ROOF_STAGES`], covered; east, then south.
-    pub stages: Vec<u8>,
-}
-
-impl Roof {
-    /// A roof planned, with nothing of it up.
-    pub fn planned(section: RoofSection, kind: Option<Kind>, per_stage: Bill) -> Roof {
-        let (low, high) = (section.min, section.max);
-        let cells = ((high[0] - low[0] + 1) * (high[2] - low[2] + 1)).max(0) as usize;
-        Roof {
-            section,
-            kind,
-            per_stage,
-            stages: vec![0; cells],
-        }
-    }
-
-    /// Its cells, counted in cubes east and south, in order.
-    pub fn cells(&self) -> impl Iterator<Item = [i32; 2]> + '_ {
-        let (low, high) = (self.section.min, self.section.max);
-        (low[0]..=high[0]).flat_map(move |x| (low[2]..=high[2]).map(move |z| [x, z]))
-    }
-
-    fn index(&self, cell: [i32; 2]) -> Option<usize> {
-        let (low, high) = (self.section.min, self.section.max);
-        let inside = (low[0]..=high[0]).contains(&cell[0]) && (low[2]..=high[2]).contains(&cell[1]);
-        inside.then(|| ((cell[0] - low[0]) * (high[2] - low[2] + 1) + cell[1] - low[2]) as usize)
-    }
-
-    /// A cell's stage, if it is under the roof.
-    pub fn stage(&self, cell: [i32; 2]) -> Option<u8> {
-        self.index(cell).map(|index| self.stages[index])
-    }
-
-    /// Whether any of it is up, so it rests on the walls under its eaves.
-    pub fn standing(&self) -> bool {
-        self.stages.iter().any(|&stage| stage > 0)
-    }
-}
-
 /// A part a player laid: its kind and the terms its cubes are built on, kept as they were
 /// when it was laid, so taking it apart gives back what went in even if a kit changes.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -435,9 +304,6 @@ pub enum BuildOp {
         laid: bool,
         kind: Kind,
     },
-    /// Put a pitched roof over a block of tiles. It takes the place of any flat roof
-    /// there.
-    AddRoof(RoofSection),
     /// The room tool's shortcut, over a footprint of tiles on each of its storeys: walls
     /// round its edge, a floor inside and a flat roof over it. Where it meets rooms
     /// already there on the same storey, the walls between are taken away, so they open
@@ -449,13 +315,11 @@ pub enum BuildOp {
     },
 }
 
-/// A base: its cubes, roofs, parts, props and the ground under them, and what is worked
-/// out from them.
+/// A base: its cubes, parts, props and the ground under them, and what is worked out from
+/// them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Base {
     cubes: Cubes,
-    /// The pitched roofs, by number, which is the order they were put up.
-    roofs: BTreeMap<RoofId, Roof>,
     /// The parts its cubes were laid in.
     parts: BTreeMap<PartId, Part>,
     /// For each cube whose kind is to change, the kind and part it changes to.
@@ -465,8 +329,6 @@ pub struct Base {
     /// What was paid for each fitted prop, which taking it out gives back.
     prop_paid: BTreeMap<[i32; 3], Bill>,
     ground: Ground,
-    /// Worked out from the roofs: their sections, in order.
-    sections: Vec<RoofSection>,
     /// Worked out from the cubes: each wall tile and what fills it.
     walls: BTreeMap<[i32; 3], Panel>,
     /// The wall tiles that close a room in: every cube of them built (construction-001:
@@ -499,7 +361,7 @@ const LEVEL: [Side; 4] = [Side::East, Side::West, Side::South, Side::North];
 
 impl Base {
     pub fn is_empty(&self) -> bool {
-        self.cubes.is_empty() && self.roofs.is_empty() && self.props.is_empty()
+        self.cubes.is_empty() && self.props.is_empty()
     }
 
     /// The cube at a place, counted in cubes, if it is not air.
@@ -550,21 +412,6 @@ impl Base {
         self.replacing.get(&at.to_array()).copied()
     }
 
-    /// A roof section by its number.
-    pub fn roof(&self, id: RoofId) -> Option<&Roof> {
-        self.roofs.get(&id)
-    }
-
-    /// Every roof section, in the order they were put up.
-    pub fn roofs(&self) -> impl Iterator<Item = (RoofId, &Roof)> + '_ {
-        self.roofs.iter().map(|(&id, roof)| (id, roof))
-    }
-
-    /// The number after every roof's, for a new one.
-    pub fn next_roof(&self) -> RoofId {
-        RoofId(self.roofs.keys().next_back().map_or(0, |id| id.0 + 1))
-    }
-
     /// The prop fitted with its lowest cube at a place.
     pub fn prop(&self, at: IVec3) -> Option<&Prop> {
         self.props.get(&at.to_array())
@@ -591,9 +438,10 @@ impl Base {
         self.walls.contains_key(&[at.x, storey_of(at.y), at.z])
     }
 
-    /// Whether a tile has a floor under it.
+    /// Whether a tile has a floor under it: a cube at its floor's layer, not of a roof.
     pub fn has_floor(&self, tile: IVec3) -> bool {
-        self.solid(IVec3::new(tile.x, floor_layer(tile.y), tile.z))
+        let at = IVec3::new(tile.x, floor_layer(tile.y), tile.z);
+        self.solid(at) && self.cube(at).is_some_and(|cube| !cube.kind.is_roof())
     }
 
     /// Whether a tile that is not a wall has a flat roof over it, or a floor of the
@@ -602,54 +450,18 @@ impl Base {
         !self.walls.contains_key(&tile.to_array()) && self.has_floor(tile + IVec3::Y)
     }
 
-    /// Whether a tile has any roof over it, flat or pitched.
-    pub fn covered(&self, tile: IVec3) -> bool {
-        self.has_roof(tile) || self.sections.iter().any(|section| section.covers(tile))
-    }
-
-    /// The kind a roof is built in: its own, or for one the shortcuts put up, the kind of
-    /// most of the walls under it, the lowest of those as many.
-    pub fn roof_kind(&self, roof: &Roof) -> Option<Kind> {
-        roof.kind.or_else(|| {
-            let (min, max) = (roof.section.min, roof.section.max);
-            let mut counts: BTreeMap<Kind, usize> = BTreeMap::new();
-            for x in min[0]..=max[0] {
-                for z in min[2]..=max[2] {
-                    let tile = IVec3::new(x, min[1], z);
-                    // The kind of the top of the wall, which carries the roof: a log
-                    // cabin on a stone plinth is roofed as logs are.
-                    let top = wall_layer(tile.y);
-                    if self.walls.contains_key(&tile.to_array())
-                        && let Some(kind) = (top..top + STOREY_CUBES)
-                            .rev()
-                            .find_map(|layer| self.cube(IVec3::new(tile.x, layer, tile.z)))
-                            .map(|cube| cube.kind)
-                    {
-                        *counts.entry(kind).or_default() += 1;
-                    }
-                }
-            }
-            let most = counts.values().copied().max()?;
-            counts
-                .into_iter()
-                .find(|&(_, n)| n == most)
-                .map(|(kind, _)| kind)
-        })
-    }
-
-    /// The pitched roofs, in the order they were put up.
-    pub fn sections(&self) -> &[RoofSection] {
-        &self.sections
-    }
-
-    /// How far above the tops of a storey's walls its pitched roof is at a point, in
-    /// metres east and south in the base's own space: the highest section over it.
-    pub fn roof_rise(&self, storey: i32, at: glam::Vec2) -> Option<f32> {
-        self.sections
-            .iter()
-            .filter(|section| section.storey() == storey)
-            .filter_map(|section| section.rise(at))
-            .max_by(|a, b| a.total_cmp(b))
+    /// Whether a tile has any roof over it: a flat one, or a roof's cubes over its column,
+    /// from the top of its walls up to the floor of the storey over it, or two storeys up
+    /// where there is none (D241). `standing` asks only for roof cubes with something in.
+    pub fn covered(&self, tile: IVec3, standing: bool) -> bool {
+        if self.has_roof(tile) {
+            return true;
+        }
+        let from = wall_layer(tile.y) + STOREY_CUBES - 1;
+        self.column(tile.x, tile.z)
+            .filter(|&y| y >= from && y < from + 2 * STOREY_CUBES)
+            .filter_map(|y| self.cube(IVec3::new(tile.x, y, tile.z)))
+            .any(|cube| cube.kind.is_roof() && (!standing || cube.is_in()))
     }
 
     /// Every tile with a floor under it that is not the top of a wall below, in a fixed
@@ -657,9 +469,8 @@ impl Base {
     pub fn floors(&self) -> impl Iterator<Item = IVec3> + '_ {
         self.cubes
             .iter()
-            .map(|(at, _)| at)
-            .filter(|at| (at.y + 1).rem_euclid(STOREY_CUBES) == 0)
-            .map(|at| IVec3::new(at.x, storey_of(at.y + 1), at.z))
+            .filter(|(at, cube)| (at.y + 1).rem_euclid(STOREY_CUBES) == 0 && !cube.kind.is_roof())
+            .map(|(at, _)| IVec3::new(at.x, storey_of(at.y + 1), at.z))
             .filter(|tile| !self.walls.contains_key(&(*tile - IVec3::Y).to_array()))
     }
 
@@ -679,11 +490,10 @@ impl Base {
         self.cube(at).is_some_and(|cube| cube.fill != Fill::Open)
     }
 
-    /// A base of these cubes and roofs, with its walls and rooms worked out.
-    fn from_cubes(cubes: Cubes, roofs: BTreeMap<RoofId, Roof>) -> Base {
+    /// A base of these cubes, with its walls and rooms worked out.
+    fn from_cubes(cubes: Cubes) -> Base {
         let mut base = Base {
             cubes,
-            roofs,
             ..Base::default()
         };
         base.settle();
@@ -748,25 +558,6 @@ impl Base {
                     changed |= self.set([x, floor_layer(storey + 1), z], cube)
                 });
             }
-            BuildOp::AddRoof(section) => {
-                // It takes the place of a flat roof under it, but not of the walls' tops.
-                for_block(section.min, section.max, |[x, storey, z]| {
-                    if !self.walls.contains_key(&[x, storey, z]) {
-                        changed |= self.set([x, floor_layer(storey + 1), z], None);
-                    }
-                });
-                if !self.roofs.values().any(|roof| roof.section == section) {
-                    let mut roof = Roof::planned(section, None, Bill::default());
-                    roof.stages.fill(ROOF_STAGES);
-                    // What it is drawn over is drawn again, as an operation's roof is.
-                    let top = wall_layer(section.storey()) + STOREY_CUBES - 1;
-                    for [x, z] in roof.cells() {
-                        self.cubes.mark(IVec3::new(x, top, z));
-                    }
-                    self.roofs.insert(self.next_roof(), roof);
-                    changed = true;
-                }
-            }
             BuildOp::AddRoom { min, max, kind } => {
                 changed |= self.add_room(IVec3::from_array(min), IVec3::from_array(max), kind)
             }
@@ -823,7 +614,7 @@ impl Base {
     }
 
     /// Works out what follows from a change: parts no cube is in go, the ground under
-    /// columns with no cubes is forgotten, and the walls, rooms and roofs are worked out.
+    /// columns with no cubes is forgotten, and the walls and rooms are worked out.
     fn settle(&mut self) {
         self.parts.retain(|_, part| part.uses > 0);
         self.work_out();
@@ -837,7 +628,6 @@ impl Base {
         for column in gone {
             self.ground.set(column, None);
         }
-        self.sections = self.roofs.values().map(|roof| roof.section).collect();
     }
 
     /// A wall tile's cubes as a panel says, or none. The top layer is left to a floor or
@@ -913,11 +703,14 @@ impl Base {
     /// Works out the wall tiles, the columns and the rooms from the cubes.
     fn work_out(&mut self) {
         self.columns.clear();
-        // A wall tile has cubes below its top layer.
+        // A wall tile has cubes below its top layer; a roof's are no wall (D241).
         let mut tiles: BTreeMap<[i32; 3], Vec<Option<Fill>>> = BTreeMap::new();
         let mut unfinished: BTreeSet<[i32; 3]> = BTreeSet::new();
         for (at, cube) in self.cubes.iter() {
             self.columns.entry([at.x, at.z]).or_default().insert(at.y);
+            if cube.kind.is_roof() {
+                continue;
+            }
             let storey = storey_of(at.y);
             let step = at.y - wall_layer(storey);
             if step < STOREY_CUBES - 1 {
@@ -1423,39 +1216,33 @@ mod tests {
     }
 
     #[test]
-    fn a_hip_roof_rises_to_its_middle_and_a_gable_to_its_ridge() {
-        let section = |style, along_x| RoofSection {
-            min: [0, 0, 0],
-            max: [7, 0, 3],
-            style,
-            along_x,
-            pitch: 0.5,
-        };
-        let at = |x: f32, z: f32| glam::Vec2::new(x, z);
-        let hip = section(RoofStyle::Hip, true);
-        assert_eq!(hip.rise(at(0.0, 1.0)), Some(0.0));
-        assert_eq!(hip.rise(at(2.0, 1.0)), Some(0.5));
-        assert_eq!(hip.rise(at(5.0, 1.0)), None);
-        let gable = section(RoofStyle::Gable, true);
-        assert_eq!(gable.rise(at(0.0, 1.0)), Some(0.5));
-        let lean = section(RoofStyle::LeanTo, true);
-        assert_eq!(lean.rise(at(1.0, 2.0)), Some(1.0));
-    }
-
-    #[test]
-    fn a_pitched_roof_takes_the_place_of_a_flat_one_and_covers_the_room() {
+    fn a_roofs_cubes_are_no_wall_or_floor_and_cover_the_room_under_them() {
         let mut base = room();
-        assert!(base.apply(BuildOp::AddRoof(RoofSection {
-            min: [0, 0, 0],
-            max: [3, 0, 2],
-            style: RoofStyle::Hip,
-            along_x: true,
-            pitch: 0.7,
-        })));
+        // The flat roof off, and a hip of roof cubes over the walls.
+        base.apply(BuildOp::Fill {
+            min: [1, 5, 1],
+            max: [2, 5, 1],
+            cube: None,
+        });
+        let footprint = (0..4).flat_map(|x| (0..3).map(move |z| [x, z])).collect();
+        let plan = roofer::over(&footprint, 6, roofer::Style::Hip, None);
+        for (at, shape) in plan.roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        }
         assert!(!base.has_roof(IVec3::new(1, 0, 1)));
-        assert!(base.covered(IVec3::new(1, 0, 1)));
-        assert!(!base.covered(IVec3::new(1, 1, 1)));
-        // The walls keep their tops.
-        assert_eq!(base.column(0, 0).count(), 7);
+        assert!(base.covered(IVec3::new(1, 0, 1), true));
+        assert!(!base.covered(IVec3::new(1, 1, 1), true));
+        // No wall tiles, floors or rooms on the storey over it of its cubes.
+        assert_eq!(base.walls().count(), 10);
+        assert!(base.walls().all(|(tile, _)| tile.y == 0));
+        assert!(!base.has_floor(IVec3::new(1, 1, 1)));
+        assert_eq!(base.tile_count(), 2);
     }
 }

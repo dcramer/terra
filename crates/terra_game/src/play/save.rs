@@ -26,9 +26,8 @@ use crate::shell::Options;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use terra_build::ops::Op;
-use terra_build::save::{SavedOp, Snapshot, convert};
-use terra_build::{Base, Bill};
+use terra_build::Bill;
+use terra_build::save::{Change, SavedOp, Snapshot, convert};
 use terra_core::{MaterialId, Operation};
 use terra_items::{ActionBar, Cell, Equipment, ItemId};
 
@@ -48,7 +47,7 @@ struct SaveFile {
     #[serde(default)]
     snapshot: Option<Snapshot>,
     #[serde(default)]
-    since: Vec<Op>,
+    since: Vec<Change>,
     /// What is left of items cut into for building (`build::act::Offcuts`).
     #[serde(default)]
     offcuts: Bill,
@@ -276,16 +275,23 @@ fn load(
         site.move_to(frame, &mut commands, &planet, &mut meshes);
     }
     match &save.snapshot {
-        Some(snapshot) => site.restore(snapshot, &save.since, &rules.rules),
+        Some(snapshot) => site.restore(snapshot, &save.since, &rules.rules, &|walls| {
+            roof_for(&look, walls)
+        }),
         None => {
-            // A save from before snapshots: the shortcuts that made it, laid as built.
-            let (base, left_out) = convert(&save.base, look.laying);
-            if left_out > 0 {
+            // A save from before snapshots: the shortcuts that made it, laid as built, its
+            // roofs from before roofs were cubes laid in the roof its walls take (D241).
+            let converted = convert(&save.base, look.laying);
+            if converted.left_out > 0 {
                 warn!(
-                    "{left_out} of the saved base's rooms had a wall pushed or pulled; those changes are left out."
+                    "{} of the saved base's rooms had a wall pushed or pulled; those changes are left out.",
+                    converted.left_out
                 );
             }
-            site.restore(&Base::from_shortcuts(&base).snapshot(), &[], &rules.rules);
+            let base = converted.base(&|walls| roof_for(&look, walls));
+            site.restore(&base.snapshot(), &[], &rules.rules, &|walls| {
+                roof_for(&look, walls)
+            });
         }
     }
     offcuts.0 = save.offcuts.clone();
@@ -611,7 +617,7 @@ fn gather(
                 .unwrap_or_else(|| site.base.snapshot()),
         ),
         since: if site.snapshot.is_some() {
-            site.since.clone()
+            site.since.iter().cloned().map(Change::Now).collect()
         } else {
             Vec::new()
         },
@@ -717,6 +723,15 @@ fn write(path: &PathBuf, save: &SaveFile) -> bool {
             false
         }
     }
+}
+
+/// The roof a base's walls of a kind take, as its kit says (D241): an old save's roofs are
+/// laid in it.
+fn roof_for(look: &crate::build::BuildLook, walls: terra_build::Kind) -> terra_build::Kind {
+    look.kits
+        .as_ref()
+        .and_then(|kits| kits.roof_for(walls))
+        .unwrap_or(terra_build::Kind::FIRST_ROOF)
 }
 
 #[cfg(test)]
@@ -1187,7 +1202,10 @@ mod tests {
             claim_step: 0, people: [])";
         let save: SaveFile = ron::from_str(text).unwrap();
         assert_eq!(save.snapshot, None);
-        let (ops, _) = convert(&save.base, terra_build::Kind(1));
-        assert_eq!(Base::from_shortcuts(&ops).tile_count(), 4);
+        let converted = convert(&save.base, terra_build::Kind(1));
+        assert_eq!(
+            terra_build::Base::from_shortcuts(&converted.ops).tile_count(),
+            4
+        );
     }
 }

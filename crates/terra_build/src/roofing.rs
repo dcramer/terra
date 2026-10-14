@@ -762,51 +762,64 @@ fn fillet(from: Vec3, to: Vec3, inside: Vec3, kit: &Kit, surfaces: &mut Surfaces
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kit::Kits;
+    use crate::kit::{Kits, Pattern};
     use crate::layout::roofs;
-    use crate::{Base, BuildOp, RoofSection, RoofStyle};
+    use crate::roofer::{self, Style};
+    use crate::{Base, BuildOp, Cube, Fill, Kind};
 
-    fn cabin(style: RoofStyle) -> Base {
+    fn cabin(style: Style) -> Base {
         let mut base = Base::default();
         base.apply(BuildOp::AddRoom {
             min: [0, 0, 0],
             max: [9, 0, 7],
-            kind: Kit::default().kind(),
+            kind: Kind::PLAIN,
         });
-        base.apply(BuildOp::AddRoof(RoofSection {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            style,
-            along_x: true,
-            pitch: 0.7,
-        }));
+        let footprint = (0..10).flat_map(|x| (0..8).map(move |z| [x, z])).collect();
+        for (at, shape) in roofer::over(&footprint, 6, style, None).roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        }
         base
     }
 
     #[test]
     fn a_valley_is_an_open_channel_the_covering_stops_short_of_either_side() {
-        // An L: a gable along x over the main block, a wing's gable along z off its south
-        // side, their valley from the inner corner at (4, 4) up to (2, 2), along x = z.
-        let kit = Kit::default();
+        // An L hipped, a wing off the main block's south side, their valley from the inner
+        // corner at (4, 4) up to (2, 2), along x = z.
+        let kit = Kit {
+            id: Kind::FIRST_ROOF.0,
+            pattern: Pattern::Roof,
+            ..Kit::default()
+        };
         let mut base = Base::default();
+        let mut footprint = std::collections::BTreeSet::new();
         for (min, max) in [([0, 0, 0], [11, 0, 7]), ([0, 0, 7], [7, 0, 15])] {
             base.apply(BuildOp::AddRoom {
                 min,
                 max,
-                kind: kit.kind(),
+                kind: Kind::PLAIN,
             });
+            for x in min[0]..=max[0] {
+                for z in min[2]..=max[2] {
+                    footprint.insert([x, z]);
+                }
+            }
         }
-        for (min, max, along_x) in [
-            ([0, 0, 0], [11, 0, 7], true),
-            ([0, 0, 4], [7, 0, 15], false),
-        ] {
-            base.apply(BuildOp::AddRoof(RoofSection {
-                min,
-                max,
-                style: RoofStyle::Gable,
-                along_x,
-                pitch: 0.7,
-            }));
+        for (at, shape) in roofer::over(&footprint, 6, Style::Hip, None).roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
         }
         let mut pieces = Vec::new();
         roofs::lay(
@@ -844,8 +857,12 @@ mod tests {
 
     #[test]
     fn every_piece_of_a_roof_is_drawn_and_its_covering_faces_out() {
-        for style in [RoofStyle::Gable, RoofStyle::Hip, RoofStyle::LeanTo] {
-            let kit = Kit::default();
+        for style in [Style::Gable, Style::Hip, Style::LeanTo] {
+            let kit = Kit {
+                id: Kind::FIRST_ROOF.0,
+                pattern: Pattern::Roof,
+                ..Kit::default()
+            };
             let mut pieces = Vec::new();
             roofs::lay(
                 &cabin(style),
@@ -878,12 +895,8 @@ mod tests {
                 .iter()
                 .map(|p| p.y)
                 .fold(f32::MIN, f32::max);
-            let ridge = crate::STOREY_M
-                + if style == RoofStyle::LeanTo {
-                    3.15
-                } else {
-                    1.4
-                };
+            // A lean-to's high side carried on up past its last cube by the eaves.
+            let ridge = crate::STOREY_M + if style == Style::LeanTo { 4.5 } else { 2.0 };
             let r = &kit.roof;
             assert!(
                 highest <= ridge + r.thick + r.butt * 2.0 + 0.2,

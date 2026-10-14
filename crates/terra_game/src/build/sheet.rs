@@ -22,9 +22,8 @@ use bevy::prelude::*;
 use std::sync::Arc;
 use terra_build::kit::{Pattern, Profile};
 use terra_build::ops::Op;
-use terra_build::{
-    Base, BuildOp, Cube, Facing, Fill, Kind, Panel, RoofSection, RoofStyle, STOREY_CUBES, Shape,
-};
+use terra_build::roofer::Style;
+use terra_build::{Base, BuildOp, Cube, Facing, Fill, Kind, Panel, STOREY_CUBES, Shape};
 use terra_core::Operation;
 
 /// How far apart the rows are, and the three states along each, in metres.
@@ -37,6 +36,17 @@ const GOING_UP: f32 = 0.45;
 /// How far a roof row going up has got: its walls up, its frame and battens on and its
 /// covering going on, most of a roof's pieces being its covering.
 const ROOF_GOING_UP: f32 = 0.72;
+
+/// A roof's parts, as `terra_build::roof_over` takes them.
+type Parts = [([i32; 2], [i32; 2], Style, bool)];
+
+fn roof_over(ops: &[BuildOp], storey: i32, parts: &Parts, kind: Kind) -> Vec<BuildOp> {
+    terra_build::roof_over(ops, storey, &parts.to_vec(), kind)
+}
+
+fn with_roof(ops: Vec<BuildOp>, parts: &Parts, kind: Kind) -> Vec<BuildOp> {
+    terra_build::with_roof(ops, &parts.to_vec(), kind)
+}
 
 /// A row of wall tiles from `from` to `to` east, on the row `z` south, in cubes.
 fn east_west(from: i32, to: i32, z: i32, kind: Kind) -> impl Iterator<Item = BuildOp> {
@@ -197,8 +207,14 @@ fn floor_alone(kind: Kind) -> Vec<BuildOp> {
 }
 
 /// Each row: its name, and the operations that make it, in cubes of half a metre. Laid
-/// in `kind`, with rows mixing in `stone` where there is a stone kit (D179).
-fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static str, Vec<BuildOp>)> {
+/// in `kind`, with rows mixing in `stone` where there is a stone kit (D179); each roof in
+/// the roof `roof` gives the walls under it.
+fn rows(
+    kind: Kind,
+    stone: Option<Kind>,
+    hewn: Option<Kind>,
+    roof: &dyn Fn(Kind) -> Kind,
+) -> Vec<(&'static str, Vec<BuildOp>)> {
     let cabin = {
         let mut ops = vec![BuildOp::AddRoom {
             min: [0, 0, 0],
@@ -210,31 +226,17 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
         ops.extend((3..=4).map(|x| wall([x, 0, 7], Panel::Door, kind)));
         ops.extend((6..=7).map(|x| wall([x, 0, 7], Panel::WINDOW, kind)));
         ops.extend((2..=4).map(|z| wall([9, 0, z], Panel::WINDOW, kind)));
-        ops.push(BuildOp::AddRoof(RoofSection {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            style: RoofStyle::Gable,
-            along_x: true,
-            pitch: 0.7,
-        }));
-        ops
+        with_roof(ops, &[([0, 0], [9, 7], Style::Gable, true)], roof(kind))
     };
     // A room five metres by four under a roof of a style, with a door.
-    let roofed = |style: RoofStyle, along_x: bool| {
+    let roofed = |style: Style, along_x: bool| {
         let mut ops = vec![BuildOp::AddRoom {
             min: [0, 0, 0],
             max: [9, 0, 7],
             kind,
         }];
         ops.extend((4..=5).map(|x| wall([x, 0, 7], Panel::Door, kind)));
-        ops.push(BuildOp::AddRoof(RoofSection {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            style,
-            along_x,
-            pitch: if style == RoofStyle::LeanTo { 0.4 } else { 0.7 },
-        }));
-        ops
+        with_roof(ops, &[([0, 0], [9, 7], style, along_x)], roof(kind))
     };
     // A wall with a hole carved in it, a cube at a time: a cross, and a slot.
     let carved = {
@@ -263,13 +265,7 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
                 .map(|x| wall([x, 0, 7], Panel::WINDOW, stone)),
         );
         house.extend((3..=4).map(|z| wall([0, 0, z], Panel::WINDOW, stone)));
-        house.push(BuildOp::AddRoof(RoofSection {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            style: RoofStyle::Hip,
-            along_x: true,
-            pitch: 0.7,
-        }));
+        let house = with_roof(house, &[([0, 0], [9, 7], Style::Hip, true)], roof(stone));
         // The cabin on a stone plinth a metre high: one wall over another.
         let mut plinth = vec![BuildOp::AddRoom {
             min: [0, 0, 0],
@@ -292,13 +288,7 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
                 cube: stone_cube,
             });
         }
-        plinth.push(BuildOp::AddRoof(RoofSection {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            style: RoofStyle::Gable,
-            along_x: true,
-            pitch: 0.7,
-        }));
+        let plinth = with_roof(plinth, &[([0, 0], [9, 7], Style::Gable, true)], roof(kind));
         // Stone and logs meeting every way walls meet.
         let column = |x: i32, z: i32| BuildOp::Fill {
             min: [x, 0, z],
@@ -327,13 +317,7 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
         }];
         end.extend((3..=4).map(|x| wall([x, 0, 7], Panel::Door, kind)));
         end.extend((0..=7).map(|z| column(9, z)));
-        end.push(BuildOp::AddRoof(RoofSection {
-            min: [0, 0, 0],
-            max: [9, 0, 7],
-            style: RoofStyle::Gable,
-            along_x: true,
-            pitch: 0.7,
-        }));
+        let end = with_roof(end, &[([0, 0], [9, 7], Style::Gable, true)], roof(kind));
         mixed = vec![
             ("Keen's piece in stone", keen(stone, true)),
             ("shapes in stone", shapes(stone)),
@@ -380,8 +364,8 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
         ),
         ("carved", carved),
         ("cabin", cabin),
-        ("hip roof", roofed(RoofStyle::Hip, true)),
-        ("lean-to", roofed(RoofStyle::LeanTo, true)),
+        ("hip roof", roofed(Style::Hip, true)),
+        ("lean-to", roofed(Style::LeanTo, true)),
     ];
     rows.extend(mixed);
     if let Some(hewn) = hewn {
@@ -399,8 +383,9 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
     rows
 }
 
-/// A room five metres by four in a kind under a gable, with a doorway and windows.
-fn house(kind: Kind) -> Vec<BuildOp> {
+/// A room five metres by four in a kind under a gable of cubes in `roof`, with a doorway
+/// and windows.
+fn house(kind: Kind, roof: Kind) -> Vec<BuildOp> {
     let mut ops = vec![BuildOp::AddRoom {
         min: [0, 0, 0],
         max: [9, 0, 7],
@@ -410,19 +395,19 @@ fn house(kind: Kind) -> Vec<BuildOp> {
     ops.extend((1..=2).map(|x| wall([x, 0, 7], Panel::WINDOW, kind)));
     ops.extend((3..=4).map(|z| wall([0, 0, z], Panel::WINDOW, kind)));
     ops.extend((2..=3).map(|x| wall([x, 0, 0], Panel::WINDOW, kind)));
-    ops.push(BuildOp::AddRoof(RoofSection {
-        min: [0, 0, 0],
-        max: [9, 0, 7],
-        style: RoofStyle::Gable,
-        along_x: true,
-        pitch: 0.75,
-    }));
-    ops
+    with_roof(ops, &[([0, 0], [9, 7], Style::Gable, true)], roof)
 }
 
 /// A further kit's rows (D236), named for it: how its walls meet, its openings, carved,
-/// a house, its shapes, and mixed with stone and logs every way they meet, after the rest.
-fn kit_rows(name: &str, kind: Kind, stone: Kind, logs: Kind) -> Vec<(String, Vec<BuildOp>)> {
+/// a house, its shapes, and mixed with stone and logs every way they meet, after the rest;
+/// its roofs of cubes in `roof` (D241).
+fn kit_rows(
+    name: &str,
+    kind: Kind,
+    stone: Kind,
+    logs: Kind,
+    roof: Kind,
+) -> Vec<(String, Vec<BuildOp>)> {
     let stone_cube = Some(Cube::new(stone, Fill::Solid));
     let carved = {
         let mut ops: Vec<BuildOp> = east_west(0, 9, 0, kind).collect();
@@ -442,7 +427,7 @@ fn kit_rows(name: &str, kind: Kind, stone: Kind, logs: Kind) -> Vec<(String, Vec
         ops
     };
     // On a stone plinth a metre high, the doorway's left open.
-    let mut plinth = house(kind);
+    let mut plinth = house(kind, roof);
     for (min, max) in [
         ([0, 0, 0], [9, 1, 0]),
         ([0, 0, 7], [3, 1, 7]),
@@ -478,13 +463,8 @@ fn kit_rows(name: &str, kind: Kind, stone: Kind, logs: Kind) -> Vec<(String, Vec
     storeys.extend((4..=5).map(|x| wall([x, 0, 7], Panel::Door, stone)));
     storeys.extend((1..=2).map(|x| wall([x, 1, 7], Panel::WINDOW, kind)));
     storeys.extend((7..=8).map(|x| wall([x, 1, 7], Panel::WINDOW, kind)));
-    storeys.push(BuildOp::AddRoof(RoofSection {
-        min: [0, 1, 0],
-        max: [9, 1, 7],
-        style: RoofStyle::Gable,
-        along_x: true,
-        pitch: 0.75,
-    }));
+    let upper = roof_over(&storeys, 1, &[([0, 0], [9, 7], Style::Gable, true)], roof);
+    storeys.extend(upper);
     let ell = |other: Kind| -> Vec<BuildOp> {
         east_west(0, 5, 0, kind)
             .chain(north_south(1, 5, 0, other))
@@ -511,7 +491,7 @@ fn kit_rows(name: &str, kind: Kind, stone: Kind, logs: Kind) -> Vec<(String, Vec
         ("T", tee(kind, kind)),
         ("openings", openings),
         ("carved", carved),
-        ("house", house(kind)),
+        ("house", house(kind, roof)),
         ("shapes", shapes(kind)),
         ("on a stone plinth", plinth),
         ("over a stone ground floor", storeys),
@@ -546,19 +526,12 @@ struct Acted {
 /// footings down to the ground, with stone steps from its door; floors of stone and of
 /// timber, open to the sky; a window cut into a built wall, a course at a time; and a door,
 /// shut and open.
-fn acted_rows(kind: Kind, stone: Kind) -> Vec<Acted> {
+fn acted_rows(kind: Kind, stone: Kind, roof: &dyn Fn(Kind) -> Kind) -> Vec<Acted> {
     let room = |kind: Kind| BuildOp::AddRoom {
         min: [0, 0, 0],
         max: [9, 0, 7],
         kind,
     };
-    let gable = BuildOp::AddRoof(RoofSection {
-        min: [0, 0, 0],
-        max: [9, 0, 7],
-        style: RoofStyle::Gable,
-        along_x: true,
-        pitch: 0.7,
-    });
     let roofless = BuildOp::SetRoof {
         min: [1, 0, 1],
         max: [8, 0, 6],
@@ -575,7 +548,7 @@ fn acted_rows(kind: Kind, stone: Kind) -> Vec<Acted> {
     let mut slope = vec![room(kind)];
     slope.extend((3..=4).map(|x| wall([x, 0, 0], Panel::Door, kind)));
     slope.extend((6..=7).map(|x| wall([x, 0, 0], Panel::WINDOW, kind)));
-    slope.push(gable);
+    let slope = with_roof(slope, &[([0, 0], [9, 7], Style::Gable, true)], roof(kind));
     // Floors open to the sky, the walls a metre high so they are seen.
     let low_walls = |ops: &mut Vec<BuildOp>| {
         ops.extend([2, 3, 4, 5].map(|layer| BuildOp::Fill {
@@ -714,6 +687,78 @@ fn slope(frame: &Transform) -> Operation {
 /// How far east of the walls' rows each kind's roof rows are, a kind after another.
 const ROOF_GROUP_M: f32 = 40.0;
 
+/// The rows of roofs of cubes (D241) in a roof kind over walls of a kind: a gable and a hip;
+/// L, T and U plans under gables whose wings die into the main ridge; a dormer on a gable's
+/// slope, its front a gable carried up from the wall with a window in it; a house of two
+/// storeys over half its ground floor, the lower roof against the upper storey's wall and a
+/// second roof over it; and a lean-to against a wall two storeys high.
+pub(super) fn roof_cube_rows(walls: Kind, roof: Kind) -> Vec<(String, Vec<BuildOp>)> {
+    let room = |min: [i32; 3], max: [i32; 3]| BuildOp::AddRoom {
+        min,
+        max,
+        kind: walls,
+    };
+    let door = |ops: &mut Vec<BuildOp>, xs: [i32; 2], z: i32| {
+        ops.extend(xs.map(|x| wall([x, 0, z], Panel::Door, walls)));
+    };
+    let mut rows = Vec::new();
+    for (name, style) in [("gable", Style::Gable), ("hip", Style::Hip)] {
+        let mut ops = vec![room([0, 0, 0], [9, 0, 7])];
+        door(&mut ops, [4, 5], 0);
+        ops.extend((3..=4).map(|z| wall([0, 0, z], Panel::WINDOW, walls)));
+        rows.push((
+            name.to_string(),
+            with_roof(ops, &[([0, 0], [9, 7], style, true)], roof),
+        ));
+    }
+    for shape in ["L", "T", "U"] {
+        let (rooms, parts) = terra_build::roof_plan(shape, Style::Gable, Style::Gable);
+        let mut ops: Vec<BuildOp> = rooms.iter().map(|&(min, max)| room(min, max)).collect();
+        door(&mut ops, [4, 5], 0);
+        rows.push((shape.to_string(), with_roof(ops, &parts, roof)));
+    }
+    // A dormer: a gable along X over a room seven metres by six, a gable along Z three metres
+    // wide off its south slope, its front the south wall carried up, a window in it.
+    let mut dormer = vec![room([0, 0, 0], [13, 0, 11])];
+    door(&mut dormer, [3, 4], 11);
+    let mut dormer = with_roof(
+        dormer,
+        &[
+            ([0, 0], [13, 11], Style::Gable, true),
+            ([4, 6], [9, 11], Style::Gable, false),
+        ],
+        roof,
+    );
+    dormer.push(BuildOp::Fill {
+        min: [6, 6, 11],
+        max: [7, 6, 11],
+        cube: Some(Cube::new(walls, Fill::Glass)),
+    });
+    rows.push(("dormer".to_string(), dormer));
+    // Two storeys over the west half of a ground floor eight metres by five: the ground
+    // floor's east half under a lean-to against the upper storey's east wall, and a hip
+    // over the upper storey.
+    let mut two = vec![room([0, 0, 0], [15, 0, 9]), room([0, 1, 0], [7, 1, 9])];
+    door(&mut two, [11, 12], 9);
+    two.extend((2..=3).map(|x| wall([x, 1, 9], Panel::WINDOW, walls)));
+    let lower = roof_over(&two, 0, &[([8, 0], [15, 9], Style::Hip, true)], roof);
+    two.extend(lower);
+    let upper = roof_over(&two, 1, &[([0, 0], [7, 9], Style::Hip, true)], roof);
+    two.extend(upper);
+    rows.push(("two storeys, a roof over a roof".to_string(), two));
+    // A lean-to against its own back wall carried up two storeys, rising to it.
+    let mut against = vec![room([0, 0, 0], [9, 0, 6])];
+    door(&mut against, [4, 5], 0);
+    against.push(BuildOp::Fill {
+        min: [0, 0, 6],
+        max: [9, 2 * STOREY_CUBES - 1, 6],
+        cube: Some(Cube::new(walls, Fill::Solid)),
+    });
+    let against = with_roof(against, &[([0, 0], [9, 5], Style::LeanTo, true)], roof);
+    rows.push(("against a taller wall".to_string(), against));
+    rows
+}
+
 /// Lays the sheet once the site is there.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lay(
@@ -759,7 +804,8 @@ pub(super) fn lay(
         .iter()
         .find(|kit| kit.pattern == Pattern::Logs && kit.timber.profile == Profile::Hewn)
         .map(|kit| kit.kind());
-    let mut placed: Vec<(String, Vec<BuildOp>, f32, usize)> = rows(laying, stone, hewn)
+    let roof = |walls: Kind| kits.roof_for(walls).unwrap_or(Kind::FIRST_ROOF);
+    let mut placed: Vec<(String, Vec<BuildOp>, f32, usize)> = rows(laying, stone, hewn, &roof)
         .into_iter()
         .enumerate()
         .map(|(row, (name, ops))| (name.to_string(), ops, 0.0, row))
@@ -771,38 +817,38 @@ pub(super) fn lay(
             let Some((&kind, _)) = names.iter().find(|(_, n)| n.as_str() == name) else {
                 continue;
             };
-            for (row_name, ops) in kit_rows(name, kind, stone, laying) {
+            for (row_name, ops) in kit_rows(name, kind, stone, laying, roof(kind)) {
                 let row = placed.len();
                 placed.push((row_name, ops, 0.0, row));
             }
         }
     }
     let count = placed.len();
-    let groups = [
-        ("logs", vec![laying], false),
-        ("stone", stone.into_iter().collect(), false),
-        ("hewn", hewn.into_iter().collect(), false),
-        (
-            "stone and logs",
-            stone
-                .into_iter()
-                .map(|s| [laying, s])
-                .next()
-                .unwrap_or([laying; 2])
-                .to_vec(),
-            true,
-        ),
-    ];
-    for (group, (kit_name, kinds, mixed)) in groups.into_iter().enumerate() {
-        if kinds.is_empty() {
-            continue;
+    // Each roof's rows to the east of the walls', a group a roof kind over the walls it
+    // takes (D241): shakes over logs, slate over stone, thatch over hewn timber; then logs
+    // and stone mixed.
+    let names = super::kit_names();
+    let mut group = 0;
+    for walls in [Some(laying), stone, hewn].into_iter().flatten() {
+        let covering = roof(walls);
+        let name = names
+            .get(&covering)
+            .cloned()
+            .unwrap_or_else(|| "roof".to_string());
+        group += 1;
+        for (row, (row_name, ops)) in roof_cube_rows(walls, covering).into_iter().enumerate() {
+            let east = ROOF_GROUP_M * group as f32;
+            placed.push((format!("{name}: {row_name}"), ops, east, row));
         }
-        for (row, (name, ops)) in terra_build::roof_rows(&kinds, mixed)
+    }
+    if let Some(stone) = stone {
+        group += 1;
+        for (row, (row_name, ops)) in terra_build::roof_rows(&[laying, stone], true, &roof)
             .into_iter()
             .enumerate()
         {
-            let east = ROOF_GROUP_M * (group + 1) as f32;
-            placed.push((format!("{kit_name}: {name}"), ops, east, row));
+            let east = ROOF_GROUP_M * group as f32;
+            placed.push((format!("stone and logs: {row_name}"), ops, east, row));
         }
     }
     for (name, ops, group_east, row) in placed {
@@ -859,7 +905,7 @@ pub(super) fn lay(
     }
     // Rows of cubes in states of their own, after them.
     let acted = stone
-        .map(|stone| acted_rows(laying, stone))
+        .map(|stone| acted_rows(laying, stone, &roof))
         .unwrap_or_default();
     let rules = rules.map(|rules| rules.rules.clone()).unwrap_or_default();
     for (index, row) in acted.iter().enumerate() {

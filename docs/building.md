@@ -60,7 +60,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | A base level with the ground where it is begun | Ark Ascended's heights | Built: the base's grid is set where its claim stone goes |
 | Building on slopes | All, differently | Built: what is built cuts into the ground (D131) and stands on a footing below |
 | Floors above and below, and stairs | All | Storeys above and below the base's floor built; stairs and ramps up a storey built (D220) |
-| Roofs | All | Built, a first version: gable, hip, lean-to and flat, over what walls enclose or drawn as a rectangle |
+| Roofs | All | Built (D241): roof cubes of shakes, slate or thatch built by hand, any shape, their ridges, hips, valleys, eaves and verges from their neighbours; "add a roof" (gable, hip, lean-to or flat) over what walls enclose or a rectangle drawn |
 | Doors that open, close and lock | All | Doorways only |
 | Fences, gates, palisades | Ark, The Forest, Rust | Missing |
 | Stability | Rust, Valheim, Sons of the Forest | None in the MVP (D142); wanted later |
@@ -284,7 +284,7 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 | Wall, drawn as a line of cubes, any length, inside or out | Built |
 | Room: the shortcut that lays a rectangle's walls, floor and roof | Built |
 | Floor, drawn on its own | Missing; laid by the room shortcut |
-| Roof: gable, hip, lean-to, flat | Built, a first version ([building-tech.md](building-tech.md#roofs-a-height-field)) |
+| Roof: cubes of a roof kind by hand; "add a roof", gable, hip, lean-to or flat | Built (D241, [building-kits.md](building-kits.md#roofs-d241)) |
 | Window and doorway, cubes left open or glazed | Built |
 | Carving cubes by hand, any shape | Built: Carve, a brush's box of built cubes marked and taken out (D226) |
 | Taking out the cube aimed at | Built: take-apart takes the brush's box aimed at where nothing rests on it, else what came last of its part (D226) |
@@ -329,7 +329,7 @@ The basis is settled (D48): **a voxel grid, as Enshrouded's**. What Enshrouded's
 **Agreed: The Sims' way, with our materials.** You draw the shape of the building; the game makes the details. Building a log cabin would go:
 
 1. **Walls.** Pick *Wall*, log. Press and drag 6 m: a wall's blueprint, shown log by log. Drag on from its end, round three more sides; when the loop closes, the game offers a floor inside, a click to accept.
-2. **Roof.** Pick *Roof* and click inside the walls: a roof's blueprint covers what they enclose. The wheel picks its style (gable, hip, flat, lean-to), Shift and the wheel its pitch. Its rafters, ridge and gable ends are worked out.
+2. **Roof.** Pick *Roof* and click inside the walls: a roof's blueprint, its cubes and its gable ends' walls (D241), covers what they enclose. The next variant picks its style (gable, hip, flat, lean-to). Its rafters, ridge and gable ends are worked out; the roof's cubes can be changed by hand.
 3. **Openings.** Pick *Door* or *Window* and click a wall: the opening is planned into it, and the wall's logs shorten round it.
 4. **Construct.** Bring logs, set them, hammer them in (D139). The cabin goes up log by log.
 
@@ -338,7 +338,7 @@ The basis is settled (D48): **a voxel grid, as Enshrouded's**. What Enshrouded's
 | Where every wall goes, how long and how high, in which material | How the logs or stones of each wall are laid, and how corners interlock |
 | Floors and storeys | Corner posts, trims, sills and lintels |
 | Where doors and windows go, and their size | How the wall is cut round them |
-| The roof's style and pitch, over what you enclosed | Its rafters, ridge, eaves and gable ends |
+| The roof's style, over what you enclosed, or its every cube by hand | Its rafters, ridge, eaves and gable ends |
 | Stairs, foundations, what goes inside | What is indoors, sheltered from rain and cold (D155) |
 
 **Against the other two**, for the same cabin:
@@ -401,7 +401,7 @@ What each part should measure (D175, Leaning). Realistic but fun (D122): the siz
 | Door, the opening | 1.0 m by 2.0 m | About 0.8 to 1.0 m by 2.0 to 2.1 m | **1.0 m by 2.0 m** by default: two cubes by four, wide enough for a person with a margin. Wider doors, 1.5 and 2 m, for barns and gates |
 | Window | 0.5, 1.5 and 3 m wide; sill 1.0 m, head 2.0 m; a tall one 0.5 to 2.5 m | Sill 0.8 to 1.0 m; head level with the doors' | By default **a sill at 1.0 m and a head at 2.0 m, level with the doors**, widths by the cube; any other size or shape carved (D181) |
 | Floor, thick | A cube, 0.5 m | 0.1 to 0.3 m with its joists | A cube, 0.5 m (D181): boards on top, joists below |
-| Roof | Pitch 0.7 rise a metre (35°), a lean-to 0.4 (22°); 0.1 m thick; no overhang | Thatch 45° and up, shingles and slates 30 to 45°, a lean-to 15 to 25° | Pitch by covering: thatch steep, slate and shingles 35°; **eaves overhanging the walls by 0.3 to 0.5 m**, with a fascia |
+| Roof | A cube a cube (45°), its cubes' slopes (D241); 0.15 m thick; eaves 0.4 to 0.5 m past its cubes | Thatch 45° and up, shingles and slates 30 to 45°, a lean-to 15 to 25° | 45° for every covering, as roof cubes slope; **eaves overhanging the walls by 0.4 to 0.5 m**, with a fascia; shallower pitches later |
 | Ceiling, inside | 2.5 m | 2.4 to 2.7 m | 2.5 m: the storey less its floor cube |
 | Steps | 0.17 m a step | 0.15 to 0.2 m a step, 0.25 to 0.3 m a tread | As now; stairs between storeys (step 4) the same |
 | Foundation | 0.14 m proud of the walls, into the ground | | As now |

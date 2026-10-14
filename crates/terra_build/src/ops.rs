@@ -11,10 +11,11 @@
 //!   carved out is the exception: an opening is cut into a wall already built, and what is
 //!   over it stays, held by the wall either side as a lintel spans it, so long as all of it
 //!   stays joined (construction-001, experience 4).
-//! - **Nothing floats**: a cube going in is joined, face to face, to the ground or to
-//!   cubes already in; one coming out leaves nothing unjoined (rule 11).
-//! - **Nothing taken while something rests on it**: a cube, a standing roof, a fitted
-//!   prop or an item (D193); a roof goes up only on built cubes under its eaves.
+//! - **Nothing floats**: a cube going in is joined, face to face or along a roof's ramp
+//!   (`support::ramp`), to the ground or to cubes already in; one coming out leaves nothing
+//!   unjoined (rule 11).
+//! - **Nothing taken while something rests on it**: a cube, a fitted prop or an item
+//!   (D193).
 //! - **No body in the way** of what goes in (construction-001, gap 17).
 //! - **The materials there** for what goes in; what comes out gives back exactly what
 //!   went in (gap 25).
@@ -25,8 +26,8 @@
 use crate::cost::{Bill, Rules};
 use crate::cubes::{Cube, Fill, Kind, PartId, Pending, Replacement, Shape, section_of};
 use crate::ground::Sample;
-use crate::support::{FACES, Holder};
-use crate::{Base, Part, Prop, ROOF_STAGES, Roof, RoofId, RoofSection};
+use crate::support::Holder;
+use crate::{Base, Part, Prop};
 use glam::IVec3;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -79,20 +80,6 @@ pub enum Op {
     Carve { cubes: Vec<[i32; 3]> },
     /// Clear the change marked on cubes.
     Cancel { cubes: Vec<[i32; 3]> },
-    /// Plan a pitched roof over a block of tiles, in a kind.
-    AddRoof {
-        roof: RoofId,
-        section: RoofSection,
-        kind: Option<Kind>,
-    },
-    /// Take a planned roof, with nothing of it up, away.
-    RemoveRoof { roof: RoofId },
-    /// Put a roof's cells up a stage, or take them down one: frame, battens, covering.
-    RoofStage {
-        roof: RoofId,
-        cells: Vec<[i32; 2]>,
-        up: bool,
-    },
     /// Fit a door, window or shutters into a hole in built walls.
     FitProp(Prop),
     /// Take a fitted prop out, by its lowest cube.
@@ -212,18 +199,6 @@ pub enum Refusal {
     NotPending(IVec3),
     /// It is like that already.
     Unchanged,
-    NoRoof(RoofId),
-    RoofTaken(RoofId),
-    /// The roof's tiles are not a block on one storey.
-    BadRoof,
-    /// Not under the roof.
-    NotUnder([i32; 2]),
-    /// Part of the roof is up: take it down first.
-    RoofUp(RoofId),
-    /// A cell is as far as it goes that way.
-    RoofStage([i32; 2]),
-    /// The roof's eaves do not rest on built walls.
-    RoofNotHeld(RoofId),
     NoProp(IVec3),
     /// A prop is in the way.
     PropThere(IVec3),
@@ -258,7 +233,6 @@ impl Refusal {
             Refusal::Holds(holders) => {
                 let what = match holders.first() {
                     Some(Holder::Cube(_)) => "the building above",
-                    Some(Holder::Roof(_)) => "the roof",
                     Some(Holder::Prop(_)) => "a door or window",
                     Some(Holder::Item(_)) => "something on it",
                     None => "something",
@@ -271,13 +245,6 @@ impl Refusal {
             Refusal::Pending(_) => "A change is already marked there.".into(),
             Refusal::NotPending(_) => "No change is marked there.".into(),
             Refusal::Unchanged => "It's like that already.".into(),
-            Refusal::NoRoof(_) => "There's no such roof.".into(),
-            Refusal::RoofTaken(_) => "That roof is already planned.".into(),
-            Refusal::BadRoof => "A roof must cover a block of tiles on one storey.".into(),
-            Refusal::NotUnder(_) => "That's not under the roof.".into(),
-            Refusal::RoofUp(_) => "Take the roof down first.".into(),
-            Refusal::RoofStage(_) => "That part of the roof can't go further.".into(),
-            Refusal::RoofNotHeld(_) => "The roof needs built walls under its eaves.".into(),
             Refusal::NoProp(_) => "There's nothing fitted there.".into(),
             Refusal::PropThere(_) => "A door or window is there.".into(),
             Refusal::NoHole => "It needs a hole in a built wall that fits it.".into(),
@@ -306,7 +273,6 @@ struct Change {
     cubes: Vec<(IVec3, Option<Cube>)>,
     replacing: Vec<(IVec3, Option<Replacement>)>,
     ground: Vec<Sample>,
-    roofs: Vec<(RoofId, Option<Roof>)>,
     /// Props fitted, with what was paid for them, or taken out.
     props: Vec<([i32; 3], Option<Fitted>)>,
     done: Done,
@@ -333,18 +299,6 @@ impl Base {
         }
         for sample in change.ground {
             self.ground.set(sample.column, Some(sample.height_cm));
-        }
-        for (id, roof) in change.roofs {
-            let old = match roof {
-                Some(roof) => self.roofs.insert(id, roof),
-                None => self.roofs.remove(&id),
-            };
-            if let Some(roof) = old.as_ref().or(self.roofs.get(&id)) {
-                let top = crate::wall_layer(roof.section.storey()) + crate::STOREY_CUBES - 1;
-                for [x, z] in roof.cells() {
-                    self.cubes.mark(IVec3::new(x, top, z));
-                }
-            }
         }
         for (at, prop) in change.props {
             let marks: Vec<IVec3> =
@@ -414,13 +368,6 @@ impl Base {
             Op::Changed { cubes, kind, part } => self.changed(cubes, *kind, *part, cx),
             Op::Carve { cubes } => self.carve(cubes, cx),
             Op::Cancel { cubes } => self.cancel(cubes, cx),
-            Op::AddRoof {
-                roof,
-                section,
-                kind,
-            } => self.add_roof(*roof, section, *kind, cx),
-            Op::RemoveRoof { roof } => self.remove_roof(*roof, cx),
-            Op::RoofStage { roof, cells, up } => self.roof_stage(*roof, cells, *up, cx),
             Op::FitProp(prop) => self.fit_prop(prop, cx),
             Op::RemoveProp { at } => self.remove_prop(IVec3::from_array(*at), cx),
             Op::SetOpen { at, open } => self.set_open(IVec3::from_array(*at), *open, cx),
@@ -646,10 +593,10 @@ impl Base {
             .collect();
         let anchored = |at: IVec3| {
             self.grounded(at)
-                || FACES.iter().any(|&step| {
-                    let beside = at + step;
-                    !new.contains(&beside.to_array()) && self.is_in(beside)
-                })
+                || self
+                    .joins(at)
+                    .into_iter()
+                    .any(|beside| !new.contains(&beside.to_array()) && self.is_in(beside))
         };
         let mut reached: BTreeSet<[i32; 3]> = new
             .iter()
@@ -658,8 +605,8 @@ impl Base {
             .collect();
         let mut frontier: Vec<[i32; 3]> = reached.iter().copied().collect();
         while let Some(at) = frontier.pop() {
-            for step in FACES {
-                let next = (IVec3::from_array(at) + step).to_array();
+            for next in self.joins(IVec3::from_array(at)) {
+                let next = next.to_array();
                 if new.contains(&next) && reached.insert(next) {
                     frontier.push(next);
                 }
@@ -707,7 +654,7 @@ impl Base {
             if !carving && now(over).is_some_and(|cube| cube.is_in()) {
                 return Err(Refusal::Holds(vec![Holder::Cube(over)]));
             }
-            // Nor a roof standing on it, nor a prop fitted against it (D193).
+            // Nor a prop fitted against it (D193).
             let held: Vec<Holder> = self
                 .resting_on(at)
                 .into_iter()
@@ -939,96 +886,6 @@ impl Base {
         }
         change.done.undo = vec![Op::Cancel {
             cubes: cubes.to_vec(),
-        }];
-        Ok(change)
-    }
-
-    fn add_roof(
-        &self,
-        id: RoofId,
-        section: &RoofSection,
-        kind: Option<Kind>,
-        cx: &Context,
-    ) -> Result<Change, Refusal> {
-        if self.roofs.contains_key(&id) {
-            return Err(Refusal::RoofTaken(id));
-        }
-        let (low, high) = (section.min, section.max);
-        if low[1] != high[1] || low[0] > high[0] || low[2] > high[2] {
-            return Err(Refusal::BadRoof);
-        }
-        if let Some(kind) = kind
-            && kind > Kind::LAST
-        {
-            return Err(Refusal::UnknownKind(kind));
-        }
-        let per_stage = kind.map(|kind| cx.rules.roof(kind)).unwrap_or_default();
-        let roof = Roof::planned(*section, kind, per_stage);
-        for [x, z] in roof.cells() {
-            claimed(IVec3::new(x, 0, z), cx)?;
-        }
-        let mut change = Change::default();
-        change.roofs.push((id, Some(roof)));
-        change.done.undo = vec![Op::RemoveRoof { roof: id }];
-        Ok(change)
-    }
-
-    fn remove_roof(&self, id: RoofId, cx: &Context) -> Result<Change, Refusal> {
-        let roof = self.roofs.get(&id).ok_or(Refusal::NoRoof(id))?;
-        claimed(IVec3::from_array(roof.section.min), cx)?;
-        if roof.standing() {
-            return Err(Refusal::RoofUp(id));
-        }
-        let mut change = Change::default();
-        change.roofs.push((id, None));
-        change.done.undo = vec![Op::AddRoof {
-            roof: id,
-            section: roof.section,
-            kind: roof.kind,
-        }];
-        Ok(change)
-    }
-
-    fn roof_stage(
-        &self,
-        id: RoofId,
-        cells: &[[i32; 2]],
-        up: bool,
-        cx: &Context,
-    ) -> Result<Change, Refusal> {
-        let roof = self.roofs.get(&id).ok_or(Refusal::NoRoof(id))?;
-        let set: BTreeSet<[i32; 2]> = cells.iter().copied().collect();
-        if set.is_empty() || set.len() != cells.len() {
-            return Err(Refusal::Malformed);
-        }
-        let mut after = roof.clone();
-        let mut change = Change::default();
-        for &cell in &set {
-            claimed(IVec3::new(cell[0], 0, cell[1]), cx)?;
-            let index = roof.index(cell).ok_or(Refusal::NotUnder(cell))?;
-            let stage = &mut after.stages[index];
-            match up {
-                true if *stage < ROOF_STAGES => *stage += 1,
-                false if *stage > 0 => *stage -= 1,
-                _ => return Err(Refusal::RoofStage(cell)),
-            }
-            if up {
-                change.done.took.add(&roof.per_stage);
-            } else {
-                change.done.gave.add(&roof.per_stage);
-            }
-        }
-        if up && !self.roof_held(roof) {
-            return Err(Refusal::RoofNotHeld(id));
-        }
-        if up && !cx.world.has(&change.done.took) {
-            return Err(Refusal::Materials(change.done.took));
-        }
-        change.roofs.push((id, Some(after)));
-        change.done.undo = vec![Op::RoofStage {
-            roof: id,
-            cells: cells.to_vec(),
-            up: !up,
         }];
         Ok(change)
     }

@@ -82,9 +82,8 @@ impl Laid {
     }
 }
 
-/// Every section a base may draw something in: those with cubes; those beside them that
-/// their cubes come within a few of, which overhangs, eaves and steps reach into; and
-/// those its roofs rise through.
+/// Every section a base may draw something in: those with cubes, and those beside them that
+/// their cubes come within a few of, which overhangs, eaves and steps reach into.
 pub fn drawable(base: &Base) -> BTreeSet<[i32; 3]> {
     let side = crate::cubes::SECTION;
     let mut out = BTreeSet::new();
@@ -109,20 +108,6 @@ pub fn drawable(base: &Base) -> BTreeSet<[i32; 3]> {
         };
         let high = cubes.iter().map(|(at, _)| *at).fold(low, IVec3::max);
         reach(low - IVec3::splat(REACH), high + IVec3::splat(REACH));
-    }
-    for (_, roof) in base.roofs() {
-        let section = roof.section;
-        let (min, max) = (
-            IVec3::from_array(section.min),
-            IVec3::from_array(section.max),
-        );
-        let span = (max - min).max_element() + 1;
-        let top = crate::wall_layer(section.storey()) + crate::STOREY_CUBES;
-        let rise = libm::ceilf(section.pitch * span as f32) as i32 + REACH;
-        reach(
-            IVec3::new(min.x - REACH, top - REACH, min.z - REACH),
-            IVec3::new(max.x + REACH, top + rise, max.z + REACH),
-        );
     }
     out
 }
@@ -223,17 +208,16 @@ const KINDS_REACH: i32 = 4;
 pub fn lay(section: &Section, whole: &Whole) -> Laid {
     let (base, kits) = (section.base, section.kits);
     let origin = section.at * crate::cubes::SECTION;
-    // Only the kits whose kinds are there, in its cubes or round them, or roof it.
+    // Only the kits whose kinds are there, in its cubes or round them.
     let near = layout::Scope {
         low: origin - IVec3::splat(KINDS_REACH),
         high: origin + IVec3::splat(crate::cubes::SECTION - 1 + KINDS_REACH),
     };
-    let mut kinds: BTreeSet<Kind> = near
+    let kinds: BTreeSet<Kind> = near
         .cubes(base, None)
         .into_iter()
         .map(|(_, cube)| cube.kind)
         .collect();
-    kinds.extend(base.roofs().filter_map(|(_, roof)| base.roof_kind(roof)));
     let present: Vec<bool> = kits
         .0
         .iter()
@@ -319,23 +303,19 @@ pub fn standing(base: &Base, kits: &Kits, fraction: f32) -> Base {
     base.standing(
         laid.iter()
             .flat_map(|pieces| pieces[..done(pieces.len(), fraction)].iter()),
-        false,
     )
 }
 
 /// How far a piece is in on a base built by plans: by the cubes it stands in, or its roof
-/// cell's stage; lit where it stands in a cube in `next`.
+/// cube's stage; lit where it stands in a cube in `next`, or is its roof cube's next stage.
 pub fn stage_by_cubes(base: &Base, piece: &Piece, next: &BTreeSet<[i32; 3]>) -> Stage {
-    // A piece of roof is up with its cell's stage; the stage after is next once nothing
-    // of the walls is.
     if let Some(cell) = piece.roof_cell() {
         let stage = base
-            .roof(cell.roof)
-            .and_then(|roof| roof.stage(cell.cell))
-            .unwrap_or(0);
+            .cube(cell.cube)
+            .map_or(0, |cube| layout::roofs::stage_of(&cube));
         return if stage >= cell.stage {
             Stage::In
-        } else if stage + 1 == cell.stage && next.is_empty() {
+        } else if stage + 1 == cell.stage && next.contains(&cell.cube.to_array()) {
             Stage::Next
         } else {
             Stage::Ghost
@@ -613,6 +593,9 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
         Reach::Far => &[Detail::Far, Detail::Proxy],
     };
     let finest = details[0];
+    // Where each point of its roofs is on them, for their masks, worked out once.
+    let roofs = std::cell::OnceCell::new();
+    let origin = section.at * crate::cubes::SECTION;
     for &detail in details {
         let first = detail == finest && detail != Detail::Far;
         let mut built: BTreeMap<(Kind, Material), Surface> = BTreeMap::new();
@@ -715,7 +698,17 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
                 crate::dress::mask(surface, kit, *material, section.base);
                 // A roof's own, by where on the roof each point is.
                 if matches!(material, Material::Covering | Material::Flashing) {
-                    crate::dress::roof_mask(surface, kit, section.base);
+                    let roofs = roofs.get_or_init(|| {
+                        layout::roofs::Roofs::whole(
+                            section.base,
+                            kits,
+                            layout::Scope {
+                                low: origin - IVec3::ONE,
+                                high: origin + IVec3::splat(crate::cubes::SECTION),
+                            },
+                        )
+                    });
+                    crate::dress::roof_mask(surface, kit, roofs);
                 }
             }
         }
@@ -837,7 +830,10 @@ fn draw_blocks(
             (Stage::Next, _) => 0,
             (Stage::Ghost, _) => 1,
         };
-        let cut = base.cube(*cube).is_some_and(|c| c.shape.is_cut());
+        // A wall carried up into a roof's cube is the wall's whole cube cut at the roof,
+        // whatever the roof's cube is cut to.
+        let cut = matches!(piece, Piece::Block { .. })
+            && base.cube(*cube).is_some_and(|c| c.shape.is_cut());
         if cut {
             shaped[set].insert(cube.to_array());
         } else {
@@ -847,7 +843,11 @@ fn draw_blocks(
     // A core shows where its infill is not in, nor lit as next: neither over it.
     cores.retain(|at| !sets[0].contains(at) && !sets[2].contains(at));
     sets[1].retain(|at| !cores.contains(at));
-    let shape_of = |cube: IVec3| base.cube(cube).map_or(crate::Shape::Whole, |c| c.shape);
+    let shape_of = |cube: IVec3| {
+        base.cube(cube)
+            .filter(|c| c.kind == kit.kind())
+            .map_or(crate::Shape::Whole, |c| c.shape)
+    };
     let cut = |cube: IVec3, at: Vec3| {
         let roof = gables
             .get(&cube.to_array())
@@ -882,11 +882,12 @@ fn draw_blocks(
         top: &top,
     };
     // Floors, and walls of kinds drawn as boxes, hide a face; walls of other kits do not,
-    // being thinner than the cube.
+    // being thinner than the cube, nor a roof's cubes, drawn as a roof over them.
     let hides_always = |at: IVec3| {
         base.cube(at).is_some_and(|cube| {
             cube.fill != Fill::Open
                 && cube.kind != kit.kind()
+                && !cube.kind.is_roof()
                 && (!base.in_wall(at) || cube.kind == Kind::PLAIN)
         })
     };
@@ -1306,7 +1307,7 @@ fn fallback(material: Material) -> [f32; 3] {
 
 /// What no kit draws, plain by colour, and glass: kept to the triangles in the section,
 /// and the plan's planned plain cubes added to its ghost shell. Only worked out when the
-/// section or a roof has something of a kind no kit draws, or glass.
+/// section has something of a kind no kit draws, or glass.
 fn plain(section: &Section, laid: &Laid, drawn: &mut Drawn) {
     let (base, kits) = (section.base, section.kits);
     let origin = section.at * crate::cubes::SECTION;
@@ -1318,10 +1319,7 @@ fn plain(section: &Section, laid: &Laid, drawn: &mut Drawn) {
     let any = scope
         .cubes(base, None)
         .iter()
-        .any(|(_, cube)| kitless(cube.kind) || cube.fill == Fill::Glass)
-        || base
-            .roofs()
-            .any(|(_, roof)| base.roof_kind(roof).is_none_or(kitless));
+        .any(|(_, cube)| kitless(cube.kind) || cube.fill == Fill::Glass);
     let _ = laid;
     if !any {
         return;
@@ -1345,14 +1343,8 @@ fn plain(section: &Section, laid: &Laid, drawn: &mut Drawn) {
     };
     let (shown, planned) = match section.progress {
         Progress::Cubes { .. } => (
-            base.view(
-                |cube| cube.is_in() || cube.fill == Fill::Open,
-                |roof| roof.standing(),
-            ),
-            Some(base.view(
-                |cube| !cube.is_in() && cube.fill != Fill::Open,
-                |roof| !roof.standing(),
-            )),
+            base.view(|cube| cube.is_in() || cube.fill == Fill::Open),
+            Some(base.view(|cube| !cube.is_in() && cube.fill != Fill::Open)),
         ),
         _ => (base.clone(), None),
     };

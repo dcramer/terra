@@ -13,7 +13,8 @@
 // ragged      how far short of the others' a saddle-notched corner log's end may stop
 // chinking    whether there is daub between the courses
 // frame       how wide the boards round an opening are
-// eaves       how far a roof over these walls overhangs them (D175)
+// roof_kind   the roof kind a roof over these walls is laid in where the hammer holds no
+//             roof's material, and an old save's roof over them is turned into (D241)
 // timber      how each log is made (D200):
 //   profile     Round, a log in its bark; or Hewn, a beam squared by the axe
 //   notch       Saddle, ends stacked at corners a little ragged; or Flush, sawn square
@@ -27,38 +28,21 @@
 //   tint        what its face's colour is multiplied by; end_tint, its sawn ends'
 //   variation   how much each log differs by its seed: thickness (either way, as a
 //               fraction), shade (how much darker at most), warmth (redder or cooler)
-// roof        how a roof over these walls is made (crates/terra_build/src/roofing.rs):
-//   rows        courses in one copy of the Covering texture, down the slope, so each
-//               course shows its height over the number; phase, where a course's lower
-//               edge falls on it, as a fraction down from its top
-//   butt        how far each course's lower edge stands out from the one under it
-//   thick       how thick the covering is over its battens
-//   uneven      how much a course's butt wanders along it, as a fraction
-//   tint        what the covering's colour is multiplied by
-//   rafter      the rafters' section (Round poles or Hewn) and thickness
-//   batten      the battens' width and thickness, one under each course
-//   board       the fascia and bargeboards' depth and thickness; board_tint, what their
-//               colour is multiplied by, weathered lighter than the bare planks
-//   ridge       what caps ridges and hips: Boards, or a Roll of the covering; cap, how
-//               wide it is either side
-//   fillet      the size of the mortar fillet where the roof meets a wall above it
 // textures    each material's textures (D14; assets/materials): where, how many metres
 //             one copy covers, and how deep its parallax reads. Log is the bark, LogEnd
 //             the sawn end's grain, Daub what fills the groove between courses, Board
-//             trims and a roof's boards, Covering a roof's shakes, Flashing its mortar,
-//             Floor a deck's boards, each drawn from one of the planks side by side across
-//             its texture (strips: the first's edge and how far apart, as fractions of it)
+//             trims, Floor a deck's boards, each drawn from one of the planks side by side
+//             across its texture (strips: the first's edge and how far apart, as fractions
+//             of it)
 // colours     plain colours: floors, flat roofs and their sides until they have kits
 //             of their own, and the daub's tint
 // cost        what building it takes (D139): a cube fills in so many steps, each taking
 //             so much of each item, in fractions (item, numerator, denominator), so
-//             a log of Wood a sixteenth a step goes in two courses; and each stage of a
-//             roof cell over these walls
+//             a log of Wood a sixteenth a step goes in two courses
 // dress       each exposed edge dressed by its role (D215): a hewn plate along every
 //             wall's top, a hewn sill on what it stands on, hewn posts up every opening's
 //             sides, a log along every step's nose, a log up every post (D193); and the
-//             dirt rising from the ground, the upper logs weathered grey, and the shakes
-//             mossed toward the eaves
+//             dirt rising from the ground, and the upper logs weathered grey
 // meets       how it meets other kinds where their cubes touch (D232): its weight, the
 //             heavier running through a joint and the lighter ending against it, as logs
 //             do against stone; its trim where it ends against a heavier kind (Board, an
@@ -74,7 +58,7 @@
     ragged: 0.04,
     chinking: true,
     frame: 0.08,
-    eaves: 0.5,
+    roof_kind: Some(2048),
     timber: (
         profile: Round,
         notch: Saddle,
@@ -90,32 +74,15 @@
         end_tint: (0.86, 0.82, 0.78),
         variation: (thickness: 0.06, shade: 0.16, warmth: 0.05),
     ),
-    roof: (
-        rows: 6.0,
-        phase: 0.145,
-        butt: 0.03,
-        thick: 0.025,
-        uneven: 0.35,
-        tint: (1.0, 0.97, 0.93),
-        rafter: (Round, 0.14),
-        batten: (0.06, 0.025),
-        board: (0.22, 0.035),
-        board_tint: (1.42, 1.36, 1.26),
-        ridge: Boards,
-        cap: 0.16,
-        fillet: 0.1,
-    ),
     textures: {
         Log: (path: "materials/pine_bark", metres: (1.0, 1.0)),
         LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
         Daub: (path: "materials/white_stucco", metres: (1.0, 1.0)),
         Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
-        Covering: (path: "materials/shakes", metres: (3.2, 1.6)),
-        Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
         Floor: (path: "materials/weathered_planks", metres: (2.0, 2.0), strips: Some((0.0605, 0.1111))),
         Hewn: (path: "materials/rough_wood", metres: (0.6, 0.6)),
     },
-    cost: (steps: 2, step: [("Wood", 1, 16)], roof: [("Wood", 1, 32)]),
+    cost: (steps: 2, step: [("Wood", 1, 16)]),
     dress: (
         roles: {
             Crest: Member(profile: Hewn, scale: 1.12, material: Hewn),
@@ -124,7 +91,7 @@
             Nose: Member(profile: Round, scale: 1.1, material: Log),
             Post: Member(profile: Round, scale: 0.9, material: Log),
         },
-        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.3, moss: 0.6, moss_tint: (0.62, 0.74, 0.4)),
+        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.3),
     ),
     meets: Some((weight: 2, end: Board, carries: None)),
     colours: (

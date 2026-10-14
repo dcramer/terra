@@ -37,21 +37,26 @@ pub struct Kit {
     pub chinking: bool,
     /// The boards round an opening: how wide and how far proud of the logs.
     pub frame: f32,
-    /// How far a roof over its walls overhangs them, at the eaves and the gable ends (D175).
+    /// A roof kind's: how far its covering is carried on past its cubes' open edges, drawn
+    /// only (D192): down at its eaves, level past its verges (D175, D241).
     pub eaves: f32,
+    /// A wall kind's: the roof kind a roof over its walls is laid in where the hammer holds
+    /// no roof's material, and an old save's roof over them is turned into (D241).
+    pub roof_kind: Option<u16>,
     /// A block kind's surface: the radius its outside edges are rounded to, and how far
     /// its material's relief stands out (`surface.rs`).
     pub bevel: f32,
     pub relief: f32,
-    /// How each long member is shaped, and how much one differs from the next (D200).
+    /// How each long member is shaped, and how much one differs from the next (D200); a
+    /// roof kind's rafters are of it.
     pub timber: Timber,
-    /// How a roof over its walls is made: its frame, battens, covering and trims.
+    /// A roof kind's: how its roof is made, its frame, battens, covering and trims.
     pub roof: Roofing,
     /// Its materials' textures (D14): where each is, how many metres across it is, and how
     /// deep its parallax reads; a material with none is drawn in its plain colour.
     pub textures: BTreeMap<Material, Texture>,
     pub colours: KitColours,
-    /// What its cubes and roofs cost to build (D139).
+    /// What its cubes cost to build (D139).
     pub cost: KitCost,
     /// How each exposed edge of its cubes is dressed by its role (D215, `layout::roles`):
     /// its pieces, what each role takes, and its masks.
@@ -175,6 +180,13 @@ impl Meets {
             Pattern::Logs => Meets {
                 weight: 2,
                 end: Joint::Board,
+                carries: Joint::None,
+                kinds: BTreeMap::new(),
+            },
+            // A roof is drawn over what it rests on, which it neither caps nor ends against.
+            Pattern::Roof => Meets {
+                weight: 0,
+                end: Joint::None,
                 carries: Joint::None,
                 kinds: BTreeMap::new(),
             },
@@ -376,10 +388,10 @@ pub struct Timber {
     pub variation: Variation,
 }
 
-/// How a kit's roofs are made (`layout::roofs`, docs/building-kits.md): a frame of rafters
-/// in its timber, battens across them, a covering of courses (shakes, slates) or a thick
-/// coat (thatch) in its `Covering` material, boards along its eaves and verges, caps over
-/// its ridges and hips, and a mortar fillet where it meets a wall.
+/// How a roof kind's roofs are made (`layout::roofs`, docs/building-kits.md): a frame of
+/// rafters in its timber, battens across them, a covering of courses (shakes, slates) or a
+/// thick coat (thatch) in its `Covering` material, boards along its eaves and verges, caps
+/// over its ridges and hips, and a mortar fillet where it meets a wall.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Roofing {
@@ -487,14 +499,14 @@ pub enum Notch {
 }
 
 /// What a kind costs to build (D139, D194): how many steps fill a cube, and what each
-/// step takes, by the items' names, in exact fractions (numerator, denominator); and what
-/// each stage of a roof cell over its walls takes. What is left out is free.
+/// step takes, by the items' names, in exact fractions (numerator, denominator); a roof
+/// kind's four steps are its frame, its battens, its covering and its trims (D241). What
+/// is left out is free.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct KitCost {
     pub steps: u8,
     pub step: Vec<(String, u64, u64)>,
-    pub roof: Vec<(String, u64, u64)>,
 }
 
 impl KitCost {
@@ -517,6 +529,10 @@ pub enum Pattern {
     /// surface, rounded and displaced by the kit's `Masonry` material (D197). Where it
     /// meets logs, it runs through and the logs end flush against it (D179).
     Masonry,
+    /// A roof's covering (`layout::roofs`, D241): its cubes, cut to slopes and corners, drawn
+    /// as a roof over them, ridges, hips, valleys, eaves and verges from their neighbours.
+    /// Its kind is a roof's ([`Kind::is_roof`]).
+    Roof,
 }
 
 /// Every kit a base is laid by, one for each kind of construction.
@@ -544,11 +560,25 @@ impl Kits {
         for kit in &self.0 {
             let terms = Terms::new(kit.cost.steps.max(1), KitCost::bill(&kit.cost.step));
             rules.kinds.insert(kit.kind(), terms);
-            rules
-                .roofs
-                .insert(kit.kind(), KitCost::bill(&kit.cost.roof));
         }
         rules
+    }
+
+    /// The roof kind a roof over walls of a kind is laid in (D241): the kind itself if it is
+    /// a roof's, else its kit's `roof_kind`, else the first roof kit's.
+    pub fn roof_for(&self, kind: Kind) -> Option<Kind> {
+        if kind.is_roof() {
+            return Some(kind);
+        }
+        self.of(kind)
+            .and_then(|kit| kit.roof_kind)
+            .map(Kind)
+            .or_else(|| {
+                self.0
+                    .iter()
+                    .find(|kit| kit.pattern == Pattern::Roof)
+                    .map(Kit::kind)
+            })
     }
 
     /// How a kind meets the others: its kit's table, or its pattern's.
@@ -696,6 +726,7 @@ impl Default for Kit {
             chinking: true,
             frame: 0.08,
             eaves: 0.5,
+            roof_kind: None,
             bevel: 0.04,
             relief: 0.05,
             timber: Timber::default(),
@@ -765,7 +796,8 @@ mod tests {
         // for what it lays with: its textures and cost; and for how it is dressed,
         // its ends run past the corners and its role members, so tests lay plain logs
         // inside their cubes; and how it meets other kinds, which the default leaves to
-        // its pattern, so a test's stone kit meets as stone, and the file says as logs.
+        // its pattern, so a test's stone kit meets as stone, and the file says as logs; and
+        // the roof over it, which the file names.
         let file = shipped("logs.ron");
         assert_eq!(file.meets, Some(Meets::of(Pattern::Logs)));
         let pine = Kit {
@@ -774,6 +806,7 @@ mod tests {
             overhang: 0.0,
             dress: Dressing::default(),
             meets: None,
+            roof_kind: None,
             ..file
         };
         assert_eq!(pine, Kit::default());

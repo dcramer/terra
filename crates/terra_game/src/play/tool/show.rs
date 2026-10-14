@@ -197,14 +197,15 @@ pub(super) fn highlight(
             // Its storey's floor, above or below the base's (D143). A roof, from the top
             // of its storey's walls as high as it would rise.
             let (bottom, height) = match kind {
+                // Its cubes climb a cube a cube from the walls' tops (D241).
                 Kind::Roof(shapes) => {
                     let shape = &shapes[builder.variant()];
                     let across = tiles.min_element() as f32 * CELL_M;
                     let rise = match shape.style {
-                        Some(terra_build::RoofStyle::LeanTo) => {
-                            tiles.max_element() as f32 * CELL_M * shape.pitch
+                        Some(terra_build::roofer::Style::LeanTo) => {
+                            tiles.max_element() as f32 * CELL_M
                         }
-                        Some(_) => across * 0.5 * shape.pitch,
+                        Some(_) => across * 0.5,
                         None => 0.0,
                     };
                     ((corner.y + 1) as f32 * STOREY_M, rise.max(0.1))
