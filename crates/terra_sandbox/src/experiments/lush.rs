@@ -50,6 +50,7 @@ use terra_world::flora::Growth;
 use terra_world::flora_kinds::Flora;
 use terra_world::grown::Cards;
 use terra_world::planet::Planet;
+use terra_world::sky_occlusion::{self, SkyOccluders};
 
 mod floor;
 mod footing;
@@ -1000,6 +1001,8 @@ fn plant(
     let mut feet: HashMap<(i32, i32), Vec<Vec2>> = HashMap::default();
     // The trees as the floor sees them, for what grows under them (D246).
     let mut canopy = Crowns::default();
+    // And as the sky's light sees them, for how much of it reaches under them (D270).
+    let mut crowns = Vec::new();
     let mut planted = [0, 0];
     // The nearest of each to the start, for scripted runs to walk up to.
     let mut nearest_to_start = [Vec2::splat(f32::MAX); 2];
@@ -1071,6 +1074,14 @@ fn plant(
                 model.species,
                 model.young,
                 model.trunk_m * scale,
+            ));
+            crowns.push(crown_seen(
+                foot + crown,
+                place.rotation * Vec3::Y,
+                model.height * scale,
+                model.crown.1 * scale,
+                model.species,
+                model.young,
             ));
             commands
                 .spawn((
@@ -1205,6 +1216,17 @@ fn plant(
     );
 
     // The floor under the trees, and the map the grass grows by (D246).
+    commands.insert_resource(SkyOccluders {
+        middle: start,
+        up,
+        east,
+        // Past the forest's edge, so where it ends, it sees the open sky as the environment
+        // map does, in the meadow beyond where the edge is looked at from.
+        half_m: FOREST_M + 70.0,
+        below_m: 15.0,
+        above_m: 45.0,
+        crowns,
+    });
     let map = floor::lay(
         &mut floor::Lay {
             commands: &mut commands,
@@ -1905,4 +1927,28 @@ fn grow_bush(dice: &mut Rng) -> Build {
         clump(&mut build, dice, &canopy, at, size, cards);
     }
     build
+}
+
+/// A tree's crown as the sky's light sees it (D270): an ellipsoid round its leaves, from
+/// where it stands, how tall it is and how far its leaves reach; an oak's crown fills its
+/// upper two thirds, a Scots pine's its top fifth, a spruce's nearly all of it. How much of
+/// the sky it hides straight up through it is the floor's own measure (`floor::Stand`).
+fn crown_seen(
+    middle_at_foot: Vec3,
+    up: Vec3,
+    height: f32,
+    reach: f32,
+    species: Species,
+    young: bool,
+) -> sky_occlusion::Crown {
+    let (mid, half, wide, closes) = match species {
+        Species::Oak => (0.68, 0.32, 1.0, 0.85),
+        Species::Pine => (0.82, 0.16, 1.0, 0.62),
+        Species::Spruce => (0.55, 0.45, 0.75, 0.92),
+    };
+    sky_occlusion::Crown {
+        middle: middle_at_foot + up * height * mid,
+        half: Vec3::new(reach * wide, height * half, reach * wide),
+        closes: closes * if young { 0.7 } else { 1.0 },
+    }
 }

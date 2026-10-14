@@ -35,6 +35,7 @@ pub mod remote;
 pub mod scene;
 pub mod shell;
 pub mod sky;
+pub mod sky_occlusion;
 pub mod skylight;
 pub mod spatial;
 pub mod start;

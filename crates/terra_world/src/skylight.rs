@@ -37,6 +37,18 @@ impl Default for SkyLight {
     }
 }
 
+/// The open sky's diffuse light toward each side, as the painted sky gives it, in the sky's own
+/// frame (+Y up, east +X, south +Z): for each of +X, -X, +Y, -Y, +Z, -Z, what comes from above
+/// the horizon and what from the ground below it, each as the environment map's diffuse light
+/// is, the irradiance over pi, before its brightness. What hides some of the sky, as a
+/// forest's crowns do, takes its share away (`sky_occlusion`).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct OpenSky {
+    pub sky: [Vec3; 6],
+    pub ground: [Vec3; 6],
+    pub brightness: f32,
+}
+
 /// The painted sky, and what it was last painted from.
 #[derive(Resource)]
 struct Painted {
@@ -46,6 +58,7 @@ struct Painted {
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<SkyLight>()
+        .init_resource::<OpenSky>()
         // The sky's light replaces the flat ambient light.
         .insert_resource(GlobalAmbientLight {
             brightness: 0.0,
@@ -100,6 +113,7 @@ fn paint(
     sky: Res<Sky>,
     tweaks: Res<Tweaks>,
     mut painted: ResMut<Painted>,
+    mut open: ResMut<OpenSky>,
     mut images: ResMut<Assets<Image>>,
     mut camera: Query<
         (
@@ -150,6 +164,9 @@ fn paint(
                 / (std::f32::consts::PI * light.brightness.max(1.0))
                 + 1.0),
     };
+    if open.brightness != light.brightness {
+        open.brightness = light.brightness;
+    }
     let key = colours.key();
     // Repainted only when something moved by more than a shade: a few times a minute
     // while the sun crosses the sky.
@@ -160,6 +177,9 @@ fn paint(
         return;
     }
     painted.from = Some(key);
+    let (sky, ground) = colours.lobes();
+    open.sky = sky;
+    open.ground = ground;
     let Some(mut image) = images.get_mut(&painted.image) else {
         return;
     };
@@ -209,6 +229,35 @@ impl Colours {
         } else {
             sky(0.0).lerp(self.ground, (-up / 0.15).clamp(0.0, 1.0))
         }
+    }
+
+    /// The diffuse light toward each of +X, -X, +Y, -Y, +Z, -Z, from the sky above the horizon
+    /// and from the ground below it: the cosine-weighted sum of the light from every way,
+    /// over pi, as Bevy filters the painted sky into its diffuse light.
+    fn lobes(&self) -> ([Vec3; 6], [Vec3; 6]) {
+        const N: usize = 48;
+        let normals = [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z];
+        let (mut sky, mut ground) = ([Vec3::ZERO; 6], [Vec3::ZERO; 6]);
+        // Directions spread evenly over the sphere: even in height, even round.
+        for i in 0..N {
+            let y = 1.0 - 2.0 * (i as f32 + 0.5) / N as f32;
+            let across = (1.0 - y * y).max(0.0).sqrt();
+            for j in 0..N * 2 {
+                let round = (j as f32 + 0.5) / (N * 2) as f32 * std::f32::consts::TAU;
+                let d = Vec3::new(across * libm::cosf(round), y, across * libm::sinf(round));
+                let light = self.toward(d);
+                for (k, n) in normals.iter().enumerate() {
+                    // Each direction stands for 4 pi / (2 N squared) of the sphere.
+                    let share = d.dot(*n).max(0.0) * 4.0 / (2 * N * N) as f32;
+                    if y >= 0.0 {
+                        sky[k] += light * share;
+                    } else {
+                        ground[k] += light * share;
+                    }
+                }
+            }
+        }
+        (sky, ground)
     }
 
     /// The six faces of the cube, +X, -X, +Y, -Y, +Z, -Z, as RGBA floats.
@@ -265,6 +314,28 @@ mod tests {
         let c = colours();
         let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
         assert!(luma(c.toward(Vec3::X)) > luma(c.toward(Vec3::Y)));
+    }
+
+    #[test]
+    fn each_side_takes_a_cosine_weighted_share_of_what_it_faces() {
+        let c = colours();
+        let (sky, ground) = c.lobes();
+        // Facing straight up sees only sky, and its light is a weighted mean of the sky's:
+        // between the zenith's and the horizon's, the brighter.
+        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        assert!(luma(ground[2]) < 1e-6 && luma(sky[3]) < 1e-6);
+        let (zenith, horizon) = (luma(c.toward(Vec3::Y)), luma(c.toward(Vec3::X)));
+        let up = luma(sky[2]);
+        assert!(
+            up > zenith.min(horizon) * 0.98 && up < zenith.max(horizon) * 1.02,
+            "{up}"
+        );
+        // Facing down sees only the ground, which is one colour: all of it.
+        assert!(ground[3].distance(c.ground) < 0.02, "{}", ground[3]);
+        // A side sees half sky and half ground.
+        let side = sky[0] + ground[0];
+        let half = (c.ground + c.toward(Vec3::X)) * 0.5;
+        assert!(luma(side) > luma(half) * 0.7 && luma(side) < luma(half) * 1.3);
     }
 
     #[test]

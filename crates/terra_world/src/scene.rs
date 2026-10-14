@@ -207,9 +207,9 @@ const HAZE_VISIBLE_M: f32 = 240.0;
 /// What the eye adapts round: the log brightness a scene meters at when it is as bright as
 /// the day's exposure for the hour expects (D214).
 const METERED_AS_SET: f32 = -3.6;
-/// How far the eye adapts from the day's exposure: up to one and a half stops brighter in deep shade,
+/// How far the eye adapts from the day's exposure: up to two and a half stops brighter in deep shade,
 /// as under a canopy, and one darker in glare, as every game with a forest clamps it.
-const ADAPT_BRIGHTER: f32 = 1.5;
+const ADAPT_BRIGHTER: f32 = 2.5;
 const ADAPT_DARKER: f32 = 1.0;
 /// How far it adapts brighter with the camera in a room closed and covered (D240): a room
 /// lit through its doors and windows is four to six stops darker than the day outside,

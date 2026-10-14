@@ -175,10 +175,6 @@ fn hash(p: vec3<f32>) -> f32 {
     return fract((r.x + r.y) * r.z);
 }
 
-// What a surface under a full canopy is lit by instead of the sky, as a share of it: dimmer,
-// and warmed by the leaves and the ground (D216).
-const CANOPY_BOUNCE: vec3<f32> = vec3<f32>(0.62, 0.66, 0.48);
-
 // How much of a canopy stands over a place, as the cover map says.
 fn canopy_over(world: vec3<f32>) -> f32 {
     if ground.cover_on == 0u {
@@ -379,11 +375,10 @@ fn fragment(
     // so the bottom of a dug hole is dark rather than lit as open ground.
 @if(VERTEX_COLORS)
     pbr_input.diffuse_occlusion *= vec3<f32>(in.color.a);
-    // Under the trees the canopy hides most of the sky and bounces back a warmer, greener
-    // light (D216): where the cover map has leaf litter, the trees stand over it.
-    let canopy = canopy_over(world);
-    pbr_input.diffuse_occlusion *= mix(vec3<f32>(1.0), CANOPY_BOUNCE, canopy);
-    pbr_input.specular_occlusion *= 1.0 - 0.6 * canopy;
+    // Under the trees the canopy hides most of the sky: its diffuse light is the sky
+    // occlusion volume's (D270), which Bevy's lighting reads; the sky it reflects, which
+    // that does not hold, is dimmed here, where the cover map says the trees stand over it.
+    pbr_input.specular_occlusion *= 1.0 - 0.6 * canopy_over(world);
 
     // Faceted: light each triangle as one flat plane. The plane's direction comes from
     // how the surface position changes between neighbouring pixels.

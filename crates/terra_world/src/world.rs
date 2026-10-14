@@ -5,8 +5,8 @@
 //! through (`walk`), and test it there.
 
 use super::{
-    air, cover, data, daylight, detail, dither, flora, grown, lod, quality, scene, skylight, tick,
-    upscale,
+    air, cover, data, daylight, detail, dither, flora, grown, lod, quality, scene, sky_occlusion,
+    skylight, tick, upscale,
 };
 use bevy::prelude::*;
 
@@ -21,6 +21,7 @@ impl Plugin for WorldPlugin {
         dither::plugin(app);
         air::plugin(app);
         skylight::plugin(app);
+        sky_occlusion::plugin(app);
         daylight::plugin(app);
         grown::plugin(app);
         flora::plugin(app);
