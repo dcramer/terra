@@ -2,7 +2,7 @@
 // library, makes one from a generated image no library has, and stacks several into one
 // texture array for a surface that blends them, such as the ground.
 //
-//   node tools/textures/textures.ts fetch <polyhaven id> [--name n] [--size 1k|2k|4k]
+//   node tools/textures/textures.ts fetch <polyhaven id | ambientcg:Id> [--name n] [--size 1k|2k|4k]
 //   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px]
 //                                            [--strength s] [--roughness r]
 //   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
@@ -13,7 +13,9 @@
 //
 // **fetch** downloads a Poly Haven material (CC0) as color.jpg, normal.jpg (OpenGL's
 // convention, as Bevy reads it), arm.jpg (occlusion, roughness and metal) and, where it
-// has one, height.jpg for parallax.
+// has one, height.jpg for parallax. `ambientcg:<Id>` fetches one from ambientCG (also CC0)
+// instead, whose maps come apart in a zip: its ARM map is put together from its occlusion
+// and roughness, with no metal.
 //
 // **stack** puts the color and normal maps of several materials one above the next, each
 // --size (1024) square, for Bevy to load as an array (`ImageArrayLayout::RowCount`). Its
@@ -41,7 +43,8 @@
 // It needs ImageMagick (`convert`).
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -174,6 +177,45 @@ async function fetchMaterial(id: string, name: string, size: string) {
   const metres = info.dimensions ? ` ${(info.dimensions[0] / 1000).toFixed(2)} m across.` : "";
   record(name, `Poly Haven [${info.name ?? id}](https://polyhaven.com/a/${id}), CC0, ${size}.${metres}`);
   console.log(`${name}: ${out}${metres}`);
+}
+
+/** An ambientCG material's zip, by its id and size, as ambientCG names it: `Ground104_2K-JPG`. */
+export function ambientCgFile(id: string, size: string): string {
+  return `${id}_${size.toUpperCase()}-JPG`;
+}
+
+async function fetchAmbientCg(id: string, name: string, size: string) {
+  const file = ambientCgFile(id, size);
+  // Unpacked in a folder of its own, outside the repository.
+  const work = mkdtempSync(join(tmpdir(), "ambientcg-"));
+  try {
+    await download(`https://ambientcg.com/get?file=${file}.zip`, join(work, "maps.zip"));
+    execFileSync("unzip", ["-q", "-o", join(work, "maps.zip"), "-d", join(work, "maps")]);
+    const map = (kind: string) => join(work, "maps", `${file}_${kind}.jpg`);
+    for (const kind of ["Color", "NormalGL", "Roughness", "Displacement"]) {
+      if (!existsSync(map(kind))) throw new Error(`${id} has no ${kind} map at ${size}`);
+    }
+    const out = join(ROOT, "assets", "materials", name);
+    mkdirSync(out, { recursive: true });
+    const jpg = ["-quality", "92"];
+    execFileSync("convert", [map("Color"), ...jpg, join(out, "color.jpg")]);
+    execFileSync("convert", [map("NormalGL"), ...jpg, join(out, "normal.jpg")]);
+    // Occlusion, roughness and no metal, as Bevy reads them.
+    const occlusion = existsSync(map("AmbientOcclusion")) ? [map("AmbientOcclusion")] : [map("Roughness"), "-fill", "white", "-colorize", "100"];
+    execFileSync("convert", [
+      "(", ...occlusion, "-colorspace", "gray", ")",
+      "(", map("Roughness"), "-colorspace", "gray", ")",
+      "(", map("Roughness"), "-fill", "black", "-colorize", "100", "-colorspace", "gray", ")",
+      "-combine", "-colorspace", "sRGB", ...jpg, join(out, "arm.jpg"),
+    ]);
+    execFileSync("convert", [map("Displacement"), "-colorspace", "gray", "-depth", "8", ...jpg, join(out, "height.jpg")]);
+    const info = await (await fetch(`https://ambientcg.com/api/v2/full_json?id=${id}`)).json();
+    const title = info.foundAssets?.[0]?.displayName ?? id;
+    record(name, `ambientCG [${title}](https://ambientcg.com/a/${id}), CC0, ${size}.`);
+    console.log(`${name}: ${out} (ambientCG gives no size in metres; the kit's file says it)`);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 }
 
 function stack(name: string, materials: string[], size: number, occlusion: number) {
@@ -483,7 +525,10 @@ async function main() {
     },
   });
   const [step, name, ...rest] = positionals;
-  if (step === "fetch" && name) {
+  if (step === "fetch" && name?.startsWith("ambientcg:")) {
+    const id = name.slice("ambientcg:".length);
+    await fetchAmbientCg(id, values.name ?? id.toLowerCase(), values.size === "2048" ? "2k" : values.size!);
+  } else if (step === "fetch" && name) {
     await fetchMaterial(name, values.name ?? name, values.size === "2048" ? "2k" : values.size!);
   } else if (step === "stack" && name && rest.length) {
     stack(name, rest, values.size === "2048" ? 1024 : Number(values.size), Number(values.occlusion));
@@ -494,7 +539,7 @@ async function main() {
     record(name, `made from a generated image by \`textures.ts material\`.`);
   } else {
     console.log(`usage:
-  node tools/textures/textures.ts fetch <polyhaven id> [--name n] [--size 1k|2k|4k]
+  node tools/textures/textures.ts fetch <polyhaven id | ambientcg:Id> [--name n] [--size 1k|2k|4k]
   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px] [--strength s] [--roughness r]
   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k]
   node tools/textures/textures.ts cards <name> <card>=<image>… [--size px] [--columns n] [--cut a]`);

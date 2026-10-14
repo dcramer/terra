@@ -1300,9 +1300,19 @@ fn win(args: &[String]) -> bool {
         program_args.join(" "),
         run_dir.display()
     );
+    // The kits' files are read from the source's assets, through WSL's share, so one saved
+    // while the copy runs is seen (WSLENV's `/p` gives Windows the path as it names it).
+    let wslenv = std::env::var("WSLENV").unwrap_or_default();
+    let wslenv = [wslenv.as_str(), "TERRA_SOURCE_ASSETS/p"]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(":");
     Command::new(program)
         .args(program_args)
         .current_dir(&run_dir)
+        .env("TERRA_SOURCE_ASSETS", root().join("assets"))
+        .env("WSLENV", wslenv)
         .status()
         .map(|status| status.success())
         .unwrap_or(false)

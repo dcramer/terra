@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { credit, keyOut, meanColour, outline, period } from "./textures.ts";
+import { ambientCgFile, credit, keyOut, meanColour, outline, period } from "./textures.ts";
+
+test("an ambientCG material's zip is named by its id and size as ambientCG names it", () => {
+  assert.equal(ambientCgFile("Ground104", "2k"), "Ground104_2K-JPG");
+});
 
 test("a picture on blue is cut out of it, its edge unmixed from the blue", () => {
   // Three by three: blue all round a green middle, and a pixel half green, half blue.

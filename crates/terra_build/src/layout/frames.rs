@@ -20,6 +20,12 @@
 //!
 //! **Corners.** A square **corner post** up every outside corner, standing out of both faces.
 //!
+//! **Gables.** A gable end over the wall's plate (`roofs::gables`) is framed by the same rule
+//! as the wall under it: its **studs** stand on the plate where the wall's posts stand, every
+//! `bay` cubes along the grid, each cut off under the roof; its **rails** at the kit's heights
+//! run between them as far as the roof lets them; and a **brace** in each end's first whole
+//! panel leans in to the end, from the next stud's foot up to the outer stud.
+//!
 //! **Openings.** An opening's frame goes through the wall, lining its reveals: a **jamb** up
 //! each side where the wall stands beside it, a **head** over it and a **sill** under it
 //! where the wall goes on, each running over the jambs. Any hole is framed, a cut cube's as a
@@ -32,7 +38,7 @@
 
 use super::roles::Dir;
 use super::{Piece, Place, Scope, drawn_fill, hash, ticks};
-use crate::kit::{Braces, Framing, Kit};
+use crate::kit::{Braces, Framing, Kit, Kits};
 use crate::{Base, CELL_M, Fill, STOREY_CUBES, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
@@ -116,6 +122,7 @@ fn along(dir: Dir) -> Vec3 {
 pub(crate) fn lay(
     base: &Base,
     kit: &Kit,
+    kits: &Kits,
     framing: &Framing,
     scope: Scope,
     pieces: &mut Vec<Piece>,
@@ -152,6 +159,16 @@ pub(crate) fn lay(
     corners(&framer, &cubes, &mut out);
     openings(&framer, &cubes, &mut out);
     posts(&framer, &cubes, &mut out);
+    let mut gabled = Vec::new();
+    super::roofs::gables(base, kit, kits, wide, &mut gabled);
+    let gabled: Vec<(IVec3, [[i32; 3]; 3])> = gabled
+        .into_iter()
+        .filter_map(|piece| match piece {
+            Piece::Gable { cube, under } => Some((cube, under)),
+            _ => None,
+        })
+        .collect();
+    gables(&framer, &gabled, &mut out);
     pieces.extend(out.pieces);
 }
 
@@ -562,6 +579,177 @@ fn braces(
     }
 }
 
+/// Each gable end's frame over a face of the kind's wall: studs where the wall's posts are,
+/// rails between them, and a brace at each end, all under the roof.
+fn gables(framer: &Framer, gabled: &[(IVec3, [[i32; 3]; 3])], out: &mut Out) {
+    let f = framer.framing;
+    let w = f.wide;
+    let bay = f.bay.max(1);
+    let base = framer.base;
+    let set: BTreeSet<[i32; 3]> = gabled.iter().map(|&(cube, _)| cube.to_array()).collect();
+    // A gable's cube in each column, for the roof's underside over it.
+    let columns: BTreeMap<[i32; 2], (IVec3, [[i32; 3]; 3])> = gabled
+        .iter()
+        .map(|&(cube, under)| ([cube.x, cube.z], (cube, under)))
+        .collect();
+    // Its faces open to the air, by plane, as (y, u).
+    let mut faces: BTreeMap<Plane, BTreeSet<(i32, i32)>> = BTreeMap::new();
+    for &(at, _) in gabled {
+        for dir in Dir::LEVEL {
+            let beyond = at + dir.step();
+            if base.cube(beyond).is_none() && !set.contains(&beyond.to_array()) {
+                let u = if dir.axis() == 0 { at.z } else { at.x };
+                faces
+                    .entry((dir, at[dir.axis()]))
+                    .or_default()
+                    .insert((at.y, u));
+            }
+        }
+    }
+    for (plane, cells) in faces {
+        let (dir, layer) = plane;
+        let Some(&(foot, u0)) = cells.iter().next() else {
+            continue;
+        };
+        // The wall's top row under it, whose posts its studs stand over.
+        let walled = |u: i32| {
+            let at = cube_of(plane, u, foot - 1);
+            framer.standing(at) && base.cube(at + dir.step()).is_none()
+        };
+        if !walled(u0) {
+            continue;
+        }
+        let (mut first, mut last) = (u0, u0);
+        while walled(first - 1) {
+            first -= 1;
+        }
+        while walled(last + 1) {
+            last += 1;
+        }
+        let face_m = (layer + i32::from(dir.sign() > 0)) as f32 * CELL_M;
+        let normal = dir.step().as_vec3();
+        let axis = along(dir);
+        let at = |u: f32, y: f32| {
+            let mut p = axis * u + Vec3::Y * y;
+            p[dir.axis()] = face_m;
+            p + normal * (f.proud - f.deep * 0.5)
+        };
+        // The roof's underside over a point along the face, if a gable is under it there.
+        let roof = |u: f32| -> Option<f32> {
+            let cell = libm::floorf(u / CELL_M) as i32;
+            let column = cube_of(plane, cell, 0);
+            let (cube, under) = columns.get(&[column.x, column.z])?;
+            Some(super::roofs::gable_cut(*cube, under, at(u, 0.0)))
+        };
+        // The lowest the roof comes over a span of the face.
+        let lowest = |a: f32, b: f32| -> Option<f32> {
+            let steps = libm::ceilf((b - a).abs() / 0.05).max(1.0) as i32;
+            (0..=steps)
+                .map(|i| roof(a + (b - a) * i as f32 / steps as f32))
+                .try_fold(f32::MAX, |low, h| h.map(|h| low.min(h)))
+        };
+        let bottom = foot as f32 * CELL_M;
+        // Studs, each from the plate up to under the roof.
+        let mut studs: Vec<(f32, f32)> = Vec::new();
+        for b in first + 2..=last - 1 {
+            if b.rem_euclid(bay) != 0 {
+                continue;
+            }
+            let u = b as f32 * CELL_M;
+            let Some(top) = lowest(u - w * 0.5, u + w * 0.5) else {
+                continue;
+            };
+            let top = top - 0.01;
+            if top - bottom > 0.2 {
+                out.beam(at(u, bottom), at(u, top), dir, w, f.deep);
+                studs.push((u, top));
+            }
+        }
+        // Rails at the kit's heights, from where the roof lets them start to where it stops
+        // them, between the studs.
+        let (start, end) = (first as f32 * CELL_M, (last + 1) as f32 * CELL_M);
+        let mut lowest_rail: Option<(f32, f32, f32)> = None;
+        for &r in &f.rails {
+            let line = (foot + r) as f32 * CELL_M;
+            let middle = if r * 2 < STOREY_CUBES {
+                line - w * 0.5
+            } else {
+                line + w * 0.5
+            };
+            let clear = |u: f32| roof(u).is_some_and(|h| h > middle + w * 0.5 + 0.01);
+            let steps = libm::ceilf((end - start) / 0.02) as i32;
+            let free: Vec<f32> = (0..=steps)
+                .map(|i| start + (end - start) * i as f32 / steps as f32)
+                .filter(|&u| clear(u))
+                .collect();
+            let (Some(&a), Some(&b)) = (free.first(), free.last()) else {
+                continue;
+            };
+            if b - a < 0.4 {
+                continue;
+            }
+            if lowest_rail.is_none_or(|(m, ..)| middle < m) {
+                lowest_rail = Some((middle, a, b));
+            }
+            let mut from = a;
+            for &(u, top) in &studs {
+                if top > middle && u > a && u < b {
+                    out.beam(at(from, middle), at(u - w * 0.5, middle), dir, w, f.deep);
+                    from = u + w * 0.5;
+                }
+            }
+            out.beam(at(from, middle), at(b, middle), dir, w, f.deep);
+        }
+        // A brace at each end, in the panel between the outer stud and the eaves: from the
+        // plate up to the stud, parallel to the roof over it and clear of it, leaning in to
+        // the end as the wall's do.
+        if f.braces == Braces::Ends && !studs.is_empty() {
+            let n = studs.len();
+            for (outer, toward) in [(studs[0], -1.0f32), (studs[n - 1], 1.0)] {
+                let side = outer.0 + toward * w * 0.5;
+                let Some(high) = roof(side) else {
+                    continue;
+                };
+                // Where the roof comes down to the plate, beyond the stud.
+                let mut eaves = side;
+                while (eaves - side).abs() < 4.0
+                    && roof(eaves + toward * 0.02).is_some_and(|h| h > bottom + 0.02)
+                {
+                    eaves += toward * 0.02;
+                }
+                let run = (eaves - side).abs();
+                let rise = high - bottom;
+                // Set in from the eaves by two fifths of the run, so a brace's width clears
+                // the roof above it.
+                let clear = 0.4 * rise;
+                if run < 0.5 || clear < f.brace {
+                    continue;
+                }
+                // Up to three fifths of the way, or under the lowest rail across the stud.
+                let mut up = rise * 0.6;
+                if let Some((middle, a, b)) = lowest_rail
+                    && a <= side
+                    && side <= b
+                {
+                    up = up.min(middle - w * 0.5 - bottom);
+                }
+                if up < 0.25 {
+                    continue;
+                }
+                let foot = side + toward * run * up / rise;
+                let back = normal * -BRACE_BACK_M;
+                out.beam(
+                    at(foot, bottom) + back,
+                    at(side, bottom + up) + back,
+                    dir,
+                    f.brace,
+                    f.deep - BRACE_BACK_M * 2.0,
+                );
+            }
+        }
+    }
+}
+
 /// A square post up every outside corner of the kind's cubes, standing out of both faces, a
 /// storey at most.
 fn corners(framer: &Framer, cubes: &[IVec3], out: &mut Out) {
@@ -822,6 +1010,7 @@ mod tests {
         lay(
             base,
             &kit,
+            &Kits(vec![kit.clone()]),
             kit.framing.as_ref().unwrap(),
             Scope::ALL,
             &mut pieces,
@@ -902,6 +1091,49 @@ mod tests {
     }
 
     #[test]
+    fn a_gable_is_framed_with_studs_rails_and_braces_under_its_roof() {
+        let mut base = Base::default();
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [9, 0, 13],
+            kind: kit().kind(),
+        });
+        let roof = crate::RoofSection {
+            min: [0, 0, 0],
+            max: [9, 0, 13],
+            style: crate::RoofStyle::Gable,
+            along_x: true,
+            pitch: 0.7,
+        };
+        base.apply(BuildOp::AddRoof(roof));
+        let found = beams(&laid(&base));
+        // The west gable's members, on its outer face, over the wall's plate at 3 m.
+        let gable: Vec<_> = found
+            .iter()
+            .filter(|(a, b, _)| a.x < 0.05 && b.x < 0.05 && a.y.min(b.y) > 2.99)
+            .collect();
+        let upright = |(a, b, _): &&(Vec3, Vec3, f32)| (a.z - b.z).abs() < 1e-3;
+        let level = |(a, b, _): &&(Vec3, Vec3, f32)| (a.y - b.y).abs() < 1e-3;
+        // Studs over the wall's posts, every metre and a half along the grid, from the plate.
+        let studs: Vec<_> = gable.iter().filter(|b| upright(b) && !level(b)).collect();
+        let at: Vec<f32> = studs.iter().map(|(a, ..)| a.z).collect();
+        assert_eq!(at.len(), 4, "{gable:?}");
+        for z in [1.5, 3.0, 4.5, 6.0] {
+            assert!(at.iter().any(|s| (s - z).abs() < 0.01), "{at:?}");
+        }
+        assert!(gable.iter().any(&level), "a rail: {gable:?}");
+        let braces = gable.iter().filter(|b| !upright(b) && !level(b)).count();
+        assert_eq!(braces, 2, "{gable:?}");
+        // Everything under the roof: no higher than the ridge, and lower toward the eaves.
+        for (a, b, _) in &gable {
+            for p in [a, b] {
+                let rise = roof.rise(glam::Vec2::new(p.x, p.z)).unwrap_or(0.0);
+                assert!(p.y < 3.0 + rise, "{p} over the roof's {rise}");
+            }
+        }
+    }
+
+    #[test]
     fn a_frame_is_laid_the_same_for_a_section_as_for_the_whole() {
         let mut base = Base::default();
         wall(&mut base, -12, 30, 3, kit().kind());
@@ -912,6 +1144,7 @@ mod tests {
             lay(
                 &base,
                 &kit,
+                &Kits(vec![kit.clone()]),
                 kit.framing.as_ref().unwrap(),
                 Scope::section(section),
                 &mut part,

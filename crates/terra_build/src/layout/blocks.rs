@@ -50,7 +50,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Vec<Piec
                 (whole && (solid(at) || cutting)).then_some(Piece::Wattle { cube: at })
             }));
         }
-        super::frames::lay(base, kit, framing, scope, &mut pieces);
+        super::frames::lay(base, kit, kits, framing, scope, &mut pieces);
     } else {
         let lintels = !dressing::dresses_role(kit, Role::Head);
         openings(base, kind, lintels, &solid, scope, &mut pieces);
@@ -138,6 +138,7 @@ fn openings(
 
 #[cfg(test)]
 mod tests {
+    use super::super::roles::{Dir, End};
     use super::*;
     use crate::kit::Pattern;
     use crate::{BuildOp, Panel};
@@ -273,6 +274,60 @@ mod tests {
                 assert!(base.cube(*cube).is_some_and(|c| c.fill == Fill::Solid));
             }
         }
+    }
+
+    #[test]
+    fn a_cross_carved_in_a_wall_has_one_lintel_and_one_sill_across_its_width() {
+        let kit = dressed();
+        let mut base = Base::default();
+        base.apply(BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [6, 6, 0],
+            cube: Some(crate::Cube::new(kit.kind(), Fill::Solid)),
+        });
+        // A cross: an upright three cubes high at x = 3 and an arm across it at y = 3.
+        let open = Some(crate::Cube::new(kit.kind(), Fill::Open));
+        for (min, max) in [([3, 2, 0], [3, 4, 0]), ([2, 3, 0], [4, 3, 0])] {
+            base.apply(BuildOp::Fill {
+                min,
+                max,
+                cube: open,
+            });
+        }
+        let pieces = lay(&base, &kit, &Kits(vec![kit.clone()]), Scope::ALL);
+        // One lintel over its top and one sill under its foot on each face, each across the
+        // three cubes the arm spans, with nothing over or under the arm's ends.
+        let laid = |role: Role| -> Vec<(IVec3, [End; 2])> {
+            pieces
+                .iter()
+                .filter_map(|p| match p {
+                    Piece::Trim {
+                        cube,
+                        role: r,
+                        side,
+                        ends,
+                        ..
+                    } if *r == role && *side == Dir::South => Some((*cube, *ends)),
+                    _ => None,
+                })
+                .collect()
+        };
+        for (role, y) in [(Role::Head, 5), (Role::Sill, 1)] {
+            let mut run = laid(role);
+            run.sort_by_key(|(cube, _)| cube.x);
+            assert_eq!(run.len(), 3, "{role:?}: {run:?}");
+            assert!(run.iter().all(|(cube, _)| cube.y == y && cube.z == 0));
+            assert_eq!(
+                run.iter().map(|(_, ends)| *ends).collect::<Vec<_>>(),
+                vec![
+                    [End::Square, End::On],
+                    [End::On, End::On],
+                    [End::On, End::Square]
+                ]
+            );
+        }
+        assert_eq!(trims(&pieces, Role::Head), 3 * 2);
+        assert_eq!(trims(&pieces, Role::Sill), 3 * 2);
     }
 
     #[test]

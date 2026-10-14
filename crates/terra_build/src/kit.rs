@@ -293,6 +293,12 @@ pub struct Masks {
     /// a little along the wall (D236).
     pub strata: f32,
     pub lift: f32,
+    /// How much paler a block kind's wall is from a storey's height above the ground up, kept
+    /// dry under the eaves and out of reach of the splash, its face weathered pale, as a
+    /// fraction, rising to it over so many metres below; its foot meanwhile is darkened by
+    /// the damp splashed up it (`dirt`).
+    pub dry: f32,
+    pub dry_reach: f32,
 }
 
 impl Default for Masks {
@@ -307,6 +313,8 @@ impl Default for Masks {
             moss_tint: [1.0; 3],
             strata: 0.0,
             lift: 0.15,
+            dry: 0.0,
+            dry_reach: 1.2,
         }
     }
 }

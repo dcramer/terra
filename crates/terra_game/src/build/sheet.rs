@@ -813,7 +813,7 @@ pub(super) fn lay(
     // The further kits' rows (D236), each by its file's name, after the rest.
     if let Some(stone) = stone {
         let names = super::kit_names();
-        for name in ["earth", "wattle"] {
+        for name in ["earth", "limewash", "wattle"] {
             let Some((&kind, _)) = names.iter().find(|(_, n)| n.as_str() == name) else {
                 continue;
             };

@@ -607,7 +607,8 @@ fn smooth(p: Vec3, size: f32, seed: u32) -> f32 {
 }
 
 /// A corner's shade by the kit's masks: dirt and damp rising unevenly from the ground,
-/// outside edges worn lighter by their normal's turn, and, for timber, grey higher up.
+/// outside edges worn lighter by their normal's turn, a block kind's lifts and its storey's
+/// top paler, dry under the eaves, and, for timber, grey higher up.
 fn masked(
     masks: &Masks,
     (timber, layered): (bool, bool),
@@ -632,6 +633,18 @@ fn masked(
         c *= 1.0 + masks.strata * (own * 1.4 + fine + speckle * 0.6 - seam);
     }
     let height = p.y - ground;
+    // Paler from a storey's height above the ground up, dry under the eaves and out of
+    // reach of the splash, the line wandering along the wall.
+    if layered && masks.dry > 0.0 {
+        let reach = masks.dry_reach.max(0.1);
+        let wander = reach * 0.35 * (smooth(p, 0.9, 29) - 0.5);
+        let dry = (1.0 - (crate::STOREY_M - height + wander) / reach).clamp(0.0, 1.0);
+        if dry > 0.0 {
+            let pale = masks.dry * dry * dry * (0.7 + 0.6 * smooth(p, 0.3, 31));
+            let luma = (c.x + c.y + c.z) / 3.0;
+            c = c.lerp(Vec3::splat(luma), pale * 0.5) * (1.0 + pale);
+        }
+    }
     // Dirt rises at most 1.4 times its height, so above that it is not worked out.
     if masks.dirt > 0.0 && height < masks.dirt * 1.4 {
         let rise = masks.dirt * (0.6 + 0.8 * smooth(p, 0.45, 3));
@@ -654,7 +667,12 @@ fn masked(
 /// A kit's masks laid over a surface it drew in a material, in its base's own space.
 pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     let masks = &kit.dress.masks;
-    if masks.dirt <= 0.0 && masks.wear <= 0.0 && masks.weather <= 0.0 && masks.strata <= 0.0 {
+    if masks.dirt <= 0.0
+        && masks.wear <= 0.0
+        && masks.weather <= 0.0
+        && masks.strata <= 0.0
+        && masks.dry <= 0.0
+    {
         return;
     }
     let timber = matches!(

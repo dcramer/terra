@@ -6,14 +6,15 @@ Where each material came from. Made by `cargo xtask textures` ([tools/textures](
 - `bark_willow`: Poly Haven [Bark Willow](https://polyhaven.com/a/bark_willow), CC0, 2k. 1.00 m across.
 - `birch_bark`: made from a generated image (art/textures/birch-bark.png) by `textures.ts material`. 1.00 m across.
 - `clay_floor_001`: Poly Haven [Clay Floor 001](https://polyhaven.com/a/clay_floor_001), CC0, 2k. 2.00 m across.
-- `clay_plaster`: Poly Haven [Clay Plaster](https://polyhaven.com/a/clay_plaster), CC0, 2k. 2.00 m across.
 - `flora`: a stack, in this order, 1024 pixels each, of `pine_bark` (Poly Haven [Pine Bark](https://polyhaven.com/a/pine_bark), CC0, 2k. 2.00 m across); `bark_brown_02` (Poly Haven [Bark Brown 02](https://polyhaven.com/a/bark_brown_02), CC0, 2k. 1.00 m across); `leaves` (made from a generated image (art/textures/leaves.png) by `textures.ts material`); `mossy_rock` (Poly Haven [Mossy Rock](https://polyhaven.com/a/mossy_rock), CC0, 2k. 3.00 m across); `lichen_rock` (Poly Haven [Lichen Rock](https://polyhaven.com/a/lichen_rock), CC0, 2k. 2.00 m across); `rock_boulder_dry` (Poly Haven [Rock Boulder Dry](https://polyhaven.com/a/rock_boulder_dry), CC0, 2k. 1.80 m across).
 - `foliage`: cards of oak, birch, pine, hazel, berry, fern, herb, daisy, buttercup, campion, oakbranch, spruce, each cut out of a generated picture on a blue background (art/textures/cards) by `textures.ts cards`, 512 pixels each.
 - `grey_roof_tiles_02`: Poly Haven [Grey Roof Tiles 02](https://polyhaven.com/a/grey_roof_tiles_02), CC0, 2k. 1.50 m across.
 - `grey_stone_path`: Poly Haven [Grey Stone Path](https://polyhaven.com/a/grey_stone_path), CC0, 2k. 1.80 m across.
 - `ground`: a stack, in this order, 1024 pixels each, of `forest_ground_04` (Poly Haven [Forest Ground 04](https://polyhaven.com/a/forest_ground_04), CC0, 2k. 3.15 m across); `leafy_grass` (Poly Haven [Leafy Grass](https://polyhaven.com/a/leafy_grass), CC0, 2k. 2.00 m across); `rock_face_03` (Poly Haven [Rock Face 03](https://polyhaven.com/a/rock_face_03), CC0, 2k. 2.70 m across); `sand_01` (Poly Haven [Sand 01](https://polyhaven.com/a/sand_01), CC0, 2k. 1.50 m across); `forest_leaves_02` (Poly Haven [Forest Leaves 02](https://polyhaven.com/a/forest_leaves_02), CC0, 2k. 3.00 m across); `forrest_ground_03` (Poly Haven [Forest Ground 03](https://polyhaven.com/a/forrest_ground_03), CC0, 2k. 2.00 m across); `roots` (Poly Haven [Roots](https://polyhaven.com/a/roots), CC0, 2k. 1.67 m across).
 - `log_end`: made from a generated image (art/textures/log-end.png) by `textures.ts material`.
+- `medieval_wall_01`: Poly Haven [Medieval Wall 01](https://polyhaven.com/a/medieval_wall_01), CC0, 2k. 2.00 m across.
 - `oak_bark`: Poly Haven [Bark Willow 02](https://polyhaven.com/a/bark_willow_02), CC0, 2k. 2.15 m across. Furrowed as an old oak's bark is; the lush forest's trunks. Its height map, inverted and at 1k, is `depth.jpg` for relief mapping; maps recompressed.
+- `packed_earth`: ambientCG [Ground 104](https://ambientcg.com/a/Ground104), CC0, 2k.
 - `patterned_clay_plaster`: Poly Haven [Patterned Clay Plaster](https://polyhaven.com/a/patterned_clay_plaster), CC0, 2k. 2.00 m across.
 - `pine_bark`: Poly Haven [Pine Bark](https://polyhaven.com/a/pine_bark), CC0, 2k. 2.00 m across.
 - `riet_01`: Poly Haven [Riet 01](https://polyhaven.com/a/riet_01), CC0, 2k. 2.50 m across.

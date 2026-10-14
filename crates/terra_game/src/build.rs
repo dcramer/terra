@@ -171,13 +171,23 @@ struct KitFile {
     timer: Timer,
 }
 
-const KITS: &str = "assets/data/kits";
+const KITS: &str = "data/kits";
 /// The kit things are laid in by default, which comes first.
 const FIRST_KIT: &str = "logs.ron";
 
+/// The assets the kits' files are read from: those next to the program, or, for a Windows
+/// copy run from WSL (`cargo xtask win`), the source's own, which it names in
+/// `TERRA_SOURCE_ASSETS`, so a kit's file saved while it runs is seen.
+fn kit_assets() -> std::path::PathBuf {
+    std::env::var_os("TERRA_SOURCE_ASSETS")
+        .map(std::path::PathBuf::from)
+        .filter(|path| path.join(KITS).is_dir())
+        .unwrap_or_else(|| bevy::asset::io::file::FileAssetReader::get_base_path().join("assets"))
+}
+
 /// Every kit's file: the first kit, then the rest by name.
 fn kit_paths() -> Vec<std::path::PathBuf> {
-    let folder = bevy::asset::io::file::FileAssetReader::get_base_path().join(KITS);
+    let folder = kit_assets().join(KITS);
     let mut paths: Vec<_> = std::fs::read_dir(&folder)
         .map(|entries| {
             entries
@@ -229,7 +239,7 @@ fn read_kit(path: &std::path::Path) -> Option<Kit> {
         .map_err(|problem| error!("{}: {problem}", path.display()))
         .ok()?;
     // Its dressed pieces (D215), made from their source under art/kits.
-    let assets = bevy::asset::io::file::FileAssetReader::get_base_path().join("assets");
+    let assets = kit_assets();
     if let Err(problem) = kit.dress.read(&|file| {
         std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
     }) {

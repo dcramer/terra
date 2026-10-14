@@ -4,6 +4,11 @@
 //! (`Piece::Corner`), those under a foot's plinth left out. Long members by role are laid
 //! with the rest of a timber kind's (`runs`), and drawn by `timber`.
 //!
+//! An opening's head and sill are its own, not each cube's (D236): however irregular its
+//! hole, one lintel runs across its full width over its highest row and one sill under its
+//! lowest, as a builder bridges a hole with one beam, each a run of its cubes' edges laid
+//! on as one; its steps between have none.
+//!
 //! A cube cut to a shape (D193) dresses its own lines with bands (`Piece::Band`) of the
 //! same profiles: a stair a nose on each of its two treads, a half a coping round its open
 //! top, a slope a coping raking up each open side, and a pillar a plinth round its base and
@@ -14,6 +19,7 @@ use super::{Piece, Place, Scope, TICKS, hash};
 use crate::kit::{Dress, Kit, Kits};
 use crate::{Base, Fill, Shape};
 use glam::IVec3;
+use std::collections::BTreeSet;
 
 /// Whether a kit dresses any role with pieces of its own.
 pub(super) fn dresses(kit: &Kit) -> bool {
@@ -38,13 +44,157 @@ pub(super) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
         .filter(|(_, cube)| cube.kind == kit.kind())
         .map(|(at, _)| at)
         .collect();
+    let merged = |role: Role| matches!(kit.dress.roles.get(&role), Some(Dress::Profile { .. }));
     for cube in cubes {
         for dressed in roles.dressed(cube) {
+            // An opening's head and sill are laid whole, below.
+            let edge = dressed.edge;
+            if matches!(edge.role, Role::Head | Role::Sill)
+                && merged(edge.role)
+                && roles.beyond(cube + edge.other.step()) == Beyond::Hole
+            {
+                continue;
+            }
             if let Some(piece) = piece(&roles, kit, &dressed) {
                 pieces.push(piece);
             }
         }
         shaped(base, &roles, kit, cube, pieces);
+    }
+    for role in [Role::Head, Role::Sill] {
+        if merged(role) {
+            across_openings(base, &roles, kit, role, scope, pieces);
+        }
+    }
+}
+
+/// How far round a scope openings are looked for, in cubes: more than one is across, so
+/// one reaching into it is found whole.
+const OPENING_REACH: i32 = 16;
+
+/// Each opening's one lintel (`Role::Head`) or sill (`Role::Sill`) on each face it shows on:
+/// over its highest row of holes, or under its lowest, across the opening's full width, laid
+/// as a run of trims on the cubes there, which belong to those cubes. None where that row has
+/// no wall over or under it, as a doorway's foot.
+fn across_openings(
+    base: &Base,
+    roles: &Roles,
+    kit: &Kit,
+    role: Role,
+    scope: Scope,
+    pieces: &mut Vec<Piece>,
+) {
+    let kind = kit.kind();
+    let hole = |at: IVec3| {
+        base.cube(at)
+            .is_some_and(|cube| cube.kind == kind && super::drawn_fill(&cube) != Fill::Solid)
+    };
+    let wide = Scope {
+        low: scope.low - IVec3::splat(OPENING_REACH),
+        high: scope.high + IVec3::splat(OPENING_REACH),
+    };
+    let mut left: BTreeSet<[i32; 3]> = wide
+        .cubes(base, None)
+        .into_iter()
+        .filter(|&(at, _)| hole(at))
+        .map(|(at, _)| at.to_array())
+        .collect();
+    let (other, toward) = if role == Role::Head {
+        (Dir::Down, 1)
+    } else {
+        (Dir::Up, -1)
+    };
+    while let Some(&first) = left.iter().next() {
+        // The opening: its holes, joined face to face.
+        left.remove(&first);
+        let mut opening = vec![IVec3::from_array(first)];
+        let mut i = 0;
+        while i < opening.len() {
+            for dir in Dir::ALL {
+                let next = opening[i] + dir.step();
+                if left.remove(&next.to_array()) {
+                    opening.push(next);
+                }
+            }
+            i += 1;
+        }
+        let Some(y) = (if role == Role::Head {
+            opening.iter().map(|h| h.y).max()
+        } else {
+            opening.iter().map(|h| h.y).min()
+        }) else {
+            continue;
+        };
+        let row = y + toward;
+        for side in Dir::LEVEL {
+            let edge = Edge { role, side, other };
+            // The face's layer, from an edge of the kind over or under the row's holes.
+            let Some(layer) = opening
+                .iter()
+                .filter(|h| h.y == y)
+                .map(|&h| h + IVec3::Y * toward)
+                .find(|&at| roles.edges(at).contains(&edge))
+                .map(|at| at[side.axis()])
+            else {
+                continue;
+            };
+            let u_axis = 2 - side.axis();
+            let (low, high) = opening.iter().fold((i32::MAX, i32::MIN), |(l, h), at| {
+                (l.min(at[u_axis]), h.max(at[u_axis]))
+            });
+            let cube_at = |u: i32| {
+                let mut at = IVec3::new(0, row, 0);
+                at[u_axis] = u;
+                at[side.axis()] = layer;
+                at
+            };
+            let bears = |at: IVec3| {
+                base.cube(at).is_some_and(|cube| {
+                    cube.kind == kind
+                        && super::drawn_fill(&cube) == Fill::Solid
+                        && !cube.shape.is_cut()
+                }) && roles.beyond(at + side.step()).open()
+            };
+            let mut u = low;
+            while u <= high {
+                if !bears(cube_at(u)) {
+                    u += 1;
+                    continue;
+                }
+                let start = u;
+                while u < high && bears(cube_at(u + 1)) {
+                    u += 1;
+                }
+                for along in start..=u {
+                    let cube = cube_at(along);
+                    if !scope.reaches(cube, cube) {
+                        continue;
+                    }
+                    let ends = [
+                        if along == start { End::Square } else { End::On },
+                        if along == u { End::Square } else { End::On },
+                    ];
+                    pieces.push(Piece::Trim {
+                        cube,
+                        role,
+                        side,
+                        other,
+                        ends,
+                        lift: 0,
+                        sink: 0,
+                        seed: hash(&[
+                            cube.x as u32,
+                            cube.y as u32,
+                            cube.z as u32,
+                            role as u32,
+                            side as u32,
+                            other as u32,
+                        ]),
+                    });
+                }
+                u += 1;
+            }
+        }
     }
 }
 
