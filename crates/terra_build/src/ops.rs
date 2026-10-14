@@ -936,6 +936,11 @@ impl Base {
         if prop.open == open {
             return Err(Refusal::Unchanged);
         }
+        // Shut on someone standing in it, it would close round them, as building where they
+        // stand would (construction-001, gap 17).
+        if !open && let Some(at) = prop.cubes().find(|&at| cx.world.in_the_way(at)) {
+            return Err(Refusal::InTheWay(at));
+        }
         let mut change = Change::default();
         let paid = self.prop_paid.get(&prop.min).cloned().unwrap_or_default();
         change

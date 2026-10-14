@@ -198,6 +198,30 @@ impl Base {
                         wanted = at[axis];
                     }
                 }
+                // Within a column, an underside overhead may come lower than at its edge,
+                // as an inverted slope's does: the body stops where it would meet it,
+                // unless it is caught in it already and moving out.
+                let caught = |along: f32| {
+                    [-walker.radius, 0.0, walker.radius].iter().any(|&shift| {
+                        let mut beside = at;
+                        beside[sideways] += shift;
+                        beside[axis] = along;
+                        self.blocks(beside, at.y, walker)
+                    })
+                };
+                if !caught(at[axis]) {
+                    // Swept in steps a tenth of a cube or less, stopped at the last clear.
+                    let steps = ((wanted - at[axis]).abs() / (CELL_M * 0.1)).ceil().max(1.0);
+                    let mut clear = at[axis];
+                    for i in 1..=steps as usize {
+                        let along = at[axis] + (wanted - at[axis]) * i as f32 / steps;
+                        if caught(along) {
+                            wanted = clear;
+                            break;
+                        }
+                        clear = along;
+                    }
+                }
             }
             let start = at[axis];
             at[axis] = wanted;

@@ -238,6 +238,28 @@ impl Building<'_, '_> {
                 }
             }
         }
+        // An item set down is in the way of what would be built through it, as a body is
+        // (construction-001, gap 17): the cubes its box, turned any way, reaches into.
+        for item in &self.items {
+            let reach = item.half.x.max(item.half.z) - 0.01;
+            let foot = item.at + Vec3::Y * item.lift;
+            let low = ((foot - Vec3::new(reach, -0.01, reach)) / CELL_M)
+                .floor()
+                .as_ivec3();
+            let high = ((foot + Vec3::new(reach, item.half.y * 2.0 - 0.01, reach)) / CELL_M)
+                .floor()
+                .as_ivec3();
+            if low.length_squared() > 1_000_000 {
+                continue;
+            }
+            for x in low.x..=high.x {
+                for y in low.y..=high.y {
+                    for z in low.z..=high.z {
+                        bodies.insert([x, y, z]);
+                    }
+                }
+            }
+        }
         // An item stands on the cube under its foot.
         let items = self
             .items

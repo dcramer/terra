@@ -15,6 +15,7 @@ use super::intent::Intent;
 use super::inventory::{Belongings, Cut, Items};
 use super::skills::{Did, ONCE, Skill, Skills};
 use super::tick::Sim;
+use super::told::Told;
 use super::work::Hold;
 use super::{LocalPlayer, Player, Stance};
 use crate::planet::Planet;
@@ -24,6 +25,7 @@ use terra_core::MaterialId;
 use terra_core::{Harvested, Operation};
 use terra_items::ItemKind;
 use terra_voxel::material;
+use terra_world::footprint::Footprint;
 
 /// How far from the player the pickaxe reaches the ground.
 const REACH_M: f32 = 4.0;
@@ -130,6 +132,8 @@ fn dig(
     yields: Res<Yields>,
     mut belongings: Belongings,
     mut did: MessageWriter<Did>,
+    mut told: MessageWriter<Told>,
+    footprints: Query<&Footprint>,
     mut gizmos: Gizmos,
 ) {
     for (player, player_at, intent, skills, cutting, mut stance, mut digging, mut spoil, ours) in
@@ -209,6 +213,19 @@ fn dig(
         }
         digging.held = None;
 
+        // Never from under what is built or planned (D193): its ground holds it up, and a
+        // building's own cut is its plan's to make (D131).
+        if footprints
+            .iter()
+            .any(|footprint| under(footprint, at, SCOOP_M))
+        {
+            told.write(Told::new(
+                player,
+                "That would dig out from under what is built.",
+            ));
+            continue;
+        }
+
         // The scoop is centred a little into the ground, so it bites.
         let taken = planet.apply(&Operation::Dig {
             centre: at - normal * (SCOOP_M * 0.3),
@@ -237,6 +254,28 @@ fn dig(
             dug.join(", ")
         );
     }
+}
+
+/// Whether a scoop at a point would reach the ground under a column a build stands on or
+/// has planned, within so far of it across.
+fn under(footprint: &Footprint, point: Vec3, reach_m: f32) -> bool {
+    let local = footprint
+        .frame
+        .compute_affine()
+        .inverse()
+        .transform_point3(point);
+    if !local.is_finite() || local.abs().max_element() > 10_000.0 {
+        return false;
+    }
+    let cell = footprint.cell_m;
+    let reach = (reach_m / cell).ceil() as i32;
+    let (x, z) = (
+        (local.x / cell).floor() as i32,
+        (local.z / cell).floor() as i32,
+    );
+    (-reach..=reach).any(|dx| {
+        (-reach..=reach).any(|dz| footprint.standing.contains(&IVec2::new(x + dx, z + dz)))
+    })
 }
 
 #[cfg(test)]
@@ -339,6 +378,27 @@ mod tests {
             .map(|gained| gained.count)
             .sum();
         (given, world.get::<Spoil>(player).unwrap().0[0])
+    }
+
+    #[test]
+    fn the_ground_under_what_is_built_is_not_dug() {
+        let (mut world, player) = digger(planet(), material::STONE, 0.01);
+        world.init_resource::<Messages<Told>>();
+        let feet = world.get::<Transform>(player).unwrap().translation;
+        let along = feet.normalize().any_orthonormal_vector();
+        // A build standing all round where the player digs.
+        world.spawn(Footprint {
+            frame: Transform::from_translation(feet),
+            cell_m: 0.5,
+            standing: (-40..40)
+                .flat_map(|x| (-40..40).map(move |z| IVec2::new(x, z)))
+                .collect(),
+            ..Default::default()
+        });
+        world.get_mut::<Spoil>(player).unwrap().0 = vec![0.0];
+        assert_eq!(dig_toward(&mut world, player, along), (0, 0.0));
+        let told: Vec<Told> = world.resource_mut::<Messages<Told>>().drain().collect();
+        assert!(told.iter().any(|told| told.text.contains("from under")));
     }
 
     #[test]

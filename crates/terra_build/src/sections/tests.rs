@@ -4,22 +4,30 @@ use crate::layout::lay_among;
 use crate::roofer::{self, Style};
 use crate::{BuildOp, Cube, Panel, STOREY_CUBES};
 
-/// The kits the game ships, as it reads them.
+/// The kits the game ships, every one, with their dressed pieces, as it reads them.
 fn shipped() -> Kits {
-    let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/data/kits");
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let read = |path: &str| {
+        std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
+    };
     let mut kits = Vec::new();
     for name in [
-        "logs.ron",
-        "hewn.ron",
-        "stone.ron",
-        "shakes.ron",
-        "slate.ron",
-        "thatch.ron",
+        "logs", "hewn", "stone", "earth", "wattle", "shakes", "slate", "thatch",
     ] {
-        let text = std::fs::read_to_string(folder.join(name)).unwrap();
-        kits.push(ron::from_str::<Kit>(&text).unwrap_or_else(|why| panic!("{name}: {why}")));
+        let text = read(&format!("data/kits/{name}.ron")).unwrap();
+        let mut kit = ron::from_str::<Kit>(&text).unwrap_or_else(|why| panic!("{name}: {why}"));
+        kit.dress.read(&read).unwrap();
+        kits.push(kit);
     }
     Kits(kits)
+}
+
+/// A kit's kind by its file's name: earth, wattle and daub.
+fn named(kits: &Kits, id_of: &str) -> Kind {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let text = std::fs::read_to_string(assets.join(format!("data/kits/{id_of}.ron"))).unwrap();
+    let kit = ron::from_str::<Kit>(&text).unwrap();
+    kits.of(kit.kind()).unwrap().kind()
 }
 
 fn kind(kits: &Kits, pattern: Pattern, profile: Profile) -> Kind {
@@ -126,6 +134,39 @@ fn bases(kits: &Kits) -> Vec<Base> {
         example.apply(op);
     }
     out.push(example);
+    // Earth under a hip and wattle and daub under a gable (D236), each across a corner of
+    // four sections; and an L of stone under hips, its valley across a section's edge.
+    for (walls, style, at) in [
+        (named(kits, "earth"), Style::Hip, [10, 10]),
+        (named(kits, "wattle"), Style::Gable, [-5, -4]),
+    ] {
+        let mut base = Base::default();
+        house(&mut base, kits, at, [11, 9], walls, style);
+        base.lay_footings(stone, |_| -40);
+        out.push(base);
+    }
+    let mut ell = Base::default();
+    ell.apply(BuildOp::AddRoom {
+        min: [8, 0, 8],
+        max: [22, 0, 14],
+        kind: stone,
+    });
+    ell.apply(BuildOp::AddRoom {
+        min: [8, 0, 15],
+        max: [14, 0, 26],
+        kind: stone,
+    });
+    let footprint: BTreeSet<[i32; 2]> = (8..=22)
+        .flat_map(|x| (8..=14).map(move |z| [x, z]))
+        .chain((8..=14).flat_map(|x| (15..=26).map(move |z| [x, z])))
+        .collect();
+    let height = roofer::field(&footprint, Style::Hip, None);
+    let kind = kits.roof_for(stone).unwrap();
+    for op in roofer::put_up(&ell, &footprint, 0, kind, &height) {
+        ell.apply(op);
+    }
+    ell.lay_footings(stone, |column| -(column[1].rem_euclid(4) as i16) * 15);
+    out.push(ell);
     out
 }
 
@@ -278,7 +319,7 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
     let kits = shipped();
     let maps = Maps::default();
     let bases = bases(&kits);
-    for base in [&bases[0], &bases[1], &bases[4]] {
+    for base in &bases {
         // Each section drawn, near.
         let mut sections: BTreeSet<[i32; 3]> = BTreeSet::new();
         for kit in &kits.0 {
