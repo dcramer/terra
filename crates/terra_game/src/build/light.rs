@@ -20,9 +20,34 @@ const INDOORS: f32 = 0.6;
 const INTO_WALLS_M: f32 = 0.3;
 const FALLOFF: f32 = 0.03;
 
-/// A light probe dimming the sky inside a room of a base.
+/// How long a room's light takes to change when it is closed or opened, in seconds: a probe
+/// is blended in and out, as engines blend a probe's weight, not switched, which dimmed a
+/// room by two fifths in one frame as its last cube went in (`cargo xtask artifacts
+/// --frames`, going-up).
+const FADE_S: f32 = 0.8;
+
+/// A light probe dimming the sky inside a room of a base: the room's box, how far it is
+/// faded in, from 0 (lit as outside) to 1, and whether it is going, its room no longer
+/// closed.
 #[derive(Component)]
-struct Indoors;
+struct Indoors {
+    room: [i32; 6],
+    share: f32,
+    going: bool,
+}
+
+/// A room's box as a key, to the centimetre.
+fn key(min: Vec3, max: Vec3) -> [i32; 6] {
+    let cm = |m: f32| (m * 100.0).round() as i32;
+    [
+        cm(min.x),
+        cm(min.y),
+        cm(min.z),
+        cm(max.x),
+        cm(max.y),
+        cm(max.z),
+    ]
+}
 
 /// The revision of each base its rooms were last looked at for, and the rooms' boxes
 /// its probes were placed for.
@@ -34,17 +59,18 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (place, follow, inside).chain());
 }
 
-/// Places a probe in every room indoors, again whenever a base changes.
+/// Places a probe in every room indoors, again whenever a base changes: a room that is new
+/// fades its probe in, one no longer closed fades its out; rooms that stay keep theirs.
 fn place(
     mut commands: Commands,
     mut placed: ResMut<Placed>,
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
-    probes: Query<(Entity, &ChildOf), With<Indoors>>,
+    mut probes: Query<(Entity, &ChildOf, &mut Indoors)>,
     camera: Query<&EnvironmentMapLight, With<MainCamera>>,
 ) {
     // Nothing to dim until the sky lights the camera.
-    let Some(sky) = camera.iter().next().map(dimmed) else {
+    let Some(sky) = camera.iter().next().cloned() else {
         return;
     };
     for build in each(&mut site, &mut builds) {
@@ -60,21 +86,43 @@ fn place(
         if unchanged {
             continue;
         }
-        for (entity, parent) in &probes {
-            if parent.parent() == build.root {
-                commands.entity(entity).try_despawn();
+        let boxes: Vec<(Vec3, Vec3)> = build
+            .base
+            .indoors_m()
+            .into_iter()
+            .map(|(low, high)| {
+                (
+                    low - Vec3::splat(INTO_WALLS_M),
+                    high + Vec3::splat(INTO_WALLS_M),
+                )
+            })
+            .collect();
+        let wanted: Vec<[i32; 6]> = boxes.iter().map(|&(min, max)| key(min, max)).collect();
+        let mut kept = Vec::new();
+        for (_, parent, mut probe) in &mut probes {
+            if parent.parent() != build.root {
+                continue;
+            }
+            probe.going = !wanted.contains(&probe.room);
+            if !probe.going {
+                kept.push(probe.room);
             }
         }
-        for (low, high) in build.base.indoors_m() {
-            let min = low - Vec3::splat(INTO_WALLS_M);
-            let max = high + Vec3::splat(INTO_WALLS_M);
+        for (&(min, max), room) in boxes.iter().zip(wanted) {
+            if kept.contains(&room) {
+                continue;
+            }
             commands.spawn((
                 Name::new("Indoors"),
-                Indoors,
+                Indoors {
+                    room,
+                    share: 0.0,
+                    going: false,
+                },
                 LightProbe {
                     falloff: Vec3::splat(FALLOFF),
                 },
-                sky.clone(),
+                lit(&sky, 0.0),
                 Transform::from_translation((min + max) * 0.5).with_scale(max - min),
                 Visibility::default(),
                 ChildOf(build.root),
@@ -83,29 +131,58 @@ fn place(
     }
 }
 
-/// The sky's light as it reaches inside: the camera's, at the brightness the sky gives it
-/// now, dimmed.
-fn dimmed(light: &EnvironmentMapLight) -> EnvironmentMapLight {
+/// How far a probe has faded after a frame so long, toward in or out.
+fn faded(share: f32, going: bool, seconds: f32) -> f32 {
+    let step = seconds / FADE_S;
+    if going {
+        (share - step).max(0.0)
+    } else {
+        (share + step).min(1.0)
+    }
+}
+
+/// The sky's light inside a room faded in so far, eased in and out: as outside at 0, dimmed
+/// at 1.
+fn dimming(share: f32) -> f32 {
+    let eased = share * share * (3.0 - 2.0 * share);
+    1.0 + (INDOORS - 1.0) * eased
+}
+
+/// The sky's light as it reaches inside a room faded in so far: the camera's, at the
+/// brightness the sky gives it now, dimmed.
+fn lit(light: &EnvironmentMapLight, share: f32) -> EnvironmentMapLight {
     EnvironmentMapLight {
-        intensity: light.intensity * INDOORS,
+        intensity: light.intensity * dimming(share),
         ..light.clone()
     }
 }
 
-/// Keeps every room's light the sky's, dimmed, as the day turns.
+/// Keeps every room's light the sky's, dimmed as far as it has faded in, as the day turns;
+/// a probe whose room has gone is taken away once faded out.
 fn follow(
+    mut commands: Commands,
+    time: Res<Time>,
     camera: Query<&EnvironmentMapLight, With<MainCamera>>,
-    mut probes: Query<&mut EnvironmentMapLight, (With<Indoors>, Without<MainCamera>)>,
+    mut probes: Query<(Entity, &mut Indoors, &mut EnvironmentMapLight), Without<MainCamera>>,
 ) {
-    let Some(sky) = camera.iter().next().map(dimmed) else {
+    let Some(sky) = camera.iter().next() else {
         return;
     };
-    for mut probe in &mut probes {
-        if probe.intensity != sky.intensity
-            || probe.diffuse_map != sky.diffuse_map
-            || probe.specular_map != sky.specular_map
+    for (entity, mut probe, mut light) in &mut probes {
+        let share = faded(probe.share, probe.going, time.delta_secs());
+        if share != probe.share {
+            probe.share = share;
+        }
+        if probe.going && share == 0.0 {
+            commands.entity(entity).try_despawn();
+            continue;
+        }
+        let now = lit(sky, share);
+        if light.intensity != now.intensity
+            || light.diffuse_map != now.diffuse_map
+            || light.specular_map != now.specular_map
         {
-            *probe = sky.clone();
+            *light = now;
         }
     }
 }
@@ -114,18 +191,50 @@ fn follow(
 /// there (`terra_world::scene::Indoors`).
 fn inside(
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    rooms: Query<&GlobalTransform, (With<Indoors>, Without<MainCamera>)>,
+    rooms: Query<(&GlobalTransform, &Indoors), Without<MainCamera>>,
     mut indoors: ResMut<terra_world::scene::Indoors>,
 ) {
     let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
         return;
     };
     // Each room's probe spans it, a unit box stretched over it.
-    let within = rooms.iter().any(|room| {
+    let within = rooms.iter().any(|(room, probe)| {
+        if probe.going {
+            return false;
+        }
         let local = room.affine().inverse().transform_point3(eye);
         local.abs().cmple(Vec3::splat(0.5)).all()
     });
     if indoors.0 != within {
         indoors.0 = within;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_room_closing_dims_its_light_a_little_each_frame_not_at_once() {
+        // At sixty frames a second, from outside's light to the room's and back.
+        let frame = 1.0 / 60.0;
+        let mut share = 0.0;
+        let mut biggest: f32 = 0.0;
+        let mut frames = 0;
+        while share < 1.0 {
+            let next = faded(share, false, frame);
+            biggest = biggest.max((dimming(next) - dimming(share)).abs());
+            share = next;
+            frames += 1;
+        }
+        assert!((dimming(1.0) - INDOORS).abs() < 1e-6 && dimming(0.0) == 1.0);
+        // Two fifths of the light over most of a second, never more than a fiftieth of
+        // it in a frame.
+        assert!(frames > 30, "{frames} frames");
+        assert!(biggest < 0.02, "{biggest} in a frame");
+        while share > 0.0 {
+            share = faded(share, true, frame);
+        }
+        assert_eq!(dimming(share), 1.0);
     }
 }

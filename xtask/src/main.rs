@@ -155,8 +155,8 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "artifacts",
-        takes: "[building] [--all]",
-        does: "find what would draw as junk in building's meshes: z-fighting, sky through walls, gaps under roofs, pieces poking out",
+        takes: "[building] [--all] [--quick] [--ratchet|--record] | --frames [--quality high,low] [--checks still,sun,glide,going-up]",
+        does: "find what would draw as junk in building's meshes: z-fighting, sky through walls, gaps under roofs, pieces poking out; --frames, what only frames show, on the GPU: shimmer, acne, flashes during an edit, TAA trails, light probes popping",
         group: "Play and check",
         run: artifacts,
     },
@@ -1171,6 +1171,7 @@ fn check() -> bool {
         && cargo("test", &["--workspace"])
         && tools_tests()
         && kits()
+        && artifacts(&["--quick".into(), "--ratchet".into()])
         && run("node", &["tools/docs/docs.ts"])
         && blender_scripts()
         && shared_crates_avoid_bevy()
@@ -1273,8 +1274,14 @@ fn rules(args: &[String]) -> bool {
 
 /// What a renderer would show as junk in the meshes building draws, every roof over every
 /// plan in each kind and every two kinds mixed, at every detail (`terra_build::inspect`); a
-/// name keeps only the bases whose names hold it, and `--all` lists every fault found.
+/// name keeps only the bases whose names hold it, and `--all` lists every fault found. With
+/// `--frames`, what only frames show, from scripted runs on the GPU (`tools/sandbox/artifacts.ts`).
 fn artifacts(args: &[String]) -> bool {
+    if args.iter().any(|a| a == "--frames") {
+        let mut all = vec!["tools/sandbox/artifacts.ts"];
+        all.extend(args.iter().filter(|a| *a != "--frames").map(String::as_str));
+        return run("node", &all);
+    }
     let mut cargo = vec![
         "run",
         "-q",

@@ -52,6 +52,10 @@ pub enum Fault {
     /// floating over it, out past a roof's edges, or further out of its cubes than the
     /// eighth of a cube a trim may stand out (D192).
     PokesOut,
+    /// A piece sunk under a block kind's surface: the surface's relief stands out over the
+    /// piece's face, so it shows in dashes where the relief dips, or not at all, as wattle's
+    /// frame did under its daub.
+    Buried,
 }
 
 /// One fault found: what, at which detail, where in the base's space, and between what.
@@ -278,6 +282,7 @@ pub fn inspect(base: &Base, kits: &Kits, maps: &Maps) -> Report {
     let roofs = crate::layout::roofs::Roofs::whole(base, kits, crate::layout::Scope::ALL);
     for (slot, drawn) in drawn.iter().enumerate() {
         if slot < 2 {
+            buried(kits, drawn, details[slot], &mut report.findings);
             pokes_out(
                 base,
                 kits,
@@ -478,6 +483,19 @@ impl Grid {
 
     /// The nearest triangle a line meets between two distances along it, from either side.
     fn hit(&self, drawn: &Drawn, from: Vec3, dir: Vec3, near: f32, far: f32) -> Option<f32> {
+        self.hit_where(drawn, from, dir, near, far, |_| true)
+    }
+
+    /// The nearest triangle a line meets between two distances along it, of those `ok` keeps.
+    fn hit_where(
+        &self,
+        drawn: &Drawn,
+        from: Vec3,
+        dir: Vec3,
+        near: f32,
+        far: f32,
+        ok: impl Fn(&Tri) -> bool,
+    ) -> Option<f32> {
         let mut best: Option<f32> = None;
         let mut seen = std::collections::HashSet::new();
         for cell in cells_along(from + dir * near, dir, far - near) {
@@ -489,6 +507,9 @@ impl Grid {
                     continue;
                 }
                 let t = &drawn.tris[i as usize];
+                if !ok(t) {
+                    continue;
+                }
                 if let Some(at) = meets(from, dir, t)
                     && at >= near
                     && at <= far
@@ -823,6 +844,81 @@ fn roof_reach(kit: &crate::kit::Kit) -> f32 {
 }
 
 /// How far out of a roof's edge its boards may hang.
+/// How far out over a piece's face a block surface may be and still bury it: past this the
+/// surface is another wall, not relief over the piece.
+const BURIED_M: f32 = 0.08;
+/// A mesh of pieces is buried when this share of its faces is under a surface.
+const BURIED_SHARE: f32 = 0.15;
+
+/// Meshes of pieces whose faces lie under a block kind's surface facing the same way: a line
+/// out from the face meets the surface within a few centimetres, so the surface's relief
+/// covers what should stand proud of it.
+fn buried(kits: &Kits, drawn: &Drawn, detail: Detail, findings: &mut Vec<Finding>) {
+    let is_surface = |mesh: u32| {
+        drawn.kinds[mesh as usize].is_some_and(|(kind, material)| {
+            matches!(material, Material::Masonry | Material::Floor)
+                && kits
+                    .of(kind)
+                    .is_some_and(|kit| kit.pattern == Pattern::Masonry)
+        })
+    };
+    let mut cells: std::collections::HashMap<[i32; 3], Vec<u32>> = std::collections::HashMap::new();
+    for (i, t) in drawn.tris.iter().enumerate() {
+        if !is_surface(t.mesh) {
+            continue;
+        }
+        let low = (t.p[0].min(t.p[1]).min(t.p[2]) / CELL_M).floor().as_ivec3();
+        let high = (t.p[0].max(t.p[1]).max(t.p[2]) / CELL_M).floor().as_ivec3();
+        for x in low.x..=high.x {
+            for y in low.y..=high.y {
+                for z in low.z..=high.z {
+                    cells.entry([x, y, z]).or_default().push(i as u32);
+                }
+            }
+        }
+    }
+    if cells.is_empty() {
+        return;
+    }
+    let grid = Grid { cells };
+    // Each mesh of pieces: its area, how much of it is buried, and where first.
+    let mut meshes: BTreeMap<u32, (f32, f32, Vec3)> = BTreeMap::new();
+    for t in &drawn.tris {
+        let Some((kind, _)) = drawn.kinds[t.mesh as usize] else {
+            continue;
+        };
+        if is_surface(t.mesh) || kits.of(kind).is_none_or(|kit| kit.pattern == Pattern::Roof) {
+            continue;
+        }
+        let area = (t.p[1] - t.p[0]).cross(t.p[2] - t.p[0]).length() * 0.5;
+        let middle = (t.p[0] + t.p[1] + t.p[2]) / 3.0;
+        let entry = meshes.entry(t.mesh).or_insert((0.0, 0.0, middle));
+        entry.0 += area;
+        let over = grid.hit_where(drawn, middle, t.n, 0.001, BURIED_M, |s| s.n.dot(t.n) > 0.7);
+        if over.is_some() {
+            if entry.1 == 0.0 {
+                entry.2 = middle;
+            }
+            entry.1 += area;
+        }
+    }
+    for (mesh, (area, under, at)) in meshes {
+        if under > 1e-3 && under > area * BURIED_SHARE {
+            findings.push(Finding {
+                fault: Fault::Buried,
+                detail,
+                at,
+                by: 0.0,
+                what: format!(
+                    "{}: {:.0}% of its faces under a block surface's relief",
+                    drawn.meshes[mesh as usize],
+                    100.0 * under / area
+                ),
+            });
+        }
+    }
+}
+
 const EDGE_M: f32 = 0.08;
 /// How far a trim may stand out of its cubes (D192), and a little for its relief.
 const TRIM_M: f32 = CELL_M / 8.0 + 0.012;
@@ -1047,6 +1143,47 @@ fn on_ground(kits: &Kits, ops: &[crate::BuildOp]) -> Base {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_piece_under_a_block_surface_is_buried_and_one_proud_of_it_is_not() {
+        let stone = crate::kit::Kit {
+            id: 2,
+            pattern: Pattern::Masonry,
+            ..Default::default()
+        };
+        let kits = Kits(vec![crate::kit::Kit::default(), stone]);
+        // A square of wall face a metre across facing +Z at `z`, as two triangles.
+        let square = |z: f32, mesh: u32| {
+            let c = |x: f32, y: f32| Vec3::new(x, y, z);
+            [
+                tri([c(0.0, 0.0), c(1.0, 0.0), c(1.0, 1.0)], mesh),
+                tri([c(0.0, 0.0), c(1.0, 1.0), c(0.0, 1.0)], mesh),
+            ]
+        };
+        let found = |piece_z: f32| {
+            let mut tris = square(0.25, 0).to_vec();
+            tris.extend(square(piece_z, 1));
+            let drawn = Drawn {
+                tris,
+                meshes: vec!["daub".into(), "frame".into()],
+                kinds: vec![
+                    Some((Kind(2), Material::Masonry)),
+                    Some((Kind(1), Material::Hewn)),
+                ],
+            };
+            let mut findings = Vec::new();
+            buried(&kits, &drawn, Detail::Near, &mut findings);
+            findings
+        };
+        // A frame's face 2 cm behind the daub's: under it.
+        let under = found(0.23);
+        assert_eq!(under.len(), 1, "{under:?}");
+        assert_eq!(under[0].fault, Fault::Buried);
+        // 3 cm proud of it, as the frame is meant to stand: not.
+        assert!(found(0.28).is_empty());
+        // A wall's thickness behind: another face, not relief over it.
+        assert!(found(0.0).is_empty());
+    }
 
     fn tri(p: [Vec3; 3], mesh: u32) -> Tri {
         let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize();

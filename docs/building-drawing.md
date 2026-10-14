@@ -4,6 +4,8 @@ How a base of cubes becomes what the GPU draws, end to end, and where each kind 
 
 ## From cubes to the screen
 
+![An edit from cubes to the screen: what runs once an edit, on the main thread and the workers, and what every frame draws, with what each costs](images/building-drawing.svg)
+
 | Stage | What happens | Where |
 |---|---|---|
 | **Cubes** | The truth (D181, D192): each cube its kind, shape, fill and how far built, in sections of 16 a side. Nothing drawn is stored | `terra_build::cubes` |
@@ -12,6 +14,21 @@ How a base of cubes becomes what the GPU draws, end to end, and where each kind 
 | **Made into meshes** | A block kind's cubes become one surface: faces against a cube of the same wall culled, outside edges rounded by the kit's `bevel`, each face a grid pushed out by its material's height map (D197). A long member is a profile swept along it (D200); dress a profile swept along an edge or corner stones (from `assets/data/kits/pieces`); a roof's covering courses laid on its cubes' slopes | `surface`, `timber`, `dress`, `roofing` |
 | **Merged** | A section's pieces in, by kind and material, into one mesh each, their masks (dirt, wear, moss) baked into corner colours. Ghosts are instanced boxes; the next piece is lit | `sections::draw` |
 | **On screen** | A base is an entity, each section a child, each mesh a child of that with a `VisibilityRange`: near (25 m), mid (60 m), far (180 m) and proxy (600 m), far and proxy one mesh with the textures baked into colour (as Unreal's HLOD). Each kit's materials are one Bevy `StandardMaterial` per texture set (colour, normal, ARM, height), shared by kits naming the same; a room has a light probe | `terra_game::build::draw`, `build::light` |
+
+## What it costs
+
+Measured on 2026-10-14, release builds, the machine shared with other agents' builds (so the slower ends are high).
+
+| Stage | Per edit | Per frame |
+|---|---|---|
+| An operation checked and applied, main thread | 0.06 ms (research/building-drawing.md) | nothing |
+| A base laid whole, a worker | a median 7 ms of the village's fifty (`cargo xtask sections`) | nothing |
+| A section cut from it | 0.03 ms | nothing |
+| A section made and merged, a worker | near a median 1.8 ms (the slowest tenth over 48 ms: a stone house's whole near section); mid 1.2 ms; far 0.6 ms. An edit's own section again from how it was drawn, 27 ms | nothing |
+| Swapped in and uploaded, main thread | every section of a change in one frame, at most 200,000 corners a frame beyond the first section | The game's main thread, with fifty buildings drawn: 13.4 ms a frame against the bare view's 9.4 (`cargo xtask bench village`, at a load of 40 on 32 cores, so the gap is high); a stone house going up a step every tenth of a second, its 8 sections laid and swapped again 288 times |
+| Drawn | | The GPU, fifty buildings in view: 3.1 ms a frame against 2.4 bare, 1.8 million triangles in each of the depth prepass and the main pass (RTX 5090, 1080p, high) |
+
+What can go wrong at each stage, and the check that finds it, is the next section.
 
 A **kit is data** (D136): a file in `assets/data/kits/` says its pattern, sizes, textures, dress by role, masks and how it meets other kinds; its materials are folders in `assets/materials/`. A new wall material is a kit file and a material, and no code: brick (`brick.ron`, Poly Haven's `medieval_red_brick` fetched by `cargo xtask textures fetch`) was added so, dressed in the stone kit's pieces. `cargo xtask kits` checks a kit file; the game reads every one in the folder, and the kit sheet gives each wall kit its rows (`--sheet-rows brick`).
 
@@ -32,7 +49,19 @@ A frame shows a fault only from some views; the meshes show all of them. `cargo 
 | **Black** or **inward** | A surface black in sun and shade alike, or lit from behind | Corner colours a mask or bake took to black; triangles wound against their normals, so the inside is drawn | Masks shade, never blacken; every triangle faces its normals. The game warns of a black surface laid with the real maps |
 | **Torn change** | For a frame, a piece twice or missing, or a seam, where an edit's sections meet | Sections of one change put on screen in different frames | What a build sends to the workers is swapped in whole, in one frame, the old meshes drawn until then (`draw::upload`) |
 | **Strays** | Lit pieces lying about a plan | Each kit's next piece lit at once on the kit sheet | One piece of a base is next, the lowest |
+| **Buried** | A piece showing in dashes, or not at all | A piece laid flush with, or inside, a block surface whose relief then stands out over it, as wattle's frame under its daub | A piece over a surface stands proud of its relief |
 
-Faults only a frame shows are checked from frames on the GPU: `cargo xtask lodcheck` (now with the village) fails on detail popping and on a frame over 1% black, as when the sky's light was left unfiltered and every shade drew black; `call sandbox.shot {"path", "frames"}` saves every frame of an edit as it happens, to compare.
+The checker is a **ratchet**: the faults of each kind in each kit's bases are kept in `crates/terra_build/examples/artifacts-baseline.tsv`, and `cargo xtask check` inspects each kit's and each two kits' rectangle under a gable on every commit (about 20 s) and fails if any count rises; `cargo xtask artifacts --ratchet` holds the whole set (about 4 minutes). As fixes land, `--record` (with `--quick` for the commit check's set) lowers the baseline.
+
+Faults only a frame shows are checked from frames on the GPU, at the high and the low preset, with `cargo xtask artifacts --frames`: scripted runs on the Windows build under WSL, their frames compared pixel by pixel (`tools/sandbox/artifacts.ts`), the worst frame of each check saved with what changed marked red.
+
+| Check | The run | What it finds | Found, 2026-10-14 |
+|---|---|---|---|
+| **Still** | The village and a street of the town, the clock stopped, forty frames after TAA settles | Any pixel changing: shadow acne flickering under temporal filtering, a cascade not holding still, dither crawling, distant walls' textures shimmering in their mips | Under 0.01% of the picture a frame, high and low |
+| **Sun** | The village close to, the clock running, so the sun moves a twentieth of a degree at a time (D204) | Shadow acne and cascades shimmering as the light moves: a true shadow's edge moves by under a pixel | Under 0.02%; none even with the sun's biases taken to nothing |
+| **Glide** | The camera sliding slowly down the town's street | A pixel flipping for one frame and back: cascade texels swimming, mips flickering, seams | Under 0.01% |
+| **Going up** | A stone house built a step every tenth of a second, from outside and from inside as its roof closes it in | A frame unlike both its neighbours (a section missing or doubled while laid again); a pixel still changing three frames after a piece went in (TAA trailing it); the picture's brightness jumping in one frame (a room's light probe popping) | No flashes or trails. The probe dimmed the room by two fifths in one frame (a 29% jump); it now fades in and out over 0.8 s, under 3% a frame |
+
+There are no moving pieces yet (no doors fitted, D225), so TAA trails are checked on pieces going in and on a moving camera. `cargo xtask lodcheck` (with the village and the town) fails on detail popping and on a frame over 1% black, as when the sky's light was left unfiltered and every shade drew black; `call sandbox.shot {"path", "frames"}` saves every frame of an edit as it happens, to compare.
 
 A fault found once gets a test where it was fixed, so it stays fixed; the checker holds the rest.

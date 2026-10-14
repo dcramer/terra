@@ -19,6 +19,8 @@ use terra_build::roofer::Style;
 const ROOM: ([i32; 3], [i32; 3]) = ([4, 0, -16], [13, 0, -9]);
 const EYE_M: Vec3 = Vec3::new(13.5, 4.5, -1.5);
 const AT_M: Vec3 = Vec3::new(4.5, 1.2, -6.0);
+const INSIDE_EYE_M: Vec3 = Vec3::new(6.2, 2.2, -5.0);
+const INSIDE_AT_M: Vec3 = Vec3::new(2.6, 1.0, -7.6);
 /// The frame building starts on, and how many frames apart its steps are: a tenth of a
 /// second at sixty frames a second.
 const FIRST_STEP: u32 = 60;
@@ -108,7 +110,13 @@ fn build(
         let frame_of = building.site.frame;
         let from_start = |at: Vec3| start.local(frame_of.transform_point(at));
         view.0 = Some((from_start(EYE_M), from_start(AT_M)));
-        info!("Going up: a stone house's plan laid.");
+        // Inside, at eye height, looking into the far corner: where its light is seen to
+        // change as its roof closes it in (`cargo xtask artifacts --frames`).
+        let (eye, at) = (from_start(INSIDE_EYE_M), from_start(INSIDE_AT_M));
+        info!(
+            "Going up: a stone house's plan laid; inside it: --vantage {:.2},{:.2},{:.2},{:.2},{:.2},{:.2}",
+            eye.x, eye.y, eye.z, at.x, at.y, at.z
+        );
         return;
     }
     if frame.0 < FIRST_STEP || !(frame.0 - FIRST_STEP).is_multiple_of(EVERY) || !frame.is_changed()

@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" font-family="Helvetica, Arial, sans-serif">
+<rect width="1000" height="560" fill="#faf7f0"/>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#5b3a26"/>
+  </marker>
+</defs>
+<text x="30" y="34" font-size="20" font-weight="bold" fill="#2b2b2b">How building is drawn: an edit, from cubes to the screen</text>
+<text x="30" y="56" font-size="13" fill="#555">Grey: shared state with no Bevy (terra_build). Brown: the game (terra_game). Times measured: one worker thread, release; per frame, RTX 5090 at 1080p</text>
+
+<!-- Row 1: on the main thread at the edit, then the workers -->
+<text x="30" y="88" font-size="13" font-weight="bold" fill="#5b3a26">ONCE AN EDIT</text>
+<g font-size="13" fill="#2b2b2b">
+  <rect x="30" y="98" width="190" height="112" rx="8" fill="#e8e4dc" stroke="#8a8170"/>
+  <text x="44" y="122" font-weight="bold">1. Cubes</text>
+  <text x="44" y="142">an operation, checked</text>
+  <text x="44" y="160">and applied; its sections</text>
+  <text x="44" y="178">and the rest of its</text>
+  <text x="44" y="196">building marked</text>
+  <text x="125" y="226" text-anchor="middle" fill="#2b5b8a" font-weight="bold">0.06 ms, main thread</text>
+
+  <rect x="270" y="98" width="190" height="112" rx="8" fill="#e8e4dc" stroke="#8a8170"/>
+  <text x="284" y="122" font-weight="bold">2. Laid whole</text>
+  <text x="284" y="142">roles from neighbours,</text>
+  <text x="284" y="160">roofs from their cubes;</text>
+  <text x="284" y="178">each kit lays its pieces</text>
+  <text x="284" y="196">in grid units</text>
+  <text x="365" y="226" text-anchor="middle" fill="#2b5b8a" font-weight="bold">7 ms a base, a worker</text>
+
+  <rect x="510" y="98" width="190" height="112" rx="8" fill="#e8e4dc" stroke="#8a8170"/>
+  <text x="524" y="122" font-weight="bold">3. Cut by section</text>
+  <text x="524" y="142">16 cubes a side; a piece</text>
+  <text x="524" y="160">is its anchor cube's</text>
+  <text x="524" y="178">section's; one laid the</text>
+  <text x="524" y="196">same is left alone</text>
+  <text x="605" y="226" text-anchor="middle" fill="#2b5b8a" font-weight="bold">0.03 ms a section</text>
+
+  <rect x="750" y="98" width="220" height="112" rx="8" fill="#e8e4dc" stroke="#8a8170"/>
+  <text x="764" y="122" font-weight="bold">4. Made and merged</text>
+  <text x="764" y="142">block surface meshed; logs</text>
+  <text x="764" y="160">swept; dress and roof parts</text>
+  <text x="764" y="178">placed; merged a mesh per</text>
+  <text x="764" y="196">kind and material; masks</text>
+  <text x="860" y="226" text-anchor="middle" fill="#2b5b8a" font-weight="bold">1.8 ms near (90th 48), 0.6 far</text>
+</g>
+<line x1="220" y1="154" x2="266" y2="154" stroke="#5b3a26" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="460" y1="154" x2="506" y2="154" stroke="#5b3a26" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="700" y1="154" x2="746" y2="154" stroke="#5b3a26" stroke-width="2" marker-end="url(#arrow)"/>
+
+<!-- Row 2 -->
+<line x1="860" y1="236" x2="860" y2="270" stroke="#5b3a26" stroke-width="2"/>
+<line x1="860" y1="270" x2="180" y2="270" stroke="#5b3a26" stroke-width="2"/>
+<line x1="180" y1="270" x2="180" y2="296" stroke="#5b3a26" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="30" y="292" font-size="13" font-weight="bold" fill="#5b3a26">EVERY FRAME</text>
+<g font-size="13" fill="#2b2b2b">
+  <rect x="30" y="300" width="190" height="130" rx="8" fill="#ecdccd" stroke="#8a5a3b"/>
+  <text x="44" y="324" font-weight="bold">5. Swapped in whole</text>
+  <text x="44" y="344">when every section of the</text>
+  <text x="44" y="362">change is back, in one</text>
+  <text x="44" y="380">frame; the old meshes</text>
+  <text x="44" y="398">drawn until then</text>
+  <text x="44" y="418" fill="#2b5b8a" font-weight="bold">up to 200k corners a frame</text>
+
+  <rect x="270" y="300" width="430" height="130" rx="8" fill="#ecdccd" stroke="#8a5a3b"/>
+  <text x="284" y="324" font-weight="bold">6. On screen, by distance (VisibilityRange, dithered under TAA)</text>
+  <text x="284" y="346">near, every piece as made ........... to 25 m</text>
+  <text x="284" y="366">mid, fewer sides, stone in 4 steps .. to 60 m</text>
+  <text x="284" y="386">far, one mesh, textures baked ....... to 180 m</text>
+  <text x="284" y="406">proxy, walls, floors, roofs ......... to 600 m</text>
+  <text x="284" y="424">the base's hull, a cell at a time, to the horizon</text>
+
+  <rect x="750" y="300" width="220" height="130" rx="8" fill="#ecdccd" stroke="#8a5a3b"/>
+  <text x="764" y="324" font-weight="bold">Beside them</text>
+  <text x="764" y="344">a plan's ghosts: instanced</text>
+  <text x="764" y="362">boxes, one material;</text>
+  <text x="764" y="380">a material per kit texture;</text>
+  <text x="764" y="398">a light probe a closed room,</text>
+  <text x="764" y="416">faded in and out</text>
+</g>
+<line x1="220" y1="365" x2="266" y2="365" stroke="#5b3a26" stroke-width="2" marker-end="url(#arrow)"/>
+
+<!-- Checks -->
+<rect x="30" y="456" width="940" height="84" rx="8" fill="#fff" stroke="#bbb"/>
+<text x="44" y="480" font-size="13" font-weight="bold" fill="#2b2b2b">What keeps junk out, checked without a person</text>
+<text x="44" y="500" font-size="13" fill="#2b2b2b">steps 2 to 4: cargo xtask artifacts, the meshes (z-fighting, holes, gaps under roofs, pieces poking out or buried), ratcheted in cargo xtask check</text>
+<text x="44" y="518" font-size="13" fill="#2b2b2b">steps 5 and 6: cargo xtask artifacts --frames on the GPU (shimmer, acne, flashes in an edit, TAA trails, probes popping);</text>
+<text x="44" y="534" font-size="13" fill="#2b2b2b">cargo xtask lodcheck (detail popping, black frames)</text>
+</svg>

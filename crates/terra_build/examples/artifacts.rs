@@ -4,6 +4,14 @@
 //! Prints how many of each fault it found at each detail and the first few of each (every
 //! one with `--all`), and fails if there is any. A name given keeps only the bases whose
 //! names hold it, as `"1: rectangle"`.
+//!
+//! It is also a ratchet (D69): the faults found of each kind in each kit's bases, and each
+//! two kits' mixed, are kept in `artifacts-baseline.tsv` beside this file. `--ratchet` fails
+//! if any count is above its baseline, so no change adds junk unnoticed, and says which have
+//! dropped; `--record` writes the counts as the new baseline, to commit as fixes land.
+//! `--quick` inspects only each kit's and each two kits' rectangle under a gable, about a
+//! sixteenth of the bases, which `cargo xtask check` ratchets on every commit; the whole set
+//! is `cargo xtask artifacts --ratchet`.
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -15,13 +23,18 @@ use terra_build::sections::Detail;
 
 fn main() -> ExitCode {
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-    let Some(kits) = read_kits(&assets) else {
+    let Some((kits, names)) = read_kits(&assets) else {
         return ExitCode::FAILURE;
     };
     let maps = stand_in_maps(&kits);
     let args: Vec<String> = std::env::args().skip(1).collect();
     let all = args.iter().any(|a| a == "--all");
-    let only = args.iter().find(|a| !a.starts_with("--")).cloned();
+    let quick = args.iter().any(|a| a == "--quick");
+    let only = args
+        .iter()
+        .find(|a| !a.starts_with("--"))
+        .cloned()
+        .or_else(|| quick.then(|| QUICK.to_string()));
     let cases = inspect::cases(&kits, only.as_deref());
     let started = std::time::Instant::now();
     // Every base on a thread of its own, as many at once as there are cores.
@@ -59,14 +72,23 @@ fn main() -> ExitCode {
         Fault::SeeThrough,
         Fault::UnderRoof,
         Fault::PokesOut,
+        Fault::Buried,
     ];
     let details = [Detail::Near, Detail::Mid, Detail::Far, Detail::Proxy];
-    let mut counts = [[0usize; 4]; 8];
+    let mut counts = [[0usize; 4]; 9];
     let (mut triangles, mut rays) = ([0usize; 4], 0usize);
     // The first few of each fault at each detail, or every one with --all.
-    let mut shown = [[0usize; 4]; 8];
+    let mut shown = [[0usize; 4]; 9];
     let mut lines = Vec::new();
+    // The faults of each kind in each kit's bases, or each two kits' mixed.
+    let mut by_kit: std::collections::BTreeMap<(String, String), usize> = Default::default();
     for (i, report) in &reports {
+        let group = group(&cases[*i].0, &names);
+        for finding in &report.findings {
+            *by_kit
+                .entry((group.clone(), format!("{:?}", finding.fault)))
+                .or_default() += 1;
+        }
         for (t, n) in triangles.iter_mut().zip(report.triangles) {
             *t += n;
         }
@@ -115,6 +137,7 @@ fn main() -> ExitCode {
         "sky or sun through a wall or a roof",
         "a gap between a wall's top and the roof",
         "a piece poking through a roof, past its edge or out of a wall",
+        "a piece sunk under a surface's relief, showing in dashes",
     ];
     for (f, fault) in faults.iter().enumerate() {
         let c = counts[f];
@@ -138,6 +161,34 @@ fn main() -> ExitCode {
         }
     }
     let total: usize = counts.iter().flatten().sum();
+    let set = if only.is_none() {
+        "all"
+    } else if quick {
+        "quick"
+    } else {
+        ""
+    };
+    let ratchet = args.iter().any(|a| a == "--ratchet");
+    let record = args.iter().any(|a| a == "--record");
+    if (ratchet || record) && set.is_empty() {
+        println!("artifacts: the baseline is of every base or of --quick's, not of a name");
+        return ExitCode::FAILURE;
+    }
+    if record {
+        return match baseline::record(set, &by_kit) {
+            Ok(()) => {
+                println!("artifacts: baseline of {set} recorded, {total} faults");
+                ExitCode::SUCCESS
+            }
+            Err(why) => {
+                println!("artifacts: {why}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    if ratchet {
+        return baseline::ratchet(set, &by_kit);
+    }
     if total == 0 {
         println!("artifacts: meshes clean");
         ExitCode::SUCCESS
@@ -147,8 +198,114 @@ fn main() -> ExitCode {
     }
 }
 
-/// Every kit under `assets/data/kits`, with its dressed pieces, as the game reads them.
-fn read_kits(assets: &Path) -> Option<Kits> {
+/// The bases `--quick` inspects: each kit's and each two kits' rectangle under a gable.
+const QUICK: &str = "rectangle, gable roof";
+
+/// The kits a base is of, by their files' names, from its name: "brick", "logs with brick".
+fn group(case: &str, names: &std::collections::BTreeMap<u16, String>) -> String {
+    let ids = case.split(':').next().unwrap_or(case);
+    ids.split(" with ")
+        .map(|id| {
+            id.trim()
+                .parse::<u16>()
+                .ok()
+                .and_then(|id| names.get(&id).cloned())
+                .unwrap_or_else(|| id.to_string())
+        })
+        .collect::<Vec<_>>()
+        .join(" with ")
+}
+
+/// The ratchet's baseline: a line a set, kits and fault, its count, tab-separated.
+mod baseline {
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+    use std::process::ExitCode;
+
+    fn path() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/artifacts-baseline.tsv")
+    }
+
+    type Counts = BTreeMap<(String, String), usize>;
+
+    /// Every set's counts as recorded.
+    fn read() -> BTreeMap<String, Counts> {
+        let mut out: BTreeMap<String, Counts> = BTreeMap::new();
+        let text = std::fs::read_to_string(path()).unwrap_or_default();
+        for line in text
+            .lines()
+            .filter(|l| !l.starts_with('#') && !l.is_empty())
+        {
+            let cells: Vec<&str> = line.split('\t').collect();
+            if let [set, kits, fault, count] = cells[..]
+                && let Ok(count) = count.parse()
+            {
+                out.entry(set.to_string())
+                    .or_default()
+                    .insert((kits.to_string(), fault.to_string()), count);
+            }
+        }
+        out
+    }
+
+    pub fn record(set: &str, counts: &Counts) -> Result<(), String> {
+        let mut all = read();
+        all.insert(set.to_string(), counts.clone());
+        let mut text = String::from(
+            "# The faults `cargo xtask artifacts` finds in building's meshes, of each kind in each kit's\n# bases: the ratchet's baseline. `cargo xtask artifacts --record` (every base) and\n# `--quick --record` (the rectangles `cargo xtask check` inspects) write it.\n# set\tkits\tfault\tcount\n",
+        );
+        for (set, counts) in &all {
+            for ((kits, fault), count) in counts {
+                text.push_str(&format!("{set}\t{kits}\t{fault}\t{count}\n"));
+            }
+        }
+        std::fs::write(path(), text).map_err(|why| format!("{}: {why}", path().display()))
+    }
+
+    /// Fails if any count is above its baseline; says which are below it.
+    pub fn ratchet(set: &str, counts: &Counts) -> ExitCode {
+        let recorded = read().remove(set).unwrap_or_default();
+        let (mut rose, mut fell) = (Vec::new(), Vec::new());
+        let keys: std::collections::BTreeSet<&(String, String)> =
+            counts.keys().chain(recorded.keys()).collect();
+        for key in keys {
+            let now = counts.get(key).copied().unwrap_or(0);
+            let was = recorded.get(key).copied().unwrap_or(0);
+            let line = format!("{} {}: {was} to {now}", key.0, key.1);
+            if now > was {
+                rose.push(line);
+            } else if now < was {
+                fell.push(line);
+            }
+        }
+        for line in &fell {
+            println!("  fewer: {line}");
+        }
+        for line in &rose {
+            println!("  MORE:  {line}");
+        }
+        let flag = if set == "quick" { " --quick" } else { "" };
+        if !rose.is_empty() {
+            println!(
+                "artifacts: FAIL: {} counts of junk in building's meshes rose past the baseline (examples/artifacts-baseline.tsv); `cargo xtask artifacts{flag}` lists them. Fix them, or if the rise is meant, `cargo xtask artifacts{flag} --record` and say why in the commit",
+                rose.len()
+            );
+            return ExitCode::FAILURE;
+        }
+        if !fell.is_empty() {
+            println!(
+                "artifacts: {} counts fell: lower the baseline with `cargo xtask artifacts{flag} --record` and commit it",
+                fell.len()
+            );
+        }
+        println!("artifacts: ratchet holds ({set})");
+        ExitCode::SUCCESS
+    }
+}
+
+/// Every kit under `assets/data/kits`, with its dressed pieces, as the game reads them, and
+/// each one's file name by its id.
+fn read_kits(assets: &Path) -> Option<(Kits, std::collections::BTreeMap<u16, String>)> {
     let read = |path: &Path| {
         std::fs::read_to_string(path).map_err(|why| format!("{}: {why}", path.display()))
     };
@@ -157,6 +314,7 @@ fn read_kits(assets: &Path) -> Option<Kits> {
         .unwrap_or_default();
     paths.sort();
     let mut kits = Vec::new();
+    let mut names = std::collections::BTreeMap::new();
     for path in paths
         .into_iter()
         .filter(|p| p.extension().is_some_and(|e| e == "ron"))
@@ -168,14 +326,19 @@ fn read_kits(assets: &Path) -> Option<Kits> {
                 Ok(kit)
             });
         match kit {
-            Ok(kit) => kits.push(kit),
+            Ok(kit) => {
+                if let Some(stem) = path.file_stem() {
+                    names.insert(kit.id, stem.to_string_lossy().to_string());
+                }
+                kits.push(kit);
+            }
             Err(why) => {
                 println!("artifacts: {} does not read: {why}", path.display());
                 return None;
             }
         }
     }
-    Some(Kits(kits))
+    Some((Kits(kits), names))
 }
 
 /// Height maps at their full range everywhere, a texel's noise, so every surface is pushed
