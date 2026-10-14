@@ -453,7 +453,9 @@ impl Base {
     /// (D277): it stands in a column of cubes, with one whole, a post or an opening over it
     /// or under it, not of a roof. A floor is a layer a cube thick, which runs on under the
     /// foot of a wall standing on it: a cube with nothing under it beside a cube of floor is
-    /// floor. A stair or a slope set on a floor leaves it a floor.
+    /// floor. A cube alone in its column is a wall's first course where it rests on the
+    /// ground and is no slab, and a walkway in the air. A stair or a slope set on a floor
+    /// leaves it a floor.
     pub fn in_wall(&self, at: IVec3) -> bool {
         let stands = |at: IVec3| self.cube(at).is_some_and(|cube| !cube.kind.is_roof());
         let standing = |at: IVec3| {
@@ -475,9 +477,20 @@ impl Base {
             stands(beside) && !standing(beside + IVec3::Y) && !standing(beside - IVec3::Y)
         };
         let around = (-1..=1).flat_map(|x| (-1..=1).map(move |z| IVec3::new(x, 0, z)));
-        over && !around
-            .filter(|&step| step != IVec3::ZERO)
-            .any(|step| floor(at + step))
+        if over {
+            return !around
+                .filter(|&step| step != IVec3::ZERO)
+                .any(|step| floor(at + step));
+        }
+        // Alone in its column: a wall's first course where it rests on the ground and is
+        // no slab, two by two of cubes on its layer, as a floor on the ground is; up in
+        // the air, a walkway or a deck.
+        let slab = [(1, 1), (1, -1), (-1, 1), (-1, -1)].iter().any(|&(x, z)| {
+            stands(at + IVec3::new(x, 0, 0))
+                && stands(at + IVec3::new(0, 0, z))
+                && stands(at + IVec3::new(x, 0, z))
+        });
+        self.grounded(at) && !slab
     }
 
     /// The way the wall a cube is in runs along the floor, from the cubes beside it: east
@@ -1365,6 +1378,37 @@ mod tests {
             Some(Cube::new(Kind::FIRST_ROOF, Fill::Solid)),
         );
         assert!(!deck.in_wall(IVec3::new(20, 7, 0)));
+    }
+
+    #[test]
+    fn a_first_course_on_bare_ground_is_a_wall_and_a_walkway_in_the_air_is_not() {
+        // A ring of logs a cube high laid by hand on bare ground, as a player's first
+        // course is, and a garden wall of stone a cube high: walls, before any course goes
+        // on them (the third goals review, finding 7).
+        let mut base = Base::default();
+        let solid = Some(Cube::new(LOGS, Fill::Solid));
+        let fill = |base: &mut Base, min: [i32; 3], max: [i32; 3], cube: Option<Cube>| {
+            base.apply(BuildOp::Fill { min, max, cube });
+        };
+        fill(&mut base, [0, 0, 0], [7, 0, 5], solid);
+        fill(&mut base, [1, 0, 1], [6, 0, 4], None);
+        fill(&mut base, [20, 0, 0], [29, 0, 0], solid);
+        for at in [[0, 0, 0], [3, 0, 0], [0, 0, 3], [7, 0, 5], [24, 0, 0]] {
+            assert!(base.in_wall(IVec3::from_array(at)), "{at:?}");
+        }
+        // A slab on the ground is a floor, to its edges.
+        fill(&mut base, [40, 0, 0], [43, 0, 3], solid);
+        for at in [[40, 0, 0], [41, 0, 2], [43, 0, 3]] {
+            assert!(!base.in_wall(IVec3::from_array(at)), "{at:?}");
+        }
+        // The same ring and wall up in the air, as walkways on posts, are no walls.
+        let mut high = Base::default();
+        fill(&mut high, [0, 4, 0], [7, 4, 5], solid);
+        fill(&mut high, [1, 4, 1], [6, 4, 4], None);
+        fill(&mut high, [20, 4, 0], [29, 4, 0], solid);
+        for at in [[0, 4, 0], [3, 4, 0], [24, 4, 0]] {
+            assert!(!high.in_wall(IVec3::from_array(at)), "{at:?}");
+        }
     }
 
     #[test]

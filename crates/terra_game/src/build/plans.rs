@@ -12,8 +12,8 @@ use terra_build::ground::{cube_cm, footing as footing_cubes};
 use terra_build::ops::{Op, Planned};
 use terra_build::roofer::{self, Style};
 use terra_build::{
-    Base, Facing, Fill, Kind, Panel, PartId, Pending, STOREY_CUBES, Shape, Terms, floor_layer,
-    storey_of, wall_layer,
+    Base, Facing, Fill, Kind, Panel, PartId, Pending, Rules, STOREY_CUBES, Shape, Terms,
+    floor_layer, storey_of, wall_layer,
 };
 
 use bevy::math::{IVec2, IVec3};
@@ -273,13 +273,80 @@ pub fn post(base: &Base, foot: IVec3, kind: Kind, footings: Option<Footings>) ->
 /// One cube of a shape, placed as Enshrouded's blocks are: in the part of the cubes of its
 /// kind beside it laid on the same terms, built or planned, every such part it touches
 /// merged into one (D260), so a mass built cube by cube is one part; else a part of its own.
-pub fn block(base: &Base, at: IVec3, shape: Shape, kind: Kind, terms: &Terms) -> Vec<Op> {
-    laid_by_hand(base, kind, terms, vec![(at, shape)])
+/// On the ground, with footings, a footing under it down to the ground, as under any wall
+/// (D194).
+pub fn block(
+    base: &Base,
+    at: IVec3,
+    shape: Shape,
+    kind: Kind,
+    rules: &Rules,
+    footings: Option<Footings>,
+) -> Vec<Op> {
+    laid_by_hand(base, kind, rules, footings, vec![(at, shape)])
 }
 
-/// Cubes laid by hand in a kind on its terms: the parts they touch that agree merged, and
-/// the cubes laid in the one they join, or a part of their own (D260).
-fn laid_by_hand(base: &Base, kind: Kind, terms: &Terms, cubes: Vec<(IVec3, Shape)>) -> Vec<Op> {
+/// Cubes laid by hand in a kind on its terms: footings first under those resting on the
+/// ground, then the cubes, each in the part they join, merging the parts they touch that
+/// agree, or a part of their own (D194, D260).
+fn laid_by_hand(
+    base: &Base,
+    kind: Kind,
+    rules: &Rules,
+    footings: Option<Footings>,
+    cubes: Vec<(IVec3, Shape)>,
+) -> Vec<Op> {
+    let mut parts = Numbers::of(base);
+    let mut ops = Vec::new();
+    if let Some(footings) = footings.map(|footings| footings.under(kind)) {
+        let laying: BTreeSet<[i32; 3]> = cubes.iter().map(|(at, _)| at.to_array()).collect();
+        let cube = cube_cm();
+        // The lowest of each column laid, with nothing under it, its foot at the ground or
+        // less than a cube over it: resting on the ground.
+        let columns: Vec<([i32; 2], i32)> = cubes
+            .iter()
+            .map(|&(at, _)| at)
+            .filter(|&at| {
+                let under = at - IVec3::Y;
+                let ground = i32::from((footings.ground_cm)([at.x, at.z]));
+                !laying.contains(&under.to_array())
+                    && base.cube(under).is_none()
+                    && at.y * cube >= ground
+                    && at.y * cube - ground < cube
+            })
+            .map(|at| ([at.x, at.z], at.y - 1))
+            .collect();
+        let under: Vec<(IVec3, Shape)> = footing_cubes(base, columns, footings.ground_cm)
+            .into_iter()
+            .map(|at| (at, Shape::Whole))
+            .collect();
+        if !under.is_empty() {
+            ops.extend(joined(
+                base,
+                footings.kind,
+                &rules.of(footings.kind),
+                under,
+                &mut parts,
+            ));
+        }
+    }
+    let laid = joined(base, kind, &rules.of(kind), cubes, &mut parts);
+    if laid.is_empty() {
+        return Vec::new();
+    }
+    ops.extend(laid);
+    ops
+}
+
+/// Cubes of a kind laid in the part of the cubes beside them that agree, the parts they
+/// touch merged into it (D260), or a part of their own, numbered from `parts`.
+fn joined(
+    base: &Base,
+    kind: Kind,
+    terms: &Terms,
+    cubes: Vec<(IVec3, Shape)>,
+    parts: &mut Numbers,
+) -> Vec<Op> {
     let at: Vec<IVec3> = cubes
         .iter()
         .map(|&(at, _)| at)
@@ -287,7 +354,7 @@ fn laid_by_hand(base: &Base, kind: Kind, terms: &Terms, cubes: Vec<(IVec3, Shape
         .collect();
     let (part, mut ops) = base
         .joining(&at, kind, terms)
-        .unwrap_or_else(|| (Numbers::of(base).next(), Vec::new()));
+        .unwrap_or_else(|| (parts.next(), Vec::new()));
     match shaped(base, part, kind, cubes) {
         Some(lay) => ops.push(lay),
         None => return Vec::new(),
@@ -314,12 +381,19 @@ pub fn brush(at: IVec3, size: i32) -> Vec<IVec3> {
 /// A box of cubes of a shape, a brush's (D226), laid as [`block`] lays one: whole cubes,
 /// a cut shape on the box's face it is cut on, its top layer, or its bottom for an upper
 /// half or a shape upside down, so a box of slopes is a ramp on a block, not a saw's teeth.
-pub fn blocks(base: &Base, cubes: &[IVec3], shape: Shape, kind: Kind, terms: &Terms) -> Vec<Op> {
+pub fn blocks(
+    base: &Base,
+    cubes: &[IVec3],
+    shape: Shape,
+    kind: Kind,
+    rules: &Rules,
+    footings: Option<Footings>,
+) -> Vec<Op> {
     let Some(first) = cubes.first() else {
         return Vec::new();
     };
     if cubes.len() == 1 {
-        return block(base, *first, shape, kind, terms);
+        return block(base, *first, shape, kind, rules, footings);
     }
     let (low, high) = cubes
         .iter()
@@ -332,7 +406,7 @@ pub fn blocks(base: &Base, cubes: &[IVec3], shape: Shape, kind: Kind, terms: &Te
             (at, if face { shape } else { Shape::Whole })
         })
         .collect();
-    laid_by_hand(base, kind, terms, cut)
+    laid_by_hand(base, kind, rules, footings, cut)
 }
 
 /// The built or part-built cubes of a box changed to a kind (D232): marked, the old taken
@@ -862,25 +936,27 @@ mod tests {
         assert_eq!(column, (0..=floor_layer(1)).collect::<Vec<_>>());
         // A block beside a cube of its kind on the same terms joins its part; one alone is
         // a part of its own (D260).
-        let terms = rules.of(LOGS);
         let parts = base.parts().count();
         base.act_all(
-            &block(&base, IVec3::new(5, 0, 0), Shape::Half, LOGS, &terms),
+            &block(&base, IVec3::new(5, 0, 0), Shape::Half, LOGS, &rules, None),
             &cx,
         )
         .unwrap();
         assert_eq!(base.parts().count(), parts);
         let (left, right) = (IVec3::new(9, 0, 0), IVec3::new(11, 0, 0));
         for at in [left, right] {
-            base.act_all(&block(&base, at, Shape::Whole, LOGS, &terms), &cx)
+            base.act_all(&block(&base, at, Shape::Whole, LOGS, &rules, None), &cx)
                 .unwrap();
         }
         assert_eq!(base.parts().count(), parts + 2);
         // One between them joins the two into one; taken out of the plan, they are two
         // again, and its undo puts it back as one.
         let between = IVec3::new(10, 0, 0);
-        base.act_all(&block(&base, between, Shape::Whole, LOGS, &terms), &cx)
-            .unwrap();
+        base.act_all(
+            &block(&base, between, Shape::Whole, LOGS, &rules, None),
+            &cx,
+        )
+        .unwrap();
         assert_eq!(base.parts().count(), parts + 1);
         let part_of = |base: &Base, at: IVec3| base.cube(at).unwrap().part;
         assert_eq!(part_of(&base, left), part_of(&base, right));
@@ -941,7 +1017,7 @@ mod tests {
         assert_eq!(cubes.len(), 64);
         assert_eq!(cubes[0], IVec3::new(4, 0, -4));
         let slope = Shape::Slope(Facing::North);
-        base.act_all(&blocks(&base, &cubes, slope, STONE, &rules.of(STONE)), &cx)
+        base.act_all(&blocks(&base, &cubes, slope, STONE, &rules, None), &cx)
             .unwrap();
         let shapes = |y: i32| {
             base.cubes()
@@ -954,7 +1030,7 @@ mod tests {
         // Upside down, the cut layer is the bottom one.
         let under = brush(IVec3::new(0, 4, 0), 2);
         base.act_all(
-            &blocks(&base, &under, Shape::UpperHalf, STONE, &rules.of(STONE)),
+            &blocks(&base, &under, Shape::UpperHalf, STONE, &rules, None),
             &cx,
         )
         .unwrap();
@@ -1054,5 +1130,78 @@ mod tests {
         assert_eq!(base.room_count(), 3);
         assert_eq!(base.room(a_low), base.room(a_high));
         assert_ne!(base.room(a_low), base.room(b_low));
+    }
+
+    #[test]
+    fn blocks_laid_by_hand_on_the_ground_stand_on_footings_and_in_the_air_on_none() {
+        // The ground 30 cm under the grid's level: a block of logs at its foot rests on it
+        // (D194, the third goals review's finding 7).
+        let rules = Rules::default();
+        let cx = Context::free(&rules);
+        let ground = |_: [i32; 2]| -30i16;
+        let footings = Footings {
+            kind: STONE,
+            ground_cm: &ground,
+            blocks: &BTreeSet::from([STONE]),
+        };
+        let mut base = Base::default();
+        let ops = block(
+            &base,
+            IVec3::new(3, 0, 3),
+            Shape::Whole,
+            LOGS,
+            &rules,
+            Some(footings),
+        );
+        assert_eq!(ops.len(), 2, "a footing, then the block: {ops:?}");
+        base.act_all(&ops, &cx).unwrap();
+        let footing = base.cube(IVec3::new(3, -1, 3)).unwrap();
+        assert_eq!(footing.kind, STONE);
+        assert_ne!(footing.part, base.cube(IVec3::new(3, 0, 3)).unwrap().part);
+        // The next block beside it joins both parts: its footing the footing's, itself the
+        // block's, and laying a course of them makes two parts, not one a click.
+        for x in 4..8 {
+            let ops = block(
+                &base,
+                IVec3::new(x, 0, 3),
+                Shape::Whole,
+                LOGS,
+                &rules,
+                Some(footings),
+            );
+            base.act_all(&ops, &cx).unwrap();
+        }
+        assert_eq!(base.parts().count(), 2);
+        assert_eq!(base.cubes().filter(|(at, _)| at.y == -1).count(), 5);
+        // A block over another, or up in the air, takes none.
+        let over = block(
+            &base,
+            IVec3::new(3, 1, 3),
+            Shape::Whole,
+            LOGS,
+            &rules,
+            Some(footings),
+        );
+        assert_eq!(over.len(), 1);
+        let high = block(
+            &base,
+            IVec3::new(20, 4, 3),
+            Shape::Whole,
+            LOGS,
+            &rules,
+            Some(footings),
+        );
+        assert_eq!(high.len(), 1);
+        // A box of them by the brush: a footing under each column of its foot.
+        let cubes = brush(IVec3::new(12, 0, 12), 2);
+        let ops = blocks(&base, &cubes, Shape::Whole, STONE, &rules, Some(footings));
+        base.act_all(&ops, &cx).unwrap();
+        assert_eq!(
+            (12..14)
+                .flat_map(|x| (12..14).map(move |z| IVec3::new(x, -1, z)))
+                .filter(|&at| base.cube(at).is_some())
+                .count(),
+            4
+        );
     }
 }

@@ -710,7 +710,7 @@ fn plan_work(
                 } else {
                     "lay a block"
                 },
-                plans::blocks(base, &cubes, shape, kind, &building.rules.rules.of(kind)),
+                plans::blocks(base, &cubes, shape, kind, &building.rules.rules, footings),
             ))
         }
         // Built cubes changed to the material in hand, the brush's box of them (D232).
