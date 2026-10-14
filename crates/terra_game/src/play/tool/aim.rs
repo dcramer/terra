@@ -580,7 +580,7 @@ fn plan_work(
     // The material in hand (D232), or the first kit's.
     let kind = builder.material.unwrap_or(look.laying);
     let ground = |column: [i32; 2]| building.ground_cm(column);
-    let blocks = building.rules.blocks.clone();
+    let blocks = building.rules.footed.clone();
     let footings = building.rules.footing.map(|kind| plans::Footings {
         kind,
         ground_cm: &ground,

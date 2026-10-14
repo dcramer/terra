@@ -9,11 +9,13 @@
 //! - [`floors`]: a timber kind's floors and flat roofs, as a deck of boards.
 //! - [`blocks`]: block kinds, a piece a cube, drawn as their surface (D197): walls,
 //!   floors and footings alike.
+//! - [`frames`]: a framed block kind's timber frame over its infill (D236).
 //! - [`ground`]: door steps down to the ground.
 
 pub mod blocks;
 mod dressing;
 mod floors;
+pub mod frames;
 pub mod ground;
 pub mod roles;
 pub mod roofs;
@@ -146,6 +148,21 @@ pub enum Piece {
     /// A block kind's cube (`blocks`), drawn as part of its kind's surface (`surface.rs`),
     /// counted in cubes.
     Block { cube: IVec3 },
+    /// A framed kind's cube's core (`frames`, D236): the wattle the daub goes on, drawn as a
+    /// surface of its own where its cube is in but its infill is not finished, or is being
+    /// cut out. It goes in before the cube's `Block`.
+    Wattle { cube: IVec3 },
+    /// A squared timber of a frame (`frames`, D236): from one end to the other along its
+    /// middle, so wide across the face it shows on and so deep into the wall along `face`,
+    /// the way that face looks, in ticks; its seed is its version.
+    Beam {
+        from: Place,
+        to: Place,
+        face: Dir,
+        wide: i32,
+        deep: i32,
+        seed: u32,
+    },
     /// A block kind's cube over the top of its wall, under a roof (`roofs::gables`): its
     /// surface cut off at the roof's underside, whose height in ticks over the cube's top,
     /// at its corners, the middles of its sides and its middle, west to east and north to
@@ -199,7 +216,22 @@ impl Piece {
                 Some((from.min(to) - across - up, from.max(to) + across + up))
             }
             Piece::Board { min, max } => Some((min.metres(), max.metres())),
+            Piece::Beam {
+                from,
+                to,
+                face,
+                wide,
+                deep,
+                ..
+            } => {
+                let (from, to) = (from.metres(), to.metres());
+                let normal = face.step().as_vec3().abs();
+                let across = (to - from).normalize_or_zero().cross(normal).abs();
+                let reach = across * (metres(wide) * 0.5) + normal * (metres(deep) * 0.5);
+                Some((from.min(to) - reach, from.max(to) + reach))
+            }
             Piece::Block { cube }
+            | Piece::Wattle { cube }
             | Piece::Gable { cube, .. }
             | Piece::Trim { cube, .. }
             | Piece::Band { cube, .. }
@@ -220,12 +252,14 @@ impl Piece {
         };
         let point = match *self {
             Piece::Block { cube }
+            | Piece::Wattle { cube }
             | Piece::Gable { cube, .. }
             | Piece::Trim { cube, .. }
             | Piece::Band { cube, .. }
             | Piece::Corner { cube, .. } => return cube,
             Piece::Log { from, to, .. }
             | Piece::Plank { from, to, .. }
+            | Piece::Beam { from, to, .. }
             | Piece::Roof { from, to, .. } => middle(from, to),
             Piece::Board { min, max } => middle(min, max),
             Piece::Covering { middle, .. } => middle.0,
@@ -255,6 +289,12 @@ impl Piece {
             }
             Piece::Board { min, .. } => min.metres().y,
             Piece::Block { cube } | Piece::Gable { cube, .. } => cube.y as f32 * CELL_M,
+            // A cube's wattle before its daub, woven a layer ahead of it: in after the
+            // blocks of the layer under it.
+            Piece::Wattle { cube } => (cube.y - 1) as f32 * CELL_M + 0.01,
+            // A frame's members as their lowest point is reached: posts up a storey with its
+            // first cubes, the plates on them when their tops are.
+            Piece::Beam { .. } => self.bounds().map_or(0.0, |(min, _)| min.y),
             // Dressed once its cube is in.
             Piece::Trim { cube, .. } | Piece::Band { cube, .. } | Piece::Corner { cube, .. } => {
                 cube.y as f32 * CELL_M + 0.01

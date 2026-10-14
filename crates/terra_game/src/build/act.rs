@@ -41,6 +41,9 @@ pub struct BuildRules {
     pub rules: Rules,
     /// The kinds that go in a cube at a time, as blocks do (D194).
     pub blocks: BTreeSet<Kind>,
+    /// The block kinds a floor of stands on footings of its own kind: not a framed kind's,
+    /// whose floor stands on stone (D236).
+    pub footed: BTreeSet<Kind>,
     /// Each kind's name, as its kit's file is called: "logs", "stone".
     pub names: BTreeMap<Kind, String>,
     /// How many cubes a claim may have planned and not built, by how many times it has

@@ -91,6 +91,11 @@ impl Maps {
         self.heights.get(topped_by(kit)?).map(Arc::as_ref)
     }
 
+    /// The height a framed kind's core is displaced by (D236): its wattle's.
+    pub fn core(&self, kit: &Kit) -> Option<&Relief> {
+        self.heights.get(cored_by(kit)?).map(Arc::as_ref)
+    }
+
     /// The colours of a kit's material, once they have loaded.
     pub fn colour(&self, kit: &Kit, material: Material) -> Option<&Swatch> {
         let texture = kit.textures.get(&material)?;
@@ -116,6 +121,15 @@ pub fn shaped_by(kit: &Kit) -> Option<&str> {
 pub fn topped_by(kit: &Kit) -> Option<&str> {
     (kit.pattern == Pattern::Masonry && kit.relief > 0.0)
         .then(|| kit.textures.get(&Material::Floor))
+        .flatten()
+        .map(|texture| texture.path.as_str())
+}
+
+/// The folder a framed kind's core is displaced by (D236), if it has one with relief.
+pub fn cored_by(kit: &Kit) -> Option<&str> {
+    let framing = kit.framing.as_ref()?;
+    (framing.core_relief > 0.0)
+        .then(|| kit.textures.get(&framing.core?))
         .flatten()
         .map(|texture| texture.path.as_str())
 }

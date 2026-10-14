@@ -30,7 +30,8 @@ pub struct Measured {
     pub per_metre: Option<usize>,
     pub per_square_metre: usize,
     pub triangles: usize,
-    /// What its dress adds a cube of its kind on the cabin, if it dresses any.
+    /// What its dress adds a cube of its kind on the cabin, if it dresses any: its trims,
+    /// corner stones and members by role, and a framed kind's frame.
     pub dress_per_cube: Option<usize>,
 }
 
@@ -50,6 +51,11 @@ pub fn needs(kit: &Kit) -> Vec<Material> {
     };
     if kit.pattern == Pattern::Logs && kit.chinking {
         needs.push(Material::Daub);
+    }
+    // A framed kind's frame, and its core (D236).
+    if let Some(framing) = &kit.framing {
+        needs.push(framing.material);
+        needs.extend(framing.core);
     }
     needs.extend([Material::Board, Material::Covering, Material::Flashing]);
     needs.dedup();
@@ -74,11 +80,16 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
     }
     for (material, texture) in &kit.textures {
         let mut maps = vec!["color.jpg", "normal.jpg", "arm.jpg"];
-        let relief = match (kit.pattern, material) {
-            (Pattern::Logs, Material::Log) => kit.timber.relief > 0.0,
-            (Pattern::Masonry, Material::Masonry) => kit.relief > 0.0,
-            _ => false,
-        };
+        let cored = kit
+            .framing
+            .as_ref()
+            .is_some_and(|framing| framing.core == Some(*material) && framing.core_relief > 0.0);
+        let relief = cored
+            || match (kit.pattern, material) {
+                (Pattern::Logs, Material::Log) => kit.timber.relief > 0.0,
+                (Pattern::Masonry, Material::Masonry) => kit.relief > 0.0,
+                _ => false,
+            };
         if texture.depth > 0.0 || relief {
             maps.push("height.jpg");
         }
@@ -169,6 +180,43 @@ pub fn check(kit: &Kit, exists: &dyn Fn(&str) -> bool, items: &[String]) -> Repo
         }
     }
     dress(kit, &mut fail);
+    if let Some(framing) = &kit.framing {
+        if kit.pattern != Pattern::Masonry {
+            fail("is framed, which only a block kind is".into());
+        }
+        // Life size, and standing out no more than an eighth of a cube (D192).
+        let sizes: [(&str, f32, f32, f32); 6] = [
+            ("its frame's members", framing.wide, 0.08, 0.3),
+            ("its frame's standing out", framing.proud, 0.0, CELL_M / 8.0),
+            (
+                "its frame's depth",
+                framing.deep,
+                framing.proud + 0.02,
+                CELL_M * 0.5,
+            ),
+            ("its corner posts", framing.corner, framing.wide, 0.3),
+            ("its braces", framing.brace, 0.06, framing.wide),
+            ("its core's relief", framing.core_relief, 0.0, 0.06),
+        ];
+        for (what, value, low, high) in sizes {
+            if !value.is_finite() || value < low || value > high {
+                fail(format!("{what}, {value} m, not from {low} to {high} m"));
+            }
+        }
+        if framing.bay < 2 {
+            fail(format!(
+                "posts every {} cubes, closer than a metre",
+                framing.bay
+            ));
+        }
+        if framing
+            .rails
+            .iter()
+            .any(|&rail| rail <= 0 || rail >= crate::STOREY_CUBES)
+        {
+            fail("a rail outside its storey".into());
+        }
+    }
     // Its budgets, on a cabin laid in it.
     let measured = measure(kit);
     if measured.per_metre.is_some_and(|n| n > MEMBER_PER_METRE) {
@@ -196,7 +244,19 @@ fn dress(kit: &Kit, fail: &mut dyn FnMut(String)) {
     }
     for (role, dress) in &kit.dress.roles {
         match dress {
-            Dress::Profile { name, extend, .. } => {
+            Dress::Profile {
+                name,
+                extend,
+                material,
+                ..
+            } => {
+                if let Some(material) = material
+                    && !kit.textures.contains_key(material)
+                {
+                    fail(format!(
+                        "dresses {role:?} in {material:?}, which it has no texture for"
+                    ));
+                }
                 let Some(profile) = pieces.and_then(|p| p.profiles.get(name)) else {
                     fail(format!(
                         "dresses {role:?} with the profile {name}, which it has not"
@@ -337,7 +397,10 @@ pub fn measure(kit: &Kit) -> Measured {
         let count: usize = surfaces.0.values().map(|s| s.triangle_count()).sum();
         all += count;
         match *piece {
-            Piece::Trim { .. } | Piece::Corner { .. } | Piece::Log { role: Some(_), .. } => {
+            Piece::Trim { .. }
+            | Piece::Corner { .. }
+            | Piece::Beam { .. }
+            | Piece::Log { role: Some(_), .. } => {
                 dress += count;
             }
             Piece::Log { from, to, .. } => {
@@ -445,6 +508,7 @@ mod tests {
                 name: "cornice".into(),
                 extend: 0.0,
                 joints: true,
+                material: None,
             },
         );
         let mut pieces = (**stone.dress.made.as_ref().unwrap()).clone();

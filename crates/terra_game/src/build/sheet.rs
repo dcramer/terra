@@ -399,6 +399,134 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
     rows
 }
 
+/// A room five metres by four in a kind under a gable, with a doorway and windows.
+fn house(kind: Kind) -> Vec<BuildOp> {
+    let mut ops = vec![BuildOp::AddRoom {
+        min: [0, 0, 0],
+        max: [9, 0, 7],
+        kind,
+    }];
+    ops.extend((4..=5).map(|x| wall([x, 0, 7], Panel::Door, kind)));
+    ops.extend((1..=2).map(|x| wall([x, 0, 7], Panel::WINDOW, kind)));
+    ops.extend((3..=4).map(|z| wall([0, 0, z], Panel::WINDOW, kind)));
+    ops.extend((2..=3).map(|x| wall([x, 0, 0], Panel::WINDOW, kind)));
+    ops.push(BuildOp::AddRoof(RoofSection {
+        min: [0, 0, 0],
+        max: [9, 0, 7],
+        style: RoofStyle::Gable,
+        along_x: true,
+        pitch: 0.75,
+    }));
+    ops
+}
+
+/// A further kit's rows (D236), named for it: how its walls meet, its openings, carved,
+/// a house, its shapes, and mixed with stone and logs every way they meet, after the rest.
+fn kit_rows(name: &str, kind: Kind, stone: Kind, logs: Kind) -> Vec<(String, Vec<BuildOp>)> {
+    let stone_cube = Some(Cube::new(stone, Fill::Solid));
+    let carved = {
+        let mut ops: Vec<BuildOp> = east_west(0, 9, 0, kind).collect();
+        let open = |x: i32, layer: i32| BuildOp::Fill {
+            min: [x, layer, 0],
+            max: [x, layer, 0],
+            cube: Some(Cube::new(kind, Fill::Open)),
+        };
+        ops.extend([open(2, 3), open(3, 2), open(3, 3), open(3, 4), open(4, 3)]);
+        ops.extend((6..=8).map(|x| open(x, 1)));
+        ops
+    };
+    let openings = {
+        let mut ops: Vec<BuildOp> = east_west(0, 11, 0, kind).collect();
+        ops.extend((2..=3).map(|x| wall([x, 0, 0], Panel::Door, kind)));
+        ops.extend((7..=8).map(|x| wall([x, 0, 0], Panel::WINDOW, kind)));
+        ops
+    };
+    // On a stone plinth a metre high, the doorway's left open.
+    let mut plinth = house(kind);
+    for (min, max) in [
+        ([0, 0, 0], [9, 1, 0]),
+        ([0, 0, 7], [3, 1, 7]),
+        ([6, 0, 7], [9, 1, 7]),
+        ([0, 0, 0], [0, 1, 7]),
+        ([9, 0, 0], [9, 1, 7]),
+    ] {
+        plinth.push(BuildOp::Fill {
+            min,
+            max,
+            cube: stone_cube,
+        });
+    }
+    // A stone ground floor with a storey of it over, a floor of timber between.
+    let mut storeys = vec![
+        BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [9, 0, 7],
+            kind: stone,
+        },
+        BuildOp::AddRoom {
+            min: [0, 1, 0],
+            max: [9, 1, 7],
+            kind,
+        },
+        BuildOp::SetFloor {
+            min: [1, 1, 1],
+            max: [8, 1, 6],
+            laid: true,
+            kind: logs,
+        },
+    ];
+    storeys.extend((4..=5).map(|x| wall([x, 0, 7], Panel::Door, stone)));
+    storeys.extend((1..=2).map(|x| wall([x, 1, 7], Panel::WINDOW, kind)));
+    storeys.extend((7..=8).map(|x| wall([x, 1, 7], Panel::WINDOW, kind)));
+    storeys.push(BuildOp::AddRoof(RoofSection {
+        min: [0, 1, 0],
+        max: [9, 1, 7],
+        style: RoofStyle::Gable,
+        along_x: true,
+        pitch: 0.75,
+    }));
+    let ell = |other: Kind| -> Vec<BuildOp> {
+        east_west(0, 5, 0, kind)
+            .chain(north_south(1, 5, 0, other))
+            .collect()
+    };
+    let tee = |through: Kind, stem: Kind| -> Vec<BuildOp> {
+        east_west(0, 9, 0, through)
+            .chain(north_south(1, 5, 4, stem))
+            .collect()
+    };
+    let in_line = |other: Kind| -> Vec<BuildOp> {
+        east_west(0, 4, 0, kind)
+            .chain(east_west(5, 9, 0, other))
+            .collect()
+    };
+    [
+        ("free end", east_west(0, 9, 0, kind).collect()),
+        (
+            "corner",
+            east_west(0, 5, 0, kind)
+                .chain(north_south(1, 5, 0, kind))
+                .collect(),
+        ),
+        ("T", tee(kind, kind)),
+        ("openings", openings),
+        ("carved", carved),
+        ("house", house(kind)),
+        ("shapes", shapes(kind)),
+        ("on a stone plinth", plinth),
+        ("over a stone ground floor", storeys),
+        ("and stone: L", ell(stone)),
+        ("and stone: T, stone through", tee(stone, kind)),
+        ("and stone: in line", in_line(stone)),
+        ("and logs: L", ell(logs)),
+        ("and logs: T, logs through", tee(logs, kind)),
+        ("and logs: in line", in_line(logs)),
+    ]
+    .into_iter()
+    .map(|(row, ops)| (format!("{name}: {row}"), ops))
+    .collect()
+}
+
 /// A row whose three columns are each a state its cubes are in, rather than how far its
 /// pieces are in: the shortcuts' cubes, then each column's operations on them, drawn by what
 /// each cube holds.
@@ -716,11 +844,7 @@ pub(super) fn lay(
         return;
     };
     let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
-    let stone = kits
-        .0
-        .iter()
-        .find(|kit| kit.pattern == Pattern::Masonry)
-        .map(|kit| kit.kind());
+    let stone = kits.footing().map(|kit| kit.kind());
     // How high the ground is at a place, in the start's own space, the yard being round:
     // what a vantage near it needs to stand on it.
     let ground_at = |planet: &Planet, east: f32, north: f32| {
@@ -746,6 +870,19 @@ pub(super) fn lay(
         .enumerate()
         .map(|(row, (name, ops))| (name.to_string(), ops, 0.0, row))
         .collect();
+    // The further kits' rows (D236), each by its file's name, after the rest.
+    if let Some(stone) = stone {
+        let names = super::kit_names();
+        for name in ["earth", "wattle"] {
+            let Some((&kind, _)) = names.iter().find(|(_, n)| n.as_str() == name) else {
+                continue;
+            };
+            for (row_name, ops) in kit_rows(name, kind, stone, laying) {
+                let row = placed.len();
+                placed.push((row_name, ops, 0.0, row));
+            }
+        }
+    }
     let count = placed.len();
     let groups = [
         ("logs", vec![laying], false),

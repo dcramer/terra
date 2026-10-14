@@ -628,7 +628,7 @@ fn floor_footing(base: &Base, kits: &Kits) -> Option<Kind> {
         .into_iter()
         .max_by_key(|&(kind, count)| (count, kind))?;
     kits.of(kind)
-        .is_some_and(|kit| kit.pattern == Pattern::Masonry)
+        .is_some_and(|kit| kit.pattern == Pattern::Masonry && kit.framing.is_none())
         .then_some(kind)
 }
 
@@ -647,17 +647,15 @@ pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Kinds> 
     use terra_build::kit::Profile;
     Some(terra_build::village::Kinds {
         logs: find(Pattern::Logs, Profile::Round)?,
-        stone: find(Pattern::Masonry, Profile::Round)?,
+        stone: kits.footing()?.kind(),
         hewn: find(Pattern::Logs, Profile::Hewn)?,
     })
 }
 
-/// The kind footings are laid in (D194): stone, the first kit laid as blocks.
+/// The kind footings are laid in (D194): stone, the first block kind by its id that is not
+/// framed.
 pub(super) fn footing_kind(kits: &Kits) -> Option<Kind> {
-    kits.0
-        .iter()
-        .find(|kit| kit.pattern == Pattern::Masonry)
-        .map(|kit| kit.kind())
+    kits.footing().map(|kit| kit.kind())
 }
 
 /// How far a footing reaches below the lowest ground under its column, so no gap shows
@@ -745,6 +743,12 @@ fn setup(
                 .iter()
                 .map(|kit| kit.kind())
                 .filter(|&kind| kits.one_at_a_time(kind))
+                .collect(),
+            footed: kits
+                .0
+                .iter()
+                .filter(|kit| kit.pattern == Pattern::Masonry && kit.framing.is_none())
+                .map(|kit| kit.kind())
                 .collect(),
             names: kit_names(),
             budgets: Vec::new(),

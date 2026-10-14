@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use terra_build::kit::Kits;
-use terra_build::relief::{Maps, Relief, Swatch, shaped_by, topped_by};
+use terra_build::relief::{Maps, Relief, Swatch, cored_by, shaped_by, topped_by};
 
 /// How many texels across and down a material's colours are kept, each the average of a
 /// patch of its texture.
@@ -89,7 +89,7 @@ fn wanted(kits: &Kits) -> (Vec<String>, Vec<String>) {
     let mut heights: Vec<String> = kits
         .0
         .iter()
-        .flat_map(|kit| [shaped_by(kit), topped_by(kit)])
+        .flat_map(|kit| [shaped_by(kit), topped_by(kit), cored_by(kit)])
         .flatten()
         .map(str::to_string)
         .collect();

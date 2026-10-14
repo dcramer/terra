@@ -317,6 +317,15 @@ const SLIVER_M: f32 = 0.05;
 /// fill reaches its middle.
 fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
     let point_cube = |point: Vec3| (point / CELL_M).floor().as_ivec3();
+    // A framed kind's core and frame go in with a cube's first step, before its infill is
+    // finished (D236): the wattle woven on the frame, then daubed.
+    if let Piece::Wattle { cube } = *piece {
+        let is_in = base
+            .cube(cube)
+            .is_some_and(|c| c.level() > 0 && c.fill == Fill::Solid);
+        return (is_in, vec![cube.to_array()]);
+    }
+    let first_step = matches!(piece, Piece::Beam { .. });
     let Some((min, max)) = piece.bounds() else {
         return (true, Vec::new());
     };
@@ -331,7 +340,11 @@ fn piece_in(base: &Base, piece: &Piece) -> (bool, Vec<[i32; 3]>) {
                 let bottom = y as f32 * CELL_M;
                 let (from, to) = (min.y.max(bottom), max.y.min(bottom + CELL_M));
                 let middle = ((from + to) * 0.5 - bottom) / CELL_M;
-                let needed = (middle * 16.0).ceil().clamp(1.0, 16.0) as u8;
+                let needed = if first_step {
+                    1
+                } else {
+                    (middle * 16.0).ceil().clamp(1.0, 16.0) as u8
+                };
                 // Only the cubes it stands in count: not air its rough edge reaches
                 // into, nor an opening it frames, nor one being carved.
                 let Some(cube) = base
@@ -444,6 +457,8 @@ impl Detail {
                 piece,
                 Piece::Log { .. }
                     | Piece::Block { .. }
+                    | Piece::Wattle { .. }
+                    | Piece::Beam { .. }
                     | Piece::Gable { .. }
                     | Piece::Covering { .. }
                     | Piece::Plank { .. }
@@ -595,7 +610,7 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
         }
         // Door steps, in the footings' stone.
         if !laid.steps.is_empty()
-            && let Some(stone) = kits.0.iter().find(|kit| kit.pattern == Pattern::Masonry)
+            && let Some(stone) = kits.footing()
         {
             let look = block_look(stone, detail.steps());
             let (sides, top) = (section.maps.shape(stone), section.maps.top(stone));
@@ -672,8 +687,16 @@ fn draw_blocks(
     let mut shaped: [BTreeSet<[i32; 3]>; 3] = Default::default();
     // A gable's cubes, with the roof's underside over each, which cuts them.
     let mut gables: BTreeMap<[i32; 3], [[i32; 3]; 3]> = BTreeMap::new();
+    // A framed kind's cubes whose core is in (D236).
+    let mut cores: BTreeSet<[i32; 3]> = BTreeSet::new();
     for (_, piece, stage) in own.iter().chain(edge).copied() {
         let cube = match piece {
+            Piece::Wattle { cube } => {
+                if *stage == Stage::In || (*stage == Stage::Next && !first) {
+                    cores.insert(cube.to_array());
+                }
+                continue;
+            }
             Piece::Block { cube } => cube,
             Piece::Gable { cube, under } => {
                 gables.insert(cube.to_array(), *under);
@@ -695,6 +718,9 @@ fn draw_blocks(
             sets[set].insert(cube.to_array());
         }
     }
+    // A core shows where its infill is not in, nor lit as next: neither over it.
+    cores.retain(|at| !sets[0].contains(at) && !sets[2].contains(at));
+    sets[1].retain(|at| !cores.contains(at));
     let shape_of = |cube: IVec3| base.cube(cube).map_or(crate::Shape::Whole, |c| c.shape);
     let cut = |cube: IVec3, at: Vec3| {
         let roof = gables
@@ -770,6 +796,8 @@ fn draw_blocks(
         } else {
             (&look, &heights)
         };
+        // A plan's shell plain; what is built in the kit's tint.
+        let colour = if set == 1 { [1.0; 3] } else { kit.tint };
         let mut tops = Surface {
             sharing: true,
             ..Surface::default()
@@ -781,7 +809,7 @@ fn draw_blocks(
             look,
             heights,
             &cut,
-            [1.0; 3],
+            colour,
             out[set].of(Material::Masonry),
             &mut tops,
         );
@@ -813,13 +841,15 @@ fn draw_blocks(
                 look,
                 heights,
                 &cut,
-                [1.0; 3],
+                colour,
                 out[set].of(Material::Masonry),
                 &mut tops,
             );
         }
-        // Stairs either way up, a stone a step, and posts, a drum a cube.
+        // Stairs either way up, a stone a step, and posts, a drum a cube; a framed kind's
+        // posts are its timber's (`layout::frames`).
         let pillar = match kit.dress.roles.get(&layout::Role::Post) {
+            _ if kit.framing.is_some() => 0.0,
             Some(crate::kit::Dress::Pillar { width }) => *width,
             _ => CELL_M,
         };
@@ -845,6 +875,7 @@ fn draw_blocks(
                         )
                     })
                     .collect(),
+                crate::Shape::Post if pillar <= 0.0 => Vec::new(),
                 crate::Shape::Post => {
                     let middle = low + Vec3::new(half, 0.0, half);
                     let reach = Vec3::new(pillar * 0.5, 0.0, pillar * 0.5);
@@ -853,11 +884,52 @@ fn draw_blocks(
                 _ => Vec::new(),
             };
             for (min, max) in boxes {
-                crate::surface::slab(min, max, look, heights, [1.0; 3], &mut faces, &mut tops);
+                crate::surface::slab(min, max, look, heights, colour, &mut faces, &mut tops);
             }
         }
         out[set].of(Material::Masonry).append(faces);
         out[set].of(Material::Floor).append(tops);
+    }
+    // A framed kind's cores where its infill is not in: the wattle, drawn as the infill's
+    // surface is, in its own material and relief, set back a little behind where the daub
+    // will be, hidden by the infill that is in.
+    if let Some((framing, material)) = kit
+        .framing
+        .as_ref()
+        .and_then(|framing| Some((framing, framing.core?)))
+        && !cores.is_empty()
+    {
+        let near = matches!(detail, Detail::Near | Detail::Mid);
+        let relief = section.maps.core(kit).filter(|_| near);
+        let woven = |uv: [f32; 2]| relief.map_or(0.25, |relief| relief.at(uv) * 0.5);
+        let core_look = Look {
+            relief: if near { framing.core_relief } else { 0.0 },
+            metres: kit.textures.get(&material).map_or([1.0, 1.0], |t| t.metres),
+            top: None,
+            ..look
+        };
+        let core_heights = Heights {
+            sides: &woven,
+            top: &woven,
+        };
+        let built = &sets[0];
+        let hides = |at: IVec3| hides_always(at) || built.contains(&at.to_array());
+        let mut tops = Surface {
+            sharing: true,
+            ..Surface::default()
+        };
+        crate::surface::draw_part(
+            &cores,
+            &keep,
+            &hides,
+            &core_look,
+            &core_heights,
+            &cut,
+            [1.0; 3],
+            out[0].of(material),
+            &mut tops,
+        );
+        out[0].of(material).append(tops);
     }
     out
 }
@@ -924,6 +996,21 @@ fn ghost(piece: &Piece, kit: &Kit, shade: bool) -> Option<Ghost> {
             Shape::Box,
         ),
         Piece::Board { min, max } => Some(boxed(min.metres(), max.metres())),
+        Piece::Beam {
+            from,
+            to,
+            face,
+            wide,
+            deep,
+            ..
+        } => along(
+            from.metres(),
+            to.metres(),
+            face.step().as_vec3(),
+            layout::metres(deep),
+            layout::metres(wide),
+            Shape::Box,
+        ),
         // A plan's trims as a band along their edge, standing out of its face.
         Piece::Trim {
             cube,
@@ -999,7 +1086,7 @@ fn ghost(piece: &Piece, kit: &Kit, shade: bool) -> Option<Ghost> {
             };
             along(from, to, up, high, wide, Shape::Box)
         }
-        Piece::Block { .. } | Piece::Gable { .. } => None,
+        Piece::Block { .. } | Piece::Gable { .. } | Piece::Wattle { .. } => None,
     }
 }
 

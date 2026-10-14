@@ -580,6 +580,82 @@ pub fn plank(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
     }
 }
 
+/// How far apart a frame's beams' rings are, at most: their faces wave only gently.
+const BEAM_STEP_M: f32 = 0.3;
+
+/// A frame's squared timber (`layout::frames`, D236): hewn square by the axe, its face
+/// scalloped by the adze, its edges wandering, as wide and deep as the frame says, its depth
+/// along the way its face looks; in the kit's `framing.material`, its grain along it, a little
+/// lighter or darker and warmer or cooler by its seed; its ends in `LogEnd`.
+pub fn beam(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
+    let Piece::Beam {
+        from,
+        to,
+        face,
+        wide,
+        deep,
+        seed,
+    } = *piece
+    else {
+        return;
+    };
+    let (from, to) = (from.metres(), to.metres());
+    let length = from.distance(to);
+    if length < 0.02 {
+        return;
+    }
+    let material = kit
+        .framing
+        .as_ref()
+        .map_or(Material::Hewn, |framing| framing.material);
+    let axis = (to - from) / length;
+    let normal = face.step().as_vec3();
+    // Its depth along its face's way, its width across that in the wall's face.
+    let side = (normal - axis * normal.dot(axis)).normalize_or(Vec3::Y);
+    let frame = Frame {
+        from,
+        length,
+        axis,
+        side,
+        up: side.cross(axis),
+    };
+    let mut random = Random(seed);
+    let look = Squared {
+        half_wide: layout::metres(deep) * 0.5,
+        half_high: layout::metres(wide) * 0.5,
+        round: HEWN_EDGE_M.min(layout::metres(wide) * 0.2),
+        metres: kit
+            .textures
+            .get(&material)
+            .map_or([0.5, 0.5], |texture| texture.metres),
+        strip: None,
+        bend: kit.timber.bend * 0.1,
+        adzed: true,
+        chamfer: 0.008,
+        step: kit.timber.step.max(BEAM_STEP_M),
+        corner_steps: 1,
+    };
+    let member = squared(&frame, &look, Split::Whole, &mut random);
+    let t = &kit.timber;
+    let shade = 1.0 - t.variation.shade * random.unit();
+    let warmth = t.variation.warmth * random.signed();
+    let colour = [
+        (t.tint[0] * shade * (1.0 + warmth)).clamp(0.0, 1.0),
+        (t.tint[1] * shade).clamp(0.0, 1.0),
+        (t.tint[2] * shade * (1.0 - warmth)).clamp(0.0, 1.0),
+    ];
+    sweep(surfaces.of(material), &member, colour);
+    let spin = random.unit() * TAU;
+    let last = member.grid.len() - 1;
+    let ends = surfaces.of(Material::LogEnd);
+    for (ring, outward) in [
+        (&member.grid[0], -frame.axis),
+        (&member.grid[last], frame.axis),
+    ] {
+        cap(ends, ring, outward, &frame, spin, member.grain, t.end_tint);
+    }
+}
+
 /// A member's rings as a closed tube of triangles, each corner shaded smooth across its
 /// neighbours but at a crease, its texture as its rings say, the seam's last column its own.
 fn sweep(out: &mut Surface, member: &Member, colour: [f32; 3]) {

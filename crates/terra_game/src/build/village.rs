@@ -79,7 +79,7 @@ pub(super) fn lay(
     };
     let (Some(logs), Some(stone), Some(hewn)) = (
         find(Pattern::Logs, Profile::Round),
-        find(Pattern::Masonry, Profile::Round),
+        kits.footing().map(|kit| kit.kind()),
         find(Pattern::Logs, Profile::Hewn),
     ) else {
         warn!("The village needs a log, a stone and a hewn kit.");

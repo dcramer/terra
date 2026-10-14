@@ -1,0 +1,54 @@
+{
+  "about": "The earth kit's dressed pieces (D215, D236, tools/kits): a cob wall stands on a stone plinth to keep it dry, wears a coping with a drip to keep the rain off its top, and has oak over and under its openings, its corners left round as earth is. Profiles are (out, up) in metres from the edge: out from the face, up from the edge's line; the cube's half a metre, and nothing stands out past an eighth of it (D192). `round` are the points rounded, by `radius`. Which material each is drawn in is the kit's (earth.ron).",
+  "profiles": {
+    "plinth": {
+      "about": "Along a wall's foot: a plinth of rubble nearly a cube high, standing out of the earth, weathered back to it in a steep slope so the rain runs off; it goes on down into the ground as far as the ground falls away.",
+      "points": [[-0.05, 0.44], [0.0, 0.44], [0.016, 0.43], [0.05, 0.37], [0.058, 0.35], [0.058, -0.06], [-0.05, -0.06]],
+      "round": [1, 2, 3, 4],
+      "radius": 0.012
+    },
+    "coping": {
+      "about": "Over a wall's top open to the sky: a flat stone coping with a rounded nose and a drip under it, throwing the rain clear of the earth.",
+      "points": [[-0.25, -0.03], [-0.25, 0.06], [-0.1, 0.058], [0.03, 0.05], [0.056, 0.04], [0.06, 0.028], [0.06, -0.01], [0.05, -0.02], [0.034, -0.02], [0.028, -0.032], [0.014, -0.032], [0.008, -0.026], [0.0, -0.026], [-0.03, -0.026]],
+      "round": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      "radius": 0.01
+    },
+    "lintel": {
+      "about": "Over an opening: a squared oak beam, a little proud of the earth, its arrises taken off by the axe, bearing on the wall either side.",
+      "points": [[-0.25, 0.0], [0.03, 0.0], [0.042, 0.01], [0.042, 0.17], [0.032, 0.182], [0.0, 0.186], [-0.04, 0.186]],
+      "round": [1, 2, 3, 4],
+      "radius": 0.012
+    },
+    "sill": {
+      "about": "Under a window: an oak sill sloped to throw the water off, a nose and a drip.",
+      "points": [[-0.25, -0.04], [-0.25, 0.012], [-0.06, 0.012], [0.04, -0.006], [0.052, -0.016], [0.052, -0.07], [0.042, -0.08], [0.026, -0.08], [0.02, -0.09], [0.01, -0.09], [0.004, -0.084], [0.0, -0.084], [-0.03, -0.084]],
+      "round": [2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "radius": 0.008
+    },
+    "cap": {
+      "about": "Where a timber wall stands on the earth: an oak sole plate bedded on it, standing out a little with its arris taken off.",
+      "points": [[-0.11, -0.05], [-0.11, 0.004], [0.034, 0.0], [0.046, -0.012], [0.046, -0.1], [0.036, -0.11], [0.0, -0.11], [-0.03, -0.11]],
+      "round": [2, 3, 4, 5],
+      "radius": 0.01
+    },
+    "fascia": {
+      "about": "Along an overhang's edge: an oak board under the earth out to its face, its lower arris rounded.",
+      "points": [[-0.25, 0.0], [0.04, 0.0], [0.05, 0.012], [0.05, 0.14], [0.042, 0.15], [0.0, 0.154], [-0.04, 0.154]],
+      "round": [1, 2, 3, 4],
+      "radius": 0.01
+    },
+    "nose": {
+      "about": "A step's tread: an oak board over the step's earth, its nose rounded and standing out over the riser below.",
+      "points": [[-0.48, -0.05], [-0.48, 0.02], [0.02, 0.02], [0.04, 0.008], [0.046, -0.02], [0.036, -0.046], [0.0, -0.056], [-0.03, -0.056]],
+      "round": [2, 3, 4, 5],
+      "radius": 0.012
+    },
+    "border": {
+      "about": "A floor's border along the foot of a wall standing on it: a flag a little proud of the beaten earth.",
+      "points": [[-0.02, -0.04], [-0.02, 0.014], [0.18, 0.014], [0.196, 0.007], [0.2, -0.004], [0.2, -0.04]],
+      "round": [2, 3],
+      "radius": 0.008
+    }
+  },
+  "corners": {}
+}

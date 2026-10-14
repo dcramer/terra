@@ -34,19 +34,19 @@ Each log differs from the next by its seed, from its place, by as much as the ki
 
 **Every exposed edge is dressed by its role** (D215, [research/role-pieces.md](../research/role-pieces.md)), as Enshrouded's blocks change with what they touch. When a section is laid, each edge of a kind's cubes is given a role from what is round it and the ground's samples (`layout::roles`), never stored; each belongs to one cube, so a piece laid for it is in, planned or carved with that cube, and a part-built wall wears its dress on what is up. The kit's file says what each role takes:
 
-| Role | Where | Stone (`stone.ron`) | Logs (`logs.ron`) | Hewn (`hewn.ron`) |
-|---|---|---|---|---|
-| Crest | Along a top open to the sky | A crowned coping with a drip | A hewn plate as the top course | A heavier hewn plate |
-| Foot | Where a wall stands on the ground or another kind, or the ground passes it | A chamfered plinth course, stepping with the ground a course at a time and run on down into it | A hewn sill beam as the first course | A heavier sill |
-| Arris | Up an outside corner, or beside a thinner kind | Quoins a course each, long and short by turns | Log ends run past the corner, an eighth of a cube | A squared corner post |
-| Jamb, Head, Sill | Round an opening | Jamb stones long and short, a lintel bearing 20 cm either side, a sloped sill with horns | Hewn posts up its sides | Hewn posts |
-| Meet | Where a thinner kind stands on it | A weathered cap under the logs | | |
-| Soffit | Under an overhang | A fascia | | |
-| Nose | Along a step | A tread with a rounded nose | A flight laid as open stairs: treads between stringers, on posts where it stands high | The same, hewn |
-| Border | Along a floor a wall stands on | A border flag | | |
-| Inside | Up an inside corner | (nothing) | | |
+| Role | Where | Stone (`stone.ron`) | Logs (`logs.ron`) | Hewn (`hewn.ron`) | Earth (`earth.ron`) | Wattle and daub (`wattle.ron`) |
+|---|---|---|---|---|---|---|
+| Crest | Along a top open to the sky | A crowned coping with a drip | A hewn plate as the top course | A heavier hewn plate | A stone coping with a drip | Its frame's plate |
+| Foot | Where a wall stands on the ground or another kind, or the ground passes it | A chamfered plinth course, stepping with the ground a course at a time and run on down into it | A hewn sill beam as the first course | A heavier sill | A rubble plinth nearly a cube high, weathered back steeply | Its frame's sill plate |
+| Arris | Up an outside corner, or beside a thinner kind | Quoins a course each, long and short by turns | Log ends run past the corner, an eighth of a cube | A squared corner post | (nothing: its corners are round) | A corner post 20 cm square |
+| Jamb, Head, Sill | Round an opening | Jamb stones long and short, a lintel bearing 20 cm either side, a sloped sill with horns | Hewn posts up its sides | Hewn posts | Round reveals, an oak lintel bearing 22 cm either side, an oak sill | Jambs, a head and a sill through the wall, lining it |
+| Meet | Where a thinner kind stands on it | A weathered cap under the logs | | | An oak sole plate under a timber kind | |
+| Soffit | Under an overhang | A fascia | | | An oak fascia | |
+| Nose | Along a step | A tread with a rounded nose | A flight laid as open stairs: treads between stringers, on posts where it stands high | The same, hewn | An oak tread | |
+| Border | Along a floor a wall stands on | A border flag | | | A stone border flag | |
+| Inside | Up an inside corner | (nothing) | | | (nothing) | Its frame's end posts |
 
-Profiles and corner stones are drawn in Blender from a source in numbers, `art/kits/<kit>/pieces.json`, into a file the kit names (`tools/kits`); a profile is swept a cube at a time, mitred out and back round corners, with a chamfered joint where it runs on and its ends closed; each piece stands out up to an eighth of a cube (D192) and casts the shadow line that makes a wall read as built. Masks shade what a kit draws: dirt rising unevenly from the ground, worn outside edges, timber greyed higher up; and a roof's covering greened by moss and lichen in blotches toward its eaves, greyed toward its ridge and worn lighter along its eaves and verges (D220). Dressed stone is Poly Haven's `rock_boulder_dry` (CC0), tinted toward the rubble; hewn members `rough_wood`. Far off the bands stay and the corner stones drop out. A kit's dress costs about 140 triangles a cube near for stone, 60 for logs, 90 for hewn, averaged over the checker's cabin; `cargo xtask kits` checks every role a kit dresses has its piece, each within an eighth of a cube, and their budgets (600 triangles a metre of profile, 320 a corner stone).
+Profiles and corner stones are drawn in Blender from a source in numbers, `art/kits/<kit>/pieces.json`, into a file the kit names (`tools/kits`); a profile is swept a cube at a time, mitred out and back round corners, with a chamfered joint where it runs on and its ends closed; each piece stands out up to an eighth of a cube (D192) and casts the shadow line that makes a wall read as built. Masks shade what a kit draws: dirt rising unevenly from the ground, worn outside edges, timber greyed higher up; and a roof's covering greened by moss and lichen in blotches toward its eaves, greyed toward its ridge and worn lighter along its eaves and verges (D220). Dressed stone is Poly Haven's `rock_boulder_dry` (CC0), tinted toward the rubble; hewn members `rough_wood`. Far off the bands stay and the corner stones drop out. A kit's dress costs about 90 triangles a cube near for stone, 60 for logs, 90 for hewn, 12 for earth and 140 for wattle and daub's frame, averaged over the checker's cabin; `cargo xtask kits` checks every role a kit dresses has its piece, each within an eighth of a cube, and their budgets (600 triangles a metre of profile, 320 a corner stone).
 
 **A kit is a file** in `assets/data/kits/` (D136): its pattern (stacked, for timber; masonry, for block kinds drawn as their surface), its sizes, its timber (profile, notch, sides, taper, bend, unevenness, bark relief, daub, tints and how much each log varies), its materials, its props' models, its cost and its dress. A pine cabin, an oak one and a hewn-timber one are three files; nothing about a kind of timber is code. The log kit is `logs.ron`, under shakes; `hewn.ron` is hewn beams under thatch; `stone.ron` is fieldstone under slate.
 
@@ -124,6 +124,25 @@ Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 Built 2026-10-12: a base is laid by every kit in `assets/data/kits/` at once, each its own kind's cubes, so mixing is per cube. Logs end flush against stone, as they end at anything not open air; stone runs through corners and T's. The kit sheet has stone and logs meeting every way walls meet: a stone house under a hip roof, a log cabin on a stone plinth a metre high, an L, a T each way round, in line, stone pillars in a log wall, and a log cabin with a stone end wall.
 
 **How a kit meets the others is its file's** (D232), `meets`: its `weight` (stone 3, timber 2), the heavier running through a joint, its faces and edges dressed there as though the lighter were not (quoins up the joint), the lighter ending against it; its `end` trim where it ends against a heavier kind (`Board`, an end board over sawn ends) and its `carries` trim along its top where a lighter kind stands on it (`Cap`, dressed as its `Meet` role); and `kinds`, by id, what differs for one kind, as `{4: (through: Some(true), end: Some(None))}`. Two as heavy each end against the other. So a new kit says how it meets the rest without code. Changing built cubes' material in place (the hammer's *Change material*) uses the same rules: stone with a block of logs changed into it is quoined round them, capped under them and stands on them without its plinth sinking over them.
+
+## Earth, and wattle and daub (D227, D236)
+
+**Earth** (`earth.ron`) is cob: a block kind drawn as its surface like stone, in Poly Haven's `clay_plaster`, its outside edges rounded 12 cm as earth weathers, each lift a little lighter or darker than the next with a darker seam between, wandering along the wall (its masks' `strata` and `lift`), warmed by the kit's `tint`. It keeps dry as cob walls do: a rubble plinth at its foot, a stone coping with a drip where its top is open to the sky, under a deep thatch. Its openings have oak lintels and sills, and where a timber wall stands on it, an oak sole plate: a profile names its `material`, and in timber its texture runs along it as grain. Its corners and reveals are left round, with no quoins.
+
+**Wattle and daub** (`wattle.ron`) is the first framed kind: a block kind whose cubes are the infill, pale limewashed daub (`patterned_clay_plaster`) with a little relief, and whose file's `framing` lays a frame of squared oak over them by rule (`layout::frames`), drawn by the timber code as an adzed beam (D200):
+
+| Member | Where |
+|---|---|
+| Sill plate, plate | Along the foot and the top of each face; a doubled girt where one storey stands on another |
+| Posts | Every `bay` cubes along the grid (a metre and a half), none within a metre of a row's end, so short studs stand over and under openings; an end post where a face ends against another kind or in an inside corner |
+| Rails | At the kit's heights in each storey (one and two metres), between the posts: under their line in a storey's lower half and over it in its upper, so they run into a window's sill and head |
+| Braces | In the lowest and highest panel at each end of a face, leaning in to the end |
+| Corner posts | A square post up every outside corner |
+| Openings | Jambs, a head and a sill through the wall, lining the reveals, round any hole: a doorway's or a cut cross's |
+
+Every member stands 3 cm proud of the daub, so the panels read set back in the frame; where members meet, one ends at the other's side. While a cube is part built, or being carved, its **wattle** shows (`Piece::Wattle`, woven hazel generated and tiled by `tools/textures`, D191): a cube goes in in four steps, its frame and wattle first, then its daub in three coats, and on the kit sheet's going-up column the wattle runs a layer ahead of the daub. A further framed kind, plaster or brick nogging, is a kit file with its own `framing`.
+
+**How they meet the rest** (D232): earth weighs 3, runs through logs, hewn timber and wattle and carries its sole plate under them; stone runs through earth, so earth stands on a stone wall under its cap. Wattle weighs 1: every other kind runs through it, and it ends against them at its own end posts. Framed kinds' floors stand on stone footings, the footing kind being the first block kind that is not framed. The kit sheet has each kit's walls meeting every way, its openings, a carved wall, a house, its shapes, and each with stone and logs (`--sheet-rows earth`, `--sheet-rows wattle`).
 
 ## Stairs, slopes and halves (D193, D220)
 

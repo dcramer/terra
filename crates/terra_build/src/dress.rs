@@ -69,9 +69,21 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
     let Some(pieces) = kit.dress.made.as_deref() else {
         return;
     };
+    // A profile in a material of its own, as an earth wall's timber lintel; else dressed stone.
+    let material = match *piece {
+        Piece::Trim { role, .. } | Piece::Band { role, .. } => match kit.dress.roles.get(&role) {
+            Some(Dress::Profile {
+                material: Some(material),
+                ..
+            }) => *material,
+            _ => Material::Dressed,
+        },
+        _ => Material::Dressed,
+    };
+    let grain = matches!(material, Material::Hewn | Material::Log);
     let metres = kit
         .textures
-        .get(&Material::Dressed)
+        .get(&material)
         .map_or([1.2, 1.2], |texture| texture.metres);
     let mut made = Indexed::default();
     match *piece {
@@ -89,6 +101,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
                 name,
                 extend,
                 joints,
+                ..
             }) = kit.dress.roles.get(&role)
             else {
                 return;
@@ -110,6 +123,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
                 lift: layout::metres(lift),
                 sink: layout::metres(sink),
                 tint: kit.dress.tint,
+                grain,
             };
             sweep.draw(profile, metres, seed, &mut made);
         }
@@ -126,6 +140,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
                 name,
                 extend,
                 joints,
+                ..
             }) = kit.dress.roles.get(&role)
             else {
                 return;
@@ -147,6 +162,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
                 lift: 0.0,
                 sink: 0.0,
                 tint: kit.dress.tint,
+                grain,
             };
             sweep.draw(profile, metres, seed, &mut made);
         }
@@ -175,7 +191,7 @@ pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
         }
         _ => return,
     }
-    let out = surfaces.of(Material::Dressed);
+    let out = surfaces.of(material);
     if out.sharing {
         out.shared.append(made);
     } else {
@@ -226,6 +242,9 @@ struct Sweep {
     lift: f32,
     sink: f32,
     tint: [f32; 3],
+    /// Whether its texture runs along it, as timber's grain does, rather than from the
+    /// world's planes, as stone's is.
+    grain: bool,
 }
 
 impl Sweep {
@@ -284,6 +303,21 @@ impl Sweep {
             let t = planar(p, normal, metres);
             [t[0] + shift[0], t[1] + shift[1]]
         };
+        // How far round the section each point is, for a texture that runs along it.
+        let mut round = vec![0.0f32; n];
+        for i in 1..n {
+            let (a, b) = (points[i - 1], points[i]);
+            round[i] = round[i - 1] + ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+        }
+        let along_uv = |ring: usize, i: usize| {
+            let (low, high) = (start(points[i][0]), end(points[i][0]));
+            let at = if low <= high {
+                rings[ring].0.clamp(low, high)
+            } else {
+                (low + high) * 0.5
+            };
+            [round[i] / metres[0] + shift[0], at / metres[1] + shift[1]]
+        };
         // A point of the section, at a ring, pulled in where the ring is a joint.
         let point = |ring: usize, i: usize, seg: usize| -> Vec3 {
             let (at, inset) = rings[ring];
@@ -314,6 +348,12 @@ impl Sweep {
                     ),
                     (point(ring, seg + 1, seg), vertex_normal(&normals, seg, 1)),
                 ];
+                let grained = [
+                    along_uv(ring, seg),
+                    along_uv(ring + 1, seg),
+                    along_uv(ring + 1, seg + 1),
+                    along_uv(ring, seg + 1),
+                ];
                 let face = (quad[2].0 - quad[0].0).cross(quad[3].0 - quad[1].0);
                 if face.length_squared() < 1e-12 {
                     continue;
@@ -322,8 +362,12 @@ impl Sweep {
                     |nn: [f32; 2]| (self.side * nn[0] + self.up * nn[1]).normalize_or(self.up);
                 let flat =
                     (self.side * normals[seg][0] + self.up * normals[seg][1]).normalize_or(self.up);
-                let corners =
-                    quad.map(|(p, nn)| out.corner(p, world_normal(nn), uv(p, flat), colour));
+                let mut k = 0;
+                let corners = quad.map(|(p, nn)| {
+                    let at = if self.grain { grained[k] } else { uv(p, flat) };
+                    k += 1;
+                    out.corner(p, world_normal(nn), at, colour)
+                });
                 // Wound to face out.
                 let outward = face.dot(flat) >= 0.0;
                 for [a, b, c] in [[0, 1, 2], [0, 2, 3]] {
@@ -564,8 +608,27 @@ fn smooth(p: Vec3, size: f32, seed: u32) -> f32 {
 
 /// A corner's shade by the kit's masks: dirt and damp rising unevenly from the ground,
 /// outside edges worn lighter by their normal's turn, and, for timber, grey higher up.
-fn masked(masks: &Masks, timber: bool, p: Vec3, normal: Vec3, ground: f32) -> [f32; 3] {
+fn masked(
+    masks: &Masks,
+    (timber, layered): (bool, bool),
+    p: Vec3,
+    normal: Vec3,
+    ground: f32,
+) -> [f32; 3] {
     let mut c = Vec3::ONE;
+    // A block kind's lifts, each a little lighter or darker, wandering along the wall.
+    if layered && masks.strata > 0.0 {
+        // Each lift its own shade, a darker seam where one was rammed on the last, the
+        // seams wandering a few centimetres up and down along the wall.
+        let lift = masks.lift.max(0.05);
+        let y = p.y / lift + 0.35 * (smooth(p, 1.1, 11) - 0.5);
+        let layer = libm::floorf(y);
+        let within = y - layer;
+        let own = layout::unit(hash(&[layer as i32 as u32, 17])) - 0.5;
+        let seam = (1.0 - (within.min(1.0 - within) / 0.1).min(1.0)) * 0.45;
+        let speckle = smooth(p, 0.25, 13) - 0.5;
+        c *= 1.0 + masks.strata * (own * 1.4 + speckle * 0.5 - seam);
+    }
     let height = p.y - ground;
     if masks.dirt > 0.0 {
         let rise = masks.dirt * (0.6 + 0.8 * smooth(p, 0.45, 3));
@@ -588,13 +651,14 @@ fn masked(masks: &Masks, timber: bool, p: Vec3, normal: Vec3, ground: f32) -> [f
 /// A kit's masks laid over a surface it drew in a material, in its base's own space.
 pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     let masks = &kit.dress.masks;
-    if masks.dirt <= 0.0 && masks.wear <= 0.0 && masks.weather <= 0.0 {
+    if masks.dirt <= 0.0 && masks.wear <= 0.0 && masks.weather <= 0.0 && masks.strata <= 0.0 {
         return;
     }
     let timber = matches!(
         material,
         Material::Log | Material::LogEnd | Material::Board | Material::Daub
     );
+    let layered = material == Material::Masonry;
     // The ground's height by column, looked up once each.
     let mut known: BTreeMap<[i32; 2], f32> = BTreeMap::new();
     let mut ground = |p: Vec3| {
@@ -607,7 +671,7 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
             .or_insert_with(|| layout::metres(layout::roles::ground_ticks(base, column)))
     };
     let mut shade = |p: Vec3, n: Vec3, c: &mut [f32; 3]| {
-        let k = masked(masks, timber, p, n, ground(p));
+        let k = masked(masks, (timber, layered), p, n, ground(p));
         *c = [c[0] * k[0], c[1] * k[1], c[2] * k[2]];
     };
     for ((p, n), c) in surface

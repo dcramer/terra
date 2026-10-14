@@ -68,8 +68,11 @@ pub enum Material {
     /// Dressed stone: the pieces a block kind's edges are dressed with by role (D215).
     Dressed,
     /// Squared timber: the plates, sills and posts a timber kind's edges are dressed with
-    /// by role (D215).
+    /// by role (D215), and a framed kind's frame (D236).
     Hewn,
+    /// Woven wattle: a framed kind's infill before it is daubed, or where it is cut into
+    /// (D236).
+    Wattle,
 }
 
 /// Surfaces by what they are drawn in; the second, whether what is drawn into them may

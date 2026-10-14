@@ -199,7 +199,7 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     as_player(world, |building, player| {
         let base = &building.site.base;
         let ground = |column: [i32; 2]| building.ground_cm(column);
-        let blocks = building.rules.blocks.clone();
+        let blocks = building.rules.footed.clone();
         let footings = building.rules.footing.map(|kind| plans::Footings {
             kind,
             ground_cm: &ground,

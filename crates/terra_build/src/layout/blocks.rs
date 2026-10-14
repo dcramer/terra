@@ -37,8 +37,24 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Vec<Piec
         .filter(|&at| solid(at))
         .map(|cube| Piece::Block { cube })
         .collect();
-    let lintels = !dressing::dresses_role(kit, Role::Head);
-    openings(base, kind, lintels, &solid, scope, &mut pieces);
+    // A framed kind (D236): a core under each whole cube of its walls' infill, in before it,
+    // and under each being cut out, the daub off it first; and its frame, which frames its
+    // openings itself.
+    if let Some(framing) = &kit.framing {
+        if framing.core.is_some() {
+            pieces.extend(cubes.iter().filter_map(|&(at, cube)| {
+                let whole = cube.kind == kind && cube.shape == crate::Shape::Whole;
+                let cutting = cube.pending == crate::Pending::Carve
+                    && cube.fill == Fill::Solid
+                    && cube.level() > 0;
+                (whole && (solid(at) || cutting)).then_some(Piece::Wattle { cube: at })
+            }));
+        }
+        super::frames::lay(base, kit, framing, scope, &mut pieces);
+    } else {
+        let lintels = !dressing::dresses_role(kit, Role::Head);
+        openings(base, kind, lintels, &solid, scope, &mut pieces);
+    }
     dressing::lay(base, kit, kits, scope, &mut pieces);
     pieces
 }
@@ -192,6 +208,7 @@ mod tests {
             name: name.into(),
             extend: 0.0,
             joints: true,
+            material: None,
         };
         let mut kit = kit();
         kit.dress.roles = [

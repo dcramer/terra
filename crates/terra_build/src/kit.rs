@@ -59,6 +59,80 @@ pub struct Kit {
     /// How it meets other kinds where their cubes touch (D232): left out, as its pattern
     /// meets them ([`Meets::of`]).
     pub meets: Option<Meets>,
+    /// What a block kind's surface's colour is multiplied by (sRGB): its earth or its daub
+    /// warmed or lightened from its texture's, a grade a kit (docs/art-style.md).
+    pub tint: [f32; 3],
+    /// A block kind framed in timber (D236, `layout::frames`): its cubes the infill, drawn as
+    /// their surface, and a frame of its members laid over them by rule; left out, none.
+    pub framing: Option<Framing>,
+}
+
+/// How a framed kind's frame is laid and drawn (D236, `layout::frames`): wattle and daub,
+/// and later plaster or brick nogging, are a block kind's cubes as the infill with a frame of
+/// squared timber over them: posts up its corners, its openings' sides and every so many
+/// cubes along a wall, a sill plate along its foot and a plate along its top, rails across
+/// it at heights in each storey, and braces in the panels by its walls' ends. Every member
+/// stands a little proud of the infill's face, so the panels read set back in the frame.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Framing {
+    /// How wide a member shows on a wall's face, in metres: a post's width, a plate's or a
+    /// rail's height.
+    pub wide: f32,
+    /// How far a member stands out of the infill's face, and how far into the wall it goes
+    /// behind its own face, in metres.
+    pub proud: f32,
+    pub deep: f32,
+    /// A corner post's side, square, in metres.
+    pub corner: f32,
+    /// A brace's width, in metres.
+    pub brace: f32,
+    /// How far apart its posts stand along a wall at most, in cubes: one at every multiple of
+    /// it on the grid, but none within a metre of a wall's end or an opening.
+    pub bay: i32,
+    /// The heights of its rails over each storey's foot, in cubes. A rail in the lower half
+    /// of a storey sits under its line, as a window's sill beam does, one in the upper half
+    /// over it, as a head beam does, so rails run on into an opening's frame.
+    pub rails: Vec<i32>,
+    /// Which panels are braced.
+    pub braces: Braces,
+    /// Its members' material: squared timber.
+    pub material: Material,
+    /// What the infill is made on before it is finished, and is shown while a cube is part
+    /// built or being cut out (`Piece::Wattle`): wattle under daub. None, nothing.
+    pub core: Option<Material>,
+    /// How far the core's own relief stands out, in metres.
+    pub core_relief: f32,
+}
+
+/// Which of a frame's panels have a brace.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Braces {
+    None,
+    /// The panels at each end of a wall, under its lowest rail and over its highest, each
+    /// brace leaning in to the post at the end, as the corners of a frame are stiffened.
+    #[default]
+    Ends,
+}
+
+impl Default for Framing {
+    /// Squared oak a little under 20 cm, a post every metre and a half, rails at one and
+    /// two metres, braced at the ends, over wattle.
+    fn default() -> Self {
+        Framing {
+            wide: 0.18,
+            proud: 0.03,
+            deep: 0.1,
+            corner: 0.2,
+            brace: 0.14,
+            bay: 3,
+            rails: vec![2, 4],
+            braces: Braces::Ends,
+            material: Material::Hewn,
+            core: Some(Material::Wattle),
+            core_relief: 0.03,
+        }
+    }
 }
 
 /// How a kind meets the others where their cubes touch (D179, D210, D232), as data, so a
@@ -154,13 +228,17 @@ pub struct Dressing {
 pub enum Dress {
     /// A profile of the kit's pieces swept along the edge, a stone a cube long with a joint
     /// between, or, without joints, as one stone however long; run on past each end that
-    /// stops square by `extend` metres, as a lintel bears on the wall either side.
+    /// stops square by `extend` metres, as a lintel bears on the wall either side. Drawn in
+    /// its `material`, the kit's `Dressed` stone unless it says; in timber (`Hewn`, `Log`)
+    /// its texture runs along it, as a beam's grain does.
     Profile {
         name: String,
         #[serde(default)]
         extend: f32,
         #[serde(default = "joints")]
         joints: bool,
+        #[serde(default)]
+        material: Option<Material>,
     },
     /// Corner stones of one of the kit's sets up the edge, a stone a course.
     Corners { set: String },
@@ -198,6 +276,11 @@ pub struct Masks {
     /// (sRGB): greener and darker on shakes, paler on slate.
     pub moss: f32,
     pub moss_tint: [f32; 3],
+    /// How much a block kind's lifts differ in shade, as a fraction either way, and how tall
+    /// a lift is, in metres: rammed or cob earth laid a lift at a time, its layers wandering
+    /// a little along the wall (D236).
+    pub strata: f32,
+    pub lift: f32,
 }
 
 impl Default for Masks {
@@ -210,6 +293,8 @@ impl Default for Masks {
             weather: 0.0,
             moss: 0.0,
             moss_tint: [1.0; 3],
+            strata: 0.0,
+            lift: 0.15,
         }
     }
 }
@@ -439,6 +524,15 @@ pub enum Pattern {
 pub struct Kits(pub Vec<Kit>);
 
 impl Kits {
+    /// The kind footings and door steps are laid in (D194, D206): the first block kind by its
+    /// id that is not framed, stone.
+    pub fn footing(&self) -> Option<&Kit> {
+        self.0
+            .iter()
+            .filter(|kit| kit.pattern == Pattern::Masonry && kit.framing.is_none())
+            .min_by_key(|kit| kit.id)
+    }
+
     /// The kit that lays a kind, if any does.
     pub fn of(&self, kind: Kind) -> Option<&Kit> {
         self.0.iter().find(|kit| kit.kind() == kind)
@@ -616,6 +710,8 @@ impl Default for Kit {
                 chinking: [0.8, 0.75, 0.66],
             },
             meets: None,
+            framing: None,
+            tint: [1.0; 3],
         }
     }
 }
