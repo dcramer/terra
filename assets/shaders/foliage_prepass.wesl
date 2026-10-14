@@ -60,6 +60,10 @@ fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>, instance: u32, leaf: bool
     if leaf {
         let lens = min(LENS_M, distance(parting.subject.xyz, eye.xyz) * 0.6);
         keep = min(keep, smoothstep(lens - LENS_BAND_M, lens, distance(world, eye.xyz)));
+    } else {
+        // Bark the lens slides past, as it does round a trunk, dithers out within a stride
+        // of it rather than sweeping across the screen as a smear TAA cannot resolve (D289).
+        keep = min(keep, smoothstep(BARK_LENS_M - LENS_BAND_M, BARK_LENS_M, distance(world, eye.xyz)));
     }
     if keep < 1.0 && noise_at(frag_coord) > keep {
         discard;
@@ -68,6 +72,8 @@ fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>, instance: u32, leaf: bool
 
 const LENS_M: f32 = 1.4;
 const LENS_BAND_M: f32 = 0.35;
+// Bark is whole from this far from a third-person lens (D289).
+const BARK_LENS_M: f32 = 0.8;
 
 // As foliage_fragment.wesl: a card fades out as it turns edge-on to the eye (D235). Not in
 // the shadow pass, which keeps the whole card.

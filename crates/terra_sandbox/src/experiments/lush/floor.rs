@@ -192,6 +192,7 @@ pub(super) struct Stand {
     crown_m: f32,
     closes: f32,
     conifer: bool,
+    spruce: bool,
 }
 
 impl Stand {
@@ -219,6 +220,7 @@ impl Stand {
             crown_m,
             closes: closes * if young { 0.7 } else { 1.0 },
             conifer: species != Species::Oak,
+            spruce: species == Species::Spruce,
         }
     }
 }
@@ -256,10 +258,11 @@ pub(super) struct Crowns {
 }
 
 /// What the canopy makes of a place: how much of the sky it hides, how much of what falls
-/// is needles, and how far the nearest bark is.
+/// is needles, how much of the canopy over it is spruce, and how far the nearest bark is.
 struct Over {
     shade: f32,
     needles: f32,
+    spruce: f32,
     bark: f32,
 }
 
@@ -276,6 +279,7 @@ impl Crowns {
         let (mut light, mut needles_miss, mut bark) = (1.0f32, 1.0f32, 8.0f32);
         // Under a broadleaf crown its own leaves fall over the needles.
         let mut leaves_miss = 1.0f32;
+        let mut spruce_miss = 1.0f32;
         for di in -CROWN_REACH..=CROWN_REACH {
             for dj in -CROWN_REACH..=CROWN_REACH {
                 for stand in self.filed.get(&(i + di, j + dj)).into_iter().flatten() {
@@ -289,12 +293,16 @@ impl Crowns {
                     } else {
                         leaves_miss *= 1.0 - stand.under(at) * 0.9;
                     }
+                    if stand.spruce {
+                        spruce_miss *= 1.0 - stand.under(at) * 0.9;
+                    }
                 }
             }
         }
         Over {
             shade: 1.0 - light,
             needles: (1.0 - needles_miss) * (0.25 + 0.75 * leaves_miss),
+            spruce: 1.0 - spruce_miss,
             bark,
         }
     }
@@ -344,6 +352,8 @@ struct Here {
     /// How much of the sky's light reaches it, with the light down a path's corridor.
     light: f32,
     needles: f32,
+    /// How much of the canopy over it is spruce.
+    spruce: f32,
     /// How far the nearest bark, the nearest log or rock's edge, and the nearest path's
     /// edge are.
     bark: f32,
@@ -376,6 +386,7 @@ impl Map {
         Here {
             light: (1.0 - shade + 0.45 * corridor).min(1.0),
             needles: over.needles,
+            spruce: over.spruce,
             bark: over.bark,
             lying: self.lying.edge(at),
             path,
@@ -813,9 +824,13 @@ impl Under {
             }
             // Holly takes the deep shade under the oaks that little else does.
             Under::Holly => (1.0 - smoothstep(0.55, 0.95, here.light)) * broadleaf,
-            // Young spruces come up in the gaps under the conifers.
+            // Young spruces come up in the gaps under the spruces, and few under the pines,
+            // whose stands stay open under their high crowns, so a pine stand reads as pines
+            // rather than a spruce thicket (D289).
             Under::Spruce => {
-                smoothstep(0.25, 0.6, here.needles) * (0.55 + 0.45 * between(0.05, 1.1, here.light))
+                smoothstep(0.25, 0.6, here.needles)
+                    * (0.55 + 0.45 * between(0.05, 1.1, here.light))
+                    * (0.2 + 0.8 * smoothstep(0.15, 0.55, here.spruce))
             }
             // Bramble in the light: gaps, the paths' and the clearing's edges.
             Under::Bramble => smoothstep(0.3, 0.75, here.light) * (0.5 + 0.5 * edge),
@@ -1575,6 +1590,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
             crown_m: 0.0,
             closes: 0.0,
             conifer: false,
+            spruce: false,
         });
         laid[3] += 1;
         note(&mut nearest, 3, at);

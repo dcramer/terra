@@ -165,12 +165,21 @@ pub(super) struct SolidShape {
 }
 
 impl SolidShape {
-    /// From a model's vertices and triangles, those whose corners `keep` keeps.
+    /// From a model's vertices and triangles, those whose corners `keep` keeps, leaving out
+    /// those that face down. A relief is the highest point over each cell, which a face
+    /// turned down never is but under an overhang; and a closed model's floor, as a modelled
+    /// trunk's under its roots is, filled the inside of its relief at the ground, so a cut
+    /// trunk was a ring of pieces round a hollow a camera could stand in (D289). An open
+    /// tube's top is filled as a hole is (`Relief::with_cell`).
     pub(super) fn of(positions: &[[f32; 3]], indices: &[u32], keep: impl Fn(Vec3) -> bool) -> Self {
         let triangles: Vec<[Vec3; 3]> = indices
             .chunks_exact(3)
             .map(|t| [0, 1, 2].map(|k| Vec3::from(positions[t[k] as usize])))
             .filter(|t| t.iter().all(|p| keep(*p)))
+            .filter(|[a, b, c]| {
+                let face = (*b - *a).cross(*c - *a);
+                face.y > -0.5 * face.length()
+            })
             .collect();
         let points: Vec<Vec3> = triangles.iter().flatten().copied().collect();
         let corners: Vec<u32> = (0..points.len() as u32).collect();
@@ -727,5 +736,53 @@ mod tests {
                 .any(|piece| piece.distance(plan).0 < 0.0);
             assert!(covered, "nothing {out} m out");
         }
+    }
+
+    /// A closed model's floor, as a modelled trunk has under its roots, does not make the
+    /// inside of its relief ground level: cut off above a body's height, a trunk two metres
+    /// thick is solid through its middle, not a ring round a hollow (D289).
+    #[test]
+    fn a_closed_trunks_middle_is_solid() {
+        // A closed cylinder 1 m round, 6 m tall, wound outward, with a floor and a lid.
+        let (sides, rings) = (24, 13);
+        let mut positions: Vec<[f32; 3]> = Vec::new();
+        for ring in 0..rings {
+            for side in 0..sides {
+                let a = side as f32 / sides as f32 * std::f32::consts::TAU;
+                positions.push([libm::cosf(a), ring as f32 * 0.5, libm::sinf(a)]);
+            }
+        }
+        let (floor, lid) = (positions.len() as u32, positions.len() as u32 + 1);
+        positions.push([0.0, 0.0, 0.0]);
+        positions.push([0.0, 6.0, 0.0]);
+        let mut indices = Vec::new();
+        let at = |ring: u32, side: u32| ring * sides + side % sides;
+        for ring in 0..rings - 1 {
+            for side in 0..sides {
+                let (a, b) = (at(ring, side), at(ring, side + 1));
+                let (c, d) = (at(ring + 1, side), at(ring + 1, side + 1));
+                indices.extend([a, c, b, b, c, d]);
+            }
+        }
+        for side in 0..sides {
+            indices.extend([floor, at(0, side), at(0, side + 1)]);
+            indices.extend([lid, at(rings - 1, side + 1), at(rings - 1, side)]);
+        }
+        // Outward, as the game culls: each wall triangle's normal points away from the axis.
+        let p = |i: u32| Vec3::from(positions[i as usize]);
+        let face = (p(indices[1]) - p(indices[0])).cross(p(indices[2]) - p(indices[0]));
+        assert!(
+            face.dot(p(indices[0]).with_y(0.0)) > 0.0,
+            "the test's walls face in"
+        );
+        let shape = SolidShape::of(&positions, &indices, |p| p.y < CROP_M);
+        let middle = shape
+            .relief
+            .cells
+            .iter()
+            .filter(|c| Vec2::new(c.x, c.z).length() < 0.4)
+            .map(|c| c.y)
+            .fold(f32::MAX, f32::min);
+        assert!(middle > 2.0, "its middle stands only {middle} m");
     }
 }

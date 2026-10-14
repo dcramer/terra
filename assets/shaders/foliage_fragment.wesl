@@ -17,6 +17,58 @@ import bevy_pbr::render::{
     clustered_forward::{view_fragment_cluster_index, unpack_clusterable_object_index_ranges},
 };
 @if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::irradiance_volume_light;
+@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) import bevy_pbr::render::mesh_view_bindings::{light_probes, environment_map_sampler};
+@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::render::mesh_view_bindings::diffuse_environment_maps;
+@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP && !MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::render::mesh_view_bindings::diffuse_environment_map;
+@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) import bevy_render::maths::quat_rotate;
+
+// How much of the open sky's light reaches a point from the side `N` faces, 0 to 1: the sky
+// occlusion volume's light there (D270) against the open sky's, as the environment map gives
+// it. Under the crowns it is a fraction; in the open, all of it.
+@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP)
+fn sky_seen(world: vec3<f32>, N: vec3<f32>, frag_coord: vec4<f32>) -> f32 {
+    let view_z = dot(vec4<f32>(
+        view.view_from_world[0].z,
+        view.view_from_world[1].z,
+        view.view_from_world[2].z,
+        view.view_from_world[3].z
+    ), vec4<f32>(world, 1.0));
+    let orthographic = view.clip_from_view[3].w == 1.0;
+    var ranges = unpack_clusterable_object_index_ranges(
+        view_fragment_cluster_index(frag_coord.xy, view_z, orthographic),
+    );
+    let seen = irradiance_volume_light(world, N, &ranges);
+    var d = quat_rotate(light_probes.view_rotation, N);
+    d.z = -d.z;
+    var open = vec3<f32>(0.0);
+@if(MULTIPLE_LIGHT_PROBES_IN_ARRAY) {
+    if light_probes.view_cubemap_index >= 0 {
+        open = textureSampleLevel(diffuse_environment_maps[light_probes.view_cubemap_index], environment_map_sampler, d, 0.0).rgb;
+    }
+} @else {
+    open = textureSampleLevel(diffuse_environment_map, environment_map_sampler, d, 0.0).rgb;
+}
+    let luma = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let open_light = dot(open, luma) * light_probes.intensity_for_view;
+    if open_light <= 1.0e-6 {
+        return 1.0;
+    }
+    return clamp(dot(seen, luma) / open_light, 0.0, 1.0);
+}
+
+// Bark reflects the sky only where it sees the sky (D289): the environment map's specular
+// light is the open sky's, which no crown hides, so limbs up among the leaves, seen from
+// below, shone slate-blue with a sky they cannot see. Specular occlusion from how much of the
+// sky the point sees, as Frostbite's from ambient occlusion (Lagarde and de Rousiers, "Moving
+// Frostbite to Physically Based Rendering", 2014, section 4.10.2), the visibility here the
+// sky occlusion volume's, as Unreal's sky light occlusion dims its sky's reflections as well.
+@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP)
+fn bark_sky_specular(input: PbrInput, frag_coord: vec4<f32>) -> f32 {
+    let seen = sky_seen(input.world_position.xyz, input.N, frag_coord);
+    let n_dot_v = max(dot(input.N, input.V), 1.0e-4);
+    let roughness = input.material.perceptual_roughness * input.material.perceptual_roughness;
+    return clamp(pow(n_dot_v + seen, exp2(-16.0 * roughness - 1.0)) - 1.0 + seen, 0.0, 1.0);
+}
 
 // What colour a leaf passes light on in, lit through: yellower than it reflects, as
 // chlorophyll passes green and yellow and keeps the red and blue (D247).
@@ -285,8 +337,8 @@ var<storage, read> parting: Parting;
 // (terra_world's parting.rs eases it over a few tenths of a second), rather than a hole cut
 // through it; and leaves at the lens fade out over a short band, so few are ever partly
 // gone at once. Only in the main camera's own view, so the prepass agrees and shadows keep
-// them. Bark only by its plant's fade: a trunk dithered through reads as a hole in
-// something solid, and the camera's boom stops before trunks.
+// them. Bark by its plant's fade, and only within a stride of the lens, which slides round
+// trunks (D285): a trunk dithered through farther off reads as a hole in something solid.
 fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>, instance: u32, leaf: bool) {
     let eye = parting.eye;
     if eye.w < 0.5 || distance(view.world_position, eye.xyz) > 0.01 {
@@ -296,6 +348,10 @@ fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>, instance: u32, leaf: bool
     if leaf {
         let lens = min(LENS_M, distance(parting.subject.xyz, eye.xyz) * 0.6);
         keep = min(keep, smoothstep(lens - LENS_BAND_M, lens, distance(world, eye.xyz)));
+    } else {
+        // Bark the lens slides past, as it does round a trunk, dithers out within a stride
+        // of it rather than sweeping across the screen as a smear TAA cannot resolve (D289).
+        keep = min(keep, smoothstep(BARK_LENS_M - LENS_BAND_M, BARK_LENS_M, distance(world, eye.xyz)));
     }
     if keep < 1.0 && noise_at(frag_coord) > keep {
         discard;
@@ -305,6 +361,8 @@ fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>, instance: u32, leaf: bool
 // Leaves are whole from this far from a third-person lens, and gone this much nearer.
 const LENS_M: f32 = 1.4;
 const LENS_BAND_M: f32 = 0.35;
+// Bark is whole from this far from a third-person lens (D289).
+const BARK_LENS_M: f32 = 0.8;
 
 // Discards this fragment if it is outside its crossfade's share at this pixel this frame.
 // `dither` is Bevy's level: -16 to 0 fading in, 0 to 16 fading out.
@@ -467,6 +525,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if wind.bark < 0.5 && wind.leaf.w > 0.0 {
         let inside = mix(wind.leaf.w, 1.0, smoothstep(0.25, 0.8, sky));
         pbr_input.material.base_color = vec4<f32>(pbr_input.material.base_color.rgb * inside, pbr_input.material.base_color.a);
+    }
+}
+@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) {
+    if wind.bark > 0.5 {
+        pbr_input.specular_occlusion *= bark_sky_specular(pbr_input, in.position);
     }
 }
     let leaf_colour = pbr_input.material.base_color.rgb;

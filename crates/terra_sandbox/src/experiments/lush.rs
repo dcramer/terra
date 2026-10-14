@@ -1075,6 +1075,15 @@ fn plant(
             // Glades open here and there, where only young trees grow.
             let glade = glade_at(&glades, at);
             let species = species_at(&groves, at, dice.range(-0.12, 0.12));
+            // Scots pines are light-hungry and their stands open under high crowns: there a
+            // young conifer, which is a spruce, comes up only in one place in four, so a pine
+            // stand reads as tall clean pines over an open floor, not a spruce thicket
+            // (D289). By where it is, and after the dice are thrown for it, so every other
+            // tree keeps its place; its room stays open.
+            let scatter = (libm::sinf(at.x * 12.9898 + at.y * 78.233) * 43_758.547)
+                .fract()
+                .abs();
+            let left_out = young && species == Species::Pine && scatter < 0.75;
             // Conifers stand closer than oaks, whose crowns spread. Trees stand in clumps
             // with gaps between, not evenly spaced as a plantation's (D247).
             // Grown pines, self-sown, stand in knots of a few two or three metres apart with
@@ -1116,7 +1125,6 @@ fn plant(
                 veterans.push(at);
             }
             let model = &trees[kind];
-            by_species[model.species as usize] += 1;
             // A veteran's model is 24 m tall; it stands about 20.
             let scale = dice.range(0.85, 1.15)
                 * if veterans_kinds.contains(&kind) {
@@ -1139,6 +1147,10 @@ fn plant(
                     dice.range(0.85, 1.18)
                 };
             place.scale = Vec3::new(wide, scale, wide);
+            if left_out {
+                continue;
+            }
+            by_species[model.species as usize] += 1;
             let foot = place.translation;
             let crown = place.rotation * (model.crown.0 * place.scale);
             canopy.add(Stand::of(
@@ -1612,20 +1624,70 @@ fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
 
 /// A limb's rings: as grown, and for a trunk also between, every 0.35 m near the ground
 /// and 1 m above, so its roots and lumps have rings to show on.
-fn rings(limb: &Limb) -> (Vec<Vec3>, Vec<f32>) {
+/// A branch's line of points drawn as the curve through them, `between` more rings in each
+/// step, as SpeedTree draws a branch as a spline through its nodes: the straight runs
+/// between a grown line's points read as pick-up sticks with elbows (D289). Catmull-Rom,
+/// centripetal so a kink does not overshoot into a loop; the radius runs along it evenly.
+fn curved(points: &[Vec3], radii: &[f32], between: usize) -> (Vec<Vec3>, Vec<f32>) {
+    let n = points.len();
+    if between == 0 || n < 3 {
+        return (points.to_vec(), radii.to_vec());
+    }
+    let at = |i: isize| -> Vec3 {
+        if i < 0 {
+            points[0] * 2.0 - points[1]
+        } else if i as usize >= n {
+            points[n - 1] * 2.0 - points[n - 2]
+        } else {
+            points[i as usize]
+        }
+    };
+    let (mut out, mut out_radii) = (vec![points[0]], vec![radii[0]]);
+    for i in 0..n - 1 {
+        let [p0, p1, p2, p3] = [-1, 0, 1, 2].map(|k| at(i as isize + k));
+        // Centripetal knots: the square root of each step's length.
+        let knot = |a: Vec3, b: Vec3| libm::sqrtf(a.distance(b)).max(1.0e-4);
+        let (t1, t2, t3) = {
+            let t1 = knot(p0, p1);
+            let t2 = t1 + knot(p1, p2);
+            (t1, t2, t2 + knot(p2, p3))
+        };
+        for s in 1..=between + 1 {
+            let f = s as f32 / (between + 1) as f32;
+            let t = t1 + (t2 - t1) * f;
+            let a1 = p0 * ((t1 - t) / t1) + p1 * (t / t1);
+            let a2 = p1 * ((t2 - t) / (t2 - t1)) + p2 * ((t - t1) / (t2 - t1));
+            let a3 = p2 * ((t3 - t) / (t3 - t2)) + p3 * ((t - t2) / (t3 - t2));
+            let b1 = a1 * ((t2 - t) / t2) + a2 * (t / t2);
+            let b2 = a2 * ((t3 - t) / (t3 - t1)) + a3 * ((t - t1) / (t3 - t1));
+            out.push(b1 * ((t2 - t) / (t2 - t1)) + b2 * ((t - t1) / (t2 - t1)));
+            out_radii.push(radii[i] + (radii[i + 1] - radii[i]) * f);
+        }
+    }
+    (out, out_radii)
+}
+
+fn rings(limb: &Limb, between: usize) -> (Vec<Vec3>, Vec<f32>) {
     if limb.depth > 0 {
         // A branch runs out to a point, as a real one does, rather than ending in an open,
         // flat-cut tube (D247).
-        let (mut points, mut radii) = (limb.points.clone(), limb.radii.clone());
-        // It narrows over a few of its own widths, as a twig does, not to a pin at once.
+        let (mut points, mut radii) = if limb.pointed {
+            curved(&limb.points, &limb.radii, between)
+        } else {
+            (limb.points.clone(), limb.radii.clone())
+        };
+        // It runs on past its last point, narrowing to a point over several of its own
+        // widths and at least a hand's length, as a twig does, not to a pin at once: a tip
+        // a few widths long read from below as a blunt cap (D289).
         if let (true, &[.., before, last], Some(&r)) =
             (limb.pointed, points.as_slice(), radii.last())
         {
             let ahead = (last - before).normalize_or(Vec3::Y);
-            points.push(last + ahead * r * 2.0);
-            radii.push(r * 0.55);
-            points.push(last + ahead * r * 5.0);
-            radii.push(r * 0.05);
+            let reach = (r * 9.0).max(0.12);
+            for (along, narrow) in [(0.3, 0.6), (0.65, 0.3), (1.0, 0.04)] {
+                points.push(last + ahead * reach * along);
+                radii.push(r * narrow);
+            }
         }
         return (points, radii);
     }
@@ -1721,7 +1783,14 @@ impl Shape {
 /// A limb as a tube with bark round it.
 fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: Vec2) {
     let start = build.positions.len() as u32;
-    let (points, radii) = rings(limb);
+    // A branch's curve drawn finer the rounder it is drawn: a near great limb two rings
+    // between its points, a near branch one, the thin and the far their points alone.
+    let between = match sides {
+        10.. => 2,
+        6.. => 1,
+        _ => 0,
+    };
+    let (points, radii) = rings(limb, between);
     let shape = Shape::of(limb);
     let mut along = 0.0;
     // One repeat of the bark's picture is about `bark_m` round the limb a third of the way
@@ -1991,5 +2060,59 @@ fn crown_seen(
         middle: middle_at_foot + up * height * mid,
         half: Vec3::new(reach * wide, height * half, reach * wide),
         closes: closes * if young { 0.7 } else { 1.0 },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A branch is drawn as the curve through its grown points, not straight runs between
+    /// them with elbows, and runs out to a fine point at least a hand's length past its last
+    /// point (D289).
+    #[test]
+    fn a_branch_curves_through_its_points_to_a_fine_tip() {
+        // A crooked branch: out, then kinked up, then on.
+        let points = vec![
+            Vec3::ZERO,
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(1.8, 0.6, 0.0),
+            Vec3::new(2.8, 0.8, 0.0),
+        ];
+        let limb = Limb {
+            points: points.clone(),
+            radii: vec![0.08, 0.06, 0.04, 0.02],
+            depth: 2,
+            pointed: true,
+        };
+        let (drawn, radii) = rings(&limb, 2);
+        // Through every grown point.
+        for point in &points {
+            assert!(
+                drawn.iter().any(|p| p.distance(*point) < 1.0e-4),
+                "misses {point}"
+            );
+        }
+        // Between them it bends a little at each ring, not all at once at an elbow.
+        let sharpest = drawn
+            .windows(3)
+            .map(|w| (w[1] - w[0]).angle_between(w[2] - w[1]))
+            .fold(0.0, f32::max);
+        let elbow = (points[1] - points[0]).angle_between(points[2] - points[1]);
+        assert!(
+            sharpest < elbow * 0.7,
+            "a {sharpest} turn of a {elbow} elbow"
+        );
+        // A fine tip, a hand's length on.
+        let tip = drawn[drawn.len() - 1].distance(points[3]);
+        assert!(tip >= 0.12, "a tip {tip} m long");
+        let end = radii[radii.len() - 1];
+        assert!(end < 0.002, "ends {end} m thick");
+        // A cut log keeps its points and its open end.
+        let log = Limb {
+            pointed: false,
+            ..limb
+        };
+        assert_eq!(rings(&log, 2).0, points);
     }
 }

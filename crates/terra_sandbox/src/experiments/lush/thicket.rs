@@ -255,14 +255,32 @@ pub(super) fn evergreen(
     clump_m: f32,
 ) -> Shrub {
     let def = def(Habit::Conical, "", clump_m, 0.024);
-    let tree = grown_tree::grow(dice, &def, height);
+    let mut tree = grown_tree::grow(dice, &def, height);
+    // In a wood's shade a young spruce keeps its needles on the outer part of each bough and
+    // loses a bough here and there, so its tiers stand apart with dark gaps between, rather
+    // than one even mass of needles (D289): each branch's sprays nearer the trunk than a
+    // third of its reach go, and a fifth of the branches below its top go bare.
+    let mut reach = vec![0.0f32; tree.branches];
+    for spray in &tree.sprays {
+        reach[spray.branch] = reach[spray.branch].max(Vec2::new(spray.at.x, spray.at.z).length());
+    }
+    let bare: Vec<bool> = (0..tree.branches).map(|_| dice.unit() < 0.2).collect();
+    let top = tree.branches.saturating_sub(1);
+    tree.sprays.retain(|spray| {
+        let out = Vec2::new(spray.at.x, spray.at.z).length();
+        spray.branch == top || (!bare[spray.branch] && out > reach[spray.branch] * 0.35)
+    });
     let canopy = Canopy::of(&tree, tint);
     let mut placed = grown_tree::crown_cards(dice, &tree, &canopy);
     // A spruce's shoots are not flat fans: each branch's side shoots hang from it in a
     // curtain and turn every way round it, as Norway spruce's do, so a branch reads as a
-    // rolled bottle-brush of needles from any side, not a horizontal plank (D269).
-    for (spray, set) in tree.sprays.iter().zip(&mut placed) {
+    // rolled bottle-brush of needles from any side, not a horizontal plank (D269); on every
+    // other spray, so the curtain is open.
+    for (k, (spray, set)) in tree.sprays.iter().zip(&mut placed).enumerate() {
         let Some(along) = spray.along else { continue };
+        if k % 2 == 1 {
+            continue;
+        }
         let side = along.cross(Vec3::Y).normalize_or(Vec3::X);
         let hang = (along * 0.45 - Vec3::Y * 0.75 + side * dice.range(-0.5, 0.5)).normalize();
         let below = spray.at - Vec3::Y * spray.size * 0.12;
@@ -399,6 +417,52 @@ pub(super) fn bramble(dice: &mut Rng, leaf: &Card, tint: Vec3) -> Shrub {
     leafy(dice, &tangle, leaf, tint)
 }
 
+/// A snag's branch, dead and weathered (D289): out from where the living one left the trunk,
+/// sagging as its wood dried and bowed, crooked where it once forked, narrowing, and snapped
+/// off a quarter to two thirds of the way out in a splintered point. Truncated as it grew it
+/// was a straight square plank cut square.
+fn dead_branch(dice: &mut Rng, grown: &Limb) -> Limb {
+    let (from, r) = (grown.points[0], grown.radii[0].max(0.012));
+    let reach = grown
+        .points
+        .last()
+        .map_or(0.5, |end| end.distance(from))
+        .max(0.3)
+        * dice.range(0.25, 0.65);
+    let mut direction = (grown.points[1] - from).normalize_or(Vec3::X);
+    let steps = 4;
+    let (mut points, mut radii) = (vec![from], vec![r]);
+    let mut at = from;
+    for step in 1..=steps {
+        let t = step as f32 / steps as f32;
+        let kink = if dice.unit() < 0.35 {
+            dice.unit_vector() * dice.range(0.2, 0.45)
+        } else {
+            dice.unit_vector() * 0.08
+        };
+        // Bowed down most near the trunk, as a beam under its own weight.
+        let level = 1.0 - direction.y.abs();
+        direction = (direction + kink - Vec3::Y * 0.22 * level * (1.0 - 0.6 * t)).normalize();
+        at += direction * reach / steps as f32;
+        points.push(at);
+        radii.push(r * (1.0 - 0.5 * t));
+    }
+    let (mut points, mut radii) = super::curved(&points, &radii, 2);
+    // The break: splinters standing on past where it snapped, to one side.
+    let (end, rr) = (at, r * 0.5);
+    let aside = direction.any_orthonormal_vector() * rr * dice.range(-1.0, 1.0);
+    points.extend([
+        end + direction * rr * 1.5 + aside,
+        end + direction * rr * 4.0 - aside,
+    ]);
+    radii.extend([rr * 0.45, rr * 0.06]);
+    Limb {
+        points,
+        radii,
+        depth: grown.depth,
+    }
+}
+
 /// A snag: a small tree long dead, standing four to ten metres, broken off at a half to
 /// nine tenths of its height, its twigs gone and its branches snapped short; a dead birch's
 /// few climbing ones, or a dead spruce's many thin whorls. Its trunk is solid.
@@ -429,14 +493,10 @@ pub(super) fn snag(dice: &mut Rng, conifer: bool, tint: Vec3) -> Shrub {
             ]);
             limb.radii.extend([r * 0.6, r * 0.08]);
         } else {
-            // Snapped short, the stubs pointing a little down with their weight gone.
-            let keep = ((limb.points.len() as f32 * dice.range(0.3, 0.85)).ceil() as usize)
-                .clamp(2, limb.points.len());
-            limb.points.truncate(keep);
-            limb.radii.truncate(keep);
+            *limb = dead_branch(dice, limb);
         }
     }
-    let sides = |depth: u32| if depth == 0 { 9 } else { 4 };
+    let sides = |depth: u32| if depth == 0 { 9 } else { 6 };
     let mut trunk = Build::default();
     let mut branches = Build::default();
     let mut far = Build::default();
@@ -636,6 +696,45 @@ mod tests {
             let height = dead.trunk.as_ref().expect("solid").height();
             assert!((1.8..10.5).contains(&height), "snag {k}: {height}");
         }
+    }
+
+    /// A snag's branch is a dead limb, not a plank: shorter than the living one was, bowed
+    /// and crooked rather than straight, narrowing, and broken off in a splintered point
+    /// (D289).
+    #[test]
+    fn a_snags_branches_are_broken_crooked_limbs() {
+        let grown = Limb {
+            points: (0..=5)
+                .map(|i| Vec3::new(i as f32 * 0.3, 2.0, 0.0))
+                .collect(),
+            radii: (0..=5).map(|i| 0.03 * (1.0 - 0.15 * i as f32)).collect(),
+            depth: 1,
+        };
+        let (mut bows, mut risen) = (Vec::new(), 0);
+        for seed in 0..12 {
+            let dead = dead_branch(&mut Seed(seed).rng(), &grown);
+            let (first, last) = (dead.points[0], dead.points[dead.points.len() - 1]);
+            assert!(
+                last.distance(first) < 1.5 * 0.7,
+                "{seed}: as long as it grew"
+            );
+            assert!(dead.radii[dead.radii.len() - 1] < dead.radii[0] * 0.1);
+            let chord = (last - first).normalize();
+            let bow = dead
+                .points
+                .iter()
+                .map(|p| (*p - first).reject_from(chord).length())
+                .fold(0.0, f32::max)
+                / last.distance(first);
+            bows.push(bow);
+            if last.y >= first.y {
+                risen += 1;
+            }
+        }
+        let mean = bows.iter().sum::<f32>() / bows.len() as f32;
+        assert!(mean > 0.04, "bowed {mean} of its length on average");
+        // Their weight bowed most down from the level they grew at; a kink lifts a few.
+        assert!(risen <= 3, "{risen} of 12 rose");
     }
 
     #[test]

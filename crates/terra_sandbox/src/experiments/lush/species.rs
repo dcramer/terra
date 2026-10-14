@@ -441,9 +441,12 @@ fn limb(
     mass: usize,
     low: bool,
 ) {
-    let sag = if low { 0.07 } else { 0.0 };
+    // Every great limb bows a little under its own weight, a low one more, most near its foot
+    // as a loaded beam does, and its outer part turns up toward the light; it narrows nearly
+    // to a twig's width at its end, where a blunt one read as a sawn-off cylinder (D289).
+    let sag = if low { 0.13 } else { 0.05 };
     let (points, radii, directions) = line(
-        dice, from, heading, length, radius, 0.78, 7, 0.1, 0.35, 0.07, sag,
+        dice, from, heading, length, radius, 0.88, 7, 0.1, 0.35, 0.1, sag,
     );
     let lump = tree.branches;
     let count = ((length / 1.3).round() as usize).clamp(3, 9);
@@ -498,7 +501,7 @@ fn twigs(
     mass: usize,
 ) {
     let (points, radii, directions) = line(
-        dice, from, heading, length, radius, 0.7, 4, 0.22, 0.25, 0.1, 0.0,
+        dice, from, heading, length, radius, 0.84, 5, 0.2, 0.3, 0.12, 0.06,
     );
     let count = 2 + dice.below(3);
     for _ in 0..count {
@@ -512,11 +515,11 @@ fn twigs(
             heading,
             twig,
             (r * 0.5).max(0.015),
-            0.7,
+            0.8,
             3,
             0.3,
             0.0,
-            0.1,
+            0.12,
             0.0,
         );
         tree.clump(
@@ -643,13 +646,30 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, form: Form, young:
         } else {
             dice.range(0.16, 0.2)
         };
+    // A young spruce in a wood's shade (D289): its whorls a year's growth apart, with dark
+    // gaps between the tiers, some whorls weaker than the next, a branch here and there
+    // missing, each bough drooping and turning up at its tip, its needles on its outer part,
+    // the inner shed in the shade; grown densely all over it read as a mass of broccoli.
+    let sapling = !pine && young;
     // A spruce's whorls a little apart, so its crown reads as tiers.
     let spacing = if pine {
         dice.range(0.9, 1.3)
     } else {
         dice.range(0.75, 1.0)
-    } * if young { 0.6 } else { 1.0 };
-    let clump_m = if young { 0.6 } else { 0.8 };
+    } * if sapling {
+        0.85
+    } else if young {
+        0.6
+    } else {
+        1.0
+    };
+    let clump_m = if sapling {
+        0.55
+    } else if young {
+        0.6
+    } else {
+        0.8
+    };
     let bands = if pine { 5 } else { 8 };
     // A pine's crown is lopsided toward the side it found light on, and its outline its own:
     // where along the crown its branches are longest, and how sharply they shorten off it.
@@ -879,7 +899,7 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, form: Form, young:
     let mut whorl = 0;
     while y < crown_top - spacing * 0.5 {
         let t = (y - base) / (crown_top - base);
-        let count = if pine {
+        let count = if pine || sapling {
             4 + dice.below(3)
         } else {
             5 + dice.below(3)
@@ -887,9 +907,12 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, form: Form, young:
         let (at, r) = stem_at(y, whorl);
         whorl += 1;
         let band = ((t * bands as f32) as usize).min(bands - 1);
+        // How well the year it grew in went: a young spruce's tiers are not all alike.
+        let vigour = if sapling { dice.range(0.7, 1.15) } else { 1.0 };
         for k in 0..count {
-            // A pine's crown is ragged: a branch here and there never grew.
-            if pine && dice.unit() < 0.15 {
+            // A pine's crown is ragged: a branch here and there never grew; a young spruce's
+            // too, shaded out.
+            if (pine && dice.unit() < 0.15) || (sapling && dice.unit() < 0.2) {
                 continue;
             }
             let around = turn + k as f32 / count as f32 * TAU + dice.range(-0.35, 0.35);
@@ -916,16 +939,16 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, form: Form, young:
                 // Out level or a little down, sagging under its own weight along its
                 // length, its tip turned up: a spruce's drooping layered whorls (D247).
                 (
-                    reach * libm::powf(1.0 - t, 0.85) * dice.range(0.85, 1.1) + 0.35,
+                    (reach * libm::powf(1.0 - t, 0.85) * dice.range(0.85, 1.1) + 0.35) * vigour,
                     -0.12 + 0.5 * t + dice.range(-0.1, 0.1),
-                    0.16,
-                    0.45,
+                    if sapling { 0.24 } else { 0.16 },
+                    if sapling { 0.6 } else { 0.45 },
                 )
             };
             let heading = (out * libm::cosf(rise) + Vec3::Y * libm::sinf(rise)).normalize();
             let thickness = (r * if pine { 0.33 } else { 0.3 }).max(0.025);
             let (mut p, rr, mut d) = line(
-                dice, at, heading, length, thickness, 0.8, 4, 0.08, 0.0, 0.0, droop,
+                dice, at, heading, length, thickness, 0.86, 4, 0.08, 0.0, 0.0, droop,
             );
             // The tip turns up toward the light.
             if let (Some(last), Some(dir)) = (p.len().checked_sub(1), d.last().copied()) {
@@ -935,9 +958,17 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, form: Form, young:
             }
             let half = (around.rem_euclid(TAU) > PI) as usize;
             let branch = band * 2 + half;
-            let gap = clump_m * if pine { 0.85 } else { 0.75 };
-            // A spruce's needles run nearly to its trunk, so its boughs show no bare stick (D264).
-            let start = length * if pine { 0.35 } else { 0.12 };
+            let gap = clump_m
+                * if pine {
+                    0.85
+                } else if sapling {
+                    1.05
+                } else {
+                    0.75
+                };
+            // A spruce's needles run nearly to its trunk, so its boughs show no bare stick
+            // (D264); a young one's in the shade only along their outer part.
+            let start = length * if pine || sapling { 0.35 } else { 0.12 };
             let mut s = start + dice.range(0.0, gap * 0.5);
             while s < length {
                 let (point, _, direction) = along(&p, &rr, s / length);
@@ -1249,6 +1280,58 @@ mod tests {
             .count();
         assert!(dead >= 6, "{dead} dead branches");
         assert!(pine.branches <= 10 && spruce.branches <= 16);
+    }
+
+    /// A young spruce in the shade is tiers of drooping boughs with gaps between them, its
+    /// needles on their outer part, not one even mass of needles to its trunk (D289): beside
+    /// a grown spruce's, which runs its needles nearly to the trunk, few of its clumps are
+    /// near its trunk, and some of its height between whorls holds none.
+    #[test]
+    fn a_young_spruce_stands_in_open_tiers() {
+        let mut dice = Seed(12).rng();
+        for k in 0..4 {
+            let height = 4.0 + k as f32;
+            let young = conifer(&mut dice, height, Species::Spruce, Form::Tall, true);
+            let below_top = |at: &Vec3| at.y < height - 1.0;
+            let clumps: Vec<Vec3> = young
+                .tips
+                .iter()
+                .map(|(at, _)| *at)
+                .filter(below_top)
+                .collect();
+            // How far out each clump is, of the farthest of its tier's (within 0.3 m).
+            let out = |at: &Vec3| Vec2::new(at.x, at.z).length();
+            let inner = clumps
+                .iter()
+                .filter(|at| {
+                    let tier = clumps
+                        .iter()
+                        .filter(|other| (other.y - at.y).abs() < 0.3)
+                        .map(out)
+                        .fold(0.0, f32::max);
+                    out(at) < tier * 0.3
+                })
+                .count();
+            assert!(
+                (inner as f32) < clumps.len() as f32 * 0.06,
+                "{k}: {inner} of {} clumps by the trunk",
+                clumps.len()
+            );
+            // Gaps between tiers: tenths of a metre up the crown with no clump's middle.
+            let (low, high) = clumps.iter().fold((f32::MAX, f32::MIN), |(l, h), at| {
+                (l.min(at.y), h.max(at.y))
+            });
+            let bands = ((high - low) / 0.1).ceil() as usize;
+            let mut filled = vec![false; bands.max(1)];
+            for at in &clumps {
+                filled[(((at.y - low) / 0.1) as usize).min(bands - 1)] = true;
+            }
+            let empty = filled.iter().filter(|f| !**f).count();
+            assert!(
+                empty as f32 > bands as f32 * 0.12,
+                "{k}: only {empty} of {bands} bands empty"
+            );
+        }
     }
 
     /// The trunk's highest point, and how far out from its foot its top is for its height.
