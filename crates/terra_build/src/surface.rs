@@ -308,6 +308,94 @@ impl Grid {
     }
 }
 
+/// A grid's values run together from its low corner: each cell's the XOR, and the sum, of
+/// every value in the box from the low corner to it, so any box's are read from its
+/// corners in eight steps, as a summed-area table is.
+struct Running {
+    xor: Vec<u64>,
+    sum: Vec<u64>,
+    size: IVec3,
+}
+
+impl Running {
+    fn of(grid: &Grid, values: &[u64]) -> Running {
+        // One cell more each way, so the box's corners below the grid read zero.
+        let size = grid.size + IVec3::ONE;
+        let at = |x: i32, y: i32, z: i32| (x + size.x * (y + size.y * z)) as usize;
+        let cells = (size.x * size.y * size.z) as usize;
+        let (mut xor, mut sum) = (vec![0u64; cells], vec![0u64; cells]);
+        for z in 1..size.z {
+            for y in 1..size.y {
+                for x in 1..size.x {
+                    let v = values
+                        [((x - 1) + grid.size.x * ((y - 1) + grid.size.y * (z - 1))) as usize];
+                    let corners = [
+                        at(x - 1, y, z),
+                        at(x, y - 1, z),
+                        at(x, y, z - 1),
+                        at(x - 1, y - 1, z),
+                        at(x - 1, y, z - 1),
+                        at(x, y - 1, z - 1),
+                        at(x - 1, y - 1, z - 1),
+                    ];
+                    let mut x_ = v;
+                    for c in corners {
+                        x_ ^= xor[c];
+                    }
+                    xor[at(x, y, z)] = x_;
+                    let s = v
+                        .wrapping_add(sum[corners[0]])
+                        .wrapping_add(sum[corners[1]])
+                        .wrapping_add(sum[corners[2]])
+                        .wrapping_sub(sum[corners[3]])
+                        .wrapping_sub(sum[corners[4]])
+                        .wrapping_sub(sum[corners[5]])
+                        .wrapping_add(sum[corners[6]]);
+                    sum[at(x, y, z)] = s;
+                }
+            }
+        }
+        Running { xor, sum, size }
+    }
+
+    /// The box `reach` round a cube, as corners into the running tables: its high corner
+    /// and its low corner less one, each cell inside the grid's.
+    fn corners(&self, grid: &Grid, cube: IVec3, reach: i32) -> [(usize, bool); 8] {
+        let low = (cube - IVec3::splat(reach) - grid.low).clamp(IVec3::ZERO, grid.size);
+        let high = (cube + IVec3::splat(reach + 1) - grid.low).clamp(IVec3::ZERO, grid.size);
+        let at = |x: i32, y: i32, z: i32| (x + self.size.x * (y + self.size.y * z)) as usize;
+        let mut out = [(0, true); 8];
+        for (k, out) in out.iter_mut().enumerate() {
+            let (hx, hy, hz) = (k & 1 == 0, k & 2 == 0, k & 4 == 0);
+            let x = if hx { high.x } else { low.x };
+            let y = if hy { high.y } else { low.y };
+            let z = if hz { high.z } else { low.z };
+            // Added where an even number of its coordinates are the low corner's.
+            let lows = u32::from(!hx) + u32::from(!hy) + u32::from(!hz);
+            *out = (at(x, y, z), lows % 2 == 0);
+        }
+        out
+    }
+
+    fn xor(&self, grid: &Grid, cube: IVec3, reach: i32) -> u64 {
+        self.corners(grid, cube, reach)
+            .iter()
+            .fold(0, |acc, &(i, _)| acc ^ self.xor[i])
+    }
+
+    fn sum(&self, grid: &Grid, cube: IVec3, reach: i32) -> u64 {
+        self.corners(grid, cube, reach)
+            .iter()
+            .fold(0u64, |acc, &(i, add)| {
+                if add {
+                    acc.wrapping_add(self.sum[i])
+                } else {
+                    acc.wrapping_sub(self.sum[i])
+                }
+            })
+    }
+}
+
 /// Whether a cube of the grid is full: not yet asked, no, or yes.
 const UNKNOWN: u8 = 0;
 const EMPTY: u8 = 1;
@@ -518,60 +606,55 @@ pub fn draw_slots(
             .fold(1.0_f32, f32::min)
     };
     // What a cube's faces are worked out from, as two numbers: where their points are, from
-    // which cubes are drawn and full two round it; and their normals along their rims,
-    // which take the faces beside them, from those three round it. A cube that is cut, or
-    // has one cut beside it, is not kept, being rare.
+    // which cubes are drawn and full two round it, and how those drawn are cut; and their
+    // normals along their rims, which take the faces beside them, from those three round
+    // it. Each a box of cells' numbers XORed together (Zobrist hashing, as chess engines and
+    // voxel meshers key a neighbourhood), read in a few steps from the grid's running XOR
+    // rather than cell by cell: a cube's is asked of every cube with faces. A cube cut with
+    // no number for its cut is not kept.
+    let windows = (caching.is_some()).then(|| {
+        let state = |i: usize| u64::from(member[i]) << 1 | u64::from(fill[i] == FULL);
+        // By where the cell is, not its place in the grid, which an edit may move.
+        let zobrist = |i: usize, what: u64| {
+            let i = i as i32;
+            let at = grid.low
+                + IVec3::new(
+                    i % grid.size.x,
+                    i / grid.size.x % grid.size.y,
+                    i / (grid.size.x * grid.size.y),
+                );
+            crate::layout::splitmix(
+                u64::from(at.x as u32)
+                    ^ u64::from(at.y as u32).rotate_left(21)
+                    ^ u64::from(at.z as u32).rotate_left(42)
+                    ^ what.rotate_left(60),
+            )
+        };
+        let cells = grid.len();
+        let states: Vec<u64> = (0..cells).map(|i| zobrist(i, state(i) + 1)).collect();
+        let cuts: Vec<u64> = (0..cells)
+            .map(|i| match (member[i] && cut_of[i], cut_keys[i]) {
+                (true, Some(key)) => crate::layout::splitmix(zobrist(i, 7) ^ key),
+                _ => 0,
+            })
+            .collect();
+        let unkeyed: Vec<u64> = (0..cells)
+            .map(|i| u64::from(member[i] && cut_of[i] && cut_keys[i].is_none()))
+            .collect();
+        [states, cuts, unkeyed].map(|values| Running::of(&grid, &values))
+    });
     let signature = |cube: IVec3| -> Option<Signature> {
-        let (mut shape, mut whole) = (
-            crate::mesh::Corners::default(),
-            crate::mesh::Corners::default(),
-        );
-        let (mut near_word, mut word) = (0u64, 0u64);
-        let (mut near_bits, mut bits) = (0, 0);
-        for z in -3..=3 {
-            for y in -3..=3 {
-                for x in -3..=3 {
-                    let at = cube + IVec3::new(x, y, z);
-                    let near = x.abs().max(y.abs()).max(z.abs()) <= 2;
-                    let (drawn, solid) = match grid.index(at) {
-                        Some(i) => {
-                            if near && member[i] && cut_of[i] {
-                                let cut = cut_keys[i]?;
-                                shape.write_u64(cut);
-                                whole.write_u64(cut);
-                            }
-                            (member[i], fill[i] == FULL)
-                        }
-                        None => (false, hides(at)),
-                    };
-                    let state = u64::from(drawn) << 1 | u64::from(solid);
-                    word = word << 2 | state;
-                    bits += 2;
-                    if bits == 64 {
-                        whole.write_u64(word);
-                        (word, bits) = (0, 0);
-                    }
-                    if near {
-                        near_word = near_word << 2 | state;
-                        near_bits += 2;
-                        if near_bits == 64 {
-                            shape.write_u64(near_word);
-                            (near_word, near_bits) = (0, 0);
-                        }
-                    }
-                }
-            }
+        let [states, cuts, unkeyed] = windows.as_ref()?;
+        if unkeyed.sum(&grid, cube, 2) != 0 {
+            return None;
         }
-        whole.write_u64(word);
-        shape.write_u64(near_word);
-        if let Some(bed_key) = heights.bed_key {
-            let beds = bed_key(cube);
-            whole.write_u64(beds);
-            shape.write_u64(beds);
-        }
+        let cut = cuts.xor(&grid, cube, 2);
+        let beds = heights
+            .bed_key
+            .map_or(0, |bed_key| crate::layout::splitmix(bed_key(cube) ^ 0x5bed));
         Some(Signature {
-            shape: shape.finish(),
-            whole: whole.finish(),
+            shape: states.xor(&grid, cube, 2) ^ cut ^ beds,
+            whole: states.xor(&grid, cube, 3) ^ cut ^ beds ^ 0x3,
         })
     };
     // Where a cube's faces' points fall across it along an axis, as fractions of a cube: a
@@ -758,22 +841,12 @@ pub fn draw_slots(
                 p[b] = low[b] + CELL_M * j as f32 / n as f32;
                 p
             };
-            // A side against another of the cubes drawn shows where that one is cut lower
-            // than this one, as a slope's side shows over a half beside it: from the other's
-            // cut up to this one's. Against anything else full, nothing shows; nor against
-            // a cube not cut at all, which is never lower.
-            let against_cut = axis != 1
-                && is_member(beyond)
-                && is_cut(beyond)
-                && (0..=n).any(|i| {
-                    (0..=n).any(|j| {
-                        let p = point(i, j);
-                        cut(beyond, p)[1] < cut(cube, p)[1].min(p.y) - 1e-4
-                    })
-                });
-            if full(beyond) && !against_cut {
+            // Against anything full that is not one of these cubes cut, nothing shows.
+            if full(beyond) && !(axis != 1 && is_member(beyond) && is_cut(beyond)) {
                 continue;
             }
+            // A face kept from last time was drawn from the same cuts round it, so shows as
+            // it did: whether it shows against a cut neighbour is not asked again.
             // Its points as they were last time, if nothing two round it has changed, but its
             // rims' normals to be worked out again from the faces beside it.
             if let (Some(signed), Some(old)) = (signed, old)
@@ -808,6 +881,22 @@ pub fn draw_slots(
                     fresh: false,
                     rims_only: false,
                 });
+                continue;
+            }
+            // A side against another of the cubes drawn shows where that one is cut lower
+            // than this one, as a slope's side shows over a half beside it: from the other's
+            // cut up to this one's. Against anything else full, nothing shows; nor against
+            // a cube not cut at all, which is never lower.
+            let against_cut = axis != 1
+                && is_member(beyond)
+                && is_cut(beyond)
+                && (0..=n).any(|i| {
+                    (0..=n).any(|j| {
+                        let p = point(i, j);
+                        cut(beyond, p)[1] < cut(cube, p)[1].min(p.y) - 1e-4
+                    })
+                });
+            if full(beyond) && !against_cut {
                 continue;
             }
             // Where its points are across it, as fractions of a cube each way (`grid_of`),
@@ -890,6 +979,58 @@ pub fn draw_slots(
                     .max(Vec3::ZERO);
                 gap.length() < INSIDE_FADE_M
             }));
+            // Everything its points are placed from, as a number: where they fall across it,
+            // the boxes they are rounded to, the inside edges that fade them, its cut and
+            // its neighbour's, and the pieces bedded near. A face whose cubes round it
+            // changed, but not anything it is placed from, as most two cubes from an edit,
+            // keeps its points and has only its rims' normals worked out again.
+            let placed = signed.map(|_| {
+                let mut hash = crate::mesh::Corners::default();
+                let mut floats = |values: &[f32]| {
+                    hash.write_usize(values.len());
+                    for v in values {
+                        hash.write_u32(v.to_bits());
+                    }
+                };
+                floats(&along_a);
+                floats(&along_b);
+                for more in &more {
+                    floats(more);
+                }
+                for (l, h) in round.iter().chain(&face_edges).chain([&own_box]) {
+                    floats(&l.to_array());
+                    floats(&h.to_array());
+                }
+                hash.write_u8(u8::from(against_cut));
+                for c in [cube, beyond] {
+                    if let Some(i) = grid.index(c)
+                        && cut_of[i]
+                    {
+                        hash.write_u64(cut_keys[i].unwrap_or(u64::MAX));
+                    }
+                }
+                if let Some(bed_key) = heights.bed_key {
+                    hash.write_u64(bed_key(cube));
+                }
+                hash.finish()
+            });
+            if let (Some(signed), Some(old), Some(placed)) = (signed, old, placed)
+                && let Some(data) = old.faces.get(&(call, cube, index as u8))
+                && data.placed == Some(placed)
+            {
+                let mut data = FaceData::clone(data);
+                data.signature = Some(signed);
+                faces.push(Face {
+                    data: Arc::new(data),
+                    keeping,
+                    slot,
+                    cube,
+                    index: index as u8,
+                    fresh: true,
+                    rims_only: true,
+                });
+                continue;
+            }
             // A point further than the bevel from every edge of a face open to the air is
             // nearer its own cube's box than any other's: every other cube's is beyond the
             // face's edges, or behind it.
@@ -974,6 +1115,7 @@ pub fn draw_slots(
             };
             let mut face = FaceData {
                 signature: signed,
+                placed,
                 points: Vec::with_capacity((na + 1) * (nb + 1)),
                 rim: Vec::with_capacity((na + 1) * (nb + 1)),
                 exact: Vec::with_capacity((na + 1) * (nb + 1)),
@@ -1416,6 +1558,8 @@ struct Face {
 #[derive(Clone, Debug)]
 pub struct FaceData {
     signature: Option<Signature>,
+    /// Everything its points were placed from, as a number.
+    placed: Option<u64>,
     points: Vec<Vec3>,
     uvs: Vec<[f32; 2]>,
     triangles: Vec<[u32; 3]>,

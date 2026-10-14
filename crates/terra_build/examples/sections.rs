@@ -233,7 +233,8 @@ struct Edit {
 
 /// Takes a cube out of the middle of a wall a metre up, as a player's hammer does, and
 /// times laying the base whole again and drawing the cube's section near again, both
-/// afresh and from how it was drawn before the edit (`sections::draw_again`).
+/// afresh and, as the game does, only its parts the edit reached, from how they were drawn
+/// before it (`sections::draw_parts`).
 fn time_edit(name: &str, base: &Base, kits: &Kits, maps: &Maps) -> Option<Edit> {
     let walls: Vec<glam::IVec3> = base
         .cubes()
@@ -253,12 +254,16 @@ fn time_edit(name: &str, base: &Base, kits: &Kits, maps: &Maps) -> Option<Edit> 
     let mut last = sections::Drawing::default();
     let before = section(base);
     let whole = sections::Whole::lay(base, kits);
-    sections::draw_again(
+    let laid_before = sections::lay(&before, &whole);
+    let keys_before = sections::cluster_keys(&before, &laid_before, Reach::Near);
+    let all = vec![true; keys_before.len()];
+    sections::draw_parts(
         &before,
-        &sections::lay(&before, &whole),
+        &laid_before,
         Reach::Near,
         None,
         Some(&mut last),
+        Some(&all),
     );
     let mut edited = base.clone();
     edited.apply(terra_build::BuildOp::Fill {
@@ -274,14 +279,20 @@ fn time_edit(name: &str, base: &Base, kits: &Kits, maps: &Maps) -> Option<Edit> 
     let started = Instant::now();
     std::hint::black_box(sections::draw(&after, &laid, Reach::Near));
     let afresh = started.elapsed().as_secs_f32() * 1000.0;
+    // Drawn again as the game does: cut from the base laid whole, each part's key, and
+    // only the parts whose key changed drawn, from how they were drawn.
     let mut now = sections::Drawing::default();
     let started = Instant::now();
-    std::hint::black_box(sections::draw_again(
+    let laid = sections::lay(&after, &whole);
+    let keys = sections::cluster_keys(&after, &laid, Reach::Near);
+    let only: Vec<bool> = keys.iter().zip(&keys_before).map(|(a, b)| a != b).collect();
+    std::hint::black_box(sections::draw_parts(
         &after,
         &laid,
         Reach::Near,
         Some(&last),
         Some(&mut now),
+        Some(&only),
     ));
     let again = started.elapsed().as_secs_f32() * 1000.0;
     Some(Edit {

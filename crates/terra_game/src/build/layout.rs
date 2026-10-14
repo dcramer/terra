@@ -63,6 +63,9 @@ pub(super) struct Timings {
     pub far: Vec<f32>,
     /// How long changes took from being noticed to all being on screen.
     pub edits: Vec<f32>,
+    /// Sections drawn again a part at a time after an edit, how long each step took on its
+    /// worker: cut from the base laid whole, each part's key, drawn, made meshes.
+    pub again: Vec<[f32; 4]>,
 }
 
 struct Job {
@@ -99,6 +102,8 @@ pub(super) enum Outcome {
         parts: Box<Parts>,
         drawing: Option<Arc<sections::Drawing>>,
         took_ms: f32,
+        /// Drawn again a part at a time, not every part: how long each step took.
+        again: Option<[f32; 4]>,
     },
 }
 
@@ -368,6 +373,7 @@ fn launch(
                     progress: &progress,
                 };
                 let laid = sections::lay(&section, &whole);
+                let cut_ms = started.elapsed().as_secs_f32() * 1000.0;
                 let key = laid.key();
                 if !force && previous == Some((key, wanted)) {
                     return Outcome::Same;
@@ -381,6 +387,7 @@ fn launch(
                 } else {
                     Vec::new()
                 };
+                let keyed_ms = started.elapsed().as_secs_f32() * 1000.0;
                 let same_reach = previous.is_some_and(|(_, reach)| reach == wanted);
                 let only: Vec<bool> = keys
                     .iter()
@@ -399,13 +406,22 @@ fn launch(
                         .then_some(only.as_slice())
                         .filter(|only| !only.is_empty()),
                 );
+                let drawn_ms = started.elapsed().as_secs_f32() * 1000.0;
+                let some = !only.is_empty() && only.iter().any(|o| !o);
                 let parts = draw::parts(drawn, store::centre(section.at), &only, keys, &layers);
+                let took_ms = started.elapsed().as_secs_f32() * 1000.0;
                 Outcome::Drawn {
                     key,
                     reach: wanted,
                     parts: Box::new(parts),
                     drawing: drawing.map(Arc::new),
-                    took_ms: started.elapsed().as_secs_f32() * 1000.0,
+                    took_ms,
+                    again: some.then_some([
+                        cut_ms,
+                        keyed_ms - cut_ms,
+                        drawn_ms - keyed_ms,
+                        took_ms - drawn_ms,
+                    ]),
                 }
             });
             jobs.running.push(Job {
@@ -432,6 +448,12 @@ fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
         match outcome {
             Some(outcome) => {
                 // Only sections with something in them are timed.
+                if let Outcome::Drawn {
+                    again: Some(again), ..
+                } = &outcome
+                {
+                    jobs.timings.again.push(*again);
+                }
                 if let Outcome::Drawn {
                     reach,
                     took_ms,
@@ -486,11 +508,19 @@ impl Jobs {
                 sorted.get(sorted.len() / 2).copied().unwrap_or(0.0)
             };
             if !self.timings.edits.is_empty() {
+                let step = |i: usize| median(&self.timings.again.iter().map(|a| a[i]).collect());
+                let again: Vec<f32> = self.timings.again.iter().map(|a| a.iter().sum()).collect();
                 info!(
-                    "Builds changed: {} changes on screen in a median {:.0} ms from being made, the slowest {:.0} ms.",
+                    "Builds changed: {} changes on screen in a median {:.0} ms from being made, the slowest {:.0} ms; {} sections drawn again a part at a time in a median {:.2} ms on a worker (cut {:.2}, keyed {:.2}, drawn {:.2}, meshes {:.2}).",
                     self.timings.edits.len(),
                     median(&self.timings.edits),
                     self.timings.edits.iter().copied().fold(0.0, f32::max),
+                    again.len(),
+                    median(&again),
+                    step(0),
+                    step(1),
+                    step(2),
+                    step(3),
                 );
             }
             if !self.drawn_once {
