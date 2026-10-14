@@ -1,12 +1,6 @@
 {
   "subject": "small wooden bedside cabinet with one drawer and an iron ring pull, a short candle in a holder on top",
   "file": "NightStand",
-  "size": 0.6,
-  "budget": 800,
-  "roles": [
-    "Wood",
-    "WoodDark",
-    "MetalDark",
-    "Cloth"
-  ]
+  "dims": [0.38, 0.6, 0.38],
+  "budget": 800
 }

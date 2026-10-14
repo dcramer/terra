@@ -1,14 +1,7 @@
 {
   "subject": "long rectangular woven wool rug with a simple striped border, lying flat on the floor",
   "file": "RugLong",
-  "size": 3.0,
+  "dims": [1.48, 0.02, 3],
   "budget": 600,
-  "roles": [
-    "Hide",
-    "Leather",
-    "ClothBlue",
-    "Olive",
-    "Cloth"
-  ],
   "flat": true
 }

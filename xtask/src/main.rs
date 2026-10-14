@@ -140,6 +140,13 @@ const TASKS: &[Task] = &[
         run: |_| kits(),
     },
     Task {
+        name: "contract",
+        takes: "",
+        does: "check every model the game places against the model contract: size, anchor, axes, sockets and, for doors and shutters, fit in their hole",
+        group: "Play and check",
+        run: |_| contract(),
+    },
+    Task {
         name: "rules",
         takes: "[--pure] [--here] [--debug]",
         does: "audit building: its rules by test and live, the village's drawing, edits' and frames' timings (research/building-audit.md)",
@@ -1186,6 +1193,24 @@ fn check() -> bool {
         && blender_scripts()
         && shared_crates_avoid_bevy()
         && shared_crates_are_repeatable()
+}
+
+/// The model contract's checker (docs/art-style.md, D303): every model the game places,
+/// each on a line with what is wrong with it. The same test runs in `check`.
+fn contract() -> bool {
+    run(
+        "cargo",
+        &[
+            "test",
+            "-q",
+            "-p",
+            "terra_game",
+            "--lib",
+            "every_model_keeps_the_contract",
+            "--",
+            "--nocapture",
+        ],
+    )
 }
 
 /// The kit checker (docs/building-plan.md): every kit file in `assets/data/kits/` has the

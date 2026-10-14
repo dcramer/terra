@@ -22,9 +22,6 @@ use terra_items::Grid;
 const DOWN_S: f32 = 3.0;
 /// How long a dropped bag lasts before it is gone (D84). A stand-in.
 const BAG_LASTS_S: f32 = 600.0;
-/// What a dropped bag, or a pile (`pile`), looks like: a prop's model and its longest side
-/// in metres.
-const BAG_MODEL: (&str, f32) = ("Sack", 0.7);
 
 /// Where a player first arrived, to wake at when there is no bed to wake in.
 #[derive(Component)]
@@ -66,28 +63,39 @@ pub fn plugin(app: &mut App) {
 
 fn load_look(
     mut commands: Commands,
+    assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let (file, size) = BAG_MODEL;
-    let mesh = match props::read_look(file, size, &mut meshes).map(|model| model.solid) {
-        Ok(Some(mesh)) => mesh,
+    let file = super::contract::BAG.0;
+    let lit = materials.add(props::lit());
+    let glowing = materials.add(props::glowing());
+    let mut making = props::Making {
+        meshes: &mut meshes,
+        materials: &mut materials,
+        assets: &assets,
+        lit: lit.clone(),
+        glowing,
+    };
+    let body = props::read_look(file, &mut making).map(|model| {
+        model
+            .body()
+            .map(|piece| (piece.mesh.clone(), piece.material.clone()))
+    });
+    let (mesh, material) = match body {
+        Ok(Some(body)) => body,
         problem => {
             if let Err(problem) = problem {
                 error!("Could not read the bag's model. {problem}");
             }
-            meshes.add(
-                Cuboid::new(0.55, 0.4, 0.45)
-                    .mesh()
-                    .build()
-                    .translated_by(Vec3::Y * 0.2),
-            )
+            let shape = Cuboid::new(0.55, 0.4, 0.45)
+                .mesh()
+                .build()
+                .translated_by(Vec3::Y * 0.2);
+            (meshes.add(shape), lit)
         }
     };
-    commands.insert_resource(BagLook {
-        mesh,
-        material: materials.add(props::lit()),
-    });
+    commands.insert_resource(BagLook { mesh, material });
 }
 
 /// Moves every player's body on by a moment, and lays it down when health runs out.

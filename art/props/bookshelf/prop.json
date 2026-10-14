@@ -1,14 +1,6 @@
 {
   "subject": "tall wooden bookshelf, as tall as a person, its shelves full of old leather-bound books, rolled scrolls, a few clay jars and a candle",
   "file": "Bookshelf",
-  "size": 2.0,
-  "budget": 2000,
-  "roles": [
-    "Wood",
-    "WoodDark",
-    "Leather",
-    "ClothRed",
-    "Cloth",
-    "Clay"
-  ]
+  "dims": [1.61, 2, 0.65],
+  "budget": 2000
 }

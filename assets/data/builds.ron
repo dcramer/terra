@@ -8,10 +8,11 @@
 // fittings  the doors and shutters fitted into openings (D192, D207, D225), each a kind
 //            of prop by its place in the list: its name, its model in
 //            assets/models/openings, how it hangs (Door, a leaf or a pair swinging into
-//            the room; Shutters, folding back against the wall outside), the side its
-//            model's hinges are on seen from its front (Left, Right), the holes it fits,
-//            wide by high in cubes, and what a leaf costs, by items.ron's names, a pair
-//            costing two. What walls, floors and roofs take is their kits' to say
+//            the room; Shutters, folding back against the wall outside), how wide, high
+//            and thick one leaf is in metres in the first hole it fits (dims), the holes
+//            it fits, wide by high in cubes, and what a leaf costs, by items.ron's names,
+//            a pair costing two. Its model is that leaf, hinged at its origin, with its
+//            hinge and handle sockets (the model contract, docs/art-style.md). What walls, floors and roofs take is their kits' to say
 //            (assets/data/kits).
 // claim      how far across a claim is at each step, what growing it to the next step
 //            costs (D94, D104), and how many cubes it may have planned and not yet built
@@ -20,16 +21,16 @@
 //            when the hammer is first taken up (D253). Each is in a tab
 //            (Hidden ones are not in the menu) and is one of:
 //              Items    things stood on a floor or the ground, each with its model in
-//                       assets/models/props, its longest size in metres, how tall a
-//                       real one stands (height, lowest and highest in metres, which a
-//                       test holds its model to at that size), and its cost.
-//                       Some lie flat (lift, metres above the floor), give light
-//                       (light: Fire), are a station (station, by stations.ron's name),
-//                       claim the land around them (claims, D94), or are to rest on
-//                       (rest: Sit, or Sleep to wake in after going down). A seat
-//                       lower than the top, as a chair's below its back, says how high
-//                       (seat, metres). Storage says how many cells it holds (holds,
-//                       wide by high, D84), which building in its claim draws on (D141).
+//                       assets/models/props, how wide, high and deep a real one is in
+//                       metres (dims), which its model is made to and drawn at, its
+//                       origin the middle of its base (the model contract,
+//                       docs/art-style.md; cargo xtask contract checks it), and its cost.
+//                       Some give light (light: Fire), are a station (station, by
+//                       stations.ron's name), claim the land around them (claims, D94),
+//                       or are to rest on (rest: Sit, at its model's seat socket, or
+//                       Sleep to wake in after going down). Storage says how many cells
+//                       it holds (holds, wide by high, D84), which building in its claim
+//                       draws on (D141).
 //              Room     rooms, by footprint in metres east by south, outside their
 //                       walls, which are half a metre thick (D181)
 //              Roof     "add a roof with this material" (D226, D241): roof cubes laid
@@ -56,15 +57,15 @@
 //              Door, Remove, Move   the hammer's other work: Door cuts a doorway
 (
     fittings: [
-        (name: "Plank door", model: "PlankDoor", hang: Door, hinge: Left,
+        (name: "Plank door", model: "PlankDoor", hang: Door, dims: (0.894, 1.939, 0.08),
             fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 2)]),
-        (name: "Ledged and braced door", model: "LedgedDoor", hang: Door, hinge: Right,
+        (name: "Ledged and braced door", model: "LedgedDoor", hang: Door, dims: (0.894, 1.939, 0.08),
             fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 3)]),
-        (name: "Studded door", model: "StuddedDoor", hang: Door, hinge: Left,
+        (name: "Studded door", model: "StuddedDoor", hang: Door, dims: (0.894, 1.939, 0.08),
             fits: [(2, 4), (3, 4), (4, 4)], cost: [("Wood", 3), ("Iron", 1)]),
-        (name: "Board shutters", model: "BoardShutter", hang: Shutters, hinge: Right,
+        (name: "Board shutters", model: "BoardShutter", hang: Shutters, dims: (0.5, 1.0, 0.05),
             fits: [(1, 2), (2, 2), (3, 2), (1, 3), (2, 3), (3, 3)], cost: [("Wood", 1)]),
-        (name: "Louvred shutters", model: "LouvredShutter", hang: Shutters, hinge: Right,
+        (name: "Louvred shutters", model: "LouvredShutter", hang: Shutters, dims: (0.5, 1.0, 0.05),
             fits: [(1, 2), (2, 2), (3, 2), (1, 3), (2, 3), (3, 3)], cost: [("Wood", 1), ("Fibre", 1)]),
     ],
     claim: (
@@ -114,16 +115,16 @@
         ])),
         (name: "Post", tab: Structure, kind: Post),
         (name: "Claim stone", tab: Claim, kind: Items([
-            (name: "Claim stone", file: "ClaimStone", size: 1.3, height: (0.8, 1.6), cost: [("Stone", 2)], claims: true),
+            (name: "Claim stone", file: "ClaimStone", dims: (1.3, 1.25, 1.24), cost: [("Stone", 2)], claims: true),
         ])),
         (name: "Workbench", tab: Crafting, kind: Items([
-            (name: "Workbench", file: "Workbench", size: 1.7, height: (0.85, 1.1), cost: [("Wood", 4), ("Stone", 2)], station: "Workbench"),
+            (name: "Workbench", file: "Workbench", dims: (1.7, 1.06, 1.2), cost: [("Wood", 4), ("Stone", 2)], station: "Workbench"),
         ])),
         (name: "Smelter", tab: Crafting, kind: Items([
-            (name: "Smelter", file: "Smelter", size: 2.0, height: (1.5, 2.5), cost: [("Stone", 10), ("Wood", 2)], station: "Smelter"),
+            (name: "Smelter", file: "Smelter", dims: (1.41, 2.0, 1.46), cost: [("Stone", 10), ("Wood", 2)], station: "Smelter"),
         ])),
         (name: "Forge", tab: Crafting, kind: Items([
-            (name: "Forge", file: "Forge", size: 2.6, height: (2.0, 3.5), cost: [("Wood", 4), ("Stone", 8)], station: "Forge"),
+            (name: "Forge", file: "Forge", dims: (2.6, 2.59, 1.55), cost: [("Wood", 4), ("Stone", 8)], station: "Forge"),
         ])),
         (name: "Window", tab: Openings, kind: Window([
             ("1.5 m", 1.5, (1.0, 1.0)),
@@ -137,10 +138,10 @@
         // Seen in the world but not yet buildable: a village's well and stall. How they
         // are learned is open (D68, D108).
         (name: "Well", tab: Hidden, kind: Items([
-            (name: "Well", file: "../village/Well", size: 2.4, height: (2.0, 3.0), cost: [("Stone", 12)]),
+            (name: "Well", file: "Well", dims: (1.7, 2.4, 1.75), cost: [("Stone", 12)]),
         ])),
         (name: "Market stall", tab: Hidden, kind: Items([
-            (name: "Market stall", file: "../village/MarketStand_1", size: 3.0, height: (2.3, 3.0), cost: [("Wood", 8), ("Fibre", 4)]),
+            (name: "Market stall", file: "MarketStall", dims: (2.6, 2.9, 2.0), cost: [("Wood", 8), ("Fibre", 4)]),
         ])),
         (name: "Remove", tab: Hidden, kind: Remove),
         (name: "Move", tab: Hidden, kind: Move),
@@ -148,28 +149,28 @@
         // crates and potted houseplants, are left out until the art direction settles;
         // they do not belong in game design 001's world.
         (name: "Seat", tab: Furniture, kind: Items([
-            (name: "Chair", file: "Chair", size: 0.95, height: (0.8, 1.05), cost: [("Wood", 2)], rest: Sit, seat: 0.46),
-            (name: "Stool", file: "Stool", size: 0.5, height: (0.4, 0.6), cost: [("Wood", 1)], rest: Sit),
+            (name: "Chair", file: "Chair", dims: (0.55, 0.95, 0.67), cost: [("Wood", 2)], rest: Sit),
+            (name: "Stool", file: "Stool", dims: (0.49, 0.5, 0.49), cost: [("Wood", 1)], rest: Sit),
         ])),
         (name: "Table", tab: Furniture, kind: Items([
-            (name: "Round table", file: "RoundTable", size: 1.19, height: (0.7, 0.8), cost: [("Wood", 3)]),
-            (name: "Night stand", file: "NightStand", size: 0.6, height: (0.5, 0.75), cost: [("Wood", 2)]),
+            (name: "Round table", file: "RoundTable", dims: (1.18, 0.75, 1.19), cost: [("Wood", 3)]),
+            (name: "Night stand", file: "NightStand", dims: (0.38, 0.6, 0.38), cost: [("Wood", 2)]),
         ])),
         (name: "Bed", tab: Furniture, kind: Items([
-            (name: "Single bed", file: "Bed", size: 2.1, height: (0.5, 1.5), cost: [("Wood", 3), ("Fibre", 3)], rest: Sleep),
+            (name: "Single bed", file: "Bed", dims: (1.32, 1.46, 2.1), cost: [("Wood", 3), ("Fibre", 3)], rest: Sleep),
         ])),
         (name: "Storage", tab: Storage, kind: Items([
-            (name: "Chest", file: "Chest", size: 1.0, height: (0.45, 0.8), cost: [("Wood", 6)], holds: (8, 6)),
-            (name: "Bookshelf", file: "Bookshelf", size: 2.0, height: (1.6, 2.2), cost: [("Wood", 4)]),
+            (name: "Chest", file: "Chest", dims: (1.0, 0.58, 0.65), cost: [("Wood", 6)], holds: (8, 6)),
+            (name: "Bookshelf", file: "Bookshelf", dims: (1.61, 2.0, 0.65), cost: [("Wood", 4)]),
         ])),
         (name: "Decor", tab: Furniture, kind: Items([
-            (name: "Round rug", file: "RugRound", size: 2.4, height: (0.0, 0.05), cost: [("Hide", 2)], lift: 0.015),
-            (name: "Long rug", file: "RugLong", size: 3.0, height: (0.0, 0.05), cost: [("Hide", 2)], lift: 0.015),
-            (name: "Shovel", file: "Spade", size: 1.3, height: (1.1, 1.6), cost: [("Wood", 1), ("Iron", 1)]),
+            (name: "Round rug", file: "RugRound", dims: (2.4, 0.02, 1.81), cost: [("Hide", 2)]),
+            (name: "Long rug", file: "RugLong", dims: (1.48, 0.02, 3.0), cost: [("Hide", 2)]),
+            (name: "Shovel", file: "Spade", dims: (0.37, 1.3, 0.11), cost: [("Wood", 1), ("Iron", 1)]),
         ])),
         (name: "Fire", tab: Fire, kind: Items([
-            (name: "Campfire", file: "Bonfire_Fire", size: 1.3, height: (0.8, 1.6), cost: [("Wood", 3), ("Stone", 2)], light: Fire, station: "Campfire"),
-            (name: "Log", file: "WoodLog", size: 1.7, height: (0.3, 0.6), cost: [("Wood", 2)]),
+            (name: "Campfire", file: "Campfire", dims: (1.3, 0.9, 1.3), cost: [("Wood", 3), ("Stone", 2)], light: Fire, station: "Campfire"),
+            (name: "Log", file: "Log", dims: (1.7, 0.45, 0.45), cost: [("Wood", 2)]),
         ])),
     ],
 )

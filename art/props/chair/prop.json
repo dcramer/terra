@@ -1,12 +1,9 @@
 {
   "subject": "rustic wooden chair: four sturdy pegged legs, a seat of woven rush, and a back of three plain wooden slats",
   "file": "Chair",
-  "size": 0.95,
-  "budget": 1000,
-  "roles": [
-    "Wood",
-    "WoodDark",
-    "WoodLight",
-    "Rope"
-  ]
+  "dims": [0.55, 0.95, 0.67],
+  "sockets": {
+    "seat": [0, 0.46, 0.05]
+  },
+  "budget": 1000
 }

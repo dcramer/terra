@@ -1,10 +1,15 @@
 {
   "subject": "wooden window shutter leaf on its own, without a window, frame or wall, standing upright, seen from the front a little to one side so its edge shows, half a metre wide and one metre tall: three vertical boards of the same weathered pine as the reference door, held by two horizontal battens with a diagonal brace between them, fixed with square iron nail heads, and two short black iron strap hinges with curled ends at one edge",
   "file": "BoardShutter",
+  "anchor": "hinge",
+  "dims": [0.5, 1, 0.05],
+  "sockets": {
+    "hinge": [0, 0, 0],
+    "handle": [0.44, 0.5, 0.025]
+  },
+  "hinge": "right",
   "into": "openings",
-  "size": 1.0,
   "budget": 800,
-  "textured": true,
   "block": true,
   "generator": "h3.1",
   "faces": 12000,

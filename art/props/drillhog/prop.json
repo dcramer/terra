@@ -1,11 +1,10 @@
 {
   "subject": "monster called a Drillhog, a burrowing creature of dungeons and caves: a huge groundhog the size of a boar, hunched and round-backed, sitting low on short powerful legs with long dark digging claws; coarse thick red-brown fur, darker on the back and paler on the belly, a blunt groundhog head with small black eyes and a snarling open mouth of jagged yellowed teeth and big front incisors. Out of its back and shoulders grow about six spiral drill bits of dull grey iron-hard horn, each a long cone with deep twisting flutes like an auger, pointing up and backward like a porcupine's quills, the largest one rising from the top of its head and curving back over the neck, smaller ones along its flanks",
   "file": "Drillhog",
+  "dims": [1.52, 1.6, 1.56],
   "into": "creatures",
-  "size": 1.6,
   "turn": 90,
   "budget": 3000,
   "faces": 20000,
-  "textured": true,
   "generator": "h3.1"
 }

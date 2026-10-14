@@ -90,12 +90,26 @@ Keep the subject's description to what the thing is, what it is made of and its 
 
 Even light matters for a model: Tripo textures the model from the concept, so shadows in the concept would be painted into its texture.
 
+## The model contract
+
+Every model the game places obeys one contract (D303), as a shipped game's asset pipeline holds its meshes to a pivot and socket convention (Unreal's pivots and sockets, glTF's axes), so the game places, fits, swings and holds it from its catalogue entry's size, its anchor and its sockets alone. No model gets its own offset, turn or scale in code or in the catalogue; a model that needs one is made again.
+
+| | The rule |
+|---|---|
+| **Real size** | Its catalogue entry states how wide, high and deep it is, in metres (`dims`); its file is that size, within 2% or a centimetre, whichever is more, and is drawn at it, unscaled. |
+| **Axes** | glTF's: +Y up, its front facing +Z, metres. |
+| **Anchor** | Its origin, by kind: the middle of its base for anything stood on a floor or the ground; for a door's or a shutter's leaf, the foot of its hinge, on the edge it turns on, in the middle of its thickness, the leaf running along +X (so every leaf hinges on its left seen from its front; the second of a pair is drawn mirrored); for something hung on a wall, the middle of its back face; for a frame or a set of shutters, the bottom middle of the opening; for a building kit's piece, its place on the grid in ticks (D208), as `tools/kits` fits it into its box. |
+| **Sockets** | The points code attaches to are empties in the file named `socket.<name>`: a leaf's `hinge` (at its origin) and `handle`; a seat's `seat`, where someone sits. Code reads them: a door swings about its hinge socket and a villager sits on the seat socket. |
+| **Fit** | A door's or shutters' leaf is made for the first hole its entry fits: in it, the leaf the hole takes is the model's size, within the tolerance, and the leaf stays within the wall's faces (a door) or on its outer half (shutters). A larger hole stretches it across and up. |
+
+`tools/props` makes a model so from its `prop.json` (`dims`, `anchor`, `hinge`, `sockets`), `cargo xtask contract` checks every model against its entry, and `cargo xtask check` runs the same test. The workbench draws each prop's box (green when it keeps the contract, red when not), its origin as three short lines (X red, Y green, Z blue) and its sockets as yellow stars, and logs what is wrong: `--prop all` shows every one.
+
 ## Checklist
 
 Check every model in the game's own light, beside a figure for scale (the workbench's `--prop`, `--model`, or `props.ts` sheets):
 
 - [ ] **Silhouette:** reads as what it is when filled in black, and at icon size.
-- [ ] **Size:** life size; within its catalogue height (D147, D110).
+- [ ] **Size:** life size; its catalogue `dims` (D110).
 - [ ] **Shapes:** big, medium and small, mostly big; nothing chunky.
 - [ ] **Material:** reads as what it is made of, close and at a distance, without shimmer.
 - [ ] **Shading:** a little shaded, not photographic, not cartoon.
@@ -103,7 +117,7 @@ Check every model in the game's own light, beside a figure for scale (the workbe
 - [ ] **Values:** touching parts differ in lightness.
 - [ ] **Normals:** split at creases, smooth across curves.
 - [ ] **Budget:** inside its range above.
-- [ ] **Contracts:** faces +Z, level, foot at the origin, and parts as [docs/characters.md](characters.md#the-contracts) says.
+- [ ] **Contracts:** [the model contract](#the-model-contract) (`cargo xtask contract`), and a character's parts as [docs/characters.md](characters.md#the-contracts) says.
 
 ## What it is not
 
@@ -116,7 +130,8 @@ Check every model in the game's own light, beside a figure for scale (the workbe
 
 Not everything we have made yet follows this guide. Each gap is work to do, not an exception to the rules:
 
-- **Most props are flat colour by role,** from direction D and before. They will be made again, textured, as each comes up.
+- **Tools and the modelled trees are flat colour by role,** from direction D and before: a tool because its held look is coloured by its Wood and Metal parts (`tools/characters/fit_held.py`). Every prop the game places is textured (D304).
+- **Textures are not compressed yet.** A prop's maps are JPEG in its file and plain RGBA on the GPU, with mipmaps made when they load; GPU-compressed textures (KTX2, BC7) come with the asset pipeline step D188 names.
 - **Item icons are painted in direction C** (D130), and will be repainted to match.
 
 ## How the renderer makes it
@@ -125,7 +140,7 @@ Models carry their own materials; the light, the sky and the air are shared shad
 
 | Ingredient | Where it comes from | State |
 |---|---|---|
-| Models | Concept, Tripo, clean-up keeping its textures (`tools/props`) | Working for doors and shutters (D225); most props still flat colour |
+| Models | Concept, Tripo with its normal, roughness and metal maps, clean-up keeping them at a budget by size: 2K colour and normal maps for a prop 1.5 m or more, 1K below, roughness and metal at half (`tools/props`, D304); drawn in their own textures, a part named `Fire` glowing in its own colours (`play::props`); made to [the model contract](#the-model-contract) (D303) | Working for every prop the game places, doors and shutters among them; tools and trees still flat colour |
 | Long members | Logs and beams generated from their kit's numbers and each one's seed, a real bark or wood material displacing and texturing them (`terra_build::timber`, D200), bark in patches over weathered wood and shade baked into the grooves (D262) | Working: round logs (`logs.ron`) and hewn timber (`hewn.ron`) |
 | Block kinds | Stone and the like drawn as their cubes' surface, rounded and displaced by a real material (`terra_build::surface`, D197) | Working: fieldstone |
 | Tileable materials | CC0 libraries first, generated where they lack one (`tools/textures`, D191) | Working for building kits and the ground |

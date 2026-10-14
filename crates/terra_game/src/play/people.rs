@@ -14,7 +14,7 @@ use super::claim::Claim;
 use super::crafting::Stations;
 use super::creatures::Creature;
 use super::interact::{CanInteract, Interactable, Interacted};
-use super::props::Prop;
+use super::props::{Models, Prop};
 use super::tick::{Sim, Smoothed};
 use super::told::Told;
 use crate::loading::Loading;
@@ -458,6 +458,7 @@ const HIPS_ABOVE_SEAT_M: f32 = 0.08;
 fn sit(
     mut commands: Commands,
     seats: Query<(&Prop, &GlobalTransform)>,
+    models: Res<Models>,
     joints: Query<&GlobalTransform, Without<Prop>>,
     children: Query<&Children>,
     names: Query<&Name>,
@@ -478,8 +479,11 @@ fn sit(
                     .iter()
                     .filter(|(prop, _)| prop.item.rest == Some(Rest::Sit))
                     .map(|(prop, seat)| {
-                        let high = prop.item.seat.unwrap_or(prop.half.y * 2.0);
-                        seat.transform_point(Vec3::Y * high)
+                        // Its seat socket (docs/art-style.md, the model contract), or
+                        // its top for a seat with nothing over it.
+                        let top = Vec3::Y * prop.half.y * 2.0;
+                        let socket = models.of(&prop.item).and_then(|m| m.socket("seat"));
+                        seat.transform_point(socket.unwrap_or(top))
                     })
                     .filter(|top| top.distance(at.translation) < SEAT_REACH_M)
                     .min_by(|a, b| {

@@ -1,10 +1,9 @@
 {
   "subject": "veteran English oak tree in winter, bare of leaves: a tall thick gnarled trunk leaning a little, ridged with deep vertical fissures, with a broken-off limb stub and a burr, rising nearly half its height before forking into four long heavy crooked limbs that reach up and out unevenly, more to one side, each dividing into a few smaller crooked branches that end thick, as thick as a wrist, with no fine twigs; rough deeply fissured dark grey-brown bark with ivy and moss low down",
   "file": "OakBough2",
+  "dims": [10.7, 23.95, 21.23],
   "into": "nature/forest",
-  "size": 24,
   "budget": 9000,
   "faces": 20000,
-  "textured": true,
   "generator": "h3.1"
 }

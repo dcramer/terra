@@ -8,7 +8,7 @@
 use super::crafting::{Station, Stations};
 use super::data;
 use super::inventory::{Cost, Items};
-use bevy::prelude::Resource;
+use bevy::prelude::{Resource, Vec3};
 use serde::Deserialize;
 use std::sync::Arc;
 use terra_build::fitting::Hang;
@@ -50,7 +50,7 @@ struct FittingFile {
     name: String,
     model: String,
     hang: Hang,
-    hinge: Hinge,
+    dims: (f32, f32, f32),
     fits: Vec<(i32, i32)>,
     cost: Vec<(String, u32)>,
 }
@@ -95,11 +95,8 @@ enum KindFile {
 struct ItemFile {
     name: String,
     file: String,
-    size: f32,
-    height: (f32, f32),
+    dims: (f32, f32, f32),
     cost: Vec<(String, u32)>,
-    #[serde(default)]
-    lift: f32,
     #[serde(default)]
     light: Light,
     #[serde(default)]
@@ -108,8 +105,6 @@ struct ItemFile {
     claims: bool,
     #[serde(default)]
     rest: Option<Rest>,
-    #[serde(default)]
-    seat: Option<f32>,
     #[serde(default)]
     holds: Option<(u8, u8)>,
 }
@@ -127,13 +122,10 @@ impl Builds {
             }),
             name: item.name,
             file: item.file,
-            size: item.size,
-            height: item.height,
-            lift: item.lift,
+            dims: Vec3::from(item.dims),
             light: item.light,
             claims: item.claims,
             rest: item.rest,
-            seat: item.seat,
             holds: item.holds,
         };
         let fittings: Vec<Arc<Fitting>> = file
@@ -147,7 +139,7 @@ impl Builds {
                     name: each.name,
                     model: each.model,
                     hang: each.hang,
-                    hinge: each.hinge,
+                    dims: Vec3::from(each.dims),
                     fits: each.fits,
                 })
             })
@@ -281,16 +273,12 @@ pub fn take_apart_seconds(cost: &Cost, times: u32) -> f32 {
 pub struct Item {
     pub name: String,
     pub file: String,
-    /// Its longest dimension, in metres.
-    pub size: f32,
-    /// How tall a real one stands, lowest to highest, in metres (D110): its model at
-    /// `size` must stand within it, which a test checks, so a squat or lanky model is
-    /// caught rather than drawn at the wrong height.
-    pub height: (f32, f32),
+    /// How wide, high and deep a real one is, in metres (D110), along its model's X, Y
+    /// and Z: its model is made to it and drawn as it is, which the model contract's
+    /// checker holds it to (`contract`, docs/art-style.md).
+    pub dims: Vec3,
     /// The raw items it is built from, and gives back when taken apart.
     pub cost: Vec<(ItemKind, u32)>,
-    /// Flat things lie this far above the floor, so the two do not flicker.
-    pub lift: f32,
     /// Whether it gives off light, and how.
     pub light: Light,
     /// The station it is, if it is one.
@@ -299,9 +287,6 @@ pub struct Item {
     pub claims: bool,
     /// What someone can rest on it for, if anything: sitting, or sleeping and waking.
     pub rest: Option<Rest>,
-    /// How high its seat is, in metres, where that is below its top, as a chair's is
-    /// below its back; someone sits on its top otherwise.
-    pub seat: Option<f32>,
     /// The cells it stores, wide by high, if it is storage (D84, D141): a grid as the
     /// backpack is, which building in its claim draws on (`storage`).
     pub holds: Option<(u8, u8)>,
@@ -315,8 +300,10 @@ pub struct Fitting {
     pub name: String,
     pub model: String,
     pub hang: Hang,
-    /// The side its model's hinges are on, seen from its front.
-    pub hinge: Hinge,
+    /// How wide, high and thick one leaf is, in metres, in the first hole it fits: its
+    /// model is made to it, hinged at its origin (docs/art-style.md, the model contract),
+    /// and stretched across and up to fit a bigger hole.
+    pub dims: Vec3,
     /// The holes it fits, wide by high, in cubes.
     pub fits: Vec<(i32, i32)>,
     /// What a leaf of it costs.
@@ -340,13 +327,6 @@ impl Fitting {
             .collect::<Vec<_>>()
             .join(", ")
     }
-}
-
-/// Which side of its model a door's or shutter's hinges are on, seen from its front.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
-pub enum Hinge {
-    Left,
-    Right,
 }
 
 /// What something is to rest on.

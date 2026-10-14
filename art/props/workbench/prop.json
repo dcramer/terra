@@ -1,7 +1,6 @@
 {
   "subject": "sturdy wooden carpenter's workbench: a thick plank top on four splayed legs, a wooden vice on one end, a lower shelf with a few planks on it, and a saw and a mallet lying on top",
   "file": "Workbench",
-  "size": 1.7,
-  "budget": 2000,
-  "roles": ["Wood", "WoodLight", "WoodDark", "Metal", "MetalDark"]
+  "dims": [1.7, 1.06, 1.2],
+  "budget": 2000
 }

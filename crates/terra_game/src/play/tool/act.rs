@@ -635,14 +635,18 @@ pub(super) fn animate(
         _ => (None, None),
     };
     let rising = drawn.rising;
-    let mesh = |item: &Item| models.of(item)?.solid.clone();
-    match growing.and_then(|growing| Some((mesh(&growing.0)?, growing))) {
-        Some((mesh, (item, at, lift, turn, indoors, done))) => {
-            let stood = props::standing(&site, &planet, at, lift + item.lift, turn, indoors);
+    // It rises in its own look: its body, textured where it is.
+    let body = |item: &Item| {
+        let body = models.of(item)?.body()?;
+        Some((body.mesh.clone(), body.material.clone()))
+    };
+    match growing.and_then(|growing| Some((body(&growing.0)?, growing))) {
+        Some(((mesh, material), (_, at, lift, turn, indoors, done))) => {
+            let stood = props::standing(&site, &planet, at, lift, turn, indoors);
             // Quick at first, easing to full size.
             let eased = 1.0 - (1.0 - done) * (1.0 - done);
             let at = stood.with_scale(Vec3::splat(0.2 + 0.8 * eased));
-            shapes.show(rising, mesh, models.lit(), at);
+            shapes.show(rising, mesh, material, at);
         }
         None => shapes.hide(rising),
     }

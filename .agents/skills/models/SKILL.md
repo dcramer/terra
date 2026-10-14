@@ -15,7 +15,8 @@ Not here: characters, bodies and gear (the `character` skill); item icons (`item
 
 | It is | Its model goes in | The game finds it in |
 |---|---|---|
-| Furniture, a prop or a station | `assets/models/props` | `assets/data/builds.ron`, an `Items` variant: file, size, the height a real one stands, cost; a station also in `stations.ron` |
+| Furniture, a prop or a station | `assets/models/props` | `assets/data/builds.ron`, an `Items` variant: file, `dims`, cost; a station also in `stations.ron` |
+| A door's or shutters' leaf | `assets/models/openings` (`"into": "openings"`, `"anchor": "hinge"`) | `builds.ron`'s `fittings`: model, how it hangs, `dims` of the leaf its first hole takes, the holes it fits, cost |
 | A tool or weapon | `assets/models/tools` (`"into": "tools"`), standing on the end of its handle, parts `Wood` and `Metal` | `items.ron`; its held look is made from it by `tools/characters/fit_held.py` |
 | An item lying on its own, such as a material | `assets/models/items` | `items.ron`; its icon by `item-icons` |
 | A tree, bush, plant or flower | Not a model: grown by rules from bark and leaf cards (D222) | `assets/data/flora.ron`, a kind with `grown` (below) |
@@ -26,9 +27,10 @@ A creature or animal is not on this pipeline yet: it needs a rig (`tripo rig --t
 
 Then, from the style guide:
 
-- **Size:** life size (D110). A real one's height or longest side, in metres.
+- **Size:** life size (D110). A real one's width, height and depth in metres, `dims`, along glTF's X, Y (up) and Z (its front): the model is made to exactly that, and its catalogue entry states the same.
+- **The model contract** (D303, [art-style.md](../../../docs/art-style.md#the-model-contract)): its anchor (`base`, the middle of its base, by default; `hinge` for a leaf) and the sockets code needs (a leaf's `hinge` and `handle`, a seat's `seat`). The game places it from these alone; never give a model an offset, turn or scale in code or in the catalogue.
 - **Budget:** the triangles its kind may have, from the guide's table. Things placed by the thousand, such as trees and rocks, stay low in their range.
-- **Materials:** what each part is made of, true to life (weathered pine, fieldstone, wrought iron). The concept and Tripo's textures carry them: set `"textured": true`. Palette roles (`roles`, from `PALETTE` in [tools/characters/look.py](../../../tools/characters/look.py)) are for the older flat-colour models, and for flora until it can read which parts of a textured model sway (step 6).
+- **Materials:** what each part is made of, true to life (weathered pine, fieldstone, wrought iron). The concept and Tripo's textures carry them, kept by default (D304); a part that glows is picked out by `roles` with `Fire` in them. `palette: true` and palette roles (from `PALETTE` in [tools/characters/look.py](../../../tools/characters/look.py)) are only for a tool, whose held look is coloured by its parts, and for flora until it can read which parts of a textured model sway (step 6).
 - **Detail:** `"generator": "h3.1"` for a piece seen close and often, such as a building kit's, which Tripo models and textures in more detail; the low-poly `p1` otherwise.
 - **Variants** (D182): most things come in many. Plan the parts a variant would swap. A kind of tree or rock wants two to four models, each its own concept and model; plants in quantity read as one kind only if their models differ.
 
@@ -48,16 +50,16 @@ Up to 100 images a month are free. Read `art/props/<name>/concept.png` and check
 
 ## 4. Ask before spending
 
-A model costs about 45 Studio credits (views, then a P1 model textured at 2K), about 55 with `h3.1` (prices in [tools/tripo/README.md](../../../tools/tripo/README.md)). Check the balance (`node tools/tripo/tripo.ts balance`) and say what it will cost. Several models, or more than about 100 credits, needs the developers' go-ahead.
+A model costs about 50 Studio credits (views, a P1 model textured at 2K, then its normal, roughness and metal maps), about 55 with `h3.1` (prices in [tools/tripo/README.md](../../../tools/tripo/README.md)). Check the balance (`node tools/tripo/tripo.ts balance`) and say what it will cost. Several models, or more than about 100 credits, needs the developers' go-ahead.
 
 ## 5. Model it, then make it ours
 
 ```bash
-node tools/props/props.ts model <name>    # about 45 credits: art/props/<name>/model.glb
+node tools/props/props.ts model <name>    # about 50 credits: art/props/<name>/model.glb, with its PBR maps
 node tools/props/props.ts refine <name>   # free, in Blender: the game's file, and a sheet
 ```
 
-`refine` needs Blender (`tools/blender`). It welds the model, cuts it to the budget, keeps its textures at 2K (or, without `textured`, gives every face a role), shades it smooth across curves and hard at creases, stands it facing +Z, level, its foot at the origin, at its size, and draws `tools/props/out/<name>.png` (four views beside a figure, in the game's light) with checks in `out/<name>.json`: triangles, size, loose parts. Look at both. Fix what comes out wrong in `prop.json` and refine again, which is free: `turn` for a front facing the wrong way, `budget`, `flat`, `block`; `reference` and `grade` so the pieces of a kit share one material and one colour grade; `match` for a role model whose texture paints a part in another shade.
+`refine` needs Blender (`tools/blender`). It welds the model, cuts it to the budget, keeps its textures at its budget (2K colour and normal maps for a prop 1.5 m or more, 1K below; or, with `palette`, gives every face a role), shades it smooth across curves and hard at creases, stands it facing +Z, level, at exactly its `dims`, its origin its anchor, with its sockets, and draws `tools/props/out/<name>.png` (four views beside a figure, in the game's light) with checks in `out/<name>.json`: triangles, size, loose parts. Look at both. Fix what comes out wrong in `prop.json` and refine again, which is free: `turn` for a front facing the wrong way, `budget`, `flat`, `block`; `reference` and `grade` so the pieces of a kit share one material and one colour grade; `match` for a role model whose texture paints a part in another shade.
 
 ## 6. Put it in the game
 
@@ -74,7 +76,7 @@ cargo run -p terra_sandbox -- --experiment workbench --model models/character/ba
 cargo run -p terra_sandbox -- --experiment workbench --model models/character/base.glb --model models/nature/<File>.glb --sides 0 --sheet shots/<name>
 ```
 
-The first is for anything in the build catalogue, drawn as when placed; the second for any model, such as a tree, beside a body for scale. For growing things, also see them where they grow: a scripted run of the play experiment with `--at` and `--face` near them, and `--shot`. Go through the style guide's checklist, and run `cargo xtask check`: it holds every catalogue item to its real height.
+The first is for anything in the build catalogue, drawn as when placed; the second for any model, such as a tree, beside a body for scale. For growing things, also see them where they grow: a scripted run of the play experiment with `--at` and `--face` near them, and `--shot`. Go through the style guide's checklist, and run `cargo xtask contract`: it holds every model the game places to the model contract, its size, anchor, sockets and, for a leaf, its fit in its hole, and `cargo xtask check` runs it too. The workbench draws its box (green when it keeps the contract), origin and sockets.
 
 ## 8. Commit
 

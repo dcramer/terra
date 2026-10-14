@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Makes the props things are built as, from a description to the file the game loads: a concept
-// image (free), a Tripo model of it (Studio credits), then a free clean-up in Blender that gives
-// every face one of our palette colours (refine.py). Each prop is a folder in art/props holding
+// image (free), a Tripo model of it with its colour, normal and roughness maps (Studio credits), then
+// a free clean-up in Blender that keeps them at the prop's texture budget (refine.py, D14). Each prop is a folder in art/props holding
 // its prop.json, and the concept and model it was made from. See README.md.
 // Node 22.18 or later, which runs TypeScript directly; no dependencies.
 
@@ -42,10 +42,12 @@ const USAGE = `usage: node tools/props/props.ts <step> [PROP …] [--again]
 
   concept   draws each prop's concept from its prop.json (free); look at it before a model
   model     a Tripo model of each concept: four views (free), then a low-poly P1 model
-            textured at 2K, about 45 Studio credits each
-  refine    the model made ours in Blender (free): welded, cut to its triangle budget, every
-            face one palette colour, at its size; writes assets/models/props/<file>.glb (or
-            the folder its "into" names) and a sheet in tools/props/out/<prop>.png
+            textured at 2K with its normal, roughness and metal maps, about 50 Studio
+            credits each
+  refine    the model made ours in Blender (free): welded, cut to its triangle budget, its
+            textures kept at its budget (a palette prop's faces each one palette colour), at
+            its size; writes assets/models/props/<file>.glb (or the folder its "into"
+            names) and a sheet in tools/props/out/<prop>.png
   all       the three in turn, each skipped where art/props already has its result
   fronts    every model in assets/models/props, tools and village seen from straight in
             front, on one sheet, tools/props/out/fronts.png: each should face the viewer,
@@ -63,12 +65,28 @@ export type Prop = {
   // The folder in assets/models it goes in, if not props: "tools" for a tool's source, which
   // tools/characters/fit_held.py makes the held look from.
   into?: string;
-  // Its longest side, in metres, as builds.ron gives it.
-  size: number;
+  // How wide, high and deep it is, in metres, along glTF's X, Y (up) and Z (its front), as
+  // its catalogue entry gives it: refine makes the model exactly this size (the model
+  // contract, docs/art-style.md).
+  dims?: [number, number, number];
+  // Where its origin goes (the model contract): "base", the middle of its base, for
+  // anything stood on a floor or the ground (the default); "hinge", the foot of its hinge
+  // edge in the middle of its thickness, the leaf running along +X, for a door's or a
+  // shutter's leaf.
+  anchor?: "base" | "hinge";
+  // For a leaf whose model has its hinges on its right seen from its front: mirrored, so
+  // every leaf is hinged on its left, at its origin.
+  hinge?: "left" | "right";
+  // The points code attaches to, by name, in metres in the finished model's own space
+  // (glTF's axes, from its origin): written into its file as empties called socket.<name>.
+  sockets?: Record<string, [number, number, number]>;
+  // A palette model's longest side, in metres, for those not yet given dims.
+  size?: number;
   // Triangles the finished model may have.
   budget: number;
-  // The palette colours its faces may take (tools/characters/look.py); none for a textured
-  // prop, which keeps its own.
+  // A palette prop's colours, which its faces may take (tools/characters/look.py). A textured
+  // prop keeps its own and needs none, but for a part that glows: its faces nearest Fire,
+  // among the roles given, glow in the game, such as a forge's coals.
   roles?: string[];
   // For a role whose colour in the texture is not its own, the sRGB colour that means it
   // there: coals painted dull red, say, mean Fire, which is far brighter in the game.
@@ -80,8 +98,11 @@ export type Prop = {
   // A building kit's piece laid along its length, such as a log or a board, which the game
   // stretches to fit: its length along X, its thinnest side up, its middle on the origin.
   along?: boolean;
-  // It keeps the textures Tripo made (D14, docs/art-style.md), scaled to 2K, rather than a
-  // palette role painted on each face.
+  // Painted in palette roles, a colour on each face, rather than keeping the textures Tripo
+  // made, as every prop does by default (D14, docs/art-style.md): for a tool, whose held look
+  // fit_held.py colours by its Wood and Metal, and for the older flat models. Needs roles.
+  palette?: boolean;
+  // Kept for older prop.json files: textured is the default.
   textured?: boolean;
   // Tripo's generator: "p1", the low-poly Smart Mesh, by default; "h3.1", its most detailed,
   // for a piece seen close and often, such as a building kit's, textured in detail so its
@@ -107,11 +128,17 @@ export function readProp(text: string, name: string): Prop {
   for (const key of ["subject", "file"]) {
     if (typeof prop[key] !== "string") throw new Error(`${name}: prop.json needs "${key}"`);
   }
-  for (const key of ["size", "budget"]) {
-    if (typeof prop[key] !== "number" || prop[key] <= 0) throw new Error(`${name}: prop.json needs a positive "${key}"`);
+  if (typeof prop.budget !== "number" || prop.budget <= 0) throw new Error(`${name}: prop.json needs a positive "budget"`);
+  const dims = prop.dims;
+  const sized = Array.isArray(dims) ? dims.length === 3 && dims.every((d: unknown) => typeof d === "number" && d > 0) : false;
+  if (!sized && !(prop.palette && typeof prop.size === "number" && prop.size > 0)) {
+    throw new Error(`${name}: prop.json needs "dims", its width, height and depth in metres`);
   }
-  if (!prop.textured && (!Array.isArray(prop.roles) || prop.roles.length === 0)) {
-    throw new Error(`${name}: prop.json needs "roles", unless it is textured`);
+  if (prop.anchor === "hinge" && !(prop.sockets?.hinge && prop.sockets?.handle)) {
+    throw new Error(`${name}: a hinged leaf needs its "hinge" and "handle" sockets`);
+  }
+  if (prop.palette && (!Array.isArray(prop.roles) || prop.roles.length === 0)) {
+    throw new Error(`${name}: prop.json needs "roles" for a palette prop`);
   }
   return prop;
 }
@@ -123,15 +150,29 @@ export function refineArgs(prop: Prop, model: string, out: string, sheet: string
     model,
     out,
     sheet,
-    String(prop.size),
+    String(prop.dims ? Math.max(...prop.dims) : prop.size),
     String(prop.budget),
     String(prop.turn ?? 0),
     ...roles,
     ...(prop.flat ? ["--flat"] : []),
     ...(prop.along ? ["--along"] : []),
-    ...(prop.textured ? ["--textured"] : []),
+    ...(prop.palette ? [] : ["--textured"]),
     ...(prop.block ? ["--block"] : []),
+    ...(prop.dims ? [`--dims=${prop.dims.join(",")}`] : []),
+    ...(prop.anchor && prop.anchor !== "base" ? [`--anchor=${prop.anchor}`] : []),
+    ...(prop.hinge === "right" ? ["--mirror"] : []),
+    ...Object.entries(prop.sockets ?? {}).map(([socket, at]) => `--socket=${socket}:${at.join(",")}`),
   ];
+}
+
+/** Runs a command that prints one line of JSON last, as the Tripo CLI does, and reads it. */
+function runJson(command: string, args: string[]): { project: string } {
+  console.log(`> ${[command, ...args].map((a) => relative(ROOT, a) || a).join(" ")}`);
+  const result = spawnSync(command, args, { cwd: ROOT, stdio: ["inherit", "pipe", "inherit"], encoding: "utf8" });
+  process.stdout.write(result.stdout ?? "");
+  if (result.status !== 0) throw new Error(`${command} failed`);
+  const last = (result.stdout ?? "").trim().split("\n").at(-1) ?? "";
+  return JSON.parse(last);
 }
 
 function run(command: string, args: string[]) {
@@ -164,7 +205,16 @@ function model(name: string, prop: Prop, again: boolean) {
   const sides = ["front", "left", "back", "right"].map((side) => `${views}-${side}.jpeg`);
   const generator = prop.generator ?? "p1";
   const quality = generator === "p1" ? "standard" : "detailed";
-  run("node", [TRIPO, "model", "--views", ...sides, "--model", generator, "--faces", String(prop.faces ?? 5000), "--texture-quality", quality, "-o", glb]);
+  const made = runJson("node", [TRIPO, "model", "--views", ...sides, "--model", generator, "--faces", String(prop.faces ?? 5000), "--texture-quality", quality, "-o", glb]);
+  // A P1 model is textured in colour only; its normal, roughness and metal maps are a
+  // further step (5 credits), which a textured prop needs (docs/art-style.md).
+  if (!prop.palette && !hasPbr(readFileSync(glb))) run("node", [TRIPO, "pbr", made.project, "-o", glb]);
+}
+
+/** Whether a GLB's materials have a normal map, as Tripo's PBR step gives them. */
+export function hasPbr(glb: Buffer): boolean {
+  const json = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString("utf8"));
+  return (json.materials ?? []).some((m: { normalTexture?: unknown }) => m.normalTexture);
 }
 
 function refine(name: string, prop: Prop) {
@@ -186,7 +236,7 @@ function refine(name: string, prop: Prop) {
 
 /** Every prop, tool and village model from the front, labelled, on one sheet. */
 function fronts() {
-  const folders = ["props", "tools", "village"].map((folder) => join(ROOT, "assets", "models", folder));
+  const folders = ["props", "tools", "openings"].map((folder) => join(ROOT, "assets", "models", folder));
   const models = folders.flatMap((folder) => readdirSync(folder).filter((f) => f.endsWith(".glb")).sort().map((f) => join(folder, f)));
   const dir = join(OUT, "fronts");
   mkdirSync(dir, { recursive: true });

@@ -1,14 +1,9 @@
 {
+  "palette": true,
   "subject": "unlit hand torch standing upright: a rough wooden stick, its top wrapped in bound strips of pitch-soaked cloth tied with twine, charred black at the very top",
   "file": "Torch",
   "into": "tools",
   "size": 0.55,
   "budget": 600,
-  "roles": [
-    "Wood",
-    "WoodDark",
-    "ClothDark",
-    "Rope",
-    "Black"
-  ]
+  "roles": ["Wood", "WoodDark", "ClothDark", "Rope", "Black"]
 }

@@ -31,8 +31,8 @@ use terra_build::{Base, CELL_M};
 /// An item from the catalogue the village has: what it is, where it stands from the
 /// middle in metres east and south, and how many degrees it is turned.
 const ITEMS: [(&str, f32, f32, f32); 3] = [
-    ("../village/Well", 0.5, -1.5, 0.0),
-    ("../village/MarketStand_1", 7.0, 3.5, -60.0),
+    ("Well", 0.5, -1.5, 0.0),
+    ("MarketStall", 7.0, 3.5, -60.0),
     // Ilse's stool.
     ("Stool", -3.5, 2.5, 0.0),
 ];

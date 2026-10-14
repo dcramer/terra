@@ -1,11 +1,6 @@
 {
   "subject": "round wooden dining table for four, its top at the height of a standing adult's hips: a thick plank top on four sturdy legs joined by stretchers near the floor",
   "file": "RoundTable",
-  "size": 1.19,
-  "budget": 1000,
-  "roles": [
-    "Wood",
-    "WoodDark",
-    "WoodLight"
-  ]
+  "dims": [1.18, 0.75, 1.19],
+  "budget": 1000
 }

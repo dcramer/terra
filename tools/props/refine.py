@@ -1,17 +1,23 @@
-"""Makes a generated prop ours: welded, cut to a triangle budget, one palette colour per face
-read from its texture, levelled and squared up, at its size, checked, and rendered in the game's light beside the
+"""Makes a generated prop ours: welded, cut to a triangle budget, its textures kept at its
+budget (or, for a palette model, one palette colour per face read from its texture),
+levelled and squared up, at its size, checked, and rendered in the game's light beside the
 figure for scale.
 
     tools/blender/run.sh tools/props/refine.py MODEL OUT.glb SHEET.png SIZE BUDGET TURN ROLE...
 
 MODEL is Tripo's textured model (facing +X, as Studio keeps them); OUT the file the game
-loads; SIZE its longest side in metres; BUDGET the triangles it may have; TURN degrees about
+loads; SIZE its longest side in metres (with --dims, below, it only sets the texture budget); BUDGET the triangles it may have; TURN degrees about
 the up axis after it is turned to face the standard way; then the palette roles its faces may
 take, each named in look.PALETTE, or as ROLE=r,g,b to match it to that sRGB colour in the
-texture instead of its own; and --flat for a thing that lies flat, such as a rug. Each face gets the role nearest its texture's colour there,
-then nearly flat regions and stray faces are evened out, so colours sit in broad areas as in
-the concept. Materials are named by role: the game colours a prop by those names (props.rs),
-and a part called Fire glows. Run by props.ts, which reads these from art/props/<prop>/prop.json.
+texture instead of its own; --flat for a thing that lies flat, such as a rug; and the model
+contract's --dims, --anchor, --mirror and --socket, described where they are read.
+
+With --textured, as every prop is by default (D14), the model keeps its colour, normal and
+roughness maps, and the roles only pick out a part that glows: the faces nearest Fire. Without
+it, each face gets the role nearest its texture's colour there, then nearly flat regions and
+stray faces are evened out, so colours sit in broad areas as in the concept. Materials are
+named by role: the game colours such a prop by those names (props.rs), and a part called Fire
+glows. Run by props.ts, which reads these from art/props/<prop>/prop.json.
 """
 
 import json
@@ -34,7 +40,7 @@ import look
 # --along: a building kit's piece laid along its length, such as a log or a board, which the
 # game stretches to fit (docs/building-kits.md): its length along X, its thinnest side up, its middle
 # on the origin.
-# --textured: the model keeps its own textures (D14), scaled to TEXTURE_PX at most, rather
+# --textured: the model keeps its own textures (D14), at its budget (TEXTURE_PX), rather
 # than a palette role painted on each face.
 # --block: a block, such as a section of stone wall, squared to its box by the turn that
 # makes its box smallest, however far it leans, so its faces lie flat against its
@@ -47,17 +53,40 @@ block = "--block" in args
 # --grade=R,G,B,SR,SG,SB: the colour texture's mean and spread on the surface, per channel,
 # to match, so the pieces of a kit share one grade (docs/art-style.md).
 grade = next((tuple(map(float, a.split("=")[1].split(","))) for a in args if a.startswith("--grade=")), None)
+# The model contract (docs/art-style.md): --dims=W,H,D, its width, height and depth in metres
+# along glTF's X, Y (up) and Z (front), which it is made exactly; --anchor=hinge for a leaf
+# hinged at its origin rather than standing on the middle of its base; --mirror for a leaf
+# whose hinges the model has on its right; --socket=NAME:X,Y,Z, an empty called
+# socket.NAME at that point of the finished model, in glTF's axes.
+dims = next((tuple(map(float, a.split("=")[1].split(","))) for a in args if a.startswith("--dims=")), None)
+anchor = next((a.split("=")[1] for a in args if a.startswith("--anchor=")), "base")
+mirror = "--mirror" in args
+sockets = {
+    a.split("=", 1)[1].split(":")[0]: tuple(map(float, a.split(":")[1].split(",")))
+    for a in args
+    if a.startswith("--socket=")
+}
 src, out, sheet, size, budget, turn, *given = [
-    a for a in args if a not in ("--flat", "--along", "--textured", "--block") and not a.startswith("--grade=")
+    a
+    for a in args
+    if a not in ("--flat", "--along", "--textured", "--block", "--mirror")
+    and not a.startswith(("--grade=", "--dims=", "--anchor=", "--socket="))
 ]
 size, budget, turn = float(size), int(budget), float(turn)
+# Below this longest side, in metres, a prop is small and its textures 1K (TEXTURE_PX).
+SMALL_M = 1.5
+# The quality the game's file stores its maps at: JPEG, as Tripo's own are, a tenth of PNG's
+# size and not told apart once filtered.
+JPEG_QUALITY = 90
 # ROLE, or ROLE=r,g,b for a role that the texture paints in another colour than its own.
 roles = [role.split("=")[0] for role in given]
 palette = np.array(
     [[float(c) for c in role.split("=")[1].split(",")] if "=" in role else look.PALETTE[role] for role in given]
 )
-# The largest side of a kept texture, in pixels (docs/art-style.md: 2K unless seen very close).
-TEXTURE_PX = 2048
+# The largest side of a kept colour or normal map, in pixels, by the model's size
+# (docs/art-style.md, Budgets): 2K for a large prop, 1K for a small one; a roughness and metal
+# map, or an occlusion map, half that, since roughness changes slowly across a surface.
+TEXTURE_PX = 2048 if size >= SMALL_M else 1024
 # The most a model's feet may lean, in degrees, for level() to stand it straight.
 LEVEL_MAX = 8.0
 # How thick a flat thing is pressed, in metres.
@@ -130,13 +159,48 @@ def smooth(ob, crease=50.0):
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(crease), keep_sharp_edges=True)
 
 
+def detailed(image):
+    """Whether an image is a colour or normal map, which keep TEXTURE_PX, rather than one
+    that changes slowly, such as roughness, which keeps half."""
+    for mat in bpy.data.materials:
+        if not mat.use_nodes:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type != "TEX_IMAGE" or node.image != image:
+                continue
+            for link in node.outputs["Color"].links:
+                to = link.to_node
+                if to.type == "NORMAL_MAP" or (to.type == "BSDF_PRINCIPLED" and link.to_socket.name == "Base Color"):
+                    return True
+    return False
+
+
 def shrink_textures():
-    """Each kept texture no larger than TEXTURE_PX on its longest side."""
+    """Each kept texture no larger than its budget on its longest side: TEXTURE_PX for a
+    colour or normal map, half that for the rest."""
     for image in bpy.data.images:
         width, height = image.size
         largest = max(width, height)
-        if largest > TEXTURE_PX:
-            image.scale(width * TEXTURE_PX // largest, height * TEXTURE_PX // largest)
+        most = TEXTURE_PX if detailed(image) else TEXTURE_PX // 2
+        if largest > most:
+            image.scale(width * most // largest, height * most // largest)
+
+
+def maps(ob):
+    """Which maps the model's materials draw, as the game reads them."""
+    found = set()
+    for slot in ob.material_slots:
+        tree = slot.material and slot.material.node_tree
+        if not tree:
+            continue
+        for node in tree.nodes:
+            if node.type == "NORMAL_MAP" and node.inputs["Color"].links:
+                found.add("normal")
+            if node.type == "BSDF_PRINCIPLED":
+                for name, map_name in (("Base Color", "colour"), ("Roughness", "roughness"), ("Metallic", "metallic")):
+                    if node.inputs[name].links:
+                        found.add(map_name)
+    return sorted(found)
 
 
 def colour_image(ob):
@@ -274,9 +338,8 @@ def reduce(ob):
     bpy.ops.object.modifier_apply(modifier=cut.name)
 
 
-def paint(ob):
-    """Each face takes the palette role nearest its texture's colour."""
-    me = ob.data
+def nearest_roles(me):
+    """For each face, the index of the role nearest its texture's colour there."""
     palette_lab = lab(palette)
     textures = [texture_of(m) for m in me.materials]
     uv = me.uv_layers.active.data if me.uv_layers else None
@@ -296,6 +359,42 @@ def paint(ob):
         # An 8-bit sRGB texture's pixels come back as stored, already sRGB, as the palette is.
         colour = lab(tex[ys, xs, :3].mean(axis=0))
         picked.append(int(np.argmin(((palette_lab - colour) ** 2).sum(axis=1))))
+    return picked
+
+
+def split_glow(ob):
+    """A textured model's glowing part, such as a forge's coals: the faces whose texture is
+    nearest Fire among its roles take a copy of their material named Fire, which the game
+    draws glowing in its own texture (props.rs). Stray faces are evened out as a painted
+    model's are. Nothing changes for a model with no Fire role."""
+    if "Fire" not in roles:
+        return
+    me = ob.data
+    fire = roles.index("Fire")
+    picked = nearest_roles(me)
+    glowing = {}
+    for poly, role in zip(me.polygons, picked):
+        if role != fire:
+            continue
+        own = me.materials[poly.material_index]
+        if own.name not in glowing:
+            copy = own.copy()
+            copy.name = "Fire"
+            tree = copy.node_tree
+            bsdf = next(n for n in tree.nodes if n.type == "BSDF_PRINCIPLED")
+            for link in bsdf.inputs["Base Color"].links:
+                tree.links.new(link.from_socket, bsdf.inputs["Emission Color"])
+            bsdf.inputs["Emission Strength"].default_value = 8.0
+            me.materials.append(copy)
+            glowing[own.name] = len(me.materials) - 1
+        poly.material_index = glowing[own.name]
+    despeckle(me)
+
+
+def paint(ob):
+    """Each face takes the palette role nearest its texture's colour."""
+    me = ob.data
+    picked = nearest_roles(me)
     me.materials.clear()
     for role in roles:
         me.materials.append(look.material(role))
@@ -489,16 +588,47 @@ def place(ob):
     turned by TURN, its longest side SIZE, standing on the origin."""
     me = ob.data
     me.transform(Matrix.Rotation(math.radians(squaring(me) - 90.0 + turn), 4, "Z"))
+    if mirror:
+        # Hinged on its right: mirrored across, its faces turned back outward.
+        me.transform(Matrix.Diagonal((-1, 1, 1, 1)))
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+        bm.to_mesh(me)
+        bm.free()
     pts = np.array([v.co for v in me.vertices])
     lo, hi = pts.min(axis=0), pts.max(axis=0)
-    me.transform(Matrix.Scale(size / float((hi - lo).max()), 4))
-    if flat:
-        zs = [v.co.z for v in me.vertices]
-        me.transform(Matrix.Diagonal((1, 1, FLAT_M / max(max(zs) - min(zs), 1e-6), 1)))
+    if dims:
+        # Exactly its stated size: glTF's X, Y and Z are Blender's X, Z and -Y.
+        width, height, depth = dims
+        span = np.maximum(hi - lo, 1e-6)
+        me.transform(Matrix.Diagonal((width / span[0], depth / span[1], height / span[2], 1)))
+    else:
+        me.transform(Matrix.Scale(size / float((hi - lo).max()), 4))
+        if flat:
+            zs = [v.co.z for v in me.vertices]
+            me.transform(Matrix.Diagonal((1, 1, FLAT_M / max(max(zs) - min(zs), 1e-6), 1)))
     pts = np.array([v.co for v in me.vertices])
     lo, hi = pts.min(axis=0), pts.max(axis=0)
-    me.transform(Matrix.Translation(Vector(((lo[0] + hi[0]) / -2, (lo[1] + hi[1]) / -2, -lo[2]))))
+    # Its origin its anchor: the middle of its base, or a leaf's hinge edge (its left seen
+    # from its front, Blender's -X) at its foot, in the middle of its thickness.
+    across = -lo[0] if anchor == "hinge" else (lo[0] + hi[0]) / -2
+    me.transform(Matrix.Translation(Vector((across, (lo[1] + hi[1]) / -2, -lo[2]))))
     me.update()
+
+
+def add_sockets():
+    """Each socket an empty called socket.NAME at its point, given in glTF's axes (X, Y up,
+    Z front), which are Blender's X, Z and -Y. The game reads them by name."""
+    empties = []
+    for name, (x, y, z) in sockets.items():
+        empty = bpy.data.objects.new(f"socket.{name}", None)
+        empty.empty_display_type = "PLAIN_AXES"
+        empty.empty_display_size = 0.05
+        empty.location = (x, -z, y)
+        bpy.context.scene.collection.objects.link(empty)
+        empties.append(empty)
+    return empties
 
 
 def checks(ob):
@@ -533,6 +663,7 @@ def checks(ob):
     }
     if textured:
         report["textures"] = sorted({f"{i.name}: {i.size[0]}x{i.size[1]}" for i in bpy.data.images if i.size[0]})
+        report["maps"] = maps(ob)
         report["colour"] = colour_stats(ob)
     else:
         report["colours"] = {role: round(a / total, 3) for role, a in area.most_common()}
@@ -603,6 +734,7 @@ ob.name = os.path.splitext(os.path.basename(out))[0]
 weld(ob.data)
 reduce(ob)
 if textured:
+    split_glow(ob)
     shrink_textures()
     if grade or block:
         match_grade(ob, grade, by_side=block)
@@ -632,8 +764,21 @@ smooth(ob)
 bpy.context.view_layer.update()
 report = checks(ob)
 report["leaned_degrees"] = 0.0 if flat or along else round(leaned, 1)
+report["anchor"] = anchor
+report["sockets"] = {name: list(at) for name, at in sockets.items()}
 select_only(ob)
-bpy.ops.export_scene.gltf(filepath=look.path(out), export_format="GLB", use_selection=True)
+for empty in add_sockets():
+    empty.select_set(True)
+# A textured model's maps as JPEG, and its tangents, which its normal map needs and which the
+# game then need not work out.
+bpy.ops.export_scene.gltf(
+    filepath=look.path(out),
+    export_format="GLB",
+    use_selection=True,
+    export_tangents=textured,
+    export_image_format="JPEG" if textured else "AUTO",
+    export_jpeg_quality=JPEG_QUALITY,
+)
 look.stage()
 render(ob, look.path(sheet))
 with open(os.path.splitext(look.path(sheet))[0] + ".json", "w") as f:

@@ -10,7 +10,6 @@ use super::act::Building;
 use super::{Built, Site};
 use crate::play::interact::{CanInteract, Interactable, Interacted};
 use bevy::asset::LoadState;
-use bevy::camera::primitives::MeshAabb;
 use bevy::camera::visibility::VisibilityRange;
 use bevy::gltf::GltfAssetLabel;
 use bevy::prelude::*;
@@ -22,33 +21,31 @@ use terra_build::{Prop, PropKind, Rules};
 
 /// How long a leaf takes to swing all the way, in seconds.
 const SWING_S: f32 = 0.7;
-/// How thick a door's leaf is drawn, and a shutter's, its hardware included, whatever its
-/// model's own depth.
-const DOOR_DRAWN_M: f32 = 0.08;
-const SHUTTER_DRAWN_M: f32 = 0.05;
 /// How far off doors and shutters are drawn: as far as a building's near detail.
 const SEEN_M: f32 = 140.0;
 
 /// Each kind of door's and shutters' model, by the kind of prop it is, as the catalogue
-/// says: its file, and whether its hinges are on its left seen from its front.
+/// says: its file, the size of the leaf it is made as, and its hinge socket. Every leaf's
+/// model keeps the model contract (docs/art-style.md): hinged at its origin, running along
+/// +X from it, its front +Z, so all are hung alike.
 #[derive(Resource, Clone, Debug, Default, PartialEq)]
 pub struct FittingLooks(pub BTreeMap<PropKind, FittingLook>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FittingLook {
     pub path: String,
-    pub hinge_left: bool,
+    /// How wide, high and thick the leaf it is made as is, in metres.
+    pub dims: Vec3,
+    /// The foot of its hinge, in its own space: its origin, as the contract has it.
+    pub hinge: Vec3,
 }
 
-/// A model loaded: its mesh, its material and the same drawn mirrored, and the box round it
-/// in its own space.
+/// A model loaded: its mesh, its material and the same drawn mirrored.
 #[derive(Clone, Debug)]
 struct Model {
     mesh: Handle<Mesh>,
     material: Handle<StandardMaterial>,
     mirrored: Handle<StandardMaterial>,
-    min: Vec3,
-    max: Vec3,
 }
 
 /// The models, as they load, by kind.
@@ -141,11 +138,8 @@ fn load(
             error!("A door's or shutters' model did not load: {problem}");
             continue;
         }
-        let (Some(found), Some(made)) = (meshes.get(mesh), materials.get(material)) else {
+        let (Some(_), Some(made)) = (meshes.get(mesh), materials.get(material)) else {
             return;
-        };
-        let Some(aabb) = found.get_aabb() else {
-            continue;
         };
         // Drawn mirrored, for one of a pair, its faces' winding is turned, so the other
         // side of each is culled, as the glTF loader does for a mirrored node.
@@ -159,8 +153,6 @@ fn load(
                 mesh: mesh.clone(),
                 material: material.clone(),
                 mirrored: materials.add(mirrored),
-                min: Vec3::from(aabb.min()),
-                max: Vec3::from(aabb.max()),
             },
         );
     }
@@ -171,41 +163,29 @@ fn load(
 }
 
 /// Where a leaf's model goes, from its hinge, standing shut, in the base's own space less
-/// `origin`: its model's own space turned and scaled so its hinge edge is on the hinge,
-/// its foot on the foot, its front out for a door and the way it opens for shutters, as
-/// thick as such a leaf is drawn. Whether it is drawn mirrored.
-fn placed(model: &Model, leaf: &Leaf, hinge_left: bool) -> (Transform, bool) {
+/// `origin`: its hinge socket on the leaf's hinge, in the middle of its thickness, running
+/// across the leaf, its front out for a door and the way it opens for shutters, stretched
+/// across and up from the leaf it is made as to the one this hole takes, as thick as it is
+/// made. Whether it is drawn mirrored, as the second of a pair is.
+fn placed(look: &FittingLook, leaf: &Leaf) -> (Transform, bool) {
     let pose = leaf.pose(0.0);
-    let size = (model.max - model.min).max(Vec3::splat(1e-3));
-    let thick = if leaf.door {
-        DOOR_DRAWN_M
-    } else {
-        SHUTTER_DRAWN_M
-    };
-    // The model's X along the leaf from its hinge edge; its Z, its front, out of the
-    // leaf's through way for a door, against it for shutters.
-    let x = if hinge_left {
-        pose.across
-    } else {
-        -pose.across
-    };
+    let made = look.dims.max(Vec3::splat(1e-3));
+    // The model's X along the leaf from its hinge; its Z, its front, out of the leaf's
+    // through way for a door, against it for shutters.
+    let x = pose.across;
     let z = if leaf.door {
         pose.through
     } else {
         -pose.through
     };
-    let scale = Vec3::new(leaf.width / size.x, leaf.height / size.y, thick / size.z);
+    let scale = Vec3::new(leaf.width / made.x, leaf.height / made.y, 1.0);
     // What it does to the model's own space, which may mirror it: drawn then as a turn
     // and a scale negative along the model's X, with the mirrored material.
     let linear = Mat3::from_cols(x * scale.x, Vec3::Y * scale.y, z * scale.z);
     let mirrored = x.cross(Vec3::Y).dot(z) < 0.0;
     let turn_x = if mirrored { -x } else { x };
-    // The model's hinge edge, foot and middle of its depth, on the hinge, in the middle of
-    // the leaf's thickness.
-    let hinge_edge = if hinge_left { model.min.x } else { model.max.x };
-    let anchor = Vec3::new(hinge_edge, model.min.y, (model.min.z + model.max.z) * 0.5);
     let transform = Transform {
-        translation: pose.through * (leaf.thick * 0.5) - linear * anchor,
+        translation: pose.through * (leaf.thick * 0.5) - linear * look.hinge,
         rotation: Quat::from_mat3(&Mat3::from_cols(turn_x, Vec3::Y, z)),
         scale: Vec3::new(if mirrored { -scale.x } else { scale.x }, scale.y, scale.z),
     };
@@ -233,7 +213,7 @@ fn spawn_leaves(
     for leaf in prop.leaves() {
         let pose = leaf.pose(0.0);
         let axis = pose.across.cross(leaf.opens).normalize_or(Vec3::Y);
-        let (at, mirrored) = placed(model, &leaf, look.hinge_left);
+        let (at, mirrored) = placed(look, &leaf);
         let hinge = commands
             .spawn((
                 Name::new("Leaf"),
@@ -515,27 +495,33 @@ pub(crate) fn fit_all(
 mod tests {
     use super::*;
 
-    /// A model as Tripo's leaves come: wider than a leaf, deep, its foot at the origin.
-    fn model() -> Model {
-        Model {
-            mesh: Handle::default(),
-            material: Handle::default(),
-            mirrored: Handle::default(),
-            min: Vec3::new(-0.6, 0.0, -0.15),
-            max: Vec3::new(0.6, 2.0, 0.15),
+    /// A leaf's model as the model contract makes it (docs/art-style.md): the catalogue's
+    /// size of a door's or a shutter's leaf, hinged at its origin, running along +X.
+    fn look(hang: Hang) -> FittingLook {
+        FittingLook {
+            path: String::new(),
+            dims: match hang {
+                Hang::Door => Vec3::new(0.894, 1.939, 0.08),
+                Hang::Shutters => Vec3::new(0.5, 1.0, 0.05),
+            },
+            hinge: Vec3::ZERO,
         }
     }
 
     /// Where the corners of a model's box are drawn, in the base's own space, with a leaf
     /// turned `open` of the way, as `spawn_leaves` puts them.
-    fn corners(model: &Model, leaf: &Leaf, hinge_left: bool, open: f32) -> Vec<Vec3> {
+    fn corners(look: &FittingLook, leaf: &Leaf, open: f32) -> Vec<Vec3> {
         let pose = leaf.pose(0.0);
         let axis = pose.across.cross(leaf.opens).normalize_or(Vec3::Y);
         let hinge = Transform::from_translation(leaf.hinge)
             .with_rotation(Quat::from_axis_angle(axis, leaf.swing * open));
-        let (at, _) = placed(model, leaf, hinge_left);
+        let (at, _) = placed(look, leaf);
         let whole = hinge.to_matrix() * at.to_matrix();
-        let (low, high) = (model.min, model.max);
+        let half = look.dims.z * 0.5;
+        let (low, high) = (
+            Vec3::new(0.0, 0.0, -half),
+            Vec3::new(look.dims.x, look.dims.y, half),
+        );
         (0..8)
             .map(|i| {
                 let corner = Vec3::new(
@@ -576,23 +562,21 @@ mod tests {
         ];
         for prop in props {
             for leaf in prop.leaves() {
-                for hinge_left in [true, false] {
-                    for open in [0.0, 0.5, 1.0] {
-                        // Every corner drawn within the box a walker meets where the leaf
-                        // stands, give or take how much thicker it is drawn.
-                        let pose = leaf.pose(open);
-                        for corner in corners(&model(), &leaf, hinge_left, open) {
-                            let from = corner - pose.hinge;
-                            let (across, through) = (from.dot(pose.across), from.dot(pose.through));
-                            assert!(
-                                across > -1e-3 && across < leaf.width + 1e-3,
-                                "{prop:?} {hinge_left} {open}: {across} across"
-                            );
-                            assert!(
-                                through > -0.02 && through < leaf.thick + 0.02,
-                                "{prop:?} {hinge_left} {open}: {through} through"
-                            );
-                        }
+                for open in [0.0, 0.5, 1.0] {
+                    // Every corner drawn within the box a walker meets where the leaf
+                    // stands, give or take how much thicker it is drawn.
+                    let pose = leaf.pose(open);
+                    for corner in corners(&look(prop.hang), &leaf, open) {
+                        let from = corner - pose.hinge;
+                        let (across, through) = (from.dot(pose.across), from.dot(pose.through));
+                        assert!(
+                            across > -1e-3 && across < leaf.width + 1e-3,
+                            "{prop:?} {open}: {across} across"
+                        );
+                        assert!(
+                            through > -0.02 && through < leaf.thick + 0.02,
+                            "{prop:?} {open}: {through} through"
+                        );
                     }
                 }
             }

@@ -356,8 +356,7 @@ pub(super) fn highlight(
                 blocked,
             },
         ) => {
-            let stood =
-                props::standing(&site, &planet, at, lift + item.lift, builder.turn, indoors);
+            let stood = props::standing(&site, &planet, at, lift, builder.turn, indoors);
             // The grid the item is snapping to, drawn on the floor or ground round it:
             // tile edges strongly, the steps between them faintly, fading with distance.
             if builder.snapping {

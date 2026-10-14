@@ -7,15 +7,21 @@
 
 use super::Footprint;
 use super::catalogue::{Builds, Item, Light};
+use super::contract;
 use super::flora::Obstacles;
 use super::interact::{CanInteract, Interactable};
-use super::models::{Part, read_model};
+use super::models::{Part, Textures, read_model, read_sockets};
 use super::storage::Storage;
 use crate::build::Site;
 use crate::planet::Planet;
 use bevy::{
-    asset::RenderAssetUsages, light::NotShadowCaster, mesh::Indices,
-    platform::collections::HashMap, prelude::*, render::render_resource::PrimitiveTopology,
+    asset::RenderAssetUsages,
+    gltf::{GltfAssetLabel, GltfLoaderSettings},
+    light::NotShadowCaster,
+    mesh::Indices,
+    platform::collections::HashMap,
+    prelude::*,
+    render::render_resource::{Face, PrimitiveTopology},
 };
 use std::sync::Arc;
 use terra_build::{Base, CELL_M};
@@ -60,15 +66,12 @@ impl Prop {
         let item = Item {
             name: "Box".to_string(),
             file: "box".to_string(),
-            size: half.max_element() * 2.0,
-            height: (0.0, half.y * 2.0),
+            dims: half * 2.0,
             cost: Vec::new(),
-            lift: 0.0,
             light: Light::None,
             station,
             claims: false,
             rest: None,
-            seat: None,
             holds: None,
         };
         Prop {
@@ -92,28 +95,60 @@ struct Settling(f32);
 
 const SETTLE_SECONDS: f32 = 0.16;
 
-/// An item's shapes, ready to draw: what is lit and what glows, stood on its foot,
-/// centred, and at its real size.
+/// An item's model, ready to draw, as its file has it: at its real size, its origin its
+/// anchor (docs/art-style.md, the model contract).
 pub struct Model {
+    /// What it is drawn as: a textured part in its own textures (D14), the flat-coloured
+    /// parts of the older models in one mesh coloured by its points.
+    pub pieces: Vec<Piece>,
+    /// All of it that does not glow in one mesh, without its textures, for drawing it in one
+    /// look, as the builder's ghost of it is.
     pub solid: Option<Handle<Mesh>>,
-    pub glow: Option<Handle<Mesh>>,
+    /// Half its width, height and depth.
     pub half: Vec3,
+    /// The box round it, in its own space.
+    pub low: Vec3,
+    pub high: Vec3,
+    /// Its sockets by name, in its own space: where code attaches to it.
+    pub sockets: Vec<(String, Vec3)>,
+}
+
+/// One piece of a model and the material it is drawn in.
+pub struct Piece {
+    pub mesh: Handle<Mesh>,
+    pub material: Handle<StandardMaterial>,
+    /// It glows, as a forge's coals do, and so casts no shadow.
+    pub glows: bool,
+}
+
+impl Model {
+    /// Its first piece that does not glow, textured if it has any, for where one piece
+    /// stands for the whole, as an item rising as it is built, or a dropped bag.
+    pub fn body(&self) -> Option<&Piece> {
+        self.pieces.iter().find(|piece| !piece.glows)
+    }
+
+    /// Where its socket called `name` is, in its own space, if it has one.
+    pub fn socket(&self, name: &str) -> Option<Vec3> {
+        socket(&self.sockets, name)
+    }
+}
+
+/// Where the socket called `name` is among `sockets`.
+pub fn socket(sockets: &[(String, Vec3)], name: &str) -> Option<Vec3> {
+    sockets
+        .iter()
+        .find(|(each, _)| each == name)
+        .map(|&(_, at)| at)
 }
 
 /// The model for every item in the catalogue.
 #[derive(Resource)]
 pub struct Models {
     models: HashMap<String, Model>,
-    lit: Handle<StandardMaterial>,
-    glowing: Handle<StandardMaterial>,
 }
 
 impl Models {
-    /// The look every item is drawn with.
-    pub fn lit(&self) -> Handle<StandardMaterial> {
-        self.lit.clone()
-    }
-
     pub fn of(&self, item: &Item) -> Option<&Model> {
         self.models.get(&item.file)
     }
@@ -128,9 +163,9 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (flicker, keep_clear, settle));
 }
 
-/// Our colour for a part of a prop, as it should look on screen, and whether it glows. A
-/// part named for a palette role (`tools/props`) has that role's colour in its file; the
-/// free models' wood is given ours.
+/// Our colour for a flat-coloured part of a prop, as it should look on screen, and whether
+/// it glows. A part named for a palette role (`tools/props`) has that role's colour in its
+/// file; the free models' wood is given ours.
 fn colour_of(part: &Part) -> (Color, bool) {
     let name = part.material.split('.').next().unwrap_or("");
     let colour = match name {
@@ -142,63 +177,240 @@ fn colour_of(part: &Part) -> (Color, bool) {
     (colour, false)
 }
 
-/// An item's meshes and its size, from the parts of its model file.
-fn build(parts: &[Part], size: f32, meshes: &mut Assets<Mesh>) -> Model {
-    let all = || parts.iter().flat_map(|part| part.positions.iter().copied());
-    let low = all().fold(Vec3::MAX, Vec3::min);
-    let high = all().fold(Vec3::MIN, Vec3::max);
-    let scale = size / (high - low).max_element().max(1e-3);
-    let foot = Vec3::new((low.x + high.x) * 0.5, low.y, (low.z + high.z) * 0.5);
-    let mut mesh_of = |glowing: bool| {
-        let mut positions = Vec::new();
-        let mut normals = Vec::new();
-        let mut colours = Vec::new();
-        let mut indices = Vec::new();
-        for part in parts {
-            let (colour, glows) = colour_of(part);
-            if glows != glowing {
-                continue;
-            }
-            let first = positions.len() as u32;
-            positions.extend(part.positions.iter().map(|&p| (p - foot) * scale));
-            normals.extend(part.normals.iter().copied());
-            colours.extend(std::iter::repeat_n(
-                colour.to_linear().to_f32_array(),
-                part.positions.len(),
-            ));
-            indices.extend(part.indices.iter().map(|index| first + index));
+/// A model read from its file, as it is: at its real size, its origin its anchor and its
+/// front +Z, as the model contract says (docs/art-style.md), so nothing about it is fixed
+/// up here.
+pub struct Shape {
+    parts: Vec<Part>,
+    /// The box round it, in its own space.
+    pub low: Vec3,
+    pub high: Vec3,
+    /// Its sockets by name, in its own space.
+    pub sockets: Vec<(String, Vec3)>,
+}
+
+#[cfg(test)]
+impl Shape {
+    /// A shape that is only its box and sockets, for testing what is said of models.
+    pub fn from_box(low: Vec3, high: Vec3, sockets: Vec<(String, Vec3)>) -> Self {
+        Self {
+            parts: Vec::new(),
+            low,
+            high,
+            sockets,
         }
-        (!positions.is_empty()).then(|| {
-            meshes.add(
-                Mesh::new(
-                    PrimitiveTopology::TriangleList,
-                    RenderAssetUsages::RENDER_WORLD,
-                )
-                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-                .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
-                .with_inserted_indices(Indices::U32(indices)),
-            )
-        })
-    };
-    Model {
-        solid: mesh_of(false),
-        glow: mesh_of(true),
-        half: (high - low) * scale * 0.5,
     }
 }
 
-/// The model in `assets/models/props/<file>.glb`, coloured as every prop is, with its
-/// longest side `size` metres.
-pub fn read_look(file: &str, size: f32, meshes: &mut Assets<Mesh>) -> Result<Model, String> {
-    Ok(build(
-        &read_model(&format!("props/{file}.glb"))?,
-        size,
-        meshes,
-    ))
+impl Shape {
+    /// Half its width, height and depth.
+    pub fn half(&self) -> Vec3 {
+        (self.high - self.low) * 0.5
+    }
 }
 
-/// The material a prop's lit parts are drawn with: their colours are its vertices'.
+/// The model in `assets/models/<file>`, such as `props/Chest.glb`.
+pub fn read_shape(file: &str) -> Result<Shape, String> {
+    let parts = read_model(file)?;
+    let all = || parts.iter().flat_map(|part| part.positions.iter().copied());
+    let low = all().fold(Vec3::MAX, Vec3::min);
+    let high = all().fold(Vec3::MIN, Vec3::max);
+    if low.cmpgt(high).any() {
+        return Err(format!("{file} has no triangles"));
+    }
+    Ok(Shape {
+        parts,
+        low,
+        high,
+        sockets: read_sockets(file)?,
+    })
+}
+
+/// Where a catalogue item's model is, under `assets/models`.
+pub fn item_file(item: &Item) -> String {
+    format!("props/{}.glb", item.file)
+}
+
+/// What making a prop's model to draw needs: where its meshes and materials go, the asset
+/// server that loads its textures, and the materials its flat-coloured parts share.
+pub struct Making<'a> {
+    pub meshes: &'a mut Assets<Mesh>,
+    pub materials: &'a mut Assets<StandardMaterial>,
+    pub assets: &'a AssetServer,
+    pub lit: Handle<StandardMaterial>,
+    pub glowing: Handle<StandardMaterial>,
+}
+
+/// One mesh of `parts`, each point coloured by its part, or nothing if there are none.
+fn coloured(parts: &[&Part], meshes: &mut Assets<Mesh>) -> Option<Handle<Mesh>> {
+    let mut positions = Vec::new();
+    let mut normals = Vec::new();
+    let mut colours = Vec::new();
+    let mut indices = Vec::new();
+    for part in parts {
+        let first = positions.len() as u32;
+        // A textured part drawn without its textures takes its material's own colour.
+        let colour = if part.textures.is_some() {
+            part.colour
+        } else {
+            colour_of(part).0
+        };
+        positions.extend_from_slice(&part.positions);
+        normals.extend_from_slice(&part.normals);
+        colours.extend(std::iter::repeat_n(
+            colour.to_linear().to_f32_array(),
+            part.positions.len(),
+        ));
+        indices.extend(part.indices.iter().map(|index| first + index));
+    }
+    (!positions.is_empty()).then(|| {
+        meshes.add(
+            Mesh::new(
+                PrimitiveTopology::TriangleList,
+                RenderAssetUsages::RENDER_WORLD,
+            )
+            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
+            .with_inserted_indices(Indices::U32(indices)),
+        )
+    })
+}
+
+/// A textured part's mesh, with its places on its textures and, for its normal map, its
+/// tangents: the file's, as `tools/props` exports them, or made here if it has none.
+fn textured_mesh(part: &Part, textures: &Textures) -> Mesh {
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, part.positions.clone())
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, part.normals.clone())
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, part.uvs.clone().unwrap_or_default())
+    .with_inserted_indices(Indices::U32(part.indices.clone()));
+    if textures.normal.is_some() {
+        match &part.tangents {
+            Some(tangents) => mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tangents.clone()),
+            None => {
+                if let Err(problem) = mesh.generate_tangents() {
+                    warn!("A prop's part has no tangents for its normal map. {problem}");
+                }
+            }
+        }
+    }
+    mesh
+}
+
+/// How bright a glowing textured part is: its colour texture times this, so painted coals
+/// glow as brightly as the flat glow (`glowing`).
+const GLOW_SCALE: f32 = 20.0;
+
+/// A textured part's material: its own textures, loaded from its file through Bevy's glTF
+/// loader by their labels, and its own factors. Loading them that way gives them mipmaps
+/// and filtering (`terra_world::mipmaps`), and each texture is loaded once however many
+/// pieces draw it.
+fn textured_material(
+    path: &str,
+    textures: &Textures,
+    glows: bool,
+    assets: &AssetServer,
+) -> StandardMaterial {
+    let load = |index: usize| -> Handle<Image> {
+        assets
+            .load_builder()
+            .with_settings(|settings: &mut GltfLoaderSettings| {
+                // Only its textures are wanted: the meshes are made here.
+                settings.load_meshes = RenderAssetUsages::empty();
+                settings.load_cameras = false;
+                settings.load_lights = false;
+                settings.load_animations = false;
+            })
+            .load(GltfAssetLabel::Texture(index).from_asset(path.to_string()))
+    };
+    let colour = load(textures.colour);
+    StandardMaterial {
+        base_color_texture: Some(colour.clone()),
+        normal_map_texture: textures.normal.map(load),
+        metallic_roughness_texture: textures.metallic_roughness.map(load),
+        occlusion_texture: textures.occlusion.map(load),
+        metallic: textures.metallic,
+        perceptual_roughness: textures.roughness,
+        double_sided: textures.double_sided,
+        cull_mode: (!textures.double_sided).then_some(Face::Back),
+        emissive: if glows {
+            LinearRgba::rgb(GLOW_SCALE, GLOW_SCALE, GLOW_SCALE)
+        } else {
+            LinearRgba::BLACK
+        },
+        emissive_texture: glows.then_some(colour),
+        ..lit()
+    }
+}
+
+/// An item's model made to draw from its shape: its textured parts each in their own
+/// material, its flat-coloured parts in one mesh lit and one glowing.
+fn make(file: &str, shape: Shape, making: &mut Making) -> Model {
+    let path = format!("models/{file}");
+    let glows = |part: &Part| colour_of(part).1;
+    let mut pieces = Vec::new();
+    // Its textured parts first, so its body is one of them where it has any.
+    for part in &shape.parts {
+        let Some(textures) = &part.textures else {
+            continue;
+        };
+        let glowing = glows(part);
+        let material = textured_material(&path, textures, glowing, making.assets);
+        pieces.push(Piece {
+            mesh: making.meshes.add(textured_mesh(part, textures)),
+            material: making.materials.add(material),
+            glows: glowing,
+        });
+    }
+    for glowing in [false, true] {
+        let flat: Vec<&Part> = shape
+            .parts
+            .iter()
+            .filter(|part| part.textures.is_none() && glows(part) == glowing)
+            .collect();
+        if let Some(mesh) = coloured(&flat, making.meshes) {
+            pieces.push(Piece {
+                mesh,
+                material: if glowing {
+                    making.glowing.clone()
+                } else {
+                    making.lit.clone()
+                },
+                glows: glowing,
+            });
+        }
+    }
+    let textured = shape.parts.iter().any(|part| part.textures.is_some());
+    let solid = if textured {
+        let lit: Vec<&Part> = shape.parts.iter().filter(|part| !glows(part)).collect();
+        coloured(&lit, making.meshes)
+    } else {
+        pieces
+            .iter()
+            .find(|piece| !piece.glows)
+            .map(|piece| piece.mesh.clone())
+    };
+    Model {
+        pieces,
+        solid,
+        half: shape.half(),
+        low: shape.low,
+        high: shape.high,
+        sockets: shape.sockets,
+    }
+}
+
+/// The model in `assets/models/<file>`, such as `props/Chest.glb`, ready to draw.
+pub fn read_look(file: &str, making: &mut Making) -> Result<Model, String> {
+    Ok(make(file, read_shape(file)?, making))
+}
+
+/// The material a prop's flat-coloured parts are drawn with: their colours are its
+/// vertices'.
 pub fn lit() -> StandardMaterial {
     StandardMaterial {
         perceptual_roughness: 0.8,
@@ -210,26 +422,32 @@ pub fn lit() -> StandardMaterial {
 fn load(
     mut commands: Commands,
     builds: Res<Builds>,
+    assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let lit = materials.add(lit());
+    let glowing = materials.add(glowing());
+    let mut making = Making {
+        meshes: &mut meshes,
+        materials: &mut materials,
+        assets: &assets,
+        lit,
+        glowing,
+    };
     let mut models = HashMap::default();
     for item in builds.items() {
-        match read_look(&item.file, item.size, &mut meshes) {
+        match read_look(&item_file(item), &mut making) {
             Ok(model) => {
                 models.insert(item.file.clone(), model);
             }
             Err(problem) => error!("Could not read a model. {problem}"),
         }
     }
-    commands.insert_resource(Models {
-        models,
-        lit: materials.add(lit()),
-        glowing: materials.add(glowing()),
-    });
+    commands.insert_resource(Models { models });
 }
 
-/// The material a prop's glowing parts are drawn with, such as a forge's coals.
+/// The material a prop's flat glowing parts are drawn with, such as a forge's coals.
 pub fn glowing() -> StandardMaterial {
     StandardMaterial {
         emissive: LinearRgba::rgb(14.0, 6.0, 1.6),
@@ -237,37 +455,38 @@ pub fn glowing() -> StandardMaterial {
     }
 }
 
-/// An item of the builder's catalogue as it is drawn when placed, for looking at models
-/// outside play, as the sandbox's workbench does.
+/// An item, door or shutters of the builder's catalogue as it is drawn, for looking at
+/// models outside play, as the sandbox's workbench does: with its entry's size and anchor.
 pub struct Look {
-    pub name: String,
+    pub entry: contract::Entry,
     pub model: Model,
 }
 
-/// The looks of the catalogue's items called `names`, or of every item for `all`, in the
-/// catalogue's order then. Each is the item's model at the size the catalogue gives it,
-/// or why it could not be read.
-pub fn looks(names: &[String], meshes: &mut Assets<Mesh>) -> Vec<Result<Look, String>> {
+/// The looks of the catalogue's items, doors and shutters called `names`, or of all for
+/// `all`, in the catalogue's order then. Each is the model as its file has it, or why it
+/// could not be read.
+pub fn looks(names: &[String], making: &mut Making) -> Vec<Result<Look, String>> {
     let builds = Builds::read(
         &super::inventory::Items::default(),
         &super::crafting::Stations::read(),
     );
-    let wanted: Vec<Arc<Item>> = if names.iter().any(|name| name == "all") {
-        builds.items().cloned().collect()
+    let entries = contract::entries(&builds);
+    let wanted: Vec<&contract::Entry> = if names.iter().any(|name| name == "all") {
+        entries.iter().collect()
     } else {
         names
             .iter()
-            .filter_map(|name| builds.item_named(name))
+            .filter_map(|name| entries.iter().find(|entry| entry.name == *name))
             .collect()
     };
     let mut found: Vec<Result<Look, String>> = names
         .iter()
-        .filter(|name| *name != "all" && builds.item_named(name).is_none())
+        .filter(|name| *name != "all" && !entries.iter().any(|entry| entry.name == **name))
         .map(|name| Err(format!("There is no item called {name} in the catalogue.")))
         .collect();
-    found.extend(wanted.iter().map(|item| {
-        read_look(&item.file, item.size, meshes).map(|model| Look {
-            name: item.name.clone(),
+    found.extend(wanted.into_iter().map(|entry| {
+        read_look(&entry.file, making).map(|model| Look {
+            entry: entry.clone(),
             model,
         })
     }));
@@ -303,7 +522,7 @@ pub fn place(
             turn: turn_degrees,
             half: model.half,
         },
-        standing(site, planet, at, lift + item.lift, turn_degrees, indoors),
+        standing(site, planet, at, lift, turn_degrees, indoors),
         Visibility::default(),
         Settling(0.0),
     ));
@@ -317,15 +536,16 @@ pub fn place(
             Storage(terra_items::Grid::new(w, h)),
         ));
     }
-    if let Some(mesh) = &model.solid {
-        prop.with_child((Mesh3d(mesh.clone()), MeshMaterial3d(models.lit.clone())));
-    }
-    if let Some(mesh) = &model.glow {
-        prop.with_child((
-            Mesh3d(mesh.clone()),
-            MeshMaterial3d(models.glowing.clone()),
-            NotShadowCaster,
-        ));
+    for piece in &model.pieces {
+        let drawn = (
+            Mesh3d(piece.mesh.clone()),
+            MeshMaterial3d(piece.material.clone()),
+        );
+        if piece.glows {
+            prop.with_child((drawn, NotShadowCaster));
+        } else {
+            prop.with_child(drawn);
+        }
     }
     let glow = |colour: Color, lumens: f32, range: f32| PointLight {
         color: colour,
@@ -675,30 +895,6 @@ pub fn push_out<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::play::crafting::Stations;
-    use crate::play::inventory::Items;
-
-    #[test]
-    fn every_item_stands_as_tall_as_a_real_one() {
-        let builds = Builds::read(&Items::default(), &Stations::read());
-        let mut meshes = Assets::<Mesh>::default();
-        let wrong: Vec<String> = builds
-            .items()
-            .filter_map(|item| {
-                let model = read_look(&item.file, item.size, &mut meshes)
-                    .unwrap_or_else(|problem| panic!("{problem}"));
-                let high = model.half.y * 2.0;
-                let (low, top) = item.height;
-                (high < low - 1e-3 || high > top + 1e-3).then(|| {
-                    format!(
-                        "{} stands {high:.2} m at size {}, not {low} to {top} m",
-                        item.name, item.size
-                    )
-                })
-            })
-            .collect();
-        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    }
 
     fn box_at_origin() -> (Prop, Transform, Visibility) {
         let prop = Prop::boxed(Vec3::splat(0.4), None);

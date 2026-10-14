@@ -1,12 +1,7 @@
 {
   "subject": "round rug of brown animal hides stitched together, lying flat on the floor",
   "file": "RugRound",
-  "size": 2.4,
+  "dims": [2.4, 0.02, 1.81],
   "budget": 600,
-  "roles": [
-    "Hide",
-    "Leather",
-    "LeatherLight"
-  ],
   "flat": true
 }

@@ -91,9 +91,57 @@ impl Bench {
     }
 }
 
+/// What the model contract says of a prop on the bench (docs/art-style.md), drawn over it
+/// so it reads at a glance: its box, green if it keeps the contract and red if not; its
+/// origin, the anchor, as three short lines, X red, Y green and Z (its front) blue; and
+/// each socket as a yellow star, its name in the log.
+#[derive(Component)]
+struct Contract {
+    low: Vec3,
+    high: Vec3,
+    sockets: Vec<(String, Vec3)>,
+    keeps: bool,
+}
+
+fn draw_contracts(mut gizmos: Gizmos, props: Query<(&Contract, &GlobalTransform)>) {
+    for (contract, at) in &props {
+        let at = at.compute_transform();
+        let middle = (contract.low + contract.high) * 0.5;
+        let colour = if contract.keeps {
+            Color::srgb(0.3, 0.9, 0.4)
+        } else {
+            Color::srgb(1.0, 0.25, 0.2)
+        };
+        gizmos.cube(
+            Transform {
+                translation: at.transform_point(middle),
+                rotation: at.rotation,
+                scale: contract.high - contract.low,
+            },
+            colour,
+        );
+        let origin = at.translation;
+        for (axis, colour) in [
+            (Vec3::X, Color::srgb(1.0, 0.2, 0.2)),
+            (Vec3::Y, Color::srgb(0.2, 1.0, 0.2)),
+            (Vec3::Z, Color::srgb(0.3, 0.5, 1.0)),
+        ] {
+            gizmos.line(origin, origin + at.rotation * axis * 0.3, colour);
+        }
+        for (_, socket) in &contract.sockets {
+            let point = at.transform_point(*socket);
+            for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+                let arm = at.rotation * axis * 0.06;
+                gizmos.line(point - arm, point + arm, Color::srgb(1.0, 0.85, 0.1));
+            }
+        }
+    }
+}
+
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
-        .add_systems(Update, (spawn, sheet::capture).chain());
+        .add_systems(Update, (spawn, sheet::capture).chain())
+        .add_systems(Update, draw_contracts);
     remote::method(app, "workbench.pose", pose_method);
     remote::method(app, "workbench.shape", shape_method);
     sheet::plugin(app);
@@ -119,7 +167,16 @@ fn setup(
     let turned = Quat::from_rotation_arc(Vec3::Y, up);
     let side = up.cross(front);
     // The row: each model in a slot of its own, then each prop in one as wide as it is.
-    let looks: Vec<_> = terra_game::play::prop_looks(&options.props, &mut meshes)
+    let lit = materials.add(terra_game::play::prop_lit());
+    let glowing = materials.add(terra_game::play::prop_glowing());
+    let mut making = terra_game::play::PropMaking {
+        meshes: &mut meshes,
+        materials: &mut materials,
+        assets: &assets,
+        lit,
+        glowing,
+    };
+    let looks: Vec<_> = terra_game::play::prop_looks(&options.props, &mut making)
         .into_iter()
         .filter_map(|look| look.map_err(|problem| error!("workbench: {problem}")).ok())
         .collect();
@@ -142,26 +199,44 @@ fn setup(
     } else {
         BODY_M
     };
-    let (lit, glowing) = (
-        materials.add(terra_game::play::prop_lit()),
-        materials.add(terra_game::play::prop_glowing()),
-    );
     for (look, offset) in looks.iter().zip(&slots[options.models.len()..]) {
         let size = look.model.half * 2.0;
+        let wrong = terra_game::play::contract::check(&look.entry);
         info!(
-            "workbench: prop {}: {:.2} m wide, {:.2} m high, {:.2} m deep",
-            look.name, size.x, size.y, size.z
+            "workbench: prop {}: {:.2} m wide, {:.2} m high, {:.2} m deep; {}",
+            look.entry.name,
+            size.x,
+            size.y,
+            size.z,
+            if wrong.is_empty() {
+                "keeps the model contract".to_string()
+            } else {
+                format!("breaks the model contract: {}", wrong.join("; "))
+            }
         );
+        for (name, at) in &look.model.sockets {
+            info!(
+                "workbench: prop {}: socket {name} at {:.2}, {:.2}, {:.2}",
+                look.entry.name, at.x, at.y, at.z
+            );
+        }
         tallest = f32::max(tallest, size.y);
         let mut prop = commands.spawn((
-            Name::new(format!("Workbench prop {}", look.name)),
+            Name::new(format!("Workbench prop {}", look.entry.name)),
             Transform::from_translation(floor + side * *offset).with_rotation(turned),
             Visibility::default(),
+            Contract {
+                low: look.model.low,
+                high: look.model.high,
+                sockets: look.model.sockets.clone(),
+                keeps: wrong.is_empty(),
+            },
         ));
-        for (mesh, material) in [(&look.model.solid, &lit), (&look.model.glow, &glowing)] {
-            if let Some(mesh) = mesh {
-                prop.with_child((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())));
-            }
+        for piece in &look.model.pieces {
+            prop.with_child((
+                Mesh3d(piece.mesh.clone()),
+                MeshMaterial3d(piece.material.clone()),
+            ));
         }
     }
     // A plain floor, so the models are judged on their own.

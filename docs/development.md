@@ -41,12 +41,13 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | `cargo xtask sections` | How long the bench's village takes to lay whole and its sections to cut and merge, on one thread as the game's workers do, against building's 2 ms bar, with the triangles of each detail and the slowest sections; a name times only the buildings whose names hold it, and `BY_KIND=1` splits the far details' triangles by kind of piece (D238); it also gives near detail's triangles and MiB by what they are drawn in, and fails when the block kinds' surface and dress take over 120 triangles a cube of them or 4 MiB a building (D284) |
 | `cargo xtask artifacts` | What a renderer would draw as junk in building's meshes, found from the meshes with no GPU: z-fighting (two surfaces in one plane), a piece drawn twice, sky through a wall or a roof, a gap between a wall's top and the roof, a piece poking through a roof or out of a wall, and corners that are not numbers. Every roof over every plan in each kind and every two kinds mixed, at every detail; prints a table of counts and the first of each, `--all` for every one; a name keeps only the bases whose names hold it |
 | `cargo xtask kits` | The kit checker: every building kit file in `assets/data/kits/` has the materials its pattern needs with all their maps, life-size numbers, and keeps to the style guide's budgets, measured on a cabin laid in it (`terra_build::checker`). |
+| `cargo xtask contract` | The model contract's checker (D303, [art-style.md](art-style.md#the-model-contract)): every model the game places, its size against its catalogue `dims`, its anchor, its sockets, and a door's or shutters' fit in its hole, one line each. `check` runs the same test. |
 | `cargo test -p terra_items` | One crate's tests |
 | `cargo fmt --all` | Format everything |
 | `cargo xtask sandbox` | Open the sandbox, the test environment for graphics and utilities; anything after it goes to the sandbox, and `--list` lists its experiments. See its [README](../crates/terra_sandbox/README.md). |
 | `cargo xtask workbench` | Models in the game's renderer ([Developer tools](#developer-tools)) |
 | `cargo xtask remote <command>` | Drive a running sandbox live ([tools/sandbox](../tools/sandbox/README.md)) |
-| `cargo xtask models` | The model gallery in a browser, at `http://localhost:8765/` ([tools/models](../tools/models/README.md)) |
+| `cargo xtask contract` | The model gallery in a browser, at `http://localhost:8765/` ([tools/models](../tools/models/README.md)) |
 | `cargo xtask doctor` | Check this machine |
 | `cargo xtask win -p <package>` | Under WSL, build for Windows and run on the real GPU |
 | `cargo xtask seed` | In a new worktree, link the main checkout's compiled dependencies in ([Worktrees](#worktrees)) |
@@ -144,7 +145,7 @@ The developers want tools that help refine each system (D71), and as many of the
 
 | Tool | Start it with | What it is for |
 |---|---|---|
-| [Model gallery](../tools/models/README.md) | `cargo xtask models` | Every model in a browser, drawn the same way beside the 1.8 m figure, with its size, triangles and problems; a page per model with materials, animations, bounds, skeleton, wireframe. Every view is a link. Shape, size and orientation, not the game's exact look |
+| [Model gallery](../tools/models/README.md) | `cargo xtask contract` | Every model in a browser, drawn the same way beside the 1.8 m figure, with its size, triangles and problems; a page per model with materials, animations, bounds, skeleton, wireframe. Every view is a link. Shape, size and orientation, not the game's exact look |
 | [Model workbench](../crates/terra_sandbox/README.md#the-workbench) | `cargo xtask workbench --model … --prop …` | Models in the game's own renderer: bodies animated, holding and wearing things (`--hold`, `--wear`), catalogue items as placed in play with their sizes (`--prop Forge`, `--prop all`), contact sheets for agents (`--sheet`) |
 | [Sandbox remote](../tools/sandbox/README.md) | `cargo xtask remote start …` | Drive a running sandbox live: move things, hold the camera, pose, give, warp, screenshot, without restarting |
 | [Prop maker](../tools/props/README.md) | `cargo xtask props concept\|model\|refine <prop>` | A prop from a description to the game: concept, Tripo model, clean-up into our palette, levelled and facing front; `props fronts` shows every model from the front on one sheet |

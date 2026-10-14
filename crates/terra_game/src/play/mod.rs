@@ -29,6 +29,7 @@ mod figure;
 pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
 pub use footprint::Footprint;
+pub mod contract;
 mod gains;
 mod harvest;
 pub(crate) mod held;
@@ -49,7 +50,10 @@ mod pooling;
 mod probe;
 pub(crate) mod props;
 mod registries;
-pub use props::{Look as PropLook, glowing as prop_glowing, lit as prop_lit, looks as prop_looks};
+pub use props::{
+    Look as PropLook, Making as PropMaking, glowing as prop_glowing, lit as prop_lit,
+    looks as prop_looks,
+};
 mod save;
 pub(crate) mod settlement;
 mod skills;

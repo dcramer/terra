@@ -674,7 +674,15 @@ fn price(
                 fitting.kind,
                 crate::build::props::FittingLook {
                     path: format!("models/openings/{}.glb", fitting.model),
-                    hinge_left: fitting.hinge == crate::play::catalogue::Hinge::Left,
+                    dims: fitting.dims,
+                    // Its hinge socket, which the model contract puts at its origin.
+                    hinge: crate::play::models::read_sockets(&format!(
+                        "openings/{}.glb",
+                        fitting.model
+                    ))
+                    .ok()
+                    .and_then(|sockets| crate::play::props::socket(&sockets, "hinge"))
+                    .unwrap_or(Vec3::ZERO),
                 },
             )
         })

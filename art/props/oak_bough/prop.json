@@ -1,10 +1,9 @@
 {
   "subject": "ancient English oak tree in winter, bare of leaves: a massive gnarled trunk with flared buttress roots, burrs and a hollow scar, rising a third of its height before parting into five heavy crooked limbs that twist outward and upward in a broad rounded outline, each limb dividing into a few smaller crooked branches that end thick, as thick as a wrist, with no fine twigs; deeply fissured grey-brown bark with patches of green moss low down",
   "file": "OakBough",
+  "dims": [11.75, 23.9, 23],
   "into": "nature/forest",
-  "size": 24,
   "budget": 9000,
   "faces": 20000,
-  "textured": true,
   "generator": "h3.1"
 }

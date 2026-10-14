@@ -1,14 +1,6 @@
 {
   "subject": "narrow single bed for one person, about half as wide as it is long: a wooden frame with a low carved headboard, a straw mattress, a striped wool blanket and a pillow",
   "file": "Bed",
-  "size": 2.1,
-  "budget": 1500,
-  "roles": [
-    "Wood",
-    "WoodDark",
-    "Cloth",
-    "ClothBlue",
-    "Olive",
-    "Hide"
-  ]
+  "dims": [1.32, 1.46, 2.1],
+  "budget": 1500
 }
