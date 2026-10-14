@@ -156,10 +156,10 @@ Now a face has points only where its shape bends, across the rounding of its ope
 |---|---|---|
 | Logs: logs, ends, decks, hewn members, daub | 6.9 M | 354 |
 | Roofs: coverings, boards, logs | 2.2 M | 256 |
-| Block kinds: surface and floors | 0.78 M | 42 |
+| Block kinds: surface and floors | 0.17 M (3.97 M before) | 13 |
 | Block kinds: dress (corner stones, plinths, copings, lintels) | 0.85 M | 64 |
 
-The block kinds' surface and dress come to 175 triangles a cube of them and 2.1 MiB a building, within a budget of 200 and 16 MiB, which `cargo xtask sections` now checks and fails over; the dress modules (D258) are half of it, the next to bring down. The timber kinds' logs, at 5.5 million triangles, and the roofs' modules are the street walk's next cost; they are not block surfaces.
+Cubes cut to a roof or a shape then took points only where their cut crosses or bends, and those near a bedded lintel or sill one every 10 cm: the block kinds' surface fell from 0.78 M to 0.17 M, and with their dress they come to 109 triangles a cube of them and 1.55 MiB a building. The budget (D284), held by tests in `cargo xtask check` and by `cargo xtask sections`: 64 triangles a square metre of surface open to the air (a stone house had 800 before, 172 after the first pass), 120 a cube with dress, 4 MiB a building. The dress modules (D258), 0.85 M, are now most of what is left of the block kinds; the timber kinds' logs, at 5.5 million triangles, and the roofs' modules are the street walk's next cost, and are not block surfaces.
 
 Stone, earth and brick, before and after, at 2, 5 and 10 m on the 5090: the same, the stone's joints as deep by parallax as by displacement at 2 m, earth's lifts and lumps kept in its shape, a wall's silhouette along its open edge straighter where the stone's displacement had broken it.
 ## The castle's edits, operations and aim (the third goals review, finding 6)

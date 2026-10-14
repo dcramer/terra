@@ -904,8 +904,10 @@ fn a_gable_is_cut_in_a_straight_line_to_the_roofs_deck_with_no_gap_under_it() {
                         .map(|p| p.section().to_array()),
                 );
             }
-            // The wall's surface on the west gable's face, a little either side of it.
+            // The wall's surface on the west gable's face, a little either side of it: its
+            // triangles there, and their corners.
             let mut face: Vec<Vec3> = Vec::new();
+            let mut triangles: Vec<[Vec3; 3]> = Vec::new();
             for at in &sections {
                 let section = Section {
                     base: &base,
@@ -916,27 +918,47 @@ fn a_gable_is_cut_in_a_straight_line_to_the_roofs_deck_with_no_gap_under_it() {
                 };
                 let drawn = draw(&section, &laid(&section), Reach::Near);
                 if let Some(surface) = drawn.near.get(&(wall, crate::mesh::Material::Masonry)) {
-                    face.extend(surface.indexed().positions.into_iter().filter(|p| {
+                    let on = |p: &Vec3| {
                         p.x.abs() < 0.1
                             && p.y > crate::STOREY_M - 0.25
                             && (0.0..=4.0).contains(&p.z)
-                    }));
+                    };
+                    let all = surface.indexed();
+                    face.extend(all.positions.iter().copied().filter(on));
+                    triangles.extend(
+                        all.indices
+                            .chunks_exact(3)
+                            .map(|t| [0, 1, 2].map(|k| all.positions[t[k] as usize]))
+                            .filter(|t| t.iter().any(on)),
+                    );
                 }
             }
             let name = format!("{} under {}", wall.0, covering.0);
-            assert!(face.len() > 50, "{name}: {}", face.len());
+            assert!(face.len() > 10, "{name}: {}", face.len());
             // Nothing over the deck, and up the whole gable, from eave to ridge either side,
             // the wall's top on it every few centimetres: no step and no gap under the roof.
             for p in &face {
                 assert!(p.y <= deck(p.z) + 0.005, "{name}: {p} over the deck");
             }
+            // How high the wall stands at a place along the gable: the highest its triangles'
+            // edges reach there, as a face of few triangles follows a straight cut (D284).
+            let top = |z: f32| {
+                triangles
+                    .iter()
+                    .flat_map(|t| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])])
+                    .filter(|(a, b)| (a.z - z) * (b.z - z) <= 0.0 && (a.z - b.z).abs() > 1e-6)
+                    .map(|(a, b)| a.y + (b.y - a.y) * (z - a.z) / (b.z - a.z))
+                    .fold(f32::MIN, f32::max)
+            };
             let mut z = 0.2;
             while z < 3.8 {
-                let gap = face
+                // At its edges' height there, or a corner a few centimetres either side.
+                let corner = face
                     .iter()
                     .filter(|p| (p.z - z).abs() < 0.07)
                     .map(|p| deck(p.z) - p.y)
                     .fold(f32::MAX, f32::min);
+                let gap = (deck(z) - top(z)).min(corner);
                 assert!(
                     gap < 0.01,
                     "{name}: a gap of {gap} m under the roof at z {z}"
@@ -1267,4 +1289,59 @@ fn verges_meeting_at_an_apex_take_no_cap_there() {
         }
         assert!(verges >= 4, "{name}: {verges} verges");
     }
+}
+
+#[test]
+fn a_stone_house_near_keeps_to_the_block_kinds_budget() {
+    let kits = shipped();
+    let maps = Maps::default();
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let base = &bases(&kits)[1];
+    let (mut surface, mut dress, mut bytes) = (0usize, 0usize, 0usize);
+    for at in drawable(base) {
+        let section = Section {
+            base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(at),
+            progress: &Progress::Whole,
+        };
+        let drawn = draw(&section, &laid(&section), Reach::Near);
+        for ((of, material), drawn) in &drawn.near {
+            if *of != stone {
+                continue;
+            }
+            let all = drawn.indexed();
+            match material {
+                Material::Masonry | Material::Floor => surface += all.triangle_count(),
+                _ => dress += all.triangle_count(),
+            }
+            // A corner as the game uploads it, position to texture place, and an index.
+            bytes += all.positions.len() * (12 + 12 + 16 + 16 + 8) + all.indices.len() * 4;
+        }
+    }
+    // Its stone, and how much of its surface is open to the air.
+    let cubes: Vec<IVec3> = base
+        .cubes()
+        .filter(|(_, c)| c.kind == stone && c.is_in())
+        .map(|(at, _)| at)
+        .collect();
+    let open = cubes
+        .iter()
+        .flat_map(|&at| crate::Side::ALL.map(|side| at + side.offset()))
+        .filter(|&next| base.cube(next).is_none_or(|c| c.kind != stone))
+        .count();
+    let area = open as f32 * CELL_M * CELL_M;
+    let per_metre = surface as f32 / area;
+    let per_cube = (surface + dress) as f32 / cubes.len() as f32;
+    let mib = bytes as f32 / (1024.0 * 1024.0);
+    assert!(
+        per_metre <= crate::surface::NEAR_TRIANGLES_A_SQUARE_METRE,
+        "{per_metre} triangles a square metre of its surface"
+    );
+    assert!(
+        per_cube <= NEAR_TRIANGLES_A_CUBE,
+        "{per_cube} triangles a cube with its dress"
+    );
+    assert!(mib <= NEAR_MIB_A_BASE, "{mib} MiB");
 }

@@ -645,6 +645,14 @@ fn outline(profile: &[[f32; 2]]) -> Vec<[f32; 2]> {
 /// How finely a block kind's cube faces are divided near: a step every 5 cm or so; and a
 /// few metres off, every 12.5 cm.
 pub const SURFACE_STEPS: u32 = 10;
+
+/// The budget for a block kind's finest detail (D284), its surface and its dress together
+/// (corner stones, plinths, copings, lintels): triangles a cube of it, and MiB of mesh a
+/// building every section of which is drawn near at once, as a player beside it has it.
+/// Its surface alone is held to `surface::NEAR_TRIANGLES_A_SQUARE_METRE`. Checked on a
+/// stone house by the tests and on the village by `cargo xtask sections`.
+pub const NEAR_TRIANGLES_A_CUBE: f32 = 120.0;
+pub const NEAR_MIB_A_BASE: f32 = 4.0;
 const MID_STEPS: u32 = 4;
 
 /// How far a block kind's floors' flagstones stand out, as a fraction of its walls' stone:

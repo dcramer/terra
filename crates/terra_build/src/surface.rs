@@ -114,11 +114,11 @@ const BED_DEPTH_M: f32 = 0.008;
 const BED_LAP_M: f32 = 0.035;
 const BED_OVER_M: f32 = 0.012;
 
-/// The most triangles a block kind's exposed cube face may take, on average, at the finest
-/// detail (D284): a flat face is two, one rounded along an open edge a dozen or so, a
-/// corner's a few dozen. Checked on a wall here, and on the village by `cargo xtask
-/// sections`, which fails over it.
-pub const NEAR_TRIANGLES_A_FACE: f32 = 16.0;
+/// The most triangles a square metre of a block kind's surface open to the air may take,
+/// on average, at the finest detail (D284): a cube's face, a quarter of a square metre, is
+/// two flat, a dozen or so rounded along an open edge, a few dozen at a corner. Checked on a
+/// wall here and on a stone house in `sections`' tests.
+pub const NEAR_TRIANGLES_A_SQUARE_METRE: f32 = 64.0;
 
 /// How far an inside corner's relief fades out from it, in metres.
 const INSIDE_FADE_M: f32 = 0.06;
@@ -493,22 +493,74 @@ pub fn draw_part(
     // between, its relief left to its maps. A cube's, whichever of its faces asks, so the
     // faces round a line agree on it.
     let even: Vec<f32> = (0..=n).map(|i| i as f32 / n as f32).collect();
-    // Whether a piece is bedded within reach of any of a cube's faces: read at each face's
-    // corners and middle, no point of the face further than half a cube from one of them.
+    // Round a bed, at half its steps: the wall's lap over a lintel's edge every 10 cm near.
+    let half: Vec<f32> = {
+        let m = n.div_ceil(2).max(1);
+        (0..=m).map(|i| i as f32 / m as f32).collect()
+    };
+    // Where a cube's cut, a roof's underside or a shape's top, crosses its top or its foot
+    // along an axis across it, as fractions of the cube, read along its four edges that
+    // way: a cut runs straight across a cube, so points there and at its corners follow it
+    // exactly (D284).
+    let crossings = |c: IVec3, axis: usize| -> Vec<f32> {
+        let low = c.as_vec3() * CELL_M;
+        let other = if axis == 0 { 2 } else { 0 };
+        let mut out = Vec::new();
+        for o in [0.0, 1.0] {
+            let at = |t: f32| {
+                let mut p = low + Vec3::Y * CELL_M * 0.5;
+                p[axis] += t * CELL_M;
+                p[other] += o * CELL_M;
+                cut(c, p)
+            };
+            // Read at every step, for where it bends (a gable's apex, a hip's crease) as
+            // well as where it crosses.
+            let samples: Vec<[f32; 2]> = (0..=n).map(|i| at(i as f32 / n as f32)).collect();
+            for side in 0..2 {
+                let h: Vec<f32> = samples.iter().map(|s| s[side]).collect();
+                if h.iter().any(|v| v.abs() > 1e30) {
+                    continue;
+                }
+                for i in 0..n {
+                    let (from, to) = (h[i], h[i + 1]);
+                    for level in [low.y, low.y + CELL_M] {
+                        if (from - level) * (to - level) < 0.0 {
+                            out.push((i as f32 + (level - from) / (to - from)) / n as f32);
+                        }
+                    }
+                    if i > 0 && (h[i - 1] - 2.0 * h[i] + h[i + 1]).abs() > 1e-4 {
+                        out.push(i as f32 / n as f32);
+                    }
+                }
+            }
+        }
+        out
+    };
+    // Whether a piece is bedded where it changes a cube's faces: each face read on a grid
+    // a quarter of a cube apart, no point of it more than 9 cm from one,
+    // first at its corners and middle to pass over the many faces nowhere near a piece.
     let bedded_near = |c: IVec3| {
         heights.bed.is_some_and(|bed| {
             let low = c.as_vec3() * CELL_M;
-            FACES.iter().any(|&(axis, side)| {
+            let at = |axis: usize, side: f32, u: f32, v: f32| {
                 let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
-                [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]]
+                let mut p = low;
+                p[axis] += if side > 0.0 { CELL_M } else { 0.0 };
+                p[a] += u * CELL_M;
+                p[b] += v * CELL_M;
+                p
+            };
+            let within = |p: Vec3, reach: f32| bed(p).is_some_and(|(inside, _)| inside > -reach);
+            FACES.iter().any(|&(axis, side)| {
+                let near = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]]
                     .iter()
-                    .any(|&[u, v]| {
-                        let mut p = low;
-                        p[axis] += if side > 0.0 { CELL_M } else { 0.0 };
-                        p[a] += u * CELL_M;
-                        p[b] += v * CELL_M;
-                        bed(p).is_some_and(|(inside, _)| inside > -(BED_LAP_M + CELL_M * 0.5))
+                    .any(|&[u, v]| within(at(axis, side, u, v), BED_LAP_M + CELL_M * 0.5));
+                near && (0..=4).any(|i| {
+                    (0..=4).any(|j| {
+                        let p = at(axis, side, i as f32 / 4.0, j as f32 / 4.0);
+                        within(p, BED_LAP_M + 0.09)
                     })
+                })
             })
         })
     };
@@ -530,18 +582,42 @@ pub fn draw_part(
     // each knowing the cubes a step past its edge and no further, agree on the cubes they
     // share. A side against a cut cube follows the cut's line between its corners, which a
     // slope's or a roof's underside is, straight across a cube.
-    let uneven = |c: IVec3| really_cut(c) || bedded_near(c);
     // Whether a cube's side toward another is open as far as where its points fall goes:
     // but against a cube drawn into the same surface. Read from `kin` alone, the same in
     // every call that draws into the surface; open where it is not quite (against another
     // kind's cube, say) only adds points where none are needed.
     let open = |c: IVec3| !kin(c);
-    let grid_of = |c: IVec3, axis: usize| -> Vec<f32> {
-        if uneven(c) {
-            even.clone()
-        } else {
-            across(open(c - step(axis, 1)), open(c + step(axis, 1)), look)
+    let worked_out = |c: IVec3| -> [Arc<[f32]>; 3] {
+        let cut = really_cut(c);
+        // Earth's packing, cut, follows its lumps up to the cut: evenly, as a bed's lap does.
+        if look.packed.is_some() && cut {
+            let even: Arc<[f32]> = even.clone().into();
+            return [even.clone(), even.clone(), even];
         }
+        if bedded_near(c) {
+            let half: Arc<[f32]> = half.clone().into();
+            return [half.clone(), half.clone(), half];
+        }
+        [0, 1, 2].map(|axis| {
+            let mut out = across(open(c - step(axis, 1)), open(c + step(axis, 1)), look);
+            if axis != 1 && cut {
+                out.extend(crossings(c, axis));
+                out.sort_by(f32::total_cmp);
+                out.dedup_by(|x, y| (*x - *y).abs() < 1e-4);
+            }
+            out.into()
+        })
+    };
+    // Each cube's, worked out once: the faces round a line each ask for the four cubes'.
+    let known: std::cell::RefCell<QuickMap<IVec3, [Arc<[f32]>; 3]>> = Default::default();
+    let grid_of = |c: IVec3, axis: usize| -> Arc<[f32]> {
+        if let Some(found) = known.borrow().get(&c) {
+            return found[axis].clone();
+        }
+        let made = worked_out(c);
+        let out = made[axis].clone();
+        known.borrow_mut().insert(c, made);
+        out
     };
     let call = caching.as_ref().map_or(0, |caching| caching.call);
     let old = caching.as_ref().and_then(|caching| caching.old);
@@ -624,7 +700,7 @@ pub fn draw_part(
                     beyond + step(over, toward),
                 ] {
                     if kin(x) {
-                        all.extend(grid_of(x, along));
+                        all.extend(grid_of(x, along).iter().copied());
                     }
                 }
                 all.sort_by(f32::total_cmp);
@@ -819,7 +895,10 @@ pub fn draw_part(
                 let (mut q, mut exact) = place(s);
                 let placed = q;
                 if cut_here {
-                    q.y = q.y.max(low).min(high);
+                    // And where it ends up, so nothing a lump or the rounding moves along
+                    // stands over the cut.
+                    let [under, over] = cut(cube, q);
+                    q.y = q.y.max(low).min(high).max(under).min(over);
                 }
                 if against_cut {
                     q.y = q.y.max(cut(beyond, p)[1].min(high));
@@ -1610,11 +1689,14 @@ mod tests {
             })
             .count();
         assert_eq!(middle, 2);
-        // About as many triangles a face as its rim needs: the budget near (D284).
-        let faces = 2 * 8 * 4 + 2 * 8 + 2 * 4;
-        let per_face = surface.triangle_count() as f32 / faces as f32;
-        assert!(per_face <= NEAR_TRIANGLES_A_FACE, "{per_face} a face");
-        // A face rounded to a corner is still more than flat.
-        assert!(per_face > 2.0, "{per_face} a face");
+        // About as many triangles a square metre as its rims need: the budget near (D284).
+        let area = (2 * 8 * 4 + 2 * 8 + 2 * 4) as f32 * CELL_M * CELL_M;
+        let per_metre = surface.triangle_count() as f32 / area;
+        assert!(
+            per_metre <= NEAR_TRIANGLES_A_SQUARE_METRE,
+            "{per_metre} a square metre"
+        );
+        // Rounded along its edges, still more than flat.
+        assert!(per_metre > 8.0, "{per_metre} a square metre");
     }
 }

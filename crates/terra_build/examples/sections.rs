@@ -11,15 +11,12 @@ use std::time::Instant;
 use terra_build::Base;
 use terra_build::kit::{Kit, Kits, Pattern, Profile};
 use terra_build::relief::{Maps, Relief, Swatch, shaped_by, topped_by};
-use terra_build::sections::{self, Progress, Reach, Section};
+use terra_build::sections::{
+    self, NEAR_MIB_A_BASE, NEAR_TRIANGLES_A_CUBE, Progress, Reach, Section,
+};
 
 /// The bar for a section laid and merged on a worker, in milliseconds.
 const BAR_MS: f32 = 2.0;
-/// The budget for the finest detail of the block kinds (D284): triangles a cube of them,
-/// and MiB of mesh a building, every section of it drawn near at once, as a player beside
-/// it has it.
-const NEAR_TRIANGLES_A_CUBE: f32 = 200.0;
-const NEAR_MIB_A_BASE: f32 = 16.0;
 /// What a corner of a textured mesh takes on the GPU, as the game uploads it: position,
 /// normal, tangent, colour and texture place.
 const NEAR_CORNER_BYTES: usize = 12 + 12 + 16 + 16 + 8;
