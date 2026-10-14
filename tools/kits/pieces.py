@@ -764,6 +764,33 @@ def modelled_mesh(name, spec):
     return low, high
 
 
+def taper_end(low, spec):
+    """A modelled capping's end, where its line stops, as a thatcher finishes a ridge at a
+    gable: the first `reach` metres of the piece, its crown easing down into what it lies on,
+    so it ends in the roof rather than in a cut face. Lies from x = 0 to its reach, as a cap
+    does past its module's end; its faces at x = 0, where it meets the piece, are left open."""
+    reach = spec.get("reach", 0.25)
+    ob = low.copy()
+    ob.data = low.data.copy()
+    ob.name = low.name + "_cap"
+    bpy.context.collection.objects.link(ob)
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+    bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(reach, 0, 0), plane_no=(1, 0, 0), clear_outer=True)
+    base = min(v.co.z for v in bm.verts)
+    for v in bm.verts:
+        t = max(0.0, min(1.0, v.co.x / reach))
+        k = 1.0 - t * t
+        v.co.z = base + (v.co.z - base) * k
+        # And drawn in across, so the end rounds off in plan too.
+        v.co.y *= 1.0 - 0.35 * t * t
+    bm.to_mesh(ob.data)
+    bm.free()
+    ob.data.update()
+    return ob
+
+
 def bake_atlas(pairs, out_dir, size=4096):
     """The kit's modelled pieces baked, as games bake a low model from its high (Substance,
     Marmoset, Blender): each low unwrapped afresh into one atlas with the others, and its
@@ -882,7 +909,10 @@ def main():
             near.append(ron_mesh(*made))
             print(f"module {name} {variant}: {len(made[2]) // 3} triangles")
             far.append(ron_mesh(*triangles(far_copy(ob, spec.get("far", 0.35)))))
-        cap = None if name in modelled else cap_mesh(f"{name}_cap", spec, 7)
+        if name in modelled:
+            cap = taper_end(modelled[name], spec) if spec.get("end") == "taper" else None
+        else:
+            cap = cap_mesh(f"{name}_cap", spec, 7)
         lines.append(f'        "{name}": (')
         lines.append(f"            length: {spec['length']:g},")
         lines.append(f"            blend: {spec.get('blend', 0.0):g},")

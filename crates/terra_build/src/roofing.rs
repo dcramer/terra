@@ -130,12 +130,15 @@ fn seat(part: RoofPart, on_roof: bool, from: Vec3, to: Vec3, sides: [Vec3; 2]) -
         // Draped over both slopes.
         RoofPart::Ridge | RoofPart::Hip | RoofPart::Valley => Seat::Crease { up: normals, into },
         // On the roof, out past its edge, or toward the wall it meets.
+        // On the roof along its edge, standing plumb and as much taller as the covering is
+        // lifted, so nothing of it leans out past the edge; out past it, or toward the wall
+        // it meets.
         RoofPart::Verge | RoofPart::Flashing => Seat::Plane {
-            up: normals[0],
+            up: Vec3::Y / normals[0].y.max(0.2),
             out: -into[0],
         },
         RoofPart::Eave if on_roof => Seat::Plane {
-            up: normals[0],
+            up: Vec3::Y / normals[0].y.max(0.2),
             out: -into[0],
         },
         // Plumb, out level past the eave, as a fascia hangs.
@@ -301,14 +304,9 @@ impl Square {
                 (x - *a).cross(*b - *a).length() < 1e-4 * (*b - *a).length().max(1e-3)
             };
             // A point lifted onto the covering's top: plumb over it along an eave.
-            let top = |p: Vec3| {
-                let off = lift(p.y);
-                if edges.iter().any(|e| e.2 && on(p, e)) {
-                    p + Vec3::Y * (off / n.y.max(0.2))
-                } else {
-                    p + n * off
-                }
-            };
+            // Lifted plumb, by as much as its thickness square to the roof: so nothing of it
+            // leans out past an edge its cut face stands plumb over.
+            let top = |p: Vec3| p + Vec3::Y * (lift(p.y) / n.y.max(0.2));
             let normal = |p: Vec3| (n - upslope * lean(p.y)).normalize_or(n);
             let colour = r.tint;
             let covering = surfaces.of(Material::Covering);

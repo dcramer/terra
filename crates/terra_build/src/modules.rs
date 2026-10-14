@@ -86,7 +86,19 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
         return;
     }
     let axis = (line.to - line.from) / length;
-    let (count, stretch) = fit(length, module.length);
+    // A modelled piece is closed by its cap within the line, or, with none, stops a little
+    // short where the line stops, so its cut end is not in the plane of what it meets.
+    let made = modelled(module);
+    let cap_length = module.cap.as_ref().map_or(0.0, |cap| {
+        cap.positions.iter().map(|p| p[0]).fold(0.0, f32::max)
+    });
+    let lead = line.capped.map(|capped| match (made, capped) {
+        (true, true) if cap_length > 0.0 => cap_length.min(length * 0.3),
+        (true, true) => END_INSET_M.min(length * 0.1),
+        _ => 0.0,
+    });
+    let span = (length - lead[0] - lead[1]).max(length * 0.2);
+    let (count, stretch) = fit(span, module.length);
     // Scaled across to the member's size, from the size it was modelled at.
     let scale = line.across.map_or([1.0, 1.0], |[y, z]| {
         let size = module.size();
@@ -100,11 +112,19 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
         let start = copy as f32 * module.length;
         // A modelled piece is one model, so every other copy is turned end for end (mirrored
         // along it) and its repeat reads half as often.
-        let (offset, along) = if modelled(module) && hash(&[seed, 11]) % 2 == 1 {
-            ((start + module.length) * stretch, -stretch)
+        let mirrored = made && hash(&[seed, 11]) % 2 == 1;
+        let (offset, along) = if mirrored {
+            (lead[0] + (start + module.length) * stretch, -stretch)
         } else {
-            (start * stretch, stretch)
+            (lead[0] + start * stretch, stretch)
         };
+        // Its cut ends kept only where the line stops with nothing beyond: between copies, or
+        // against a cap, two faces would lie in one plane.
+        let open = [
+            copy == 0 && cap_length == 0.0,
+            copy + 1 == count && cap_length == 0.0,
+        ];
+        let keep = if mirrored { [open[1], open[0]] } else { open };
         place(
             mesh,
             (offset, Vec3::new(along, scale[0], scale[1])),
@@ -113,6 +133,7 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
             look,
             seed,
             (&mut body, &mut ends),
+            made.then_some((module.length, keep)),
         );
     }
     // Caps where it stops: the end's as modelled, the start's mirrored along it.
@@ -122,7 +143,7 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
                 continue;
             }
             let seed = hash(&[line.seed, 99, end as u32]);
-            let at = if end == 1 { length } else { 0.0 };
+            let at = if end == 1 { length - lead[1] } else { lead[0] };
             let sign = if end == 1 { 1.0 } else { -1.0 };
             place(
                 cap,
@@ -132,6 +153,7 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
                 look,
                 seed,
                 (&mut body, &mut ends),
+                made.then_some((cap_length, [false, true])),
             );
         }
     }
@@ -148,6 +170,9 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
     }
 }
 
+/// How far short of a line's stopped end a modelled piece with no cap stops, in metres.
+const END_INSET_M: f32 = 0.015;
+
 /// One copy of a mesh placed on the line: in the line's own frame (along it, up, across),
 /// so far along it and scaled by so much each way, along by less than nothing to mirror it.
 #[allow(clippy::too_many_arguments)]
@@ -159,6 +184,9 @@ fn place(
     look: &Look,
     seed: u32,
     (body, ends): (&mut Indexed, &mut Indexed),
+    // For a modelled piece: its length as modelled, and whether to keep the faces that close
+    // it at its start (x = 0) and its end.
+    closing: Option<(f32, [bool; 2])>,
 ) {
     let shade = 1.0 - look.shade * layout::unit(hash(&[seed, 3]));
     let colour = look.tint.map(|c| c * shade);
@@ -200,6 +228,13 @@ fn place(
         let [a, b, c] = t.map(|i| i as usize);
         if a >= corners.len() || b >= corners.len() || c >= corners.len() {
             continue;
+        }
+        if let Some((long, keep)) = closing {
+            let x = |i: usize| mesh.positions[i][0];
+            let near = |at: f32| [a, b, c].iter().all(|&i| (x(i) - at).abs() < 1e-3);
+            if (near(0.0) && !keep[0]) || (near(long) && !keep[1]) {
+                continue;
+            }
         }
         // A face looking along the module is an end, if it has a material of its own.
         let to_ends = look.ends.is_some() && corners[a].3 && corners[b].3 && corners[c].3;

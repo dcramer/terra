@@ -89,7 +89,7 @@
       "step": 1.0,
       "variants": 1,
       "open": true,
-      "y": [-0.025, 0.0],
+      "y": [-0.031, -0.006],
       "z": [0.0, 0.05],
       "round": 0.004,
       "per_corner": 2,
@@ -104,7 +104,9 @@
       "z": [-0.21, 0.21],
       "budget": 900,
       "blend": 0.07,
-      "trim": 0.08
+      "trim": 0.08,
+      "end": "taper",
+      "reach": 0.18
     },
     "valley": {
       "about": "An open valley lined with two weathered boards, modelled; unfolded flat so it lies in the crease.",

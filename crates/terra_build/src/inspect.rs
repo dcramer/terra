@@ -806,6 +806,22 @@ fn through_solid(base: &Base, kits: &Kits, from: Vec3, dir: Vec3) -> Option<(f32
 /// How far over a roof's top its own pieces may stand, past its covering's thickness and
 /// the step of its courses: a ridge's or a hip's cap.
 const CAP_M: f32 = 0.1;
+/// How high over a roof's top, straight up, a roof kind's own pieces may stand: its covering
+/// and its tallest piece (a ridge's capping is modelled standing well over the thatch, D258),
+/// each measured square to the roof, up a slope of 45 degrees, and a cap's worth more.
+fn roof_reach(kit: &crate::kit::Kit) -> f32 {
+    let pieces = kit.dress.made.as_deref();
+    let tallest = kit
+        .roof
+        .parts
+        .values()
+        .filter_map(|part| pieces.and_then(|p| p.modules.get(&part.module)))
+        .flat_map(|module| module.near.iter().chain(&module.cap))
+        .flat_map(|mesh| mesh.positions.iter().map(|p| p[1]))
+        .fold(0.0, f32::max);
+    (kit.roof.thick + kit.roof.relief).max(tallest) * std::f32::consts::SQRT_2 + CAP_M
+}
+
 /// How far out of a roof's edge its boards may hang.
 const EDGE_M: f32 = 0.08;
 /// How far a trim may stand out of its cubes (D192), and a little for its relief.
@@ -842,11 +858,7 @@ fn pokes_out(
         // Over the roof nearest under it: its covering and caps may stand so far over the
         // roof's top; a wall's piece in a roof cube, or over one, not at all.
         if let Some(top) = roofs.top_over(middle.x, middle.z, middle.y - 0.6) {
-            let allowed = if is_roof {
-                kit.roof.thick + kit.roof.relief + CAP_M
-            } else {
-                0.02
-            };
+            let allowed = if is_roof { roof_reach(kit) } else { 0.02 };
             // A wall's own face standing up beside a roof is not in it.
             let inside = middle - t.n * 0.01;
             let in_roof = is_roof

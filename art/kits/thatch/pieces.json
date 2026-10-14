@@ -93,7 +93,7 @@
       "step": 1.0,
       "variants": 1,
       "open": true,
-      "y": [-0.03, 0.0],
+      "y": [-0.036, -0.006],
       "z": [0.0, 0.05],
       "round": 0.006,
       "per_corner": 2,
@@ -104,11 +104,13 @@
       "model": "art/kits/thatch/ridge/model.glb",
       "lies": "capping",
       "length": 1.5,
-      "y": [0.25, 0.43],
+      "y": [0.2, 0.42],
       "z": [-0.46, 0.46],
       "budget": 1100,
       "blend": 0.3,
-      "trim": 0.1
+      "trim": 0.1,
+      "end": "taper",
+      "reach": 0.3
     },
     "verge": {
       "about": "The verge rolled and bound, modelled: a bundle of reed tied every so often, bulging between its ties.",
@@ -116,7 +118,7 @@
       "lies": "log",
       "length": 1.5,
       "y": [-0.08, 0.32],
-      "z": [-0.21, 0.12],
+      "z": [-0.06, 0.22],
       "budget": 800,
       "trim": 0.06
     },
@@ -126,7 +128,7 @@
       "lies": "slab",
       "length": 1.5,
       "y": [0.0, 0.34],
-      "z": [-0.6, 0.08],
+      "z": [-0.62, 0.06],
       "budget": 800,
       "trim": 0.06
     }
