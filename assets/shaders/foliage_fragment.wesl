@@ -77,6 +77,19 @@ fn noise_at(frag_coord: vec4<f32>) -> f32 {
     return fract(52.9829189 * fract(dot(shifted, vec2<f32>(0.06711056, 0.00583715))));
 }
 
+// A card seen edge-on is a smear of stretched leaves: it fades out a pixel at a time as it
+// turns edge-on to the eye, as SpeedTree's leaf cards do, the cards behind it filling in
+// (D235). Its face is the triangle's own, from how the world position changes across the
+// screen, since its normal leans out of the crown instead.
+fn edge_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
+    let face = normalize(cross(dpdx(world), dpdy(world)));
+    let towards = normalize(view.world_position - world);
+    let keep = smoothstep(0.08, 0.3, abs(dot(face, towards)));
+    if noise_at(frag_coord) > keep {
+        discard;
+    }
+}
+
 // Leaves and twigs right at the camera fade out, a pixel at a time and a different pixel
 // each frame, so TAA blends them away rather than the camera pushing through them (D216).
 fn near_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
@@ -107,6 +120,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     temporal_dither(in.position, in.visibility_range_dither);
 
     near_fade(in.position, in.world_position.xyz);
+    if wind.bark < 0.5 {
+        edge_fade(in.position, in.world_position.xyz);
+    }
 
     var pbr_input = pbr_input_from_standard_material(in, is_front);
 @if(VERTEX_COLORS) {

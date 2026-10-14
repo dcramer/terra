@@ -165,7 +165,7 @@ pub fn oak(dice: &mut Rng, height: f32, form: Form, young: bool) -> Tree {
     let r0 = tree.trunk_m;
     let bole = height
         * match (form, young) {
-            (_, true) => dice.range(0.24, 0.34),
+            (_, true) => dice.range(0.34, 0.44),
             (Form::Tall, _) => dice.range(0.34, 0.44),
             (Form::Broad, _) => dice.range(0.2, 0.27),
             (Form::Forked, _) => dice.range(0.26, 0.33),
@@ -464,6 +464,27 @@ fn twigs(
         tree.clump(at, clump_m * dice.range(0.75, 0.9), direction, branch, mass);
     }
     tree.limb(points, radii, 2);
+}
+
+/// Where a modelled tree's leaf clump goes, as tools/blender/tips.py finds them along its
+/// outer branches: its place, the way its branch runs there, its size and its mass.
+pub type Tip = ((f32, f32, f32), (f32, f32, f32), f32, usize);
+
+/// An oak whose trunk and limbs are a model: only its clumps, from where its branches run
+/// out, each mass also one lump far off (D235).
+pub fn modelled(tips: &[Tip], trunk_m: f32) -> Tree {
+    let mut tree = Tree::new(Species::Oak, trunk_m);
+    for &((x, y, z), (dx, dy, dz), size, mass) in tips {
+        tree.clump(
+            Vec3::new(x, y, z),
+            size * 1.25,
+            Vec3::new(dx, dy, dz),
+            mass,
+            mass,
+        );
+    }
+    tree.settle();
+    tree
 }
 
 /// A conifer, `height` tall: a trunk straight to the top, branches off it in whorls. A
@@ -785,7 +806,7 @@ fn card(
     };
     let in_mass = (middle.distance(mass) / (size * 3.0)).clamp(0.0, 1.0);
     let rise = (middle.y / crown.height).clamp(0.0, 1.0);
-    let light = 0.5 + 0.22 * outer + 0.18 * in_mass + 0.18 * rise + dice.range(-0.07, 0.07);
+    let light = 0.44 + 0.22 * outer + 0.16 * in_mass + 0.16 * rise + dice.range(-0.07, 0.07);
     let mut tint = Vec3::new(
         light * dice.range(0.95, 1.05),
         light,

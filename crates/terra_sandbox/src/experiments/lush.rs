@@ -97,6 +97,11 @@ const SHADOW_LUMP: f32 = 0.6;
 const SUN_ONLY: usize = 1;
 /// How many kinds of bush there are; each is drawn many times. The trees' are `KINDS`.
 const BUSH_KINDS: u64 = 4;
+/// Veteran oaks' modelled trunks: each model in `models/nature/forest` and its clumps in
+/// `data/trees` (D235), how tall the models are, and how thick round their foot.
+const VETERANS: [(&str, &str); 2] = [("OakBough", "oak_bough"), ("OakBough2", "oak_bough_2")];
+const VETERAN_M: f32 = 24.0;
+const VETERAN_TRUNK_M: f32 = 2.0;
 /// Bushes cast shadows this near, and fade out at the second distance.
 const BUSH_M: [f32; 2] = [20.0, 70.0];
 /// Tree feet are filed in squares this wide, for the grass to thin under.
@@ -231,21 +236,24 @@ fn follow_detail(
 
 /// Scans' glTF materials still to be copied into the materials their meshes are drawn with.
 #[derive(Resource, Default)]
-struct Scanned(Vec<(Handle<GltfMaterial>, Handle<StandardMaterial>)>);
+struct Scanned(Vec<(Handle<GltfMaterial>, Handle<StandardMaterial>, Color)>);
 
 /// Copies each scan's glTF material, once loaded, into the material it is drawn with: its
-/// scanned colour, normal, roughness and occlusion maps.
+/// scanned colour, normal, roughness and occlusion maps, its colour times a tint.
 fn dress_scans(
     mut scanned: ResMut<Scanned>,
     gltf: Res<Assets<GltfMaterial>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    scanned.0.retain(|(from, to)| {
+    scanned.0.retain(|(from, to, tint)| {
         let (Some(from), Some(mut to)) = (gltf.get(from), materials.get_mut(to)) else {
             return true;
         };
         *to = StandardMaterial {
-            base_color: from.base_color,
+            base_color: {
+                let (a, b) = (from.base_color.to_linear(), tint.to_linear());
+                Color::linear_rgba(a.red * b.red, a.green * b.green, a.blue * b.blue, a.alpha)
+            },
             base_color_texture: from.base_color_texture.clone(),
             normal_map_texture: from.normal_map_texture.clone(),
             metallic_roughness_texture: from.metallic_roughness_texture.clone(),
@@ -496,6 +504,9 @@ struct TreeModel {
     bark: Handle<Foliage>,
     /// The far crown's material, in its leaves' colour.
     far: Handle<StandardMaterial>,
+    /// A modelled trunk's material, for a tree whose wood is a model rather than grown; its
+    /// mesh is then `wood[0]`, drawn at every distance.
+    modelled: Option<Handle<StandardMaterial>>,
 }
 
 /// The kinds of tree the forest grows, each grown once and drawn many times: what it is,
@@ -722,7 +733,7 @@ fn plant(
             &wind,
             "bark_willow",
             Color::srgb(0.72, 0.68, 0.64),
-            0.045,
+            0.06,
             1.0,
         ),
         bark_material(
@@ -763,7 +774,7 @@ fn plant(
             let (bark, bark_m, leaf, tint, far_material) = match species {
                 Species::Oak => {
                     let which = kind % 2;
-                    (barks[which].clone(), [BARK_M, Vec2::splat(1.3)][which], leaf_of[0], Vec3::new(0.92, 0.95, 0.85), &far_crowns[0])
+                    (barks[which].clone(), [BARK_M, Vec2::splat(1.8)][which], leaf_of[0], Vec3::new(0.92, 0.95, 0.85), &far_crowns[0])
                 }
                 Species::Pine => (barks[2].clone(), Vec2::splat(2.0), leaf_of[1], Vec3::new(1.15, 1.15, 1.0), &far_crowns[1]),
                 Species::Spruce => (barks[3].clone(), Vec2::splat(2.0), leaf_of[2], Vec3::new(0.9, 1.0, 0.9), &far_crowns[2]),
@@ -808,9 +819,70 @@ fn plant(
                 young,
                 bark,
                 far: far_material.clone(),
+                modelled: None,
             }
         })
         .collect();
+    // Veteran oaks: a trunk and limbs modelled (Tripo, from a concept drawn to the style
+    // guide, art/props/oak_bough), far more gnarled and burred than a grown one can be, its
+    // crown grown on it as cards at the clumps tools/blender/tips.py found along its outer
+    // branches (D235).
+    let mut trees = trees;
+    let first_veteran = trees.len();
+    for (n, (model, tips)) in VETERANS.into_iter().enumerate() {
+        let path = format!("models/nature/forest/{model}.glb");
+        let material = plain.add(StandardMaterial::default());
+        // Darkened to the forest's bark, about sRGB 78 (D221).
+        scanned.0.push((
+            assets.load(
+                GltfAssetLabel::Material {
+                    index: 0,
+                    is_scale_inverted: false,
+                }
+                .from_asset(path.clone()),
+            ),
+            material.clone(),
+            Color::srgb(0.5, 0.48, 0.46),
+        ));
+        let trunk: Handle<Mesh> = assets.load(
+            GltfAssetLabel::Primitive {
+                mesh: 0,
+                primitive: 0,
+            }
+            .from_asset(path),
+        );
+        let tips: Vec<species::Tip> = terra_world::data::read(&format!("trees/{tips}.ron"));
+        let tree = species::modelled(&tips, VETERAN_TRUNK_M);
+        let mut dice = seed.derive("veteran").index(n as u64).rng();
+        let mut cards = species::crown_cards(&mut dice, &tree, VETERAN_M, leaf_of[0]);
+        for card in cards.iter_mut().flatten() {
+            card.tint *= Vec3::new(0.9, 0.95, 0.85);
+            // Its trunk does not sway, so nor do its leaves much with it.
+            card.sway.x *= 0.25;
+        }
+        let near = crown_near(&cards);
+        info!(
+            "lush: veteran oak {model}, {VETERAN_M:.0} m: {} clumps, crown {} near",
+            tree.tips.len(),
+            near.triangles()
+        );
+        trees.push(TreeModel {
+            wood: [trunk.clone(), trunk.clone(), trunk],
+            crown_near: meshes.add(near.mesh()),
+            crown_far: meshes.add(crown_far(&cards).mesh()),
+            shadow: meshes.add(crown_stand_in(&cards).mesh()),
+            clumps: meshes.add(crown_clumps(&tree, 1.0, false).mesh()),
+            lumps: meshes.add(crown_clumps(&tree, SHADOW_LUMP, true).mesh()),
+            height: VETERAN_M,
+            trunk_m: tree.trunk_m,
+            species: Species::Oak,
+            young: false,
+            bark: barks[0].clone(),
+            far: far_crowns[0].clone(),
+            modelled: Some(material),
+        });
+    }
+    let veterans_kinds = first_veteran..trees.len();
     let bushes: Vec<Handle<Mesh>> = (0..BUSH_KINDS)
         .map(|kind| meshes.add(grow_bush(&mut seed.derive("bush").index(kind).rng()).mesh()))
         .collect();
@@ -893,6 +965,7 @@ fn plant(
             kinds
         }
     };
+    let mut veterans: Vec<Vec2> = Vec::new();
     let pools: [[Vec<usize>; 2]; 3] =
         [Species::Oak, Species::Pine, Species::Spruce].map(|s| [pool(s, false), pool(s, true)]);
     let mut by_species = [0; 3];
@@ -930,10 +1003,27 @@ fn plant(
             }
             feet.entry(square(at, FILED_M)).or_default().push(at);
             let choices = &pools[species as usize][young as usize];
-            let kind = choices[dice.below(choices.len() as u32) as usize];
+            let mut kind = choices[dice.below(choices.len() as u32) as usize];
+            // At the edge of a glade, where it had room, an oak may be a veteran, its crown
+            // spreading over the open ground; never two near.
+            if species == Species::Oak
+                && !young
+                && glade < -0.05
+                && dice.unit() < 0.4
+                && veterans.iter().all(|v: &Vec2| v.distance(at) > 40.0)
+            {
+                kind = veterans_kinds.start + dice.below(veterans_kinds.len() as u32) as usize;
+                veterans.push(at);
+            }
             let model = &trees[kind];
             by_species[model.species as usize] += 1;
-            let scale = dice.range(0.85, 1.15);
+            // A veteran's model is 24 m tall; it stands about 20.
+            let scale = dice.range(0.85, 1.15)
+                * if veterans_kinds.contains(&kind) {
+                    0.82
+                } else {
+                    1.0
+                };
             // In steps of a twentieth, so trees share their distances: Bevy draws at most
             // 65,535 distinct ones, and past that shares a slot and culls wrongly (D230).
             let size =
@@ -960,7 +1050,15 @@ fn plant(
                     ),
                 ))
                 .with_children(|tree| {
-                    for level in 0..3 {
+                    // A modelled trunk is one mesh at every distance.
+                    if let Some(material) = &model.modelled {
+                        tree.spawn((
+                            Mesh3d(model.wood[0].clone()),
+                            MeshMaterial3d(material.clone()),
+                            detail(0, 3, size),
+                        ));
+                    }
+                    for level in 0..if model.modelled.is_some() { 0 } else { 3 } {
                         // The simplest trunk stands on under the far crown too.
                         let last = if level == 2 { 3 } else { level };
                         let mut wood = tree.spawn((
@@ -1016,6 +1114,17 @@ fn plant(
                 nearest_to_start[young as usize] = at;
             }
         }
+    }
+    if let Some(near) = veterans
+        .iter()
+        .min_by(|a, b| a.length().total_cmp(&b.length()))
+    {
+        info!(
+            "lush: {} veteran oaks, the nearest at {:.1},{:.1} (east, south).",
+            veterans.len(),
+            near.x,
+            near.y
+        );
     }
 
     // Bushes: along the paths and in the glades more than under the trees.
@@ -1079,6 +1188,7 @@ fn plant(
                 .from_asset(path.clone()),
             ),
             material.clone(),
+            Color::WHITE,
         ));
         (
             assets.load(

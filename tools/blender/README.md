@@ -16,6 +16,8 @@ tools/blender/run.sh path/to/script.py --open scene.blend [args...]
 
 **[scan.py](scan.py)** makes a scanned model, such as a Poly Haven rock or fern, placeable by the hundred: each piece welded, cut to a triangle budget with its textures kept, its foot at the origin, written as its own glTF binary. `tools/blender/run.sh tools/blender/scan.py MODEL.gltf OUT_PREFIX BUDGET [--whole] [--loose] [--crease DEG]`: `--loose` takes a set scanned as one object a loose part at a time, largest first, and `--crease` splits normals at creases rather than smoothing everywhere, as `tools/props/scans.ts` asks for the flora file's rocks.
 
+**[tips.py](tips.py)** finds where a modelled tree's leaves go, for a crown of cards grown on a modelled trunk (D235): `tools/blender/run.sh tools/blender/tips.py MODEL.glb OUT.ron [--from 0.5] [--clump 1.0]` measures how far each point is from the foot along the surface, gathers the points past `--from` of the longest path into clumps a `--clump` apart, each with the way its branch runs and a mass by side and height, and writes them as RON for `assets/data/trees`.
+
 **Checked by `cargo xtask check`:** [check.py](check.py) compiles every tracked script, checks what it imports exists in this Blender and what it uses from our own modules is there, and imports the shared modules, without running any script. A machine with no Blender skips it.
 
 Scripts that run inside Blender are the one place Python is allowed (D121). A module other scripts import must run nothing when imported. Write what they make under an ignored folder such as `shots/`; models and renders are build output.

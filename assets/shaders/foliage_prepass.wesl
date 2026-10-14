@@ -38,6 +38,17 @@ fn near_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
     }
 }
 
+// As foliage_fragment.wesl: a card fades out as it turns edge-on to the eye (D235). Not in
+// the shadow pass, which keeps the whole card.
+fn edge_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
+    let face = normalize(cross(dpdx(world), dpdy(world)));
+    let towards = normalize(view.world_position - world);
+    let keep = smoothstep(0.08, 0.3, abs(dot(face, towards)));
+    if noise_at(frag_coord) > keep {
+        discard;
+    }
+}
+
 fn temporal_dither(frag_coord: vec4<f32>, dither: i32) {
     if dither == 0 {
         return;
@@ -68,6 +79,9 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
 @if(VISIBILITY_RANGE_DITHER)
     temporal_dither(in.position, in.visibility_range_dither);
     near_fade(in.position, in.world_position.xyz);
+    if (flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS) == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK {
+        edge_fade(in.position, in.world_position.xyz);
+    }
 
     pbr_prepass_functions::prepass_sample_color_and_alpha_discard(in);
 
