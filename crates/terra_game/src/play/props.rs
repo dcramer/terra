@@ -303,7 +303,7 @@ fn textured_mesh(part: &Part, textures: &Textures) -> Mesh {
 
 /// How bright a glowing textured part is: its colour texture times this, so painted coals
 /// glow as brightly as the flat glow (`glowing`).
-const GLOW_SCALE: f32 = 20.0;
+const GLOW_SCALE: f32 = 8.0;
 
 /// A textured part's material: its own textures, loaded from its file through Bevy's glTF
 /// loader by their labels, and its own factors. Loading them that way gives them mipmaps
