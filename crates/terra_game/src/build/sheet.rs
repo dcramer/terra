@@ -778,6 +778,25 @@ pub(super) fn roof_cube_rows(walls: Kind, roof: Kind) -> Vec<(String, Vec<BuildO
     rows
 }
 
+/// A house's gable end, to be seen straight on: a room five metres by four in a wall kind
+/// under a gable of cubes in a roof kind, its west wall the gable, with a doorway in it
+/// under a lintel and a window in the long wall beside. Where the walls are carried up to
+/// the roof, its verges and its ridge's end all show at once (the "gable end" rows).
+fn gable_end(walls: Kind, roof: Kind) -> Vec<BuildOp> {
+    let mut ops = vec![BuildOp::AddRoom {
+        min: [0, 0, 0],
+        max: [9, 0, 7],
+        kind: walls,
+    }];
+    ops.extend((3..=4).map(|z| wall([0, 0, z], Panel::Door, walls)));
+    ops.extend((2..=3).map(|x| wall([x, 0, 7], Panel::WINDOW, walls)));
+    with_roof(ops, &[([0, 0], [9, 7], Style::Gable, true)], roof)
+}
+
+/// Where a gable end row's west gable is seen from straight on, and what is looked at, in
+/// the house's own metres: eight metres out, level with the middle of the gable.
+const GABLE_END_VIEW: [Vec3; 2] = [Vec3::new(-8.0, 3.6, 2.0), Vec3::new(0.0, 3.6, 2.0)];
+
 /// Lays the sheet once the site is there.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lay(
@@ -874,6 +893,39 @@ pub(super) fn lay(
             placed.push((format!("stone and logs: {row_name}"), ops, east, row));
         }
     }
+    // Every wall kind's gable end under every roof kind, each seen straight on from its own
+    // vantage, so how walls are carried up to a roof is judged in every pairing.
+    group += 1;
+    let roof_kinds: Vec<Kind> = kits
+        .0
+        .iter()
+        .filter(|kit| kit.pattern == Pattern::Roof)
+        .map(|kit| kit.kind())
+        .collect();
+    let wall_kinds: Vec<Kind> = kits
+        .0
+        .iter()
+        .filter(|kit| kit.pattern != Pattern::Roof)
+        .map(|kit| kit.kind())
+        .collect();
+    let mut row = 0;
+    for &walls in &wall_kinds {
+        for &covering in &roof_kinds {
+            let name = |kind: Kind| {
+                names
+                    .get(&kind)
+                    .cloned()
+                    .unwrap_or_else(|| kind.0.to_string())
+            };
+            placed.push((
+                format!("gable end: {} under {}", name(walls), name(covering)),
+                gable_end(walls, covering),
+                ROOF_GROUP_M * group as f32,
+                row,
+            ));
+            row += 1;
+        }
+    }
     for (name, ops, group_east, row) in placed {
         // Only the rows asked for, each where it always is.
         let wanted = &options.sheet_rows;
@@ -908,6 +960,17 @@ pub(super) fn lay(
             } else {
                 frame
             };
+            // A gable end's own vantage, straight on to the built house's gable, through
+            // its frame, as the yard is round.
+            if column == 0 && name.starts_with("gable end:") {
+                let start = site.frame.compute_affine().inverse();
+                let [eye, at] =
+                    GABLE_END_VIEW.map(|p| start.transform_point3(frame.transform_point(p)));
+                info!(
+                    "Kit sheet: {name}: straight on: --vantage {},{},{},{},{},{}",
+                    eye.x, eye.y, eye.z, at.x, at.y, at.z
+                );
+            }
             let label = format!("Kit sheet: {name}, {shown:?}");
             let mut build = Build::new(&mut commands, &look, frame, &label);
             build.kits = Some(kits.clone());

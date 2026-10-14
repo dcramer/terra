@@ -253,6 +253,104 @@ fn unit(dir: Dir) -> Vec3 {
     dir.step().as_vec3()
 }
 
+/// Where a piece set into a wall is bedded: a lintel or a sill, swept along an opening's
+/// head or sill and on past it into the wall either side. The wall's face is sunk behind
+/// it and built up a little round its edges (`surface::Heights::bed`), so the piece sits
+/// all but flush, its ends and its edge away from the opening lost in the wall, as cob or
+/// rubble is built up round a timber, rather than standing on the face like a board.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bed {
+    /// Along the edge, from one end of the piece to the other, on the wall's face.
+    pub from: Vec3,
+    pub to: Vec3,
+    /// Out of the face, and up the face square to the edge.
+    pub out: Vec3,
+    pub up: Vec3,
+    /// How far the piece reaches up the face from the edge, lowest and highest, in metres.
+    pub low: f32,
+    pub high: f32,
+    /// How far its face stands out of the wall's.
+    pub face: f32,
+    /// Whether each end, at `from` and at `to`, is the piece's end, which the wall laps
+    /// onto, rather than running on into the next cube's.
+    pub ends: [bool; 2],
+    /// Whether the opening is under it (a lintel) rather than over it (a sill): the edge
+    /// along the opening is the one the wall does not lap onto.
+    pub over_opening: bool,
+}
+
+impl Bed {
+    /// How far a point of the wall's face is inside the piece's outline on the face, in
+    /// metres, less than nothing outside it; none if the point is not on this face.
+    pub fn inside(&self, p: Vec3) -> Option<f32> {
+        let rel = p - self.from;
+        // Only the face itself, not the opening's reveal behind it.
+        if rel.dot(self.out).abs() > 1e-3 {
+            return None;
+        }
+        let length = self.from.distance(self.to);
+        let along = rel.dot((self.to - self.from) / length.max(1e-6));
+        let up = rel.dot(self.up);
+        // Past an end running on into the next cube's, that one's bed takes over; along
+        // the opening's side, the piece's own edge shows.
+        let edge = |lapped: bool, inset: f32| {
+            if lapped || inset < 0.0 {
+                inset
+            } else {
+                f32::MAX
+            }
+        };
+        let inside = edge(self.ends[0], along)
+            .min(edge(self.ends[1], length - along))
+            .min(edge(!self.over_opening, up - self.low))
+            .min(edge(self.over_opening, self.high - up));
+        Some(inside)
+    }
+}
+
+/// The bed of a piece set into a wall, if it is one: a lintel or a sill swept along an
+/// opening's head or sill (`Piece::Trim`, `Role::Head` or `Role::Sill`).
+pub fn bed(piece: &Piece, kit: &Kit) -> Option<Bed> {
+    let Piece::Trim {
+        cube,
+        role,
+        side,
+        other,
+        ends,
+        ..
+    } = *piece
+    else {
+        return None;
+    };
+    if !matches!(role, layout::Role::Head | layout::Role::Sill) {
+        return None;
+    }
+    let Some(Dress::Profile { name, extend, .. }) = kit.dress.roles.get(&role) else {
+        return None;
+    };
+    let profile = kit.dress.made.as_deref()?.profiles.get(name)?;
+    let low = profile.iter().map(|p| p[1]).fold(f32::MAX, f32::min);
+    let high = profile.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
+    let face = profile.iter().map(|p| p[0]).fold(0.0f32, f32::max);
+    let edge = layout::roles::Edge { role, side, other };
+    let (from, to) = layout::roles::line(cube, edge);
+    let at = |p: [i32; 3]| IVec3::from_array(p).as_vec3() * (CELL_M / TICKS as f32);
+    let (from, to) = (at(from), at(to));
+    let along = (to - from).normalize_or(Vec3::X);
+    let reach = ends.map(|end| if end == End::Square { *extend } else { 0.0 });
+    Some(Bed {
+        from: from - along * reach[0],
+        to: to + along * reach[1],
+        out: unit(side),
+        up: Vec3::Y,
+        low,
+        high,
+        face,
+        ends: ends.map(|end| !matches!(end, End::On | End::Step)),
+        over_opening: role == layout::Role::Head,
+    })
+}
+
 /// A stone's shade and where its texture falls, from its seed: each a part of the texture
 /// of its own, a little lighter or darker and warmer or cooler, as stones from one bed are.
 fn stone_look(seed: u32, tint: [f32; 3]) -> ([f32; 3], [f32; 2]) {

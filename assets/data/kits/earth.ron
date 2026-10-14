@@ -21,9 +21,9 @@
 //             (its straw), the earth dug where it stands, and a thirty-second of a Wood for
 //             its oak lintels, sills, sole plates and treads (D215)
 // dress       a stone plinth at every foot, stepping with the ground; a stone coping with a
-//             drip on every top open to the sky; an oak lintel over and an oak sill under
-//             every opening; an oak sole plate where a timber wall stands on it; an oak fascia
-//             under an overhang, an oak tread on every step, a stone border round a floor;
+//             drip on every top open to the sky; an oak lintel set into the earth over every
+//             opening, bearing on it either side, and an oak sill under; an oak sole plate
+//             where a timber wall stands on it; an oak fascia under an overhang, an oak tread on every step, a stone border round a floor;
 //             posts as round-cornered pillars 40 cm square; nothing up its corners or its
 //             openings' sides, which stay round; its lifts a little lighter and darker by
 //             turns (strata), its foot darkened by the damp splashed up over its plinth
@@ -64,7 +64,7 @@
         roles: {
             Foot: Profile(name: "plinth", joints: false),
             Crest: Profile(name: "coping"),
-            Head: Profile(name: "lintel", extend: 0.22, joints: false, material: Some(Hewn)),
+            Head: Profile(name: "lintel", extend: 0.12, joints: false, material: Some(Hewn)),
             Sill: Profile(name: "sill", extend: 0.08, joints: false, material: Some(Hewn)),
             Meet: Profile(name: "cap", joints: false, material: Some(Hewn)),
             Soffit: Profile(name: "fascia", joints: false, material: Some(Hewn)),

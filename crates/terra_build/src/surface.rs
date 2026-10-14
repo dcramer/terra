@@ -80,7 +80,20 @@ impl Packed {
 pub struct Heights<'a> {
     pub sides: &'a dyn Fn([f32; 2]) -> f32,
     pub top: &'a dyn Fn([f32; 2]) -> f32,
+    /// Where a point of the surface is against a piece set into it, a lintel or a sill
+    /// (`dress::Bed`): how far inside the piece's outline on the face it is, in metres (less
+    /// than nothing outside), and how far the piece's face stands out. Inside, the surface
+    /// is sunk behind its deepest relief, so the piece can sit all but flush; round the
+    /// outline it is built up a little over the piece's edge, so the piece is set in it.
+    pub bed: Option<&'a dyn Fn(Vec3) -> Option<(f32, f32)>>,
 }
+
+/// How far behind its deepest relief a wall's face is sunk where a piece is bedded in it.
+const BED_DEPTH_M: f32 = 0.008;
+/// How far either side of a bedded piece's outline the wall comes back to its own face, and
+/// how far over the piece's face it is built up on the outline.
+const BED_LAP_M: f32 = 0.035;
+const BED_OVER_M: f32 = 0.012;
 
 /// How far an inside corner's relief fades out from it, in metres.
 const INSIDE_FADE_M: f32 = 0.06;
@@ -318,17 +331,21 @@ pub fn draw_part(
         None => hides(at),
     };
     let n = look.steps.max(1) as usize;
-    // Each cube shrunk by the bevel on every side nothing hides.
+    // Each cube shrunk by the bevel on every side nothing hides, but for a top cut away over
+    // its middle, as a gable's top is at its roof or a slope's at its ramp: what is left
+    // ends at the cut, sawn straight, not rounded off at every cube along it.
     let mut shrunk: Vec<(Vec3, Vec3)> = vec![(Vec3::ZERO, Vec3::ZERO); grid.len()];
     for &cube in cubes {
         let cube = IVec3::from_array(cube);
         let mut low = cube.as_vec3() * CELL_M;
         let mut high = low + Vec3::splat(CELL_M);
+        let cut_top = (cuts.of)(cube)
+            && cut(cube, low + Vec3::new(CELL_M * 0.5, CELL_M, CELL_M * 0.5))[1] < high.y - 1e-4;
         for axis in 0..3 {
             if !full(cube - step(axis, 1)) {
                 low[axis] += look.bevel;
             }
-            if !full(cube + step(axis, 1)) {
+            if !full(cube + step(axis, 1)) && !(axis == 1 && cut_top) {
                 high[axis] -= look.bevel;
             }
         }
@@ -496,6 +513,14 @@ pub fn draw_part(
             if full(beyond) && !against_cut {
                 continue;
             }
+            // A face a piece is bedded in is not kept: what is round it does not say where
+            // the piece is.
+            let bedded = heights.bed.is_some_and(|bed| {
+                [(0, 0), (n, 0), (0, n), (n, n), (n / 2, n / 2)]
+                    .iter()
+                    .any(|&(i, j)| bed(point(i, j)).is_some_and(|(inside, _)| inside > -CELL_M))
+            });
+            let signed = if bedded { None } else { signed };
             // As it was drawn last time, if nothing round it has changed since.
             if let (Some(signed), Some(old)) = (signed, old)
                 && let Some(data) = old.faces.get(&(call, cube, index as u8))
@@ -575,7 +600,25 @@ pub fn draw_part(
                     fade(p, &face_edges)
                 };
                 let packed = look.packed.map_or(0.0, |packed| packed.at(p));
-                rounded + outward * ((displaced(p, outward, look, heights) + packed) * faded)
+                let relief = displaced(p, outward, look, heights);
+                let mut out = (relief + packed) * faded;
+                // Sunk behind a piece set into it, a little deeper than its deepest relief,
+                // and built up over its edges round its outline.
+                if let Some((inside, face)) = heights.bed.and_then(|bed| bed(p))
+                    && inside > -BED_LAP_M
+                {
+                    // How far over the piece's edge the wall is built here, by its own
+                    // relief, so the edge it leaves is as uneven as the wall.
+                    let high = (relief / look.relief.max(1e-4) + 0.5).clamp(0.0, 1.0);
+                    let reach = BED_LAP_M * (0.25 + high);
+                    let over = ((reach - inside) / 0.01).clamp(0.0, 1.0)
+                        * (1.0 + inside / BED_LAP_M).clamp(0.0, 1.0);
+                    let sunk = ((inside - reach) / 0.015).clamp(0.0, 1.0);
+                    let deepest = -(look.relief * 0.5) - packed.abs() - BED_DEPTH_M;
+                    out += (deepest - out) * sunk;
+                    out = out.max(over * (face + BED_OVER_M));
+                }
+                rounded + outward * out
             };
             // Wound so each triangle faces out along the face's normal.
             let flip = side < 0.0;
@@ -608,20 +651,32 @@ pub fn draw_part(
             for i in 0..=n {
                 for j in 0..=n {
                     let p = point(i, j);
-                    let mut q = place(p);
-                    let high = if cut_here {
-                        let [low, high] = cut(cube, p);
-                        q.y = q.y.max(low).min(high);
-                        high
+                    let [low, high] = if cut_here {
+                        cut(cube, p)
                     } else {
-                        f32::MAX
+                        [f32::MIN, f32::MAX]
                     };
+                    // A side is cut before it is rounded and displaced, and textured where
+                    // the point ends up, so the texture runs on unstretched to the cut and
+                    // points cut to the same place stay one.
+                    let mut s = if axis == 1 || !cut_here {
+                        p
+                    } else {
+                        p.with_y(p.y.max(low).min(high))
+                    };
+                    if against_cut {
+                        s.y = s.y.max(cut(beyond, p)[1].min(high));
+                    }
+                    let mut q = place(s);
+                    if cut_here {
+                        q.y = q.y.max(low).min(high);
+                    }
                     if against_cut {
                         q.y = q.y.max(cut(beyond, p)[1].min(high));
                     }
                     face.points.push(q);
                     flat.push(p.with_y(clipped(p)));
-                    face.uvs.push(planar(p, normal, metres));
+                    face.uvs.push(planar(s, normal, metres));
                 }
             }
             let at = |i: usize, j: usize| (i * (n + 1) + j) as u32;
@@ -976,6 +1031,7 @@ mod tests {
         let heights = Heights {
             sides: height,
             top: &flat,
+            bed: None,
         };
         draw(
             &set,
@@ -1023,6 +1079,7 @@ mod tests {
         let heights = Heights {
             sides: &bumpy,
             top: &flat,
+            bed: None,
         };
         let (min, max) = (Vec3::new(0.0, -0.3, 0.0), Vec3::new(1.5, 0.12, 0.32));
         slab(min, max, &look(), &heights, [1.0; 3], &mut out, &mut tops);
@@ -1082,6 +1139,7 @@ mod tests {
         let heights = Heights {
             sides: &flat,
             top: &flat,
+            bed: None,
         };
         draw_cut(
             &set,

@@ -380,9 +380,20 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                     })
                 };
                 let flat = |_: [f32; 2]| 0.5;
+                // Bedded behind its lintels and sills, as a section's surface is.
+                let beds: Vec<crate::dress::Bed> = pieces
+                    .iter()
+                    .filter_map(|p| crate::dress::bed(p, kit))
+                    .collect();
+                let bed = |p: Vec3| {
+                    beds.iter()
+                        .filter_map(|b| b.inside(p).map(|inside| (inside, b.face)))
+                        .max_by(|a, b| a.0.total_cmp(&b.0))
+                };
                 let heights = Heights {
                     sides: &flat,
                     top: &flat,
+                    bed: (!beds.is_empty()).then_some(&bed as &dyn Fn(Vec3) -> Option<(f32, f32)>),
                 };
                 let (mut faces, mut tops) = (Surface::default(), Surface::default());
                 crate::surface::draw_cut(
@@ -804,4 +815,164 @@ fn a_base_laid_again_after_an_edit_cuts_into_the_sections_laid_whole() {
         assert!(cut > 1000);
         (before, whole) = (after, again);
     }
+}
+
+#[test]
+fn a_gable_is_cut_in_a_straight_line_to_the_roofs_deck_with_no_gap_under_it() {
+    // Every block kind's gable under every roof kind, drawn as the game draws it.
+    let kits = shipped();
+    let maps = Maps::default();
+    let walls: Vec<Kind> = kits
+        .0
+        .iter()
+        .filter(|kit| kit.pattern == Pattern::Masonry)
+        .map(|kit| kit.kind())
+        .collect();
+    let roofs: Vec<Kind> = kits
+        .0
+        .iter()
+        .filter(|kit| kit.pattern == Pattern::Roof)
+        .map(|kit| kit.kind())
+        .collect();
+    assert!(walls.len() >= 3 && roofs.len() == 3);
+    // Five metres by four, the ridge along X two metres in: the deck up the west gable's
+    // face is a storey up at the eaves, rising a metre a metre.
+    let deck = |z: f32| crate::STOREY_M + z.min(4.0 - z);
+    for &wall in &walls {
+        for &covering in &roofs {
+            let mut base = Base::default();
+            base.apply(BuildOp::AddRoom {
+                min: [0, 0, 0],
+                max: [9, 0, 7],
+                kind: wall,
+            });
+            let footprint: BTreeSet<[i32; 2]> =
+                (0..10).flat_map(|x| (0..8).map(move |z| [x, z])).collect();
+            let height = roofer::field(&footprint, Style::Gable, Some(true));
+            for op in roofer::put_up(&base, &footprint, 0, covering, &height) {
+                base.apply(op);
+            }
+            let mut sections: BTreeSet<[i32; 3]> = BTreeSet::new();
+            for kit in &kits.0 {
+                sections.extend(
+                    lay_among(&base, kit, &kits)
+                        .pieces
+                        .iter()
+                        .map(|p| p.section().to_array()),
+                );
+            }
+            // The wall's surface on the west gable's face, a little either side of it.
+            let mut face: Vec<Vec3> = Vec::new();
+            for at in &sections {
+                let section = Section {
+                    base: &base,
+                    kits: &kits,
+                    maps: &maps,
+                    at: IVec3::from_array(*at),
+                    progress: &Progress::Whole,
+                };
+                let drawn = draw(&section, &laid(&section), Reach::Near);
+                if let Some(surface) = drawn.near.get(&(wall, crate::mesh::Material::Masonry)) {
+                    face.extend(surface.indexed().positions.into_iter().filter(|p| {
+                        p.x.abs() < 0.1
+                            && p.y > crate::STOREY_M - 0.25
+                            && (0.0..=4.0).contains(&p.z)
+                    }));
+                }
+            }
+            let name = format!("{} under {}", wall.0, covering.0);
+            assert!(face.len() > 50, "{name}: {}", face.len());
+            // Nothing over the deck, and up the whole gable, from eave to ridge either side,
+            // the wall's top on it every few centimetres: no step and no gap under the roof.
+            for p in &face {
+                assert!(p.y <= deck(p.z) + 0.005, "{name}: {p} over the deck");
+            }
+            let mut z = 0.2;
+            while z < 3.8 {
+                let gap = face
+                    .iter()
+                    .filter(|p| (p.z - z).abs() < 0.07)
+                    .map(|p| deck(p.z) - p.y)
+                    .fold(f32::MAX, f32::min);
+                assert!(
+                    gap < 0.01,
+                    "{name}: a gap of {gap} m under the roof at z {z}"
+                );
+                z += 0.05;
+            }
+        }
+    }
+}
+
+#[test]
+fn a_lintel_is_set_into_an_earth_wall_its_face_built_up_round_it() {
+    // The earth kit with its pieces, as the game reads it.
+    let kits = shipped();
+    let earth = kits.of(named(&kits, "earth")).unwrap().clone();
+    let maps = Maps::default();
+    // A wall along X with a window in it.
+    let mut base = Base::default();
+    for x in 0..10 {
+        base.apply(BuildOp::SetWall {
+            tile: [x, 0, 0],
+            panel: Some(if (4..=5).contains(&x) {
+                Panel::WINDOW
+            } else {
+                Panel::Solid
+            }),
+            kind: earth.kind(),
+        });
+    }
+    let pieces = lay_among(&base, &earth, &kits).pieces;
+    // The lintel over it on the wall's north face.
+    let bed = pieces
+        .iter()
+        .filter_map(|p| crate::dress::bed(p, &earth))
+        .find(|b| b.over_opening && b.out.z < 0.0)
+        .expect("a lintel");
+    assert!(bed.face > 0.0 && bed.face <= CELL_M / 8.0, "{}", bed.face);
+    let mut sections: BTreeSet<[i32; 3]> = BTreeSet::new();
+    sections.extend(pieces.iter().map(|p| p.section().to_array()));
+    let mut face: Vec<Vec3> = Vec::new();
+    for at in &sections {
+        let section = Section {
+            base: &base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(*at),
+            progress: &Progress::Whole,
+        };
+        let drawn = draw(&section, &laid(&section), Reach::Near);
+        if let Some(surface) = drawn
+            .near
+            .get(&(earth.kind(), crate::mesh::Material::Masonry))
+        {
+            face.extend(
+                surface
+                    .indexed()
+                    .positions
+                    .into_iter()
+                    .filter(|p| p.z.abs() < 0.1),
+            );
+        }
+    }
+    // Behind the lintel the earth is sunk behind its face, so none of it shows through; round
+    // its top and ends it is built up proud of it, over its edges.
+    let (mut behind, mut over) = (0, 0);
+    for p in &face {
+        let Some(inside) = bed.inside(p.with_z(0.0)) else {
+            continue;
+        };
+        let out = -p.z;
+        if inside > 0.05 {
+            assert!(out < bed.face, "earth at {p} through the lintel");
+            behind += 1;
+        } else if inside > -0.01 && out > bed.face {
+            over += 1;
+        }
+    }
+    assert!(
+        behind > 20 && over > 3,
+        "{behind} behind, {over} over its edges"
+    );
 }

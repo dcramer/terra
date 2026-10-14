@@ -27,7 +27,7 @@
 
 use super::{Piece, Place, Scope, hash, ticks};
 use crate::kit::{Kit, Kits};
-use crate::mesh::{QuickMap, ROOF_THICK_M};
+use crate::mesh::QuickMap;
 use crate::{Base, CELL_M, Cube, Fill, Kind, Shape};
 use glam::{IVec3, Vec2, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
@@ -36,8 +36,6 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const STEP_M: f32 = CELL_M * 0.5;
 /// How far a roof of a kind with no kit is carried on past its edges.
 pub const EAVES_M: f32 = 0.5;
-/// How far short of the covering's edges a batten stops, in metres.
-const BATTEN_SHORT_M: f32 = 0.2;
 /// How many stages a roof cube goes up in: its frame, its battens, its covering and its
 /// trims, a step of its fill each (`kit.cost.steps`).
 pub const ROOF_STAGES: u8 = 4;
@@ -504,9 +502,11 @@ impl Roofs {
             .min_by(|a, b| a.total_cmp(b))
     }
 
-    /// The underside of the lowest roof over a point whose top is no lower than `above`.
+    /// Where a wall carried up under the lowest roof over a point, whose top is no lower
+    /// than `above`, is cut: the roof's deck, the plane its covering is laid on and the
+    /// boards under it are drawn on, so a gable closes to the roof with no gap under it.
     pub fn under_over(&self, x: f32, z: f32, above: f32) -> Option<f32> {
-        self.top_over(x, z, above).map(|top| top - ROOF_THICK_M)
+        self.top_over(x, z, above)
     }
 
     /// Where a point is on the roof whose top is nearest it: how far up from its lowest to
@@ -665,18 +665,19 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             let down = (planar_normal(from, to, a) + planar_normal(from, to, b))
                 .normalize_or(Vec3::Y)
                 * (batten + rafter);
-            // Stopped short of its ends by the eaves' reach, at the walls' faces, so its end
-            // never shows past the covering at a gable's apex.
-            let length = from.distance(to);
-            let trim = (to - from) / length.max(1e-3) * kit.eaves.min(length * 0.25);
-            pieces.push(Piece::Roof {
-                part: RoofPart::Rafter,
-                from: Place::near(from - down + trim),
-                to: Place::near(to - down - trim),
-                sides: segment.sides,
-                seed: hash(&[seed, 1]),
-                cell: roofs.cell(segment.square, 1),
-            });
+            // A ridge's beam bears on the gables' inner faces, inside the roof; a hip's
+            // and a valley's run on down to the eaves as the rafters do.
+            let level = segment.part == RoofPart::Ridge;
+            for (from, to) in framed(base, from - down, to - down, level) {
+                pieces.push(Piece::Roof {
+                    part: RoofPart::Rafter,
+                    from: Place::near(from),
+                    to: Place::near(to),
+                    sides: segment.sides,
+                    seed: hash(&[seed, 1]),
+                    cell: roofs.cell(segment.square, 1),
+                });
+            }
         }
         pieces.push(Piece::Roof {
             part: segment.part,
@@ -739,20 +740,88 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             }
         }
     }
+    // Each over the roof's own cubes, from wall to wall: none out under the eaves and
+    // verges, where the boards under the covering are all that shows, nor through a gable.
     for segment in join(battens) {
-        // Stopped a little short of its ends, inside the covering's edges.
-        let (from, to) = (segment.from.metres(), segment.to.metres());
-        let length = from.distance(to);
-        let short = (to - from) / length.max(1e-3) * BATTEN_SHORT_M.min(length * 0.25);
-        pieces.push(Piece::Roof {
-            part: RoofPart::Batten,
-            from: Place::near(from + short),
-            to: Place::near(to - short),
-            sides: segment.sides,
-            seed: 0,
-            cell: roofs.cell(segment.square, 2),
-        });
+        for (from, to) in framed(base, segment.from.metres(), segment.to.metres(), true) {
+            pieces.push(Piece::Roof {
+                part: RoofPart::Batten,
+                from: Place::near(from),
+                to: Place::near(to),
+                sides: segment.sides,
+                seed: 0,
+                cell: roofs.cell(segment.square, 2),
+            });
+        }
     }
+}
+
+/// How far apart a frame's piece is tried along it, in metres, for where it may run.
+const FRAME_STEP_M: f32 = 0.02;
+/// The shortest piece of frame left once cut, in metres.
+const FRAME_SHORTEST_M: f32 = 0.1;
+
+/// Where a piece of a roof's frame from `from` to `to` may run, cut into the pieces between:
+/// never inside a wall, a gable carried up into the roof included, so it stops at the
+/// wall's face and its end is never seen through it; and a `level` one (a batten, a
+/// ridge's beam) only over the roof's own cubes, so it stops inside the roof rather than
+/// running on out under a verge to end in the air. Rafters and the beams under hips and
+/// valleys, which fall to the eaves, run on out over them as rafters' tails do.
+fn framed(base: &Base, from: Vec3, to: Vec3, level: bool) -> Vec<(Vec3, Vec3)> {
+    let length = from.distance(to);
+    if length < 1e-4 {
+        return Vec::new();
+    }
+    let inside = |p: Vec3| {
+        let at = (p / CELL_M).floor().as_ivec3();
+        let wall = |at: IVec3| {
+            base.cube(at).is_some_and(|c| {
+                !c.kind.is_roof() && super::drawn_fill(&c) == Fill::Solid && !c.shape.is_cut()
+            })
+        };
+        let here = base.cube(at);
+        // A wall's cube, or a roof's standing on one: the wall carried up into it.
+        let in_wall = wall(at) || (here.is_some_and(|c| c.kind.is_roof()) && wall(at - IVec3::Y));
+        let over_roof = !level
+            || (-1..=1).any(|dy| {
+                base.cube(at + IVec3::Y * dy)
+                    .is_some_and(|c| c.kind.is_roof() && c.fill != Fill::Open)
+            });
+        !in_wall && over_roof
+    };
+    let steps = libm::ceilf(length / FRAME_STEP_M).max(1.0) as usize;
+    let at = |t: f32| from.lerp(to, t);
+    let t = |i: usize| i as f32 / steps as f32;
+    // Where it passes from inside to out between two tries, to a millimetre or so.
+    let edge = |mut good: f32, mut bad: f32| {
+        for _ in 0..6 {
+            let middle = (good + bad) * 0.5;
+            if inside(at(middle)) {
+                good = middle;
+            } else {
+                bad = middle;
+            }
+        }
+        good
+    };
+    let mut out = Vec::new();
+    let mut start: Option<f32> = None;
+    for i in 0..=steps {
+        let ok = inside(at(t(i)));
+        match (ok, start) {
+            (true, None) => start = Some(if i == 0 { 0.0 } else { edge(t(i), t(i - 1)) }),
+            (false, Some(s)) => {
+                out.push((at(s), at(edge(t(i - 1), t(i)))));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(s) = start {
+        out.push((at(s), to));
+    }
+    out.retain(|(a, b)| a.distance(*b) >= FRAME_SHORTEST_M);
+    out
 }
 
 /// A ridge a cube wide, the flat top of whole cubes along a roof's middle where its span
@@ -932,6 +1001,21 @@ fn rafters(roofs: &Roofs, ours: &dyn Fn(usize) -> bool, below: f32, pieces: &mut
                 continue;
             }
             let across = 2 - along;
+            // None along a verge: where a square either side is carried out past the edge
+            // of its cube across the slope, the line is a gable's face or out beyond it,
+            // where a rafter would lie on the wall or hang in the air under the verge.
+            let past = |q: usize| {
+                let square = &roofs.squares[q];
+                let (place, cube) = if across == 0 {
+                    (square.place[0], square.cube.x)
+                } else {
+                    (square.place[1], square.cube.z)
+                };
+                place.div_euclid(2) != cube
+            };
+            if past(q) || past(other) {
+                continue;
+            }
             let mine = roofs.triangle(q, side);
             let theirs = roofs.triangle(other, (side + 2) % 4);
             // Each falls along the line, the same way.
@@ -987,7 +1071,7 @@ pub(crate) fn gables(base: &Base, kit: &Kit, scope: Scope, pieces: &mut Vec<Piec
         }) {
             continue;
         }
-        if let Some(under) = underside(base, at, cube) {
+        if let Some(under) = underside(at, cube) {
             pieces.push(Piece::Gable { cube: at, under });
         }
     }
@@ -996,12 +1080,10 @@ pub(crate) fn gables(base: &Base, kit: &Kit, scope: Scope, pieces: &mut Vec<Piec
 /// The underside of a roof cube's roof over its corners, the middles of its sides and its
 /// middle, west to east and north to south, in ticks, if any of it is over the cube's
 /// bottom: what a wall carried up into it is cut at.
-pub(crate) fn underside(base: &Base, at: IVec3, cube: Cube) -> Option<[[i32; 3]; 3]> {
-    let covered = base.cube(at + IVec3::Y).is_some();
-    let under = |u: f32, v: f32| {
-        let top = (at.y as f32 + surface(cube.shape, u, v)) * CELL_M;
-        ticks(if covered { top } else { top - ROOF_THICK_M })
-    };
+pub(crate) fn underside(at: IVec3, cube: Cube) -> Option<[[i32; 3]; 3]> {
+    // Up to the roof's deck, the plane its covering lies on: the boards under the roof, its
+    // eaves and its verges are drawn on it, so the wall meets them in one straight line.
+    let under = |u: f32, v: f32| ticks((at.y as f32 + surface(cube.shape, u, v)) * CELL_M);
     let rows = [0.0, 0.5, 1.0].map(|v| [0.0, 0.5, 1.0].map(|u| under(u, v)));
     let highest = rows.iter().flatten().copied().max().unwrap_or(i32::MIN);
     (super::metres(highest) > at.y as f32 * CELL_M + 0.02).then_some(rows)
@@ -1055,12 +1137,17 @@ mod tests {
                 }
             }
         }
-        // The flat roof the room tool lays, off.
-        base.apply(BuildOp::Fill {
-            min: [-50, 5, -50],
-            max: [50, 5, 50],
-            cube: None,
-        });
+        // The flat roof the room tool lays, off, the walls' top layer left under the roof,
+        // as "add a roof" does.
+        for &[x, z] in &footprint {
+            if base.filling(IVec3::new(x, 0, z)).is_none() {
+                base.apply(BuildOp::Fill {
+                    min: [x, 5, z],
+                    max: [x, 5, z],
+                    cube: None,
+                });
+            }
+        }
         let plan = roofer::over(&footprint, 6, style, None);
         for (at, shape) in plan.roof {
             base.apply(BuildOp::Fill {
@@ -1157,9 +1244,9 @@ mod tests {
             let cube = piece.roof_cell().unwrap().cube;
             assert!(base.cube(cube).is_some_and(|c| c.kind == ROOF), "{piece:?}");
         }
-        // Rafters along every cube's edge up each slope, eleven between the verges a side,
-        // and a beam under the ridge.
-        assert_eq!(parts(&pieces, RoofPart::Rafter).len(), 2 * 11 + 1);
+        // Rafters along every cube's edge up each slope, nine a side from one gable's inner
+        // face to the other's, none on a gable or out under a verge, and a beam under the ridge.
+        assert_eq!(parts(&pieces, RoofPart::Rafter).len(), 2 * 9 + 1);
     }
 
     #[test]
@@ -1294,7 +1381,109 @@ mod tests {
             if let Piece::Gable { cube, under } = piece {
                 assert!(base.cube(*cube).is_some_and(|c| c.kind.is_roof()));
                 let highest = super::super::metres(*under.iter().flatten().max().unwrap());
-                assert!(highest > cube.y as f32 * CELL_M && highest < (cube.y + 1) as f32 * CELL_M);
+                assert!(
+                    highest > cube.y as f32 * CELL_M
+                        && highest <= (cube.y + 1) as f32 * CELL_M + 1e-3
+                );
+            }
+        }
+        // Cut along the roof's deck, the plane its covering lies on, with no gap under it:
+        // up the west gable's face the eaves are a storey up, rising a metre a metre to the
+        // ridge two metres in.
+        let deck = |z: f32| STOREY_M + z.min(4.0 - z);
+        let mut tried = 0;
+        for piece in &pieces {
+            let Piece::Gable { cube, under } = piece else {
+                continue;
+            };
+            if cube.x != 0 {
+                continue;
+            }
+            for k in 0..=10 {
+                let z = (cube.z as f32 + k as f32 / 10.0) * CELL_M;
+                let want = deck(z);
+                // Only where the deck crosses this cube, not the one over or under it.
+                if want < cube.y as f32 * CELL_M || want > (cube.y + 1) as f32 * CELL_M {
+                    continue;
+                }
+                let cut = gable_cut(*cube, under, Vec3::new(0.0, 0.0, z));
+                assert!(
+                    (cut - want).abs() < 0.005,
+                    "{cube} at {z}: cut at {cut}, deck {want}"
+                );
+                tried += 1;
+            }
+        }
+        assert!(tried > 20, "{tried}");
+    }
+
+    /// Every point along a piece of a roof's frame, a rafter, a beam or a batten.
+    fn frame_points(pieces: &[Piece]) -> Vec<(Vec3, bool)> {
+        pieces
+            .iter()
+            .filter_map(|p| match *p {
+                Piece::Roof {
+                    part: RoofPart::Rafter | RoofPart::Batten,
+                    from,
+                    to,
+                    ..
+                } => Some((from.metres(), to.metres())),
+                _ => None,
+            })
+            .flat_map(|(a, b)| {
+                let level = (a.y - b.y).abs() < 1e-3;
+                (0..=20).map(move |i| (a.lerp(b, i as f32 / 20.0), level))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn no_piece_of_a_frame_crosses_a_gable_or_ends_in_the_air_past_it() {
+        // Five metres by four, the gables' outer faces at x = 0 and 5, their inner faces
+        // half a metre in.
+        let base = roofed(&[([0, 0, 0], [9, 0, 7])], Style::Gable);
+        let points = frame_points(&laid(&base));
+        assert!(points.len() > 100);
+        for (p, _) in points {
+            assert!(
+                (0.5 - 1e-3..=4.5 + 1e-3).contains(&p.x),
+                "a piece of frame at {p}, in a gable or out past it"
+            );
+        }
+    }
+
+    #[test]
+    fn a_level_piece_of_frame_runs_only_over_the_rooms_of_any_plan() {
+        // An L, a T and a U of gables: no batten or ridge beam in a wall, gable or not, nor
+        // out past the walls under an eave or a verge.
+        for shape in ["L", "T", "U"] {
+            let (rooms, _) = crate::roof_plan(shape, Style::Gable, Style::Gable);
+            let rooms: Vec<([i32; 3], [i32; 3])> = rooms.to_vec();
+            let base = roofed(&rooms, Style::Gable);
+            // In the plan, and not in its outer walls: every column round it in the plan too.
+            let planned = |x: i32, z: i32| {
+                rooms.iter().any(|(min, max)| {
+                    (min[0]..=max[0]).contains(&x) && (min[2]..=max[2]).contains(&z)
+                })
+            };
+            let inside =
+                |x: i32, z: i32| (-1..=1).all(|dx| (-1..=1).all(|dz| planned(x + dx, z + dz)));
+            let points = frame_points(&laid(&base));
+            assert!(points.iter().any(|(_, level)| *level), "{shape}");
+            for (p, level) in points {
+                let (x, z) = (
+                    libm::floorf(p.x / CELL_M) as i32,
+                    libm::floorf(p.z / CELL_M) as i32,
+                );
+                // On a cube's edge, either side will do.
+                let near = |a: f32| (a / CELL_M - libm::roundf(a / CELL_M)).abs() < 1e-3;
+                let xs = if near(p.x) { vec![x - 1, x] } else { vec![x] };
+                let zs = if near(p.z) { vec![z - 1, z] } else { vec![z] };
+                let over_a_room = xs.iter().any(|&x| zs.iter().any(|&z| inside(x, z)));
+                assert!(
+                    !level || over_a_room,
+                    "{shape}: a level piece of frame at {p}"
+                );
             }
         }
     }

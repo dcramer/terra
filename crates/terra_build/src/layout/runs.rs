@@ -15,7 +15,6 @@ use super::roles::Role;
 use super::roofs::Roofs;
 use super::{Axis, Layout, Piece, Place, Split, Spot, TICKS, Walls, hash, metres, ticks, unit};
 use crate::kit::{Kit, Kits};
-use crate::mesh::ROOF_THICK_M;
 use crate::{CELL_M, Fill};
 use glam::{IVec3, Vec3};
 
@@ -265,6 +264,7 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
                 .cube((p.with_y(foot + 0.01) / CELL_M).floor().as_ivec3())
                 .is_some_and(|cube| cube.kind.is_roof());
             let (mut lowest, mut over, mut any) = (f32::MAX, !in_roof, false);
+            let (mut least, mut most) = (f32::MAX, f32::MIN);
             for side in [-1.0, 0.0, 1.0] {
                 let q = p + across * reach * side;
                 let Some(top) = roofs.top_over(q.x, q.z, foot - NEAR_ROOF_M) else {
@@ -272,7 +272,14 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
                 };
                 any = true;
                 over &= foot >= top - 1e-3;
-                lowest = lowest.min(top - ROOF_THICK_M - foot);
+                lowest = lowest.min(top - foot);
+                (least, most) = (least.min(top), most.max(top));
+            }
+            // Where the roof falls across the log, as along the eaves, the log has no end
+            // to cut to it there: it fits whole under the roof's deck or not at all. Where
+            // it falls along it, as up a gable, its end is cut to the slope (`lean`).
+            if most - least > 0.01 {
+                lowest -= 2.0 * radius;
             }
             (any && !over).then_some(lowest)
         };
@@ -633,7 +640,7 @@ mod tests {
                         continue;
                     };
                     assert!(
-                        at.y + r <= top - ROOF_THICK_M + 3e-3,
+                        at.y + r <= top + 3e-3,
                         "{style:?}: a log at {at} meets the roof at {top}"
                     );
                 }

@@ -288,7 +288,7 @@ fn face(framer: &Framer, plane: Plane, cells: &BTreeSet<(i32, i32)>, out: &mut O
         }
         let over = cube_of(plane, column, top);
         let cube = framer.base.cube(over).filter(|cube| cube.kind.is_roof())?;
-        let under = super::roofs::underside(framer.base, over, cube)?;
+        let under = super::roofs::underside(over, cube)?;
         Some(super::roofs::gable_cut(over, &under, at(u, 0.0)))
     };
     // How far a gable's member at a height may run out along it toward the roof from a point,

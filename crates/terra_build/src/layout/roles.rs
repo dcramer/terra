@@ -301,6 +301,12 @@ impl<'a> Roles<'a> {
     pub fn beyond(&self, at: IVec3) -> Beyond {
         match self.base.cube(at) {
             Some(cube) if drawn_fill(&cube) == Fill::Solid => {
+                // A roof's cube standing on a whole cube of the kind is the wall carried up
+                // into it to the roof (D241), a gable or the wedge under an eave: the wall
+                // runs on into it, with no top, cap or corner where it begins.
+                if cube.kind.is_roof() && self.ours(at - IVec3::Y) {
+                    return Beyond::Same;
+                }
                 if cube.kind == self.kind && cube.shape.is_cut() {
                     Beyond::Cut
                 } else if cube.kind == self.kind {
@@ -635,6 +641,55 @@ mod tests {
             fill(&mut base, at.to_array(), at.to_array(), STONE);
         }
         assert_eq!(count(&all(&base), Role::Crest), 0);
+    }
+
+    #[test]
+    fn a_gable_carried_up_into_its_roof_has_no_edge_at_its_steps() {
+        // A gable of stone under roof cubes of a roof kit: the wall runs on into the roof
+        // cubes standing on it, so the steps the gable's cubes climb in have no corner up
+        // them, no cap or top along them, nothing to stand out under the roof.
+        let mut kits = kits();
+        kits.0.push(Kit {
+            id: Kind::FIRST_ROOF.0,
+            pattern: Pattern::Roof,
+            ..Kit::default()
+        });
+        let mut base = Base::default();
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [7, 0, 5],
+            kind: STONE,
+        });
+        let footprint = (0..8).flat_map(|x| (0..6).map(move |z| [x, z])).collect();
+        let plan = crate::roofer::over(&footprint, 6, crate::roofer::Style::Gable, None);
+        for (at, shape) in plan.roof {
+            base.apply(BuildOp::Fill {
+                min: at.to_array(),
+                max: at.to_array(),
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                }),
+            });
+        }
+        for at in plan.gables {
+            fill(&mut base, at.to_array(), at.to_array(), STONE);
+        }
+        let roles = Roles::new(&base, STONE, &kits);
+        let gable: Vec<IVec3> = base
+            .cubes()
+            .filter(|(at, c)| c.kind == STONE && at.y >= 6)
+            .map(|(at, _)| at)
+            .collect();
+        assert!(gable.len() > 10);
+        for at in gable {
+            for edge in roles.edges(at) {
+                assert!(
+                    edge.other != Dir::Up && edge.role != Role::Arris,
+                    "{at}: {edge:?} on a gable under its roof"
+                );
+            }
+        }
     }
 
     #[test]

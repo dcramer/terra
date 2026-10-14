@@ -290,7 +290,17 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
             };
             if at == section.at {
                 own.push(placed(piece));
-            } else if (fraction || matches!(piece, Piece::Block { .. } | Piece::Gable { .. }))
+            } else if (fraction
+                // Blocks round the edge, and the lintels and sills bedded in them, whose
+                // beds reach a little past their cubes (`dress::Bed`).
+                || matches!(piece, Piece::Block { .. } | Piece::Gable { .. })
+                || matches!(
+                    piece,
+                    Piece::Trim {
+                        role: layout::Role::Head | layout::Role::Sill,
+                        ..
+                    }
+                ))
                 && piece.anchor().cmpge(low).all()
                 && piece.anchor().cmple(high).all()
             {
@@ -1005,9 +1015,21 @@ fn draw_blocks(
     };
     let sides = |uv: [f32; 2]| relief.map_or(0.5, |relief| relief.at(uv));
     let top = |uv: [f32; 2]| top.map_or(0.5, |relief| relief.at(uv));
+    // The face sunk behind every lintel and sill set into it, so each sits in the wall.
+    let beds: Vec<crate::dress::Bed> = own
+        .iter()
+        .chain(edge)
+        .filter_map(|(_, piece, _)| crate::dress::bed(piece, kit))
+        .collect();
+    let bed = |p: Vec3| {
+        beds.iter()
+            .filter_map(|b| b.inside(p).map(|inside| (inside, b.face)))
+            .max_by(|a, b| a.0.total_cmp(&b.0))
+    };
     let heights = Heights {
         sides: &sides,
         top: &top,
+        bed: (!beds.is_empty()).then_some(&bed as &dyn Fn(Vec3) -> Option<(f32, f32)>),
     };
     // Floors, and walls of kinds drawn as boxes, hide a face; walls of other kits do not,
     // being thinner than the cube, nor a roof's cubes, drawn as a roof over them.
@@ -1034,6 +1056,7 @@ fn draw_blocks(
     let plan_heights = Heights {
         sides: &flat,
         top: &flat,
+        bed: None,
     };
     let mut out: [Surfaces; 3] = [
         Surfaces::sharing(),
@@ -1170,6 +1193,7 @@ fn draw_blocks(
         let core_heights = Heights {
             sides: &woven,
             top: &woven,
+            bed: None,
         };
         let built = &sets[0];
         let hides = |at: IVec3| hides_always(at) || built.contains(&at.to_array());
