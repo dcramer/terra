@@ -18,7 +18,7 @@
 //!                      a cut block rises                                 (or Z and C)
 //!   R                  the next variant of the part
 //!   Q                  take-apart mode, and back
-//!   F                  move mode, and back
+//!   G                  move mode, and back
 //!   X                  the grid on and off: items snap to it and turn in eighths
 //!   Hold Alt           the opposite of the grid setting, while held
 //!   Ctrl and wheel     the material walls, floors, roofs and blocks are laid in (D232);
