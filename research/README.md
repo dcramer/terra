@@ -36,6 +36,7 @@ Plans and decisions live in [docs](../docs). A finding here does not change the 
 | [role-pieces.md](role-pieces.md) | Which way of giving each exposed face, edge and corner of a cube a look by its role and neighbours brings stone, logs and roofs on par with Enshrouded: role layers and masks, swept profiles and corner pieces, or modules? |
 | [goals-review-2026-10-13.md](goals-review-2026-10-13.md) | Does the building system as built match the developers' goals: Enshrouded's voxel approach, building by hand, the cube as the truth, the art guide, 300 buildings? |
 | [goals-review-2026-10-14.md](goals-review-2026-10-14.md) | Since the first review, has building kept to the developers' goals: hand-made pieces (D251), building by hand, the cube as the truth, performance at scale? |
+| [goals-review-2026-10-15.md](goals-review-2026-10-15.md) | Since the second review: are D251's modelled pieces what the developers asked for, were its findings fixed or papered over, and what is measured at scale? |
 | [enshrouded-parity.md](enshrouded-parity.md) | Feature by feature, how does Enshrouded's building compare with ours as built, and what closes each gap on our cube store, operations and layouts without rebuilding them? |
 | [tripo-studio-credits.md](tripo-studio-credits.md) | Can scripts spend our Tripo subscription's credits instead of API credits? |
 | [tripo-studio-api.md](tripo-studio-api.md) | What does each Studio operation take and return, so a script can do everything the web app does? |
