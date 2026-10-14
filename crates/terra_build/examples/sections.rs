@@ -15,6 +15,14 @@ use terra_build::sections::{self, Progress, Reach, Section};
 
 /// The bar for a section laid and merged on a worker, in milliseconds.
 const BAR_MS: f32 = 2.0;
+/// The budget for the finest detail of the block kinds (D284): triangles a cube of them,
+/// and MiB of mesh a building, every section of it drawn near at once, as a player beside
+/// it has it.
+const NEAR_TRIANGLES_A_CUBE: f32 = 200.0;
+const NEAR_MIB_A_BASE: f32 = 16.0;
+/// What a corner of a textured mesh takes on the GPU, as the game uploads it: position,
+/// normal, tangent, colour and texture place.
+const NEAR_CORNER_BYTES: usize = 12 + 12 + 16 + 16 + 8;
 
 fn main() -> ExitCode {
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
@@ -47,6 +55,9 @@ fn main() -> ExitCode {
     // Triangles of every section at each detail: near, mid, far and proxy.
     let mut triangles = [0usize; 4];
     let mut by_kind: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
+    // Near detail's triangles and bytes by pattern and material, and the cubes drawn.
+    let mut near_by: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
+    let mut block_cubes = 0usize;
     let roof = |walls: terra_build::Kind| {
         kits.roof_for(walls)
             .unwrap_or(terra_build::Kind::FIRST_ROOF)
@@ -58,10 +69,14 @@ fn main() -> ExitCode {
         {
             continue;
         }
-        let mut base = Base::default();
-        for op in ops {
-            base.apply(op);
-        }
+        let base = Base::from_shortcuts(&ops);
+        block_cubes += base
+            .cubes()
+            .filter(|(_, c)| {
+                kits.of(c.kind)
+                    .is_some_and(|k| k.pattern == Pattern::Masonry)
+            })
+            .count();
         let progress = Progress::Whole;
         // Laid whole once, as the game's first job for a change does.
         let started = Instant::now();
@@ -100,6 +115,19 @@ fn main() -> ExitCode {
                     Reach::Far => drawn.far.triangle_count(),
                 };
                 triangles[slot] += finest;
+                if reach == Reach::Near {
+                    for ((kind, material), surface) in &drawn.near {
+                        let pattern = kits.of(*kind).map_or(Pattern::Masonry, |k| k.pattern);
+                        let all = surface.indexed();
+                        let entry = near_by
+                            .entry(format!("{pattern:?} {material:?}"))
+                            .or_default();
+                        entry.0 += all.triangle_count();
+                        // As the game uploads it: position, normal, colour, tangent and
+                        // texture place a corner, and an index each.
+                        entry.1 += all.positions.len() * NEAR_CORNER_BYTES + all.indices.len() * 4;
+                    }
+                }
                 if reach == Reach::Far {
                     triangles[3] += sections::proxy(&section).triangle_count();
                     if std::env::var_os("BY_KIND").is_some() {
@@ -158,6 +186,26 @@ fn main() -> ExitCode {
     for (kind, (far, proxy)) in &by_kind {
         println!("  {kind:12} far {far:9} proxy {proxy:9}");
     }
+    // Near detail, as dense as it is drawn where a player stands beside it, by what it is
+    // drawn in; and the block kinds' surface and dress against their budget (D284).
+    println!("Near, by pattern and material, triangles and MiB:");
+    for (what, (tri, bytes)) in &near_by {
+        println!(
+            "  {what:22} {tri:9} {:7.1} MiB",
+            *bytes as f32 / (1024.0 * 1024.0)
+        );
+    }
+    let (block_triangles, block_bytes) = near_by
+        .iter()
+        .filter(|(what, _)| what.starts_with("Masonry"))
+        .fold((0, 0), |(t, b), (_, &(tri, bytes))| (t + tri, b + bytes));
+    let per_cube = block_triangles as f32 / block_cubes.max(1) as f32;
+    let per_base = block_bytes as f32 / buildings.max(1) as f32 / (1024.0 * 1024.0);
+    let dense = per_cube <= NEAR_TRIANGLES_A_CUBE && per_base <= NEAR_MIB_A_BASE;
+    println!(
+        "Block kinds near, surface and dress: {per_cube:.0} triangles a cube of them, {per_base:.2} MiB a building; the budget {NEAR_TRIANGLES_A_CUBE} and {NEAR_MIB_A_BASE} MiB: {}",
+        if dense { "met" } else { "MISSED" }
+    );
     report_edits(&mut edits);
     slowest.sort_by(|a, b| b.0.total_cmp(&a.0));
     println!("The slowest:");
@@ -168,7 +216,7 @@ fn main() -> ExitCode {
         "The bar: a section laid and merged in under {BAR_MS} ms (median): {}",
         if met { "met" } else { "MISSED" }
     );
-    if met {
+    if met && dense {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE

@@ -145,3 +145,20 @@ A castle edit still waits about 300 ms on a worker before it is drawn: a row of 
 | `bevy_transform` (dirty trees and propagation) | 0.52 | 9.3 |
 
 and on the render thread `render_system` 4.7 ms, 2.8 of it submitting command buffers. No one system of the game's is the frame: the update is many engine systems over many entities (some 4,700 meshes drawn), on a machine whose load stretched every one of them, so the frames' worst moments were systems of a few hundredths of a millisecond taking 20 to 50 ms when their threads were not run. The one that was ours, `terrain::choose`, worked out which chunks of ground are wanted on the main thread every 4 m walked, 17 ms each time; it is done on a worker now (76a68a3), and the next run, at load 20, had the game's update at 9.8 ms, frames 11.9 / 29.3 / 132 ms, with `choose` gone from the costly systems. The rest is entities and draws, for D278's merging and the render thread's encoding to bring down.
+
+## Up close: the block surface (D284)
+
+Near detail was the street walk's cost: the village's fifty buildings drawn near come to 14.2 million triangles (`cargo xtask sections`), and every exposed face of a block kind's cube was ten by ten squares, 200 triangles, its stone's relief displaced into it, wherever it was within 25 m.
+
+Now a face has points only where its shape bends, across the rounding of its open edges, and is otherwise one flat square; the relief is the material's normal map and parallax; faces of different detail share their points along the lines they meet on, so the surface stays closed. The village's near detail is 10.8 million triangles; what is left, by what it is drawn in:
+
+| Near | Triangles | MiB |
+|---|---|---|
+| Logs: logs, ends, decks, hewn members, daub | 6.9 M | 354 |
+| Roofs: coverings, boards, logs | 2.2 M | 256 |
+| Block kinds: surface and floors | 0.78 M | 42 |
+| Block kinds: dress (corner stones, plinths, copings, lintels) | 0.85 M | 64 |
+
+The block kinds' surface and dress come to 175 triangles a cube of them and 2.1 MiB a building, within a budget of 200 and 16 MiB, which `cargo xtask sections` now checks and fails over; the dress modules (D258) are half of it, the next to bring down. The timber kinds' logs, at 5.5 million triangles, and the roofs' modules are the street walk's next cost; they are not block surfaces.
+
+Stone, earth and brick, before and after, at 2, 5 and 10 m on the 5090: the same, the stone's joints as deep by parallax as by displacement at 2 m, earth's lifts and lumps kept in its shape, a wall's silhouette along its open edge straighter where the stone's displacement had broken it.

@@ -388,19 +388,20 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
             };
             if at == section.at {
                 own.push(placed(piece));
-            } else if (fraction
+            } else if ((fraction || matches!(piece, Piece::Block { .. } | Piece::Gable { .. }))
                 // Blocks round the edge, and the lintels and sills bedded in them, whose
-                // beds reach a little past their cubes (`dress::Bed`).
-                || matches!(piece, Piece::Block { .. } | Piece::Gable { .. })
-                || matches!(
+                // beds reach a little past their cubes (`dress::Bed`), a cube further: the
+                // cubes round the edge are drawn as finely as a bed near them asks (D284).
+                && piece.anchor().cmpge(low).all()
+                && piece.anchor().cmple(high).all())
+                || (matches!(
                     piece,
                     Piece::Trim {
                         role: layout::Role::Head | layout::Role::Sill,
                         ..
                     }
-                ))
-                && piece.anchor().cmpge(low).all()
-                && piece.anchor().cmple(high).all()
+                ) && piece.anchor().cmpge(low - IVec3::ONE).all()
+                    && piece.anchor().cmple(high + IVec3::ONE).all())
             {
                 edge.push(placed(piece));
             }
@@ -1214,6 +1215,9 @@ fn draw_blocks(
         // What is built hides what is not; the rest show their own faces.
         let built = &sets[0];
         let hides = |at: IVec3| hides_always(at) || (set != 0 && built.contains(&at.to_array()));
+        // Its whole cubes and its cut ones, drawn apart into one surface.
+        let kin =
+            |at: IVec3| sets[set].contains(&at.to_array()) || shaped[set].contains(&at.to_array());
         let (look, heights) = if set == 1 {
             (&plan_look, &plan_heights)
         } else {
@@ -1228,6 +1232,7 @@ fn draw_blocks(
         crate::surface::draw_part(
             &sets[set],
             &keep,
+            &kin,
             &hides,
             look,
             heights,
@@ -1261,6 +1266,7 @@ fn draw_blocks(
             crate::surface::draw_part(
                 &cut_down,
                 &keep,
+                &kin,
                 &hides,
                 look,
                 heights,
@@ -1348,6 +1354,7 @@ fn draw_blocks(
         crate::surface::draw_part(
             &cores,
             &keep,
+            &|at| cores.contains(&at.to_array()),
             &hides,
             &core_look,
             &core_heights,

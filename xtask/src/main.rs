@@ -149,7 +149,7 @@ const TASKS: &[Task] = &[
     Task {
         name: "sections",
         takes: "[building]",
-        does: "time laying and merging the village's sections, as the game's workers do, against the 2 ms bar",
+        does: "time laying and merging the village's sections, as the game's workers do, against the 2 ms bar, and the block kinds' near triangles and MiB against their budget (D284)",
         group: "Play and check",
         run: sections,
     },

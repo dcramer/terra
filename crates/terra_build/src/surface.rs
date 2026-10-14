@@ -114,6 +114,12 @@ const BED_DEPTH_M: f32 = 0.008;
 const BED_LAP_M: f32 = 0.035;
 const BED_OVER_M: f32 = 0.012;
 
+/// The most triangles a block kind's exposed cube face may take, on average, at the finest
+/// detail (D284): a flat face is two, one rounded along an open edge a dozen or so, a
+/// corner's a few dozen. Checked on a wall here, and on the village by `cargo xtask
+/// sections`, which fails over it.
+pub const NEAR_TRIANGLES_A_FACE: f32 = 16.0;
+
 /// How far an inside corner's relief fades out from it, in metres.
 const INSIDE_FADE_M: f32 = 0.06;
 
@@ -158,6 +164,7 @@ pub fn draw(
     draw_part(
         cubes,
         &|_| true,
+        &|at| cubes.contains(&at.to_array()),
         hides,
         look,
         heights,
@@ -192,6 +199,7 @@ pub fn draw_cut(
     draw_part(
         cubes,
         &|_| true,
+        &|at| cubes.contains(&at.to_array()),
         hides,
         look,
         heights,
@@ -296,6 +304,9 @@ const FULL: u8 = 2;
 /// out, so the edges and shading where they meet the kept ones come out as they would
 /// with all of them drawn, and left out. A section drawn with the cubes a step beyond its
 /// edge meets its neighbour's surface with no seam (docs/building-plan.md, drawing).
+/// `kin` says which cubes are drawn into the same surface, in this call or another (a
+/// section's whole cubes and its cut ones are drawn apart), so faces meeting across calls
+/// put their points in the same places along the line they share.
 ///
 /// The cubes, whether those round them are full, their shrunk boxes and the inside edges
 /// are kept in a [`Grid`]; a point further than the bevel from its face's edges is nearest
@@ -305,6 +316,7 @@ const FULL: u8 = 2;
 pub fn draw_part(
     cubes: &BTreeSet<[i32; 3]>,
     keep: &dyn Fn(IVec3) -> bool,
+    kin: &dyn Fn(IVec3) -> bool,
     hides: &dyn Fn(IVec3) -> bool,
     look: &Look,
     heights: &Heights,
@@ -475,6 +487,62 @@ pub fn draw_part(
         hash.write_u64(word);
         Some(hash.finish())
     };
+    // Where a cube's faces' points fall across it along an axis, as fractions of a cube: a
+    // cube cut, or with a piece bedded near it, evenly at its steps, as its
+    // shape there needs; any other only where its shape bends (`across`), its stone flat
+    // between, its relief left to its maps. A cube's, whichever of its faces asks, so the
+    // faces round a line agree on it.
+    let even: Vec<f32> = (0..=n).map(|i| i as f32 / n as f32).collect();
+    // Whether a piece is bedded within reach of any of a cube's faces: read at each face's
+    // corners and middle, no point of the face further than half a cube from one of them.
+    let bedded_near = |c: IVec3| {
+        heights.bed.is_some_and(|bed| {
+            let low = c.as_vec3() * CELL_M;
+            FACES.iter().any(|&(axis, side)| {
+                let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+                [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]]
+                    .iter()
+                    .any(|&[u, v]| {
+                        let mut p = low;
+                        p[axis] += if side > 0.0 { CELL_M } else { 0.0 };
+                        p[a] += u * CELL_M;
+                        p[b] += v * CELL_M;
+                        bed(p).is_some_and(|(inside, _)| inside > -(BED_LAP_M + CELL_M * 0.5))
+                    })
+            })
+        })
+    };
+    // Whether a cube that may be cut is: its cut passes through it somewhere over its top's
+    // corners or middle.
+    let really_cut = |c: IVec3| {
+        (cuts.of)(c) && {
+            let low = c.as_vec3() * CELL_M;
+            [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]]
+                .iter()
+                .any(|&[u, v]| {
+                    let p = low + Vec3::new(u, 0.5, v) * CELL_M;
+                    let [under, over] = cut(c, p);
+                    over < low.y + CELL_M - 1e-4 || under > low.y + 1e-4
+                })
+        }
+    };
+    // Asked only of a cube itself, never of those round it, so a section and its neighbour,
+    // each knowing the cubes a step past its edge and no further, agree on the cubes they
+    // share. A side against a cut cube follows the cut's line between its corners, which a
+    // slope's or a roof's underside is, straight across a cube.
+    let uneven = |c: IVec3| really_cut(c) || bedded_near(c);
+    // Whether a cube's side toward another is open as far as where its points fall goes:
+    // but against a cube drawn into the same surface. Read from `kin` alone, the same in
+    // every call that draws into the surface; open where it is not quite (against another
+    // kind's cube, say) only adds points where none are needed.
+    let open = |c: IVec3| !kin(c);
+    let grid_of = |c: IVec3, axis: usize| -> Vec<f32> {
+        if uneven(c) {
+            even.clone()
+        } else {
+            across(open(c - step(axis, 1)), open(c + step(axis, 1)), look)
+        }
+    };
     let call = caching.as_ref().map_or(0, |caching| caching.call);
     let old = caching.as_ref().and_then(|caching| caching.old);
     // Each face drawn: a grid of points, placed once each, and its triangles' corners in it.
@@ -540,6 +608,50 @@ pub fn draw_part(
                     .any(|&(i, j)| bed(point(i, j)).is_some_and(|(inside, _)| inside > -CELL_M))
             });
             let signed = if bedded { None } else { signed };
+            // Where its points are across it, as fractions of a cube each way (`grid_of`),
+            // and along each of its sides every point any face on that side's line has, so
+            // faces meet point for point with no crack: each side's line is shared by the
+            // four cubes round it, and all of them take the points of all four.
+            let along_a = grid_of(cube, a);
+            let along_b = grid_of(cube, b);
+            let (na, nb) = (along_a.len() - 1, along_b.len() - 1);
+            let line = |along: usize, over: usize, toward: i32| -> Vec<f32> {
+                let mut all = Vec::new();
+                for x in [
+                    cube,
+                    cube + step(over, toward),
+                    beyond,
+                    beyond + step(over, toward),
+                ] {
+                    if kin(x) {
+                        all.extend(grid_of(x, along));
+                    }
+                }
+                all.sort_by(f32::total_cmp);
+                all.dedup_by(|x, y| (*x - *y).abs() < 1e-5);
+                all
+            };
+            let missing = |line: Vec<f32>, own: &[f32]| -> Vec<f32> {
+                line.into_iter()
+                    .filter(|&t| own.iter().all(|&o| (o - t).abs() >= 1e-5))
+                    .collect()
+            };
+            // The points each side lacks of its line's: along `a` on the sides at `b`'s low
+            // and high edges, along `b` on those at `a`'s.
+            let more = [
+                missing(line(a, b, -1), &along_a),
+                missing(line(a, b, 1), &along_a),
+                missing(line(b, a, -1), &along_b),
+                missing(line(b, a, 1), &along_b),
+            ];
+            let param = |u: f32, v: f32| {
+                let mut p = Vec3::ZERO;
+                p[axis] = plane;
+                p[a] = low[a] + CELL_M * u;
+                p[b] = low[b] + CELL_M * v;
+                p
+            };
+            let point = |i: usize, j: usize| param(along_a[i], along_b[j]);
             // As it was drawn last time, if nothing round it has changed since.
             if let (Some(signed), Some(old)) = (signed, old)
                 && let Some(data) = old.faces.get(&(call, cube, index as u8))
@@ -598,7 +710,7 @@ pub fn draw_part(
                     && face_high[b] - p[b] > margin
             };
             let own = [own_box];
-            let place = |p: Vec3| -> Vec3 {
+            let place = |p: Vec3| -> (Vec3, Vec3) {
                 let boxes: &[(Vec3, Vec3)] = if inner(p) { &own } else { &round };
                 let nearest = boxes
                     .iter()
@@ -628,7 +740,8 @@ pub fn draw_part(
                 let packed = look
                     .packed
                     .map_or(0.0, |packed| packed.at(p, outward, stepping));
-                let relief = displaced(p, outward, look, heights);
+                // Flat but for its packing: its stone's relief is drawn from its maps.
+                let relief = 0.0;
                 let mut out = (relief + packed) * faded;
                 // Sunk behind a piece set into it, a little deeper than its deepest relief,
                 // and built up over its edges round its outline.
@@ -646,7 +759,14 @@ pub fn draw_part(
                     out += (deepest - out) * sunk;
                     out = out.max(over * (face + BED_OVER_M));
                 }
-                rounded + outward * out
+                // Its normal the rounding's where it is no more than rounded, the same
+                // worked out from any face; else from its triangles (`ZERO`).
+                let exact = if out.abs() < 1e-7 {
+                    outward
+                } else {
+                    Vec3::ZERO
+                };
+                (rounded + outward * out, exact)
             };
             // Wound so each triangle faces out along the face's normal.
             let flip = side < 0.0;
@@ -657,9 +777,11 @@ pub fn draw_part(
             };
             let mut face = FaceData {
                 signature: signed,
-                points: Vec::with_capacity((n + 1) * (n + 1)),
-                uvs: Vec::with_capacity((n + 1) * (n + 1)),
-                triangles: Vec::with_capacity(n * n * 2),
+                points: Vec::with_capacity((na + 1) * (nb + 1)),
+                rim: Vec::with_capacity((na + 1) * (nb + 1)),
+                exact: Vec::with_capacity((na + 1) * (nb + 1)),
+                uvs: Vec::with_capacity((na + 1) * (nb + 1)),
+                triangles: Vec::with_capacity(na * nb * 2),
                 top,
                 local: Vec::new(),
                 normals: Vec::new(),
@@ -676,40 +798,116 @@ pub fn draw_part(
                 p.y.max(low).min(high)
             };
             flat.clear();
-            for i in 0..=n {
-                for j in 0..=n {
-                    let p = point(i, j);
-                    let [low, high] = if cut_here {
-                        cut(cube, p)
-                    } else {
-                        [f32::MIN, f32::MAX]
-                    };
-                    // A side is cut before it is rounded and displaced, and textured where
-                    // the point ends up, so the texture runs on unstretched to the cut and
-                    // points cut to the same place stay one.
-                    let mut s = if axis == 1 || !cut_here {
-                        p
-                    } else {
-                        p.with_y(p.y.max(low).min(high))
-                    };
-                    if against_cut {
-                        s.y = s.y.max(cut(beyond, p)[1].min(high));
-                    }
-                    let mut q = place(s);
-                    if cut_here {
-                        q.y = q.y.max(low).min(high);
-                    }
-                    if against_cut {
-                        q.y = q.y.max(cut(beyond, p)[1].min(high));
-                    }
-                    face.points.push(q);
-                    flat.push(p.with_y(clipped(p)));
-                    face.uvs.push(planar(s, normal, metres));
+            // A point of the face added: placed, where it would be unrounded, and textured.
+            let add = |p: Vec3, rim: bool, face: &mut FaceData, flat: &mut Vec<Vec3>| {
+                let [low, high] = if cut_here {
+                    cut(cube, p)
+                } else {
+                    [f32::MIN, f32::MAX]
+                };
+                // A side is cut before it is rounded and displaced, and textured where the
+                // point ends up, so the texture runs on unstretched to the cut and points cut
+                // to the same place stay one.
+                let mut s = if axis == 1 || !cut_here {
+                    p
+                } else {
+                    p.with_y(p.y.max(low).min(high))
+                };
+                if against_cut {
+                    s.y = s.y.max(cut(beyond, p)[1].min(high));
+                }
+                let (mut q, mut exact) = place(s);
+                let placed = q;
+                if cut_here {
+                    q.y = q.y.max(low).min(high);
+                }
+                if against_cut {
+                    q.y = q.y.max(cut(beyond, p)[1].min(high));
+                }
+                if q != placed {
+                    exact = Vec3::ZERO;
+                }
+                face.points.push(q);
+                face.exact.push(exact);
+                face.rim.push(rim);
+                flat.push(p.with_y(clipped(p)));
+                face.uvs.push(planar(s, normal, metres));
+                (face.points.len() - 1) as u32
+            };
+            for i in 0..=na {
+                for j in 0..=nb {
+                    let rim = i == 0 || j == 0 || i == na || j == nb;
+                    add(point(i, j), rim, &mut face, &mut flat);
                 }
             }
-            let at = |i: usize, j: usize| (i * (n + 1) + j) as u32;
-            for i in 0..n {
-                for j in 0..n {
+            // The points its sides lack of their lines', each with where it is along its side.
+            let [bottom, top_side, left, right] = [0, 1, 2, 3].map(|s| {
+                more[s]
+                    .iter()
+                    .map(|&t| {
+                        let p = match s {
+                            0 => param(t, 0.0),
+                            1 => param(t, 1.0),
+                            2 => param(0.0, t),
+                            _ => param(1.0, t),
+                        };
+                        (t, add(p, true, &mut face, &mut flat))
+                    })
+                    .collect::<Vec<(f32, u32)>>()
+            });
+            let at = |i: usize, j: usize| (i * (nb + 1) + j) as u32;
+            let within = |extra: &[(f32, u32)], from: f32, to: f32| -> Vec<(f32, u32)> {
+                extra
+                    .iter()
+                    .copied()
+                    .filter(|&(t, _)| t > from && t < to)
+                    .collect()
+            };
+            for i in 0..na {
+                for j in 0..nb {
+                    // The points a cell on the face's rim takes from its neighbours' sides,
+                    // round it in order: along its bottom, up its right, back along its top,
+                    // down its left.
+                    let (a0, a1, b0, b1) = (along_a[i], along_a[i + 1], along_b[j], along_b[j + 1]);
+                    let mut ring: Vec<u32> = vec![at(i, j)];
+                    if j == 0 {
+                        ring.extend(within(&bottom, a0, a1).iter().map(|&(_, c)| c));
+                    }
+                    ring.push(at(i + 1, j));
+                    if i + 1 == na {
+                        ring.extend(within(&right, b0, b1).iter().map(|&(_, c)| c));
+                    }
+                    ring.push(at(i + 1, j + 1));
+                    if j + 1 == nb {
+                        ring.extend(within(&top_side, a0, a1).iter().rev().map(|&(_, c)| c));
+                    }
+                    ring.push(at(i, j + 1));
+                    if i == 0 {
+                        ring.extend(within(&left, b0, b1).iter().rev().map(|&(_, c)| c));
+                    }
+                    let triangle = |t: [u32; 3], face: &mut FaceData| {
+                        let [x, y, z] = t;
+                        let t = if flip { [x, z, y] } else { t };
+                        let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
+                        // Cut away to nothing.
+                        if (pb - pa).cross(pc - pa).length_squared() < 1e-12 {
+                            return;
+                        }
+                        face.triangles.push(t);
+                    };
+                    if ring.len() > 4 {
+                        // A fan from the cell's middle to every point round it.
+                        let middle = add(
+                            param((a0 + a1) * 0.5, (b0 + b1) * 0.5),
+                            false,
+                            &mut face,
+                            &mut flat,
+                        );
+                        for k in 0..ring.len() {
+                            triangle([middle, ring[k], ring[(k + 1) % ring.len()]], &mut face);
+                        }
+                        continue;
+                    }
                     let corners = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
                     // Split along the diagonal that follows the cut where it creases across
                     // the square, as along a corner slope's hip or valley: the one whose
@@ -725,14 +923,7 @@ pub fn draw_part(
                         [[0, 1, 2], [0, 2, 3]]
                     };
                     for [x, y, z] in split {
-                        let (y, z) = if flip { (z, y) } else { (y, z) };
-                        let t = [corners[x], corners[y], corners[z]];
-                        let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
-                        // Cut away to nothing.
-                        if (pb - pa).cross(pc - pa).length_squared() < 1e-12 {
-                            continue;
-                        }
-                        face.triangles.push(t);
+                        triangle([corners[x], corners[y], corners[z]], &mut face);
                     }
                 }
             }
@@ -751,10 +942,7 @@ pub fn draw_part(
     // face's own sum there is added to the place's, a face at a time. A face kept from last
     // time keeps its normals, as does every face round it, so only the places on the edges
     // of faces worked out anew are summed, from the faces beside them.
-    let edge = |index: usize| {
-        let (i, j) = (index / (n + 1), index % (n + 1));
-        i == 0 || j == 0 || i == n || j == n
-    };
+    let edge = |rim: &[bool], index: usize| rim[index];
     let key = |p: Vec3| ((p * 2048.0).round()).as_ivec3();
     for face in faces.iter_mut().filter(|face| face.fresh) {
         let data = Arc::get_mut(&mut face.data).expect("a face worked out anew is its own");
@@ -776,7 +964,7 @@ pub fn draw_part(
             anew[i] = true;
         }
         for (c, &p) in face.data.points.iter().enumerate() {
-            if edge(c) {
+            if edge(&face.data.rim, c) {
                 slots.entry(key(p)).or_insert_with(|| {
                     sums.push(Vec3::ZERO);
                     (sums.len() - 1) as u32
@@ -795,7 +983,7 @@ pub fn draw_part(
     {
         let data = &face.data;
         for (c, &p) in data.points.iter().enumerate() {
-            if edge(c)
+            if edge(&data.rim, c)
                 && let Some(&slot) = slots.get(&key(p))
             {
                 sums[slot as usize] += data.local[c];
@@ -806,8 +994,9 @@ pub fn draw_part(
     // with its triangles' corners among them: what it puts into a surface sharing corners.
     for face in faces.iter_mut().filter(|face| face.fresh) {
         let data = Arc::get_mut(&mut face.data).expect("a face worked out anew is its own");
+        let rim = data.rim.clone();
         let sum_at = |c: usize| {
-            if edge(c) {
+            if edge(&rim, c) {
                 sums[slots[&key(data.points[c])] as usize]
             } else {
                 data.local[c]
@@ -824,7 +1013,12 @@ pub fn draw_part(
                 if *slot == u32::MAX {
                     *slot = order.len() as u32;
                     order.push(c);
-                    normals[c as usize] = sum_at(c as usize).normalize_or(fallback);
+                    let exact = data.exact[c as usize];
+                    normals[c as usize] = if exact != Vec3::ZERO {
+                        exact
+                    } else {
+                        sum_at(c as usize).normalize_or(fallback)
+                    };
                 }
                 indices.push(*slot);
             }
@@ -883,7 +1077,51 @@ pub fn draw_part(
     }
 }
 
-/// A cube and those round it.
+/// Where a face's points fall across it one way, as fractions of a cube from its low edge:
+/// at both edges; across the rounding of each edge open to the air, in as many steps as
+/// its detail rounds it in; and between them none, the face flat, unless its kind is packed
+/// in lifts and lumps (earth, D236), whose shape the points must follow, then every
+/// quarter of a cube near and every half a few metres off. As terrain and voxel renderers
+/// spend triangles only where the silhouette bends and leave a flat face's detail to its
+/// normal and height maps.
+fn across(low_open: bool, high_open: bool, look: &Look) -> Vec<f32> {
+    let (rounding, packing) = if look.steps >= crate::sections::SURFACE_STEPS {
+        (3, 4)
+    } else if look.steps >= 4 {
+        (2, 2)
+    } else {
+        (1, 1)
+    };
+    let bevel = (look.bevel / CELL_M).min(0.45);
+    let mut out = vec![0.0, 1.0];
+    if bevel > 0.0 {
+        for k in 1..=rounding {
+            let t = bevel * k as f32 / rounding as f32;
+            if low_open {
+                out.push(t);
+            }
+            if high_open {
+                out.push(1.0 - t);
+            }
+        }
+    }
+    if look.packed.is_some() {
+        let (from, to) = (
+            if low_open { bevel } else { 0.0 },
+            if high_open { 1.0 - bevel } else { 1.0 },
+        );
+        out.extend(
+            (1..packing)
+                .map(|k| k as f32 / packing as f32)
+                .filter(|&t| t > from + 0.02 && t < to - 0.02),
+        );
+    }
+    out.sort_by(f32::total_cmp);
+    out.dedup_by(|a, b| (*a - *b).abs() < 1e-5);
+    out
+}
+
+/// A cube and those round them.
 const NEIGHBOURHOOD: [IVec3; 27] = {
     let mut out = [IVec3::ZERO; 27];
     let mut i = 0;
@@ -915,6 +1153,10 @@ pub struct FaceData {
     points: Vec<Vec3>,
     uvs: Vec<[f32; 2]>,
     triangles: Vec<[u32; 3]>,
+    /// Whether each point is on its rim, where other faces meet it.
+    rim: Vec<bool>,
+    /// Each point's normal where the rounding alone gives it, `ZERO` where its triangles do.
+    exact: Vec<Vec3>,
     top: bool,
     local: Vec<Vec3>,
     normals: Vec<Vec3>,
@@ -1179,8 +1421,13 @@ mod tests {
             &mut out,
             &mut tops,
         );
+        // A triangle of a side looking east or west, not of a top or underside beside it.
+        let side_on =
+            |t: &[Vec3]| (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero().x.abs() > 0.5;
         let between = out.positions.chunks(3).any(|t| {
-            t.iter().all(|p| (p.x - CELL_M).abs() < 0.05) && t.iter().any(|p| p.y > CELL_M * 0.55)
+            side_on(t)
+                && t.iter().all(|p| (p.x - CELL_M).abs() < 0.05)
+                && t.iter().any(|p| p.y > CELL_M * 0.55)
         });
         assert!(
             !between,
@@ -1206,7 +1453,8 @@ mod tests {
         assert!(side, "no side over the half");
         assert!(
             !out.positions.chunks(3).any(|t| {
-                t.iter().all(|p| (p.x - CELL_M).abs() < 0.05)
+                side_on(t)
+                    && t.iter().all(|p| (p.x - CELL_M).abs() < 0.05)
                     && t.iter().all(|p| p.y < CELL_M * 0.45)
             }),
             "a side inside the half"
@@ -1328,8 +1576,8 @@ mod tests {
     }
 
     #[test]
-    fn the_relief_moves_the_surface_by_half_its_depth_at_most_and_not_at_an_inside_corner() {
-        // An L two cubes high, its inside corner the upright line at x and z of one cube.
+    fn the_stones_relief_is_left_to_the_maps_and_a_flat_face_is_two_triangles() {
+        // An L two cubes high: its relief moves nothing, the height its maps' to draw.
         let ell = [
             [0, 0, 0],
             [1, 0, 0],
@@ -1338,29 +1586,35 @@ mod tests {
             [1, 1, 0],
             [0, 1, 1],
         ];
-        let smooth = Look {
-            relief: 0.0,
+        let (a, b) = (drawn(&ell, &flat), drawn(&ell, &bumpy));
+        assert_eq!(a.positions, b.positions);
+        // In a wall eight cubes long, four high and one thick, a face in its middle is flat
+        // and one square: two triangles; the rounding is along its open edges alone.
+        let wall: Vec<[i32; 3]> = (0..8)
+            .flat_map(|x| (0..4).map(move |y| [x, y, 0]))
+            .collect();
+        let near = Look {
+            steps: crate::sections::SURFACE_STEPS,
             ..look()
         };
-        let (a, b) = (drawn_as(&ell, &smooth, &bumpy), drawn(&ell, &bumpy));
-        assert_eq!(a.positions.len(), b.positions.len());
-        let moved: Vec<(Vec3, f32)> = a
+        let surface = drawn_as(&wall, &near, &flat);
+        let middle = surface
             .positions
-            .iter()
-            .zip(&b.positions)
-            .map(|(x, y)| (*x, x.distance(*y)))
-            .collect();
-        // A height from 0 to 1 moves it out or in by half the relief, no more.
-        let half = look().relief * 0.5;
-        assert!(moved.iter().all(|&(_, by)| by <= half + 1e-5));
-        assert!(moved.iter().any(|&(_, by)| by > half * 0.8));
-        // Along the inside corner it does not move at all.
-        let corner: Vec<f32> = moved
-            .iter()
-            .filter(|(at, _)| (at.x - CELL_M).abs() < 1e-5 && (at.z - CELL_M).abs() < 1e-5)
-            .map(|&(_, by)| by)
-            .collect();
-        assert!(!corner.is_empty());
-        assert!(corner.iter().all(|&by| by < 1e-5), "{corner:?}");
+            .chunks(3)
+            .filter(|t| {
+                t.iter().all(|p| {
+                    (p.z - CELL_M).abs() < 1e-5
+                        && (CELL_M * 3.0..=CELL_M * 4.0).contains(&p.x)
+                        && (CELL_M..=CELL_M * 2.0).contains(&p.y)
+                })
+            })
+            .count();
+        assert_eq!(middle, 2);
+        // About as many triangles a face as its rim needs: the budget near (D284).
+        let faces = 2 * 8 * 4 + 2 * 8 + 2 * 4;
+        let per_face = surface.triangle_count() as f32 / faces as f32;
+        assert!(per_face <= NEAR_TRIANGLES_A_FACE, "{per_face} a face");
+        // A face rounded to a corner is still more than flat.
+        assert!(per_face > 2.0, "{per_face} a face");
     }
 }

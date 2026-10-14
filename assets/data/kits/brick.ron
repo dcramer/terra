@@ -31,7 +31,7 @@
         end_tint: (0.86, 0.82, 0.78),
     ),
     textures: {
-        Masonry: (path: "materials/medieval_red_brick", metres: (2.0, 2.0)),
+        Masonry: (path: "materials/medieval_red_brick", metres: (2.0, 2.0), depth: 0.015),
         Floor: (path: "materials/medieval_red_brick", metres: (2.0, 2.0)),
         Dressed: (path: "materials/rock_boulder_dry", metres: (1.4, 1.4)),
         Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),

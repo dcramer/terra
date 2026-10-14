@@ -210,7 +210,13 @@ fn a_section_cut_from_its_base_laid_whole_is_the_section_laid_alone() {
                 "base {index}, section {at:?}"
             );
             assert_eq!(
-                sorted(laid.edge.iter().map(|p| p.1.clone())),
+                // Blocks: the lintels and sills a step further are there for their beds.
+                sorted(
+                    laid.edge
+                        .iter()
+                        .map(|p| p.1.clone())
+                        .filter(|p| matches!(p, Piece::Block { .. } | Piece::Gable { .. }))
+                ),
                 sorted(edge),
                 "base {index}, section {at:?}, a cube beyond it"
             );
@@ -292,24 +298,32 @@ fn a_piece_is_owned_by_the_cube_its_middle_is_in_exactly() {
     assert_eq!(log([-t, 0, 0], [0, 0, 0]).section(), IVec3::new(-1, 0, 0));
 }
 
-/// Every triangle of a set of surfaces, each as its corners' bits, sorted.
-fn triangles<'a>(surfaces: impl IntoIterator<Item = &'a Surface>) -> Vec<[u32; 18]> {
+/// Every triangle of a set of surfaces, each as its corners' bits, sorted, with their
+/// normals in that order.
+fn triangles<'a>(surfaces: impl IntoIterator<Item = &'a Surface>) -> Vec<([u32; 9], [Vec3; 3])> {
     let mut out = Vec::new();
     for surface in surfaces {
         let all = surface.indexed();
         for t in all.indices.chunks_exact(3) {
-            let mut corners: Vec<[u32; 6]> = t
+            let mut corners: Vec<([u32; 3], Vec3)> = t
                 .iter()
                 .map(|&i| {
                     let (p, n) = (all.positions[i as usize], all.normals[i as usize]);
-                    [p.x, p.y, p.z, n.x, n.y, n.z].map(f32::to_bits)
+                    ([p.x, p.y, p.z].map(f32::to_bits), n)
                 })
                 .collect();
-            corners.sort();
-            out.push(corners.concat().try_into().unwrap());
+            corners.sort_by_key(|c| c.0);
+            let at: Vec<u32> = corners.iter().flat_map(|c| c.0).collect();
+            out.push((
+                at.try_into().unwrap(),
+                [corners[0].1, corners[1].1, corners[2].1],
+            ));
         }
     }
-    out.sort();
+    // Back to back, the same corners face both ways: told apart by which way, roughly.
+    let way =
+        |t: &([u32; 9], [Vec3; 3])| t.1.map(|n| (n * 4.0).round().to_array().map(|c| c as i32));
+    out.sort_by(|a: &([u32; 9], [Vec3; 3]), b| a.0.cmp(&b.0).then_with(|| way(a).cmp(&way(b))));
     out
 }
 
@@ -416,7 +430,19 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
             b.len(),
             "as many triangles merged as the pieces have"
         );
-        assert!(a == b, "the same triangles, corners and normals");
+        // The same triangles, corner for corner; their normals the same but where a cut's
+        // edge meets a section's (D284): there each is summed from the triangles round it,
+        // which a neighbour a step past the section's edge splits in another order, so they
+        // agree to within a degree.
+        assert!(
+            a.iter().map(|t| t.0).eq(b.iter().map(|t| t.0)),
+            "the same triangles and corners"
+        );
+        for (x, y) in a.iter().zip(&b) {
+            for (m, n) in x.1.iter().zip(&y.1) {
+                assert!(m.dot(*n) > 0.9998, "{m} against {n}");
+            }
+        }
     }
 }
 
