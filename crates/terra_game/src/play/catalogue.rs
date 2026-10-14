@@ -407,10 +407,10 @@ pub enum Tab {
 }
 
 impl Tab {
-    /// The tabs the menu shows, in order.
+    /// The tabs the menu shows, in order: building by hand's first (D253).
     pub const SHOWN: [Tab; 7] = [
-        Tab::Claim,
         Tab::Structure,
+        Tab::Claim,
         Tab::Openings,
         Tab::Crafting,
         Tab::Furniture,
@@ -504,6 +504,32 @@ mod tests {
         // Never instant, never endless.
         assert!(build_seconds(&[], 1) >= 0.5);
         assert!(build_seconds(&bed, 100) <= 3.0);
+    }
+
+    #[test]
+    fn the_hammer_leads_with_building_by_hand() {
+        // D253: the first part, in hand by default and on the first key, is a block, in the
+        // first tab the menu shows; carving and changing material come before the room,
+        // the wall and the roof.
+        let (_, builds) = builds();
+        let parts = builds.parts();
+        assert!(matches!(parts[0].kind, Kind::Block(_)), "{}", parts[0].name);
+        assert_eq!(parts[0].tab, Tab::SHOWN[0]);
+        let place = |found: fn(&Kind) -> bool| {
+            parts
+                .iter()
+                .position(|part| found(&part.kind))
+                .expect("on the menu")
+        };
+        let by_hand =
+            place(|k| matches!(k, Kind::Carve)).max(place(|k| matches!(k, Kind::Replace)));
+        for convenience in [
+            place(|k| matches!(k, Kind::Room(_))),
+            place(|k| matches!(k, Kind::Wall(_))),
+            place(|k| matches!(k, Kind::Roof(_))),
+        ] {
+            assert!(by_hand < convenience);
+        }
     }
 
     #[test]

@@ -351,8 +351,9 @@ pub struct Builder {
 impl Default for Builder {
     fn default() -> Self {
         Self {
+            // The first part, a block, in hand (D253).
             part: 0,
-            stowed: true,
+            stowed: false,
             in_hand: false,
             variants: Vec::new(),
             turn: 0.0,

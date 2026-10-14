@@ -11,7 +11,8 @@
 // claim      how far across a claim is at each step, what growing it to the next step
 //            costs (D94, D104), and how many cubes it may have planned and not yet built
 //            at each step (D193), a cabin's plan being about three hundred
-// parts      in the order the build menu lists them within each tab. Each is in a tab
+// parts      in the order the build menu lists them within each tab, the first in hand
+//            when the hammer is first taken up (D253). Each is in a tab
 //            (Hidden ones are not in the menu) and is one of:
 //              Items    things stood on a floor or the ground, each with its model in
 //                       assets/models/props, its longest size in metres, how tall a
@@ -59,38 +60,8 @@
         planned: [1500, 3000, 6000],
     ),
     parts: [
-        (name: "Claim stone", tab: Claim, kind: Items([
-            (name: "Claim stone", file: "ClaimStone", size: 1.3, height: (0.8, 1.6), cost: [("Stone", 2)], claims: true),
-        ])),
-        (name: "Workbench", tab: Crafting, kind: Items([
-            (name: "Workbench", file: "Workbench", size: 1.7, height: (0.85, 1.1), cost: [("Wood", 4), ("Stone", 2)], station: "Workbench"),
-        ])),
-        (name: "Smelter", tab: Crafting, kind: Items([
-            (name: "Smelter", file: "Smelter", size: 2.0, height: (1.5, 2.5), cost: [("Stone", 10), ("Wood", 2)], station: "Smelter"),
-        ])),
-        (name: "Forge", tab: Crafting, kind: Items([
-            (name: "Forge", file: "Forge", size: 2.6, height: (2.0, 3.5), cost: [("Wood", 4), ("Stone", 8)], station: "Forge"),
-        ])),
-        (name: "Room", tab: Structure, kind: Room([
-            (name: "5 by 5 m", metres: (5.0, 5.0)),
-            (name: "3.5 by 3.5 m", metres: (3.5, 3.5)),
-            (name: "7 by 7 m", metres: (7.0, 7.0)),
-            (name: "Corridor, 2 by 5 m", metres: (2.0, 5.0)),
-        ])),
-        (name: "Roof", tab: Structure, kind: Roof([
-            (name: "Gable", style: Some(Gable)),
-            (name: "Hip", style: Some(Hip)),
-            (name: "Lean-to", style: Some(LeanTo)),
-            (name: "Flat", style: None),
-        ])),
-        (name: "Wall", tab: Structure, kind: Wall([("3 m", 3.0), ("1.5 m", 1.5), ("0.5 m", 0.5)])),
-        (name: "Floor", tab: Structure, kind: Floor),
-        (name: "Stairs", tab: Structure, kind: Flight([
-            (name: "Stairs, 1 m wide", ramp: false, wide: 1.0),
-            (name: "Stairs, 1.5 m wide", ramp: false, wide: 1.5),
-            (name: "Ramp, 1 m wide", ramp: true, wide: 1.0),
-        ])),
-        (name: "Post", tab: Structure, kind: Post),
+        // Building by hand first (D253): Block, in hand by default, with its shape, material
+        // and brush; then carving and changing material; then the conveniences.
         (name: "Block", tab: Structure, kind: Block([
             ("Cube", Whole),
             ("Half", Half),
@@ -104,8 +75,40 @@
             ("Outer corner", OuterCorner),
             ("Inner corner", InnerCorner),
         ])),
-        (name: "Change material", tab: Structure, kind: Replace),
         (name: "Carve", tab: Structure, kind: Carve),
+        (name: "Change material", tab: Structure, kind: Replace),
+        (name: "Room", tab: Structure, kind: Room([
+            (name: "5 by 5 m", metres: (5.0, 5.0)),
+            (name: "3.5 by 3.5 m", metres: (3.5, 3.5)),
+            (name: "7 by 7 m", metres: (7.0, 7.0)),
+            (name: "Corridor, 2 by 5 m", metres: (2.0, 5.0)),
+        ])),
+        (name: "Wall", tab: Structure, kind: Wall([("3 m", 3.0), ("1.5 m", 1.5), ("0.5 m", 0.5)])),
+        (name: "Add a roof", tab: Structure, kind: Roof([
+            (name: "Gable", style: Some(Gable)),
+            (name: "Hip", style: Some(Hip)),
+            (name: "Lean-to", style: Some(LeanTo)),
+            (name: "Flat", style: None),
+        ])),
+        (name: "Floor", tab: Structure, kind: Floor),
+        (name: "Stairs", tab: Structure, kind: Flight([
+            (name: "Stairs, 1 m wide", ramp: false, wide: 1.0),
+            (name: "Stairs, 1.5 m wide", ramp: false, wide: 1.5),
+            (name: "Ramp, 1 m wide", ramp: true, wide: 1.0),
+        ])),
+        (name: "Post", tab: Structure, kind: Post),
+        (name: "Claim stone", tab: Claim, kind: Items([
+            (name: "Claim stone", file: "ClaimStone", size: 1.3, height: (0.8, 1.6), cost: [("Stone", 2)], claims: true),
+        ])),
+        (name: "Workbench", tab: Crafting, kind: Items([
+            (name: "Workbench", file: "Workbench", size: 1.7, height: (0.85, 1.1), cost: [("Wood", 4), ("Stone", 2)], station: "Workbench"),
+        ])),
+        (name: "Smelter", tab: Crafting, kind: Items([
+            (name: "Smelter", file: "Smelter", size: 2.0, height: (1.5, 2.5), cost: [("Stone", 10), ("Wood", 2)], station: "Smelter"),
+        ])),
+        (name: "Forge", tab: Crafting, kind: Items([
+            (name: "Forge", file: "Forge", size: 2.6, height: (2.0, 3.5), cost: [("Wood", 4), ("Stone", 8)], station: "Forge"),
+        ])),
         (name: "Window", tab: Openings, kind: Window([
             ("1.5 m", 1.5, (1.0, 1.0)),
             ("3 m", 3.0, (1.0, 1.0)),

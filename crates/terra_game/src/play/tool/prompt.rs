@@ -256,8 +256,9 @@ fn storey(storey: i32) -> String {
     }
 }
 
-/// The keys worth knowing while a part is in hand: with a part laid in a material, the
-/// material and the keys that change it (D232); with a brush, its size (D226).
+/// The keys worth knowing while a part is in hand: a block's shape and the key that turns
+/// to the next (D253); with a part laid in a material, the material and the keys that
+/// change it (D232); with a brush, its size (D226).
 pub fn legend(builder: &Builder, builds: &Builds, settings: &Settings, material: &str) -> String {
     if builder.stowed {
         return String::new();
@@ -269,6 +270,12 @@ pub fn legend(builder: &Builder, builds: &Builds, settings: &Settings, material:
         ("grid on", "on the grid")
     };
     let mut legend = String::new();
+    let part = builder.picked(builds);
+    if matches!(part.kind, Kind::Block(_))
+        && let Some(shape) = part.variant_name(builder.variant())
+    {
+        legend += &format!("{}  shape: {shape}     ", key(Action::NextKind));
+    }
     if builder.lays_material(builds) {
         legend += &format!(
             "{} Scroll  material: {}     {}  pick from a cube     ",
