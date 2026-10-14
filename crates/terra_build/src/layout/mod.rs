@@ -637,6 +637,18 @@ impl Walls<'_> {
         }
     }
 
+    /// Whether a cube is another kind's wall the kit's walls end against with an end board
+    /// up the joint (`trims::ends`, D232): the other runs through, or neither does.
+    fn board_against(&self, at: IVec3) -> bool {
+        self.base.cube(at).is_some_and(|cube| {
+            cube.kind != self.kind
+                && cube.kind != crate::Kind::PLAIN
+                && cube.fill == Fill::Solid
+                && self.base.in_wall(at)
+                && self.kits.end(self.kind, cube.kind) == crate::kit::Joint::Board
+        })
+    }
+
     /// Whether the open air is beyond a cube, so a log may run past into it.
     fn open_beyond(&self, at: IVec3) -> bool {
         self.base.cube(at).is_none() && !self.base.contains(at)
@@ -908,7 +920,8 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     }
     runs::posts(&walls, &ours, &mut layout);
     runs::corner_posts(&walls, kit, kits, &ours, &mut layout);
-    trims::ends(&walls, kit, kits, &ours, &mut layout);
+    trims::ends(&walls, kit, &ours, &mut layout);
+    trims::sides(&walls, kit, &ours, &mut layout);
     if kit.textures.contains_key(&Material::Floor) {
         floors::decks(&walls, kit, scope, &mut layout);
     }

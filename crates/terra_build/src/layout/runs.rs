@@ -73,6 +73,9 @@ pub(super) fn courses(
                 let open = walls.open_beyond(axis.cube(row, beyond, cube.y));
                 match next {
                     Spot::Hole => -beside_hole,
+                    // Ending against another kind under an end board (`trims::ends`): its
+                    // sawn end inside the board, not in the plane of the board's face.
+                    _ if walls.board_against(axis.cube(row, beyond, cube.y)) => -kit.frame * 0.6,
                     // Uneven, but never past the overhang: short of it by up to `ragged`.
                     Spot::Nothing if corner && open => {
                         kit.overhang - unit(hash(&[seed, end as u32, which])) * kit.ragged()
@@ -237,6 +240,17 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
     let radius = kit.radius();
     let reach = radius + kit.ragged();
     let pieces = std::mem::take(&mut layout.pieces);
+    // Where logs end, and how many end there: two, a joint in a course.
+    let mut ends: std::collections::HashMap<[i32; 3], u8> = Default::default();
+    for piece in &pieces {
+        if let Piece::Log { from, to, .. } = piece
+            && from.0[1] == to.0[1]
+        {
+            *ends.entry(from.0).or_default() += 1;
+            *ends.entry(to.0).or_default() += 1;
+        }
+    }
+    let mut blocking = Layout::default();
     for piece in pieces {
         let Piece::Log {
             from,
@@ -305,6 +319,21 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
             layout.pieces.push(piece);
             continue;
         }
+        let joint = |end: Vec3| ends.get(&Place::near(end).0).copied().unwrap_or(0) > 1;
+        eave_blocking(
+            &roofs,
+            kit,
+            &Dropped {
+                from,
+                along,
+                across,
+                length,
+                joints: [joint(from), joint(to)],
+                unfit: &|i| (!fits(i)).then(|| at(i)),
+                samples,
+            },
+            &mut blocking,
+        );
         // Where the roof comes down to the log's foot between two samples.
         let crossing = |inside: i32, outside: i32| {
             let (a, b) = (
@@ -381,7 +410,133 @@ pub(super) fn under_roofs(base: &crate::Base, kits: &Kits, kit: &Kit, layout: &m
             layout.pieces.push(cut);
         }
     }
+    layout.pieces.extend(blocking.pieces);
 }
+
+/// A log an eave comes down over, for [`eave_blocking`].
+struct Dropped<'a> {
+    from: Vec3,
+    along: Vec3,
+    across: Vec3,
+    length: f32,
+    /// Whether each end, at `from` and at the other, is a joint with the next log of its
+    /// course, rather than the end of its stretch.
+    joints: [bool; 2],
+    /// For each of so many samples along it, where along it is, if it does not fit there.
+    unfit: &'a dyn Fn(i32) -> Option<f32>,
+    samples: i32,
+}
+
+/// Where a roof falls across a log it comes down over, as along the eaves, and the log does
+/// not fit under it, the log is left out; this blocks the space it leaves, from its foot up
+/// to the roof's underside, with boards, as a builder blocks between the rafters over a
+/// wall's plate (eave blocking), so the wall closes to the roof rather than stopping a
+/// course short of it with a slot into the room. Laid from the log alone, so it is the same
+/// whatever else is laid (D281): none where the course under it is left out too, whose
+/// blocking reaches as high; and those of a row along the north and south set in a little
+/// further than those along the east and west, so where two cross at a corner none of their
+/// faces share a plane.
+fn eave_blocking(roofs: &Roofs, kit: &Kit, log: &Dropped, layout: &mut Layout) {
+    let radius = kit.radius();
+    let inset = if log.along.x.abs() > 0.5 {
+        BLOCKING_SET_BACK_M
+    } else {
+        BLOCKING_SET_BACK_M + CROSSING_M
+    };
+    // A little inside the log's width, so its sides are not in the planes of the members'
+    // faces under it, and its foot a little into the course under it.
+    let half = radius - inset;
+    let foot = log.from.y - radius;
+    let step = log.length / log.samples.max(1) as f32;
+    // The roof's underside over the log's width where it falls across it, its lowest.
+    let gap = |at: f32| -> Option<f32> {
+        let p = log.from + log.along * at;
+        let mut tops = [0.0f32; 3];
+        for (top, side) in tops.iter_mut().zip([-1.0, 0.0, 1.0]) {
+            let q = p + log.across * half * side;
+            *top = roofs.top_over(q.x, q.z, foot - NEAR_ROOF_M)?;
+        }
+        let (least, most) = (
+            tops.iter().copied().fold(f32::MAX, f32::min),
+            tops.iter().copied().fold(f32::MIN, f32::max),
+        );
+        (most - least > 0.01 && least > foot + MIN_BLOCKING_M).then_some(least)
+    };
+    let mut i = 0;
+    while i <= log.samples {
+        let Some(top) = (log.unfit)(i).and_then(gap) else {
+            i += 1;
+            continue;
+        };
+        let (start, mut low) = (i, top);
+        while i < log.samples
+            && let Some(next) = (log.unfit)(i + 1).and_then(gap)
+        {
+            low = low.min(next);
+            i += 1;
+        }
+        let a = (start as f32 - 0.5) * step;
+        let b = (i as f32 + 0.5) * step;
+        i += 1;
+        // The course under it left out too: its blocking covers this one's.
+        if low - (foot - kit.course) <= 2.0 * radius {
+            continue;
+        }
+        // Its ends a little in from the log's, out of the plane of the sawn ends under it,
+        // but for a joint, where the next log's blocking carries on.
+        let (a, b) = (
+            if log.joints[0] {
+                a.max(0.0)
+            } else {
+                a.max(inset)
+            },
+            if log.joints[1] {
+                b.min(log.length)
+            } else {
+                b.min(log.length - inset)
+            },
+        );
+        if b - a < MIN_BLOCKING_M {
+            continue;
+        }
+        let ends = [log.from + log.along * a, log.from + log.along * b];
+        let mut min = Vec3::splat(f32::MAX);
+        let mut max = Vec3::splat(f32::MIN);
+        for end in ends {
+            for side in [-1.0, 1.0] {
+                let q = end + log.across * half * side;
+                min = min.min(q.with_y(foot - inset));
+                max = max.max(q.with_y(low - (inset - BLOCKING_SET_BACK_M)));
+            }
+        }
+        // Its foot and top on every fourth tick, those of a row along the north and south
+        // two ticks off them, so two crossing never share a plane, whatever roof they are
+        // under.
+        let crossing = i32::from(log.along.x.abs() <= 0.5) * 2;
+        let snap = |p: Vec3| {
+            let mut place = Place::near(p);
+            place.0[1] = (place.0[1] - crossing).div_euclid(4) * 4 + crossing;
+            place
+        };
+        let board = Piece::Board {
+            min: snap(min),
+            max: snap(max),
+        };
+        // A whole course's two halves, split at a layer, block the same space.
+        if !layout.pieces.contains(&board) {
+            layout.pieces.push(board);
+        }
+    }
+}
+
+/// How far eave blocking is set back from a log's widest.
+const BLOCKING_SET_BACK_M: f32 = 0.03;
+/// How much further in a row's blocking along the north and south is set than one along the
+/// east and west, so where they cross none of their faces share a plane.
+const CROSSING_M: f32 = 0.005;
+
+/// The least space under a roof worth blocking.
+const MIN_BLOCKING_M: f32 = 0.02;
 
 /// A cube of ours with none beside it either way is a post: an upright log up each
 /// stack of them.
@@ -668,6 +823,77 @@ mod tests {
                         at.y + r <= top + 3e-3,
                         "{style:?}: a log at {at} meets the roof at {top}"
                     );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_wall_under_an_eave_is_closed_to_the_roof() {
+        // Under a hip the roof falls across every wall's top, so the course carried up into
+        // the roof's cubes is left out; the space between the courses under it and the
+        // roof is blocked with boards, with no two sharing a face.
+        let kit = kit();
+        let base = roofed_cabin(Style::Hip);
+        let roofs = Roofs::whole(&base, &Kits(vec![kit.clone()]), super::super::Scope::ALL);
+        let laid = lay(&base, &kit);
+        let boards: Vec<(Vec3, Vec3)> = laid
+            .pieces
+            .iter()
+            .filter_map(|p| match *p {
+                Piece::Board { min, max } => Some((min.metres(), max.metres())),
+                _ => None,
+            })
+            .collect();
+        let logs = logs(&laid);
+        // Along the middle of each wall's line, from the top of the highest log there up to
+        // the roof's underside over its outer face, where the roof comes lowest, something
+        // stands: a log or a board.
+        let middle = CELL_M * 0.5;
+        let face = kit.radius() - 0.04;
+        for (x, z, outward) in [
+            (2.0, middle, -Vec3::Z),
+            (2.0, 3.0 - middle, Vec3::Z),
+            (middle, 1.5, -Vec3::X),
+            (4.0 - middle, 1.5, Vec3::X),
+        ] {
+            let outer = Vec3::new(x, 0.0, z) + outward * face;
+            let under = roofs
+                .under_over(outer.x, outer.z, 2.0)
+                .expect("a roof over the wall");
+            let mut y = 2.0;
+            while y < under - 0.02 {
+                let p = Vec3::new(x, y, z);
+                let in_log = logs.iter().any(|(from, to, _)| {
+                    let (low, high) = (from.min(*to), from.max(*to));
+                    let near =
+                        |a: f32, lo: f32, hi: f32| a >= lo - kit.radius() && a <= hi + kit.radius();
+                    near(p.x, low.x, high.x)
+                        && near(p.z, low.z, high.z)
+                        && (p.y - from.y).abs() < kit.radius() * 0.9
+                });
+                let in_board = boards
+                    .iter()
+                    .any(|(lo, hi)| p.cmpge(*lo).all() && p.cmple(*hi).all());
+                assert!(
+                    in_log || in_board,
+                    "nothing at {p}, under the roof at {under}"
+                );
+                y += 0.01;
+            }
+        }
+        // No two boards in one another with a face in the same plane.
+        for (i, a) in boards.iter().enumerate() {
+            for b in &boards[i + 1..] {
+                let overlap = a.0.cmplt(b.1).all() && b.0.cmplt(a.1).all();
+                if overlap {
+                    for axis in 0..3 {
+                        assert!(
+                            (a.0[axis] - b.0[axis]).abs() > 1e-3
+                                && (a.1[axis] - b.1[axis]).abs() > 1e-3,
+                            "{a:?} and {b:?} share a face"
+                        );
+                    }
                 }
             }
         }

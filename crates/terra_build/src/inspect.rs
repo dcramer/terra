@@ -103,6 +103,12 @@ const RAY_START_M: f32 = 0.3;
 /// How short of a wall's far side a line may come out and still count as through it: its
 /// rounded edges are not holes.
 const THROUGH_M: f32 = 0.3;
+/// How far a line may run inside solid cubes and still be through a wall rather than along
+/// one: a wall three cubes thick, slanting across it.
+const ALONG_M: f32 = 3.0 * CELL_M * 1.2;
+/// How far a line may run inside solid cubes and come out of a side square to the face it
+/// went in by, as through a corner: further, it ran along a wall and out of its side.
+const CORNER_M: f32 = 2.0 * CELL_M * 1.2;
 
 /// A triangle drawn, in the base's space, in a mesh by its number.
 #[derive(Clone, Copy, Debug)]
@@ -686,6 +692,12 @@ fn see_through(
             if solid(base, kits, beside) || base.cube(beside).is_some_and(|c| c.kind.is_roof()) {
                 continue;
             }
+            // A wall's end, the wall running on behind it: a line in through it near its
+            // sides runs along the wall in the air its cubes hold beside a timber wall's
+            // faces, not through it, so lines go in up its middle, along its core, and
+            // beside it only where another wall meets it there.
+            let end = face.y == 0 && solid(base, kits, at - face);
+            let across = IVec3::new(face.z, 0, face.x).abs().as_vec3();
             // A face down into the ground, or a footing's sides in it, is not seen.
             let floor_m = at.y as f32 * CELL_M;
             let column_ground = |c: IVec3| f32::from(ground.height_cm([c.x, c.z])) / 100.0;
@@ -700,16 +712,24 @@ fn see_through(
                 n.cross(n.any_orthonormal_vector()).abs(),
             );
             let middle = (at.as_vec3() + Vec3::splat(0.5)) * CELL_M;
-            let mut dirs: Vec<Vec3> = vec![-n];
+            // Square to the face but for a few degrees off it either way: a line exactly
+            // along an axis threads a seam that runs with it, as the groove between two
+            // courses along a log wall seen from its end, which no view sees through.
+            let mut dirs: Vec<Vec3> = vec![(-n + u_axis * 0.07 + v_axis * 0.04).normalize()];
             if slanting {
                 for t in [u_axis, -u_axis, v_axis, -v_axis] {
                     dirs.push((-n + t * 0.6).normalize());
                 }
             }
             'lines: for (u, v) in samples() {
-                let on_face = middle
-                    + n * (CELL_M * 0.5)
-                    + (u_axis * (u - 0.5) + v_axis * (v - 0.5)) * CELL_M;
+                let mut offset = (u_axis * (u - 0.5) + v_axis * (v - 0.5)) * CELL_M;
+                // Up its middle, or toward a wall beside it, where it meets that wall.
+                let side = offset.dot(across);
+                let toward = (across * side.signum()).round().as_ivec3();
+                if end && !solid(base, kits, at + toward) {
+                    offset -= across * side;
+                }
+                let on_face = middle + n * (CELL_M * 0.5) + offset;
                 for &dir in &dirs {
                     let from = on_face - dir * RAY_START_M;
                     // How far it runs inside solid cubes, and which way it comes out.
@@ -718,8 +738,16 @@ fn see_through(
                     };
                     let inside = out_t - RAY_START_M;
                     // Only a line that comes out on the other side of the wall, having gone
-                    // through it, not one clipping a corner.
-                    if inside < THROUGH_M || out_n.dot(n) > 0.3 {
+                    // through it, not one clipping a corner, nor one running along a wall's
+                    // length, in the air its cubes hold beside a timber wall's faces, nor one
+                    // that comes out into the ground, as down through a floor laid on it.
+                    let out = from + dir * out_t;
+                    let out_cell = (out / CELL_M).floor().as_ivec3();
+                    if !(THROUGH_M..=ALONG_M).contains(&inside)
+                        || (out_n.dot(n).abs() < 0.3 && inside > CORNER_M)
+                        || out_n.dot(n) > 0.3
+                        || out.y < column_ground(out_cell) + 0.02
+                    {
                         continue;
                     }
                     cast += 1;
@@ -729,8 +757,11 @@ fn see_through(
                             (
                                 on_face,
                                 format!(
-                                    "{} cube {at}: a line in through its {face} face meets nothing",
-                                    kind_name(kits, cube.kind)
+                                    "{} cube {at}: a line in through its {face} face, heading ({:.2}, {:.2}, {:.2}), meets nothing",
+                                    kind_name(kits, cube.kind),
+                                    dir.x,
+                                    dir.y,
+                                    dir.z
                                 ),
                             ),
                         );
@@ -1193,6 +1224,79 @@ mod tests {
             d: n.dot(p[0]),
             mesh,
         }
+    }
+
+    /// A box's twelve triangles, wound outward.
+    fn cuboid(min: Vec3, max: Vec3, mesh: u32) -> Vec<Tri> {
+        let mut out = Vec::new();
+        for axis in 0..3 {
+            for high in [false, true] {
+                let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+                let corner = |a: f32, b: f32| {
+                    let mut p = if high { max } else { min };
+                    p[u] = if a > 0.0 { max[u] } else { min[u] };
+                    p[v] = if b > 0.0 { max[v] } else { min[v] };
+                    p
+                };
+                let q = [
+                    corner(0.0, 0.0),
+                    corner(1.0, 0.0),
+                    corner(1.0, 1.0),
+                    corner(0.0, 1.0),
+                ];
+                let (a, b) = if high {
+                    ([0, 1, 2], [0, 2, 3])
+                } else {
+                    ([0, 2, 1], [0, 3, 2])
+                };
+                out.push(tri(a.map(|i| q[i]), mesh));
+                out.push(tri(b.map(|i| q[i]), mesh));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_line_along_a_timber_wall_beside_its_logs_is_not_through_it_and_a_hole_is() {
+        // A wall of logs three cubes long on the ground, its lower course narrower than its
+        // cubes as a log wall is, under a plate as wide as them, with daub between them at
+        // the wall's core: a line in from the wall's end beside the course, in the air its
+        // cubes hold, runs along the wall under the plate and meets nothing.
+        let kits = Kits(vec![crate::kit::Kit::default()]);
+        let kind = kits.0[0].kind();
+        let mut base = Base::default();
+        base.apply(crate::BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [2, 0, 0],
+            cube: Some(crate::Cube::new(kind, Fill::Solid)),
+        });
+        let wall = |gap: Option<(f32, f32)>| {
+            let mut tris = Vec::new();
+            let spans = match gap {
+                Some((a, b)) => vec![(0.0, a), (b, 1.5)],
+                None => vec![(0.0, 1.5)],
+            };
+            for (a, b) in spans {
+                tris.extend(cuboid(Vec3::new(a, 0.0, 0.14), Vec3::new(b, 0.24, 0.36), 0));
+                tris.extend(cuboid(Vec3::new(a, 0.24, 0.2), Vec3::new(b, 0.26, 0.3), 0));
+                tris.extend(cuboid(Vec3::new(a, 0.26, 0.0), Vec3::new(b, 0.5, 0.5), 0));
+            }
+            let drawn = Drawn {
+                tris,
+                meshes: vec!["logs".into()],
+                kinds: vec![Some((kind, Material::Log))],
+            };
+            let mut findings = Vec::new();
+            see_through(&base, &kits, &drawn, Detail::Near, true, &mut findings);
+            findings
+        };
+        let whole = wall(None);
+        assert!(whole.is_empty(), "{whole:?}");
+        let holed = wall(Some((0.7, 1.3)));
+        assert!(
+            holed.iter().any(|f| f.fault == Fault::SeeThrough),
+            "{holed:?}"
+        );
     }
 
     #[test]

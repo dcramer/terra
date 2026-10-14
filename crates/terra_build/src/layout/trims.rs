@@ -32,13 +32,23 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
             for (along, low, high) in runs_of(&edges, |(along, layer)| (along, layer)) {
                 let face = (along + i32::from(outward > 0)) as f32 * CELL_M;
                 let middle = face + outward as f32 * width * 0.5;
+                // Down into the course under a window's sill too: the course its foot's
+                // layer starts in ends at the post, so a post standing on the layer's floor
+                // left a hole under it between that course's end and the sill. A little
+                // short of the head's top and the sill's foot, whose faces are in those
+                // planes.
                 let over = if solid(along, high + 1) {
-                    kit.course
+                    kit.course - POST_SHORT_M
+                } else {
+                    0.0
+                };
+                let under = if solid(along, low - 1) {
+                    kit.course - POST_SHORT_M
                 } else {
                     0.0
                 };
                 let mut post = super::runs::log(
-                    axis.point(row, middle, low as f32 * CELL_M),
+                    axis.point(row, middle, low as f32 * CELL_M - under),
                     axis.point(row, middle, (high + 1) as f32 * CELL_M + over),
                     super::Split::Whole,
                     super::hash(&[row as u32, along as u32, low as u32, outward as u32, 11]),
@@ -119,30 +129,85 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
     }
 }
 
+/// Where another kind's wall comes in square against the side of one of the kit's, as a
+/// stone or brick wall's end against a log end wall at a corner: a board up the joint,
+/// filling the space the cube holds between the members' face and the other's, which a
+/// cube's wall of logs, narrower than its cube, leaves as a slot through the corner. From
+/// the foot of each stack of such cubes to its top.
+pub(super) fn sides(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut Layout) {
+    let face = kit.radius();
+    for axis in [Axis::X, Axis::Z] {
+        let across = axis.other().step();
+        for outward in [-1, 1] {
+            let meets = |at: glam::IVec3| {
+                let other = at + across * outward;
+                walls.ours(at) == Some(Fill::Solid)
+                    && walls.runs(at, axis)
+                    && !walls.runs(at, axis.other())
+                    && walls.base.cube(other).is_some_and(|cube| {
+                        cube.kind != walls.kind
+                            && cube.kind != crate::Kind::PLAIN
+                            && cube.fill == Fill::Solid
+                            && !cube.kind.is_roof()
+                            && walls.base.in_wall(other)
+                    })
+            };
+            for &at in ours {
+                if !meets(at) || meets(at - glam::IVec3::Y) {
+                    continue;
+                }
+                let mut top = at;
+                while meets(top + glam::IVec3::Y) {
+                    top += glam::IVec3::Y;
+                }
+                let (row, along) = axis.row_of(at);
+                let middle = axis.point(row, 0.0, 0.0).dot(axis.across());
+                let sign = outward as f32;
+                let (a, b) = (
+                    middle + sign * (face - SIDE_BOARD_INTO_M),
+                    middle + sign * CELL_M * 0.5,
+                );
+                let point = |across_m: f32, along_m: f32, height: f32| {
+                    let mut p = axis.point(row, along_m, height);
+                    p += axis.across() * (across_m - middle);
+                    p
+                };
+                let low = point(
+                    a.min(b),
+                    along as f32 * CELL_M + END_BOARD_IN_M,
+                    at.y as f32 * CELL_M + END_BOARD_IN_M,
+                );
+                let high = point(
+                    a.max(b),
+                    (along + 1) as f32 * CELL_M - END_BOARD_IN_M,
+                    (top.y + 1) as f32 * CELL_M - END_BOARD_IN_M,
+                );
+                layout.pieces.push(Piece::Board {
+                    min: Place::near(low.min(high)),
+                    max: Place::near(low.max(high)),
+                });
+            }
+        }
+    }
+}
+
+/// How far into the members a board up a side joint reaches, past their face.
+const SIDE_BOARD_INTO_M: f32 = 0.03;
+
+/// How far short of a head's top or a sill's foot a post up an opening's side stops.
+const POST_SHORT_M: f32 = 0.03;
+/// How far in from its stack's foot and top an end board stops.
+const END_BOARD_IN_M: f32 = 0.005;
+
 /// Where a wall of the kit's kind ends against a wall of another kind, as logs end flush
 /// against stone (D179): an end board up the joint, over the logs' sawn ends, from the
 /// foot of each stack of such cubes to its top, where the kits say it ends there with a
 /// board (D232: the other runs through it, or neither does).
-pub(super) fn ends(
-    walls: &Walls,
-    kit: &Kit,
-    kits: &crate::kit::Kits,
-    ours: &[glam::IVec3],
-    layout: &mut Layout,
-) {
-    let other = |at: glam::IVec3| {
-        walls.base.cube(at).is_some_and(|cube| {
-            cube.kind != walls.kind
-                && cube.kind != crate::Kind::PLAIN
-                && cube.fill == Fill::Solid
-                && walls.base.in_wall(at)
-                && kits.end(walls.kind, cube.kind) == crate::kit::Joint::Board
-        })
-    };
+pub(super) fn ends(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut Layout) {
     let ends_at = |at: glam::IVec3, axis: Axis, outward: i32| {
         walls.ours(at) == Some(Fill::Solid)
             && walls.runs(at, axis)
-            && other(at + axis.step() * outward)
+            && walls.board_against(at + axis.step() * outward)
     };
     for axis in [Axis::X, Axis::Z] {
         for outward in [-1, 1] {
@@ -159,8 +224,11 @@ pub(super) fn ends(
                 let face = (along + i32::from(outward > 0)) as f32 * CELL_M;
                 let (a, b) = (face, face - outward as f32 * kit.frame * 1.2);
                 let out = axis.across() * (kit.radius() + 0.03);
-                let low = axis.point(row, a.min(b), at.y as f32 * CELL_M) - out;
-                let high = axis.point(row, a.max(b), (top.y + 1) as f32 * CELL_M) + out;
+                // Its foot and top a hair in from its stack's, out of the planes of a sill's
+                // underside and a split log's flat top there.
+                let low = axis.point(row, a.min(b), at.y as f32 * CELL_M + END_BOARD_IN_M) - out;
+                let high =
+                    axis.point(row, a.max(b), (top.y + 1) as f32 * CELL_M - END_BOARD_IN_M) + out;
                 layout.pieces.push(Piece::Board {
                     min: Place::near(low.min(high)),
                     max: Place::near(low.max(high)),
@@ -263,5 +331,49 @@ mod tests {
             a.y.abs() < 0.01 && (b.y - crate::STOREY_M).abs() < 0.01,
             "{a} {b}"
         );
+        // The logs' sawn ends inside it, not in the plane of its face against the stone.
+        for (from, to, _) in logs(&layout) {
+            for end in [from.x, to.x] {
+                assert!(
+                    (end - b.x).abs() > 0.01,
+                    "a log ends at the board's face: {end}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_stone_wall_ending_against_a_log_walls_side_is_met_by_a_board() {
+        // A log wall along x, and a stone wall coming in square against its south side: the
+        // logs, narrower than their cubes, leave a slot between their face and the stone's
+        // end, which a board up the joint fills, from the logs' face to the cube's.
+        let mut base = crate::Base::default();
+        let stone = crate::Kind(2);
+        wall(&mut base, (0..6).map(|x| [x, 0, 0]), Panel::Solid);
+        base.apply(BuildOp::Fill {
+            min: [2, 0, 1],
+            max: [2, STOREY_CUBES - 1, 3],
+            cube: Some(Cube::new(stone, Fill::Solid)),
+        });
+        let kit = kit();
+        let layout = lay(&base, &kit);
+        let side: Vec<(Vec3, Vec3)> = layout
+            .pieces
+            .iter()
+            .filter_map(|p| match *p {
+                Piece::Board { min, max } => Some((min.metres(), max.metres())),
+                _ => None,
+            })
+            .filter(|(a, b)| a.x > 0.99 && b.x < 1.51 && b.z > 0.45)
+            .collect();
+        assert_eq!(side.len(), 1, "{side:?}");
+        let (a, b) = side[0];
+        let face = CELL_M * 0.5 + kit.radius();
+        assert!(a.z < face && (b.z - CELL_M).abs() < 1e-3, "{a} {b}");
+        assert!(
+            (a.x - 1.0).abs() < 0.01 && (b.x - 1.5).abs() < 0.01,
+            "{a} {b}"
+        );
+        assert!(a.y < 0.01 && b.y > crate::STOREY_M - 0.01, "{a} {b}");
     }
 }
