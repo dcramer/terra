@@ -93,12 +93,15 @@ pub(super) fn courses(
                     + 0.25 * unit(hash(&[axis as u32, row as u32, 17])));
             for (a, b) in joined(from, to, limit, span, phase) {
                 // Each log by the cubes it lies along, so it is the same whatever else of
-                // the row is laid: daub under it where it starts on a course of logs, and
+                // the row is laid: daub under it where it lies on a course of logs, and
                 // a plate or a sill where it has nothing over it, or under it.
                 let first = ((a / CELL_M).floor() as i32).clamp(low, high);
                 let last = ((b / CELL_M).ceil() as i32 - 1).clamp(low, high);
-                let below = walls.spot(kit, axis, row, first, course - 1);
-                let daub = kit.chinking && split != Split::Top && matches!(below, Spot::Log(_));
+                let daub = kit.chinking
+                    && split != Split::Top
+                    && (first..=last).any(|along| {
+                        matches!(walls.spot(kit, axis, row, along, course - 1), Spot::Log(_))
+                    });
                 let every = |course: i32, what: &dyn Fn(Spot) -> bool| {
                     (first..=last).all(|along| what(walls.spot(kit, axis, row, along, course)))
                 };

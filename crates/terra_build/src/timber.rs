@@ -136,6 +136,9 @@ pub(crate) fn member(
     // A gable's log cut to the roof over it: nothing of it above the slope rising from its
     // foot at each end, as a builder saws it.
     if lean.iter().any(|&rise| rise > 0.0) {
+        // Rings close enough to follow the slope: one drawn far off has its ends alone,
+        // and its top would fall from its cut end the whole length of it.
+        densify(&mut made, LEAN_RING_M);
         let foot = kit.radius();
         for p in made.grid.iter_mut().flatten() {
             let along = (*p - from).dot(frame.axis);
@@ -236,6 +239,45 @@ struct Member {
     /// What each point's colour is multiplied by, ring by ring, where it differs from one:
     /// the shade of the grooves and the mottling along it. Empty for none.
     tone: Vec<Vec<f32>>,
+}
+
+/// How far apart a member's rings are at most where its end is cut to a roof's slope.
+const LEAN_RING_M: f32 = 0.25;
+
+/// Rings put between a member's rings where they are further apart than `most`, on the
+/// lines between them, so its shape is as it was but its points close enough to be cut.
+fn densify(made: &mut Member, most: f32) {
+    let mut grid = Vec::with_capacity(made.grid.len());
+    let mut uvs = Vec::with_capacity(made.uvs.len());
+    let mut tone = Vec::with_capacity(made.tone.len());
+    for i in 0..made.grid.len() {
+        if i > 0 {
+            let (a, b) = (&made.grid[i - 1], &made.grid[i]);
+            let gap = a[0].distance(b[0]);
+            let more = (gap / most).ceil() as usize;
+            for k in 1..more {
+                let t = k as f32 / more as f32;
+                grid.push(a.iter().zip(b).map(|(p, q)| p.lerp(*q, t)).collect());
+                let (ua, ub) = (&made.uvs[i - 1], &made.uvs[i]);
+                uvs.push(
+                    ua.iter()
+                        .zip(ub)
+                        .map(|(p, q)| [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t])
+                        .collect(),
+                );
+                if !made.tone.is_empty() {
+                    let (ta, tb) = (&made.tone[i - 1], &made.tone[i]);
+                    tone.push(ta.iter().zip(tb).map(|(p, q)| p + (q - p) * t).collect());
+                }
+            }
+        }
+        grid.push(made.grid[i].clone());
+        uvs.push(made.uvs[i].clone());
+        if !made.tone.is_empty() {
+            tone.push(made.tone[i].clone());
+        }
+    }
+    (made.grid, made.uvs, made.tone) = (grid, uvs, tone);
 }
 
 /// The way the weather comes from, in a base's own space: the face of a lying log that looks
