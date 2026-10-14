@@ -286,8 +286,14 @@ pub struct FoliageExtension {
 
 /// How far a leaf's own tilt, in the card atlas's normal map, turns it from its crown's
 /// normal (D269): enough that leaves side by side catch the sun differently, little enough
-/// that a crown still shades as one mass.
-pub const RELIEF: f32 = 0.8;
+/// that a crown still shades as one mass. All of it since each leaf is folded and curled in
+/// the map (D292).
+pub const RELIEF: f32 = 1.0;
+
+/// How much a leaf reflects head on, as Bevy's reflectance (0.16 times its square): some 2%,
+/// a little under a clean waxy cuticle's 3%, as hairs and dust dull a leaf, and at 3% the sun
+/// turned whole leaves chalky (D292). Its gloss is each leaf's own, the atlas's roughness.
+pub const LEAF_REFLECTANCE: f32 = 0.28;
 
 /// The card atlas's normal map, read as numbers rather than colours.
 pub fn leaf_normals(cards: &Cards, assets: &AssetServer) -> Handle<Image> {
@@ -392,8 +398,9 @@ impl Looks {
                 cull_mode: None,
                 double_sided: false,
                 diffuse_transmission: 0.55,
+                // Each leaf's roughness is the atlas's own, in its normal map (D292).
                 perceptual_roughness: 0.85,
-                reflectance: 0.2,
+                reflectance: LEAF_REFLECTANCE,
                 ..default()
             },
             extension: FoliageExtension {

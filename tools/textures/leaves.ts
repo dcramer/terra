@@ -99,14 +99,18 @@ export type Recipe = {
  * width, so a plant can be grown with its leaves at their real size (D276). */
 export type Composed = { size: number; rgba: Buffer; normal: Buffer; rough: Buffer; leaf?: number };
 
-/** How rough a card is where its recipe or picture says nothing: as the leaf material was. */
-export const ROUGH = 0.8;
+/** How rough a card is where its recipe or picture says nothing: nearly matte, since a
+ * picture's own painted light already has its sheen, and at the leaf material's 0.8 a fern
+ * by the camera went chalky in the sun. */
+export const ROUGH = 0.9;
 /** A leaf's underside, hairy or waxless and greyer: matte whatever its upper face. */
 const UNDERSIDE_ROUGH = 0.88;
 /** Bark of a twig, a needle's waxy face, a berry's bloom. */
 const TWIG_ROUGH = 0.75;
 const BERRY_ROUGH = 0.45;
-const NEEDLE_ROUGH = 0.6;
+// A needle is too thin for a card's one normal to glint true: glossier, a spruce's cards went
+// white against the sun.
+const NEEDLE_ROUGH = 0.85;
 
 /** The leaves of a scan, each a connected patch of its opacity past half, the smallest left
  * out (bits broken off, specks of dust), with the label map that says which pixel is whose. */
@@ -408,7 +412,8 @@ export function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: La
       // A hole an insect bit: nothing, and a thin dead rim round it.
       let rim = 0;
       for (const [ha, hc, hr] of laid.holes ?? []) {
-        const d = Math.hypot(a - ha, (c - hc) * 1.15) / hr;
+        // Ragged, as a bite is, not a punched circle.
+        const d = Math.hypot(a - ha, (c - hc) * 1.15) / (hr * (0.75 + 0.5 * noise2(a / hr * 1.5, c / hr * 1.5, laid.seed ?? 0)));
         if (d < 1) cover = 0;
         else rim = Math.max(rim, 1 - Math.min(1, (d - 1) * 4));
       }
@@ -448,8 +453,11 @@ export function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: La
       }
       if (laid.underside) {
         // A leaf's underside: paler and greyer, a little blue, its veins standing out less.
+        // Graded to an albedo, less grey and blue: against living leaves' greens the old
+        // underside read chalky and slate.
         const u = grey(r, g, b);
-        [r, g, b] = [(r * 0.6 + u * 0.4) * 1.2, (g * 0.6 + u * 0.4) * 1.18, (b * 0.6 + u * 0.4) * 1.3];
+        const [keep, blue] = recipe.albedo ? [0.75, 1.15] : [0.6, 1.3];
+        [r, g, b] = [(r * keep + u * (1 - keep)) * 1.2, (g * keep + u * (1 - keep)) * 1.18, (b * keep + u * (1 - keep)) * blue];
       }
       // A little darker toward the stalk, where a leaf's base lies in its neighbours' shade.
       const base = 0.82 + 0.18 * Math.min(1, Math.max(0, a * 1.6));
@@ -766,7 +774,7 @@ function needles(recipe: Recipe, size: number): Composed {
     }
   }
   const draw = (front: boolean) => {
-    // A needle's waxy face is glossier than the twig's bark.
+    // Needles as matte as `NEEDLE_ROUGH` says.
     for (const n of laid) if (n.front === front) drawTwig(canvas, n.points, [n.width, n.width * 0.3], n.colour, NEEDLE_ROUGH);
   };
   draw(false);

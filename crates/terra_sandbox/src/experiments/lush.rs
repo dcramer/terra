@@ -157,13 +157,16 @@ impl Leaf {
         }
     }
 }
-/// How the crowns' leaves are shaded (D247): their pictures greyed by 15% and darkened by
-/// 15%, toward a forest's leaves in the shade; how brightly a leaf glows lit through toward
-/// the sun; and how dark the inside of a crown goes in the sun's light, at least.
-const LEAF: Vec4 = Vec4::new(0.15, 0.15, 1.6, 0.3);
-/// The middle layer's leaves (D269): greyed and darkened as the floor's (D268), lit through
-/// less than a crown's, as backlit they glowed lime, and as dark inside as a crown.
-const THICKET: Vec4 = Vec4::new(0.12, 0.1, 0.8, 0.25);
+/// How the crowns' leaves are shaded (D247): their pictures neither greyed nor darkened,
+/// since the atlas's leaves are graded to living leaves' colour (D292), where once they were
+/// greyed and darkened by 15% from a pale pastel; how brightly a leaf glows lit through
+/// toward the sun, a fifth more than when the leaves were paler, as the glow takes their colour;
+/// and how dark the inside of a crown goes in the sun's light, at least.
+const LEAF: Vec4 = Vec4::new(0.0, 0.0, 1.8, 0.3);
+/// The middle layer's leaves (D269): darkened as the floor's (D268) but not greyed, its
+/// hazel, bramble and holly graded to living leaves' greens (D292); lit through less than a
+/// crown's, as backlit they glowed lime, and as dark inside as a crown.
+const THICKET: Vec4 = Vec4::new(0.0, 0.1, 0.8, 0.25);
 /// How much of the light through a leaf is Bevy's own diffuse transmission (D279): little, as it
 /// takes the open sky through every leaf, unshaded by the crowns, which washed the forest's
 /// middle distance teal; the light through a leaf is the foliage shader's, from the sun and
@@ -172,21 +175,22 @@ const BEVY_THROUGH: f32 = 0.05;
 /// The far crowns' colours, oak, pine and spruce: the leaves' average, as the farthest level
 /// of a tree and the far forest past the meadow show them (D273).
 const FAR_CROWNS: [Color; 3] = [
-    Color::srgb(0.22, 0.32, 0.12),
+    Color::srgb(0.19, 0.3, 0.085),
     Color::srgb(0.15, 0.23, 0.12),
     Color::srgb(0.13, 0.21, 0.12),
 ];
-/// Each kind's crown cards tinted, oak, pine and spruce (D247, D248).
+/// Each kind's crown cards tinted, oak, pine and spruce (D247, D248); the conifers' as they
+/// read when the crowns' leaves were greyed and darkened (D292).
 const CROWN_TINTS: [Vec3; 3] = [
     Vec3::new(0.92, 0.95, 0.85),
-    Vec3::new(1.15, 1.15, 1.0),
-    Vec3::new(1.5, 1.65, 0.45),
+    Vec3::new(1.16, 0.95, 1.05),
+    Vec3::new(1.48, 1.36, 0.67),
 ];
 /// The atlas's oakbranch, pine and spruce pictures' average colour where they are leaf,
 /// linear, measured from `materials/foliage/cards.png` by hand-run script: what the far
 /// forest's crowns are coloured from, tinted and darkened as the crowns' cards are (D273).
 const LEAF_MEANS: [Vec3; 3] = [
-    Vec3::new(0.111, 0.183, 0.057),
+    Vec3::new(0.079, 0.128, 0.036),
     Vec3::new(0.027, 0.074, 0.027),
     Vec3::new(0.006, 0.014, 0.007),
 ];
@@ -737,8 +741,9 @@ fn plant(
             cull_mode: None,
             double_sided: false,
             diffuse_transmission: transmission,
+            // Each leaf's roughness is the atlas's own, its reflectance a leaf's (D292).
             perceptual_roughness: 0.8,
-            reflectance: 0.25,
+            reflectance: terra_world::grown::LEAF_REFLECTANCE,
             ..default()
         },
         extension: FoliageExtension {
@@ -750,8 +755,8 @@ fn plant(
         },
     };
     let crown_leaves = materials.add(crown_material(Vec3::ZERO, LEAF, BEVY_THROUGH));
-    // The floor's and the middle layer's: greyed and darkened as the crowns' are, if less,
-    // so their pictures' spring green reads as leaves in a wood's shade, not lime, and lit through
+    // The floor's and the middle layer's: greyed and darkened a little, so the ferns' and
+    // herbs' pictures' spring green reads as leaves in a wood's shade, not lime, and lit through
     // less, as backlit they glowed lime too (D268).
     let floor_cards = materials.add(crown_material(
         Vec3::ZERO,

@@ -57,14 +57,15 @@ fn sky_seen(world: vec3<f32>, N: vec3<f32>, frag_coord: vec4<f32>) -> f32 {
     return clamp(dot(seen, luma) / open_light, 0.0, 1.0);
 }
 
-// Bark reflects the sky only where it sees the sky (D289): the environment map's specular
-// light is the open sky's, which no crown hides, so limbs up among the leaves, seen from
-// below, shone slate-blue with a sky they cannot see. Specular occlusion from how much of the
+// Bark and leaves reflect the sky only where they see the sky (D289, D292): the environment
+// map's specular light is the open sky's, which no crown hides, so limbs up among the leaves,
+// seen from below, and glossy leaves deep in the undergrowth shone slate-blue with a sky they
+// cannot see. Specular occlusion from how much of the
 // sky the point sees, as Frostbite's from ambient occlusion (Lagarde and de Rousiers, "Moving
 // Frostbite to Physically Based Rendering", 2014, section 4.10.2), the visibility here the
 // sky occlusion volume's, as Unreal's sky light occlusion dims its sky's reflections as well.
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP)
-fn bark_sky_specular(input: PbrInput, frag_coord: vec4<f32>) -> f32 {
+fn sky_specular(input: PbrInput, frag_coord: vec4<f32>) -> f32 {
     let seen = sky_seen(input.world_position.xyz, input.N, frag_coord);
     let n_dot_v = max(dot(input.N, input.V), 1.0e-4);
     let roughness = input.material.perceptual_roughness * input.material.perceptual_roughness;
@@ -201,7 +202,8 @@ struct Wind {
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> wind: Wind;
-// The card atlas's normal map: each leaf's relief and tilt, in OpenGL's convention (D269).
+// The card atlas's normal map: each leaf's relief and tilt, in OpenGL's convention (D269), and
+// in its alpha each pixel's roughness (D292).
 @group(constants::MATERIAL_BIND_GROUP) @binding(102)
 var leaf_normals: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(103)
@@ -214,7 +216,7 @@ var leaf_normals_sampler: sampler;
 // the world position and the texture place change across the screen: Schüler's cotangent
 // frame ("Normal Mapping Without Precomputed Tangents", 2013), which is right from either
 // side of the card.
-fn leaf_relief(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>) {
+fn leaf_relief(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, n: vec2<f32>) {
     let dp1 = dpdx(world);
     let dp2 = dpdy(world);
     let duv1 = dpdx(uv);
@@ -231,16 +233,53 @@ fn leaf_relief(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>) 
     let t = dp2perp * duv1.x + dp1perp * duv2.x;
     let b = dp2perp * duv1.y + dp1perp * duv2.y;
     let scale = inverseSqrt(max(max(dot(t, t), dot(b, b)), 1.0e-20));
-    let n = textureSampleBias(leaf_normals, leaf_normals_sampler, uv, view.mip_bias).rgb * 2.0 - 1.0;
     // Green is up the picture, toward a smaller v.
     let lean = (n.x * t - n.y * b) * scale;
     let leant = (*input).N + lean * wind.relief;
     // Kept only if it is a direction: a frame of nothing gives no number at all.
     let length2 = dot(leant, leant);
     if length2 > 1.0e-8 && length2 < 1.0e8 {
+        let crown = (*input).N;
         (*input).N = leant * inverseSqrt(length2);
+        // A leaf, or half of a folded one, turned from the crown's outward face sees less of
+        // the open side the crown's light comes from, so it is a little darker in the sky's
+        // light too, not only in the sun's (D292): in shade, where only that light falls, each
+        // leaf then still reads apart from the next, as a bent normal's occlusion has it.
+        let facing = clamp(dot((*input).N, crown), 0.0, 1.0);
+        (*input).diffuse_occlusion *= mix(1.0, facing * facing, LEAF_TILT_SHADE);
     }
 }
+
+// How much a leaf turned from its crown's face is darkened in the sky's light (D292).
+const LEAF_TILT_SHADE: f32 = 0.7;
+
+// Each leaf's own gloss (D292): the atlas's roughness, kept in its normal map's alpha, the
+// waxy upper face of an oak or holly leaf glossier than its veins, a hazel's softer, every
+// underside matte; so the sun glints off leaves one by one as they face it. Widened where
+// the leaves' normals turn faster across the screen than a pixel can hold, so a crown farther
+// off is a soft sheen, not glitter: Tokuyoshi and Kaplanyan's specular anti-aliasing
+// ("Improved Geometric Specular Antialiasing", 2019), as Godot does it (MIT, by Juan
+// Linietsky, Ariel Manzur and the Godot contributors; scene_forward_clustered.glsl), with
+// its defaults.
+fn leaf_gloss(input: ptr<function, PbrInput>, rough: f32) {
+    let n = (*input).N;
+    let dndu = dpdx(n);
+    let dndv = dpdy(n);
+    let variance = GLOSS_AA_SPREAD * (dot(dndu, dndu) + dot(dndv, dndv));
+    let kernel = min(2.0 * variance, GLOSS_AA_LIMIT);
+    let alpha = rough * rough;
+    (*input).material.perceptual_roughness = sqrt(clamp(alpha + kernel, 0.0, 1.0));
+}
+
+// How much of the sky a glossy leaf reflects, of what the environment map gives (D292). A
+// leaf's sheen is the sun's glint off it; the sky's, at a leaf's gloss, turned the leaves in
+// shade at the forest's edge to grey ghosts, a leaf seldom being one smooth plane facing the
+// sky as a card's normal map has it.
+const LEAF_SKY_SHEEN: f32 = 0.15;
+
+// Godot's roughness limiter: the screen-space variance taken, and the most it adds.
+const GLOSS_AA_SPREAD: f32 = 0.25;
+const GLOSS_AA_LIMIT: f32 = 0.18;
 
 fn hash3(p: vec3<f32>) -> f32 {
     return fract(sin(dot(p, vec3<f32>(127.1, 311.7, 74.7))) * 43758.5453);
@@ -632,7 +671,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     }
 @if(VERTEX_UVS_A) {
     if wind.bark < 0.5 && wind.relief > 0.0 {
-        leaf_relief(&pbr_input, in.uv, in.world_position.xyz);
+        let surface = textureSampleBias(leaf_normals, leaf_normals_sampler, in.uv, view.mip_bias);
+        leaf_relief(&pbr_input, in.uv, in.world_position.xyz, surface.xy * 2.0 - 1.0);
+        leaf_gloss(&pbr_input, surface.a);
     }
 }
 @if(VERTEX_COLORS) {
@@ -668,8 +709,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     }
 }
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) {
-    if wind.bark > 0.5 {
-        pbr_input.specular_occlusion *= bark_sky_specular(pbr_input, in.position);
+    pbr_input.specular_occlusion *= sky_specular(pbr_input, in.position);
+    if wind.bark < 0.5 {
+        pbr_input.specular_occlusion *= LEAF_SKY_SHEEN;
     }
 }
     let leaf_colour = pbr_input.material.base_color.rgb;
