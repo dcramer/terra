@@ -157,13 +157,13 @@ The hammer's *Block* has the upper half and the stair and slope upside down; *Co
 **Doors** are fitted props (D207); none is fitted or drawn for now (D225), so a doorway is its frame and steps.
 ## Roofs (D209)
 
-A kit lays its own roofs, from the shape the roof's sections make over the walls (`terra_build::layout::roofs`, drawn by `roofing`): a gable, a hip or a lean-to over any plan, an L, T or U getting its valleys and its ridges dying into one another from the sections alone. In the order a roof goes up, a stage of its cells at a time:
+A kit lays its own roofs, from the shape the roof's sections make over the walls (`terra_build::layout::roofs`, drawn by `roofing`): a gable, a hip or a lean-to over any plan, an L, T or U getting its valleys and its ridges dying into one another from the sections alone. A lean-to suits a rectangle or a shed: over an L, T or U it stands each wing's high side up as a tall, tower-like gable wall, so the kit sheet and the village give those gables, hips, or a hip over the main block with gabled wings. A block kind's wall top under a pitched roof takes no coping (D215), which would stand up through the covering along the wall's line. In the order a roof goes up, a stage of its cells at a time:
 
 | Stage | Pieces |
 |---|---|
 | Frame | A rafter up the slope at every cube, in the kit's timber (round poles for logs and thatch, hewn for stone), and a beam under every ridge, hip and valley |
 | Battens | One under the foot of each course, along the face |
-| Covering | The covering a square at a time, from the eaves up; boards along the eaves (fascia) and the verges (bargeboards); then caps over ridges and hips (two boards, or a roll of the covering), valley boards, and a mortar fillet where a wall stands up through the roof |
+| Covering | The covering a square at a time, from the eaves up; boards along the eaves (fascia) and the verges (bargeboards); then caps over ridges and hips (two boards, or a roll of the covering), an open valley (the covering cut back either side of it, its courses' cut ends facing a channel lined with boards), and a mortar fillet where a wall stands up through the roof. The boards are the kit's planks weathered lighter (`board_tint`), so a roof's edges read against its covering |
 
 The covering is courses, level up the slope so they run round a hip, each stepping out at its butt by the kit's amount, wandering a little along it; the texture is laid so its rows sit on the steps, each course shifted along so no two rows repeat. Shakes over pine logs, slates (Poly Haven's `grey_roof_tiles_02`) over stone, a foot of thatch (`riet_01`) over hewn timber: each kit's `roof` numbers and its `Covering` material, so a roof is data too.
 
@@ -173,7 +173,7 @@ A ghost's covering is a plain sheet, without its courses, which costs a tenth as
 
 ## Checking it
 
-The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a doorway, windows and a gable roof, every shape in each kit (a platform on posts reached by stairs and a ramp, a step of halves, a post alone) and a floor alone, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71): To the east, every roof style (gable, hip, lean-to) over every plan (a rectangle, an L, a T, a U) in each kit and mixed, built, part-built and as a ghost; `--sheet-rows TEXT` lays only the rows whose names hold it, as `--sheet-rows "stone: L"`, since the whole sheet is heavy to lay.
+The yard (building-tech.md) has a kit sheet: one of each way walls meet, a free end, a corner, a T, a cross, a long wall, posts, a wall carved a cube at a time and a small cabin with a doorway, windows and a gable roof, every shape in each kit (a platform on posts reached by stairs and a ramp, a step of halves, a post alone) and a floor alone, each in a row of three: built, going up and as a blueprint. Each row's vantage is written to the log, so a picture of it is one command (D69, D71): To the east, every sensible roof over every plan (a rectangle under a gable, a hip or a lean-to; an L, a T and a U under gables, hips, or a hip with gabled wings) in each kit and mixed, built, part-built and as a ghost; `--sheet-rows TEXT` lays only the rows whose names hold it, as `--sheet-rows "stone: L"`, since the whole sheet is heavy to lay.
 
 ```bash
 cargo run -p terra_sandbox -- --experiment play --level yard --kit-sheet --time 16 --vantage 13,9,-6,13,0.5,-26.5 --shot out/corners.png

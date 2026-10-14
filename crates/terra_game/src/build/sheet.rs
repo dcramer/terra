@@ -587,32 +587,39 @@ fn slope(frame: &Transform) -> Operation {
 const ROOF_GROUP_M: f32 = 40.0;
 
 /// A plan's shape: the rooms it is drawn as, from one tile to another, and the sections of
-/// its roof in a style. Arms are four metres wide, but a U's, three.
-fn plan(shape: &str, style: RoofStyle) -> (Vec<([i32; 3], [i32; 3])>, Vec<RoofSection>) {
-    let pitch = if style == RoofStyle::LeanTo { 0.4 } else { 0.7 };
-    let section = |min: [i32; 3], max: [i32; 3], along_x: bool| RoofSection {
+/// its roof, its main block's in one style and its wings' in another. Arms are four metres
+/// wide, but a U's, three.
+fn plan(
+    shape: &str,
+    main: RoofStyle,
+    wings: RoofStyle,
+) -> (Vec<([i32; 3], [i32; 3])>, Vec<RoofSection>) {
+    let pitch = |style: RoofStyle| if style == RoofStyle::LeanTo { 0.4 } else { 0.7 };
+    let section = |min: [i32; 3], max: [i32; 3], style: RoofStyle, along_x: bool| RoofSection {
         min,
         max,
         style,
         along_x,
-        pitch,
+        pitch: pitch(style),
     };
     // A wing off the main block reaches into it: to its ridge for a gable, so its ridge
-    // dies into the main roof's; across it for a hip or a lean-to, whose ends lie under
-    // the main roof's slopes.
+    // dies into the main roof's; across it for a hip, whose end lies under the main roof's
+    // slope.
     let wing = |x: (i32, i32), z_end: i32| {
-        let from = if style == RoofStyle::Gable { 4 } else { 0 };
-        let along_x = style == RoofStyle::LeanTo;
-        section([x.0, 0, from], [x.1, 0, z_end], along_x)
+        let from = if wings == RoofStyle::Gable { 4 } else { 0 };
+        section([x.0, 0, from], [x.1, 0, z_end], wings, false)
     };
     match shape {
         "L" => (
             vec![([0, 0, 0], [11, 0, 7]), ([0, 0, 7], [7, 0, 15])],
-            vec![section([0, 0, 0], [11, 0, 7], true), wing((0, 7), 15)],
+            vec![section([0, 0, 0], [11, 0, 7], main, true), wing((0, 7), 15)],
         ),
         "T" => (
             vec![([0, 0, 0], [13, 0, 7]), ([3, 0, 7], [10, 0, 15])],
-            vec![section([0, 0, 0], [13, 0, 7], true), wing((3, 10), 15)],
+            vec![
+                section([0, 0, 0], [13, 0, 7], main, true),
+                wing((3, 10), 15),
+            ],
         ),
         "U" => (
             vec![
@@ -621,30 +628,37 @@ fn plan(shape: &str, style: RoofStyle) -> (Vec<([i32; 3], [i32; 3])>, Vec<RoofSe
                 ([10, 0, 7], [15, 0, 13]),
             ],
             vec![
-                section([0, 0, 0], [15, 0, 7], true),
+                section([0, 0, 0], [15, 0, 7], main, true),
                 wing((0, 5), 13),
                 wing((10, 15), 13),
             ],
         ),
         _ => (
             vec![([0, 0, 0], [9, 0, 7])],
-            vec![section([0, 0, 0], [9, 0, 7], true)],
+            vec![section([0, 0, 0], [9, 0, 7], main, true)],
         ),
     }
 }
 
-/// The roof rows: every style of roof over every shape of plan, in a kind, or mixed: the
+/// The roof rows: every sensible roof over every shape of plan, in a kind, or mixed: the
 /// main block in the second kind and its wings in the first, so their roofs meet. Each with
 /// a door in its north wall and a window in its west.
 pub(super) fn roof_rows(kinds: &[Kind], mixed: bool) -> Vec<(String, Vec<BuildOp>)> {
     let mut rows = Vec::new();
     for shape in ["rectangle", "L", "T", "U"] {
-        for (style, name) in [
-            (RoofStyle::Gable, "gable"),
-            (RoofStyle::Hip, "hip"),
-            (RoofStyle::LeanTo, "lean-to"),
+        // A lean-to only over a rectangle: over a wing it makes a tall gable wall where it
+        // is high, so an L, a T or a U takes a hip over its main block with gabled wings.
+        let third = if shape == "rectangle" {
+            (RoofStyle::LeanTo, RoofStyle::LeanTo, "lean-to")
+        } else {
+            (RoofStyle::Hip, RoofStyle::Gable, "hip and gable")
+        };
+        for (style, wings, name) in [
+            (RoofStyle::Gable, RoofStyle::Gable, "gable"),
+            (RoofStyle::Hip, RoofStyle::Hip, "hip"),
+            third,
         ] {
-            let (rooms, sections) = plan(shape, style);
+            let (rooms, sections) = plan(shape, style, wings);
             let mut ops = Vec::new();
             for (index, &(min, max)) in rooms.iter().enumerate() {
                 let kind = if mixed && kinds.len() > 1 && index == 0 && rooms.len() > 1 {

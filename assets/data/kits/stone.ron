@@ -51,6 +51,7 @@
         rafter: (Hewn, 0.13),
         batten: (0.05, 0.025),
         board: (0.16, 0.035),
+        board_tint: (1.36, 1.34, 1.3),
         ridge: Roll,
         cap: 0.11,
         fillet: 0.1,

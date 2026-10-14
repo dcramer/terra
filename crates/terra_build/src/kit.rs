@@ -319,6 +319,10 @@ pub struct Roofing {
     pub batten: (f32, f32),
     /// The boards along its eaves (fascia) and verges (bargeboards): how deep and thick.
     pub board: (f32, f32),
+    /// What its boards' colour is multiplied by (linear): their wood weathered to a silver
+    /// grey-brown, lighter than the bare texture, so a roof's edges read against its
+    /// covering and the walls, not as black lines.
+    pub board_tint: [f32; 3],
     /// What caps its ridges and hips, and how wide it is either side of them.
     pub ridge: Ridge,
     pub cap: f32,
@@ -349,6 +353,7 @@ impl Default for Roofing {
             rafter: (Profile::Round, 0.14),
             batten: (0.06, 0.025),
             board: (0.22, 0.035),
+            board_tint: [1.42, 1.36, 1.26],
             ridge: Ridge::Boards,
             cap: 0.16,
             fillet: 0.1,

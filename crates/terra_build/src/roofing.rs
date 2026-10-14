@@ -109,6 +109,54 @@ impl Square {
         triangles
     }
 
+    /// For each facet, the valleys running through it from the square's middle to a
+    /// corner, where the next triangle round rises above its plane: each as its two ends and
+    /// the way into the facet, square to it in its plane.
+    fn valleys(&self, facets: &[Facet]) -> Vec<Vec<(Vec3, Vec3, Vec3)>> {
+        if facets.len() != 4 {
+            return vec![Vec::new(); facets.len()];
+        }
+        (0..4)
+            .map(|side| {
+                let (t, _) = &facets[side];
+                let n = up(t);
+                let mut found = Vec::new();
+                // Its edges to the corners after and before it, shared with the triangles
+                // either side.
+                for (corner, next) in [((side + 1) % 4, (side + 1) % 4), (side, (side + 3) % 4)] {
+                    let (p, q) = (self.middle, self.corners[corner]);
+                    let (other, _) = &facets[next];
+                    let apex = other
+                        .iter()
+                        .copied()
+                        .max_by(|a, b| {
+                            let off = |x: Vec3| x.distance(p).min(x.distance(q));
+                            off(*a).total_cmp(&off(*b))
+                        })
+                        .unwrap_or(p);
+                    // A crease, not the few millimetres corners are rounded to on the grid.
+                    if n.dot(apex - p) <= 0.015 {
+                        continue;
+                    }
+                    let third = t
+                        .iter()
+                        .copied()
+                        .max_by(|a, b| {
+                            let off = |x: Vec3| x.distance(p).min(x.distance(q));
+                            off(*a).total_cmp(&off(*b))
+                        })
+                        .unwrap_or(p);
+                    let mut inward = n.cross(q - p).normalize_or_zero();
+                    if inward.dot(third - p) < 0.0 {
+                        inward = -inward;
+                    }
+                    found.push((p, q, inward));
+                }
+                found
+            })
+            .collect()
+    }
+
     /// The course a height is in, and how far up it, from 0 at its foot to 1 at its head.
     fn course(&self, y: f32) -> (i32, f32) {
         let at = (y - self.base) / self.rise;
@@ -144,8 +192,19 @@ impl Square {
         let r = &kit.roof;
         let texture = size(kit, Material::Covering);
         let rows = r.rows.max(0.1);
-        for (polygon, sides) in self.facets() {
+        let facets = self.facets();
+        let valleys = self.valleys(&facets);
+        for ((polygon, sides), cuts) in facets.into_iter().zip(valleys) {
             let n = up(&polygon);
+            // Cut back from a valley through it, so the valley is an open channel, its
+            // lining showing between the courses' cut ends (`valley`).
+            let mut polygon = polygon;
+            for &(from, _, inward) in &cuts {
+                polygon = keep_beyond(&polygon, from + inward * VALLEY_M, inward);
+            }
+            if polygon.len() < 3 {
+                continue;
+            }
             let level = Vec3::Y.cross(n).normalize_or(Vec3::X);
             let upslope = n.cross(level);
             // How far out from the roof a point stands, in its course: the course's butt
@@ -185,6 +244,13 @@ impl Square {
                         .normalize_or(Vec3::X);
                     (a, b, outward)
                 })
+                .collect();
+            // And where it is cut back from a valley, its cut edge, facing the channel.
+            let edges: Vec<(Vec3, Vec3, Vec3)> = edges
+                .into_iter()
+                .chain(cuts.iter().map(|&(from, to, inward)| {
+                    (from + inward * VALLEY_M, to + inward * VALLEY_M, -inward)
+                }))
                 .collect();
             let (bands, steps) = bands(&polygon, self);
             // Each band leans out a little more at its foot than its head, shaded as one.
@@ -355,6 +421,31 @@ fn bands(polygon: &[Vec3], square: &Square) -> (Vec<(i32, Vec<Vec3>)>, Vec<(i32,
     (bands, steps)
 }
 
+/// How far the covering stops short of a valley either side, leaving it an open channel.
+const VALLEY_M: f32 = 0.13;
+
+/// The part of a flat convex polygon on the far side of a line through `at` square to
+/// `inward`, in its plane: where `(p - at) . inward` is not less than nothing.
+fn keep_beyond(polygon: &[Vec3], at: Vec3, inward: Vec3) -> Vec<Vec3> {
+    let d = |p: Vec3| (p - at).dot(inward);
+    let mut out = Vec::new();
+    for i in 0..polygon.len() {
+        let (a, b) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+        let (da, db) = (d(a), d(b));
+        if da >= 0.0 {
+            out.push(a);
+        }
+        if (da >= 0.0) != (db >= 0.0) {
+            out.push(a + (b - a) * (da / (da - db)));
+        }
+    }
+    out.dedup_by(|a, b| a.distance(*b) < 1e-6);
+    if out.len() > 1 && out[0].distance(out[out.len() - 1]) < 1e-6 {
+        out.pop();
+    }
+    out
+}
+
 /// Four corners in order, wound to face a way.
 fn facing(quad: [Vec3; 4], way: Vec3) -> [Vec3; 4] {
     let face = (quad[1] - quad[0]).cross(quad[2] - quad[0]);
@@ -504,7 +595,7 @@ fn board(from: Vec3, to: Vec3, inside: Vec3, kit: &Kit, surfaces: &mut Surfaces)
         from - Vec3::Y * deep,
         [to - from, inward * thick, Vec3::Y * (deep + 0.01)],
         size(kit, Material::Board),
-        [0.85; 3],
+        kit.roof.board_tint,
     );
 }
 
@@ -526,7 +617,7 @@ fn cap(from: Vec3, to: Vec3, sides: [Vec3; 2], seed: u32, kit: &Kit, surfaces: &
                     start,
                     [along, down * (r.cap + thick), n * thick],
                     size(kit, Material::Board),
-                    [0.9; 3],
+                    r.board_tint,
                 );
             }
         }
@@ -610,19 +701,20 @@ fn cap(from: Vec3, to: Vec3, sides: [Vec3; 2], seed: u32, kit: &Kit, surfaces: &
     }
 }
 
-/// A valley's boards, one on each slope along it, over the covering.
+/// A valley's lining, an open channel between the covering's cut ends either side
+/// (`Square::cover` stops short of it): boards along it on each slope, laid on the roof
+/// under the covering, running a little under its cut ends.
 fn valley(from: Vec3, to: Vec3, sides: [Vec3; 2], kit: &Kit, surfaces: &mut Surfaces) {
     let r = &kit.roof;
-    let (_, thick) = r.board;
     for side in sides {
         let n = planar_normal(from, to, side);
         let out = across(from, to, side);
         oriented(
             surfaces.of(Material::Board),
-            from + n * (r.thick + r.butt * 0.5),
-            [to - from, out * r.cap * 0.8, n * thick],
+            from + n * 0.002,
+            [to - from, out * (VALLEY_M + 0.05), n * (r.thick * 0.5)],
             size(kit, Material::Board),
-            [0.75; 3],
+            r.board_tint.map(|c| c * 0.45),
         );
     }
 }
@@ -689,6 +781,65 @@ mod tests {
             pitch: 0.7,
         }));
         base
+    }
+
+    #[test]
+    fn a_valley_is_an_open_channel_the_covering_stops_short_of_either_side() {
+        // An L: a gable along x over the main block, a wing's gable along z off its south
+        // side, their valley from the inner corner at (4, 4) up to (2, 2), along x = z.
+        let kit = Kit::default();
+        let mut base = Base::default();
+        for (min, max) in [([0, 0, 0], [11, 0, 7]), ([0, 0, 7], [7, 0, 15])] {
+            base.apply(BuildOp::AddRoom {
+                min,
+                max,
+                kind: kit.kind(),
+            });
+        }
+        for (min, max, along_x) in [
+            ([0, 0, 0], [11, 0, 7], true),
+            ([0, 0, 4], [7, 0, 15], false),
+        ] {
+            base.apply(BuildOp::AddRoof(RoofSection {
+                min,
+                max,
+                style: RoofStyle::Gable,
+                along_x,
+                pitch: 0.7,
+            }));
+        }
+        let mut pieces = Vec::new();
+        roofs::lay(
+            &base,
+            &kit,
+            &Kits(vec![kit.clone()]),
+            crate::layout::Scope::ALL,
+            &mut pieces,
+        );
+        let mut surfaces = Surfaces::default();
+        for piece in &pieces {
+            draw(piece, &kit, &mut surfaces);
+        }
+        let covering = &surfaces.0[&Material::Covering];
+        // The covering's top faces near the valley, either side of it.
+        let near = |side: f32| {
+            covering
+                .positions
+                .chunks(3)
+                .filter(|t| {
+                    t.iter().all(|p| {
+                        let off = (p.x - p.z) * side / std::f32::consts::SQRT_2;
+                        (2.6..3.7).contains(&p.x) && off > 0.0 && off < VALLEY_M * 0.6
+                    })
+                })
+                .count()
+        };
+        assert_eq!(
+            near(1.0),
+            0,
+            "covering in the channel on the main block's side"
+        );
+        assert_eq!(near(-1.0), 0, "covering in the channel on the wing's side");
     }
 
     #[test]

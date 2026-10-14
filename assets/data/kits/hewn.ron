@@ -40,6 +40,7 @@
         rafter: (Round, 0.12),
         batten: (0.05, 0.03),
         board: (0.2, 0.04),
+        board_tint: (1.4, 1.34, 1.24),
         ridge: Roll,
         cap: 0.3,
         fillet: 0.12,

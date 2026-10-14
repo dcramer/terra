@@ -37,7 +37,8 @@
 //   tint        what the covering's colour is multiplied by
 //   rafter      the rafters' section (Round poles or Hewn) and thickness
 //   batten      the battens' width and thickness, one under each course
-//   board       the fascia and bargeboards' depth and thickness
+//   board       the fascia and bargeboards' depth and thickness; board_tint, what their
+//               colour is multiplied by, weathered lighter than the bare planks
 //   ridge       what caps ridges and hips: Boards, or a Roll of the covering; cap, how
 //               wide it is either side
 //   fillet      the size of the mortar fillet where the roof meets a wall above it
@@ -99,6 +100,7 @@
         rafter: (Round, 0.14),
         batten: (0.06, 0.025),
         board: (0.22, 0.035),
+        board_tint: (1.42, 1.36, 1.26),
         ridge: Boards,
         cap: 0.16,
         fillet: 0.1,

@@ -287,6 +287,17 @@ impl<'a> Roles<'a> {
         ground_ticks(self.base, column)
     }
 
+    /// Whether a cube is the top of a storey's wall with a pitched roof over its tile.
+    fn roofed(&self, cube: IVec3) -> bool {
+        let storey = crate::storey_of(cube.y);
+        cube.y == crate::wall_layer(storey) + crate::STOREY_CUBES - 1
+            && self
+                .base
+                .sections()
+                .iter()
+                .any(|section| section.covers(IVec3::new(cube.x, storey, cube.z)))
+    }
+
     /// Whether a cell is in the ground: its middle below the ground's height there.
     fn buried(&self, at: IVec3) -> bool {
         at.y * TICKS + TICKS / 2 < self.ground([at.x, at.z])
@@ -349,6 +360,14 @@ impl<'a> Roles<'a> {
                     let role = match (vertical, hole) {
                         (Dir::Up, true) => Role::Sill,
                         (Dir::Up, false) if self.ours(cube - side.step() + IVec3::Y) => Role::Nose,
+                        // A block kind's wall top under a pitched roof is no crest: the
+                        // roof is over it, and a coping would stand up through the covering.
+                        // A timber wall keeps its plate, which carries the rafters.
+                        (Dir::Up, false)
+                            if !self.thin.contains(&self.kind) && self.roofed(cube) =>
+                        {
+                            continue;
+                        }
                         (Dir::Up, false) => Role::Crest,
                         (_, true) => Role::Head,
                         (_, false) => Role::Soffit,
@@ -594,6 +613,33 @@ mod tests {
             .iter()
             .filter(|d| d.cube == IVec3::from_array(cube) && d.edge.role == role)
             .collect()
+    }
+
+    #[test]
+    fn a_wall_top_under_a_pitched_roof_is_no_crest_and_one_open_to_the_sky_is() {
+        let mut base = Base::default();
+        base.apply(BuildOp::AddRoom {
+            min: [0, 0, 0],
+            max: [7, 0, 5],
+            kind: STONE,
+        });
+        // Open to the sky: its walls' tops are crests.
+        base.apply(BuildOp::SetRoof {
+            min: [1, 0, 1],
+            max: [6, 0, 4],
+            laid: false,
+            kind: STONE,
+        });
+        assert!(count(&all(&base), Role::Crest) > 0);
+        // Under a gable, none: a coping there would stand up through the roof.
+        base.apply(BuildOp::AddRoof(crate::RoofSection {
+            min: [0, 0, 0],
+            max: [7, 0, 5],
+            style: crate::RoofStyle::Gable,
+            along_x: true,
+            pitch: 0.7,
+        }));
+        assert_eq!(count(&all(&base), Role::Crest), 0);
     }
 
     #[test]
