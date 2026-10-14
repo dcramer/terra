@@ -2,7 +2,7 @@
 //! out to where the planet's curve hides the ground even from a height, so the forest is not
 //! an island. As SpeedTree games draw their farthest trees, each is a billboard: one card
 //! turned to the eye about its upright, its crown drawn on it by the shader as the species'
-//! silhouette, rounded and lit by Bevy's own lighting, its leaves' grain from the bushes'
+//! silhouette, rounded and lit by Bevy's own lighting, its leaves' grain from the spike's oak
 //! leaf picture (research/far-forest.md). The cards are merged into a mesh a square, so a few
 //! hundred draws hold tens of thousands of trees, and none casts a shadow. Where they stand,
 //! and which kind each is, follow the near forest's own rules (`species_at`, `glade_at`), so

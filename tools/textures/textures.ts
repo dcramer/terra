@@ -480,6 +480,19 @@ export function cellsOf(ron: string): Map<string, [number, number]> {
   return cells;
 }
 
+/** How long each card's leaves are, as a share of its width, in the card table as it stands,
+ * by name, for those that say. */
+export function leavesOf(ron: string): Map<string, number> {
+  const leaves = new Map<string, number>();
+  const starts = [...ron.matchAll(/"(\w+)": \(/g)];
+  starts.forEach((start, k) => {
+    const entry = ron.slice(start.index, starts[k + 1]?.index ?? ron.length);
+    const leaf = entry.match(/leaf: ([\d.]+)/);
+    if (leaf) leaves.set(start[1], Number(leaf[1]));
+  });
+  return leaves;
+}
+
 /** Lays each card in a square atlas, a grid of `columns` cells, with a normal map beside it,
  * and writes the card table the game reads, which gives each card's cell and outline in the
  * atlas's coordinates. A card is one of: a picture, cut out of its blue background (flat in
@@ -493,7 +506,9 @@ async function cards(name: string, entries: string[], size: number, columns: num
   const normals = Buffer.alloc(size * size * 3);
   for (let i = 0; i < size * size; i++) normals.set([128, 128, 255], i * 3);
   const ronFile = join(ROOT, "assets", "data", `${name}.ron`);
-  const before = existsSync(ronFile) ? cellsOf(readFileSync(ronFile, "utf8")) : new Map();
+  const standing = existsSync(ronFile) ? readFileSync(ronFile, "utf8") : "";
+  const before = cellsOf(standing);
+  const leavesBefore = leavesOf(standing);
   const old = existsSync(join(out, "cards.png")) ? rgba(join(out, "cards.png")) : undefined;
   const oldNormals = existsSync(join(out, "normal.png"))
     ? execFileSync("convert", [join(out, "normal.png"), "-depth", "8", "rgb:-"], { maxBuffer: 1 << 28 })
@@ -508,6 +523,7 @@ async function cards(name: string, entries: string[], size: number, columns: num
     if (!card || !source) throw new Error(`a card is name=image, name=recipe.leaves.json or name=keep, not ${entry}`);
     let pixels: Buffer;
     let normal: Buffer | undefined;
+    let leaf = leavesBefore.get(card);
     if (source === "keep") {
       const at = before.get(card);
       if (!at || !old || old.width !== size) throw new Error(`${card} is not in the atlas as it stands, at this size, to keep`);
@@ -522,13 +538,18 @@ async function cards(name: string, entries: string[], size: number, columns: num
       kept.push(card);
     } else if (source.endsWith(".leaves.json")) {
       const recipe: Recipe = JSON.parse(readFileSync(resolve(source), "utf8"));
-      if (!scans.has(recipe.scan)) scans.set(recipe.scan, await leafScan(recipe.scan));
-      const made = compose(scans.get(recipe.scan)!, recipe, cell);
+      // A conifer's needles are drawn, from no scan.
+      const drawn = recipe.form === "needles";
+      const id = drawn ? undefined : recipe.scan;
+      if (id !== undefined && !scans.has(id)) scans.set(id, await leafScan(id));
+      const made = compose(id === undefined ? undefined : scans.get(id), recipe, cell);
+      leaf = made.leaf;
       // The colour grown out over its edge, as for a picture.
       pixels = bleed(made.rgba, cell, cell);
       normal = made.normal;
-      composed.push(`${card} (${recipe.scan})`);
+      composed.push(drawn ? `${card} (drawn needle by needle)` : `${card} (${recipe.scan})`);
     } else {
+      leaf = undefined;
       // Resizing leaves what is clear black, and the edge a pale rim, which filtering at a
       // card's edge mixes in as a fringe; the colour inside is grown out over both.
       pixels = bleed(pictureCell(source, cell), cell, cell);
@@ -546,8 +567,10 @@ async function cards(name: string, entries: string[], size: number, columns: num
     table.push(`            cell: ${corner(0, 0)},`);
     table.push(`            outline: [${shape.map(([u, v]) => corner(u, v)).join(", ")}],`);
     table.push(`            colour: (${colour.map((c) => c.toFixed(3)).join(", ")}),`);
+    if (leaf !== undefined) table.push(`            leaf: ${leaf.toFixed(4)},`);
     table.push(`        ),`);
-    console.log(`${card}: cell ${col},${row}, its octagon ${(100 * area(shape)).toFixed(0)}% of the cell, colour ${colour.map((c) => c.toFixed(2))}`);
+    const leaves = leaf === undefined ? "" : `, its leaves ${(100 * leaf).toFixed(1)}% of it long`;
+    console.log(`${card}: cell ${col},${row}, its octagon ${(100 * area(shape)).toFixed(0)}% of the cell, colour ${colour.map((c) => c.toFixed(2))}${leaves}`);
   }
   execFileSync("convert", ["-size", `${size}x${size}`, "-depth", "8", "rgba:-", join(out, "cards.png")], { input: atlas });
   execFileSync("convert", ["-size", `${size}x${size}`, "-depth", "8", "rgb:-", join(out, "normal.png")], { input: normals });
@@ -556,7 +579,8 @@ async function cards(name: string, entries: string[], size: number, columns: num
     `// pictures and recipes by \`node tools/textures/textures.ts cards\`; don't edit by hand. Each`,
     `// card's cell is the top-left corner of its square in the atlas, a ${columns}th of it across, and`,
     `// its outline the octagon round what it covers past the cut, in the atlas's coordinates (0 to`,
-    `// 1), and its colour the average of what it covers, in sRGB. The normal map beside it is each`,
+    `// 1), its colour the average of what it covers, in sRGB, and for a composed card how long its`,
+    `// leaves are on average, as a share of the card's width. The normal map beside it is each`,
     `// leaf's relief and tilt, in OpenGL's convention; flat for cards made from pictures.`,
     `(`,
     `    atlas: "materials/${name}/cards.png",`,

@@ -16,10 +16,10 @@
 
 use super::shade::{self, NearShadows, ShadowSet};
 use super::species::Species;
-use super::thicket;
+use super::thicket::{self, Stool};
 use super::{
-    BARK_M, BUSH_KINDS, Build, CLEARING_M, FADE, FOREST_M, Foliage, FoliageExtension, Footing,
-    Limb, Path, Scanned, grow_bush, smoothstep, square, tube,
+    BARK_M, Build, CLEARING_M, FADE, FOREST_M, Foliage, FoliageExtension, Footing, Limb, Path,
+    Scanned, smoothstep, square, tube,
 };
 use bevy::{
     camera::visibility::VisibilityRange,
@@ -480,11 +480,10 @@ pub(super) struct Lay<'a, 'w, 's> {
     pub pine_bark: Handle<Foliage>,
     /// A young spruce's grey-brown bark.
     pub spruce_bark: Handle<Foliage>,
-    /// The cards of the shared atlas, and the bushes' own leaves.
+    /// The cards of the shared atlas.
     pub atlas: Handle<Foliage>,
     /// The middle layer's cards: the shared atlas, shaded deeper inside and lit through.
     pub thicket: Handle<Foliage>,
-    pub leaves: Handle<Foliage>,
     pub seed: Seed,
     /// The foliage materials, and those the middle layer's shadows shrink away in, by the
     /// leaves they are cut to and where they have shrunk away by, in quarter metres.
@@ -518,14 +517,6 @@ fn variant_tint(dice: &mut Rng, base: Vec3) -> Vec3 {
         value,
         value * dice.range(0.8, 1.05),
     )
-}
-
-fn tint_build(colours: &mut [[f32; 4]], tint: Vec3) {
-    for colour in colours {
-        colour[0] *= tint.x;
-        colour[1] *= tint.y;
-        colour[2] *= tint.z;
-    }
 }
 
 /// The kinds of undergrowth: the floor's, knee-high and below, and the middle layer's, one
@@ -626,9 +617,9 @@ const PLACEMENTS: [Placement; 16] = [
         tries: 6000,
         clump: (1, 3),
         spread_m: 1.4,
-        scale: (1.1, 2.1),
+        scale: (0.85, 1.2),
         seen_m: 85.0,
-        near_m: 0.0,
+        near_m: 25.0,
         shadow_m: 24.0,
         drift_m: 20.0,
     },
@@ -650,9 +641,9 @@ const PLACEMENTS: [Placement; 16] = [
         tries: 3500,
         clump: (1, 3),
         spread_m: 1.0,
-        scale: (0.7, 1.4),
+        scale: (0.85, 1.2),
         seen_m: 70.0,
-        near_m: 0.0,
+        near_m: 22.0,
         shadow_m: 24.0,
         drift_m: 14.0,
     },
@@ -1189,20 +1180,13 @@ impl Lay<'_, '_, '_> {
                     Drawn::one(self.meshes.add(build.mesh(false)), atlas)
                 }
                 Under::Hazel => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.32, 0.34, 0.31));
-                    let def = terra_world::grown::BushDef {
-                        leaves: "hazel".into(),
-                        tint: (1.0, 1.0, 1.0),
-                        clumps: (9, 14),
-                        spread: 1.15,
-                    };
-                    let build = plants::bush(&mut dice, &def, &card("hazel"), tint);
-                    let mesh = build.mesh(false);
-                    let atlas_handle = self.atlas.clone();
-                    let shadow = self.shadow_of(&mesh, Some(&atlas_handle), shadow_m);
-                    let mut drawn = Drawn::one(self.meshes.add(mesh), atlas);
-                    drawn.shadows.push(shadow);
-                    drawn
+                    // Young stools on the floor, a metre or two: rods, a vase, a fan, each
+                    // with its stems showing, at the size their leaves are (D276).
+                    let tint = variant_tint(&mut dice, Vec3::new(0.34, 0.37, 0.34));
+                    let stool = [Stool::Rods, Stool::Vase, Stool::Fan][n as usize % 3];
+                    let tallest = dice.range(1.3, 2.3);
+                    let shrub = thicket::coppice(&mut dice, &card("hazel"), tint, stool, tallest);
+                    self.layered(shrub, self.bark.clone(), shadow_m)
                 }
                 Under::Bilberry => {
                     let tint = variant_tint(&mut dice, Vec3::new(0.66, 0.7, 0.62));
@@ -1216,19 +1200,10 @@ impl Lay<'_, '_, '_> {
                     Drawn::one(self.meshes.add(build.mesh(false)), atlas)
                 }
                 Under::Scrub => {
-                    if n >= BUSH_KINDS {
-                        break;
-                    }
                     // Young oak scrub, darker than the oak spray's own lime.
-                    let mut build = grow_bush(&mut dice);
-                    let tint = variant_tint(&mut dice, Vec3::new(0.42, 0.46, 0.36));
-                    tint_build(&mut build.colours, tint);
-                    let mesh = build.mesh();
-                    let leaves = self.leaves.clone();
-                    let shadow = self.shadow_of(&mesh, Some(&leaves), shadow_m);
-                    let mut drawn = Drawn::one(self.meshes.add(mesh), Look::Foliage(leaves));
-                    drawn.shadows.push(shadow);
-                    drawn
+                    let tint = variant_tint(&mut dice, Vec3::new(0.4, 0.42, 0.37));
+                    let shrub = thicket::scrub(&mut dice, &card("oak"), tint);
+                    self.layered(shrub, self.bark.clone(), shadow_m)
                 }
                 Under::Sapling => {
                     let tint = variant_tint(&mut dice, Vec3::new(0.4, 0.42, 0.37));
@@ -1257,7 +1232,15 @@ impl Lay<'_, '_, '_> {
                 }
                 Under::Coppice => {
                     let tint = variant_tint(&mut dice, Vec3::new(0.34, 0.37, 0.34));
-                    let shrub = thicket::coppice(&mut dice, &card("hazel"), tint);
+                    let stool =
+                        [Stool::Vase, Stool::Fan, Stool::Rods, Stool::Overstood][n as usize % 4];
+                    let tallest = match stool {
+                        Stool::Vase => dice.range(2.8, 4.6),
+                        Stool::Fan => dice.range(2.6, 4.2),
+                        Stool::Rods => dice.range(2.0, 3.2),
+                        Stool::Overstood => dice.range(4.0, 5.4),
+                    };
+                    let shrub = thicket::coppice(&mut dice, &card("hazel"), tint, stool, tallest);
                     self.layered(shrub, self.bark.clone(), shadow_m)
                 }
                 Under::Holly => {

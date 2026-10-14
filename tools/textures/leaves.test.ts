@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Canvas, compose, laidNormal, scanLeaves, type Recipe, type Scan } from "./leaves.ts";
-import { cellsOf } from "./textures.ts";
+import { cellsOf, leavesOf } from "./textures.ts";
 
 const close = (a: number[], b: number[], within = 1e-6) => a.every((v, i) => Math.abs(v - b[i]) < within);
 
@@ -99,4 +99,49 @@ test("a composed card covers leaves and twig, its normal map flat where it cover
 test("the card table's cells are read back by name", () => {
   const ron = `cards: {\n        "oak": (\n            cell: (0.0000, 0.2500),\n        ),\n        "pine": (\n            cell: (0.5000, 0.0000),`;
   assert.deepEqual([...cellsOf(ron)], [["oak", [0, 0.25]], ["pine", [0.5, 0]]]);
+});
+
+test("the card table's leaf lengths are read back by name, for the cards that give one", () => {
+  const ron = `"oak": (\n            cell: (0.0000, 0.2500),\n            leaf: 0.1372,\n        ),\n        "pine": (\n            cell: (0.5000, 0.0000),\n        ),`;
+  assert.deepEqual([...leavesOf(ron)], [["oak", 0.1372]]);
+});
+
+test("a card says how long its leaves are, shorter as the recipe asks for smaller leaves", () => {
+  const recipe: Recipe = {
+    scan: "made up", form: "spray", leaves: 10, length: [0.2, 0.3], shoots: 2, twig: [0.4, 0.3, 0.2], thickness: 0.01,
+    tone: 0.2, young: 0.2, old: 0.2, underside: 0.1, saturation: 1, value: 1, seed: 4,
+  };
+  const big = compose(scan(2), recipe, 64).leaf;
+  const small = compose(scan(2), { ...recipe, length: [0.1, 0.15] }, 64).leaf;
+  // Measured on the card after it is fitted to its cell, so a little longer than asked.
+  assert.ok(big > 0.15 && big < 0.4, `leaves ${big} of the card`);
+  assert.ok(small < big * 0.75, `smaller leaves ${small} of the card, against ${big}`);
+});
+
+test("a conifer's card is drawn needle by needle, its needles as long as asked, its edge a fringe", () => {
+  const recipe: Recipe = {
+    form: "needles", leaves: 3, length: [0.04, 0.06], shoots: 10, twig: [0.3, 0.2, 0.13], thickness: 0.006, tone: 0.3,
+    young: 0, old: 0, underside: 0, saturation: 1, value: 1, seed: 7,
+    needle: { colour: [0.08, 0.14, 0.08], young: [0.15, 0.24, 0.11], width: 0.004, every: 0.006 },
+  };
+  const size = 128;
+  const card = compose(undefined, recipe, size);
+  assert.ok(card.leaf > 0.03 && card.leaf < 0.08, `needles ${card.leaf} of the card`);
+  let covered = 0;
+  let edge = 0;
+  for (let y = 1; y < size - 1; y++) {
+    for (let x = 1; x < size - 1; x++) {
+      const on = (i: number) => card.rgba[i * 4 + 3] > 115;
+      const i = y * size + x;
+      if (!on(i)) continue;
+      covered++;
+      if (!on(i - 1) || !on(i + 1) || !on(i - size) || !on(i + size)) edge++;
+    }
+  }
+  assert.ok(covered > size * size * 0.15, `covers ${covered}`);
+  // Single needles at its edge: far more edge for what it covers than a solid round shape
+  // as big, whose edge is its circumference.
+  const solid = 2 * Math.sqrt(Math.PI * covered);
+  assert.ok(edge > solid * 4, `${edge} of ${covered} covered pixels at an edge, against ${solid.toFixed(0)}`);
+  assert.deepEqual(compose(undefined, recipe, size).rgba, card.rgba, "the same recipe draws the same card");
 });

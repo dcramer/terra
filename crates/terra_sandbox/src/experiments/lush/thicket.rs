@@ -115,26 +115,134 @@ fn drawn(tree: &Tree, canopy: &Canopy, placed: &[Vec<Placing>], leaf: &Card) -> 
     }
 }
 
-/// A hazel stool: four to nine slender stems from one root, each a small upright tree
-/// leaning out, so the whole is a vase of leaves two to four and a half metres tall, as a
-/// hazel left uncut for a decade or two grows.
-pub(super) fn coppice(dice: &mut Rng, leaf: &Card, tint: Vec3) -> Shrub {
-    let def = def(Habit::Upright, "hazel", 0.6, 0.011);
-    let tallest = dice.range(2.6, 4.6);
-    let stems = 4 + dice.below(6);
+/// A tree bowed over toward `axis`'s turn, more the higher a point is, as a stem arches
+/// under the weight of its leaves: `angle` at its top, none at its foot.
+fn bowed(tree: &mut Tree, axis: Vec3, angle: f32) {
+    let height = tree.height.max(0.1);
+    let turn = |at: Vec3| {
+        let share = (at.y / height).clamp(0.0, 1.0);
+        Quat::from_axis_angle(axis, angle * share * share)
+    };
+    for limb in &mut tree.limbs {
+        for point in &mut limb.points {
+            *point = turn(*point) * *point;
+        }
+    }
+    for spray in &mut tree.sprays {
+        let by = turn(spray.at);
+        spray.at = by * spray.at;
+        spray.along = spray.along.map(|along| by * along);
+    }
+}
+
+/// How a hazel stool has grown (D276), so that stools read apart rather than as one rounded
+/// dome: hazel is cut to the ground every seven to twenty years and grows again as rods from
+/// the stool, so a wood holds stools at every age since.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Stool {
+    /// Five to nine stems leaning out all round, some bowing over at the top: a vase.
+    Vase,
+    /// Four to seven leaning one way, toward the light at a path's or a clearing's edge.
+    Fan,
+    /// Nine to fourteen thin straight rods a few years from the cut, nearly upright, their
+    /// leaves only along their upper half.
+    Rods,
+    /// Two to four thick old stems left uncut for decades, bare for half their height under
+    /// crowns of their own, like small trees from one root.
+    Overstood,
+}
+
+/// A hazel stool `tallest` metres tall at most, grown as `stool` says: slender stems from one
+/// root, each a small upright tree, leafy in gappy sprays along their upper part so the
+/// stems show between them.
+pub(super) fn coppice(
+    dice: &mut Rng,
+    leaf: &Card,
+    tint: Vec3,
+    stool: Stool,
+    tallest: f32,
+) -> Shrub {
+    // How many stems, how far they lean, how thick they are for their height, their sprays'
+    // size, the share of sprays kept, and how much of each stem is a bare pole under the
+    // small tree it carries.
+    let (stems, lean, trunk, clump, keep, bare) = match stool {
+        Stool::Vase => (5 + dice.below(5), (0.15, 0.5), 0.011, 0.75, 0.75, 0.0),
+        Stool::Fan => (4 + dice.below(4), (0.3, 0.7), 0.011, 0.75, 0.75, 0.0),
+        Stool::Rods => (9 + dice.below(6), (0.03, 0.22), 0.012, 0.65, 0.6, 0.3),
+        Stool::Overstood => (2 + dice.below(3), (0.1, 0.3), 0.025, 0.75, 0.8, 0.35),
+    };
+    let def = def(Habit::Upright, "hazel", clump, trunk);
     let turn = dice.range(0.0, TAU);
-    let mut stool = empty(Habit::Upright);
+    let light = dice.range(0.0, TAU);
+    let mut whole = empty(Habit::Upright);
     for k in 0..stems {
-        let height = tallest * dice.range(0.55, 1.0);
-        let mut stem = grown_tree::grow(dice, &def, height);
-        let around = turn + k as f32 / stems as f32 * TAU + dice.range(-0.4, 0.4);
+        let height = tallest
+            * match stool {
+                Stool::Rods => dice.range(0.7, 1.0),
+                _ => dice.range(0.55, 1.0),
+            };
+        let pole = height * bare;
+        let mut stem = grown_tree::grow(dice, &def, height - pole);
+        stem.sprays.retain(|_| dice.unit() < keep);
+        // Hazel holds its leaves in flat sprays along its shoots, out from its stem and
+        // drooping a little, not in balls, so a stool reads as layers with gaps between.
+        for spray in &mut stem.sprays {
+            let out = Vec3::new(spray.at.x, 0.0, spray.at.z).normalize_or(Vec3::X);
+            let wander = Vec3::new(dice.range(-0.5, 0.5), 0.0, dice.range(-0.5, 0.5));
+            spray.along = Some((out + wander - Vec3::Y * dice.range(0.0, 0.35)).normalize());
+        }
+        if pole > 0.0 {
+            // Its stem's foot no longer flares into roots up there.
+            let r = stem.trunk_m;
+            for limb in stem.limbs.iter_mut().filter(|limb| limb.depth == 0) {
+                for radius in &mut limb.radii {
+                    *radius = radius.min(r);
+                }
+            }
+            moved(&mut stem, Quat::IDENTITY, Vec3::Y * pole);
+            stem.limbs.push(Limb {
+                points: vec![Vec3::ZERO, Vec3::Y * pole * 0.5, Vec3::Y * pole],
+                radii: vec![r * 1.6, r * 1.1, r],
+                depth: 0,
+            });
+        }
+        let around = match stool {
+            Stool::Fan => light + dice.range(-0.9, 0.9),
+            _ => turn + k as f32 / stems as f32 * TAU + dice.range(-0.4, 0.4),
+        };
         let out = Vec3::new(libm::cosf(around), 0.0, libm::sinf(around));
-        let lean = Quat::from_axis_angle(Vec3::Y.cross(out), dice.range(0.1, 0.42));
+        let toward = Vec3::Y.cross(out);
+        // A leaning stem of a vase or a fan may bow over under its leaves.
+        if matches!(stool, Stool::Vase | Stool::Fan) && dice.unit() < 0.5 {
+            bowed(&mut stem, toward, dice.range(0.2, 0.6));
+        }
+        let lean = Quat::from_axis_angle(toward, dice.range(lean.0, lean.1));
         let spin = Quat::from_rotation_y(dice.range(0.0, TAU));
         moved(&mut stem, lean * spin, out * dice.range(0.04, 0.3));
-        merge(&mut stool, stem);
+        merge(&mut whole, stem);
     }
-    leafy(dice, &stool, leaf, tint)
+    leafy(dice, &whole, leaf, tint)
+}
+
+/// Oak scrub: two to four small oaks from one root a metre or two tall, crooked and
+/// spreading, as oak grows back where it was browsed or cut, gappy, its stems showing.
+pub(super) fn scrub(dice: &mut Rng, leaf: &Card, tint: Vec3) -> Shrub {
+    let def = def(Habit::Spreading, "oak", 0.6, 0.03);
+    let mut whole = empty(Habit::Spreading);
+    let turn = dice.range(0.0, TAU);
+    let stems = 2 + dice.below(3);
+    for k in 0..stems {
+        let height = dice.range(0.9, 1.9);
+        let mut stem = grown_tree::grow(dice, &def, height);
+        stem.sprays.retain(|_| dice.unit() < 0.8);
+        let around = turn + k as f32 / stems as f32 * TAU + dice.range(-0.5, 0.5);
+        let out = Vec3::new(libm::cosf(around), 0.0, libm::sinf(around));
+        let lean = Quat::from_axis_angle(Vec3::Y.cross(out), dice.range(0.1, 0.5));
+        let spin = Quat::from_rotation_y(dice.range(0.0, TAU));
+        moved(&mut stem, lean * spin, out * dice.range(0.05, 0.35));
+        merge(&mut whole, stem);
+    }
+    leafy(dice, &whole, leaf, tint)
 }
 
 /// A small conifer-shaped evergreen, its branches in whorls to near the ground: holly, of
@@ -417,14 +525,108 @@ mod tests {
             across: 0.25,
             outline: vec![(0.0, 0.0), (0.25, 0.0), (0.25, 0.25), (0.0, 0.25)],
             colour: Vec3::splat(0.3),
+            leaf: None,
         }
+    }
+
+    const STOOLS: [Stool; 4] = [Stool::Vase, Stool::Fan, Stool::Rods, Stool::Overstood];
+
+    /// How long the leaves on each card of a build are in the world: a card is its cell's
+    /// outline scaled as the card is, so its size is the distance between two of its corners
+    /// over theirs in the atlas, and its leaves the card's share of that.
+    fn leaf_lengths(build: &Build, card: &Card) -> Vec<f32> {
+        let n = card.outline.len();
+        let share = card
+            .leaf
+            .expect("a composed card says how long its leaves are");
+        build
+            .positions
+            .chunks(n)
+            .zip(build.uvs.chunks(n))
+            .map(|(at, uv)| {
+                let world = Vec3::from(at[0]).distance(Vec3::from(at[n / 2]));
+                let atlas = Vec2::from(uv[0]).distance(Vec2::from(uv[n / 2]));
+                world / atlas * card.across * share
+            })
+            .collect()
+    }
+
+    /// A hazel's leaves are 6 to 12 cm long and 1 cm of stalk, near the camera at their own
+    /// size, not three times it (D276).
+    #[test]
+    fn hazel_leaves_are_their_real_size() {
+        let cards = terra_world::grown::Cards::read();
+        let hazel = cards.get("hazel");
+        let mut dice = Seed(7).rng();
+        for stool in STOOLS {
+            for tallest in [1.6, 3.6] {
+                let shrub = coppice(&mut dice, hazel, Vec3::ONE, stool, tallest);
+                let mut lengths = leaf_lengths(&shrub.leaves.expect("leafy")[0], hazel);
+                lengths.sort_by(f32::total_cmp);
+                let middle = lengths[lengths.len() / 2];
+                assert!(
+                    (0.07..0.13).contains(&middle),
+                    "{stool:?} {tallest} m: leaves {middle} m long"
+                );
+            }
+        }
+    }
+
+    /// A stool of rods or an overstood one stands on bare stems, its leaves only up them; a
+    /// vase is leafy lower down; a fan's leaves lie off to one side of its root.
+    #[test]
+    fn stools_grow_apart() {
+        let mut dice = Seed(8).rng();
+        let leaves = |dice: &mut Rng, stool: Stool| {
+            let shrub = coppice(dice, &leaf(), Vec3::ONE, stool, 3.5);
+            let build = shrub
+                .leaves
+                .expect("leafy")
+                .into_iter()
+                .next()
+                .expect("near");
+            let points: Vec<Vec3> = build.positions.iter().map(|p| Vec3::from(*p)).collect();
+            let lowest = points.iter().map(|p| p.y).fold(f32::MAX, f32::min);
+            let middle = points.iter().sum::<Vec3>() / points.len() as f32;
+            (
+                lowest / build.height(),
+                Vec2::new(middle.x, middle.z).length(),
+            )
+        };
+        let mut low = [0.0f32; 4];
+        let mut off = [0.0f32; 4];
+        for _ in 0..4 {
+            for (k, stool) in STOOLS.into_iter().enumerate() {
+                let (lowest, aside) = leaves(&mut dice, stool);
+                low[k] += lowest / 4.0;
+                off[k] += aside / 4.0;
+            }
+        }
+        assert!(
+            low[2] > 0.25 && low[3] > 0.25,
+            "rods and overstood leafy from {low:?}"
+        );
+        assert!(
+            low[0] < low[2] && low[0] < low[3],
+            "a vase leafy from {low:?}"
+        );
+        assert!(
+            off[1] > off[0] * 1.5,
+            "a fan's leaves {off:?} m off its root"
+        );
     }
 
     #[test]
     fn the_middle_layer_stands_between_knee_and_canopy_height() {
         let mut dice = Seed(5).rng();
         for k in 0..6 {
-            let stool = coppice(&mut dice, &leaf(), Vec3::ONE);
+            let stool = coppice(
+                &mut dice,
+                &leaf(),
+                Vec3::ONE,
+                STOOLS[k % 4],
+                2.0 + k as f32 * 0.6,
+            );
             let height = stool.leaves.as_ref().expect("leafy")[0].height();
             assert!((1.8..5.5).contains(&height), "hazel {k}: {height}");
             let tangle = bramble(&mut dice, &leaf(), Vec3::ONE);

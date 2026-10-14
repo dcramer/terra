@@ -1,9 +1,9 @@
 {
   "scan": "LeafSet024",
   "form": "spray",
-  "leaves": 24,
-  "length": [0.2, 0.29],
-  "shoots": 4,
+  "leaves": 52,
+  "length": [0.14, 0.2],
+  "shoots": 7,
   "twig": [0.36, 0.28, 0.2],
   "thickness": 0.009,
   "tone": 0.3,

@@ -227,14 +227,55 @@ const ROUTE_TURN: f32 = 1.6;
 /// A spot of a route is reached this near it.
 const ROUTE_REACHED_M: f32 = 1.5;
 
+/// How long a route walk may go without getting nearer its spot before it steps round
+/// what is in its way, in seconds; how long it heads off to one side; and how far it turns
+/// from its spot to do it, in radians.
+const DETOUR_AFTER_S: f32 = 0.5;
+const DETOUR_S: f32 = 2.0;
+const DETOUR_TURN: f32 = 1.4;
+
+/// A route walk's way round something in its way: the nearest it has been to its spot,
+/// how long since it got nearer, and how long it has still to head off to its left.
+#[derive(Default)]
+struct Detour {
+    nearest: Option<f32>,
+    since: f32,
+    left: f32,
+}
+
+impl Detour {
+    /// How far to turn from the way to the spot, `distance` away, `dt` seconds on.
+    fn turn(&mut self, distance: f32, dt: f32) -> f32 {
+        if self.left > 0.0 {
+            self.left -= dt;
+            return DETOUR_TURN;
+        }
+        if self.nearest.is_none_or(|nearest| distance < nearest - 0.05) {
+            self.nearest = Some(distance);
+            self.since = 0.0;
+        } else {
+            self.since += dt;
+            if self.since > DETOUR_AFTER_S {
+                self.left = DETOUR_S;
+                self.since = 0.0;
+                self.nearest = None;
+            }
+        }
+        0.0
+    }
+}
+
 /// For scripted walks, such as benchmarks (`--route`): the player walks to each spot in
 /// turn, east and south of the start, turning toward it no faster than the arrow keys turn
-/// the view, as someone playing would. Once at the last, they stand.
+/// the view, as someone playing would. Once at the last, they stand. Stopped by a trunk or
+/// a rock in the way, they head off to their left for a moment and on again, so the walk
+/// keeps going however the world it crosses is laid out (D276).
 fn follow_route(
     time: Res<Time>,
     options: Res<Options>,
     start: Res<Start>,
     mut next: Local<usize>,
+    mut detour: Local<Detour>,
     player: Single<(&Transform, &mut View, &mut Intent), IsLocalPlayer>,
 ) {
     let Some(&(east, south)) = options.route.get(*next) else {
@@ -246,10 +287,12 @@ fn follow_route(
     let to = (start.at(east, south) - feet).reject_from(up);
     if to.length() < ROUTE_REACHED_M {
         *next += 1;
+        *detour = Detour::default();
         info!("Route: reached {east:.0},{south:.0}.");
         return;
     }
-    let wanted = to.normalize();
+    let wanted =
+        Quat::from_axis_angle(up, detour.turn(to.length(), time.delta_secs())) * to.normalize();
     let turn = libm::atan2f(up.dot(view.forward.cross(wanted)), view.forward.dot(wanted));
     let most = ROUTE_TURN * time.delta_secs();
     view.forward = Quat::from_axis_angle(up, turn.clamp(-most, most)) * view.forward;
@@ -285,4 +328,41 @@ fn warp(
     motion.facing = facing;
     view.forward = facing;
     info!("Warped to {:.1} m east and {:.1} m south.", at.0, at.1);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A walk getting nearer goes straight; one stopped turns off to its left for a while,
+    /// then heads for its spot again.
+    #[test]
+    fn a_stopped_route_walk_steps_round_and_on() {
+        let mut detour = Detour::default();
+        let dt = 1.0 / 60.0;
+        let mut distance = 20.0;
+        for _ in 0..120 {
+            distance -= 0.08;
+            assert_eq!(
+                detour.turn(distance, dt),
+                0.0,
+                "turned while getting nearer"
+            );
+        }
+        let turned: Vec<f32> = (0..360).map(|_| detour.turn(distance, dt)).collect();
+        let first = turned
+            .iter()
+            .position(|&t| t != 0.0)
+            .expect("never turned off");
+        assert!(
+            (first as f32 * dt) < DETOUR_AFTER_S + 0.1,
+            "waited {first} frames"
+        );
+        let off = turned[first..].iter().take_while(|&&t| t != 0.0).count();
+        assert!(
+            (off as f32 * dt - DETOUR_S).abs() < 0.05,
+            "turned off for {off} frames"
+        );
+        assert_eq!(turned[first + off], 0.0, "never turned back");
+    }
 }

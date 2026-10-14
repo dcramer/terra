@@ -4,7 +4,10 @@
 // young and yellower, some old and darker, a few turned over to their paler underside,
 // overlapping with a soft shadow where one lies on another; and a normal map beside the
 // colour, each leaf's scanned relief turned with it and tilted as the leaf is, so in the game
-// every leaf catches the light at its own angle.
+// every leaf catches the light at its own angle. A conifer's card is drawn needle by needle
+// instead, as SpeedTree's needle atlases are rendered from modelled needles: a twig and its
+// shoots clothed all round in short needles, so its edge is a fringe of single needles, not
+// the cut outline of a picture of a whole bough (D276).
 //
 // A card's recipe is a JSON file (art/textures/cards/<card>.leaves.json); `textures.ts cards`
 // composes it when a card is given one instead of a picture. Pure functions, no I/O, so the
@@ -21,19 +24,30 @@ export type ScanLeaf = { id: number; base: [number, number]; tip: [number, numbe
 
 /** How a card is composed. Shares are of the card's width; colours sRGB from 0 to 1. */
 export type Recipe = {
-  /** ambientCG's id of the scan the leaves come from, such as LeafSet024. */
-  scan: string;
+  /** ambientCG's id of the scan the leaves come from, such as LeafSet024; none for needles. */
+  scan?: string;
   /** `spray`: leaves one by one along a twig and its shoots, as hazel and oak bear them;
    * `compound`: leaf stalks along a cane, each ending in three or five leaflets, as bramble;
    * `litter`: fallen leaves lying flat in a loose heap, with fallen needles, twigs (`shoots`
-   * of them) and cones among them, for the forest floor. */
-  form: "spray" | "compound" | "litter";
-  /** How many leaves, or for `compound`, leaf stalks. */
+   * of them) and cones among them, for the forest floor; `needles`: a conifer's branch end,
+   * every twig clothed all round in needles (`needle`), drawn rather than cut from a scan. */
+  form: "spray" | "compound" | "litter" | "needles";
+  /** How many leaves, or for `compound`, leaf stalks; for `needles`, the shoots each side
+   * shoot has of its own, at most. */
   leaves: number;
-  /** A leaf's length, stalk to tip, as a share of the card: least and most. */
+  /** A leaf's length, stalk to tip, as a share of the card: least and most; a needle's. */
   length: [number, number];
+  /** For `needles`: an old needle's colour and a young one's at the shoots' tips (sRGB), a
+   * needle's width at its base as a share of the card, and how far apart needles are along
+   * a twig, as a share of the card. */
+  needle?: { colour: [number, number, number]; young: [number, number, number]; width: number; every: number };
   /** Side shoots off the main twig. */
   shoots: number;
+  /** Where along the main twig the shoots leave it, as shares of its length, and how long
+   * they are, as shares of the card: by default a quarter to two thirds along, a third to a
+   * half of the card long. Small
+   * leaves need the shoots spread wider to fill the card. */
+  shoot?: { from: [number, number]; length: [number, number] };
   twig: [number, number, number];
   /** The twig's thickness where it enters the card. */
   thickness: number;
@@ -57,8 +71,10 @@ export type Recipe = {
   seed: number;
 };
 
-/** A composed card: its colour and coverage, four bytes a pixel, and its normal map, three. */
-export type Composed = { size: number; rgba: Buffer; normal: Buffer };
+/** A composed card: its colour and coverage, four bytes a pixel, and its normal map, three;
+ * and, for a twig of leaves or needles, how long they are on average, as a share of the card's
+ * width, so a plant can be grown with its leaves at their real size (D276). */
+export type Composed = { size: number; rgba: Buffer; normal: Buffer; leaf?: number };
 
 /** The leaves of a scan, each a connected patch of its opacity past half, the smallest left
  * out (bits broken off, specks of dust), with the label map that says which pixel is whose. */
@@ -416,7 +432,9 @@ function along(points: [number, number][], t: number): { at: [number, number]; h
 
 /** Composes a card `size` pixels square from a scan's leaves by its recipe. Drawn at twice
  * the size and halved, for smooth edges. */
-export function compose(scan: Scan, recipe: Recipe, size: number): Composed {
+export function compose(scan: Scan | undefined, recipe: Recipe, size: number): Composed {
+  if (recipe.form === "needles") return needles(recipe, size);
+  if (!scan) throw new Error(`a ${recipe.form} card needs a scan`);
   const { leaves, label } = scanLeaves(scan.alpha, scan.width, scan.height);
   if (!leaves.length) throw new Error(`${recipe.scan} has no leaves in its opacity`);
   const big = size * 2;
@@ -425,17 +443,18 @@ export function compose(scan: Scan, recipe: Recipe, size: number): Composed {
   const roll = dice(recipe.seed);
   if (recipe.form === "litter") {
     floor(canvas, scan, label, leaves, recipe, roll, big, room);
-    return halve(fit(canvas, big), size);
+    return halve(fit(canvas, big).canvas, size);
   }
   // The twig enters at one side low down and runs up across the card, its shoots off it.
   const start: [number, number] = [room + big * 0.06, room + big * roll.range(0.6, 0.78)];
   const heading = -roll.range(0.2, 0.45);
   const main = curve(start, heading, big * 0.82, roll.range(-0.5, 0.2));
   const twigs: [number, number][][] = [main];
+  const shoot = recipe.shoot ?? { from: [0.25, 0.65], length: [0.32, 0.5] };
   for (let k = 0; k < recipe.shoots; k++) {
-    const from = along(main, roll.range(0.25, 0.65));
+    const from = along(main, roll.range(shoot.from[0], shoot.from[1]));
     const out = from.heading + roll.sign() * roll.range(0.45, 0.85);
-    twigs.push(curve(from.at, out, big * roll.range(0.32, 0.5), roll.range(-0.4, 0.4), 8));
+    twigs.push(curve(from.at, out, big * roll.range(shoot.length[0], shoot.length[1]), roll.range(-0.4, 0.4), 8));
   }
   const thick = recipe.thickness * big;
   twigs.forEach((points, k) => drawTwig(canvas, points, k ? [thick * 0.6, thick * 0.3] : [thick, thick * 0.35], recipe.twig));
@@ -506,12 +525,87 @@ export function compose(scan: Scan, recipe: Recipe, size: number): Composed {
       }
     }
   }
-  return halve(fit(canvas, big), size);
+  const fitted = fit(canvas, big);
+  const mean = laid.reduce((sum, leaf) => sum + leaf.length, 0) / Math.max(1, laid.length);
+  return { ...halve(fitted.canvas, size), leaf: (mean * fitted.scale) / big };
+}
+
+/** A conifer's branch end drawn needle by needle (`needles`), its stalk at the foot of the
+ * card and its tip at the top, as the game lays a conifer's cards along its branches: a main
+ * twig with side shoots alternating off it, shorter toward its tip, each with a few of its
+ * own, and every twig clothed all round in short stiff needles pointing forward. A needle on
+ * the far side of its twig is drawn first and darker, then the twig, then those on the near
+ * side over it; one pointing toward or away from the eye is foreshortened. Needles at the
+ * shoots' tips are the young growth's lighter green. */
+function needles(recipe: Recipe, size: number): Composed {
+  const needle = recipe.needle;
+  if (!needle) throw new Error("a needles card needs its `needle`");
+  const big = size * 2;
+  const room = Math.round(big * 0.2);
+  const canvas = new Canvas(big + 2 * room);
+  const roll = dice(recipe.seed);
+  const main = curve([room + big * 0.5, room + big * 0.98], -Math.PI / 2 + roll.range(-0.1, 0.1), big * 0.92, roll.range(-0.25, 0.25), 16);
+  const twigs: { points: [number, number][]; rank: number }[] = [{ points: main, rank: 0 }];
+  for (let k = 0; k < recipe.shoots; k++) {
+    const t = 0.08 + (0.8 * (k + roll.range(0.1, 0.9))) / recipe.shoots;
+    const from = along(main, t);
+    const side = k % 2 ? 1 : -1;
+    const reach = big * roll.range(0.42, 0.58) * (1.15 - 0.85 * t);
+    const shoot = curve(from.at, from.heading + side * roll.range(0.8, 1.15), reach, -side * roll.range(0.15, 0.45), 10);
+    twigs.push({ points: shoot, rank: 1 });
+    const own = Math.floor(roll.unit() * (recipe.leaves + 1));
+    for (let j = 0; j < own; j++) {
+      const off = along(shoot, roll.range(0.25, 0.7));
+      twigs.push({ points: curve(off.at, off.heading + roll.sign() * roll.range(0.6, 1.0), reach * roll.range(0.25, 0.45), 0, 5), rank: 2 });
+    }
+  }
+  type Needle = { points: [number, number][]; width: number; colour: [number, number, number]; front: boolean; length: number };
+  const laid: Needle[] = [];
+  const [old, young] = [needle.colour, needle.young];
+  for (const twig of twigs) {
+    let total = 0;
+    for (let i = 1; i < twig.points.length; i++) total += Math.hypot(twig.points[i][0] - twig.points[i - 1][0], twig.points[i][1] - twig.points[i - 1][1]);
+    const steps = Math.max(3, Math.round(total / (needle.every * big)));
+    for (let i = 0; i < steps; i++) {
+      const t = Math.min(1, (i + roll.unit()) / steps);
+      const { at, heading } = along(twig.points, t);
+      for (let n = 0; n < 3; n++) {
+        // Round the twig at `phi`: across it in the picture by its cosine, toward the eye by
+        // its sine; leaning forward from the twig by `lean`.
+        const phi = roll.range(0, Math.PI * 2);
+        const lean = roll.range(0.5, 1.0);
+        const length = big * roll.range(recipe.length[0], recipe.length[1]) * (1 - 0.25 * t * t);
+        const [hx, hy] = [Math.cos(heading), Math.sin(heading)];
+        const [px, py] = [-hy, hx];
+        const forward = Math.cos(lean);
+        const across = Math.sin(lean) * Math.cos(phi);
+        const tip: [number, number] = [at[0] + (hx * forward + px * across) * length, at[1] + (hy * forward + py * across) * length];
+        // A needle curves a little toward the tip of its twig.
+        const middle: [number, number] = [(at[0] + tip[0]) / 2 + hx * length * 0.06, (at[1] + tip[1]) / 2 + hy * length * 0.06];
+        const fresh = twig.rank > 0 ? Math.min(1, Math.max(0, (t - 0.7) / 0.25)) : 0;
+        const tone = 1 + roll.range(-recipe.tone, recipe.tone * 0.5);
+        const front = Math.sin(phi) > 0;
+        const shade = tone * (front ? 1 : 0.62);
+        const colour = old.map((c, k) => (c + (young[k] - c) * fresh) * shade) as [number, number, number];
+        laid.push({ points: [at, middle, tip], width: needle.width * big * roll.range(0.8, 1.15), colour, front, length });
+      }
+    }
+  }
+  const draw = (front: boolean) => {
+    for (const n of laid) if (n.front === front) drawTwig(canvas, n.points, [n.width, n.width * 0.3], n.colour);
+  };
+  draw(false);
+  const thick = recipe.thickness * big;
+  for (const twig of twigs) drawTwig(canvas, twig.points, [thick * [1, 0.6, 0.4][twig.rank], thick * 0.3], recipe.twig);
+  draw(true);
+  const fitted = fit(canvas, big);
+  const mean = laid.reduce((sum, n) => sum + n.length, 0) / Math.max(1, laid.length);
+  return { ...halve(fitted.canvas, size), leaf: (mean * fitted.scale) / big };
 }
 
 /** What a canvas covers, scaled and moved to fill a canvas `to` pixels square, short of its
  * edge by a hair, keeping its shape. */
-function fit(canvas: Canvas, to: number): Canvas {
+function fit(canvas: Canvas, to: number): { canvas: Canvas; scale: number } {
   const n = canvas.size;
   let [x0, y0, x1, y1] = [n, n, 0, 0];
   for (let y = 0; y < n; y++) {
@@ -521,7 +615,7 @@ function fit(canvas: Canvas, to: number): Canvas {
     }
   }
   const out = new Canvas(to);
-  if (x1 <= x0) return out;
+  if (x1 <= x0) return { canvas: out, scale: 1 };
   const scale = (to * 0.98) / Math.max(x1 - x0, y1 - y0);
   const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
   for (let y = 0; y < to; y++) {
@@ -547,11 +641,11 @@ function fit(canvas: Canvas, to: number): Canvas {
       }
     }
   }
-  return out;
+  return { canvas: out, scale };
 }
 
 /** The canvas halved, each pixel the four under it averaged by their cover, in sRGB bytes. */
-function halve(canvas: Canvas, size: number): Composed {
+function halve(canvas: Canvas, size: number): Omit<Composed, "leaf"> {
   const rgba = Buffer.alloc(size * size * 4);
   const normal = Buffer.alloc(size * size * 3);
   const big = canvas.size;

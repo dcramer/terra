@@ -151,13 +151,16 @@ impl Grown {
 }
 
 /// One card in the atlas: the top-left of its cell and how far across the cell is, the
-/// outline round its leaves in the atlas's coordinates, and their average colour, linear.
+/// outline round its leaves in the atlas's coordinates, their average colour, linear, and,
+/// for a composed card, how long a leaf or needle on it is as a share of its width, so a
+/// plant can be grown with its leaves at their real size (D276).
 #[derive(Clone, Debug)]
 pub struct Card {
     pub cell: Vec2,
     pub across: f32,
     pub outline: Vec<(f32, f32)>,
     pub colour: Vec3,
+    pub leaf: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -176,6 +179,9 @@ struct CardEntry {
     cell: (f32, f32),
     outline: Vec<(f32, f32)>,
     colour: (f32, f32, f32),
+    /// How long its leaves are as a share of its width; 0, or left out, for a picture.
+    #[serde(default)]
+    leaf: f32,
 }
 
 /// The cards there are (`assets/data/foliage.ron`), the atlas they are in, and its normal
@@ -214,6 +220,7 @@ impl Cards {
                         across: file.across,
                         outline: entry.outline,
                         colour,
+                        leaf: (entry.leaf > 0.0).then_some(entry.leaf),
                     },
                 )
             })
