@@ -983,4 +983,76 @@ mod tests {
         assert!(matches!(&out[..], [Op::Empty { cubes }] if cubes.iter().all(|at| at[1] == 3)));
         base.act_all(&out, &cx).unwrap();
     }
+
+    /// The room tool's plans laid as built cubes at once.
+    fn built(base: &mut Base, ops: Vec<Op>) {
+        for op in ops {
+            match op {
+                Op::LayPlan { kind, cubes, .. } => {
+                    for planned in cubes {
+                        let cube = terra_build::Cube {
+                            shape: planned.shape,
+                            ..terra_build::Cube::new(kind, Fill::Solid)
+                        };
+                        base.apply(terra_build::BuildOp::Fill {
+                            min: planned.at,
+                            max: planned.at,
+                            cube: Some(cube),
+                        });
+                    }
+                }
+                Op::Unplan { cubes } => {
+                    for at in cubes {
+                        base.apply(terra_build::BuildOp::Fill {
+                            min: at,
+                            max: at,
+                            cube: None,
+                        });
+                    }
+                }
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn an_l_two_storeys_high_is_a_room_a_wing_a_storey_until_a_well_joins_them() {
+        // Two wings by the room tool, each with its own walls, the one between them shared,
+        // and a storey over each, as the sandbox's check built them (D261).
+        let mut base = Base::default();
+        for (min, max) in [
+            ([-30, 0, -22], [-13, 0, -14]),
+            ([-30, 0, -14], [-22, 0, 0]),
+            ([-30, 1, -22], [-13, 1, -14]),
+            ([-30, 1, -14], [-22, 1, 0]),
+        ] {
+            let ops = room(
+                &base,
+                IVec3::from_array(min),
+                IVec3::from_array(max),
+                STONE,
+                STONE,
+                None,
+            );
+            built(&mut base, ops);
+        }
+        // A room a wing a storey, the wall between the wings and the floor between the
+        // storeys closing each in: each its walls' inside, five cubes high. The sandbox's
+        // third room was the other wing, not a void.
+        assert_eq!(base.room_count(), 4);
+        assert_eq!(base.room_cubes(), 2 * (16 * 7 * 5) + 2 * (7 * 13 * 5));
+        let (a_low, a_high) = (IVec3::new(-20, 2, -18), IVec3::new(-20, 8, -18));
+        let b_low = IVec3::new(-26, 2, -6);
+        assert_ne!(base.room(a_low), base.room(a_high));
+        assert_ne!(base.room(a_low), base.room(b_low));
+        // A well through the floor between one wing's storeys joins them in one room.
+        base.apply(terra_build::BuildOp::Fill {
+            min: [-24, 5, -20],
+            max: [-21, 5, -17],
+            cube: None,
+        });
+        assert_eq!(base.room_count(), 3);
+        assert_eq!(base.room(a_low), base.room(a_high));
+        assert_ne!(base.room(a_low), base.room(b_low));
+    }
 }
