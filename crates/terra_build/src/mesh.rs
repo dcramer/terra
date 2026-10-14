@@ -187,6 +187,14 @@ impl Surface {
     }
 
     /// A triangle with a normal and a place on its texture at each corner.
+    /// Room for so many more corners of loose triangles.
+    pub(crate) fn reserve(&mut self, corners: usize) {
+        self.positions.reserve(corners);
+        self.normals.reserve(corners);
+        self.colours.reserve(corners);
+        self.uvs.reserve(corners);
+    }
+
     pub(crate) fn textured(
         &mut self,
         corners: [Vec3; 3],
@@ -256,6 +264,15 @@ impl Indexed {
         self.uvs.extend(other.uvs);
         self.indices
             .extend(other.indices.into_iter().map(|i| first + i));
+    }
+
+    /// Room for so many more corners, and indices of them.
+    pub(crate) fn reserve(&mut self, corners: usize, indices: usize) {
+        self.positions.reserve(corners);
+        self.normals.reserve(corners);
+        self.uvs.reserve(corners);
+        self.colours.reserve(corners);
+        self.indices.reserve(indices);
     }
 
     /// A corner, and its index.

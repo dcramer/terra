@@ -63,6 +63,13 @@ pub(super) struct Sections {
     /// and the worker laying it.
     pub whole: Option<Arc<terra_build::sections::Whole>>,
     pub laying: Option<bevy::tasks::Task<(terra_build::sections::Whole, f32)>>,
+    /// The base as last laid and how, and the sections marked since: a change lays again
+    /// only the buildings it marked (`Whole::lay_again`), not every one in the claim.
+    pub last_laid: Option<(Arc<Base>, Arc<terra_build::sections::Whole>)>,
+    pub marked_since: BTreeSet<[i32; 3]>,
+    /// When the oldest change not yet all on screen was noticed, to time how long a
+    /// change takes to be seen.
+    pub changed_at: Option<std::time::Instant>,
     /// What a walker meets of a plan shown so far through, being worked out.
     pub standing: Option<bevy::tasks::Task<Base>>,
     /// The last change since it was noticed, until all it set waiting is on screen: when,
@@ -126,15 +133,27 @@ fn notice(planet: Res<Planet>, mut site: ResMut<Site>, mut builds: Query<&mut Bu
 fn noticed(build: &mut Build) {
     let sections = &mut build.sections;
     sections.noticed = Some(build.revision);
-    sections.snapshot = None;
-    sections.whole = None;
+    // Timed from here, a change to something on screen, not a build first laid.
+    if !sections.drawn.is_empty() {
+        sections
+            .changed_at
+            .get_or_insert_with(std::time::Instant::now);
+    }
+    // What was laid last, kept to lay only what changed from: the base it was laid from
+    // and how, if it was laid; if not, what was kept before still stands.
+    if let (Some(base), Some(whole)) = (sections.snapshot.take(), sections.whole.take()) {
+        sections.last_laid = Some((base, whole));
+        sections.marked_since.clear();
+    }
     sections.laying = None;
     let marked = build.base.take_dirty();
+    sections.marked_since.extend(marked.iter().copied());
     let mut wait = |at: [i32; 3], force: bool| {
         let waiting = sections.waiting.entry(at).or_default();
         waiting.force |= force;
     };
     if std::mem::take(&mut sections.everything) {
+        sections.last_laid = None;
         let all: BTreeSet<[i32; 3]> = drawable(&build.base)
             .into_iter()
             .chain(sections.drawn.keys().copied())

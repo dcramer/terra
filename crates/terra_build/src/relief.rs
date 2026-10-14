@@ -28,14 +28,27 @@ impl Relief {
 
     /// The height, from 0 to 1, where the texture is at a point, repeating, between texels.
     pub fn at(&self, uv: [f32; 2]) -> f32 {
-        let x = uv[0].rem_euclid(1.0) * self.width as f32 - 0.5;
-        let y = uv[1].rem_euclid(1.0) * self.height as f32 - 0.5;
+        // A block kind's surface reads this at every point of its grid, so no division:
+        // `v - floor(v)` is `v.rem_euclid(1.0)` to the bit, and a texel is at most one off
+        // either end.
+        let repeat = |v: f32| v - v.floor();
+        let x = repeat(uv[0]) * self.width as f32 - 0.5;
+        let y = repeat(uv[1]) * self.height as f32 - 0.5;
         let (x0, y0) = (x.floor(), y.floor());
         let (fx, fy) = (x - x0, y - y0);
+        let wrap = |i: f32, side: usize| {
+            let (i, side) = (i as i64, side as i64);
+            (if i < 0 {
+                i + side
+            } else if i >= side {
+                i - side
+            } else {
+                i
+            })
+            .clamp(0, side - 1) as usize
+        };
         let texel = |i: f32, j: f32| {
-            let i = (i as i64).rem_euclid(self.width as i64) as usize;
-            let j = (j as i64).rem_euclid(self.height as i64) as usize;
-            self.data[j * self.width + i] as f32 / 255.0
+            self.data[wrap(j, self.height) * self.width + wrap(i, self.width)] as f32 / 255.0
         };
         let top = texel(x0, y0) * (1.0 - fx) + texel(x0 + 1.0, y0) * fx;
         let bottom = texel(x0, y0 + 1.0) * (1.0 - fx) + texel(x0 + 1.0, y0 + 1.0) * fx;
@@ -161,6 +174,44 @@ mod tests {
         near([0.25, 1.75], 0.4);
         // Between the last row and the first, as it wraps.
         near([0.25, 0.0], 0.2);
+    }
+
+    #[test]
+    fn the_relief_reads_as_wrapping_by_remainders_does_on_both_sides_of_zero() {
+        // The plain way: each place's remainder, each texel's index by remainder.
+        let (width, height) = (5, 3);
+        let data: Vec<u8> = (0..width * height).map(|i| (i * 37 % 256) as u8).collect();
+        let relief = Relief::new(width, height, data.clone()).unwrap();
+        let plain = |uv: [f32; 2]| {
+            let x = uv[0].rem_euclid(1.0) * width as f32 - 0.5;
+            let y = uv[1].rem_euclid(1.0) * height as f32 - 0.5;
+            let (x0, y0) = (x.floor(), y.floor());
+            let (fx, fy) = (x - x0, y - y0);
+            let texel = |i: f32, j: f32| {
+                let i = (i as i64).rem_euclid(width as i64) as usize;
+                let j = (j as i64).rem_euclid(height as i64) as usize;
+                data[j * width + i] as f32 / 255.0
+            };
+            let top = texel(x0, y0) * (1.0 - fx) + texel(x0 + 1.0, y0) * fx;
+            let bottom = texel(x0, y0 + 1.0) * (1.0 - fx) + texel(x0 + 1.0, y0 + 1.0) * fx;
+            top * (1.0 - fy) + bottom * fy
+        };
+        let mut checked = 0;
+        for i in -2000..2000 {
+            let u = i as f32 * 0.0137 - 1e-9;
+            let v = -(i as f32) * 0.0291 + 3.0;
+            assert_eq!(
+                relief.at([u, v]).to_bits(),
+                plain([u, v]).to_bits(),
+                "{u}, {v}"
+            );
+            checked += 1;
+        }
+        // Just below whole numbers, where a remainder rounds up to one.
+        for u in [-1e-9, -1.0 - 1e-8, 2.0 - 1e-8, -0.0] {
+            assert_eq!(relief.at([u, u]).to_bits(), plain([u, u]).to_bits(), "{u}");
+        }
+        assert_eq!(checked, 4000);
     }
 
     #[test]

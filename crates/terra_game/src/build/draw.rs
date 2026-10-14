@@ -1,8 +1,9 @@
 //! Drawing a base's sections (docs/building-plan.md, drawing; D211): what `layout` laid
 //! and merged on the workers put on screen, a few sections a frame. Each section holds a
 //! mesh per kind and material of what is built, near; the next piece lit; a plan's pieces
-//! as ghosts, a unit box or prism each, all sharing one mesh and material so Bevy draws
-//! them as one batch; and far off one mesh with its
+//! as ghosts, a unit box or prism each stretched over its piece, merged on the worker
+//! into a mesh a shade, so a plan of a thousand pieces is two entities rather than a
+//! thousand spawned again at every step built; and far off one mesh with its
 //! textures baked into its colours, coarser again further still, switched by distance
 //! with `VisibilityRange`, as Unreal's HLOD does. Near detail is made only for sections
 //! near the camera and dropped when the camera leaves them.
@@ -92,8 +93,8 @@ impl bevy::pbr::Material for GhostMaterial {
 }
 
 /// What builds are drawn with beside their kits' materials: what no kit draws, a plan's
-/// ghosts in two shades and its shell, the next piece lit, far off sections in
-/// their baked colours; and the shapes a ghost is drawn as.
+/// ghosts in two shades and its shell, the next piece lit, far off sections in their
+/// baked colours.
 #[derive(Clone)]
 pub(super) struct Looks {
     structure: Handle<StandardMaterial>,
@@ -101,8 +102,6 @@ pub(super) struct Looks {
     shell: Handle<GhostMaterial>,
     pub next: Handle<StandardMaterial>,
     far: Handle<StandardMaterial>,
-    cube: Handle<Mesh>,
-    prism: Handle<Mesh>,
 }
 
 /// A plan's ghosts' colour: a pale blue, clear enough to see what is built through it.
@@ -111,7 +110,6 @@ const GHOST: [f32; 3] = [0.5, 0.75, 1.0];
 
 impl Looks {
     pub fn new(
-        meshes: &mut Assets<Mesh>,
         materials: &mut Assets<StandardMaterial>,
         ghosts: Option<&mut Assets<GhostMaterial>>,
     ) -> Self {
@@ -150,12 +148,6 @@ impl Looks {
                 reflectance: 0.25,
                 ..default()
             }),
-            cube: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
-            // Eight sides round, along X as a log lies.
-            prism: meshes.add(
-                Mesh::from(Cylinder::new(0.5, 1.0).mesh().resolution(8))
-                    .rotated_by(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-            ),
         }
     }
 }
@@ -238,7 +230,8 @@ pub(super) struct Parts {
     plain: Option<Mesh>,
     next: Vec<Mesh>,
     shell: Option<Mesh>,
-    ghosts: Vec<Ghost>,
+    /// A plan's ghosts, a mesh for each of their two shades.
+    ghosts: [Option<Mesh>; 2],
     far: Option<Mesh>,
     proxy: Option<Mesh>,
     centre: Vec3,
@@ -266,11 +259,80 @@ pub(super) fn parts(drawn: Merged, centre: Vec3) -> Parts {
         plain: plain(&drawn.plain),
         next: drawn.next.0.values().filter_map(plain).collect(),
         shell: mesh(&drawn.shell, centre, Uvs::Only),
-        ghosts: drawn.ghosts,
+        ghosts: [false, true].map(|shade| ghost_mesh(&drawn.ghosts, shade, centre)),
         far: plain(&drawn.far),
         proxy: plain(&drawn.proxy),
         centre,
     }
+}
+
+/// The shapes a ghost is drawn as, a unit box and an eight-sided prism along X, each
+/// face's texture running 0 to 1 across it, which the ghost shader draws the edges of.
+fn ghost_shapes() -> &'static [Mesh; 2] {
+    static SHAPES: std::sync::OnceLock<[Mesh; 2]> = std::sync::OnceLock::new();
+    SHAPES.get_or_init(|| {
+        [
+            Mesh::from(Cuboid::new(1.0, 1.0, 1.0)),
+            Mesh::from(Cylinder::new(0.5, 1.0).mesh().resolution(8))
+                .rotated_by(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+        ]
+    })
+}
+
+/// A plan's ghosts of one shade merged into one mesh about a point: each a unit shape
+/// turned and stretched over its piece, its normals turned with it.
+fn ghost_mesh(ghosts: &[Ghost], shade: bool, centre: Vec3) -> Option<Mesh> {
+    let shapes = ghost_shapes();
+    let read = |mesh: &Mesh| {
+        let positions = match mesh.attribute(Mesh::ATTRIBUTE_POSITION) {
+            Some(bevy::mesh::VertexAttributeValues::Float32x3(v)) => v.clone(),
+            _ => Vec::new(),
+        };
+        let normals = match mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
+            Some(bevy::mesh::VertexAttributeValues::Float32x3(v)) => v.clone(),
+            _ => Vec::new(),
+        };
+        let uvs = match mesh.attribute(Mesh::ATTRIBUTE_UV_0) {
+            Some(bevy::mesh::VertexAttributeValues::Float32x2(v)) => v.clone(),
+            _ => Vec::new(),
+        };
+        let indices: Vec<u32> = mesh
+            .indices()
+            .map_or(Vec::new(), |i| i.iter().map(|i| i as u32).collect());
+        (positions, normals, uvs, indices)
+    };
+    let units = [read(&shapes[0]), read(&shapes[1])];
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut normals: Vec<[f32; 3]> = Vec::new();
+    let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+    for ghost in ghosts.iter().filter(|ghost| ghost.shade == shade) {
+        let unit = &units[usize::from(ghost.shape == Shape::Round)];
+        let first = positions.len() as u32;
+        let size = ghost.size.max(Vec3::splat(1e-4));
+        for (p, n) in unit.0.iter().zip(&unit.1) {
+            let p = ghost.rotation * (Vec3::from_array(*p) * ghost.size) + ghost.centre - centre;
+            // Stretched, a normal is scaled by the inverse.
+            let n = (ghost.rotation * (Vec3::from_array(*n) / size)).normalize_or_zero();
+            positions.push(p.to_array());
+            normals.push(n.to_array());
+        }
+        uvs.extend(&unit.2);
+        indices.extend(unit.3.iter().map(|i| first + i));
+    }
+    if indices.is_empty() {
+        return None;
+    }
+    Some(
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+        .with_inserted_indices(Indices::U32(indices)),
+    )
 }
 
 /// What a mesh is given of where its corners fall on a texture.
@@ -372,6 +434,19 @@ fn upload(
         }
         show(&mut commands, &mut meshes, &look, build, done, *quality);
     }
+    // A change is on screen once nothing of its build is waiting, being laid or out.
+    for build in each(&mut site, &mut builds) {
+        let sections = &build.sections;
+        let done = sections.waiting.is_empty()
+            && sections.whole.is_some()
+            && sections
+                .tickets
+                .iter()
+                .all(|(at, ticket)| sections.drawn.get(at).is_some_and(|d| d.ticket == *ticket));
+        if done && let Some(at) = build.sections.changed_at.take() {
+            jobs.timings.edits.push(at.elapsed().as_secs_f32() * 1000.0);
+        }
+    }
     let waiting = each(&mut site, &mut builds).all(|build| build.sections.waiting.is_empty());
     // A change all on screen: how long from its being noticed, and what it set going.
     if jobs.quiet() {
@@ -396,7 +471,7 @@ fn upload(
 impl Parts {
     /// Whether nothing of it is drawn.
     pub(super) fn is_empty(&self) -> bool {
-        self.corners() == 0 && self.ghosts.is_empty()
+        self.corners() == 0
     }
 
     /// How many corners its meshes have.
@@ -408,11 +483,18 @@ impl Parts {
             .map(|(_, _, mesh)| count(mesh))
             .sum::<usize>()
             + self.next.iter().map(count).sum::<usize>()
-            + [&self.plain, &self.shell, &self.far, &self.proxy]
-                .into_iter()
-                .flatten()
-                .map(count)
-                .sum::<usize>()
+            + [
+                &self.plain,
+                &self.shell,
+                &self.ghosts[0],
+                &self.ghosts[1],
+                &self.far,
+                &self.proxy,
+            ]
+            .into_iter()
+            .flatten()
+            .map(count)
+            .sum::<usize>()
     }
 }
 
@@ -548,25 +630,18 @@ fn show(
             ChildOf(entity),
         ));
     }
-    // A plan's pieces, each a unit shape stretched over it: one mesh and two materials
-    // for them all, which Bevy batches.
-    for ghost in &parts.ghosts {
-        let shape = match ghost.shape {
-            Shape::Box => looks.cube.clone(),
-            Shape::Round => looks.prism.clone(),
-        };
-        commands.spawn((
-            Mesh3d(shape),
-            MeshMaterial3d(looks.ghost[usize::from(ghost.shade)].clone()),
-            Transform {
-                translation: ghost.centre - parts.centre,
-                rotation: ghost.rotation,
-                scale: ghost.size,
-            },
-            ghost_range(),
-            NotShadowCaster,
-            ChildOf(entity),
-        ));
+    // A plan's pieces, a mesh for each shade.
+    for (shade, mesh) in parts.ghosts.into_iter().enumerate() {
+        if let Some(mesh) = mesh {
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(looks.ghost[shade].clone()),
+                Transform::IDENTITY,
+                ghost_range(),
+                NotShadowCaster,
+                ChildOf(entity),
+            ));
+        }
     }
     build.sections.drawn.insert(done.section, drawn);
 }

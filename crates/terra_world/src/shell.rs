@@ -150,6 +150,9 @@ usage: terra_sandbox [options]
                         hip or stone: L (repeatable)
   --village             on the yard, lay fifty buildings of every kind, roof and plan,
                         built, north of the start, to measure many in view
+  --going-up            on the yard, lay a stone house's plan beside the start, hold the
+                        camera on it and build it a step every tenth of a second, as
+                        the hammer does, to measure building as it happens
   --vantage <x,y,z,x,y,z[@frame]>
                         where a fixed camera stands and what it looks at, in metres
                         east, up and south of the start, for experiments that have
@@ -256,6 +259,8 @@ pub struct Options {
     pub sheet_rows: Vec<String>,
     /// On the yard: lay fifty buildings, every kind, roof and plan (docs/building-plan.md).
     pub village: bool,
+    /// On the yard: build a stone house a step at a time, the camera on it (`--going-up`).
+    pub going_up: bool,
     /// The hour of the day the play experiment's clock is set to, if not its own.
     pub time: Option<f32>,
     /// Where the play experiment's player starts, east and south of the start in metres.
@@ -392,6 +397,7 @@ impl Options {
             kit_sheet: false,
             sheet_rows: Vec::new(),
             village: false,
+            going_up: false,
             start_at: None,
             time: None,
             start_facing: None,
@@ -510,6 +516,7 @@ impl Options {
                 "--sheet-rows" => options.sheet_rows.push(value("--sheet-rows")?),
                 "--village" => options.village = true,
                 "--vantage-ground" => options.vantage_ground = true,
+                "--going-up" => options.going_up = true,
                 "--model" => options.models.push(value("--model")?),
                 "--prop" => options.props.push(value("--prop")?),
                 "--hold" => options.hold = Some(value("--hold")?),

@@ -583,27 +583,84 @@ pub fn ground_at(base: &Base, point: Vec3) -> f32 {
     layout::metres(layout::roles::ground_ticks(base, column))
 }
 
-/// Smooth value noise over a lattice so many metres across, from 0 to 1.
-fn smooth(p: Vec3, size: f32, seed: u32) -> f32 {
-    let q = p / size;
-    let base = q.floor();
-    let f = q - base;
-    let f = f * f * (Vec3::splat(3.0) - 2.0 * f);
-    let b = base.as_ivec3();
-    let at = |dx: i32, dy: i32, dz: i32| {
-        layout::unit(hash(&[
-            (b.x + dx) as u32,
-            (b.y + dy) as u32,
-            (b.z + dz) as u32,
-            seed,
-        ]))
-    };
-    let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
-    let x00 = lerp(at(0, 0, 0), at(1, 0, 0), f.x);
-    let x10 = lerp(at(0, 1, 0), at(1, 1, 0), f.x);
-    let x01 = lerp(at(0, 0, 1), at(1, 0, 1), f.x);
-    let x11 = lerp(at(0, 1, 1), at(1, 1, 1), f.x);
-    lerp(lerp(x00, x10, f.y), lerp(x01, x11, f.y), f.z)
+/// Smooth value noise over lattices so many metres across, from 0 to 1, read at many
+/// points in turn: the corners of the cells last read are kept, a few to hand for each
+/// lattice by where they are, as a surface's corners come face by face, so most fall in a
+/// cell read just before, and a cell's corners are eight hashes.
+#[derive(Default)]
+struct Noise {
+    /// Each lattice by its size and seed, and the cells of it kept.
+    lattices: Vec<(f32, u32, Box<Cells>)>,
+}
+
+/// A lattice's cells kept to hand, each its corner and its eight corners' values.
+type Cells = [Option<(IVec3, [f32; 8])>; CELLS_KEPT];
+
+/// How many cells of each lattice are kept to hand.
+const CELLS_KEPT: usize = 32;
+
+impl Noise {
+    fn at(&mut self, p: Vec3, size: f32, seed: u32) -> f32 {
+        let q = p / size;
+        let base = q.floor();
+        let f = q - base;
+        let f = f * f * (Vec3::splat(3.0) - 2.0 * f);
+        let b = base.as_ivec3();
+        let lattice = match self
+            .lattices
+            .iter()
+            .position(|(s, k, _)| *s == size && *k == seed)
+        {
+            Some(at) => at,
+            None => {
+                self.lattices
+                    .push((size, seed, Box::new([None; CELLS_KEPT])));
+                self.lattices.len() - 1
+            }
+        };
+        let cells = &mut self.lattices[lattice].2;
+        let slot = (b.x.wrapping_mul(73_856_093)
+            ^ b.y.wrapping_mul(19_349_663)
+            ^ b.z.wrapping_mul(83_492_791)) as u32 as usize
+            % CELLS_KEPT;
+        let v = match cells[slot] {
+            Some((cell, v)) if cell == b => v,
+            _ => {
+                let at = |dx: i32, dy: i32, dz: i32| {
+                    layout::unit(hash(&[
+                        (b.x + dx) as u32,
+                        (b.y + dy) as u32,
+                        (b.z + dz) as u32,
+                        seed,
+                    ]))
+                };
+                let v = [
+                    at(0, 0, 0),
+                    at(1, 0, 0),
+                    at(0, 1, 0),
+                    at(1, 1, 0),
+                    at(0, 0, 1),
+                    at(1, 0, 1),
+                    at(0, 1, 1),
+                    at(1, 1, 1),
+                ];
+                cells[slot] = Some((b, v));
+                v
+            }
+        };
+        let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+        let x00 = lerp(v[0], v[1], f.x);
+        let x10 = lerp(v[2], v[3], f.x);
+        let x01 = lerp(v[4], v[5], f.x);
+        let x11 = lerp(v[6], v[7], f.x);
+        lerp(lerp(x00, x10, f.y), lerp(x01, x11, f.y), f.z)
+    }
+}
+
+/// `x` to the power one and a half, as `libm::powf` gives it to within a rounding, a
+/// tenth of the time: masks raise a fraction so at most corners.
+fn three_halves(x: f32) -> f32 {
+    x * x.sqrt()
 }
 
 /// A corner's shade by the kit's masks: dirt and damp rising unevenly from the ground,
@@ -615,6 +672,7 @@ fn masked(
     p: Vec3,
     normal: Vec3,
     ground: f32,
+    noise: &mut Noise,
 ) -> [f32; 3] {
     let mut c = Vec3::ONE;
     // A block kind's lifts, each a little lighter or darker, wandering along the wall.
@@ -622,14 +680,14 @@ fn masked(
         // Each lift its own shade, a darker seam where one was rammed on the last, the
         // seams wandering a few centimetres up and down along the wall.
         let lift = masks.lift.max(0.05);
-        let y = p.y / lift + 0.35 * (smooth(p, 1.1, 11) - 0.5);
+        let y = p.y / lift + 0.35 * (noise.at(p, 1.1, 11) - 0.5);
         let layer = libm::floorf(y);
         let within = y - layer;
         let own = layout::unit(hash(&[layer as i32 as u32, 17])) - 0.5;
         let seam = (1.0 - (within.min(1.0 - within) / 0.06).min(1.0)) * 0.7;
         // Within a lift, finer layers where each basketful was rammed, fainter.
-        let fine = libm::sinf(y * std::f32::consts::TAU * 3.0 + 2.0 * smooth(p, 0.7, 15)) * 0.2;
-        let speckle = smooth(p, 0.25, 13) - 0.5;
+        let fine = libm::sinf(y * std::f32::consts::TAU * 3.0 + 2.0 * noise.at(p, 0.7, 15)) * 0.2;
+        let speckle = noise.at(p, 0.25, 13) - 0.5;
         c *= 1.0 + masks.strata * (own * 1.4 + fine + speckle * 0.6 - seam);
     }
     let height = p.y - ground;
@@ -637,18 +695,18 @@ fn masked(
     // reach of the splash, the line wandering along the wall.
     if layered && masks.dry > 0.0 {
         let reach = masks.dry_reach.max(0.1);
-        let wander = reach * 0.35 * (smooth(p, 0.9, 29) - 0.5);
+        let wander = reach * 0.35 * (noise.at(p, 0.9, 29) - 0.5);
         let dry = (1.0 - (crate::STOREY_M - height + wander) / reach).clamp(0.0, 1.0);
         if dry > 0.0 {
-            let pale = masks.dry * dry * dry * (0.7 + 0.6 * smooth(p, 0.3, 31));
+            let pale = masks.dry * dry * dry * (0.7 + 0.6 * noise.at(p, 0.3, 31));
             let luma = (c.x + c.y + c.z) / 3.0;
             c = c.lerp(Vec3::splat(luma), pale * 0.5) * (1.0 + pale);
         }
     }
     // Dirt rises at most 1.4 times its height, so above that it is not worked out.
     if masks.dirt > 0.0 && height < masks.dirt * 1.4 {
-        let rise = masks.dirt * (0.6 + 0.8 * smooth(p, 0.45, 3));
-        let dirt = libm::powf((1.0 - height / rise).clamp(0.0, 1.0), 1.5);
+        let rise = masks.dirt * (0.6 + 0.8 * noise.at(p, 0.45, 3));
+        let dirt = three_halves((1.0 - height / rise).clamp(0.0, 1.0));
         c = c.lerp(Vec3::from_array(masks.dirt_tint), dirt);
     }
     if masks.wear > 0.0 {
@@ -657,7 +715,7 @@ fn masked(
         c *= 1.0 + masks.wear * round;
     }
     if timber && masks.weather > 0.0 {
-        let grey = masks.weather * (height / 3.0).clamp(0.0, 1.0) * (0.5 + smooth(p, 0.8, 5));
+        let grey = masks.weather * (height / 3.0).clamp(0.0, 1.0) * (0.5 + noise.at(p, 0.8, 5));
         let luma = (c.x + c.y + c.z) / 3.0;
         c = c.lerp(Vec3::splat(luma * 1.05), grey.clamp(0.0, 1.0));
     }
@@ -680,28 +738,34 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
         Material::Log | Material::LogEnd | Material::Board | Material::Daub
     );
     let layered = material == Material::Masonry;
-    // The ground's height by column, looked up once each; corners come in runs over a
-    // column, so the last is kept to hand.
-    let mut known: BTreeMap<[i32; 2], f32> = BTreeMap::new();
-    let mut last: Option<([i32; 2], f32)> = None;
+    // The ground's height by column, looked up once each, in a table over the columns the
+    // surface stands on.
+    let column = |p: Vec3| [(p.x / CELL_M).floor() as i32, (p.z / CELL_M).floor() as i32];
+    let (low, high) = surface
+        .positions
+        .iter()
+        .chain(&surface.shared.positions)
+        .map(|&p| column(p))
+        .fold(([i32::MAX; 2], [i32::MIN; 2]), |(l, h), c| {
+            (
+                [l[0].min(c[0]), l[1].min(c[1])],
+                [h[0].max(c[0]), h[1].max(c[1])],
+            )
+        });
+    let wide = (high[0] - low[0] + 1).max(0) as usize;
+    let deep = (high[1] - low[1] + 1).max(0) as usize;
+    let mut known: Vec<f32> = vec![f32::NAN; wide * deep];
     let mut ground = |p: Vec3| {
-        let column = [
-            libm::floorf(p.x / CELL_M) as i32,
-            libm::floorf(p.z / CELL_M) as i32,
-        ];
-        if let Some((at, height)) = last
-            && at == column
-        {
-            return height;
+        let at = column(p);
+        let slot = (at[0] - low[0]) as usize + (at[1] - low[1]) as usize * wide;
+        if known[slot].is_nan() {
+            known[slot] = layout::metres(layout::roles::ground_ticks(base, at));
         }
-        let height = *known
-            .entry(column)
-            .or_insert_with(|| layout::metres(layout::roles::ground_ticks(base, column)));
-        last = Some((column, height));
-        height
+        known[slot]
     };
+    let mut noise = Noise::default();
     let mut shade = |p: Vec3, n: Vec3, c: &mut [f32; 3]| {
-        let k = masked(masks, (timber, layered), p, n, ground(p));
+        let k = masked(masks, (timber, layered), p, n, ground(p), &mut noise);
         *c = [c[0] * k[0], c[1] * k[1], c[2] * k[2]];
     };
     for ((p, n), c) in surface
@@ -733,27 +797,28 @@ pub fn roof_mask(surface: &mut Surface, kit: &Kit, roofs: &crate::layout::roofs:
     if masks.moss <= 0.0 && masks.weather <= 0.0 && masks.wear <= 0.0 {
         return;
     }
-    let shade = |p: Vec3, c: &mut [f32; 3]| {
+    let mut noise = Noise::default();
+    let mut shade = |p: Vec3, c: &mut [f32; 3]| {
         let Some((up, inside)) = roofs.place_of(p) else {
             return;
         };
         let up: f32 = up.clamp(-0.5, 1.0);
         let mut colour = Vec3::from_array(*c);
         if masks.moss > 0.0 {
-            let blotch = smooth(p, 0.6, 17) * 0.7 + smooth(p, 2.1, 19) * 0.6;
-            let low = libm::powf((1.0 - up).clamp(0.0, 1.0), 1.5);
+            let blotch = noise.at(p, 0.6, 17) * 0.7 + noise.at(p, 2.1, 19) * 0.6;
+            let low = three_halves((1.0 - up).clamp(0.0, 1.0));
             let moss = (masks.moss * low * blotch * 1.8).clamp(0.0, 0.85);
             colour = colour.lerp(colour * Vec3::from_array(masks.moss_tint), moss);
         }
         if masks.weather > 0.0 {
-            let grey = masks.weather * up.max(0.0) * (0.4 + smooth(p, 1.3, 23));
+            let grey = masks.weather * up.max(0.0) * (0.4 + noise.at(p, 1.3, 23));
             let luma = (colour.x + colour.y + colour.z) / 3.0;
             colour = colour.lerp(Vec3::splat(luma * 1.08), grey.clamp(0.0, 1.0));
         }
         // Lighter along its open edges, which take the weather first.
         let worn = masks.wear.max(masks.weather * 0.5);
         let edge = (1.0 - inside / 0.5).clamp(0.0, 1.0);
-        colour *= 1.0 + worn * edge * (0.5 + smooth(p, 0.4, 29));
+        colour *= 1.0 + worn * edge * (0.5 + noise.at(p, 0.4, 29));
         *c = colour.to_array();
     };
     for (p, c) in surface.positions.iter().zip(surface.colours.iter_mut()) {

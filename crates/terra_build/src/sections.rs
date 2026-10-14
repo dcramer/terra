@@ -189,6 +189,44 @@ impl Whole {
         }
         whole
     }
+
+    /// This base laid again after edits that marked some sections (`Base::take_dirty`),
+    /// from `before` as it was laid: only the buildings the marks are in, before the edits
+    /// and after (an edit may join two or split one), are laid again, and every other
+    /// building's sections kept as they were, as a claim may hold many. What a section is
+    /// cut from it is what laying the base whole gives. Where its kits' pieces come in
+    /// the order the whole base goes in is not kept, so a plan shown so far through
+    /// (`Progress::Fraction`) is laid whole.
+    pub fn lay_again(
+        &self,
+        before: &Base,
+        base: &Base,
+        kits: &Kits,
+        marked: &BTreeSet<[i32; 3]>,
+    ) -> Whole {
+        let mut again = affected(before, marked);
+        again.extend(affected(base, marked));
+        let mut whole = Whole {
+            by_section: self
+                .by_section
+                .iter()
+                .filter(|(at, _)| !again.contains(*at))
+                .map(|(at, pieces)| (*at, pieces.clone()))
+                .collect(),
+            counts: self.counts.clone(),
+        };
+        for (index, kit) in kits.0.iter().enumerate() {
+            let pieces = layout::lay_sections(base, kit, kits, &again).pieces;
+            for (order, piece) in pieces.into_iter().enumerate() {
+                whole
+                    .by_section
+                    .entry(piece.section().to_array())
+                    .or_default()
+                    .push((index, order, piece));
+            }
+        }
+        whole
+    }
 }
 
 /// How far a section's cubes are searched for the kinds whose kits may lay pieces in it.
@@ -387,7 +425,7 @@ pub enum Reach {
 }
 
 /// How finely a section is drawn.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Detail {
     /// Every piece as it is made, textured: near.
     Near,
@@ -562,6 +600,51 @@ pub struct Drawn {
 /// detail only for the sections near the camera. A plan's ghosts, the next part and the
 /// doors and windows come with the finest textured detail drawn.
 pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
+    draw_again(section, laid, reach, None, None)
+}
+
+/// What a section's finer details were drawn as, piece by piece and face by face, kept so
+/// drawing it again after an edit works out only what the edit reached (`draw_again`): a
+/// piece drawn the same as before, and a block surface's faces whose cubes round them are
+/// as they were, are taken as they were drawn, as a voxel game remeshes only round an edit.
+#[derive(Clone, Debug, Default)]
+pub struct Drawing {
+    faces: crate::surface::FaceCache,
+    pieces: crate::mesh::QuickMap<(usize, Detail, Piece), std::sync::Arc<Surfaces>>,
+}
+
+impl Drawing {
+    /// How many faces and pieces it holds.
+    pub fn len(&self) -> usize {
+        self.faces.len() + self.pieces.len()
+    }
+
+    /// How many of its block surfaces' faces were taken from the last drawing.
+    pub fn faces_taken(&self) -> usize {
+        self.faces.taken()
+    }
+
+    /// How many block surfaces' faces it holds.
+    pub fn faces(&self) -> usize {
+        self.faces.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// As [`draw`], taking what is unchanged from how the section was drawn last time, if
+/// that is given, and keeping how it is drawn now in `keep`, if that is: the same surfaces
+/// as drawing it afresh, to the bit.
+pub fn draw_again(
+    section: &Section,
+    laid: &Laid,
+    reach: Reach,
+    last: Option<&Drawing>,
+    keep: Option<&mut Drawing>,
+) -> Drawn {
+    let mut keep = keep;
     let mut drawn = Drawn::default();
     let kits = section.kits;
     // Only the details that can be seen while it is drawn for this reach: what it fades
@@ -593,12 +676,29 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
                 None
             };
             let mut mine = Surfaces::sharing();
+            // Pieces are kept piece by piece only where they are made finely.
+            let kept = keep.is_some() && matches!(detail, Detail::Near | Detail::Mid);
             for (count, (_, piece, stage)) in own.iter().enumerate() {
                 if !detail.shows(piece) {
                     continue;
                 }
                 match stage {
                     Stage::In if far_box(piece, &coarse, detail, &mut mine) => {}
+                    Stage::In if kept => {
+                        let key = (index, detail, piece.clone());
+                        let made = match last.and_then(|last| last.pieces.get(&key)) {
+                            Some(made) => made.clone(),
+                            None => {
+                                let mut made = Surfaces::sharing();
+                                crate::draw::draw_as(piece, &coarse, face, false, &mut made);
+                                std::sync::Arc::new(made)
+                            }
+                        };
+                        join(&mut mine, (*made).clone());
+                        if let Some(keep) = keep.as_deref_mut() {
+                            keep.pieces.insert(key, made);
+                        }
+                    }
                     Stage::In => crate::draw::draw_as(
                         piece,
                         &coarse,
@@ -618,7 +718,12 @@ pub fn draw(section: &Section, laid: &Laid, reach: Reach) -> Drawn {
                 }
             }
             if kit.pattern == Pattern::Masonry {
-                let blocks = draw_blocks(section, kit, &own, &edge, detail, first);
+                let caching = keep.as_deref_mut().map(|keep| BlockCaching {
+                    call: (index as u32) << 8 | detail as u32,
+                    old: last.map(|last| &last.faces),
+                    new: &mut keep.faces,
+                });
+                let blocks = draw_blocks(section, kit, &own, &edge, detail, first, caching);
                 for (set, surfaces) in blocks.into_iter().enumerate() {
                     match set {
                         0 => join(&mut mine, surfaces),
@@ -742,6 +847,25 @@ fn join(into: &mut Surfaces, from: Surfaces) {
 /// the next, each closed where it meets the others but for what is already built, with
 /// the cubes a step beyond the section's edge worked out but not drawn, so its edges meet
 /// the next section's as one surface.
+/// A kit's block surfaces drawn at a detail, under a number, as they were and as kept.
+struct BlockCaching<'a> {
+    call: u32,
+    old: Option<&'a crate::surface::FaceCache>,
+    new: &'a mut crate::surface::FaceCache,
+}
+
+/// One of a kit's block surfaces' caching, each under a number of its own.
+fn cached<'a>(
+    caching: &'a mut Option<BlockCaching>,
+    surface: u32,
+) -> Option<crate::surface::Caching<'a>> {
+    caching.as_mut().map(|caching| crate::surface::Caching {
+        call: caching.call << 4 | surface,
+        old: caching.old,
+        new: &mut *caching.new,
+    })
+}
+
 fn draw_blocks(
     section: &Section,
     kit: &Kit,
@@ -749,6 +873,7 @@ fn draw_blocks(
     edge: &[&Placed],
     detail: Detail,
     first: bool,
+    mut caching: Option<BlockCaching>,
 ) -> [Surfaces; 3] {
     let base = section.base;
     let mut sets: [BTreeSet<[i32; 3]>; 3] = Default::default();
@@ -820,6 +945,15 @@ fn draw_blocks(
         };
         [low, roof.min(high)]
     };
+    // Most cubes are whole: their cut is never asked.
+    let cut_at_all = |cube: IVec3| {
+        let shape = shape_of(cube);
+        gables.contains_key(&cube.to_array()) || shape.planed_top() || shape.planed_under()
+    };
+    let cut = crate::surface::Cuts {
+        of: &cut_at_all,
+        at: &cut,
+    };
     let look = block_look(kit, detail.steps());
     let (relief, top) = if matches!(detail, Detail::Near | Detail::Mid) {
         (section.maps.shape(kit), section.maps.top(kit))
@@ -890,6 +1024,7 @@ fn draw_blocks(
             colour,
             out[set].of(Material::Masonry),
             &mut tops,
+            cached(&mut caching, set as u32),
         );
         // Halves, slopes, their corners and the same upside down: the surface of each run
         // of them cut down to its tops and up to its undersides (D231), hidden where whole
@@ -922,6 +1057,7 @@ fn draw_blocks(
                 colour,
                 out[set].of(Material::Masonry),
                 &mut tops,
+                None,
             );
         }
         // Stairs either way up, a stone a step, and posts, a drum a cube; a framed kind's
@@ -1006,6 +1142,7 @@ fn draw_blocks(
             [1.0; 3],
             out[0].of(material),
             &mut tops,
+            cached(&mut caching, 3),
         );
         out[0].of(material).append(tops);
     }

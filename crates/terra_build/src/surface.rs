@@ -22,6 +22,8 @@ use crate::mesh::{QuickMap, planar};
 use crate::{CELL_M, Surface};
 use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
+use std::hash::Hasher;
+use std::sync::Arc;
 
 /// How a block kind's surface is made: from its kit.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -84,15 +86,21 @@ pub fn draw(
     out: &mut Surface,
     tops: &mut Surface,
 ) {
-    draw_cut(
+    let cuts = Cuts {
+        of: &|_| false,
+        at: &|_, _| [f32::MIN, f32::MAX],
+    };
+    draw_part(
         cubes,
+        &|_| true,
         hides,
         look,
         heights,
-        &|_, _| [f32::MIN, f32::MAX],
+        &cuts,
         colour,
         out,
         tops,
+        None,
     );
 }
 
@@ -112,23 +120,122 @@ pub fn draw_cut(
     out: &mut Surface,
     tops: &mut Surface,
 ) {
+    let cuts = Cuts {
+        of: &|_| true,
+        at: cut,
+    };
     draw_part(
         cubes,
         &|_| true,
         hides,
         look,
         heights,
-        cut,
+        &cuts,
         colour,
         out,
         tops,
+        None,
     );
 }
+
+/// Faces of a surface drawn before, each with what it was worked out from, kept so the
+/// surface drawn again after an edit works out only the faces near what changed, as a
+/// voxel mesher keeps a chunk's mesh and remeshes only round an edit: a face's place
+/// depends on the cubes two round it, and its edges' shading on three
+/// ([`draw_part`]). Each face is filed under the number of the surface it is of.
+#[derive(Clone, Debug, Default)]
+pub struct FaceCache {
+    faces: QuickMap<(u32, IVec3, u8), Arc<FaceData>>,
+    /// How many of them were taken from the last.
+    taken: usize,
+}
+
+impl FaceCache {
+    /// How many faces it holds.
+    pub fn len(&self) -> usize {
+        self.faces.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.faces.is_empty()
+    }
+
+    /// How many of its faces were taken from the last drawing rather than worked out.
+    pub fn taken(&self) -> usize {
+        self.taken
+    }
+}
+
+/// A surface's faces as drawn last time, to take from, and this time, to keep: under a
+/// number of the caller's, one for each surface it draws (a kit's, at a detail).
+pub struct Caching<'a> {
+    pub call: u32,
+    pub old: Option<&'a FaceCache>,
+    pub new: &'a mut FaceCache,
+}
+
+/// How cubes are cut (D231): `of` says whether a cube may be cut at all, so one that is
+/// not, as most are, is drawn whole without asking where; `at` gives the heights a cube is
+/// cut to over a point of its face, lowest and highest, as [`draw_cut`] takes them.
+pub struct Cuts<'a> {
+    pub of: &'a dyn Fn(IVec3) -> bool,
+    pub at: &'a dyn Fn(IVec3, Vec3) -> [f32; 2],
+}
+
+/// The cubes drawn and those round them, a few deep, in one box looked up by place rather
+/// than hashed, as a terrain mesher keeps a chunk's voxels padded by its neighbours'.
+struct Grid {
+    low: IVec3,
+    size: IVec3,
+}
+
+impl Grid {
+    /// How far round the cubes it reaches: a face looks at the cubes one away, and the
+    /// inside edges two.
+    const PAD: i32 = 3;
+
+    fn around(cubes: &BTreeSet<[i32; 3]>) -> Grid {
+        let (low, high) = cubes
+            .iter()
+            .map(|&c| IVec3::from_array(c))
+            .fold((IVec3::MAX, IVec3::MIN), |(l, h), c| (l.min(c), h.max(c)));
+        let (low, high) = if cubes.is_empty() {
+            (IVec3::ZERO, IVec3::ZERO)
+        } else {
+            (low, high)
+        };
+        let low = low - IVec3::splat(Self::PAD);
+        Grid {
+            low,
+            size: high + IVec3::splat(Self::PAD + 1) - low,
+        }
+    }
+
+    fn len(&self) -> usize {
+        (self.size.x * self.size.y * self.size.z) as usize
+    }
+
+    fn index(&self, at: IVec3) -> Option<usize> {
+        let d = at - self.low;
+        (d.cmpge(IVec3::ZERO).all() && d.cmplt(self.size).all())
+            .then(|| (d.x + self.size.x * (d.y + self.size.y * d.z)) as usize)
+    }
+}
+
+/// Whether a cube of the grid is full: not yet asked, no, or yes.
+const UNKNOWN: u8 = 0;
+const EMPTY: u8 = 1;
+const FULL: u8 = 2;
 
 /// As [`draw_cut`], keeping only the faces of the cubes `keep` says: the rest are worked
 /// out, so the edges and shading where they meet the kept ones come out as they would
 /// with all of them drawn, and left out. A section drawn with the cubes a step beyond its
 /// edge meets its neighbour's surface with no seam (docs/building-plan.md, drawing).
+///
+/// The cubes, whether those round them are full, their shrunk boxes and the inside edges
+/// are kept in a [`Grid`]; a point further than the bevel from its face's edges is nearest
+/// its own cube's box alone, and the inside edges a face is not near are not looked at, so
+/// most of a face is placed with no search at all.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_part(
     cubes: &BTreeSet<[i32; 3]>,
@@ -136,43 +243,72 @@ pub fn draw_part(
     hides: &dyn Fn(IVec3) -> bool,
     look: &Look,
     heights: &Heights,
-    cut: &dyn Fn(IVec3, Vec3) -> [f32; 2],
+    cuts: &Cuts,
     colour: [f32; 3],
     out: &mut Surface,
     tops: &mut Surface,
+    mut caching: Option<Caching>,
 ) {
-    // Whether a cube is full, asked of each once: `hides` reads the base.
-    let known: std::cell::RefCell<QuickMap<IVec3, bool>> = Default::default();
-    let full = |at: IVec3| {
-        if let Some(&full) = known.borrow().get(&at) {
-            return full;
+    let cut = cuts.at;
+    let grid = Grid::around(cubes);
+    // Kept faces are known by everything round them for three cubes.
+    let asked = if caching.is_some() { 3 } else { 1 };
+    // Which cells are cubes drawn, and whether each cell round them is full, asked of each
+    // once: `hides` reads the base.
+    let mut member = vec![false; grid.len()];
+    let mut fill = vec![UNKNOWN; grid.len()];
+    for &cube in cubes {
+        if let Some(i) = grid.index(IVec3::from_array(cube)) {
+            member[i] = true;
+            fill[i] = FULL;
         }
-        let full = cubes.contains(&at.to_array()) || hides(at);
-        known.borrow_mut().insert(at, full);
-        full
+    }
+    for &cube in cubes {
+        let cube = IVec3::from_array(cube);
+        for z in -asked..=asked {
+            for y in -asked..=asked {
+                for x in -asked..=asked {
+                    let at = cube + IVec3::new(x, y, z);
+                    if let Some(i) = grid.index(at)
+                        && fill[i] == UNKNOWN
+                    {
+                        fill[i] = if hides(at) { FULL } else { EMPTY };
+                    }
+                }
+            }
+        }
+    }
+    let is_member = |at: IVec3| grid.index(at).is_some_and(|i| member[i]);
+    let full = |at: IVec3| match grid.index(at) {
+        Some(i) if fill[i] != UNKNOWN => fill[i] == FULL,
+        Some(i) => member[i] || hides(at),
+        None => hides(at),
     };
     let n = look.steps.max(1) as usize;
     // Each cube shrunk by the bevel on every side nothing hides.
-    let shrunk: QuickMap<IVec3, (Vec3, Vec3)> = cubes
-        .iter()
-        .map(|&cube| {
-            let cube = IVec3::from_array(cube);
-            let mut low = cube.as_vec3() * CELL_M;
-            let mut high = low + Vec3::splat(CELL_M);
-            for axis in 0..3 {
-                if !full(cube - step(axis, 1)) {
-                    low[axis] += look.bevel;
-                }
-                if !full(cube + step(axis, 1)) {
-                    high[axis] -= look.bevel;
-                }
+    let mut shrunk: Vec<(Vec3, Vec3)> = vec![(Vec3::ZERO, Vec3::ZERO); grid.len()];
+    for &cube in cubes {
+        let cube = IVec3::from_array(cube);
+        let mut low = cube.as_vec3() * CELL_M;
+        let mut high = low + Vec3::splat(CELL_M);
+        for axis in 0..3 {
+            if !full(cube - step(axis, 1)) {
+                low[axis] += look.bevel;
             }
-            (cube, (low, high))
-        })
-        .collect();
+            if !full(cube + step(axis, 1)) {
+                high[axis] -= look.bevel;
+            }
+        }
+        if let Some(i) = grid.index(cube) {
+            shrunk[i] = (low, high);
+        }
+    }
+    let shrunk_at = |at: IVec3| grid.index(at).filter(|&i| member[i]).map(|i| shrunk[i]);
     // Every inside edge: a cube's edge with three of the four cubes round it full, kept by
-    // the cell its middle is in, so a point looks only at those near it.
-    let mut inside: QuickMap<IVec3, Vec<(Vec3, Vec3)>> = QuickMap::default();
+    // the cell its middle is in (a list a cell, linked through `edges`), so a point looks
+    // only at those near it.
+    let mut first_edge = vec![u32::MAX; grid.len()];
+    let mut edges: Vec<(u32, (Vec3, Vec3))> = Vec::new();
     for &cube in cubes {
         let cube = IVec3::from_array(cube);
         for axis in 0..3 {
@@ -183,32 +319,51 @@ pub fn draw_part(
                 let corner = cube + step(a, da) + step(b, db);
                 let round = [(0, 0), (-1, 0), (0, -1), (-1, -1)]
                     .map(|(ea, eb)| full(corner + step(a, ea) + step(b, eb)));
-                if round.iter().filter(|&&f| f).count() == 3 {
-                    let from = corner.as_vec3() * CELL_M;
-                    let to = from + unit(axis, CELL_M);
-                    let cell = ((from + to) * 0.5 / CELL_M).floor().as_ivec3();
-                    let edges = inside.entry(cell).or_default();
-                    if !edges.contains(&(from, to)) {
-                        edges.push((from, to));
+                if round.iter().filter(|&&f| f).count() != 3 {
+                    continue;
+                }
+                let from = corner.as_vec3() * CELL_M;
+                let to = from + unit(axis, CELL_M);
+                let cell = ((from + to) * 0.5 / CELL_M).floor().as_ivec3();
+                let Some(slot) = grid.index(cell) else {
+                    continue;
+                };
+                let mut at = first_edge[slot];
+                let mut known = false;
+                while at != u32::MAX {
+                    let (next, edge) = edges[at as usize];
+                    if edge == (from, to) {
+                        known = true;
+                        break;
                     }
+                    at = next;
+                }
+                if !known {
+                    edges.push((first_edge[slot], (from, to)));
+                    first_edge[slot] = (edges.len() - 1) as u32;
                 }
             }
         }
     }
     // The inside edges near a cube, which a point of its faces may be near: those further
     // off are further than the fade from it.
-    let near_inside = |cube: IVec3| -> Vec<(Vec3, Vec3)> {
-        let mut found = Vec::new();
-        for x in -1..=2 {
+    let near_inside = |cube: IVec3, found: &mut Vec<(Vec3, Vec3)>| {
+        found.clear();
+        for z in -1..=2 {
             for y in -1..=2 {
-                for z in -1..=2 {
-                    if let Some(edges) = inside.get(&(cube + IVec3::new(x, y, z))) {
-                        found.extend(edges);
+                for x in -1..=2 {
+                    let Some(slot) = grid.index(cube + IVec3::new(x, y, z)) else {
+                        continue;
+                    };
+                    let mut at = first_edge[slot];
+                    while at != u32::MAX {
+                        let (next, edge) = edges[at as usize];
+                        found.push(edge);
+                        at = next;
                     }
                 }
             }
         }
-        found
     };
     let fade = |p: Vec3, edges: &[(Vec3, Vec3)]| {
         edges
@@ -220,27 +375,62 @@ pub fn draw_part(
             })
             .fold(1.0_f32, f32::min)
     };
+    // What a cube's faces are worked out from, as a number: which cubes are drawn two round
+    // it and which are full three round it. A cube that is cut, or has one cut beside it,
+    // is not kept, being rare.
+    let signature = |cube: IVec3| -> Option<u64> {
+        let mut hash = crate::mesh::Corners::default();
+        let mut word = 0u64;
+        let mut bits = 0;
+        for z in -3..=3 {
+            for y in -3..=3 {
+                for x in -3..=3 {
+                    let at = cube + IVec3::new(x, y, z);
+                    let near = x.abs().max(y.abs()).max(z.abs()) <= 2;
+                    let (drawn, solid) = match grid.index(at) {
+                        Some(i) => (member[i], fill[i] == FULL),
+                        None => (false, hides(at)),
+                    };
+                    if near && drawn && (cuts.of)(at) {
+                        return None;
+                    }
+                    word = word << 2 | u64::from(drawn) << 1 | u64::from(solid);
+                    bits += 2;
+                    if bits == 64 {
+                        hash.write_u64(word);
+                        (word, bits) = (0, 0);
+                    }
+                }
+            }
+        }
+        hash.write_u64(word);
+        Some(hash.finish())
+    };
+    let call = caching.as_ref().map_or(0, |caching| caching.call);
+    let old = caching.as_ref().and_then(|caching| caching.old);
     // Each face drawn: a grid of points, placed once each, and its triangles' corners in it.
     let mut faces: Vec<Face> = Vec::new();
+    let mut cube_edges: Vec<(Vec3, Vec3)> = Vec::new();
+    let mut face_edges: Vec<(Vec3, Vec3)> = Vec::new();
+    let mut round: Vec<(Vec3, Vec3)> = Vec::with_capacity(27);
+    let mut flat: Vec<Vec3> = Vec::new();
     for &cube in cubes {
         let cube = IVec3::from_array(cube);
         let keeping = keep(cube);
         // A cube left out matters only where it meets one kept, a step away.
-        if !keeping
-            && !(-1..=1)
-                .any(|x| (-1..=1).any(|y| (-1..=1).any(|z| keep(cube + IVec3::new(x, y, z)))))
-        {
+        if !keeping && !NEIGHBOURHOOD.iter().any(|&offset| keep(cube + offset)) {
             continue;
         }
         let low = cube.as_vec3() * CELL_M;
-        let edges = near_inside(cube);
-        // The shrunk boxes of the cubes round this one, which any point of its faces may
-        // be nearest.
-        let round: Vec<(Vec3, Vec3)> = (-1..=1)
-            .flat_map(|x| (-1..=1).flat_map(move |y| (-1..=1).map(move |z| IVec3::new(x, y, z))))
-            .filter_map(|offset| shrunk.get(&(cube + offset)).copied())
-            .collect();
-        for (axis, side) in FACES {
+        near_inside(cube, &mut cube_edges);
+        let own_box = shrunk_at(cube).unwrap_or((low, low + Vec3::splat(CELL_M)));
+        let cut_here = (cuts.of)(cube);
+        let signed = if caching.is_some() {
+            signature(cube)
+        } else {
+            None
+        };
+        for (index, (axis, side)) in FACES.into_iter().enumerate() {
             let out_step = step(axis, side as i32);
             let beyond = cube + out_step;
             let normal = unit(axis, side);
@@ -259,9 +449,11 @@ pub fn draw_part(
             };
             // A side against another of the cubes drawn shows where that one is cut lower
             // than this one, as a slope's side shows over a half beside it: from the other's
-            // cut up to this one's. Against anything else full, nothing shows.
+            // cut up to this one's. Against anything else full, nothing shows; nor against
+            // a cube not cut at all, which is never lower.
             let against_cut = axis != 1
-                && cubes.contains(&beyond.to_array())
+                && is_member(beyond)
+                && (cuts.of)(beyond)
                 && (0..=n).any(|i| {
                     (0..=n).any(|j| {
                         let p = point(i, j);
@@ -269,6 +461,20 @@ pub fn draw_part(
                     })
                 });
             if full(beyond) && !against_cut {
+                continue;
+            }
+            // As it was drawn last time, if nothing round it has changed since.
+            if let (Some(signed), Some(old)) = (signed, old)
+                && let Some(data) = old.faces.get(&(call, cube, index as u8))
+                && data.signature == Some(signed)
+            {
+                faces.push(Face {
+                    data: data.clone(),
+                    keeping,
+                    cube,
+                    index: index as u8,
+                    fresh: false,
+                });
                 continue;
             }
             // Only the boxes that may be nearest a point of this face: none further from
@@ -280,16 +486,44 @@ pub fn draw_part(
                 (l, h)
             };
             let reach = look.bevel * look.bevel * 3.0 + 1e-6;
-            let round: Vec<(Vec3, Vec3)> = round
-                .iter()
-                .copied()
-                .filter(|&(l, h)| {
-                    let gap = (l - face_high).max(face_low - h).max(Vec3::ZERO);
-                    gap.length_squared() <= reach
-                })
-                .collect();
+            round.clear();
+            for x in -1..=1 {
+                for y in -1..=1 {
+                    for z in -1..=1 {
+                        let Some((l, h)) = shrunk_at(cube + IVec3::new(x, y, z)) else {
+                            continue;
+                        };
+                        let gap = (l - face_high).max(face_low - h).max(Vec3::ZERO);
+                        if gap.length_squared() <= reach {
+                            round.push((l, h));
+                        }
+                    }
+                }
+            }
+            // Only the inside edges that come within the fade of this face: the rest fade
+            // nothing anywhere on it.
+            face_edges.clear();
+            face_edges.extend(cube_edges.iter().copied().filter(|&(from, to)| {
+                let gap = (from.min(to) - face_high)
+                    .max(face_low - from.max(to))
+                    .max(Vec3::ZERO);
+                gap.length() < INSIDE_FADE_M
+            }));
+            // A point further than the bevel from every edge of a face open to the air is
+            // nearer its own cube's box than any other's: every other cube's is beyond the
+            // face's edges, or behind it.
+            let margin = look.bevel + 1e-3;
+            let inner = |p: Vec3| {
+                !against_cut
+                    && p[a] - face_low[a] > margin
+                    && face_high[a] - p[a] > margin
+                    && p[b] - face_low[b] > margin
+                    && face_high[b] - p[b] > margin
+            };
+            let own = [own_box];
             let place = |p: Vec3| -> Vec3 {
-                let nearest = round
+                let boxes: &[(Vec3, Vec3)] = if inner(p) { &own } else { &round };
+                let nearest = boxes
                     .iter()
                     .map(|&(low, high)| p.clamp(low, high))
                     .min_by(|a, b| a.distance_squared(p).total_cmp(&b.distance_squared(p)))
@@ -302,7 +536,12 @@ pub fn draw_part(
                 } else {
                     (p, normal)
                 };
-                rounded + outward * (displaced(p, outward, look, heights) * fade(p, &edges))
+                let faded = if face_edges.is_empty() {
+                    1.0
+                } else {
+                    fade(p, &face_edges)
+                };
+                rounded + outward * (displaced(p, outward, look, heights) * faded)
             };
             // Wound so each triangle faces out along the face's normal.
             let flip = side < 0.0;
@@ -311,26 +550,38 @@ pub fn draw_part(
                 Some((metres, _)) if top => metres,
                 _ => look.metres,
             };
-            let mut face = Face {
+            let mut face = FaceData {
+                signature: signed,
                 points: Vec::with_capacity((n + 1) * (n + 1)),
                 uvs: Vec::with_capacity((n + 1) * (n + 1)),
                 triangles: Vec::with_capacity(n * n * 2),
                 top,
-                keeping,
+                local: Vec::new(),
+                normals: Vec::new(),
+                order: Vec::new(),
+                indices: Vec::new(),
             };
             // Each point cut to the heights there, and where it would be unrounded, to
-            // choose each square's diagonal by.
+            // choose each square's diagonal by; a cube not cut is all there.
             let clipped = |p: Vec3| {
+                if !cut_here {
+                    return p.y;
+                }
                 let [low, high] = cut(cube, p);
                 p.y.max(low).min(high)
             };
-            let mut flat = Vec::with_capacity((n + 1) * (n + 1));
+            flat.clear();
             for i in 0..=n {
                 for j in 0..=n {
                     let p = point(i, j);
-                    let [low, high] = cut(cube, p);
                     let mut q = place(p);
-                    q.y = q.y.max(low).min(high);
+                    let high = if cut_here {
+                        let [low, high] = cut(cube, p);
+                        q.y = q.y.max(low).min(high);
+                        high
+                    } else {
+                        f32::MAX
+                    };
                     if against_cut {
                         q.y = q.y.max(cut(beyond, p)[1].min(high));
                     }
@@ -368,88 +619,190 @@ pub fn draw_part(
                     }
                 }
             }
-            faces.push(face);
+            faces.push(Face {
+                data: Arc::new(face),
+                keeping,
+                cube,
+                index: index as u8,
+                fresh: true,
+            });
         }
     }
     // Smooth across every edge the faces share: the normal at a point is the sum of its
     // triangles' around it. Inside a face that is its own triangles; on a face's edge,
-    // where other faces meet it, every triangle with a corner there, found by place.
-    let edge = |index: u32| {
-        let (i, j) = (index as usize / (n + 1), index as usize % (n + 1));
+    // where other faces meet it, every triangle with a corner there, found by place: each
+    // face's own sum there is added to the place's, a face at a time. A face kept from last
+    // time keeps its normals, as does every face round it, so only the places on the edges
+    // of faces worked out anew are summed, from the faces beside them.
+    let edge = |index: usize| {
+        let (i, j) = (index / (n + 1), index % (n + 1));
         i == 0 || j == 0 || i == n || j == n
     };
     let key = |p: Vec3| ((p * 2048.0).round()).as_ivec3();
-    let mut sums: QuickMap<IVec3, Vec3> = QuickMap::default();
-    let mut own: Vec<Vec<Vec3>> = Vec::with_capacity(faces.len());
-    for face in &faces {
-        let mut local = vec![Vec3::ZERO; face.points.len()];
-        for t in &face.triangles {
-            let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
+    for face in faces.iter_mut().filter(|face| face.fresh) {
+        let data = Arc::get_mut(&mut face.data).expect("a face worked out anew is its own");
+        let mut local = vec![Vec3::ZERO; data.points.len()];
+        for t in &data.triangles {
+            let [pa, pb, pc] = t.map(|c| data.points[c as usize]);
             let normal = (pb - pa).cross(pc - pa);
             for &c in t {
-                if edge(c) {
-                    *sums.entry(key(face.points[c as usize])).or_default() += normal;
-                } else {
-                    local[c as usize] += normal;
-                }
+                local[c as usize] += normal;
             }
         }
-        own.push(local);
+        data.local = local;
     }
-    for (face, local) in faces.iter().zip(own) {
-        if !face.keeping {
-            continue;
+    let mut slots: QuickMap<IVec3, u32> = QuickMap::default();
+    let mut sums: Vec<Vec3> = Vec::new();
+    let mut anew = vec![false; grid.len()];
+    for face in faces.iter().filter(|face| face.fresh) {
+        if let Some(i) = grid.index(face.cube) {
+            anew[i] = true;
         }
-        let into = if face.top { &mut *tops } else { &mut *out };
-        let normal_at = |c: u32, fallback: Vec3| {
-            let sum = if edge(c) {
-                sums[&key(face.points[c as usize])]
+        for (c, &p) in face.data.points.iter().enumerate() {
+            if edge(c) {
+                slots.entry(key(p)).or_insert_with(|| {
+                    sums.push(Vec3::ZERO);
+                    (sums.len() - 1) as u32
+                });
+            }
+        }
+    }
+    let beside_anew = |cube: IVec3| {
+        NEIGHBOURHOOD
+            .iter()
+            .any(|&offset| grid.index(cube + offset).is_some_and(|i| anew[i]))
+    };
+    for face in faces
+        .iter()
+        .filter(|face| face.fresh || beside_anew(face.cube))
+    {
+        let data = &face.data;
+        for (c, &p) in data.points.iter().enumerate() {
+            if edge(c)
+                && let Some(&slot) = slots.get(&key(p))
+            {
+                sums[slot as usize] += data.local[c];
+            }
+        }
+    }
+    // Each face's normals, and its points in the order its triangles first come to them,
+    // with its triangles' corners among them: what it puts into a surface sharing corners.
+    for face in faces.iter_mut().filter(|face| face.fresh) {
+        let data = Arc::get_mut(&mut face.data).expect("a face worked out anew is its own");
+        let sum_at = |c: usize| {
+            if edge(c) {
+                sums[slots[&key(data.points[c])] as usize]
             } else {
-                local[c as usize]
-            };
-            sum.normalize_or(fallback)
+                data.local[c]
+            }
         };
+        let mut normals = vec![Vec3::ZERO; data.points.len()];
+        let mut index: Vec<u32> = vec![u32::MAX; data.points.len()];
+        let (mut order, mut indices) = (Vec::new(), Vec::with_capacity(data.triangles.len() * 3));
+        for t in &data.triangles {
+            let [pa, pb, pc] = t.map(|c| data.points[c as usize]);
+            let fallback = (pb - pa).cross(pc - pa).normalize_or_zero();
+            for &c in t {
+                let slot = &mut index[c as usize];
+                if *slot == u32::MAX {
+                    *slot = order.len() as u32;
+                    order.push(c);
+                    normals[c as usize] = sum_at(c as usize).normalize_or(fallback);
+                }
+                indices.push(*slot);
+            }
+        }
+        (data.normals, data.order, data.indices) = (normals, order, indices);
+    }
+    // Room for what is kept, at once.
+    let (mut points, mut corners) = ([0usize; 2], [0usize; 2]);
+    for face in faces.iter().filter(|face| face.keeping) {
+        points[usize::from(face.data.top)] += face.data.order.len();
+        corners[usize::from(face.data.top)] += face.data.indices.len();
+    }
+    for (into, (points, corners)) in [&mut *out, &mut *tops]
+        .into_iter()
+        .zip(points.into_iter().zip(corners))
+    {
+        if into.sharing {
+            into.shared.reserve(points, corners);
+        } else {
+            into.reserve(corners);
+        }
+    }
+    for face in faces.iter().filter(|face| face.keeping) {
+        let data = &face.data;
+        let into = if data.top { &mut *tops } else { &mut *out };
         if into.sharing {
             // Each point of the grid once, with the triangles' corners shared.
-            let mut index: Vec<u32> = vec![u32::MAX; face.points.len()];
-            for t in &face.triangles {
-                let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
-                let fallback = (pb - pa).cross(pc - pa).normalize_or_zero();
-                for &c in t {
-                    let slot = &mut index[c as usize];
-                    if *slot == u32::MAX {
-                        *slot = into.shared.corner(
-                            face.points[c as usize],
-                            normal_at(c, fallback),
-                            face.uvs[c as usize],
-                            colour,
-                        );
-                    }
-                    into.shared.indices.push(*slot);
-                }
+            let first = into.shared.positions.len() as u32;
+            for &c in &data.order {
+                let c = c as usize;
+                into.shared
+                    .corner(data.points[c], data.normals[c], data.uvs[c], colour);
             }
+            into.shared
+                .indices
+                .extend(data.indices.iter().map(|&i| first + i));
             continue;
         }
-        for t in &face.triangles {
-            let corners = t.map(|c| face.points[c as usize]);
-            let fallback = (corners[1] - corners[0])
-                .cross(corners[2] - corners[0])
-                .normalize_or_zero();
-            let normals = t.map(|c| normal_at(c, fallback));
-            into.textured(corners, normals, t.map(|c| face.uvs[c as usize]), colour);
+        for t in &data.triangles {
+            let corners = t.map(|c| data.points[c as usize]);
+            let normals = t.map(|c| data.normals[c as usize]);
+            into.textured(corners, normals, t.map(|c| data.uvs[c as usize]), colour);
+        }
+    }
+    if let Some(caching) = caching.as_mut() {
+        for face in faces
+            .into_iter()
+            .filter(|face| face.data.signature.is_some())
+        {
+            caching.new.taken += usize::from(!face.fresh);
+            caching
+                .new
+                .faces
+                .insert((caching.call, face.cube, face.index), face.data);
         }
     }
 }
 
-/// A cube's face as it is drawn: its grid of points, placed, where each falls on its
-/// texture, its triangles as three points of the grid each, whether it is a top in a
-/// material of its own, and whether it is kept.
+/// A cube and those round it.
+const NEIGHBOURHOOD: [IVec3; 27] = {
+    let mut out = [IVec3::ZERO; 27];
+    let mut i = 0;
+    while i < 27 {
+        out[i] = IVec3::new(i as i32 % 3 - 1, i as i32 / 3 % 3 - 1, i as i32 / 9 - 1);
+        i += 1;
+    }
+    out
+};
+
+/// A cube's face as it is drawn, whether it is kept, its cube and which of its faces it is,
+/// and whether it was worked out anew rather than kept from last time.
 struct Face {
+    data: Arc<FaceData>,
+    keeping: bool,
+    cube: IVec3,
+    index: u8,
+    fresh: bool,
+}
+
+/// A face worked out: what it was worked out from ([`FaceCache`]), its grid of points,
+/// placed, where each falls on its texture, its triangles as three points of the grid each,
+/// whether it is a top in a material of its own; each point's own triangles' normals
+/// summed and its normal; and its points in the order its triangles come to them, with its
+/// triangles' corners among them.
+#[derive(Debug)]
+pub struct FaceData {
+    signature: Option<u64>,
     points: Vec<Vec3>,
     uvs: Vec<[f32; 2]>,
     triangles: Vec<[u32; 3]>,
     top: bool,
-    keeping: bool,
+    local: Vec<Vec3>,
+    normals: Vec<Vec3>,
+    order: Vec<u32>,
+    indices: Vec<u32>,
 }
 
 /// How far the surface is pushed out at a point: its materials' heights there, their three

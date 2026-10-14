@@ -32,7 +32,7 @@ fn main() -> ExitCode {
     };
     let (Some(logs), Some(stone), Some(hewn)) = (
         find(Pattern::Logs, Profile::Round),
-        find(Pattern::Masonry, Profile::Round),
+        kits.footing().map(Kit::kind),
         find(Pattern::Logs, Profile::Hewn),
     ) else {
         println!("sections: the village needs a log, a stone and a hewn kit");
@@ -43,6 +43,7 @@ fn main() -> ExitCode {
     let mut times: [Vec<(f32, f32)>; 3] = Default::default();
     let mut slowest: Vec<(f32, String)> = Vec::new();
     let mut whole_ms: Vec<f32> = Vec::new();
+    let mut edits: Vec<Edit> = Vec::new();
     // Triangles of every section at each detail: near, mid, far and proxy.
     let mut triangles = [0usize; 4];
     let mut by_kind: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
@@ -66,6 +67,7 @@ fn main() -> ExitCode {
         let started = Instant::now();
         let whole = sections::Whole::lay(&base, &kits);
         whole_ms.push(started.elapsed().as_secs_f32() * 1000.0);
+        edits.extend(time_edit(&name, &base, &kits, &maps));
         for at in sections::drawable(&base) {
             let section = Section {
                 base: &base,
@@ -156,6 +158,7 @@ fn main() -> ExitCode {
     for (kind, (far, proxy)) in &by_kind {
         println!("  {kind:12} far {far:9} proxy {proxy:9}");
     }
+    report_edits(&mut edits);
     slowest.sort_by(|a, b| b.0.total_cmp(&a.0));
     println!("The slowest:");
     for (ms, what) in slowest.iter().take(6) {
@@ -169,6 +172,108 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// An edit timed: a wall's cube taken out of a building, and the section it is in drawn
+/// again near, afresh and from how it was drawn before, on one thread, in ms.
+struct Edit {
+    what: String,
+    whole: f32,
+    afresh: f32,
+    again: f32,
+    taken: usize,
+    faces: usize,
+}
+
+/// Takes a cube out of the middle of a wall a metre up, as a player's hammer does, and
+/// times laying the base whole again and drawing the cube's section near again, both
+/// afresh and from how it was drawn before the edit (`sections::draw_again`).
+fn time_edit(name: &str, base: &Base, kits: &Kits, maps: &Maps) -> Option<Edit> {
+    let walls: Vec<glam::IVec3> = base
+        .cubes()
+        .map(|(at, _)| at)
+        .filter(|&at| at.y == 2 && base.in_wall(at))
+        .collect();
+    let cube = *walls.get(walls.len() / 2)?;
+    let progress = Progress::Whole;
+    let at = terra_build::cubes::section_of(cube);
+    let section = |base| Section {
+        base,
+        kits,
+        maps,
+        at,
+        progress: &progress,
+    };
+    let mut last = sections::Drawing::default();
+    let before = section(base);
+    let whole = sections::Whole::lay(base, kits);
+    sections::draw_again(
+        &before,
+        &sections::lay(&before, &whole),
+        Reach::Near,
+        None,
+        Some(&mut last),
+    );
+    let mut edited = base.clone();
+    edited.apply(terra_build::BuildOp::Fill {
+        min: cube.to_array(),
+        max: cube.to_array(),
+        cube: None,
+    });
+    let after = section(&edited);
+    let started = Instant::now();
+    let whole = sections::Whole::lay(&edited, kits);
+    let whole_ms = started.elapsed().as_secs_f32() * 1000.0;
+    let laid = sections::lay(&after, &whole);
+    let started = Instant::now();
+    std::hint::black_box(sections::draw(&after, &laid, Reach::Near));
+    let afresh = started.elapsed().as_secs_f32() * 1000.0;
+    let mut now = sections::Drawing::default();
+    let started = Instant::now();
+    std::hint::black_box(sections::draw_again(
+        &after,
+        &laid,
+        Reach::Near,
+        Some(&last),
+        Some(&mut now),
+    ));
+    let again = started.elapsed().as_secs_f32() * 1000.0;
+    Some(Edit {
+        what: format!("{name}, section {:?}", at.to_array()),
+        whole: whole_ms,
+        afresh,
+        again,
+        taken: now.faces_taken(),
+        faces: now.faces(),
+    })
+}
+
+fn report_edits(edits: &mut [Edit]) {
+    if edits.is_empty() {
+        return;
+    }
+    let median = |values: &mut Vec<f32>| {
+        values.sort_by(f32::total_cmp);
+        values[values.len() / 2]
+    };
+    let mut whole: Vec<f32> = edits.iter().map(|e| e.whole).collect();
+    let mut afresh: Vec<f32> = edits.iter().map(|e| e.afresh).collect();
+    let mut again: Vec<f32> = edits.iter().map(|e| e.again).collect();
+    println!(
+        "An edit, a wall's cube taken out of each of {} buildings: laid whole again in a median {:.2} ms; its section drawn near afresh in {:.2}, from how it was drawn in {:.2}",
+        edits.len(),
+        median(&mut whole),
+        median(&mut afresh),
+        median(&mut again)
+    );
+    edits.sort_by(|a, b| b.afresh.total_cmp(&a.afresh));
+    println!("  The slowest, afresh and again, and the faces kept:");
+    for edit in edits.iter().take(4) {
+        println!(
+            "  {:6.2} {:6.2}  {} of {}  {}",
+            edit.afresh, edit.again, edit.taken, edit.faces, edit.what
+        );
     }
 }
 

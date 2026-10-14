@@ -27,6 +27,7 @@ use terra_core::Operation;
 
 pub(crate) mod act;
 mod draw;
+mod going_up;
 mod layout;
 mod light;
 mod maps;
@@ -301,6 +302,7 @@ pub fn plugin(app: &mut App) {
 pub(crate) fn player_plugin(app: &mut App) {
     act::plugin(app);
     remote::plugin(app);
+    going_up::plugin(app);
 }
 
 /// A point just outside the example base's door, in the base's own space.
@@ -724,7 +726,7 @@ fn setup(
     // The base is first laid at the start, whether or not anything is built there.
     let frame = **start;
     let look = BuildLook {
-        looks: draw::Looks::new(&mut meshes, &mut materials, ghosts.as_deref_mut()),
+        looks: draw::Looks::new(&mut materials, ghosts.as_deref_mut()),
         kits: read_kits().map(Arc::new),
         laying: Kind::PLAIN,
         maps: Arc::default(),

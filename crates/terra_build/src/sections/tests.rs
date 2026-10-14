@@ -690,3 +690,118 @@ fn every_shape_is_drawn_in_every_kit_within_its_cut() {
         }
     }
 }
+
+#[test]
+fn a_section_drawn_again_from_how_it_was_drawn_is_drawn_as_afresh() {
+    let kits = shipped();
+    let maps = Maps::default();
+    let bases = bases(&kits);
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let (mut taken, mut faces) = (0, 0);
+    for base in [&bases[1], &bases[4]] {
+        // A wall's cube a metre up taken out.
+        let wall = base
+            .cubes()
+            .map(|(at, _)| at)
+            .find(|&at| at.y == 2 && base.in_wall(at) && base.cube(at).unwrap().kind == stone)
+            .unwrap();
+        let mut edited = base.clone();
+        edited.apply(BuildOp::Fill {
+            min: wall.to_array(),
+            max: wall.to_array(),
+            cube: None,
+        });
+        let sections: BTreeSet<[i32; 3]> =
+            drawable(base).union(&drawable(&edited)).copied().collect();
+        for at in sections {
+            for reach in [Reach::Near, Reach::Mid] {
+                let section = |base| Section {
+                    base,
+                    kits: &kits,
+                    maps: &maps,
+                    at: IVec3::from_array(at),
+                    progress: &Progress::Whole,
+                };
+                let before = section(base);
+                let mut last = Drawing::default();
+                draw_again(&before, &laid(&before), reach, None, Some(&mut last));
+                let after = section(&edited);
+                let laid_after = laid(&after);
+                let mut now = Drawing::default();
+                let again = draw_again(&after, &laid_after, reach, Some(&last), Some(&mut now));
+                let fresh = draw(&after, &laid_after, reach);
+                assert!(again.near == fresh.near, "{at:?} {reach:?}: near differs");
+                assert!(again.mid == fresh.mid, "{at:?} {reach:?}: mid differs");
+                taken += now.faces_taken();
+                faces += now.faces.len();
+            }
+        }
+    }
+    // Most faces are far from the cube taken out, and kept.
+    assert!(
+        faces > 1000 && taken * 10 > faces * 8,
+        "{taken} of {faces} kept"
+    );
+}
+
+#[test]
+fn a_base_laid_again_after_an_edit_cuts_into_the_sections_laid_whole() {
+    let kits = shipped();
+    let maps = Maps::default();
+    let logs = kind(&kits, Pattern::Logs, Profile::Round);
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    // A claim of two buildings sections apart, as a player's may hold many.
+    let mut claim = Base::default();
+    house(&mut claim, &kits, [10, 12], [11, 9], logs, Style::Gable);
+    house(&mut claim, &kits, [70, 12], [9, 9], stone, Style::Hip);
+    claim.lay_footings(stone, |_| -40);
+    claim.take_dirty();
+    let walls: Vec<IVec3> = claim
+        .cubes()
+        .map(|(at, _)| at)
+        .filter(|&at| at.y == 2 && claim.in_wall(at))
+        .collect();
+    let edits = [
+        // A log wall's cube taken out, a stone one, and a cube built on the ground
+        // between the two, which is a building of its own.
+        BuildOp::Fill {
+            min: walls[0].to_array(),
+            max: walls[0].to_array(),
+            cube: None,
+        },
+        BuildOp::Fill {
+            min: walls[walls.len() - 1].to_array(),
+            max: walls[walls.len() - 1].to_array(),
+            cube: None,
+        },
+        BuildOp::Fill {
+            min: [44, 0, 14],
+            max: [45, 1, 14],
+            cube: Some(Cube::new(stone, Fill::Solid)),
+        },
+    ];
+    let mut before = claim.clone();
+    let mut whole = Whole::lay(&before, &kits);
+    for edit in edits {
+        let mut after = before.clone();
+        after.apply(edit);
+        let marked = after.take_dirty();
+        let again = whole.lay_again(&before, &after, &kits, &marked);
+        let afresh = Whole::lay(&after, &kits);
+        let mut cut = 0;
+        for at in drawable(&after).union(&drawable(&before)) {
+            let section = Section {
+                base: &after,
+                kits: &kits,
+                maps: &maps,
+                at: IVec3::from_array(*at),
+                progress: &Progress::Whole,
+            };
+            let (a, b) = (lay(&section, &again), lay(&section, &afresh));
+            cut += b.pieces.len();
+            assert!(a == b, "{edit:?}: section {at:?} is not as laid whole");
+        }
+        assert!(cut > 1000);
+        (before, whole) = (after, again);
+    }
+}

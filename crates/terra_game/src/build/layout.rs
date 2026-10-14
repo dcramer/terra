@@ -54,6 +54,8 @@ pub(super) struct Timings {
     pub whole: Vec<f32>,
     pub near: Vec<f32>,
     pub far: Vec<f32>,
+    /// How long changes took from being noticed to all being on screen.
+    pub edits: Vec<f32>,
 }
 
 struct Job {
@@ -170,6 +172,10 @@ fn launch(
     let wait = options.scripted() && !options.bench;
     let no_kits: Arc<Kits> = Arc::new(Kits(Vec::new()));
     for build in each(&mut site, &mut builds) {
+        let in_order = matches!(
+            build.progress(),
+            terra_build::sections::Progress::Fraction(_)
+        );
         let sections = &mut build.sections;
         if sections.waiting.is_empty() || sections.whole.is_some() {
             continue;
@@ -180,9 +186,16 @@ fn launch(
                 .get_or_insert_with(|| Arc::new(build.base.clone()))
                 .clone();
             let kits = build.kits.clone().unwrap_or_else(|| no_kits.clone());
+            // Only the buildings changed laid again, unless where pieces come in the order
+            // the whole base goes in is wanted.
+            let last = sections.last_laid.clone().filter(|_| !in_order);
+            let marked = sections.marked_since.clone();
             sections.laying = Some(pool.spawn(async move {
                 let started = Instant::now();
-                let whole = sections::Whole::lay(&snapshot, &kits);
+                let whole = match last {
+                    Some((before, whole)) => whole.lay_again(&before, &snapshot, &kits, &marked),
+                    None => sections::Whole::lay(&snapshot, &kits),
+                };
                 (whole, started.elapsed().as_secs_f32() * 1000.0)
             }));
         }
@@ -344,6 +357,14 @@ impl Jobs {
                 sorted.sort_by(f32::total_cmp);
                 sorted.get(sorted.len() / 2).copied().unwrap_or(0.0)
             };
+            if !self.timings.edits.is_empty() {
+                info!(
+                    "Builds changed: {} changes on screen in a median {:.0} ms from being made, the slowest {:.0} ms.",
+                    self.timings.edits.len(),
+                    median(&self.timings.edits),
+                    self.timings.edits.iter().copied().fold(0.0, f32::max),
+                );
+            }
             info!(
                 "Builds drawn: {} bases laid whole in a median {:.2} ms, then {} sections cut from them and merged, textured in a median {:.2} ms, far only in {:.2} ms, on a worker.",
                 self.timings.whole.len(),

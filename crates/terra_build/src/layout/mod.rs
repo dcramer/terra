@@ -630,6 +630,30 @@ pub fn lay_section_and_edge(
     (layout, edge)
 }
 
+/// The pieces of some sections of a base: exactly those of [`lay_among`] whose
+/// [`Piece::section`] is one of them, worked out from what reaches them alone, as
+/// [`lay_section`] does for one, so an edit lays again only the building it is in.
+pub fn lay_sections(base: &Base, kit: &Kit, kits: &Kits, sections: &BTreeSet<[i32; 3]>) -> Layout {
+    let Some((low, high)) = sections.iter().map(|&at| IVec3::from_array(at)).fold(
+        None,
+        |bounds: Option<(IVec3, IVec3)>, at| {
+            Some(bounds.map_or((at, at), |(l, h)| (l.min(at), h.max(at))))
+        },
+    ) else {
+        return Layout::default();
+    };
+    let side = crate::cubes::SECTION;
+    let scope = Scope {
+        low: low * side - IVec3::splat(Scope::MARGIN),
+        high: (high + IVec3::ONE) * side - IVec3::ONE + IVec3::splat(Scope::MARGIN),
+    };
+    let mut layout = lay_scoped(base, kit, kits, scope);
+    layout
+        .pieces
+        .retain(|piece| sections.contains(&piece.section().to_array()));
+    layout
+}
+
 fn lay_scoped(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     let mut layout = if kit.pattern == Pattern::Roof {
         Layout::default()

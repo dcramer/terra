@@ -372,6 +372,20 @@ const SCENES: &[Scene] = &[
         frames: "600",
     },
     Scene {
+        name: "going-up",
+        about: "a stone house built on the yard a step every tenth of a second, as the hammer builds, the camera on it: what building costs as it happens",
+        args: &[
+            "--experiment",
+            "play",
+            "--level",
+            "yard",
+            "--time",
+            "17",
+            "--going-up",
+        ],
+        frames: "1800",
+    },
+    Scene {
         name: "walk",
         about: "40 seconds' walk through the lush forest and its grass, out from the clearing and round, turning as a player would, looking up into the canopy once; the world and the walker alone",
         args: &[
@@ -484,6 +498,8 @@ fn worth_saying(line: &str) -> Option<&str> {
     [
         "Builds drawn: ",
         "Village: ",
+        "Going up: ",
+        "SANDBOX slowest frames",
         "frame parts, ",
         "GPU passes, ",
     ]
