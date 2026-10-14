@@ -236,10 +236,11 @@ impl Shapes {
     }
 }
 
-/// How far round its foot a trunk `trunk_m` thick and its flared roots reach: the roots
-/// spread to about twice its width (`species::flare`).
+/// How far round its foot a trunk `trunk_m` thick and its flared roots reach: its foot
+/// flares to about twice its width (`species::flare`) and its roots stand out half as far
+/// again (`Shape::at` in lush.rs).
 pub(super) fn trunk_reach(trunk_m: f32) -> f32 {
-    trunk_m * 2.4 + 0.25
+    trunk_m * 3.4 + 0.25
 }
 
 /// Where a thing stands, as its relief is fitted: on the ground under its origin, as the
