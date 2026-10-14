@@ -28,6 +28,7 @@
 //!
 //! Its cost is measured by `cargo xtask bench forest forest-walk`.
 
+use bevy::camera::primitives::Aabb;
 use bevy::gltf::GltfMaterial;
 use bevy::{
     asset::RenderAssetUsages,
@@ -204,6 +205,7 @@ pub fn plugin(app: &mut App) {
                 add_mipmaps,
                 dress_scans,
                 follow_detail,
+                footings,
             ),
         )
         // The bark's relief at the quality preset's depth.
@@ -232,6 +234,56 @@ fn follow_detail(
     if let Some(mut material) = materials.get_mut(&forest.lumps) {
         material.extension.shrink = Vec4::new(end * (1.0 - SHADOW_END), end, from, to) * detail.0;
     }
+}
+
+/// Something on the forest floor that stops a walker, its footprint still to be worked out
+/// from its mesh.
+#[derive(Component)]
+struct Footing;
+
+/// Gives each rock, boulder, stump and log the footprint its mesh has (D243): circles along
+/// its longer side as wide as its shorter, so a fallen log blocks a walker along all its
+/// length and a boulder at its own width, not one small circle at its middle.
+fn footings(
+    mut commands: Commands,
+    pending: Query<(Entity, &Aabb, &GlobalTransform), With<Footing>>,
+    mut obstacles: ResMut<Obstacles>,
+) {
+    // Bevy gives a drawn thing its bounds once its mesh has loaded.
+    for (entity, aabb, place) in &pending {
+        for (at, radius) in footprint(place, Vec3::from(aabb.min()), Vec3::from(aabb.max())) {
+            obstacles.add(at, radius);
+        }
+        commands.entity(entity).remove::<Footing>();
+    }
+}
+
+/// The circles a box on the ground, `min` to `max` in its own frame, stops a walker with:
+/// along the longer of its two level sides, overlapping, each as wide as the shorter side,
+/// at the box's foot.
+fn footprint(place: &GlobalTransform, min: Vec3, max: Vec3) -> Vec<(Vec3, f32)> {
+    let (scale, _, _) = place.to_scale_rotation_translation();
+    let size = (max - min) * scale;
+    let middle = (min + max) * 0.5;
+    let (long, long_axis, short) = if size.x >= size.z {
+        (size.x, Vec3::X, size.z)
+    } else {
+        (size.z, Vec3::Z, size.x)
+    };
+    let radius = (short * 0.5).max(0.15);
+    let count = ((long - short) / radius).ceil().max(0.0) as usize + 1;
+    (0..count)
+        .map(|k| {
+            let t = if count == 1 {
+                0.5
+            } else {
+                k as f32 / (count - 1) as f32
+            };
+            let along = (t - 0.5) * (long - short) / scale.max_element();
+            let local = Vec3::new(middle.x, min.y, middle.z) + long_axis * along;
+            (place.transform_point(local), radius)
+        })
+        .collect()
 }
 
 /// Scans' glTF materials still to be copied into the materials their meshes are drawn with.
@@ -1036,6 +1088,8 @@ fn plant(
             obstacles.add(foot, model.trunk_m * scale * 1.2);
             commands
                 .spawn((
+                    // Named, so a check can find it and walk into it (tools/sandbox/collide.ts).
+                    Name::new(format!("{:?}", model.species)),
                     place,
                     Visibility::default(),
                     Growth::new(
@@ -1231,11 +1285,11 @@ fn plant(
     // What, how many tries, how far it is drawn, its size, how far it sinks, whether it stops a
     // walker, and how it likes the shade: 1 under trees only, 0 anywhere, -1 the open.
     for (what, tries, seen_m, size, sink, solid, shade) in [
-        (0, 1100, 80.0, (0.7, 1.6), 0.15, false, -0.3),
+        (0, 1100, 80.0, (0.7, 1.6), 0.15, true, -0.3),
         (1, 60, 160.0, (0.6, 1.3), 0.3, true, 0.0),
         (2, 4200, 35.0, (0.9, 1.8), 0.02, false, 1.0),
         (3, 70, 90.0, (0.8, 1.3), 0.08, true, 0.6),
-        (4, 160, 110.0, (0.8, 1.2), 0.0, false, 0.8),
+        (4, 160, 110.0, (0.8, 1.2), 0.0, true, 0.8),
     ] {
         for _ in 0..tries {
             let angle = floor_dice.range(0.0, TAU);
@@ -1268,8 +1322,10 @@ fn plant(
                     )
                 }
             };
+            let name = Name::new(["Rock", "Boulder", "Fern", "Stump", "Log"][what]);
             let mut thing = if what == 4 {
                 commands.spawn((
+                    name.clone(),
                     Mesh3d(mesh),
                     MeshMaterial3d(bark.clone()),
                     place,
@@ -1277,6 +1333,7 @@ fn plant(
                 ))
             } else {
                 commands.spawn((
+                    name,
                     Mesh3d(mesh),
                     MeshMaterial3d(material),
                     place,
@@ -1287,7 +1344,8 @@ fn plant(
                 thing.insert(NotShadowCaster);
             }
             if solid {
-                obstacles.add(place.translation, 0.6 * scale);
+                // Its footprint is worked out from its own mesh once loaded (`footings`).
+                thing.insert(Footing);
             }
             laid[what] += 1;
         }

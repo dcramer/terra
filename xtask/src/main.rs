@@ -74,6 +74,17 @@ const TASKS: &[Task] = &[
         },
     },
     Task {
+        name: "collide",
+        takes: "[--count 30]",
+        does: "walk the player into the lush forest's rocks, boulders, stumps, logs and trees, and check each stops them (tools/sandbox)",
+        group: "Play and check",
+        run: |args| {
+            let mut all = vec!["tools/sandbox/collide.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "lodcheck",
         takes: "[--views floor,path,clearing] [--time 17] [--limit 0.5]",
         does: "find what pops as detail changes: still views while every switch distance is swept; fails past the limit (tools/sandbox)",

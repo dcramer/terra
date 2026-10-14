@@ -105,6 +105,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.shot", shot);
     method(app, "sandbox.quit", quit);
     method(app, "sandbox.whoami", whoami);
+    method(app, "world.obstacles", obstacles);
     info!("remote: listening on localhost:{port}");
 }
 
@@ -159,6 +160,7 @@ struct Find {
 
 fn find(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Find { name } = parse_some(params)?;
+    let start = world.get_resource::<crate::start::Start>().copied();
     let mut found = Vec::new();
     let mut query = world.query::<(Entity, &Name, Option<&Transform>, Option<&GlobalTransform>)>();
     for (entity, each, local, global) in query.iter(world) {
@@ -169,6 +171,10 @@ fn find(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             "entity": entity.to_bits(),
             "name": each.as_str(),
             "at": global.map(|global| triple(global.translation())),
+            // East, up and south of the start, the terms scripts give places in.
+            "from_start": global
+                .zip(start)
+                .map(|(global, start)| triple(start.local(global.translation()))),
             "translation": local.map(|local| triple(local.translation)),
             "rotation": local.map(|local| degrees(local.rotation)),
             "scale": local.map(|local| triple(local.scale)),
@@ -654,6 +660,39 @@ fn shot(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let shot = crate::shell::screenshot(world.get_resource::<crate::shell::Picture>());
     world.spawn(shot).observe(save_to_disk(path.clone()));
     Ok(json!({ "path": path }))
+}
+
+#[derive(Deserialize)]
+struct Near {
+    at: [f32; 2],
+    within: f32,
+}
+
+/// What stops a walker within so far of a spot, east and south of the start: each obstacle's
+/// middle, east and south, and how far round it is, nearest first (D243).
+fn obstacles(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Near { at, within } = parse_some(params)?;
+    let start = *world.resource::<crate::start::Start>();
+    let planet = world.resource::<crate::planet::Planet>().clone();
+    let centre = planet.ground_at(start.at(at[0], at[1]));
+    let store = world.resource::<crate::flora::Obstacles>();
+    let mut found: Vec<(f32, Value)> = store
+        .near(centre, within)
+        .filter_map(|(point, radius)| {
+            let local = start.local(point);
+            let apart = Vec2::new(local.x - at[0], local.z - at[1]).length();
+            (apart <= within).then(|| {
+                (
+                    apart,
+                    json!({ "at": [local.x, local.z], "radius": radius, "apart": apart }),
+                )
+            })
+        })
+        .collect();
+    found.sort_by(|a, b| a.0.total_cmp(&b.0));
+    Ok(Value::Array(
+        found.into_iter().map(|(_, v)| v).take(200).collect(),
+    ))
 }
 
 /// Asked to close. Requests are answered after the frame's last systems, too late for
