@@ -135,7 +135,11 @@ fn paint(
 
     let linear = |c: Color| Vec3::from_slice(&c.to_linear().to_f32_array()[..3]);
     let sun_height = tweaks.sun_direction.normalize_or(Vec3::Y).dot(up).max(0.0);
+    // How low the sun is: 1 at 4° and below, 0 from 22° up.
+    let low = 1.0 - ((sun_height - 0.07) / 0.31).clamp(0.0, 1.0);
+    let low = low * low * (3.0 - 2.0 * low);
     let colours = Colours {
+        low,
         shade: linear(light.shade),
         horizon: linear(sky.horizon),
         zenith: linear(sky.zenith),
@@ -165,6 +169,8 @@ fn paint(
 /// What the sky is painted from, as linear colours.
 #[derive(Clone, Copy)]
 struct Colours {
+    /// How low the sun is, 0 to 1.
+    low: f32,
     shade: Vec3,
     horizon: Vec3,
     zenith: Vec3,
@@ -180,6 +186,7 @@ impl Colours {
         {
             key[i * 3..i * 3 + 3].copy_from_slice(&c.to_array());
         }
+        key[12] = self.low;
         key
     }
 
@@ -192,7 +199,10 @@ impl Colours {
         let hue = |c: Vec3| c / luma(c);
         let sky = |e: f32| {
             let drawn = hue(self.horizon.lerp(self.zenith, e.max(0.0).sqrt()));
-            hue(drawn.lerp(hue(self.shade), 0.5)) * (1.15 - 0.35 * e.max(0.0))
+            // While the sun is low the drawn horizon is orange and pink, and half of it washed
+            // the whole forest salmon at dusk; the shade under trees is lit by the sky above
+            // it, so it takes mostly the shade's cool colour then (D256).
+            hue(drawn.lerp(hue(self.shade), 0.5 + 0.38 * self.low)) * (1.15 - 0.35 * e.max(0.0))
         };
         if up >= 0.0 {
             sky(up)
@@ -234,6 +244,7 @@ mod tests {
 
     fn colours() -> Colours {
         Colours {
+            low: 0.0,
             shade: Vec3::new(0.4, 0.5, 1.0),
             horizon: Vec3::new(0.9, 0.85, 0.8),
             zenith: Vec3::new(0.1, 0.25, 0.7),
