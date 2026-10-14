@@ -233,10 +233,13 @@ const ROUTE_REACHED_M: f32 = 1.5;
 const DETOUR_AFTER_S: f32 = 0.5;
 const DETOUR_S: f32 = 2.0;
 const DETOUR_TURN: f32 = 1.4;
-/// Each try round the same thing heads off the other way, half as long again as the last,
-/// up to this long: always to the left and for as long, a walk met a boulder wider than its
-/// detour at the same face again and again, and stood there for the rest of the film.
+/// Each try round the same thing is half as long again as the last, up to this long, and after
+/// so many tries to one side it tries the other: always to the left and for as long, a walk met
+/// a boulder wider than its detour at the same face again and again, and stood there for the
+/// rest of the film; turning the other way each try, each undid the last and it stood eight
+/// seconds at a rock.
 const DETOUR_LONGEST_S: f32 = 8.0;
+const TRIES_A_SIDE: u32 = 3;
 /// After this long at one spot without reaching it, the walk gives it up for the next.
 const GIVE_UP_S: f32 = 20.0;
 /// Getting this much nearer its spot means what was in the way is passed.
@@ -280,7 +283,7 @@ impl Detour {
             self.since += dt;
             if self.since > DETOUR_AFTER_S {
                 self.before.get_or_insert(distance);
-                self.side = if self.tries.is_multiple_of(2) {
+                self.side = if (self.tries / TRIES_A_SIDE).is_multiple_of(2) {
                     1.0
                 } else {
                     -1.0
@@ -409,9 +412,9 @@ mod tests {
         assert_eq!(turned[first + off], 0.0, "never turned back");
     }
 
-    /// Stopped again and again at the same thing, a walk tries the other side each time,
-    /// longer each time, so it gets round something wider than one try; and once past, it
-    /// starts again from a short try to the left.
+    /// Stopped again and again at the same thing, a walk tries longer each time, a few times
+    /// to one side and then the other, so it gets round something wider than one try; and
+    /// once past, it starts again from a short try to the left.
     #[test]
     fn a_walk_stopped_again_tries_the_other_side_for_longer() {
         let mut detour = Detour::default();
@@ -420,7 +423,7 @@ mod tests {
         // Never getting nearer: record each try's side and length.
         let mut tries: Vec<(f32, f32)> = Vec::new();
         let mut current: Option<(f32, f32)> = None;
-        for _ in 0..(60 * 18) {
+        for _ in 0..(60 * 30) {
             let t = detour.turn(distance, dt);
             match (current.as_mut(), t != 0.0) {
                 (Some(c), true) => c.1 += dt,
@@ -432,9 +435,17 @@ mod tests {
                 (None, false) => {}
             }
         }
-        assert!(tries.len() >= 3, "{tries:?}");
+        let a_side = TRIES_A_SIDE as usize;
+        assert!(tries.len() > a_side, "{tries:?}");
+        assert!(
+            tries[..a_side].iter().all(|t| t.0 > 0.0),
+            "not to the left first: {tries:?}"
+        );
+        assert!(
+            tries[a_side].0 < 0.0,
+            "never tried the other side: {tries:?}"
+        );
         for pair in tries.windows(2) {
-            assert_eq!(pair[0].0, -pair[1].0, "the same side twice: {tries:?}");
             assert!(
                 pair[1].1 > pair[0].1 * 1.3 || pair[1].1 >= DETOUR_LONGEST_S - 0.05,
                 "not longer: {tries:?}"
