@@ -27,7 +27,8 @@
 // ARM map of its own.
 //
 // **cards** lays leaves, fronds and flowers in one atlas, assets/materials/<name>/cards.png,
-// a grid of --columns (4) cells across --size (2048), with its normal map, normal.png, and
+// a grid of --columns (4) cells across --size (2048), with its normal map, normal.png (its
+// alpha each pixel's roughness), and
 // writes the table the game reads, assets/data/<name>.ron: each card's cell and the octagon
 // round its leaves, so a card is cut to them. Each card is a picture drawn on a flat blue
 // background, cut out of it; a recipe, `<card>.leaves.json`, composed from scanned leaves
@@ -53,7 +54,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { compose, type Recipe, type Scan } from "./leaves.ts";
+import { compose, ROUGH, type Recipe, type Scan } from "./leaves.ts";
 
 const ROOT = resolve(import.meta.dirname, "..", "..");
 
@@ -258,6 +259,39 @@ function stack(name: string, materials: string[], size: number, occlusion: numbe
   const layers = materials.map((m) => `\`${m}\` (${credited(m)?.replace(/\.$/, "") ?? "uncredited"})`);
   record(name, `a stack, in this order, ${size} pixels each, of ${layers.join("; ")}.`);
   console.log(`${name}: ${materials.length} layers in ${out}`);
+}
+
+/** A card atlas's normal map, four bytes a pixel, its alpha each pixel's roughness; one from
+ * before roughness was kept in it, opaque, is given `ROUGH` there. */
+function normalMap(image: string): { data: Buffer; width: number } {
+  const info = execFileSync("convert", [image, "-format", "%w %[channels]", "info:"]).toString().split(" ");
+  const data = execFileSync("convert", [image, "-depth", "8", "rgba:-"], { maxBuffer: 1 << 30 });
+  if (!info[1].includes("a")) for (let i = 3; i < data.length; i += 4) data[i] = Math.round(ROUGH * 255);
+  return { data, width: Number(info[0]) };
+}
+
+/** A square of pixels scaled from `from` to `to` pixels across. A colour picture's alpha is
+ * its cover, which ImageMagick weights its colour by; any other's four channels are data
+ * (a normal map's alpha its roughness), scaled each on its own. */
+function resized(data: Buffer, from: number, to: number, kind: "rgba" | "rgb"): Buffer {
+  const scale = (input: Buffer, format: string) =>
+    execFileSync("convert", ["-size", `${from}x${from}`, "-depth", "8", `${format}:-`, "-filter", "Lanczos", "-resize", `${to}x${to}!`, `${format}:-`], {
+      input,
+      maxBuffer: 1 << 30,
+    });
+  if (kind === "rgba") return scale(data, "rgba");
+  const [rgb, alpha] = [Buffer.alloc(from * from * 3), Buffer.alloc(from * from)];
+  for (let i = 0; i < from * from; i++) {
+    data.copy(rgb, i * 3, i * 4, i * 4 + 3);
+    alpha[i] = data[i * 4 + 3];
+  }
+  const [big, bigAlpha] = [scale(rgb, "rgb"), scale(alpha, "gray")];
+  const out = Buffer.alloc(to * to * 4);
+  for (let i = 0; i < to * to; i++) {
+    big.copy(out, i * 4, i * 3, i * 3 + 3);
+    out[i * 4 + 3] = bigAlpha[i];
+  }
+  return out;
 }
 
 /** An image's pixels, four bytes each, and its size. */
@@ -465,10 +499,13 @@ async function leafScan(id: string): Promise<Scan> {
   try {
     execFileSync("unzip", ["-q", "-o", zip, "-d", work]);
     const map = (kind: string) => join(work, `${file}_${kind}.png`);
+    // At the scan's own size: a 2K set's leaves are 400 to 550 pixels long, two to four times
+    // what a card draws them at.
     const n = 2048;
     const read = (kind: string, format: string) =>
       execFileSync("convert", [map(kind), "-resize", `${n}x${n}!`, "-depth", "8", format], { maxBuffer: 1 << 28 });
-    return { width: n, height: n, colour: read("Color", "rgb:-"), normal: read("NormalGL", "rgb:-"), alpha: read("Opacity", "gray:-") };
+    const roughness = existsSync(map("Roughness")) ? read("Roughness", "gray:-") : undefined;
+    return { width: n, height: n, colour: read("Color", "rgb:-"), normal: read("NormalGL", "rgb:-"), alpha: read("Opacity", "gray:-"), roughness };
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -504,16 +541,17 @@ async function cards(name: string, entries: string[], size: number, columns: num
   mkdirSync(out, { recursive: true });
   const cell = Math.floor(size / columns);
   const atlas = Buffer.alloc(size * size * 4);
-  const normals = Buffer.alloc(size * size * 3);
-  for (let i = 0; i < size * size; i++) normals.set([128, 128, 255], i * 3);
+  // The normal map, its alpha each pixel's roughness (D292).
+  const normals = Buffer.alloc(size * size * 4);
+  const flat = [128, 128, 255, Math.round(ROUGH * 255)];
+  for (let i = 0; i < size * size; i++) normals.set(flat, i * 4);
   const ronFile = join(ROOT, "assets", "data", `${name}.ron`);
   const standing = existsSync(ronFile) ? readFileSync(ronFile, "utf8") : "";
   const before = cellsOf(standing);
   const leavesBefore = leavesOf(standing);
   const old = existsSync(join(out, "cards.png")) ? rgba(join(out, "cards.png")) : undefined;
-  const oldNormals = existsSync(join(out, "normal.png"))
-    ? execFileSync("convert", [join(out, "normal.png"), "-depth", "8", "rgb:-"], { maxBuffer: 1 << 28 })
-    : undefined;
+  // A normal map from before roughness was in its alpha has none: as rough as `ROUGH` there.
+  const oldNormals = existsSync(join(out, "normal.png")) ? normalMap(join(out, "normal.png")) : undefined;
   const table: string[] = [];
   const scans = new Map<string, Scan>();
   const composed: string[] = [];
@@ -523,19 +561,23 @@ async function cards(name: string, entries: string[], size: number, columns: num
     const [card, source] = entry.split("=");
     if (!card || !source) throw new Error(`a card is name=image, name=recipe.leaves.json or name=keep, not ${entry}`);
     let pixels: Buffer;
-    let normal: Buffer | undefined;
+    let normal: Buffer;
     let leaf = leavesBefore.get(card);
     if (source === "keep") {
       const at = before.get(card);
-      if (!at || !old || old.width !== size) throw new Error(`${card} is not in the atlas as it stands, at this size, to keep`);
-      const [ox, oy] = [Math.round(at[0] * size), Math.round(at[1] * size)];
-      pixels = Buffer.alloc(cell * cell * 4);
-      normal = Buffer.alloc(cell * cell * 3);
-      for (let y = 0; y < cell; y++) {
-        old.data.copy(pixels, y * cell * 4, ((oy + y) * size + ox) * 4, ((oy + y) * size + ox + cell) * 4);
-        if (oldNormals) oldNormals.copy(normal, y * cell * 3, ((oy + y) * size + ox) * 3, ((oy + y) * size + ox + cell) * 3);
-        else for (let x = 0; x < cell; x++) normal.set([128, 128, 255], (y * cell + x) * 3);
-      }
+      if (!at || !old) throw new Error(`${card} is not in the atlas as it stands, to keep`);
+      // Its cell as it stands, scaled to this atlas's cells if they are another size.
+      const was = Math.floor(old.width / columns);
+      const [ox, oy] = [Math.round(at[0] * old.width), Math.round(at[1] * old.width)];
+      const from = (data: Buffer, kind: "rgba" | "rgb") => {
+        const piece = Buffer.alloc(was * was * 4);
+        for (let y = 0; y < was; y++) data.copy(piece, y * was * 4, ((oy + y) * old.width + ox) * 4, ((oy + y) * old.width + ox + was) * 4);
+        return was === cell ? piece : resized(piece, was, cell, kind);
+      };
+      pixels = from(old.data, "rgba");
+      normal = Buffer.alloc(cell * cell * 4);
+      for (let i = 0; i < cell * cell; i++) normal.set(flat, i * 4);
+      if (oldNormals && oldNormals.width === old.width) normal = from(oldNormals.data, "rgb");
       kept.push(card);
     } else if (source.endsWith(".leaves.json")) {
       const recipe: Recipe = JSON.parse(readFileSync(resolve(source), "utf8"));
@@ -547,19 +589,26 @@ async function cards(name: string, entries: string[], size: number, columns: num
       leaf = made.leaf;
       // The colour grown out over its edge, as for a picture.
       pixels = bleed(made.rgba, cell, cell);
-      normal = made.normal;
+      normal = Buffer.alloc(cell * cell * 4);
+      for (let i = 0; i < cell * cell; i++) normal.set([made.normal[i * 3], made.normal[i * 3 + 1], made.normal[i * 3 + 2], made.rough[i]], i * 4);
       composed.push(drawn ? `${card} (drawn needle by needle)` : `${card} (${recipe.scan})`);
     } else {
       leaf = undefined;
       // Resizing leaves what is clear black, and the edge a pale rim, which filtering at a
       // card's edge mixes in as a fringe; the colour inside is grown out over both.
       pixels = bleed(pictureCell(source, cell), cell, cell);
+      // Flat, and as rough as a file beside the picture says (`<card>.surface.json`), such as
+      // holly's waxy leaves; `ROUGH` otherwise.
+      const surface = source.replace(/\.png$/, ".surface.json");
+      const rough = existsSync(surface) ? Number(JSON.parse(readFileSync(surface, "utf8")).roughness) : ROUGH;
+      normal = Buffer.alloc(cell * cell * 4);
+      for (let i = 0; i < cell * cell; i++) normal.set([128, 128, 255, Math.round(rough * 255)], i * 4);
       pictured.push(card);
     }
     const [col, row] = [index % columns, Math.floor(index / columns)];
     for (let y = 0; y < cell; y++) {
       pixels.copy(atlas, ((row * cell + y) * size + col * cell) * 4, y * cell * 4, (y + 1) * cell * 4);
-      if (normal) normal.copy(normals, ((row * cell + y) * size + col * cell) * 3, y * cell * 3, (y + 1) * cell * 3);
+      normal.copy(normals, ((row * cell + y) * size + col * cell) * 4, y * cell * 4, (y + 1) * cell * 4);
     }
     const shape = outline(pixels, cell, cell, cut);
     const colour = meanColour(pixels, cut);
@@ -574,7 +623,7 @@ async function cards(name: string, entries: string[], size: number, columns: num
     console.log(`${card}: cell ${col},${row}, its octagon ${(100 * area(shape)).toFixed(0)}% of the cell, colour ${colour.map((c) => c.toFixed(2))}${leaves}`);
   }
   execFileSync("convert", ["-size", `${size}x${size}`, "-depth", "8", "rgba:-", join(out, "cards.png")], { input: atlas });
-  execFileSync("convert", ["-size", `${size}x${size}`, "-depth", "8", "rgb:-", join(out, "normal.png")], { input: normals });
+  execFileSync("convert", ["-size", `${size}x${size}`, "-depth", "8", "rgba:-", join(out, "normal.png")], { input: normals });
   const ron = [
     `// The leaf, frond and flower cards in assets/materials/${name}/cards.png, made from their`,
     `// pictures and recipes by \`node tools/textures/textures.ts cards\`; don't edit by hand. Each`,

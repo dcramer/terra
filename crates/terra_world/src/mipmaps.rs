@@ -59,8 +59,7 @@ fn mipmaps(
         let mut levels = 1;
         let srgb = format == TextureFormat::Rgba8UnormSrgb;
         for pixels in data.chunks_exact(layer) {
-            // A picture with transparency is a cut-out, whose leaves must not thin away.
-            let cut_out = pixels.chunks_exact(4).any(|p| p[3] < 255);
+            let cut_out = is_cut_out(pixels, srgb);
             let (chain, count) = if cut_out {
                 cut_out_chain(pixels, size.width, size.height, CUT_OUT, srgb)
             } else {
@@ -76,6 +75,13 @@ fn mipmaps(
         sampler.set_address_mode(bevy::image::ImageAddressMode::Repeat);
         image.sampler = ImageSampler::Descriptor(sampler);
     }
+}
+
+/// Whether a picture is cut out by its alpha: a colour picture with transparency, whose
+/// leaves must not thin away. A linear picture's alpha is data, as the leaf cards' normal
+/// map keeps each pixel's roughness there (D292), and is averaged as the rest.
+fn is_cut_out(pixels: &[u8], srgb: bool) -> bool {
+    srgb && pixels.chunks_exact(4).any(|p| p[3] < 255)
 }
 
 /// An RGBA image followed by each smaller copy of it, every pixel the average of the four
@@ -233,6 +239,17 @@ mod tests {
         // The colour under a leaf is the leaf's, not darkened by the empty pixels by it.
         let leaf = second.chunks_exact(4).find(|p| p[3] > 0).unwrap();
         assert_eq!(&leaf[..3], &[40, 120, 30]);
+    }
+
+    #[test]
+    fn only_a_colour_picture_is_cut_out_by_its_alpha() {
+        // A leaf over nothing, and a normal map whose alpha is a roughness of 0.5.
+        let leaf = [40, 120, 30, 255, 0, 0, 0, 0];
+        let normals = [128, 128, 255, 128, 140, 120, 250, 128];
+        assert!(is_cut_out(&leaf, true));
+        assert!(!is_cut_out(&normals, false));
+        // An opaque colour picture is not one either.
+        assert!(!is_cut_out(&[40, 120, 30, 255], true));
     }
 
     #[test]

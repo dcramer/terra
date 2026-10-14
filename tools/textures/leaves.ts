@@ -15,8 +15,8 @@
 
 /** A scan of leaves laid flat, its stalks toward the bottom, as ambientCG's leaf sets are:
  * colour and normal (OpenGL's convention: green up the picture) three bytes a pixel, its
- * opacity one. */
-export type Scan = { width: number; height: number; colour: Buffer; normal: Buffer; alpha: Buffer };
+ * opacity one, and its roughness one, where the set has it. */
+export type Scan = { width: number; height: number; colour: Buffer; normal: Buffer; alpha: Buffer; roughness?: Buffer };
 
 /** One leaf found in a scan: where its stalk ends and its tip is, its box, and which
  * pixels are its own (`label`, shared by every leaf of the scan). */
@@ -57,12 +57,35 @@ export type Recipe = {
   young: number;
   old: number;
   underside: number;
-  /** The scan's colour graded: its saturation and lightness, as multiples. */
-  saturation: number;
-  value: number;
+  /** The scan's colour graded, where no `albedo` is given: its saturation and lightness, as multiples. */
+  saturation?: number;
+  value?: number;
   /** The scan's colour multiplied, channel by channel, to shift its hue: a spring scan's yellow
    * toward summer's deeper green. */
   hue?: [number, number, number];
+  /** The average colour of the leaves' upper faces, sRGB, as a summer leaf of the kind is
+   * measured (D292). The scan is scaled to it channel by channel in linear light, so each
+   * scanned leaf keeps its own veins, blemishes and shading; `saturation`, `value` and `hue`
+   * grade it instead where this is not given. */
+  albedo?: [number, number, number];
+  /** How far a leaf's own light and dark is deepened about its average: 1 as scanned. A scan
+   * is lit flat and evenly, so its veins and mottling read fainter than on a living leaf. */
+  contrast?: number;
+  /** The upper faces' roughness on average (perceptual, 0 to 1): the scan's own roughness
+   * map, its veins rougher than the blade, scaled to average this. A waxy leaf is glossy above,
+   * every underside matte (`UNDERSIDE_ROUGH`). Without it, a card is as rough as `ROUGH`. */
+  roughness?: number;
+  /** How far, at most, a leaf folds up along its midrib, its halves facing each other a
+   * little (radians), and how far its tip curls over: each leaf then shades from one half to
+   * the other and from base to tip, as a real leaf does, not as one flat plane. */
+  fold?: number;
+  curl?: number;
+  /** Shares of leaves yellowing in patches in from their margin and tip, as leaves do when
+   * old or short of water, and bitten or holed by insects. */
+  yellowed?: number;
+  holes?: number;
+  /** How far a leaf's hue wanders from the next, greener or yellower. */
+  hues?: number;
   /** Berries in bunches along the twig, if it bears them. */
   berries?: { count: number; colour: [number, number, number]; radius: number };
   /** For `litter`: fallen needles, how many and their colour, and pine cones. */
@@ -74,7 +97,16 @@ export type Recipe = {
 /** A composed card: its colour and coverage, four bytes a pixel, and its normal map, three;
  * and, for a twig of leaves or needles, how long they are on average, as a share of the card's
  * width, so a plant can be grown with its leaves at their real size (D276). */
-export type Composed = { size: number; rgba: Buffer; normal: Buffer; leaf?: number };
+export type Composed = { size: number; rgba: Buffer; normal: Buffer; rough: Buffer; leaf?: number };
+
+/** How rough a card is where its recipe or picture says nothing: as the leaf material was. */
+export const ROUGH = 0.8;
+/** A leaf's underside, hairy or waxless and greyer: matte whatever its upper face. */
+const UNDERSIDE_ROUGH = 0.88;
+/** Bark of a twig, a needle's waxy face, a berry's bloom. */
+const TWIG_ROUGH = 0.75;
+const BERRY_ROUGH = 0.45;
+const NEEDLE_ROUGH = 0.6;
 
 /** The leaves of a scan, each a connected patch of its opacity past half, the smallest left
  * out (bits broken off, specks of dust), with the label map that says which pixel is whose. */
@@ -144,7 +176,56 @@ export type Laid = {
   mirror: number;
   underside: boolean;
   tint: [number, number, number];
+  /** Folded up along its midrib and its tip curled over (radians), as `Recipe.fold` and
+   * `curl`; yellowing in from its margin, 0 to 1, by a noise of its own (`seed`); holes
+   * bitten in it, each where along its midrib and across it (in midrib lengths) and how
+   * wide; and young (-1), grown (0) or old (1), which a leaf's gloss follows. */
+  fold?: number;
+  curl?: number;
+  yellow?: number;
+  holes?: [number, number, number][];
+  age?: number;
+  seed?: number;
 };
+
+/** What a scan's leaves are on average, measured once: their colour (linear), their
+ * roughness, and how far in from its margin each pixel is (`inside`, 0 at the edge to 1 a
+ * fifteenth of a leaf in). */
+export type ScanStats = { mean: [number, number, number]; rough: number; inside: Float32Array };
+
+export function scanStats(scan: Scan, leaves: ScanLeaf[]): ScanStats {
+  const mean = [0, 0, 0];
+  let [rough, n] = [0, 0];
+  for (let i = 0; i < scan.width * scan.height; i++) {
+    if (scan.alpha[i] < 128) continue;
+    for (let c = 0; c < 3; c++) mean[c] += linear(scan.colour[i * 3 + c] / 255);
+    rough += scan.roughness ? scan.roughness[i] / 255 : ROUGH;
+    n++;
+  }
+  const lengths = leaves.map((l) => Math.hypot(l.tip[0] - l.base[0], l.tip[1] - l.base[1])).sort((a, b) => a - b);
+  const r = Math.max(1, Math.round((lengths[Math.floor(lengths.length / 2)] ?? 30) / 30));
+  let inside = new Float32Array(scan.width * scan.height);
+  for (let i = 0; i < inside.length; i++) inside[i] = scan.alpha[i] >= 128 ? 1 : 0;
+  for (let pass = 0; pass < 3; pass++) inside = boxBlur(inside, scan.width, scan.height, r);
+  // Half covered at the margin itself; past twice that, all the way in.
+  for (let i = 0; i < inside.length; i++) inside[i] = Math.min(1, Math.max(0, (inside[i] - 0.5) * 2));
+  return { mean: mean.map((v) => v / Math.max(1, n)) as [number, number, number], rough: rough / Math.max(1, n), inside };
+}
+
+/** Smooth value noise in the plane, 0 to 1, the same for the same seed. */
+function noise2(x: number, y: number, seed: number): number {
+  const hash = (i: number, j: number) => {
+    let h = (i * 374761393 + j * 668265263 + seed * 2246822519) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const [i, j] = [Math.floor(x), Math.floor(y)];
+  const [fx, fy] = [x - i, y - j];
+  const [u, v] = [fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)];
+  const top = hash(i, j) + (hash(i + 1, j) - hash(i, j)) * u;
+  const bottom = hash(i, j + 1) + (hash(i + 1, j + 1) - hash(i, j + 1)) * u;
+  return top + (bottom - top) * v;
+}
 
 /** A normal from a scan's leaf (OpenGL's convention, green up its picture) as the leaf lies
  * on the card: its scan's midrib `axis` (a unit vector in the picture, y down, stalk to
@@ -169,25 +250,31 @@ export function laidNormal(n: [number, number, number], axis: [number, number], 
   return out.map((v) => v / length) as [number, number, number];
 }
 
-/** A canvas a card is composed on: colour (linear, premultiplied by cover), cover, and the
- * normal, all floats. */
+/** What is drawn onto a canvas: cover, colour (linear), normal and, where it says, roughness,
+ * at each pixel of a box. */
+export type Patch = { cover: Float32Array; colour: Float32Array; normal: Float32Array; rough?: Float32Array };
+
+/** A canvas a card is composed on: colour (linear, premultiplied by cover), cover, the
+ * normal and the roughness, all floats. */
 export class Canvas {
   colour: Float32Array;
   cover: Float32Array;
   normal: Float32Array;
+  rough: Float32Array;
   size: number;
   constructor(size: number) {
     this.size = size;
     this.colour = new Float32Array(size * size * 3);
     this.cover = new Float32Array(size * size);
     this.normal = new Float32Array(size * size * 3);
+    this.rough = new Float32Array(size * size).fill(ROUGH);
     for (let i = 0; i < size * size; i++) this.normal[i * 3 + 2] = 1;
   }
 
-  /** Lays a patch over what is there: its cover, colour (linear) and normal at each pixel of
-   * a box. First darkens what lies under it near its edge, a soft shadow a little down and
-   * to the right, as leaves lying on each other shade the one below. */
-  lay(box: [number, number, number, number], patch: { cover: Float32Array; colour: Float32Array; normal: Float32Array }, shadow: number) {
+  /** Lays a patch over what is there: its cover, colour (linear), normal and roughness at
+   * each pixel of a box. First darkens what lies under it near its edge, a soft shadow a
+   * little down and to the right, as leaves lying on each other shade the one below. */
+  lay(box: [number, number, number, number], patch: Patch, shadow: number) {
     const [x0, y0, x1, y1] = box;
     const [w, h] = [x1 - x0, y1 - y0];
     if (w <= 0 || h <= 0) return;
@@ -221,6 +308,10 @@ export class Canvas {
           this.colour[i * 3 + c] = patch.colour[j * 3 + c] * a + this.colour[i * 3 + c] * (1 - a);
           this.normal[i * 3 + c] = patch.normal[j * 3 + c] * a + this.normal[i * 3 + c] * (1 - a);
         }
+        // What lay here before shows through where the patch is part covered; under nothing,
+        // the patch's own.
+        const under = this.cover[i] > 0 ? this.rough[i] : (patch.rough?.[j] ?? ROUGH);
+        this.rough[i] = (patch.rough?.[j] ?? ROUGH) * a + under * (1 - a);
         this.cover[i] = a + this.cover[i] * (1 - a);
       }
     }
@@ -253,8 +344,10 @@ const linear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) 
 const encoded = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.max(0, v) ** (1 / 2.4) - 0.055);
 
 /** A scan's leaf drawn as `laid` lays it: each pixel of the box it covers sampled back from
- * the scan, bilinearly, from that leaf's own pixels only. */
-function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: Laid, recipe: Recipe) {
+ * the scan, bilinearly, from that leaf's own pixels only. Its colour graded to the recipe's
+ * (to its `albedo`, or by its saturation and lightness), its normal turned with it and, if it
+ * is folded or curled, bent across and along it, and its roughness the scan's. */
+export function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: Laid, recipe: Recipe, stats?: ScanStats) {
   const [bx, by] = leaf.base;
   const axisLength = Math.hypot(leaf.tip[0] - bx, leaf.tip[1] - by);
   const axis: [number, number] = [(leaf.tip[0] - bx) / axisLength, (leaf.tip[1] - by) / axisLength];
@@ -276,8 +369,13 @@ function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: Laid, rec
   const x1 = Math.ceil(Math.max(...corners.map((p) => p[0]))) + 1;
   const y1 = Math.ceil(Math.max(...corners.map((p) => p[1]))) + 1;
   const [w, h] = [x1 - x0, y1 - y0];
-  const patch = { cover: new Float32Array(w * h), colour: new Float32Array(w * h * 3), normal: new Float32Array(w * h * 3) };
+  const patch = { cover: new Float32Array(w * h), colour: new Float32Array(w * h * 3), normal: new Float32Array(w * h * 3), rough: new Float32Array(w * h).fill(ROUGH) };
   const grey = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  // Graded to the measured albedo: each channel scaled so the scan's average is the kind's.
+  const target = recipe.albedo && stats ? recipe.albedo.map((c, k) => linear(c) / Math.max(1e-4, stats.mean[k])) : undefined;
+  const contrast = recipe.contrast ?? 1;
+  const roughScale = recipe.roughness !== undefined && stats ? recipe.roughness / Math.max(0.05, stats.rough) : undefined;
+  const width = 0.5 * Math.max(leaf.box[2] - leaf.box[0], leaf.box[3] - leaf.box[1]) / axisLength;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const [px, py] = [x0 + x + 0.5 - laid.at[0], y0 + y + 0.5 - laid.at[1]];
@@ -290,6 +388,8 @@ function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: Laid, rec
       const [fx, fy] = [sx - ix, sy - iy];
       let cover = 0;
       const colour = [0, 0, 0];
+      const n = [0, 0, 0];
+      let [rough, inside] = [0, 0];
       for (const [ox, oy, wt] of [[0, 0, (1 - fx) * (1 - fy)], [1, 0, fx * (1 - fy)], [0, 1, (1 - fx) * fy], [1, 1, fx * fy]]) {
         const [qx, qy] = [ix + ox, iy + oy];
         if (qx < 0 || qy < 0 || qx >= scan.width || qy >= scan.height) continue;
@@ -300,15 +400,52 @@ function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: Laid, rec
         cover += k;
         for (let ch = 0; ch < 3; ch++) {
           colour[ch] += linear(scan.colour[q * 3 + ch] / 255) * k;
+          n[ch] += (scan.normal[q * 3 + ch] / 127.5 - 1) * k;
         }
+        rough += (scan.roughness ? scan.roughness[q] / 255 : ROUGH) * k;
+        inside += (stats?.inside[q] ?? 1) * k;
+      }
+      // A hole an insect bit: nothing, and a thin dead rim round it.
+      let rim = 0;
+      for (const [ha, hc, hr] of laid.holes ?? []) {
+        const d = Math.hypot(a - ha, (c - hc) * 1.15) / hr;
+        if (d < 1) cover = 0;
+        else rim = Math.max(rim, 1 - Math.min(1, (d - 1) * 4));
       }
       if (cover <= 0.002) continue;
       const j = y * w + x;
       patch.cover[j] = Math.min(1, cover);
       let [r, g, b] = colour.map((v) => v / cover);
-      // Graded: saturation about its own grey, then lightness.
-      const l = grey(r, g, b);
-      [r, g, b] = [r, g, b].map((v, c) => Math.max(0, (l + (v - l) * recipe.saturation) * recipe.value * (recipe.hue?.[c] ?? 1)));
+      inside /= cover;
+      if (target) {
+        // Its own light and dark about the scan's average deepened, then scaled to the albedo.
+        [r, g, b] = [r, g, b].map((v, k) => {
+          const m = stats!.mean[k];
+          return Math.max(0, m * (Math.max(1e-5, v) / m) ** contrast * target[k]);
+        });
+      } else {
+        // Graded: saturation about its own grey, then lightness.
+        const l = grey(r, g, b);
+        [r, g, b] = [r, g, b].map((v, k) => Math.max(0, (l + (v - l) * (recipe.saturation ?? 1)) * (recipe.value ?? 1) * (recipe.hue?.[k] ?? 1)));
+      }
+      let edge = 0;
+      if (laid.yellow) {
+        // Yellowing in patches between the veins, more toward the tip and the margin, with
+        // ragged edges; where it is furthest on, a fleck of brown.
+        const wander = noise2(a * 4, c * 4, laid.seed ?? 0) * 0.6 + noise2(a * 13, c * 13, (laid.seed ?? 0) + 1) * 0.4;
+        const from = (1 - inside) * 0.25 + Math.max(0, a - 0.5) * 0.7 + wander;
+        const yellow = Math.min(1, Math.max(0, (from - 1.15 + laid.yellow) * 2.5));
+        const l = grey(r, g, b);
+        const gold = [l * 1.55, l * 1.4, l * 0.3];
+        [r, g, b] = [r, g, b].map((v, k) => v + (gold[k] - v) * yellow);
+        edge = Math.max(0, yellow - 0.85) * 2;
+      }
+      edge = Math.max(edge, rim * 0.8);
+      if (edge > 0) {
+        const l = grey(r, g, b);
+        const brown = [l * 1.4, l * 0.85, l * 0.35];
+        [r, g, b] = [r, g, b].map((v, k) => (v + (brown[k] - v) * edge) * (1 - 0.35 * edge));
+      }
       if (laid.underside) {
         // A leaf's underside: paler and greyer, a little blue, its veins standing out less.
         const u = grey(r, g, b);
@@ -319,18 +456,29 @@ function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: Laid, rec
       patch.colour[j * 3] = r * laid.tint[0] * base;
       patch.colour[j * 3 + 1] = g * laid.tint[1] * base;
       patch.colour[j * 3 + 2] = b * laid.tint[2] * base;
-      // The normal, from the nearest of the leaf's own pixels.
-      const q = Math.min(scan.height - 1, Math.max(0, Math.round(sy))) * scan.width + Math.min(scan.width - 1, Math.max(0, Math.round(sx)));
-      const n: [number, number, number] = [scan.normal[q * 3] / 127.5 - 1, scan.normal[q * 3 + 1] / 127.5 - 1, scan.normal[q * 3 + 2] / 127.5 - 1];
-      const out = laidNormal(laid.underside ? [-n[0], n[1], n[2]] : n, axis, laid);
+      // The normal, bent where the leaf folds along its midrib (each half facing in toward
+      // the other) and curls over toward its tip.
+      const fold = (laid.fold ?? 0) * Math.sign(c) * Math.min(1, Math.abs(c) / Math.max(0.05, width * 0.35));
+      const curl = (laid.curl ?? 0) * Math.max(0, a) ** 2;
+      const scanned: [number, number, number] = [n[0] / cover, n[1] / cover, n[2] / cover];
+      const out = laidNormal(laid.underside ? [-scanned[0], scanned[1], scanned[2]] : scanned, axis, {
+        ...laid,
+        turn: laid.turn - fold,
+        tilt: laid.tilt + curl,
+      });
       patch.normal.set(out, j * 3);
+      // Its roughness: the scan's, scaled to the kind's gloss; a young leaf's a little
+      // glossier, an old or yellowing one's duller; an underside matte.
+      let rr = roughScale !== undefined ? (rough / cover) * roughScale : ROUGH;
+      rr += (laid.age ?? 0) * 0.07 + edge * 0.2 + (laid.yellow ? 0.08 : 0);
+      patch.rough[j] = laid.underside ? UNDERSIDE_ROUGH : Math.min(1, Math.max(0.2, rr));
     }
   }
   return { box: [x0, y0, x1, y1] as [number, number, number, number], patch };
 }
 
 /** A twig drawn along points: round, darker at its sides, its normal turned across it. */
-function drawTwig(canvas: Canvas, points: [number, number][], radius: [number, number], colour: [number, number, number]) {
+function drawTwig(canvas: Canvas, points: [number, number][], radius: [number, number], colour: [number, number, number], rough = TWIG_ROUGH) {
   const lengths = [0];
   for (let i = 1; i < points.length; i++) lengths.push(lengths[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
   const total = lengths[lengths.length - 1];
@@ -341,7 +489,7 @@ function drawTwig(canvas: Canvas, points: [number, number][], radius: [number, n
     Math.floor(Math.min(...xs) - pad), Math.floor(Math.min(...ys) - pad), Math.ceil(Math.max(...xs) + pad), Math.ceil(Math.max(...ys) + pad),
   ];
   const [w, h] = [box[2] - box[0], box[3] - box[1]];
-  const patch = { cover: new Float32Array(w * h), colour: new Float32Array(w * h * 3), normal: new Float32Array(w * h * 3) };
+  const patch = { cover: new Float32Array(w * h), colour: new Float32Array(w * h * 3), normal: new Float32Array(w * h * 3), rough: new Float32Array(w * h).fill(rough) };
   const tone = colour.map(linear);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -389,7 +537,7 @@ function drawTwig(canvas: Canvas, points: [number, number][], radius: [number, n
 function drawBerry(canvas: Canvas, at: [number, number], radius: number, colour: [number, number, number]) {
   const box: [number, number, number, number] = [Math.floor(at[0] - radius - 1), Math.floor(at[1] - radius - 1), Math.ceil(at[0] + radius + 1), Math.ceil(at[1] + radius + 1)];
   const [w, h] = [box[2] - box[0], box[3] - box[1]];
-  const patch = { cover: new Float32Array(w * h), colour: new Float32Array(w * h * 3), normal: new Float32Array(w * h * 3) };
+  const patch = { cover: new Float32Array(w * h), colour: new Float32Array(w * h * 3), normal: new Float32Array(w * h * 3), rough: new Float32Array(w * h).fill(BERRY_ROUGH) };
   const tone = colour.map(linear);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -430,6 +578,30 @@ function along(points: [number, number][], t: number): { at: [number, number]; h
   return { at: [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s], heading: Math.atan2(b[1] - a[1], b[0] - a[0]) };
 }
 
+/** A leaf as it has lived (D292): folded and curled, its hue its own, some yellowing, some
+ * bitten, as the recipe asks, each by a roll of its own so the leaves' places and turns stay
+ * as they were. */
+function lived(leaf: Laid, recipe: Recipe, k: number): Laid {
+  const roll = dice(recipe.seed * 7919 + k + 1);
+  const hue = roll.range(-(recipe.hues ?? 0), recipe.hues ?? 0);
+  const out: Laid = {
+    ...leaf,
+    tint: [leaf.tint[0] * (1 + hue), leaf.tint[1], leaf.tint[2] * (1 - 0.6 * hue)],
+    fold: (recipe.fold ?? 0) * roll.range(0.3, 1),
+    curl: (recipe.curl ?? 0) * roll.sign() * roll.range(0.2, 1),
+    seed: recipe.seed * 31 + k,
+  };
+  if (roll.unit() < (recipe.yellowed ?? 0)) out.yellow = roll.range(0.3, 0.8);
+  if (roll.unit() < (recipe.holes ?? 0)) {
+    const holes: [number, number, number][] = [];
+    for (let h = Math.floor(roll.range(1, 4)); h > 0; h--) holes.push([roll.range(0.3, 0.85), roll.range(-0.22, 0.22), roll.range(0.02, 0.05)]);
+    // A bite out of its margin.
+    if (roll.unit() < 0.5) holes.push([roll.range(0.35, 0.8), roll.sign() * roll.range(0.32, 0.4), roll.range(0.07, 0.13)]);
+    out.holes = holes;
+  }
+  return out;
+}
+
 /** Composes a card `size` pixels square from a scan's leaves by its recipe. Drawn at twice
  * the size and halved, for smooth edges. */
 export function compose(scan: Scan | undefined, recipe: Recipe, size: number): Composed {
@@ -461,7 +633,7 @@ export function compose(scan: Scan | undefined, recipe: Recipe, size: number): C
 
   // Every leaf as laid: where along which twig, its side, and its look.
   const laid: Laid[] = [];
-  const look = (t: number): Pick<Laid, "turn" | "tilt" | "mirror" | "underside" | "tint" | "leaf"> => {
+  const look = (t: number): Pick<Laid, "turn" | "tilt" | "mirror" | "underside" | "tint" | "leaf" | "age"> => {
     const roll2 = roll.unit();
     // Young leaves toward the tips, old toward the base.
     const young = roll2 < recipe.young * (0.4 + 1.2 * t);
@@ -471,7 +643,7 @@ export function compose(scan: Scan | undefined, recipe: Recipe, size: number): C
     // Mostly a little turned, some steeply, so they foreshorten and catch the light apart.
     const turn = roll.sign() * (roll.unit() < 0.25 ? roll.range(0.6, 1.15) : roll.range(0.0, 0.5));
     const tilt = roll.sign() * roll.range(0.0, 0.7);
-    return { leaf: leaves[Math.floor(roll.unit() * leaves.length)].id, turn, tilt, mirror: roll.sign(), underside: roll.unit() < recipe.underside, tint };
+    return { leaf: leaves[Math.floor(roll.unit() * leaves.length)].id, turn, tilt, mirror: roll.sign(), underside: roll.unit() < recipe.underside, tint, age: young ? -1 : old ? 1 : 0 };
   };
   const length = (t: number) => big * roll.range(recipe.length[0], recipe.length[1]) * (1 - 0.35 * t);
   if (recipe.form === "spray") {
@@ -510,9 +682,11 @@ export function compose(scan: Scan | undefined, recipe: Recipe, size: number): C
   }
   // Drawn from the back: the farther leaves first, a little darker, so those in front shade them.
   laid.sort(() => roll.unit() - 0.5);
+  const stats = scanStats(scan, leaves);
   laid.forEach((leaf, k) => {
     const back = 0.8 + (0.2 * k) / Math.max(1, laid.length - 1);
-    const drawn = drawLeaf(scan, label, leaves.find((l) => l.id === leaf.leaf)!, { ...leaf, tint: leaf.tint.map((v) => v * back) as [number, number, number] }, recipe);
+    const life = lived(leaf, recipe, k);
+    const drawn = drawLeaf(scan, label, leaves.find((l) => l.id === leaf.leaf)!, { ...life, tint: life.tint.map((v) => v * back) as [number, number, number] }, recipe, stats);
     canvas.lay(drawn.box, drawn.patch, 0.5);
   });
   if (recipe.berries) {
@@ -592,7 +766,8 @@ function needles(recipe: Recipe, size: number): Composed {
     }
   }
   const draw = (front: boolean) => {
-    for (const n of laid) if (n.front === front) drawTwig(canvas, n.points, [n.width, n.width * 0.3], n.colour);
+    // A needle's waxy face is glossier than the twig's bark.
+    for (const n of laid) if (n.front === front) drawTwig(canvas, n.points, [n.width, n.width * 0.3], n.colour, NEEDLE_ROUGH);
   };
   draw(false);
   const thick = recipe.thickness * big;
@@ -626,14 +801,17 @@ function fit(canvas: Canvas, to: number): { canvas: Canvas; scale: number } {
       const [fx, fy] = [sx - ix, sy - iy];
       const i = y * to + x;
       out.normal[i * 3 + 2] = 0;
+      out.rough[i] = 0;
       for (const [ox, oy, w] of [[0, 0, (1 - fx) * (1 - fy)], [1, 0, fx * (1 - fy)], [0, 1, (1 - fx) * fy], [1, 1, fx * fy]]) {
         const [qx, qy] = [ix + ox, iy + oy];
         if (qx < 0 || qy < 0 || qx >= n || qy >= n) {
           out.normal[i * 3 + 2] += w;
+          out.rough[i] += ROUGH * w;
           continue;
         }
         const q = qy * n + qx;
         out.cover[i] += canvas.cover[q] * w;
+        out.rough[i] += canvas.rough[q] * w;
         for (let c = 0; c < 3; c++) {
           out.colour[i * 3 + c] += canvas.colour[q * 3 + c] * w;
           out.normal[i * 3 + c] += canvas.normal[q * 3 + c] * w;
@@ -648,16 +826,19 @@ function fit(canvas: Canvas, to: number): { canvas: Canvas; scale: number } {
 function halve(canvas: Canvas, size: number): Omit<Composed, "leaf"> {
   const rgba = Buffer.alloc(size * size * 4);
   const normal = Buffer.alloc(size * size * 3);
+  const rough = Buffer.alloc(size * size);
   const big = canvas.size;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       let cover = 0;
       const colour = [0, 0, 0];
       const n = [0, 0, 0];
+      let r = 0;
       for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
         const i = (y * 2 + dy) * big + x * 2 + dx;
         const a = canvas.cover[i];
         cover += a / 4;
+        r += (canvas.rough[i] * a + ROUGH * (1 - a)) / 4;
         for (let c = 0; c < 3; c++) {
           colour[c] += canvas.colour[i * 3 + c];
           n[c] += canvas.normal[i * 3 + c] * a + (c === 2 ? 1 - a : 0);
@@ -669,9 +850,10 @@ function halve(canvas: Canvas, size: number): Omit<Composed, "leaf"> {
       if (rgba[j * 4 + 3] === 0) [n[0], n[1], n[2]] = [0, 0, 1];
       const len = Math.hypot(n[0], n[1], n[2]) || 1;
       for (let c = 0; c < 3; c++) normal[j * 3 + c] = Math.round((n[c] / len) * 127.5 + 127.5);
+      rough[j] = Math.round(Math.min(1, Math.max(0, r)) * 255);
     }
   }
-  return { size, rgba, normal };
+  return { size, rgba, normal, rough };
 }
 
 /** A forest floor's litter, `litter` recipes: fallen leaves lying flat in a loose heap, each
@@ -754,7 +936,7 @@ function drawCone(canvas: Canvas, at: [number, number], angle: number, length: n
   const reach = length * 0.6;
   const box: [number, number, number, number] = [Math.floor(at[0] - reach), Math.floor(at[1] - reach), Math.ceil(at[0] + reach), Math.ceil(at[1] + reach)];
   const [w, h] = [box[2] - box[0], box[3] - box[1]];
-  const patch = { cover: new Float32Array(w * h), colour: new Float32Array(w * h * 3), normal: new Float32Array(w * h * 3) };
+  const patch = { cover: new Float32Array(w * h), colour: new Float32Array(w * h * 3), normal: new Float32Array(w * h * 3), rough: new Float32Array(w * h).fill(0.85) };
   const tone = colour.map(linear);
   const [dx, dy] = [Math.cos(angle), Math.sin(angle)];
   for (let y = 0; y < h; y++) {

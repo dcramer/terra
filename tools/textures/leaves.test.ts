@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Canvas, compose, laidNormal, scanLeaves, type Recipe, type Scan } from "./leaves.ts";
+import { Canvas, compose, drawLeaf, laidNormal, scanLeaves, type Recipe, type Scan } from "./leaves.ts";
 import { cellsOf, leavesOf } from "./textures.ts";
 
 const close = (a: number[], b: number[], within = 1e-6) => a.every((v, i) => Math.abs(v - b[i]) < within);
@@ -94,6 +94,73 @@ test("a composed card covers leaves and twig, its normal map flat where it cover
   }
   assert.ok(left > 20 && right > 20, `${left} lean left, ${right} right`);
   assert.deepEqual(compose(scan(2), recipe, 64).rgba, card.rgba, "the same recipe composes the same card");
+});
+
+const linear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+
+/** The leaf pixels of a card (cover past half, green above red, so not the twig): their mean
+ * colour (linear) and roughness. */
+function leafPixels(card: ReturnType<typeof compose>) {
+  const sum = [0, 0, 0];
+  let [rough, n] = [0, 0];
+  for (let i = 0; i < card.size * card.size; i++) {
+    const [r, g] = [card.rgba[i * 4], card.rgba[i * 4 + 1]];
+    if (card.rgba[i * 4 + 3] < 200 || g <= r) continue;
+    for (let c = 0; c < 3; c++) sum[c] += linear(card.rgba[i * 4 + c] / 255);
+    rough += card.rough[i] / 255;
+    n++;
+  }
+  return { mean: sum.map((v) => v / n), rough: rough / n, n };
+}
+
+const graded: Recipe = {
+  scan: "made up", form: "spray", leaves: 10, length: [0.2, 0.3], shoots: 2, twig: [0.4, 0.3, 0.2], thickness: 0.01,
+  tone: 0, young: 0, old: 0, underside: 0, albedo: [0.3, 0.4, 0.15], roughness: 0.5, seed: 4,
+};
+
+test("a card graded to an albedo takes that colour's balance, not the scan's", () => {
+  const { mean } = leafPixels(compose(scan(2), graded, 96));
+  // The scan is sRGB (60, 120, 40), its red a quarter of its green in linear light; the
+  // albedo's a little over a half. The leaves are darker than the albedo toward their stalks
+  // and behind others, by the same in every channel.
+  const want = linear(0.3) / linear(0.4);
+  assert.ok(Math.abs(mean[0] / mean[1] - want) < 0.05, `red over green ${(mean[0] / mean[1]).toFixed(3)}, want ${want.toFixed(3)}`);
+  assert.ok(mean[1] < linear(0.4) * 1.02 && mean[1] > linear(0.4) * 0.6, `green ${mean[1].toFixed(3)}`);
+});
+
+test("a card's roughness is its recipe's on the upper faces and matte on the undersides", () => {
+  const upper = leafPixels(compose(scan(2), graded, 96));
+  assert.ok(Math.abs(upper.rough - 0.5) < 0.04, `upper faces ${upper.rough.toFixed(3)}`);
+  const under = leafPixels(compose(scan(2), { ...graded, underside: 1 }, 96));
+  assert.ok(under.rough > 0.85, `undersides ${under.rough.toFixed(3)}`);
+});
+
+test("a folded leaf's halves lean toward each other across its midrib, and a hole is bitten out", () => {
+  const made = scan(1);
+  made.normal.fill(0).forEach((_, i, all) => (all[i] = [128, 128, 255][i % 3]));
+  const { leaves, label } = scanLeaves(made.alpha, made.width, made.height);
+  // Laid pointing up the card, so its right half is to the right.
+  const laid = { leaf: leaves[0].id, at: [100, 180] as [number, number], angle: -Math.PI / 2, length: 160, turn: 0, tilt: 0, mirror: 1, underside: false, tint: [1, 1, 1] as [number, number, number] };
+  const lean = (fold: number, holes?: [number, number, number][]) => {
+    const { box, patch } = drawLeaf(made, label, leaves[0], { ...laid, fold, holes }, graded);
+    let [left, right, cover, nl, nr] = [0, 0, 0, 0, 0];
+    for (let y = 0; y < box[3] - box[1]; y++) {
+      for (let x = 0; x < box[2] - box[0]; x++) {
+        const j = y * (box[2] - box[0]) + x;
+        cover += patch.cover[j];
+        if (patch.cover[j] < 0.9) continue;
+        if (box[0] + x < 90) [left, nl] = [left + patch.normal[j * 3], nl + 1];
+        if (box[0] + x > 110) [right, nr] = [right + patch.normal[j * 3], nr + 1];
+      }
+    }
+    return { left: left / nl, right: right / nr, cover };
+  };
+  const flat = lean(0);
+  assert.ok(Math.abs(flat.left) < 0.02 && Math.abs(flat.right) < 0.02, `flat ${flat.left}, ${flat.right}`);
+  const folded = lean(0.4);
+  assert.ok(folded.left > 0.1 && folded.right < -0.1, `folded: the left half leans ${folded.left}, the right ${folded.right}`);
+  const holed = lean(0, [[0.5, 0, 0.1]]);
+  assert.ok(holed.cover < flat.cover * 0.97, `holed covers ${holed.cover.toFixed(0)} of ${flat.cover.toFixed(0)}`);
 });
 
 test("the card table's cells are read back by name", () => {
