@@ -50,7 +50,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Vec<Piec
                 (whole && (solid(at) || cutting)).then_some(Piece::Wattle { cube: at })
             }));
         }
-        super::frames::lay(base, kit, kits, framing, scope, &mut pieces);
+        super::frames::lay(base, kit, framing, scope, &mut pieces);
     } else {
         let lintels = !dressing::dresses_role(kit, Role::Head);
         openings(base, kind, lintels, &solid, scope, &mut pieces);

@@ -138,7 +138,7 @@ Built 2026-10-12: a base is laid by every kit in `assets/data/kits/` at once, ea
 | Posts | Every `bay` cubes along the grid (a metre and a half), none within a metre of a row's end, so short studs stand over and under openings; an end post where a face ends against another kind or in an inside corner |
 | Rails | At the kit's heights in each storey (one and two metres), between the posts: under their line in a storey's lower half and over it in its upper, so they run into a window's sill and head |
 | Braces | In the lowest and highest panel at each end of a face, leaning in to the end |
-| Gables | Over the plate under a roof, by the same rule: studs over the wall's posts, each cut off under the roof, rails at the kit's heights as far as the roof lets them, and at each end a brace from the plate up to the outer stud, parallel to the roof over it |
+| Gables | The wall carried up into its roof (D241), framed as a triangle by the same rule, not as the steps of its cubes: the wall's plate a girt across it, studs over the wall's posts each cut off under the roof, rails at the kit's heights out to the roof, and at each end a brace from the girt up to the outer stud, parallel to the roof over it; nothing along or up its steps |
 | Corner posts | A square post up every outside corner |
 | Openings | Jambs, a head and a sill through the wall, lining the reveals, round any hole: a doorway's or a cut cross's |
 
