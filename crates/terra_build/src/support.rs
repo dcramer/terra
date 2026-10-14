@@ -154,8 +154,10 @@ impl Base {
 
     /// The cubes that would no longer be joined to the ground if these were emptied,
     /// sorted: a flood from each neighbour of theirs, through cubes with something in
-    /// them, until it finds the ground.
+    /// them, until it finds the ground. The flood goes lowest first, so from the top of a
+    /// castle's wall it finds the ground down the wall rather than wandering the castle.
     pub fn unjoined_without(&self, gone: &BTreeSet<[i32; 3]>) -> Vec<IVec3> {
+        use std::cmp::Reverse;
         let stays = |at: IVec3| !gone.contains(&at.to_array()) && self.is_in(at);
         let mut joined: BTreeSet<[i32; 3]> = BTreeSet::new();
         let mut lost: BTreeSet<[i32; 3]> = BTreeSet::new();
@@ -166,16 +168,17 @@ impl Base {
                     continue;
                 }
                 let mut seen = BTreeSet::from([key]);
-                let mut frontier = vec![start];
+                let mut frontier = std::collections::BinaryHeap::from([(Reverse(start.y), key)]);
                 let mut found = false;
-                while let Some(here) = frontier.pop() {
+                while let Some((_, here)) = frontier.pop() {
+                    let here = IVec3::from_array(here);
                     if self.grounded(here) || joined.contains(&here.to_array()) {
                         found = true;
                         break;
                     }
                     for next in self.joins(here) {
                         if stays(next) && seen.insert(next.to_array()) {
-                            frontier.push(next);
+                            frontier.push((Reverse(next.y), next.to_array()));
                         }
                     }
                 }
