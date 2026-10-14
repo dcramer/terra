@@ -105,7 +105,8 @@ pub(super) struct Footing;
 
 /// A tree whose trunk is still to be fitted: its finest wood, its nearest crown (what a
 /// walker sees of it), how far round its foot its trunk and roots reach, and how far its
-/// skirt does, in its model's units (D248).
+/// branches reach within a body's height of the ground, in its model's units: if at all, it
+/// has a skirt, fitted to the crown's cards there (D248).
 #[derive(Component)]
 pub(super) struct Trunk {
     pub wood: Handle<Mesh>,
