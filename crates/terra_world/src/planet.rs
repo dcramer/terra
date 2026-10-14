@@ -272,6 +272,7 @@ struct Sun;
 /// The camera the world is seen through. Other cameras, such as the one that draws item
 /// icons (`icons`), draw into images; queries for the view ask for this one.
 #[derive(Component)]
+#[require(crate::parting::CameraSubject)]
 pub struct MainCamera;
 
 pub type GroundMaterial = ExtendedMaterial<StandardMaterial, GroundExtension>;

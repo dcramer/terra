@@ -27,7 +27,7 @@ use bevy::{
     pbr::{ExtendedMaterial, MaterialExtension},
     platform::collections::HashMap,
     prelude::*,
-    render::render_resource::AsBindGroup,
+    render::{render_resource::AsBindGroup, storage::ShaderBuffer},
     shader::ShaderRef,
 };
 use serde::Deserialize;
@@ -256,6 +256,10 @@ pub struct FoliageExtension {
     /// through from behind, and how dark the inside of a crown goes (D247); off here.
     #[uniform(100)]
     pub leaf: Vec4,
+    /// What its plants make way for: the camera, and bodies walking through them
+    /// (`crate::parting`, D271), in the one buffer every foliage material shares.
+    #[storage(101, read_only)]
+    pub parting: Handle<ShaderBuffer>,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -291,9 +295,11 @@ pub struct Looks {
 }
 
 impl Looks {
-    /// The materials, with the wind blowing along `wind` (level with the ground).
+    /// The materials, with the wind blowing along `wind` (level with the ground), and plants
+    /// making way as `parting` says.
     pub fn new(
         wind: Vec3,
+        parting: Handle<ShaderBuffer>,
         cards: &Cards,
         assets: &AssetServer,
         foliage: &mut Assets<Foliage>,
@@ -306,6 +312,7 @@ impl Looks {
             cards: Vec3::ZERO,
             shrink: Vec4::ZERO,
             leaf: Vec4::ZERO,
+            parting,
         };
         let leaves = foliage.add(Foliage {
             base: StandardMaterial {

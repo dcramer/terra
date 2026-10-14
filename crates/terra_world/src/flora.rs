@@ -479,6 +479,7 @@ fn plant(
     cards: Res<grown::Cards>,
     assets: Res<AssetServer>,
     quality: Res<crate::quality::Quality>,
+    parting: Option<Res<crate::parting::Parting>>,
 ) {
     let middle = start.translation;
     let up = middle.normalize();
@@ -518,6 +519,7 @@ fn plant(
     // Every kind's models, or its grown variants, by its place in `assets/data/flora.ron`.
     let mut looks = grown::Looks::new(
         -SUN_DIRECTION.reject_from(up).normalize(),
+        parting.map(|parting| parting.0.clone()).unwrap_or_default(),
         &cards,
         &assets,
         &mut foliage,

@@ -28,6 +28,7 @@ pub mod loading;
 pub mod lod;
 pub mod mipmaps;
 pub mod models;
+pub mod parting;
 pub mod planet;
 pub mod quality;
 pub mod record;

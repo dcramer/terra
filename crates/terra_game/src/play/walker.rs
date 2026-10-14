@@ -15,13 +15,13 @@ use crate::planet::{MainCamera, Planet};
 use crate::shell::{Options, ScriptFrame};
 use crate::start::Start;
 use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
-use terra_world::{lod::Viewpoint, tick::Smoothed};
+use terra_world::{lod::Viewpoint, parting::PartsPlants, tick::Smoothed};
 
 /// Someone playing. What they are doing is in the components beside this one: how they
 /// move (`Motion`), what their hands and feet are up to (`Stance`), and whether they are
 /// down (`Downed`), along with what they carry, know and feel, which the layers above add.
 #[derive(Component)]
-#[require(Smoothed, Viewpoint)]
+#[require(Smoothed, Viewpoint, PartsPlants)]
 pub(crate) struct Player;
 
 /// The player this machine steers: its input moves them, and the camera, the screen and

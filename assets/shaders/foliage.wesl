@@ -43,6 +43,56 @@ struct Wind {
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> wind: Wind;
 
+// What plants make way for (D271), as terra_world's parting.rs writes it: the main camera's
+// eye (w 1 if it follows a subject), the subject (w how many bodies), and each body's feet
+// (w its radius) and head, now, then a frame ago.
+struct Parting {
+    eye: vec4<f32>,
+    subject: vec4<f32>,
+    bodies: array<vec4<f32>, 32>,
+}
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var<storage, read> parting: Parting;
+
+// Plants yield to bodies walking through them (D271), as Ghost of Tsushima's grass takes
+// characters' displacement: what is within a body's reach, between its feet and head, is
+// pushed out round it, level with the ground and a little down, by as much as it bends
+// freely (`give`, 0 at a root). Taking [0, reach] onto [radius, reach] keeps the push from folding a plant over
+// itself. `then` is 0 for where bodies are now, 2 for where they were a frame ago.
+fn parted(world: vec3<f32>, give: f32, then: u32) -> vec3<f32> {
+    var moved = vec3<f32>(0.0);
+    let count = min(u32(parting.subject.w), 8u);
+    for (var i = 0u; i < count; i++) {
+        let feet = parting.bodies[i * 4u + then];
+        let head = parting.bodies[i * 4u + then + 1u].xyz;
+        let from_feet = world - feet.xyz;
+        let reach = feet.w + 0.6;
+        // Most vertices are nowhere near a body: one test, before the rest.
+        let near = reach + distance(head, feet.xyz) + 0.4;
+        if give <= 0.0 || dot(from_feet, from_feet) > near * near {
+            continue;
+        }
+        let up = normalize(feet.xyz);
+        let rise = dot(from_feet, up);
+        let height = dot(head - feet.xyz, up);
+        let within = smoothstep(-0.2, 0.1, rise) * (1.0 - smoothstep(height, height + 0.4, rise));
+        let across = from_feet - up * rise;
+        let apart = length(across);
+        if within > 0.0 && apart < reach {
+            let push = feet.w * (1.0 - apart / reach) * within * give;
+            moved += across / max(apart, 0.001) * push - up * push * 0.35;
+        }
+    }
+    return moved;
+}
+
+// How freely a vertex bends, from its wind weight: tips of shrubs and ferns freely, a
+// tree's trunk and low limbs hardly.
+fn give(weights: vec2<f32>) -> f32 {
+    return clamp(sqrt(max(weights.x, 0.0)) * 3.0, 0.0, 1.0);
+}
+
 // A crown's cards drop out with distance, as SpeedTree's leaves do (D223): each vertex
 // knows its offset from its card's middle, and its card's rank and how many its clump has
 // (the tangent's w: the rank, plus a hundredth of the count). From cards.x to cards.y the
@@ -125,7 +175,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
 }
     var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
-    world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv_b, globals.time), 1.0);
+    world = vec4<f32>(world.xyz + sway(world.xyz, vertex.uv_b, globals.time) + parted(world.xyz, give(vertex.uv_b), 0u), 1.0);
 @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
     // Each tree's bark shifted by where it stands, so no two trunks of a kind show the same
@@ -154,7 +204,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let previous_from_local = mesh_functions::get_previous_world_from_local(vertex_in.instance_index);
     var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
-    previous = vec4<f32>(previous.xyz + sway(previous.xyz, vertex.uv_b, globals.time - globals.delta_time), 1.0);
+    previous = vec4<f32>(previous.xyz + sway(previous.xyz, vertex.uv_b, globals.time - globals.delta_time) + parted(previous.xyz, give(vertex.uv_b), 2u), 1.0);
     out.previous_world_position = previous;
 }
 } @else {

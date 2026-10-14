@@ -182,6 +182,49 @@ fn near_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
     }
 }
 
+// As foliage.wesl's: the camera's eye and the figure it follows (D271).
+struct Parting {
+    eye: vec4<f32>,
+    subject: vec4<f32>,
+    bodies: array<vec4<f32>, 32>,
+}
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var<storage, read> parting: Parting;
+
+// A third-person camera's view kept clear (D271), with a camera-obstruction fade as Unreal
+// games dither theirs: leaves within three metres of the lens, and those in a tube
+// round the line from the eye to the figure it follows, narrowing toward the figure and
+// ending at its middle, fade out a pixel at a time, as `near_fade` does, so the camera never
+// looks through a bush it has backed into and the figure is never lost in one. Only in the
+// main camera's own view, so the prepass agrees and shadows keep them. Not bark, which
+// only `near_fade` takes: a trunk dithered through reads as a hole in something solid.
+fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>) {
+    let eye = parting.eye;
+    if eye.w < 0.5 || distance(view.world_position, eye.xyz) > 0.01 {
+        return;
+    }
+    let to = parting.subject.xyz - eye.xyz;
+    let far = max(length(to), 0.1);
+    let along = to / far;
+    let from_eye = world - eye.xyz;
+    // Most leaves are beyond both the lens's reach and the tube's: one test, before the rest.
+    let seen = dot(from_eye, from_eye);
+    if seen > 9.0 && seen > (far + 0.15) * (far + 0.15) + 1.0 {
+        return;
+    }
+    let s = dot(from_eye, along);
+    let off = length(from_eye - along * s);
+    let lens = min(3.0, far * 0.65);
+    var keep = smoothstep(lens * 0.55, lens, length(from_eye));
+    let radius = mix(1.0, 0.8, clamp(s / far, 0.0, 1.0));
+    let tube = (1.0 - smoothstep(radius * 0.65, radius, off)) * (1.0 - smoothstep(far - 0.1, far + 0.15, s));
+    keep = min(keep, 1.0 - tube * step(0.0, s));
+    if keep < 1.0 && noise_at(frag_coord) > keep {
+        discard;
+    }
+}
+
 // Discards this fragment if it is outside its crossfade's share at this pixel this frame.
 // `dither` is Bevy's level: -16 to 0 fading in, 0 to 16 fading out.
 fn temporal_dither(frag_coord: vec4<f32>, dither: i32) {
@@ -283,6 +326,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     near_fade(in.position, in.world_position.xyz);
     if wind.bark < 0.5 {
         edge_fade(in.position, in.world_position.xyz);
+        clear_view(in.position, in.world_position.xyz);
     }
 
     var pbr_input: PbrInput;

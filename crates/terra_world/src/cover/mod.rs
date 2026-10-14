@@ -26,7 +26,10 @@ use bevy::{
     pbr::{ExtendedMaterial, MaterialExtension},
     platform::collections::HashMap,
     prelude::*,
-    render::render_resource::{AsBindGroup, Face},
+    render::{
+        render_resource::{AsBindGroup, Face},
+        storage::ShaderBuffer,
+    },
     shader::ShaderRef,
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
@@ -125,6 +128,10 @@ pub struct GrassExtension {
     /// How blades thin out one by one with distance (`blades::thinning`).
     #[uniform(100)]
     pub thinning: Vec4,
+    /// Where blades bend away from bodies walking through them and shrink from the camera
+    /// (`crate::parting`, D271).
+    #[storage(101, read_only)]
+    pub parting: Handle<ShaderBuffer>,
 }
 
 impl MaterialExtension for GrassExtension {
@@ -222,6 +229,7 @@ fn grow(
     mut materials: ResMut<Assets<GrassMaterial>>,
     detail: Res<DetailScale>,
     quality: Res<crate::quality::Quality>,
+    parting: Option<Res<crate::parting::Parting>>,
 ) {
     let density = quality.grass();
     let Some(camera) = camera.iter().next() else {
@@ -256,6 +264,7 @@ fn grow(
                 wind: (start.rotation * Vec3::X).extend(1.0),
                 fade: Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0),
                 thinning: blades::thinning(density),
+                parting: parting.map(|parting| parting.0.clone()).unwrap_or_default(),
             },
         });
         commands.insert_resource(Meadow {

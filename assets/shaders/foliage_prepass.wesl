@@ -38,6 +38,44 @@ fn near_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
     }
 }
 
+// As foliage.wesl's: the camera's eye and the figure it follows (D271).
+struct Parting {
+    eye: vec4<f32>,
+    subject: vec4<f32>,
+    bodies: array<vec4<f32>, 32>,
+}
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var<storage, read> parting: Parting;
+
+// As foliage_fragment.wesl: the third-person camera's view kept clear of leaves (D271).
+// Only in the main camera's own view, so shadows keep them.
+fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>) {
+    let eye = parting.eye;
+    if eye.w < 0.5 || distance(view.world_position, eye.xyz) > 0.01 {
+        return;
+    }
+    let to = parting.subject.xyz - eye.xyz;
+    let far = max(length(to), 0.1);
+    let along = to / far;
+    let from_eye = world - eye.xyz;
+    // Most leaves are beyond both the lens's reach and the tube's: one test, before the rest.
+    let seen = dot(from_eye, from_eye);
+    if seen > 9.0 && seen > (far + 0.15) * (far + 0.15) + 1.0 {
+        return;
+    }
+    let s = dot(from_eye, along);
+    let off = length(from_eye - along * s);
+    let lens = min(3.0, far * 0.65);
+    var keep = smoothstep(lens * 0.55, lens, length(from_eye));
+    let radius = mix(1.0, 0.8, clamp(s / far, 0.0, 1.0));
+    let tube = (1.0 - smoothstep(radius * 0.65, radius, off)) * (1.0 - smoothstep(far - 0.1, far + 0.15, s));
+    keep = min(keep, 1.0 - tube * step(0.0, s));
+    if keep < 1.0 && noise_at(frag_coord) > keep {
+        discard;
+    }
+}
+
 // As foliage_fragment.wesl: a card fades out as it turns edge-on to the eye (D235). Not in
 // the shadow pass, which keeps the whole card.
 fn edge_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
@@ -81,6 +119,7 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
     near_fade(in.position, in.world_position.xyz);
     if (flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS) == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK {
         edge_fade(in.position, in.world_position.xyz);
+        clear_view(in.position, in.world_position.xyz);
     }
 
     pbr_prepass_functions::prepass_sample_color_and_alpha_discard(in);

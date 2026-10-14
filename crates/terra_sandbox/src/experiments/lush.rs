@@ -38,7 +38,10 @@ use bevy::{
     pbr::{ExtendedMaterial, MaterialExtension, ParallaxMappingMethod},
     platform::collections::HashMap,
     prelude::*,
-    render::render_resource::{AsBindGroup, TextureFormat},
+    render::{
+        render_resource::{AsBindGroup, TextureFormat},
+        storage::ShaderBuffer,
+    },
     shader::ShaderRef,
 };
 use std::f32::consts::{PI, TAU};
@@ -202,6 +205,9 @@ pub struct FoliageExtension {
     /// through from behind, and how dark the inside of a crown goes, at least (D247).
     #[uniform(100)]
     leaf: Vec4,
+    /// What its plants make way for: the camera, and bodies walking through them (D271).
+    #[storage(101, read_only)]
+    parting: Handle<ShaderBuffer>,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -595,6 +601,7 @@ fn plant(
     mut scanned: ResMut<Scanned>,
     mut mossy: ResMut<Assets<floor::Mossy>>,
     mut mossy_scans: ResMut<floor::MossyScans>,
+    parting: Option<Res<terra_world::parting::Parting>>,
 ) {
     let (Some(planet), Some(flora), Some(sun)) = (planet, flora, sun) else {
         return;
@@ -618,6 +625,7 @@ fn plant(
         cards: Vec3::ZERO,
         shrink: Vec4::ZERO,
         leaf: Vec4::ZERO,
+        parting: parting.map(|parting| parting.0.clone()).unwrap_or_default(),
     };
     // Read at a slant, as leaves edge-on are, a picture blurs unless sampled along the
     // slant too (anisotropic filtering).

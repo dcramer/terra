@@ -14,6 +14,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
+use terra_world::parting::CameraSubject;
 
 const LOOK_SPEED: f32 = 0.0025;
 /// How fast the arrow keys turn the view, in radians a second.
@@ -27,6 +28,8 @@ const FURTHEST_M: f32 = 9.0;
 const ZOOM_NOTCH_M: f32 = 0.6;
 const ZOOM_KEY_M_S: f32 = 5.0;
 const HEAD_M: f32 = 1.62;
+/// The figure's middle, which the camera keeps clear of foliage.
+const CHEST_M: f32 = 1.2;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Zoom>().add_systems(
@@ -188,10 +191,12 @@ pub(super) fn follow(
     planet: Res<Planet>,
     options: Res<Options>,
     obstacles: Option<Res<super::Obstacles>>,
-    mut camera: Single<&mut Transform, With<MainCamera>>,
+    camera: Single<(&mut Transform, &mut CameraSubject), With<MainCamera>>,
 ) {
+    let (mut camera, mut subject) = camera.into_inner();
     // A fixed camera, for taking pictures.
     if let Some((from, toward)) = options.vantage {
+        subject.0 = None;
         // Heights above the start, or with --vantage-ground above the ground there.
         let place = |at: Vec3| {
             if options.vantage_ground {
@@ -213,7 +218,7 @@ pub(super) fn follow(
             let moved = obstacles.push_out(feet, 0.3, 0.4) - feet;
             from += moved;
         }
-        **camera = Transform::from_translation(from).looking_at(toward, from.normalize());
+        *camera = Transform::from_translation(from).looking_at(toward, from.normalize());
         return;
     }
     let (player, view) = *player;
@@ -263,7 +268,9 @@ pub(super) fn follow(
     if at.length() < ground {
         at = at.normalize() * ground;
     }
-    **camera = Transform::from_translation(at).looking_to(looking, up);
+    *camera = Transform::from_translation(at).looking_to(looking, up);
+    // Foliage between the camera and the figure dithers away (D271).
+    subject.0 = Some(player.translation + up * CHEST_M);
 }
 
 #[cfg(test)]

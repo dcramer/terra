@@ -40,6 +40,57 @@ struct Grass {
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> grass: Grass;
 
+// As foliage.wesl's: the camera's eye and the figure it follows, and the bodies that part
+// plants (D271).
+struct Parting {
+    eye: vec4<f32>,
+    subject: vec4<f32>,
+    bodies: array<vec4<f32>, 32>,
+}
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var<storage, read> parting: Parting;
+
+// As foliage.wesl: blades bend away from bodies walking through them, the more the higher
+// up the blade (D271).
+fn parted(world: vec3<f32>, give: f32, then: u32) -> vec3<f32> {
+    var moved = vec3<f32>(0.0);
+    let count = min(u32(parting.subject.w), 8u);
+    for (var i = 0u; i < count; i++) {
+        let feet = parting.bodies[i * 4u + then];
+        let head = parting.bodies[i * 4u + then + 1u].xyz;
+        let from_feet = world - feet.xyz;
+        let reach = feet.w + 0.6;
+        // Most vertices are nowhere near a body: one test, before the rest.
+        let near = reach + distance(head, feet.xyz) + 0.4;
+        if give <= 0.0 || dot(from_feet, from_feet) > near * near {
+            continue;
+        }
+        let up = normalize(feet.xyz);
+        let rise = dot(from_feet, up);
+        let height = dot(head - feet.xyz, up);
+        let within = smoothstep(-0.2, 0.1, rise) * (1.0 - smoothstep(height, height + 0.4, rise));
+        let across = from_feet - up * rise;
+        let apart = length(across);
+        if within > 0.0 && apart < reach {
+            let push = feet.w * (1.0 - apart / reach) * within * give;
+            moved += across / max(apart, 0.001) * push - up * push * 0.35;
+        }
+    }
+    return moved;
+}
+
+// Blades right at a third-person camera's lens shrink into their roots, as leaves there
+// fade (foliage_fragment.wesl's `clear_view`, D271): only in the main camera's own view, so
+// shadows keep them.
+fn cleared(root: vec3<f32>) -> f32 {
+    let eye = parting.eye;
+    if eye.w < 0.5 || distance(view.world_position, eye.xyz) > 0.01 {
+        return 1.0;
+    }
+    return smoothstep(0.4, 1.2, distance(root, eye.xyz));
+}
+
 // Gusts (D255): one wind for the grass, the bushes and the trees, as Ghost of Tsushima has it.
 // Its strength rises and falls as fronts roll downwind at about 6 m/s, waves 40 and 90 m long
 // (a gust every 7 to 15 s), so they never line up the same way twice, sharpened so calm spells
@@ -80,7 +131,7 @@ fn shrunk(local: vec3<f32>, to_root: vec2<f32>, rise: f32, rank: f32, world_from
     let root = local + vec3<f32>(to_root.x, -rise, to_root.y);
     let root_world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(root, 1.0)).xyz;
     let far = distance(root_world, view.world_position);
-    var keep = 1.0 - smoothstep(grass.fade.x, grass.fade.y, far);
+    var keep = (1.0 - smoothstep(grass.fade.x, grass.fade.y, far)) * cleared(root_world);
     // Where this blade thins out: those only the near ring has are gone by its end, the
     // highest ranks first; those the second ring has but not the third, by the second's.
     let t = grass.thinning;
@@ -104,7 +155,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     local = shrunk(local, vertex.uv, vertex.color.a, vertex.uv_b.y, world_from_local);
     var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
-    world = vec4<f32>(world.xyz + sway(world.xyz, weights(vertex.uv_b.x), globals.time), 1.0);
+    world = vec4<f32>(world.xyz + sway(world.xyz, weights(vertex.uv_b.x), globals.time) + parted(world.xyz, vertex.uv_b.x, 0u), 1.0);
 @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
 @if(VERTEX_UVS_B)
@@ -123,7 +174,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let previous_from_local = mesh_functions::get_previous_world_from_local(vertex_in.instance_index);
     var previous = mesh_functions::mesh_position_local_to_world(previous_from_local, vec4<f32>(local, 1.0));
 @if(VERTEX_UVS_B)
-    previous = vec4<f32>(previous.xyz + sway(previous.xyz, weights(vertex.uv_b.x), globals.time - globals.delta_time), 1.0);
+    previous = vec4<f32>(previous.xyz + sway(previous.xyz, weights(vertex.uv_b.x), globals.time - globals.delta_time) + parted(previous.xyz, vertex.uv_b.x, 2u), 1.0);
     out.previous_world_position = previous;
 }
 } @else {
