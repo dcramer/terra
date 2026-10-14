@@ -29,6 +29,25 @@ fn rules() -> Rules {
             (THATCH, Terms::new(4, Bill::of("Thatch", Amount::new(1, 4)))),
         ]),
         props: BTreeMap::from([(DOOR, Bill::of("Door", Amount::whole(1)))]),
+        // Logs weaker than stone, a quarter back from their debris; thatch as any kind.
+        toughness: BTreeMap::from([
+            (
+                LOGS,
+                crate::Toughness {
+                    health: 60,
+                    salvage: Amount::new(1, 4),
+                    repair: Amount::new(1, 2),
+                },
+            ),
+            (
+                STONE,
+                crate::Toughness {
+                    health: 150,
+                    salvage: Amount::new(1, 2),
+                    repair: Amount::new(1, 4),
+                },
+            ),
+        ]),
     }
 }
 
@@ -1278,6 +1297,57 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
                 }),
             }
         }
+        23 => {
+            // A blow, as an attack's (D193): a run of cubes, whatever they are.
+            let ins = with(&|cube| cube.is_in());
+            let Some(start) = pick(rng, &ins) else {
+                return fallback;
+            };
+            let cubes = run_from(rng, start, 3, |at| base.cube(at).is_some());
+            Op::Damage {
+                cubes,
+                amount: 10 + rng.below(140) as u16,
+            }
+        }
+        24 => {
+            let damaged: Vec<IVec3> = base.damaged().map(|(at, _)| at).collect();
+            match pick(rng, &damaged) {
+                Some(at) => Op::Repair {
+                    cubes: vec![at.to_array()],
+                },
+                None => fallback,
+            }
+        }
+        25 => {
+            let piles: Vec<IVec3> = base.debris().map(|(at, _)| at).collect();
+            match pick(rng, &piles) {
+                Some(at) => Op::Gather { at: at.to_array() },
+                None => Op::Gather {
+                    at: somewhere(rng).to_array(),
+                },
+            }
+        }
+        26 => {
+            // The ground under a few columns gives way, or rises.
+            let columns: Vec<[i32; 2]> = base.occupied_columns().map(|c| [c.x, c.y]).collect();
+            let mut samples: BTreeMap<[i32; 2], i16> = BTreeMap::new();
+            for _ in 0..1 + rng.below(4) {
+                if let Some(column) = pick(rng, &columns) {
+                    // From a metre and a half down to a little up.
+                    let by = 20 - rng.below(170) as i16;
+                    samples.insert(column, base.ground().height_cm(column) + by);
+                }
+            }
+            if samples.is_empty() {
+                return fallback;
+            }
+            Op::Subside {
+                samples: samples
+                    .into_iter()
+                    .map(|(column, height_cm)| Sample { column, height_cm })
+                    .collect(),
+            }
+        }
         19 => match pick(rng, &props) {
             Some(at) => Op::RemoveProp { at },
             None => fallback,
@@ -1313,9 +1383,12 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
     }
 }
 
-/// What is in a base: each cube's steps, each prop.
+/// What is in a base: each cube's steps, each prop, and its debris.
 fn value(base: &Base, rules: &Rules) -> Bill {
     let mut bill = Bill::default();
+    for (_, pile) in base.debris() {
+        bill.add(&pile.gives);
+    }
     for (_, cube) in base.cubes().filter(|(_, cube)| cube.fill != Fill::Open) {
         let terms = base.terms(&cube);
         let steps = u64::from(cube.level() / terms.step());
@@ -1346,6 +1419,11 @@ fn check_rules(base: &Base, at: &str) {
             "{at}: the prop at {:?} is in no hole",
             prop.min
         );
+    }
+    // Only what is in is damaged, and never past its health.
+    for (cube, _) in base.damaged() {
+        let found = base.cube(cube).filter(Cube::is_in);
+        assert!(found.is_some(), "{at}: {cube} damaged but not in");
     }
 }
 
@@ -1439,6 +1517,8 @@ fn random_operations_keep_every_rule() {
         let begun = base.act_all(&start, &free).unwrap();
         yard.stock.take(&begun.took).unwrap();
         let (mut paid, mut refunded) = (begun.took, Bill::default());
+        // What harm destroyed and repairs used up, and what undoing them brought back.
+        let (mut lost, mut recovered) = (Bill::default(), Bill::default());
         log.extend(start);
         let mut undos: Vec<Vec<Op>> = Vec::new();
         for step in 0..1200 {
@@ -1448,8 +1528,8 @@ fn random_operations_keep_every_rule() {
                 yard.bodies = (0..3).map(|_| somewhere(&mut rng).to_array()).collect();
                 yard.items = (0..3).map(|_| somewhere(&mut rng).to_array()).collect();
             }
-            let roll = rng.below(26);
-            let undo = roll >= 23;
+            let roll = rng.below(31);
+            let undo = roll >= 27;
             let ops = if undo {
                 match undos.pop() {
                     Some(ops) => ops,
@@ -1478,6 +1558,8 @@ fn random_operations_keep_every_rule() {
                     yard.stock.add(&done.gave);
                     paid.add(&done.took);
                     refunded.add(&done.gave);
+                    lost.add(&done.lost);
+                    recovered.add(&done.recovered);
                     // The columns, kept cube by cube, are those of every cube counted afresh.
                     let mut counted = base.clone();
                     counted.count_columns();
@@ -1539,10 +1621,15 @@ fn random_operations_keep_every_rule() {
                 }
             }
             check_rules(&base, &at);
+            // What is in, lies about, came out and was lost is what went in and was
+            // brought back, exactly.
             let mut held = value(&base, &rules);
             held.add(&refunded);
+            held.add(&lost);
+            let mut put = paid.clone();
+            put.add(&recovered);
             assert_eq!(
-                held, paid,
+                held, put,
                 "{at}: what is in and what came out is not what went in"
             );
             if step % 300 == 299 {
@@ -1587,6 +1674,10 @@ fn random_operations_keep_every_rule() {
         "SetOpen",
         "Open",
         "Close",
+        "Damage",
+        "Repair",
+        "Gather",
+        "Subside",
     ];
     for name in every {
         assert!(accepted.contains_key(name), "{name} was never accepted");

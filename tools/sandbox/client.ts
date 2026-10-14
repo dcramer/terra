@@ -206,6 +206,29 @@ export async function shot(file: string) {
   throw new Error(`the sandbox did not save ${path}`);
 }
 
+/// Saves the next so many frames one after another, as FILE-00000.png on, to see a change
+/// as it happens; returns at once, and `filmed` waits for the last.
+export async function film(file: string, frames: number) {
+  const path = resolve(file);
+  mkdirSync(dirname(path), { recursive: true });
+  await call("sandbox.shot", { path: forSandbox(path), frames });
+  return path.replace(/\.png$/, `-${String(frames - 1).padStart(5, "0")}.png`);
+}
+
+/// Waits for a file a run is saving to be whole.
+export async function filmed(path: string) {
+  let last = -1;
+  for (let i = 0; i < 600; i++) {
+    if (existsSync(path)) {
+      const size = statSync(path).size;
+      if (size > 0 && size === last) return path;
+      last = size;
+    }
+    await sleep(100);
+  }
+  throw new Error(`the sandbox did not save ${path}`);
+}
+
 // The mark: the number of the first line of the run's record that has not been looked at
 // yet. Commands that act move it to now before they act, so `waitFor` and `said` see only
 // what happened since; `waitFor` moves it past what it found, so waiting twice for the same

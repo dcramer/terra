@@ -20,8 +20,11 @@
 // meets       heavier than timber (weight 3), so it runs through a joint with it, quoined up
 //             its end, and caps its top where timber stands on it (D232)
 // colours     its plain colours far off and for what has no texture: a pack's own
+// toughness  how much damage a cube takes before it is destroyed (D193); half of what
+//             went in back from its debris, half its cost to repair from nothing
 (
     pattern: Masonry,
+    toughness: (health: 600),
     bevel: 0.04,
     relief: 0.05,
     timber: (

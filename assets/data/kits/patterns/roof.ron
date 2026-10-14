@@ -16,8 +16,10 @@
 // textures    the texture sets every roof shares: rafters' ends, battens' boards, flashing's
 //             mortar; a pack adds its Covering, its rafters' Log and its pieces' atlas
 // meets       a roof is drawn over what it rests on, which it neither caps nor ends against
+// toughness  how much damage a cube takes before it is destroyed (D193): a roof is light
 (
     pattern: Roof,
+    toughness: (health: 200),
     eaves: 0.5,
     timber: (
         profile: Round,

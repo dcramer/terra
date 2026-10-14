@@ -60,6 +60,9 @@ pub type Placed = (usize, Piece, Stage);
 pub struct Laid {
     pub pieces: Vec<Placed>,
     pub edge: Vec<Placed>,
+    /// Its damaged cubes and a cube round it, each with how many quarters of its health it
+    /// has lost (`loss`), which its surfaces are worn by as they are drawn.
+    pub worn: Vec<([i32; 3], u8)>,
 }
 
 impl Laid {
@@ -69,6 +72,7 @@ impl Laid {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.pieces.hash(&mut hasher);
         self.edge.hash(&mut hasher);
+        self.worn.hash(&mut hasher);
         hasher.finish()
     }
 }
@@ -413,9 +417,23 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
         own.sort_by_cached_key(key);
         edge.sort_by_cached_key(key);
     }
+    // Its damaged cubes, and those a cube round it whose wear reaches over its edge.
+    let worn = base
+        .damaged()
+        .filter(|(at, _)| at.cmpge(low).all() && at.cmple(high).all())
+        .filter_map(|(at, damage)| {
+            let kind = base.cube(at)?.kind;
+            let toughness = kits
+                .of(kind)
+                .map(|kit| kit.toughness.rules())
+                .unwrap_or_default();
+            Some((at.to_array(), toughness.quarters(damage)))
+        })
+        .collect();
     Laid {
         pieces: own.into_iter().map(|(_, _, placed)| placed).collect(),
         edge: edge.into_iter().map(|(_, _, placed)| placed).collect(),
+        worn,
     }
 }
 
@@ -1205,6 +1223,13 @@ fn draw_details(
         }
         if first {
             drawn.next = next;
+        }
+        // Damaged cubes worn by how much of their health they have lost, every material
+        // alike (`loss`).
+        if !laid.worn.is_empty() {
+            for surface in built.iter_mut().flat_map(|slot| slot.values_mut()) {
+                crate::loss::wear(surface, &laid.worn);
+            }
         }
         match detail {
             Detail::Near => drawn.near_by = built,

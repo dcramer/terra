@@ -14,6 +14,10 @@
 // - Roofs (D241): a roof's cubes over a stone room on four posts and its walls, "add a roof"
 //   as a hip, built a layer at a time a stage at a time, nothing floating; pictures of it
 //   half built and finished close up.
+// - Loss and repair (D193, D305): a log wall's first course knocked out, all of the wall
+//   over it comes down into debris and nothing floats, filmed as it falls; the debris
+//   gathered gives back its share; the stone room's wall damaged short of breaking, drawn
+//   worn, then mended with the hammer's repair, pictures of each.
 // - Timing: a single cube's change from the operation to its sections on screen (`Build:
 //   change on screen`, a median of several), the worst frame while building continuously,
 //   and while walking down the village's street (`sandbox.frames`).
@@ -32,7 +36,8 @@ let failures = 0;
 
 type Answer = { done: boolean; what: string; took?: string; gave?: string; refused?: string; cubes?: number[][] };
 type Part = { id: number; kind: string; cubes: number; built: number; done: boolean };
-type Base = { cubes: number; planned: number; floating: number; parts: Part[]; roofs: { cubes: number; built: number; stages: number[] }; player: number[] | null };
+type Pile = { at: number[]; cubes: number; props: number; gives: string };
+type Base = { cubes: number; planned: number; floating: number; damaged: number; debris: Pile[]; parts: Part[]; roofs: { cubes: number; built: number; stages: number[] }; player: number[] | null };
 type Spread = { median: number; p99: number; worst: number } | null;
 type Frames = { frames: number; frame: Spread; work: Spread; game: Spread; gpu: Spread };
 
@@ -46,7 +51,7 @@ const ground = async (x: number, z: number) => ((await game.call("build.ground",
 /// The layer of the cube the ground passes through under a column.
 const foot = async (x: number, z: number) => Math.floor((await ground(x, z)) / 0.5);
 const block = (at: number[], shape: unknown = "Whole", kind = "stone") => act("build.lay", { what: "block", min: at, max: at, kind, shape });
-const cube = async (at: number[]) => (await game.call("build.cube", { at })) as { kind: string | null; built?: boolean; pending?: string; level?: number };
+const cube = async (at: number[]) => (await game.call("build.cube", { at })) as { kind: string | null; built?: boolean; pending?: string; level?: number; damage?: number; health?: number };
 
 function check(that: boolean, what: string) {
   if (!that) throw new Error(what);
@@ -308,6 +313,93 @@ async function main() {
     const eave = await op([{ Empty: { cubes: [[14, 5, 12]] } }]);
     check(!eave.done, "a wall's top came out from under the roof");
     return `${now.roofs.cubes} roof cubes built in ${steps} steps, ${JSON.stringify(now.roofs.stages)}; under its eave: "${eave.refused}"`;
+  });
+
+  await step("collapse", async () => {
+    // A log wall a storey high on its stone footings, built through; then its first course
+    // of logs knocked out, as an attack would, filmed from the side as it falls.
+    await game.give("stone:20", "wood:20");
+    const near = await point([19, 0, 7]);
+    await game.warp(eastSouth(near.from_start), eastSouth((await point([15, 0, 6])).from_start));
+    const laid = await act("build.lay", { what: "wall", min: [30, 0, 10], max: [30, 0, 15], kind: "logs" });
+    check(laid.done, `the wall was refused: ${laid.refused}`);
+    for (let round = 0; round < 60; round++) {
+      await stock();
+      await game.give("wood:10");
+      const done = await acts("build.fill", { steps: 12 });
+      if (done.length < 12 && done.every((each) => each.done)) break;
+      const refused = done.find((each) => !each.done);
+      if (refused && !refused.refused?.startsWith("You need")) throw new Error(`refused: ${refused.refused} (${refused.what})`);
+    }
+    // The first course of logs in each column, over its footing.
+    const course: number[][] = [];
+    for (let z = 10; z <= 15; z++) {
+      for (let y = -6; y < 8; y++) {
+        if ((await cube([30, y, z])).kind === "logs") {
+          course.push([30, y, z]);
+          break;
+        }
+      }
+    }
+    check(course.length === 6, `the wall's first course is ${JSON.stringify(course)}`);
+    const before = await base();
+    const [eye, at] = [await point([10.5, 2.4, 13.5]), await point([15.25, 1.2, 6.5])];
+    await game.call("sandbox.look", { at: at.world, from: eye.world });
+    await game.waitSeconds(2);
+    await game.shot("shots/rules-collapse-0.png");
+    const last = await game.film("shots/rules-collapse-fall.png", 60);
+    const hit = (await game.call("build.damage", { at: course[0], to: course[course.length - 1] })) as Answer & { fell: number; took_ms: number };
+    check(hit.done, `the blow was refused: ${hit.refused}`);
+    await game.filmed(last);
+    await game.waitSeconds(2);
+    await game.shot("shots/rules-collapse-1.png");
+    const after = await base();
+    check(after.floating === 0, `${after.floating} cubes float`);
+    check(after.debris.length >= 6, `${after.debris.length} piles of debris`);
+    // Every cube of the wall over the course came down; its footings stand.
+    for (const at of course) {
+      check((await cube([at[0], at[1] + 1, at[2]])).kind === null, `the log over ${at} still stands`);
+      check((await cube([at[0], at[1] - 1, at[2]])).kind !== null, `the footing under ${at} fell`);
+    }
+    // Gathered, the debris is gone and what it gave back came to the pack.
+    const gathered = (await acts("build.gather")).filter((each) => each.done);
+    check(gathered.length === after.debris.length, `${gathered.length} of ${after.debris.length} piles gathered`);
+    check((await base()).debris.length === 0, "debris left after gathering it");
+    await game.waitSeconds(2);
+    await game.shot("shots/rules-collapse-2.png");
+    await game.call("sandbox.release");
+    check(before.cubes - after.cubes === hit.fell, `${before.cubes - after.cubes} cubes gone, ${hit.fell} said to fall`);
+    return `${hit.fell} cubes fell, worked out in ${hit.took_ms.toFixed(1)} ms, into ${after.debris.length} piles; gathered: ${gathered.map((each) => each.gave).join(", ")}`;
+  });
+
+  await step("repair", async () => {
+    // The stone room's west wall hit short of breaking: worn where it was hit, then mended.
+    // Three courses of it over the ground, three cubes along.
+    const wall: number[][] = [];
+    for (let z = 11; z <= 13; z++) {
+      const f = await foot(14, z);
+      for (let y = f + 1; y <= f + 3; y++) {
+        const found = await cube([14, y, z]);
+        if (found.kind === "stone" && found.built) wall.push([14, y, z]);
+      }
+    }
+    wall.sort((a, b) => a[1] - b[1] || a[2] - b[2]);
+    check(wall.length === 9, `the wall's cubes are ${JSON.stringify(wall)}`);
+    const health = (await cube(wall[0])).health ?? 600;
+    const hit = await act("build.op", { ops: [{ Damage: { cubes: wall, amount: Math.floor(health * 0.6) } }] });
+    check(hit.done, `the blow was refused: ${hit.refused}`);
+    const worn = await base();
+    check(worn.damaged === 9, `${worn.damaged} cubes damaged`);
+    await picture("repair-0", [7, 1.0, 6], [4.5, 2.2, 7.5]);
+    // Out from under damage is refused: mended first.
+    const out = await op([{ Empty: { cubes: [wall[wall.length - 1]] } }]);
+    check(!out.done && /repair/.test(out.refused ?? ""), `a damaged cube came out: ${out.refused ?? "done"}`);
+    await stock();
+    const mended = await op([{ Repair: { cubes: wall } }]);
+    check(mended.done, `the repair was refused: ${mended.refused}`);
+    check((await base()).damaged === 0, "cubes still damaged after the repair");
+    await picture("repair-1", [7, 1.0, 6], [4.5, 2.2, 7.5]);
+    return `9 cubes worn to ${Math.floor(health * 0.6)} of ${health}; mended, taking ${mended.took}`;
   });
 
   await step("edit-on-screen", async () => {

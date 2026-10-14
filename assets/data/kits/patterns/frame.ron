@@ -14,8 +14,11 @@
 //             timber; a pack adds its Masonry (the infill) and Floor
 // meets       the lightest (weight 1): every other kind runs through it, and it ends
 //             against them at its own end posts
+// toughness  how much damage a cube takes before it is destroyed (D193): wattle and daub
+//             gives way before stone or logs
 (
     pattern: Masonry,
+    toughness: (health: 300),
     framing: Some((
         wide: 0.18,
         proud: 0.03,

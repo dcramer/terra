@@ -94,6 +94,12 @@ pub struct Snapshot {
     #[serde(default)]
     pub prop_paid: Vec<([i32; 3], crate::Bill)>,
     pub ground: Vec<Sample>,
+    /// How much damage each damaged cube has taken (`loss`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub damage: Vec<([i32; 3], u16)>,
+    /// The debris lying about, by the cube it lies in.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub debris: Vec<([i32; 3], crate::loss::Pile)>,
 }
 
 /// Why a snapshot could not be read.
@@ -128,6 +134,16 @@ impl Base {
                 .map(|(&at, paid)| (at, paid.clone()))
                 .collect(),
             ground: self.ground.samples().collect(),
+            damage: self
+                .damage
+                .iter()
+                .map(|(&at, &damage)| (at, damage))
+                .collect(),
+            debris: self
+                .debris
+                .iter()
+                .map(|(&at, pile)| (at, pile.clone()))
+                .collect(),
         }
     }
 
@@ -161,7 +177,8 @@ impl Base {
         // cost comes to, where working with it could overflow, is refused.
         let bills = (snapshot.parts.iter().map(|(_, part)| &part.terms.per_step))
             .chain(snapshot.roofs.iter().map(|(_, roof)| &roof.per_stage))
-            .chain(snapshot.prop_paid.iter().map(|(_, paid)| paid));
+            .chain(snapshot.prop_paid.iter().map(|(_, paid)| paid))
+            .chain(snapshot.debris.iter().map(|(_, pile)| &pile.gives));
         if let Some(amount) = bills.filter_map(crate::Bill::out_of_bounds).next() {
             return Err(BadSnapshot::Amount(amount));
         }
@@ -175,6 +192,13 @@ impl Base {
                 .map(|prop| (prop.min, *prop))
                 .collect(),
             prop_paid: snapshot.prop_paid.iter().cloned().collect(),
+            damage: snapshot
+                .damage
+                .iter()
+                .copied()
+                .filter(|&(_, damage)| damage > 0)
+                .collect(),
+            debris: snapshot.debris.iter().cloned().collect(),
             ..Base::default()
         };
         for sample in &snapshot.ground {
@@ -475,8 +499,16 @@ written_changes!(
     Regroup {
         cubes: Vec<[i32; 3]>,
         part: PartId
-    };
-    FitProp(Prop)
+    },
+    Damage {
+        cubes: Vec<[i32; 3]>,
+        amount: u16
+    },
+    Repair { cubes: Vec<[i32; 3]> },
+    Gather { at: [i32; 3] },
+    Subside { samples: Vec<Sample> };
+    FitProp(Prop),
+    Restore(Box<crate::loss::Patch>)
 );
 
 /// A base restored from a snapshot and the changes saved since, as a saved game is loaded:

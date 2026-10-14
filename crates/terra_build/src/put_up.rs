@@ -132,6 +132,7 @@ mod tests {
                 .map(|&(kind, steps)| (Kind(kind), Terms::new(steps, Bill::default())))
                 .collect::<BTreeMap<_, _>>(),
             props: BTreeMap::new(),
+            toughness: BTreeMap::new(),
         }
     }
 

@@ -60,6 +60,9 @@ pub struct Kit {
     pub colours: KitColours,
     /// What its cubes cost to build (D139).
     pub cost: KitCost,
+    /// How it stands up to harm and what is left when it falls (D193): its pattern's, unless
+    /// its file says otherwise.
+    pub toughness: KitToughness,
     /// How each exposed edge of its cubes is dressed by its role (D215, `layout::roles`):
     /// its pieces, what each role takes, and its masks.
     pub dress: Dressing,
@@ -599,6 +602,50 @@ impl KitCost {
     }
 }
 
+/// How a kind stands up to harm (D193, [`crate::cost::Toughness`]): how much damage a cube
+/// takes before it is destroyed; the share of what went into a cube its debris gives back,
+/// and the share of its cost a repair from nothing takes, each (numerator, denominator) and
+/// a power of two no finer than a sixteenth, else the default half.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct KitToughness {
+    pub health: u16,
+    pub salvage: (u64, u64),
+    pub repair: (u64, u64),
+}
+
+impl Default for KitToughness {
+    /// Pine logs', as `patterns/coursed.ron` has it.
+    fn default() -> Self {
+        KitToughness {
+            health: 400,
+            salvage: (1, 2),
+            repair: (1, 2),
+        }
+    }
+}
+
+impl KitToughness {
+    /// As the rules hold it, a share that is not a power of two no finer than a sixteenth,
+    /// or more than the whole, taken as half.
+    pub fn rules(&self) -> crate::cost::Toughness {
+        let share = |(num, den): (u64, u64)| {
+            let amount = Amount::new(num, den.max(1));
+            let (_, den) = amount.parts();
+            if den.is_power_of_two() && den <= 16 && amount <= Amount::whole(1) {
+                amount
+            } else {
+                Amount::new(1, 2)
+            }
+        };
+        crate::cost::Toughness {
+            health: self.health.max(1),
+            salvage: share(self.salvage),
+            repair: share(self.repair),
+        }
+    }
+}
+
 /// How a kit lays its walls (D160: a few patterns in code, kits as data).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Pattern {
@@ -640,6 +687,7 @@ impl Kits {
         for kit in &self.0 {
             let terms = Terms::new(kit.cost.steps.max(1), KitCost::bill(&kit.cost.step));
             rules.kinds.insert(kit.kind(), terms);
+            rules.toughness.insert(kit.kind(), kit.toughness.rules());
         }
         rules
     }
@@ -826,6 +874,7 @@ impl Default for Kit {
             roof: Roofing::default(),
             textures: BTreeMap::new(),
             cost: KitCost::default(),
+            toughness: KitToughness::default(),
             dress: Dressing::default(),
             colours: KitColours {
                 light: [0.74, 0.56, 0.37],
@@ -959,6 +1008,29 @@ mod tests {
         let mut kit = Kit::read(&format!("{MATERIALS}/{name}"), &read).unwrap();
         kit.dress.made = None;
         kit
+    }
+
+    #[test]
+    fn a_materials_toughness_is_its_patterns_unless_it_says_otherwise() {
+        // D305: each pattern says how a cube of it stands up to harm, and a material may
+        // say otherwise; shares are half unless said.
+        let health = |name: &str| shipped(name).toughness.rules().health;
+        let stone = shipped("stone.ron").toughness.rules();
+        assert_eq!(stone.salvage, Amount::new(1, 2));
+        assert!(health("stone.ron") > health("logs.ron"));
+        assert!(health("logs.ron") > health("wattle.ron"));
+        assert!(health("wattle.ron") > health("thatch.ron"));
+        // A share that is not a power of two, or more than the whole, is taken as half.
+        let odd = KitToughness {
+            health: 0,
+            salvage: (1, 3),
+            repair: (5, 4),
+        }
+        .rules();
+        assert_eq!(
+            (odd.health, odd.salvage, odd.repair),
+            (1, Amount::new(1, 2), Amount::new(1, 2))
+        );
     }
 
     #[test]

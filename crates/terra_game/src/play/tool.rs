@@ -208,7 +208,8 @@ fn drawn_wall(from: IVec2, to: IVec2, level: i32) -> Vec<IVec3> {
 }
 
 /// What the hammer does to the base (D139, D144): lays a plan, for nothing, at a click;
-/// builds what goes in next, takes apart what came last, or fits a door or shutters,
+/// builds what goes in next, takes apart what came last, fits a door or shutters, or mends
+/// what is damaged (D305),
 /// each held for a moment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Doing {
@@ -216,6 +217,7 @@ pub enum Doing {
     Build,
     TakeApart,
     Fit,
+    Repair,
 }
 
 /// What the hammer would do to the base now, worked out as it is aimed, and whether the
@@ -409,6 +411,11 @@ pub struct BuilderLook {
 }
 
 impl Builder {
+    /// The cube of the base the view is on, within reach, if any.
+    pub fn aimed(&self) -> Option<IVec3> {
+        self.aimed
+    }
+
     pub fn picked<'a>(&self, builds: &'a Builds) -> &'a Part {
         builds.part(self.part)
     }

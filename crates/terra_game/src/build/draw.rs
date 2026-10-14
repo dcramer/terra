@@ -225,7 +225,7 @@ impl KitMaterials {
     }
 
     /// A kind's material, or the first kit's for no kind.
-    fn get(&self, kind: Kind, material: Material) -> Option<&Handle<StandardMaterial>> {
+    pub(super) fn get(&self, kind: Kind, material: Material) -> Option<&Handle<StandardMaterial>> {
         self.by_kind
             .get(&(kind, material))
             .or_else(|| self.first.get(&material))

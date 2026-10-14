@@ -99,6 +99,21 @@ pub enum Op {
     /// terms: how parts that touch and agree are merged, and a part taken apart into pieces
     /// split (`parts`), so refunds stay exact whatever the cubes are grouped in.
     Regroup { cubes: Vec<[i32; 3]>, part: PartId },
+    /// Harm cubes, as an attack does (D90, D193; `loss`): so much damage to each with
+    /// anything in it; one left with no health is destroyed, and what then hangs from
+    /// nothing collapses into debris. Never refused for what it brings down.
+    Damage { cubes: Vec<[i32; 3]>, amount: u16 },
+    /// Mend damaged cubes, for a share of what they cost (`loss`).
+    Repair { cubes: Vec<[i32; 3]> },
+    /// Gather the debris lying in a cube: what it gives back.
+    Gather { at: [i32; 3] },
+    /// The ground under columns gives way, or rises (D193): sampled again as [`Op::Ground`]
+    /// is, but never refused; what it leaves hanging collapses into debris.
+    Subside { samples: Vec<Sample> },
+    /// Puts back what harm, the ground giving way, a repair or gathering changed: the
+    /// inverse the server made of one of those, saying itself what it takes and gives, so
+    /// not a player's to send (`loss::Patch`).
+    Restore(Box<crate::loss::Patch>),
 }
 
 /// A claim's ground and its budget of planned cubes (D193).
@@ -212,6 +227,12 @@ pub enum Refusal {
     NotOpen(IVec3),
     /// The ground would go from under what is built.
     Undermines(IVec3),
+    /// It has taken no damage.
+    NotDamaged(IVec3),
+    /// It is damaged: mended before it is taken apart (`loss`).
+    Damaged(IVec3),
+    /// No debris lies there.
+    NoDebris(IVec3),
 }
 
 impl Refusal {
@@ -254,6 +275,9 @@ impl Refusal {
             Refusal::NoHole => "It needs a hole in a built wall that fits it.".into(),
             Refusal::NotOpen(_) => "That's not an opening.".into(),
             Refusal::Undermines(_) => "That would dig out from under what is built.".into(),
+            Refusal::NotDamaged(_) => "It isn't damaged.".into(),
+            Refusal::Damaged(_) => "It's damaged: repair it first.".into(),
+            Refusal::NoDebris(_) => "There's no rubble there.".into(),
         }
     }
 }
@@ -265,21 +289,32 @@ pub struct Done {
     pub gave: Bill,
     /// The operations that undo it, in order.
     pub undo: Vec<Op>,
+    /// What it destroyed or used up for good (`loss`): the share of what collapsed that its
+    /// debris does not give back, what a repair took.
+    pub lost: Bill,
+    /// What an undo brought back of what was lost.
+    pub recovered: Bill,
 }
 
 /// A prop fitted, and what was paid for it.
-type Fitted = (Prop, Bill);
+pub type Fitted = (Prop, Bill);
 
 /// An operation's checked effect, before it is applied.
 #[derive(Default)]
-struct Change {
-    parts: Vec<(PartId, Part)>,
-    cubes: Vec<(IVec3, Option<Cube>)>,
-    replacing: Vec<(IVec3, Option<Replacement>)>,
-    ground: Vec<Sample>,
+pub(crate) struct Change {
+    pub(crate) parts: Vec<(PartId, Part)>,
+    pub(crate) cubes: Vec<(IVec3, Option<Cube>)>,
+    pub(crate) replacing: Vec<(IVec3, Option<Replacement>)>,
+    pub(crate) ground: Vec<Sample>,
+    /// Columns whose ground is forgotten, as it was before it was sampled.
+    pub(crate) forget: Vec<[i32; 2]>,
     /// Props fitted, with what was paid for them, or taken out.
-    props: Vec<([i32; 3], Option<Fitted>)>,
-    done: Done,
+    pub(crate) props: Vec<([i32; 3], Option<Fitted>)>,
+    /// Cubes' damage set, none or nothing taking it away (`loss`).
+    pub(crate) damage: Vec<(IVec3, Option<u16>)>,
+    /// Debris laid or taken away.
+    pub(crate) debris: Vec<([i32; 3], Option<crate::loss::Pile>)>,
+    pub(crate) done: Done,
 }
 
 impl Base {
@@ -303,6 +338,23 @@ impl Base {
         }
         for sample in change.ground {
             self.ground.set(sample.column, Some(sample.height_cm));
+        }
+        for column in change.forget {
+            self.ground.set(column, None);
+        }
+        for (at, damage) in change.damage {
+            match damage.filter(|&damage| damage > 0) {
+                Some(damage) => self.damage.insert(at.to_array(), damage),
+                None => self.damage.remove(&at.to_array()),
+            };
+            // Drawn as worn as it is (`sections`).
+            self.cubes.mark(at);
+        }
+        for (at, pile) in change.debris {
+            match pile {
+                Some(pile) => self.debris.insert(at, pile),
+                None => self.debris.remove(&at),
+            };
         }
         for (at, prop) in change.props {
             let marks: Vec<IVec3> =
@@ -338,6 +390,8 @@ impl Base {
                 Ok(step) => {
                     done.took.add(&step.took);
                     done.gave.add(&step.gave);
+                    done.lost.add(&step.lost);
+                    done.recovered.add(&step.recovered);
                     undo.push(step.undo);
                 }
                 Err(refusal) => {
@@ -379,11 +433,16 @@ impl Base {
             Op::Close { cubes } => self.close(cubes, cx),
             Op::Ground { samples } => self.resample(samples, cx),
             Op::Regroup { cubes, part } => self.regroup(cubes, *part, cx),
+            Op::Damage { cubes, amount } => self.harm(cubes, *amount, cx),
+            Op::Repair { cubes } => self.repair(cubes, cx),
+            Op::Gather { at } => self.gather(IVec3::from_array(*at)),
+            Op::Subside { samples } => self.subside(samples, cx),
+            Op::Restore(patch) => self.restore(patch, cx),
         }
     }
 
     /// The cubes an operation names, sorted, each once and inside the claim.
-    fn named(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Vec<IVec3>, Refusal> {
+    pub(crate) fn named(&self, cubes: &[[i32; 3]], cx: &Context) -> Result<Vec<IVec3>, Refusal> {
         let set: BTreeSet<[i32; 3]> = cubes.iter().copied().collect();
         if set.is_empty() || set.len() != cubes.len() {
             return Err(Refusal::Malformed);
@@ -396,7 +455,7 @@ impl Base {
     }
 
     /// The cube at a place, or a refusal that nothing is there.
-    fn there(&self, at: IVec3) -> Result<Cube, Refusal> {
+    pub(crate) fn there(&self, at: IVec3) -> Result<Cube, Refusal> {
         self.cube(at).ok_or(Refusal::Nothing(at))
     }
 
@@ -616,8 +675,17 @@ impl Base {
             if cube.is_built() {
                 return Err(Refusal::AlreadyBuilt(at));
             }
-            if cx.world.in_the_way(at) {
+            // Debris lying in it is gathered first (`loss`), and lying on it, as nothing
+            // goes in under what rests on it.
+            if cx.world.in_the_way(at) || self.debris.contains_key(&at.to_array()) {
                 return Err(Refusal::InTheWay(at));
+            }
+            if self.debris.contains_key(&(at + IVec3::Y).to_array()) {
+                return Err(Refusal::InTheWay(at + IVec3::Y));
+            }
+            // A damaged cube is mended before more goes in, as before anything comes out.
+            if self.damage.contains_key(&at.to_array()) {
+                return Err(Refusal::Damaged(at));
             }
             let terms = self.terms(&cube);
             change.done.took.add(&terms.per_step);
@@ -695,6 +763,15 @@ impl Base {
             }
             if cx.world.holds_item(at) {
                 return Err(Refusal::Holds(vec![Holder::Item(at)]));
+            }
+            // Debris lies on it, as an item would.
+            if self.debris.contains_key(&(at + IVec3::Y).to_array()) {
+                return Err(Refusal::Holds(vec![Holder::Item(at + IVec3::Y)]));
+            }
+            // A damaged cube is mended before it comes out, so taking apart, which gives
+            // back all that went in, is no way round a repair's cost (`loss`).
+            if self.damage.contains_key(&at.to_array()) {
+                return Err(Refusal::Damaged(at));
             }
             let terms = self.terms(&cube);
             change.done.gave.add(&terms.per_step);

@@ -43,6 +43,16 @@
 //! - `build.cube {at}`: a cube: its material, shape, fill, how far in, and what is pending.
 //! - `build.ground {columns}`: the ground's height under the middle of each column, in metres
 //!   in the base's own space, as the planet has it now: to see what building changed of it.
+//! - `build.damage {at, to?, amount?, build?}`: harms the cubes of the box from `at` to `to`
+//!   (`at` alone if not given) by `amount`, enough to destroy each if not given, as an attack
+//!   will (D90, D305): what then hangs from nothing collapses into debris. With `build`, a
+//!   scene's building whose name holds it (`castle`, with `--castle`) rather than the base.
+//! - `build.subside {columns, by_m}`: the ground under columns gives way by so many metres,
+//!   bringing down what it alone held (D193).
+//! - `build.repair {at, brush?}`: mends the damaged cubes of a brush's box round `at`, as
+//!   the hammer does with nothing picked.
+//! - `build.gather {at?}`: gathers the debris lying in a cube, or all of it, as the interact
+//!   key does.
 
 use super::act::{BuildRules, Building, Offcuts};
 use super::{Site, plans};
@@ -78,6 +88,169 @@ pub fn plugin(app: &mut App) {
     method(app, "build.carve", carve);
     method(app, "build.take_out", take_out);
     method(app, "build.cube", cube);
+    method(app, "build.damage", damage);
+    method(app, "build.subside", subside);
+    method(app, "build.repair", repair);
+    method(app, "build.gather", gather);
+}
+
+#[derive(Deserialize)]
+struct Harm {
+    at: [i32; 3],
+    to: Option<[i32; 3]>,
+    amount: Option<u16>,
+    build: Option<String>,
+}
+
+impl Harm {
+    /// The cubes of its box with anything in them.
+    fn cubes(&self, base: &terra_build::Base) -> Vec<[i32; 3]> {
+        let (a, b) = (
+            IVec3::from_array(self.at),
+            IVec3::from_array(self.to.unwrap_or(self.at)),
+        );
+        let (low, high) = (a.min(b), a.max(b));
+        (low.x..=high.x)
+            .flat_map(|x| {
+                (low.y..=high.y).flat_map(move |y| (low.z..=high.z).map(move |z| [x, y, z]))
+            })
+            .filter(|&at| base.is_in(IVec3::from_array(at)))
+            .collect()
+    }
+}
+
+/// Harms a scene's building, a castle's tower, by the same operation, to time a collapse
+/// (D185's castle).
+fn damage_built(harm: &Harm, name: &str, world: &mut World) -> BrpResult {
+    let rules = world.resource::<BuildRules>().rules.clone();
+    let mut builds = world.query::<(&Name, &mut super::Built)>();
+    let Some((_, mut built)) = builds
+        .iter_mut(world)
+        .find(|(each, _)| each.as_str().contains(name))
+    else {
+        return Err(refused(format!("there is no building called {name}")));
+    };
+    let cubes = harm.cubes(&built.base);
+    if cubes.is_empty() {
+        return Err(refused("nothing is built there"));
+    }
+    let amount = harm.amount.unwrap_or(u16::MAX);
+    let before = built.base.cubes().count();
+    let started = std::time::Instant::now();
+    let cx = terra_build::ops::Context::free(&rules);
+    let result = built.act(&[Op::Damage { cubes, amount }], &cx);
+    let took_ms = started.elapsed().as_secs_f32() * 1000.0;
+    let fell = before - built.base.cubes().count();
+    info!("Build: damage {name}: {fell} cubes fell, worked out in {took_ms:.1} ms");
+    let mut said = answer("damage", result);
+    said["fell"] = json!(fell);
+    said["piles"] = json!(built.base.debris().count());
+    said["took_ms"] = json!(took_ms);
+    Ok(said)
+}
+
+/// Harms a box of cubes, as an attack will (D305): not the player's act, so not theirs to
+/// undo.
+fn damage(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let harm: Harm = parse_some(params)?;
+    if let Some(name) = harm.build.clone() {
+        return damage_built(&harm, &name, world);
+    }
+    as_player(world, |building, _| {
+        let cubes = harm.cubes(&building.site.base);
+        if cubes.is_empty() {
+            return Err(refused("nothing is built there"));
+        }
+        let amount = harm.amount.unwrap_or(u16::MAX);
+        let before = building.site.base.cubes().count();
+        let started = std::time::Instant::now();
+        let result = building.act(None, "damage", &[Op::Damage { cubes, amount }]);
+        let took_ms = started.elapsed().as_secs_f32() * 1000.0;
+        let fell = before - building.site.base.cubes().count();
+        let mut said = answer("damage", result);
+        said["fell"] = json!(fell);
+        said["piles"] = json!(building.site.base.debris().count());
+        said["took_ms"] = json!(took_ms);
+        Ok(said)
+    })
+}
+
+#[derive(Deserialize)]
+struct Subside {
+    columns: Vec<[i32; 2]>,
+    by_m: f32,
+}
+
+/// The ground under columns gives way by so many metres (D193).
+fn subside(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let asked: Subside = parse_some(params)?;
+    as_player(world, |building, _| {
+        let ground = building.site.base.ground();
+        let samples = asked
+            .columns
+            .iter()
+            .map(|&column| terra_build::Sample {
+                column,
+                height_cm: ground
+                    .height_cm(column)
+                    .saturating_sub((asked.by_m * 100.0).round() as i16),
+            })
+            .collect();
+        let before = building.site.base.cubes().count();
+        let result = building.act(None, "the ground gives way", &[Op::Subside { samples }]);
+        let fell = before - building.site.base.cubes().count();
+        let mut said = answer("the ground gives way", result);
+        said["fell"] = json!(fell);
+        Ok(said)
+    })
+}
+
+/// Mends the damaged cubes of a brush's box round a cube, as the hammer does.
+fn repair(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let asked: Brushed = parse_some(params)?;
+    as_player(world, |building, player| {
+        let cubes: Vec<[i32; 3]> =
+            plans::brush(IVec3::from_array(asked.at), asked.brush.unwrap_or(1))
+                .into_iter()
+                .filter(|&at| building.site.base.damage(at) > 0)
+                .map(|at| at.to_array())
+                .collect();
+        if cubes.is_empty() {
+            return Err(refused("nothing there is damaged"));
+        }
+        let result = building.act(Some(player), "repair", &[Op::Repair { cubes }]);
+        Ok(answer("repair", result))
+    })
+}
+
+#[derive(Deserialize)]
+struct GatherAsked {
+    at: Option<[i32; 3]>,
+}
+
+/// Gathers the debris lying in a cube, or all of it, as the interact key does.
+fn gather(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let asked: GatherAsked = parse_some(params.or(Some(json!({}))))?;
+    as_player(world, |building, player| {
+        let piles: Vec<[i32; 3]> = match asked.at {
+            Some(at) => vec![at],
+            None => building
+                .site
+                .base
+                .debris()
+                .map(|(at, _)| at.to_array())
+                .collect(),
+        };
+        if piles.is_empty() {
+            return Err(refused("there is no debris"));
+        }
+        let mut done = Vec::new();
+        for at in piles {
+            let result = building.act(Some(player), "gather the rubble", &[Op::Gather { at }]);
+            done.push(answer("gather the rubble", result));
+        }
+        Ok(Value::Array(done))
+    })
 }
 
 #[derive(Deserialize)]
@@ -625,6 +798,8 @@ fn cube(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             "pending": format!("{:?}", cube.pending),
             "part": cube.part.map(|part| part.0),
             "room": room,
+            "damage": site.base.damage(IVec3::from_array(at)),
+            "health": rules.rules.toughness(cube.kind).health,
         }),
     })
 }
@@ -703,6 +878,18 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         .cubes()
         .filter(|(_, cube)| cube.fill == Fill::Open)
         .count();
+    // What is damaged, and the debris lying about (D305).
+    let debris: Vec<Value> = base
+        .debris()
+        .map(|(at, pile)| {
+            json!({
+                "at": at.to_array(),
+                "cubes": pile.cubes(),
+                "props": pile.props,
+                "gives": pile.gives.to_string(),
+            })
+        })
+        .collect();
     Ok(json!({
         "origin": from_start(Vec3::ZERO),
         "cell_m": CELL_M,
@@ -711,6 +898,8 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "planned": base.store().planned(),
         "openings": openings,
         "floating": base.floating().len(),
+        "damaged": base.damaged().count(),
+        "debris": debris,
         "room_cubes": base.room_cubes(),
         "rooms": base.room_count(),
         "parts": parts,

@@ -849,6 +849,19 @@ fn plan_work(
                 work: found,
             })
         }
+        // With nothing picked, a damaged cube aimed at is mended (D305).
+        (_, Target::Structure { cube })
+            if builder.stowed && building.site.base.damage(cube) > 0 =>
+        {
+            work(
+                building,
+                Doing::Repair,
+                "repair".to_string(),
+                vec![Op::Repair {
+                    cubes: vec![cube.to_array()],
+                }],
+            )
+        }
         // With nothing picked, what goes in next.
         (_, Target::Structure { cube }) if builder.stowed => {
             let part = building.site.base.cube(cube).and_then(|cube| cube.part);

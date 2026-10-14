@@ -19,6 +19,8 @@
 //!   from their neighbours (`layout::roofs`): no wall tile, floor or room of their own.
 //! - **Doors and shutters are props** ([`Prop`]) fitted into holes in built walls, their
 //!   leaves hung on the hole's sides ([`fitting`]).
+//! - **Cubes take damage and are repaired** ([`loss`], D193): one destroyed, what then
+//!   hangs from nothing collapses into debris that gives back part of what went in.
 //! - **Everything a player does is an operation** ([`ops::Op`]), checked by one pure
 //!   function against the state when it arrives, and undone by its inverse: nothing
 //!   floats, and nothing is taken while something rests on it ([`support`], D193).
@@ -38,6 +40,7 @@ pub mod castle;
 pub mod checker;
 pub mod cost;
 pub mod cubes;
+pub mod debris;
 pub mod draw;
 pub mod dress;
 mod example;
@@ -48,6 +51,7 @@ pub mod inspect;
 pub mod kit;
 pub mod layers;
 pub mod layout;
+pub mod loss;
 mod mesh;
 pub mod modules;
 pub mod ops;
@@ -66,7 +70,7 @@ pub mod timber;
 pub mod village;
 mod walk;
 
-pub use cost::{Amount, Bill, PropKind, Rules, Terms};
+pub use cost::{Amount, Bill, PropKind, Rules, Terms, Toughness};
 pub use cubes::{Cube, Cubes, Facing, Fill, Kind, PartId, Pending, Replacement, Shape, State};
 pub use example::{
     RoofParts, VILLAGE_HOUSES, bench_village, example, plan as roof_plan, roof_over, roof_rows,
@@ -345,6 +349,11 @@ pub struct Base {
     props: BTreeMap<[i32; 3], Prop>,
     /// What was paid for each fitted prop, which taking it out gives back.
     prop_paid: BTreeMap<[i32; 3], Bill>,
+    /// How much damage each cube with anything in it has taken, where it has taken any
+    /// (D193, `loss`).
+    damage: BTreeMap<[i32; 3], u16>,
+    /// The debris lying where what collapsed fell, by the cube it lies in (`loss`).
+    debris: BTreeMap<[i32; 3], loss::Pile>,
     ground: Ground,
     /// Each column of cubes, by where it stands, and its layers.
     columns: BTreeMap<[i32; 2], BTreeSet<i32>>,
@@ -383,7 +392,9 @@ impl Base {
                 + layers
                 + self.parts.len()
                 + self.replacing.len()
-                + self.props.len())
+                + self.props.len()
+                + self.damage.len()
+                + self.debris.len())
                 * NODE
     }
 

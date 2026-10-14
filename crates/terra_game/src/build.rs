@@ -32,6 +32,7 @@ mod going_up;
 mod hlod;
 mod layout;
 mod light;
+mod loss;
 mod maps;
 mod memory;
 pub(crate) mod plans;
@@ -359,6 +360,7 @@ pub fn plugin(app: &mut App) {
 pub(crate) fn player_plugin(app: &mut App) {
     act::plugin(app);
     props::plugin(app);
+    loss::plugin(app);
     remote::plugin(app);
     memory::remote(app);
     going_up::plugin(app);

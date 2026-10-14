@@ -52,7 +52,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Move what is placed | Subnautica 2 | Built for items, not walls |
 | Take apart, giving back everything | Enshrouded, Subnautica, Valheim | Built; what does not fit drops at your feet |
 | Undo for a short while | Enshrouded, Rust | Built: Y, within a minute |
-| Repair | Rust, Valheim, The Forest | Missing: nothing built takes damage yet |
+| Repair | Rust, Valheim, The Forest | Built: the hammer mends a damaged cube for a share of its cost (D305); attacks to damage it are still to come (D90) |
 | Change a piece's material in place | Rust, 7 Days to Die | Built: Change material, a brush's box of built cubes, the old out from under what stays and given back, the new built (D232) |
 | Plans that cost nothing, then constructed part by part | The Forest, Ark Ascended | Built (D139, D201) |
 | Building from storage nearby, not only the pack | Enshrouded | Built: chests, and what is built in a claim draws on them after the pack (D141, D295) |
@@ -138,7 +138,11 @@ What is constructed stays where it is built; to move a wall, take it apart and l
 
 ### Repairing
 
-With the hammer in hand and nothing picked, aim at something damaged: its damage shows, and holding left mouse mends it for a little of its cost (D90; not built, since nothing takes damage yet).
+With the hammer in hand and nothing picked, aim at something damaged: its damage shows, darker and broken the more it has lost, and holding left mouse mends it for a share of its cost, a quarter of that share for each quarter of its health lost (D305). A damaged cube is mended before anything more is built into it or taken out of it.
+
+### Collapse and debris
+
+What loses its support without being asked, to an attack or the ground giving way, collapses (D193): everything no longer joined to the ground falls straight down and lies as rubble, logs as logs and stone as broken stone, giving back part of what went into it (a half unless its kind says otherwise) when gathered with the interact key; the rest is lost. Rubble is in the way of building where it lies. Nothing takes damage until attacks come (D90); until then the remote and a debug key (F9, on the cube aimed at) do it.
 
 ### To lock down
 
@@ -314,7 +318,7 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 - **Taking apart** gives back everything it cost (built); what does not fit drops at your feet (built).
 - **Undo**: the last thing built or taken apart, within a minute (built, on Y).
 - **Moving**: items now (built); walls as a whole later (open).
-- **Repair**: once bases take damage (D90), the hammer mends what it built, for a little of its cost (proposed). Tools and gear already wear and are mended at stations (D99).
+- **Repair**: the hammer mends what is damaged, for a share of its cost (built, D305); what collapses lies as rubble to gather. Tools and gear already wear and are mended at stations (D99).
 - **Material**: Change material, a brush's box of built cubes changed in place, the old out and given back, the new built (built, D232).
 
 ## Stability
@@ -441,7 +445,7 @@ For the developers to reorder. Each step is small enough to play and judge.
 3. **Large materials** (D140): logs that lie where trees fall, carried on the shoulder; a log pile to keep them, later unlocked. How is open (D296).
 4. **Up and down**: floors drawn on their own, posts, stairs and ramps (built, D220); ladders.
 5. **Doors and defences**: doors that open and lock by the claim; fences, walls and gates drawn as a line.
-6. **Damage and repair**, with the first attacks on a base (D90).
+6. **Damage and repair** (damage, collapse into rubble and repair built, D305), with the first attacks on a base (D90).
 7. **More kinds of construction** (earth and wattle and daub built, D227; changing them in place built, D232); better transport, unlocked (D140).
 8. **Carving and brushes** (built, D226, D233).
 9. **Stability**, after the MVP (D142).

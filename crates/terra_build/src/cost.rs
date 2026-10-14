@@ -63,6 +63,11 @@ impl Amount {
         Amount::new(self.num * count, self.den)
     }
 
+    /// A share of this: so much of it as `share` is of one.
+    pub fn of(self, share: Amount) -> Amount {
+        Amount::new(self.num * share.num, self.den * share.den)
+    }
+
     /// What is left taking `other` away, or `None` if it is more than this.
     pub fn minus(self, other: Amount) -> Option<Amount> {
         let den = lcm(self.den, other.den);
@@ -177,6 +182,15 @@ impl Bill {
         bill
     }
 
+    /// A share of this bill: so much of each as `share` is of one.
+    pub fn share(&self, share: Amount) -> Bill {
+        let mut bill = Bill::default();
+        for (material, amount) in &self.0 {
+            bill.add_one(material, amount.of(share));
+        }
+        bill
+    }
+
     /// Takes another bill from this one, or `None`, changing nothing, if it holds more of
     /// something than this does.
     pub fn take(&mut self, other: &Bill) -> Option<()> {
@@ -264,18 +278,57 @@ impl Terms {
 )]
 pub struct PropKind(pub u16);
 
-/// What everything costs: the terms of each kind of construction, and each kind of prop.
-/// What is not listed is free, in one step, as in the yard (docs/building-tech.md).
+/// How a kind stands up to harm and what is left when it falls (D193, step 6 of
+/// docs/building-plan.md): how much damage a cube of it takes before it is destroyed, the
+/// share of what went into a cube that its debris gives back, and the share of its cost a
+/// repair takes for a cube brought back from nothing, a quarter of that for each quarter of
+/// its health it has lost. Shares are powers of two, so what they come to stays exact.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Toughness {
+    pub health: u16,
+    pub salvage: Amount,
+    pub repair: Amount,
+}
+
+impl Default for Toughness {
+    /// A kind no kit says anything of: a hundred, and half back either way.
+    fn default() -> Self {
+        Toughness {
+            health: 100,
+            salvage: Amount::new(1, 2),
+            repair: Amount::new(1, 2),
+        }
+    }
+}
+
+impl Toughness {
+    /// How many quarters of its health a cube with so much damage has lost, rounded up: 0
+    /// for none, 4 for all of it. What a repair is charged by, and how the damage is drawn.
+    pub fn quarters(&self, damage: u16) -> u8 {
+        let health = u32::from(self.health.max(1));
+        (u32::from(damage) * 4).div_ceil(health).min(4) as u8
+    }
+}
+
+/// What everything costs: the terms of each kind of construction, and each kind of prop;
+/// and how each kind stands up to harm. What is not listed is free, in one step, as in the
+/// yard (docs/building-tech.md), and as tough as [`Toughness::default`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Rules {
     pub kinds: BTreeMap<Kind, Terms>,
     pub props: BTreeMap<PropKind, Bill>,
+    pub toughness: BTreeMap<Kind, Toughness>,
 }
 
 impl Rules {
     /// The terms a kind is built on.
     pub fn of(&self, kind: Kind) -> Terms {
         self.kinds.get(&kind).cloned().unwrap_or_default()
+    }
+
+    /// How a kind stands up to harm.
+    pub fn toughness(&self, kind: Kind) -> Toughness {
+        self.toughness.get(&kind).copied().unwrap_or_default()
     }
 
     /// What a prop takes to fit.

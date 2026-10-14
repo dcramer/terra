@@ -35,6 +35,8 @@ pub enum Interactable {
     Door,
     /// Shutters fitted over a window, to open or shut.
     Shutters,
+    /// Debris of the base, to gather (D305).
+    Debris,
 }
 
 impl Interactable {
@@ -51,6 +53,7 @@ impl Interactable {
             Interactable::Storage => (0.4, 0.6),
             Interactable::Door => (1.1, 0.7),
             Interactable::Shutters => (0.5, 0.6),
+            Interactable::Debris => (0.2, 0.8),
         }
     }
 
@@ -68,6 +71,7 @@ impl Interactable {
             Interactable::Storage => "open it".to_string(),
             Interactable::Door => "open or shut the door".to_string(),
             Interactable::Shutters => "open or shut the shutters".to_string(),
+            Interactable::Debris => "gather the rubble".to_string(),
         }
     }
 }

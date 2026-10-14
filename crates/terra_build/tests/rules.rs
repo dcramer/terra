@@ -26,6 +26,7 @@ fn rules() -> Rules {
             (ROOF, Terms::new(4, Bill::of("Shakes", Amount::new(1, 32)))),
         ]),
         props: BTreeMap::from([(DOOR, Bill::of("Door", Amount::whole(1)))]),
+        toughness: BTreeMap::new(),
     }
 }
 
@@ -681,4 +682,151 @@ fn everything_a_walker_stands_on_is_a_cube() {
         base.cubes()
             .any(|(_, cube)| matches!(cube.shape, Shape::Stair(_)))
     );
+}
+
+// Loss and repair (D193, step 6): what loses its support without being asked collapses
+// into debris that gives back part of its materials; nothing floats.
+
+/// Something to hit: a stone room's walls eight cubes high, a floor across their tops,
+/// and logs standing out from one side, on level ground.
+fn hall(base: &mut Base, cx: &Context) -> Vec<[i32; 3]> {
+    let mut walls = Vec::new();
+    for x in 0..8 {
+        for z in 0..6 {
+            if x == 0 || x == 7 || z == 0 || z == 5 {
+                walls.extend(column(x, z, 0, 7));
+            }
+        }
+    }
+    plan(base, cx, STONE, &walls, Shape::Whole);
+    build(base, cx, &walls);
+    let floor: Vec<[i32; 3]> = (1..7)
+        .flat_map(|x| (1..5).map(move |z| [x, 7, z]))
+        .collect();
+    plan(base, cx, STONE, &floor, Shape::Whole);
+    build(base, cx, &floor);
+    let hangs: Vec<[i32; 3]> = (1..4).flat_map(|z| [[8, 4, z], [9, 4, z]]).collect();
+    plan(base, cx, LOGS, &hangs, Shape::Whole);
+    build(base, cx, &hangs);
+    walls
+}
+
+#[test]
+fn whatever_is_hit_nothing_is_left_floating_and_its_debris_gives_back_its_share() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    let walls = hall(&mut base, &cx);
+    let value = |base: &Base| {
+        let mut bill = Bill::default();
+        for (_, cube) in base.cubes() {
+            bill.add(&base.put_in(&cube));
+        }
+        bill
+    };
+    let debris = |base: &Base| {
+        let mut bill = Bill::default();
+        for (_, pile) in base.debris() {
+            bill.add(&pile.gives);
+        }
+        bill
+    };
+    // Every cube of its walls in turn, from the bottom, hit hard enough to destroy it.
+    for at in walls.iter().filter(|at| at[1] < 3) {
+        if !base.is_in(IVec3::from_array(*at)) {
+            continue;
+        }
+        let (was, lying) = (value(&base), debris(&base));
+        let done = base
+            .act(
+                &Op::Damage {
+                    cubes: vec![*at],
+                    amount: u16::MAX,
+                },
+                &cx,
+            )
+            .unwrap();
+        assert!(
+            base.floating().is_empty(),
+            "{at:?} left {:?}",
+            base.floating()
+        );
+        // Half of what came down lies in its debris, the rest lost; nothing made or lost
+        // besides.
+        let mut fell = was.clone();
+        fell.take(&value(&base)).expect("less is in");
+        let mut gained = debris(&base);
+        gained.take(&lying).expect("more lies about");
+        assert_eq!(gained, fell.share(Amount::new(1, 2)), "{at:?}");
+        let mut accounted = gained.clone();
+        accounted.add(&done.lost);
+        assert_eq!(accounted, fell, "{at:?}");
+    }
+    assert!(base.debris().count() > 0);
+}
+
+#[test]
+fn a_damaged_cube_is_mended_before_anything_more_goes_in_or_comes_out() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    let post = column(0, 0, 0, 2);
+    plan(&mut base, &cx, LOGS, &post, Shape::Whole);
+    // The post's foot one course in of two, hit.
+    base.act(&fill([0, 0, 0]), &cx).unwrap();
+    base.act(
+        &Op::Damage {
+            cubes: vec![[0, 0, 0]],
+            amount: 10,
+        },
+        &cx,
+    )
+    .unwrap();
+    let at = IVec3::new(0, 0, 0);
+    assert_eq!(base.check(&fill([0, 0, 0]), &cx), Err(Refusal::Damaged(at)));
+    assert_eq!(
+        base.check(&empty([0, 0, 0]), &cx),
+        Err(Refusal::Damaged(at))
+    );
+    base.act(
+        &Op::Repair {
+            cubes: vec![[0, 0, 0]],
+        },
+        &cx,
+    )
+    .unwrap();
+    base.act(&fill([0, 0, 0]), &cx).unwrap();
+    assert!(base.cube(at).unwrap().is_built());
+}
+
+#[test]
+fn debris_is_in_the_way_of_building_where_it_lies_until_gathered() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    // A post two high and an arm out from its top, which falls when the arm's root goes,
+    // onto a plan laid on the ground under it.
+    let post = column(0, 0, 0, 1);
+    plan(&mut base, &cx, STONE, &post, Shape::Whole);
+    build(&mut base, &cx, &post);
+    let arm = [[1, 1, 0], [2, 1, 0]];
+    plan(&mut base, &cx, STONE, &arm, Shape::Whole);
+    build(&mut base, &cx, &arm);
+    plan(&mut base, &cx, STONE, &[[2, 0, 0]], Shape::Whole);
+    base.act(
+        &Op::Damage {
+            cubes: vec![[1, 1, 0]],
+            amount: u16::MAX,
+        },
+        &cx,
+    )
+    .unwrap();
+    let lying = IVec3::new(2, 0, 0);
+    assert!(base.pile(lying).is_some());
+    assert_eq!(
+        base.check(&fill([2, 0, 0]), &cx),
+        Err(Refusal::InTheWay(lying))
+    );
+    base.act(&Op::Gather { at: [2, 0, 0] }, &cx).unwrap();
+    base.act(&fill([2, 0, 0]), &cx).unwrap();
 }

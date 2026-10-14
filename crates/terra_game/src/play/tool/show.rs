@@ -486,6 +486,7 @@ fn touched(ops: &[terra_build::ops::Op], placed: bool) -> Vec<IVec3> {
             | Op::Open { cubes }
             | Op::Close { cubes }
             | Op::Replace { cubes, .. }
+            | Op::Repair { cubes }
             | Op::Carve { cubes } => cubes.iter().map(|&at| IVec3::from_array(at)).collect(),
             Op::FitProp(prop) => prop.cubes().collect(),
             _ => Vec::new(),
