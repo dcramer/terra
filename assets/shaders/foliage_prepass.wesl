@@ -32,7 +32,7 @@ fn noise_at(frag_coord: vec4<f32>) -> f32 {
 // As foliage_fragment.wesl: what is right at the camera fades out. A shadow view stands far
 // off, so shadows keep it.
 fn near_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
-    let near = smoothstep(0.5, 1.6, distance(world, view.world_position));
+    let near = smoothstep(0.3, 0.9, distance(world, view.world_position));
     if near < 1.0 && noise_at(frag_coord) > near {
         discard;
     }
@@ -43,7 +43,7 @@ fn near_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
 fn edge_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
     let face = normalize(cross(dpdx(world), dpdy(world)));
     let towards = normalize(view.world_position - world);
-    let keep = smoothstep(0.08, 0.3, abs(dot(face, towards)));
+    let keep = smoothstep(0.04, 0.16, abs(dot(face, towards)));
     if noise_at(frag_coord) > keep {
         discard;
     }
@@ -100,7 +100,9 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
 
 @if(VERTEX_UVS) {
 @if(VERTEX_TANGENTS) {
-@if(STANDARD_MATERIAL_NORMAL_MAP) {
+// Not for a modelled trunk, which has no wind weights: its texture coordinates are not its
+// bark's, which the main pass lays on from three sides (D264).
+@if(STANDARD_MATERIAL_NORMAL_MAP && VERTEX_UVS_B) {
 @if(STANDARD_MATERIAL_NORMAL_MAP_UV_B)
         let uv = (uv_transform * vec3(in.uv_b, 1.0)).xy;
 @else

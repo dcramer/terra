@@ -42,7 +42,7 @@ use bevy::{
     render::render_resource::{AsBindGroup, TextureFormat},
     shader::ShaderRef,
 };
-use std::f32::consts::TAU;
+use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 use terra_gen::{Noise, Rng, Seed};
 use terra_world::cover::{CoverRules, CoverSource, Growing};
@@ -93,16 +93,18 @@ const SHADOW_HANDOVER_M: [f32; 2] = [14.0, 26.0];
 const BARK_M: Vec2 = Vec2::new(2.15, 2.15);
 /// The trees' barks (D247): the scan in `materials`, how many metres across its picture is,
 /// its tint, how deep its furrows are relief-mapped, and how much moss it grows. Three for
-/// oaks, two for pines, two for spruces, in that order.
+/// oaks, two for pines, two for spruces, in that order. Each tint takes its scan to bark's
+/// real albedo, about 0.08 to 0.1 linear on average (sRGB 80 to 90) whatever the scan's own
+/// (D264): tinted as the scans came, under Khronos PBR Neutral (D254) trunks read near black.
 #[allow(clippy::type_complexity)]
 const BARKS: [(&str, f32, (f32, f32, f32), f32, f32); 7] = [
-    ("oak_bark", 2.15, (0.58, 0.56, 0.54), 0.05, 1.0),
-    ("bark_willow", 1.0, (0.72, 0.68, 0.64), 0.06, 1.0),
-    ("bark_brown_02", 1.0, (0.62, 0.58, 0.55), 0.05, 1.0),
-    ("pine_bark", 2.0, (0.6, 0.54, 0.5), 0.05, 0.35),
-    ("pine_bark", 2.0, (0.68, 0.6, 0.54), 0.05, 0.3),
-    ("bark_brown_02", 1.0, (0.5, 0.49, 0.48), 0.04, 0.6),
-    ("pine_bark", 2.0, (0.5, 0.49, 0.48), 0.05, 0.6),
+    ("oak_bark", 2.15, (0.68, 0.66, 0.63), 0.05, 1.0),
+    ("oak_bark", 1.5, (0.62, 0.61, 0.6), 0.06, 1.0),
+    ("bark_brown_02", 1.0, (0.86, 0.82, 0.8), 0.05, 1.0),
+    ("pine_bark", 2.0, (0.84, 0.76, 0.7), 0.05, 0.35),
+    ("pine_bark", 2.0, (0.9, 0.8, 0.72), 0.05, 0.3),
+    ("bark_brown_02", 1.0, (0.78, 0.77, 0.76), 0.04, 0.6),
+    ("pine_bark", 2.0, (0.74, 0.72, 0.7), 0.05, 0.6),
 ];
 /// The solid shadow lumps are this much of the crown's size, so a low sun, which looks
 /// through many crowns, still comes through in places.
@@ -111,9 +113,14 @@ const SHADOW_LUMP: f32 = 0.6;
 const SUN_ONLY: usize = 1;
 /// How many kinds of bush there are; each is drawn many times. The trees' are `KINDS`.
 const BUSH_KINDS: u64 = 4;
-/// Veteran oaks' modelled trunks: each model in `models/nature/forest` and its clumps in
-/// `data/trees` (D235), how tall the models are, and how thick round their foot.
-const VETERANS: [(&str, &str); 2] = [("OakBough", "oak_bough"), ("OakBough2", "oak_bough_2")];
+/// Veteran oaks' modelled trunks: each model in `models/nature/forest` (near, and `_far`
+/// beyond the first level of detail, both made by tools/blender/trunk.py), its clumps in
+/// `data/trees` (D235), and which of `BARKS` it is drawn in (D264); how tall the models are,
+/// and how thick round their foot.
+const VETERANS: [(&str, &str, usize); 2] = [
+    ("OakBough", "oak_bough", 2),
+    ("OakBough2", "oak_bough_2", 0),
+];
 const VETERAN_M: f32 = 24.0;
 const VETERAN_TRUNK_M: f32 = 2.0;
 /// Tree feet are filed in squares this wide, to keep trees apart.
@@ -558,9 +565,9 @@ struct TreeModel {
     bark: Handle<Foliage>,
     /// The far crown's material, in its leaves' colour.
     far: Handle<StandardMaterial>,
-    /// A modelled trunk's material, for a tree whose wood is a model rather than grown; its
-    /// mesh is then `wood[0]`, drawn at every distance.
-    modelled: Option<Handle<StandardMaterial>>,
+    /// Whether its wood is a model rather than grown: then `wood[0]` near the camera and
+    /// `wood[1]` beyond, in `bark` laid on from three sides (D264).
+    modelled: bool,
 }
 
 /// The kinds of tree the forest grows, each grown once and drawn many times: what it is,
@@ -691,15 +698,14 @@ fn plant(
     unmipped.0.push((leaf_picture.clone(), Some(LEAF_CUT)));
     // Scanned furrowed bark, as an old oak's is, its colour in the range real bark has (D214),
     // with the relief and roughness that let it catch the sky's light in the shade. The scan
-    // is at the top of bark's range; this takes it to the darker grey-brown of an old oak,
-    // about sRGB 78, as the forests of the Witcher 3 and Sons of the Forest have it (D221).
-    // Fallen logs are of it too.
+    // is at the top of bark's range; this takes it to the grey-brown of an old oak, about
+    // sRGB 88, as the first of `BARKS` (D221, D264). Fallen logs are of it too.
     let bark = bark_material(
         &assets,
         &mut materials,
         &wind,
         "oak_bark",
-        Color::srgb(0.58, 0.56, 0.54),
+        Color::srgb(0.68, 0.66, 0.63),
         0.03,
         1.0,
     );
@@ -791,7 +797,8 @@ fn plant(
         far_crown(Color::srgb(0.13, 0.21, 0.12)),
     ];
     // Each kind's bark in several scans or shades, so a stand of them is not one bark (D247):
-    // old oaks' deep-furrowed willow, the finer greyer one and a darker brown; pines' pine
+    // old oaks' deep-furrowed willow, it again larger and greyer (Bark Willow, dark mud
+    // without plates, read as fur, D264) and a grey-brown with knots; pines' pine
     // bark, darker and lighter; spruces' the grey-brown scan and a grey pine bark. Each is
     // `BARKS`' entry: what scan, how many metres its picture covers, tint, relief and moss.
     let barks: Vec<(Handle<Foliage>, Vec2)> = BARKS
@@ -878,38 +885,44 @@ fn plant(
                 young,
                 bark,
                 far: far_material.clone(),
-                modelled: None,
+                modelled: false,
             }
         })
         .collect();
     // Veteran oaks: a trunk and limbs modelled (Tripo, from a concept drawn to the style
     // guide, art/props/oak_bough), far more gnarled and burred than a grown one can be, its
     // crown grown on it as cards at the clumps tools/blender/tips.py found along its outer
-    // branches (D235).
+    // branches (D235). The model's own texture read as blue-black clay beside the grown
+    // trunks, its baked shadows black: it is drawn in the grown oaks' bark instead, laid on
+    // by where each point is (D264).
     let mut trees = trees;
     let first_veteran = trees.len();
-    for (n, (model, tips)) in VETERANS.into_iter().enumerate() {
-        let path = format!("models/nature/forest/{model}.glb");
-        let material = plain.add(StandardMaterial::default());
-        // Darkened to the forest's bark, about sRGB 78 (D221).
-        scanned.0.push((
-            assets.load(
-                GltfAssetLabel::Material {
-                    index: 0,
-                    is_scale_inverted: false,
-                }
-                .from_asset(path.clone()),
-            ),
-            material.clone(),
-            Color::srgb(0.5, 0.48, 0.46),
-        ));
-        let trunk: Handle<Mesh> = assets.load(
-            GltfAssetLabel::Primitive {
-                mesh: 0,
-                primitive: 0,
-            }
-            .from_asset(path),
+    for (n, (model, tips, which)) in VETERANS.into_iter().enumerate() {
+        let (name, metres, (r, g, b), relief, moss) = BARKS[which];
+        let bark = bark_material(
+            &assets,
+            &mut materials,
+            &wind,
+            name,
+            Color::srgb(r, g, b),
+            relief,
+            moss,
         );
+        if let Some(mut material) = materials.get_mut(&bark) {
+            // From metres to the picture's repeats, as the shader projects it.
+            material.base.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / metres));
+        }
+        let trunk = |file: String| -> Handle<Mesh> {
+            assets.load(
+                GltfAssetLabel::Primitive {
+                    mesh: 0,
+                    primitive: 0,
+                }
+                .from_asset(file),
+            )
+        };
+        let near_trunk = trunk(format!("models/nature/forest/{model}.glb"));
+        let far_trunk = trunk(format!("models/nature/forest/{model}_far.glb"));
         let tips: Vec<species::Tip> = terra_world::data::read(&format!("trees/{tips}.ron"));
         let tree = species::modelled(&tips, VETERAN_TRUNK_M);
         let mut dice = seed.derive("veteran").index(n as u64).rng();
@@ -926,7 +939,7 @@ fn plant(
             near.triangles()
         );
         trees.push(TreeModel {
-            wood: [trunk.clone(), trunk.clone(), trunk],
+            wood: [near_trunk, far_trunk.clone(), far_trunk],
             crown_near: meshes.add(near.mesh()),
             crown_far: meshes.add(crown_far(&cards).mesh()),
             shadow: meshes.add(crown_stand_in(&cards).mesh()),
@@ -938,9 +951,9 @@ fn plant(
             skirt_m: 0.0,
             species: Species::Oak,
             young: false,
-            bark: barks[0].0.clone(),
+            bark,
             far: far_crowns[0].clone(),
-            modelled: Some(material),
+            modelled: true,
         });
     }
     let veterans_kinds = first_veteran..trees.len();
@@ -1128,15 +1141,18 @@ fn plant(
                     ),
                 ))
                 .with_children(|tree| {
-                    // A modelled trunk is one mesh at every distance.
-                    if let Some(material) = &model.modelled {
-                        tree.spawn((
-                            Mesh3d(model.wood[0].clone()),
-                            MeshMaterial3d(material.clone()),
-                            detail(0, 3, size),
-                        ));
+                    // A modelled trunk is its near mesh, then its far one at every distance
+                    // beyond, casting its shadow throughout.
+                    if model.modelled {
+                        for (level, last) in [(0, 0), (1, 3)] {
+                            tree.spawn((
+                                Mesh3d(model.wood[level].clone()),
+                                MeshMaterial3d(model.bark.clone()),
+                                detail(level, last, size),
+                            ));
+                        }
                     }
-                    for level in 0..if model.modelled.is_some() { 0 } else { 3 } {
+                    for level in 0..if model.modelled { 0 } else { 3 } {
                         // The simplest trunk stands on under the far crown too.
                         let last = if level == 2 { 3 } else { level };
                         let mut wood = tree.spawn((
@@ -1448,14 +1464,16 @@ struct Tree {
 /// sided, and gone at the last level, where its needles hide them. `bark_m` is how much of
 /// a limb one repeat of its bark's picture covers, round it and along it.
 fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
+    // Near the camera, round enough that no limb shows facets and a trunk's roots each have
+    // sides to swell on (D264).
     let (deepest, sides) = match tree.species {
         Species::Oak => (
             [3, 2, 1][detail],
-            [[20, 8, 5, 3], [10, 5, 4, 3], [6, 4, 3, 3]][detail],
+            [[36, 12, 7, 4], [14, 6, 4, 3], [7, 4, 3, 3]][detail],
         ),
         Species::Pine | Species::Spruce => (
             [2, 1, 0][detail],
-            [[16, 4, 3, 3], [9, 3, 3, 3], [6, 3, 3, 3]][detail],
+            [[28, 6, 4, 3], [12, 4, 3, 3], [7, 3, 3, 3]][detail],
         ),
     };
     let mut build = Build::default();
@@ -1478,19 +1496,29 @@ fn rings(limb: &Limb) -> (Vec<Vec3>, Vec<f32>) {
         // A branch runs out to a point, as a real one does, rather than ending in an open,
         // flat-cut tube (D247).
         let (mut points, mut radii) = (limb.points.clone(), limb.radii.clone());
-        if let (true, [.., before, last], Some(&r)) =
+        // It narrows over a few of its own widths, as a twig does, not to a pin at once.
+        if let (true, &[.., before, last], Some(&r)) =
             (limb.pointed, points.as_slice(), radii.last())
         {
-            let tip = *last + (*last - *before).normalize_or(Vec3::Y) * r * 3.0;
-            points.push(tip);
-            radii.push(r * 0.04);
+            let ahead = (last - before).normalize_or(Vec3::Y);
+            points.push(last + ahead * r * 2.0);
+            radii.push(r * 0.55);
+            points.push(last + ahead * r * 5.0);
+            radii.push(r * 0.05);
         }
         return (points, radii);
     }
     let (mut points, mut radii) = (vec![limb.points[0]], vec![limb.radii[0]]);
     for k in 1..limb.points.len() {
         let (a, b) = (limb.points[k - 1], limb.points[k]);
-        let spacing = if a.y < 3.0 { 0.35 } else { 1.0 };
+        // Close at the foot, where the roots swell out of it.
+        let spacing = if a.y < 1.2 {
+            0.12
+        } else if a.y < 3.0 {
+            0.35
+        } else {
+            1.0
+        };
         let count = (a.distance(b) / spacing).ceil().max(1.0) as usize;
         for n in 1..=count {
             let t = n as f32 / count as f32;
@@ -1502,11 +1530,16 @@ fn rings(limb: &Limb) -> (Vec<Vec3>, Vec<f32>) {
 }
 
 /// How a limb's radius varies round it and along it, as a share of its radius: shallow
-/// flutes running up the bark and broad lumps, and on a trunk five roots spreading at its
-/// foot, each tree its own by where it grew.
+/// flutes running up the bark and broad lumps, and on a trunk six to eight roots swelling
+/// out of its foot, each of its own size, width and height and curling a little round the
+/// trunk as it climbs, so no foot is a star of equal points (D264); each tree its own by
+/// where it grew.
 struct Shape {
     phase: f32,
     trunk: bool,
+    /// Each root: where round the trunk, how far it stands out (a share of the radius), how
+    /// wide (radians), and how high up the trunk it reaches (metres).
+    roots: Vec<(f32, f32, f32, f32)>,
 }
 
 impl Shape {
@@ -1514,9 +1547,28 @@ impl Shape {
         let p = limb.points[0];
         let phase =
             (libm::sinf(p.x * 12.9898 + p.z * 78.233 + p.y * 37.719) * 43_758.547).fract() * TAU;
+        let trunk = limb.depth == 0;
+        let roots = if trunk {
+            let mut dice = Seed((phase * 1.0e6) as u64).derive("roots").rng();
+            let count = 6 + dice.below(3);
+            let r = limb.radii[0];
+            (0..count)
+                .map(|k| {
+                    (
+                        (k as f32 + dice.range(-0.3, 0.3)) / count as f32 * TAU + phase,
+                        dice.range(0.18, 0.5),
+                        dice.range(0.16, 0.32),
+                        r * dice.range(0.5, 1.3) + 0.25,
+                    )
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         Self {
             phase,
-            trunk: limb.depth == 0,
+            trunk,
+            roots,
         }
     }
 
@@ -1529,9 +1581,17 @@ impl Shape {
             * libm::sinf(0.9 * along + 2.0 * angle);
         let mut shape = 1.0 + deep * (flutes + lumps);
         if self.trunk {
-            let foot = 1.0 - smoothstep(0.0, 1.6, up);
-            let root = 0.5 + 0.5 * libm::cosf(5.0 * angle + self.phase);
-            shape *= 1.0 + foot * foot * (0.3 * root * root - 0.1);
+            // Each root a ridge, highest at the ground and dying into the bole over its own
+            // height; the trunk drawn in a little between them.
+            let mut swell = 0.0f32;
+            for &(at, out, wide, high) in &self.roots {
+                let off = (angle - at - 0.12 * up + PI).rem_euclid(TAU) - PI;
+                let fall = libm::expf(-(up - 0.15).max(0.0) / high * 2.2);
+                let ridge = libm::expf(-(off / wide) * (off / wide));
+                swell = swell.max(out * ridge * fall);
+            }
+            let between = 0.08 * (1.0 - smoothstep(0.0, 1.2, up));
+            shape *= 1.0 + swell - between;
         }
         shape
     }
@@ -1552,12 +1612,21 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: Vec2) {
         |r: f32| (TAU * r.max(0.004) / wraps * bark_m.y / bark_m.x).min(bark_m.y * 2.0);
     let mut v = 0.0;
     let mut side = (points[1] - points[0]).any_orthonormal_vector();
+    // How far along the limb each ring is, and its radius at each side, so a normal can
+    // follow how the radius changes along it too: a root's back faces up out of the ground,
+    // not level, and a twig's tip leans forward as it narrows.
+    let mut alongs = vec![0.0f32; points.len()];
+    for i in 1..points.len() {
+        alongs[i] = alongs[i - 1] + points[i].distance(points[i - 1]);
+    }
+    let radius_at = |i: usize, angle: f32| radii[i] * shape.at(angle, alongs[i], points[i].y);
     for (i, (&point, &radius)) in points.iter().zip(&radii).enumerate() {
         if i > 0 {
             let step = point.distance(points[i - 1]);
             along += step;
             v += step / repeat_along(0.5 * (radius + radii[i - 1]));
         }
+        let (before, after) = (i.saturating_sub(1), (i + 1).min(points.len() - 1));
         let forward = if i + 1 < points.len() {
             points[i + 1] - point
         } else {
@@ -1580,7 +1649,9 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: Vec2) {
             let slope = radius
                 * (shape.at(angle + step, along, point.y) - shape.at(angle - step, along, point.y))
                 / (2.0 * step);
-            let normal = (out * r - round * slope).normalize_or(out);
+            let rise = (radius_at(after, angle) - radius_at(before, angle))
+                / (alongs[after] - alongs[before]).max(1.0e-4);
+            let normal = (out - round * slope / r.max(1.0e-4) - forward * rise).normalize_or(out);
             let uv = Vec2::new(j as f32 / sides as f32 * wraps, v);
             let index = build.vertex(
                 point + out * r,
@@ -1589,9 +1660,12 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: Vec2) {
                 Vec2::new(bend * bend, flutter),
                 Vec3::ONE,
             );
-            // How much of the sky it sees, under its own crown and its neighbours': little
-            // low on the trunk, most up in the crown (D216).
-            build.colours[index as usize][3] = 0.3 + 0.7 * smoothstep(0.0, 0.8, bend);
+            // How much of the sky it sees, under its own crown and its neighbours': least at
+            // the foot, which stays damp, dark and mossy for a metre or so, more up the bole,
+            // most up in the crown (D216). The foot's darkening reached eye height, and the
+            // trunks there read black (D264).
+            build.colours[index as usize][3] =
+                0.3 + 0.2 * smoothstep(0.0, 1.4, point.y) + 0.5 * smoothstep(0.0, 0.8, bend);
         }
     }
     let ring = sides + 1;
