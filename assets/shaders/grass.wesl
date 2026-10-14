@@ -96,15 +96,16 @@ fn cleared(root: vec3<f32>) -> f32 {
 // Gusts (D255): one wind for the grass, the bushes and the trees, as Ghost of Tsushima has it.
 // Its strength rises and falls as fronts roll downwind at about 6 m/s, waves 40 and 90 m long
 // (a gust every 7 to 15 s), so they never line up the same way twice, sharpened so calm spells
-// are still and gusts come through as fronts; the whole breathes slowly. From a fifth to
-// twice and a half the old steady wind, about the same on average.
+// are still and gusts come through as fronts; the whole breathes slowly. From under a half to
+// one and a half times the old steady wind, about the same on average: at two and a half, as
+// it was, a gust swung an oak's crown a metre (D282).
 fn gusts(downwind: f32, crosswind: f32, time: f32) -> f32 {
     let front = downwind - time * 6.0;
     let a = sin(front * 0.157 + crosswind * 0.05);
     let b = sin(front * 0.07 - crosswind * 0.083 + 1.7);
     let g = 0.5 + 0.5 * (0.55 * a + 0.45 * b);
     let breath = 0.8 + 0.2 * sin(time * 0.13 + 0.4);
-    return 1.5 * (0.12 + 1.6 * g * g * g) * breath;
+    return (0.45 + 1.1 * g * g * g) * breath;
 }
 
 fn sway(world: vec3<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
