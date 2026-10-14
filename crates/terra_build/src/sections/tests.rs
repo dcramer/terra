@@ -402,13 +402,13 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                     .collect();
                 let bed = |p: Vec3| {
                     beds.iter()
-                        .filter_map(|b| b.inside(p).map(|inside| (inside, b.face)))
+                        .filter_map(|b| b.at(p))
                         .max_by(|a, b| a.0.total_cmp(&b.0))
                 };
                 let heights = Heights {
                     sides: &flat,
                     top: &flat,
-                    bed: (!beds.is_empty()).then_some(&bed as &dyn Fn(Vec3) -> Option<(f32, f32)>),
+                    bed: (!beds.is_empty()).then_some(&bed as crate::surface::BedAt),
                     bed_key: None,
                 };
                 let (mut faces, mut tops) = (Surface::default(), Surface::default());
@@ -1184,7 +1184,8 @@ fn a_lintel_is_set_into_an_earth_wall_its_face_built_up_round_it() {
         };
         let out = -p.z;
         if inside > 0.05 {
-            assert!(out < bed.face, "earth at {p} through the lintel");
+            // Sunk behind the wall's own face, not only the lintel's.
+            assert!(out < 0.0, "earth at {p} not sunk behind the lintel");
             behind += 1;
         } else if inside > -0.01 && out > bed.face {
             over += 1;
@@ -1193,6 +1194,69 @@ fn a_lintel_is_set_into_an_earth_wall_its_face_built_up_round_it() {
     assert!(
         behind > 20 && over > 3,
         "{behind} behind, {over} over its edges"
+    );
+}
+
+#[test]
+fn an_openings_head_is_sunk_behind_its_lintels_underside() {
+    // A stone wall along X with a window in it, under lintels on both faces whose
+    // undersides lie in the plane of the opening's head: the head's face is sunk behind
+    // them, so the two are never drawn in one plane.
+    let kits = shipped();
+    let stone = kits.of(named(&kits, "stone")).unwrap().clone();
+    let maps = Maps::default();
+    let mut base = Base::default();
+    for x in 0..10 {
+        base.apply(BuildOp::SetWall {
+            tile: [x, 0, 0],
+            panel: Some(if (4..=5).contains(&x) {
+                Panel::WINDOW
+            } else {
+                Panel::Solid
+            }),
+            kind: stone.kind(),
+        });
+    }
+    let pieces = lay_among(&base, &stone, &kits).pieces;
+    let bed = pieces
+        .iter()
+        .filter_map(|p| crate::dress::bed(p, &stone))
+        .find(|b| b.over_opening)
+        .expect("a lintel");
+    let head = bed.from.y;
+    let (mut sunk, mut flush) = (0, 0);
+    let mut sections: BTreeSet<[i32; 3]> = BTreeSet::new();
+    sections.extend(pieces.iter().map(|p| p.section().to_array()));
+    for at in &sections {
+        let section = Section {
+            base: &base,
+            kits: &kits,
+            maps: &maps,
+            at: IVec3::from_array(*at),
+            progress: &Progress::Whole,
+        };
+        let drawn = draw(&section, &laid(&section), Reach::Near);
+        let Some(surface) = drawn
+            .near
+            .get(&(stone.kind(), crate::mesh::Material::Masonry))
+        else {
+            continue;
+        };
+        // The head's points over the opening's middle, across the wall's depth.
+        for p in surface.indexed().positions {
+            if (p.x - 2.5).abs() > 0.3 || (p.y - head).abs() > 0.05 || !(0.1..0.4).contains(&p.z) {
+                continue;
+            }
+            if (p.y - head).abs() < 2e-3 {
+                flush += 1;
+            } else if p.y > head + 0.005 {
+                sunk += 1;
+            }
+        }
+    }
+    assert!(
+        flush == 0 && sunk > 4,
+        "{flush} in the lintels' plane, {sunk} sunk"
     );
 }
 

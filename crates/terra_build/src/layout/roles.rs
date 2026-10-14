@@ -236,6 +236,13 @@ pub struct Roles<'a> {
     kind: Kind,
     thin: Vec<Kind>,
     capped: Vec<Kind>,
+    /// Whether the kind's foot is a plinth swept along it, which would run into a
+    /// footing's own (`footing_dressed`), rather than a member laid on what it stands on.
+    plinth: bool,
+    /// How high its foot's plinth stands over its line, and how far under its line each
+    /// trim along a top reaches, in ticks, from its pieces' profiles.
+    plinth_high: Option<i32>,
+    top_low: BTreeMap<Role, i32>,
     known: RefCell<BTreeMap<[i32; 3], Vec<Edge>>>,
 }
 
@@ -261,11 +268,36 @@ impl<'a> Roles<'a> {
             .filter(|kit| kits.carries(kind, kit.kind()) == crate::kit::Joint::Cap)
             .map(|kit| kit.kind())
             .collect();
+        let plinth = kits.of(kind).is_some_and(|kit| {
+            matches!(
+                kit.dress.roles.get(&Role::Foot),
+                Some(crate::kit::Dress::Profile { .. })
+            )
+        });
+        // A profile's lowest and highest, in ticks, where the kit dresses a role with one.
+        let span = |role: Role| {
+            let kit = kits.of(kind)?;
+            let Some(crate::kit::Dress::Profile { name, .. }) = kit.dress.roles.get(&role) else {
+                return None;
+            };
+            let profile = kit.dress.made.as_deref()?.profiles.get(name)?;
+            let low = profile.iter().map(|p| p[1]).fold(f32::MAX, f32::min);
+            let high = profile.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
+            Some((super::ticks(low), super::ticks(high)))
+        };
+        let plinth_high = span(Role::Foot).map(|(_, high)| high);
+        let top_low = [Role::Crest, Role::Meet, Role::Nose, Role::Sill]
+            .into_iter()
+            .filter_map(|role| span(role).map(|(low, _)| (role, low)))
+            .collect();
         Roles {
             base,
             kind,
             thin,
             capped,
+            plinth,
+            plinth_high,
+            top_low,
             known: RefCell::default(),
         }
     }
@@ -380,7 +412,12 @@ impl<'a> Roles<'a> {
                     continue;
                 }
                 if matches!(fv, Beyond::Other(_) | Beyond::Ground) || self.on_ground(cube, side) {
-                    push(Role::Foot, side, vertical);
+                    // Not where it stands on another kind's footing dressed with its own
+                    // foot along this side: one plinth there, the footing's, not two
+                    // stacked into one another.
+                    if !self.footing_dressed(cube - IVec3::Y, side) {
+                        push(Role::Foot, side, vertical);
+                    }
                 } else if fv == Beyond::Same
                     && self.solid(diagonal).is_some()
                     && self.solid(diagonal + side.step()).is_some()
@@ -410,6 +447,21 @@ impl<'a> Roles<'a> {
         out
     }
 
+    /// Whether a cube is another kind's, with a foot of its own along a side: open to the
+    /// air there, standing on the ground, a third kind or the ground passing it.
+    fn footing_dressed(&self, at: IVec3, side: Dir) -> bool {
+        if !self.plinth {
+            return false;
+        }
+        let Some(kind) = self.solid(at).filter(|&kind| kind != self.kind) else {
+            return false;
+        };
+        self.solid(at + side.step()).is_none()
+            && (self.buried(at - IVec3::Y)
+                || self.solid(at - IVec3::Y).is_some_and(|under| under != kind)
+                || self.on_ground(at, side))
+    }
+
     /// Whether the ground passes a side face of a cube: the cell beside it is clear of the
     /// ground and the one below that is in it.
     fn on_ground(&self, cube: IVec3, side: Dir) -> bool {
@@ -422,9 +474,38 @@ impl<'a> Roles<'a> {
         self.edges(cube).contains(&edge)
     }
 
+    /// How a foot on a cube follows the ground, kept under the trim along the cube's top on
+    /// a face it is on (a footing's cap where a wall stands on it): a plinth lifted clear of
+    /// high ground beside a short footing ran up into its cap, the two one in the other with
+    /// their ends in one plane. Lowered as far as it must be, its foot going as far down.
+    fn lift(&self, cube: IVec3) -> (i32, i32) {
+        let (lift, sink) = self.ground_lift(cube);
+        let Some(plinth) = self.plinth_high.filter(|_| lift > 0) else {
+            return (lift, sink);
+        };
+        let edges = self.edges(cube);
+        let top = edges
+            .iter()
+            .filter(|e| {
+                e.other == Dir::Up
+                    && edges
+                        .iter()
+                        .any(|f| f.role == Role::Foot && f.side == e.side)
+            })
+            .filter_map(|e| self.top_low.get(&e.role))
+            .map(|low| TICKS + low)
+            .min();
+        let over = top.map_or(0, |top| lift + plinth - top);
+        if over <= 0 {
+            return (lift, sink);
+        }
+        let lower = over.min(lift);
+        (lift - lower, (sink - lower).max(0))
+    }
+
     /// How a foot on a cube follows the ground: raised in steps of a course to stand
     /// clear of the highest ground beside the cube, and going on down to the lowest.
-    fn lift(&self, cube: IVec3) -> (i32, i32) {
+    fn ground_lift(&self, cube: IVec3) -> (i32, i32) {
         let bottom = cube.y * TICKS;
         let (mut high, mut low) = (i32::MIN, i32::MAX);
         for x in -1..=1 {
@@ -817,6 +898,52 @@ mod tests {
             border
                 .iter()
                 .all(|e| e.cube.y == 1 && e.edge.side == Dir::South)
+        );
+    }
+
+    #[test]
+    fn a_wall_with_a_plinth_on_a_footing_with_its_own_takes_none() {
+        // A brick wall on a stone footing a cube high on the ground: the footing's plinth
+        // is the foot there, not a second one stacked on it and run into it; on the
+        // ground, the brick has its own.
+        let plinth = |id: u16| {
+            let mut kit = Kit {
+                id,
+                pattern: Pattern::Masonry,
+                ..Kit::default()
+            };
+            kit.dress.roles.insert(
+                Role::Foot,
+                crate::kit::Dress::Profile {
+                    name: "plinth".into(),
+                    extend: 0.0,
+                    joints: true,
+                    material: None,
+                },
+            );
+            kit
+        };
+        let kits = Kits(vec![plinth(2), plinth(7)]);
+        let brick = Kind(7);
+        let mut base = base(&[([0, 0, 0], [3, 0, 0])]);
+        fill(&mut base, [0, 1, 0], [3, 3, 0], brick);
+        fill(&mut base, [5, 0, 0], [6, 3, 0], brick);
+        let feet = |at: [i32; 3]| {
+            Roles::new(&base, brick, &kits)
+                .dressed(IVec3::from_array(at))
+                .into_iter()
+                .filter(|e| e.edge.role == Role::Foot)
+                .count()
+        };
+        assert_eq!(feet([1, 1, 0]), 0);
+        assert_eq!(feet([5, 0, 0]), 3);
+        // The footing keeps its own.
+        let stone = Roles::new(&base, STONE, &kits);
+        assert!(
+            stone
+                .dressed(IVec3::new(1, 0, 0))
+                .iter()
+                .any(|e| e.edge.role == Role::Foot)
         );
     }
 

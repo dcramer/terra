@@ -105,6 +105,10 @@ pub const COURSE_M: f32 = CELL_M * 0.5;
 /// How wide and deep the chamfered joint between two stones of a band is.
 const JOINT_M: f32 = 0.012;
 const JOINT_DEPTH_M: f32 = 0.009;
+/// How far back a square end's part set into the wall is cut, for each metre it is in.
+const SQUARE_RECESS: f32 = 0.2;
+/// How far past a lintel's or a sill's back its reveal is sunk.
+const REVEAL_PAST_M: f32 = 0.06;
 /// How far a corner stone may run along a face it shares with the cube's other edge's
 /// stones: to half the cube, short of a joint, so the two meet and never pass.
 const SHARED_REACH_M: f32 = CELL_M * 0.5 - JOINT_M * 0.5;
@@ -284,6 +288,8 @@ pub struct Bed {
     /// Whether the opening is under it (a lintel) rather than over it (a sill): the edge
     /// along the opening is the one the wall does not lap onto.
     pub over_opening: bool,
+    /// How far it reaches into the wall behind the face, in metres.
+    pub back: f32,
 }
 
 impl Bed {
@@ -312,6 +318,51 @@ impl Bed {
             .min(edge(!self.over_opening, up - self.low))
             .min(edge(self.over_opening, self.high - up));
         Some(inside)
+    }
+
+    /// As [`Bed::inside`], for a point of the opening's reveal the piece's underside (a
+    /// lintel's) or top (a sill's) lies in: how far inside the piece's depth into the wall
+    /// it is, with how far the piece stands out of it, nothing. The reveal is sunk behind
+    /// the piece as the face is, else the two are drawn in one plane and fight.
+    pub fn reveal(&self, p: Vec3) -> Option<f32> {
+        let rel = p - self.from;
+        let flush = if self.over_opening {
+            self.low
+        } else {
+            self.high
+        };
+        if flush.abs() > 1e-3 || rel.dot(self.up).abs() > 1e-3 {
+            return None;
+        }
+        let deep = -rel.dot(self.out);
+        if deep < -1e-3 {
+            return None;
+        }
+        let length = self.from.distance(self.to);
+        let along = rel.dot((self.to - self.from) / length.max(1e-6));
+        // Sunk on a little past its back, where the lintel on the wall's other face meets
+        // it, so the head is behind both all the way across.
+        // Along it only its own ends bound it, not where it runs on into the next cube's,
+        // whose bed takes over past it.
+        if (!self.ends[0] && along < 0.0) || (!self.ends[1] && along > length) {
+            return None;
+        }
+        let end = |own: bool, inset: f32| if own { inset } else { f32::MAX };
+        Some(
+            (self.back + REVEAL_PAST_M - deep)
+                .min(end(self.ends[0], along))
+                .min(end(self.ends[1], length - along)),
+        )
+    }
+
+    /// Where a point of a wall's surface is against the piece, on its face or its reveal:
+    /// how far inside the piece's outline, how far the piece stands out there, and whether
+    /// the wall laps over its edges there: on its face, not on a reveal, where its edge
+    /// away from the opening is inside the wall.
+    pub fn at(&self, p: Vec3) -> Option<(f32, f32, bool)> {
+        self.inside(p)
+            .map(|inside| (inside, self.face, true))
+            .or_else(|| self.reveal(p).map(|inside| (inside, 0.0, false)))
     }
 }
 
@@ -355,6 +406,7 @@ pub fn bed(piece: &Piece, kit: &Kit) -> Option<Bed> {
         face,
         ends: ends.map(|end| !matches!(end, End::On | End::Step)),
         over_opening: role == layout::Role::Head,
+        back: -profile.iter().map(|p| p[0]).fold(0.0f32, f32::min),
     })
 }
 
@@ -430,11 +482,17 @@ impl Sweep {
             End::Square => self.extend,
             _ => 0.0,
         });
+        // A square end's part set into the wall cut back from its line, so it is not in the
+        // plane of the wall's end or an opening's reveal there, nor of the next piece's.
+        let recess = self.ends.map(|end| match end {
+            End::Square if self.extend == 0.0 => SQUARE_RECESS,
+            _ => 0.0,
+        });
         let joint = self
             .ends
             .map(|end| self.joints && matches!(end, End::On | End::Step));
-        let start = |o: f32| -extend[0] - o * mitre[0];
-        let end = |o: f32| length + extend[1] + o * mitre[1];
+        let start = |o: f32| -extend[0] - o * mitre[0] + (-o).max(0.0) * recess[0];
+        let end = |o: f32| length + extend[1] + o * mitre[1] - (-o).max(0.0) * recess[1];
         // Rings along it: at each end, and in from a joint by its chamfer.
         let mut rings: Vec<(f32, bool)> = vec![(f32::MIN, joint[0])];
         if joint[0] {

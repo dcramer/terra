@@ -94,6 +94,9 @@ impl Packed {
     }
 }
 
+/// Where a point of a surface is against the pieces set into it (`dress::Bed::at`).
+pub type BedAt<'a> = &'a dyn Fn(Vec3) -> Option<(f32, f32, bool)>;
+
 /// What a surface is displaced by: its material's height where its texture is at a point,
 /// from 0 to 1, and its tops' material's, if they have one.
 pub struct Heights<'a> {
@@ -101,10 +104,11 @@ pub struct Heights<'a> {
     pub top: &'a dyn Fn([f32; 2]) -> f32,
     /// Where a point of the surface is against a piece set into it, a lintel or a sill
     /// (`dress::Bed`): how far inside the piece's outline on the face it is, in metres (less
-    /// than nothing outside), and how far the piece's face stands out. Inside, the surface
+    /// than nothing outside), how far the piece's face stands out, and whether the surface
+    /// laps over its edge there. Inside, the surface
     /// is sunk behind its deepest relief, so the piece can sit all but flush; round the
     /// outline it is built up a little over the piece's edge, so the piece is set in it.
-    pub bed: Option<&'a dyn Fn(Vec3) -> Option<(f32, f32)>>,
+    pub bed: Option<BedAt<'a>>,
     /// A number for the pieces bedded near a cube, two cubes round it, that `bed` reads:
     /// what a face kept from one drawing to the next ([`FaceCache`]) must have the same.
     pub bed_key: Option<&'a dyn Fn(IVec3) -> u64>,
@@ -637,7 +641,7 @@ pub fn draw_slots(
                 p[b] += v * CELL_M;
                 p
             };
-            let within = |p: Vec3, reach: f32| bed(p).is_some_and(|(inside, _)| inside > -reach);
+            let within = |p: Vec3, reach: f32| bed(p).is_some_and(|(inside, ..)| inside > -reach);
             FACES.iter().any(|&(axis, side)| {
                 let near = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]]
                     .iter()
@@ -933,7 +937,7 @@ pub fn draw_slots(
                 let mut out = (relief + packed) * faded;
                 // Sunk behind a piece set into it, a little deeper than its deepest relief,
                 // and built up over its edges round its outline.
-                if let Some((inside, face)) = heights.bed.and_then(|bed| bed(p))
+                if let Some((inside, face, lapped)) = heights.bed.and_then(|bed| bed(p))
                     && inside > -BED_LAP_M
                 {
                     // How far over the piece's edge the wall is built here, by its own
@@ -945,7 +949,12 @@ pub fn draw_slots(
                     let sunk = ((inside - reach) / 0.015).clamp(0.0, 1.0);
                     let deepest = -(look.relief * 0.5) - packed.abs() - BED_DEPTH_M;
                     out += (deepest - out) * sunk;
-                    out = out.max(over * (face + BED_OVER_M));
+                    // Built up only where it laps over the edge: elsewhere a floor of
+                    // nothing would undo the sinking, leaving the wall in the plane of a
+                    // flush piece (a lintel's underside in its opening's head).
+                    if lapped && over > 0.0 {
+                        out = out.max(over * (face + BED_OVER_M));
+                    }
                 }
                 // Its normal the rounding's where it is no more than rounded, the same
                 // worked out from any face; else from its triangles (`ZERO`).

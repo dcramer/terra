@@ -1484,10 +1484,7 @@ fn draw_blocks(
         beds_at
             .get(&(p / CELL_M).floor().as_ivec3())?
             .iter()
-            .filter_map(|&index| {
-                let b = &beds[index];
-                b.inside(p).map(|inside| (inside, b.face))
-            })
+            .filter_map(|&index| beds[index].at(p))
             .max_by(|a, b| a.0.total_cmp(&b.0))
     };
     let bed_key = |cube: IVec3| {
@@ -1505,7 +1502,7 @@ fn draw_blocks(
     let heights = Heights {
         sides: &sides,
         top: &top,
-        bed: (!beds.is_empty()).then_some(&bed as &dyn Fn(Vec3) -> Option<(f32, f32)>),
+        bed: (!beds.is_empty()).then_some(&bed as crate::surface::BedAt),
         bed_key: (!beds.is_empty()).then_some(&bed_key as &dyn Fn(IVec3) -> u64),
     };
     // Floors, and walls of kinds drawn as boxes, hide a face; walls of other kits do not,

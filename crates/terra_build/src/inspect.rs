@@ -1014,9 +1014,15 @@ fn pokes_out(
             }
         }
         if !is_roof {
-            // Out of its cubes: how far from the nearest cube of the base, of any kind.
+            // Out of its cubes: how far from the nearest cube of the base, of any kind, out
+            // of any one of its faces (a trim at a corner stands out of both), unless it
+            // is in the ground, as a plinth sunk to meet it is.
             for p in t.p {
                 let cell = (p / CELL_M).floor().as_ivec3();
+                let ground = f32::from(base.ground().height_cm([cell.x, cell.z])) / 100.0;
+                if p.y < ground {
+                    continue;
+                }
                 let mut nearest = f32::MAX;
                 for dx in -1..=1 {
                     for dy in -1..=1 {
@@ -1029,7 +1035,7 @@ fn pokes_out(
                             let out = (low - p)
                                 .max(p - (low + Vec3::splat(CELL_M)))
                                 .max(Vec3::ZERO);
-                            nearest = nearest.min(out.length());
+                            nearest = nearest.min(out.max_element());
                         }
                     }
                 }
@@ -1297,6 +1303,42 @@ mod tests {
             holed.iter().any(|f| f.fault == Fault::SeeThrough),
             "{holed:?}"
         );
+    }
+
+    #[test]
+    fn a_trim_out_of_its_cubes_is_measured_off_each_face_and_not_in_the_ground() {
+        // A stone cube on the ground, and a trim's triangle round its corner, standing out
+        // of each face by `out`, at `y`.
+        let stone = crate::kit::Kit {
+            id: 2,
+            pattern: Pattern::Masonry,
+            ..Default::default()
+        };
+        let kits = Kits(vec![stone]);
+        let mut base = Base::default();
+        base.apply(crate::BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [0, 0, 0],
+            cube: Some(crate::Cube::new(Kind(2), Fill::Solid)),
+        });
+        let roofs = crate::layout::roofs::Roofs::whole(&base, &kits, crate::layout::Scope::ALL);
+        let found = |out: f32, y: f32| {
+            let c = |x: f32, z: f32| Vec3::new(x, y, z);
+            let drawn = Drawn {
+                tris: vec![tri([c(-out, -out), c(0.2, -out), c(-out, 0.2)], 0)],
+                meshes: vec!["plinth".into()],
+                kinds: vec![Some((Kind(2), Material::Dressed))],
+            };
+            let mut findings = Vec::new();
+            pokes_out(&base, &kits, &roofs, &drawn, Detail::Near, &mut findings);
+            findings
+        };
+        // An eighth of a cube out of both faces at a corner is a trim's reach.
+        assert!(found(0.06, 0.2).is_empty());
+        // Further out of one is not.
+        assert_eq!(found(0.1, 0.2).len(), 1);
+        // Under the ground, where a plinth is sunk to meet it, nothing is out.
+        assert!(found(0.1, -0.2).is_empty());
     }
 
     #[test]
