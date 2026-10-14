@@ -164,6 +164,11 @@ const LEAF: Vec4 = Vec4::new(0.15, 0.15, 1.6, 0.3);
 /// The middle layer's leaves (D269): greyed and darkened as the floor's (D268), lit through
 /// less than a crown's, as backlit they glowed lime, and as dark inside as a crown.
 const THICKET: Vec4 = Vec4::new(0.12, 0.1, 0.8, 0.25);
+/// How much of the light through a leaf is Bevy's own diffuse transmission (D279): little, as it
+/// takes the open sky through every leaf, unshaded by the crowns, which washed the forest's
+/// middle distance teal; the light through a leaf is the foliage shader's, from the sun and
+/// from the sky occlusion volume's light above it (D247, D272).
+const BEVY_THROUGH: f32 = 0.05;
 /// The far crowns' colours, oak, pine and spruce: the leaves' average, as the farthest level
 /// of a tree and the far forest past the meadow show them (D273).
 const FAR_CROWNS: [Color; 3] = [
@@ -734,23 +739,23 @@ fn plant(
             ..wind.clone()
         },
     };
-    let crown_leaves = materials.add(crown_material(Vec3::ZERO, LEAF, 0.25));
+    let crown_leaves = materials.add(crown_material(Vec3::ZERO, LEAF, BEVY_THROUGH));
     // The floor's and the middle layer's: greyed and darkened as the crowns' are, if less,
     // so their pictures' spring green reads as leaves in a wood's shade, not lime, and lit through
     // less, as backlit they glowed lime too (D268).
     let floor_cards = materials.add(crown_material(
         Vec3::ZERO,
         Vec4::new(0.12, 0.1, 0.0, 0.0),
-        0.35,
+        BEVY_THROUGH,
     ));
     // The middle layer's, greyed and darkened as the floor's, but shaded as a crown is: its
     // inside dark, its leaves lit through where the sun is behind them (`THICKET`, D269).
-    let thicket_cards = materials.add(crown_material(Vec3::ZERO, THICKET, 0.15));
+    let thicket_cards = materials.add(crown_material(Vec3::ZERO, THICKET, BEVY_THROUGH));
     // The near crown's leaves, whose cards drop out with distance (D223).
     let dropping_leaves = materials.add(crown_material(
         Vec2::from(CARDS_DROP_M).extend(1.0),
         LEAF,
-        0.25,
+        BEVY_THROUGH,
     ));
     // The shadow stand-ins: their cards shrink away over the handover, and the lumps grow in
     // then shrink away at the end of the shadows (D234).

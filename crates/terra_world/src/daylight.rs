@@ -258,8 +258,11 @@ fn keys() -> [(f32, Light); 6] {
 /// of the sky is open over the eye (D224, D273): the forest's own shaded green air under a
 /// closed canopy, the open air's in the open.
 fn haze_for(horizon: Vec3, open: f32) -> (Vec3, f32) {
-    let open = smoothstep(0.4, 0.95, open);
-    let shade = horizon.lerp(Vec3::new(0.42, 0.5, 0.42), 0.35) * 0.62;
+    // Only well out from under the trees: in a glade among old oaks, half open, it is still
+    // the forest's haze, and it is green, the light come through leaves, not the horizon's
+    // blue, which washed the middle distance teal (D279).
+    let open = smoothstep(0.55, 0.98, open);
+    let shade = horizon.lerp(Vec3::new(0.42, 0.5, 0.36), 0.65) * 0.62;
     let visible = super::scene::HAZE_VISIBLE_M
         * libm::powf(OPEN_VISIBLE_M / super::scene::HAZE_VISIBLE_M, open);
     (shade.lerp(horizon * OPEN_AIR, open), visible)
