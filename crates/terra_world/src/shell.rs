@@ -41,6 +41,11 @@ usage: terra_sandbox [options]
   --list                list the experiments and exit
   --radius <metres>     planet radius (default 2000)
   --shot <file.png>     save a screenshot once the scene has settled, then exit
+  --detail-sweep <from>-<to>@<frame>-<frame>
+                        hold the clock and the wind still and sweep how far detail reaches,
+                        every distance at which something changes its level of detail,
+                        from one share of its own to another over those frames, so what
+                        pops shows between frames of a still view (tools/sandbox/lodcheck.ts)
   --shots <prefix>@<frames>
                         save a screenshot on each of those frames, counted as --press
                         counts them, as <prefix>-<frame>.png, then exit: a list and
@@ -191,6 +196,8 @@ pub struct Options {
     pub shot: Option<PathBuf>,
     /// Screenshots on chosen frames of one run (`--shots`).
     pub shots: Option<Shots>,
+    /// Detail swept over frames, the clock held still (`--detail-sweep`, D225).
+    pub detail_sweep: Option<crate::detail::Sweep>,
     pub settle_frames: u32,
     pub bench: bool,
     /// Listen for a script driving the run (`remote`), and on which port.
@@ -346,6 +353,7 @@ impl Options {
             radius_m: 2000.0,
             shot: None,
             shots: None,
+            detail_sweep: None,
             settle_frames: SETTLE_FRAMES,
             bench: false,
             remote: false,
@@ -467,6 +475,10 @@ impl Options {
                 "--trace" => options.trace = Some(PathBuf::from(value("--trace")?)),
                 "--shot" => options.shot = Some(PathBuf::from(value("--shot")?)),
                 "--shots" => options.shots = Some(Shots::parse(&value("--shots")?)?),
+                "--detail-sweep" => {
+                    options.detail_sweep =
+                        Some(crate::detail::Sweep::parse(&value("--detail-sweep")?)?)
+                }
                 "--walls" => {
                     options.walls = match value("--walls")?.as_str() {
                         kind @ ("logs" | "plain") => Some(kind.to_string()),

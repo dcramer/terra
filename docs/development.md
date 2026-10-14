@@ -31,6 +31,7 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | `cargo xtask yard` | Play the yard: a flat test level for working on building. Smooth ground with nothing on it, building free and instant without a claim stone, the sun at noon, nothing saved. The same as `--level yard` on the play experiment, so the sandbox remote can drive it. |
 | `cargo xtask vantage` | The vantage sheet: the lush forest from fixed views at 13:00 and 17:00, side by side in `shots/vantage/sheet.jpg` ([tools/sandbox](../tools/sandbox/README.md#scripts)) |
 | `cargo xtask film` | A video of the forest walk, or any scripted run, at the game's own speed, in `shots/film.mp4` ([tools/sandbox](../tools/sandbox/README.md#scripts)) |
+| `cargo xtask lodcheck` | What pops as detail changes (a crown clipping out, a shadow clipping in), from still views while every switch distance is swept; fails past a limit ([tools/sandbox](../tools/sandbox/README.md#scripts)) |
 | `cargo xtask pops` | What pops in or out, or flickers, frame by frame through a stretch of the forest walk, worst frames marked in `shots/pops/pops.jpg` ([tools/sandbox](../tools/sandbox/README.md#scripts)) |
 | `cargo xtask loop` | Play the MVP's loop by script and check every step happened ([QA for agents](#checking-the-game-without-a-person-qa-for-agents)) |
 | `cargo xtask bench` | Time the benchmark scenes ([Measuring performance](#measuring-performance)) |

@@ -45,6 +45,7 @@ use std::f32::consts::TAU;
 use std::sync::Arc;
 use terra_gen::{Noise, Rng, Seed};
 use terra_world::cover::{CoverRules, CoverSource, Growing};
+use terra_world::detail::DetailScale;
 use terra_world::flora::{Growth, Obstacles};
 use terra_world::flora_kinds::Flora;
 use terra_world::planet::Planet;
@@ -156,8 +157,25 @@ pub fn plugin(app: &mut App) {
                 plant.run_if(not(resource_exists::<Forest>)),
                 add_mipmaps,
                 dress_scans,
+                follow_detail,
             ),
         );
+}
+
+/// The near crowns' cards drop out between distances scaled as every other level of
+/// detail is (D230).
+fn follow_detail(
+    detail: Res<DetailScale>,
+    forest: Option<Res<Forest>>,
+    mut materials: ResMut<Assets<Foliage>>,
+) {
+    let Some(forest) = forest else { return };
+    if !(detail.is_changed() || forest.is_added()) {
+        return;
+    }
+    if let Some(mut material) = materials.get_mut(&forest.dropping) {
+        material.extension.cards = (Vec2::from(CARDS_DROP_M) * detail.0).extend(1.0);
+    }
 }
 
 /// Scans' glTF materials still to be copied into the materials their meshes are drawn with.
@@ -319,7 +337,11 @@ fn with_mipmaps(image: &mut Image, cut: Option<f32>) {
 /// The forest, once planted. Its grass is terra_world's ground cover, told by the forest's
 /// map where it grows.
 #[derive(Resource)]
-struct Forest;
+struct Forest {
+    /// The near crowns' leaves, whose cards drop out between distances that follow how far
+    /// detail reaches (D230).
+    dropping: Handle<Foliage>,
+}
 
 /// The forest's map, on a flat patch laid over the ground: east and south of the start, in
 /// metres.
@@ -668,7 +690,10 @@ fn plant(
             } as usize;
             let model = &trees[kind];
             let scale = dice.range(0.85, 1.15);
-            let size = (model.height * scale / DETAIL_FOR_M).clamp(0.45, 1.4);
+            // In steps of a twentieth, so trees share their distances: Bevy draws at most
+            // 65,535 distinct ones, and past that shares a slot and culls wrongly (D230).
+            let size =
+                ((model.height * scale / DETAIL_FOR_M).clamp(0.45, 1.4) * 20.0).round() / 20.0;
             // Sunk a little, so the root flare meets uneven ground.
             let place = place_on(at, &mut dice, 0.3, scale);
             let foot = place.translation;
@@ -920,7 +945,9 @@ fn plant(
         source: Arc::new(LushCover(map)),
         seed: seed.derive("grass"),
     });
-    commands.insert_resource(Forest);
+    commands.insert_resource(Forest {
+        dropping: dropping_leaves.clone(),
+    });
 }
 
 /// Paths through the forest: a ring round the clearing, and two ways out from it to the

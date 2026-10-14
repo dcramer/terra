@@ -18,6 +18,7 @@ pub mod cover;
 pub mod data;
 pub mod daylight;
 pub mod debug;
+pub mod detail;
 pub mod flora;
 pub mod flora_kinds;
 pub mod footprint;

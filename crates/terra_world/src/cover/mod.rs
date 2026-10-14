@@ -17,6 +17,7 @@
 pub mod blades;
 mod floor;
 
+use crate::detail::DetailScale;
 use crate::footprint::Footprint;
 use crate::planet::{MainCamera, Planet};
 use crate::start::Start;
@@ -198,10 +199,20 @@ fn grow(
     footprints: Query<Ref<Footprint>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<GrassMaterial>>,
+    detail: Res<DetailScale>,
 ) {
     let Some(camera) = camera.iter().next() else {
         return;
     };
+    // How far detail reaches scales the rings and the fade as it does every other level of
+    // detail (D230).
+    if detail.is_changed()
+        && let Some(meadow) = &meadow
+        && let Some(mut material) = materials.get_mut(&meadow.material)
+    {
+        material.extension.fade = Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0) * detail.0;
+        material.extension.thinning = blades::thinning() * Vec4::new(1.0, detail.0, 1.0, detail.0);
+    }
     let Some(mut meadow) = meadow else {
         let material = materials.add(GrassMaterial {
             base: StandardMaterial {
@@ -268,7 +279,7 @@ fn grow(
     let here = Vec2::new(local.x, local.z);
 
     squares.retain(|&key, square| {
-        let keep = square_middle(key).distance(here) < REACH_M + SQUARE_M;
+        let keep = square_middle(key).distance(here) < REACH_M * detail.0 + SQUARE_M;
         if !keep && let Some(entity) = square.entity {
             commands.entity(entity).despawn();
         }
@@ -313,7 +324,7 @@ fn grow(
 
     // What is wanted: squares within reach that are missing or in the wrong ring, nearest
     // first.
-    let reach = (REACH_M / SQUARE_M).ceil() as i32;
+    let reach = (REACH_M * detail.0 / SQUARE_M).ceil() as i32;
     let (ci, cj) = (
         (here.x / SQUARE_M).floor() as i32,
         (here.y / SQUARE_M).floor() as i32,
@@ -321,10 +332,10 @@ fn grow(
     let mut wanted: Vec<(f32, (i32, i32), usize)> = (-reach..=reach)
         .flat_map(|di| (-reach..=reach).map(move |dj| (ci + di, cj + dj)))
         .filter_map(|key| {
-            if square_middle(key).distance(here) >= REACH_M {
+            if square_middle(key).distance(here) >= REACH_M * detail.0 {
                 return None;
             }
-            let distance = square_nearest(key, here);
+            let distance = square_nearest(key, here) / detail.0;
             let square = squares.get(&key);
             let current = square
                 .map(|s| s.building.as_ref().map_or(s.ring, |(ring, _)| *ring))

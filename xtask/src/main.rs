@@ -63,6 +63,17 @@ const TASKS: &[Task] = &[
         },
     },
     Task {
+        name: "lodcheck",
+        takes: "[--views floor,path,clearing] [--time 17] [--limit 0.5]",
+        does: "find what pops as detail changes: still views while every switch distance is swept; fails past the limit (tools/sandbox)",
+        group: "Play and check",
+        run: |args| {
+            let mut all = vec!["tools/sandbox/lodcheck.ts"];
+            all.extend(args.iter().map(String::as_str));
+            run("node", &all)
+        },
+    },
+    Task {
         name: "pops",
         takes: "[--frames 1200-1320] [-- sandbox args]",
         does: "find what pops in or out, or flickers, in a stretch of a scripted walk, frame by frame (tools/sandbox)",
