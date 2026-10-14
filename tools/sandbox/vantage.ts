@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // The vantage sheet (docs/biomes.md, "How we'd know"; D69): the lush forest from fixed views,
-// the forest floor at eye height, its edge, the clearing and an overlook, at each hour asked
+// the forest floor at eye height, its edge, the clearing, an overlook, close along a path and
+// into a spruce grove, at each hour asked
 // for, side by side in one picture, so a change to how the world looks is judged on the same
 // views every time. One scripted run per hour moves its camera from view to view
 // (--vantage …@frame) and saves each with --shots.
@@ -22,6 +23,10 @@ const VIEWS: [string, string][] = [
   ["edge", "0,1.8,250,0,5,200"],
   ["clearing", "7,1.8,9,-8,1.2,-7"],
   ["overlook", "0,45,150,0,0,0"],
+  // Close along a path at eye height, where the floor, undergrowth and trunks are judged.
+  ["path", "-54,1.6,-41,-60,0.5,-48"],
+  // Into a spruce grove.
+  ["grove", "-21.9,1.7,-100,-21.9,4,-114"],
 ];
 /// Frames each view is held for before it is pictured: grass is built round the camera as
 /// it arrives, and levels of detail fade in.
