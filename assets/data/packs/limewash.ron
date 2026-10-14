@@ -1,0 +1,19 @@
+// Lime-washed earth's reference pack (D236, D290): the packed earth's, washed with lime,
+// Poly Haven's `medieval_wall_01` (CC0), the earth showing through where the wash has worn;
+// smoothed by the wash, so not lumped, and its lintels a little longer.
+(
+    pack: "packed_earth",
+    relief: 0.055,
+    tint: (0.96, 0.94, 0.9),
+    packed: None,
+    timber: (tint: (0.72, 0.62, 0.52)),
+    textures: {
+        Masonry: (path: "materials/medieval_wall_01", metres: (2.0, 2.0), depth: 0.015),
+    },
+    dress: (
+        roles: { Head: Profile(extend: 0.22) },
+        tint: (0.95, 0.92, 0.88),
+        masks: (dirt_tint: (0.7, 0.64, 0.56), wear: 0.08, strata: 0.03, dry: 0.0, splash: 0.0, streaks: 0.0, streak_reach: 1.5),
+    ),
+    colours: (light: (0.86, 0.82, 0.74), dark: (0.6, 0.55, 0.48), chinking: (0.86, 0.82, 0.74)),
+)

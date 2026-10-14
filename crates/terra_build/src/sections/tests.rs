@@ -14,9 +14,8 @@ fn shipped() -> Kits {
     for name in [
         "logs", "hewn", "stone", "earth", "wattle", "shakes", "slate", "thatch",
     ] {
-        let text = read(&format!("data/kits/{name}.ron")).unwrap();
-        let mut kit = ron::from_str::<Kit>(&text).unwrap_or_else(|why| panic!("{name}: {why}"));
-        kit.dress.read(&read).unwrap();
+        let kit = Kit::read(&format!("data/kits/{name}.ron"), &read)
+            .unwrap_or_else(|why| panic!("{name}: {why}"));
         kits.push(kit);
     }
     Kits(kits)
@@ -25,8 +24,10 @@ fn shipped() -> Kits {
 /// A kit's kind by its file's name: earth, wattle and daub.
 fn named(kits: &Kits, id_of: &str) -> Kind {
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-    let text = std::fs::read_to_string(assets.join(format!("data/kits/{id_of}.ron"))).unwrap();
-    let kit = ron::from_str::<Kit>(&text).unwrap();
+    let read = |path: &str| {
+        std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
+    };
+    let kit = Kit::read(&format!("data/kits/{id_of}.ron"), &read).unwrap();
     kits.of(kit.kind()).unwrap().kind()
 }
 

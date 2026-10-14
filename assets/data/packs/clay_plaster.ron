@@ -1,0 +1,14 @@
+// Wattle and daub's reference pack (D236, D290): pale limewashed daub, Poly Haven's
+// `patterned_clay_plaster` (CC0), a little relief, lightened by its tint; beaten clay floors.
+(
+    bevel: 0.025,
+    relief: 0.028,
+    tint: (1.18, 1.2, 1.1),
+    textures: {
+        Masonry: (path: "materials/patterned_clay_plaster", metres: (2.6, 2.6), depth: 0.012),
+        Floor: (path: "materials/clay_floor_001", metres: (2.0, 2.0)),
+    },
+    dress: (
+        masks: (dirt: 0.7, dirt_tint: (0.66, 0.6, 0.5), wear: 0.06, moss: 0.5, moss_tint: (0.66, 0.7, 0.46)),
+    ),
+)

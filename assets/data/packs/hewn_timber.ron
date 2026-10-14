@@ -1,0 +1,33 @@
+// Hewn timber's reference pack (D200, D290): beams squared by the axe, Poly Haven's
+// `rough_wood` (CC0), sawn flush at the corners, white daub between the courses, and every
+// role dressed in heavier hewn members, a squared post up each corner.
+(
+    ragged: 0.0,
+    timber: (
+        profile: Hewn,
+        notch: Flush,
+        taper: 0.02,
+        bend: 0.02,
+        uneven: 0.02,
+        swell: 0.01,
+        relief: 0.0,
+        daub: (0.8, 0.06),
+        tint: (1.0, 0.86, 0.7),
+        end_tint: (0.9, 0.8, 0.7),
+        variation: (thickness: 0.05, shade: 0.14, warmth: 0.06),
+    ),
+    textures: {
+        Log: (path: "materials/rough_wood", metres: (0.6, 0.6)),
+        Daub: (path: "materials/white_stucco", metres: (1.0, 1.0)),
+    },
+    dress: (
+        roles: {
+            Crest: Member(scale: 1.15),
+            Arris: Member(profile: Hewn, scale: 0.6, material: Hewn),
+            Nose: Member(profile: Hewn, scale: 1.0, material: Hewn),
+            Post: Member(profile: Hewn, scale: 0.85, material: Hewn),
+        },
+        masks: (weather: 0.25),
+    ),
+    colours: (chinking: (0.84, 0.8, 0.72)),
+)

@@ -46,13 +46,9 @@ fn main() -> ExitCode {
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        match read(&path)
-            .and_then(|text| ron::from_str::<Kit>(&text).map_err(|why| why.to_string()))
-            .and_then(|mut kit| {
-                // Its dressed pieces, made from their source under art/kits (D215).
-                kit.dress.read(&|file| read(&assets.join(file)))?;
-                Ok(kit)
-            }) {
+        // A material over its pattern and pack, with its dressed pieces (D215, D290).
+        let read = |file: &str| read(&assets.join(file));
+        match Kit::read(&format!("{}/{name}", terra_build::kit::MATERIALS), &read) {
             Ok(kit) => kits.push((name, kit)),
             Err(why) => {
                 println!("{name}: does not read: {why}");

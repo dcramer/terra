@@ -200,11 +200,19 @@ fn kit_paths() -> Vec<std::path::PathBuf> {
     paths
 }
 
-/// When a kit's file last changed.
+/// When a material's file, a pattern's or a pack's last changed (D290).
 fn modified() -> Option<SystemTime> {
-    kit_paths()
+    let assets = kit_assets();
+    let folders = [
+        terra_build::kit::MATERIALS,
+        terra_build::layers::PATTERNS,
+        terra_build::layers::PACKS,
+    ];
+    folders
         .iter()
-        .filter_map(|path| std::fs::metadata(path).and_then(|m| m.modified()).ok())
+        .filter_map(|folder| std::fs::read_dir(assets.join(folder)).ok())
+        .flat_map(|entries| entries.flatten())
+        .filter_map(|entry| entry.metadata().and_then(|m| m.modified()).ok())
         .max()
 }
 
@@ -231,19 +239,15 @@ fn read_kits() -> Option<Kits> {
 }
 
 fn read_kit(path: &std::path::Path) -> Option<Kit> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|problem| error!("Could not read {}: {problem}", path.display()))
-        .ok()?;
-    let mut kit: Kit = ron::from_str(&text)
-        .map_err(|problem| error!("{}: {problem}", path.display()))
-        .ok()?;
-    // Its dressed pieces (D215), made from their source under art/kits.
+    // A material over its pattern and its pack, and its dressed pieces (D215, D290).
     let assets = kit_assets();
-    if let Err(problem) = kit.dress.read(&|file| {
+    let read = |file: &str| {
         std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
-    }) {
-        error!("{}: {problem}", path.display());
-    }
+    };
+    let name = path.file_name()?.to_string_lossy().to_string();
+    let kit = Kit::read(&format!("{}/{name}", terra_build::kit::MATERIALS), &read)
+        .map_err(|problem| error!("{problem}"))
+        .ok()?;
     match (kit.pattern, kit.courses()) {
         (Pattern::Masonry, _) | (_, (_, true)) => Some(kit),
         _ => {

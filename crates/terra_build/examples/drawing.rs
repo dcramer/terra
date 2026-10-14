@@ -265,9 +265,11 @@ fn read_kits(assets: &Path) -> (Kits, BTreeMap<String, Kind>) {
     let (mut kits, mut names) = (Vec::new(), BTreeMap::new());
     for path in paths {
         let stem = path.file_stem().unwrap().to_string_lossy().to_string();
-        let text = std::fs::read_to_string(&path).unwrap();
-        let mut kit: Kit = ron::from_str(&text).unwrap_or_else(|why| panic!("{stem}: {why}"));
-        kit.dress.read(&read).unwrap();
+        let kit = Kit::read(
+            &format!("{}/{stem}.ron", terra_build::kit::MATERIALS),
+            &read,
+        )
+        .unwrap_or_else(|why| panic!("{stem}: {why}"));
         names.insert(stem, kit.kind());
         kits.push(kit);
     }

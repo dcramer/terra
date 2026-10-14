@@ -1,0 +1,79 @@
+// The coursed pattern (D178, D200, D262, D290): courses of long members, logs or beams,
+// crossing at the corners; each member a profile swept along the run the layout gives,
+// shaped by these numbers and its own seed (crates/terra_build/src/timber.rs), so no two
+// are alike, and wearing its material's bake. A material of it (pine logs, hewn oak) is a
+// few lines naming this pattern and its pack. Sizes in metres; colours as on screen (sRGB).
+//
+// diameter    how thick a log is, in a wall a cube thick (D175, D181)
+// course      how far apart the courses are; it must divide the 3 m storey
+// longest     the longest wall one log spans, as long as a tree gives (D174)
+// ragged      how far short of the others' a saddle-notched corner log's end may stop
+// overhang    how far a log runs past its corner cube: up to an eighth of a cube (D192)
+// chinking    whether there is daub between the courses
+// frame       how wide the boards round an opening are
+// timber      how each member is made (D200): its profile (Round, a log in its bark; Hewn,
+//             squared by the axe), its notch (Saddle, ends stacked a little ragged; Flush),
+//             points round its section and rings along it (sides, step), taper, bend,
+//             uneven, swell, the bark's relief by its height map, the daub under it (how far
+//             out as a fraction of its half width, how tall), its face's and ends' tints, the
+//             groove's shade (D262), knots a metre, whether it weathers where exposed, and
+//             how much each member differs by its seed (variation)
+// textures    the texture sets its members wear (assets/materials): LogEnd the sawn ends
+//             (an atlas of `cells` by `cells`), Board trims, Floor a deck's boards each from
+//             one plank of its texture (`strips`), Hewn its squared members; a pack adds its
+//             Log face and Daub
+// dress       each exposed edge by its role (D215): a hewn plate along every wall's top, a
+//             hewn sill on what it stands on, hewn posts up every opening's sides, a log
+//             along every step's nose, a log up every post (D193); dirt rising from the
+//             ground
+// meets       weight 2, ending against heavier kinds with an end board over its sawn ends
+(
+    pattern: Logs,
+    diameter: 0.3,
+    course: 0.25,
+    longest: 4.0,
+    ragged: 0.04,
+    chinking: true,
+    frame: 0.08,
+    timber: (
+        profile: Round,
+        notch: Saddle,
+        sides: 18,
+        step: 0.08,
+        taper: 0.07,
+        bend: 0.03,
+        uneven: 0.035,
+        swell: 0.02,
+        relief: 0.022,
+        daub: (0.7, 0.05),
+        tint: (1.0, 0.92, 0.8),
+        end_tint: (0.72, 0.6, 0.47),
+        groove: 0.4,
+        knots: 0.8,
+        exposed: true,
+        variation: (thickness: 0.06, shade: 0.16, warmth: 0.05, mottle: 0.1),
+    ),
+    textures: {
+        LogEnd: (path: "materials/log_ends", metres: (1.0, 1.0), cells: 2),
+        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
+        Floor: (path: "materials/weathered_planks", metres: (2.0, 2.0), strips: Some((0.0605, 0.1111))),
+        Hewn: (path: "materials/rough_wood", metres: (0.5, 0.5)),
+    },
+    dress: (
+        roles: {
+            Crest: Member(profile: Hewn, scale: 1.12, material: Hewn),
+            Foot: Member(profile: Hewn, scale: 1.2, material: Hewn),
+            Jamb: Member(profile: Hewn, scale: 0.6, material: Hewn),
+            Nose: Member(profile: Round, scale: 1.1, material: Log),
+            Post: Member(profile: Round, scale: 0.9, material: Log),
+        },
+        masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46)),
+    ),
+    meets: Some((weight: 2, end: Board, carries: None)),
+    colours: (
+        light: (0.74, 0.56, 0.37),
+        dark: (0.5, 0.34, 0.22),
+        roof: (0.47, 0.42, 0.37),
+        chinking: (0.92, 0.9, 0.86),
+    ),
+)

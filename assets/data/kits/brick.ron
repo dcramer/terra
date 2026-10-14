@@ -1,66 +1,9 @@
-// A brick wall's kit (docs/building-kits.md, D197): old red brick laid in lime mortar, a
-// cube thick, drawn as its cubes' own surface as stone is, its edges crisper than
-// fieldstone's and its mortar joints sunk by the brick's height. Brick with stone
-// dressings, as such walls are built: the stone kit's coping, plinth, quoins, jambs, lintel
-// and sill, in dressed stone a shade paler than the brick. A floor of it is paved in brick.
-// Nothing in it is code: it is this file and its material (assets/materials, fetched by
-// `cargo xtask textures fetch medieval_red_brick`). What this leaves out is stone.ron's.
-//
-// bevel       its outside edges rounded 2 cm: brick keeps a sharper arris than rubble
-// relief      how far a brick stands out of its sunk joints
-// textures    its brick (Poly Haven's medieval_red_brick, CC0), walls and floors; the
-//             dressed stone round its openings and over its tops (rock_boulder_dry); its
-//             lintels' wood
-// cost        a cube in one step, a quarter of a Stone: fired clay counts as stone until there
-//             is a brick item (D236)
-// dress       the stone kit's pieces (pieces/stone.ron), by the same roles
-// meets       as heavy as stone and earth (D232): it runs through timber and caps its top
-//             where timber stands on it; against stone or earth, each ends against the other
+// Old red brick with stone dressings (D290): a material of the block pattern, under slate.
 (
     id: 7,
-    pattern: Masonry,
-    roof_kind: Some(2049),
-    bevel: 0.02,
-    relief: 0.03,
-    tint: (1.0, 0.97, 0.95),
-    timber: (
-        profile: Hewn,
-        notch: Flush,
-        relief: 0.0,
-        tint: (0.9, 0.84, 0.76),
-        end_tint: (0.86, 0.82, 0.78),
-    ),
-    textures: {
-        Masonry: (path: "materials/medieval_red_brick", metres: (2.0, 2.0), depth: 0.015),
-        Floor: (path: "materials/medieval_red_brick", metres: (2.0, 2.0)),
-        Dressed: (path: "materials/rock_boulder_dry", metres: (1.4, 1.4)),
-        Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
-        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
-    },
+    pattern: "block",
+    pack: "red_brick",
     cost: (steps: 1, step: [("Stone", 1, 4)]),
-    dress: (
-        pieces: Some("data/kits/pieces/stone.ron"),
-        roles: {
-            Crest: Profile(name: "coping"),
-            Nose: Profile(name: "nose"),
-            Sill: Profile(name: "sill", extend: 0.06),
-            Head: Profile(name: "lintel", extend: 0.2, joints: false),
-            Soffit: Profile(name: "fascia"),
-            Foot: Profile(name: "plinth"),
-            Meet: Profile(name: "cap"),
-            Border: Profile(name: "border"),
-            Arris: Corners(set: "quoin"),
-            Jamb: Corners(set: "jamb"),
-            Post: Pillar(width: 0.36),
-        },
-        tint: (1.02, 0.98, 0.92),
-        masks: (dirt: 0.55, dirt_tint: (0.5, 0.42, 0.36), wear: 0.12, moss: 0.3, moss_tint: (0.62, 0.64, 0.46)),
-    ),
-    meets: Some((weight: 3, end: None, carries: Cap)),
-    colours: (
-        light: (0.62, 0.36, 0.28),
-        dark: (0.4, 0.22, 0.17),
-        roof: (0.47, 0.42, 0.37),
-        chinking: (0.74, 0.7, 0.62),
-    ),
+    weight: 3,
+    roof_kind: Some(2049),
 )

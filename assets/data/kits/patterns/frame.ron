@@ -1,0 +1,60 @@
+// The frame pattern (D236, D258, D290): a block kind whose cubes are the infill, drawn as
+// their surface as the block pattern's are, with a frame of squared oak laid over them by
+// rule (`layout::frames`): sill plates and plates, posts every `bay` cubes, rails at
+// `rails` heights, braces in the end panels, corner posts, and jambs, heads and sills round
+// openings, each member the module `member` (art/kits/wattle) scaled to its size. While a
+// cube is part built its `core` shows (wattle under daub). A material of it (wattle and
+// daub, later plaster or brick nogging) is a few lines naming this pattern and its pack.
+//
+// framing     the frame's sizes in metres (wide, proud of the infill, deep, corner, brace),
+//             its bay and rails in cubes, which panels are braced, its members' material,
+//             module, and the core under the infill with its relief
+// timber      the frame's oak
+// textures    the frame's atlas (Piece), the wattle core, the oak (Hewn), boards and logs'
+//             timber; a pack adds its Masonry (the infill) and Floor
+// meets       the lightest (weight 1): every other kind runs through it, and it ends
+//             against them at its own end posts
+(
+    pattern: Masonry,
+    framing: Some((
+        wide: 0.18,
+        proud: 0.03,
+        deep: 0.1,
+        corner: 0.2,
+        brace: 0.14,
+        bay: 3,
+        rails: [2, 4],
+        braces: Ends,
+        material: Hewn,
+        module: "member",
+        core: Some(Wattle),
+        core_relief: 0.03,
+    )),
+    timber: (
+        profile: Hewn,
+        notch: Flush,
+        step: 0.08,
+        relief: 0.0,
+        tint: (0.6, 0.5, 0.4),
+        end_tint: (0.82, 0.74, 0.64),
+        variation: (thickness: 0.04, shade: 0.16, warmth: 0.06),
+    ),
+    textures: {
+        Piece: (path: "materials/wattle_pieces", metres: (1.0, 1.0)),
+        Wattle: (path: "materials/wattle", metres: (0.9, 0.54)),
+        Hewn: (path: "materials/rough_wood", metres: (0.5, 0.5)),
+        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
+        Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
+        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
+    },
+    dress: (
+        pieces: Some("data/kits/pieces/wattle.ron"),
+    ),
+    meets: Some((weight: 1, end: None, carries: None)),
+    colours: (
+        light: (0.74, 0.56, 0.37),
+        dark: (0.5, 0.34, 0.22),
+        roof: (0.47, 0.42, 0.37),
+        chinking: (0.86, 0.82, 0.74),
+    ),
+)

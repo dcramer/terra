@@ -666,22 +666,11 @@ mod tests {
         }
         let items = std::fs::read_to_string(assets.join("data/items.ron")).unwrap();
         let items: Items = ron::from_str(&items).unwrap();
-        let mut kits = Vec::new();
-        for entry in std::fs::read_dir(assets.join("data/kits")).unwrap() {
-            let path = entry.unwrap().path();
-            if path.extension().is_some_and(|e| e == "ron") {
-                let text = std::fs::read_to_string(&path).unwrap();
-                let mut kit: Kit =
-                    ron::from_str(&text).unwrap_or_else(|why| panic!("{}: {why}", path.display()));
-                let read = |file: &str| {
-                    std::fs::read_to_string(assets.join(file)).map_err(|why| why.to_string())
-                };
-                kit.dress.read(&read).unwrap();
-                let name = path.file_name().unwrap().to_string_lossy().to_string();
-                kits.push((name, kit));
-            }
-        }
-        kits.sort_by(|a, b| a.0.cmp(&b.0));
+        let kits: Vec<(String, Kit)> = Kit::read_folder(&assets)
+            .unwrap()
+            .into_iter()
+            .map(|(name, kit)| (format!("{name}.ron"), kit))
+            .collect();
         (
             kits,
             items.kinds.into_iter().map(|item| item.name).collect(),

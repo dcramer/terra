@@ -1,7 +1,9 @@
-//! A kind of construction's kit (docs/building-kits.md, D136, D177): a file in
-//! `assets/data/kits/` saying how its walls are laid, how big its pieces are, how each long
-//! member is shaped and varies (D200), its materials and what building in it costs. A new
-//! kind, a pine cabin or an oak one, round logs or hewn beams, is a new file, not code.
+//! A kind of construction's kit (docs/building-kits.md, D136, D177, D290): how its walls are
+//! laid, how big its pieces are, how each long member is shaped and varies (D200), its
+//! materials and what building in it costs. Its file in `assets/data/kits/` is a material: a
+//! few lines naming its pattern (`data/kits/patterns/`) and its reference pack
+//! (`data/packs/`), its cost and weight, and what it overrides, resolved into a whole kit by
+//! `layers` as it is read ([`Kit::read`]). A new material is a new file, not code.
 
 use crate::Kind;
 use crate::cost::{Amount, Bill, Rules, Terms};
@@ -824,7 +826,65 @@ impl Default for Kit {
     }
 }
 
+/// Where the materials' files are, under `assets/`: one a material, each over its pattern's
+/// file and its pack (D290, `layers`).
+pub const MATERIALS: &str = "data/kits";
+
 impl Kit {
+    /// A material's file read as the game reads it (D290): resolved over its pattern and its
+    /// pack (`layers::resolve`), checked as a kit, and its dressed pieces read. `read` gives
+    /// a file under `assets/` as text; a mistake names the file.
+    pub fn read(path: &str, read: &dyn Fn(&str) -> Result<String, String>) -> Result<Kit, String> {
+        let text = read(path)?;
+        let whole = crate::layers::resolve(&text, read).map_err(|why| format!("{path}: {why}"))?;
+        let mut kit: Kit = ron::from_str(&whole).map_err(|why| format!("{path}: {why}"))?;
+        kit.dress
+            .read(read)
+            .map_err(|why| format!("{path}: {why}"))?;
+        Ok(kit)
+    }
+
+    /// Every material's file under `assets/` (`MATERIALS`), by its name (its file's stem), in
+    /// order of name; `list` gives the names of the files in a folder under `assets/`.
+    pub fn read_all(
+        list: &dyn Fn(&str) -> Result<Vec<String>, String>,
+        read: &dyn Fn(&str) -> Result<String, String>,
+    ) -> Result<Vec<(String, Kit)>, String> {
+        let mut names: Vec<String> = list(MATERIALS)?
+            .into_iter()
+            .filter_map(|file| file.strip_suffix(".ron").map(str::to_string))
+            .collect();
+        names.sort();
+        names
+            .into_iter()
+            .map(|name| {
+                Ok((
+                    name.clone(),
+                    Kit::read(&format!("{MATERIALS}/{name}.ron"), read)?,
+                ))
+            })
+            .collect()
+    }
+
+    /// Every material's file in an `assets` folder on disk, as [`Kit::read_all`] reads them.
+    pub fn read_folder(assets: &std::path::Path) -> Result<Vec<(String, Kit)>, String> {
+        let list = |folder: &str| {
+            std::fs::read_dir(assets.join(folder))
+                .map_err(|why| format!("{folder}: {why}"))
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .filter(|entry| entry.path().is_file())
+                        .map(|entry| entry.file_name().to_string_lossy().to_string())
+                        .collect()
+                })
+        };
+        let read = |path: &str| {
+            std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
+        };
+        Kit::read_all(&list, &read)
+    }
+
     /// How many courses fill a storey, and whether they fill it exactly.
     pub fn courses(&self) -> (i32, bool) {
         let count = (crate::STOREY_M / self.course).round();
@@ -862,9 +922,38 @@ mod tests {
     }
 
     fn shipped(name: &str) -> Kit {
-        let path = assets().join("data/kits").join(name);
-        let text = std::fs::read_to_string(&path).unwrap();
-        ron::from_str(&text).unwrap_or_else(|why| panic!("{}: {why}", path.display()))
+        let read = |path: &str| {
+            std::fs::read_to_string(assets().join(path)).map_err(|why| format!("{path}: {why}"))
+        };
+        let mut kit = Kit::read(&format!("{MATERIALS}/{name}"), &read).unwrap();
+        kit.dress.made = None;
+        kit
+    }
+
+    #[test]
+    fn every_material_is_a_small_file_over_its_pattern_and_pack() {
+        // D290: a material fits on one screen, its pattern and its pack saying the rest.
+        let folder = assets().join(MATERIALS);
+        let mut seen = 0;
+        for entry in std::fs::read_dir(&folder).unwrap().flatten() {
+            let path = entry.path();
+            if path.extension().is_none_or(|e| e != "ron") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            let lines = text
+                .lines()
+                .filter(|line| !line.trim().is_empty() && !line.trim().starts_with("//"))
+                .count();
+            assert!(lines <= 20, "{}: {lines} lines", path.display());
+            assert!(
+                text.contains("pattern: \"") && text.contains("pack: \""),
+                "{}",
+                path.display()
+            );
+            seen += 1;
+        }
+        assert!(seen >= 10, "{seen}");
     }
 
     #[test]

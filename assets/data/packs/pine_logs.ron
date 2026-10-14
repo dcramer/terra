@@ -1,0 +1,19 @@
+// Pine logs' reference pack (D262, D290): bark in patches over wood weathered silver
+// (`log_bark`, made by `textures.ts blend` from Poly Haven's `pine_bark` and `rough_wood`),
+// a metre round by two along; mud daub (`clay_floor_001`) in the grooves; ends run a little
+// past the corners; the upper logs weathered grey. Its pieces' file holds the modelled
+// whole log (art/kits/logs), which a material takes in place of the generated ones by
+// naming it in `timber.module`.
+(
+    overhang: 0.06,
+    textures: {
+        Piece: (path: "materials/logs_pieces", metres: (1.0, 1.0)),
+        Log: (path: "materials/log_bark", metres: (1.0, 2.0)),
+        Daub: (path: "materials/clay_floor_001", metres: (0.5, 0.5)),
+        Hewn: (path: "materials/rough_wood", metres: (0.6, 0.6)),
+    },
+    dress: (
+        pieces: Some("data/kits/pieces/logs.ron"),
+        masks: (weather: 0.3),
+    ),
+)

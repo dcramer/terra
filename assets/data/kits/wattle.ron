@@ -1,87 +1,10 @@
-// A wattle and daub wall's kit (docs/building-kits.md, D227, D236): a frame of squared oak
-// with panels of hazel wattle daubed with lime and clay between its members. The panels are
-// its cubes' own surface, as a block kind's (D197), pale daub with a little relief, set back
-// behind the frame; the frame is laid over them by rule (`framing`, crates/terra_build/src/
-// layout/frames.rs). While a cube is part built, or being cut out, its wattle shows, woven,
-// before the daub is on. Its roof is thatch (`roof_kind`, D241). What this leaves out is the
-// log kit's; logs.ron and stone.ron say what each number is.
-//
-// bevel, relief  the daub's soft edges and its hand-smoothed relief
-// tint           the daub limewashed a warm cream, against the dark oak (docs/art-style.md)
-// timber         its frame's oak: dark and weathered, each member a little different
-// framing        its frame: members 18 cm wide standing 3 cm proud of the daub and 10 cm deep,
-//                corner posts 20 cm square, braces 14 cm, a post every one and a half metres
-//                along a wall, rails at one and two metres in each storey, braced at each end,
-//                over a core of woven hazel standing out 3 cm; each member the hand-made
-//                module `member` of its pieces (art/kits/wattle, tools/kits, D258)
-// textures       its daub (Poly Haven's patterned_clay_plaster, CC0), its wattle (generated
-//                and made to tile, art/textures/wattle.png, D191), its oak (rough_wood), its
-//                floors' beaten earth (clay_floor_001)
-// cost           a cube in four steps, each a sixty-fourth of a Wood and of a Fibre: its
-//                frame and wattle first, then its daub in three coats
-// meets          the lightest kind (D179, D232): stone, earth, logs and hewn timber all run
-//                through it; it ends against them at its own frame's posts and stands on
-//                stone or earth under their caps
+// Wattle and daub (D236): limewashed daub in a frame of squared oak, a material of the
+// frame pattern under thatch. Four steps a cube: its frame and wattle, then three coats.
 (
     id: 5,
-    pattern: Masonry,
-    roof_kind: Some(2050),
-    bevel: 0.025,
-    relief: 0.028,
-    tint: (1.18, 1.2, 1.1),
-    timber: (
-        profile: Hewn,
-        notch: Flush,
-        step: 0.08,
-        relief: 0.0,
-        tint: (0.6, 0.5, 0.4),
-        end_tint: (0.82, 0.74, 0.64),
-        variation: (thickness: 0.04, shade: 0.16, warmth: 0.06),
-    ),
-    framing: Some((
-        wide: 0.18,
-        proud: 0.03,
-        deep: 0.1,
-        corner: 0.2,
-        brace: 0.14,
-        bay: 3,
-        rails: [2, 4],
-        braces: Ends,
-        material: Hewn,
-        module: "member",
-        core: Some(Wattle),
-        core_relief: 0.03,
-    )),
-    textures: {
-        Piece: (path: "materials/wattle_pieces", metres: (1.0, 1.0)),
-        Masonry: (path: "materials/patterned_clay_plaster", metres: (2.6, 2.6), depth: 0.012),
-        Wattle: (path: "materials/wattle", metres: (0.9, 0.54)),
-        Hewn: (path: "materials/rough_wood", metres: (0.5, 0.5)),
-        Floor: (path: "materials/clay_floor_001", metres: (2.0, 2.0)),
-        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
-        Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
-        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
-    },
+    pattern: "frame",
+    pack: "clay_plaster",
     cost: (steps: 4, step: [("Wood", 1, 64), ("Fibre", 1, 64)]),
-    dress: (
-        pieces: Some("data/kits/pieces/wattle.ron"),
-        masks: (dirt: 0.7, dirt_tint: (0.66, 0.6, 0.5), wear: 0.06, moss: 0.5, moss_tint: (0.66, 0.7, 0.46)),
-    ),
-    meets: Some((
-        weight: 1,
-        end: None,
-        carries: None,
-        kinds: {
-            1: (through: Some(false)),
-            2: (through: Some(false)),
-            3: (through: Some(false)),
-            4: (through: Some(false)),
-        },
-    )),
-    colours: (
-        light: (0.74, 0.56, 0.37),
-        dark: (0.5, 0.34, 0.22),
-        roof: (0.47, 0.42, 0.37),
-        chinking: (0.86, 0.82, 0.74),
-    ),
+    weight: 1,
+    roof_kind: Some(2050),
 )

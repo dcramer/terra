@@ -1,81 +1,11 @@
-// A lime-washed earth wall's kit (docs/building-kits.md, D227, D236): cob as earth.ron
-// lays it, washed over with lime, the wash worn thin where the weather reaches and the earth
-// showing through it in patches; laid, dressed and meeting the other kinds as earth is. What
-// this leaves out is the log kit's; earth.ron, logs.ron and stone.ron say what each is. Its
-// roof is thatch (`roof_kind`, D241).
-//
-// relief      the wash over the cob's lumps, a little smoother than bare earth
-// tint        the lime a warm white, not paper white (docs/art-style.md)
-// textures    its wash (Poly Haven's medieval_wall_01, CC0: rough lime over earth, worn
-//             through in patches, in parallax), the rest as earth's
-// dress       as earth's, its foot darkened by the damp splashed up the wash, its lifts
-//             showing faintly through it
+// Lime-washed cob (D236): packed earth washed with lime, a material of the block pattern
+// under thatch. Stone runs through it, as through cob.
 (
     id: 6,
-    pattern: Masonry,
-    roof_kind: Some(2050),
-    bevel: 0.12,
-    relief: 0.055,
-    tint: (0.96, 0.94, 0.9),
-    timber: (
-        profile: Hewn,
-        notch: Flush,
-        relief: 0.0,
-        tint: (0.72, 0.62, 0.52),
-        end_tint: (0.86, 0.8, 0.72),
-        variation: (thickness: 0.04, shade: 0.12, warmth: 0.05),
-    ),
-    textures: {
-        Masonry: (path: "materials/medieval_wall_01", metres: (2.0, 2.0), depth: 0.015),
-        Floor: (path: "materials/clay_floor_001", metres: (2.0, 2.0)),
-        Dressed: (path: "materials/rock_boulder_dry", metres: (1.4, 1.4)),
-        Hewn: (path: "materials/rough_wood", metres: (0.5, 0.5)),
-        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
-        Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
-        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
-    },
+    pattern: "block",
+    pack: "limewash",
     cost: (steps: 2, step: [("Stone", 1, 16), ("Fibre", 1, 16), ("Wood", 1, 64)]),
-    dress: (
-        pieces: Some("data/kits/pieces/earth.ron"),
-        roles: {
-            Foot: Profile(name: "plinth", joints: false),
-            Crest: Profile(name: "coping"),
-            Head: Profile(name: "lintel", extend: 0.22, joints: false, material: Some(Hewn)),
-            Sill: Profile(name: "sill", extend: 0.08, joints: false, material: Some(Hewn)),
-            Meet: Profile(name: "cap", joints: false, material: Some(Hewn)),
-            Soffit: Profile(name: "fascia", joints: false, material: Some(Hewn)),
-            Nose: Profile(name: "nose", joints: false, material: Some(Hewn)),
-            Border: Profile(name: "border"),
-            Post: Pillar(width: 0.4),
-        },
-        tint: (0.95, 0.92, 0.88),
-        masks: (
-            dirt: 0.9,
-            dirt_tint: (0.7, 0.64, 0.56),
-            wear: 0.08,
-            moss: 0.5,
-            moss_tint: (0.7, 0.72, 0.5),
-            strata: 0.03,
-            lift: 0.42,
-        ),
-    ),
-    meets: Some((
-        weight: 3,
-        end: None,
-        carries: Cap,
-        kinds: {
-            // As earth: logs, hewn timber and wattle and daub end against it, on its sole
-            // plate; stone runs through it.
-            1: (through: Some(true)),
-            3: (through: Some(true)),
-            2: (through: Some(false), end: Some(None)),
-            5: (through: Some(true)),
-        },
-    )),
-    colours: (
-        light: (0.86, 0.82, 0.74),
-        dark: (0.6, 0.55, 0.48),
-        roof: (0.47, 0.42, 0.37),
-        chinking: (0.86, 0.82, 0.74),
-    ),
+    weight: 3,
+    roof_kind: Some(2050),
+    meets: Some((kinds: { 2: (through: Some(false)) })),
 )

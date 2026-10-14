@@ -1,48 +1,8 @@
-// A thatched roof of reed on round poles (docs/building-kits.md, D241, D258), a thick coat
-// cut clean at its eaves, a pointed sedge ridge and bundled verges from art/kits/thatch: a
-// roof kind, as shakes.ron says what each number is. The roof over hewn timber walls
-// unless another is in hand.
+// Water reed thatch (D241): a roof of the roof pattern, over hewn timber, earth and wattle.
 (
     id: 2050,
-    pattern: Roof,
-    eaves: 0.5,
-    timber: (
-        profile: Round,
-        notch: Flush,
-        relief: 0.0,
-        tint: (1.0, 0.86, 0.7),
-        end_tint: (0.9, 0.8, 0.7),
-    ),
-    roof: (
-        rows: 4.0,
-        phase: 0.0,
-        thick: 0.26,
-        relief: 0.05,
-        tint: (1.0, 0.92, 0.8),
-        rafter: 0.12,
-        batten: (0.05, 0.03),
-        parts: {
-            Ridge: (module: "ridge", material: Covering, tint: (0.86, 0.8, 0.66)),
-            Hip: (module: "ridge", material: Covering, tint: (0.86, 0.8, 0.66)),
-            Valley: (module: "valley", material: Covering, tint: (1.0, 0.92, 0.8)),
-            Verge: (module: "verge", material: Covering, tint: (0.96, 0.88, 0.76)),
-            Eave: (module: "eave", material: Covering, on_roof: true),
-            Flashing: (module: "flashing", material: Flashing),
-            Rafter: (module: "rafter", material: Log, ends: Some(LogEnd), tint: (1.0, 0.86, 0.7)),
-            Batten: (module: "batten", material: Board, tint: (0.9, 0.9, 0.9)),
-        },
-    ),
-    textures: {
-        Log: (path: "materials/rough_wood", metres: (0.6, 0.6)),
-        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
-        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
-        Piece: (path: "materials/thatch_pieces", metres: (1.0, 1.0)),
-        Covering: (path: "materials/riet_01", metres: (2.5, 2.5)),
-        Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
-    },
+    pattern: "roof",
+    pack: "thatch",
     cost: (steps: 4, step: [("Fibre", 1, 32), ("Wood", 1, 64)]),
-    dress: (
-        pieces: Some("data/kits/pieces/thatch.ron"),
-        masks: (weather: 0.25, moss: 0.5, moss_tint: (0.66, 0.7, 0.46)),
-    ),
+    weight: 0,
 )

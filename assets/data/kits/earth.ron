@@ -1,113 +1,12 @@
-// An earth wall's kit (docs/building-kits.md, D194, D197, D227, D236): cob or rammed earth,
-// gritty earth with small stones packed in lifts a cube thick, drawn as its cubes' own
-// surface as stone is, but its outside edges rounded soft, as earth weathers, its face
-// lumped and ridged by the earth's own height and its fine grit by parallax.
-// It stands on a stone plinth to keep it dry, wears a stone coping with a drip where its top
-// is open to the sky, and has oak over and under its openings; its corners and reveals are
-// left round, with no quoins. Its roof is thatch (`roof_kind`, D241). What this leaves out
-// is the log kit's; logs.ron and stone.ron say what each number is.
-//
-// bevel       how far its outside edges are rounded: 12 cm, soft, as earth's are (D194)
-// tint        its earth's yellow taken down to a grey-brown
-// relief      how far its texture's grit and ridges stand out
-// packed      its shape as packed by hand (D236): lumps 5 cm either way about 60 cm
-//             across, each lift rounded out 3.5 cm between its seams and standing up to 3 cm
-//             proud or shy of the next, so a wall bulges, its lifts read as ridges from the
-//             street and its arrises and outline step from lift to lift, and its corners wander
-// textures    its earth (ambientCG's Ground104, CC0, as packed_earth, its grit and
-//             ridges standing 1.6% of its 2.6 m deep in parallax, coarse and sparse), its
-//             floors' beaten earth (clay_floor_001), its plinth's and coping's stone (rock_boulder_dry), its
-//             lintels', sills', sole plates' and treads' oak (rough_wood)
-// cost        a cube in two lifts, each an eighth of a Stone (the grit in it) and of a Fibre
-//             (its straw), the earth dug where it stands, and a thirty-second of a Wood for
-//             its oak lintels, sills, sole plates and treads (D215)
-// dress       a stone plinth at every foot, stepping with the ground; a stone coping with a
-//             drip on every top open to the sky; an oak lintel set into the earth over every
-//             opening, bearing on it either side, and an oak sill under; an oak sole plate
-//             where a timber wall stands on it; an oak fascia under an overhang, an oak tread on every step, a stone border round a floor;
-//             posts as round-cornered pillars 40 cm square; nothing up its corners or its
-//             openings' sides, which stay round; its lifts a little lighter and darker by
-//             turns (strata), its foot darkened by the damp splashed up over its plinth
-//             (splash), dark streaks run down under its sills and any open top (streaks),
-//             its arrises worn paler (wear), and paler from a storey up, dry under the eaves
-//             (dry)
-// meets       a block kind as stone is (D232), heavier than timber and running through it,
-//             its sole plate under timber standing on it; stone runs through it, so it stands
-//             on a stone plinth wall under that wall's cap, and ends against stone
+// Cob, packed earth (D227, D236): a material of the block pattern under deep thatch, with
+// its own trims in its pack (data/packs/packed_earth.ron). Stone runs through it, so it
+// stands on a stone wall under its cap.
 (
     id: 4,
-    pattern: Masonry,
-    roof_kind: Some(2050),
-    bevel: 0.12,
-    relief: 0.07,
-    tint: (0.98, 0.95, 1.08),
-    packed: Some((lumps: 0.05, lump: 0.6, ridge: 0.035, step: 0.03)),
-    timber: (
-        profile: Hewn,
-        notch: Flush,
-        relief: 0.0,
-        tint: (0.82, 0.7, 0.58),
-        end_tint: (0.86, 0.8, 0.72),
-        variation: (thickness: 0.04, shade: 0.12, warmth: 0.05),
-    ),
-    textures: {
-        Masonry: (path: "materials/packed_earth", metres: (2.6, 2.6), depth: 0.016),
-        Floor: (path: "materials/clay_floor_001", metres: (2.0, 2.0)),
-        Dressed: (path: "materials/rock_boulder_dry", metres: (1.4, 1.4)),
-        Hewn: (path: "materials/rough_wood", metres: (0.5, 0.5)),
-        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
-        Log: (path: "materials/rough_wood", metres: (0.5, 0.5)),
-        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
-    },
+    pattern: "block",
+    pack: "packed_earth",
     cost: (steps: 2, step: [("Stone", 1, 16), ("Fibre", 1, 16), ("Wood", 1, 64)]),
-    dress: (
-        pieces: Some("data/kits/pieces/earth.ron"),
-        roles: {
-            Foot: Profile(name: "plinth", joints: false),
-            Crest: Profile(name: "coping"),
-            Head: Profile(name: "lintel", extend: 0.12, joints: false, material: Some(Hewn)),
-            Sill: Profile(name: "sill", extend: 0.08, joints: false, material: Some(Hewn)),
-            Meet: Profile(name: "cap", joints: false, material: Some(Hewn)),
-            Soffit: Profile(name: "fascia", joints: false, material: Some(Hewn)),
-            Nose: Profile(name: "nose", joints: false, material: Some(Hewn)),
-            Border: Profile(name: "border"),
-            Post: Pillar(width: 0.4),
-        },
-        tint: (0.95, 0.9, 0.84),
-        masks: (
-            dirt: 0.9,
-            dirt_tint: (0.6, 0.56, 0.53),
-            wear: 0.3,
-            moss: 0.5,
-            moss_tint: (0.7, 0.72, 0.5),
-            strata: 0.08,
-            lift: 0.42,
-            dry: 0.3,
-            dry_reach: 1.2,
-            splash: 0.6,
-            streaks: 0.6,
-            streak_reach: 1.4,
-        ),
-    ),
-    meets: Some((
-        weight: 3,
-        end: None,
-        carries: Cap,
-        kinds: {
-            // Logs and hewn timber end against it, on its sole plate where they stand on it.
-            1: (through: Some(true)),
-            3: (through: Some(true)),
-            // Stone runs through it: earth stands on a stone wall under its cap, and ends
-            // against a stone one.
-            2: (through: Some(false), end: Some(None)),
-            // Wattle and daub ends against it, on its sole plate over a ground floor of earth.
-            5: (through: Some(true)),
-        },
-    )),
-    colours: (
-        light: (0.62, 0.5, 0.38),
-        dark: (0.42, 0.33, 0.25),
-        roof: (0.47, 0.42, 0.37),
-        chinking: (0.72, 0.62, 0.5),
-    ),
+    weight: 3,
+    roof_kind: Some(2050),
+    meets: Some((kinds: { 2: (through: Some(false)) })),
 )

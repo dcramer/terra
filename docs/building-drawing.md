@@ -30,7 +30,7 @@ Measured on 2026-10-14, release builds, the machine shared with other agents' bu
 
 What can go wrong at each stage, and the check that finds it, is the next section.
 
-A **kit is data** (D136): a file in `assets/data/kits/` says its pattern, sizes, textures, dress by role, masks and how it meets other kinds; its materials are folders in `assets/materials/`. A new wall material is a kit file and a material, and no code: brick (`brick.ron`, Poly Haven's `medieval_red_brick` fetched by `cargo xtask textures fetch`) was added so, dressed in the stone kit's pieces. `cargo xtask kits` checks a kit file; the game reads every one in the folder, and the kit sheet gives each wall kit its rows (`--sheet-rows brick`).
+A **kit is data** (D136, D290): a material file in `assets/data/kits/`, a few lines naming its pattern (`assets/data/kits/patterns/`) and its reference pack (`assets/data/packs/`), its cost and weight, merged over them as it is read ([construction-002.md](proposals/construction-002.md#hundreds-of-materials)); its texture sets are folders in `assets/materials/`. A new wall material is a material file, a pack and its textures, and no code. `cargo xtask kits` checks every material; the game reads every one in the folder, and the kit sheet gives each wall kit its rows (`--sheet-rows brick`).
 
 ![Brick, a kit file and a material: stone quoins, jambs and plinth, under slate](images/brick-kit-2026-10-14.jpg)
 

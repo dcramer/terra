@@ -1,0 +1,17 @@
+// Split shakes' reference pack (D241, D258, D290): a covering of split shakes (`shakes`,
+// made by tools/textures), six courses a copy, 3 cm thick; its own modelled ridge cap,
+// valley, fascia, bargeboard and flashing (art/kits/shakes) baked into one atlas; pine
+// rafters in their bark; greened by moss toward the eaves.
+(
+    timber: (relief: 0.015),
+    roof: (rows: 6.0, phase: 0.145, thick: 0.03, relief: 0.03, tint: (1.0, 0.97, 0.93)),
+    textures: {
+        Covering: (path: "materials/shakes", metres: (3.2, 1.6)),
+        Piece: (path: "materials/shakes_pieces", metres: (1.0, 1.0)),
+        Log: (path: "materials/pine_bark", metres: (1.0, 1.0)),
+    },
+    dress: (
+        pieces: Some("data/kits/pieces/shakes.ron"),
+        masks: (weather: 0.3, moss: 0.6, moss_tint: (0.62, 0.74, 0.4)),
+    ),
+)

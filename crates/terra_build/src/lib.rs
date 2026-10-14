@@ -44,6 +44,7 @@ pub mod ground;
 pub mod hull;
 pub mod inspect;
 pub mod kit;
+pub mod layers;
 pub mod layout;
 mod mesh;
 pub mod modules;

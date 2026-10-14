@@ -453,11 +453,9 @@ mod tests {
     /// A shipped roof kit, its pieces read, numbered as the first roof kind.
     fn shipped(name: &str) -> Kit {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-        let text = std::fs::read_to_string(assets.join("data/kits").join(name)).unwrap();
-        let mut kit: Kit = ron::from_str(&text).unwrap();
-        kit.dress
-            .read(&|file| std::fs::read_to_string(assets.join(file)).map_err(|e| e.to_string()))
-            .unwrap();
+        let read =
+            |file: &str| std::fs::read_to_string(assets.join(file)).map_err(|e| e.to_string());
+        let mut kit = Kit::read(&format!("data/kits/{name}"), &read).unwrap();
         kit.id = Kind::FIRST_ROOF.0;
         kit
     }

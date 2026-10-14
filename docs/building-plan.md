@@ -102,7 +102,7 @@ First, as now: arithmetic on the cubes, each to its fill and its kind's slab, st
 
 ## The art pipeline
 
-- **Kits are data**: a file per kind in `assets/data/kits/`, its pattern, roles and their models, textures and sizes (as now).
+- **Kits are data** (D290): a material file per kind in `assets/data/kits/`, a few lines over its pattern (`patterns/`) and its reference pack (`assets/data/packs/`).
 - **Long members** (D200): generated from the kit file, a profile swept along each piece; their materials (bark, end grain, daub) from the library like the blocks', the bark's height read on the CPU to displace it.
 - **Blocks**: a material each, from a library or generated (D191): colour, normal, roughness and the height the surface is displaced by (D197).
 - **Levels of detail**: `refine` writes each model at three budgets, for near, middle and far.
@@ -132,7 +132,7 @@ Code only places, repeats, stretches and turns pieces (D177); a line shorter tha
 
 **Detail by distance** comes from the pieces: `tools/kits` writes each module at two budgets (near, and a far one about a third of it, Blender's decimate); a few metres off a section draws the far meshes, past 60 m the covering as a sheet and a frame's members as boxes, and the proxy the surfaces only. **Budgets**: 800 triangles a metre of module near and 600 its cap, 320 a stone, 800 a square metre of roof all told (`cargo xtask kits` checks them, that every part a roof or frame kit names has its piece of a raw material the kind costs, and that each module faces out).
 
-**A new material is data**: a kit file naming its textures from the library (credited in `assets/materials/README.md`) and its pieces file, made by `tools/kits` from a source a person can read. A slate roof is a kit file and a source; so is a reed one.
+**A new material is data** (D290): a material file of a few lines naming its pattern and its reference pack, the pack naming its textures from the library (credited in `assets/materials/README.md`) and, where its outline is its look, its pieces file, made by `tools/kits` from a source a person can read.
 
 **How shipped games do it.** Enshrouded draws each building material as voxels textured and displaced by the material, with modelled edge pieces: its roof galleries show a deeply displaced tile surface running smooth through valleys, with modelled ridge tiles, verge tiles turned down over the edge and a gutter module along the eave (**seen**, [research/voxel-building-look.md](../research/voxel-building-look.md)). Valheim and V Rising build from prefab modules per material, a roof as 26° and 45° panels with separate ridge pieces; Unreal's modular kits tile grid-sized modules and run trims along splines, with HLOD for distance; The Sims draws its roofs as a patterned surface with trim pieces by style. Ours is Enshrouded's: the surface from the material and the edges from modules, laid by rule from the cubes.
 

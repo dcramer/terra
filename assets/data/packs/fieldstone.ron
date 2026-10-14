@@ -1,0 +1,13 @@
+// Fieldstone's reference pack (D290): rough fieldstone walls, Poly Haven's `stone_wall`, and
+// flagstone floors and tops, `grey_stone_path` (CC0, assets/materials/README.md); its dressed
+// stone greyed toward the rubble; dirt rising from the ground and its corners worn.
+(
+    textures: {
+        Masonry: (path: "materials/stone_wall", metres: (2.0, 2.0), depth: 0.025),
+        Floor: (path: "materials/grey_stone_path", metres: (1.8, 1.8), depth: 0.008),
+    },
+    dress: (
+        tint: (0.93, 0.91, 0.88),
+        masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14),
+    ),
+)

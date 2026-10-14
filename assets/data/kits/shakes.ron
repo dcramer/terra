@@ -1,72 +1,9 @@
-// A roof of split pine shakes (docs/building-kits.md, D241, D254): a roof kind, laid on cubes
-// by hand or by the hammer's "add a roof", cut to slopes and corners, and drawn as a roof
-// from each cube's neighbours (crates/terra_build/src/layout/roofs.rs, roofing.rs): its
-// covering the cubes' surface in the shakes, its ridges, hips, valleys, eaves, verges and
-// flashing, and its frame, the hand-made modules of its pieces (art/kits/shakes, made by
-// tools/kits). The roof over log walls unless another is in hand. Sizes in metres; colours
-// as they appear on screen (sRGB). What this leaves out is logs.ron's.
-//
-// id          the kind it lays (D181): a roof's, numbered from 2048 (D241)
-// pattern     Roof
-// eaves       how far its covering is carried on past its cubes' open edges, drawn only
-//             (D192): down the slope at an eave, level past a verge
-// roof        how it is made (crates/terra_build/src/roofing.rs):
-//   rows        courses in one copy of the Covering texture, down the slope; phase, where a
-//               course's lower edge falls on it, as a fraction down from its top
-//   thick       how thick the covering is over the roof
-//   relief      how far its texture's height pushes it out more, deepest to proudest, so
-//               each course's butt stands out as a step
-//   tint        what the covering's colour is multiplied by
-//   rafter      the rafters' thickness; batten, the battens' width and thickness, which
-//               set how far under the roof each lies
-//   parts       each line of the roof and its frame: the module of its pieces laid along
-//               it, its material, its ends' material and its tint
-// textures    its materials (assets/materials): Covering its shakes, Board its battens,
-//             boards and underside, Log and LogEnd its poles' bark and sawn ends, Flashing
-//             the mortar against a wall
-// cost        a roof's cube goes up in four steps (D241): its frame, its battens, its
-//             covering and its trims, each taking so much of each item
-// dress       its pieces' file, and its masks: the shakes mossed toward the eaves, greyed
-//             toward the ridge
+// Split shakes (D241): a roof of the roof pattern (patterns/roof.ron), over logs. Four steps
+// a cube: its frame, its battens, its covering, its trims.
 (
     id: 2048,
-    pattern: Roof,
-    eaves: 0.5,
-    timber: (
-        profile: Round,
-        notch: Flush,
-        relief: 0.015,
-    ),
-    roof: (
-        rows: 6.0,
-        phase: 0.145,
-        thick: 0.03,
-        relief: 0.03,
-        tint: (1.0, 0.97, 0.93),
-        rafter: 0.14,
-        batten: (0.06, 0.025),
-        parts: {
-            Ridge: (module: "ridge", material: Piece),
-            Hip: (module: "ridge", material: Piece),
-            Valley: (module: "valley", material: Piece),
-            Eave: (module: "eave", material: Piece, tint: (0.58, 0.54, 0.5)),
-            Verge: (module: "verge", material: Piece, tint: (0.58, 0.54, 0.5)),
-            Flashing: (module: "flashing", material: Piece, tint: (0.62, 0.6, 0.58)),
-            Rafter: (module: "rafter", material: Log, ends: Some(LogEnd)),
-            Batten: (module: "batten", material: Board, tint: (0.9, 0.9, 0.9)),
-        },
-    ),
-    textures: {
-        Log: (path: "materials/pine_bark", metres: (1.0, 1.0)),
-        LogEnd: (path: "materials/log_end", metres: (1.0, 1.0)),
-        Board: (path: "materials/weathered_planks", metres: (2.0, 2.0)),
-        Piece: (path: "materials/shakes_pieces", metres: (1.0, 1.0)),
-        Covering: (path: "materials/shakes", metres: (3.2, 1.6)),
-        Flashing: (path: "materials/white_stucco", metres: (1.0, 1.0)),
-    },
+    pattern: "roof",
+    pack: "shakes",
     cost: (steps: 4, step: [("Wood", 1, 32)]),
-    dress: (
-        pieces: Some("data/kits/pieces/shakes.ron"),
-        masks: (weather: 0.3, moss: 0.6, moss_tint: (0.62, 0.74, 0.4)),
-    ),
+    weight: 0,
 )

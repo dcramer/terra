@@ -346,12 +346,15 @@ fn read_kits(assets: &Path) -> Option<Kits> {
         .into_iter()
         .filter(|p| p.extension().is_some_and(|e| e == "ron"))
     {
-        let kit = read(&path)
-            .and_then(|text| ron::from_str::<Kit>(&text).map_err(|why| why.to_string()))
-            .and_then(|mut kit| {
-                kit.dress.read(&|file| read(&assets.join(file)))?;
-                Ok(kit)
-            });
+        let name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let kit = Kit::read(
+            &format!("{}/{name}", terra_build::kit::MATERIALS),
+            &|file: &str| read(&assets.join(file)),
+        );
         match kit {
             Ok(kit) => kits.push(kit),
             Err(why) => {
