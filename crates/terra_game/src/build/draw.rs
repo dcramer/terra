@@ -208,6 +208,15 @@ pub(super) struct KitMaterials {
 }
 
 impl KitMaterials {
+    /// Every distinct material the kits are drawn in.
+    pub(super) fn all(&self) -> impl Iterator<Item = &Handle<StandardMaterial>> {
+        let mut seen = std::collections::BTreeSet::new();
+        self.by_kind
+            .values()
+            .chain(self.first.values())
+            .filter(move |handle| seen.insert(handle.id()))
+    }
+
     /// A kind's material, or the first kit's for no kind.
     fn get(&self, kind: Kind, material: Material) -> Option<&Handle<StandardMaterial>> {
         self.by_kind
