@@ -44,7 +44,17 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let up = normalize(world);
     let facing = dot(pbr_input.N, up);
     let patches = noise(world * 1.6) * 0.5 + noise(world * 4.7 + 11.0) * 0.3 + noise(world * 17.0 + 3.0) * 0.2;
-    let grows = smoothstep(0.35, 0.6, facing + (patches - 0.5) * 1.2) * moss.colour.a;
+    // Moss on the tops and ledges in patches with a ragged edge; bare stone down the sides,
+    // where it shows its own relief and grain.
+    let grows = smoothstep(0.5, 0.7, facing + (patches - 0.5) * 1.4) * moss.colour.a;
+    // Lichen on the bare stone, in pale grey-green crusts and specks (D268).
+    let crust = noise(world * 7.0 + 23.0) * 0.6 + noise(world * 29.0 + 9.0) * 0.4;
+    let lichen = smoothstep(0.6, 0.74, crust) * (1.0 - grows) * 0.6;
+    if lichen > 0.0 {
+        let base = pbr_input.material.base_color.rgb;
+        let pale = vec3<f32>(0.16, 0.17, 0.12) * (0.8 + 0.4 * noise(world * 61.0));
+        pbr_input.material.base_color = vec4<f32>(mix(base, pale, lichen), pbr_input.material.base_color.a);
+    }
     if grows > 0.0 {
         // Cushions of it, darker between them, yellower where it is thin.
         let cushions = noise(world * 9.0 + 5.0) * 0.6 + noise(world * 31.0) * 0.4;
@@ -56,7 +66,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         pbr_input.material.base_color = vec4<f32>(mix(base, colour, grows), pbr_input.material.base_color.a);
         pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 1.0, grows);
         // A cushion of moss is softer than the stone's relief.
-        pbr_input.N = normalize(mix(pbr_input.N, pbr_input.world_normal, grows * 0.5));
+        pbr_input.N = normalize(mix(pbr_input.N, pbr_input.world_normal, grows * 0.3));
     }
     pbr_input.material.base_color = alpha_discard(
         pbr_input.material.flags,

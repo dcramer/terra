@@ -254,8 +254,8 @@ fn fragment(
         let gy = dpdy(world);
         // Under trees the soil is fallen leaves, browner than the open ground's; under
         // conifers, needles, a little redder.
-        let litter_colour = vec3<f32>(0.1, 0.07, 0.042);
-        let needle_colour = vec3<f32>(0.088, 0.06, 0.037);
+        let litter_colour = vec3<f32>(0.09, 0.07, 0.048);
+        let needle_colour = vec3<f32>(0.066, 0.055, 0.043);
         // Soil and rock each at two sizes, blended in patches, so their repeat does not
         // show across a field or a hillside.
         let soil_tint = mix(colour, mix(litter_colour, needle_colour, needles), max(litter, needles)) * (0.9 + 0.2 * blotch);
@@ -283,7 +283,7 @@ fn fragment(
         // broken patches.
         let rooty = smoothstep(0.3, 0.75, roots + (fleck - 0.5) * 0.35 + (blotch - 0.5) * 0.3) * (1.0 - steep);
         if rooty > 0.0 {
-            let duff = vec3<f32>(0.075, 0.05, 0.03) * (0.8 + 0.4 * blotch);
+            let duff = vec3<f32>(0.066, 0.05, 0.037) * (0.8 + 0.4 * blotch);
             ground_is = over(ground_is, layer(ROOTS, 1.0, duff, world + 3.0, gx, gy, n), rooty);
         }
 

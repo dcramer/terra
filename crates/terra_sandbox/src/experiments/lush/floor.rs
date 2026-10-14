@@ -532,6 +532,7 @@ enum Under {
     Spruce,
     Bramble,
     Snag,
+    Twigs,
 }
 
 /// How each kind of undergrowth is placed: how many drift centres are tried, how many
@@ -555,7 +556,7 @@ struct Placement {
 /// away (D234).
 const SHADOW_SHRINK: f32 = 0.55;
 
-const PLACEMENTS: [Placement; 15] = [
+const PLACEMENTS: [Placement; 16] = [
     Placement {
         kind: Under::Bracken,
         name: "Bracken",
@@ -736,6 +737,18 @@ const PLACEMENTS: [Placement; 15] = [
         shadow_m: 45.0,
         drift_m: 30.0,
     },
+    Placement {
+        kind: Under::Twigs,
+        name: "Twigs",
+        tries: 9000,
+        clump: (1, 3),
+        spread_m: 1.6,
+        scale: (0.8, 1.2),
+        seen_m: 30.0,
+        near_m: 0.0,
+        shadow_m: 0.0,
+        drift_m: 12.0,
+    },
 ];
 
 /// A bell from `low` to `high`, highest between.
@@ -803,6 +816,10 @@ impl Under {
             Under::Snag => {
                 (1.0 - smoothstep(0.5, 0.9, here.light)) * smoothstep(1.5, 3.5, here.bark)
             }
+            // Twigs fallen from the canopy, thickest under it and round the trunks.
+            Under::Twigs => {
+                (1.0 - smoothstep(0.5, 0.95, here.light)) * (0.5 + 0.5 * near(here.bark, 1.0, 6.0))
+            }
         }
     }
 
@@ -815,6 +832,7 @@ impl Under {
             Under::Bramble => (1.0, 0.3, 1.2),
             Under::Snag => (1.6, 0.8, 2.5),
             Under::Branches => (0.5, 0.1, 0.4),
+            Under::Twigs => (0.3, 0.05, 0.3),
             Under::Flowers => (0.6, 0.1, 0.05),
             _ => (0.35, 0.1, 0.2),
         }
@@ -1210,6 +1228,12 @@ impl Lay<'_, '_, '_> {
                         .expect("sticks have normals and texture places");
                     Drawn::one(self.meshes.add(mesh), Look::Foliage(self.bark.clone()))
                 }
+                Under::Twigs => {
+                    let mut mesh = twigs(&mut dice).mesh();
+                    mesh.generate_tangents()
+                        .expect("twigs have normals and texture places");
+                    Drawn::one(self.meshes.add(mesh), Look::Foliage(self.bark.clone()))
+                }
                 Under::Flowers => {
                     let tint = variant_tint(&mut dice, Vec3::new(0.9, 0.9, 0.86));
                     let name = ["daisy", "buttercup", "campion"][n as usize % 3];
@@ -1376,7 +1400,16 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         let (scale, kinds, size) = if boulder {
             (dice.range(0.6, 1.3), &boulders, 1.2)
         } else {
-            (dice.range(0.6, 1.6), &rocks, 0.35)
+            // Many small stones and a few big ones.
+            let u = dice.unit();
+            (0.4 + 1.8 * u * u, &rocks, 0.35)
+        };
+        // Most sit a fifth to two fifths in the ground; a third are half buried or more,
+        // only their mossy backs showing, as hummocks of the floor.
+        let sink = if dice.unit() < 0.35 {
+            dice.range(0.45, 0.75)
+        } else {
+            dice.range(0.2, 0.4)
         };
         let place = lay.on(at, dice, 0.0, scale);
         let (mesh, material) = kinds[dice.below(kinds.len() as u32) as usize].clone();
@@ -1387,7 +1420,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
             place,
             within(if boulder { 160.0 } else { 80.0 }),
             Footing,
-            Sink(dice.range(0.2, 0.4)),
+            Sink(sink),
         ));
         map.lying.add(at, size * scale * 0.6);
         laid[boulder as usize] += 1;
@@ -1402,7 +1435,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
             rock(lay, &mut map, &mut dice, near, false);
         }
     }
-    for _ in 0..800 {
+    for _ in 0..1400 {
         let at = disc(&mut dice, CLEARING_M, FOREST_M);
         // More in the shade, where the soil is thin over them.
         if dice.unit() > 0.4 + 0.6 * (1.0 - map.here(at).light) {
@@ -2057,6 +2090,48 @@ fn branches(dice: &mut Rng) -> Build {
         colour[0] *= 0.82;
         colour[1] *= 0.78;
         colour[2] *= 0.72;
+        colour[3] = 0.45;
+    }
+    build
+}
+
+/// Twig litter: a dozen to thirty thin dead twigs scattered over a couple of metres, lying
+/// every way, some crooked, as the canopy drops them in every wind; grey with weather.
+fn twigs(dice: &mut Rng) -> Build {
+    let mut build = Build::default();
+    for _ in 0..12 + dice.below(19) {
+        let at = Vec3::new(dice.range(-1.1, 1.1), 0.0, dice.range(-1.1, 1.1));
+        let angle = dice.range(0.0, TAU);
+        let along = Vec3::new(libm::cosf(angle), 0.0, libm::sinf(angle));
+        let across = along.cross(Vec3::Y);
+        let length = dice.range(0.2, 0.9);
+        let radius = dice.range(0.006, 0.02);
+        let kink = dice.range(-0.06, 0.06);
+        let points = (0..=2)
+            .map(|i| {
+                let t = i as f32 / 2.0;
+                at + along * (t - 0.5) * length
+                    + Vec3::Y * radius
+                    + across * kink * libm::sinf(t * PI)
+            })
+            .collect();
+        tube(
+            &mut build,
+            &Limb {
+                points,
+                radii: vec![radius, radius * 0.8, radius * 0.5],
+                depth: 1,
+                pointed: false,
+            },
+            3,
+            1.0e4,
+            BARK_M * 0.3,
+        );
+    }
+    for colour in &mut build.colours {
+        colour[0] *= 0.8;
+        colour[1] *= 0.76;
+        colour[2] *= 0.7;
         colour[3] = 0.45;
     }
     build

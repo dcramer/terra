@@ -673,11 +673,12 @@ fn plant(
     };
     let crown_leaves = materials.add(crown_material(Vec3::ZERO, LEAF, 0.25));
     // The floor's and the middle layer's: greyed and darkened as the crowns' are, if less,
-    // so their pictures' spring green reads as leaves in a wood's shade, not lime (D268).
+    // so their pictures' spring green reads as leaves in a wood's shade, not lime, and lit through
+    // less, as backlit they glowed lime too (D268).
     let floor_cards = materials.add(crown_material(
         Vec3::ZERO,
         Vec4::new(0.12, 0.1, 0.0, 0.0),
-        0.55,
+        0.35,
     ));
     // The near crown's leaves, whose cards drop out with distance (D223).
     let dropping_leaves = materials.add(crown_material(
