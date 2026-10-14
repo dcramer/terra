@@ -444,14 +444,14 @@ impl Walls<'_> {
         })
     }
 
-    /// Whether a cube is in a wall: its tile is a wall tile (`Base::in_wall`), but for the
-    /// top layer over a post or another cube cut to a shape, which is what it carries: a
-    /// deck or a beam, not a wall's top.
+    /// Whether a cube is in a wall (`Base::in_wall`), but for the top of a column over a
+    /// post or another cube cut to a shape, which is what it carries: a deck or a beam, not
+    /// a wall's top.
     fn walled(&self, at: IVec3) -> bool {
         if !self.base.in_wall(at) {
             return false;
         }
-        let top = at.y - crate::wall_layer(crate::storey_of(at.y)) == crate::STOREY_CUBES - 1;
+        let top = !self.base.in_wall(at + IVec3::Y);
         !(top
             && self
                 .base

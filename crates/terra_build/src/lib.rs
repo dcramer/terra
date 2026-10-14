@@ -9,10 +9,10 @@
 //! - **A wall is a row of cubes**, a storey high unless built otherwise; a post is a
 //!   column of them, a floor a layer. So walls meet, cross, are carved and mix kinds by
 //!   sharing cubes.
-//! - **A storey is six cubes, three metres.** Its floor is the layer of cubes just under
-//!   it, so a floor's top is the storey's height, and the layer at the top of its walls is
-//!   the next storey's floor, or a flat roof. A cell of a storey, a *tile*, is a column of
-//!   six cubes.
+//! - **A storey is six cubes, three metres**, but only as the quick tools' default height
+//!   (D176, D277): what a cube is, wall or floor, and the rooms, are read from the cubes
+//!   alone. The quick tools lay a storey's floor as the layer just under it and its walls
+//!   six cubes high, and read a column of six cubes as a wall *tile*.
 //! - **Rooms are worked out** from the cubes, the space they close in all round ([`rooms`]).
 //! - **A roof is cubes too** (D241): cubes of a roof kind ([`Kind::is_roof`]) cut to
 //!   slopes and corners, laid by hand or by the roofer ([`roofer`]) and drawn as a roof
@@ -334,8 +334,6 @@ pub struct Base {
     /// What was paid for each fitted prop, which taking it out gives back.
     prop_paid: BTreeMap<[i32; 3], Bill>,
     ground: Ground,
-    /// Worked out from the cubes: each wall tile and what fills it.
-    walls: BTreeMap<[i32; 3], Panel>,
     /// Each column of cubes, by where it stands, and its layers.
     columns: BTreeMap<[i32; 2], BTreeSet<i32>>,
     /// Every cube closed in, and which room it is in, worked out when asked (D261).
@@ -434,10 +432,49 @@ impl Base {
         &self.ground
     }
 
-    /// Whether a cube is part of a wall, rather than a floor or roof: its tile is a wall
-    /// tile.
+    /// Whether a cube is part of a wall, rather than a floor or roof, from the cubes alone
+    /// (D277): it stands in a column of cubes, with one whole, a post or an opening over it
+    /// or under it, not of a roof. A floor is a layer a cube thick, which runs on under the
+    /// foot of a wall standing on it: a cube with nothing under it beside a cube of floor is
+    /// floor. A stair or a slope set on a floor leaves it a floor.
     pub fn in_wall(&self, at: IVec3) -> bool {
-        self.walls.contains_key(&[at.x, storey_of(at.y), at.z])
+        let stands = |at: IVec3| self.cube(at).is_some_and(|cube| !cube.kind.is_roof());
+        let standing = |at: IVec3| {
+            self.cube(at).is_some_and(|cube| {
+                !cube.kind.is_roof()
+                    && (cube.fill == Fill::Open || matches!(cube.shape, Shape::Whole | Shape::Post))
+            })
+        };
+        if !stands(at) {
+            return false;
+        }
+        let (over, under) = (standing(at + IVec3::Y), standing(at - IVec3::Y));
+        if under {
+            return true;
+        }
+        // Nothing under it: a wall's foot, unless a floor beside it, or corner to corner
+        // with it, runs on under it.
+        let floor = |beside: IVec3| {
+            stands(beside) && !standing(beside + IVec3::Y) && !standing(beside - IVec3::Y)
+        };
+        let around = (-1..=1).flat_map(|x| (-1..=1).map(move |z| IVec3::new(x, 0, z)));
+        over && !around
+            .filter(|&step| step != IVec3::ZERO)
+            .any(|step| floor(at + step))
+    }
+
+    /// The way the wall a cube is in runs along the floor, from the cubes beside it: east
+    /// and west where a cube of a wall is beside it that way, else north and south where
+    /// one is, else east and west.
+    pub fn runs_along(&self, at: IVec3) -> IVec3 {
+        let wall = |step: IVec3| self.in_wall(at + step);
+        if wall(IVec3::X) || wall(IVec3::NEG_X) {
+            IVec3::X
+        } else if wall(IVec3::Z) || wall(IVec3::NEG_Z) {
+            IVec3::Z
+        } else {
+            IVec3::X
+        }
     }
 
     /// Whether a tile has a floor under it: a cube at its floor's layer, not of a roof.
@@ -449,7 +486,7 @@ impl Base {
     /// Whether a tile that is not a wall has a flat roof over it, or a floor of the
     /// storey above.
     pub fn has_roof(&self, tile: IVec3) -> bool {
-        !self.walls.contains_key(&tile.to_array()) && self.has_floor(tile + IVec3::Y)
+        self.filling(tile).is_none() && self.has_floor(tile + IVec3::Y)
     }
 
     /// Whether a tile has any roof over it: a flat one, or a roof's cubes over its column,
@@ -473,14 +510,24 @@ impl Base {
             .iter()
             .filter(|(at, cube)| (at.y + 1).rem_euclid(STOREY_CUBES) == 0 && !cube.kind.is_roof())
             .map(|(at, _)| IVec3::new(at.x, storey_of(at.y + 1), at.z))
-            .filter(|tile| !self.walls.contains_key(&(*tile - IVec3::Y).to_array()))
+            .filter(|tile| self.filling(*tile - IVec3::Y).is_none())
     }
 
-    /// Every wall tile and what fills it, in a fixed order.
+    /// Every wall tile and what fills it, in a fixed order: the quick tools' view of the
+    /// cubes, a storey's column at its default height ([`Base::filling`]).
     pub fn walls(&self) -> impl Iterator<Item = (IVec3, Panel)> + '_ {
-        self.walls
+        let tiles: BTreeSet<[i32; 3]> = self
+            .cubes
             .iter()
-            .map(|(&tile, &panel)| (IVec3::from_array(tile), panel))
+            .filter(|(at, cube)| {
+                !cube.kind.is_roof() && at.y - wall_layer(storey_of(at.y)) < STOREY_CUBES - 1
+            })
+            .map(|(at, _)| [at.x, storey_of(at.y), at.z])
+            .collect();
+        tiles.into_iter().filter_map(|tile| {
+            let tile = IVec3::from_array(tile);
+            self.filling(tile).map(|panel| (tile, panel))
+        })
     }
 
     /// The layers of the cubes standing at a place, counted in cubes along the floor.
@@ -675,7 +722,7 @@ impl Base {
             // only being changed.
             if top
                 && self.cubes.get(IVec3::from_array(at)).is_some()
-                && !self.walls.contains_key(&tile.to_array())
+                && self.filling(tile).is_none()
             {
                 continue;
             }
@@ -702,7 +749,7 @@ impl Base {
             for x in min.x..=max.x {
                 for z in min.z..=max.z {
                     let tile = IVec3::new(x, y, z);
-                    let wall = self.walls.contains_key(&tile.to_array());
+                    let wall = self.filling(tile).is_some();
                     // A floor under all of it, the walls too, unless the top of a wall
                     // below is there.
                     if self.cubes.get(IVec3::new(x, floor_layer(y), z)).is_none() {
@@ -739,36 +786,29 @@ impl Base {
         changed
     }
 
-    /// Works out the wall tiles and the columns from the cubes, and forgets the rooms, to be
-    /// worked out again when asked.
+    /// Works out the columns from the cubes, and forgets the rooms, to be worked out again
+    /// when asked.
     fn work_out(&mut self) {
         self.columns.clear();
-        // A wall tile has cubes below its top layer; a roof's are no wall (D241).
-        let mut tiles: BTreeMap<[i32; 3], Vec<Option<Fill>>> = BTreeMap::new();
-        for (at, cube) in self.cubes.iter() {
+        for (at, _) in self.cubes.iter() {
             self.columns.entry([at.x, at.z]).or_default().insert(at.y);
-            if cube.kind.is_roof() {
-                continue;
-            }
-            let storey = storey_of(at.y);
-            let step = at.y - wall_layer(storey);
-            if step < STOREY_CUBES - 1 {
-                tiles
-                    .entry([at.x, storey, at.z])
-                    .or_insert_with(|| vec![None; STOREY_CUBES as usize])[step as usize] =
-                    Some(cube.fill);
-            }
         }
-        self.walls = tiles
-            .into_iter()
-            .map(|(tile, fills)| (tile, panel_of(&fills)))
-            .collect();
         self.rooms = rooms::Rooms::default();
     }
 
-    /// What fills a wall tile. `None` where there is no wall.
+    /// What fills a wall tile, read from its cubes: the quick tools' view of a storey's
+    /// column at its default height, six cubes (D176, D277). `None` where no cube but a
+    /// roof's stands below its top layer.
     pub fn filling(&self, tile: IVec3) -> Option<Panel> {
-        self.walls.get(&tile.to_array()).copied()
+        let foot = wall_layer(tile.y);
+        let fills: Vec<Option<Fill>> = (0..STOREY_CUBES)
+            .map(|step| {
+                self.cube(IVec3::new(tile.x, foot + step, tile.z))
+                    .filter(|cube| step < STOREY_CUBES - 1 && !cube.kind.is_roof())
+                    .map(|cube| cube.fill)
+            })
+            .collect();
+        fills.iter().any(Option::is_some).then(|| panel_of(&fills))
     }
 
     /// What fills a wall tile, or solid where there is none.
@@ -787,7 +827,7 @@ impl Base {
     /// The way a wall tile's wall runs along the floor: east and west where it has wall
     /// either side that way, else north and south where it has, else east and west.
     pub fn along(&self, tile: IVec3) -> IVec3 {
-        let wall = |step: IVec3| self.walls.contains_key(&(tile + step).to_array());
+        let wall = |step: IVec3| self.filling(tile + step).is_some();
         if wall(IVec3::X) || wall(IVec3::NEG_X) {
             IVec3::X
         } else if wall(IVec3::Z) || wall(IVec3::NEG_Z) {
@@ -1242,6 +1282,50 @@ mod tests {
         assert!(base.run(IVec3::new(1, 0, 1)).is_empty());
         assert_eq!(cells(CELL_M * 3.0), 3);
         assert_eq!(cells(0.0), 1);
+    }
+
+    #[test]
+    fn what_is_wall_and_what_is_floor_is_read_from_the_cubes_not_storeys() {
+        let mut base = Base::default();
+        let solid = Some(Cube::new(LOGS, Fill::Solid));
+        let fill = |base: &mut Base, min: [i32; 3], max: [i32; 3], cube: Option<Cube>| {
+            base.apply(BuildOp::Fill { min, max, cube });
+        };
+        // A floor a cube thick, a wall on it from layer 3 to 8 on a plinth across where
+        // two storeys meet, a knee-high wall, and a stair set on the floor.
+        fill(&mut base, [0, -1, 0], [9, -1, 5], solid);
+        fill(&mut base, [0, 0, 0], [0, 2, 0], solid);
+        fill(&mut base, [0, 3, 0], [0, 8, 5], solid);
+        fill(&mut base, [5, 0, 0], [9, 0, 0], solid);
+        let stair = Cube {
+            shape: Shape::Stair(Facing::North),
+            ..Cube::new(LOGS, Fill::Solid)
+        };
+        fill(&mut base, [5, 0, 3], [5, 0, 3], Some(stair));
+        assert!(
+            (3..=8).all(|y| base.in_wall(IVec3::new(0, y, 4))),
+            "the wall off a storey's layer"
+        );
+        assert!(base.in_wall(IVec3::new(7, 0, 0)), "the knee-high wall");
+        // The floor is floor: under the knee-high wall and the plinth too, where it runs
+        // on under them, and under the stair.
+        for at in [[4, -1, 2], [7, -1, 0], [0, -1, 0], [5, -1, 3]] {
+            assert!(!base.in_wall(IVec3::from_array(at)), "{at:?}");
+        }
+        // A deck alone up a storey on a post is no wall; the post is.
+        let mut deck = Base::default();
+        fill(&mut deck, [20, 0, 0], [20, 4, 0], solid);
+        fill(&mut deck, [18, 5, -2], [22, 5, 2], solid);
+        assert!(deck.in_wall(IVec3::new(20, 2, 0)));
+        assert!(!deck.in_wall(IVec3::new(19, 5, 1)));
+        // A roof's cubes are never wall.
+        fill(
+            &mut deck,
+            [20, 6, 0],
+            [20, 7, 0],
+            Some(Cube::new(Kind::FIRST_ROOF, Fill::Solid)),
+        );
+        assert!(!deck.in_wall(IVec3::new(20, 7, 0)));
     }
 
     #[test]

@@ -119,9 +119,7 @@ fn openings(
             low.as_vec3() * CELL_M,
             (high + IVec3::ONE).as_vec3() * CELL_M,
         );
-        let along_x = high.x > low.x
-            || (high.z == low.z
-                && base.along(IVec3::new(low.x, crate::storey_of(low.y), low.z)) == IVec3::X);
+        let along_x = high.x > low.x || (high.z == low.z && base.runs_along(low) == IVec3::X);
         let over = solid(IVec3::new(low.x, high.y + 1, low.z));
         // A timber lintel, into the wall either side, where the wall goes on over it.
         if lintels && over {
