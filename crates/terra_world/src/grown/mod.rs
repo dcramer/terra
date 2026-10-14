@@ -260,6 +260,26 @@ pub struct FoliageExtension {
     /// (`crate::parting`, D271), in the one buffer every foliage material shares.
     #[storage(101, read_only)]
     pub parting: Handle<ShaderBuffer>,
+    /// For leaves: how far the atlas's normal map turns each leaf from the crown's normal,
+    /// and the map (D269); 0 and none for bark.
+    #[uniform(100)]
+    pub relief: f32,
+    #[texture(102)]
+    #[sampler(103)]
+    pub leaf_normals: Option<Handle<Image>>,
+}
+
+/// How far a leaf's own tilt, in the card atlas's normal map, turns it from its crown's
+/// normal (D269): enough that leaves side by side catch the sun differently, little enough
+/// that a crown still shades as one mass.
+pub const RELIEF: f32 = 0.8;
+
+/// The card atlas's normal map, read as numbers rather than colours.
+pub fn leaf_normals(cards: &Cards, assets: &AssetServer) -> Handle<Image> {
+    assets
+        .load_builder()
+        .with_settings(|settings: &mut ImageLoaderSettings| settings.is_srgb = false)
+        .load(cards.normals.clone())
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -313,6 +333,8 @@ impl Looks {
             shrink: Vec4::ZERO,
             leaf: Vec4::ZERO,
             parting,
+            relief: 0.0,
+            leaf_normals: None,
         };
         let leaves = foliage.add(Foliage {
             base: StandardMaterial {
@@ -327,7 +349,11 @@ impl Looks {
                 reflectance: 0.2,
                 ..default()
             },
-            extension: wind.clone(),
+            extension: FoliageExtension {
+                relief: RELIEF,
+                leaf_normals: Some(leaf_normals(cards, assets)),
+                ..wind.clone()
+            },
         });
         // A far crown: rough, lit through from behind a little, in its vertex colours.
         let far = plain.add(StandardMaterial {

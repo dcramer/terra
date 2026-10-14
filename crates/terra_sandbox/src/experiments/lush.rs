@@ -180,6 +180,9 @@ impl Leaf {
 /// 15%, toward a forest's leaves in the shade; how brightly a leaf glows lit through toward
 /// the sun; and how dark the inside of a crown goes in the sun's light, at least.
 const LEAF: Vec4 = Vec4::new(0.15, 0.15, 1.6, 0.3);
+/// The middle layer's leaves (D269): greyed and darkened as the floor's (D268), lit through
+/// less than a crown's, as backlit they glowed lime, and as dark inside as a crown.
+const THICKET: Vec4 = Vec4::new(0.12, 0.1, 0.8, 0.25);
 /// Paths are filed in squares this wide, to find the nearest quickly.
 const PATH_SQUARE_M: f32 = 12.0;
 
@@ -208,6 +211,13 @@ pub struct FoliageExtension {
     /// What its plants make way for: the camera, and bodies walking through them (D271).
     #[storage(101, read_only)]
     parting: Handle<ShaderBuffer>,
+    /// For leaves: how far the atlas's normal map turns each leaf from the crown's normal,
+    /// and the map (D269); 0 and none for bark.
+    #[uniform(100)]
+    relief: f32,
+    #[texture(102)]
+    #[sampler(103)]
+    leaf_normals: Option<Handle<Image>>,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -626,6 +636,8 @@ fn plant(
         shrink: Vec4::ZERO,
         leaf: Vec4::ZERO,
         parting: parting.map(|parting| parting.0.clone()).unwrap_or_default(),
+        relief: 0.0,
+        leaf_normals: None,
     };
     // Read at a slant, as leaves edge-on are, a picture blurs unless sampled along the
     // slant too (anisotropic filtering).
@@ -657,6 +669,7 @@ fn plant(
     // all of them are drawn in one material (D222).
     let cards = Cards::read();
     let atlas: Handle<Image> = assets.load(cards.atlas.clone());
+    let leaf_normals = terra_world::grown::leaf_normals(&cards, &assets);
     // A crown's leaves: a little of the light through them from behind is Bevy's, the same
     // from every angle; the glow toward the sun is the foliage shader's own (`LEAF`, D247),
     // so a leaf lit from the front keeps most of its colour. The forest floor's plants keep
@@ -677,6 +690,8 @@ fn plant(
         extension: FoliageExtension {
             cards: cards_drop,
             leaf,
+            relief: terra_world::grown::RELIEF,
+            leaf_normals: Some(leaf_normals.clone()),
             ..wind.clone()
         },
     };
@@ -689,6 +704,9 @@ fn plant(
         Vec4::new(0.12, 0.1, 0.0, 0.0),
         0.35,
     ));
+    // The middle layer's, greyed and darkened as the floor's, but shaded as a crown is: its
+    // inside dark, its leaves lit through where the sun is behind them (`THICKET`, D269).
+    let thicket_cards = materials.add(crown_material(Vec3::ZERO, THICKET, 0.15));
     // The near crown's leaves, whose cards drop out with distance (D223).
     let dropping_leaves = materials.add(crown_material(
         Vec2::from(CARDS_DROP_M).extend(1.0),
@@ -1252,7 +1270,9 @@ fn plant(
             cards: &cards,
             bark: bark.clone(),
             pine_bark: barks[3].0.clone(),
+            spruce_bark: barks[5].0.clone(),
             atlas: floor_cards,
+            thicket: thicket_cards,
             leaves: leaves.clone(),
             seed,
             foliage: &mut materials,

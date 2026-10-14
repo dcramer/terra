@@ -405,6 +405,22 @@ pub struct Canopy {
     /// Whether its normals lean out from its trunk, as a cone's do, rather than from its
     /// middle.
     pub from_axis: bool,
+    /// How far it reaches from its middle in each direction (`ENVELOPE` bins round and up,
+    /// D269), so a crown that is not a ball, an egg of holly or a vase of hazel, is deep in
+    /// by its own shape; empty for one taken as a ball of `reach`.
+    pub envelope: Vec<f32>,
+}
+
+/// A crown's envelope's bins: round its middle, and from below to above.
+const ENVELOPE: (usize, usize) = (12, 6);
+
+/// The envelope's bin a direction from the middle falls in.
+fn envelope_bin(direction: Vec3) -> usize {
+    let (round, up) = ENVELOPE;
+    let turn = (libm::atan2f(direction.z, direction.x) / TAU + 1.0).fract();
+    let i = ((turn * round as f32) as usize).min(round - 1);
+    let j = (((direction.y.clamp(-1.0, 1.0) * 0.5 + 0.5) * up as f32) as usize).min(up - 1);
+    j * round + i
 }
 
 impl Canopy {
@@ -417,6 +433,32 @@ impl Canopy {
             .map(|s| s.at.distance(centre))
             .fold(0.0, f32::max)
             .max(1.0);
+        // The farthest spray each way, its own size out, then each bin the farthest of it
+        // and its neighbours, so the envelope has no holes between sprays.
+        let (round, up) = ENVELOPE;
+        let mut farthest = vec![0.0f32; round * up];
+        for spray in sprays {
+            let offset = spray.at - centre;
+            let bin = envelope_bin(offset.normalize_or(Vec3::Y));
+            farthest[bin] = farthest[bin].max(offset.length() + spray.size * 0.5);
+        }
+        let envelope = (0..round * up)
+            .map(|bin| {
+                let (i, j) = ((bin % round) as i32, (bin / round) as i32);
+                let mut most = 0.0f32;
+                for dj in -1..=1 {
+                    for di in -1..=1 {
+                        let jj = j + dj;
+                        if jj < 0 || jj >= up as i32 {
+                            continue;
+                        }
+                        let ii = (i + di).rem_euclid(round as i32);
+                        most = most.max(farthest[jj as usize * round + ii as usize]);
+                    }
+                }
+                if most > 0.0 { most } else { reach }
+            })
+            .collect();
         Self {
             centre,
             reach,
@@ -424,7 +466,19 @@ impl Canopy {
             bend: 1.0,
             tint,
             from_axis: tree.habit == Habit::Conical,
+            envelope,
         }
+    }
+
+    /// How deep in the crown a point is: 0 at its middle, 1 at its outermost leaves that way.
+    fn depth(&self, at: Vec3) -> f32 {
+        let offset = at - self.centre;
+        let reach = if self.envelope.is_empty() {
+            self.reach
+        } else {
+            self.envelope[envelope_bin(offset.normalize_or(Vec3::Y))]
+        };
+        offset.length() / reach.max(0.1)
     }
 
     /// Which way the crown faces at a point: out of it, so it shades as one.
@@ -437,33 +491,42 @@ impl Canopy {
     }
 
     /// How a card at a point is coloured: darker deep and low in the crown, which the rest
-    /// shades, a little different card to card.
+    /// shades, and different card to card as real leaves are (D269): lighter or darker by a
+    /// fifth, a few young and yellower, more old and a darker olive.
     fn colour(&self, dice: &mut Rng, at: Vec3) -> Vec3 {
         let depth = if self.from_axis {
             let axis = Vec3::new(0.0, at.y, 0.0);
             (at.distance(axis) / (self.reach * 0.6)).clamp(0.0, 1.0)
         } else {
-            (at.distance(self.centre) / self.reach).clamp(0.0, 1.0)
+            self.depth(at).clamp(0.0, 1.0)
         };
         let rise = ((at.y - self.centre.y) / self.reach * 0.5 + 0.5).clamp(0.0, 1.0);
-        let light = 0.72 + 0.2 * depth + 0.14 * rise + dice.range(-0.05, 0.05);
-        Vec3::new(
-            light * dice.range(0.95, 1.05),
-            light,
-            light * dice.range(0.92, 1.02),
-        ) * self.tint
+        let light = 0.72 + 0.2 * depth + 0.14 * rise + dice.range(-0.14, 0.1);
+        let age = dice.unit();
+        let hue = if age < 0.12 {
+            Vec3::new(1.1, 1.06, 0.78)
+        } else if age > 0.72 {
+            Vec3::new(0.86, 0.88, 0.72)
+        } else {
+            Vec3::new(dice.range(0.95, 1.05), 1.0, dice.range(0.92, 1.02))
+        };
+        hue * light * self.tint
     }
 
     /// How much of the sky a point in or under the crown sees: most at its edge and top,
-    /// least deep inside it and low on the trunk under it (D216).
+    /// least deep inside it and low on the trunk under it (D216). Its own leaves hide the sky
+    /// from what lies a little inside its outermost layer, so it falls off steeply from the
+    /// edge in (D269): a crown's inside reads dark between the lit leaves of its skin.
     pub fn sky(&self, at: Vec3) -> f32 {
         let depth = if self.from_axis {
             Vec2::new(at.x, at.z).length() / (self.reach * 0.6)
         } else {
-            at.distance(self.centre) / self.reach
+            self.depth(at)
         };
         let rise = (at.y / self.height).clamp(0.0, 1.0);
-        (0.25 + 0.5 * depth.clamp(0.0, 1.0) + 0.35 * rise).min(1.0)
+        let t = ((depth - 0.25) / 0.65).clamp(0.0, 1.0);
+        let shell = t * t * (3.0 - 2.0 * t);
+        (0.2 + 0.62 * shell + 0.3 * rise).min(1.0)
     }
 
     fn sway(&self, dice: &mut Rng, at: Vec3) -> Vec2 {
@@ -515,7 +578,7 @@ pub fn clump(
 
 /// A conifer's spray: a card lying along its twig, its base toward the branch, rolled a
 /// little about the twig so a branch seen from the side is not edge-on.
-fn twig_card(
+pub fn twig_card(
     dice: &mut Rng,
     canopy: &Canopy,
     at: Vec3,
@@ -585,7 +648,7 @@ pub fn crown(cards: &[Vec<Placing>], tree: &Tree, leaf: &Card, detail: usize) ->
             if i % every != 0 {
                 continue;
             }
-            ([2, 1, 1][detail], grow)
+            ([set.len(), 1, 1][detail], grow)
         } else {
             let keep = [set.len(), 3, 1][detail].min(set.len());
             // Each grows by the root of how many it stands for, a little less, since the
@@ -668,4 +731,50 @@ pub fn lumps(tree: &Tree, scale: f32, colour: Vec3) -> Build {
         );
     }
     build
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An upright egg of sprays, as holly is, a metre round and five tall, its leaves on
+    /// its skin.
+    fn egg() -> Tree {
+        let mut sprays = Vec::new();
+        for j in 1..12 {
+            let t = j as f32 / 12.0;
+            let ring = libm::sinf(PI * t);
+            for i in 0..16 {
+                let a = i as f32 / 16.0 * TAU;
+                sprays.push(Spray {
+                    at: Vec3::new(libm::cosf(a) * ring, 0.5 + 4.5 * t, libm::sinf(a) * ring),
+                    along: None,
+                    size: 0.3,
+                    branch: 0,
+                });
+            }
+        }
+        Tree {
+            limbs: Vec::new(),
+            sprays,
+            branches: 1,
+            trunk_m: 0.05,
+            height: 5.0,
+            habit: Habit::Upright,
+        }
+    }
+
+    #[test]
+    fn a_crowns_skin_sees_the_sky_by_its_own_shape_and_its_inside_little() {
+        let canopy = Canopy::of(&egg(), Vec3::ONE);
+        let middle = canopy.centre;
+        // Its side, a metre out, is as much its skin as its top, two and a half metres up.
+        let side = canopy.sky(middle + Vec3::X);
+        let top = canopy.sky(middle + Vec3::Y * 2.3);
+        assert!(side > 0.7, "the side's skin sees {side}");
+        assert!(top > 0.8, "the top sees {top}");
+        // Half way in at the side, it is shaded by the skin round it.
+        let inside = canopy.sky(middle + Vec3::X * 0.4);
+        assert!(inside < side - 0.3, "inside {inside}, skin {side}");
+    }
 }

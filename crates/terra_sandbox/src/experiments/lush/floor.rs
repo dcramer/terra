@@ -467,8 +467,12 @@ pub(super) struct Lay<'a, 'w, 's> {
     pub bark: Handle<Foliage>,
     /// Pine bark, for logs and stumps among the conifers.
     pub pine_bark: Handle<Foliage>,
+    /// A young spruce's grey-brown bark.
+    pub spruce_bark: Handle<Foliage>,
     /// The cards of the shared atlas, and the bushes' own leaves.
     pub atlas: Handle<Foliage>,
+    /// The middle layer's cards: the shared atlas, shaded deeper inside and lit through.
+    pub thicket: Handle<Foliage>,
     pub leaves: Handle<Foliage>,
     pub seed: Seed,
     /// The foliage materials, and those the middle layer's shadows shrink away in, by the
@@ -1079,7 +1083,7 @@ impl Lay<'_, '_, '_> {
             for (build, band) in [(near, Band::Near), (far, Band::Far)] {
                 drawn.parts.push(Part {
                     mesh: self.meshes.add(build.mesh(false)),
-                    look: Look::Foliage(self.atlas.clone()),
+                    look: Look::Foliage(self.thicket.clone()),
                     band,
                     solid: false,
                 });
@@ -1252,10 +1256,10 @@ impl Lay<'_, '_, '_> {
                     self.layered(shrub, self.bark.clone(), shadow_m)
                 }
                 Under::Spruce => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.95, 1.0, 0.95));
+                    let tint = variant_tint(&mut dice, Vec3::new(1.6, 1.75, 0.7));
                     let height = dice.range(1.4, 4.4);
                     let shrub = thicket::evergreen(&mut dice, &card("spruce"), tint, height, 0.5);
-                    self.layered(shrub, self.pine_bark.clone(), shadow_m)
+                    self.layered(shrub, self.spruce_bark.clone(), shadow_m)
                 }
                 Under::Bramble => {
                     let tint = variant_tint(&mut dice, Vec3::new(0.5, 0.54, 0.46));

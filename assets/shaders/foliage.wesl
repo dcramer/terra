@@ -38,6 +38,9 @@ struct Wind {
     // For leaves: how much their colour is greyed and darkened, how brightly they glow lit
     // through, and how dark the inside of a crown goes at least (D247).
     leaf: vec4<f32>,
+    // For leaves: how far the atlas's normal map turns each leaf from the crown's normal
+    // (D269); 0 for none.
+    relief: f32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)

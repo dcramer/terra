@@ -20,6 +20,7 @@ pub fn bush(dice: &mut Rng, def: &BushDef, leaf: &Card, tint: Vec3) -> Build {
         bend: 0.25,
         tint,
         from_axis: false,
+        envelope: Vec::new(),
     };
     let mut build = Build::default();
     for _ in 0..def.clumps.0 + dice.below(def.clumps.1 - def.clumps.0 + 1) {

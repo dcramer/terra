@@ -28,8 +28,9 @@ const THROUGH: vec3<f32> = vec3<f32>(1.0, 1.0, 0.45);
 // A leaf deep in a crown is lit through the leaves above it as well as in flecks where the
 // sun finds a gap, each layer passing on a little (`LAYERS` of the sun at a crown's inside),
 // so from under the canopy every leaf glows a little and those in a fleck brightly, rather
-// than all but the outermost going dark (D264). Its glow follows its own colour, before its
-// underside was darkened.
+// than all but the outermost going dark (D264). A little: leaves in another crown's shadow
+// pass on a few hundredths of the sun, so they read dark against those a fleck lights (D269).
+// Its glow follows its own colour, before its underside was darkened.
 fn lit_through(input: PbrInput, colour: vec3<f32>, sky: f32, frag_coord: vec4<f32>) -> vec3<f32> {
     if wind.leaf.z <= 0.0 || lights.n_directional_lights == 0u {
         return vec3<f32>(0.0);
@@ -39,7 +40,8 @@ fn lit_through(input: PbrInput, colour: vec3<f32>, sky: f32, frag_coord: vec4<f3
     let V = input.V;
     let toward = clamp(dot(-V, L), 0.0, 1.0);
     let forward = 0.75 * pow(toward, 6.0) + 0.25 * toward * toward;
-    let behind = clamp(dot(-input.world_normal, L), 0.0, 1.0);
+    // Each leaf at its own tilt (D269), so some glow brighter than their neighbours.
+    let behind = clamp(dot(-input.N, L), 0.0, 1.0);
     let view_z = dot(vec4<f32>(
         view.view_from_world[0].z,
         view.view_from_world[1].z,
@@ -54,7 +56,7 @@ fn lit_through(input: PbrInput, colour: vec3<f32>, sky: f32, frag_coord: vec4<f3
 }
 
 // How much of the sun reaches the inside of a crown through the leaves above (D264).
-const LAYERS: f32 = 0.2;
+const LAYERS: f32 = 0.06;
 
 // How much a leaf's underside, seen from inside or below its crown, reflects of what its
 // outer face would (D264).
@@ -103,10 +105,42 @@ struct Wind {
     // For leaves: how much their colour is greyed and darkened, how brightly they glow lit
     // through, and how dark the inside of a crown goes at least (D247).
     leaf: vec4<f32>,
+    // For leaves: how far the atlas's normal map turns each leaf from the crown's normal
+    // (D269); 0 for none.
+    relief: f32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> wind: Wind;
+// The card atlas's normal map: each leaf's relief and tilt, in OpenGL's convention (D269).
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var leaf_normals: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(103)
+var leaf_normals_sampler: sampler;
+
+// Each leaf turned to its own angle (D269): the atlas's normal map, laid on the card's own
+// face, leans the crown's normal (which leans out of the whole crown, so it still shades as
+// one mass) as far as each leaf is tilted, so leaves catch the sun one by one. Cards carry no
+// tangents of their own (theirs say how they drop out, D223), so the frame comes from how
+// the world position and the texture place change across the screen: Schüler's cotangent
+// frame ("Normal Mapping Without Precomputed Tangents", 2013), which is right from either
+// side of the card.
+fn leaf_relief(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>) {
+    let dp1 = dpdx(world);
+    let dp2 = dpdy(world);
+    let duv1 = dpdx(uv);
+    let duv2 = dpdy(uv);
+    let face = normalize(cross(dp1, dp2));
+    let dp2perp = cross(dp2, face);
+    let dp1perp = cross(face, dp1);
+    let t = dp2perp * duv1.x + dp1perp * duv2.x;
+    let b = dp2perp * duv1.y + dp1perp * duv2.y;
+    let scale = inverseSqrt(max(max(dot(t, t), dot(b, b)), 1.0e-20));
+    let n = textureSampleBias(leaf_normals, leaf_normals_sampler, uv, view.mip_bias).rgb * 2.0 - 1.0;
+    // Green is up the picture, toward a smaller v.
+    let lean = (n.x * t - n.y * b) * scale;
+    (*input).N = normalize((*input).N + lean * wind.relief);
+}
 
 fn hash3(p: vec3<f32>) -> f32 {
     return fract(sin(dot(p, vec3<f32>(127.1, 311.7, 74.7))) * 43758.5453);
@@ -351,6 +385,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // plates catch the light as a real trunk's do rather than reading as fur (D247).
         pbr_input.N = normalize(pbr_input.world_normal + (pbr_input.N - pbr_input.world_normal) * 1.8);
     }
+@if(VERTEX_UVS_A) {
+    if wind.bark < 0.5 && wind.relief > 0.0 {
+        leaf_relief(&pbr_input, in.uv, in.world_position.xyz);
+    }
+}
 @if(VERTEX_COLORS) {
     // Alpha is how much of the sky this point sees.
     let sky = in.color.a;
@@ -368,9 +407,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     pbr_input.diffuse_occlusion *= mix(BOUNCE, vec3<f32>(1.0), sky);
     pbr_input.specular_occlusion *= mix(0.35, 1.0, sky);
     // The inside of a crown, which little light reaches, darkened in the sun too, not only
-    // in the sky's light, down to leaf.w (D247).
+    // in the sky's light, down to leaf.w (D247); the outermost leaves, which see most of the
+    // sky, not at all, so a crown's skin stays bright over its dark inside (D269).
     if wind.bark < 0.5 && wind.leaf.w > 0.0 {
-        let inside = mix(wind.leaf.w, 1.0, smoothstep(0.3, 0.95, sky));
+        let inside = mix(wind.leaf.w, 1.0, smoothstep(0.25, 0.8, sky));
         pbr_input.material.base_color = vec4<f32>(pbr_input.material.base_color.rgb * inside, pbr_input.material.base_color.a);
     }
 }

@@ -928,13 +928,16 @@ fn card(
         (middle.distance(crown.centre) / (crown.reach * 1.1)).clamp(0.0, 1.0)
     };
     let in_mass = (middle.distance(mass) / (size * 3.0)).clamp(0.0, 1.0);
-    let light = 0.44 + 0.22 * outer + 0.16 * in_mass + 0.16 * rise + dice.range(-0.07, 0.07);
+    let light = 0.44 + 0.22 * outer + 0.16 * in_mass + 0.16 * rise + dice.range(-0.13, 0.09);
     let mut tint = Vec3::new(
         light * dice.range(0.95, 1.05),
         light,
         light * dice.range(0.9, 1.0),
     ) * hue;
-    // Here and there a leaf turning.
+    // Older leaves a darker olive (D269), and here and there a leaf turning.
+    if dice.unit() < 0.3 {
+        tint *= Vec3::new(0.86, 0.88, 0.72);
+    }
     if species == Species::Oak && dice.unit() < 0.05 {
         tint *= Vec3::new(1.2, 1.08, 0.65);
     }
@@ -953,8 +956,18 @@ fn card(
         tint,
         sway: Vec2::new(bend * bend, flutter),
         flip: if dice.unit() < 0.5 { -1.0 } else { 1.0 },
-        // Deep in the crown it sees about a third of the sky (D247).
-        sky: (0.3 + 0.7 * outer.max(in_mass * 0.8)).min(1.0),
+        // Deep in the crown it sees little of the sky, falling off steeply inside the
+        // outermost leaves of its mass and of the crown (D247, D269).
+        sky: {
+            // A conifer's open whorls let light in to its middle: it sees about a third of
+            // the sky deep in, as it did (D247).
+            let t = ((outer.max(in_mass * 0.85) - 0.3) / 0.65).clamp(0.0, 1.0);
+            if crown.axial {
+                (0.3 + 0.7 * outer.max(in_mass * 0.8)).min(1.0)
+            } else {
+                0.15 + 0.85 * t * t * (3.0 - 2.0 * t)
+            }
+        },
         leaf,
     }
 }

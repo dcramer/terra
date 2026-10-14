@@ -44,6 +44,9 @@ export type Recipe = {
   /** The scan's colour graded: its saturation and lightness, as multiples. */
   saturation: number;
   value: number;
+  /** The scan's colour multiplied, channel by channel, to shift its hue: a spring scan's yellow
+   * toward summer's deeper green. */
+  hue?: [number, number, number];
   /** Berries in bunches along the twig, if it bears them. */
   berries?: { count: number; colour: [number, number, number]; radius: number };
   seed: number;
@@ -284,7 +287,7 @@ function drawLeaf(scan: Scan, label: Int32Array, leaf: ScanLeaf, laid: Laid, rec
       let [r, g, b] = colour.map((v) => v / cover);
       // Graded: saturation about its own grey, then lightness.
       const l = grey(r, g, b);
-      [r, g, b] = [r, g, b].map((v) => Math.max(0, (l + (v - l) * recipe.saturation) * recipe.value));
+      [r, g, b] = [r, g, b].map((v, c) => Math.max(0, (l + (v - l) * recipe.saturation) * recipe.value * (recipe.hue?.[c] ?? 1)));
       if (laid.underside) {
         // A leaf's underside: paler and greyer, a little blue, its veins standing out less.
         const u = grey(r, g, b);
@@ -436,7 +439,7 @@ export function compose(scan: Scan, recipe: Recipe, size: number): Composed {
     const young = roll2 < recipe.young * (0.4 + 1.2 * t);
     const old = !young && roll.unit() < recipe.old * (1.6 - 1.2 * t);
     const v = 1 + roll.range(-recipe.tone, recipe.tone * 0.6);
-    const tint: [number, number, number] = young ? [v * 1.12, v * 1.08, v * 0.72] : old ? [v * 0.72, v * 0.74, v * 0.55] : [v, v, v * roll.range(0.9, 1.05)];
+    const tint: [number, number, number] = young ? [v * 1.08, v * 1.06, v * 0.8] : old ? [v * 0.72, v * 0.74, v * 0.55] : [v, v, v * roll.range(0.9, 1.05)];
     // Mostly a little turned, some steeply, so they foreshorten and catch the light apart.
     const turn = roll.sign() * (roll.unit() < 0.25 ? roll.range(0.6, 1.15) : roll.range(0.0, 0.5));
     const tilt = roll.sign() * roll.range(0.0, 0.7);
