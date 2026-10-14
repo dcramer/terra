@@ -108,37 +108,64 @@ const VARIANTS: u64 = 6;
 pub(super) struct Stand {
     at: Vec2,
     trunk_m: f32,
+    crown_at: Vec2,
     crown_m: f32,
     closes: f32,
     conifer: bool,
 }
 
 impl Stand {
-    /// A tree of a species `height` tall: an oak's crown spreads a third of its height, a
-    /// veteran's half, a pine's and spruce's a sixth; a pine lets much of the light through,
-    /// a spruce little; young trees less of either.
+    /// A tree of a species standing at `at`, its crown's middle at `crown_at` reaching
+    /// `crown_m` round it: an oak's crown hides most of the sky under it, a Scots pine's lets
+    /// much of the light through, a spruce's little; a young tree's less.
     pub(super) fn of(
         at: Vec2,
+        crown_at: Vec2,
+        crown_m: f32,
         species: Species,
         young: bool,
-        veteran: bool,
-        height: f32,
         trunk_m: f32,
     ) -> Self {
-        let (spread, closes) = match species {
-            Species::Oak if veteran => (0.5, 0.85),
-            Species::Oak => (0.33, 0.82),
-            Species::Pine => (0.17, 0.62),
-            Species::Spruce => (if young { 0.24 } else { 0.18 }, 0.92),
+        let closes = match species {
+            Species::Oak => 0.85,
+            Species::Pine => 0.62,
+            Species::Spruce => 0.92,
         };
         Self {
             at,
             // The root flare spreads past the trunk.
             trunk_m: trunk_m * 1.3,
-            crown_m: height * spread,
-            closes: closes * if young { 0.6 } else { 1.0 },
+            crown_at,
+            crown_m,
+            closes: closes * if young { 0.7 } else { 1.0 },
             conifer: species != Species::Oak,
         }
+    }
+}
+
+/// A crown's middle, level with the foot, and how far its leaves reach from it, from where
+/// its clumps of leaves are and how big.
+pub(super) fn crown_of(tips: &[(Vec3, f32)]) -> (Vec3, f32) {
+    let count = tips.len().max(1) as f32;
+    let middle = tips.iter().fold(Vec3::ZERO, |sum, (tip, _)| {
+        sum + Vec3::new(tip.x, 0.0, tip.z)
+    }) / count;
+    let reach = tips
+        .iter()
+        .map(|(tip, size)| Vec2::new(tip.x - middle.x, tip.z - middle.z).length() + size * 0.5)
+        .fold(0.5, f32::max);
+    (middle, reach)
+}
+
+impl Stand {
+    /// How much of the crown is over a place, 0 to 1: all of it under its middle, none past
+    /// its edge.
+    fn under(&self, at: Vec2) -> f32 {
+        1.0 - smoothstep(
+            0.4 * self.crown_m,
+            1.0 * self.crown_m,
+            self.crown_at.distance(at),
+        )
     }
 }
 
@@ -170,13 +197,11 @@ impl Crowns {
         for di in -CROWN_REACH..=CROWN_REACH {
             for dj in -CROWN_REACH..=CROWN_REACH {
                 for stand in self.filed.get(&(i + di, j + dj)).into_iter().flatten() {
-                    let d = stand.at.distance(at);
-                    bark = bark.min(d - stand.trunk_m);
-                    // Densest under the middle of the crown, none past its edge.
-                    let under = 1.0 - smoothstep(0.4 * stand.crown_m, 1.05 * stand.crown_m, d);
-                    light *= 1.0 - under * stand.closes;
+                    bark = bark.min(stand.at.distance(at) - stand.trunk_m);
+                    light *= 1.0 - stand.under(at) * stand.closes;
                     if stand.conifer {
                         // Needles fall a little past the crown.
+                        let d = stand.crown_at.distance(at);
                         let fall = 1.0 - smoothstep(0.6 * stand.crown_m, 1.5 * stand.crown_m, d);
                         needles_miss *= 1.0 - fall * 0.9;
                     }
@@ -261,11 +286,11 @@ impl Map {
         let path = self.path_edge(at);
         // Gaps in the canopy, where a crown is thin or a tree has fallen.
         let gap = smoothstep(0.58, 0.82, self.noise(at, 19.0, 10.0));
-        let shade = over.shade * (1.0 - 0.6 * gap);
+        let shade = over.shade * (1.0 - 0.45 * gap);
         // A path's corridor lets the light down to its edges.
-        let corridor = 1.0 - smoothstep(0.5, 4.0, path.max(0.0));
+        let corridor = 1.0 - smoothstep(0.5, 5.0, path.max(0.0));
         Here {
-            light: (1.0 - shade + 0.3 * corridor).min(1.0),
+            light: (1.0 - shade + 0.45 * corridor).min(1.0),
             needles: over.needles,
             bark: over.bark,
             lying: self.lying.edge(at),
@@ -312,8 +337,11 @@ impl Map {
         // Duff and roots round a tree's foot, its edge wandering; along logs and rocks.
         let ring = 1.0 - smoothstep(0.0, 1.5, here.bark + wander);
         let along = 1.0 - smoothstep(0.0, 0.7, here.lying + wander * 0.4);
+        // Dark duff in the damp hollows under the canopy.
+        let damp = floor * smoothstep(0.6, 0.85, here.wet + (mossy - 0.5) * 0.4) * 0.65;
         let roots = (ring * 0.95)
             .max(along * 0.7)
+            .max(damp)
             .max(fray * (0.35 + 0.5 * self.noise(at, 79.0, 0.9)));
         let moss = (ring * (0.25 + 0.6 * mossy))
             .max(along * 0.5)
@@ -452,8 +480,8 @@ const PLACEMENTS: [Placement; 10] = [
     Placement {
         kind: Under::Frond,
         name: "Fern",
-        tries: 8000,
-        clump: (4, 10),
+        tries: 14000,
+        clump: (5, 12),
         spread_m: 0.9,
         scale: (0.8, 1.5),
         seen_m: 45.0,
@@ -463,7 +491,7 @@ const PLACEMENTS: [Placement; 10] = [
     Placement {
         kind: Under::Herb,
         name: "Herb",
-        tries: 7000,
+        tries: 12000,
         clump: (6, 14),
         spread_m: 0.7,
         scale: (0.6, 1.1),
@@ -552,7 +580,7 @@ impl Under {
         let broadleaf = 1.0 - smoothstep(0.2, 0.6, here.needles);
         match self {
             // Half shade: the edges of clearings, gaps, the paths' sides.
-            Under::Bracken => between(0.2, 1.2, here.light) * (0.4 + 0.6 * broadleaf),
+            Under::Bracken => between(0.05, 1.2, here.light) * (0.4 + 0.6 * broadleaf),
             // The shade, the damp, round the trunks and along the logs.
             Under::Fern | Under::Frond => {
                 (1.0 - smoothstep(0.35, 0.8, here.light))
@@ -1118,6 +1146,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         map.canopy.add(Stand {
             at,
             trunk_m: radius * scale * 1.3,
+            crown_at: at,
             crown_m: 0.0,
             closes: 0.0,
             conifer: false,
@@ -1746,7 +1775,7 @@ mod tests {
             .map(|k| {
                 let angle = k as f32 / 6.0 * TAU;
                 let foot = at + Vec2::new(libm::cosf(angle), libm::sinf(angle)) * 3.5;
-                Stand::of(foot, species, false, false, 22.0, 0.5)
+                Stand::of(foot, foot, 7.0, species, false, 0.5)
             })
             .collect()
     }
@@ -1777,7 +1806,7 @@ mod tests {
     #[test]
     fn grass_is_pushed_back_from_a_trunk_by_duff_and_roots() {
         let (_, at) = map_with(&[]);
-        let young = Stand::of(at, Species::Oak, true, false, 6.0, 0.4);
+        let young = Stand::of(at, at, 2.0, Species::Oak, true, 0.4);
         let (map, _) = map_with(&[young]);
         let foot = map.growing(at + Vec2::X * 0.55);
         assert!(foot.grass < 0.1, "{foot:?}");

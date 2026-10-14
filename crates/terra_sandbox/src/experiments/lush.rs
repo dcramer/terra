@@ -547,6 +547,9 @@ struct TreeModel {
     lumps: Handle<Mesh>,
     height: f32,
     trunk_m: f32,
+    /// Its crown's middle, level with its foot, and how far its leaves reach from it, for
+    /// the floor's shade (D246).
+    crown: (Vec3, f32),
     species: Species,
     young: bool,
     bark: Handle<Foliage>,
@@ -864,6 +867,7 @@ fn plant(
                 lumps: meshes.add(lumps.mesh()),
                 height,
                 trunk_m: tree.trunk_m,
+                crown: floor::crown_of(&tree.tips),
                 species,
                 young,
                 bark,
@@ -924,6 +928,7 @@ fn plant(
             lumps: meshes.add(crown_clumps(&tree, SHADOW_LUMP, true).mesh()),
             height: VETERAN_M,
             trunk_m: tree.trunk_m,
+            crown: floor::crown_of(&tree.tips),
             species: Species::Oak,
             young: false,
             bark: barks[0].0.clone(),
@@ -1085,12 +1090,13 @@ fn plant(
             let place = place_on(at, &mut dice, 0.3, scale);
             let foot = place.translation;
             obstacles.add(foot, model.trunk_m * scale * 1.2);
+            let crown = place.rotation * model.crown.0 * scale;
             canopy.add(Stand::of(
                 at,
+                at + Vec2::new(crown.dot(east), crown.dot(south)),
+                model.crown.1 * scale,
                 model.species,
                 model.young,
-                veterans_kinds.contains(&kind),
-                model.height * scale,
                 model.trunk_m * scale,
             ));
             commands
