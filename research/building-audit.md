@@ -13,7 +13,7 @@
 | Drawing audit | One of each sort of village building (D229), in all nine kits with their dress: every section drawn twice at near, middle and far; coplanar overlaps that would z-fight; one cube out of a wall; an operation's cost | `crates/terra_build/examples/drawing.rs` |
 | Live | The rules over the remote in an optimised build on the Windows GPU, a roof built and pictured half up and done, timings | `tools/sandbox/rules.ts`, pictures in `shots/rules-*.png` |
 
-Also run for this audit: `cargo xtask check`, `cabin`, `kits`, `sections`, `demo`, `lodcheck`, `pops` and `bench village village-bare` on both GPUs. The machine was shared with other agents' builds (load 30 to 70 on 32 cores), so every frame time below is slower and less even than on a quiet machine; GPU times and counts are not.
+Also run for this audit: `cargo xtask check`, `cabin` (every step ok), `kits` (every kit ok), `sections`, `demo` and `bench village village-bare` on both GPUs. `lodcheck` and `pops` are the forest's and did not finish: lodcheck's lush run exited as it began (winit's "Exit Failure"), and pops' scripted walk had saved no frame after 40 minutes and was stopped; both to run again on a quiet machine. The machine was shared with other agents' builds (load 30 to 70 on 32 cores), so every frame time below is slower and less even than on a quiet machine; GPU times and counts are not.
 
 ## Structure
 
