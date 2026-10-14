@@ -5,7 +5,7 @@
 //! cubes, a floor or flat roof as its cubes with a floor's colour on top and a ceiling's
 //! under it. Openings, doorways and windows, are holes, not drawn.
 
-use crate::{Base, CELL_M, Fill, IVec3, Kind, storey_of};
+use crate::{Base, CELL_M, Fill, IVec3, Kind};
 use glam::Vec3;
 use std::collections::BTreeMap;
 
@@ -465,7 +465,6 @@ pub(crate) fn build(base: &Base, kit: impl Fn(Kind) -> Option<KitLook>) -> BaseM
     for (at, cube) in base.cubes() {
         let wall = base.in_wall(at);
         let look = kit(cube.kind);
-        let tile = IVec3::new(at.x, storey_of(at.y), at.z);
         match cube.fill {
             Fill::Open => continue,
             // A kit draws its kind's cubes itself: a block kind as its surface, a timber
@@ -483,18 +482,19 @@ pub(crate) fn build(base: &Base, kit: impl Fn(Kind) -> Option<KitLook>) -> BaseM
                 match out.y {
                     1 => TOP,
                     -1 => HULL,
-                    _ if base.contains(tile + out) => INNER_WALL,
+                    _ if base.contains(at + out) => INNER_WALL,
                     _ => HULL,
                 }
             } else {
-                // A floor or flat roof: its top a floor where a room is over it.
-                let above = IVec3::new(at.x, storey_of(at.y + 1), at.z);
+                // A floor or flat roof: its top a floor where a room is over it, its
+                // underside a ceiling where one is under it (D261).
+                let (above, below) = (base.contains(at + IVec3::Y), base.contains(at - IVec3::Y));
                 match (out.y, &look) {
-                    (1, Some(look)) if base.contains(above) => look.floor,
+                    (1, Some(look)) if above => look.floor,
                     (1, Some(look)) => look.roof,
-                    (1, None) if base.contains(above) => FLOOR,
+                    (1, None) if above => FLOOR,
                     (1, None) => ROOF,
-                    (-1, _) if base.contains(above - IVec3::Y) => CEILING,
+                    (-1, _) if below => CEILING,
                     (_, Some(look)) => look.side,
                     _ => UNDERSIDE,
                 }

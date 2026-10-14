@@ -759,7 +759,9 @@ pub fn convert(saved: &[SavedOp], kind: Kind) -> Converted {
     for &op in saved {
         let wall = |base: &Base, face: Face, panel: Option<Panel>| {
             let (inner, outer) = (face.tile(), face.tile() + face.side.offset());
-            let tile = match (base.contains(inner), base.contains(outer)) {
+            // In a room: the air cube at the foot of the tile's storey (D261).
+            let roomed = |tile: IVec3| base.contains(tile.with_y(crate::wall_layer(tile.y)));
+            let tile = match (roomed(inner), roomed(outer)) {
                 (true, false) => outer,
                 (false, true) => inner,
                 _ if base.filling(outer).is_some() && base.filling(inner).is_none() => outer,

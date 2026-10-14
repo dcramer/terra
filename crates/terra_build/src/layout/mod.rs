@@ -599,10 +599,7 @@ impl Walls<'_> {
 
     /// Whether the open air is beyond a cube, so a log may run past into it.
     fn open_beyond(&self, at: IVec3) -> bool {
-        self.base.cube(at).is_none()
-            && !self
-                .base
-                .contains(IVec3::new(at.x, crate::storey_of(at.y), at.z))
+        self.base.cube(at).is_none() && !self.base.contains(at)
     }
 }
 
@@ -928,7 +925,7 @@ impl Random {
 pub(crate) mod tests {
     use super::*;
     use crate::kit::Texture;
-    use crate::{BuildOp, Panel};
+    use crate::{BuildOp, Cube, Panel};
 
     pub(crate) fn kit() -> Kit {
         Kit::default()
@@ -990,6 +987,54 @@ pub(crate) mod tests {
             textures: BTreeMap::from([(Material::Floor, texture("floor"))]),
             ..kit()
         }
+    }
+
+    #[test]
+    fn a_walkway_a_cube_wide_draws_alike_at_any_layer() {
+        // A timber walkway a cube wide on a post at each end, at layer 3, partway up what
+        // a storey was, and at layer 5, where a storey's floor was (D277; the second goals
+        // review, finding 6): a deck both times, never a log wall, and the same pieces.
+        let kit = kit();
+        let walkway = |y: i32| {
+            let mut base = Base::default();
+            let post = Cube {
+                shape: crate::Shape::Post,
+                ..Cube::new(kit.kind(), Fill::Solid)
+            };
+            for x in [0, 7] {
+                base.apply(BuildOp::Fill {
+                    min: [x, 0, 0],
+                    max: [x, y - 1, 0],
+                    cube: Some(post),
+                });
+            }
+            base.apply(BuildOp::Fill {
+                min: [0, y, 0],
+                max: [7, y, 0],
+                cube: Some(Cube::new(kit.kind(), Fill::Solid)),
+            });
+            base
+        };
+        let kinds = |layout: &Layout| {
+            let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+            for piece in &layout.pieces {
+                let name = format!("{piece:?}");
+                let name = name.split([' ', '(', '{']).next().unwrap_or("").to_string();
+                *counts.entry(name).or_default() += 1;
+            }
+            counts
+        };
+        let (low, high) = (lay(&walkway(3), &kit), lay(&walkway(5), &kit));
+        for (layout, y) in [(&low, 3), (&high, 5)] {
+            // Logs lying along the walkway's own layer, as a wall's courses would.
+            let band = (y as f32 * CELL_M)..=((y + 1) as f32 * CELL_M);
+            let level: Vec<_> = logs(layout)
+                .into_iter()
+                .filter(|(from, to, _)| (from.y - to.y).abs() < 1e-4 && band.contains(&from.y))
+                .collect();
+            assert!(level.is_empty(), "logs laid along the walkway: {level:?}");
+        }
+        assert_eq!(kinds(&low), kinds(&high));
     }
 
     #[test]

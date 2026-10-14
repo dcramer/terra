@@ -153,7 +153,8 @@ pub(super) fn aim(
                         let tile = ((touched + toward_viewer * 0.2) / CELL_M)
                             .floor()
                             .as_ivec3()
-                            .with_y(hit.face.tile[1]);
+                            .with_y(terra_build::wall_layer(hit.face.tile[1]));
+                        // In a room: the air cube at the foot of the storey (D261).
                         let indoors = site.base.contains(tile);
                         let along = on_grid(touched);
                         // Clear of the wall's face.
@@ -450,7 +451,11 @@ pub(super) fn aim(
                                         cell,
                                     )
                             } else {
-                                !site.base.contains(cell) && site.base.filling(cell).is_none()
+                                !site.base.contains(IVec3::new(
+                                    cell.x,
+                                    terra_build::wall_layer(cell.y),
+                                    cell.z,
+                                )) && site.base.filling(cell).is_none()
                             }
                         })
                     });
