@@ -151,7 +151,9 @@ fn clipped(
     out: &mut Indexed,
     cuts: &mut [Vec<(Vec3, Vec3, [f32; 2])>; 2],
 ) {
-    let shade = 1.0 - look.shade * layout::unit(hash(&[seed, 3]));
+    // A modelled piece carries its own colour: copies of it vary only a little, or a line
+    // of them reads in bands.
+    let shade = 1.0 - look.shade * 0.3 * layout::unit(hash(&[seed, 3]));
     let colour = look.tint.map(|c| c * shade);
     // Each corner: along the line, in the world, its normal and its place in the atlas.
     type Corner = (f32, Vec3, Vec3, [f32; 2]);
