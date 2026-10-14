@@ -92,6 +92,7 @@
     },
     cost: (steps: 2, step: [("Wood", 1, 16)]),
     dress: (
+        pieces: Some("data/kits/pieces/logs.ron"),
         roles: {
             Crest: Member(profile: Hewn, scale: 1.12, material: Hewn),
             Foot: Member(profile: Hewn, scale: 1.2, material: Hewn),

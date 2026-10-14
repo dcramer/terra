@@ -341,6 +341,24 @@ def section(spec, x, seed, length, end=False):
             k = r * (1.0 + spec.get("lumps", 0.06) * f * lumps(x, math.cos(a), math.sin(a), seed, 0.25))
             out.append((cy + k * math.cos(a), cz + k * math.sin(a)))
         return out, True
+    if kind == "log":
+        # A log in its bark (D262): round, a little uneven and wandering, lumpy where its
+        # bark is thick, scribed flatter top and bottom where it bears on its neighbours.
+        r = spec["radius"]
+        n = spec.get("sides", 18)
+        flat = spec.get("flat", 0.0) * r
+        out = []
+        for i in range(n):
+            a = 2 * math.pi * i / n
+            wave = spec.get("uneven", 0.03) * f * (
+                math.sin(2 * a + seed * 0.7 + 1.3 * x) + 0.6 * math.sin(3 * a + seed * 1.3 - 0.7 * x)
+            )
+            k = r * (1.0 + wave + spec.get("lumps", 0.04) * f * lumps(x, math.cos(a), math.sin(a), seed, 0.25))
+            y, z = k * math.cos(a), k * math.sin(a)
+            if flat > 0 and abs(y) > r - flat:
+                y = math.copysign(r - flat + (abs(y) - (r - flat)) * 0.35, y)
+            out.append((y, z))
+        return out, True
     if kind == "mound":
         # A ridge or a fillet laid over what it sits on: crowned across, its foot cut down
         # square at its edges, which may be cut in points along it; straw lumpy.
@@ -409,6 +427,27 @@ def part_mesh(name, spec, seed):
     else:
         caps = (not spec.get("open", False), not spec.get("open", False))
     parts = [ring_mesh(name, rings, closed, caps, spec.get("smooth", 40.0))]
+    # Branch stubs sawn off close on a log's two faces, a few a copy, clear of its ends.
+    if spec["kind"] == "log" and spec.get("stubs"):
+        rng = random.Random(seed * 7919 + 13)
+        lo, hi = spec["stubs"]
+        r = spec["radius"]
+        for k in range(rng.randint(lo, hi)):
+            x = rng.uniform(0.15, max(0.16, length - 0.15))
+            a = rng.choice([1, -1]) * math.pi / 2 + rng.uniform(-0.6, 0.6)
+            out, up = rng.uniform(*spec["stub_length"]), rng.uniform(*spec["stub_radius"])
+            # Each ring round the stub's own axis, which points out of the log at angle a; the
+            # stub's section lies across it and along the log.
+            stub = []
+            for reach, size in ((r * 0.85, up), (r + out * 0.6, up * 0.95), (r + out, up * 0.85)):
+                cy, cz = math.cos(a) * reach, math.sin(a) * reach
+                pts = []
+                for i in range(8):
+                    b = 2 * math.pi * i / 8
+                    # Round the stub: across the log (perpendicular to a) and along it.
+                    pts.append((cy - math.sin(a) * size * math.cos(b), cz + math.cos(a) * size * math.cos(b), size * math.sin(b)))
+                stub.append(pts)
+            parts.append(stub_mesh(f"{name}_stub{k}", x, stub))
     # Rods laid along it, as a ridge's liggers are pegged over its straw.
     for k, (ry, rz) in enumerate(spec.get("rods", [])):
         rr = spec.get("rod", 0.012)
@@ -422,6 +461,21 @@ def part_mesh(name, spec, seed):
             rod.append((x, ring))
         parts.append(ring_mesh(f"{name}_rod{k}", rod, True, (False, False), 60.0))
     return join(name, parts) if len(parts) > 1 else parts[0]
+
+
+def stub_mesh(name, x, rings):
+    """A branch stub: rings of (y, z, along) points round its axis, joined in order, its
+    outer ring filled where it was sawn."""
+    bm = bmesh.new()
+    vs = [[bm.verts.new((x + d, -z, y)) for (y, z, d) in ring] for ring in rings]
+    n = len(rings[0])
+    for a, b in zip(vs, vs[1:]):
+        for i in range(n):
+            j = (i + 1) % n
+            bm.faces.new((a[i], a[j], b[j], b[i]))
+    bm.faces.new(vs[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return finish(name, bm, 40.0, recalc=False)
 
 
 def shrink(points, by):
