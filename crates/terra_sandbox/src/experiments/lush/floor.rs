@@ -14,13 +14,15 @@
 //!   plants on density maps): drift centres where the light, the trunks, the logs and a
 //!   noise of the kind's own like it, and a clump round each.
 
+use super::shade::{self, NearShadows, ShadowSet};
 use super::species::Species;
+use super::thicket;
 use super::{
-    BARK_M, BUSH_KINDS, Build, CLEARING_M, FADE, FOREST_M, Foliage, Footing, Limb, Path, SUN_ONLY,
-    Scanned, grow_bush, smoothstep, square, tube,
+    BARK_M, BUSH_KINDS, Build, CLEARING_M, FADE, FOREST_M, Foliage, FoliageExtension, Footing,
+    Limb, Path, Scanned, grow_bush, smoothstep, square, tube,
 };
 use bevy::{
-    camera::visibility::{RenderLayers, VisibilityRange},
+    camera::visibility::VisibilityRange,
     gltf::GltfMaterial,
     image::ImageLoaderSettings,
     light::NotShadowCaster,
@@ -33,10 +35,11 @@ use bevy::{
 use std::f32::consts::{PI, TAU};
 use terra_gen::{Noise, Rng, Seed};
 use terra_world::cover::Growing;
+use terra_world::detail::DetailScale;
 use terra_world::flora::Growth;
 use terra_world::flora_kinds::{Cuttable, Flora};
 use terra_world::grown::build::{self as grown_build, Placing};
-use terra_world::grown::{Cards, Habit, TreeDef, plants, tree as grown_tree};
+use terra_world::grown::{Cards, plants};
 use terra_world::planet::Planet;
 
 /// A rock's scanned material with moss over what faces the sky (`mossy.wesl`).
@@ -63,7 +66,84 @@ pub(super) struct MossyScans(Vec<(Handle<GltfMaterial>, Handle<Mossy>)>);
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Mossy>::default())
         .init_resource::<MossyScans>()
-        .add_systems(Update, dress_mossy);
+        .init_resource::<FloorShadows>()
+        // After the scene has set the open world's soil.
+        .add_systems(PostStartup, forest_soil)
+        .add_systems(Update, (dress_mossy, follow_shadows, shade::follow_camera));
+    terra_world::remote::method(app, "lush.undergrowth", show_undergrowth);
+}
+
+/// The forest's own soil: a dark loam, grey-brown, as a wood's trodden paths and bare
+/// earth are, rather than the pale sandy brown of the open world's.
+fn forest_soil(mut tweaks: ResMut<terra_world::planet::Tweaks>) {
+    tweaks.ground_low = Color::srgb(0.3, 0.25, 0.2);
+    tweaks.ground_high = Color::srgb(0.36, 0.31, 0.25);
+}
+
+/// The materials the middle layer's shadows shrink away in, and where each has shrunk away
+/// by, as authored.
+#[derive(Resource, Default)]
+pub(super) struct FloorShadows(Vec<(Handle<Foliage>, f32)>);
+
+/// The middle layer's shadows shrink away at distances scaled as every other level of detail
+/// is (D230).
+fn follow_shadows(
+    detail: Res<DetailScale>,
+    shadows: Res<FloorShadows>,
+    mut materials: ResMut<Assets<Foliage>>,
+) {
+    if !(detail.is_changed() || shadows.is_changed()) {
+        return;
+    }
+    for (material, end) in &shadows.0 {
+        if let Some(mut material) = materials.get_mut(material) {
+            material.extension.shrink = Vec4::new(end * SHADOW_SHRINK, *end, 0.0, 0.0) * detail.0;
+        }
+    }
+}
+
+/// What the camera sees of the undergrowth, shrubs, saplings, snags, ferns and the rest: each
+/// mesh of it the camera draws, not the copies only the sun sees, so hiding it leaves every
+/// shadow where it was.
+#[derive(Component)]
+pub(super) struct Undergrowth;
+
+#[derive(serde::Deserialize)]
+struct Show {
+    hidden: bool,
+    within: Option<f32>,
+}
+
+/// `lush.undergrowth {hidden, within?}`: hides what the camera sees of the undergrowth
+/// within so many metres of it, or shows it all again, so `tools/sandbox/vantage.ts` can
+/// measure how much of a view it hides by comparing the two pictures.
+fn show_undergrowth(
+    In(params): In<Option<serde_json::Value>>,
+    world: &mut World,
+) -> bevy::remote::BrpResult {
+    let Show { hidden, within } = bevy::remote::builtin_methods::parse_some(params)?;
+    let eye = world
+        .query_filtered::<&GlobalTransform, With<terra_world::planet::MainCamera>>()
+        .iter(world)
+        .next()
+        .map(GlobalTransform::translation)
+        .ok_or_else(|| terra_world::remote::refused("there is no camera"))?;
+    let within = within.unwrap_or(f32::MAX);
+    let parts: Vec<(Entity, bool)> = world
+        .query_filtered::<(Entity, &GlobalTransform), With<Undergrowth>>()
+        .iter(world)
+        .map(|(entity, place)| (entity, hidden && place.translation().distance(eye) < within))
+        .collect();
+    let mut count = 0;
+    for (entity, hide) in parts {
+        count += hide as u32;
+        world.entity_mut(entity).insert(if hide {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        });
+    }
+    Ok(serde_json::json!({ "hidden": count }))
 }
 
 /// Copies each rock scan's glTF material, once loaded, under its moss.
@@ -343,9 +423,12 @@ impl Map {
             .max(along * 0.7)
             .max(damp)
             .max(fray * (0.35 + 0.5 * self.noise(at, 79.0, 0.9)));
-        let moss = (ring * (0.25 + 0.6 * mossy))
+        // Moss round a foot only on some sides of it, in broken patches, never a halo; along
+        // logs and rocks; on the floor only in the dampest hollows, in cushions.
+        let broken = smoothstep(0.4, 0.7, self.noise(at, 37.0, 0.9));
+        let moss = (ring * broken * (0.2 + 0.6 * mossy))
             .max(along * 0.5)
-            .max(floor * smoothstep(0.5, 0.8, mossy * 0.7 + here.wet * 0.4) * 0.9)
+            .max(floor * smoothstep(0.66, 0.9, mossy * 0.7 + here.wet * 0.4) * 0.7)
             * off_path.max(0.3);
         Growing {
             grass,
@@ -388,6 +471,12 @@ pub(super) struct Lay<'a, 'w, 's> {
     pub atlas: Handle<Foliage>,
     pub leaves: Handle<Foliage>,
     pub seed: Seed,
+    /// The foliage materials, and those the middle layer's shadows shrink away in, by the
+    /// leaves they are cut to and where they have shrunk away by, in quarter metres.
+    pub foliage: &'a mut Assets<Foliage>,
+    pub shrinking: HashMap<(Option<AssetId<Foliage>>, u32), Handle<Foliage>>,
+    /// The plants whose shadows are given them only near the camera.
+    pub shade: NearShadows,
 }
 
 /// From one distance to another, crossfading at the far end.
@@ -424,7 +513,8 @@ fn tint_build(colours: &mut [[f32; 4]], tint: Vec3) {
     }
 }
 
-/// The kinds of undergrowth.
+/// The kinds of undergrowth: the floor's, knee-high and below, and the middle layer's, one
+/// to five metres (D268).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Under {
     Bracken,
@@ -437,11 +527,17 @@ enum Under {
     Sapling,
     Branches,
     Flowers,
+    Coppice,
+    Holly,
+    Spruce,
+    Bramble,
+    Snag,
 }
 
 /// How each kind of undergrowth is placed: how many drift centres are tried, how many
-/// plants a clump has and how far it spreads, how big they are, how far each is drawn and
-/// how near its shadow is cast, and how broad its drifts are.
+/// plants a clump has and how far it spreads, how big they are, how far each is drawn,
+/// where its near level hands over to its far one (none at 0), where its shadow has shrunk
+/// away (none at 0), and how broad its drifts are.
 struct Placement {
     kind: Under,
     name: &'static str,
@@ -450,19 +546,25 @@ struct Placement {
     spread_m: f32,
     scale: (f32, f32),
     seen_m: f32,
+    near_m: f32,
     shadow_m: f32,
     drift_m: f32,
 }
 
-const PLACEMENTS: [Placement; 10] = [
+/// The middle layer's shadows are cast in full to this share of their distance, then shrink
+/// away (D234).
+const SHADOW_SHRINK: f32 = 0.55;
+
+const PLACEMENTS: [Placement; 15] = [
     Placement {
         kind: Under::Bracken,
         name: "Bracken",
-        tries: 10000,
-        clump: (4, 11),
-        spread_m: 1.0,
-        scale: (0.7, 1.45),
+        tries: 11000,
+        clump: (5, 13),
+        spread_m: 1.1,
+        scale: (0.7, 1.5),
         seen_m: 55.0,
+        near_m: 0.0,
         shadow_m: 0.0,
         drift_m: 16.0,
     },
@@ -472,8 +574,9 @@ const PLACEMENTS: [Placement; 10] = [
         tries: 6000,
         clump: (2, 5),
         spread_m: 0.8,
-        scale: (0.8, 1.6),
+        scale: (0.6, 1.7),
         seen_m: 45.0,
+        near_m: 0.0,
         shadow_m: 0.0,
         drift_m: 9.0,
     },
@@ -483,8 +586,9 @@ const PLACEMENTS: [Placement; 10] = [
         tries: 14000,
         clump: (5, 12),
         spread_m: 0.9,
-        scale: (0.8, 1.5),
+        scale: (0.55, 1.6),
         seen_m: 45.0,
+        near_m: 0.0,
         shadow_m: 0.0,
         drift_m: 9.0,
     },
@@ -496,6 +600,7 @@ const PLACEMENTS: [Placement; 10] = [
         spread_m: 0.7,
         scale: (0.6, 1.1),
         seen_m: 35.0,
+        near_m: 0.0,
         shadow_m: 0.0,
         drift_m: 7.0,
     },
@@ -507,7 +612,8 @@ const PLACEMENTS: [Placement; 10] = [
         spread_m: 1.4,
         scale: (1.1, 2.1),
         seen_m: 85.0,
-        shadow_m: 22.0,
+        near_m: 0.0,
+        shadow_m: 24.0,
         drift_m: 20.0,
     },
     Placement {
@@ -518,6 +624,7 @@ const PLACEMENTS: [Placement; 10] = [
         spread_m: 0.8,
         scale: (0.45, 0.8),
         seen_m: 40.0,
+        near_m: 0.0,
         shadow_m: 0.0,
         drift_m: 11.0,
     },
@@ -529,18 +636,20 @@ const PLACEMENTS: [Placement; 10] = [
         spread_m: 1.0,
         scale: (0.7, 1.4),
         seen_m: 70.0,
-        shadow_m: 20.0,
+        near_m: 0.0,
+        shadow_m: 24.0,
         drift_m: 14.0,
     },
     Placement {
         kind: Under::Sapling,
         name: "Sapling",
-        tries: 3000,
-        clump: (1, 3),
-        spread_m: 2.0,
-        scale: (0.7, 1.3),
-        seen_m: 100.0,
-        shadow_m: 25.0,
+        tries: 10000,
+        clump: (1, 4),
+        spread_m: 2.2,
+        scale: (0.8, 1.2),
+        seen_m: 85.0,
+        near_m: 28.0,
+        shadow_m: 32.0,
         drift_m: 24.0,
     },
     Placement {
@@ -551,6 +660,7 @@ const PLACEMENTS: [Placement; 10] = [
         spread_m: 1.2,
         scale: (0.5, 1.2),
         seen_m: 45.0,
+        near_m: 0.0,
         shadow_m: 0.0,
         drift_m: 10.0,
     },
@@ -562,8 +672,69 @@ const PLACEMENTS: [Placement; 10] = [
         spread_m: 0.6,
         scale: (0.8, 1.3),
         seen_m: 35.0,
+        near_m: 0.0,
         shadow_m: 0.0,
         drift_m: 7.0,
+    },
+    Placement {
+        kind: Under::Coppice,
+        name: "Hazel",
+        tries: 18000,
+        clump: (1, 4),
+        spread_m: 2.6,
+        scale: (0.8, 1.15),
+        seen_m: 85.0,
+        near_m: 28.0,
+        shadow_m: 32.0,
+        drift_m: 22.0,
+    },
+    Placement {
+        kind: Under::Holly,
+        name: "Holly",
+        tries: 18000,
+        clump: (1, 4),
+        spread_m: 2.2,
+        scale: (0.8, 1.2),
+        seen_m: 85.0,
+        near_m: 28.0,
+        shadow_m: 32.0,
+        drift_m: 26.0,
+    },
+    Placement {
+        kind: Under::Spruce,
+        name: "Young spruce",
+        tries: 16000,
+        clump: (2, 6),
+        spread_m: 2.4,
+        scale: (0.75, 1.2),
+        seen_m: 90.0,
+        near_m: 28.0,
+        shadow_m: 32.0,
+        drift_m: 20.0,
+    },
+    Placement {
+        kind: Under::Bramble,
+        name: "Bramble",
+        tries: 8000,
+        clump: (1, 4),
+        spread_m: 1.8,
+        scale: (0.8, 1.3),
+        seen_m: 70.0,
+        near_m: 25.0,
+        shadow_m: 24.0,
+        drift_m: 14.0,
+    },
+    Placement {
+        kind: Under::Snag,
+        name: "Snag",
+        tries: 5000,
+        clump: (1, 1),
+        spread_m: 0.0,
+        scale: (0.9, 1.1),
+        seen_m: 110.0,
+        near_m: 35.0,
+        shadow_m: 45.0,
+        drift_m: 30.0,
     },
 ];
 
@@ -578,6 +749,9 @@ impl Under {
     fn likes(self, here: &Here) -> f32 {
         let near = |d: f32, from: f32, to: f32| 1.0 - smoothstep(from, to, d);
         let broadleaf = 1.0 - smoothstep(0.2, 0.6, here.needles);
+        // The middle layer is thickest where light comes down the side of something open,
+        // a clearing's or a path's edge or a gap, and thinner in the deep shade.
+        let edge = near(here.path, 2.0, 9.0);
         match self {
             // Half shade: the edges of clearings, gaps, the paths' sides.
             Under::Bracken => between(0.05, 1.2, here.light) * (0.4 + 0.6 * broadleaf),
@@ -599,7 +773,11 @@ impl Under {
                 smoothstep(0.45, 0.9, here.light) * (0.5 + 0.5 * near(here.path, 1.0, 6.0))
             }
             // Where a gap lets the light down.
-            Under::Sapling => smoothstep(0.4, 0.8, here.light) * smoothstep(2.0, 4.0, here.bark),
+            Under::Sapling => {
+                smoothstep(0.15, 0.6, here.light)
+                    * smoothstep(2.0, 4.0, here.bark)
+                    * (0.6 + 0.4 * edge)
+            }
             // Fallen from the trees, round their feet and by the logs.
             Under::Branches => {
                 (1.0 - smoothstep(0.4, 0.8, here.light))
@@ -609,6 +787,22 @@ impl Under {
             Under::Flowers => {
                 smoothstep(0.65, 0.95, here.light) * (0.4 + 0.6 * near(here.path, 0.5, 4.0))
             }
+            // Hazel stools under oaks, thickest in half shade at the edges.
+            Under::Coppice => {
+                (0.45 + 0.55 * between(0.05, 1.1, here.light)) * broadleaf * (0.6 + 0.4 * edge)
+            }
+            // Holly takes the deep shade under the oaks that little else does.
+            Under::Holly => (1.0 - smoothstep(0.55, 0.95, here.light)) * broadleaf,
+            // Young spruces come up in the gaps under the conifers.
+            Under::Spruce => {
+                smoothstep(0.25, 0.6, here.needles) * (0.55 + 0.45 * between(0.05, 1.1, here.light))
+            }
+            // Bramble in the light: gaps, the paths' and the clearing's edges.
+            Under::Bramble => smoothstep(0.3, 0.75, here.light) * (0.5 + 0.5 * edge),
+            // Small trees that lost the race for light, among the big ones.
+            Under::Snag => {
+                (1.0 - smoothstep(0.5, 0.9, here.light)) * smoothstep(1.5, 3.5, here.bark)
+            }
         }
     }
 
@@ -616,7 +810,10 @@ impl Under {
     fn clear_of(self) -> (f32, f32, f32) {
         match self {
             Under::Hazel | Under::Scrub => (1.0, 0.3, 0.7),
-            Under::Sapling => (2.0, 0.6, 1.2),
+            Under::Sapling | Under::Holly | Under::Spruce => (2.0, 0.6, 1.4),
+            Under::Coppice => (1.8, 0.6, 1.8),
+            Under::Bramble => (1.0, 0.3, 1.2),
+            Under::Snag => (1.6, 0.8, 2.5),
             Under::Branches => (0.5, 0.1, 0.4),
             Under::Flowers => (0.6, 0.1, 0.05),
             _ => (0.35, 0.1, 0.2),
@@ -624,17 +821,54 @@ impl Under {
     }
 }
 
-/// How each variant of a kind is drawn.
-#[derive(Clone)]
-enum Drawn {
-    /// One mesh, in a material.
-    One(Handle<Mesh>, Handle<Foliage>),
-    /// A scan in its own material.
-    Scan(Handle<Mesh>, Handle<StandardMaterial>),
-    /// A sapling: its wood and its leaves.
-    Two([(Handle<Mesh>, Handle<Foliage>); 2]),
+/// How each variant of a kind is drawn: its parts, and the copies only the sun sees that
+/// its shadow is cast from.
+#[derive(Clone, Default)]
+struct Drawn {
+    parts: Vec<Part>,
+    shadows: Vec<(Handle<Mesh>, Handle<Foliage>)>,
+    /// Its shadows as filed for the camera to bring near (`shade`).
+    shadow_set: Option<usize>,
 }
 
+/// A mesh of a plant in its material, over a band of distance; solid if it stops a walker.
+#[derive(Clone)]
+struct Part {
+    mesh: Handle<Mesh>,
+    look: Look,
+    band: Band,
+    solid: bool,
+}
+
+#[derive(Clone)]
+enum Look {
+    Foliage(Handle<Foliage>),
+    Plain(Handle<StandardMaterial>),
+}
+
+/// Which distances a part is drawn over: all its kind's, or only near or only past where
+/// its near level hands over.
+#[derive(Clone, Copy)]
+enum Band {
+    All,
+    Near,
+    Far,
+}
+
+impl Drawn {
+    fn one(mesh: Handle<Mesh>, look: Look) -> Self {
+        Self {
+            parts: vec![Part {
+                mesh,
+                look,
+                band: Band::All,
+                solid: false,
+            }],
+            shadows: Vec::new(),
+            shadow_set: None,
+        }
+    }
+}
 impl Lay<'_, '_, '_> {
     /// A place on the ground, `at` east and south of the start, turned at random about its
     /// up, sunk `sink`, `scale` times its size.
@@ -751,8 +985,109 @@ impl Lay<'_, '_, '_> {
         self.plain.add(material)
     }
 
+    /// The material a shadow stand-in is drawn in, cast in full to `SHADOW_SHRINK` of `end`
+    /// and shrinking away by `end` (D234): the leaves' own picture, cut to their outline, or
+    /// for wood plain and solid.
+    fn shrinking_material(
+        &mut self,
+        leaves: Option<&Handle<Foliage>>,
+        end: f32,
+    ) -> Handle<Foliage> {
+        let key = (leaves.map(Handle::id), (end * 4.0) as u32);
+        if let Some(material) = self.shrinking.get(&key) {
+            return material.clone();
+        }
+        let base = leaves
+            .and_then(|handle| self.foliage.get(handle))
+            .map(|material| material.base.clone())
+            .unwrap_or_default();
+        let wind = self
+            .foliage
+            .get(&self.atlas)
+            .expect("the floor's cards are made before it is laid")
+            .extension
+            .clone();
+        let material = self.foliage.add(Foliage {
+            base,
+            extension: FoliageExtension {
+                shrink: Vec4::new(end * SHADOW_SHRINK, end, 0.0, 0.0),
+                leaf: Vec4::ZERO,
+                ..wind
+            },
+        });
+        self.shrinking.insert(key, material.clone());
+        material
+    }
+
+    /// A mesh's shadow stand-in, shrinking away by `end`.
+    fn shadow_of(
+        &mut self,
+        mesh: &Mesh,
+        leaves: Option<&Handle<Foliage>>,
+        end: f32,
+    ) -> (Handle<Mesh>, Handle<Foliage>) {
+        let material = self.shrinking_material(leaves, end);
+        (self.meshes.add(thicket::shrinking(mesh)), material)
+    }
+
+    /// A plant of the middle layer drawn: what stands first is what the plant's own entity
+    /// draws, its leaves near or a snag's trunk, so each plant is as few entities as it can
+    /// be; then its wood, its leaves farther off, and its shadow.
+    fn layered(&mut self, shrub: thicket::Shrub, bark: Handle<Foliage>, shadow_m: f32) -> Drawn {
+        let mut drawn = Drawn::default();
+        let [wood_near, wood_far] = shrub.wood;
+        let leafy = shrub.leaves.is_some();
+        let wood = |lay: &mut Self, build: grown_build::Build, band: Band, solid: bool| {
+            if build.indices.is_empty() {
+                return None;
+            }
+            let mut mesh = build.mesh(true);
+            ensure_tangents(&mut mesh);
+            if solid {
+                // Kept on the CPU too, for its footing to be fitted to (D267).
+                mesh.asset_usage = bevy::asset::RenderAssetUsages::all();
+            }
+            Some(Part {
+                mesh: lay.meshes.add(mesh),
+                look: Look::Foliage(bark.clone()),
+                band,
+                solid,
+            })
+        };
+        if let Some(trunk) = shrub.trunk {
+            drawn.parts.extend(wood(self, trunk, Band::All, true));
+        }
+        if let Some([near, far]) = shrub.leaves {
+            for (build, band) in [(near, Band::Near), (far, Band::Far)] {
+                drawn.parts.push(Part {
+                    mesh: self.meshes.add(build.mesh(false)),
+                    look: Look::Foliage(self.atlas.clone()),
+                    band,
+                    solid: false,
+                });
+            }
+        }
+        // A leafy plant's stems are thin, and drawn at one level; a dead one's branches are
+        // all there is of it, and have two.
+        if leafy {
+            drawn.parts.extend(wood(self, wood_near, Band::All, false));
+        } else {
+            drawn.parts.extend(wood(self, wood_near, Band::Near, false));
+            drawn.parts.extend(wood(self, wood_far, Band::Far, false));
+        }
+        if let Some(shadow) = shrub.shadow {
+            let atlas = self.atlas.clone();
+            let cut_to = leafy.then_some(&atlas);
+            drawn
+                .shadows
+                .push(self.shadow_of(&shadow.mesh(false), cut_to, shadow_m));
+        }
+        drawn
+    }
+
     /// Each kind's variants.
-    fn grow(&mut self, kind: Under) -> Vec<Drawn> {
+    fn grow(&mut self, placement: &Placement) -> Vec<Drawn> {
+        let kind = placement.kind;
         let mut dice = self
             .seed
             .derive("undergrowth kinds")
@@ -760,37 +1095,49 @@ impl Lay<'_, '_, '_> {
             .rng();
         let cards = self.cards;
         let card = |name: &str| cards.get(name).clone();
+        let shadow_m = placement.shadow_m;
         let mut out = Vec::new();
         for n in 0..VARIANTS {
+            let atlas = Look::Foliage(self.atlas.clone());
             let drawn = match kind {
                 Under::Bracken => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.82, 0.9, 0.62));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.62, 0.64, 0.52));
                     let build = bracken(&mut dice, &card("fern"), tint);
-                    Drawn::One(self.meshes.add(build.mesh(false)), self.atlas.clone())
+                    Drawn::one(self.meshes.add(build.mesh(false)), atlas)
                 }
                 Under::Fern => {
                     // The scan is one; the rest are its frond grown.
                     if n > 0 {
                         break;
                     }
-                    let (mesh, material) = self.scan("fern", Color::srgb(0.85, 0.9, 0.8));
-                    Drawn::Scan(mesh, material)
+                    let (mesh, material) = self.scan("fern", Color::srgb(0.6, 0.64, 0.58));
+                    Drawn::one(mesh, Look::Plain(material))
                 }
                 Under::Frond => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.78, 0.88, 0.7));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.54, 0.6, 0.52));
+                    // Lady fern's shuttlecocks, broad and arching, and male fern's, upright
+                    // and narrow, as two kinds of each.
+                    let upright = n % 2 == 1;
                     let def = terra_world::grown::RosetteDef {
                         card: "fern".into(),
                         tint: (1.0, 1.0, 1.0),
-                        leaves: (8, 13),
-                        tilt: (30.0, 65.0),
+                        leaves: if upright { (6, 9) } else { (9, 15) },
+                        tilt: if upright { (55.0, 78.0) } else { (25.0, 60.0) },
                         stalk: (0.03, 0.97),
                         tip: (0.97, 0.03),
                     };
-                    let build = plants::rosette(&mut dice, &def, &card("fern"), tint);
-                    Drawn::One(self.meshes.add(build.mesh(false)), self.atlas.clone())
+                    let mut build = plants::rosette(&mut dice, &def, &card("fern"), tint);
+                    // Some young and small, some old and broad.
+                    let size = [1.0, 0.8, 1.25, 0.65, 1.1, 0.9][n as usize];
+                    for p in &mut build.positions {
+                        for c in p.iter_mut() {
+                            *c *= size;
+                        }
+                    }
+                    Drawn::one(self.meshes.add(build.mesh(false)), atlas)
                 }
                 Under::Herb => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.8, 0.86, 0.72));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.6, 0.62, 0.54));
                     let def = terra_world::grown::RosetteDef {
                         card: "herb".into(),
                         tint: (1.0, 1.0, 1.0),
@@ -806,10 +1153,10 @@ impl Lay<'_, '_, '_> {
                             *c *= 0.4;
                         }
                     }
-                    Drawn::One(self.meshes.add(build.mesh(false)), self.atlas.clone())
+                    Drawn::one(self.meshes.add(build.mesh(false)), atlas)
                 }
                 Under::Hazel => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.42, 0.52, 0.32));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.32, 0.34, 0.31));
                     let def = terra_world::grown::BushDef {
                         leaves: "hazel".into(),
                         tint: (1.0, 1.0, 1.0),
@@ -817,10 +1164,15 @@ impl Lay<'_, '_, '_> {
                         spread: 1.15,
                     };
                     let build = plants::bush(&mut dice, &def, &card("hazel"), tint);
-                    Drawn::One(self.meshes.add(build.mesh(false)), self.atlas.clone())
+                    let mesh = build.mesh(false);
+                    let atlas_handle = self.atlas.clone();
+                    let shadow = self.shadow_of(&mesh, Some(&atlas_handle), shadow_m);
+                    let mut drawn = Drawn::one(self.meshes.add(mesh), atlas);
+                    drawn.shadows.push(shadow);
+                    drawn
                 }
                 Under::Bilberry => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.8, 0.85, 0.75));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.66, 0.7, 0.62));
                     let def = terra_world::grown::BushDef {
                         leaves: "berry".into(),
                         tint: (1.0, 1.0, 1.0),
@@ -828,7 +1180,7 @@ impl Lay<'_, '_, '_> {
                         spread: 1.7,
                     };
                     let build = plants::bush(&mut dice, &def, &card("berry"), tint);
-                    Drawn::One(self.meshes.add(build.mesh(false)), self.atlas.clone())
+                    Drawn::one(self.meshes.add(build.mesh(false)), atlas)
                 }
                 Under::Scrub => {
                     if n >= BUSH_KINDS {
@@ -836,117 +1188,149 @@ impl Lay<'_, '_, '_> {
                     }
                     // Young oak scrub, darker than the oak spray's own lime.
                     let mut build = grow_bush(&mut dice);
-                    let tint = variant_tint(&mut dice, Vec3::new(0.5, 0.58, 0.4));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.42, 0.46, 0.36));
                     tint_build(&mut build.colours, tint);
-                    Drawn::One(self.meshes.add(build.mesh()), self.leaves.clone())
+                    let mesh = build.mesh();
+                    let leaves = self.leaves.clone();
+                    let shadow = self.shadow_of(&mesh, Some(&leaves), shadow_m);
+                    let mut drawn = Drawn::one(self.meshes.add(mesh), Look::Foliage(leaves));
+                    drawn.shadows.push(shadow);
+                    drawn
                 }
                 Under::Sapling => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.6, 0.68, 0.48));
-                    let (wood, crown) = sapling(&mut dice, cards, n, tint);
-                    let wood = self.meshes.add(wood.mesh(true));
-                    Drawn::Two([
-                        (wood, self.bark.clone()),
-                        (self.meshes.add(crown.mesh(false)), self.atlas.clone()),
-                    ])
+                    let tint = variant_tint(&mut dice, Vec3::new(0.4, 0.42, 0.37));
+                    let leaves = if n % 2 == 0 { "oak" } else { "hazel" };
+                    let shrub = thicket::sapling(&mut dice, &card(leaves), tint);
+                    self.layered(shrub, self.bark.clone(), shadow_m)
                 }
                 Under::Branches => {
                     let mut build = branches(&mut dice);
                     let mut mesh = std::mem::take(&mut build).mesh();
                     mesh.generate_tangents()
                         .expect("sticks have normals and texture places");
-                    Drawn::One(self.meshes.add(mesh), self.bark.clone())
+                    Drawn::one(self.meshes.add(mesh), Look::Foliage(self.bark.clone()))
                 }
                 Under::Flowers => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.95, 0.95, 0.9));
+                    let tint = variant_tint(&mut dice, Vec3::new(0.9, 0.9, 0.86));
                     let name = ["daisy", "buttercup", "campion"][n as usize % 3];
                     let build = plants::tuft(&mut dice, 2 + (n % 2) as u32, &card(name), tint);
-                    Drawn::One(self.meshes.add(build.mesh(false)), self.atlas.clone())
+                    Drawn::one(self.meshes.add(build.mesh(false)), atlas)
+                }
+                Under::Coppice => {
+                    let tint = variant_tint(&mut dice, Vec3::new(0.34, 0.37, 0.34));
+                    let shrub = thicket::coppice(&mut dice, &card("hazel"), tint);
+                    self.layered(shrub, self.bark.clone(), shadow_m)
+                }
+                Under::Holly => {
+                    // Dark, glossy, nearly black-green in the shade.
+                    let tint = variant_tint(&mut dice, Vec3::new(0.42, 0.5, 0.44));
+                    let shrub = thicket::holly(&mut dice, &card("holly"), tint);
+                    self.layered(shrub, self.bark.clone(), shadow_m)
+                }
+                Under::Spruce => {
+                    let tint = variant_tint(&mut dice, Vec3::new(0.95, 1.0, 0.95));
+                    let height = dice.range(1.4, 4.4);
+                    let shrub = thicket::evergreen(&mut dice, &card("spruce"), tint, height, 0.5);
+                    self.layered(shrub, self.pine_bark.clone(), shadow_m)
+                }
+                Under::Bramble => {
+                    let tint = variant_tint(&mut dice, Vec3::new(0.5, 0.54, 0.46));
+                    let shrub = thicket::bramble(&mut dice, &card("bramble"), tint);
+                    self.layered(shrub, self.bark.clone(), shadow_m)
+                }
+                Under::Snag => {
+                    // Weathered silver-grey, the bark half gone.
+                    let conifer = n % 2 == 0;
+                    let grey = dice.range(0.82, 1.0);
+                    let shrub =
+                        thicket::snag(&mut dice, conifer, Vec3::new(1.0, 0.97, 0.92) * grey);
+                    let bark = if conifer {
+                        self.pine_bark.clone()
+                    } else {
+                        self.bark.clone()
+                    };
+                    self.layered(shrub, bark, shadow_m)
                 }
             };
+            let mut drawn = drawn;
+            if !drawn.shadows.is_empty() {
+                drawn.shadow_set = Some(self.shade.add_set(ShadowSet {
+                    parts: std::mem::take(&mut drawn.shadows),
+                    end_m: shadow_m,
+                }));
+            }
             out.push(drawn);
         }
         out
     }
 
-    /// Spawns one plant of a kind.
-    fn plant(&mut self, placement: &Placement, drawn: &Drawn, place: Transform) {
+    /// Spawns one plant of a kind, standing at `at` on the map: its first part drawn by its
+    /// own entity, the rest by its children, and its shadow filed for when the camera is
+    /// near (`shade`).
+    fn plant(&mut self, placement: &Placement, drawn: &Drawn, at: Vec2, place: Transform) {
         let cut = match placement.kind {
-            Under::Hazel | Under::Scrub | Under::Sapling => self.cut_as("Bush", place.scale.y),
+            Under::Hazel | Under::Scrub | Under::Sapling | Under::Coppice | Under::Holly => {
+                self.cut_as("Bush", place.scale.y)
+            }
             Under::Bilberry => self.cut_as("Berry bush", place.scale.y),
             _ => None,
         };
-        let (seen, shadow) = (placement.seen_m, placement.shadow_m);
-        // A small plant, uncut and casting no shadow, is one entity.
-        if cut.is_none() && shadow <= 0.0 {
-            let mut entity = self.commands.spawn((
-                Name::new(placement.name),
-                place,
-                within(seen),
+        let (seen, near) = (placement.seen_m, placement.near_m);
+        let band = |band: Band| match band {
+            Band::All => within(seen),
+            Band::Near => within(near),
+            Band::Far => VisibilityRange {
+                start_margin: near * (1.0 - FADE)..near,
+                end_margin: seen * (1.0 - FADE)..seen,
+                use_aabb: false,
+            },
+        };
+        let drawn_as = |entity: &mut EntityCommands, part: &Part| {
+            entity.insert((
+                Mesh3d(part.mesh.clone()),
+                band(part.band),
                 NotShadowCaster,
+                Undergrowth,
             ));
-            match drawn {
-                Drawn::One(mesh, material) => {
-                    entity.insert((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())));
-                }
-                Drawn::Scan(mesh, material) => {
-                    entity.insert((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())));
-                }
-                Drawn::Two(parts) => {
-                    entity.insert((
-                        Mesh3d(parts[0].0.clone()),
-                        MeshMaterial3d(parts[0].1.clone()),
-                    ));
-                    entity.with_child((
-                        Mesh3d(parts[1].0.clone()),
-                        MeshMaterial3d(parts[1].1.clone()),
-                        within(seen),
-                        NotShadowCaster,
-                    ));
-                }
+            match &part.look {
+                Look::Foliage(material) => entity.insert(MeshMaterial3d(material.clone())),
+                Look::Plain(material) => entity.insert(MeshMaterial3d(material.clone())),
+            };
+            if part.solid {
+                entity.insert(Footing);
             }
+        };
+        let Some((first, rest)) = drawn.parts.split_first() else {
             return;
-        }
-        let mut entity =
-            self.commands
-                .spawn((Name::new(placement.name), place, Visibility::default()));
+        };
+        let mut entity = self.commands.spawn((Name::new(placement.name), place));
+        drawn_as(&mut entity, first);
         if cut.is_some() {
             entity.insert(Growth::new(cut, None, 0.5));
         }
-        entity.with_children(|plant| {
-            let parts: Vec<(
-                Handle<Mesh>,
-                Option<Handle<Foliage>>,
-                Option<Handle<StandardMaterial>>,
-            )> = match drawn {
-                Drawn::One(mesh, material) => vec![(mesh.clone(), Some(material.clone()), None)],
-                Drawn::Scan(mesh, material) => vec![(mesh.clone(), None, Some(material.clone()))],
-                Drawn::Two(parts) => parts
-                    .iter()
-                    .map(|(mesh, material)| (mesh.clone(), Some(material.clone()), None))
-                    .collect(),
-            };
-            for (mesh, foliage, plain) in parts {
-                let mut part = plant.spawn((Mesh3d(mesh.clone()), within(seen), NotShadowCaster));
-                if let Some(material) = &foliage {
-                    part.insert(MeshMaterial3d(material.clone()));
+        if !rest.is_empty() {
+            entity.with_children(|plant| {
+                for part in rest {
+                    drawn_as(&mut plant.spawn_empty(), part);
                 }
-                if let Some(material) = plain {
-                    part.insert(MeshMaterial3d(material));
-                }
-                // Its shadow from a copy only the sun sees, which fades out nearer, so the
-                // plant itself never dithers between two of itself.
-                if shadow > 0.0
-                    && let Some(material) = foliage
-                {
-                    plant.spawn((
-                        Mesh3d(mesh),
-                        MeshMaterial3d(material),
-                        within(shadow),
-                        RenderLayers::layer(SUN_ONLY),
-                    ));
-                }
-            }
-        });
+            });
+        }
+        // Its shadow from a copy only the sun sees, which shrinks away rather than ending,
+        // as Bevy's shadow passes do not dither (D234), so the plant itself never dithers
+        // between two of itself.
+        if let Some(set) = drawn.shadow_set {
+            let plant = entity.id();
+            self.shade.add(plant, at, set);
+        }
+    }
+}
+
+/// Tangents for a mesh of bark, which its normal map needs.
+fn ensure_tangents(mesh: &mut Mesh) {
+    if !mesh.contains_attribute(Mesh::ATTRIBUTE_TANGENT)
+        && let Err(problem) = mesh.generate_tangents()
+    {
+        warn!("No tangents for the floor's wood: {problem}");
     }
 }
 
@@ -1178,7 +1562,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
     // The undergrowth, kind by kind, in drifts.
     let mut counts = Vec::new();
     for placement in &PLACEMENTS {
-        let variants = lay.grow(placement.kind);
+        let variants = lay.grow(placement);
         let drift = Noise::new(lay.seed.derive(placement.name).index(placement.kind as u64));
         let (bark_m, lying_m, path_m) = placement.kind.clear_of();
         let mut count = 0;
@@ -1214,7 +1598,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 let scale = dice.range(placement.scale.0, placement.scale.1) * edge;
                 let place = lay.on(p, &mut dice, 0.03 * scale, scale);
                 let drawn = variants[dice.below(variants.len() as u32) as usize].clone();
-                lay.plant(placement, &drawn, place);
+                lay.plant(placement, &drawn, p, place);
                 count += 1;
                 if p.length() < closest.length() {
                     closest = p;
@@ -1227,6 +1611,17 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         ));
     }
     info!("lush: undergrowth: {}.", counts.join(", "));
+    let shadows = lay
+        .shrinking
+        .iter()
+        .map(|((_, end), material)| (material.clone(), *end as f32 / 4.0))
+        .collect();
+    lay.commands.insert_resource(FloorShadows(shadows));
+    let shade = std::mem::replace(
+        &mut lay.shade,
+        NearShadows::new(lay.start, lay.east, lay.south),
+    );
+    lay.commands.insert_resource(shade);
     map
 }
 
@@ -1717,37 +2112,6 @@ fn bracken(dice: &mut Rng, leaf: &terra_world::grown::Card, tint: Vec3) -> grown
         }
     }
     build
-}
-
-/// A sapling a few metres tall: a slender stem nearly to its top, its branches climbing and
-/// its leaves, oak or hazel, in a few small clumps: grown as the game's trees are, small.
-fn sapling(
-    dice: &mut Rng,
-    cards: &Cards,
-    n: u64,
-    tint: Vec3,
-) -> (grown_build::Build, grown_build::Build) {
-    let leaves = if n.is_multiple_of(2) { "oak" } else { "hazel" };
-    let def = TreeDef {
-        habit: Habit::Upright,
-        bark: "oak_bark".into(),
-        bark_m: 1.0,
-        bark_tint: (1.0, 1.0, 1.0),
-        leaves: leaves.into(),
-        tint: (tint.x, tint.y, tint.z),
-        clump_m: 0.7,
-        trunk: 0.014,
-    };
-    let height = dice.range(2.4, 4.5);
-    let shape = grown_tree::grow(dice, &def, height);
-    let canopy = grown_tree::Canopy::of(&shape, tint);
-    let mut wood = grown_tree::wood(&shape, 0, def.bark_m);
-    let placed = grown_tree::crown_cards(dice, &shape, &canopy);
-    let mut crown = grown_tree::crown(&placed, &shape, cards.get(leaves), 0);
-    for build in [&mut wood, &mut crown] {
-        build.see_sky(|at| canopy.sky(at));
-    }
-    (wood, crown)
 }
 
 #[cfg(test)]

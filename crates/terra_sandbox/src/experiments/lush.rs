@@ -53,7 +53,9 @@ use terra_world::planet::Planet;
 
 mod floor;
 mod footing;
+mod shade;
 mod species;
+mod thicket;
 
 use floor::{Crowns, Stand};
 use footing::{Footing, Shapes, SolidShape, Trunk};
@@ -670,7 +672,13 @@ fn plant(
         },
     };
     let crown_leaves = materials.add(crown_material(Vec3::ZERO, LEAF, 0.25));
-    let floor_cards = materials.add(crown_material(Vec3::ZERO, Vec4::ZERO, 0.55));
+    // The floor's and the middle layer's: greyed and darkened as the crowns' are, if less,
+    // so their pictures' spring green reads as leaves in a wood's shade, not lime (D268).
+    let floor_cards = materials.add(crown_material(
+        Vec3::ZERO,
+        Vec4::new(0.12, 0.1, 0.0, 0.0),
+        0.55,
+    ));
     // The near crown's leaves, whose cards drop out with distance (D223).
     let dropping_leaves = materials.add(crown_material(
         Vec2::from(CARDS_DROP_M).extend(1.0),
@@ -1216,6 +1224,9 @@ fn plant(
             atlas: floor_cards,
             leaves: leaves.clone(),
             seed,
+            foliage: &mut materials,
+            shrinking: HashMap::default(),
+            shade: shade::NearShadows::new(start, east, south),
         },
         path,
         canopy,

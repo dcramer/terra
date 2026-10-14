@@ -40,7 +40,7 @@ const SHORT = 0.35;
 const LOW = 0.35;
 const TALL = 0.6;
 /// The kinds the forest must have.
-const KINDS = ["Rock", "Boulder", "Stump", "Log", "Oak", "Pine", "Spruce"];
+const KINDS = ["Rock", "Boulder", "Stump", "Log", "Snag", "Oak", "Pine", "Spruce"];
 
 type Low = { at: [number, number]; across: [number, number]; top: number };
 type Solid = { entity: number; name: string; at: [number, number]; top: number | null; low: Low | null; fitted: boolean };

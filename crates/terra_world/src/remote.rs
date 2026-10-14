@@ -13,7 +13,8 @@
 //!   front, `aim` how far above it to look, as at a person's chest rather than their feet;
 //!   `from` puts the eye at a point in the world instead; `vantage`, six numbers, puts the
 //!   eye at the first three and looks at the last three, in metres east, up and south of
-//!   the start, as `--vantage` and the kit sheet's log say.
+//!   the start, as `--vantage` and the kit sheet's log say; with `--vantage-ground` it moves
+//!   the run's fixed camera, heights above the ground, as `--vantage` does then.
 //!   `sandbox.release` lets the camera go.
 //! - `sandbox.pause {paused}`: stops or restarts the game's clock, animations included.
 //! - `sandbox.step {frames}`: lets a stopped clock run for so many frames, then stops it.
@@ -284,6 +285,16 @@ fn look(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         height,
         from,
     } = parse_some(params)?;
+    // With --vantage-ground, a vantage is the run's own fixed camera moved, its heights above
+    // the ground and its eye out of any trunk, as --vantage gives it.
+    if let Some(v) = vantage
+        && world.resource::<Options>().vantage_ground
+    {
+        let view = (Vec3::new(v[0], v[1], v[2]), Vec3::new(v[3], v[4], v[5]));
+        world.resource_mut::<Options>().vantage = Some(view);
+        world.resource_mut::<HeldCamera>().0 = None;
+        return Ok(json!("vantage"));
+    }
     let (at, from) = match vantage {
         Some(v) => {
             let start = world

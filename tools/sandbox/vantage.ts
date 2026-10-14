@@ -4,7 +4,8 @@
 // into a spruce grove, at each hour asked
 // for, side by side in one picture, so a change to how the world looks is judged on the same
 // views every time. One scripted run per hour moves its camera from view to view
-// (--vantage …@frame) and saves each with --shots.
+// (--vantage …@frame) and saves each with --shots; at the first hour, how closed the canopy
+// is, and how much of a view at eye height the undergrowth hides, from a run driven live.
 //
 //   node tools/sandbox/vantage.ts [--time 13,17] [--out shots/vantage]
 //
@@ -14,6 +15,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { resolve } from "node:path";
+import * as game from "./client.ts";
 import { ROOT } from "./client.ts";
 
 /// Each view: a name, where the camera stands and what it looks at, in metres east, up and
@@ -34,6 +36,13 @@ const HOLD = 200;
 /// How many places the canopy is looked up through, and the frames each is held.
 const SKY_PLACES = 12;
 const SKY_HOLD = 60;
+/// How many places the middle layer's blocking is measured at, and how near the undergrowth
+/// it counts is.
+const BLOCK_PLACES = 16;
+const BLOCK_M = 20;
+/// What is within this of the eye is left out of every picture, as a walker steps aside
+/// from a bush rather than standing in it.
+const ASIDE_M = 1.2;
 
 const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(name);
@@ -76,7 +85,7 @@ for (const hour of hours) {
     tiles.push("-label", `${name}, ${hour}:00${measured}`, file);
   });
   console.log(`vantage: ${hour}:00 in ${((Date.now() - started) / 1000).toFixed(0)} s`);
-  if (hour === hours[0]) tiles.push(...canopy(hour));
+  if (hour === hours[0]) tiles.push(...canopy(hour), ...(await blocking(hour)));
 }
 
 /// How closed the canopy is: from eye height, 1.7 m over the ground, looking straight up at
@@ -125,6 +134,74 @@ function canopy(hour: string): string[] {
   console.log(`vantage: sky looking up from eye height: mean ${mean.toFixed(1)}%, median ${median.toFixed(1)}%`);
   // The view up from the middle place, on the sheet.
   return ["-label", `up, ${hour}:00, sky ${mean.toFixed(0)}% (median ${median.toFixed(0)}%)`, resolve(out, `sky-${Math.floor(SKY_PLACES / 2)}.png`)];
+}
+
+/// How much of a view at eye height the undergrowth within 20 m hides: shrubs, saplings,
+/// snags, ferns and the rest, the middle layer that ends sightlines in a real forest (Sons of
+/// the Forest rarely lets one see past 20 to 30 m). At places on a spiral 30 to 160 m from
+/// the start, eye 1.7 m over the ground, looking level, a run driven over the remote protocol
+/// stops the clock and the wind and pictures each view, leaving out what is within 1.2 m as
+/// a walker steps aside from a bush, then again with what the camera sees of the undergrowth
+/// within 20 m hidden (`lush.undergrowth`, shadows left as they were), and
+/// again with it back, to know the noise; what differs between the first two is what it
+/// hides. Reported for the band round the horizon, the middle fifth of the picture, which is
+/// what a sightline crosses, and for the whole picture. The forest's aim is 30 to 60% of the
+/// band.
+async function blocking(hour: string): Promise<string[]> {
+  const places = Array.from({ length: BLOCK_PLACES }, (_, k) => {
+    const distance = 30 + (130 * k) / (BLOCK_PLACES - 1);
+    const angle = k * 2.39996 + 0.7;
+    const [x, z] = [Math.cos(angle) * distance, Math.sin(angle) * distance];
+    const heading = angle + 1.9 + k;
+    return [x, z, x + Math.cos(heading) * 30, z + Math.sin(heading) * 30].map(Math.round);
+  });
+  const view = (p: number[]) => [p[0], 1.7, p[1], p[2], 1.7, p[3]];
+  await game.start(
+    ["--offscreen", "--clean", "--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, "--vantage-ground", "--vantage", view(places[0]).join(",")],
+    { release: true },
+  );
+  await game.waitFor("undergrowth:", { since: 0, timeout: 120 });
+  const share = (mask: string, band: boolean) =>
+    Number(spawnSync("magick", [mask, ...(band ? ["-gravity", "center", "-crop", "100%x20%+0+0", "+repage"] : []), "-format", "%[fx:mean]", "info:"], { encoding: "utf8" }).stdout) * 100;
+  // A pixel counts where any channel changed by more than 4% of white, and only in patches:
+  // the opening takes out the scattered pixels TAA and the haze's jitter change, and the
+  // closing fills the speckle where leaves gave way to leaves of a like colour behind them.
+  const differ = (a: string, b: string, mask: string) => {
+    const done = spawnSync("magick", [a, b, "-resize", "480x270!", "-compose", "difference", "-composite", "-separate", "-evaluate-sequence", "max", "-threshold", "4%", "-morphology", "Open", "Disk:1", "-morphology", "Close", "Disk:2", mask], { encoding: "utf8" });
+    if (done.status !== 0) throw new Error(done.stderr);
+    return [share(mask, true), share(mask, false)];
+  };
+  const results: { band: number; whole: number; noise: number }[] = [];
+  for (const [k, p] of places.entries()) {
+    await game.call("sandbox.look", { vantage: view(p) });
+    // Grass is built round the camera as it arrives, and levels of detail fade in.
+    await game.waitSeconds(4);
+    await game.call("sandbox.pause", { paused: true });
+    await game.call("lush.undergrowth", { hidden: true, within: ASIDE_M });
+    await game.sleep(1500);
+    const seen = await game.shot(resolve(out, `block-${k}.png`));
+    await game.call("lush.undergrowth", { hidden: true, within: BLOCK_M });
+    await game.sleep(1500);
+    const bare = await game.shot(resolve(out, `block-${k}-bare.png`));
+    await game.call("lush.undergrowth", { hidden: true, within: ASIDE_M });
+    await game.sleep(1500);
+    const again = await game.shot(resolve(out, `block-${k}-again.png`));
+    await game.call("lush.undergrowth", { hidden: false });
+    await game.call("sandbox.pause", { paused: false });
+    const [band, whole] = differ(seen, bare, resolve(out, `block-${k}-mask.png`));
+    const [noise] = differ(seen, again, resolve(out, `block-${k}-noise.png`));
+    results.push({ band, whole, noise });
+  }
+  await game.stop();
+  const mean = (pick: (r: (typeof results)[0]) => number) => results.reduce((sum, r) => sum + pick(r), 0) / results.length;
+  console.log(`vantage: undergrowth within ${BLOCK_M} m hides, at eye height at ${hour}:00: ${places.map((p, k) => `${p[0]},${p[1]} ${results[k].band.toFixed(0)}%`).join(", ")}`);
+  console.log(`vantage: undergrowth within ${BLOCK_M} m hides at eye height: mean ${mean((r) => r.band).toFixed(1)}% of the band round the horizon (median ${[...results].sort((a, b) => a.band - b.band)[Math.floor(results.length / 2)].band.toFixed(1)}%), ${mean((r) => r.whole).toFixed(1)}% of the picture (noise ${mean((r) => r.noise).toFixed(1)}%)`);
+  // The place nearest the band's mean, on the sheet, and what counted.
+  const typical = results.reduce((best, r, k) => (Math.abs(r.band - mean((q) => q.band)) < Math.abs(results[best].band - mean((q) => q.band)) ? k : best), 0);
+  return [
+    "-label", `eye height, ${hour}:00, undergrowth hides ${mean((r) => r.band).toFixed(0)}% of the horizon band`, resolve(out, `block-${typical}.png`),
+    "-label", `what it hides there (${results[typical].band.toFixed(0)}%)`, resolve(out, `block-${typical}-mask.png`),
+  ];
 }
 
 const sheet = resolve(out, "sheet.jpg");

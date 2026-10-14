@@ -124,6 +124,9 @@ struct Clump {
     facing: f32,
     hue: f32,
     dry: f32,
+    /// Where grass is thin, whether this clump grows at all: it does where this is under
+    /// how much grass there is (`tussocks`).
+    alive: f32,
 }
 
 /// A cheap, well-mixed hash of a grid cell and a stream, as a number in [0, 1); seeded so
@@ -150,7 +153,29 @@ fn clump(seed: u64, i: i32, j: i32) -> Clump {
         facing: h(4) * TAU,
         hue: h(5) * 2.0 - 1.0,
         dry: h(6) * 2.0 - 1.0,
+        alive: h(7),
     }
+}
+
+/// How thick the grass grows at a blade: as thick as the cover says where it is thick, but
+/// thin grass grows in tussocks rather than as an even stubble of lone blades, as it does on
+/// a shaded floor: only some clumps grow, at random, more of them the more grass there is,
+/// each thick at its middle and none at its edge, with bare ground between. `from_middle` is
+/// in clump cells.
+fn tussocks(grass: f32, clump: &Clump, from_middle: f32) -> f32 {
+    let even = libm::sqrtf(grass);
+    let thick = smoothstep(0.3, 0.75, grass);
+    let tuft = if clump.alive < grass * 2.4 + 0.04 {
+        (even * 2.4).min(1.0) * (1.0 - smoothstep(0.22, 0.6, from_middle))
+    } else {
+        0.0
+    };
+    tuft + (even - tuft) * thick
+}
+
+fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
+    let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// What grows on the sample grid: the ground's rise above the square's middle, how much
@@ -307,10 +332,14 @@ pub fn square(
             // Its rank decides whether it grows at all, and in which rings: the far rings
             // keep the lowest ranks, a subset of the near ring.
             let rank = h(3);
+            if grass < 0.02 {
+                continue;
+            }
             // Grass half as thick still covers the ground with most of its blades, only
-            // shorter; thin grass stays thin.
-            let thick = libm::sqrtf(grass);
-            if rank > thick || grass < 0.02 {
+            // shorter; thin grass grows in tussocks.
+            let (clump, from_middle) = nearest_clump(at);
+            let thick = tussocks(grass, &clump, from_middle);
+            if rank > thick {
                 continue;
             }
             // Measured as grown at full detail: a far ring draws fewer blades, wider, over
@@ -329,7 +358,6 @@ pub fn square(
             {
                 continue;
             }
-            let (clump, from_middle) = nearest_clump(at);
             let tall = (0.12 + 0.42 * libm::powf(grass, 0.7) * (0.6 + 0.4 * lush))
                 * clump.height
                 * (1.0 - 0.35 * from_middle.min(1.0))
@@ -456,5 +484,34 @@ impl BladeMesh {
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.up_and_rank)
         .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.colours)
         .with_inserted_indices(Indices::U32(self.indices))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn thin_grass_grows_in_tussocks_and_thick_grass_evenly() {
+        let clumps: Vec<Clump> = (0..400).map(|k| clump(9, k % 20, k / 20)).collect();
+        let growing = |grass: f32| {
+            clumps
+                .iter()
+                .filter(|c| tussocks(grass, c, 0.0) > 0.0)
+                .count()
+        };
+        // Thin, only some clumps grow, thick at their middle and bare at their edge.
+        let few = growing(0.1);
+        assert!((60..200).contains(&few), "{few} of 400");
+        let tuft = clumps
+            .iter()
+            .find(|c| tussocks(0.1, c, 0.0) > 0.0)
+            .expect("a tussock");
+        assert!(tussocks(0.1, tuft, 0.0) > libm::sqrtf(0.1) * 1.5);
+        assert_eq!(tussocks(0.1, tuft, 0.7), 0.0);
+        // Thick, every clump, edge to edge, as before.
+        for c in &clumps {
+            assert_eq!(tussocks(0.9, c, 0.7), libm::sqrtf(0.9));
+        }
     }
 }

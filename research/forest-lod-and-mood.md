@@ -31,5 +31,6 @@ Sources are marked **P** (the developers' own talks, notes, documentation, job p
 - **Cards that drop out** (D223): our crowns now thin card by card with distance, survivors growing, as SpeedTree's do, instead of swapping between versions.
 - **Haze between the trees** (D224): a forest-scale distance haze, its colour following the hour.
 - **A darker, more muted scene** (D216).
+- **A layer at eye height** (D268): hazel, holly, young spruces, saplings, bramble and snags, one to five metres, measured hiding 44% of an eye-height view within 20 m.
 
-Still to take, roughly in order of effect per cost: sound in the world; an eye-height layer of saplings and shrubs; haze that varies with height and drifts; one travelling wind; the same continuous thinning for trunks and branches; billboards or impostors for the far forest; shadows chosen per cascade (Horizon Zero Dawn).
+Still to take, roughly in order of effect per cost: sound in the world; haze that varies with height and drifts; one travelling wind; the same continuous thinning for trunks and branches; billboards or impostors for the far forest; shadows chosen per cascade (Horizon Zero Dawn).
