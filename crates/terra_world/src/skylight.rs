@@ -64,6 +64,11 @@ struct Painted {
 /// for the new sky to reach the GPU and be filtered; the filtered light stays on the camera
 /// between (`EnvironmentMapLight`), and its brightness and turn are set on that directly.
 const FILTER_FRAMES: u32 = 4;
+/// For the first painting, longer, and counted only once the game is playing and no shader is
+/// compiling: Bevy compiles the filter's pipelines in the background, and removed before they
+/// ran, the light the shading reads is never filtered and stays black, so every shade was
+/// black in a run whose sky did not change, a scripted shot of the kit sheet.
+const FIRST_FILTER_FRAMES: u32 = 30;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<SkyLight>()
@@ -97,7 +102,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.insert_resource(Painted {
         image: images.add(image),
         from: None,
-        filtering: FILTER_FRAMES,
+        filtering: FIRST_FILTER_FRAMES,
     });
 }
 
@@ -125,6 +130,8 @@ fn paint(
     tweaks: Res<Tweaks>,
     mut painted: ResMut<Painted>,
     mut open: ResMut<OpenSky>,
+    shaders: Option<Res<crate::loading::Shaders>>,
+    screen: Option<Res<State<crate::loading::Screen>>>,
     mut images: ResMut<Assets<Image>>,
     mut camera: Query<
         (
@@ -161,7 +168,12 @@ fn paint(
             generated.rotation = rotation;
         }
     }
-    painted.filtering = painted.filtering.saturating_sub(1);
+    // Counted only while the filter can run: playing, with nothing compiling.
+    let ready = shaders.is_none_or(|shaders| shaders.idle())
+        && screen.is_none_or(|screen| *screen.get() == crate::loading::Screen::Playing);
+    if ready {
+        painted.filtering = painted.filtering.saturating_sub(1);
+    }
 
     let linear = |c: Color| Vec3::from_slice(&c.to_linear().to_f32_array()[..3]);
     let sun_height = tweaks.sun_direction.normalize_or(Vec3::Y).dot(up).max(0.0);
@@ -198,8 +210,13 @@ fn paint(
         }
         return;
     }
+    // The first painting waits on Bevy compiling its filter, which takes many frames.
+    painted.filtering = if painted.from.is_none() {
+        FIRST_FILTER_FRAMES
+    } else {
+        FILTER_FRAMES
+    };
     painted.from = Some(key);
-    painted.filtering = FILTER_FRAMES;
     if !generating {
         commands
             .entity(entity)

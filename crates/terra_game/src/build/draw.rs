@@ -21,7 +21,7 @@ use bevy::{
     render::render_resource::{AsBindGroup, PrimitiveTopology},
     shader::ShaderRef,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use terra_build::kit::Kits;
 use terra_build::sections::{Drawn as Merged, Ghost, Reach, Shape};
@@ -272,6 +272,19 @@ pub(super) struct Parts {
 
 /// Turns a section drawn into meshes, about its middle.
 pub(super) fn parts(drawn: Merged, centre: Vec3) -> Parts {
+    // A surface whose colours came out near black, as a mask reading the real maps can make
+    // it, is drawn black in any light: said once a run (`terra_build::inspect`).
+    static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    for (&(kind, material), surface) in &drawn.near {
+        if let Some(dark) = terra_build::inspect::black(surface)
+            && !SAID.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            warn!(
+                "Build: kind {} {material:?} near {centre} drawn black: {dark} corners near black",
+                kind.0
+            );
+        }
+    }
     let textured = |surface: &Surface| mesh(surface, centre, Uvs::Mapped);
     let plain = |surface: &Surface| mesh(surface, centre, Uvs::None);
     Parts {
@@ -433,7 +446,17 @@ pub fn plugin(app: &mut App) {
 /// section near is a few hundred thousand, far a few thousand.
 const UPLOAD_CORNERS: usize = 200_000;
 
-/// Puts what the workers have laid on screen, a few sections a frame.
+/// How many frames a build's laid sections are held back for the rest sent out with them at
+/// most, before they are shown as they are, so a build always shows its changes.
+const HOLD_FRAMES: u32 = 30;
+
+/// Puts what the workers have laid on screen, a few builds' changes a frame. What a build
+/// sent out is swapped in whole, every section of it in the same frame once all are back,
+/// the old meshes drawn until then, as a chunked world double-buffers its chunks: a piece
+/// belongs to one section, and a block surface is rounded with its neighbours' cubes, so a
+/// section shown new beside one still old could show a piece twice or not at all, or a seam,
+/// for a frame. Only sections held `HOLD_FRAMES` are shown as they are, and say so.
+#[allow(clippy::too_many_arguments)]
 fn upload(
     mut commands: Commands,
     mut jobs: ResMut<Jobs>,
@@ -445,17 +468,54 @@ fn upload(
     mut builds: Query<&mut Built>,
 ) {
     let all = options.scripted() && !options.bench;
+    // The builds whose changes are all laid, and those held back too long.
+    let roots: BTreeSet<Entity> = jobs.ready.iter().map(|done| done.root).collect();
+    let (mut complete, mut partial) = (BTreeSet::new(), BTreeSet::new());
+    let standing: BTreeSet<Entity> = each(&mut site, &mut builds).map(|b| b.root).collect();
+    // What was laid for a build since taken away is dropped.
+    jobs.ready.retain(|done| standing.contains(&done.root));
+    jobs.held.retain(|root, _| standing.contains(root));
+    for build in each(&mut site, &mut builds) {
+        if !roots.contains(&build.root) {
+            continue;
+        }
+        // Every section sent out has come back: what came back is the latest of each, laid
+        // from one base, to show together. Sections still waiting to be sent, for a newer
+        // change, are shown when theirs come back.
+        let laid = !jobs.laying(build.root);
+        let held = jobs.held.entry(build.root).or_default();
+        *held += 1;
+        if laid {
+            complete.insert(build.root);
+        } else if *held > HOLD_FRAMES {
+            partial.insert(build.root);
+        }
+    }
     let mut corners = 0;
+    let mut rest = std::collections::VecDeque::new();
+    let mut shown: BTreeSet<Entity> = BTreeSet::new();
     while let Some(done) = jobs.ready.pop_front() {
+        let whole = complete.contains(&done.root);
+        if !whole && !partial.contains(&done.root) {
+            rest.push_back(done);
+            continue;
+        }
         let size = match &done.outcome {
             Outcome::Drawn { parts, .. } => parts.corners(),
             Outcome::Same => 0,
         };
-        if !all && corners > 0 && corners + size > UPLOAD_CORNERS {
-            jobs.ready.push_front(done);
-            break;
+        // A change begun this frame is finished this frame, however big; another build's
+        // waits for the next once this frame's corners are spent.
+        if !all && !shown.contains(&done.root) && corners > 0 && corners + size > UPLOAD_CORNERS {
+            rest.push_back(done);
+            continue;
         }
         corners += size;
+        if shown.insert(done.root) && !whole {
+            warn!(
+                "Build: sections shown before the rest sent out with them came back, after {HOLD_FRAMES} frames"
+            );
+        }
         let Some(build) = each(&mut site, &mut builds).find(|build| build.root == done.root) else {
             continue;
         };
@@ -470,6 +530,12 @@ fn upload(
             change.back_ms = change.since.elapsed().as_secs_f32() * 1000.0;
         }
         show(&mut commands, &mut meshes, &look, build, done, *quality);
+    }
+    jobs.ready = rest;
+    for root in shown {
+        if !jobs.ready.iter().any(|done| done.root == root) {
+            jobs.held.remove(&root);
+        }
     }
     // A change is on screen once nothing of its build is waiting, being laid or out.
     for build in each(&mut site, &mut builds) {

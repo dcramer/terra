@@ -92,7 +92,8 @@ pub fn plugin(app: &mut App) {
             .after(InputSystems)
             .after(shell::scripted_presses),
     )
-    .add_systems(Update, quit_when_asked)
+    .init_resource::<Burst>()
+    .add_systems(Update, (quit_when_asked, burst))
     .add_systems(PostUpdate, hold_camera.in_set(CameraHold));
     method(app, "sandbox.find", find);
     method(app, "sandbox.place", place);
@@ -683,13 +684,61 @@ fn said(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 #[derive(Deserialize)]
 struct Shot {
     path: String,
+    /// So many frames one after another, each to the path with its number before the
+    /// extension (`f.png` as `f-00000.png` on), to compare frame by frame what a change
+    /// does on screen as it happens: what pops or flickers, or a frame with a gap.
+    #[serde(default)]
+    frames: Option<u32>,
+}
+
+/// Frames being saved one after another (`sandbox.shot` with `frames`): where, the next's
+/// number and how many.
+#[derive(Resource, Default)]
+struct Burst {
+    path: Option<std::path::PathBuf>,
+    next: u32,
+    count: u32,
+}
+
+/// Saves this frame, while a burst of frames is being saved.
+fn burst(
+    mut commands: Commands,
+    mut burst: ResMut<Burst>,
+    picture: Option<Res<crate::shell::Picture>>,
+) {
+    let Some(path) = burst.path.clone() else {
+        return;
+    };
+    if burst.next >= burst.count {
+        burst.path = None;
+        return;
+    }
+    let stem = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let file = path.with_file_name(format!("{stem}-{:05}.png", burst.next));
+    std::fs::remove_file(&file).ok();
+    commands
+        .spawn(crate::shell::screenshot(picture.as_deref()))
+        .observe(save_to_disk(file));
+    burst.next += 1;
 }
 
 fn shot(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
-    let Shot { path } = parse_some(params)?;
+    let Shot { path, frames } = parse_some(params)?;
     let path = std::path::absolute(&path).map_err(refused)?;
     if let Some(folder) = path.parent() {
         std::fs::create_dir_all(folder).map_err(refused)?;
+    }
+    if let Some(count) = frames {
+        let count = count.min(600);
+        *world.resource_mut::<Burst>() = Burst {
+            path: Some(path.clone()),
+            next: 0,
+            count,
+        };
+        return Ok(json!({ "path": path, "frames": count }));
     }
     std::fs::remove_file(&path).ok();
     let shot = crate::shell::screenshot(world.get_resource::<crate::shell::Picture>());

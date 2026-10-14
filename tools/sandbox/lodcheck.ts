@@ -46,6 +46,10 @@ const SETTLE = 6;
 const WIDTH = 720;
 const CHANGED = "4%";
 const SPECKLE = "Disk:2";
+/// A pixel is black under this much of white in every channel; a frame fails with more than
+/// this share of them.
+const BLACK = "2%";
+const MOST_BLACK = 1;
 
 const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(name);
@@ -143,6 +147,15 @@ for (const view of views) {
   for (const pop of pops.slice(0, 3)) console.log(`lodcheck: ${view}: frame ${pop.frame}: ${pop.share.toFixed(2)}% popped at scale ${pop.scale.toFixed(2)}`);
   if (over.length) failed = true;
   worst.push(...pops.slice(0, 2));
+  // Black: nothing lit by day is this dark, not the deepest shade, which the sky lights. A
+  // share of it is light gone missing (an unfiltered sky light left every shade black) or
+  // NaNs spreading.
+  const black = Number(magick(file(view, SWEEP.last), "-resize", `${WIDTH}x`, "-channel", "RGB", "-separate", "-evaluate-sequence", "max", "-threshold", BLACK, "-negate", "-format", "%[fx:mean*100]", "info:"));
+  console.log(`lodcheck: ${view}: ${black.toFixed(2)}% of the last frame black`);
+  if (black > MOST_BLACK) {
+    console.log(`lodcheck: ${view}: FAIL: over ${MOST_BLACK}% black: the shade unlit, or NaNs`);
+    failed = true;
+  }
 }
 
 // The worst frames, each with what popped marked red over it.

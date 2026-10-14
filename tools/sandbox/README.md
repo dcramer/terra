@@ -56,8 +56,8 @@ r said                                   # everything said since the last action
 | `give ITEM[:COUNT] …` | In play: carry something, as `--give` does, or set the body (`health:20`), and wait until it is given; fails if it did not fit |
 | `pose CLIP [FRACTION]` | In the workbench: hold every model that far through a clip given with `--anim`, or play it |
 | `shape [--model N] TEMPLATE` or `shape heavy=0.5 thin=0.2` | In the workbench: reshape a model's body live, as a template or any mix of morphs (`appearance`) |
-| `shot FILE.png` | Save a screenshot and wait for it |
 | `call build.state`, `call build.lay {…}` … | In play: the player's base, read and built through the same checked operations as the hammer: `build.state`, `build.lay`, `build.opening`, `build.fill`, `build.take_apart`, `build.undo`, `build.op`, `build.point`, `build.material`, `build.replace`, `build.carve`, `build.take_out`, `build.cube` (see `crates/terra_game/src/build/remote.rs`), and `build.memory`, what every base holds on the CPU and the GPU |
+| `shot FILE.png` | Save a screenshot and wait for it; `call sandbox.shot {"path": …, "frames": N}` saves the next N frames one after another, as `FILE-00000.png` on, to compare frame by frame what a change does as it happens |
 | `call METHOD [JSON]` | Any method; `call rpc.discover` lists them, Bevy's `world.*` ones included |
 
 ## Scripts

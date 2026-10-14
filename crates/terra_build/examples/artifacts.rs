@@ -52,6 +52,8 @@ fn main() -> ExitCode {
     reports.sort_by_key(|(i, _)| *i);
     let faults = [
         Fault::NotFinite,
+        Fault::Black,
+        Fault::Inward,
         Fault::Coplanar,
         Fault::Doubled,
         Fault::SeeThrough,
@@ -59,10 +61,10 @@ fn main() -> ExitCode {
         Fault::PokesOut,
     ];
     let details = [Detail::Near, Detail::Mid, Detail::Far, Detail::Proxy];
-    let mut counts = [[0usize; 4]; 6];
+    let mut counts = [[0usize; 4]; 8];
     let (mut triangles, mut rays) = ([0usize; 4], 0usize);
     // The first few of each fault at each detail, or every one with --all.
-    let mut shown = [[0usize; 4]; 6];
+    let mut shown = [[0usize; 4]; 8];
     let mut lines = Vec::new();
     for (i, report) in &reports {
         for (t, n) in triangles.iter_mut().zip(report.triangles) {
@@ -106,6 +108,8 @@ fn main() -> ExitCode {
     );
     let looks = [
         "black pixels that spread",
+        "a surface drawn black whatever the light",
+        "a surface drawn from inside, dark or see-through",
         "two surfaces flickering in one plane (z-fighting)",
         "a piece drawn twice",
         "sky or sun through a wall or a roof",

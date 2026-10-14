@@ -36,6 +36,12 @@ use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Fault {
     NotFinite,
+    /// A mesh whose corners' colours, which multiply its texture, are mostly near black, so
+    /// it is drawn black in sun and shade alike.
+    Black,
+    /// Triangles wound against their own normals, so the GPU culls their outside and draws
+    /// their inside, lit from behind: a wall drawn black, or seen through.
+    Inward,
     Coplanar,
     Doubled,
     SeeThrough,
@@ -78,6 +84,9 @@ impl Report {
 /// buffer of 32 bits, reversed, keeps far finer than this at any distance a building is
 /// seen from, so this is two surfaces meant to be one.
 const COPLANAR_M: f32 = 0.001;
+/// How dark a corner's colour (sRGB) is to count as black: nothing a kit tints or masks is
+/// meant this dark, the darkest dirt and soot a little over a tenth.
+const DARK: f32 = 0.06;
 /// How nearly two triangles must face the same way to fight: within about two degrees.
 const SAME_FACING: f32 = 0.9994;
 /// How much two triangles must overlap to be seen fighting, in square metres: a square
@@ -135,6 +144,20 @@ impl Drawn {
                 first_bad.get_or_insert(*p);
             }
         }
+        // Corners whose colour, which multiplies the texture, is near black: drawn black
+        // whatever the light, as a mask or a bake gone wrong does.
+        if let Some(dark) = black(surface) {
+            findings.push(Finding {
+                fault: Fault::Black,
+                detail,
+                at: all.positions.first().copied().unwrap_or(Vec3::ZERO),
+                what: format!(
+                    "{}: {dark} of {} corners near black",
+                    self.meshes[mesh as usize],
+                    all.colours.len()
+                ),
+            });
+        }
         if bad > 0 {
             findings.push(Finding {
                 fault: Fault::NotFinite,
@@ -146,6 +169,8 @@ impl Drawn {
                 ),
             });
         }
+        let (mut inward, mut area_in, mut area_all) = (0usize, 0.0f32, 0.0f32);
+        let mut first_in = None;
         for t in all.indices.chunks_exact(3) {
             let p = [0, 1, 2].map(|i| all.positions[t[i] as usize]);
             let cross = (p[1] - p[0]).cross(p[2] - p[0]);
@@ -154,6 +179,15 @@ impl Drawn {
                 continue;
             }
             let n = cross / area2;
+            // Wound against its corners' normals: culled from outside and drawn from
+            // inside, lit from behind.
+            let normal: Vec3 = t.iter().map(|&i| all.normals[i as usize]).sum();
+            area_all += area2;
+            if normal.dot(n) < -0.2 * normal.length() {
+                inward += 1;
+                area_in += area2;
+                first_in.get_or_insert(p[0]);
+            }
             self.tris.push(Tri {
                 p,
                 n,
@@ -161,7 +195,35 @@ impl Drawn {
                 mesh,
             });
         }
+        // A sliver here and there wound back where a surface folds is not seen; a share of
+        // its area is.
+        if area_in > area_all * 0.01 {
+            findings.push(Finding {
+                fault: Fault::Inward,
+                detail,
+                at: first_in.unwrap_or(Vec3::ZERO),
+                what: format!(
+                    "{}: {inward} triangles, {:.0}% of its area, wound against their normals",
+                    self.meshes[mesh as usize],
+                    area_in / area_all * 100.0
+                ),
+            });
+        }
     }
+}
+
+/// How many of a surface's corners are near black, if over a quarter are ([`Fault::Black`]):
+/// the game asks it of every surface it is given, with the real maps the masks read.
+pub fn black(surface: &Surface) -> Option<usize> {
+    let colours = surface.colours.iter().chain(&surface.shared.colours);
+    let (mut dark, mut all) = (0, 0);
+    for c in colours {
+        all += 1;
+        if !c.iter().all(|v| v.is_finite()) || c[0].max(c[1]).max(c[2]) < DARK {
+            dark += 1;
+        }
+    }
+    (all > 0 && dark * 4 > all).then_some(dark)
 }
 
 /// Inspects a base built whole, at every detail its sections are drawn at.

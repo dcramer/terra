@@ -49,6 +49,9 @@ pub(super) struct Jobs {
     busy_since: Option<Instant>,
     /// Whether everything has been drawn once, after which work is streaming.
     drawn_once: bool,
+    /// How many frames each build's laid sections have been held back for the rest of its
+    /// change (`draw::upload`).
+    pub held: std::collections::BTreeMap<Entity, u32>,
 }
 
 /// How long bases took to lay whole, and sections with anything in them to cut from them
@@ -427,6 +430,11 @@ fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
 }
 
 impl Jobs {
+    /// Whether any section of a build is still on a worker.
+    pub fn laying(&self, root: Entity) -> bool {
+        self.running.iter().any(|job| job.root == root)
+    }
+
     /// Whether nothing is being laid or waiting to be put on screen.
     pub fn quiet(&self) -> bool {
         self.running.is_empty() && self.ready.is_empty()
