@@ -162,6 +162,15 @@ Now a face has points only where its shape bends, across the rounding of its ope
 Cubes cut to a roof or a shape then took points only where their cut crosses or bends, and those near a bedded lintel or sill one every 10 cm: the block kinds' surface fell from 0.78 M to 0.17 M, and with their dress they come to 109 triangles a cube of them and 1.55 MiB a building. The budget (D284), held by tests in `cargo xtask check` and by `cargo xtask sections`: 64 triangles a square metre of surface open to the air (a stone house had 800 before, 172 after the first pass), 120 a cube with dress, 4 MiB a building. The dress modules (D258), 0.85 M, are now most of what is left of the block kinds; the timber kinds' logs, at 5.5 million triangles, and the roofs' modules are the street walk's next cost, and are not block surfaces.
 
 Stone, earth and brick, before and after, at 2, 5 and 10 m on the 5090: the same, the stone's joints as deep by parallax as by displacement at 2 m, earth's lifts and lumps kept in its shape, a wall's silhouette along its open edge straighter where the stone's displacement had broken it.
+
+**The street walk after D284** (`town300`, d8e8cfe, recorded in `benchmarks.csv`), on a machine that did not go quiet, so the load is noted with each:
+
+| GPU | Load | Median / p99 / worst | Hitches | Triangles a frame | Frame's parts |
+|---|---|---|---|---|---|
+| 5090, high | 71 to 104 | 15.4 / 29.9 / 77.2 ms (three runs, the middle; the quietest of them 8.6 / 24.8 / 77.2) | 62 | 9.05 M | the game's update 12.1 ms, the GPU 3.2 |
+| Radeon, low | 24 to 86 | 78.9 / 115.7 / 541.5 ms (one run of three; two stuck past 300 s) | 1,197 | 2.36 M | the game's update 21.0 ms, the GPU 55.3: its main pass 36.0, the depth prepass over the same triangles 6.5 |
+
+The 5090's frame is the main thread's, the CPU systems the performance work owns. The Radeon's is its main pass, at five times the depth prepass over the same 1.2 M triangles: shading the pixels, not the triangles' number, is most of what it spends, so near triangles cut further show there only in the prepass and the vertex work. Before D284 the walk was 9.2 / 72.5 / 123.2 ms on the 5090 (5d73d6b, load 20 to 40) and 64.3 / 96.5 / 130.8 on the Radeon.
 ## The castle's edits, operations and aim (the third goals review, finding 6)
 
 Throwaway drivers in `terra_build`, release, one thread, on the castle's 141,502 cubes.
