@@ -5,8 +5,11 @@
 //! The first view is meshed before the first frame, across every core, so nothing is
 //! seen half built. After that, as the camera moves on, the chunks it now wants are meshed
 //! in the background, and the ones it no longer wants stay until their replacements are
-//! ready, so the ground never shows holes. A scripted run waits for every chunk each
-//! frame, so the same script shows the same ground on any machine.
+//! ready, so the ground never shows holes. Which chunks are wanted is worked out on a
+//! worker too, as Voxel Tools updates its level-of-detail octree off the main thread: it
+//! took 17 ms of a frame every 4 m walked on a 30 km world. A scripted run waits for every
+//! chunk and every choice each frame, so the same script shows the same ground on any
+//! machine.
 
 use crate::loading::{self, Progress};
 use crate::planet::MainCamera;
@@ -42,6 +45,10 @@ struct Terrain {
     chosen_from: Option<Vec3>,
     /// How many edits the ground had when its chunks were last brought up to date.
     edits_seen: usize,
+    /// The chunks wanted from a place, being worked out; and the edits made since the
+    /// chunks were last brought up to date, whose chunks are meshed again once they are.
+    choosing: Option<Task<HashMap<ChunkId, Sides>>>,
+    changed: Vec<(Vec3, f32)>,
 }
 
 /// A chunk drawn: with which faces stitched to finer neighbours, and its entity, if its
@@ -224,30 +231,50 @@ fn first_view(
     terrain.edits_seen = planet.voxels().edit_count();
 }
 
-/// Chooses the chunks again when the camera has moved on or the ground has changed, and
-/// starts meshing those that are new or out of date.
+/// Chooses the chunks again, on a worker, when the camera has moved on or the ground has
+/// changed, and once they are chosen starts meshing those that are new or out of date.
 fn choose(
     planet: Res<Planet>,
+    options: Res<Options>,
     camera: Single<&GlobalTransform, With<MainCamera>>,
     mut terrain: ResMut<Terrain>,
 ) {
     let viewer = camera.translation();
     let edits = planet.voxels().edit_count();
-    let moved = terrain
-        .chosen_from
-        .is_none_or(|from| from.distance(viewer) > RECHOOSE_M);
-    if !moved && edits == terrain.edits_seen {
+    if terrain.choosing.is_none() {
+        let moved = terrain
+            .chosen_from
+            .is_none_or(|from| from.distance(viewer) > RECHOOSE_M);
+        if !moved && edits == terrain.edits_seen {
+            return;
+        }
+        // Chunks an edit reached are meshed again even if nothing else changed.
+        let since: Vec<(Vec3, f32)> = planet.voxels().edits_since(terrain.edits_seen).collect();
+        terrain.changed.extend(since);
+        terrain.edits_seen = edits;
+        // A dig can open chunks that held no surface before, so the ground is chosen
+        // again after any edit, not only when the camera moves.
+        if moved {
+            terrain.chosen_from = Some(viewer);
+        }
+        let from = planet.clone();
+        terrain.choosing =
+            Some(AsyncComputeTaskPool::get().spawn(async move { wanted(&from, viewer) }));
+    }
+    let Some(task) = terrain.choosing.as_mut() else {
         return;
-    }
-    // Chunks an edit reached are meshed again even if nothing else changed.
-    let changed: Vec<(Vec3, f32)> = planet.voxels().edits_since(terrain.edits_seen).collect();
-    terrain.edits_seen = edits;
-    // A dig can open chunks that held no surface before, so the ground is chosen again
-    // after any edit, not only when the camera moves.
-    terrain.wanted = wanted(&planet, viewer);
-    if moved {
-        terrain.chosen_from = Some(viewer);
-    }
+    };
+    let chosen = if options.scripted() && !options.bench {
+        Some(block_on(task))
+    } else {
+        block_on(future::poll_once(task))
+    };
+    let Some(chosen) = chosen else {
+        return;
+    };
+    terrain.choosing = None;
+    terrain.wanted = chosen;
+    let changed = std::mem::take(&mut terrain.changed);
     // What is being meshed for a chunk no longer wanted stops (dropping a task cancels it).
     // Left to finish, the meshing of chunks walked past piles up faster than it is done,
     // keeps the threads busy long after the walk, and keeps old chunks from being taken
