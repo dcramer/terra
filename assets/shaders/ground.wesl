@@ -48,7 +48,7 @@ struct Ground {
     sea_deep: vec4<f32>,
     layer_metres: vec4<f32>,
     textured: u32,
-    litter_metres: f32,
+    more_metres: vec4<f32>,
     // From a point in the world to its place on the cover map, and whether there is one.
     cover_from_world: mat4x4<f32>,
     cover_on: u32,
@@ -70,6 +70,12 @@ var ground_normal: texture_2d_array<f32>;
 var cover_map: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(105)
 var cover_sampler: sampler;
+// And more of it: fallen needles in red, duff and roots in green, and how much canopy stands
+// over in blue.
+@group(constants::MATERIAL_BIND_GROUP) @binding(106)
+var cover_more: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(107)
+var cover_more_sampler: sampler;
 
 // The layers of the texture array, in the order planet.rs gives them.
 const SOIL: u32 = 0u;
@@ -77,6 +83,8 @@ const GRASS: u32 = 1u;
 const ROCK: u32 = 2u;
 const SAND: u32 = 3u;
 const LITTER: u32 = 4u;
+const NEEDLES: u32 = 5u;
+const ROOTS: u32 = 6u;
 
 struct Layer {
     colour: vec3<f32>,
@@ -94,9 +102,11 @@ fn facing(n: vec3<f32>) -> vec3<f32> {
 // average swapped for `tint`, and the surface's normal bent by its relief. The position's
 // gradients are given so that this can be called where only some pixels need it.
 fn layer(index: u32, scale: f32, tint: vec3<f32>, world: vec3<f32>, gx: vec3<f32>, gy: vec3<f32>, n: vec3<f32>) -> Layer {
-    var metres = ground.litter_metres;
+    var metres = 1.0;
     if index < 4u {
         metres = ground.layer_metres[index];
+    } else {
+        metres = ground.more_metres[index - 4u];
     }
     let k = 1.0 / (metres * scale);
     let p = world * k;
@@ -169,14 +179,14 @@ fn hash(p: vec3<f32>) -> f32 {
 // and warmed by the leaves and the ground (D216).
 const CANOPY_BOUNCE: vec3<f32> = vec3<f32>(0.62, 0.66, 0.48);
 
-// How much of a canopy stands over a place, from the cover map's leaf litter.
+// How much of a canopy stands over a place, as the cover map says.
 fn canopy_over(world: vec3<f32>) -> f32 {
     if ground.cover_on == 0u {
         return 0.0;
     }
     let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
     let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
-    return textureSampleLevel(cover_map, cover_sampler, at, 0.0).b * inside * 0.8;
+    return textureSampleLevel(cover_more, cover_more_sampler, at, 0.0).b * inside * 0.85;
 }
 
 fn noise(p: vec3<f32>) -> f32 {
@@ -224,6 +234,8 @@ fn fragment(
         var litter = 0.0;
         var moss = 0.0;
         var blades = 0.0;
+        var needles = 0.0;
+        var roots = 0.0;
         if ground.cover_on != 0u {
             let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
             let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
@@ -233,15 +245,20 @@ fn fragment(
             litter = map.b * inside;
             moss = map.a * inside;
             blades = map.r * inside;
+            let more = textureSampleLevel(cover_more, cover_more_sampler, at, 0.0);
+            needles = more.r * inside;
+            roots = more.g * inside;
         }
         let n = normalize(in.world_normal);
         let gx = dpdx(world);
         let gy = dpdy(world);
-        // Under trees the soil is fallen leaves, browner than the open ground's.
+        // Under trees the soil is fallen leaves, browner than the open ground's; under
+        // conifers, needles, a little redder.
         let litter_colour = vec3<f32>(0.15, 0.09, 0.045);
+        let needle_colour = vec3<f32>(0.15, 0.085, 0.045);
         // Soil and rock each at two sizes, blended in patches, so their repeat does not
         // show across a field or a hillside.
-        let soil_tint = mix(colour, litter_colour, litter) * (0.9 + 0.2 * blotch);
+        let soil_tint = mix(colour, mix(litter_colour, needle_colour, needles), max(litter, needles)) * (0.9 + 0.2 * blotch);
         var ground_is = sizes(SOIL, 2.9, 23.0, soil_tint, world, gx, gy, n, 0.2 + 0.45 * blotch);
         if steep > 0.0 {
             let rock_tint = ground.steep.rgb * (0.85 + 0.3 * blotch);
@@ -254,6 +271,20 @@ fn fragment(
             let leaf_tint = litter_colour * (0.85 + 0.3 * fleck);
             let fallen = sizes(LITTER, 2.6, 41.0, leaf_tint, world, gx, gy, n, 0.2 + 0.4 * blotch);
             ground_is = over(ground_is, fallen, leaves);
+        }
+        // Under pines and spruces, their needles, drifting over the leaves at the edges.
+        let needly = smoothstep(0.25, 0.7, needles + (blotch - 0.5) * 0.4) * (1.0 - steep);
+        if needly > 0.0 {
+            let needle_tint = needle_colour * (0.85 + 0.3 * fleck);
+            let fallen = sizes(NEEDLES, 2.3, 29.0, needle_tint, world, gx, gy, n, 0.2 + 0.4 * blotch);
+            ground_is = over(ground_is, fallen, needly);
+        }
+        // Round a tree's foot and along a path's edge, dark duff and the roots in it, in
+        // broken patches.
+        let rooty = smoothstep(0.3, 0.75, roots + (fleck - 0.5) * 0.35 + (blotch - 0.5) * 0.3) * (1.0 - steep);
+        if rooty > 0.0 {
+            let duff = vec3<f32>(0.075, 0.05, 0.03) * (0.8 + 0.4 * blotch);
+            ground_is = over(ground_is, layer(ROOTS, 1.0, duff, world + 3.0, gx, gy, n), rooty);
         }
 
         // Grass sits in the soil's hollows first: where the soil is lighter it is higher,

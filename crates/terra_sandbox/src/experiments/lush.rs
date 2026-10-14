@@ -52,8 +52,10 @@ use terra_world::flora_kinds::Flora;
 use terra_world::grown::Cards;
 use terra_world::planet::Planet;
 
+mod floor;
 mod species;
 
+use floor::{Crowns, Sink, Stand};
 use species::{Form, Species};
 
 type Foliage = ExtendedMaterial<StandardMaterial, FoliageExtension>;
@@ -87,8 +89,6 @@ const CARDS_DROP_M: [f32; 2] = [18.0, 110.0];
 /// Crowns' shadows hand over from their cards to solid lumps between these distances, for
 /// every tree alike (D234).
 const SHADOW_HANDOVER_M: [f32; 2] = [14.0, 26.0];
-/// How many kinds of fallen log there are; each is drawn many times.
-const LOG_KINDS: u64 = 5;
 /// How much of a trunk one repeat of the bark's picture covers: round it, and along it.
 const BARK_M: Vec2 = Vec2::new(2.15, 2.15);
 /// The solid shadow lumps are this much of the crown's size, so a low sun, which looks
@@ -103,9 +103,7 @@ const BUSH_KINDS: u64 = 4;
 const VETERANS: [(&str, &str); 2] = [("OakBough", "oak_bough"), ("OakBough2", "oak_bough_2")];
 const VETERAN_M: f32 = 24.0;
 const VETERAN_TRUNK_M: f32 = 2.0;
-/// Bushes cast shadows this near, and fade out at the second distance.
-const BUSH_M: [f32; 2] = [20.0, 70.0];
-/// Tree feet are filed in squares this wide, for the grass to thin under.
+/// Tree feet are filed in squares this wide, to keep trees apart.
 const FILED_M: f32 = 8.0;
 /// Where the leaves' picture is cut: more opaque than this is leaf.
 const LEAF_CUT: f32 = 0.45;
@@ -195,7 +193,7 @@ impl MaterialExtension for FoliageExtension {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(MaterialPlugin::<Foliage>::default())
+    app.add_plugins((MaterialPlugin::<Foliage>::default(), floor::plugin))
         .init_resource::<Unmipped>()
         .init_resource::<Scanned>()
         .add_systems(
@@ -243,15 +241,36 @@ struct Footing;
 
 /// Gives each rock, boulder, stump and log the footprint its mesh has (D243): circles along
 /// its longer side as wide as its shorter, so a fallen log blocks a walker along all its
-/// length and a boulder at its own width, not one small circle at its middle.
+/// length and a boulder at its own width, not one small circle at its middle. A rock is
+/// first sunk its share of its height into the ground (D246).
 fn footings(
     mut commands: Commands,
-    pending: Query<(Entity, &Aabb, &GlobalTransform), With<Footing>>,
+    mut pending: Query<
+        (
+            Entity,
+            &Aabb,
+            &mut Transform,
+            &GlobalTransform,
+            Option<&Sink>,
+        ),
+        With<Footing>,
+    >,
     mut obstacles: ResMut<Obstacles>,
 ) {
     // Bevy gives a drawn thing its bounds once its mesh has loaded.
-    for (entity, aabb, place) in &pending {
-        for (at, radius) in footprint(place, Vec3::from(aabb.min()), Vec3::from(aabb.max())) {
+    for (entity, aabb, mut transform, place, sink) in &mut pending {
+        let mut place = *place;
+        if let Some(Sink(share)) = sink {
+            let height = (aabb.max().y - aabb.min().y) * transform.scale.y;
+            let down = transform.rotation * Vec3::NEG_Y * height * share;
+            transform.translation += down;
+            place = GlobalTransform::from(Transform {
+                translation: place.translation() + down,
+                ..place.compute_transform()
+            });
+            commands.entity(entity).remove::<Sink>();
+        }
+        for (at, radius) in footprint(&place, Vec3::from(aabb.min()), Vec3::from(aabb.max())) {
             obstacles.add(at, radius);
         }
         commands.entity(entity).remove::<Footing>();
@@ -457,19 +476,8 @@ struct Forest {
     lumps: Handle<Foliage>,
 }
 
-/// The forest's map, on a flat patch laid over the ground: east and south of the start, in
-/// metres.
-struct Map {
-    path: Path,
-    /// Every tree's foot, filed by square, for the grass to thin under.
-    trunks: HashMap<(i32, i32), Vec<Vec2>>,
-    /// Where the grass grows thick or thin, and green or dry.
-    patches: Noise,
-}
-
-/// The forest's grass, as terra_world's ground cover asks it: thick in the open, thin
-/// under the trees, none on the paths.
-struct LushCover(Arc<Map>);
+/// The forest's grass, as terra_world's ground cover asks it, from the floor's map (D246).
+struct LushCover(Arc<floor::Map>);
 
 impl CoverSource for LushCover {
     fn growing(&self, _planet: &Planet, _ground: Vec3, at: Vec2) -> Growing {
@@ -478,41 +486,6 @@ impl CoverSource for LushCover {
 
     fn reaches(&self, middle: Vec2, half: f32) -> bool {
         middle.length() < FOREST_M + 30.0 + half
-    }
-}
-
-impl Map {
-    /// What grows at a place: grass thick in the open and thin in the shade under the
-    /// crowns, none on the paths; there, fallen leaves, and moss round the trees' feet and
-    /// in patches on the leaves.
-    fn growing(&self, at: Vec2) -> Growing {
-        let off_path = smoothstep(-0.1, 0.6, self.path.edge_distance(at));
-        let trunk = nearest(&self.trunks, at, FILED_M);
-        let patch = 0.55
-            + 0.45
-                * self
-                    .patches
-                    .fbm(Vec3::new(at.x, 0.0, at.y) / 9.0, 2, 2.0, 0.5);
-        let open = smoothstep(2.5, 7.0, trunk);
-        let shaded = 1.0 - smoothstep(3.0, 8.0, trunk);
-        let noise = |height: f32, across: f32| {
-            0.5 + 0.5 * self.patches.sample(Vec3::new(at.x, height, at.y) / across)
-        };
-        // In the shade grass grows only where some light gets through, in patches.
-        let shade_grass = smoothstep(0.35, 0.7, noise(19.0, 4.0));
-        // Moss round a tree's foot, its edge wandering, and in patches on the leaves.
-        let foot = 1.0 - smoothstep(0.5, 2.4, trunk + (noise(53.0, 1.3) - 0.5) * 2.2);
-        let mossy = noise(31.0, 3.5);
-        Growing {
-            grass: off_path
-                * patch
-                * (1.0 * open + 0.75 * (1.0 - open) * (0.25 + 0.75 * shade_grass)),
-            lush: noise(7.0, 20.0),
-            path: self.path.edge_distance(at) < 0.0,
-            litter: off_path * shaded,
-            moss: off_path
-                * (foot * (0.35 + 0.65 * mossy)).max(shaded * smoothstep(0.6, 0.85, mossy) * 0.7),
-        }
     }
 }
 
@@ -650,6 +623,8 @@ fn plant(
     mut plain: ResMut<Assets<StandardMaterial>>,
     mut unmipped: ResMut<Unmipped>,
     mut scanned: ResMut<Scanned>,
+    mut mossy: ResMut<Assets<floor::Mossy>>,
+    mut mossy_scans: ResMut<floor::MossyScans>,
 ) {
     let (Some(planet), Some(flora), Some(sun)) = (planet, flora, sun) else {
         return;
@@ -937,9 +912,6 @@ fn plant(
         });
     }
     let veterans_kinds = first_veteran..trees.len();
-    let bushes: Vec<Handle<Mesh>> = (0..BUSH_KINDS)
-        .map(|kind| meshes.add(grow_bush(&mut seed.derive("bush").index(kind).rng()).mesh()))
-        .collect();
 
     let path = Path::new(seed.derive("path"));
     // For scripted runs: --face this to look, or walk, down a path from the start.
@@ -1026,6 +998,8 @@ fn plant(
     // The nearest grown tree of each kind to the start, for scripted runs to look at.
     let mut nearest_of = [Vec2::splat(f32::MAX); 3];
     let mut feet: HashMap<(i32, i32), Vec<Vec2>> = HashMap::default();
+    // The trees as the floor sees them, for what grows under them (D246).
+    let mut canopy = Crowns::default();
     let mut planted = [0, 0];
     // The nearest of each to the start, for scripted runs to walk up to.
     let mut nearest_to_start = [Vec2::splat(f32::MAX); 2];
@@ -1086,6 +1060,14 @@ fn plant(
             let place = place_on(at, &mut dice, 0.3, scale);
             let foot = place.translation;
             obstacles.add(foot, model.trunk_m * scale * 1.2);
+            canopy.add(Stand::of(
+                at,
+                model.species,
+                model.young,
+                veterans_kinds.contains(&kind),
+                model.height * scale,
+                model.trunk_m * scale,
+            ));
             commands
                 .spawn((
                     // Named, so a check can find it and walk into it (tools/sandbox/collide.ts).
@@ -1183,177 +1165,6 @@ fn plant(
         );
     }
 
-    // Bushes: along the paths and in the glades more than under the trees.
-    let mut bushed = 0;
-    for _ in 0..16_000 {
-        let angle = dice.range(0.0, TAU);
-        let distance = libm::sqrtf(dice.range(9.0, (FOREST_M + 10.0) * (FOREST_M + 10.0)));
-        let at = Vec2::new(libm::cosf(angle), libm::sinf(angle)) * distance;
-        let path = path.edge_distance(at);
-        let chance = if path < 6.0 { 0.6 } else { 0.3 };
-        if path < 0.6 || nearest(&feet, at, 2.0) < 1.6 || dice.unit() > chance {
-            continue;
-        }
-        let scale = dice.range(0.7, 1.3);
-        let place = place_on(at, &mut dice, 0.05, scale);
-        let mesh = bushes[dice.below(BUSH_KINDS as u32) as usize].clone();
-        commands
-            .spawn((
-                place,
-                Visibility::default(),
-                Growth::new(cut_as("Bush", place.scale.y), None, 0.5),
-            ))
-            .with_children(|bush| {
-                // Drawn once, out to its distance; its shadow from a copy only the sun sees,
-                // which fades out nearer, so the bush itself never dithers between two of
-                // itself.
-                let within = |m: f32| VisibilityRange {
-                    start_margin: 0.0..0.0,
-                    end_margin: m * (1.0 - FADE)..m,
-                    use_aabb: false,
-                };
-                bush.spawn((
-                    Mesh3d(mesh.clone()),
-                    MeshMaterial3d(leaves.clone()),
-                    within(BUSH_M[1]),
-                    NotShadowCaster,
-                ));
-                bush.spawn((
-                    Mesh3d(mesh),
-                    MeshMaterial3d(leaves.clone()),
-                    within(BUSH_M[0]),
-                    RenderLayers::layer(SUN_ONLY),
-                ));
-            });
-        bushed += 1;
-    }
-
-    // The forest floor (D219): scanned rocks and boulders, ferns in the shade, stumps, and
-    // logs fallen from trees of the forest's own kind, each drawn out to its own distance.
-    // A scan's mesh, and a material of our own that its glTF material is copied into once
-    // loaded (`dress_scans`), as Bevy 0.20 loads a glTF's material as a `GltfMaterial`.
-    let mut scan = |file: &str| -> (Handle<Mesh>, Handle<StandardMaterial>) {
-        let path = format!("models/nature/forest/{file}.glb");
-        let material = plain.add(StandardMaterial::default());
-        scanned.0.push((
-            assets.load(
-                GltfAssetLabel::Material {
-                    index: 0,
-                    is_scale_inverted: false,
-                }
-                .from_asset(path.clone()),
-            ),
-            material.clone(),
-            Color::WHITE,
-        ));
-        (
-            assets.load(
-                GltfAssetLabel::Primitive {
-                    mesh: 0,
-                    primitive: 0,
-                }
-                .from_asset(path),
-            ),
-            material,
-        )
-    };
-    let rocks: Vec<_> = (1..=7)
-        .map(|n| scan(&format!("mossy_rock_b_{n}")))
-        .collect();
-    let mut boulders: Vec<_> = (1..=6)
-        .map(|n| scan(&format!("mossy_rock_a_{n}")))
-        .collect();
-    boulders.push(scan("boulder_1"));
-    let fern = scan("fern");
-    let stump = scan("stump");
-    let logs: Vec<Handle<Mesh>> = (0..LOG_KINDS)
-        .map(|kind| {
-            let mut dice = seed.derive("log").index(kind).rng();
-            let mut mesh = fallen_log(&mut dice).mesh();
-            mesh.generate_tangents()
-                .expect("a log has normals and texture places");
-            meshes.add(mesh)
-        })
-        .collect();
-    let within = |m: f32| VisibilityRange {
-        start_margin: 0.0..0.0,
-        end_margin: m * (1.0 - FADE)..m,
-        use_aabb: false,
-    };
-    let mut floor_dice = seed.derive("floor").rng();
-    let mut laid = [0; 5];
-    // What, how many tries, how far it is drawn, its size, how far it sinks, whether it stops a
-    // walker, and how it likes the shade: 1 under trees only, 0 anywhere, -1 the open.
-    for (what, tries, seen_m, size, sink, solid, shade) in [
-        (0, 1100, 80.0, (0.7, 1.6), 0.15, true, -0.3),
-        (1, 60, 160.0, (0.6, 1.3), 0.3, true, 0.0),
-        (2, 4200, 35.0, (0.9, 1.8), 0.02, false, 1.0),
-        (3, 70, 90.0, (0.8, 1.3), 0.08, true, 0.6),
-        (4, 160, 110.0, (0.8, 1.2), 0.0, true, 0.8),
-    ] {
-        for _ in 0..tries {
-            let angle = floor_dice.range(0.0, TAU);
-            let distance =
-                libm::sqrtf(floor_dice.range(CLEARING_M * CLEARING_M, FOREST_M * FOREST_M));
-            let at = Vec2::new(libm::cosf(angle), libm::sinf(angle)) * distance;
-            let trunk = nearest(&feet, at, 8.0);
-            let under = 1.0 - smoothstep(3.0, 8.0, trunk);
-            let likes = if shade >= 0.0 {
-                1.0 - shade + shade * under
-            } else {
-                1.0 + shade * under
-            };
-            if path.edge_distance(at) < 1.2 || trunk < 1.6 || floor_dice.unit() > likes {
-                continue;
-            }
-            let scale = floor_dice.range(size.0, size.1);
-            let mut place = place_on(at, &mut floor_dice, sink * scale, scale);
-            let (mesh, material) = match what {
-                0 => rocks[floor_dice.below(rocks.len() as u32) as usize].clone(),
-                1 => boulders[floor_dice.below(boulders.len() as u32) as usize].clone(),
-                2 => fern.clone(),
-                3 => stump.clone(),
-                _ => {
-                    // A log lies along the ground, half sunk at its ends.
-                    place.translation -= place.rotation * Vec3::Y * 0.1;
-                    (
-                        logs[floor_dice.below(LOG_KINDS as u32) as usize].clone(),
-                        Handle::default(),
-                    )
-                }
-            };
-            let name = Name::new(["Rock", "Boulder", "Fern", "Stump", "Log"][what]);
-            let mut thing = if what == 4 {
-                commands.spawn((
-                    name.clone(),
-                    Mesh3d(mesh),
-                    MeshMaterial3d(bark.clone()),
-                    place,
-                    within(seen_m),
-                ))
-            } else {
-                commands.spawn((
-                    name,
-                    Mesh3d(mesh),
-                    MeshMaterial3d(material),
-                    place,
-                    within(seen_m),
-                ))
-            };
-            if what == 2 {
-                thing.insert(NotShadowCaster);
-            }
-            if solid {
-                // Its footprint is worked out from its own mesh once loaded (`footings`).
-                thing.insert(Footing);
-            }
-            laid[what] += 1;
-        }
-    }
-    info!(
-        "lush: the floor has {} rocks, {} boulders, {} ferns, {} stumps and {} fallen logs.",
-        laid[0], laid[1], laid[2], laid[3], laid[4]
-    );
     info!(
         "lush: {} oaks, {} pines and {} spruces; the nearest grown of each at {:.1},{:.1}, {:.1},{:.1} and {:.1},{:.1} (east, south).",
         by_species[0],
@@ -1367,8 +1178,8 @@ fn plant(
         nearest_of[2].y
     );
     info!(
-        "lush: {} grown trees, {} young ones and {bushed} bushes planted. The nearest stand at \
-         {:.1},{:.1} and {:.1},{:.1} (east, south).",
+        "lush: {} grown trees and {} young ones planted. The nearest stand at {:.1},{:.1} and \
+         {:.1},{:.1} (east, south).",
         planted[0],
         planted[1],
         nearest_to_start[0].x,
@@ -1377,11 +1188,32 @@ fn plant(
         nearest_to_start[1].y
     );
 
-    let map = Arc::new(Map {
+    // The floor under the trees, and the map the grass grows by (D246).
+    let map = floor::lay(
+        &mut floor::Lay {
+            commands: &mut commands,
+            planet: &planet,
+            start,
+            east,
+            south,
+            assets: &assets,
+            meshes: &mut meshes,
+            plain: &mut plain,
+            scanned: &mut scanned,
+            mossy: &mut mossy,
+            mossy_scans: &mut mossy_scans,
+            flora: &flora,
+            cards: &cards,
+            bark: bark.clone(),
+            pine_bark: barks[2].clone(),
+            atlas: crown_leaves.clone(),
+            leaves: leaves.clone(),
+            seed,
+        },
         path,
-        trunks: feet,
-        patches: Noise::new(seed.derive("patches")),
-    });
+        canopy,
+    );
+    let map = Arc::new(map);
     commands.insert_resource(CoverRules {
         source: Arc::new(LushCover(map)),
         seed: seed.derive("grass"),
@@ -1572,69 +1404,6 @@ fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
             height,
             bark_m,
         );
-    }
-    build
-}
-
-/// A log fallen and lying along the ground, from the forest's own kind of tree: a trunk's
-/// length, tapering and a little bent, its ends cut (D219).
-fn fallen_log(dice: &mut Rng) -> Build {
-    let length = dice.range(4.0, 9.0);
-    let radius = dice.range(0.22, 0.42);
-    let bend = dice.range(-0.4, 0.4);
-    let steps = 8;
-    let points: Vec<Vec3> = (0..=steps)
-        .map(|k| {
-            let t = k as f32 / steps as f32;
-            Vec3::new(
-                (t - 0.5) * length,
-                radius * (1.0 - 0.25 * t),
-                bend * libm::sinf(t * std::f32::consts::PI),
-            )
-        })
-        .collect();
-    let radii: Vec<f32> = (0..=steps)
-        .map(|k| radius * (1.0 - 0.3 * k as f32 / steps as f32))
-        .collect();
-    let limb = Limb {
-        points: points.clone(),
-        radii: radii.clone(),
-        depth: 1,
-    };
-    let mut build = Build::default();
-    // Lying still: a height so tall that nothing of it sways.
-    tube(&mut build, &limb, 14, 1.0e4, BARK_M);
-    // Each end cut flat: a disc of the bark's picture, facing out along the log.
-    for (end, inward) in [
-        (0, points[1] - points[0]),
-        (steps, points[steps - 1] - points[steps]),
-    ] {
-        let normal = -inward.normalize();
-        let side = normal.any_orthonormal_vector();
-        let other = normal.cross(side);
-        let centre = build.vertex(
-            points[end],
-            normal,
-            Vec2::splat(0.5),
-            Vec2::ZERO,
-            Vec3::splat(0.7),
-        );
-        let ring: Vec<u32> = (0..12)
-            .map(|j| {
-                let angle = j as f32 / 12.0 * TAU;
-                let out = side * libm::cosf(angle) + other * libm::sinf(angle);
-                build.vertex(
-                    points[end] + out * radii[end],
-                    normal,
-                    Vec2::new(0.5 + 0.2 * libm::cosf(angle), 0.5 + 0.2 * libm::sinf(angle)),
-                    Vec2::ZERO,
-                    Vec3::splat(0.7),
-                )
-            })
-            .collect();
-        for j in 0..12 {
-            build.indices.extend([centre, ring[j], ring[(j + 1) % 12]]);
-        }
     }
     build
 }

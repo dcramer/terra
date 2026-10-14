@@ -16,7 +16,7 @@
 //! a material from the same tool.
 
 pub mod build;
-mod plants;
+pub mod plants;
 pub mod tree;
 
 use crate::data;

@@ -62,6 +62,24 @@ pub struct Growing {
     pub litter: f32,
     /// How much moss grows on it.
     pub moss: f32,
+    /// How much of the forest floor is fallen needles, under conifers, rather than leaves.
+    pub needles: f32,
+    /// How much of it is duff and roots: at a tree's foot, along a path's edge.
+    pub roots: f32,
+    /// How much canopy stands over it, from open sky to none seen: the ground's light from
+    /// the sky is dimmed and warmed by it (D216).
+    pub shade: f32,
+    /// How much taller than usual the grass grows: 0 as usual, 1 half as tall again, as a
+    /// meadow's does in the open.
+    pub tall: f32,
+}
+
+impl Growing {
+    /// Whether the ground is covered by something other than grass: leaves, needles, moss
+    /// or duff, as the bare-ground measure counts it.
+    pub fn floored(litter: f32, moss: f32, needles: f32, roots: f32) -> bool {
+        litter + moss + needles + roots > 0.5
+    }
 }
 
 /// What a world says grows where. Asked from other threads, so it holds what it needs

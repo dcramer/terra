@@ -314,9 +314,9 @@ pub struct GroundExtension {
     /// Whether the ground is drawn with its textures, or in flat colours.
     #[uniform(100)]
     textured: u32,
-    /// How many metres the fifth layer, leaf litter, covers.
+    /// How many metres the fifth layer on, leaf litter, needles and roots, each cover.
     #[uniform(100)]
-    litter_metres: f32,
+    more_metres: Vec4,
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     color: Option<Handle<Image>>,
@@ -335,15 +335,20 @@ pub struct GroundExtension {
     #[texture(104)]
     #[sampler(105)]
     cover_map: Option<Handle<Image>>,
+    #[texture(106)]
+    #[sampler(107)]
+    cover_more: Option<Handle<Image>>,
 }
 
 /// What covers the ground near the camera, painted by the ground cover (`cover`) for the
 /// ground to draw under it, as Horizon Zero Dawn's placement paints its terrain: grass in
-/// red, how lush in green, forest floor (leaf litter) in blue, moss in alpha. The ground
-/// owns the question; the cover answers it.
+/// red, how lush in green, forest floor (leaf litter) in blue, moss in alpha; and in a
+/// second picture fallen needles in red, duff and roots in green, and how much canopy
+/// stands over in blue. The ground owns the question; the cover answers it.
 #[derive(Resource, Clone, Default)]
 pub struct GroundCoverMap {
     pub image: Option<Handle<Image>>,
+    pub more: Option<Handle<Image>>,
     /// From a point in the world to the map: its x and y are where on the picture, from 0
     /// to 1.
     pub from_world: Mat4,
@@ -359,10 +364,11 @@ pub struct GroundTextures {
 
 /// The layers of `materials/ground`, in order, and how many metres each covers
 /// (assets/materials/README.md).
-const GROUND_LAYERS: u32 = 5;
+const GROUND_LAYERS: u32 = 7;
 const GROUND_LAYER_METRES: Vec4 = Vec4::new(3.15, 2.0, 2.7, 1.5);
-/// The fifth layer, fallen leaves for the forest floor.
-const GROUND_LITTER_METRES: f32 = 3.0;
+/// The fifth layer on, for the forest floor: fallen leaves, fallen needles, and duff with
+/// roots in it.
+const GROUND_MORE_METRES: Vec4 = Vec4::new(3.0, 2.0, 1.67, 1.0);
 
 impl GroundTextures {
     fn load(assets: &AssetServer) -> Self {
@@ -421,7 +427,7 @@ impl GroundExtension {
             sand: tweaks.sand.into(),
             sea_deep: tweaks.sea_deep.into(),
             layer_metres: GROUND_LAYER_METRES,
-            litter_metres: GROUND_LITTER_METRES,
+            more_metres: GROUND_MORE_METRES,
             // Textures are for ground that is covered; the bare stand-in stays flat.
             textured: (tweaks.ground_cover > 0.0) as u32,
             color: Some(textures.color.clone()),
@@ -431,6 +437,7 @@ impl GroundExtension {
             one_size: (quality == crate::quality::Quality::Low) as u32,
             // Bevy's blank picture stands in for a map until there is one.
             cover_map: Some(cover.image.clone().unwrap_or_default()),
+            cover_more: Some(cover.more.clone().unwrap_or_default()),
         }
     }
 }

@@ -158,17 +158,21 @@ fn clump(seed: u64, i: i32, j: i32) -> Clump {
 struct Samples {
     corner: Vec2,
     side: usize,
-    values: Vec<[f32; 6]>,
+    values: Vec<[f32; SAMPLED]>,
 }
 
+/// How many things are sampled at each point: the rise, grass, lush, path, litter, moss,
+/// needles, roots and tall.
+const SAMPLED: usize = 9;
+
 impl Samples {
-    fn at(&self, at: Vec2) -> [f32; 6] {
+    fn at(&self, at: Vec2) -> [f32; SAMPLED] {
         let cell = ((at - self.corner) / SAMPLE_M)
             .clamp(Vec2::ZERO, Vec2::splat((self.side - 1) as f32 - 0.001));
         let (i, j) = (cell.x as usize, cell.y as usize);
         let (fx, fy) = (cell.x.fract(), cell.y.fract());
         let get = |a: usize, b: usize| self.values[b * self.side + a];
-        let mut out = [0.0; 6];
+        let mut out = [0.0; SAMPLED];
         for (k, value) in out.iter_mut().enumerate() {
             let top = get(i, j)[k] * (1.0 - fx) + get(i + 1, j)[k] * fx;
             let bottom = get(i, j + 1)[k] * (1.0 - fx) + get(i + 1, j + 1)[k] * fx;
@@ -224,6 +228,9 @@ pub fn square(
                 if growing.path { 1.0 } else { 0.0 },
                 growing.litter,
                 growing.moss,
+                growing.needles,
+                growing.roots,
+                growing.tall,
             ]);
         }
     }
@@ -275,15 +282,26 @@ pub fn square(
             let (gi, gj) = (first_blade.x + a, first_blade.y + b);
             let h = |stream| hash(seed, gi, gj, stream);
             let at = Vec2::new(gi as f32 + h(1), gj as f32 + h(2)) * BLADE_SPACING_M;
-            let [rise, grass, lush, path, litter, moss] = samples.at(at);
+            let [
+                rise,
+                grass,
+                lush,
+                path,
+                litter,
+                moss,
+                needles,
+                roots,
+                taller,
+            ] = samples.at(at);
             let cell = (((at - corner) / CELL_M).floor().as_ivec2())
                 .clamp(IVec2::ZERO, IVec2::splat(CELLS as i32 - 1));
             let index = cell.y as usize * CELLS + cell.x as usize;
             if path > 0.5 {
                 built.path[index] = true;
             }
-            // Fallen leaves and moss cover the ground too (docs/biomes.md, ground cover).
-            if litter + moss > 0.5 {
+            // Fallen leaves and needles, moss and duff cover the ground too (docs/biomes.md,
+            // ground cover).
+            if super::Growing::floored(litter, moss, needles, roots) {
                 built.covered[index] = true;
             }
             // Its rank decides whether it grows at all, and in which rings: the far rings
@@ -316,6 +334,7 @@ pub fn square(
                 * clump.height
                 * (1.0 - 0.35 * from_middle.min(1.0))
                 * (0.8 + 0.25 * h(4))
+                * (1.0 + 0.5 * taller)
                 // A third are short, filling in under the rest.
                 * if h(10) < 0.33 { 0.35 + 0.25 * h(11) } else { 1.0 };
             let away = (at - clump.at).normalize_or(Vec2::X);

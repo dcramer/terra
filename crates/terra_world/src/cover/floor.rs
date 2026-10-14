@@ -4,9 +4,11 @@
 //! their feet moss; the grass's edge and its fade with distance land on ground of its own
 //! colour, so neither shows.
 //!
-//! The picture is 128 m across round the camera, half a metre a texel, painted on another
-//! thread from the same [`CoverSource`](super::CoverSource) the blades ask, and painted
-//! again when the camera has moved a quarter of the way to its edge.
+//! It is two pictures 128 m across round the camera, half a metre a texel: the first grass,
+//! how lush, leaf litter and moss, the second needles, duff and roots, and how much canopy
+//! stands over. They are painted on another thread from the same
+//! [`CoverSource`](super::CoverSource) the blades ask, and painted again when the camera has
+//! moved a quarter of the way to their edge.
 
 use super::CoverRules;
 use crate::planet::{GroundCoverMap, MainCamera, Planet};
@@ -28,9 +30,10 @@ const REPAINT_M: f32 = 32.0;
 #[derive(Resource)]
 struct Floor {
     image: Handle<Image>,
+    more: Handle<Image>,
     /// The middle of the map now drawn, east and south of the start.
     middle: Option<Vec2>,
-    painting: Option<(Vec2, Task<Vec<u8>>)>,
+    painting: Option<(Vec2, Task<[Vec<u8>; 2]>)>,
 }
 
 pub(super) fn plugin(app: &mut App) {
@@ -69,21 +72,25 @@ fn paint(
         return;
     };
     let Some(mut floor) = floor else {
-        let mut image = Image::new_fill(
-            Extent3d {
-                width: TEXELS,
-                height: TEXELS,
-                depth_or_array_layers: 1,
-            },
-            TextureDimension::D2,
-            &[255, 128, 0, 0],
-            // Amounts, not colours.
-            TextureFormat::Rgba8Unorm,
-            RenderAssetUsages::default(),
-        );
-        image.sampler = ImageSampler::linear();
+        let mut picture = |fill: [u8; 4]| {
+            let mut image = Image::new_fill(
+                Extent3d {
+                    width: TEXELS,
+                    height: TEXELS,
+                    depth_or_array_layers: 1,
+                },
+                TextureDimension::D2,
+                &fill,
+                // Amounts, not colours.
+                TextureFormat::Rgba8Unorm,
+                RenderAssetUsages::default(),
+            );
+            image.sampler = ImageSampler::linear();
+            images.add(image)
+        };
         commands.insert_resource(Floor {
-            image: images.add(image),
+            image: picture([255, 128, 0, 0]),
+            more: picture([0, 0, 0, 0]),
             middle: None,
             painting: None,
         });
@@ -98,11 +105,16 @@ fn paint(
         let middle = *middle;
         floor.painting = None;
         floor.middle = Some(middle);
+        let [first, second] = pixels;
         if let Some(mut image) = images.get_mut(&floor.image) {
-            image.data = Some(pixels);
+            image.data = Some(first);
+        }
+        if let Some(mut image) = images.get_mut(&floor.more) {
+            image.data = Some(second);
         }
         *map = GroundCoverMap {
             image: Some(floor.image.clone()),
+            more: Some(floor.more.clone()),
             from_world: from_world(&start, middle),
         };
     }
@@ -116,6 +128,7 @@ fn paint(
         let task = AsyncComputeTaskPool::get().spawn(async move {
             let corner = corner(middle);
             let mut pixels = Vec::with_capacity((TEXELS * TEXELS * 4) as usize);
+            let mut more = Vec::with_capacity((TEXELS * TEXELS * 4) as usize);
             for b in 0..TEXELS {
                 for a in 0..TEXELS {
                     let at = corner + (Vec2::new(a as f32, b as f32) + 0.5) * TEXEL_M;
@@ -127,9 +140,15 @@ fn paint(
                         byte(growing.litter),
                         byte(growing.moss),
                     ]);
+                    more.extend([
+                        byte(growing.needles),
+                        byte(growing.roots),
+                        byte(growing.shade),
+                        0,
+                    ]);
                 }
             }
-            pixels
+            [pixels, more]
         });
         floor.painting = Some((middle, task));
     }
