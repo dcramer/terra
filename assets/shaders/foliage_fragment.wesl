@@ -121,13 +121,13 @@ fn underside(input: ptr<function, PbrInput>) {
     (*input).diffuse_occlusion *= mix(1.0, FLOOR_LIGHT, down);
 }
 
-// How much of the painted sky's light from below a crown's lower face gets (D264).
-const FLOOR_LIGHT: f32 = 0.4;
+// How much of the painted sky's light from below a crown's lower face gets (D264, D286).
+const FLOOR_LIGHT: f32 = 0.2;
 
 // Sky light under a canopy is dimmed by the leaves above and warmed by what they and the
 // ground bounce: what a surface that sees none of the sky is lit by instead, as a share of
-// the sky's light (D216). Crysis bakes the same into its trees' vertices.
-const BOUNCE: vec3<f32> = vec3<f32>(0.55, 0.6, 0.4);
+// the sky's light (D216, D286). Crysis bakes the same into its trees' vertices.
+const BOUNCE: vec3<f32> = vec3<f32>(0.28, 0.3, 0.2);
 
 // Field order must match FoliageExtension in grown/mod.rs and lush.rs.
 struct Wind {

@@ -57,10 +57,10 @@ const LAYER_M: f32 = 2.5;
 /// How far a look toward the sky is followed through the crowns.
 const REACH_M: f32 = 90.0;
 /// The light a crown's underside gives where it hides the sky, as a share of the sky's it
-/// hides: sunlight through the leaves above, green.
-const LEAF_GLOW: Vec3 = Vec3::new(0.12, 0.18, 0.06);
+/// hides: sunlight through the leaves above, green; dim, as a forest's shade is (D286).
+const LEAF_GLOW: Vec3 = Vec3::new(0.06, 0.09, 0.03);
 /// How much of the ground's bounce is left in the deepest shade, where little sun reaches it.
-const SHADED_GROUND: f32 = 0.2;
+const SHADED_GROUND: f32 = 0.1;
 
 /// Each cell's share of the sky seen from each side, +X, -X, +Y, -Y, +Z, -Z of the world,
 /// and straight up, as the grid holds them.

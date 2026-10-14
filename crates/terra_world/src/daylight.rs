@@ -24,8 +24,9 @@ use std::f32::consts::TAU;
 pub const DAY_SECONDS: f32 = 30.0 * 60.0;
 /// The sky lights the shade this many times as brightly as the keys below say. Open sky
 /// gives level ground something like a sixth of what the sun does; the keys gave it about a
-/// sixteenth, so every shadow was near black (D216).
-const SKY_LIGHT_GAIN: f32 = 1.6;
+/// sixteenth, so every shadow was near black (D216). Under trees the shade is darker than open
+/// ground's: 1.6 left it three stops brighter than Sons of the Forest's (D286).
+const SKY_LIGHT_GAIN: f32 = 1.2;
 
 /// How far one sees in the open air, out of the trees, before the forest's haze swallows
 /// what is there, and how bright that haze is against the horizon's colour (D273).
@@ -262,7 +263,7 @@ fn haze_for(horizon: Vec3, open: f32) -> (Vec3, f32) {
     // the forest's haze, and it is green, the light come through leaves, not the horizon's
     // blue, which washed the middle distance teal (D279).
     let open = smoothstep(0.55, 0.98, open);
-    let shade = horizon.lerp(Vec3::new(0.42, 0.5, 0.36), 0.65) * 0.62;
+    let shade = horizon.lerp(Vec3::new(0.44, 0.48, 0.3), 0.65) * 0.62;
     let visible = super::scene::HAZE_VISIBLE_M
         * libm::powf(OPEN_VISIBLE_M / super::scene::HAZE_VISIBLE_M, open);
     (shade.lerp(horizon * OPEN_AIR, open), visible)
@@ -371,7 +372,7 @@ fn shine(
     }
     let low = 1.0 - smoothstep(8.0, 30.0, height.max(0.0));
     for mut grade in &mut grading {
-        let warm = 0.035 * low * if hour > 12.0 { 1.0 } else { 0.5 };
+        let warm = 0.02 + 0.035 * low * if hour > 12.0 { 1.0 } else { 0.5 };
         if (grade.global.temperature - warm).abs() > 1e-4 {
             grade.global.temperature = warm;
         }
