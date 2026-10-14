@@ -373,6 +373,26 @@ impl std::hash::Hasher for Corners {
     fn write_i32(&mut self, n: i32) {
         self.write_u32(n as u32);
     }
+    // A number a step, not a byte a step: a piece is hashed by many of them.
+    fn write_u8(&mut self, n: u8) {
+        self.write_u32(u32::from(n));
+    }
+    fn write_u16(&mut self, n: u16) {
+        self.write_u32(u32::from(n));
+    }
+    fn write_u64(&mut self, n: u64) {
+        self.write_u32(n as u32);
+        self.write_u32((n >> 32) as u32);
+    }
+    fn write_i64(&mut self, n: i64) {
+        self.write_u64(n as u64);
+    }
+    fn write_usize(&mut self, n: usize) {
+        self.write_u64(n as u64);
+    }
+    fn write_isize(&mut self, n: isize) {
+        self.write_u64(n as u64);
+    }
 }
 
 impl Surface {

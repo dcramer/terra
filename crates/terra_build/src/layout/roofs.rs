@@ -524,6 +524,28 @@ impl Roofs {
             })
     }
 
+    /// A number for everything a point's place on the roofs depends on ([`Roofs::place_of`]):
+    /// every square, how far in from an edge each is, and each roof's span.
+    pub(crate) fn fingerprint(&self) -> u64 {
+        use std::hash::Hasher;
+        let mut hash = crate::mesh::Corners::default();
+        for (q, square) in self.squares.iter().enumerate() {
+            hash.write_i32(square.place[0]);
+            hash.write_i32(square.place[1]);
+            for corner in square.corners {
+                hash.write_u32(corner.to_bits());
+            }
+            hash.write_u32(square.middle.to_bits());
+            hash.write_u16(self.inside[q]);
+            hash.write_usize(self.roof[q]);
+        }
+        for (low, high) in &self.span {
+            hash.write_u32(low.to_bits());
+            hash.write_u32(high.to_bits());
+        }
+        hash.finish()
+    }
+
     /// The cell of a square's cube a piece goes up with.
     fn cell(&self, q: usize, stage: u8) -> RoofCell {
         RoofCell {
@@ -802,8 +824,10 @@ fn framed(base: &Base, from: Vec3, to: Vec3, level: bool) -> Vec<(Vec3, Vec3)> {
     if length < 1e-4 {
         return Vec::new();
     }
-    let inside = |p: Vec3| {
-        let at = (p / CELL_M).floor().as_ivec3();
+    // Whether a cell may hold it, asked of the base once a cell: the tries come a few
+    // centimetres apart, many to a cell.
+    let known: std::cell::RefCell<Option<(IVec3, bool)>> = std::cell::RefCell::new(None);
+    let inside_cell = |at: IVec3| {
         let wall = |at: IVec3| {
             base.cube(at).is_some_and(|c| {
                 !c.kind.is_roof() && super::drawn_fill(&c) == Fill::Solid && !c.shape.is_cut()
@@ -818,6 +842,17 @@ fn framed(base: &Base, from: Vec3, to: Vec3, level: bool) -> Vec<(Vec3, Vec3)> {
                     .is_some_and(|c| c.kind.is_roof() && c.fill != Fill::Open)
             });
         !in_wall && over_roof
+    };
+    let inside = |p: Vec3| {
+        let at = (p / CELL_M).floor().as_ivec3();
+        if let Some((cell, ok)) = *known.borrow()
+            && cell == at
+        {
+            return ok;
+        }
+        let ok = inside_cell(at);
+        *known.borrow_mut() = Some((at, ok));
+        ok
     };
     let steps = libm::ceilf(length / FRAME_STEP_M).max(1.0) as usize;
     let at = |t: f32| from.lerp(to, t);

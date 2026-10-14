@@ -737,6 +737,9 @@ pub struct Drawing {
     pieces: crate::mesh::QuickMap<(usize, Detail, Piece), std::sync::Arc<Surfaces>>,
     /// The ground under the base when it was drawn, which the pieces' masks were made on.
     ground: Option<crate::ground::Ground>,
+    /// The roofs round it when it was drawn ([`layout::roofs::Roofs::fingerprint`]), which a
+    /// roof's pieces' masks were made on.
+    roofs: Option<u64>,
 }
 
 impl Drawing {
@@ -817,13 +820,33 @@ fn draw_details(
     let kits = section.kits;
     // The pieces drawn last time, kept masked, so to be taken only while the ground their
     // dirt rises from is as it was.
+    // Where each point of its roofs is on them, for their masks, worked out once.
+    let origin = section.at * crate::cubes::SECTION;
+    let roofs = std::cell::OnceCell::new();
+    let roofs_round = || {
+        roofs.get_or_init(|| {
+            layout::roofs::Roofs::whole(
+                section.base,
+                kits,
+                layout::Scope {
+                    low: origin - IVec3::ONE,
+                    high: origin + IVec3::splat(crate::cubes::SECTION),
+                },
+            )
+        })
+    };
+    // A roof's pieces are kept masked by where on the roofs they are: only while the roofs
+    // round are as they were.
+    let fingerprint = (last.is_some() || keep.is_some()).then(|| roofs_round().fingerprint());
+    if let Some(keep) = keep.as_deref_mut() {
+        keep.roofs = fingerprint;
+    }
     let pieces_kept = last
-        .filter(|last| last.ground.as_ref() == Some(section.base.ground()))
+        .filter(|last| {
+            last.ground.as_ref() == Some(section.base.ground()) && last.roofs == fingerprint
+        })
         .map(|last| &last.pieces);
     let finest = details[0];
-    // Where each point of its roofs is on them, for their masks, worked out once.
-    let roofs = std::cell::OnceCell::new();
-    let origin = section.at * crate::cubes::SECTION;
     for &detail in details {
         let first = detail == finest && detail != Detail::Far;
         let mut built: BTreeMap<(Kind, Material), Surface> = BTreeMap::new();
@@ -854,12 +877,19 @@ fn draw_details(
                     if stone || *material != Material::Masonry {
                         crate::dress::mask(surface, kit, *material, section.base);
                     }
+                    // A roof's own, by where on the roof each point is.
+                    if matches!(material, Material::Covering | Material::Flashing) {
+                        crate::dress::roof_mask(surface, kit, roofs_round());
+                    }
                 }
                 surfaces
             };
             // Where pieces are made finely each is drawn and masked on its own, to be kept
             // if asked: the same whether kept or not, so drawing again draws the same.
             let kept = matches!(detail, Detail::Near | Detail::Mid);
+            // The pieces drawn on their own, put together once all are, with room made at
+            // once: a section's are many thousands.
+            let mut made_pieces: Vec<std::sync::Arc<Surfaces>> = Vec::new();
             for (count, (_, piece, stage)) in own.iter().enumerate() {
                 if !detail.shows(piece) {
                     continue;
@@ -879,14 +909,7 @@ fn draw_details(
                                 std::sync::Arc::new(masked(made, false))
                             }
                         };
-                        for (&material, surface) in &made.0 {
-                            let into = if material == Material::Masonry {
-                                &mut fresh
-                            } else {
-                                &mut mine
-                            };
-                            into.of(material).extend_from(surface);
-                        }
+                        made_pieces.push(made.clone());
                         if let Some(keep) = keep.as_deref_mut() {
                             keep.pieces.insert(key, made);
                         }
@@ -907,6 +930,34 @@ fn draw_details(
                         drawn.ghosts.extend(ghost(piece, kit, count % 2 == 1));
                     }
                     Stage::Ghost => {}
+                }
+            }
+            let mut room: BTreeMap<Material, [usize; 3]> = BTreeMap::new();
+            for made in &made_pieces {
+                for (&material, surface) in &made.0 {
+                    let room = room.entry(material).or_default();
+                    room[0] += surface.positions.len();
+                    room[1] += surface.shared.positions.len();
+                    room[2] += surface.shared.indices.len();
+                }
+            }
+            for (material, [loose, shared, indices]) in room {
+                let into = if material == Material::Masonry {
+                    fresh.of(material)
+                } else {
+                    mine.of(material)
+                };
+                into.reserve(loose);
+                into.shared.reserve(shared, indices);
+            }
+            for made in &made_pieces {
+                for (&material, surface) in &made.0 {
+                    let into = if material == Material::Masonry {
+                        &mut fresh
+                    } else {
+                        &mut mine
+                    };
+                    into.of(material).extend_from(surface);
                 }
             }
             if kit.pattern == Pattern::Masonry {
@@ -941,24 +992,6 @@ fn draw_details(
         }
         if first {
             drawn.next = next;
-        }
-        // A roof's own masks, by where on the roof each point is, over all of it at once.
-        for ((kind, material), surface) in built.iter_mut() {
-            if let Some(kit) = kits.of(*kind)
-                && matches!(material, Material::Covering | Material::Flashing)
-            {
-                let roofs = roofs.get_or_init(|| {
-                    layout::roofs::Roofs::whole(
-                        section.base,
-                        kits,
-                        layout::Scope {
-                            low: origin - IVec3::ONE,
-                            high: origin + IVec3::splat(crate::cubes::SECTION),
-                        },
-                    )
-                });
-                crate::dress::roof_mask(surface, kit, roofs);
-            }
         }
         match detail {
             Detail::Near => drawn.near = built,

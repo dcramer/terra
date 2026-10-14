@@ -737,14 +737,25 @@ fn a_section_drawn_again_from_how_it_was_drawn_is_drawn_as_afresh() {
     let bases = bases(&kits);
     let stone = kind(&kits, Pattern::Masonry, Profile::Round);
     let (mut taken, mut faces) = (0, 0);
-    for (base, ground) in [
-        (&bases[1], false),
-        (&bases[4], false),
-        (&bases[1], true),
-        (&bases[4], true),
+    // What is changed: a wall's cube, the ground, or a roof's cube.
+    #[derive(PartialEq)]
+    enum Edit {
+        Wall,
+        Ground,
+        Roof,
+    }
+    for (base, edit) in [
+        (&bases[1], Edit::Wall),
+        (&bases[4], Edit::Wall),
+        (&bases[1], Edit::Ground),
+        (&bases[4], Edit::Ground),
+        (&bases[1], Edit::Roof),
+        (&bases[4], Edit::Roof),
     ] {
-        // A wall's cube a metre up taken out; or the ground under the base changed, which
-        // every piece's dirt rises from.
+        // A wall's cube a metre up taken out; the ground under the base changed, which
+        // every piece's dirt rises from; or a roof's lowest cube taken out, which changes
+        // where on the roof every point of it is, its masks' heights.
+        let ground = edit == Edit::Ground;
         let wall = base
             .cubes()
             .map(|(at, _)| at)
@@ -758,9 +769,17 @@ fn a_section_drawn_again_from_how_it_was_drawn_is_drawn_as_afresh() {
                 height_cm: 30,
             }));
         } else {
+            let at = if edit == Edit::Roof {
+                base.cubes()
+                    .filter(|(_, cube)| cube.kind.is_roof())
+                    .min_by_key(|(at, _)| (at.y, at.x, at.z))
+                    .map_or(wall, |(at, _)| at)
+            } else {
+                wall
+            };
             edited.apply(BuildOp::Fill {
-                min: wall.to_array(),
-                max: wall.to_array(),
+                min: at.to_array(),
+                max: at.to_array(),
                 cube: None,
             });
         }
@@ -785,7 +804,7 @@ fn a_section_drawn_again_from_how_it_was_drawn_is_drawn_as_afresh() {
                 let fresh = draw(&after, &laid_after, reach);
                 assert!(again.near == fresh.near, "{at:?} {reach:?}: near differs");
                 assert!(again.mid == fresh.mid, "{at:?} {reach:?}: mid differs");
-                if !ground {
+                if edit == Edit::Wall {
                     taken += now.faces_taken();
                     faces += now.faces.len();
                 }
