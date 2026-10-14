@@ -1035,7 +1035,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
             let mut dice = lay.seed.derive("log").index(kind).rng();
             let log = fallen_log(&mut dice);
             let mut mesh = log.bark.mesh();
-            // Kept on the CPU too, for its footing to be fitted to (D265).
+            // Kept on the CPU too, for its footing to be fitted to (D267).
             mesh.asset_usage = bevy::asset::RenderAssetUsages::all();
             mesh.generate_tangents()
                 .expect("a log has normals and texture places");
@@ -1106,7 +1106,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
             let mut dice = lay.seed.derive("stump").index(kind).rng();
             let stump = stump(&mut dice, kind.is_multiple_of(2));
             let mut mesh = stump.bark.mesh();
-            // Kept on the CPU too, for its footing to be fitted to (D265).
+            // Kept on the CPU too, for its footing to be fitted to (D267).
             mesh.asset_usage = bevy::asset::RenderAssetUsages::all();
             mesh.generate_tangents()
                 .expect("a stump has normals and texture places");

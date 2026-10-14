@@ -798,7 +798,7 @@ fn plant(
                 shadow.triangles(),
                 clumps.triangles()
             );
-            // What stops a walker, from the finest wood and the nearest crown (D265).
+            // What stops a walker, from the finest wood and the nearest crown (D267).
             let trunk = SolidShape::trunk(&wood[0].positions, &wood[0].indices, tree.trunk_m);
             let seen = SolidShape::crown(&near.positions, &near.indices);
             let wood = wood.map(|build| {
@@ -1071,7 +1071,7 @@ fn plant(
                     Visibility::default(),
                     // It stops a walker at its trunk and roots as drawn, or at its skirt where
                     // its branches reach the ground, so the camera is not walked in among a
-                    // spruce's boughs (D248, D265). Filed at its foot, where it is felled from.
+                    // spruce's boughs (D248, D267). Filed at its foot, where it is felled from.
                     Trunk {
                         wood: model.wood[0].clone(),
                         crown: model.crown_near.clone(),

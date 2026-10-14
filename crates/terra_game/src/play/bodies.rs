@@ -134,7 +134,7 @@ fn keep_apart(
                 at += apart.normalize_or(up.any_orthonormal_vector()) * (reach - apart.length());
             }
         }
-        // What is lower than a step they walk over, as the player does (D265).
+        // What is lower than a step they walk over, as the player does (D267).
         at = obstacles.push_out(at, body.radius, Walker::default().step_up);
         if at != transform.translation {
             transform.translation = planet.ground_at(at);

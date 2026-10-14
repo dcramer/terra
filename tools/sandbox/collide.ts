@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Walks the player into what stands in the lush forest and checks that what stops them is
-// what they see (D69, D243, D265): trunks, boulders, rocks, stumps, fallen logs, and anything
+// what they see (D69, D243, D267): trunks, boulders, rocks, stumps, fallen logs, and anything
 // else the forest gives a footing. A sample of every kind, low and tall, is taken from the
 // game (lush.solids), and for each the player is set down a few metres off, facing it, at
 // a different turn round it each time, and walks at it. Measured against the meshes

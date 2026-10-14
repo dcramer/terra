@@ -1,5 +1,5 @@
 //! What stands on the ground and is solid to a walker: a tree's trunk, a rock, a stump, a
-//! fallen log (D265). Each is fitted once from its model, the way shipped games fit simple
+//! fallen log (D267). Each is fitted once from its model, the way shipped games fit simple
 //! colliders to a visual mesh rather than colliding with the mesh itself:
 //!
 //! - **Its relief**: the highest point of the model over each cell of a fine grid laid over

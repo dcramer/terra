@@ -113,7 +113,7 @@ fn layer_metres() -> [Vec4; 2] {
 }
 
 /// Trees, rocks, stumps and logs that stop a walker or hold one up, each fitted to its model
-/// (`terra_core::Solid`, D265), filed by place so a walker asks only about those near it.
+/// (`terra_core::Solid`, D267), filed by place so a walker asks only about those near it.
 #[derive(Resource)]
 pub struct Obstacles {
     solid: SpatialHash<Solid>,

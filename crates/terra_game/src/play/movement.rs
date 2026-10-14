@@ -175,7 +175,7 @@ fn walk(
             target = from_base.transform_point3(walked);
         }
         // Trunks, rocks, stumps and logs taller than a step push the player round them; lower
-        // ones are stepped onto, below (D265).
+        // ones are stepped onto, below (D267).
         target = obstacles.push_out(target, walker.radius, walker.step_up);
         // The sea is for looking at: wade in a little way and no further.
         let ground_ahead = planet.ground_at(target).length();
@@ -235,7 +235,7 @@ fn walk(
         // the true ground there sinks the player into the drawn one or lifts them off it.
         let ground = planet.ground_at(target).length();
         // A rock, stump or log low enough to step onto holds the player up as the ground
-        // does, and so does a taller one they stand on already (D265).
+        // does, and so does a taller one they stand on already (D267).
         let ground = lying_on(&obstacles, target, &walker).map_or(ground, |on| on.max(ground));
         let held_at = match offered {
             Some(floor) if site.is_some_and(|site| site.walkable().ceiling(before).is_some()) => {

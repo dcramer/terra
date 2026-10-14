@@ -1,4 +1,4 @@
-//! What stops a walker in the forest, fitted to what is drawn (D243, D248, D265).
+//! What stops a walker in the forest, fitted to what is drawn (D243, D248, D267).
 //!
 //! Each kind of model is read once into its relief, the highest point over each cell of a
 //! fine grid over its plan (`terra_core::Relief`); each placed thing then fits pieces round

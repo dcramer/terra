@@ -693,7 +693,7 @@ struct Near {
 }
 
 /// What stops a walker or holds one up within so far of a spot, east and south of the start,
-/// nearest first (D243, D265): each thing's middle, east and south; how far round it reaches;
+/// nearest first (D243, D267): each thing's middle, east and south; how far round it reaches;
 /// how far the spot is from its middle, `apart`, and from the edge of its nearest piece too
 /// tall to step onto, `gap` (less than nothing inside it, none if it has no such piece);
 /// its tallest piece's top over the ground, if any, and how many pieces it has.
