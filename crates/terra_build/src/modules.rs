@@ -64,6 +64,189 @@ pub struct Line {
     pub blend: f32,
 }
 
+/// Lays a modelled module along a line as a modular kit's piece is laid: copies at the length
+/// they were modelled, end to end from an offset along the model the line's seed picks, cut
+/// where the line stops (or where its caps begin) and closed there, so a short rail is a
+/// length of the timber, not the whole timber squeezed, and no two lines start alike.
+fn lay_cut(
+    module: &Module,
+    variants: &[Stone],
+    line: &Line,
+    look: &Look,
+    (lo, hi): (f32, f32),
+    scale: [f32; 2],
+    (body, ends): (&mut Indexed, &mut Indexed),
+) {
+    let length = line.from.distance(line.to);
+    let axis = (line.to - line.from) / length;
+    let long = module.length.max(0.05);
+    let into = 0.1 + 0.8 * layout::unit(hash(&[line.seed, 13]));
+    let first = lo - into * long;
+    let mut cuts: [Vec<(Vec3, Vec3, [f32; 2])>; 2] = [Vec::new(), Vec::new()];
+    let mut copy = 0;
+    while first + copy as f32 * long < hi {
+        let seed = hash(&[line.seed, copy as u32]);
+        let mesh = &variants[hash(&[seed, 7]) as usize % variants.len()];
+        let start = first + copy as f32 * long;
+        // Every other copy turned end for end, so its repeat reads half as often.
+        let (offset, along) = if hash(&[seed, 11]) % 2 == 1 {
+            (start + long, -1.0)
+        } else {
+            (start, 1.0)
+        };
+        clipped(
+            mesh,
+            (offset, Vec3::new(along, scale[0], scale[1]), long),
+            (lo, hi),
+            line,
+            axis,
+            look,
+            seed,
+            body,
+            &mut cuts,
+        );
+        copy += 1;
+    }
+    // Each cut closed, from its middle, looking along the line out of it.
+    let shade = look.tint;
+    for (end, segments) in cuts.into_iter().enumerate() {
+        if segments.is_empty() {
+            continue;
+        }
+        let outward = if end == 0 { -axis } else { axis };
+        let count = segments.len() as f32 * 2.0;
+        let middle = segments.iter().map(|s| s.0 + s.1).sum::<Vec3>() / count;
+        let uv = segments
+            .iter()
+            .fold([0.0, 0.0], |a, s| [a[0] + s.2[0], a[1] + s.2[1]]);
+        let uv = [uv[0] / (count * 0.5), uv[1] / (count * 0.5)];
+        for (a, b, _) in segments {
+            let face = (a - middle).cross(b - middle);
+            if face.length_squared() < 1e-12 {
+                continue;
+            }
+            let (a, b) = if face.dot(outward) >= 0.0 {
+                (a, b)
+            } else {
+                (b, a)
+            };
+            let corners = [middle, a, b].map(|p| ends.corner(p, outward, uv, shade));
+            ends.indices.extend(corners);
+        }
+    }
+}
+
+/// One copy of a modelled mesh placed on the line and cut to `lo`..`hi` along it, in the
+/// line's own frame; its faces closing it at either end of the model left out, and the
+/// segments where it is cut gathered, at the low cut and the high, to close it there.
+#[allow(clippy::too_many_arguments)]
+fn clipped(
+    mesh: &Stone,
+    (offset, axes, long): (f32, Vec3, f32),
+    (lo, hi): (f32, f32),
+    line: &Line,
+    axis: Vec3,
+    look: &Look,
+    seed: u32,
+    out: &mut Indexed,
+    cuts: &mut [Vec<(Vec3, Vec3, [f32; 2])>; 2],
+) {
+    let shade = 1.0 - look.shade * layout::unit(hash(&[seed, 3]));
+    let colour = look.tint.map(|c| c * shade);
+    // Each corner: along the line, in the world, its normal and its place in the atlas.
+    type Corner = (f32, Vec3, Vec3, [f32; 2]);
+    let corners: Vec<Corner> = mesh
+        .positions
+        .iter()
+        .zip(&mesh.normals)
+        .enumerate()
+        .map(|(i, (p, n))| {
+            let (p, n) = (Vec3::from_array(*p), Vec3::from_array(*n));
+            let q = Vec3::new(offset, 0.0, 0.0) + p * axes;
+            let n = (n / axes).normalize_or(Vec3::Y);
+            let (world, normal) = seat(line, axis, q, n);
+            (
+                q.x,
+                world,
+                normal,
+                mesh.uvs.get(i).copied().unwrap_or([0.0; 2]),
+            )
+        })
+        .collect();
+    let lerp = |a: &Corner, b: &Corner, at: f32| -> Corner {
+        let t = ((at - a.0) / (b.0 - a.0)).clamp(0.0, 1.0);
+        (
+            at,
+            a.1.lerp(b.1, t),
+            a.2.lerp(b.2, t).normalize_or(a.2),
+            [
+                a.3[0] + (b.3[0] - a.3[0]) * t,
+                a.3[1] + (b.3[1] - a.3[1]) * t,
+            ],
+        )
+    };
+    for t in &mesh.triangles {
+        let [a, b, c] = t.map(|i| i as usize);
+        if a >= corners.len() || b >= corners.len() || c >= corners.len() {
+            continue;
+        }
+        // The model's own ends, which copies meet at, never drawn.
+        let x = |i: usize| mesh.positions[i][0];
+        let at_end = |at: f32| [a, b, c].iter().all(|&i| (x(i) - at).abs() < 1e-3);
+        if at_end(0.0) || at_end(long) {
+            continue;
+        }
+        let mut polygon: Vec<Corner> = vec![corners[a], corners[b], corners[c]];
+        for (end, (plane, keep_above)) in [(lo, true), (hi, false)].into_iter().enumerate() {
+            let inside = |c: &Corner| {
+                if keep_above {
+                    c.0 >= plane
+                } else {
+                    c.0 <= plane
+                }
+            };
+            let mut kept: Vec<Corner> = Vec::new();
+            let mut on_plane: Vec<Corner> = Vec::new();
+            for i in 0..polygon.len() {
+                let (p, q) = (&polygon[i], &polygon[(i + 1) % polygon.len()]);
+                if inside(p) {
+                    kept.push(*p);
+                }
+                if inside(p) != inside(q) {
+                    let cut = lerp(p, q, plane);
+                    kept.push(cut);
+                    on_plane.push(cut);
+                }
+            }
+            if on_plane.len() == 2 {
+                cuts[end].push((on_plane[0].1, on_plane[1].1, on_plane[0].3));
+            }
+            polygon = kept;
+            if polygon.len() < 3 {
+                break;
+            }
+        }
+        if polygon.len() < 3 {
+            continue;
+        }
+        let indices: Vec<u32> = polygon
+            .iter()
+            .map(|c| out.corner(c.1, c.2, c.3, colour))
+            .collect();
+        for k in 1..indices.len() - 1 {
+            let [i, j, l] = [indices[0], indices[k], indices[k + 1]];
+            let (pa, pb, pc) = (polygon[0].1, polygon[k].1, polygon[k + 1].1);
+            let face = (pb - pa).cross(pc - pa);
+            let normal = polygon[0].2 + polygon[k].2 + polygon[k + 1].2;
+            if face.dot(normal) >= 0.0 {
+                out.indices.extend([i, j, l]);
+            } else {
+                out.indices.extend([i, l, j]);
+            }
+        }
+    }
+}
+
 /// How many copies of a module so long fit a line so long, and how much each is stretched.
 pub fn fit(length: f32, module: f32) -> (usize, f32) {
     let module = module.max(0.05);
@@ -106,34 +289,42 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
     });
     let mut body = Indexed::default();
     let mut ends = Indexed::default();
+    // A modelled piece is cut to length, never squeezed; one made from numbers fits whole
+    // copies, which it can, being uniform along it.
+    let count = if made {
+        let lo = lead[0].min(length * 0.45);
+        let hi = (length - lead[1]).max(lo + length * 0.1);
+        lay_cut(
+            module,
+            variants,
+            line,
+            look,
+            (lo, hi),
+            scale,
+            (&mut body, &mut ends),
+        );
+        0
+    } else {
+        count
+    };
     for copy in 0..count {
         let seed = hash(&[line.seed, copy as u32]);
         let mesh = &variants[hash(&[seed, 7]) as usize % variants.len()];
         let start = copy as f32 * module.length;
         // A modelled piece is one model, so every other copy is turned end for end (mirrored
         // along it) and its repeat reads half as often.
-        let mirrored = made && hash(&[seed, 11]) % 2 == 1;
-        let (offset, along) = if mirrored {
-            (lead[0] + (start + module.length) * stretch, -stretch)
-        } else {
-            (lead[0] + start * stretch, stretch)
-        };
-        // Its cut ends kept only where the line stops with nothing beyond: between copies, or
-        // against a cap, two faces would lie in one plane.
-        let open = [
-            copy == 0 && cap_length == 0.0,
-            copy + 1 == count && cap_length == 0.0,
-        ];
-        let keep = if mirrored { [open[1], open[0]] } else { open };
         place(
             mesh,
-            (offset, Vec3::new(along, scale[0], scale[1])),
+            (
+                lead[0] + start * stretch,
+                Vec3::new(stretch, scale[0], scale[1]),
+            ),
             line,
             axis,
             look,
             seed,
             (&mut body, &mut ends),
-            made.then_some((module.length, keep)),
+            None,
         );
     }
     // Caps where it stops: the end's as modelled, the start's mirrored along it.
@@ -390,12 +581,13 @@ mod tests {
     }
 
     #[test]
-    fn a_modelled_module_is_drawn_in_its_kits_atlas_by_its_own_uvs() {
+    fn a_modelled_module_is_cut_to_length_in_its_kits_atlas_not_squeezed() {
+        // A metre's bar modelled, its atlas V running 0.2 to 0.4 along it, laid along 0.4 m.
         let mut module = bar();
         module.near[0].uvs = vec![[0.1, 0.2], [0.3, 0.2], [0.3, 0.4], [0.1, 0.4]];
         let line = Line {
             from: Vec3::ZERO,
-            to: Vec3::X,
+            to: Vec3::X * 0.4,
             seat: Seat::Plane {
                 up: Vec3::Y,
                 out: Vec3::Z,
@@ -409,10 +601,31 @@ mod tests {
         lay(&module, &line, &look(), false, &mut surfaces);
         assert!(!surfaces.0.contains_key(&Material::Board));
         let made = &surfaces.0[&Material::Piece].shared;
-        assert_eq!(made.triangle_count(), 2);
-        let mut uvs = made.uvs.clone();
-        uvs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        assert_eq!(uvs, vec![[0.1, 0.2], [0.1, 0.4], [0.3, 0.2], [0.3, 0.4]]);
+        assert!(made.triangle_count() > 0);
+        // From one end of the line to the other and no further.
+        let (low, high) = made
+            .positions
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(l, h), p| (l.min(p.x), h.max(p.x)));
+        assert!(
+            low.abs() < 1e-4 && (high - 0.4).abs() < 1e-4,
+            "{low} {high}"
+        );
+        // Its texture as modelled, 0.2 of V a metre along it: 0.4 m of the bar, not the
+        // whole bar squeezed into 0.4 m, which would run 0.5 a metre.
+        let mut checked = 0;
+        for t in made.indices.chunks(3) {
+            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+                let (pa, pb) = (made.positions[a as usize], made.positions[b as usize]);
+                let (va, vb) = (made.uvs[a as usize][1], made.uvs[b as usize][1]);
+                let dx = (pa.x - pb.x).abs();
+                if dx > 0.05 && (pa.y - 0.1).abs() < 1e-4 && (pb.y - 0.1).abs() < 1e-4 {
+                    assert!(((va - vb).abs() / dx - 0.2).abs() < 1e-3, "{dx} {va} {vb}");
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 0);
     }
 
     #[test]
