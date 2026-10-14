@@ -177,7 +177,6 @@ pub fn inspect(base: &Base, kits: &Kits, maps: &Maps) -> Report {
             maps,
             at: IVec3::from_array(at),
             progress: &progress,
-            flights: &[],
         };
         let laid = sections::lay(&section, &whole);
         let near = sections::draw(&section, &laid, Reach::Near);
