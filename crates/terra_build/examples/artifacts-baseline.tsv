@@ -146,54 +146,47 @@ all	wattle	Doubled	48
 all	wattle	Inward	24
 all	wattle	PokesOut	112
 quick	brick	Coplanar	14
-quick	brick	Inward	2
 quick	brick	PokesOut	4
-quick	brick with earth	Coplanar	29
-quick	brick with earth	Inward	2
+quick	brick with earth	Coplanar	26
 quick	brick with earth	PokesOut	6
 quick	brick with hewn	Coplanar	25
-quick	brick with hewn	Inward	2
 quick	brick with hewn	PokesOut	4
 quick	brick with hewn	SeeThrough	96
 quick	brick with hewn	UnderRoof	23
 quick	brick with limewash	Coplanar	23
-quick	brick with limewash	Inward	2
-quick	brick with limewash	PokesOut	5
+quick	brick with limewash	PokesOut	4
 quick	brick with logs	Coplanar	25
-quick	brick with logs	Inward	2
 quick	brick with logs	PokesOut	4
 quick	brick with logs	SeeThrough	96
 quick	brick with logs	UnderRoof	19
 quick	brick with stone	Coplanar	20
-quick	brick with stone	Inward	2
 quick	brick with stone	PokesOut	4
 quick	brick with wattle	Coplanar	23
-quick	brick with wattle	Inward	2
 quick	brick with wattle	PokesOut	2
-quick	earth	Coplanar	21
+quick	earth	Coplanar	17
 quick	earth	Doubled	6
 quick	earth	PokesOut	11
-quick	earth with hewn	Buried	2
+quick	earth with hewn	Buried	1
 quick	earth with hewn	Coplanar	22
 quick	earth with hewn	Doubled	6
 quick	earth with hewn	PokesOut	11
 quick	earth with hewn	SeeThrough	96
-quick	earth with hewn	UnderRoof	16
-quick	earth with limewash	Buried	2
+quick	earth with hewn	UnderRoof	12
+quick	earth with limewash	Buried	1
 quick	earth with limewash	Coplanar	22
 quick	earth with limewash	Doubled	6
-quick	earth with limewash	PokesOut	12
-quick	earth with logs	Buried	2
+quick	earth with limewash	PokesOut	11
+quick	earth with logs	Buried	1
 quick	earth with logs	Coplanar	22
 quick	earth with logs	Doubled	6
 quick	earth with logs	PokesOut	11
 quick	earth with logs	SeeThrough	96
-quick	earth with logs	UnderRoof	16
-quick	earth with stone	Buried	2
+quick	earth with logs	UnderRoof	12
+quick	earth with stone	Buried	1
 quick	earth with stone	Coplanar	22
 quick	earth with stone	Doubled	6
 quick	earth with stone	PokesOut	11
-quick	earth with wattle	Buried	2
+quick	earth with wattle	Buried	1
 quick	earth with wattle	Coplanar	22
 quick	earth with wattle	Doubled	6
 quick	earth with wattle	PokesOut	9
@@ -204,7 +197,7 @@ quick	hewn	SeeThrough	30
 quick	hewn	UnderRoof	32
 quick	hewn with limewash	Coplanar	19
 quick	hewn with limewash	Doubled	6
-quick	hewn with limewash	PokesOut	9
+quick	hewn with limewash	PokesOut	8
 quick	hewn with limewash	UnderRoof	16
 quick	hewn with logs	Coplanar	22
 quick	hewn with logs	Doubled	6
@@ -219,24 +212,24 @@ quick	hewn with wattle	Coplanar	16
 quick	hewn with wattle	Doubled	6
 quick	hewn with wattle	PokesOut	6
 quick	hewn with wattle	UnderRoof	16
-quick	limewash	Coplanar	17
+quick	limewash	Coplanar	15
 quick	limewash	Doubled	6
 quick	limewash	Inward	2
-quick	limewash	PokesOut	9
-quick	limewash with logs	Coplanar	22
+quick	limewash	PokesOut	8
+quick	limewash with logs	Coplanar	21
 quick	limewash with logs	Doubled	6
 quick	limewash with logs	Inward	2
-quick	limewash with logs	PokesOut	9
+quick	limewash with logs	PokesOut	8
 quick	limewash with logs	SeeThrough	96
-quick	limewash with logs	UnderRoof	16
-quick	limewash with stone	Coplanar	20
+quick	limewash with logs	UnderRoof	12
+quick	limewash with stone	Coplanar	19
 quick	limewash with stone	Doubled	6
 quick	limewash with stone	Inward	2
-quick	limewash with stone	PokesOut	9
-quick	limewash with wattle	Coplanar	20
+quick	limewash with stone	PokesOut	8
+quick	limewash with wattle	Coplanar	19
 quick	limewash with wattle	Doubled	6
 quick	limewash with wattle	Inward	2
-quick	limewash with wattle	PokesOut	7
+quick	limewash with wattle	PokesOut	6
 quick	logs	Coplanar	20
 quick	logs	PokesOut	4
 quick	logs	SeeThrough	29
@@ -246,12 +239,11 @@ quick	logs with stone	PokesOut	4
 quick	logs with wattle	Coplanar	21
 quick	logs with wattle	PokesOut	2
 quick	stone	Coplanar	11
-quick	stone	Inward	2
+quick	stone	Inward	1
 quick	stone	PokesOut	4
 quick	stone with wattle	Coplanar	20
-quick	stone with wattle	Inward	2
+quick	stone with wattle	Inward	1
 quick	stone with wattle	PokesOut	2
 quick	wattle	Coplanar	15
 quick	wattle	Doubled	6
-quick	wattle	Inward	2
 quick	wattle	PokesOut	6

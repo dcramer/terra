@@ -525,7 +525,11 @@ pub fn draw_part(
                     let (from, to) = (h[i], h[i + 1]);
                     for level in [low.y, low.y + CELL_M] {
                         if (from - level) * (to - level) < 0.0 {
-                            out.push((i as f32 + (level - from) / (to - from)) / n as f32);
+                            let t = (i as f32 + (level - from) / (to - from)) / n as f32;
+                            // Not where a corner or another point already is, a sliver away.
+                            if t > 0.02 && t < 0.98 {
+                                out.push(t);
+                            }
                         }
                     }
                     if i > 0 && (h[i - 1] - 2.0 * h[i] + h[i + 1]).abs() > 1e-4 {
@@ -603,7 +607,7 @@ pub fn draw_part(
             if axis != 1 && cut {
                 out.extend(crossings(c, axis));
                 out.sort_by(f32::total_cmp);
-                out.dedup_by(|x, y| (*x - *y).abs() < 1e-4);
+                out.dedup_by(|x, y| (*x - *y).abs() < 0.02);
             }
             out.into()
         })
@@ -895,10 +899,17 @@ pub fn draw_part(
                 let (mut q, mut exact) = place(s);
                 let placed = q;
                 if cut_here {
-                    // And where it ends up, so nothing a lump or the rounding moves along
-                    // stands over the cut.
+                    q.y = q.y.max(low).min(high);
+                    // And a side's, or a packed top's, where it ends up, so nothing a lump or
+                    // the rounding moves along stands over the cut. Not a smooth top's: its
+                    // rounding, brought onto a sloping cut where it ends up, folds over
+                    // itself in the cut.
                     let [under, over] = cut(cube, q);
-                    q.y = q.y.max(low).min(high).max(under).min(over);
+                    if axis != 1 || look.packed.is_some() {
+                        q.y = q.y.max(under).min(over);
+                    } else if q.y > over {
+                        q = s.with_y(s.y.max(low).min(high));
+                    }
                 }
                 if against_cut {
                     q.y = q.y.max(cut(beyond, p)[1].min(high));
@@ -968,22 +979,55 @@ pub fn draw_part(
                         let [x, y, z] = t;
                         let t = if flip { [x, z, y] } else { t };
                         let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
-                        // Cut away to nothing.
-                        if (pb - pa).cross(pc - pa).length_squared() < 1e-12 {
+                        let cross = (pb - pa).cross(pc - pa);
+                        // Cut away to nothing, or folded back on itself where a cut or the
+                        // rounding pinches a cell: drawn from inside, it would show dark.
+                        let folded = if look.packed.is_some() {
+                            -0.5 * cross.length()
+                        } else {
+                            0.0
+                        };
+                        if cross.length_squared() < 1e-12 || cross.dot(normal) < folded {
                             return;
                         }
                         face.triangles.push(t);
                     };
                     if ring.len() > 4 {
-                        // A fan from the cell's middle to every point round it.
-                        let middle = add(
-                            param((a0 + a1) * 0.5, (b0 + b1) * 0.5),
-                            false,
-                            &mut face,
-                            &mut flat,
-                        );
-                        for k in 0..ring.len() {
-                            triangle([middle, ring[k], ring[(k + 1) % ring.len()]], &mut face);
+                        // Its corners in the ring, and which of its sides took points.
+                        let corner_at = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
+                        let took = [
+                            j == 0 && !within(&bottom, a0, a1).is_empty(),
+                            i + 1 == na && !within(&right, b0, b1).is_empty(),
+                            j + 1 == nb && !within(&top_side, a0, a1).is_empty(),
+                            i == 0 && !within(&left, b0, b1).is_empty(),
+                        ];
+                        // A fan from a corner on neither side that took points, which every
+                        // point round the cell sees across it, as a cell's taken points lie
+                        // along its sides; failing one, from the cell's middle.
+                        let apex = (0..4)
+                            .find(|&k| !took[k] && !took[(k + 3) % 4])
+                            .map(|k| corner_at[k]);
+                        let (apex, open) = match apex {
+                            Some(apex) => (apex, false),
+                            None => {
+                                let middle = add(
+                                    param((a0 + a1) * 0.5, (b0 + b1) * 0.5),
+                                    false,
+                                    &mut face,
+                                    &mut flat,
+                                );
+                                (middle, true)
+                            }
+                        };
+                        let start = ring.iter().position(|&c| c == apex).unwrap_or(0);
+                        let n_ring = ring.len();
+                        for k in 0..n_ring {
+                            let (x, y) =
+                                (ring[(start + k) % n_ring], ring[(start + k + 1) % n_ring]);
+                            if !open && (x == apex || y == apex) {
+                                continue;
+                            }
+                            triangle([apex, x, y], &mut face);
                         }
                         continue;
                     }
