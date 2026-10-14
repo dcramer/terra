@@ -1438,6 +1438,36 @@ fn doctor() -> bool {
         false,
         &format!("install Blender {pinned} (https://www.blender.org/download/lts/); under WSL, the Windows one"),
     );
+    // Tripo's models are meshopt-compressed; some Linux distributions' Blender, such as
+    // Arch's, leave out the library its glTF importer decodes them with.
+    if !blender.is_empty() {
+        let meshopt = output("tools/blender/run.sh", &["--find"]).and_then(|path| {
+            output(
+                &path,
+                &[
+                    "--background",
+                    "--factory-startup",
+                    "--python-expr",
+                    "from io_scene_gltf2.io.imp.gltf2_io_binary_meshopt import MeshoptDecoder as M\n\
+                     try:\n    print('MESHOPT', M.find_library())\nexcept Exception as e:\n    print('NOMESHOPT', e)",
+                ],
+            )
+        });
+        let found = meshopt.as_deref().unwrap_or_default();
+        let missing = found
+            .lines()
+            .find_map(|line| line.strip_prefix("NOMESHOPT Meshopt decoder library not found at "))
+            .unwrap_or("its glTF add-on folder");
+        report.item(
+            "Blender opens Tripo's compressed models (meshopt)",
+            found.lines().any(|line| line.starts_with("MESHOPT ")),
+            false,
+            &format!(
+                "this Blender was built without libbf_intern_meshopt_bridge.so: copy it from the official \
+                 Blender {pinned} for Linux (its lib folder) to {missing}, or install that build and set BLENDER"
+            ),
+        );
+    }
     report.item(
         "ImageMagick, for painting item icons (tools/icons)",
         output("convert", &["-version"]).is_some(),
