@@ -75,7 +75,7 @@ fn lay_cut(
     variants: &[Stone],
     line: &Line,
     look: &Look,
-    (lo, hi): (f32, f32),
+    (lo, hi, capped): (f32, f32, [bool; 2]),
     scale: [f32; 2],
     (body, ends): (&mut Indexed, &mut Indexed),
 ) {
@@ -117,33 +117,217 @@ fn lay_cut(
         );
         copy += 1;
     }
-    // Each cut closed, from its middle, looking along the line out of it.
+    // Each cut closed, looking along the line out of it, but where a cap is laid on it: the
+    // cap closes it, and a face between the two would be drawn twice over in one plane.
     let shade = look.tint;
     for (end, segments) in cuts.into_iter().enumerate() {
-        if segments.is_empty() {
+        if segments.is_empty() || capped[end] {
             continue;
         }
         let outward = if end == 0 { -axis } else { axis };
-        let count = segments.len() as f32 * 2.0;
-        let middle = segments.iter().map(|s| s.0 + s.1).sum::<Vec3>() / count;
+        let count = segments.len() as f32;
         let uv = segments
             .iter()
             .fold([0.0, 0.0], |a, s| [a[0] + s.2[0], a[1] + s.2[1]]);
-        let uv = [uv[0] / (count * 0.5), uv[1] / (count * 0.5)];
-        for (a, b, _) in segments {
-            let face = (a - middle).cross(b - middle);
-            if face.length_squared() < 1e-12 {
-                continue;
-            }
-            let (a, b) = if face.dot(outward) >= 0.0 {
-                (a, b)
-            } else {
-                (b, a)
-            };
-            let corners = [middle, a, b].map(|p| ends.corner(p, outward, uv, shade));
+        let uv = [uv[0] / count, uv[1] / count];
+        let lines: Vec<(Vec3, Vec3)> = segments.iter().map(|s| (s.0, s.1)).collect();
+        for [a, b, c] in close(&lines, outward) {
+            let corners = [a, b, c].map(|p| ends.corner(p, outward, uv, shade));
             ends.indices.extend(corners);
         }
     }
+}
+
+/// The faces that close a cut through a mesh, from the segments its triangles were cut along,
+/// all in one plane square to `outward`: the segments joined end to end into outlines, an
+/// open one closed straight across, each filled by ear clipping (as Blender's and every
+/// engine's mesh slicing caps a cut), so a section that is not convex, a ridge's roll or a
+/// bundle's lumpy face, is filled once and never folded over itself as a fan from its middle
+/// would be. Each triangle looks the outward way.
+pub(crate) fn close(segments: &[(Vec3, Vec3)], outward: Vec3) -> Vec<[Vec3; 3]> {
+    const SAME_M: f32 = 1e-5;
+    let u = outward.any_orthonormal_vector();
+    let v = outward.cross(u);
+    let flat = |p: Vec3| glam::Vec2::new(p.dot(u), p.dot(v));
+    let mut used = vec![false; segments.len()];
+    let mut filled: Vec<[glam::Vec2; 3]> = Vec::new();
+    let mut all: Vec<Vec3> = Vec::new();
+    for first in 0..segments.len() {
+        if used[first] {
+            continue;
+        }
+        used[first] = true;
+        let mut outline = vec![segments[first].0, segments[first].1];
+        // Onward from its end, then back from its start.
+        for forward in [true, false] {
+            loop {
+                let tip = if forward {
+                    outline[outline.len() - 1]
+                } else {
+                    outline[0]
+                };
+                let next = (0..segments.len()).find_map(|k| {
+                    if used[k] {
+                        return None;
+                    }
+                    let (a, b) = segments[k];
+                    if a.distance(tip) < SAME_M {
+                        Some((k, b))
+                    } else if b.distance(tip) < SAME_M {
+                        Some((k, a))
+                    } else {
+                        None
+                    }
+                });
+                let Some((k, p)) = next else {
+                    break;
+                };
+                used[k] = true;
+                if forward {
+                    outline.push(p);
+                } else {
+                    outline.insert(0, p);
+                }
+            }
+        }
+        // The same point twice in a row, or the outline's end on its start, once.
+        outline.dedup_by(|a, b| a.distance(*b) < SAME_M);
+        if outline.len() > 1 && outline[0].distance(outline[outline.len() - 1]) < SAME_M {
+            outline.pop();
+        }
+        if outline.len() < 3 {
+            continue;
+        }
+        let points: Vec<glam::Vec2> = outline.iter().map(|&p| flat(p)).collect();
+        // An outline every point of which its middle sees, a member's or a bundle's, a fan
+        // from its middle, which keeps its triangles whole; any other by its ears.
+        let middle = points.iter().sum::<glam::Vec2>() / points.len() as f32;
+        let turn =
+            |i: usize| (points[i] - middle).perp_dot(points[(i + 1) % points.len()] - middle);
+        let way = (0..points.len()).map(turn).sum::<f32>().signum();
+        if (0..points.len()).all(|i| turn(i) * way > 0.0) {
+            for i in 0..points.len() {
+                filled.push([middle, points[i], points[(i + 1) % points.len()]]);
+            }
+        } else {
+            for [i, j, k] in ear_clip(&points) {
+                filled.push([points[i], points[j], points[k]]);
+            }
+        }
+        all.extend(outline);
+    }
+    // The plane the cut lies in, which a sheared seat leans off square to the line: what is
+    // filled in the square plane is put back on it, along the line.
+    let Some(&first) = all.first() else {
+        return Vec::new();
+    };
+    let far = all
+        .iter()
+        .copied()
+        .max_by(|a, b| a.distance(first).total_cmp(&b.distance(first)))
+        .unwrap_or(first);
+    let plane = all
+        .iter()
+        .map(|&p| (far - first).cross(p - first))
+        .max_by(|a, b| a.length_squared().total_cmp(&b.length_squared()))
+        .unwrap_or(outward)
+        .normalize_or(outward);
+    let lift = |q: glam::Vec2| {
+        let on = u * q.x + v * q.y;
+        let along = plane.dot(outward);
+        let t = if along.abs() < 1e-4 {
+            first.dot(outward)
+        } else {
+            plane.dot(first - on) / along
+        };
+        on + outward * t
+    };
+    // Outlines that overlap, or one crossing itself, filled once: each triangle cut back to
+    // what the triangles before it do not cover.
+    let mut out = Vec::new();
+    let mut done: Vec<[glam::Vec2; 3]> = Vec::new();
+    for triangle in filled {
+        let mut pieces = vec![triangle.to_vec()];
+        for before in &done {
+            pieces = pieces
+                .into_iter()
+                .flat_map(|piece| {
+                    if polygon_area(&clip_inside(&piece, before)) < 1e-9 {
+                        vec![piece]
+                    } else {
+                        outside(&piece, before)
+                    }
+                })
+                .collect();
+        }
+        for piece in pieces {
+            for k in 1..piece.len().saturating_sub(1) {
+                let t = [piece[0], piece[k], piece[k + 1]];
+                if (t[1] - t[0]).perp_dot(t[2] - t[0]).abs() < 1e-10 {
+                    continue;
+                }
+                let [a, b, c] = t.map(lift);
+                let face = (b - a).cross(c - a);
+                out.push(if face.dot(outward) >= 0.0 {
+                    [a, b, c]
+                } else {
+                    [a, c, b]
+                });
+            }
+        }
+        done.push(triangle);
+    }
+    out
+}
+
+/// A simple polygon's triangles by ear clipping, as indices into its points; what is left
+/// when no ear is found, as of a polygon that crosses itself, a fan from its first point.
+fn ear_clip(points: &[glam::Vec2]) -> Vec<[usize; 3]> {
+    let twice_area: f32 = (0..points.len())
+        .map(|i| points[i].perp_dot(points[(i + 1) % points.len()]))
+        .sum();
+    let mut left: Vec<usize> = (0..points.len()).collect();
+    if twice_area < 0.0 {
+        left.reverse();
+    }
+    let cross =
+        |a: usize, b: usize, c: usize| (points[b] - points[a]).perp_dot(points[c] - points[a]);
+    let inside = |p: glam::Vec2, [a, b, c]: [usize; 3]| {
+        let (pa, pb, pc) = (points[a], points[b], points[c]);
+        (pb - pa).perp_dot(p - pa) >= 0.0
+            && (pc - pb).perp_dot(p - pb) >= 0.0
+            && (pa - pc).perp_dot(p - pc) >= 0.0
+    };
+    let mut out = Vec::new();
+    while left.len() > 3 {
+        let n = left.len();
+        let ear = (0..n).find(|&i| {
+            let t = [left[(i + n - 1) % n], left[i], left[(i + 1) % n]];
+            cross(t[0], t[1], t[2]) > 1e-12
+                && left.iter().filter(|&&k| !t.contains(&k)).all(|&k| {
+                    !inside(points[k], t) || points[k] == points[t[0]] || points[k] == points[t[2]]
+                })
+        });
+        let Some(i) = ear else {
+            // Collinear points left, or one crossing itself: a flat corner first, else a fan.
+            if let Some(i) = (0..n)
+                .find(|&i| cross(left[(i + n - 1) % n], left[i], left[(i + 1) % n]).abs() <= 1e-12)
+            {
+                left.remove(i);
+                continue;
+            }
+            for k in 1..n - 1 {
+                out.push([left[0], left[k], left[k + 1]]);
+            }
+            return out;
+        };
+        out.push([left[(i + n - 1) % n], left[i], left[(i + 1) % n]]);
+        left.remove(i);
+    }
+    if left.len() == 3 && cross(left[0], left[1], left[2]).abs() > 1e-12 {
+        out.push([left[0], left[1], left[2]]);
+    }
+    out
 }
 
 /// One copy of a modelled mesh placed on the line and cut to `lo`..`hi` along it, in the
@@ -312,7 +496,7 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
             variants,
             line,
             look,
-            (lo, hi),
+            (lo, hi, line.capped.map(|capped| capped && cap_length > 0.0)),
             scale,
             (&mut body, &mut ends),
         );
@@ -469,6 +653,329 @@ fn place(
             out.indices.extend([tri[0], tri[2], tri[1]]);
         }
     }
+}
+
+/// A kit's modules made fit to lay, as an engine's import cleans a mesh before building it
+/// (Unreal's mesh build drops degenerate and duplicate triangles): every mesh of each
+/// ([`clean`]). The kit does it once, as it reads its pieces.
+pub fn clean_all(pieces: &mut crate::dress::Pieces) {
+    for module in pieces.modules.values_mut() {
+        for mesh in module
+            .near
+            .iter_mut()
+            .chain(module.far.iter_mut())
+            .chain(module.cap.iter_mut())
+        {
+            clean(mesh);
+        }
+    }
+}
+
+/// How nearly in one plane a sliver folded back over its neighbour lies: within 45 degrees
+/// of it, as no surface of a model folds back on itself with its normals smooth across.
+const FOLD: f32 = 1.0;
+
+/// A modelled mesh made fit to lay: without triangles of no area, a triangle drawn twice (a
+/// face made double-sided, both copies of which a layer turns to look one way), or a sliver
+/// folded back over its neighbour across their shared edge, looking the same way by its
+/// corners' normals, which laid lies in its neighbour's plane over it and flickers. The
+/// smaller of a fold goes; its neighbour covers where it was.
+pub fn clean(mesh: &mut Stone) {
+    let key = |p: [f32; 3]| p.map(|v| libm::roundf(v * 1e5) as i64);
+    let point = |i: u32| Vec3::from_array(mesh.positions[i as usize]);
+    let normal = |t: &[u32; 3]| -> Vec3 {
+        t.iter()
+            .filter_map(|&i| mesh.normals.get(i as usize))
+            .map(|n| Vec3::from_array(*n))
+            .sum()
+    };
+    let area = |t: &[u32; 3]| {
+        let [a, b, c] = t.map(point);
+        (b - a).cross(c - a).length() * 0.5
+    };
+    let in_range = |t: &[u32; 3]| t.iter().all(|&i| (i as usize) < mesh.positions.len());
+    // Each triangle once, by its corners' places, and with some area.
+    let mut seen = std::collections::HashSet::new();
+    let mut keep: Vec<bool> = mesh
+        .triangles
+        .iter()
+        .map(|t| {
+            if !in_range(t) || area(t) < 1e-10 {
+                return false;
+            }
+            let mut corners = t.map(|i| key(mesh.positions[i as usize]));
+            corners.sort();
+            seen.insert(corners)
+        })
+        .collect();
+    // Folds: two triangles across an edge, the one's far corner on the same side of the edge
+    // as the other's and nearly in its plane.
+    let mut edges: std::collections::HashMap<[[i64; 3]; 2], Vec<usize>> = Default::default();
+    for (k, t) in mesh.triangles.iter().enumerate() {
+        if !keep[k] {
+            continue;
+        }
+        for e in 0..3 {
+            let mut edge = [t[e], t[(e + 1) % 3]].map(|i| key(mesh.positions[i as usize]));
+            edge.sort();
+            edges.entry(edge).or_default().push(k);
+        }
+    }
+    let far_corner = |t: &[u32; 3], edge: &[[i64; 3]; 2]| {
+        t.iter()
+            .copied()
+            .find(|&i| !edge.contains(&key(mesh.positions[i as usize])))
+    };
+    let mut edges: Vec<_> = edges.into_iter().collect();
+    edges.sort_by_key(|edge| edge.0);
+    for (edge, on) in edges {
+        for x in 0..on.len() {
+            for y in x + 1..on.len() {
+                let (i, j) = (on[x], on[y]);
+                if !keep[i] || !keep[j] {
+                    continue;
+                }
+                let (ti, tj) = (mesh.triangles[i], mesh.triangles[j]);
+                // The larger as the plane, the smaller the one that may fold over it.
+                let (big, small, gone) = if area(&ti) >= area(&tj) {
+                    (ti, tj, j)
+                } else {
+                    (tj, ti, i)
+                };
+                let (Some(a), Some(b)) = (far_corner(&big, &edge), far_corner(&small, &edge))
+                else {
+                    continue;
+                };
+                let ends: Vec<Vec3> = big.iter().filter(|&&k| k != a).map(|&k| point(k)).collect();
+                let [e0, e1] = [ends[0], ends[1]];
+                let n = (e1 - e0).cross(point(a) - e0).normalize_or_zero();
+                let mut side = n.cross(e1 - e0).normalize_or_zero();
+                if side.dot(point(a) - e0) < 0.0 {
+                    side = -side;
+                }
+                let (h, z) = (side.dot(point(b) - e0), n.dot(point(b) - e0));
+                if h > 0.0 && z.abs() < h * FOLD && normal(&big).dot(normal(&small)) > 0.0 {
+                    keep[gone] = false;
+                }
+            }
+        }
+    }
+    let mut k = 0;
+    mesh.triangles.retain(|_| {
+        k += 1;
+        keep[k - 1]
+    });
+    unlap(mesh);
+}
+
+/// How far apart two faces of a modelled mesh may be and still lie in one plane, in metres,
+/// and how nearly they must look the same way.
+const PLANE_M: f32 = 0.0015;
+const ONE_WAY: f32 = 0.999;
+
+/// Each triangle of a modelled mesh that lies over a larger one in its plane, looking the same
+/// way by its corners' normals, cut back to what of it the larger does not cover, as two
+/// faces of a model meet where they should only touch: a cap's end face triangulated across
+/// itself, two layers of a model run into one. What is left of it is cut into convex pieces,
+/// its new corners' normals and texture places taken from the triangle's own.
+fn unlap(mesh: &mut Stone) {
+    let point = |m: &Stone, i: u32| Vec3::from_array(m.positions[i as usize]);
+    let facing = |m: &Stone, t: &[u32; 3]| {
+        let [a, b, c] = t.map(|i| point(m, i));
+        let n = (b - a).cross(c - a);
+        let along: Vec3 = t
+            .iter()
+            .filter_map(|&i| m.normals.get(i as usize))
+            .map(|n| Vec3::from_array(*n))
+            .sum();
+        let n = n.normalize_or_zero();
+        if n.dot(along) < 0.0 { -n } else { n }
+    };
+    let area = |m: &Stone, t: &[u32; 3]| {
+        let [a, b, c] = t.map(|i| point(m, i));
+        (b - a).cross(c - a).length() * 0.5
+    };
+    for _ in 0..4 {
+        let mut changed = false;
+        let mut k = 0;
+        while k < mesh.triangles.len() {
+            let small = mesh.triangles[k];
+            let n = facing(mesh, &small);
+            let small_area = area(mesh, &small);
+            let cover = (0..mesh.triangles.len()).find(|&j| {
+                if j == k {
+                    return false;
+                }
+                let big = mesh.triangles[j];
+                let big_area = area(mesh, &big);
+                if big_area < small_area || (big_area == small_area && j > k) {
+                    return false;
+                }
+                let m = facing(mesh, &big);
+                if m.dot(n) < ONE_WAY {
+                    return false;
+                }
+                let d = m.dot(point(mesh, big[0]));
+                if small
+                    .iter()
+                    .any(|&i| (m.dot(point(mesh, i)) - d).abs() > PLANE_M)
+                {
+                    return false;
+                }
+                let flat = flatten(m);
+                let tri = |t: [u32; 3]| t.map(|i| flat(point(mesh, i)));
+                polygon_area(&clip_inside(&tri(small), &tri(big))) > 1e-7
+            });
+            let Some(j) = cover else {
+                k += 1;
+                continue;
+            };
+            let big = mesh.triangles[j];
+            let m = facing(mesh, &big);
+            let flat = flatten(m);
+            let big_flat = big.map(|i| flat(point(mesh, i)));
+            let small_flat = small.map(|i| flat(point(mesh, i)));
+            let pieces = outside(&small_flat, &big_flat);
+            // The new corners, each from the small triangle's by where it falls in it.
+            let corners = small.map(|i| i as usize);
+            let weights = |p: glam::Vec2| {
+                let [a, b, c] = small_flat;
+                let whole = (b - a).perp_dot(c - a);
+                if whole.abs() < 1e-14 {
+                    return [1.0, 0.0, 0.0];
+                }
+                let wb = (p - a).perp_dot(c - a) / whole;
+                let wc = (b - a).perp_dot(p - a) / whole;
+                [1.0 - wb - wc, wb, wc]
+            };
+            let mut added = Vec::new();
+            for piece in pieces {
+                let ids: Vec<u32> = piece
+                    .iter()
+                    .map(|&p| {
+                        let w = weights(p);
+                        let mix3 = |v: &Vec<[f32; 3]>| {
+                            let mut out = Vec3::ZERO;
+                            for (c, w) in corners.iter().zip(w) {
+                                out += Vec3::from_array(v.get(*c).copied().unwrap_or([0.0; 3])) * w;
+                            }
+                            out
+                        };
+                        let position = mix3(&mesh.positions);
+                        let normal = mix3(&mesh.normals).normalize_or(n);
+                        mesh.positions.push(position.to_array());
+                        mesh.normals.push(normal.to_array());
+                        if !mesh.uvs.is_empty() {
+                            let mut uv = [0.0; 2];
+                            for (c, w) in corners.iter().zip(w) {
+                                let at = mesh.uvs.get(*c).copied().unwrap_or([0.0; 2]);
+                                uv[0] += at[0] * w;
+                                uv[1] += at[1] * w;
+                            }
+                            mesh.uvs.push(uv);
+                        }
+                        (mesh.positions.len() - 1) as u32
+                    })
+                    .collect();
+                for i in 1..ids.len().saturating_sub(1) {
+                    let t = [ids[0], ids[i], ids[i + 1]];
+                    if area(mesh, &t) < 1e-10 {
+                        continue;
+                    }
+                    // Wound as the triangle it is cut from.
+                    let [a, b, c] = t.map(|i| point(mesh, i));
+                    let [sa, sb, sc] = small.map(|i| point(mesh, i));
+                    let same = (b - a).cross(c - a).dot((sb - sa).cross(sc - sa)) >= 0.0;
+                    added.push(if same { t } else { [t[0], t[2], t[1]] });
+                }
+            }
+            mesh.triangles.swap_remove(k);
+            mesh.triangles.extend(added);
+            changed = true;
+        }
+        if !changed {
+            break;
+        }
+    }
+}
+
+/// A point in a plane square to `n`, by two axes in it.
+fn flatten(n: Vec3) -> impl Fn(Vec3) -> glam::Vec2 {
+    let u = n.any_orthonormal_vector();
+    let v = n.cross(u);
+    move |p| glam::Vec2::new(p.dot(u), p.dot(v))
+}
+
+fn polygon_area(polygon: &[glam::Vec2]) -> f32 {
+    if polygon.len() < 3 {
+        return 0.0;
+    }
+    (0..polygon.len())
+        .map(|i| polygon[i].perp_dot(polygon[(i + 1) % polygon.len()]))
+        .sum::<f32>()
+        .abs()
+        * 0.5
+}
+
+/// A convex polygon clipped to one side of a line through `a` and `b`: the left, or the right.
+fn clip_side(polygon: &[glam::Vec2], a: glam::Vec2, b: glam::Vec2, left: bool) -> Vec<glam::Vec2> {
+    let side = |p: glam::Vec2| {
+        let s = (b - a).perp_dot(p - a);
+        if left { s } else { -s }
+    };
+    let mut out = Vec::with_capacity(polygon.len() + 2);
+    for i in 0..polygon.len() {
+        let (p, q) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+        let (sp, sq) = (side(p), side(q));
+        if sp >= 0.0 {
+            out.push(p);
+        }
+        if (sp >= 0.0) != (sq >= 0.0) {
+            out.push(p + (q - p) * (sp / (sp - sq)));
+        }
+    }
+    out
+}
+
+/// A triangle wound counter-clockwise.
+fn counter_clockwise(t: &[glam::Vec2; 3]) -> [glam::Vec2; 3] {
+    if (t[1] - t[0]).perp_dot(t[2] - t[0]) < 0.0 {
+        [t[0], t[2], t[1]]
+    } else {
+        *t
+    }
+}
+
+/// What of a convex polygon lies inside a triangle.
+fn clip_inside(polygon: &[glam::Vec2], triangle: &[glam::Vec2; 3]) -> Vec<glam::Vec2> {
+    let t = counter_clockwise(triangle);
+    let mut rest = polygon.to_vec();
+    for e in 0..3 {
+        rest = clip_side(&rest, t[e], t[(e + 1) % 3], true);
+        if rest.len() < 3 {
+            return Vec::new();
+        }
+    }
+    rest
+}
+
+/// What of a convex polygon lies outside a triangle, as convex pieces: beyond its first edge,
+/// then within that and beyond its second, then within both and beyond its third.
+fn outside(polygon: &[glam::Vec2], triangle: &[glam::Vec2; 3]) -> Vec<Vec<glam::Vec2>> {
+    let t = counter_clockwise(triangle);
+    let mut rest = polygon.to_vec();
+    let mut out = Vec::new();
+    for e in 0..3 {
+        let beyond = clip_side(&rest, t[e], t[(e + 1) % 3], false);
+        if polygon_area(&beyond) > 1e-9 {
+            out.push(beyond);
+        }
+        rest = clip_side(&rest, t[e], t[(e + 1) % 3], true);
+        if rest.len() < 3 {
+            break;
+        }
+    }
+    out
 }
 
 /// Whether a module is modelled, read by its own UVs in its kit's atlas (`Material::Piece`),
@@ -676,6 +1183,212 @@ mod tests {
             };
             assert!((p.dot(plane) - 0.1).abs() < 1e-4, "{p}");
             assert!(n.dot(plane) > 0.99, "{n}");
+        }
+    }
+
+    /// How much of the plane two lists of triangles in it cover twice over, and the area of
+    /// all of them, measured flat in the plane square to `n`.
+    fn twice_covered(triangles: &[[Vec3; 3]], n: Vec3) -> (f32, f32) {
+        let flat = flatten(n);
+        let flats: Vec<[glam::Vec2; 3]> = triangles.iter().map(|t| t.map(&flat)).collect();
+        let mut twice = 0.0;
+        for i in 0..flats.len() {
+            for j in i + 1..flats.len() {
+                twice += polygon_area(&clip_inside(&flats[i], &flats[j]));
+            }
+        }
+        let all = flats.iter().map(|t| polygon_area(t)).sum();
+        (twice, all)
+    }
+
+    /// The segments a cut along X makes through an outline in Y and Z, in order round it.
+    fn outline(points: &[[f32; 2]]) -> Vec<(Vec3, Vec3)> {
+        (0..points.len())
+            .map(|i| {
+                let [a, b] = [points[i], points[(i + 1) % points.len()]];
+                (Vec3::new(0.5, a[0], a[1]), Vec3::new(0.5, b[0], b[1]))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_cut_through_a_section_that_is_not_convex_is_closed_once() {
+        // A comb of three teeth, 0.3 across and 0.2 up, whose middle sees none of its teeth'
+        // tips whole: a fan from its middle folded over itself; filled, it covers its area
+        // once, every face looking out of the cut.
+        let comb = [
+            [0.0, 0.0],
+            [0.0, 0.3],
+            [0.2, 0.3],
+            [0.2, 0.25],
+            [0.05, 0.25],
+            [0.05, 0.2],
+            [0.2, 0.2],
+            [0.2, 0.1],
+            [0.05, 0.1],
+            [0.05, 0.05],
+            [0.2, 0.05],
+            [0.2, 0.0],
+        ];
+        // Its segments in any order and either way round, as a mesh's triangles give them.
+        let mut segments = outline(&comb);
+        segments.reverse();
+        segments.swap(0, 5);
+        segments[3] = (segments[3].1, segments[3].0);
+        let faces = close(&segments, Vec3::X);
+        let (twice, all) = twice_covered(&faces, Vec3::X);
+        let area = 0.2 * 0.3 - 2.0 * 0.15 * 0.05;
+        assert!(twice < 1e-7, "{twice}");
+        assert!((all - area).abs() < 1e-5, "{all} against {area}");
+        for [a, b, c] in &faces {
+            assert!((b - a).cross(c - a).x > 0.0);
+        }
+        // Two outlines that overlap, as two bundles of a ridge run into one another: their
+        // union, once.
+        let mut two = outline(&[[0.0, 0.0], [0.0, 0.2], [0.2, 0.2], [0.2, 0.0]]);
+        two.extend(outline(&[[0.1, 0.1], [0.1, 0.3], [0.3, 0.3], [0.3, 0.1]]));
+        let faces = close(&two, -Vec3::X);
+        let (twice, all) = twice_covered(&faces, Vec3::X);
+        assert!(twice < 1e-7, "{twice}");
+        assert!((all - 0.07).abs() < 1e-5, "{all}");
+    }
+
+    #[test]
+    fn a_modelled_module_is_closed_where_it_is_cut_but_not_under_its_cap() {
+        // A box modelled a metre long, 0.1 up and 0.2 across, with a cap 0.05 long.
+        let corners = |x: f32| [[x, 0.0, -0.1], [x, 0.1, -0.1], [x, 0.1, 0.1], [x, 0.0, 0.1]];
+        let box_of = |from: f32, to: f32| {
+            let mut mesh = Stone::default();
+            let (a, b) = (corners(from), corners(to));
+            for side in 0..4 {
+                let (p, q) = (side, (side + 1) % 4);
+                // Each side's normal out from the box's middle.
+                let mid = |c: [f32; 3]| c[1] - 0.05;
+                let base = mesh.positions.len() as u32;
+                mesh.positions.extend([a[p], a[q], b[q], b[p]]);
+                let out = Vec3::new(0.0, mid(a[p]) + mid(a[q]), a[p][2] + a[q][2]).normalize();
+                mesh.normals.extend([out.to_array(); 4]);
+                mesh.uvs
+                    .extend([[0.0, 0.0], [0.1, 0.0], [0.1, 0.1], [0.0, 0.1]]);
+                mesh.triangles
+                    .extend([[base, base + 1, base + 2], [base, base + 2, base + 3]]);
+            }
+            mesh
+        };
+        let mut cap = box_of(0.0, 0.05);
+        // The cap's own end, at its far end.
+        let base = cap.positions.len() as u32;
+        cap.positions.extend(corners(0.05));
+        cap.normals.extend([[1.0, 0.0, 0.0]; 4]);
+        cap.uvs.extend([[0.0, 0.0]; 4]);
+        cap.triangles
+            .extend([[base, base + 1, base + 2], [base, base + 2, base + 3]]);
+        let module = Module {
+            length: 1.0,
+            near: vec![box_of(0.0, 1.0)],
+            cap: Some(cap),
+            ..Module::default()
+        };
+        let lay_on = |capped: [bool; 2]| {
+            let line = Line {
+                from: Vec3::ZERO,
+                to: Vec3::X * 2.5,
+                seat: Seat::Plane {
+                    up: Vec3::Y,
+                    out: Vec3::Z,
+                },
+                across: None,
+                capped,
+                seed: 7,
+                blend: 0.0,
+            };
+            let mut surfaces = Surfaces::sharing();
+            lay(&module, &line, &look(), false, &mut surfaces);
+            let made = surfaces.0[&Material::Piece].shared.clone();
+            // The faces looking along the line, by where along it they are.
+            let mut ends: std::collections::BTreeMap<i32, f32> = Default::default();
+            for t in made.indices.chunks(3) {
+                let [a, b, c] = [0, 1, 2].map(|k| made.positions[t[k] as usize]);
+                let face = (b - a).cross(c - a);
+                if face.x.abs() > 0.99 * face.length() && face.length() > 0.0 {
+                    *ends.entry(libm::roundf(a.x * 1000.0) as i32).or_default() +=
+                        face.length() * 0.5;
+                }
+            }
+            ends
+        };
+        // Cut at both ends and closed there, each once.
+        let open = lay_on([false; 2]);
+        assert_eq!(
+            open.keys().copied().collect::<Vec<_>>(),
+            vec![0, 2500],
+            "{open:?}"
+        );
+        assert!(open.values().all(|a| (a - 0.02).abs() < 1e-4), "{open:?}");
+        // Capped at its end: closed by the cap's end out at the line's end, nothing where the
+        // cap meets the cut, inside.
+        let capped = lay_on([false, true]);
+        assert_eq!(
+            capped.keys().copied().collect::<Vec<_>>(),
+            vec![0, 2500],
+            "{capped:?}"
+        );
+    }
+
+    #[test]
+    fn a_modelled_mesh_is_cleaned_of_doubled_faces_folds_and_faces_over_one_another() {
+        let up = [0.0, 1.0, 0.0];
+        let mut mesh = Stone {
+            positions: vec![
+                // A square, as two triangles, facing up.
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+                // A sliver folded back over the second along its diagonal.
+                [0.6, 0.004, 0.5],
+            ],
+            normals: vec![up; 5],
+            triangles: vec![
+                [0, 2, 1],
+                [0, 3, 2],
+                // The first again, wound the other way: a face made double-sided.
+                [0, 1, 2],
+                // The fold: across the diagonal from the second, on its side.
+                [0, 2, 4],
+            ],
+            uvs: vec![],
+        };
+        clean(&mut mesh);
+        assert_eq!(mesh.triangles.len(), 2, "{:?}", mesh.triangles);
+        // Two triangles crossing one another in one plane, as a cap's end face triangulated
+        // across itself: what is left covers their union once.
+        let mut crossed = Stone {
+            positions: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [0.0, 0.0, 0.2],
+                [1.0, 0.0, 0.2],
+            ],
+            normals: vec![up; 6],
+            triangles: vec![[0, 2, 1], [4, 3, 5]],
+            uvs: vec![],
+        };
+        clean(&mut crossed);
+        let faces: Vec<[Vec3; 3]> = crossed
+            .triangles
+            .iter()
+            .map(|t| t.map(|i| Vec3::from_array(crossed.positions[i as usize])))
+            .collect();
+        let (twice, all) = twice_covered(&faces, Vec3::Y);
+        assert!(twice < 1e-6, "{twice}");
+        // Half a square and 0.4 of one, overlapping by a triangle 0.8 across and 0.36 high.
+        let union = 0.5 + 0.4 - 0.5 * 0.8 * (0.8 * 0.8 / 1.8);
+        assert!((all - union).abs() < 1e-4, "{all} against {union}");
+        for [a, b, c] in faces {
+            assert!((b - a).cross(c - a).y > 0.0);
         }
     }
 }

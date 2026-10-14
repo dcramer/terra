@@ -409,8 +409,9 @@ impl Dressing {
             return Ok(());
         };
         let text = read(path)?;
-        let pieces: crate::dress::Pieces =
+        let mut pieces: crate::dress::Pieces =
             ron::from_str(&text).map_err(|why| format!("{path}: {why}"))?;
+        crate::modules::clean_all(&mut pieces);
         self.made = Some(Arc::new(pieces));
         Ok(())
     }
