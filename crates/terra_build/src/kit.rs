@@ -903,6 +903,22 @@ impl Kit {
         self.diameter * 0.5
     }
 
+    /// How deep a material of it reads by parallax, as a fraction of its texture's width:
+    /// as its texture says, or a round log's bark by its timber's relief, which is drawn by
+    /// its maps and not its points (D284).
+    pub fn depth(&self, material: Material) -> f32 {
+        let Some(texture) = self.textures.get(&material) else {
+            return 0.0;
+        };
+        let bark = material == Material::Log
+            && self.pattern == Pattern::Logs
+            && self.timber.profile == Profile::Round;
+        if texture.depth > 0.0 || !bark {
+            return texture.depth;
+        }
+        self.timber.relief / texture.metres[0].max(1e-3)
+    }
+
     /// How far short of the corner's face an end may stop: by up to `ragged` when saddle
     /// notched, never when flush.
     pub fn ragged(&self) -> f32 {

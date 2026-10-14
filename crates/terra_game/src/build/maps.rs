@@ -259,26 +259,35 @@ mod tests {
     }
 
     #[test]
-    fn a_kit_is_shaped_by_its_stone_or_its_bark_and_coloured_by_all_its_textures() {
-        let pine = Kit {
-            textures: BTreeMap::from([(
-                Material::Log,
-                terra_build::kit::Texture {
-                    path: "materials/pine_bark".into(),
-                    metres: [1.0, 1.0],
-                    depth: 0.0,
-                    reflectance: terra_build::kit::matte(),
-                    strips: None,
-                    cells: 1,
-                },
-            )]),
+    fn a_kit_is_shaped_by_its_stone_not_its_bark_and_coloured_by_all_its_textures() {
+        let texture = |path: &str| terra_build::kit::Texture {
+            path: path.into(),
+            metres: [1.0, 1.0],
+            depth: 0.0,
+            reflectance: terra_build::kit::matte(),
+            strips: None,
+            cells: 1,
+        };
+        let stone = Kit {
+            pattern: terra_build::kit::Pattern::Masonry,
+            relief: 0.02,
+            textures: BTreeMap::from([(Material::Masonry, texture("materials/fieldstone"))]),
             ..Kit::default()
         };
-        assert_eq!(shaped_by(&pine), Some("materials/pine_bark"));
-        let mut smooth = pine.clone();
-        smooth.timber.relief = 0.0;
+        assert_eq!(shaped_by(&stone), Some("materials/fieldstone"));
+        let mut smooth = stone.clone();
+        smooth.relief = 0.0;
         assert_eq!(shaped_by(&smooth), None);
-        let (heights, colours) = wanted(&Kits(vec![pine.clone(), pine]));
-        assert_eq!((heights.len(), colours.len()), (1, 1));
+        // A log's bark stands out by its parallax, which its relief sets (D284).
+        let pine = Kit {
+            pattern: terra_build::kit::Pattern::Logs,
+            textures: BTreeMap::from([(Material::Log, texture("materials/pine_bark"))]),
+            ..Kit::default()
+        };
+        assert!(pine.timber.relief > 0.0);
+        assert_eq!(shaped_by(&pine), None);
+        assert_eq!(pine.depth(Material::Log), pine.timber.relief);
+        let (heights, colours) = wanted(&Kits(vec![stone.clone(), stone, pine]));
+        assert_eq!((heights.len(), colours.len()), (1, 2));
     }
 }

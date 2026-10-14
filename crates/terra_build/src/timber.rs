@@ -1,13 +1,14 @@
 //! Long members made from their pieces (D200, docs/building-kits.md): a profile swept along
 //! each log the layout gives (`layout::runs`), shaped by the kit's numbers and the piece's
-//! seed, its face displaced by its material's height and textured by it, its cut ends
+//! seed, its face textured by its material, its bark's relief that material's normal map and
+//! parallax (D284), its cut ends
 //! showing their grain, and daub in the groove under it. Pure data, so it runs anywhere.
 //!
 //! Two profiles from one sweep, after the timber spike ([research/timber-walls.md]):
 //!
 //! - **Round**, a log in its bark: tapered from its butt, bowed, its section a little uneven
 //!   and swelling here and there, flattened a little where it sits on the one below, its
-//!   bark standing out by the bark's own height map; its sawn ends chamfered by the axe.
+//!   bark's relief its material's maps; its sawn ends chamfered by the axe.
 //! - **Hewn**, a beam squared by the axe: flat faces gently waved and scalloped by the adze,
 //!   its edges rounded and wandering where the axe met the tree's round; its ends sawn
 //!   square, a band of daub between it and the course below.
@@ -22,7 +23,6 @@ use crate::draw::cuboid;
 use crate::kit::{Kit, Notch, Profile};
 use crate::layout::{self, Piece, Random, Split};
 use crate::mesh::{Material, Surface, Surfaces};
-use crate::relief::Relief;
 use glam::Vec3;
 use std::f32::consts::{PI, TAU};
 
@@ -32,13 +32,15 @@ const CREASE: f32 = 0.64;
 /// How far round a hewn beam's edges are rounded, and a sawn plank's.
 const HEWN_EDGE_M: f32 = 0.03;
 const PLANK_EDGE_M: f32 = 0.006;
+/// How far apart a round log's rings are at most where its shape bends: its bow, taper and
+/// swells, each over metres, change little in a quarter of one.
+const SHAPE_RING_M: f32 = 0.25;
 /// How far apart a plank's rings are: its face waves only gently, and a floor has many.
 const PLANK_STEP_M: f32 = 0.4;
 
 /// Draws a log, a beam or a post, and the daub under it, into the kit's materials: its face
-/// in `Log`, its cut ends in `LogEnd`, its daub in `Daub`. `face` is the face material's
-/// height map, which a round log's bark stands out by.
-pub fn draw(piece: &Piece, kit: &Kit, face: Option<&Relief>, surfaces: &mut Surfaces) {
+/// in `Log`, its cut ends in `LogEnd`, its daub in `Daub`.
+pub fn draw(piece: &Piece, kit: &Kit, surfaces: &mut Surfaces) {
     let Piece::Log {
         from,
         to,
@@ -66,7 +68,6 @@ pub fn draw(piece: &Piece, kit: &Kit, face: Option<&Relief>, surfaces: &mut Surf
         dressed.timber.profile = profile;
         dressed.diameter *= scale;
         if profile == Profile::Hewn {
-            dressed.timber.relief = 0.0;
             dressed.timber.taper = dressed.timber.taper.min(0.02);
         }
         let mut own = Surfaces(Default::default(), surfaces.1);
@@ -78,11 +79,6 @@ pub fn draw(piece: &Piece, kit: &Kit, face: Option<&Relief>, surfaces: &mut Surf
             chinking,
             lean.map(|rise| rise as f32 / layout::TICKS as f32),
             &dressed,
-            if profile == Profile::Round {
-                face
-            } else {
-                None
-            },
             &mut own,
         );
         for (each, surface) in own.0 {
@@ -103,7 +99,6 @@ pub fn draw(piece: &Piece, kit: &Kit, face: Option<&Relief>, surfaces: &mut Surf
         chinking,
         lean.map(|rise| rise as f32 / layout::TICKS as f32),
         kit,
-        face,
         surfaces,
     );
 }
@@ -120,7 +115,6 @@ pub(crate) fn member(
     chinking: Option<(f32, f32)>,
     lean: [f32; 2],
     kit: &Kit,
-    face: Option<&Relief>,
     surfaces: &mut Surfaces,
 ) {
     let length = from.distance(to);
@@ -130,7 +124,7 @@ pub(crate) fn member(
     let frame = Frame::new(from, to);
     let mut random = Random(seed);
     let mut made = match kit.timber.profile {
-        Profile::Round => round(&frame, kit, split, face, chinking.is_some(), &mut random),
+        Profile::Round => round(&frame, kit, split, chinking.is_some(), &mut random),
         Profile::Hewn => hewn(&frame, kit, split, &mut random),
     };
     // A gable's log cut to the roof over it: nothing of it above the slope rising from its
@@ -320,14 +314,7 @@ fn on_cut(height: f32, split: Split) -> bool {
 
 /// A: a round log, tapered and bowed as a tree grows, its section a little uneven and
 /// swelling here and there, its bark displaced by the bark's height.
-fn round(
-    frame: &Frame,
-    kit: &Kit,
-    split: Split,
-    face: Option<&Relief>,
-    walled: bool,
-    random: &mut Random,
-) -> Member {
+fn round(frame: &Frame, kit: &Kit, split: Split, walled: bool, random: &mut Random) -> Member {
     let t = &kit.timber;
     let metres = kit
         .textures
@@ -344,8 +331,6 @@ fn round(
         Notch::Saddle => 0.03,
         Notch::Flush => 0.012,
     };
-    let at = stations(frame.length, t.step, chamfer);
-    let last = at.len() - 1;
     let columns = t.sides as usize;
     let around = TAU * radius;
     // A face weathered where a log is exposed (`textures.ts blend --exposed`) is laid once
@@ -380,8 +365,6 @@ fn round(
             ]
         })
         .collect();
-    let mut grid = Vec::with_capacity(at.len());
-    let mut uvs = Vec::with_capacity(at.len());
     // Its shade: drawn from a seed of its own, so its shape is as it was without it.
     let mut own = Random(random.0 ^ 0x5bd1_e995);
     let mottle_phase = [own.unit() * TAU, own.unit() * TAU, own.unit() * TAU];
@@ -400,6 +383,25 @@ fn round(
             [along, angle, size, high]
         })
         .collect();
+    // Its rings where its shape bends and no closer (D284): the bark's relief is its
+    // material's normal map and parallax, not its points, so between its chamfered ends a
+    // ring every `SHAPE_RING_M` follows its bow, taper and swells, and three across each
+    // knot raise it.
+    let mut at = stations(frame.length, t.step.max(SHAPE_RING_M), chamfer);
+    let ends = (at[2], at[at.len() - 3]);
+    for &[along, _, size, _] in &knots {
+        for k in [-1.0, 0.0, 1.0] {
+            let s = (along + k * size) / frame.length;
+            if s > ends.0 && s < ends.1 {
+                at.push(s);
+            }
+        }
+    }
+    at.sort_by(f32::total_cmp);
+    at.dedup_by(|a, b| (*a - *b) * frame.length < 0.01);
+    let last = at.len() - 1;
+    let mut grid = Vec::with_capacity(at.len());
+    let mut uvs = Vec::with_capacity(at.len());
     // What its shade round it is, the same all along it: toward the grooves, where it meets
     // the logs above and below, in shade, most under it, where the sky does not reach; its
     // top bleached by the sun a little, as its underside is not.
@@ -470,7 +472,6 @@ fn round(
             // sin(2a + phase + along * 1.3), by the sum of angles.
             let wave = sin2 * shift_cos + cos2 * shift_sin;
             let uneven = 1.0 + t.uneven * wave + t.uneven * 0.6 * sin3;
-            let relief = face.map_or(0.0, |face| (face.at(uv(along, j)) - 0.5) * t.relief * fade);
             let angle = -PI * 0.5 + TAU * j as f32 / columns as f32;
             let mut knot = 0.0;
             for &[at_m, at_angle, size, high] in &knots {
@@ -484,7 +485,7 @@ fn round(
                 knot += high * w * fade;
                 ring_tone[j] *= 1.0 - 0.5 * w * w;
             }
-            let r = radius * (1.0 + taper * butt) * swell * uneven * end + relief + knot;
+            let r = radius * (1.0 + taper * butt) * swell * uneven * end + knot;
             // Scribed a little flatter top and bottom, to sit on the log below.
             let height = sin * r * 0.94;
             let (across, height) = if on_cut(height, split) {
@@ -923,9 +924,9 @@ mod tests {
         }
     }
 
-    fn corners(piece: &Piece, kit: &Kit, face: Option<&Relief>) -> Vec<Vec3> {
+    fn corners(piece: &Piece, kit: &Kit) -> Vec<Vec3> {
         let mut surfaces = Surfaces::default();
-        draw(piece, kit, face, &mut surfaces);
+        draw(piece, kit, &mut surfaces);
         surfaces
             .0
             .values()
@@ -956,25 +957,19 @@ mod tests {
         }
     }
 
-    /// A bark of ridges, for a log to stand out by.
-    fn bark() -> Relief {
-        Relief::new(4, 4, (0..16).map(|i| (i * 17) as u8).collect()).unwrap()
-    }
-
     #[test]
     fn a_seed_gives_the_same_log_on_every_machine_and_another_seed_another() {
         let (round, hewn) = (pinned(Profile::Round), pinned(Profile::Hewn));
-        let bark = bark();
         let sums = [
-            checksum(&corners(&log(7, Split::Whole), &round, Some(&bark))),
-            checksum(&corners(&log(7, Split::Top), &round, Some(&bark))),
-            checksum(&corners(&log(7, Split::Whole), &hewn, None)),
+            checksum(&corners(&log(7, Split::Whole), &round)),
+            checksum(&corners(&log(7, Split::Top), &round)),
+            checksum(&corners(&log(7, Split::Whole), &hewn)),
         ];
         assert_eq!(
             sums,
             [
-                0x4710_c8d8_ec6f_108b,
-                0xf7ce_ca6b_1bba_c2b0,
+                0x8b56_adb0_1c7d_bfe3,
+                0xa096_7969_9a67_e35a,
                 0xae55_c81f_31d4_b99f
             ],
             "drawn differently from the machine these were taken on (D30)"
@@ -982,11 +977,11 @@ mod tests {
         // The same log with another seed is another log, of the same kind.
         for kit in [&round, &hewn] {
             let (a, b) = (
-                corners(&log(7, Split::Whole), kit, Some(&bark)),
-                corners(&log(8, Split::Whole), kit, Some(&bark)),
+                corners(&log(7, Split::Whole), kit),
+                corners(&log(8, Split::Whole), kit),
             );
             assert_ne!(a, b);
-            assert_eq!(a, corners(&log(7, Split::Whole), kit, Some(&bark)));
+            assert_eq!(a, corners(&log(7, Split::Whole), kit));
         }
     }
 
@@ -998,7 +993,7 @@ mod tests {
         let mut shades = Vec::new();
         for seed in 0..64 {
             let mut surfaces = Surfaces::default();
-            draw(&log(seed, Split::Whole), &kit, None, &mut surfaces);
+            draw(&log(seed, Split::Whole), &kit, &mut surfaces);
             let face = &surfaces.0[&Material::Log];
             // How far its middle ring reaches from the log's line.
             let middle = face
@@ -1046,7 +1041,7 @@ mod tests {
             },
         );
         let mut surfaces = Surfaces::default();
-        draw(&log(5, Split::Whole), &kit, None, &mut surfaces);
+        draw(&log(5, Split::Whole), &kit, &mut surfaces);
         let face = &surfaces.0[&Material::Log];
         // Its middle's corners, by how high on it they are: under it darkest, its side
         // lightest, its top between.
@@ -1071,7 +1066,7 @@ mod tests {
         let mut cells = std::collections::BTreeSet::new();
         for seed in 0..16 {
             let mut surfaces = Surfaces::default();
-            draw(&log(seed, Split::Whole), &kit, None, &mut surfaces);
+            draw(&log(seed, Split::Whole), &kit, &mut surfaces);
             let ends = &surfaces.0[&Material::LogEnd];
             for corner in ends.uvs.chunks(3 * 18) {
                 let cell = |uv: &[f32; 2]| ((uv[0] * 2.0) as i32, (uv[1] * 2.0) as i32);
@@ -1103,7 +1098,7 @@ mod tests {
                 role: None,
             };
             let mut surfaces = Surfaces::default();
-            draw(&piece, &kit, None, &mut surfaces);
+            draw(&piece, &kit, &mut surfaces);
             let face = &surfaces.0[&Material::Log];
             let all = face
                 .positions
@@ -1133,7 +1128,7 @@ mod tests {
             let kit = pinned(profile);
             for split in [Split::Whole, Split::Top, Split::Bottom] {
                 let mut surfaces = Surfaces::default();
-                draw(&log(3, split), &kit, Some(&bark()), &mut surfaces);
+                draw(&log(3, split), &kit, &mut surfaces);
                 for material in [Material::Log, Material::LogEnd, Material::Daub] {
                     let what = format!("{profile:?} {split:?} {material:?}");
                     let surface = &surfaces.0[&material];
@@ -1154,7 +1149,7 @@ mod tests {
             role: None,
         };
         let mut surfaces = Surfaces::default();
-        draw(&post, &pinned(Profile::Round), None, &mut surfaces);
+        draw(&post, &pinned(Profile::Round), &mut surfaces);
         assert!(facing_out(&surfaces.0[&Material::Log], "post") > 0);
     }
 
@@ -1173,7 +1168,7 @@ mod tests {
                 let (from, to) = (from.metres(), to.metres());
                 let frame = Frame::new(from, to);
                 let mut surfaces = Surfaces::default();
-                draw(&piece, &kit, Some(&bark()), &mut surfaces);
+                draw(&piece, &kit, &mut surfaces);
                 for p in surfaces.0.values().flat_map(|s| &s.positions) {
                     let along = (*p - from).dot(frame.axis);
                     assert!(

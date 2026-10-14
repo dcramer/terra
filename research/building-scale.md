@@ -171,6 +171,8 @@ Stone, earth and brick, before and after, at 2, 5 and 10 m on the 5090: the same
 | Radeon, low | 24 to 86 | 78.9 / 115.7 / 541.5 ms (one run of three; two stuck past 300 s) | 1,197 | 2.36 M | the game's update 21.0 ms, the GPU 55.3: its main pass 36.0, the depth prepass over the same triangles 6.5 |
 
 The 5090's frame is the main thread's, the CPU systems the performance work owns. The Radeon's is its main pass, at five times the depth prepass over the same 1.2 M triangles: shading the pixels, not the triangles' number, is most of what it spends, so near triangles cut further show there only in the prepass and the vertex work. Before D284 the walk was 9.2 / 72.5 / 123.2 ms on the 5090 (5d73d6b, load 20 to 40) and 64.3 / 96.5 / 130.8 on the Radeon.
+
+**Logs, the same way.** A round log was a ring every 8 cm round 18 sides, its bark's relief displaced into it: the village's logs near were 5.43 million triangles, half its near detail. Its bark now stands out by its material's parallax at the timber's relief, and its rings come every 25 cm, where its bow, taper and swells bend it, with three across each knot; a few metres off a ring a metre and no knots. The village's near detail fell from 10.8 to 9.4 million triangles (logs 5.43 to 4.08 M, 243 to 184 MiB), its middle detail from 4.07 to 3.73 M, and its sections' near drawing from a median 5.4 ms to 2.1. A pine wall at 2, 5 and 10 m on the 5090 looks the same: its bark as deep by parallax, its silhouette the log's own.
 ## The castle's edits, operations and aim (the third goals review, finding 6)
 
 Throwaway drivers in `terra_build`, release, one thread, on the castle's 141,502 cubes.

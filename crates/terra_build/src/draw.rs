@@ -35,7 +35,7 @@ pub fn draw_as(
 ) {
     match *piece {
         Piece::Log { .. } if log_module(piece, kit, plain, surfaces) => {}
-        Piece::Log { .. } => crate::timber::draw(piece, kit, face, surfaces),
+        Piece::Log { .. } => crate::timber::draw(piece, kit, surfaces),
         Piece::Board { min, max } => cuboid(
             surfaces.of(Material::Board),
             min.metres(),

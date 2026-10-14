@@ -557,9 +557,12 @@ impl Detail {
         let mut kit = kit.clone();
         match self {
             Detail::Near | Detail::Proxy => {}
+            // A few metres off: eight sides, a ring a metre, which still follow a log's bow
+            // and taper; its knots, a centimetre high, go with their rings.
             Detail::Mid => {
                 kit.timber.sides = kit.timber.sides.min(8);
-                kit.timber.step = kit.timber.step.max(0.4);
+                kit.timber.step = kit.timber.step.max(1.0);
+                kit.timber.knots = 0.0;
                 kit.dress.far = true;
             }
             // A log far off a few pixels across: six sides, a ring at each end; a band of
@@ -568,6 +571,7 @@ impl Detail {
                 kit.dress.far = true;
                 kit.timber.sides = kit.timber.sides.min(6);
                 kit.timber.step = kit.timber.step.max(8.0);
+                kit.timber.knots = 0.0;
                 if let Some(made) = &kit.dress.made {
                     let mut coarse = (**made).clone();
                     for profile in coarse.profiles.values_mut() {

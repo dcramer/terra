@@ -151,11 +151,12 @@ impl Maps {
 }
 
 /// The folder of the material whose height shapes a kit's pieces, if any does: a block
-/// kind's stone, a timber kind's bark, or a roof's covering.
+/// kind's stone or a roof's covering.
 pub fn shaped_by(kit: &Kit) -> Option<&str> {
     let (material, depth) = match kit.pattern {
         Pattern::Masonry => (Material::Masonry, kit.relief),
-        Pattern::Logs => (Material::Log, kit.timber.relief),
+        // A log's bark stands out by its material's parallax, not its points (D284).
+        Pattern::Logs => return None,
         Pattern::Roof => (Material::Covering, kit.roof.relief),
     };
     (depth > 0.0)

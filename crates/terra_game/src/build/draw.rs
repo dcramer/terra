@@ -245,14 +245,15 @@ pub(super) fn kit_materials(
     for kit in &kits.0 {
         for (material, texture) in &kit.textures {
             let path = &texture.path;
+            let depth = kit.depth(*material);
             let handle = made
                 .entry((
                     path.clone(),
-                    [texture.depth.to_bits(), texture.reflectance.to_bits()],
+                    [depth.to_bits(), texture.reflectance.to_bits()],
                 ))
                 .or_insert_with(|| {
                     let arm: Handle<Image> = linear(format!("{path}/arm.jpg"));
-                    let parallax = texture.depth > 0.0;
+                    let parallax = depth > 0.0;
                     materials.add(StandardMaterial {
                         base_color_texture: Some(assets.load(format!("{path}/color.jpg"))),
                         normal_map_texture: Some(linear(format!("{path}/normal.jpg"))),
@@ -262,7 +263,7 @@ pub(super) fn kit_materials(
                         metallic: 1.0,
                         reflectance: texture.reflectance,
                         depth_map: parallax.then(|| linear(format!("{path}/height.jpg"))),
-                        parallax_depth_scale: texture.depth,
+                        parallax_depth_scale: depth,
                         parallax_mapping_method:
                             bevy::pbr::ParallaxMappingMethod::DEFAULT_RELIEF_MAPPING,
                         max_parallax_layer_count: 16.0,

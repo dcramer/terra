@@ -102,17 +102,17 @@ all	limewash with stone	SeeThrough	17
 all	limewash with wattle	Coplanar	271
 all	limewash with wattle	Doubled	48
 all	limewash with wattle	PokesOut	113
-all	logs	Coplanar	228
+all	logs	Coplanar	225
 all	logs	PokesOut	68
 all	logs	SeeThrough	273
 all	logs	UnderRoof	132
-all	logs with stone	Coplanar	338
+all	logs with stone	Coplanar	335
 all	logs with stone	PokesOut	106
-all	logs with stone	SeeThrough	264
-all	logs with wattle	Coplanar	299
+all	logs with stone	SeeThrough	234
+all	logs with wattle	Coplanar	296
 all	logs with wattle	Doubled	36
 all	logs with wattle	PokesOut	103
-all	logs with wattle	SeeThrough	246
+all	logs with wattle	SeeThrough	216
 all	logs with wattle	UnderRoof	179
 all	stone	Coplanar	186
 all	stone	PokesOut	85
