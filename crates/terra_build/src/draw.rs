@@ -137,17 +137,17 @@ fn beam(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) {
     let normal = face.step().as_vec3();
     let out = (normal - axis * normal.dot(axis)).normalize_or(Vec3::Y);
     let t = &kit.timber;
-    let line = crate::modules::Line {
-        from,
-        to,
-        seat: crate::modules::Seat::Plane {
-            up: out.cross(axis),
-            out,
-        },
-        across: Some([crate::layout::metres(wide), crate::layout::metres(deep)]),
-        capped: [true; 2],
-        seed,
-        blend: 0.0,
+    let (wide, deep) = (crate::layout::metres(wide), crate::layout::metres(deep));
+    // A member through the wall, lining an opening, is far deeper than the timber was
+    // modelled: stretched to it, the model's waves would swell to centimetres and break
+    // through the daub. So it is two timbers of the model's own depth, one at each face, as
+    // a frame's jambs are pegged to the face either side.
+    let modelled = module.size()[1].max(0.02);
+    let lines: Vec<(Vec3, f32)> = if deep > modelled * 2.0 {
+        let shift = (deep - modelled) * 0.5;
+        vec![(out * shift, modelled), (-out * shift, modelled)]
+    } else {
+        vec![(Vec3::ZERO, deep)]
     };
     let look = crate::modules::Look {
         material: framing.material,
@@ -157,7 +157,21 @@ fn beam(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) {
         tint: t.tint,
         shade: t.variation.shade,
     };
-    crate::modules::lay(module, &line, &look, plain || kit.dress.far, surfaces);
+    for (k, (shift, depth)) in lines.into_iter().enumerate() {
+        let line = crate::modules::Line {
+            from: from + shift,
+            to: to + shift,
+            seat: crate::modules::Seat::Plane {
+                up: out.cross(axis),
+                out,
+            },
+            across: Some([wide, depth]),
+            capped: [true; 2],
+            seed: crate::layout::hash(&[seed, k as u32]),
+            blend: 0.0,
+        };
+        crate::modules::lay(module, &line, &look, plain || kit.dress.far, surfaces);
+    }
 }
 
 /// A box from one corner to the other, each face's texture mapped from its plane.

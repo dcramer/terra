@@ -574,7 +574,48 @@ def import_model(name, path):
             bpy.data.objects.remove(other)
     ob.name = name
     ob.select_set(False)
+    weld(ob)
     return ob
+
+
+def weld(ob):
+    """Its corners made one where glTF split them along its texture's seams, and anything loose
+    or of no area taken away: a model that is many islands breaks open along every seam when it
+    is cut to its budget, and shows the sky through the cracks."""
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    size = max(max(v.co[i] for v in bm.verts) - min(v.co[i] for v in bm.verts) for i in range(3))
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=size * 2e-4)
+    bmesh.ops.dissolve_degenerate(bm, edges=bm.edges, dist=size * 1e-5)
+    loose = [v for v in bm.verts if not v.link_faces]
+    bmesh.ops.delete(bm, geom=loose, context="VERTS")
+    # Only its largest connected part: Tripo leaves crumbs floating beside a model, which
+    # would stretch the box it is fitted into.
+    seen, parts = set(), []
+    for f in bm.faces:
+        if f.index in seen:
+            continue
+        part, stack = [], [f]
+        seen.add(f.index)
+        while stack:
+            g = stack.pop()
+            part.append(g)
+            for e in g.edges:
+                for h in e.link_faces:
+                    if h.index not in seen:
+                        seen.add(h.index)
+                        stack.append(h)
+        parts.append(part)
+    bm.faces.ensure_lookup_table()
+    if len(parts) > 1:
+        parts.sort(key=lambda p: -sum(f.calc_area() for f in p))
+        keep_area = sum(f.calc_area() for f in parts[0])
+        drop = [f for p in parts[1:] if sum(f.calc_area() for f in p) < keep_area * 0.02 for f in p]
+        bmesh.ops.delete(bm, geom=drop, context="FACES")
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(ob.data)
+    bm.free()
+    ob.data.update()
 
 
 def lay_along(ob, how):
@@ -664,10 +705,19 @@ def cut_to(ob, budget):
     if tris > budget:
         mod = ob.modifiers.new("Budget", "DECIMATE")
         mod.ratio = budget / tris
+        mod.use_collapse_triangulate = True
         bpy.context.view_layer.objects.active = ob
         ob.select_set(True)
         bpy.ops.object.modifier_apply(modifier=mod.name)
         ob.select_set(False)
+        # No slivers or flipped faces left by the collapse.
+        bm = bmesh.new()
+        bm.from_mesh(ob.data)
+        bmesh.ops.dissolve_degenerate(bm, edges=bm.edges, dist=1e-4)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bmesh.ops.triangulate(bm, faces=bm.faces)
+        bm.to_mesh(ob.data)
+        bm.free()
     bpy.context.view_layer.objects.active = ob
     ob.select_set(True)
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(45))
@@ -714,7 +764,7 @@ def modelled_mesh(name, spec):
     return low, high
 
 
-def bake_atlas(pairs, out_dir, size=2048):
+def bake_atlas(pairs, out_dir, size=4096):
     """The kit's modelled pieces baked, as games bake a low model from its high (Substance,
     Marmoset, Blender): each low unwrapped afresh into one atlas with the others, and its
     high's colour and the shape the low lost baked into it from the high (`color.jpg`,

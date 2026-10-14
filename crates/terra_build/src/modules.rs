@@ -98,9 +98,16 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
         let seed = hash(&[line.seed, copy as u32]);
         let mesh = &variants[hash(&[seed, 7]) as usize % variants.len()];
         let start = copy as f32 * module.length;
+        // A modelled piece is one model, so every other copy is turned end for end (mirrored
+        // along it) and its repeat reads half as often.
+        let (offset, along) = if modelled(module) && hash(&[seed, 11]) % 2 == 1 {
+            ((start + module.length) * stretch, -stretch)
+        } else {
+            (start * stretch, stretch)
+        };
         place(
             mesh,
-            (start * stretch, Vec3::new(stretch, scale[0], scale[1])),
+            (offset, Vec3::new(along, scale[0], scale[1])),
             line,
             axis,
             look,
