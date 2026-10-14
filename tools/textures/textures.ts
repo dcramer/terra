@@ -9,7 +9,8 @@
 //   node tools/textures/textures.ts cards <name> <card>=<image | recipe.leaves.json | keep>… [--size px] [--columns n]
 //   node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m]
 //                                         [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
-//   node tools/textures/textures.ts ends <name> <ambientCG id…> [--size px] [--weather f]
+//                                         [--exposed] [--soft f]
+//   node tools/textures/textures.ts ends <name> <ambientCG id…> [--size px] [--weather f] [--checks n]
 //
 // Each writes assets/materials/<name>/, and adds or updates its line in that folder's
 // README.md, which says where every material came from.
@@ -700,7 +701,19 @@ function blend(
     seed,
     saturation,
     lighten,
-  }: { around: number; along: number; cover: number; size: number; seed: number; saturation: number; lighten: number },
+    exposed,
+    soft,
+  }: {
+    around: number;
+    along: number;
+    cover: number;
+    size: number;
+    seed: number;
+    saturation: number;
+    lighten: number;
+    exposed: boolean;
+    soft: number;
+  },
 ) {
   const out = join(ROOT, "assets", "materials", name);
   mkdirSync(out, { recursive: true });
@@ -734,13 +747,31 @@ function blend(
   // octaves breaking their edges.
   const cells: [number, number] = [Math.max(1, Math.round(around * 6)), Math.max(1, Math.round(along * 1.5))];
   const noise = tileNoise(w, h, cells, seed, 4);
-  // The noise's level that leaves `cover` of the texture in bark.
-  const sorted = Float32Array.from(noise).sort();
+  // With `exposed`, the texture is laid once round each log from underneath (D262): a
+  // quarter of the way across is its face to the weather, half way its top, three quarters
+  // its face in the lee. Bark is lost where a log is exposed, on its top and the upper half
+  // of its weather face, a little on the upper half of its lee face, and never underneath.
+  const exposure = (x: number) =>
+    exposed
+      ? Math.exp(-(((x - 0.5) / 0.11) ** 2)) +
+        0.8 * Math.exp(-(((x - 0.33) / 0.09) ** 2)) +
+        0.35 * Math.exp(-(((x - 0.67) / 0.08) ** 2))
+      : 0;
+  // How much bark each pixel keeps, highest where the noise is and the log is sheltered.
+  const keep = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      keep[i] = noise[i] - 0.3 * exposure((x + 0.5) / w);
+    }
+  }
+  // The level that leaves `cover` of the texture in bark.
+  const sorted = Float32Array.from(keep).sort();
   const level = sorted[Math.min(sorted.length - 1, Math.floor((1 - cover) * sorted.length))];
   const mask = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) {
     const ragged = (bark.height[i] / 255 - 0.5) * 0.12;
-    mask[i] = smoothstep(level - 0.01, level + 0.01, noise[i] + ragged);
+    mask[i] = smoothstep(level - soft, level + soft, keep[i] + ragged);
   }
   const colour = Buffer.alloc(w * h * 3);
   const normal = Buffer.alloc(w * h * 3);
@@ -757,7 +788,7 @@ function blend(
       const [gx, gy] = [(at(2, 0) - at(-2, 0)) / 4, (at(0, 2) - at(0, -2)) / 4];
       const edge = Math.min(1, Math.hypot(gx, gy) * 8);
       // In the wood just off the bark's edge, a shadow under its lip.
-      const shadow = 1 - 0.35 * edge * (1 - m);
+      const shadow = 1 - (exposed ? 0.18 : 0.35) * edge * (1 - m);
       for (let c = 0; c < 3; c++) {
         const k = i * 3 + c;
         colour[k] = Math.round((wood.colour[k] * (1 - m) + bark.colour[k] * m) * shadow);
@@ -784,7 +815,7 @@ function blend(
   record(
     name,
     `${credit(overName)} at ${overM} m lying in patches over ${credit(baseName)} at ${baseM} m, ` +
-      `${Math.round(cover * 100)}% covered, its colour ${Math.round(saturation * 100)}% saturated and the wood's ${Math.round(lighten * 100)}% as light, by \`textures.ts blend\`. ${around.toFixed(2)} m round by ${along.toFixed(2)} m along.`,
+      `${Math.round(cover * 100)}% covered, its colour ${Math.round(saturation * 100)}% saturated and the wood's ${Math.round(lighten * 100)}% as light${exposed ? ", the bark lost where a log is exposed" : ""}, by \`textures.ts blend\`. ${around.toFixed(2)} m round by ${along.toFixed(2)} m along.`,
   );
   console.log(`${name}: ${out}, ${around} m round by ${along} m along, ${Math.round(cover * 100)}% ${overName}`);
 }
@@ -810,11 +841,31 @@ export function rim(alpha: Buffer, width: number, height: number, centre: [numbe
   });
 }
 
+/** A small seeded random number generator (Mulberry32), from 0 up to 1. */
+function mulberry(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** A number from a name, the same every run. */
+function zlibish(text: string): number {
+  let h = 2166136261;
+  for (const ch of text) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return h >>> 0;
+}
+
 /** **ends**: a log's sawn ends, an atlas of real tree ends scanned by ambientCG (CC0), each
  * cut out by its opacity and drawn out round so its bark's edge falls on a circle 0.47 of its
  * cell from the middle, as a log's cap maps its rim; greyed by `weather` as an end left in the
- * weather goes. Cells side by side, `columns` across; a log draws one by its seed. */
-async function ends(name: string, ids: string[], size: number, weather: number) {
+ * weather goes; opened by `checks`, radial cracks from its rim in, as an end does drying.
+ * Cells side by side, `columns` across; a log draws one by its seed. */
+async function ends(name: string, ids: string[], size: number, weather: number, checks: number) {
   const out = join(ROOT, "assets", "materials", name);
   const tmp = join(out, ".scans");
   mkdirSync(tmp, { recursive: true });
@@ -844,6 +895,15 @@ async function ends(name: string, ids: string[], size: number, weather: number) 
     const rough = pixels(file("Roughness"), 1, n, n);
     const occlusion = existsSync(file("AmbientOcclusion")) ? pixels(file("AmbientOcclusion"), 1, n, n) : Buffer.alloc(n * n, 255);
     const [col, row] = [index % columns, Math.floor(index / columns)];
+    // Checks: the radial cracks a log's end opens as it dries, from its rim in, each at its
+    // own angle, as deep as its seed says, wandering a little and narrowing inward.
+    const rng = mulberry(zlibish(id));
+    const cracks = Array.from({ length: checks }, () => ({
+      angle: rng() * 2 * Math.PI,
+      from: 0.25 + 0.55 * rng(),
+      wide: 0.003 + 0.004 * rng(),
+      wander: rng() * 10,
+    }));
     for (let y = 0; y < cell; y++) {
       for (let x = 0; x < cell; x++) {
         const [dx, dy] = [(x + 0.5) / cell - 0.5, (y + 0.5) / cell - 0.5];
@@ -860,12 +920,39 @@ async function ends(name: string, ids: string[], size: number, weather: number) 
         const luma = (colour[from * 3] * 0.3 + colour[from * 3 + 1] * 0.55 + colour[from * 3 + 2] * 0.15) / 255;
         // Weathered: towards a grey a little warm, a little darker.
         const grey = [luma * 0.86, luma * 0.82, luma * 0.76];
+        // How far into a check this pixel is, 1 at its middle, and which way across it.
+        let crack = 0;
+        let across = 0;
+        const r = Math.hypot(dx, dy) / 0.47;
+        for (const k of cracks) {
+          if (r < k.from || r > 1.0) continue;
+          const turn = Math.atan2(Math.sin(angle - k.angle - 0.012 * Math.sin(r * 7 + k.wander)), Math.cos(angle - k.angle - 0.012 * Math.sin(r * 7 + k.wander)));
+          const half = k.wide * Math.min(1, (r - k.from) / 0.25);
+          const d = Math.abs(turn) * r * 0.47;
+          if (d < half) {
+            const depth = 1 - d / half;
+            if (depth > crack) {
+              crack = depth;
+              across = Math.sign(turn);
+            }
+          }
+        }
         for (let c = 0; c < 3; c++) {
           const fresh = colour[from * 3 + c] / 255;
-          maps.colour[to * 3 + c] = Math.round(255 * (fresh * (1 - weather) + grey[c] * weather));
+          const weathered = fresh * (1 - weather) + grey[c] * weather;
+          maps.colour[to * 3 + c] = Math.round(255 * weathered * (1 - 0.6 * crack));
           maps.normal[to * 3 + c] = normal[from * 3 + c];
         }
-        maps.arm[to * 3] = occlusion[from];
+        if (crack > 0) {
+          // The check's walls lean in to its middle, across the radius.
+          const [tx, ty] = [-Math.sin(angle) * across, Math.cos(angle) * across];
+          const n0 = [0, 1, 2].map((c) => (normal[from * 3 + c] / 255) * 2 - 1);
+          n0[0] -= tx * crack * 0.8;
+          n0[1] += ty * crack * 0.8;
+          const l = Math.hypot(n0[0], n0[1], n0[2]) || 1;
+          for (let c = 0; c < 3; c++) maps.normal[to * 3 + c] = Math.round(((n0[c] / l) * 0.5 + 0.5) * 255);
+        }
+        maps.arm[to * 3] = Math.round(occlusion[from] * (1 - 0.6 * crack));
         maps.arm[to * 3 + 1] = rough[from];
         maps.arm[to * 3 + 2] = 0;
       }
@@ -879,7 +966,7 @@ async function ends(name: string, ids: string[], size: number, weather: number) 
   const links = ids.map((id) => `[${id}](https://ambientcg.com/a/${id})`).join(", ");
   record(
     name,
-    `ambientCG ${links}, CC0, each cut out and drawn round in a cell of ${columns} by ${columns}, greyed ${Math.round(weather * 100)}% by \`textures.ts ends\`.`,
+    `ambientCG ${links}, CC0, each cut out and drawn round in a cell of ${columns} by ${columns}, greyed ${Math.round(weather * 100)}%${checks ? `, ${checks} checks cut in each` : ""} by \`textures.ts ends\`.`,
   );
 }
 
@@ -913,6 +1000,9 @@ async function main() {
       weather: { type: "string", default: "0.4" },
       saturation: { type: "string", default: "1" },
       lighten: { type: "string", default: "1" },
+      exposed: { type: "boolean", default: false },
+      soft: { type: "string", default: "0.01" },
+      checks: { type: "string", default: "0" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -935,9 +1025,11 @@ async function main() {
       seed: Number(values.seed),
       saturation: Number(values.saturation),
       lighten: Number(values.lighten),
+      exposed: Boolean(values.exposed),
+      soft: Number(values.soft),
     });
   } else if (step === "ends" && name && rest.length) {
-    await ends(name, rest, Number(values.size), Number(values.weather));
+    await ends(name, rest, Number(values.size), Number(values.weather), Number(values.checks));
   } else if (step === "material" && name && rest.length === 1) {
     material(name, resolve(rest[0]), values.tile!, Number(values.size), Number(values.strength), Number(values.roughness));
     record(name, `made from a generated image by \`textures.ts material\`.`);
@@ -947,8 +1039,8 @@ async function main() {
   node tools/textures/textures.ts material <name> <image> [--tile y|x|xy] [--size px] [--strength s] [--roughness r]
   node tools/textures/textures.ts stack <name> <material…> [--size px] [--occlusion k] [--height]
   node tools/textures/textures.ts cards <name> <card>=<image | recipe.leaves.json | keep>… [--size px] [--columns n] [--cut a]
-  node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m] [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f]
-  node tools/textures/textures.ts ends <name> <ambientCG TreeEnd id…> [--size px] [--weather f]`);
+  node tools/textures/textures.ts blend <name> <base>=<metres> <over>=<metres> [--around m] [--along m] [--cover f] [--seed n] [--saturation f] [--lighten f] [--exposed] [--soft f]
+  node tools/textures/textures.ts ends <name> <ambientCG TreeEnd id…> [--size px] [--weather f] [--checks n]`);
     process.exit(values.help ? 0 : 2);
   }
 }

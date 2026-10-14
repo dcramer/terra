@@ -238,6 +238,12 @@ struct Member {
     tone: Vec<Vec<f32>>,
 }
 
+/// The way the weather comes from, in a base's own space: the face of a lying log that looks
+/// most this way loses its bark first (`Timber::exposed`).
+const WEATHER: Vec3 = Vec3::new(-0.8, 0.0, 0.6);
+/// How much paler a weathered log is at its very ends.
+const END_WEATHER: f32 = 0.14;
+
 /// Rings this far apart, or further, are a member drawn far off, with no more than its ends.
 const COARSE_STEP_M: f32 = 4.0;
 
@@ -300,11 +306,22 @@ fn round(
     let last = at.len() - 1;
     let columns = t.sides as usize;
     let around = TAU * radius;
+    // A face weathered where a log is exposed (`textures.ts blend --exposed`) is laid once
+    // round a lying log from underneath, its middle on top and its first quarter to the
+    // weather, so the bark it has lost lies there; any other face, wherever its seed says.
+    let exposed = t.exposed && frame.axis.y.abs() < 0.5;
+    let to_weather = frame.side.dot(WEATHER) >= 0.0;
     let uv = |t_along: f32, j: usize| {
-        [
-            shift[0] + j as f32 / columns as f32 * around / metres[0],
-            shift[1] + t_along * frame.length / metres[1],
-        ]
+        let along = shift[1] + t_along * frame.length / metres[1];
+        if exposed {
+            let round = j as f32 / columns as f32;
+            [if to_weather { round } else { 1.0 - round }, along]
+        } else {
+            [
+                shift[0] + j as f32 / columns as f32 * around / metres[0],
+                along,
+            ]
+        }
     };
     // What each point round the section needs that does not change along the log, worked
     // out once: its angle's sine and cosine, and its unevenness's.
@@ -366,7 +383,13 @@ fn round(
         let metres = along * frame.length;
         let patch = t.variation.mottle
             * (0.6 * libm::sinf(metres * 1.9 + mottle_phase[0])
-                + 0.4 * libm::sinf(metres * 4.7 + mottle_phase[1]));
+                + 0.4 * libm::sinf(metres * 4.7 + mottle_phase[1]))
+            // Weathered paler toward its ends, where the rain and sun get at it most.
+            + if exposed {
+                END_WEATHER * (1.0 - smoothstep(0.0, 0.45, metres.min(frame.length - metres)))
+            } else {
+                0.0
+            };
         // sin(2 cos a + x), by the sum of angles, a little lighter or darker round it too.
         let (x_sin, x_cos) = (
             libm::sinf(metres * 3.1 + mottle_phase[2]),
@@ -908,8 +931,8 @@ mod tests {
         assert_eq!(
             sums,
             [
-                0x2808_fe13_b995_60af,
-                0x00da_042e_394e_6b6a,
+                0x4710_c8d8_ec6f_108b,
+                0xf7ce_ca6b_1bba_c2b0,
                 0xae55_c81f_31d4_b99f
             ],
             "drawn differently from the machine these were taken on (D30)"
@@ -1019,6 +1042,47 @@ mod tests {
             }
         }
         assert_eq!(cells.len(), 4, "{cells:?}");
+    }
+
+    #[test]
+    fn a_weathered_face_is_laid_with_its_top_up_and_its_weather_face_to_the_weather() {
+        let mut kit = pinned(Profile::Round);
+        kit.timber.exposed = true;
+        // Both ways along the same line: the face looking +Z, toward the weather, takes the
+        // texture's first quarter, the top its middle.
+        for (from, to) in [(0.0, 3.0), (3.0, 0.0)] {
+            let piece = Piece::Log {
+                from: Place::near(Vec3::new(from, 0.125, 0.25)),
+                to: Place::near(Vec3::new(to, 0.125, 0.25)),
+                split: Split::Whole,
+                seed: 4,
+                chinking: None,
+                lean: [0, 0],
+                role: None,
+            };
+            let mut surfaces = Surfaces::default();
+            draw(&piece, &kit, None, &mut surfaces);
+            let face = &surfaces.0[&Material::Log];
+            let all = face
+                .positions
+                .iter()
+                .zip(&face.uvs)
+                .chain(face.shared.positions.iter().zip(&face.shared.uvs));
+            let middle: Vec<_> = all.filter(|(p, _)| (p.x - 1.5).abs() < 0.1).collect();
+            let most = |key: &dyn Fn(&Vec3) -> f32| {
+                middle
+                    .iter()
+                    .max_by(|a, b| key(a.0).total_cmp(&key(b.0)))
+                    .map(|(_, uv)| uv[0].rem_euclid(1.0))
+                    .unwrap()
+            };
+            let (top, weather) = (most(&|p| p.y), most(&|p| p.z));
+            assert!((top - 0.5).abs() < 0.08, "{from}: top at {top}");
+            assert!(
+                (weather - 0.25).abs() < 0.08,
+                "{from}: weather face at {weather}"
+            );
+        }
     }
 
     #[test]

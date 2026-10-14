@@ -434,6 +434,11 @@ pub struct Timber {
     /// How many knots a metre of a round log has, on average, where its branches were
     /// trimmed: each a low swell a few centimetres across, dark at its heart.
     pub knots: f32,
+    /// Whether its face's texture is weathered where a log is exposed (`textures.ts blend
+    /// --exposed`, D262): then laid once round each lying log, its middle on top and its
+    /// first quarter to the weather, so its bark is lost on the log's top and weather face,
+    /// and the log weathers paler toward its ends.
+    pub exposed: bool,
     /// How much each member differs from the next.
     pub variation: Variation,
     /// A module of the kit's pieces (D251, D258) its wall's whole logs are drawn as in place
@@ -753,9 +758,10 @@ impl Default for Timber {
             relief: 0.022,
             daub: (0.7, 0.05),
             tint: [1.0, 0.92, 0.8],
-            end_tint: [0.86, 0.82, 0.78],
+            end_tint: [0.72, 0.6, 0.47],
             groove: 0.4,
             knots: 0.8,
+            exposed: true,
             variation: Variation::default(),
             module: None,
         }
