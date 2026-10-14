@@ -55,6 +55,7 @@ use terra_world::grown::Cards;
 use terra_world::planet::Planet;
 use terra_world::sky_occlusion::{self, SkyOccluders};
 
+mod far;
 mod floor;
 mod footing;
 mod shade;
@@ -183,6 +184,27 @@ const LEAF: Vec4 = Vec4::new(0.15, 0.15, 1.6, 0.3);
 /// The middle layer's leaves (D269): greyed and darkened as the floor's (D268), lit through
 /// less than a crown's, as backlit they glowed lime, and as dark inside as a crown.
 const THICKET: Vec4 = Vec4::new(0.12, 0.1, 0.8, 0.25);
+/// The far crowns' colours, oak, pine and spruce: the leaves' average, as the farthest level
+/// of a tree and the far forest past the meadow show them (D273).
+const FAR_CROWNS: [Color; 3] = [
+    Color::srgb(0.22, 0.32, 0.12),
+    Color::srgb(0.15, 0.23, 0.12),
+    Color::srgb(0.13, 0.21, 0.12),
+];
+/// Each kind's crown cards tinted, oak, pine and spruce (D247, D248).
+const CROWN_TINTS: [Vec3; 3] = [
+    Vec3::new(0.92, 0.95, 0.85),
+    Vec3::new(1.15, 1.15, 1.0),
+    Vec3::new(1.5, 1.65, 0.45),
+];
+/// The atlas's oakbranch, pine and spruce pictures' average colour where they are leaf,
+/// linear, measured from `materials/foliage/cards.png` by hand-run script: what the far
+/// forest's crowns are coloured from, tinted and darkened as the crowns' cards are (D273).
+const LEAF_MEANS: [Vec3; 3] = [
+    Vec3::new(0.111, 0.183, 0.057),
+    Vec3::new(0.027, 0.074, 0.027),
+    Vec3::new(0.006, 0.014, 0.007),
+];
 /// Paths are filed in squares this wide, to find the nearest quickly.
 const PATH_SQUARE_M: f32 = 12.0;
 
@@ -245,6 +267,7 @@ pub fn plugin(app: &mut App) {
         MaterialPlugin::<Foliage>::default(),
         floor::plugin,
         footing::plugin,
+        far::plugin,
     ))
     .init_resource::<Unmipped>()
     .init_resource::<Scanned>()
@@ -252,6 +275,7 @@ pub fn plugin(app: &mut App) {
         Update,
         (
             plant.run_if(not(resource_exists::<Forest>)),
+            far_land.run_if(resource_added::<Forest>),
             add_mipmaps,
             dress_scans,
             follow_detail,
@@ -259,6 +283,15 @@ pub fn plugin(app: &mut App) {
     )
     // The bark's relief at the quality preset's depth.
     .add_systems(PostUpdate, terra_world::quality::follow_relief::<Foliage>);
+}
+
+/// Past the far forest, land covered by the same forest to the horizon, drawn in the sky
+/// (D273): its canopy the far crowns' colours together, its hills low.
+fn far_land(mut sky: ResMut<terra_world::sky::Sky>) {
+    sky.far_land = Some(terra_world::sky::FarLand {
+        canopy: Color::srgb(0.18, 0.27, 0.12),
+        hills: 1.1,
+    });
 }
 
 /// The near crowns' cards drop out between distances scaled as every other level of
@@ -488,6 +521,25 @@ fn nearest(filed: &HashMap<(i32, i32), Vec<Vec2>>, at: Vec2, within: f32) -> f32
     nearest
 }
 
+/// How open the forest is at a place, low in glades, where only young trees grow.
+fn glade_at(glades: &Noise, at: Vec2) -> f32 {
+    glades.fbm(Vec3::new(at.x, 0.0, at.y) / 45.0, 2, 2.0, 0.5)
+}
+
+/// Which kind of tree grows at a place: Scots pines in groves, where a broad field of noise
+/// is high, Norway spruces in the groves' damper hollows, where another is, oaks everywhere
+/// else; `mixed` moves a grove's edge, so its edges mix.
+fn species_at(groves: &Noise, at: Vec2, mixed: f32) -> Species {
+    let grove = groves.fbm(Vec3::new(at.x, 0.0, at.y) / 70.0, 2, 2.0, 0.5);
+    if grove < 0.1 + mixed {
+        Species::Oak
+    } else if groves.sample(Vec3::new(at.x, 40.0, at.y) / 35.0) > 0.15 {
+        Species::Spruce
+    } else {
+        Species::Pine
+    }
+}
+
 fn smoothstep(from: f32, to: f32, value: f32) -> f32 {
     let t = ((value - from) / (to - from)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -611,6 +663,7 @@ fn plant(
     mut scanned: ResMut<Scanned>,
     mut mossy: ResMut<Assets<floor::Mossy>>,
     mut mossy_scans: ResMut<floor::MossyScans>,
+    mut far_forest: ResMut<Assets<far::FarForest>>,
     parting: Option<Res<terra_world::parting::Parting>>,
 ) {
     let (Some(planet), Some(flora), Some(sun)) = (planet, flora, sun) else {
@@ -760,11 +813,7 @@ fn plant(
             ..default()
         })
     };
-    let far_crowns = [
-        far_crown(Color::srgb(0.22, 0.32, 0.12)),
-        far_crown(Color::srgb(0.15, 0.23, 0.12)),
-        far_crown(Color::srgb(0.13, 0.21, 0.12)),
-    ];
+    let far_crowns = FAR_CROWNS.map(&mut far_crown);
     // Each kind's bark in several scans or shades, so a stand of them is not one bark (D247):
     // old oaks' deep-furrowed willow, it again larger and greyer (Bark Willow, dark mud
     // without plates, read as fur, D264) and a grey-brown with knots; pines' pine
@@ -804,12 +853,12 @@ fn plant(
                 _ => species::conifer(&mut dice, height, species, young),
             };
             let (which, leaf, tint, far_material) = match species {
-                Species::Oak => (kind % 3, leaf_of[0], Vec3::new(0.92, 0.95, 0.85), &far_crowns[0]),
-                Species::Pine => (3 + kind % 2, leaf_of[1], Vec3::new(1.15, 1.15, 1.0), &far_crowns[1]),
+                Species::Oak => (kind % 3, leaf_of[0], CROWN_TINTS[0], &far_crowns[0]),
+                Species::Pine => (3 + kind % 2, leaf_of[1], CROWN_TINTS[1], &far_crowns[1]),
                 // Dark green, about sRGB 0.15. The needle picture is the deep green of Norway
                 // spruce, and the tint pushes it further from blue: needles this dark are lit
                 // mostly by the blue sky, which turned them teal (D247, D248).
-                Species::Spruce => (5 + kind % 2, leaf_of[2], Vec3::new(1.5, 1.65, 0.45), &far_crowns[2]),
+                Species::Spruce => (5 + kind % 2, leaf_of[2], CROWN_TINTS[2], &far_crowns[2]),
             };
             let (bark, bark_m) = barks[which].clone();
             let wood = [0, 1, 2].map(|detail| wood(&tree, detail, height, bark_m));
@@ -1038,15 +1087,8 @@ fn plant(
             let distance = libm::sqrtf(dice.range(CLEARING_M * CLEARING_M, FOREST_M * FOREST_M));
             let at = Vec2::new(libm::cosf(angle), libm::sinf(angle)) * distance;
             // Glades open here and there, where only young trees grow.
-            let glade = glades.fbm(Vec3::new(at.x, 0.0, at.y) / 45.0, 2, 2.0, 0.5);
-            let grove = groves.fbm(Vec3::new(at.x, 0.0, at.y) / 70.0, 2, 2.0, 0.5);
-            let species = if grove < 0.1 + dice.range(-0.12, 0.12) {
-                Species::Oak
-            } else if groves.sample(Vec3::new(at.x, 40.0, at.y) / 35.0) > 0.15 {
-                Species::Spruce
-            } else {
-                Species::Pine
-            };
+            let glade = glade_at(&glades, at);
+            let species = species_at(&groves, at, dice.range(-0.12, 0.12));
             // Conifers stand closer than oaks, whose crowns spread. Trees stand in clumps
             // with gaps between, not evenly spaced as a plantation's (D247).
             let clumped = 0.5 + 0.5 * clumps.fbm(Vec3::new(at.x, 0.0, at.y) / 22.0, 2, 2.0, 0.5);
@@ -1239,6 +1281,25 @@ fn plant(
         nearest_to_start[0].y,
         nearest_to_start[1].x,
         nearest_to_start[1].y
+    );
+
+    // The forest carried on past the meadow (D273).
+    far::lay(
+        far::Lay {
+            planet: &planet,
+            start,
+            east,
+            south,
+            seed,
+            glades: &glades,
+            groves: &groves,
+            clumps: &clumps,
+            leaves: leaf_picture.clone(),
+            crowns: [0, 1, 2].map(|k| LEAF_MEANS[k] * CROWN_TINTS[k] * (1.0 - LEAF.y)),
+        },
+        &mut commands,
+        &mut meshes,
+        &mut far_forest,
     );
 
     // The floor under the trees, and the map the grass grows by (D246).

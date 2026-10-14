@@ -76,6 +76,8 @@ fn preset(mut tweaks: ResMut<Tweaks>) {
 #[derive(Component)]
 struct Haze;
 const HAZE_M: Vec3 = Vec3::new(240.0, 60.0, 240.0);
+/// How far below the ground its foot stands: where it stood under an eye at a walker's height.
+const HAZE_FOOT_M: f32 = 8.3;
 
 /// The haze's density through its box, as a picture 64 by 48 by 64 (D244): a thin haze all
 /// through it, and in its lowest dozen metres, round the ground, a mist up to seven times as
@@ -109,7 +111,7 @@ fn haze_density() -> Image {
     let mut data = Vec::with_capacity((W * H * D) as usize);
     for z in 0..D {
         for y in 0..H {
-            // Metres above the box's foot, which stands 10 m below the camera.
+            // Metres above the box's foot, which stands `HAZE_FOOT_M` below the ground.
             let up = (y as f32 + 0.5) / H as f32 * HAZE_M.y;
             let low = 1.0 - smoothstep(9.0, 15.0, up);
             for x in 0..W {
@@ -165,9 +167,13 @@ fn haze(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     ));
 }
 
-/// The haze stands round the camera, upright on the planet, its foot below the ground.
+/// The haze stands round the camera, upright on the planet, its foot below the ground under
+/// it, so its mist lies on the ground wherever the eye is (D273). Stood on the eye, the mist
+/// rose with it: from a height it hung level with the eye, and looked through edge-on it was
+/// a dark band under the horizon.
 fn haze_follows(
     camera: Query<&GlobalTransform, With<MainCamera>>,
+    planet: Option<Res<crate::planet::Planet>>,
     mut haze: Query<(&mut Transform, &mut FogVolume), With<Haze>>,
     time: Res<Time>,
 ) {
@@ -176,7 +182,16 @@ fn haze_follows(
     };
     let at = camera.translation();
     let up = at.normalize_or(Vec3::Y);
-    haze.translation = at + up * (HAZE_M.y * 0.5 - 10.0);
+    // The ground under the eye, or the eye where there is none to find (it is in the ground).
+    let ground = planet.map_or(at, |planet| {
+        let ground = planet.ground_at(at);
+        if (at - ground).dot(up) >= 0.0 {
+            ground
+        } else {
+            at
+        }
+    });
+    haze.translation = ground + up * (HAZE_M.y * 0.5 - HAZE_FOOT_M);
     haze.rotation = Quat::from_rotation_arc(Vec3::Y, up);
     // The mist's drifts stay where they are in the world as the box follows the camera, and
     // creep slowly downwind.
@@ -202,7 +217,7 @@ fn style_sun(mut commands: Commands, sun: Single<(Entity, &mut DirectionalLight)
 }
 
 /// How far one sees between the trees before the haze swallows what is there.
-const HAZE_VISIBLE_M: f32 = 240.0;
+pub(crate) const HAZE_VISIBLE_M: f32 = 240.0;
 
 /// What the eye adapts round: the log brightness a scene meters at when it is as bright as
 /// the day's exposure for the hour expects (D214).

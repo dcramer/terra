@@ -88,8 +88,63 @@ struct Baked {
 /// painted, and its brightness, which changes more, is the volume's own and follows at once.
 const RELIT: f32 = 0.03;
 
+/// How much of the sky the main camera sees overhead, from 0 under a closed canopy to 1 in
+/// the open, from the same cells; there once the volume is (D273). What depends on whether
+/// the eye is under the trees or out of them reads it: the forest's haze (`daylight`).
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct OpenOverhead(pub f32);
+
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, (bake, receive, light).chain());
+    app.add_systems(Update, (bake, receive, light, overhead).chain());
+}
+
+/// Follows how open the sky is over the camera, between the cells round it.
+fn overhead(
+    mut commands: Commands,
+    occluders: Option<Res<SkyOccluders>>,
+    baked: Option<Res<Baked>>,
+    camera: Query<&GlobalTransform, With<crate::planet::MainCamera>>,
+    open: Option<ResMut<OpenOverhead>>,
+) {
+    let (Some(o), Some(baked), Some(camera)) = (occluders, baked, camera.iter().next()) else {
+        return;
+    };
+    let now = OpenOverhead(open_at(o.as_ref(), &baked.seen, camera.translation()));
+    match open {
+        Some(mut open) => {
+            open.set_if_neq(now);
+        }
+        None => commands.insert_resource(now),
+    }
+}
+
+/// How much of the sky is seen overhead at a point, blended between the eight cells round
+/// it; outside the volume, all of it, as the volume sees there at its edges.
+fn open_at(o: &SkyOccluders, seen: &Seen, point: Vec3) -> f32 {
+    let south = o.east.cross(o.up);
+    let height = o.above_m + o.below_m;
+    let size = Vec3::new(o.half_m * 2.0, height, o.half_m * 2.0);
+    let step = size / seen.cells.as_vec3();
+    let from = point - o.middle;
+    let local = Vec3::new(
+        from.dot(o.east) + o.half_m,
+        from.dot(o.up) + o.below_m,
+        from.dot(south) + o.half_m,
+    );
+    if local.cmplt(Vec3::ZERO).any() || local.cmpgt(size).any() {
+        return 1.0;
+    }
+    let max = (seen.cells - 1).as_vec3();
+    let at = (local / step - 0.5).clamp(Vec3::ZERO, max);
+    let low = at.floor().as_uvec3();
+    let high = (low + 1).min(seen.cells - 1);
+    let t = at - low.as_vec3();
+    let cell =
+        |x: u32, y: u32, z: u32| seen.up[((z * seen.cells.y + y) * seen.cells.x + x) as usize];
+    let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+    let row = |y: u32, z: u32| lerp(cell(low.x, y, z), cell(high.x, y, z), t.x);
+    let layer = |z: u32| lerp(row(low.y, z), row(high.y, z), t.y);
+    lerp(layer(low.z), layer(high.z), t.z)
 }
 
 /// Starts working out what each cell sees once there are crowns.
@@ -515,6 +570,34 @@ mod tests {
         );
         let away = cell_at(&seen, &o, Vec3::new(35.0, 1.0, 35.0));
         assert!(seen.sides[away][2] > seen.sides[under][2] + 0.3);
+    }
+
+    #[test]
+    fn the_sky_overhead_is_closed_under_a_crown_and_open_above_it_and_outside() {
+        // A canopy over the middle of the square, as in the test above.
+        let mut crowns = Vec::new();
+        for i in -2..=2 {
+            for j in -2..=2 {
+                crowns.push(Crown {
+                    middle: Vec3::new(i as f32 * 10.0, 15.0, j as f32 * 10.0),
+                    half: Vec3::new(7.0, 5.0, 7.0),
+                    closes: 0.9,
+                });
+            }
+        }
+        let o = wood(crowns);
+        let seen = seen(&o);
+        let under = open_at(&o, &seen, Vec3::new(0.5, 1.7, -0.5));
+        let above = open_at(&o, &seen, Vec3::new(0.5, 30.0, -0.5));
+        let beside = open_at(&o, &seen, Vec3::new(36.0, 1.7, 36.0));
+        assert!(under < 0.5, "under the crown {under}");
+        assert!(above > 0.99, "above it {above}");
+        assert!(beside > under + 0.3, "beside it {beside}");
+        assert_eq!(open_at(&o, &seen, Vec3::new(90.0, 1.7, 0.0)), 1.0);
+        // Between cells it changes smoothly, not in steps.
+        let a = open_at(&o, &seen, Vec3::new(10.0, 1.7, 0.0));
+        let b = open_at(&o, &seen, Vec3::new(10.5, 1.7, 0.0));
+        assert!((a - b).abs() < 0.1, "{a} then {b}");
     }
 
     #[test]

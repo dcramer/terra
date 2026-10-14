@@ -13,7 +13,10 @@
 //! hazy as mountains tens of kilometres off on Earth. Its centre follows the camera, so
 //! "up" is always the planet's up where the camera is.
 //!
-//! The clouds, the stars and the moon are still our own sky (`sky`), drawn over it.
+//! The clouds, the stars and the moon are still our own sky (`sky`), drawn over it, and so
+//! is the far land a world may ask for below the horizon (D273), coloured by the air as it is
+//! seen: a small picture of it all round the camera, which Bevy works out from the air's
+//! tables each frame ([`AirPicture`]).
 //! Its sky goes dark as soon as the sun is down, where a real one glows on through the
 //! dusk, so from sunset that sky draws the dusk's and the night's colours (`daylight`).
 
@@ -21,11 +24,12 @@ use crate::daylight::{Clock, SkyPath};
 use crate::planet::{MainCamera, Planet, Tweaks};
 use bevy::{
     light::{
-        Atmosphere, SunDisk,
+        Atmosphere, AtmosphereEnvironmentMapLight, GeneratedEnvironmentMapLight, SunDisk,
         atmosphere::{Falloff, PhaseFunction, ScatteringMedium, ScatteringTerm},
     },
     pbr::AtmosphereSettings,
     prelude::*,
+    render::sync_world::SyncToRenderWorld,
 };
 
 /// How many times longer every distance through the air is than in the world.
@@ -41,9 +45,24 @@ const DUST: f32 = 1.5;
 #[derive(Component)]
 struct Air;
 
+/// The air as seen from the camera, all round it: a cube of its light (Bevy's
+/// `AtmosphereEnvironmentMapLight`, unexposed), worked out each frame from the same tables
+/// the sky is drawn from, so what is drawn with it matches the sky. For the sky's own
+/// drawing, not the world's light, which is the painted sky's (`skylight`).
+#[derive(Resource, Clone, Debug)]
+pub struct AirPicture(pub Handle<Image>);
+
+/// The entity Bevy keeps the picture on.
+#[derive(Component)]
+struct Pictured;
+
+/// How many pixels along each face of the picture: fine enough to read the air just over
+/// the horizon, which is where it changes most.
+const PICTURE: u32 = 128;
+
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, spawn)
-        .add_systems(Update, settings)
+        .add_systems(Update, (settings, picture))
         .add_systems(Update, discs)
         .add_systems(PostUpdate, follow.after(TransformSystems::Propagate));
 }
@@ -98,6 +117,30 @@ fn spawn(mut commands: Commands, mut media: ResMut<Assets<ScatteringMedium>>) {
         },
         Transform::from_scale(Vec3::splat(1.0 / HAZE_SCALE)),
     ));
+    commands.spawn((
+        Name::new("Air seen"),
+        Pictured,
+        AtmosphereEnvironmentMapLight {
+            intensity: 0.0,
+            affects_lightmapped_mesh_diffuse: false,
+            size: UVec2::splat(PICTURE),
+        },
+        SyncToRenderWorld::default(),
+    ));
+}
+
+/// Keeps the air's picture once Bevy has made it, and stops Bevy filtering it into light
+/// every frame, which only a light probe needs.
+fn picture(
+    mut commands: Commands,
+    made: Query<(Entity, &GeneratedEnvironmentMapLight), With<Pictured>>,
+) {
+    for (entity, generated) in &made {
+        commands.insert_resource(AirPicture(generated.environment_map.clone()));
+        commands
+            .entity(entity)
+            .remove::<GeneratedEnvironmentMapLight>();
+    }
 }
 
 /// Shows the sun's disc while the world's light is the sun, and hides it while it is the

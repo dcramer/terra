@@ -33,4 +33,4 @@ Sources are marked **P** (the developers' own talks, notes, documentation, job p
 - **A darker, more muted scene** (D216).
 - **A layer at eye height** (D268): hazel, holly, young spruces, saplings, bramble and snags, one to five metres, measured hiding 44% of an eye-height view within 20 m.
 
-Still to take, roughly in order of effect per cost: sound in the world; haze that varies with height and drifts; one travelling wind; the same continuous thinning for trunks and branches; billboards or impostors for the far forest; shadows chosen per cascade (Horizon Zero Dawn).
+Still to take, roughly in order of effect per cost: sound in the world; haze that varies with height and drifts; one travelling wind; the same continuous thinning for trunks and branches; billboards or impostors for the far forest (taken by D273, [far-forest.md](far-forest.md)); shadows chosen per cascade (Horizon Zero Dawn).

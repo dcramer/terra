@@ -22,10 +22,18 @@ struct Sky {
     sunlight: vec3<f32>,
     over_air: u32,
     twilight: f32,
+    // The far land's canopy, and in w how high its farthest ridges rise, in radians; 0 for
+    // none (D273).
+    far_land: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(0)
 var<uniform> sky: Sky;
+// The air all round the camera, as Bevy's atmosphere works it out each frame, unexposed.
+@group(constants::MATERIAL_BIND_GROUP) @binding(1)
+var air_texture: texture_cube<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(2)
+var air_sampler: sampler;
 
 // Cheap smooth noise for clouds: random values on a grid, blended between.
 fn hash(p: vec3<f32>) -> f32 {
@@ -126,6 +134,86 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(colour * sky.brightness * exp(-altitude / 700.0), 1.0);
 }
 
+// The air's light from a direction, exposed as the sky is. The cube is left-handed, as
+// Bevy's environment maps are.
+fn air_seen(direction: vec3<f32>) -> vec3<f32> {
+    let d = vec3<f32>(direction.x, direction.y, -direction.z);
+    return textureSampleLevel(air_texture, air_sampler, d, 0.0).rgb * view.exposure;
+}
+
+// Each ridge of the far land, nearest first: where it stands between the planet's own
+// horizon below and the air's above (0 at the planet's, 1 at the air's), how high its hills
+// rise as a share of the farthest's, and how much of the land's own colour the haze leaves.
+const RIDGES: u32 = 4u;
+const RIDGE_AT: array<f32, 4> = array<f32, 4>(0.12, 0.5, 0.8, 1.0);
+const RIDGE_HILLS: array<f32, 4> = array<f32, 4>(0.45, 0.55, 0.75, 1.0);
+const RIDGE_LEFT: array<f32, 4> = array<f32, 4>(0.55, 0.34, 0.18, 0.08);
+
+// The land beyond the world's edge (D273), below the horizon, as shipped games draw the
+// hills past their maps: ridges one behind another, each paler than the one before in the
+// air's own colour at the horizon, the farthest on the horizon itself. The stand-in planet is
+// small, so its ground falls away below the air's horizon, by more the higher the eye: the
+// ridges spread between the two, nearer ones lower, as land does seen from a height. Their
+// tops are broken by the crowns of the forest on them, finer the farther. Premultiplied.
+fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<f32>) -> vec4<f32> {
+    let hills = sky.far_land.w;
+    let lift = dot(direction, up);
+    let rise = asin(clamp(lift, -1.0, 1.0));
+    let pixel = max(fwidth(rise), 1.0e-5);
+    if hills <= 0.0 || lift > sin(hills * 1.3) {
+        return vec4<f32>(0.0);
+    }
+    var at = RIDGE_AT;
+    var rising = RIDGE_HILLS;
+    var leaves = RIDGE_LEFT;
+    let r = sky.radius_m;
+    let dip = acos(clamp(r / (r + max(length(eye) - r, 0.3)), 0.0, 1.0));
+    // Round the horizon: a point on a circle, so the noise along it has no seam.
+    let east = normalize(cross(up, vec3<f32>(0.0, 0.0, 1.0)));
+    let north = cross(east, up);
+    let level = normalize(direction - up * lift + east * 1.0e-5);
+    let round = vec2<f32>(dot(level, east), dot(level, north));
+    // The air just over the horizon: Bevy's tables darken the air's light below it, most of
+    // all straight ahead, as if its own ground showed through.
+    let horizon = air_seen(normalize(level + up * 0.02))
+        + (mix(sky.horizon.rgb, sky.zenith.rgb, 0.1) * sky.brightness * sky.twilight);
+    // The forest on it, lit as the world's canopy is by the sun through the air and the sky.
+    let sun = normalize(sky.sun_direction);
+    let canopy = sky.far_land.rgb;
+    let lit = canopy * (sunlight * max(dot(sun, up), 0.0) * 0.6 + air_seen(up) * 1.6) / 3.14159
+        * view.exposure;
+    var colour = vec3<f32>(0.0);
+    var cover = 0.0;
+    for (var k = 0u; k < RIDGES; k++) {
+        let f = f32(k);
+        let base = -dip * (1.0 - at[k]);
+        // Hills along the ridge, and the crowns on them, finer and lower the farther.
+        let p = vec3<f32>(round * (5.0 + 4.0 * f), f * 13.7);
+        let shape = billow(p) * 0.85 + billow(p * 3.7 + 3.0) * 0.15;
+        let crowns = noise(vec3<f32>(round * (260.0 + 240.0 * f), f * 5.1));
+        let ridge = base + hills * rising[k] * smoothstep(0.25, 0.85, shape)
+            + hills * (0.06 / (1.0 + f)) * crowns;
+        let inside = clamp((ridge - rise) / pixel + 0.5, 0.0, 1.0);
+        if inside <= 0.0 {
+            continue;
+        }
+        // Mist settles below each ridge's crest, paler toward the valley behind the next.
+        let deep = smoothstep(0.0, max(dip * 0.35, 0.004), ridge - rise);
+        let left = leaves[k] * mix(1.0, 0.7, deep);
+        // The crowns' light and shade, finer the farther.
+        let grain = noise(vec3<f32>(round * (420.0 + 400.0 * f), rise * (420.0 + 400.0 * f) + f * 3.3));
+        let land = lit * (0.8 + 0.4 * grain);
+        let seen = mix(horizon, land, left);
+        let take = inside * (1.0 - cover);
+        colour += seen * take;
+        cover += take;
+        if cover > 0.999 {
+            break;
+        }
+    }
+    return vec4<f32>(colour, cover);
+}
+
 // Over Bevy's atmosphere (air.rs), which draws the sky's colour and the sun: only the
 // clouds, lit by the same sunlight as the world and exposed as it is, and by night the
 // stars and the moon, premultiplied so that clouds cover the sky and stars add to it.
@@ -179,5 +267,7 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
         let halo = pow(toward_moon, 60.0) * 0.12;
         colour += vec3<f32>(0.8, 0.85, 0.95) * (disc * 1.2 + halo) * sky.night * (1.0 - cloud * 0.7);
     }
-    return vec4<f32>(colour, cover);
+    // The far land stands in front of all of it.
+    let land = far_land(direction, up, eye, sunlight);
+    return vec4<f32>(land.rgb + colour * (1.0 - land.a), land.a + cover * (1.0 - land.a));
 }

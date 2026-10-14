@@ -27,6 +27,11 @@ pub const DAY_SECONDS: f32 = 30.0 * 60.0;
 /// sixteenth, so every shadow was near black (D216).
 const SKY_LIGHT_GAIN: f32 = 1.6;
 
+/// How far one sees in the open air, out of the trees, before the forest's haze swallows
+/// what is there, and how bright that haze is against the horizon's colour (D273).
+const OPEN_VISIBLE_M: f32 = 2_500.0;
+const OPEN_AIR: f32 = 0.45;
+
 /// The sun's direction moves on in this many steps an hour: a twentieth of a degree each,
 /// a few times a second at the game's pace.
 const SUN_STEPS: f32 = 300.0;
@@ -249,6 +254,17 @@ fn keys() -> [(f32, Light); 6] {
     ]
 }
 
+/// The haze's colour and how far one sees through it, for the horizon's colour and how much
+/// of the sky is open over the eye (D224, D273): the forest's own shaded green air under a
+/// closed canopy, the open air's in the open.
+fn haze_for(horizon: Vec3, open: f32) -> (Vec3, f32) {
+    let open = smoothstep(0.4, 0.95, open);
+    let shade = horizon.lerp(Vec3::new(0.42, 0.5, 0.42), 0.35) * 0.62;
+    let visible = super::scene::HAZE_VISIBLE_M
+        * libm::powf(OPEN_VISIBLE_M / super::scene::HAZE_VISIBLE_M, open);
+    (shade.lerp(horizon * OPEN_AIR, open), visible)
+}
+
 /// The light with the sun so many degrees above the horizon.
 fn light_at(height: f32) -> Light {
     let keys = keys();
@@ -314,6 +330,7 @@ fn shine(
     mut skylight: ResMut<SkyLight>,
     mut exposure: Query<&mut Exposure, With<MainCamera>>,
     mut haze: Query<&mut DistanceFog, With<MainCamera>>,
+    open: Option<Res<crate::sky_occlusion::OpenOverhead>>,
     mut mist: Query<&mut bevy::light::FogVolume>,
     mut grading: Query<&mut bevy::render::view::ColorGrading, With<MainCamera>>,
 ) {
@@ -356,10 +373,17 @@ fn shine(
             grade.global.temperature = warm;
         }
     }
+    // Out from under the trees, where the sky over the eye is open, the forest's haze gives
+    // way to the open air's (D273): thinner, so the far forest and the land beyond show, and
+    // in the horizon's colour, so they fade toward the sky rather than into a dark band. The
+    // air's own haze (`air`) carries the distance from there. A world with no trees to hide
+    // the sky keeps the forest's haze.
+    let open = open.map_or(0.0, |open| open.0);
     for mut fog in &mut haze {
-        let air = light.horizon.lerp(Vec3::new(0.42, 0.5, 0.42), 0.35) * 0.62;
+        let (air, visible) = haze_for(light.horizon, open);
         fog.color = colour(air);
         fog.directional_light_color = colour(light.light * 0.55).with_alpha(0.5);
+        fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(visible);
     }
     sky.zenith = colour(light.zenith);
     sky.glow = colour(light.glow);
@@ -387,6 +411,29 @@ mod tests {
 
     fn path() -> SkyPath {
         SkyPath::over(Vec3::new(0.1, 1.0, 0.2))
+    }
+
+    #[test]
+    fn out_of_the_trees_the_haze_is_thinner_and_takes_the_horizons_colour() {
+        let horizon = Vec3::new(0.9, 0.86, 0.8);
+        let (under, near) = haze_for(horizon, 0.1);
+        let (out, far) = haze_for(horizon, 1.0);
+        assert_eq!(near, super::super::scene::HAZE_VISIBLE_M);
+        assert!(far > near * 8.0, "{far} against {near}");
+        // Under the canopy green and dim; out of it the horizon's own hue.
+        assert!(under.y > under.x && under.y > under.z, "{under}");
+        let hue = |c: Vec3| c / c.max_element();
+        assert!(
+            (hue(out) - hue(horizon)).abs().max_element() < 1e-4,
+            "{out}"
+        );
+        // Between, it changes smoothly as the eye walks out.
+        let mut last = near;
+        for k in 1..=20 {
+            let (_, now) = haze_for(horizon, k as f32 / 20.0);
+            assert!(now >= last && now < last * 1.6, "{last} then {now}");
+            last = now;
+        }
     }
 
     #[test]
