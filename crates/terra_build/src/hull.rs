@@ -13,7 +13,7 @@
 use crate::kit::{Kits, Pattern};
 use crate::mesh::{Material, Surface};
 use crate::relief::Maps;
-use crate::{Base, CELL_M, Cube, Fill, Kind, Shape};
+use crate::{Base, CELL_M, Cube, Cubes, Facing, Fill, Kind, Shape};
 use glam::{IVec3, Vec3};
 use std::collections::{BTreeMap, HashSet};
 
@@ -30,6 +30,9 @@ pub fn hull(base: &Base, kits: &Kits, maps: &Maps, low: IVec3, high: IVec3) -> S
     // Whole faces by their direction, the plane they lie in and their colour: the cells
     // of each plane, merged into rectangles once all are known.
     let mut planes: BTreeMap<(usize, i32, usize), HashSet<[i32; 2]>> = BTreeMap::new();
+    // Slopes' tops by the way they rise, their layer, the line they run along and their
+    // colour: where along it each is, merged into runs, as a roof's course is one plane.
+    let mut slopes: BTreeMap<(u8, i32, i32, usize), Vec<i32>> = BTreeMap::new();
     let mut out = Surface::default();
     for (at, cube) in store.within(low, high) {
         if !cube.is_in() {
@@ -45,9 +48,24 @@ pub fn hull(base: &Base, kits: &Kits, maps: &Maps, low: IVec3, high: IVec3) -> S
                 let (plane, cell) = plane_of(dir, at);
                 planes.entry((dir, plane, colour)).or_default().insert(cell);
             }
-        } else {
-            cut(&mut out, at, &cube, tops, &solid, &mut colours);
+            continue;
         }
+        let top_drawn = if let Shape::Slope(facing) = cube.shape {
+            let colour = colours.of(cube.kind, true);
+            let (line, along) = if along_x(facing) {
+                (at.z, at.x)
+            } else {
+                (at.x, at.z)
+            };
+            slopes
+                .entry((facing as u8, at.y, line, colour))
+                .or_default()
+                .push(along);
+            true
+        } else {
+            false
+        };
+        cut(&mut out, at, &cube, tops, !top_drawn, store, &mut colours);
     }
     for ((dir, plane, colour), cells) in planes {
         let colour = colours.list[colour];
@@ -56,7 +74,44 @@ pub fn hull(base: &Base, kits: &Kits, maps: &Maps, low: IVec3, high: IVec3) -> S
             quad(&mut out, corners, DIRECTIONS[dir].as_vec3(), colour);
         }
     }
+    for ((facing, y, line, colour), mut along) in slopes {
+        let facing = [Facing::North, Facing::East, Facing::South, Facing::West][facing as usize];
+        let tops = corners(Shape::Slope(facing));
+        let colour = colours.list[colour];
+        along.sort_unstable();
+        let mut runs: Vec<(i32, i32)> = Vec::new();
+        for a in along {
+            match runs.last_mut() {
+                Some(run) if run.1 + 1 == a => run.1 = a,
+                _ => runs.push((a, a)),
+            }
+        }
+        for (first, last) in runs {
+            // The run's corners, west-north round to west-south, at the slope's heights.
+            let (x0, x1, z0, z1) = if along_x(facing) {
+                (first, last + 1, line, line + 1)
+            } else {
+                (line, line + 1, first, last + 1)
+            };
+            let corners = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]
+                .iter()
+                .zip(tops)
+                .map(|(&[x, z], up)| Vec3::new(x as f32, y as f32 + up, z as f32) * CELL_M)
+                .collect::<Vec<_>>();
+            quad(
+                &mut out,
+                [corners[0], corners[1], corners[2], corners[3]],
+                Vec3::Y,
+                colour,
+            );
+        }
+    }
     out
+}
+
+/// Whether a slope rising this way is the same along X, so its runs go along X.
+fn along_x(facing: Facing) -> bool {
+    matches!(facing, Facing::North | Facing::South)
 }
 
 /// Whether a cube fills its sides, so its neighbours' faces against it are hidden.
@@ -69,11 +124,15 @@ fn fills(cube: &Cube) -> bool {
 fn corners(shape: Shape) -> [f32; 4] {
     match shape {
         Shape::Half | Shape::Slope(_) | Shape::OuterCorner(_) | Shape::InnerCorner(_) => {
-            [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]].map(|[u, v]| shape.top(u, v))
+            CORNERS.map(|[u, v]| shape.top(u, v))
         }
         _ => [1.0; 4],
     }
 }
+
+/// A cube's corners on its footprint, as fractions east and south: west-north, east-north,
+/// east-south and west-south.
+const CORNERS: [[f32; 2]; 4] = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
 
 /// The six directions a face looks, and which of them is up.
 const DIRECTIONS: [IVec3; 6] = [
@@ -142,12 +201,14 @@ fn cut(
     at: IVec3,
     cube: &Cube,
     tops: [f32; 4],
-    solid: &dyn Fn(IVec3) -> bool,
+    with_top: bool,
+    store: &Cubes,
     colours: &mut Colours,
 ) {
+    let solid = |at: IVec3| store.get(at).is_some_and(|cube| fills(&cube));
     let base = at.as_vec3();
     let corner = |i: usize, up: f32| {
-        let [u, v] = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]][i];
+        let [u, v] = CORNERS[i];
         (base + Vec3::new(u, up, v)) * CELL_M
     };
     let (top, side) = (colours.of(cube.kind, true), colours.of(cube.kind, false));
@@ -155,7 +216,7 @@ fn cut(
     // The top, split along the diagonal its shape creases on: the one whose middle is at
     // the shape's height over the cube's middle.
     let middle = cube.shape.top(0.5, 0.5);
-    let corners = [0, 1, 2, 3].map(|i| corner(i, tops[i]));
+    let points = [0, 1, 2, 3].map(|i| corner(i, tops[i]));
     let across =
         ((tops[0] + tops[2]) * 0.5 - middle).abs() > ((tops[1] + tops[3]) * 0.5 - middle).abs();
     let triangles = if across {
@@ -163,17 +224,39 @@ fn cut(
     } else {
         [[0, 1, 2], [0, 2, 3]]
     };
-    for [a, b, c] in triangles {
-        triangle(out, [corners[a], corners[b], corners[c]], Vec3::Y, top);
+    if with_top {
+        for [a, b, c] in triangles {
+            triangle(out, [points[a], points[b], points[c]], Vec3::Y, top);
+        }
     }
     // Each side, from the foot to the top's height at its two corners, where nothing fills
-    // it: west-north to east-north is the north side, and so on round.
+    // it as high: west-north to east-north is the north side, and so on round; against a
+    // cut neighbour as high along the edge they share, as along a roof's course, nothing.
     for (i, normal) in [IVec3::NEG_Z, IVec3::X, IVec3::Z, IVec3::NEG_X]
         .iter()
         .enumerate()
     {
         let (a, b) = (i, (i + 1) % 4);
         if solid(at + *normal) || (tops[a] <= 0.0 && tops[b] <= 0.0) {
+            continue;
+        }
+        let covered = store.get(at + *normal).is_some_and(|next| {
+            let theirs = corners(next.shape);
+            // Our corner (u, v) is theirs at (u, v) less the step to them.
+            let across = |i: usize| {
+                let [u, v] = CORNERS[i];
+                let (u, v) = (u - normal.x as f32, v - normal.z as f32);
+                CORNERS
+                    .iter()
+                    .position(|&c| c == [u, v])
+                    .map_or(0.0, |j| theirs[j])
+            };
+            next.is_in()
+                && next.fill == Fill::Solid
+                && across(a) >= tops[a] - 1e-4
+                && across(b) >= tops[b] - 1e-4
+        });
+        if covered {
             continue;
         }
         let side_corners = [
@@ -318,6 +401,41 @@ mod tests {
             .reduce(Vec3::max)
             .unwrap();
         assert_eq!(high, Vec3::new(4.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn a_course_of_slopes_is_one_plane_with_no_sides_between() {
+        let slope = Cube {
+            shape: Shape::Slope(Facing::North),
+            ..stone()
+        };
+        let base = Base::from_shortcuts(&[
+            BuildOp::Fill {
+                min: [0, 0, 0],
+                max: [5, 0, 0],
+                cube: Some(stone()),
+            },
+            BuildOp::Fill {
+                min: [0, 1, 0],
+                max: [5, 1, 0],
+                cube: Some(slope),
+            },
+        ]);
+        let surface = hull(
+            &base,
+            &Kits(Vec::new()),
+            &Maps::default(),
+            IVec3::splat(-16),
+            IVec3::splat(31),
+        );
+        let normals = &surface.shared.normals;
+        // The six slopes' tops, one quad facing up and south: two triangles.
+        let sloped = normals.iter().filter(|n| n.y > 0.1 && n.z > 0.1).count();
+        assert_eq!(sloped, 6);
+        // Their sides: only the two at the course's ends, east and west.
+        let ends = normals.iter().filter(|n| n.x.abs() > 0.9).count();
+        // The stone row's two ends, a rectangle each, and the slopes' two, a triangle each.
+        assert_eq!(ends, 2 * 6 + 2 * 3);
     }
 
     #[test]

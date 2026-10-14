@@ -88,4 +88,28 @@ The bare view, nothing built, measured 8.1 ms median with the game's own work 6.
 | `town300`: first laid to last on screen, cold | 27.4 s | 23.8 s |
 | `castle`: what the base holds | | 1,088 MiB on the GPU walking in, 63 MiB from the field; 41 MiB on the CPU |
 
-The town's street walk is still over the budget in its 99th percentile and hitches: its near detail, 300,000 triangles a stone house, is put on screen a section at a time as the walk reaches it (2.8 GiB of meshes, the slowest burst 3.5 s), which D278 does not touch. Numbers on the integrated GPU follow.
+The town's street walk is still over the budget in its 99th percentile and hitches: its near detail, 300,000 triangles a stone house, is put on screen a section at a time as the walk reaches it (2.8 GiB of meshes, the slowest burst 3.5 s), which D278 does not touch.
+
+## After (D278) on the integrated Radeon at low, one run each
+
+| Scene | Before | After | GPU, after | Triangles a frame |
+|---|---|---|---|---|
+| `town300` (street) | did not finish in 300 s | 86.5 / 143.5 / 349.0 | 57.1 ms | 3.7 M |
+| `town300-rise` | 80.9 / 116.0 / 137.9 | 56.2 / 69.5 / 81.6 | 48.3 ms (82.1 before) | 2.6 M (5.8 M) |
+| `castle` | 83.4 / 143.7 / 152.1 | 66.0 / 123.7 / 133.1 | 44.5 ms | 3.3 M |
+| `castle-field` | 32.4 / 41.7 / 44.7 | 30.7 / 43.4 / 47.0 | 24.2 ms | 1.0 M |
+| `far` | 28.0 / 49.5 / 62.6 | 26.7 / 38.7 / 42.5 | 22.2 ms | 0.8 M |
+
+`far` and `castle-field` meet D239's 33.3 ms median, as the bare view's 28.4 ms nearly does alone.
+
+Then, from the same runs' counts: the hull's roof courses merged into one plane each and the sides between cut cubes dropped, 630 triangles a house (`cargo xtask sections`: 31,564 for the village's fifty, against the old proxy's 267,770); and at the low preset the far detail handing over to the hull at 120 m rather than 180 (60 m as drawn there). On the Radeon, one run each:
+
+| Scene | After the first change | After both | GPU | Triangles a frame |
+|---|---|---|---|---|
+| `town300-rise` | 56.2 / 69.5 / 81.6 | 36.2 / 58.2 / 91.4 | 30.9 ms | 1.6 M |
+| `castle` | 66.0 / 123.7 / 133.1 | 67.0 / 111.2 / 121.6 | 44.9 ms | 2.8 M |
+| `far` | 26.7 / 38.7 / 42.5 | 21.6 / 33.6 / 74.4 | 17.6 ms | 0.7 M |
+
+The town from the rise is within 3 ms of D239's 33.3 ms, its GPU at 30.9 ms; the castle walked through is its near and middle detail, the stone's surface displaced a few centimetres a step, which D278 does not change.
+
+A `town` view in `cargo xtask lodcheck` (forty buildings down a street from 25 m up, the detail scale swept from half to twice) finds nothing popping as the far detail hands over to the hull: no frame changes by a patch, worst 0.00%. The town and the castle near do not: their frames are the main pass and depth prepass over the far and middle detail of the houses within 90 m (its preset halves distances), 20,000 and 96,000 triangles a house, and the street walk's worst frames are sections put on screen as it reaches them.

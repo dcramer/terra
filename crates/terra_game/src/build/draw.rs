@@ -37,6 +37,18 @@ use terra_world::quality::Quality;
 const NEAR_M: f32 = 25.0;
 const MID_M: f32 = 60.0;
 const FAR_M: f32 = 180.0;
+/// Where the far detail hands over to the hull at the low preset, as authored: nearer, as its
+/// GPU is spent on the far detail's triangles a few pixels across (D278).
+const FAR_LOW_M: f32 = 120.0;
+
+/// Where a section's far detail ends at a quality preset.
+fn far_end(quality: Quality) -> f32 {
+    if quality == Quality::Low {
+        FAR_LOW_M
+    } else {
+        FAR_M
+    }
+}
 const PROXY_M: f32 = 600.0;
 /// How far a plan's ghosts are seen.
 const GHOST_M: f32 = 90.0;
@@ -67,9 +79,9 @@ fn proxy_fade() -> std::ops::Range<f32> {
 }
 
 /// A section's proxy: from where its far detail ends to where its base's cell takes over.
-fn proxy_range() -> VisibilityRange {
+fn proxy_range(far: f32) -> VisibilityRange {
     VisibilityRange {
-        start_margin: fade(FAR_M),
+        start_margin: fade(far),
         end_margin: proxy_fade(),
         use_aabb: false,
     }
@@ -723,13 +735,13 @@ fn show(
         add(mesh, looks.next.clone(), range(None, next_to));
     }
     if let Some(mesh) = parts.plain {
-        add(mesh, looks.structure.clone(), range(None, FAR_M));
+        add(mesh, looks.structure.clone(), range(None, far_end(quality)));
     }
     if let Some(mesh) = parts.far {
-        add(mesh, looks.far.clone(), range(far_from, FAR_M));
+        add(mesh, looks.far.clone(), range(far_from, far_end(quality)));
     }
     if let Some(mesh) = parts.proxy {
-        add(mesh, looks.far.clone(), proxy_range());
+        add(mesh, looks.far.clone(), proxy_range(far_end(quality)));
     }
     if coarse_shadows {
         for id in quiet {

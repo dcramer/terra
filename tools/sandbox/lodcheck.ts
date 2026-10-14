@@ -7,7 +7,11 @@
 // few scattered pixels a frame, which a morphological opening removes; a pop is a patch that
 // appears or goes at once, which survives it.
 //
+<<<<<<< HEAD
 //   node tools/sandbox/lodcheck.ts [--views floor,path,clearing,village] [--time 17] [--limit 0.5]
+=======
+//   node tools/sandbox/lodcheck.ts [--views floor,path,clearing,town] [--time 17] [--limit 0.5]
+>>>>>>> 34026d1 (A hull's roof courses one plane each, 630 triangles a house; the low preset hands far detail to it at 120 m; lodcheck looks down a street (D278))
 //
 // Prints each view's worst frames, with the share of the picture that popped and the detail
 // scale it popped at (1 is as played: a pop at 1.3 happens 1.3 times as far off as the
@@ -31,7 +35,18 @@ const VIEWS: Record<string, string> = {
   path: "-6,1.7,-80,40,2.0,-74",
   clearing: "7,1.8,9,-8,1.2,-7",
   edge: "0,1.8,250,0,5,200",
+<<<<<<< HEAD
   village: "-85,16,10,-5,0,-50",
+=======
+  // Down a street of forty buildings from 25 m up, houses from 30 m to 310 m off, so the
+  // sweep crosses each one's far detail handing over to its hull (D278).
+  town: "-170,25,-170,150,0,-170",
+};
+/// What each view draws: the lush forest with the walker alone, or a view's own scene.
+const WALK = ["--experiment", "walk", "--experiment", "lush", "--level", "yard"];
+const SCENES: Record<string, string[]> = {
+  town: ["--experiment", "play", "--level", "yard", "--radius", "30000", "--town", "40"],
+>>>>>>> 34026d1 (A hull's roof courses one plane each, 630 triangles a house; the low preset hands far detail to it at 120 m; lodcheck looks down a street (D278))
 };
 /// What each view's run is: the forest walked, or the village built on the yard.
 const SCENE = (view: string) =>
@@ -55,7 +70,11 @@ const arg = (name: string, fallback: string) => {
   const at = process.argv.indexOf(name);
   return at > 0 ? process.argv[at + 1] : fallback;
 };
+<<<<<<< HEAD
 const views = arg("--views", "floor,path,clearing,village").split(",");
+=======
+const views = arg("--views", "floor,path,clearing,town").split(",");
+>>>>>>> 34026d1 (A hull's roof courses one plane each, 630 triangles a house; the low preset hands far detail to it at 120 m; lodcheck looks down a street (D278))
 const hour = arg("--time", "17");
 const limit = Number(arg("--limit", "0.5"));
 const out = resolve(ROOT, "shots/lodcheck");
@@ -106,12 +125,24 @@ const runs = await Promise.all(
   views.map((view) => {
     const dir = resolve(out, view);
     mkdirSync(dir);
+<<<<<<< HEAD
     const [command, words] = offscreenRun(`lodcheck-${view}`, [
       "--clean", ...SCENE(view), "--time", hour,
       "--vantage", VIEWS[view], "--detail-sweep", `${SWEEP.from}-${SWEEP.to}@${SWEEP.first}-${SWEEP.last}`,
       "--shots", `${offscreenPath(dir)}/f@${SWEEP.first + SETTLE - 1}-${SWEEP.last}`,
     ]);
     return run(command, words, { ...process.env, BEVY_ASSET_ROOT: ROOT });
+=======
+    return run(
+      resolve(ROOT, "target/release/terra_sandbox"),
+      [
+        "--offscreen", "--clean", ...(SCENES[view] ?? WALK), "--time", hour,
+        "--vantage", VIEWS[view], "--detail-sweep", `${SWEEP.from}-${SWEEP.to}@${SWEEP.first}-${SWEEP.last}`,
+        "--shots", `${dir}/f@${SWEEP.first + SETTLE - 1}-${SWEEP.last}`,
+      ],
+      { ...process.env, BEVY_ASSET_ROOT: ROOT },
+    );
+>>>>>>> 34026d1 (A hull's roof courses one plane each, 630 triangles a house; the low preset hands far detail to it at 120 m; lodcheck looks down a street (D278))
   }),
 );
 views.forEach((view, i) => {
