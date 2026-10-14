@@ -99,6 +99,9 @@ fn lit_through(input: PbrInput, colour: vec3<f32>, sky: f32, frag_coord: vec4<f3
     let forward = 0.75 * pow(toward, 6.0) + 0.25 * toward * toward;
     // Each leaf at its own tilt (D269), so some glow brighter than their neighbours.
     let behind = clamp(dot(-input.N, L), 0.0, 1.0);
+    // Mostly toward the sun, little from any angle on its far side: at a fifth, every leaf
+    // facing away from the sun glowed, and the crowns along the top of the picture read lime,
+    // 14% of its top third against Sons of the Forest's 2% (D300).
     let view_z = dot(vec4<f32>(
         view.view_from_world[0].z,
         view.view_from_world[1].z,
@@ -109,7 +112,7 @@ fn lit_through(input: PbrInput, colour: vec3<f32>, sky: f32, frag_coord: vec4<f3
     let reached = mix(LAYERS * sky, 1.0, shadow);
     let deep = sky * sky;
     return colour * THROUGH * (*sun).color.rgb * view.exposure
-        * reached * deep * wind.leaf.z * (0.8 * forward + 0.2 * behind);
+        * reached * deep * wind.leaf.z * (0.8 * forward + 0.05 * behind);
 }
 
 // The sky's light through a leaf (D272): what falls on its upper face, as the sky occlusion
