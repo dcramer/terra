@@ -49,12 +49,21 @@ pub struct OpenSky {
     pub brightness: f32,
 }
 
-/// The painted sky, and what it was last painted from.
+/// The painted sky, what it was last painted from, and for how many more frames Bevy is to
+/// filter it into the light the shading reads.
 #[derive(Resource)]
 struct Painted {
     image: Handle<Image>,
     from: Option<[f32; 16]>,
+    filtering: u32,
 }
+
+/// Bevy filters a generated environment map into its diffuse and specular light every frame
+/// it is there, nearly two milliseconds of the GPU's time, though the sky is painted again only
+/// a few times a minute. So it is there only for this many frames after each painting, enough
+/// for the new sky to reach the GPU and be filtered; the filtered light stays on the camera
+/// between (`EnvironmentMapLight`), and its brightness and turn are set on that directly.
+const FILTER_FRAMES: u32 = 4;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<SkyLight>()
@@ -88,6 +97,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.insert_resource(Painted {
         image: images.add(image),
         from: None,
+        filtering: FILTER_FRAMES,
     });
 }
 
@@ -109,6 +119,7 @@ fn light_camera(
 /// Paints the sky again when its light has changed enough to see, and turns it so its
 /// up is the camera's: the planet's centre is the world's origin.
 fn paint(
+    mut commands: Commands,
     light: Res<SkyLight>,
     sky: Res<Sky>,
     tweaks: Res<Tweaks>,
@@ -117,35 +128,40 @@ fn paint(
     mut images: ResMut<Assets<Image>>,
     mut camera: Query<
         (
+            Entity,
             &GlobalTransform,
-            &mut GeneratedEnvironmentMapLight,
+            Option<&mut GeneratedEnvironmentMapLight>,
             Option<&mut EnvironmentMapLight>,
         ),
         With<MainCamera>,
     >,
 ) {
-    let Ok((at, mut environment, filtered)) = camera.single_mut() else {
+    let Ok((entity, at, generated, filtered)) = camera.single_mut() else {
         return;
     };
     let up = at.translation().normalize_or(Vec3::Y);
     let rotation = Quat::from_rotation_arc(Vec3::Y, up);
-    if environment.rotation.angle_between(rotation) > 0.01 {
-        environment.rotation = rotation;
-    }
-    if environment.intensity != light.brightness {
-        environment.intensity = light.brightness;
-    }
-    // Bevy makes the light the shading reads, `EnvironmentMapLight`, once from the
-    // generated one, and does not follow later changes to its brightness or turn, so they
-    // are given to it as well; without this the shade kept the first frame's light all day.
+    // Bevy makes the light the shading reads, `EnvironmentMapLight`, from the generated
+    // one, and does not follow later changes to its brightness or turn, so they are given
+    // to it as well; without this the shade kept the first frame's light all day.
     if let Some(mut filtered) = filtered {
-        if filtered.intensity != environment.intensity {
-            filtered.intensity = environment.intensity;
+        if filtered.intensity != light.brightness {
+            filtered.intensity = light.brightness;
         }
-        if filtered.rotation != environment.rotation {
-            filtered.rotation = environment.rotation;
+        if filtered.rotation.angle_between(rotation) > 0.01 {
+            filtered.rotation = rotation;
         }
     }
+    let generating = generated.is_some();
+    if let Some(mut generated) = generated {
+        if generated.intensity != light.brightness {
+            generated.intensity = light.brightness;
+        }
+        if generated.rotation.angle_between(rotation) > 0.01 {
+            generated.rotation = rotation;
+        }
+    }
+    painted.filtering = painted.filtering.saturating_sub(1);
 
     let linear = |c: Color| Vec3::from_slice(&c.to_linear().to_f32_array()[..3]);
     let sun_height = tweaks.sun_direction.normalize_or(Vec3::Y).dot(up).max(0.0);
@@ -174,9 +190,26 @@ fn paint(
         .from
         .is_some_and(|from| from.iter().zip(key).all(|(a, b)| (a - b).abs() < 0.005))
     {
+        // Unchanged: once the last painting is filtered, Bevy need not filter it again.
+        if generating && painted.filtering == 0 {
+            commands
+                .entity(entity)
+                .remove::<GeneratedEnvironmentMapLight>();
+        }
         return;
     }
     painted.from = Some(key);
+    painted.filtering = FILTER_FRAMES;
+    if !generating {
+        commands
+            .entity(entity)
+            .insert(GeneratedEnvironmentMapLight {
+                environment_map: painted.image.clone(),
+                intensity: light.brightness,
+                rotation,
+                ..default()
+            });
+    }
     let (sky, ground) = colours.lobes();
     open.sky = sky;
     open.ground = ground;

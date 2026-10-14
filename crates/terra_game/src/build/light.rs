@@ -9,7 +9,7 @@
 use super::store::each;
 use super::{Built, Site};
 use crate::planet::MainCamera;
-use bevy::light::{EnvironmentMapLight, GeneratedEnvironmentMapLight, LightProbe};
+use bevy::light::{EnvironmentMapLight, LightProbe};
 use bevy::prelude::*;
 use std::collections::BTreeMap;
 
@@ -41,7 +41,7 @@ fn place(
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
     probes: Query<(Entity, &ChildOf), With<Indoors>>,
-    camera: Query<(&EnvironmentMapLight, &GeneratedEnvironmentMapLight), With<MainCamera>>,
+    camera: Query<&EnvironmentMapLight, With<MainCamera>>,
 ) {
     // Nothing to dim until the sky lights the camera.
     let Some(sky) = camera.iter().next().map(dimmed) else {
@@ -83,20 +83,18 @@ fn place(
     }
 }
 
-/// The sky's light as it reaches inside: the camera's, the brightness the sky gives it
+/// The sky's light as it reaches inside: the camera's, at the brightness the sky gives it
 /// now, dimmed.
-fn dimmed(
-    (light, generated): (&EnvironmentMapLight, &GeneratedEnvironmentMapLight),
-) -> EnvironmentMapLight {
+fn dimmed(light: &EnvironmentMapLight) -> EnvironmentMapLight {
     EnvironmentMapLight {
-        intensity: generated.intensity * INDOORS,
+        intensity: light.intensity * INDOORS,
         ..light.clone()
     }
 }
 
 /// Keeps every room's light the sky's, dimmed, as the day turns.
 fn follow(
-    camera: Query<(&EnvironmentMapLight, &GeneratedEnvironmentMapLight), With<MainCamera>>,
+    camera: Query<&EnvironmentMapLight, With<MainCamera>>,
     mut probes: Query<&mut EnvironmentMapLight, (With<Indoors>, Without<MainCamera>)>,
 ) {
     let Some(sky) = camera.iter().next().map(dimmed) else {
