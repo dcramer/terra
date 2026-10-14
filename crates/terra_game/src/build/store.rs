@@ -65,6 +65,19 @@ pub(super) struct Sections {
     pub laying: Option<bevy::tasks::Task<(terra_build::sections::Whole, f32)>>,
     /// What a walker meets of a plan shown so far through, being worked out.
     pub standing: Option<bevy::tasks::Task<Base>>,
+    /// The last change since it was noticed, until all it set waiting is on screen: when,
+    /// how many sections it set waiting, and how many came back merged anew or the same,
+    /// for `Build: change on screen` (research/building-audit.md).
+    pub change: Option<Change>,
+}
+
+/// A change being drawn, timed from when it was noticed to when it is all on screen.
+#[derive(Debug)]
+pub(super) struct Change {
+    pub since: std::time::Instant,
+    pub waiting: usize,
+    pub merged: usize,
+    pub same: usize,
 }
 
 pub fn plugin(app: &mut App) {
@@ -153,6 +166,12 @@ fn noticed(build: &mut Build) {
     for at in affected(&build.base, &relit) {
         wait(at, false);
     }
+    sections.change = Some(Change {
+        since: std::time::Instant::now(),
+        waiting: sections.waiting.len(),
+        merged: 0,
+        same: 0,
+    });
 }
 
 /// The middle of a section, in its base's own space, in metres: where what is drawn of it

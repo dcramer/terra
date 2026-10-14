@@ -75,11 +75,12 @@ export const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms))
 /// by a relative path, such as a save: a script that restarts a run to load its save keeps
 /// the same copy. `foreground` lets a person use the window too; otherwise the run stays
 /// out of their way (`--background`).
-export type Start = { windows?: boolean; realTime?: boolean; foreground?: boolean; copy?: string };
+/// `release` runs an optimised build, to time things as a player would meet them.
+export type Start = { windows?: boolean; realTime?: boolean; foreground?: boolean; copy?: string; release?: boolean };
 
 /// Starts a sandbox listening, in the background, on a port nothing else answers on and with
 /// a token to know it by, and waits until it answers. Its log goes to shots/remote.log.
-export async function start(sandboxArgs: string[], { windows, realTime, foreground, copy }: Start = {}) {
+export async function start(sandboxArgs: string[], { windows, realTime, foreground, copy, release }: Start = {}) {
   for (let tries = 0; tries < 20; tries++) {
     // A random port away from the usual one other runs use, below the dynamic range, where
     // Windows reserves blocks of ports for Hyper-V and WSL and a run would start without a
@@ -99,8 +100,8 @@ export async function start(sandboxArgs: string[], { windows, realTime, foregrou
   const args = ["--remote-port", String(port), "--remote-token", token, ...(realTime ? [] : ["--steady"]), ...(foreground ? [] : ["--background"]), ...sandboxArgs];
   writeMark(0);
   const command = windows
-    ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", "--copy", copy ?? `remote-${port}`, "--", ...args]]
-    : ["cargo", ["run", "-q", "-p", "terra_sandbox", "--", ...args]];
+    ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", ...(release ? ["--release"] : []), "--copy", copy ?? `remote-${port}`, "--", ...args]]
+    : ["cargo", ["run", "-q", ...(release ? ["--release"] : []), "-p", "terra_sandbox", "--", ...args]];
   // Windows will not replace a program that is still closing, such as the last run of this
   // one, so a start that ends at once for that reason is tried again.
   const logPath = resolve(ROOT, "shots/remote.log");

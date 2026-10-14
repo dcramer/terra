@@ -139,6 +139,13 @@ const TASKS: &[Task] = &[
         run: |_| kits(),
     },
     Task {
+        name: "rules",
+        takes: "[--pure] [--here] [--debug]",
+        does: "audit building: its rules by test and live, the village's drawing, edits' and frames' timings (research/building-audit.md)",
+        group: "Play and check",
+        run: rules,
+    },
+    Task {
         name: "sections",
         takes: "[building]",
         does: "time laying and merging the village's sections, as the game's workers do, against the 2 ms bar",
@@ -977,6 +984,73 @@ fn sections(args: &[String]) -> bool {
     ];
     cargo.extend(args.iter().map(String::as_str));
     run("cargo", &cargo)
+}
+
+/// The building audit (research/building-audit.md): terra_build's rules tests with the
+/// known failures too, the random operations over many seeds, the drawing audit over the
+/// village, and the rules checked live (tools/sandbox/rules.ts) unless `--pure`. Every part
+/// runs whatever an earlier one says, and each says pass or fail.
+fn rules(args: &[String]) -> bool {
+    let pure = args.iter().any(|arg| arg == "--pure");
+    let mut results = vec![
+        (
+            "rules tests, known failures included",
+            run(
+                "cargo",
+                &[
+                    "test",
+                    "-q",
+                    "-p",
+                    "terra_build",
+                    "--test",
+                    "rules",
+                    "--",
+                    "--include-ignored",
+                ],
+            ),
+        ),
+        ("random operations over 64 seeds", {
+            println!("\n> TERRA_SEEDS=64 cargo test -p terra_build random_operations");
+            Command::new("cargo")
+                .args([
+                    "test",
+                    "-q",
+                    "--release",
+                    "-p",
+                    "terra_build",
+                    "random_operations",
+                ])
+                .env("TERRA_SEEDS", "64")
+                .current_dir(root())
+                .status()
+                .is_ok_and(|status| status.success())
+        }),
+        (
+            "drawing audit",
+            run(
+                "cargo",
+                &[
+                    "run",
+                    "-q",
+                    "--release",
+                    "-p",
+                    "terra_build",
+                    "--example",
+                    "drawing",
+                ],
+            ),
+        ),
+    ];
+    if !pure {
+        let mut all = vec!["tools/sandbox/rules.ts"];
+        all.extend(args.iter().map(String::as_str));
+        results.push(("live rules (tools/sandbox/rules.ts)", run("node", &all)));
+    }
+    println!();
+    for (what, passed) in &results {
+        println!("{}  {what}", if *passed { "ok  " } else { "FAIL" });
+    }
+    results.iter().all(|(_, passed)| *passed)
 }
 
 /// The tests of the TypeScript tools (D121), which Node runs as they are.

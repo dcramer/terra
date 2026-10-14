@@ -113,6 +113,7 @@ First, as now: arithmetic on the cubes, each to its fill and its kind's slab, st
 - **Property tests over random operations**, as `terra_items` has: after every step, nothing floats, nothing taken while held, refunds exact, layouts the same laid twice, undo returns the state. A failure names its seed and step.
 - **The kit sheet** shows every case in construction-001's table in each state, a vantage per row, for screenshots.
 - **Live**, over the remote (D69): commands to lay a plan, fill, take apart, fit a prop and read a base's state, so a script builds a cabin from plan to door and walks in, as `cargo xtask loop` plays the loop.
+- **Audited**: `cargo xtask rules` (D257, [research/building-audit.md](../research/building-audit.md)) runs every rule by test and live, the drawing over every village building and kit, and the timings below.
 - **Measured**: a `village` scene in `cargo xtask bench`, fifty buildings of mixed kinds, roofs and plans in view, against `village-bare`, the same view with nothing built, on the fast GPU and the integrated one (D25, D185). The bars: no frame above the yard's for the same view; a section laid and merged in under 2 ms on a worker; an operation applied and checked in under 0.1 ms.
 
 ## Order

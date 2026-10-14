@@ -359,6 +359,29 @@ fn end_update(
     }
 }
 
+/// The frames of the last so many seconds (a minute at most is kept): how many, and the
+/// spread of their time between frames, their work, the game's update and the GPU's, for
+/// a script to time a stretch of play (`sandbox.frames`).
+pub fn recent(world: &World, seconds: f32) -> Option<(usize, [Option<Spread>; 4])> {
+    let frames = world.get_resource::<Frames>()?;
+    let now = frames.samples.back()?.at;
+    let samples: Vec<Sample> = frames
+        .samples
+        .iter()
+        .filter(|sample| (now - sample.at).as_secs_f32() <= seconds)
+        .copied()
+        .collect();
+    Some((
+        samples.len(),
+        [
+            spread(&samples, |s| Some(s.frame_ms)),
+            spread(&samples, |s| Some(s.work_ms())),
+            spread(&samples, |s| Some(s.game_ms)),
+            spread(&samples, |s| s.gpu_ms),
+        ],
+    ))
+}
+
 fn spread(samples: &[Sample], value: impl Fn(&Sample) -> Option<f32>) -> Option<Spread> {
     Spread::of(samples.iter().filter_map(value).collect())
 }

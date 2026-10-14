@@ -117,7 +117,12 @@ async function main() {
   const room = (await game.call("build.lay", { what: "room", min: [4, 0, -16], max: [13, 0, -9], kind: "stone" })) as { done: boolean; refused?: string };
   if (room.done) {
     await game.call("build.lay", { what: "roof", min: [4, 0, -16], max: [13, 0, -9], kind: "stone", style: "Hip", pitch: 0.7 });
-    await game.call("build.fill", { steps: 200 });
+    // A pack holds about twenty raw things, so stone is brought as it is needed: about
+    // two hundred steps in, a quarter of a Stone each.
+    for (let round = 0; round < 4; round++) {
+      await game.give("stone:13");
+      await game.call("build.fill", { steps: 50 });
+    }
     const target = await point([4.5, 1.2, -6]);
     const eye = await point([13.5, 4.5, -1.5]);
     await picture("going-up", { at: target.world, from: eye.world });

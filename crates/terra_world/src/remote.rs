@@ -27,6 +27,9 @@
 //!   default: what a person's click on a button does.
 //! - `sandbox.status`: the frame, the game's time, whether it is stopped, frames still to
 //!   step, and the number the run's next line will get.
+//! - `sandbox.frames {seconds?}`: the frames of the last so many seconds (10, a minute at
+//!   most), on the real clock: how many, and the median, 99th percentile and worst of the
+//!   time between them, their work, the game's update and the GPU's, in milliseconds.
 //! - `sandbox.said {since?, containing?, most?}`: what the run has said, from the line
 //!   numbered `since`, only lines containing some text if asked (`record`).
 //! - `sandbox.shot {path}`: saves a screenshot; the reply comes before the file does.
@@ -101,6 +104,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.point", point);
     method(app, "sandbox.click", click);
     method(app, "sandbox.status", status);
+    method(app, "sandbox.frames", frames);
     method(app, "sandbox.said", said);
     method(app, "sandbox.shot", shot);
     method(app, "sandbox.quit", quit);
@@ -607,6 +611,26 @@ fn status(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "stepping": world.resource::<Steps>().left,
         "next_line": next,
     }))
+}
+
+#[derive(Deserialize)]
+struct Recent {
+    seconds: Option<f32>,
+}
+
+/// How the frames of the last few seconds went (`debug::recent`).
+fn frames(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Recent { seconds } = parse_some(params.or(Some(json!({}))))?;
+    let (count, spreads) = crate::debug::recent(world, seconds.unwrap_or(10.0))
+        .ok_or_else(|| refused("no frames are timed in this run"))?;
+    let spread = |spread: Option<crate::debug::Spread>| {
+        spread.map_or(
+            Value::Null,
+            |s| json!({ "median": s.median, "p99": s.high, "worst": s.worst }),
+        )
+    };
+    let [frame, work, game, gpu] = spreads.map(spread);
+    Ok(json!({ "frames": count, "frame": frame, "work": work, "game": game, "gpu": gpu }))
 }
 
 #[derive(Deserialize)]

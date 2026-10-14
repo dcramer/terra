@@ -364,9 +364,32 @@ fn upload(
         let Some(build) = each(&mut site, &mut builds).find(|build| build.root == done.root) else {
             continue;
         };
+        if let Some(change) = build.sections.change.as_mut() {
+            match &done.outcome {
+                Outcome::Drawn { .. } => change.merged += 1,
+                Outcome::Same => change.same += 1,
+            }
+        }
         show(&mut commands, &mut meshes, &look, build, done, *quality);
     }
     let waiting = each(&mut site, &mut builds).all(|build| build.sections.waiting.is_empty());
+    // A change all on screen: how long from its being noticed, and what it set going.
+    if jobs.quiet() {
+        for build in each(&mut site, &mut builds) {
+            if !build.sections.waiting.is_empty() || build.sections.laying.is_some() {
+                continue;
+            }
+            if let Some(change) = build.sections.change.take() {
+                info!(
+                    "Build: change on screen in {:.1} ms: {} sections set waiting, {} merged anew, {} laid the same.",
+                    change.since.elapsed().as_secs_f32() * 1000.0,
+                    change.waiting,
+                    change.merged,
+                    change.same,
+                );
+            }
+        }
+    }
     jobs.settle(waiting);
 }
 
