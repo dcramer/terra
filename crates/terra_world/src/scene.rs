@@ -152,7 +152,7 @@ fn haze(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         Name::new("Haze"),
         Haze,
         FogVolume {
-            fog_color: Color::srgb(0.92, 0.95, 1.0),
+            fog_color: Color::srgb(0.95, 0.94, 0.88),
             density_factor: HAZE_DENSITY,
             density_texture: Some(images.add(haze_density())),
             absorption: 0.05,
@@ -375,9 +375,11 @@ fn follow_quality(
     match quality.haze_steps() {
         Some(steps) => {
             camera.insert(VolumetricFog {
-                // The sky's light in the haze, roughly its colour.
-                ambient_color: Color::srgb(0.7, 0.8, 1.0),
-                ambient_intensity: 0.05,
+                // The sky's light in the haze: under trees it comes through leaves, greener and
+                // far dimmer than the open sky's, which laid a grey-blue veil over the spruces
+                // (D266). The haze glows where the sun lights it, in shafts.
+                ambient_color: Color::srgb(0.55, 0.62, 0.5),
+                ambient_intensity: 0.015,
                 // Each frame's march starts a little differently, for TAA to smooth.
                 jitter: 0.5,
                 step_count: steps,
