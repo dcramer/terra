@@ -140,7 +140,7 @@ Models carry their own materials; the light, the sky and the air are shared shad
 | Ground cover | Grass as clumped blades round the camera, fading into ground of its own colour; leaf litter and moss painted onto the ground under trees (D202) | Working in the lush forest; litter is Poly Haven's Forest Leaves 02, a fifth layer of the ground |
 | Water | A see-through surface mirroring the sky at a low angle | Working; no waves |
 | Shade in corners | Screen-space ambient occlusion over about a metre (D212), and contact shadows where things meet (D204) | Working |
-| Trees, bushes and small plants | Grown by rules, as SpeedTree makes them: trunks and branches of real bark, leaves as cards cut from pictures of real sprays, a few variants a kind, levels of detail and shadow stand-ins by size (D203, D222) | Working: pine, birch and a broadleaf, two bushes, fern, herb and three flowers |
+| Trees, bushes and small plants | Grown by rules, as SpeedTree makes them: trunks and branches of real bark, leaves as cards cut from pictures of real sprays, a few variants a kind, levels of detail and shadow stand-ins by size (D203, D222) | Working: pine, birch and a broadleaf, two bushes, fern, herb and three flowers; in the lush forest, oaks in three forms, Scots pines, Norway spruces, and veteran oaks whose trunks are models with grown crowns (D235) |
 | Rocks | Shapes from CC0 scans cut to 350 to 550 triangles, drawn in real rock materials projected triplanar and tinted by their kind (D212, D222) | Working |
 
 - **Effort goes into light and atmosphere**, which is shader code and shared by everything.

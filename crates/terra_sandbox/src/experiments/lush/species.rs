@@ -799,13 +799,16 @@ fn card(
     };
     // Leaves deep in their mass and in the crown, and low in it, are shaded by the rest.
     let flat = Vec2::new(middle.x - crown.centre.x, middle.z - crown.centre.z).length();
+    let rise = (middle.y / crown.height).clamp(0.0, 1.0);
+    // A cone narrows to its top, which sees the most sky of all.
     let outer = if crown.axial {
-        (flat / (crown.reach * 0.7)).clamp(0.0, 1.0)
+        (flat / (crown.reach * 0.7))
+            .max(rise * rise)
+            .clamp(0.0, 1.0)
     } else {
         (middle.distance(crown.centre) / (crown.reach * 1.1)).clamp(0.0, 1.0)
     };
     let in_mass = (middle.distance(mass) / (size * 3.0)).clamp(0.0, 1.0);
-    let rise = (middle.y / crown.height).clamp(0.0, 1.0);
     let light = 0.44 + 0.22 * outer + 0.16 * in_mass + 0.16 * rise + dice.range(-0.07, 0.07);
     let mut tint = Vec3::new(
         light * dice.range(0.95, 1.05),

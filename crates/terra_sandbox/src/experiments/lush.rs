@@ -722,8 +722,8 @@ fn plant(
     };
     let far_crowns = [
         far_crown(Color::srgb(0.22, 0.32, 0.12)),
-        far_crown(Color::srgb(0.11, 0.19, 0.1)),
-        far_crown(Color::srgb(0.09, 0.15, 0.09)),
+        far_crown(Color::srgb(0.15, 0.23, 0.12)),
+        far_crown(Color::srgb(0.13, 0.21, 0.12)),
     ];
     // Old oaks' bark in two scans, deep-furrowed willow and the finer, greyer one, so a
     // stand of them is not one bark; pines' and spruces' in pine bark, a spruce's greyer.
@@ -779,7 +779,7 @@ fn plant(
                     (barks[which].clone(), [BARK_M, Vec2::splat(1.8)][which], leaf_of[0], Vec3::new(0.92, 0.95, 0.85), &far_crowns[0])
                 }
                 Species::Pine => (barks[2].clone(), Vec2::splat(2.0), leaf_of[1], Vec3::new(1.15, 1.15, 1.0), &far_crowns[1]),
-                Species::Spruce => (barks[3].clone(), Vec2::splat(2.0), leaf_of[2], Vec3::new(0.9, 1.0, 0.9), &far_crowns[2]),
+                Species::Spruce => (barks[3].clone(), Vec2::splat(2.0), leaf_of[2], Vec3::new(1.1, 1.2, 1.05), &far_crowns[2]),
             };
             let wood = [0, 1, 2].map(|detail| wood(&tree, detail, height, bark_m));
             // Every level of the crown, and its shadow, from one set of cards (D221).
