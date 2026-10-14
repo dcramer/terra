@@ -96,14 +96,14 @@ Each row is a case the system must draw, build and collide correctly. Status is 
 | Ground higher than the floor | Open: dig it (D131) or refuse | D131: dug |
 | A cellar, a terrace into a hill | Built below ground level: the ground dug there (D131) | Built |
 | Ground dug away under a building later | Open: the footing shows, or the building is undermined | Footing shows |
-| Door steps | Steps of the kit down to the ground | Built (D206): stone slabs |
+| Door steps | Steps of the kit down to the ground | Built (D261): stair and half cubes of the footing kind, from any doorway |
 | **Support** (rule 11) | | |
-| A wall, floor or post on the ground | Joined to the ground: built | Not checked |
-| A floor or wall built off something not yet built | Refused until what it rests on is in; the plan shows what is first | Not checked |
+| A wall, floor or post on the ground | Joined to the ground: built | Built (D199) |
+| A floor or wall built off something not yet built | Refused until what it rests on is in; the plan shows what is first | Built (D199) |
 | A balcony, a cantilever | Allowed while joined; how far it may reach waits for load (D142) | |
-| Taking out a part that holds others up | Refused, saying which parts rest on it | Not checked |
-| Digging the ground from under a building | Refused in a claim while something rests on it | Not checked |
-| A roof whose walls are taken away | The walls cannot be taken until the roof is | Not checked |
+| Taking out a part that holds others up | Refused, saying which parts rest on it | Built (D199) |
+| Digging the ground from under a building | Refused in a claim while something rests on it | Built (D199) |
+| A roof whose walls are taken away | The walls cannot be taken until the roof is | Built (D199) |
 | **Walking** | | |
 | Walls, glass, openings | Cubes block, openings pass | Built |
 | Ghosts | Walked through (rule 6) | Built |

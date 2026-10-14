@@ -531,8 +531,10 @@ fn cube(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let At { at } = parse_some(params)?;
     let rules = world.resource::<BuildRules>().clone();
     let site = world.resource::<Site>();
+    // The room it is in, if it is air closed in (D261).
+    let room = site.base.room(IVec3::from_array(at));
     Ok(match site.base.cube(IVec3::from_array(at)) {
-        None => json!({ "at": at, "kind": Value::Null }),
+        None => json!({ "at": at, "kind": Value::Null, "room": room }),
         Some(cube) => json!({
             "at": at,
             "kind": rules.name(cube.kind),
@@ -542,6 +544,7 @@ fn cube(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             "built": cube.is_built(),
             "pending": format!("{:?}", cube.pending),
             "part": cube.part.map(|part| part.0),
+            "room": room,
         }),
     })
 }

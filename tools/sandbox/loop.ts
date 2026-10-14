@@ -190,7 +190,7 @@ async function play() {
       // On the meadow north of the lake, facing north, as the cabin builds.
       await game.warp([0, -8], [0, -14]);
       await game.hold("Hammer");
-      await game.press("b@20", "1@30", "enter@40", "e@70:80", "b@180", "4@190", "right@200", "enter@210", "right@230:40", "e@290:200");
+      await game.press("b@20", "2@30", "enter@40", "e@70:80", "b@180", "4@190", "right@200", "enter@210", "right@230:40", "e@290:200");
       smelter = where(await game.waitFor("Placed a Smelter", { timeout: 60 }));
     },
     "Placed a Claim stone",

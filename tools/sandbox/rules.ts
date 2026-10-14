@@ -105,7 +105,7 @@ async function main() {
     await game.warp([0, -8], [0, -14]);
     await game.give("stone:4");
     await game.hold("Hammer");
-    await game.press("b@20", "1@30", "enter@40", "e@70:80");
+    await game.press("b@20", "2@30", "enter@40", "e@70:80");
     const placed = (await game.waitFor("Placed a Claim stone", { timeout: 60 })).text;
     // The pickaxe in hand, so no part's outline is drawn over the pictures; the build.*
     // methods build as the hammer does whatever is held.
