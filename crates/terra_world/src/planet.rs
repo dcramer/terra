@@ -372,6 +372,16 @@ const GROUND_LAYER_METRES: Vec4 = Vec4::new(1.3, 2.0, 2.7, 1.5);
 const GROUND_MORE_METRES: Vec4 = Vec4::new(2.0, 1.5, 1.67, 0.7);
 
 impl GroundTextures {
+    /// The layers' colours and normal maps, as arrays, for materials drawn in them too, as
+    /// the lush forest's moss on its rocks is (D294).
+    pub fn color(&self) -> &Handle<Image> {
+        &self.color
+    }
+
+    pub fn normal(&self) -> &Handle<Image> {
+        &self.normal
+    }
+
     fn load(assets: &AssetServer) -> Self {
         let layers = |linear: bool| {
             move |settings: &mut ImageLoaderSettings| {

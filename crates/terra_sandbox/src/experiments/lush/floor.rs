@@ -51,6 +51,12 @@ pub(super) struct MossExtension {
     /// The moss's colour, linear, and in w how much grows.
     #[uniform(100)]
     colour: Vec4,
+    /// The ground's layers, its moss among them (D294).
+    #[texture(101, dimension = "2d_array")]
+    #[sampler(102)]
+    ground_color: Option<Handle<Image>>,
+    #[texture(103, dimension = "2d_array")]
+    ground_normal: Option<Handle<Image>>,
 }
 
 impl MaterialExtension for MossExtension {
@@ -76,8 +82,8 @@ pub(super) fn plugin(app: &mut App) {
 /// The forest's own soil: a dark loam, grey-brown, as a wood's trodden paths and bare
 /// earth are, rather than the pale sandy brown of the open world's.
 fn forest_soil(mut tweaks: ResMut<terra_world::planet::Tweaks>) {
-    tweaks.ground_low = Color::srgb(0.3, 0.25, 0.2);
-    tweaks.ground_high = Color::srgb(0.36, 0.31, 0.25);
+    tweaks.ground_low = Color::srgb(0.24, 0.21, 0.18);
+    tweaks.ground_high = Color::srgb(0.29, 0.26, 0.22);
 }
 
 /// The materials the middle layer's shadows shrink away in, and where each has shrunk away
@@ -150,12 +156,18 @@ fn show_undergrowth(
 fn dress_mossy(
     mut scans: ResMut<MossyScans>,
     gltf: Res<Assets<GltfMaterial>>,
+    ground: Option<Res<terra_world::planet::GroundTextures>>,
     mut materials: ResMut<Assets<Mossy>>,
 ) {
+    let Some(ground) = ground else {
+        return;
+    };
     scans.0.retain(|(from, to)| {
         let (Some(from), Some(mut to)) = (gltf.get(from), materials.get_mut(to)) else {
             return true;
         };
+        to.extension.ground_color = Some(ground.color().clone());
+        to.extension.ground_normal = Some(ground.normal().clone());
         to.base = StandardMaterial {
             base_color: from.base_color,
             base_color_texture: from.base_color_texture.clone(),
@@ -170,6 +182,10 @@ fn dress_mossy(
         false
     });
 }
+
+/// How much grass grows under a closed canopy, as a share of a lit lawn's, before its tufts
+/// (D293): Sons of the Forest's floor under its trees is grass and ferns, not bare litter.
+const SHADE_GRASS: f32 = 0.62;
 
 /// The floor runs on past the forest's edge this far, as meadow with scrub, bracken and
 /// flowers at its edge, so the forest grades into the open rather than ending.
@@ -263,6 +279,9 @@ struct Over {
     shade: f32,
     needles: f32,
     spruce: f32,
+    /// How much of what falls here is a broadleaf's leaves, from the crowns near, whatever
+    /// light comes through them (D294).
+    leaves: f32,
     bark: f32,
 }
 
@@ -280,6 +299,8 @@ impl Crowns {
         // Under a broadleaf crown its own leaves fall over the needles.
         let mut leaves_miss = 1.0f32;
         let mut spruce_miss = 1.0f32;
+        // And its leaves fall a little past its crown, as needles do, sun or shade.
+        let mut fallen_miss = 1.0f32;
         for di in -CROWN_REACH..=CROWN_REACH {
             for dj in -CROWN_REACH..=CROWN_REACH {
                 for stand in self.filed.get(&(i + di, j + dj)).into_iter().flatten() {
@@ -292,6 +313,9 @@ impl Crowns {
                         needles_miss *= 1.0 - fall * 0.95;
                     } else {
                         leaves_miss *= 1.0 - stand.under(at) * 0.9;
+                        let d = stand.crown_at.distance(at);
+                        let fall = 1.0 - smoothstep(0.8 * stand.crown_m, 2.2 * stand.crown_m, d);
+                        fallen_miss *= 1.0 - fall * 0.9;
                     }
                     if stand.spruce {
                         spruce_miss *= 1.0 - stand.under(at) * 0.9;
@@ -303,6 +327,7 @@ impl Crowns {
             shade: 1.0 - light,
             needles: (1.0 - needles_miss) * (0.25 + 0.75 * leaves_miss),
             spruce: 1.0 - spruce_miss,
+            leaves: 1.0 - fallen_miss,
             bark,
         }
     }
@@ -354,6 +379,7 @@ struct Here {
     needles: f32,
     /// How much of the canopy over it is spruce.
     spruce: f32,
+    leaves: f32,
     /// How far the nearest bark, the nearest log or rock's edge, and the nearest path's
     /// edge are.
     bark: f32,
@@ -387,6 +413,7 @@ impl Map {
             light: (1.0 - shade + 0.45 * corridor).min(1.0),
             needles: over.needles,
             spruce: over.spruce,
+            leaves: over.leaves,
             bark: over.bark,
             lying: self.lying.edge(at),
             path,
@@ -403,15 +430,17 @@ impl Map {
         let path = here.path;
         // The path's edge: no grass on it, short and broken grass in a fraying band beside
         // it, dirt, roots and leaves in that band.
-        let off_path = smoothstep(0.05, 1.5, path);
+        // Grass comes up close to a path's edge, as it does beside a trodden track (D293).
+        let off_path = smoothstep(-0.1, 0.7, path);
         let fray = (1.0 - smoothstep(0.0, 1.5, path)) * smoothstep(-0.35, 0.1, path);
         let patch = 0.6
             + 0.4
                 * self
                     .noise
                     .fbm(Vec3::new(at.x, 0.0, at.y) / 9.0, 2, 2.0, 0.5);
-        // In the shade grass grows mostly where a fleck of light falls, in tufts, thinning out
-        // gradually into the litter rather than ending.
+        // In the shade grass still covers most of the floor, as shade grasses and sedges do
+        // under Sons of the Forest's canopy (D293), thickest where a fleck of light falls, in
+        // tufts, and giving way to bare litter at the trees' feet and on the paths.
         let tufts = smoothstep(0.45, 0.85, self.noise(at, 23.0, 2.6));
         let lit = smoothstep(0.22, 0.72, here.light);
         // Pushed back from the bark, the logs and the rocks.
@@ -419,12 +448,17 @@ impl Map {
         let foot = smoothstep(0.2, 0.85, here.bark + wander * 0.4);
         let beside = smoothstep(0.0, 0.55, here.lying + wander * 0.3);
         // How thick the light lets it grow, thinner and drier on the needles under pines.
-        let light_grows = (1.0 - 0.55 * smoothstep(0.2, 0.7, here.needles))
-            * (lit + (1.0 - lit) * (0.06 + 0.3 * tufts));
+        let light_grows = (1.0 - 0.15 * smoothstep(0.2, 0.7, here.needles))
+            * (lit + (1.0 - lit) * (SHADE_GRASS + 0.3 * tufts));
         // Thin grass grows in clumps, not as a stubble of lone blades spread evenly.
         let clumps = smoothstep(0.35, 0.65, self.noise(at, 89.0, 1.6));
         let clumped = clumps + (1.0 - clumps) * smoothstep(0.3, 0.75, light_grows);
-        let grass = off_path * foot * beside * patch * light_grows * clumped;
+        // A path little walked keeps tussocks along it, more toward its edges (D293).
+        let trodden = off_path.max(
+            (0.45 + 0.4 * smoothstep(-1.2, 0.0, path))
+                * smoothstep(0.45, 0.75, self.noise(at, 29.0, 1.1)),
+        );
+        let grass = trodden * foot * beside * patch * light_grows * clumped;
         // Faint grass is none.
         let grass = grass * smoothstep(0.04, 0.2, grass);
         let floor = 1.0 - lit;
@@ -455,16 +489,23 @@ impl Map {
             lush: self.noise(at, 7.0, 20.0).max(floor * 0.8),
             path: path < 0.0,
             // Fallen leaves cover the floor wherever trees stand near, not only in their deep shade:
-            // off the paths no forest floor is bare; on them a few drift into the hollows.
-            litter: (canopied * (1.0 - needles)).max(fray * 0.7) * on_floor
-                + (1.0 - on_floor) * 0.45 * smoothstep(0.45, 0.8, self.noise(at, 97.0, 1.7)),
+            // off the paths no forest floor is bare; on them a few drift into the hollows. Leaves
+            // fall where broadleaves stand, sun or shade, as needles do where pines stand (D294).
+            litter: (canopied.max(0.9 * smoothstep(0.1, 0.5, here.leaves)) * (1.0 - needles))
+                .max(fray * 0.7)
+                * on_floor
+                + (1.0 - on_floor) * 0.35 * smoothstep(0.45, 0.8, self.noise(at, 97.0, 1.7)),
             moss,
             needles,
             roots,
             shade: 1.0 - here.light,
-            // Tall meadow grass in patches where the sun reaches.
-            tall: smoothstep(0.7, 0.95, here.light)
-                * smoothstep(0.4, 0.7, self.noise(at, 41.0, 7.0)),
+            // Litter heaps against trunks, logs and rocks, its edge wandering (D294).
+            heap: 1.0 - smoothstep(0.0, 0.9, here.bark.min(here.lying) + wander * 0.25),
+            // Tall meadow grass in patches where the sun reaches; in the shade, clumps of
+            // taller sedge among the short grass, so it is not one height (D293).
+            tall: (smoothstep(0.7, 0.95, here.light)
+                * smoothstep(0.4, 0.7, self.noise(at, 41.0, 7.0)))
+            .max(0.6 * floor * smoothstep(0.6, 0.8, self.noise(at, 43.0, 1.9))),
         }
     }
 }
@@ -973,11 +1014,13 @@ impl Lay<'_, '_, '_> {
             base: StandardMaterial::default(),
             extension: MossExtension {
                 colour: Vec3::from_array(
-                    Color::srgb(0.25, 0.32, 0.13)
+                    Color::srgb(0.2, 0.25, 0.1)
                         .to_linear()
                         .to_f32_array_no_alpha(),
                 )
                 .extend(moss),
+                ground_color: None,
+                ground_normal: None,
             },
         });
         self.mossy_scans.0.push((
@@ -2260,14 +2303,19 @@ mod tests {
     }
 
     #[test]
-    fn grass_grows_thick_in_the_open_and_gives_out_under_a_closed_canopy() {
+    fn grass_grows_thick_in_the_open_and_thinner_under_a_closed_canopy() {
         let (open, at) = map_with(&[]);
-        let growing = open.growing(at);
-        assert!(growing.grass > 0.4, "{growing:?}");
-        assert!(growing.shade < 0.05, "{growing:?}");
+        let lit = open.growing(at);
+        assert!(lit.grass > 0.4, "{lit:?}");
+        assert!(lit.shade < 0.05, "{lit:?}");
         let (shaded, _) = map_with(&stand_round(at, Species::Oak));
         let growing = shaded.growing(at);
-        assert!(growing.grass < 0.35, "{growing:?}");
+        // Thinner, but still covering most of the floor, as shade grass does (D293).
+        assert!(
+            growing.grass < lit.grass * 0.85,
+            "{growing:?} against {lit:?}"
+        );
+        assert!(growing.grass > 0.25, "{growing:?}");
         assert!(growing.shade > 0.6, "{growing:?}");
         assert!(growing.litter > 0.5, "leaves under oaks: {growing:?}");
         assert!(growing.needles < 0.1, "{growing:?}");

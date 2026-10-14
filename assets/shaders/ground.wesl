@@ -29,7 +29,8 @@ import bevy_pbr::{
 import bevy_pbr::render::{
     forward_io::{VertexOutput, FragmentOutput},
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
-    mesh_view_bindings::globals,
+    mesh_view_bindings::{globals, view, lights},
+    shadows::fetch_directional_shadow,
 };
 
 // Field order must match GroundExtension in planet.rs.
@@ -93,6 +94,8 @@ const MOSS: u32 = 7u;
 const RELIEF: f32 = 1.5;
 // How many hexagons of the hex tiling (below) a texture's repeat holds across.
 const HEX_PER_REPEAT: f32 = 1.4;
+// How far the soil's own light and dark are drawn out (D294).
+const SOIL_CONTRAST: f32 = 1.7;
 // A layer sampled once, plainly, where its repeat does not show: small patches of it.
 const PLAIN: f32 = -1.0;
 
@@ -292,6 +295,29 @@ fn noise(p: vec3<f32>) -> f32 {
     return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
 }
 
+// How much of a fragment's colour its hollows keep in the sun (D294): 1 out of the sun, and
+// less in the hollows the more of its light is the sun's.
+@if(!PREPASS_PIPELINE)
+fn micro_shadow(world: vec4<f32>, n: vec3<f32>, relief: vec3<f32>, height: f32, frag: vec4<f32>) -> f32 {
+    if lights.n_directional_lights == 0u {
+        return 1.0;
+    }
+    let L = lights.directional_lights[0].direction_to_light;
+    let view_z = dot(vec4<f32>(
+        view.view_from_world[0].z,
+        view.view_from_world[1].z,
+        view.view_from_world[2].z,
+        view.view_from_world[3].z
+    ), world);
+    let sunlit = fetch_directional_shadow(0u, world, n, view_z, frag.xy) * clamp(dot(n, L) * 4.0, 0.0, 1.0);
+    let cavity = smoothstep(0.2, 0.7, height);
+    let micro = clamp(abs(dot(relief, L)) + 2.0 * cavity * cavity - 1.0, 0.0, 1.0);
+    return mix(1.0, micro, sunlit * SUN_SHARE);
+}
+
+// How much of the light on sunlit ground is the sun's, so how much of it the hollows lose.
+const SUN_SHARE: f32 = 0.85;
+
 @fragment
 fn fragment(
     in: VertexOutput,
@@ -353,9 +379,10 @@ fn fragment(
         let gy = dpdy(world);
         let flat_ground = 1.0 - steep;
         // Under broadleaves the floor is their fallen leaves, brown with paler and darker
-        // ones; under conifers, needles, a warmer red-brown.
-        let litter_colour = vec3<f32>(0.1, 0.072, 0.044);
-        let needle_colour = vec3<f32>(0.074, 0.056, 0.04);
+        // ones; under conifers, needles, a warmer red-brown. Both a dark umber, as Sons of
+        // the Forest's floor is, not lit orange (D293).
+        let litter_colour = vec3<f32>(0.068, 0.054, 0.036);
+        let needle_colour = vec3<f32>(0.054, 0.043, 0.031);
         let leaves = smoothstep(0.2, 0.75, litter + (blotch - 0.5) * 0.45) * flat_ground;
         let needly = smoothstep(0.25, 0.7, needles + (blotch - 0.5) * 0.4) * flat_ground;
         // Soil, and rock on steep ground, where the floor's litter does not cover it all.
@@ -363,6 +390,18 @@ fn fragment(
         if max(leaves, needly) < 0.999 {
             let soil_tint = mix(colour, mix(litter_colour, needle_colour, needles), max(litter, needles)) * (0.9 + 0.2 * blotch);
             ground_is = layer(SOIL, 1.0, soil_tint, world, gx, gy, n, 1.0);
+            // Trodden soil is not one tone (D294): its scan's light and dark drawn out, damp,
+            // packed patches darker and dry crumbs lighter, a metre or two across and less, and
+            // small stones worked up out of it, so a path in the sun is not flat peach.
+            let crumbs = ground_is.colour / max(soil_tint, vec3<f32>(0.001));
+            ground_is.colour = soil_tint * pow(max(crumbs, vec3<f32>(0.0)), vec3<f32>(SOIL_CONTRAST));
+            let damp = noise(world * 0.6 + 31.0) * 0.6 + noise(world * 2.1 + 47.0) * 0.4;
+            ground_is.colour *= mix(1.18, 0.62, smoothstep(0.3, 0.75, damp));
+            let stony = smoothstep(0.4, 0.85, noise(world * 0.45 + 59.0)) * 0.5;
+            if stony > 0.0 {
+                let stone_tint = vec3<f32>(0.11, 0.1, 0.085) * (0.75 + 0.5 * fleck);
+                ground_is = settle(ground_is, layer(ROCK, 0.22, stone_tint, world + 71.0, gx, gy, n, 1.0), stony);
+            }
             if steep > 0.0 {
                 let rock_tint = ground.steep.rgb * (0.85 + 0.3 * blotch);
                 ground_is = over(ground_is, layer(ROCK, 1.0, rock_tint, world + 37.0, gx, gy, n, 0.15), steep);
@@ -374,7 +413,7 @@ fn fragment(
             var fallen = layer(LITTER, 1.0, leaf_tint, world + 41.0, gx, gy, n, 1.0);
             // The scan's reds and yellows toned down toward the tint, keeping its light and dark.
             let light = dot(fallen.colour, vec3<f32>(0.333)) / dot(leaf_tint, vec3<f32>(0.333));
-            fallen.colour = mix(leaf_tint * light, fallen.colour, 0.5);
+            fallen.colour = mix(leaf_tint * light, fallen.colour, 0.3);
             ground_is = settle(ground_is, fallen, leaves);
         }
         // Under pines and spruces, their needles, drifting into the leaves at the edges.
@@ -431,6 +470,12 @@ fn fragment(
         // is most of the light under a canopy (D270), so the floor's relief reads in shade.
         let hollow = smoothstep(0.0, 0.6, ground_is.height);
         colour = ground_is.colour * mix(0.8, 1.0, hollow);
+        // In the sun the hollows are shadowed by what stands round them, needle by needle and
+        // clod by clod, which the sky's light (darkened above) does not show: micro-shadowing
+        // from the cavity, as Uncharted 4 does it (Brinck and Maximov, "The Technical Art of
+        // Uncharted 4", 2016), on the direct light alone (D294). Without it the sunlit floor
+        // read as flat peach sand beside the shaded floor's detail.
+        colour *= micro_shadow(in.world_position, n, ground_is.normal, ground_is.height, in.position);
         pbr_input.diffuse_occlusion *= vec3<f32>(mix(0.6, 1.0, hollow));
         colour *= mix(0.72, 1.0, smoothstep(0.05, 0.3, above_sea - lap) * undug + (1.0 - undug));
         colour = mix(colour, ground.sea_deep.rgb, smoothstep(0.0, 4.5, -above_sea) * 0.92 * undug);

@@ -189,8 +189,8 @@ pub(super) struct Samples {
 }
 
 /// How many things are sampled at each point: the rise, grass, lush, path, litter, moss,
-/// needles, roots and tall.
-pub(super) const SAMPLED: usize = 9;
+/// needles, roots, tall and heap.
+pub(super) const SAMPLED: usize = 10;
 
 impl Samples {
     pub(super) fn at(&self, at: Vec2) -> [f32; SAMPLED] {
@@ -260,6 +260,7 @@ pub fn square(
                 growing.needles,
                 growing.roots,
                 growing.tall,
+                growing.heap,
             ]);
         }
     }
@@ -321,6 +322,7 @@ pub fn square(
                 needles,
                 roots,
                 taller,
+                _,
             ] = samples.at(at);
             let cell = (((at - corner) / CELL_M).floor().as_ivec2())
                 .clamp(IVec2::ZERO, IVec2::splat(CELLS as i32 - 1));

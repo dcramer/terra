@@ -6,6 +6,7 @@
 // crawling screen door. The pattern is Jimenez's interleaved gradient noise (Call of Duty:
 // Advanced Warfare), shifted each frame, as Unreal dithers its foliage's crossfades.
 
+import bevy_pbr::render::pbr_bindings;
 import bevy_pbr::render::{
     forward_io::{VertexOutput, FragmentOutput},
     pbr_fragment::pbr_input_from_standard_material,
@@ -263,6 +264,10 @@ fn wander(p: vec3<f32>) -> f32 {
 // the sky the point sees, least low on the trunk; `share`, how much moss this bark grows
 // (1 for an oak's, less for a pine's). Moss runs in streaks down the bark, as water does,
 // its edges broken by finer patches rather than smooth blobs (D235).
+//
+// Moss has a body of its own (D294): cushions a few centimetres across that bulge and catch
+// the light, strands of lighter and darker green in them, darker down between, yellower where
+// it is thin.
 fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f32) {
     let up = normalize(world);
     let facing_up = clamp(dot((*input).N, up), 0.0, 1.0);
@@ -281,7 +286,19 @@ fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f3
     // On what faces up, a root flare's broad top, in cushions with bark between, not a coat.
     let cushions = mix(1.0, smoothstep(0.35, 0.65, wander(world * 1.6 + 3.0) + 0.4 * (fine - 0.5)), facing_up);
     let moss = smoothstep(0.42, 0.8, wet + 0.35 * (fine - 0.5) - 0.05) * share * cushions;
-    colour = mix(colour, vec3<f32>(0.1, 0.13, 0.04) * (0.75 + 0.5 * wander(world * 6.0)), moss * 0.85);
+    // Cushions and the strands in them, their height in metres.
+    let heap = wander(world * 16.0 + 2.0) * 0.6 + wander(world * 41.0) * 0.4;
+    let hx = dpdx(heap * MOSS_CUSHION_M);
+    let hy = dpdy(heap * MOSS_CUSHION_M);
+    let strands = wander(world * vec3<f32>(90.0, 140.0, 90.0) + 17.0);
+    let thin = 1.0 - smoothstep(0.3, 0.75, moss);
+    let moss_colour = vec3<f32>(0.1, 0.13, 0.04) * (0.7 + 0.5 * wander(world * 6.0))
+        * mix(0.45, 1.15, heap) * (0.8 + 0.4 * strands)
+        * mix(vec3<f32>(1.0), vec3<f32>(1.25, 1.05, 0.6), thin);
+    colour = mix(colour, moss_colour, moss * 0.9);
+    let cushioned = bumped((*input).N, dpdx(world), dpdy(world), hx, hy);
+    (*input).N = normalize(mix((*input).N, cushioned, moss));
+    (*input).diffuse_occlusion *= vec3<f32>(mix(1.0, mix(0.6, 1.0, heap), moss));
     // Where the foot meets the floor, soil and leaf mould over the bark between the moss, so
     // the tree goes down into the ground rather than standing on it.
     let soiled = low * facing_up * (1.0 - moss) * smoothstep(0.3, 0.7, wander(world * 2.3 + 5.0) + 0.3 * (fine - 0.5) + 0.2);
@@ -289,6 +306,23 @@ fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f3
     colour *= mix(1.0, 0.72, low * (1.0 - moss));
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
     (*input).material.perceptual_roughness = mix((*input).material.perceptual_roughness, 1.0, moss);
+}
+
+// How high the moss's cushions heap on bark, in metres (D294).
+const MOSS_CUSHION_M: f32 = 0.012;
+
+// A surface's normal bent by a height over it, from how the height and the position change
+// across the screen: Mikkelsen's "Bump Mapping Unparametrized Surfaces on the GPU" (2010).
+fn bumped(n: vec3<f32>, gx: vec3<f32>, gy: vec3<f32>, hx: f32, hy: f32) -> vec3<f32> {
+    let r1 = cross(gy, n);
+    let r2 = cross(n, gx);
+    let det = dot(gx, r1);
+    let bent = abs(det) * n - sign(det) * (hx * r1 + hy * r2);
+    let length2 = dot(bent, bent);
+    if length2 < 1.0e-20 {
+        return n;
+    }
+    return bent * inverseSqrt(length2);
 }
 
 fn noise_at(frag_coord: vec4<f32>) -> f32 {
@@ -384,15 +418,42 @@ fn temporal_dither(frag_coord: vec4<f32>, dither: i32) {
 // its picture), with the tangent that goes with them, so its normal map and relief follow.
 @if(VERTEX_UVS_A && VERTEX_TANGENTS)
 fn projected(in: VertexOutput, is_front: bool, u: vec3<f32>, v: vec3<f32>) -> PbrInput {
+    return projected_at(in, is_front, u, v, vec2<f32>(0.0));
+}
+
+// As `projected`, the picture moved by `offset` metres along `u` and `v`.
+@if(VERTEX_UVS_A && VERTEX_TANGENTS)
+fn projected_at(in: VertexOutput, is_front: bool, u: vec3<f32>, v: vec3<f32>, offset: vec2<f32>) -> PbrInput {
     var side = in;
     let p = in.world_position.xyz;
-    side.uv = vec2<f32>(dot(p, u), dot(p, v));
+    side.uv = vec2<f32>(dot(p, u), dot(p, v)) + offset;
     let n = normalize(in.world_normal);
     let t = normalize(u - n * dot(n, u) + v * 1.0e-4);
     let w = select(-1.0, 1.0, dot(cross(n, t), v) >= 0.0);
     side.world_tangent = vec4<f32>(t, w);
-    return pbr_input_from_standard_material(side, is_front);
+    return flattened(pbr_input_from_standard_material(side, is_front), side.uv);
 }
+
+// A bark scan with its broad light and dark taken out (D294): its colour over the picture's
+// own at an eighth of a repeat, times its mean, so what is left is the plates, furrows and
+// knots. A scan's broad stripes (Bark Brown 02's pale band, its green one) repeated round a
+// trunk and moved row by row read as a plaid of squares; the bark's broad variation is the
+// world's (`weather`), not the picture's.
+fn flattened(p: PbrInput, uv: vec2<f32>) -> PbrInput {
+    var out = p;
+@if(!BINDLESS) {
+    let at = (pbr_bindings::material.uv_transform * vec3<f32>(uv, 1.0)).xy;
+    let levels = f32(textureNumLevels(pbr_bindings::base_color_texture));
+    let broad = textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, at, levels - 4.0).rgb;
+    let mean = textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, at, levels - 1.0).rgb;
+    let even = pow(mean / max(broad, vec3<f32>(0.004)), vec3<f32>(FLATTEN));
+    out.material.base_color = vec4<f32>(p.material.base_color.rgb * even, p.material.base_color.a);
+}
+    return out;
+}
+
+// How much of a bark scan's broad light and dark is taken out (D294).
+const FLATTEN: f32 = 0.9;
 
 fn hash2(p: vec2<f32>) -> vec2<f32> {
     return fract(sin(vec2<f32>(dot(p, vec2<f32>(127.1, 311.7)), dot(p, vec2<f32>(269.5, 183.3)))) * 43758.5453);
@@ -409,11 +470,30 @@ fn bark_blend(a: PbrInput, b: PbrInput, k: f32) -> PbrInput {
     return out;
 }
 
+// The two blended in `unrepeated` keeping the bark's contrast (D294): each one's difference
+// from the picture's mean, weighed and scaled back up by the root of the weights' squares,
+// Heitz and Neyret's variance-preserving blend ("High-Performance By-Example Noise using a
+// Histogram-Preserving Blending Operator", HPG 2018). A plain fade halved the contrast over
+// the middle of every repeat, which read as bands up a trunk a repeat apart, the plaid of a
+// mid-ground trunk. Its relief kept the same way.
+fn bark_kept(a: PbrInput, b: PbrInput, k: f32, mean: vec3<f32>) -> PbrInput {
+    var out = bark_blend(a, b, k);
+    let wa = 1.0 - k;
+    let wb = k;
+    let gain = inverseSqrt(max(wa * wa + wb * wb, 1.0e-4));
+    let colour = mean + ((a.material.base_color.rgb - mean) * wa + (b.material.base_color.rgb - mean) * wb) * gain;
+    out.material.base_color = vec4<f32>(max(colour, vec3<f32>(0.0)), out.material.base_color.a);
+    let n = a.world_normal;
+    out.N = normalize(n + ((a.N - n) * wa + (b.N - n) * wb) * gain);
+    return out;
+}
+
 // A grown trunk's bark without its picture's repeats showing (D264): up a tall trunk one
 // scan repeated every two metres read as bands, a pine's orange plates as tape. Each repeat
 // up the limb is the picture from a place of its own, and where two meet they blend over
 // the middle of a repeat each, as Quilez's texture-repetition and Unreal's texture variation
-// work, so no two repeats in a column are the same and no seam shows.
+// work, so no two repeats in a column are the same and no seam shows; keeping the bark's
+// contrast where they meet (`bark_kept`, D294).
 @if(VERTEX_UVS_A)
 fn unrepeated(in: VertexOutput, is_front: bool) -> PbrInput {
     let along = in.uv.y;
@@ -424,19 +504,79 @@ fn unrepeated(in: VertexOutput, is_front: bool) -> PbrInput {
     a.uv = in.uv + hash2(vec2<f32>(cell_a, 7.0));
     b.uv = in.uv + hash2(vec2<f32>(cell_b, 19.0));
     let k = smoothstep(0.3, 0.7, abs(fract(along) * 2.0 - 1.0));
-    return bark_blend(
-        pbr_input_from_standard_material(a, is_front),
-        pbr_input_from_standard_material(b, is_front),
-        k,
-    );
+    let pa = flattened(pbr_input_from_standard_material(a, is_front), a.uv);
+    let pb = flattened(pbr_input_from_standard_material(b, is_front), b.uv);
+    var mean = pa.material.base_color.rgb;
+@if(!BINDLESS) {
+    mean = textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, vec2<f32>(0.5), 16.0).rgb
+        * pbr_bindings::material.base_color.rgb;
+@if(VERTEX_COLORS) {
+    mean *= in.color.rgb;
 }
+}
+    return pbr_input_from_standard_material(in, is_front);
+}
+
+// One side of a triplanar projection without its repeat showing (D294): hex tiling, as
+// ground.wesl's, from Morten Mikkelsen's "Practical Real-Time Hex-Tiling" (JCGT 11(2), 2022;
+// github.com/mmikk/hextile-demo, MIT licence, copyright (c) 2022 mmikk). Each hexagon, about
+// `HEX_M` across, is a copy of the bark moved at random (not turned: furrows run up a trunk),
+// and every point blends the three nearest, weighted toward the nearest and the lighter, so
+// the copies meet between plates rather than across them. Bevy's material samples with the
+// screen's own derivatives, so each of the three is the copy of one class of the lattice's
+// corners (a three-colouring, every triangle one of each): a slot's copy changes only where
+// its weight is none, and no seam of blurred mips shows.
+@if(VERTEX_UVS_A && VERTEX_TANGENTS)
+fn hex_projected(in: VertexOutput, is_front: bool, u: vec3<f32>, v: vec3<f32>) -> PbrInput {
+    let p = in.world_position.xyz;
+    let st = vec2<f32>(dot(p, u), dot(p, v)) / HEX_M;
+    let skewed = vec2<f32>(st.x - 0.57735027 * st.y, 1.15470054 * st.y);
+    let base = floor(skewed);
+    let f = fract(skewed);
+    let z = 1.0 - f.x - f.y;
+    let s = step(0.0, -z);
+    let s2 = 2.0 * s - 1.0;
+    let w = vec3<f32>(-z * s2, s - f.y * s2, s - f.x * s2);
+    var corners = array<vec2<f32>, 3>(base + vec2<f32>(s, s), base + vec2<f32>(s, 1.0 - s), base + vec2<f32>(1.0 - s, s));
+    var barycentric = array<f32, 3>(w.x, w.y, w.z);
+    var slots: array<PbrInput, 3>;
+    var weights = vec3<f32>(0.0);
+    for (var k = 0; k < 3; k++) {
+        // The corner of class k, and its weight.
+        var corner = corners[0];
+        var weight = barycentric[0];
+        for (var c = 0; c < 3; c++) {
+            let d = i32(corners[c].x) - i32(corners[c].y);
+            if ((d % 3) + 3) % 3 == k {
+                corner = corners[c];
+                weight = barycentric[c];
+            }
+        }
+        slots[k] = projected_at(in, is_front, u, v, hash2(corner) * 17.0);
+        let light = dot(slots[k].material.base_color.rgb, vec3<f32>(0.333));
+        weights[k] = mix(1.0, light * 3.0, 0.5) * pow(weight, 7.0);
+    }
+    weights /= max(weights.x + weights.y + weights.z, 1.0e-6);
+    var out = slots[0];
+    out.material.base_color = slots[0].material.base_color * weights.x + slots[1].material.base_color * weights.y + slots[2].material.base_color * weights.z;
+    out.material.perceptual_roughness = slots[0].material.perceptual_roughness * weights.x + slots[1].material.perceptual_roughness * weights.y + slots[2].material.perceptual_roughness * weights.z;
+    out.diffuse_occlusion = slots[0].diffuse_occlusion * weights.x + slots[1].diffuse_occlusion * weights.y + slots[2].diffuse_occlusion * weights.z;
+    out.specular_occlusion = slots[0].specular_occlusion * weights.x + slots[1].specular_occlusion * weights.y + slots[2].specular_occlusion * weights.z;
+    out.N = normalize(slots[0].N * weights.x + slots[1].N * weights.y + slots[2].N * weights.z);
+    return out;
+}
+
+// How far across the hexagons of a modelled trunk's bark are, in metres (D294).
+const HEX_M: f32 = 0.75;
 
 // A modelled trunk's bark (D264). Its own texture coordinates are an atlas made for a
 // texture it no longer has, so the bark scan is laid on by where each point is, from three
 // sides (triplanar), each weighted by how squarely the surface faces it, as terrain and rock
 // shaders do: the same bark, at the same scale and relief, as a grown trunk's, without the
 // seams a tiling picture would show along the model's own islands. The trees stand near
-// enough to the start that the world's y is their up, so the furrows run up the trunk.
+// enough to the start that the world's y is their up, so the furrows run up the trunk. The
+// two sides a trunk mostly faces are hex-tiled, so its picture's repeat does not show as a
+// plaid of squares (D294).
 @if(VERTEX_UVS_A && VERTEX_TANGENTS)
 fn triplanar(in: VertexOutput, is_front: bool) -> PbrInput {
     let n = normalize(in.world_normal);
@@ -445,9 +585,9 @@ fn triplanar(in: VertexOutput, is_front: bool) -> PbrInput {
     let x = vec3<f32>(1.0, 0.0, 0.0);
     let y = vec3<f32>(0.0, 1.0, 0.0);
     let z = vec3<f32>(0.0, 0.0, 1.0);
-    let a = projected(in, is_front, z, y);
+    let a = hex_projected(in, is_front, z, y);
     let b = projected(in, is_front, x, z);
-    let c = projected(in, is_front, x, y);
+    let c = hex_projected(in, is_front, x, y);
     var out = a;
     out.material.base_color = a.material.base_color * w.x + b.material.base_color * w.y + c.material.base_color * w.z;
     out.material.perceptual_roughness = a.material.perceptual_roughness * w.x + b.material.perceptual_roughness * w.y + c.material.perceptual_roughness * w.z;

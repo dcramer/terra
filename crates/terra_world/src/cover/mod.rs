@@ -76,6 +76,10 @@ pub struct Growing {
     /// How much taller than usual the grass grows: 0 as usual, 1 half as tall again, as a
     /// meadow's does in the open.
     pub tall: f32,
+    /// How close it is to something standing or lying on the floor, a trunk, a log or a
+    /// rock, from 0 away from it to 1 against it: where litter heaps up and climbs onto it
+    /// (D294).
+    pub heap: f32,
 }
 
 impl Growing {

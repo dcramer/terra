@@ -16,6 +16,14 @@
 //!   the ground with distance, a piece at a time by its rank (`litter.wesl`), so it thins out
 //!   rather than ending.
 //!
+//! - **Heaped against what stands in its way** (D294). Against a trunk, a log or a rock the
+//!   litter lies in layers, a piece or two on another, and leans up onto it, as leaves blown
+//!   across a floor pile against whatever stops them; so a trunk goes down into the litter
+//!   rather than meeting the ground along a line.
+//! - **Ivy in its own shade.** Under each piece of ivy, which stands off the leaves on its
+//!   stalks, a darker copy lies on the ground a little wider, as a decal's shadow would, so
+//!   it does not float.
+//!
 //! About 3.5 pieces a square metre on a full floor and twice that against what stands on
 //! it, 8 triangles each: some 150,000 triangles drawn round the camera in the forest.
 
@@ -37,6 +45,10 @@ use std::f32::consts::TAU;
 pub const FILE: &str = "litter.ron";
 /// Pieces are tried on a grid this fine, in metres.
 const SPACING_M: f32 = 0.3;
+/// How light the litter's cards are drawn against their scans' colour (D293).
+const LITTER_VALUE: f32 = 0.72;
+/// How steeply litter right against a trunk, a log or a rock leans up onto it: rise over run.
+const HEAP_LEAN: f32 = 0.9;
 /// From how far pieces start to sink into the ground, and where the last is gone.
 pub const FADE_M: [f32; 2] = [8.0, 16.0];
 
@@ -133,12 +145,12 @@ pub(super) fn lay(
             let (gi, gj) = (first.x + a, first.y + b);
             let h = |stream| hash(seed, gi, gj, stream);
             let at = Vec2::new(gi as f32 + h(1), gj as f32 + h(2)) * SPACING_M;
-            let [_, grass, _, _, litter, moss, needles, roots, _] = samples.at(at);
+            let [_, grass, _, _, litter, moss, needles, roots, _, heap] = samples.at(at);
             let floor = (litter + needles).min(1.0);
             // Thicker against trunks, logs and rocks, where the duff is; thinner in grass
             // and on moss.
             let density = floor
-                * (0.4 + 0.6 * roots)
+                * (0.4 + 0.6 * roots.max(heap))
                 * (1.0 - 0.85 * smoothstep(0.15, 0.6, grass))
                 * (1.0 - 0.6 * moss);
             if h(3) >= density * 0.8 {
@@ -166,9 +178,21 @@ pub(super) fn lay(
             };
             let cell = kind.cells[(h(7) * kind.cells.len() as f32) as usize % kind.cells.len()];
             let size = kind.size.0 + (kind.size.1 - kind.size.0) * h(8);
+            // Against something, which way it stands (up the heap's slope), and how steeply
+            // the litter leans up onto it.
+            let step = 0.25;
+            let heap_at = |p: Vec2| samples.at(p)[9];
+            let toward = Vec2::new(
+                heap_at(at + Vec2::X * step) - heap_at(at - Vec2::X * step),
+                heap_at(at + Vec2::Y * step) - heap_at(at - Vec2::Y * step),
+            )
+            .normalize_or_zero();
+            let lean = toward * HEAP_LEAN * heap * heap;
             let rise = |p: Vec2| samples.at(p)[0];
-            let place =
-                |p: Vec2, lift: f32| Vec3::new(p.x - middle.x, rise(p) + lift, p.y - middle.y);
+            let place = |p: Vec2, lift: f32| {
+                let up_onto = (p - at).dot(lean).max(0.0);
+                Vec3::new(p.x - middle.x, rise(p) + lift + up_onto, p.y - middle.y)
+            };
             let centre = place(at, 0.0);
             if clear
                 .iter()
@@ -176,8 +200,9 @@ pub(super) fn lay(
             {
                 continue;
             }
-            // Darker in the damp under moss and duff, a little lighter on top of a deep floor.
-            let value = (0.6 + 0.35 * h(9)) * (1.0 - 0.25 * roots);
+            // Darker in the damp under moss and duff, a little lighter on top of a deep floor;
+            // an umber, as the floor's own, rather than the scans' orange (D293).
+            let value = LITTER_VALUE * (0.6 + 0.35 * h(9)) * (1.0 - 0.25 * roots);
             // Ivy's leaves are dark and glossy, darker than the scan's in the shade it grows in.
             let value = if std::ptr::eq(kind, &cards.ivy) {
                 value * 0.6
@@ -185,26 +210,48 @@ pub(super) fn lay(
                 value
             };
             let tint = Vec3::new(
-                value * (0.95 + 0.1 * h(10)),
+                value * (0.82 + 0.1 * h(10)),
                 value,
-                value * (0.9 + 0.1 * h(11)),
+                value * (0.95 + 0.1 * h(11)),
             );
-            mesh.piece(
-                at,
-                h(12) * TAU,
-                size,
-                // Ivy stands off the leaves on its stalks.
-                if std::ptr::eq(kind, &cards.ivy) {
-                    0.035 + 0.04 * h(13)
-                } else {
-                    0.012 + 0.03 * size * h(13)
-                },
-                cell,
-                cards.across,
-                tint,
-                h(14),
-                place,
-            );
+            let is_ivy = std::ptr::eq(kind, &cards.ivy);
+            if is_ivy {
+                // Its shade on the leaves under it.
+                mesh.piece(
+                    at,
+                    h(12) * TAU,
+                    size * 1.12,
+                    0.004,
+                    cell,
+                    cards.across,
+                    Vec3::new(0.14, 0.12, 0.1),
+                    h(14),
+                    place,
+                );
+            }
+            // A heap: against something, a piece or two more lies on this one, each turned
+            // its own way and a little smaller, higher up.
+            let layers = 1 + (h(16) < heap * 0.85) as u32 + (h(17) < heap * 0.45) as u32;
+            for layer in 0..layers {
+                let k = layer as f32;
+                let on = |p: Vec2, lift: f32| place(p, lift + k * (0.025 + 0.02 * h(18)));
+                mesh.piece(
+                    at + Vec2::new(h(19) - 0.5, h(20) - 0.5) * 0.12 * k,
+                    (h(12) + 0.37 * k) * TAU,
+                    size * (1.0 - 0.12 * k),
+                    // Ivy stands off the leaves on its stalks.
+                    if is_ivy {
+                        0.035 + 0.04 * h(13)
+                    } else {
+                        0.012 + 0.03 * size * h(13) + 0.03 * heap
+                    },
+                    cell,
+                    cards.across,
+                    tint * (1.0 + 0.08 * k),
+                    h(14),
+                    on,
+                );
+            }
         }
     }
     (!mesh.indices.is_empty()).then(|| mesh.mesh())
@@ -355,6 +402,59 @@ mod tests {
         );
         assert!(piled as f32 > floor as f32 * 1.8, "{piled} against {floor}");
         assert!(grassy * 5 < floor, "{grassy} in grass against {floor}");
+    }
+
+    /// Litter heaps against what stands on the floor (D294): with something standing east of
+    /// the square, the heap rising toward it, more pieces lie in the square's east half than
+    /// its west, and they lie higher there, piled on each other and leaning up onto it.
+    #[test]
+    fn litter_heaps_up_against_what_stands_there() {
+        let side = (SQUARE_M / 0.5) as usize + 1;
+        let mut values = Vec::with_capacity(side * side);
+        for _ in 0..side {
+            for a in 0..side {
+                let mut value = [0.0; SAMPLED];
+                value[4] = 1.0;
+                value[9] = a as f32 / (side - 1) as f32;
+                values.push(value);
+            }
+        }
+        let samples = Samples {
+            corner: Vec2::ZERO,
+            side,
+            values,
+        };
+        let mesh = lay(&samples, &cards(), 7, Vec2::ZERO, &[], |p| p).expect("litter");
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("no positions");
+        };
+        // Each piece's middle vertex: east of the square's middle or west, and how high.
+        let middles: Vec<[f32; 3]> = positions
+            .chunks((SIDE * SIDE) as usize)
+            .map(|piece| piece[(SIDE * SIDE / 2) as usize])
+            .collect();
+        let half = |east: bool| -> (usize, f32) {
+            let lying: Vec<f32> = middles
+                .iter()
+                .filter(|p| (p[0] > 0.0) == east)
+                .map(|p| p[1])
+                .collect();
+            (
+                lying.len(),
+                lying.iter().sum::<f32>() / lying.len().max(1) as f32,
+            )
+        };
+        let ((west, west_high), (east, east_high)) = (half(false), half(true));
+        assert!(
+            east as f32 > west as f32 * 1.3,
+            "{east} pieces east, {west} west"
+        );
+        assert!(
+            east_high > west_high + 0.015,
+            "east {east_high:.3} m high, west {west_high:.3} m"
+        );
     }
 
     #[test]
