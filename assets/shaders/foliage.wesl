@@ -35,6 +35,9 @@ struct Wind {
     // A shadow stand-in shrinks to its middles between x and y and grows from them between
     // z and w (D234).
     shrink: vec4<f32>,
+    // For leaves: how much their colour is greyed and darkened, how brightly they glow lit
+    // through, and how dark the inside of a crown goes at least (D247).
+    leaf: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)

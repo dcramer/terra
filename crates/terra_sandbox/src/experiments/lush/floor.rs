@@ -1426,6 +1426,7 @@ fn fallen_log(dice: &mut Rng) -> Log {
             ],
             radii: vec![r, r * 0.8, r * 0.45],
             depth: 1,
+            pointed: false,
         };
         let first = bark.positions.len();
         tube(&mut bark, &stub, 6, 1.0e4, BARK_M);
@@ -1584,6 +1585,7 @@ fn branches(dice: &mut Rng) -> Build {
                 points: points.clone(),
                 radii,
                 depth: 1,
+                pointed: false,
             },
             5,
             1.0e4,
@@ -1603,6 +1605,7 @@ fn branches(dice: &mut Rng) -> Build {
                     ],
                     radii: vec![radius * 0.5, radius * 0.35, radius * 0.2],
                     depth: 1,
+                    pointed: false,
                 },
                 4,
                 1.0e4,

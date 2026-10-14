@@ -101,10 +101,16 @@ function canopy(hour: string): string[] {
   const shares = frames.map((frame, index) => {
     const file = resolve(out, `sky-${index}.png`);
     renameSync(`${prefix}-${String(frame).padStart(5, "0")}.png`, file);
-    // Sky is bright and blue, or a white cloud; leaves lit through are green over blue, bark
-    // and shade dark.
-    const sky = "(b>g && b>r*1.1 && (r+g+b)>0.75) || (r>0.75 && g>0.75 && b>0.75)";
-    const measured = spawnSync("magick", [file, "-resize", "480x270!", "-fx", `${sky} ? 1 : 0`, "-write", file.replace(/\.png$/, "-mask.png"), "-format", "%[fx:mean]", "info:"], { encoding: "utf8" });
+    // Sky is blue over red and green, not dark, and smooth (`v`, how much the brightness
+    // varies over a few pixels), or a white cloud. Leaves lit through are green over blue;
+    // bark and needles in the sky's light can be as blue but are darker, greyer or textured.
+    // The sheet keeps each view's mask beside it, to check what counted.
+    const sky = "(u.b>u.g && u.b>u.r*1.08 && u.b-u.r>0.09 && (u.r+u.g+u.b)>0.9 && v.r<0.012) || (u.r>0.75 && u.g>0.75 && u.b>0.75)";
+    const measured = spawnSync(
+      "magick",
+      [file, "-resize", "480x270!", "(", "+clone", "-colorspace", "gray", "-statistic", "StandardDeviation", "3x3", ")", "-fx", `${sky} ? 1 : 0`, "-write", file.replace(/\.png$/, "-mask.png"), "-format", "%[fx:mean]", "info:"],
+      { encoding: "utf8" },
+    );
     return Number(measured.stdout) * 100;
   });
   const sorted = [...shares].sort((a, b) => a - b);

@@ -248,6 +248,10 @@ pub struct FoliageExtension {
     /// For a shadow stand-in that shrinks away rather than ending (D234); off here.
     #[uniform(100)]
     pub shrink: Vec4,
+    /// For leaves: how much their colour is greyed and darkened, how brightly they glow lit
+    /// through from behind, and how dark the inside of a crown goes (D247); off here.
+    #[uniform(100)]
+    pub leaf: Vec4,
 }
 
 impl MaterialExtension for FoliageExtension {
@@ -297,6 +301,7 @@ impl Looks {
             bark: 0.0,
             cards: Vec3::ZERO,
             shrink: Vec4::ZERO,
+            leaf: Vec4::ZERO,
         };
         let leaves = foliage.add(Foliage {
             base: StandardMaterial {

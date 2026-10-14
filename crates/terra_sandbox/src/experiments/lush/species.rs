@@ -125,6 +125,7 @@ impl Tree {
             points,
             radii,
             depth,
+            pointed: depth > 0,
         });
     }
 
@@ -136,6 +137,19 @@ impl Tree {
         self.branch_of.push(branch);
         self.mass_of.push(mass);
         self.branches = self.branches.max(branch + 1);
+    }
+
+    /// Takes away every clump lower than `y`.
+    fn bare_below(&mut self, y: f32) {
+        let keep: Vec<bool> = self.tips.iter().map(|(at, _)| at.y >= y).collect();
+        let mut k = keep.iter();
+        self.tips.retain(|_| *k.next().unwrap_or(&true));
+        let mut k = keep.iter();
+        self.along.retain(|_| *k.next().unwrap_or(&true));
+        let mut k = keep.iter();
+        self.branch_of.retain(|_| *k.next().unwrap_or(&true));
+        let mut k = keep.iter();
+        self.mass_of.retain(|_| *k.next().unwrap_or(&true));
     }
 
     /// Each mass's middle, from its clumps.
@@ -156,27 +170,35 @@ impl Tree {
 /// into twigs; leaves are in clumps along the outer branches and at their tips, each great
 /// limb's a mass of its own. The crown's outline bulges in lobes, a few to a tree.
 pub fn oak(dice: &mut Rng, height: f32, form: Form, young: bool) -> Tree {
-    let girth = match form {
-        Form::Tall => 0.03,
-        Form::Broad => 0.037,
-        Form::Forked => 0.033,
+    // Stout, as an oak is beside a pine of its height: a 22 m forest oak is about 1.7 m
+    // through at the foot, a broad one 2 m (D247).
+    let girth = match (form, young) {
+        (_, true) => 0.03,
+        (Form::Tall, _) => 0.038,
+        (Form::Broad, _) => 0.046,
+        (Form::Forked, _) => 0.042,
     };
     let mut tree = Tree::new(Species::Oak, height * girth * dice.range(0.9, 1.1));
     let r0 = tree.trunk_m;
     let bole = height
         * match (form, young) {
-            (_, true) => dice.range(0.34, 0.44),
-            (Form::Tall, _) => dice.range(0.34, 0.44),
-            (Form::Broad, _) => dice.range(0.2, 0.27),
-            (Form::Forked, _) => dice.range(0.26, 0.33),
+            (_, true) => dice.range(0.22, 0.32),
+            (Form::Tall, _) => dice.range(0.27, 0.35),
+            (Form::Broad, _) => dice.range(0.16, 0.22),
+            (Form::Forked, _) => dice.range(0.22, 0.28),
         };
+    // A crown as wide as the tree is tall or more, as an oak's is, not a ball on a stick.
     let reach = height
         * match (form, young) {
-            (_, true) => dice.range(0.26, 0.32),
-            (Form::Tall, _) => dice.range(0.2, 0.25),
-            (Form::Broad, _) => dice.range(0.3, 0.37),
-            (Form::Forked, _) => dice.range(0.24, 0.29),
+            (_, true) => dice.range(0.34, 0.42),
+            (Form::Tall, _) => dice.range(0.3, 0.36),
+            (Form::Broad, _) => dice.range(0.4, 0.47),
+            (Form::Forked, _) => dice.range(0.34, 0.4),
         };
+    // The side it found most light on, which it leans to and reaches farthest toward, so
+    // no crown is round about its trunk.
+    let light = round(dice.range(0.0, TAU));
+    let favour = dice.range(0.25, 0.5);
     // Where the trunk gives out into the crown's top.
     let lead = bole + (height - bole) * dice.range(0.45, 0.6);
     // The crown bulges in a few lobes, so no two outlines are alike.
@@ -185,16 +207,18 @@ pub fn oak(dice: &mut Rng, height: f32, form: Form, young: bool) -> Tree {
         .collect();
     let lobe = |direction: Vec3| {
         let flat = Vec3::new(direction.x, 0.0, direction.z).normalize_or(Vec3::X);
-        0.85 + lobes
-            .iter()
-            .map(|(towards, gain)| gain * libm::powf(flat.dot(*towards).max(0.0), 3.0))
-            .sum::<f32>()
+        (0.85
+            + lobes
+                .iter()
+                .map(|(towards, gain)| gain * libm::powf(flat.dot(*towards).max(0.0), 3.0))
+                .sum::<f32>())
+            * (1.0 + favour * flat.dot(light))
     };
-    let clump_m = if young { 0.95 } else { 1.3 };
+    let clump_m = if young { 1.05 } else { 1.45 };
 
     // The trunk, or for a forked oak the trunk to its fork and two stems from there,
-    // leaning a little and wandering more as it rises.
-    let lean = round(dice.range(0.0, TAU)) * dice.range(0.0, 0.08);
+    // leaning toward its light and wandering more as it rises.
+    let lean = (light + round(dice.range(0.0, TAU)) * 0.5).normalize() * dice.range(0.03, 0.1);
     let fork = if form == Form::Forked && !young {
         Some(bole + dice.range(0.3, 1.2))
     } else {
@@ -291,31 +315,54 @@ pub fn oak(dice: &mut Rng, height: f32, form: Form, young: bool) -> Tree {
         let stem_top = stem.last().map_or(lead, |p| p.y);
         let stem_foot = stem[0].y;
         let first = if source == 0 { bole } else { stem_foot + 0.6 };
+        // A grown oak's lowest one or two limbs are its greatest: thick, near level and
+        // reaching out past the rest, as an oak's do where it once had room.
+        let great = if source == 0 && !young && form != Form::Forked {
+            1 + dice.below(2) as usize
+        } else {
+            0
+        };
         for k in 0..count {
-            let s = (k as f32 + dice.range(0.2, 0.8)) / count as f32;
+            // Unevenly up the stem, not a limb every so many metres.
+            let s = (k as f32 + dice.range(0.05, 0.95)) / count as f32;
+            let s = if k < great { s * 0.4 } else { s };
             let y = first + (stem_top - first) * s * 0.95;
             let t = ((y - stem_foot) / (stem_top - stem_foot).max(0.1)).clamp(0.0, 1.0);
             let (at, r, _) = along(&stem, &stem_r, t);
             let crown_t = ((y - bole) / (height - bole)).clamp(0.0, 1.0);
-            turn += 2.4 + dice.range(-0.5, 0.5);
+            turn += 2.4 + dice.range(-0.7, 0.7);
+            // More limbs on the side it found light on.
+            let spiral = (round(turn) + light * favour * 0.8).normalize();
             let out = if source == 0 {
-                round(turn)
+                spiral
             } else {
                 // Above a fork, each stem's limbs lean away from the other stem.
-                let away = Vec3::new(at.x, 0.0, at.z).normalize_or(round(turn));
-                (round(turn) + away * 0.9).normalize()
+                let away = Vec3::new(at.x, 0.0, at.z).normalize_or(spiral);
+                (spiral + away * 0.9).normalize()
             };
-            let rise = match form {
-                Form::Broad => 0.2 + 0.7 * crown_t,
-                _ => 0.35 + 0.65 * crown_t,
-            } + dice.range(-0.15, 0.15);
+            let rise = if k < great {
+                dice.range(0.15, 0.35)
+            } else {
+                let climb = match form {
+                    Form::Broad => 0.2 + 0.7 * crown_t,
+                    _ => 0.35 + 0.65 * crown_t,
+                };
+                climb + dice.range(-0.15, 0.15)
+            };
             let heading = (out * libm::cosf(rise) + Vec3::Y * libm::sinf(rise)).normalize();
-            let wide =
-                reach * lobe(heading) * dice.range(0.85, 1.1) * (1.0 - 0.45 * crown_t * crown_t);
+            let wide = reach
+                * lobe(heading)
+                * dice.range(0.8, 1.1)
+                * (1.0 - 0.45 * crown_t * crown_t)
+                * if k < great { 1.15 } else { 1.0 };
             let mut length = wide / libm::cosf(rise).max(0.4);
             length = length.min((height * 0.97 - y) / (libm::sinf(rise) * 0.85 + 0.25));
             length = length.max(height * 0.12);
-            let thickness = r * dice.range(0.5, 0.64);
+            let thickness = r * if k < great {
+                dice.range(0.62, 0.72)
+            } else {
+                dice.range(0.5, 0.64)
+            };
             limb(
                 dice,
                 &mut tree,
@@ -325,7 +372,7 @@ pub fn oak(dice: &mut Rng, height: f32, form: Form, young: bool) -> Tree {
                 thickness,
                 clump_m,
                 mass,
-                rise < 0.6,
+                rise < 0.6 && k >= great,
             );
             mass += 1;
         }
@@ -346,6 +393,9 @@ pub fn oak(dice: &mut Rng, height: f32, form: Form, young: bool) -> Tree {
         );
         mass += 1;
     }
+    // A great limb's branches that sag toward the ground lose their leaves there, shaded,
+    // as a forest oak's lowest do.
+    tree.bare_below((bole * 0.7).max(height * 0.16));
     tree.settle();
     tree
 }
@@ -500,18 +550,27 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
     );
     let r0 = tree.trunk_m;
     let steps = 16;
-    let lean = round(dice.range(0.0, TAU)) * dice.range(0.0, if pine { 0.05 } else { 0.02 });
+    // A pine leans, and sweeps: its lean grows up the bole, as a trunk that once bent toward
+    // the light and righted itself; a spruce stands nearly straight (D247).
+    let lean = round(dice.range(0.0, TAU))
+        * if pine {
+            dice.range(0.03, 0.1)
+        } else {
+            dice.range(0.0, 0.025)
+        };
     let (mut points, mut radii) = (vec![Vec3::ZERO], vec![r0]);
     let mut at = Vec3::ZERO;
     for step in 1..=steps {
         let t = step as f32 / steps as f32;
         let wobble = Vec3::new(dice.range(-1.0, 1.0), 0.0, dice.range(-1.0, 1.0))
             * if pine { 0.05 } else { 0.015 };
+        let sweep = if pine { 0.4 + 1.2 * t } else { 1.0 };
         at = Vec3::new(at.x, 0.0, at.z)
-            + (lean + wobble) * height / steps as f32 * 0.4
+            + (lean * sweep + wobble) * height / steps as f32 * 0.4
             + Vec3::Y * height * t;
         points.push(at);
-        radii.push((r0 * (1.0 - 0.9 * t)).max(0.03));
+        // Nearly a cylinder up the bole, tapering fast in the crown, not a straight cone.
+        radii.push((r0 * (1.0 - 0.5 * t - 0.45 * libm::powf(t, 2.5))).max(0.03));
     }
     flare(&points, &mut radii, if pine { 0.8 } else { 0.6 });
     let trunk_at = |y: f32| along(&points, &radii, y / height);
@@ -519,7 +578,9 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
         * match (pine, young) {
             (true, false) => dice.range(0.55, 0.66),
             (true, true) => dice.range(0.3, 0.4),
-            (false, false) => dice.range(0.08, 0.18),
+            // In a stand a spruce's lowest branches are shaded out and die, standing on as
+            // bare grey twigs below its live crown (D247).
+            (false, false) => dice.range(0.2, 0.32),
             (false, true) => dice.range(0.02, 0.06),
         };
     let reach = height
@@ -528,10 +589,11 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
         } else {
             dice.range(0.16, 0.2)
         };
+    // A spruce's whorls a little apart, so its crown reads as tiers.
     let spacing = if pine {
         dice.range(0.9, 1.3)
     } else {
-        dice.range(0.6, 0.8)
+        dice.range(0.75, 1.0)
     } * if young { 0.6 } else { 1.0 };
     let clump_m = if young { 0.6 } else { 0.8 };
     let bands = if pine { 5 } else { 8 };
@@ -561,12 +623,41 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
         }
     }
 
+    // A spruce's dead lower branches: whorls of bare twigs, short and broken, drooping.
+    if !pine && !young {
+        let mut y = dice.range(1.2, 2.0);
+        while y < base - 0.3 {
+            let (at, r, _) = trunk_at(y);
+            let turn = dice.range(0.0, TAU);
+            for k in 0..3 + dice.below(3) {
+                let out = round(turn + k as f32 * TAU / 4.0 + dice.range(-0.5, 0.5));
+                let heading = (out + Vec3::Y * dice.range(-0.35, 0.05)).normalize();
+                let length = dice.range(0.4, 1.0) * (0.6 + 0.4 * y / base) * reach * 0.5;
+                let (p, rr, _) = line(
+                    dice,
+                    at + out * r * 0.6,
+                    heading,
+                    length.max(0.3),
+                    (r * 0.12).max(0.02),
+                    0.7,
+                    3,
+                    0.2,
+                    0.3,
+                    0.0,
+                    0.05,
+                );
+                tree.limb(p, rr, 2);
+            }
+            y += spacing * dice.range(0.7, 1.3);
+        }
+    }
+
     let mut y = base;
     let mut turn = dice.range(0.0, TAU);
     while y < height - spacing * 0.5 {
         let t = (y - base) / (height - base);
         let count = if pine {
-            3 + dice.below(3)
+            4 + dice.below(3)
         } else {
             5 + dice.below(3)
         };
@@ -574,7 +665,7 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
         let band = ((t * bands as f32) as usize).min(bands - 1);
         for k in 0..count {
             // A pine's crown is ragged: a branch here and there never grew.
-            if pine && dice.unit() < 0.25 {
+            if pine && dice.unit() < 0.15 {
                 continue;
             }
             let around = turn + k as f32 / count as f32 * TAU + dice.range(-0.35, 0.35);
@@ -590,11 +681,13 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
                     0.25,
                 )
             } else {
+                // Out level or a little down, sagging under its own weight along its
+                // length, its tip turned up: a spruce's drooping layered whorls (D247).
                 (
                     reach * libm::powf(1.0 - t, 0.85) * dice.range(0.85, 1.1) + 0.35,
-                    -0.25 + 0.6 * t + dice.range(-0.1, 0.1),
-                    0.07,
-                    0.3,
+                    -0.12 + 0.5 * t + dice.range(-0.1, 0.1),
+                    0.16,
+                    0.45,
                 )
             };
             let heading = (out * libm::cosf(rise) + Vec3::Y * libm::sinf(rise)).normalize();
@@ -611,7 +704,7 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
             let half = (around.rem_euclid(TAU) > PI) as usize;
             let branch = band * 2 + half;
             let gap = clump_m * if pine { 0.85 } else { 0.75 };
-            let start = length * if pine { 0.45 } else { 0.25 };
+            let start = length * if pine { 0.35 } else { 0.25 };
             let mut s = start + dice.range(0.0, gap * 0.5);
             while s < length {
                 let (point, _, direction) = along(&p, &rr, s / length);
@@ -722,7 +815,7 @@ pub fn crown_cards(dice: &mut Rng, tree: &Tree, height: f32, leaf: Leaf) -> Vec<
             let along = tree.along[i];
             let count = match tree.species {
                 Species::Oak => 7 + dice.below(4),
-                Species::Pine => 3 + dice.below(2),
+                Species::Pine => 4 + dice.below(2),
                 Species::Spruce => 3 + dice.below(3),
             };
             (0..count)
@@ -834,7 +927,8 @@ fn card(
         tint,
         sway: Vec2::new(bend * bend, flutter),
         flip: if dice.unit() < 0.5 { -1.0 } else { 1.0 },
-        sky: (0.45 + 0.55 * outer.max(in_mass * 0.8)).min(1.0),
+        // Deep in the crown it sees about a third of the sky (D247).
+        sky: (0.3 + 0.7 * outer.max(in_mass * 0.8)).min(1.0),
         leaf,
     }
 }
@@ -888,10 +982,17 @@ mod tests {
             lowest(&pine)
         );
         assert!(
-            lowest(&spruce) < 24.0 * 0.25,
+            lowest(&spruce) < 24.0 * 0.4,
             "spruce leaves only from {}",
             lowest(&spruce)
         );
+        // Below its live crown, a spruce's dead branches.
+        let dead = spruce
+            .limbs
+            .iter()
+            .filter(|l| l.depth == 2 && l.points[0].y < lowest(&spruce) - 0.5)
+            .count();
+        assert!(dead >= 6, "{dead} dead branches");
         assert!(pine.branches <= 10 && spruce.branches <= 16);
     }
 }

@@ -11,8 +11,39 @@ import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
     pbr_types::{PbrInput, STANDARD_MATERIAL_FLAGS_UNLIT_BIT},
-    mesh_view_bindings::{globals, view},
+    mesh_view_bindings::{globals, view, lights},
+    shadows::fetch_directional_shadow,
 };
+
+// What colour a leaf passes light on in, lit through: yellower than it reflects, as
+// chlorophyll passes green and yellow and keeps the red and blue (D247).
+const THROUGH: vec3<f32> = vec3<f32>(1.0, 1.0, 0.45);
+
+// A leaf lit from behind (D247), as Crysis and SpeedTree light theirs: the sun through it,
+// brightest looking toward the sun, a little from any angle on its far side, only where the
+// sun reaches the leaf (its shadow), and less deep in the crown (`sky`, its occlusion).
+// Bevy's own diffuse transmission is lit the same from any angle, so a crown seen from below
+// read as flat; this gives it the glow of lit-through leaves.
+fn lit_through(input: PbrInput, sky: f32, frag_coord: vec4<f32>) -> vec3<f32> {
+    if wind.leaf.z <= 0.0 || lights.n_directional_lights == 0u {
+        return vec3<f32>(0.0);
+    }
+    let sun = &lights.directional_lights[0];
+    let L = (*sun).direction_to_light;
+    let V = input.V;
+    let forward = pow(clamp(dot(-V, L), 0.0, 1.0), 6.0);
+    let behind = clamp(dot(-input.world_normal, L), 0.0, 1.0);
+    let view_z = dot(vec4<f32>(
+        view.view_from_world[0].z,
+        view.view_from_world[1].z,
+        view.view_from_world[2].z,
+        view.view_from_world[3].z
+    ), input.world_position);
+    let shadow = fetch_directional_shadow(0u, input.world_position, input.world_normal, view_z, frag_coord.xy);
+    let deep = sky * sky;
+    return input.material.base_color.rgb * THROUGH * (*sun).color.rgb * view.exposure
+        * shadow * deep * wind.leaf.z * (0.8 * forward + 0.12 * behind);
+}
 
 // Sky light under a canopy is dimmed by the leaves above and warmed by what they and the
 // ground bounce: what a surface that sees none of the sky is lit by instead, as a share of
@@ -28,6 +59,9 @@ struct Wind {
     // A shadow stand-in shrinks to its middles between x and y and grows from them between
     // z and w (D234).
     shrink: vec4<f32>,
+    // For leaves: how much their colour is greyed and darkened, how brightly they glow lit
+    // through, and how dark the inside of a crown goes at least (D247).
+    leaf: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -58,14 +92,19 @@ fn wander(p: vec3<f32>) -> f32 {
 fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f32) {
     let up = normalize(world);
     let facing_up = clamp(dot((*input).N, up), 0.0, 1.0);
-    let low = 1.0 - smoothstep(0.35, 0.75, sky);
+    let low = 1.0 - smoothstep(0.3, 0.45, sky);
     var colour = (*input).material.base_color.rgb;
     colour *= 0.82 + 0.36 * wander(world * 0.21);
-    // The noise stretched three times along the trunk, so patches run up and down it.
+    // Moss grows where the bark faces the sky and stays damp (D247): on the tops of limbs
+    // and of the roots, in the furrows the bark's own occlusion map finds, and toward the
+    // foot on the trunk's damp side, its edge broken by fine noise rather than laid on in
+    // patches or a band. The damp side is the same for every tree, as moss favours north.
+    let damp_side = clamp(dot((*input).N, normalize(cross(up, vec3<f32>(0.0, 0.0, 1.0)))) * 0.5 + 0.5, 0.0, 1.0);
+    let crevice = 1.0 - (*input).diffuse_occlusion.r;
     let streaked = world - up * dot(world, up) * 0.7;
-    let patches = wander(streaked * 1.3) * 0.55 + wander(streaked * 4.1 + 13.0) * 0.3
-        + wander(world * 11.0 + 7.0) * 0.15;
-    let moss = smoothstep(0.6, 0.92, patches + 0.2 * facing_up + 0.3 * low - 0.12) * share;
+    let fine = wander(streaked * 4.1 + 13.0) * 0.6 + wander(world * 11.0 + 7.0) * 0.4;
+    let wet = 0.85 * facing_up * facing_up + 0.55 * low * (0.35 + 0.65 * damp_side) + 0.6 * crevice;
+    let moss = smoothstep(0.5, 0.85, wet + 0.35 * (fine - 0.5) - 0.05) * share;
     colour = mix(colour, vec3<f32>(0.1, 0.13, 0.04) * (0.75 + 0.5 * wander(world * 6.0)), moss * 0.85);
     colour *= mix(1.0, 0.72, low * (1.0 - moss));
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
@@ -125,6 +164,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     }
 
     var pbr_input = pbr_input_from_standard_material(in, is_front);
+    if wind.bark > 0.5 {
+        // The bark's relief read deeper than its scan's normal map gives, so its furrows and
+        // plates catch the light as a real trunk's do rather than reading as fur (D247).
+        pbr_input.N = normalize(pbr_input.world_normal + (pbr_input.N - pbr_input.world_normal) * 1.8);
+    }
 @if(VERTEX_COLORS) {
     // Alpha is how much of the sky this point sees.
     let sky = in.color.a;
@@ -132,8 +176,21 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // 1 is bark with all its moss; up to 2, bark with less (D235).
         weather(&pbr_input, in.world_position.xyz, sky, clamp(2.0 - wind.bark, 0.0, 1.0));
     }
+    if wind.bark < 0.5 && (wind.leaf.x > 0.0 || wind.leaf.y > 0.0) {
+        // Leaves greyed and darkened toward a forest's, as the pictures are brighter and
+        // greener than leaves in shade read (D247).
+        let c = pbr_input.material.base_color.rgb;
+        let grey = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+        pbr_input.material.base_color = vec4<f32>(mix(c, vec3<f32>(grey), wind.leaf.x) * (1.0 - wind.leaf.y), pbr_input.material.base_color.a);
+    }
     pbr_input.diffuse_occlusion *= mix(BOUNCE, vec3<f32>(1.0), sky);
     pbr_input.specular_occlusion *= mix(0.35, 1.0, sky);
+    // The inside of a crown, which little light reaches, darkened in the sun too, not only
+    // in the sky's light, down to leaf.w (D247).
+    if wind.bark < 0.5 && wind.leaf.w > 0.0 {
+        let inside = mix(wind.leaf.w, 1.0, smoothstep(0.3, 0.95, sky));
+        pbr_input.material.base_color = vec4<f32>(pbr_input.material.base_color.rgb * inside, pbr_input.material.base_color.a);
+    }
 }
     pbr_input.material.base_color = alpha_discard(
         pbr_input.material.flags,
@@ -144,6 +201,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var out: FragmentOutput;
     if (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == 0u {
         out.color = apply_pbr_lighting(pbr_input);
+@if(VERTEX_COLORS) {
+        if wind.bark < 0.5 {
+            out.color = vec4<f32>(out.color.rgb + lit_through(pbr_input, in.color.a, in.position), out.color.a);
+        }
+}
     } else {
         out.color = pbr_input.material.base_color;
     }

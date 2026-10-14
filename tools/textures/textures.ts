@@ -279,6 +279,57 @@ export function keyOut(data: Buffer, width: number, height: number): Buffer {
   return out;
 }
 
+/** A cut-out picture with the colour of what it covers wholly grown outward, a pixel a
+ * pass, over its edge and everything clear, its transparency kept (alpha dilation, as
+ * shipped games' foliage textures have it): from pixels opaque and a pixel inside the edge,
+ * so the edge's pale rim goes too, and filtering or mipmaps at a card's edge read leaf,
+ * not black or sky. Beyond 16 passes, the average of what is covered. */
+export function bleed(data: Buffer, width: number, height: number): Buffer {
+  const n = width * height;
+  const out = Buffer.from(data);
+  const opaque = (x: number, y: number) => x < 0 || y < 0 || x >= width || y >= height || data[(y * width + x) * 4 + 3] >= 250;
+  let front = new Uint8Array(n);
+  const mean = [0, 0, 0];
+  let covered = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (opaque(x, y) && opaque(x + 1, y) && opaque(x - 1, y) && opaque(x, y + 1) && opaque(x, y - 1)) {
+        const i = y * width + x;
+        front[i] = 1;
+        for (let c = 0; c < 3; c++) mean[c] += data[i * 4 + c];
+        covered++;
+      }
+    }
+  }
+  for (let pass = 0; pass < 16; pass++) {
+    const next = front.slice();
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        if (front[i]) continue;
+        const sum = [0, 0, 0];
+        let count = 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+          const [nx, ny] = [x + dx, y + dy];
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height || !front[ny * width + nx]) continue;
+          for (let c = 0; c < 3; c++) sum[c] += out[(ny * width + nx) * 4 + c];
+          count++;
+        }
+        if (count) {
+          for (let c = 0; c < 3; c++) out[i * 4 + c] = Math.round(sum[c] / count);
+          next[i] = 1;
+        }
+      }
+    }
+    front = next;
+  }
+  for (let i = 0; i < n; i++) {
+    if (front[i]) continue;
+    for (let c = 0; c < 3; c++) out[i * 4 + c] = Math.round(mean[c] / Math.max(1, covered));
+  }
+  return out;
+}
+
 /** The octagon round every pixel covered past `cut`, as corners in the image's own
  * coordinates from 0 to 1, clockwise from the top left: the tightest with sides along the
  * axes and the diagonals, a pixel out. A card cut to it shades far fewer empty pixels
@@ -348,11 +399,15 @@ function cards(name: string, entries: string[], size: number, columns: number, c
     execFileSync("convert", ["-size", `${source.width}x${source.height}`, "-depth", "8", "rgba:-", "-resize", `${cell}x${cell}!`, file], {
       input: keyed,
     });
+    // Resizing leaves what is clear black, and the edge a pale rim, which filtering at a
+    // card's edge mixes in as a fringe; the colour inside is grown out over both.
     const small = rgba(file);
+    small.data = bleed(small.data, small.width, small.height);
+    execFileSync("convert", ["-size", `${small.width}x${small.height}`, "-depth", "8", "rgba:-", file], { input: small.data });
     const shape = outline(small.data, small.width, small.height, cut);
     const colour = meanColour(small.data, cut);
     const [col, row] = [index % columns, Math.floor(index / columns)];
-    placed.push(file, "-geometry", `+${col * cell}+${row * cell}`, "-composite");
+    placed.push(file, "-geometry", `+${col * cell}+${row * cell}`, "-compose", "Copy", "-composite");
     const corner = (u: number, v: number) => `(${((col + u) / columns).toFixed(4)}, ${((row + v) / columns).toFixed(4)})`;
     table.push(`        "${card}": (`);
     table.push(`            cell: ${corner(0, 0)},`);
