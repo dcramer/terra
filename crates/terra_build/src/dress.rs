@@ -909,6 +909,10 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     {
         return;
     }
+    // Nothing drawn in it, so no columns to span: the table below would be empty bounds.
+    if surface.positions.is_empty() && surface.shared.positions.is_empty() {
+        return;
+    }
     let timber = matches!(
         material,
         Material::Log | Material::LogEnd | Material::Board | Material::Daub
@@ -1089,6 +1093,15 @@ mod tests {
         assert!(foot < 0.65, "{foot}");
         let up = rained.shade(&masks, Vec3::new(0.25, 1.4, CELL_M), out).x;
         assert!((up - 1.0).abs() < 1e-4, "{up}");
+    }
+
+    #[test]
+    fn an_empty_surface_takes_the_masks_without_a_fault() {
+        // A section can draw nothing in a material; its masks then have no columns.
+        let kit = crate::layout::tests::kit();
+        let mut surface = Surface::default();
+        mask(&mut surface, &kit, Material::Log, &Base::default());
+        assert_eq!(surface.triangle_count(), 0);
     }
 
     #[test]
