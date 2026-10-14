@@ -128,9 +128,16 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
             );
         }
     }
-    put(surfaces, look.material, body);
-    if let Some(material) = look.ends {
-        put(surfaces, material, ends);
+    // A modelled piece is in its kit's atlas, whatever it stands for; one made from
+    // numbers in its material, its ends in theirs.
+    if modelled(module) {
+        put(surfaces, Material::Piece, body);
+        put(surfaces, Material::Piece, ends);
+    } else {
+        put(surfaces, look.material, body);
+        if let Some(material) = look.ends {
+            put(surfaces, material, ends);
+        }
     }
 }
 
@@ -211,6 +218,12 @@ fn place(
             out.indices.extend([tri[0], tri[2], tri[1]]);
         }
     }
+}
+
+/// Whether a module is modelled, read by its own UVs in its kit's atlas (`Material::Piece`),
+/// rather than made from numbers and mapped by where it lies.
+pub fn modelled(module: &Module) -> bool {
+    module.near.first().is_some_and(|mesh| !mesh.uvs.is_empty())
 }
 
 /// A point and a normal in a line's frame (along it, up, across) in the world.
@@ -332,6 +345,32 @@ mod tests {
         // Its top a tenth of a metre up off the plane, facing up.
         assert!(made.positions.iter().all(|p| (p.y - 2.1).abs() < 1e-4));
         assert!(made.normals.iter().all(|n| n.y > 0.99));
+    }
+
+    #[test]
+    fn a_modelled_module_is_drawn_in_its_kits_atlas_by_its_own_uvs() {
+        let mut module = bar();
+        module.near[0].uvs = vec![[0.1, 0.2], [0.3, 0.2], [0.3, 0.4], [0.1, 0.4]];
+        let line = Line {
+            from: Vec3::ZERO,
+            to: Vec3::X,
+            seat: Seat::Plane {
+                up: Vec3::Y,
+                out: Vec3::Z,
+            },
+            across: None,
+            capped: [false; 2],
+            seed: 3,
+            blend: 0.0,
+        };
+        let mut surfaces = Surfaces::sharing();
+        lay(&module, &line, &look(), false, &mut surfaces);
+        assert!(!surfaces.0.contains_key(&Material::Board));
+        let made = &surfaces.0[&Material::Piece].shared;
+        assert_eq!(made.triangle_count(), 2);
+        let mut uvs = made.uvs.clone();
+        uvs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert_eq!(uvs, vec![[0.1, 0.2], [0.1, 0.4], [0.3, 0.2], [0.3, 0.4]]);
     }
 
     #[test]

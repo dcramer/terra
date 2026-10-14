@@ -491,6 +491,10 @@ pub struct Part {
     pub ends: Option<Material>,
     #[serde(default = "white")]
     pub tint: [f32; 3],
+    /// For an eave: whether its piece lies on the roof's plane, as thatch's cut lip does,
+    /// rather than hanging plumb, as a fascia does.
+    #[serde(default)]
+    pub on_roof: bool,
 }
 
 fn white() -> [f32; 3] {

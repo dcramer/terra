@@ -25,6 +25,7 @@ Where each material came from. Made by `cargo xtask textures` ([tools/textures](
 - `rough_wood`: Poly Haven [Rough Wood](https://polyhaven.com/a/rough_wood), CC0, 2k. 0.50 m across.
 - `shakes`: made from a generated image (art/textures/shakes.png) by `textures.ts material`.
 - `stone_wall`: Poly Haven [Stone Wall](https://polyhaven.com/a/stone_wall), CC0, 2k. 2.00 m across.
+- `thatch_pieces`: the thatch kit's modelled pieces' own textures (Tripo models of the approved concepts in art/kits/thatch/ridge, verge and eave), baked into one atlas by `tools/kits/pieces.py`; its normal map flat, its occlusion, roughness and metal plain.
 - `wattle`: woven hazel wattle, made from a generated image (art/textures/wattle.png, its prompt beside it) by `textures.ts material`, no library having one (D191). 0.90 m across.
 - `weathered_planks`: Poly Haven [Weathered Planks](https://polyhaven.com/a/weathered_planks), CC0, 2k. 2.00 m across.
 - `white_stucco`: Poly Haven [White Stucco](https://polyhaven.com/a/white_stucco), CC0, 2k. 2.00 m across.

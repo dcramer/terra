@@ -578,34 +578,45 @@ def import_model(name, path):
 
 
 def lay_along(ob, how):
-    """Turned in game space so its longest side lies along X; for a `board` or a member its
-    middle side up (Y) and its thinnest across (Z); for a `capping` its width across (Z) with
-    its crest up, for a `channel` with its hollow up; a `log` round either way."""
-    pts = [game_of(v.co) for v in ob.data.vertices]
-    lo = Vector((min(p[i] for p in pts) for i in range(3)))
-    hi = Vector((max(p[i] for p in pts) for i in range(3)))
-    size = hi - lo
-    order = sorted(range(3), key=lambda i: -size[i])
-    along, second, third = order
-    if how in ("capping", "channel"):
-        up, across = third, second
+    """Turned so it lies along game X, as it was modelled standing (Tripo models stand with
+    their up as Blender's Z): about its up so the way it runs, the line of its crest for a
+    capping, or its longest way in plan for the rest, lies along X. A `board` or a member,
+    modelled lying flat, is then stood on its edge, its width up (Y) and its thickness across
+    (Z); the rest keep their up, across Z. A capping's crest is up, a channel's hollow."""
+    vs = [v.co.copy() for v in ob.data.vertices]
+    zs = sorted(v.z for v in vs)
+    top = zs[int(len(zs) * 0.9)]
+    plan = [v for v in vs if v.z >= top] if how == "capping" else vs
+    mx = sum(v.x for v in plan) / len(plan)
+    my = sum(v.y for v in plan) / len(plan)
+    sxx = sum((v.x - mx) ** 2 for v in plan)
+    syy = sum((v.y - my) ** 2 for v in plan)
+    sxy = sum((v.x - mx) * (v.y - my) for v in plan)
+    angle = 0.5 * math.atan2(2 * sxy, sxx - syy)
+    c, s = math.cos(-angle), math.sin(-angle)
+    turned = [Vector((v.x * c - v.y * s, v.x * s + v.y * c, v.z)) for v in vs]
+    # In game space: along, up and across.
+    if how == "board":
+        game = [Vector((v.x, v.y, v.z)) for v in turned]
     else:
-        up, across = second, third
-    def move(p):
-        return Vector((p[along] - lo[along], p[up] - (lo[up] + hi[up]) / 2, p[across] - (lo[across] + hi[across]) / 2))
-    moved = [move(p) for p in pts]
+        game = [Vector((v.x, v.z, -v.y)) for v in turned]
+    mirrored = False
+    lo = Vector((min(p[i] for p in game) for i in range(3)))
+    hi = Vector((max(p[i] for p in game) for i in range(3)))
+    moved = [Vector((p.x - lo.x, p.y - (lo.y + hi.y) / 2, p.z - (lo.z + hi.z) / 2)) for p in game]
     if how in ("capping", "channel"):
         # Its crest up, or its hollow: the middle across stands higher than its sides on a
         # capping, lower on a channel.
         w = max(abs(p.z) for p in moved)
         middle = [p.y for p in moved if abs(p.z) < w * 0.15]
         sides = [p.y for p in moved if abs(p.z) > w * 0.7]
-        if middle and sides:
-            raised = max(middle) > max(sides)
-            if raised != (how == "capping"):
-                moved = [Vector((p.x, -p.y, p.z)) for p in moved]
+        if middle and sides and (max(middle) > max(sides)) != (how == "capping"):
+            moved = [Vector((p.x, -p.y, p.z)) for p in moved]
+            mirrored = not mirrored
     for v, p in zip(ob.data.vertices, moved):
         v.co = blender_of(p)
+    if mirrored:
+        ob.data.flip_normals()
     ob.data.update()
 
 
@@ -664,9 +675,33 @@ def cut_to(ob, budget):
     ob.select_set(False)
 
 
+def trim(ob, fraction):
+    """Its two ends cut off by so much of its length each, square, so copies laid end to end
+    meet in its full section, not where the model tapers to its own ends; the cuts filled."""
+    if fraction <= 0:
+        return
+    xs = [game_of(v.co).x for v in ob.data.vertices]
+    lo, hi = min(xs), max(xs)
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    for at, keep_above in ((lo + (hi - lo) * fraction, True), (hi - (hi - lo) * fraction, False)):
+        geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+        cut = bmesh.ops.bisect_plane(
+            bm, geom=geom, plane_co=(at, 0, 0), plane_no=(1, 0, 0),
+            clear_inner=keep_above, clear_outer=not keep_above,
+        )
+        edges = [e for e in cut["geom_cut"] if isinstance(e, bmesh.types.BMEdge)]
+        if edges:
+            bmesh.ops.holes_fill(bm, edges=edges)
+    bm.to_mesh(ob.data)
+    bm.free()
+    ob.data.update()
+
+
 def modelled_mesh(name, spec):
     ob = import_model(name, spec["model"])
     lay_along(ob, spec.get("lies", "board"))
+    trim(ob, spec.get("trim", 0.0))
     if spec.get("lies") in ("capping", "channel"):
         unfold(ob)
     fit(ob, spec["length"], spec["y"], spec["z"])

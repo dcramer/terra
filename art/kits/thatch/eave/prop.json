@@ -1,0 +1,12 @@
+{
+  "subject": "straight length of thatched roof eave edge, one and a half metres long, seen on its own as a building piece: a thick slab of water reed thatch thirty centimetres deep whose front edge is the butt ends of the reeds, trimmed into a full rounded clean cut lip like a thick bristle brush, golden brown weathered reed, the cut ends the same golden straw colour, a little paler",
+  "file": "kit_thatch_eave",
+  "size": 1.5,
+  "budget": 2500,
+  "roles": [
+    "Wood"
+  ],
+  "textured": true,
+  "generator": "h3.1",
+  "into": "kits"
+}

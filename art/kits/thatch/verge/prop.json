@@ -1,0 +1,12 @@
+{
+  "subject": "straight length of thatched roof verge, one and a half metres long, seen on its own as a building piece: a fat rolled bundle of water reed thatch about thirty centimetres across, bound tightly with twisted straw ties every half metre so it bulges between them, the cut reed ends visible on its underside, golden brown weathered reed",
+  "file": "kit_thatch_verge",
+  "size": 1.5,
+  "budget": 2500,
+  "roles": [
+    "Wood"
+  ],
+  "textured": true,
+  "generator": "h3.1",
+  "into": "kits"
+}

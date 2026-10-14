@@ -1,0 +1,12 @@
+{
+  "subject": "straight length of thatched roof ridge, one and a half metres long, seen on its own as a building piece: a thick block ridge of sedge thatch shaped like a rounded saddle draped over a ninety degree roof apex, its lower edges cut into a row of scalloped points, two long hazel liggers pegged along each side with crossed spars, golden brown dried reed and sedge with visible bundled straw texture",
+  "file": "kit_thatch_ridge",
+  "size": 1.5,
+  "budget": 2500,
+  "roles": [
+    "Wood"
+  ],
+  "textured": true,
+  "generator": "h3.1",
+  "into": "kits"
+}

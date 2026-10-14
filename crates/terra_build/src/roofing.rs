@@ -90,7 +90,7 @@ pub fn draw_as(
             let line = Line {
                 from,
                 to,
-                seat: seat(part, from, to, sides.map(Place::metres)),
+                seat: seat(part, spec.on_roof, from, to, sides.map(Place::metres)),
                 across: None,
                 capped: [true; 2],
                 seed,
@@ -122,7 +122,7 @@ fn look(kit: &Kit, part: &Part) -> Look {
 
 /// How a part of a roof sits on its line, `sides` a point on the roof either side of it,
 /// or for an edge, on the roof and beyond.
-fn seat(part: RoofPart, from: Vec3, to: Vec3, sides: [Vec3; 2]) -> Seat {
+fn seat(part: RoofPart, on_roof: bool, from: Vec3, to: Vec3, sides: [Vec3; 2]) -> Seat {
     let normals = sides.map(|side| planar_normal(from, to, side));
     let into = sides.map(|side| across(from, to, side));
     match part {
@@ -130,6 +130,10 @@ fn seat(part: RoofPart, from: Vec3, to: Vec3, sides: [Vec3; 2]) -> Seat {
         RoofPart::Ridge | RoofPart::Hip | RoofPart::Valley => Seat::Crease { up: normals, into },
         // On the roof, out past its edge, or toward the wall it meets.
         RoofPart::Verge | RoofPart::Flashing => Seat::Plane {
+            up: normals[0],
+            out: -into[0],
+        },
+        RoofPart::Eave if on_roof => Seat::Plane {
             up: normals[0],
             out: -into[0],
         },
@@ -511,9 +515,13 @@ mod tests {
                     for (corners, normals) in
                         surface.positions.chunks(3).zip(surface.normals.chunks(3))
                     {
+                        // Wound the way its corners' normals look together: a modelled
+                        // piece is shaded smooth across small creases, so one corner may
+                        // lean past its face.
                         let own = (corners[1] - corners[0]).cross(corners[2] - corners[0]);
+                        let together = normals[0] + normals[1] + normals[2];
                         assert!(
-                            normals.iter().all(|n| n.is_finite() && own.dot(*n) >= 0.0),
+                            normals.iter().all(|n| n.is_finite()) && own.dot(together) >= 0.0,
                             "{name} {style:?} {material:?}: {corners:?} against {normals:?}"
                         );
                     }

@@ -487,6 +487,11 @@ fn parts(kit: &Kit, fail: &mut dyn FnMut(String)) {
             fail(format!("its module {name} has nothing in it"));
             continue;
         }
+        if crate::modules::modelled(module) && !kit.textures.contains_key(&Material::Piece) {
+            fail(format!(
+                "its module {name} is modelled, and it has no Piece atlas to draw it in"
+            ));
+        }
         let per_metre = (module.triangles() as f32 / module.length).round() as usize;
         if per_metre > MODULE_PER_METRE {
             fail(format!(
