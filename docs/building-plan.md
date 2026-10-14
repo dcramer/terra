@@ -114,7 +114,7 @@ D251 asks that walls, floors and roofs be drawn by one system, as Enshrouded's m
 
 **A kind is three things, all data** (D136): its **material**, the textures its cubes' surface is drawn in (colour, normal, roughness and height, from the library in `assets/materials`); its **pieces**, hand-made, one or more for each role an edge or a member can have; and its **pattern**, the rule by which its pieces lay (a surface, courses of members, a frame, a roof). Walls, floors and roofs are the same thing at different places: a floor is the top role of its kind's cubes, a roof the sloped top of a roof kind's.
 
-**Three sorts of piece**, each modelled in Blender and written by `tools/kits` from its source in `art/kits/<kit>/pieces.json` into the kit's pieces file, never made by game code:
+**Three sorts of piece**, written by `tools/kits` into the kit's pieces file, never made by game code. As first built they are made by a script in Blender from numbers in `art/kits/<kit>/pieces.json`: script-made, not modelled, so not yet the hand-made models D251 asks for. Each is replaced by a model as it comes (Tripo, cleaned up in Blender, textured in its own UVs, kept in `art/kits/<kit>/`), which `tools/kits` reads in place of its numbers:
 
 | Sort | What it is | Laid by code as | For |
 |---|---|---|---|
