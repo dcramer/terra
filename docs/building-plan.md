@@ -26,9 +26,10 @@ The developers' agenda, above everything below: building takes **an approach to 
 |---|---|
 | `cubes` | The cube store: sections of 16 cubes a side (8 m), each a dense array of packed cubes, kept in a sorted map, with a dirty mark per section |
 | `ops` | The operations, what each needs to be valid, and each one's inverse for undo |
-| `ground` | The ground's height under each column, sampled into a plan when it is laid; the footings under a building, down to it (D206) |
+| `ground` | The ground's height under each column, sampled into a plan when it is laid; the footings under a building, down to it (D206), and its doorways and their steps (D261) |
 | `support` | What holds what: joined to the ground, and what rests on a cube |
-| `rooms` | Rooms and indoors, worked out per building (today's, moved) |
+| `rooms` | Rooms and indoors: the space the built cubes close in, flooded in three dimensions (D261) |
+| `parts` | Parts that touch and agree merged as cubes are laid by hand, and split as they are taken apart (D260) |
 | `cost` | What each cube costs and what went into it, in exact fractions |
 | `kit` | A kit's data: its pattern, sizes, timber, materials, props and cost, and how it meets other kinds (`meets`, D232); checked as it is read |
 | `layout/runs` | Long members: logs, beams, planks, wattle, laid along runs |
@@ -44,7 +45,6 @@ The developers' agenda, above everything below: building takes **an approach to 
 | `layout/floors` | A timber kind's floors and flat roofs as decks: boards, rim beams, joists (D206) |
 | `layout/roofs` | A roof kind's cubes as a roof, from their neighbours (D241): covering, eave, verge, ridge, hip, valley, flashing, rafters and battens, each waiting on its cube's stage; walls under roof cubes cut at the roof's underside; drawn by `roofing`, the covering as the cubes' surface in its material and every line a module (D258) |
 | `roofer` | "Add a roof with this material" (D226, D241): roof cubes over a footprint, gable, hip or lean-to, and the walls under its gable ends; old saves' roof sections laid as roof cubes through it |
-| `layout/ground` | Door steps down to the ground (D206); footings are cubes, laid by `ground` |
 | `walk` | Walking: each cube to its fill, and to its shape's top under the walker's feet: a stair's steps, a slope's ramp, a half (D220) |
 | `save` | The snapshot format, and conversion of older saves |
 | `sections` | A section laid alone and drawn: its pieces and how far each is in, merged by kind and material near, baked into one coarse surface far off and coarser further, the plan's pieces as ghosts; which sections a change reaches |

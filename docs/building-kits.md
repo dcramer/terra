@@ -177,7 +177,7 @@ The hammer's *Block* has the upper half and the stair and slope upside down; *Co
 
 **A floor drawn alone**, with the hammer's *Floor* on any storey, with no walls on it, is finished at its edges: a timber deck with its rim of beams and its joists, a stone floor paved in its flagstones, its edges rounded into the ground.
 
-**Door steps** are stone slabs from each ground-floor door in an outside wall down to the ground, a riser of no more than 18 cm each, set into the ground; none where the threshold is less than a step up.
+**Door steps** are cubes (D261): stairs, and a half where one riser is enough, of the footings' kind, from any doorway down to the ground, a quarter of a metre a riser, each on a footing to the ground; none where the threshold is within 20 cm of the ground. The footing kind's kit draws them as it draws any of its cut cubes.
 
 **Doors** are fitted props (D207); none is fitted or drawn for now (D225), so a doorway is its frame and steps.
 ## Roofs (D241)
