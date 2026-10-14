@@ -1486,6 +1486,18 @@ fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
             bark_m,
         );
     }
+    // A Scots pine's bark is thick, grey-brown and fissured low on its bole and thin, flaking
+    // and orange up in its crown, which tells a pine at a glance; one shade all the way up
+    // read as one orange tube (D264). Carried in its vertices' colour, which tints the scan.
+    if tree.species == Species::Pine {
+        for (at, colour) in build.positions.iter().zip(&mut build.colours) {
+            let up = smoothstep(0.3, 0.65, at[1] / height);
+            let shade = Vec3::new(0.82, 0.84, 0.9).lerp(Vec3::new(1.12, 1.0, 0.86), up);
+            colour[0] = shade.x;
+            colour[1] = shade.y;
+            colour[2] = shade.z;
+        }
+    }
     build
 }
 
@@ -1556,7 +1568,7 @@ impl Shape {
                 .map(|k| {
                     (
                         (k as f32 + dice.range(-0.3, 0.3)) / count as f32 * TAU + phase,
-                        dice.range(0.18, 0.5),
+                        dice.range(0.3, 0.85),
                         dice.range(0.16, 0.32),
                         r * dice.range(0.5, 1.3) + 0.25,
                     )
@@ -1590,7 +1602,7 @@ impl Shape {
                 let ridge = libm::expf(-(off / wide) * (off / wide));
                 swell = swell.max(out * ridge * fall);
             }
-            let between = 0.08 * (1.0 - smoothstep(0.0, 1.2, up));
+            let between = 0.1 * (1.0 - smoothstep(0.0, 1.2, up));
             shape *= 1.0 + swell - between;
         }
         shape
@@ -1624,7 +1636,10 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: Vec2) {
         if i > 0 {
             let step = point.distance(points[i - 1]);
             along += step;
-            v += step / repeat_along(0.5 * (radius + radii[i - 1]));
+            // Along its surface, which slopes out over a flared foot, not its middle line, or
+            // the bark is drawn out in streaks down the roots.
+            let surface = libm::sqrtf(step * step + (radius - radii[i - 1]).powi(2));
+            v += surface / repeat_along(0.5 * (radius + radii[i - 1]));
         }
         let (before, after) = (i.saturating_sub(1), (i + 1).min(points.len() - 1));
         let forward = if i + 1 < points.len() {

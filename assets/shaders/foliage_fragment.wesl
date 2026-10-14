@@ -212,6 +212,43 @@ fn projected(in: VertexOutput, is_front: bool, u: vec3<f32>, v: vec3<f32>) -> Pb
     return pbr_input_from_standard_material(side, is_front);
 }
 
+fn hash2(p: vec2<f32>) -> vec2<f32> {
+    return fract(sin(vec2<f32>(dot(p, vec2<f32>(127.1, 311.7)), dot(p, vec2<f32>(269.5, 183.3)))) * 43758.5453);
+}
+
+// The two blended in `unrepeated`, by how far along the bark the point is, in repeats.
+fn bark_blend(a: PbrInput, b: PbrInput, k: f32) -> PbrInput {
+    var out = a;
+    out.material.base_color = mix(a.material.base_color, b.material.base_color, k);
+    out.material.perceptual_roughness = mix(a.material.perceptual_roughness, b.material.perceptual_roughness, k);
+    out.diffuse_occlusion = mix(a.diffuse_occlusion, b.diffuse_occlusion, k);
+    out.specular_occlusion = mix(a.specular_occlusion, b.specular_occlusion, k);
+    out.N = normalize(mix(a.N, b.N, k));
+    return out;
+}
+
+// A grown trunk's bark without its picture's repeats showing (D264): up a tall trunk one
+// scan repeated every two metres read as bands, a pine's orange plates as tape. Each repeat
+// up the limb is the picture from a place of its own, and where two meet they blend over
+// the middle of a repeat each, as Quilez's texture-repetition and Unreal's texture variation
+// work, so no two repeats in a column are the same and no seam shows.
+@if(VERTEX_UVS_A)
+fn unrepeated(in: VertexOutput, is_front: bool) -> PbrInput {
+    let along = in.uv.y;
+    var a = in;
+    var b = in;
+    let cell_a = floor(along);
+    let cell_b = floor(along + 0.5);
+    a.uv = in.uv + hash2(vec2<f32>(cell_a, 7.0));
+    b.uv = in.uv + hash2(vec2<f32>(cell_b, 19.0));
+    let k = smoothstep(0.3, 0.7, abs(fract(along) * 2.0 - 1.0));
+    return bark_blend(
+        pbr_input_from_standard_material(a, is_front),
+        pbr_input_from_standard_material(b, is_front),
+        k,
+    );
+}
+
 // A modelled trunk's bark (D264). Its own texture coordinates are an atlas made for a
 // texture it no longer has, so the bark scan is laid on by where each point is, from three
 // sides (triplanar), each weighted by how squarely the surface faces it, as terrain and rock
@@ -253,6 +290,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // A modelled trunk: grown wood always has wind weights, a model none (D264).
     if wind.bark > 0.5 {
         pbr_input = triplanar(in, is_front);
+    } else {
+        pbr_input = pbr_input_from_standard_material(in, is_front);
+    }
+} @elif(VERTEX_UVS_A && VERTEX_UVS_B) {
+    if wind.bark > 0.5 {
+        pbr_input = unrepeated(in, is_front);
     } else {
         pbr_input = pbr_input_from_standard_material(in, is_front);
     }

@@ -98,7 +98,9 @@ fn along(points: &[Vec3], radii: &[f32], t: f32) -> (Vec3, f32, Vec3) {
     )
 }
 
-/// The foot of a trunk flares into its roots.
+/// The foot of a trunk flares a little all round; its roots swell out of the flare as
+/// ridges of their own (lush.rs, `Shape`), with the trunk drawn in between them, so the
+/// foot is not one smooth skirt (D264).
 fn flare(points: &[Vec3], radii: &mut [f32], strength: f32) {
     for (point, r) in points.iter().zip(radii.iter_mut()) {
         *r *= 1.0 + strength * libm::expf(-point.y / 0.9);
@@ -237,7 +239,7 @@ pub fn oak(dice: &mut Rng, height: f32, form: Form, young: bool) -> Tree {
         let share = at.y / lead;
         radii.push(r0 * (1.0 - 0.62 * libm::powf(share.clamp(0.0, 1.0), 0.8)));
     }
-    flare(&points, &mut radii, if young { 0.7 } else { 1.1 });
+    flare(&points, &mut radii, if young { 0.4 } else { 0.6 });
     let stems: Vec<(Vec<Vec3>, Vec<f32>)> = if let Some(fork) = fork {
         // Two stems from the fork, each about as thick as the other, parting.
         let foot = *points.last().unwrap_or(&Vec3::Y);
@@ -572,7 +574,7 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
         // Nearly a cylinder up the bole, tapering fast in the crown, not a straight cone.
         radii.push((r0 * (1.0 - 0.5 * t - 0.45 * libm::powf(t, 2.5))).max(0.03));
     }
-    flare(&points, &mut radii, if pine { 0.8 } else { 0.6 });
+    flare(&points, &mut radii, if pine { 0.45 } else { 0.35 });
     let trunk_at = |y: f32| along(&points, &radii, y / height);
     let base = height
         * match (pine, young) {
@@ -624,17 +626,18 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
     }
 
     // A spruce's dead lower branches: whorls of thin bare twigs, short and broken, drooping,
-    // each with a few twigs of its own off it, a tangle rather than spokes (D247).
+    // each with a few twigs of its own off it, a tangle rather than spokes (D247); a third of
+    // a metre to under a metre, not sticks reaching as far as the live boughs (D264).
     if !pine && !young {
         let mut y = dice.range(1.2, 2.0);
         while y < base - 0.3 {
             let (at, r, _) = trunk_at(y);
             let turn = dice.range(0.0, TAU);
-            let count = 4 + dice.below(4);
+            let count = 3 + dice.below(3);
             for k in 0..count {
                 let out = round(turn + k as f32 * TAU / count as f32 + dice.range(-0.4, 0.4));
                 let heading = (out + Vec3::Y * dice.range(-0.45, 0.0)).normalize();
-                let length = dice.range(0.3, 1.0) * (0.6 + 0.4 * y / base) * reach * 0.5;
+                let length = dice.range(0.15, 0.6) * (0.5 + 0.5 * y / base) * reach * 0.35;
                 let (p, rr, _) = line(
                     dice,
                     at + out * r * 0.8,
@@ -670,7 +673,7 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
                 }
                 tree.limb(p, rr, 2);
             }
-            y += spacing * dice.range(0.5, 1.0);
+            y += spacing * dice.range(0.7, 1.3);
         }
     }
 
@@ -726,7 +729,8 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, young: bool) -> Tr
             let half = (around.rem_euclid(TAU) > PI) as usize;
             let branch = band * 2 + half;
             let gap = clump_m * if pine { 0.85 } else { 0.75 };
-            let start = length * if pine { 0.35 } else { 0.25 };
+            // A spruce's needles run nearly to its trunk, so its boughs show no bare stick (D264).
+            let start = length * if pine { 0.35 } else { 0.12 };
             let mut s = start + dice.range(0.0, gap * 0.5);
             while s < length {
                 let (point, _, direction) = along(&p, &rr, s / length);
