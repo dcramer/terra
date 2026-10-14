@@ -13,7 +13,7 @@
 // scale it popped at (1 is as played: a pop at 1.3 happens 1.3 times as far off as the
 // switch's own distance, when the player walks through it), and puts them side by side,
 // marked red, in shots/lodcheck/sheet.jpg. Fails if any frame pops more than --limit percent.
-// About forty seconds for three views: they are drawn at once and compared on every core.
+// About two minutes for the five views: drawn one after another, compared on every core.
 // Under WSL each view runs on the Windows build, on the real GPU (`offscreenRun`): WSL's own
 // draws on the CPU, too slowly to finish. Needs ImageMagick. Node 22.18 or later; no dependencies.
 
@@ -50,9 +50,11 @@ const SETTLE = 6;
 const WIDTH = 720;
 const CHANGED = "4%";
 const SPECKLE = "Disk:2";
-/// A pixel is black under this much of white in every channel; a frame fails with more than
-/// this share of them.
-const BLACK = "2%";
+/// A pixel is black under this much of white in every channel, nothing in 8 bits; a frame
+/// fails with more than this share of them. Not under 2%: a forest's shade is now as dark as
+/// Sons of the Forest's (D286), whose own frames have 6% of their pixels under 2% at the median,
+/// and the lush views under the canopy up to 3.5%, but light gone missing leaves nothing.
+const BLACK = "0.4%";
 const MOST_BLACK = 1;
 
 const arg = (name: string, fallback: string) => {
@@ -105,9 +107,10 @@ type Pop = { view: string; frame: number; share: number; scale: number };
 const worst: Pop[] = [];
 let failed = false;
 for (const view of views) if (!VIEWS[view]) throw new Error(`no view ${view}; there are ${Object.keys(VIEWS).join(", ")}`);
-// Every view drawn at once, each its own run.
-const runs = await Promise.all(
-  views.map((view) => {
+// Each view its own run, one after another: the lush forest's meshes and leaf atlases no longer
+// fit on the GPU three or five runs at once, and a run that ran out died at its end, unsaid.
+const runs = await pool(
+  views.map((view) => () => {
     const dir = resolve(out, view);
     mkdirSync(dir);
     const [command, words] = offscreenRun(`lodcheck-${view}`, [
@@ -117,6 +120,7 @@ const runs = await Promise.all(
     ]);
     return run(command, words, { ...process.env, BEVY_ASSET_ROOT: ROOT });
   }),
+  1,
 );
 views.forEach((view, i) => {
   const { status, said } = runs[i];
@@ -151,8 +155,8 @@ for (const view of views) {
   for (const pop of pops.slice(0, 3)) console.log(`lodcheck: ${view}: frame ${pop.frame}: ${pop.share.toFixed(2)}% popped at scale ${pop.scale.toFixed(2)}`);
   if (over.length) failed = true;
   worst.push(...pops.slice(0, 2));
-  // Black: nothing lit by day is this dark, not the deepest shade, which the sky lights. A
-  // share of it is light gone missing (an unfiltered sky light left every shade black) or
+  // Black: nothing lit by day is this dark, not the deepest shade, which the sky and the haze
+  // light. A share of it is light gone missing (an unfiltered sky light left every shade black) or
   // NaNs spreading.
   const black = Number(magick(file(view, SWEEP.last), "-resize", `${WIDTH}x`, "-channel", "RGB", "-separate", "-evaluate-sequence", "max", "-threshold", BLACK, "-negate", "-format", "%[fx:mean*100]", "info:"));
   console.log(`lodcheck: ${view}: ${black.toFixed(2)}% of the last frame black`);

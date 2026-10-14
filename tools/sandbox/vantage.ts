@@ -6,6 +6,8 @@
 // views every time. One scripted run per hour moves its camera from view to view
 // (--vantage …@frame) and saves each with --shots; at the first hour, how closed the canopy
 // is, and how much of a view at eye height the undergrowth hides, from a run driven live.
+// For the views inside the forest, how each looks against Sons of the Forest's own daytime
+// frames: brightness, near black, warmth, local contrast, lit litter (look.ts, D286).
 //
 //   node tools/sandbox/vantage.ts [--time 13,17] [--out shots/vantage]
 //
@@ -16,6 +18,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { resolve } from "node:path";
 import * as game from "./client.ts";
+import { line, look, meanOf } from "./look.ts";
+import { readPng } from "./png.ts";
 import { ROOT, imageMagick } from "./client.ts";
 
 /// Each view: a name, where the camera stands and what it looks at, in metres east, up and
@@ -30,6 +34,8 @@ const VIEWS: [string, string][] = [
   // Into a spruce grove.
   ["grove", "-21.9,1.7,-100,-21.9,4,-114"],
 ];
+/// The views inside the forest, whose look (`look.ts`) is held against Sons of the Forest's.
+const FOREST_VIEWS = ["floor", "clearing", "path", "grove"];
 /// Frames each view is held for before it is pictured: grass is built round the camera as
 /// it arrives, and levels of detail fade in.
 const HOLD = 200;
@@ -84,6 +90,13 @@ for (const hour of hours) {
     if (bare) console.log(`vantage: ${name} at ${hour}:00: bare ground within 30 m ${bare[1]}%, paths ${bare[2]}%`);
     tiles.push("-label", `${name}, ${hour}:00${measured}`, file);
   });
+  // How the views inside the forest look against Sons of the Forest's own frames (D286).
+  const inside = VIEWS.filter(([name]) => FOREST_VIEWS.includes(name)).map(([name]) => {
+    const l = look(readPng(resolve(out, `${hour}-${name}.png`)));
+    console.log(`vantage: look: ${line(`${name} at ${hour}:00`, l)}`);
+    return l;
+  });
+  console.log(`vantage: look: ${line(`mean at ${hour}:00`, meanOf(inside))}`);
   console.log(`vantage: ${hour}:00 in ${((Date.now() - started) / 1000).toFixed(0)} s`);
   if (hour === hours[0]) tiles.push(...canopy(hour), ...(await blocking(hour)));
 }
