@@ -13,7 +13,7 @@ use crate::layout::roofs::RoofPart;
 use crate::layout::{self, Piece};
 use crate::mesh::{Material, Surface, Surfaces};
 use crate::relief::Maps;
-use crate::surface::{Heights, Look};
+use crate::surface::{Heights, Look, Packed};
 use crate::{Base, CELL_M, Fill, Kind};
 use glam::{IVec3, Mat3, Quat, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
@@ -558,6 +558,21 @@ pub fn block_look(kit: &Kit, steps: u32) -> Look {
         steps,
         metres: metres(Material::Masonry).unwrap_or([2.0, 2.0]),
         top: metres(Material::Floor).map(|metres| (metres, relief * FLOOR_RELIEF)),
+        // Its packing's lumps as far as its steps can show them, its lifts' ridges near.
+        packed: kit
+            .packed
+            .filter(|_| steps >= MID_STEPS)
+            .map(|packing| Packed {
+                packing: crate::kit::Packing {
+                    ridge: if steps >= SURFACE_STEPS {
+                        packing.ridge
+                    } else {
+                        0.0
+                    },
+                    ..packing
+                },
+                lift: kit.dress.masks.lift,
+            }),
     }
 }
 
@@ -985,6 +1000,7 @@ fn draw_blocks(
         steps: 1,
         metres: [CELL_M, CELL_M],
         top: None,
+        packed: None,
     };
     let flat = |_: [f32; 2]| 0.5;
     let plan_heights = Heights {
@@ -1120,6 +1136,7 @@ fn draw_blocks(
             relief: if near { framing.core_relief } else { 0.0 },
             metres: kit.textures.get(&material).map_or([1.0, 1.0], |t| t.metres),
             top: None,
+            packed: None,
             ..look
         };
         let core_heights = Heights {

@@ -18,7 +18,7 @@
 use crate::kit::{Dress, Kit, Masks};
 use crate::layout::{self, Dir, End, Piece, TICKS, hash};
 use crate::mesh::{Indexed, Material, Surface, Surfaces, planar};
-use crate::{Base, CELL_M};
+use crate::{Base, CELL_M, Fill};
 use glam::{IVec3, Mat3, Vec3};
 use std::collections::BTreeMap;
 
@@ -663,6 +663,37 @@ fn three_halves(x: f32) -> f32 {
     x * x.sqrt()
 }
 
+/// Where a point is among a block kind's lifts so tall: how many lifts up, the seams
+/// wandering a few centimetres up and down along the wall. The surface's ridges
+/// (`surface::Packed`) follow it, and the masks' strata the same through their kept
+/// `Noise`, which reads the same lattice, so they agree.
+pub(crate) fn lift_at(p: Vec3, lift: f32) -> f32 {
+    p.y / lift + 0.35 * (smooth(p, 1.1, 11) - 0.5)
+}
+
+/// Smooth value noise over a lattice so many metres across, from 0 to 1.
+pub(crate) fn smooth(p: Vec3, size: f32, seed: u32) -> f32 {
+    let q = p / size;
+    let base = q.floor();
+    let f = q - base;
+    let f = f * f * (Vec3::splat(3.0) - 2.0 * f);
+    let b = base.as_ivec3();
+    let at = |dx: i32, dy: i32, dz: i32| {
+        layout::unit(hash(&[
+            (b.x + dx) as u32,
+            (b.y + dy) as u32,
+            (b.z + dz) as u32,
+            seed,
+        ]))
+    };
+    let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+    let x00 = lerp(at(0, 0, 0), at(1, 0, 0), f.x);
+    let x10 = lerp(at(0, 1, 0), at(1, 1, 0), f.x);
+    let x01 = lerp(at(0, 0, 1), at(1, 0, 1), f.x);
+    let x11 = lerp(at(0, 1, 1), at(1, 1, 1), f.x);
+    lerp(lerp(x00, x10, f.y), lerp(x01, x11, f.y), f.z)
+}
+
 /// A corner's shade by the kit's masks: dirt and damp rising unevenly from the ground,
 /// outside edges worn lighter by their normal's turn, a block kind's lifts and its storey's
 /// top paler, dry under the eaves, and, for timber, grey higher up.
@@ -722,6 +753,106 @@ fn masked(
     c.to_array()
 }
 
+/// Where the rain marks a block kind's wall (D215), from its cubes: the damp splashed up
+/// over its own foot, and the streaks drawn down under a sill or an open top; each column's
+/// foot and each cell's source looked up once.
+struct Rained<'a> {
+    base: &'a Base,
+    kind: crate::Kind,
+    feet: BTreeMap<[i32; 3], f32>,
+    sources: BTreeMap<[i32; 3], Option<f32>>,
+}
+
+impl Rained<'_> {
+    fn ours(&self, at: IVec3) -> bool {
+        self.base
+            .cube(at)
+            .is_some_and(|cube| cube.kind == self.kind && layout::drawn_fill(&cube) == Fill::Solid)
+    }
+
+    /// The cell of the wall a point of its face is on: a little in from the face.
+    fn cell(p: Vec3, n: Vec3) -> IVec3 {
+        let level = Vec3::new(n.x, 0.0, n.z).normalize_or_zero();
+        ((p - level * (CELL_M * 0.5)) / CELL_M).floor().as_ivec3()
+    }
+
+    /// The bottom of the wall under a cell, in metres: as far down as the kind goes.
+    fn foot(&mut self, cell: IVec3) -> f32 {
+        if let Some(&foot) = self.feet.get(&cell.to_array()) {
+            return foot;
+        }
+        let mut at = cell;
+        for _ in 0..crate::STOREY_CUBES * 2 {
+            if !self.ours(at - IVec3::Y) {
+                break;
+            }
+            at -= IVec3::Y;
+        }
+        let foot = at.y as f32 * CELL_M;
+        self.feet.insert(cell.to_array(), foot);
+        foot
+    }
+
+    /// The height a streak runs down from over a cell: the foot of an opening or the open
+    /// top of the wall over it, within reach; none under a roof or another kind.
+    fn source(&mut self, cell: IVec3, reach: f32) -> Option<f32> {
+        if let Some(&found) = self.sources.get(&cell.to_array()) {
+            return found;
+        }
+        let mut found = None;
+        let cells = libm::ceilf(reach / CELL_M) as i32;
+        for up in 1..=cells.max(1) {
+            let at = cell + IVec3::Y * up;
+            if self.ours(at) {
+                continue;
+            }
+            // An opening's foot, or a top open to the sky, not under the eaves of a roof.
+            let open = match self.base.cube(at) {
+                None => (1..=crate::STOREY_CUBES)
+                    .all(|over| self.base.cube(at + IVec3::Y * over).is_none()),
+                Some(cube) => cube.kind == self.kind,
+            };
+            if open {
+                found = Some(at.y as f32 * CELL_M);
+            }
+            break;
+        }
+        self.sources.insert(cell.to_array(), found);
+        found
+    }
+
+    /// What a point of the wall's face is shaded by: darker over its foot, and in streaks
+    /// under a sill or an open top.
+    fn shade(&mut self, masks: &Masks, p: Vec3, n: Vec3) -> Vec3 {
+        let mut k = Vec3::ONE;
+        // Only the sides: a top is not splashed nor streaked.
+        if n.y.abs() > 0.7 {
+            return k;
+        }
+        let cell = Self::cell(p, n);
+        let tint = Vec3::from_array(masks.dirt_tint);
+        if masks.splash > 0.0 {
+            let up = p.y - self.foot(cell);
+            let reach = masks.splash * (0.7 + 0.6 * smooth(p, 0.35, 51));
+            let wet = libm::powf((1.0 - up / reach).clamp(0.0, 1.0), 0.8);
+            k = k.lerp(tint, wet);
+        }
+        if masks.streaks > 0.0
+            && let Some(from) = self.source(cell, masks.streak_reach)
+        {
+            let down = from - p.y;
+            if down > 0.0 && down < masks.streak_reach {
+                // Long and narrow, as water runs: stretched up the wall, fine across it.
+                let across = Vec3::new(p.x * 9.0, p.y * 0.7, p.z * 9.0);
+                let streak = ((smooth(across, 1.0, 53) - 0.42) * 3.0).clamp(0.0, 1.0);
+                let fade = 1.0 - down / masks.streak_reach;
+                k = k.lerp(k * tint, masks.streaks * streak * fade);
+            }
+        }
+        k
+    }
+}
+
 /// A kit's masks laid over a surface it drew in a material, in its base's own space.
 pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     let masks = &kit.dress.masks;
@@ -730,6 +861,8 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
         && masks.weather <= 0.0
         && masks.strata <= 0.0
         && masks.dry <= 0.0
+        && masks.splash <= 0.0
+        && masks.streaks <= 0.0
     {
         return;
     }
@@ -764,9 +897,26 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
         known[slot]
     };
     let mut noise = Noise::default();
+    let mut rained = Rained {
+        base,
+        kind: kit.kind(),
+        feet: BTreeMap::new(),
+        sources: BTreeMap::new(),
+    };
+    let rains = layered && (masks.splash > 0.0 || masks.streaks > 0.0);
     let mut shade = |p: Vec3, n: Vec3, c: &mut [f32; 3]| {
-        let k = masked(masks, (timber, layered), p, n, ground(p), &mut noise);
-        *c = [c[0] * k[0], c[1] * k[1], c[2] * k[2]];
+        let mut k = Vec3::from_array(masked(
+            masks,
+            (timber, layered),
+            p,
+            n,
+            ground(p),
+            &mut noise,
+        ));
+        if rains {
+            k *= rained.shade(masks, p, n);
+        }
+        *c = [c[0] * k.x, c[1] * k.y, c[2] * k.z];
     };
     for ((p, n), c) in surface
         .positions
@@ -840,6 +990,63 @@ pub fn trim_triangles(profile: &[[f32; 2]]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rain_streaks_a_wall_under_its_sill_and_open_top_not_under_a_roof_and_wets_its_foot() {
+        use crate::{BuildOp, Cube, Kind};
+        let kind = Kind(4);
+        let mut base = Base::default();
+        // A wall eight cubes long and six high, a window two cubes up in it.
+        base.apply(BuildOp::Fill {
+            min: [0, 0, 0],
+            max: [7, 5, 0],
+            cube: Some(Cube::new(kind, Fill::Solid)),
+        });
+        base.apply(BuildOp::Fill {
+            min: [2, 2, 0],
+            max: [3, 3, 0],
+            cube: Some(Cube::new(kind, Fill::Open)),
+        });
+        // A roof's cube over its east end.
+        base.apply(BuildOp::Fill {
+            min: [6, 6, 0],
+            max: [7, 6, 0],
+            cube: Some(Cube::new(Kind::FIRST_ROOF, Fill::Solid)),
+        });
+        let masks = Masks {
+            dirt_tint: [0.5; 3],
+            splash: 0.5,
+            streaks: 1.0,
+            streak_reach: 1.5,
+            ..Masks::default()
+        };
+        let mut rained = Rained {
+            base: &base,
+            kind,
+            feet: BTreeMap::new(),
+            sources: BTreeMap::new(),
+        };
+        let out = Vec3::Z;
+        // Somewhere along the face under the sill a streak darkens it; nowhere beside it.
+        let darkest = |rained: &mut Rained, x0: f32, x1: f32, y: f32| {
+            (0..40)
+                .map(|i| {
+                    let x = x0 + (x1 - x0) * i as f32 / 40.0;
+                    rained.shade(&masks, Vec3::new(x, y, CELL_M), out).x
+                })
+                .fold(1.0f32, f32::min)
+        };
+        assert!(darkest(&mut rained, 1.0, 2.0, 0.8) < 0.9);
+        assert!((darkest(&mut rained, 2.6, 3.4, 0.8) - 1.0).abs() < 1e-4);
+        // Under the open top, streaked; under the roof, dry.
+        assert!(darkest(&mut rained, 0.0, 1.0, 2.6) < 0.9);
+        assert!((darkest(&mut rained, 3.0, 4.0, 2.6) - 1.0).abs() < 1e-4);
+        // Wet over its foot, dry a metre up.
+        let foot = rained.shade(&masks, Vec3::new(0.25, 0.05, CELL_M), out).x;
+        assert!(foot < 0.65, "{foot}");
+        let up = rained.shade(&masks, Vec3::new(0.25, 1.4, CELL_M), out).x;
+        assert!((up - 1.0).abs() < 1e-4, "{up}");
+    }
 
     #[test]
     fn a_simple_polygon_is_filled_by_its_ears() {

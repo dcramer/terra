@@ -67,9 +67,27 @@ pub struct Kit {
     /// What a block kind's surface's colour is multiplied by (sRGB): its earth or its daub
     /// warmed or lightened from its texture's, a grade a kit (docs/art-style.md).
     pub tint: [f32; 3],
+    /// How a block kind's earth was packed (D236): its face bulging where it was pressed by
+    /// hand and its lifts standing out as ridges, in its shape, not only its texture; left
+    /// out, none.
+    pub packed: Option<Packing>,
     /// A block kind framed in timber (D236, `layout::frames`): its cubes the infill, drawn as
     /// their surface, and a frame of its members laid over them by rule; left out, none.
     pub framing: Option<Framing>,
+}
+
+/// How a block kind's earth was packed, in its surface's shape (D236): lumps where it was
+/// pressed by hand, and each lift rounded out between the seams where the next was rammed
+/// on it, the seams following its masks' `lift` and wandering as its strata do.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Packing {
+    /// How far its lumps stand out or sink, either way, in metres, and how far across one
+    /// is.
+    pub lumps: f32,
+    pub lump: f32,
+    /// How far each lift's middle stands out from the seams either side, in metres.
+    pub ridge: f32,
 }
 
 /// How a framed kind's frame is laid and drawn (D236, `layout::frames`): wattle and daub,
@@ -299,6 +317,13 @@ pub struct Masks {
     /// the damp splashed up it (`dirt`).
     pub dry: f32,
     pub dry_reach: f32,
+    /// How high a block kind's wall is darkened over its own foot, where the rain splashes
+    /// up off its plinth and the ground, in metres, its top wandering, to `dirt_tint`; and
+    /// how dark the streaks are that rain draws down it under a sill or an open top, as a
+    /// fraction, and how far down they run, in metres.
+    pub splash: f32,
+    pub streaks: f32,
+    pub streak_reach: f32,
 }
 
 impl Default for Masks {
@@ -315,6 +340,9 @@ impl Default for Masks {
             lift: 0.15,
             dry: 0.0,
             dry_reach: 1.2,
+            splash: 0.0,
+            streaks: 0.0,
+            streak_reach: 1.5,
         }
     }
 }
@@ -771,6 +799,7 @@ impl Default for Kit {
             },
             meets: None,
             framing: None,
+            packed: None,
             tint: [1.0; 3],
         }
     }

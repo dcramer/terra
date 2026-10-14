@@ -40,6 +40,39 @@ pub struct Look {
     /// flagstones are: how many metres one copy of that covers, and how far its relief
     /// stands out.
     pub top: Option<([f32; 2], f32)>,
+    /// Earth's packing (D236), if it was packed: lumps and lifts in its shape.
+    pub packed: Option<Packed>,
+}
+
+/// Earth's packing in a surface's shape: its kit's `Packing`, and how tall its lifts are.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Packed {
+    pub packing: crate::kit::Packing,
+    pub lift: f32,
+}
+
+impl Packed {
+    /// How far the surface is pushed out at a point by its packing: lumps of two sizes, and
+    /// each lift rounded out between its seams, a little flatter in its middle.
+    fn at(&self, p: Vec3) -> f32 {
+        use crate::dress::smooth;
+        let k = &self.packing;
+        let lumps = if k.lumps > 0.0 {
+            let size = k.lump.max(0.05);
+            (smooth(p, size, 41) * 0.65 + smooth(p, size * 0.45, 43) * 0.35 - 0.5) * 2.0 * k.lumps
+        } else {
+            0.0
+        };
+        let ridge = if k.ridge > 0.0 {
+            let y = crate::dress::lift_at(p, self.lift.max(0.05));
+            let within = y - libm::floorf(y);
+            let belly = 1.0 - (2.0 * within - 1.0) * (2.0 * within - 1.0);
+            (libm::powf(belly, 0.6) - 0.6) * k.ridge
+        } else {
+            0.0
+        };
+        lumps + ridge
+    }
 }
 
 /// What a surface is displaced by: its material's height where its texture is at a point,
@@ -541,7 +574,8 @@ pub fn draw_part(
                 } else {
                     fade(p, &face_edges)
                 };
-                rounded + outward * (displaced(p, outward, look, heights) * faded)
+                let packed = look.packed.map_or(0.0, |packed| packed.at(p));
+                rounded + outward * ((displaced(p, outward, look, heights) + packed) * faded)
             };
             // Wound so each triangle faces out along the face's normal.
             let flip = side < 0.0;
@@ -910,6 +944,7 @@ mod tests {
             steps: 8,
             metres: [2.0, 2.0],
             top: None,
+            packed: None,
         }
     }
 
@@ -1120,6 +1155,52 @@ mod tests {
             .collect();
         wall.retain(|c| *c != [1, 1, 0]);
         assert!(closed(&drawn(&wall, &bumpy)));
+    }
+
+    #[test]
+    fn packed_earth_stays_closed_and_its_lifts_stand_out_between_their_seams() {
+        let packing = crate::kit::Packing {
+            lumps: 0.0,
+            lump: 0.5,
+            ridge: 0.04,
+        };
+        let packed = Packed { packing, lift: 0.5 };
+        // Up a line on the wall, the lifts' middles stand out the ridge's depth beyond the
+        // seams, and no further.
+        let along: Vec<f32> = (0..400)
+            .map(|i| packed.at(Vec3::new(0.3, i as f32 * 0.01, 0.0)))
+            .collect();
+        let (low, high) = along
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(l, h), &v| (l.min(v), h.max(v)));
+        assert!((high - low - 0.04).abs() < 0.004, "{low} {high}");
+        // With lumps too, a carved wall's surface stays one closed surface.
+        let look = Look {
+            packed: Some(Packed {
+                packing: crate::kit::Packing {
+                    lumps: 0.03,
+                    ..packing
+                },
+                lift: 0.5,
+            }),
+            ..look()
+        };
+        let mut wall: Vec<[i32; 3]> = (0..4)
+            .flat_map(|x| (0..3).map(move |y| [x, y, 0]))
+            .collect();
+        wall.retain(|c| *c != [1, 1, 0]);
+        let surface = drawn_as(&wall, &look, &bumpy);
+        assert!(closed(&surface));
+        // And its face is no longer flat: it bulges out and sinks in by centimetres.
+        let front: Vec<f32> = surface
+            .positions
+            .iter()
+            .filter(|p| p[2] > CELL_M * 0.5)
+            .map(|p| p[2])
+            .collect();
+        let spread = front.iter().fold(f32::MIN, |a, &b| a.max(b))
+            - front.iter().fold(f32::MAX, |a, &b| a.min(b));
+        assert!(spread > 0.06, "{spread}");
     }
 
     #[test]

@@ -8,8 +8,11 @@
 // is the log kit's; logs.ron and stone.ron say what each number is.
 //
 // bevel       how far its outside edges are rounded: 12 cm, soft, as earth's are (D194)
-// tint        its earth's yellow taken down to an ochre-brown
-// relief      how far its lumps and ridges stand out
+// tint        its earth's yellow taken down to a grey-brown
+// relief      how far its texture's grit and ridges stand out
+// packed      its shape as packed by hand (D236): lumps 5 cm either way about 60 cm
+//             across, and each lift rounded out 3.5 cm between its seams, so a wall bulges
+//             and its lifts read as ridges from the street, and its corners wander
 // textures    its earth (ambientCG's Ground104, CC0, as packed_earth, its grit and
 //             ridges standing 2.5% of its size deep in parallax), its floors' beaten earth
 //             (clay_floor_001), its plinth's and coping's stone (rock_boulder_dry), its
@@ -23,8 +26,10 @@
 //             under an overhang, an oak tread on every step, a stone border round a floor;
 //             posts as round-cornered pillars 40 cm square; nothing up its corners or its
 //             openings' sides, which stay round; its lifts a little lighter and darker by
-//             turns (strata), its foot darkened by the damp splashed up over its plinth, and
-//             paler from a storey up, dry under the eaves (dry)
+//             turns (strata), its foot darkened by the damp splashed up over its plinth
+//             (splash), dark streaks run down under its sills and any open top (streaks),
+//             its arrises worn paler (wear), and paler from a storey up, dry under the eaves
+//             (dry)
 // meets       a block kind as stone is (D232), heavier than timber and running through it,
 //             its sole plate under timber standing on it; stone runs through it, so it stands
 //             on a stone plinth wall under that wall's cap, and ends against stone
@@ -34,7 +39,8 @@
     roof_kind: Some(2050),
     bevel: 0.12,
     relief: 0.07,
-    tint: (1.12, 1.02, 0.97),
+    tint: (0.98, 0.95, 1.08),
+    packed: Some((lumps: 0.05, lump: 0.6, ridge: 0.035)),
     timber: (
         profile: Hewn,
         notch: Flush,
@@ -69,14 +75,17 @@
         tint: (0.95, 0.9, 0.84),
         masks: (
             dirt: 0.9,
-            dirt_tint: (0.62, 0.56, 0.5),
-            wear: 0.12,
+            dirt_tint: (0.6, 0.56, 0.53),
+            wear: 0.3,
             moss: 0.5,
             moss_tint: (0.7, 0.72, 0.5),
             strata: 0.08,
             lift: 0.42,
             dry: 0.3,
             dry_reach: 1.2,
+            splash: 0.6,
+            streaks: 0.6,
+            streak_reach: 1.4,
         ),
     ),
     meets: Some((
