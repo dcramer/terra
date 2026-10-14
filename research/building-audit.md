@@ -117,7 +117,7 @@ From the cabin's, the roof's and the demo's pictures on the Windows GPU, against
 
 ## Left, by how much it matters
 
-1. **High: a 100 to 230 ms stall on every change to a build's footprint** (`flora::make_way` on the main thread). Every cube planned or built on new ground stalls the game for a fifth of a second. Hide the plants by the footprint's change only, and grow the grass squares on the workers as `cover` does.
+1. **Closed since: the 100 to 230 ms stall on every change to a build's footprint.** `flora::make_way` now looks only at the places a change took or gave up (`Footprint::changes_from`): the plants within reach of them, and the grass squares under them, grown again on the workers and put in place when done; the lush forest's cover the same. Live `building-frames` afterwards: worst 58.9 ms on a busy machine (load 48), against 208 to 231.
 2. **High on the integrated GPU: the village at 39 ms** against the low preset's 33 ms; the buildings' main pass and prepass.
 3. **Medium: z-fighting** where dress profiles and roof boards lie in one plane (above).
 4. **Medium: a big building's near section takes 80 to 170 ms to lay and merge**, so an edit to a roofed house shows a tenth of a second late.

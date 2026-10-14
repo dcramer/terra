@@ -28,6 +28,7 @@ use bevy::{
     prelude::*,
     render::render_resource::{AsBindGroup, PrimitiveTopology},
     shader::ShaderRef,
+    tasks::{AsyncComputeTaskPool, Task, TaskPool, block_on, poll_once},
 };
 use terra_gen::{Noise, Rng, Seed};
 
@@ -178,14 +179,26 @@ impl Growth {
 /// The squares of grass, and what is needed to regrow one.
 #[derive(Resource)]
 struct Meadow {
-    ground: Patch,
-    seed: Seed,
+    grass: Grass,
     material: Handle<WindMaterial>,
-    dry: LinearRgba,
-    lush: LinearRgba,
     squares: HashMap<(i32, i32), Entity>,
     /// When the grass was last cleared for what is built.
     cleared_at: Tick,
+    /// Each footprint as it was last cleared for, so a change clears for only what it
+    /// changed.
+    seen: HashMap<Entity, Footprint>,
+    /// Squares being grown again on the workers, each put in place of the one drawn when
+    /// it is done.
+    growing: HashMap<(i32, i32), Task<Option<Mesh>>>,
+}
+
+/// What a square of grass is grown from, apart from the planet and what is built.
+#[derive(Clone)]
+struct Grass {
+    ground: Patch,
+    seed: Seed,
+    dry: LinearRgba,
+    lush: LinearRgba,
     /// The share of its tufts grown, at the quality preset (D239).
     density: f32,
 }
@@ -232,7 +245,9 @@ pub fn plugin(app: &mut App) {
         .add_message::<ClearAround>()
         .add_systems(
             Update,
-            (make_way, clear_new, clear_around, follow_digs).in_set(FloraSystems::Clear),
+            (make_way, clear_new, clear_around, follow_digs, regrown)
+                .chain()
+                .in_set(FloraSystems::Clear),
         );
 }
 
@@ -407,7 +422,7 @@ fn plant(
     mut commands: Commands,
     planet: Res<Planet>,
     tweaks: Res<Tweaks>,
-    footprints: Query<&Footprint>,
+    footprints: Query<(Entity, &Footprint)>,
     ticks: SystemChangeTick,
     start: Res<Start>,
     flora: Res<Flora>,
@@ -539,7 +554,7 @@ fn plant(
                    stops: Option<(Vec3, f32)>| {
         if footprints
             .iter()
-            .any(|footprint| footprint.covers(transform.translation, clearance_m))
+            .any(|(_, footprint)| footprint.covers(transform.translation, clearance_m))
         {
             return;
         }
@@ -731,25 +746,32 @@ fn plant(
     }
 
     let mut meadow = Meadow {
-        ground,
-        seed: seed.derive("grass"),
+        grass: Grass {
+            ground,
+            seed: seed.derive("grass"),
+            dry: tweaks.grass_dry.to_linear(),
+            lush: tweaks.grass_lush.to_linear(),
+            density: quality.grass(),
+        },
         material: blades,
-        dry: tweaks.grass_dry.to_linear(),
-        lush: tweaks.grass_lush.to_linear(),
         squares: HashMap::default(),
         cleared_at: ticks.this_run(),
-        density: quality.grass(),
+        seen: footprints
+            .iter()
+            .map(|(entity, footprint)| (entity, footprint.clone()))
+            .collect(),
+        growing: HashMap::default(),
     };
     let squares = (GRASS_REACH_M / GRASS_SQUARE_M).ceil() as i32;
     // One thread per row of squares; working out where the ground is, is the slow part.
-    let footprints: Vec<&Footprint> = footprints.iter().collect();
+    let footprints: Vec<&Footprint> = footprints.iter().map(|(_, f)| f).collect();
     let grown: Vec<((i32, i32), Option<Mesh>)> = std::thread::scope(|scope| {
-        let (meadow, planet, footprints) = (&meadow, &*planet, footprints.as_slice());
+        let (grass, planet, footprints) = (&meadow.grass, &*planet, footprints.as_slice());
         let rows: Vec<_> = (-squares..squares)
             .map(|i| {
                 scope.spawn(move || {
                     (-squares..squares)
-                        .map(|j| ((i, j), grass_square(meadow, planet, footprints, i, j)))
+                        .map(|j| ((i, j), grass_square(grass, planet, footprints, i, j)))
                         .collect::<Vec<_>>()
                 })
             })
@@ -784,7 +806,7 @@ fn plant(
 
 /// One square of grass as a mesh, or nothing if no grass grows there.
 fn grass_square(
-    meadow: &Meadow,
+    meadow: &Grass,
     planet: &Planet,
     footprints: &[&Footprint],
     i: i32,
@@ -872,58 +894,155 @@ fn grass_square(
 }
 
 /// When something built changes shape, clears away whatever it now stands on, with what
-/// that blocked.
+/// that blocked, and grows again the grass where it changed. Only what changed is looked
+/// at: the plants within reach of the places it took or gave up, and the squares of grass
+/// under those, which are grown on the workers and put in place when done (`regrown`), so
+/// a change to a big base costs a frame no more than a change to a small one.
 fn make_way(
-    mut commands: Commands,
-    footprints: Query<Ref<Footprint>>,
+    footprints: Query<(Entity, Ref<Footprint>)>,
     planet: Res<Planet>,
     meadow: Option<ResMut<Meadow>>,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut obstacles: ResMut<Obstacles>,
     mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
     ticks: SystemChangeTick,
 ) {
     let Some(mut meadow) = meadow else { return };
-    let changed: Vec<&Footprint> = footprints
-        .iter()
-        .filter(|footprint| {
-            footprint
-                .last_changed()
-                .is_newer_than(meadow.cleared_at, ticks.this_run())
-        })
-        .map(Ref::into_inner)
-        .collect();
-    if changed.is_empty() {
-        return;
-    }
-    meadow.cleared_at = ticks.this_run();
-    for (growth, transform, mut visibility) in &mut growth {
-        if changed
-            .iter()
-            .any(|footprint| footprint.covers(transform.translation, growth.clearance_m))
-        {
-            *visibility = Visibility::Hidden;
-            if let Some(stood) = growth.obstacle {
-                obstacles.remove(stood);
-            }
-        }
-    }
-    // Regrow the squares of grass at or beside what changed.
-    let all: Vec<&Footprint> = footprints.iter().map(Ref::into_inner).collect();
-    for (&(i, j), &entity) in &meadow.squares {
-        let centre = (Vec2::new(i as f32, j as f32) + 0.5) * GRASS_SQUARE_M;
-        let point = meadow.ground.ground(&planet, centre.x, centre.y);
-        if !changed
-            .iter()
-            .any(|footprint| footprint.covers(point, GRASS_SQUARE_M))
+    let mut changes: Vec<(&Footprint, Vec<Footprint>)> = Vec::new();
+    for (entity, footprint) in &footprints {
+        if !footprint
+            .last_changed()
+            .is_newer_than(meadow.cleared_at, ticks.this_run())
         {
             continue;
         }
-        match grass_square(&meadow, &planet, &all, i, j) {
-            Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
-            None => commands.entity(entity).remove::<Mesh3d>(),
-        };
+        let footprint = footprint.into_inner();
+        let changed = footprint.changes_from(meadow.seen.get(&entity));
+        meadow.seen.insert(entity, footprint.clone());
+        if !changed.is_empty() {
+            changes.push((footprint, changed));
+        }
     }
+    meadow.cleared_at = ticks.this_run();
+    if changes.is_empty() {
+        return;
+    }
+    // Plants are cleared by the footprint as it is now, but only those within reach of a
+    // place it changed: each change's box, in its own space, as wide as a plant's
+    // clearance can reach.
+    for (footprint, changed) in &changes {
+        let local = footprint.to_local();
+        let boxes: Vec<(Vec2, Vec2)> = changed
+            .iter()
+            .filter(|change| change.frame == footprint.frame)
+            .filter_map(Footprint::bounds)
+            .collect();
+        for (growth, transform, mut visibility) in &mut growth {
+            if *visibility == Visibility::Hidden {
+                continue;
+            }
+            let at = local.transform_point3(transform.translation);
+            let reach = growth.clearance_m + footprint.cell_m;
+            let near = boxes.iter().any(|(low, high)| {
+                at.x > low.x - reach
+                    && at.x < high.x + reach
+                    && at.z > low.y - reach
+                    && at.z < high.y + reach
+            });
+            if near && footprint.covers_local(at, growth.clearance_m) {
+                *visibility = Visibility::Hidden;
+                if let Some(stood) = growth.obstacle {
+                    obstacles.remove(stood);
+                }
+            }
+        }
+    }
+    // The squares of grass the changed places fall in, or come within a tuft's clearance
+    // of, grown again.
+    let mut squares: Vec<(i32, i32)> = Vec::new();
+    for (_, changed) in &changes {
+        for change in changed {
+            for place in change.places() {
+                let middle = change.frame.transform_point(Vec3::new(
+                    (place.x as f32 + 0.5) * change.cell_m,
+                    0.0,
+                    (place.y as f32 + 0.5) * change.cell_m,
+                ));
+                let ground = &meadow.grass.ground;
+                let from = middle - ground.middle;
+                let (east, north) = (from.dot(ground.east), from.dot(ground.north));
+                let reach = change.cell_m * 0.71 + 0.5;
+                let key = |m: f32| (m / GRASS_SQUARE_M).floor() as i32;
+                for i in key(east - reach)..=key(east + reach) {
+                    for j in key(north - reach)..=key(north + reach) {
+                        if !squares.contains(&(i, j)) {
+                            squares.push((i, j));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let all: Vec<Footprint> = footprints
+        .iter()
+        .map(|(_, f)| f.into_inner().clone())
+        .collect();
+    regrow(&mut meadow, &planet, all, squares);
+}
+
+/// Grows squares of grass again on the workers, without what is built on `footprints`,
+/// each to be put in place of the one drawn when done (`regrown`); one already growing
+/// from what was there before is dropped.
+fn regrow(
+    meadow: &mut Meadow,
+    planet: &Planet,
+    footprints: Vec<Footprint>,
+    squares: Vec<(i32, i32)>,
+) {
+    let squares: Vec<(i32, i32)> = squares
+        .into_iter()
+        .filter(|key| meadow.squares.contains_key(key))
+        .collect();
+    if squares.is_empty() {
+        return;
+    }
+    let pool = AsyncComputeTaskPool::get_or_init(TaskPool::default);
+    let footprints = std::sync::Arc::new(footprints);
+    for (i, j) in squares {
+        let (grass, planet, footprints) =
+            (meadow.grass.clone(), planet.clone(), footprints.clone());
+        let task = pool.spawn(async move {
+            let footprints: Vec<&Footprint> = footprints.iter().collect();
+            grass_square(&grass, &planet, &footprints, i, j)
+        });
+        meadow.growing.insert((i, j), task);
+    }
+}
+
+/// Puts the squares of grass grown again in place, as each is done.
+fn regrown(
+    mut commands: Commands,
+    meadow: Option<ResMut<Meadow>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    let Some(mut meadow) = meadow else { return };
+    if meadow.growing.is_empty() {
+        return;
+    }
+    let Meadow {
+        squares, growing, ..
+    } = &mut *meadow;
+    growing.retain(|key, task| {
+        let Some(grown) = block_on(poll_once(task)) else {
+            return true;
+        };
+        if let Some(&entity) = squares.get(key) {
+            match grown {
+                Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
+                None => commands.entity(entity).remove::<Mesh3d>(),
+            };
+        }
+        false
+    });
 }
 
 /// What grows after something was built, as a forest grown later than a village is,
@@ -955,16 +1074,14 @@ fn clear_new(
 /// over it, whose squares are grown again. The digs of a loaded game are followed the
 /// same way, once the plants have grown.
 fn follow_digs(
-    mut commands: Commands,
     planet: Res<Planet>,
     footprints: Query<&Footprint>,
-    meadow: Option<Res<Meadow>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    meadow: Option<ResMut<Meadow>>,
     mut obstacles: ResMut<Obstacles>,
     mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
     mut seen: Local<usize>,
 ) {
-    let Some(meadow) = meadow else { return };
+    let Some(mut meadow) = meadow else { return };
     let count = planet.voxels().edit_count();
     if count == *seen {
         return;
@@ -986,23 +1103,18 @@ fn follow_digs(
             }
         }
     }
-    for (&(i, j), &entity) in &meadow.squares {
-        let centre = (Vec2::new(i as f32, j as f32) + 0.5) * GRASS_SQUARE_M;
-        let point = meadow.ground.ground(&planet, centre.x, centre.y);
-        if !near(point, GRASS_SQUARE_M * 0.71) {
-            continue;
-        }
-        match grass_square(
-            &meadow,
-            &planet,
-            &footprints.iter().collect::<Vec<_>>(),
-            i,
-            j,
-        ) {
-            Some(mesh) => commands.entity(entity).insert(Mesh3d(meshes.add(mesh))),
-            None => commands.entity(entity).remove::<Mesh3d>(),
-        };
-    }
+    let squares: Vec<(i32, i32)> = meadow
+        .squares
+        .keys()
+        .copied()
+        .filter(|&(i, j)| {
+            let centre = (Vec2::new(i as f32, j as f32) + 0.5) * GRASS_SQUARE_M;
+            let point = meadow.grass.ground.ground(&planet, centre.x, centre.y);
+            near(point, GRASS_SQUARE_M * 0.71)
+        })
+        .collect();
+    let footprints: Vec<Footprint> = footprints.iter().cloned().collect();
+    regrow(&mut meadow, &planet, footprints, squares);
 }
 
 /// Clears plants where something has been set down since they grew.
@@ -1148,18 +1260,22 @@ mod tests {
     fn meadow(planet: &Planet) -> Meadow {
         let middle = planet.start();
         Meadow {
-            ground: Patch {
-                middle,
-                east: Vec3::X,
-                north: Vec3::Z,
+            grass: Grass {
+                ground: Patch {
+                    middle,
+                    east: Vec3::X,
+                    north: Vec3::Z,
+                },
+                seed: Seed(1),
+                dry: LinearRgba::BLACK,
+                lush: LinearRgba::WHITE,
+                density: 1.0,
             },
-            seed: Seed(1),
             material: Handle::default(),
-            dry: LinearRgba::BLACK,
-            lush: LinearRgba::WHITE,
             squares: HashMap::default(),
             cleared_at: Tick::new(0),
-            density: 1.0,
+            seen: HashMap::default(),
+            growing: HashMap::default(),
         }
     }
 
@@ -1220,6 +1336,65 @@ mod tests {
         world.run_system_cached(make_way).unwrap();
         assert!(hidden(&world, near) && !blocked(&world, on));
         assert!(!hidden(&world, far) && blocked(&world, off));
+    }
+
+    #[test]
+    fn a_change_to_a_footprint_clears_and_regrows_only_where_it_changed() {
+        let mut world = World::new();
+        let planet = planet();
+        let start = planet.start();
+        let up = start.normalize();
+        let frame =
+            Transform::from_translation(start).with_rotation(Quat::from_rotation_arc(Vec3::Y, up));
+        let at = |x: f32, z: f32| frame.transform_point(Vec3::new(x, 0.0, z));
+        // A tree where the base will grow to, 30 m east, and one well beyond.
+        let (grown_over, beyond) = two_trees(&mut world, at(30.5, 0.5), at(60.0, 0.0));
+        // The meadow's squares round the start, its map along the base's grid.
+        let mut meadow = meadow(&planet);
+        meadow.grass.ground.east = frame.rotation * Vec3::X;
+        meadow.grass.ground.north = frame.rotation * Vec3::Z;
+        for i in -8..8 {
+            for j in -8..8 {
+                let square = world.spawn_empty().id();
+                meadow.squares.insert((i, j), square);
+            }
+        }
+        world.insert_resource(meadow);
+        world.insert_resource(planet);
+        let room = |x: i32| (x..x + 4).flat_map(move |x| (0..4).map(move |z| IVec2::new(x, z)));
+        let base = world
+            .spawn(Footprint {
+                frame,
+                cell_m: 1.0,
+                ground: room(0).collect(),
+                ..default()
+            })
+            .id();
+        world.run_system_cached(make_way).unwrap();
+        let growing = |world: &World| {
+            let mut keys: Vec<(i32, i32)> =
+                world.resource::<Meadow>().growing.keys().copied().collect();
+            keys.sort();
+            keys
+        };
+        assert!(growing(&world).contains(&(0, 0)));
+        assert!(!hidden(&world, grown_over));
+        world.resource_mut::<Meadow>().growing.clear();
+        // The base grows a room 30 m east: the grass there is grown again, and not where
+        // the first room stands, and the tree under it goes.
+        world
+            .get_mut::<Footprint>(base)
+            .unwrap()
+            .ground
+            .extend(room(30));
+        world.run_system_cached(make_way).unwrap();
+        assert_eq!(growing(&world), vec![(2, -1), (2, 0), (3, -1), (3, 0)]);
+        assert!(hidden(&world, grown_over) && !hidden(&world, beyond));
+        // Nothing changed, nothing done.
+        world.resource_mut::<Meadow>().growing.clear();
+        world.get_mut::<Footprint>(base).unwrap().set_changed();
+        world.run_system_cached(make_way).unwrap();
+        assert!(growing(&world).is_empty());
     }
 
     #[test]

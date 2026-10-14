@@ -155,6 +155,9 @@ struct Meadow {
     squares: HashMap<(i32, i32), Square>,
     /// What is built or planned, which the squares are kept clear of.
     clear: Arc<Vec<Footprint>>,
+    /// Each footprint as the squares were last grown for, so a change grows again only the
+    /// squares where it changed.
+    seen: HashMap<Entity, Footprint>,
 }
 
 pub fn plugin(app: &mut App) {
@@ -214,7 +217,7 @@ fn grow(
     planet: Res<Planet>,
     start: Res<Start>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    footprints: Query<Ref<Footprint>>,
+    footprints: Query<(Entity, Ref<Footprint>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<GrassMaterial>>,
     detail: Res<DetailScale>,
@@ -258,7 +261,16 @@ fn grow(
         commands.insert_resource(Meadow {
             material,
             squares: HashMap::default(),
-            clear: Arc::new(footprints.iter().map(|f| f.into_inner().clone()).collect()),
+            clear: Arc::new(
+                footprints
+                    .iter()
+                    .map(|(_, f)| f.into_inner().clone())
+                    .collect(),
+            ),
+            seen: footprints
+                .iter()
+                .map(|(entity, f)| (entity, f.into_inner().clone()))
+                .collect(),
         });
         return;
     };
@@ -266,29 +278,48 @@ fn grow(
         material,
         squares,
         clear,
+        seen,
     } = &mut *meadow;
-    // When something built changes shape, the squares on or beside it, before or after,
-    // are built again without what now stands there.
-    let changed: Vec<Footprint> = footprints
-        .iter()
-        .filter(|f| f.is_changed())
-        .map(|f| f.into_inner().clone())
-        .collect();
-    if !changed.is_empty() {
-        let before = std::mem::replace(
-            clear,
-            Arc::new(footprints.iter().map(|f| f.into_inner().clone()).collect()),
-        );
-        let touched = |key: (i32, i32)| {
-            let middle = square_middle(key);
-            let point = planet.ground_at(start.at(middle.x, middle.y));
-            changed
+    // When something built changes shape, the squares where it changed, the places it took
+    // or gave up and a blade's clearance round them, are built again without what now
+    // stands there; the rest of a big base is not looked at again.
+    let mut changes: Vec<Footprint> = Vec::new();
+    for (entity, footprint) in &footprints {
+        if footprint.is_changed() {
+            let footprint = footprint.into_inner();
+            changes.extend(footprint.changes_from(seen.get(&entity)));
+            seen.insert(entity, footprint.clone());
+        }
+    }
+    if !changes.is_empty() {
+        *clear = Arc::new(
+            footprints
                 .iter()
-                .chain(before.iter())
-                .any(|f| f.covers(point, SQUARE_M * 0.75))
-        };
-        for (&key, square) in squares.iter_mut() {
-            if touched(key) {
+                .map(|(_, f)| f.into_inner().clone())
+                .collect(),
+        );
+        let to_start = start.compute_affine().inverse();
+        let mut touched: Vec<(i32, i32)> = Vec::new();
+        for change in &changes {
+            let reach = change.cell_m * 0.71 + blades::CLEAR_M + CELL_M;
+            for place in change.places() {
+                let middle = to_start.transform_point3(change.frame.transform_point(Vec3::new(
+                    (place.x as f32 + 0.5) * change.cell_m,
+                    0.0,
+                    (place.y as f32 + 0.5) * change.cell_m,
+                )));
+                let key = |m: f32| (m / SQUARE_M).floor() as i32;
+                for i in key(middle.x - reach)..=key(middle.x + reach) {
+                    for j in key(middle.z - reach)..=key(middle.z + reach) {
+                        if !touched.contains(&(i, j)) {
+                            touched.push((i, j));
+                        }
+                    }
+                }
+            }
+        }
+        for key in touched {
+            if let Some(square) = squares.get_mut(&key) {
                 // Built again, from scratch: what is drawn stays until then, and one being
                 // built from the old footprints is dropped.
                 square.building = None;
