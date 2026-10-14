@@ -232,8 +232,9 @@ async function build() {
     const refused = done.find((each) => !each.done);
     check(!refused, `refused: ${refused?.refused} (${refused?.what})`);
     const now = await base();
-    const walls = now.parts.filter((part) => part.kind === "logs");
-    check(walls.every((wall) => wall.built > 0), "a wall has nothing in it");
+    // The four walls, not the gable ends over them, which wait for their tops.
+    const walls = now.parts.filter((part) => part.kind === "logs" && part.min[1] < 6);
+    check(walls.length === 4 && walls.every((wall) => wall.built > 0), `a wall has nothing in it: ${JSON.stringify(walls)}`);
     check(now.floating === 0, `${now.floating} cubes float`);
     // The roof can't go on half-built walls: its cubes rest on them, and climb from those.
     const early = await act("build.op", { ops: [{ Fill: { cubes: [[MIN[0] + 2, 7, MIN[2] + 1]] } }] });

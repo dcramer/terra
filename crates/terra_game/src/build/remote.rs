@@ -165,7 +165,10 @@ fn with_cubes(mut answer: Value, ops: &[Op]) -> Value {
 #[derive(Deserialize)]
 struct Lay {
     what: String,
+    /// The box laid, from one cube or tile to another: not wanted by a roof `over` a space.
+    #[serde(default)]
     min: [i32; 3],
+    #[serde(default)]
     max: [i32; 3],
     kind: Option<String>,
     floor: Option<String>,
