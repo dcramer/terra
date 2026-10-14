@@ -97,13 +97,14 @@ pub fn draw_as(
                 seed,
                 blend: module.blend,
             };
-            modules::lay(
-                module,
-                &line,
-                &look(kit, spec),
-                plain || kit.dress.far,
-                surfaces,
-            );
+            // An eave's butts and a verge's boards are as long as modelled far off too: they
+            // are the roof's edge, against the wall below and the sky, which the caps along
+            // a ridge, a hip or a valley are not.
+            let mut look = look(kit, spec);
+            if matches!(part, RoofPart::Eave | RoofPart::Verge) {
+                look.repeat = 1.0;
+            }
+            modules::lay(module, &line, &look, plain || kit.dress.far, surfaces);
         }
         _ => {}
     }
@@ -118,6 +119,7 @@ fn look(kit: &Kit, part: &Part) -> Look {
         end_metres: part.ends.map_or([1.0, 1.0], |m| size(kit, m)),
         tint: part.tint,
         shade: 0.14,
+        repeat: kit.dress.repeat(),
     }
 }
 

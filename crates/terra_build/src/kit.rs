@@ -265,6 +265,10 @@ pub struct Dressing {
     /// few metres off and further, never read from a file.
     #[serde(skip)]
     pub far: bool,
+    /// Whether it is drawn far off, past where the far budget begins: its modules' copies
+    /// drawn `modules::FAR_REPEAT` times their length. Set as `far` is.
+    #[serde(skip)]
+    pub far_off: bool,
 }
 
 /// What a role is dressed with.
@@ -371,11 +375,21 @@ impl Default for Dressing {
             masks: Masks::default(),
             made: None,
             far: false,
+            far_off: false,
         }
     }
 }
 
 impl Dressing {
+    /// How many times its length each copy of its modules is drawn.
+    pub fn repeat(&self) -> f32 {
+        if self.far_off {
+            crate::modules::FAR_REPEAT
+        } else {
+            1.0
+        }
+    }
+
     /// The long member a role is dressed with, if any: its section, how much thicker than a
     /// log, and its face's material.
     pub fn member(&self, role: Role) -> Option<(Profile, f32, Material)> {

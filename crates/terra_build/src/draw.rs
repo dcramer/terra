@@ -100,6 +100,7 @@ fn log_module(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) ->
         end_metres: metres(kit, Material::LogEnd),
         tint: kit.timber.tint,
         shade: kit.timber.variation.shade,
+        repeat: kit.dress.repeat(),
     };
     crate::modules::lay(module, &line, &look, plain || kit.dress.far, surfaces);
     true
@@ -156,6 +157,7 @@ fn beam(piece: &Piece, kit: &Kit, plain: bool, surfaces: &mut Surfaces) {
         end_metres: metres(kit, Material::LogEnd),
         tint: t.tint,
         shade: t.variation.shade,
+        repeat: kit.dress.repeat(),
     };
     for (k, (shift, depth)) in lines.into_iter().enumerate() {
         let line = crate::modules::Line {

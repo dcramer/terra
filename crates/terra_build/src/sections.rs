@@ -569,6 +569,7 @@ impl Detail {
             // dress its outline's three furthest corners, which keep its silhouette.
             Detail::Far => {
                 kit.dress.far = true;
+                kit.dress.far_off = true;
                 kit.timber.sides = kit.timber.sides.min(6);
                 kit.timber.step = kit.timber.step.max(8.0);
                 kit.timber.knots = 0.0;

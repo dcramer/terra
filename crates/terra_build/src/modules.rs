@@ -47,6 +47,8 @@ pub struct Look {
     /// What its colour is multiplied by, and how much lighter or darker a copy may be.
     pub tint: [f32; 3],
     pub shade: f32,
+    /// How many times its length each copy is drawn: 1 as modelled, `FAR_REPEAT` far off.
+    pub repeat: f32,
 }
 
 /// Where a module is laid: from one end of a line to the other, seated so, its section
@@ -79,7 +81,11 @@ fn lay_cut(
 ) {
     let length = line.from.distance(line.to);
     let axis = (line.to - line.from) / length;
-    let long = module.length.max(0.05);
+    // Each copy drawn `repeat` times its length, so a line far off has that many
+    // times fewer: what repeats along it is a few pixels apart either way.
+    let model = module.length.max(0.05);
+    let stretch = look.repeat.max(1.0);
+    let long = model * stretch;
     let into = 0.1 + 0.8 * layout::unit(hash(&[line.seed, 13]));
     let first = lo - into * long;
     let mut cuts: [Vec<(Vec3, Vec3, [f32; 2])>; 2] = [Vec::new(), Vec::new()];
@@ -96,7 +102,11 @@ fn lay_cut(
         };
         clipped(
             mesh,
-            (offset, Vec3::new(along, scale[0], scale[1]), long),
+            (
+                offset,
+                Vec3::new(along * stretch, scale[0], scale[1]),
+                model,
+            ),
             (lo, hi),
             line,
             axis,
@@ -283,7 +293,8 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
         _ => 0.0,
     });
     let span = (length - lead[0] - lead[1]).max(length * 0.2);
-    let (count, stretch) = fit(span, module.length);
+    let k = look.repeat.max(1.0);
+    let (count, stretch) = fit(span, module.length * k);
     // Scaled across to the member's size, from the size it was modelled at.
     let scale = line.across.map_or([1.0, 1.0], |[y, z]| {
         let size = module.size();
@@ -312,14 +323,14 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
     for copy in 0..count {
         let seed = hash(&[line.seed, copy as u32]);
         let mesh = &variants[hash(&[seed, 7]) as usize % variants.len()];
-        let start = copy as f32 * module.length;
+        let start = copy as f32 * module.length * k;
         // A modelled piece is one model, so every other copy is turned end for end (mirrored
         // along it) and its repeat reads half as often.
         place(
             mesh,
             (
                 lead[0] + start * stretch,
-                Vec3::new(stretch, scale[0], scale[1]),
+                Vec3::new(stretch * k, scale[0], scale[1]),
             ),
             line,
             axis,
@@ -365,6 +376,11 @@ pub fn lay(module: &Module, line: &Line, look: &Look, far: bool, surfaces: &mut 
 
 /// How far short of a line's stopped end a modelled piece with no cap stops, in metres.
 const END_INSET_M: f32 = 0.015;
+
+/// How many times its length each copy of a module is drawn far off (a ridge's caps, an
+/// eave's butts, a hip's): a ridge tile 30 cm long is a few pixels at 60 m and more, so
+/// copies twice as long read the same and a line has half as many.
+pub const FAR_REPEAT: f32 = 2.0;
 
 /// One copy of a mesh placed on the line: in the line's own frame (along it, up, across),
 /// so far along it and scaled by so much each way, along by less than nothing to mirror it.
@@ -543,6 +559,7 @@ mod tests {
             end_metres: [1.0, 1.0],
             tint: [1.0; 3],
             shade: 0.0,
+            repeat: 1.0,
         }
     }
 

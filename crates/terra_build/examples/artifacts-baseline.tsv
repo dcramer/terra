@@ -4,7 +4,7 @@
 # set	kits	fault	count
 all	brick	Coplanar	222
 all	brick	PokesOut	73
-all	brick	SeeThrough	18
+all	brick	SeeThrough	13
 all	brick with earth	Coplanar	361
 all	brick with earth	Doubled	36
 all	brick with earth	PokesOut	158
@@ -21,10 +21,10 @@ all	brick with limewash	SeeThrough	1
 all	brick with logs	Coplanar	275
 all	brick with logs	PokesOut	80
 all	brick with logs	SeeThrough	5
-all	brick with logs	UnderRoof	111
+all	brick with logs	UnderRoof	105
 all	brick with stone	Coplanar	258
 all	brick with stone	PokesOut	108
-all	brick with stone	SeeThrough	18
+all	brick with stone	SeeThrough	13
 all	brick with wattle	Coplanar	302
 all	brick with wattle	Doubled	36
 all	brick with wattle	PokesOut	105
@@ -49,13 +49,13 @@ all	earth with logs	Doubled	12
 all	earth with logs	Inward	3
 all	earth with logs	PokesOut	113
 all	earth with logs	SeeThrough	4
-all	earth with logs	UnderRoof	125
+all	earth with logs	UnderRoof	119
 all	earth with stone	Buried	3
 all	earth with stone	Coplanar	276
 all	earth with stone	Doubled	12
 all	earth with stone	Inward	3
 all	earth with stone	PokesOut	141
-all	earth with stone	SeeThrough	17
+all	earth with stone	SeeThrough	12
 all	earth with wattle	Buried	3
 all	earth with wattle	Coplanar	289
 all	earth with wattle	Doubled	48
@@ -77,7 +77,7 @@ all	hewn with logs	UnderRoof	190
 all	hewn with stone	Coplanar	266
 all	hewn with stone	Doubled	12
 all	hewn with stone	PokesOut	110
-all	hewn with stone	SeeThrough	17
+all	hewn with stone	SeeThrough	13
 all	hewn with stone	UnderRoof	48
 all	hewn with wattle	Coplanar	289
 all	hewn with wattle	Doubled	48
@@ -90,11 +90,11 @@ all	limewash with logs	Coplanar	244
 all	limewash with logs	Doubled	12
 all	limewash with logs	PokesOut	88
 all	limewash with logs	SeeThrough	4
-all	limewash with logs	UnderRoof	125
+all	limewash with logs	UnderRoof	119
 all	limewash with stone	Coplanar	254
 all	limewash with stone	Doubled	12
 all	limewash with stone	PokesOut	116
-all	limewash with stone	SeeThrough	17
+all	limewash with stone	SeeThrough	12
 all	limewash with wattle	Coplanar	271
 all	limewash with wattle	Doubled	48
 all	limewash with wattle	PokesOut	113
@@ -103,14 +103,14 @@ all	logs	PokesOut	68
 all	logs	UnderRoof	132
 all	logs with stone	Coplanar	269
 all	logs with stone	PokesOut	106
-all	logs with stone	SeeThrough	17
+all	logs with stone	SeeThrough	13
 all	logs with wattle	Coplanar	296
 all	logs with wattle	Doubled	36
 all	logs with wattle	PokesOut	103
 all	logs with wattle	UnderRoof	164
 all	stone	Coplanar	186
 all	stone	PokesOut	85
-all	stone	SeeThrough	18
+all	stone	SeeThrough	13
 all	stone with wattle	Coplanar	269
 all	stone with wattle	Doubled	36
 all	stone with wattle	PokesOut	87
