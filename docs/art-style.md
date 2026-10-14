@@ -41,7 +41,7 @@ Trees should be mighty, towering over the player (the developers, 2026-10-12). S
 ## Colour and materials
 
 1. **Real materials.** Each part is what it is made of, and looks it: weathered pine, split shakes, fieldstone, wrought iron. Its texture carries the material's colour, grain and wear.
-2. **A little shaded, a little simplified.** Textures are detailed but not photographic: gentle painted shading in the hollows and on the edges, grain and cracks clear but not noisy, colour a touch richer and cleaner than a photo. Never cartoon colour or flat fills.
+2. **A little shaded, a little simplified.** Textures are detailed but not photographic: gentle painted shading in the hollows and on the edges, grain and cracks clear but not noisy, colour a touch richer and cleaner than a photo. Never cartoon colour or flat fills. **Leaves are the exception** (D291): drawn true to life, each leaf with its own veins, relief, tilt and sheen, in real leaves' varied greens, as Sons of the Forest's are.
 3. **Value before hue.** Parts that touch differ in lightness, not only in hue, so the form reads in greyscale: a pale cut log end against its darker side, a dark roof over lighter walls.
 4. **One kit, one grade.** Every piece of a kit, a building's logs, roof, boards and stones, comes from one concept and shares its colour grade, so they belong together.
 5. **Glow is still sparing.** Fire, runes, crystals and screens glow, as an accent.
