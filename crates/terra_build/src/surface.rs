@@ -54,7 +54,7 @@ pub struct Packed {
 impl Packed {
     /// How far the surface is pushed out at a point by its packing: lumps of two sizes, and
     /// each lift rounded out between its seams, a little flatter in its middle.
-    fn at(&self, p: Vec3) -> f32 {
+    fn at(&self, p: Vec3, outward: Vec3, stepping: f32) -> f32 {
         use crate::dress::smooth;
         let k = &self.packing;
         let lumps = if k.lumps > 0.0 {
@@ -71,7 +71,26 @@ impl Packed {
         } else {
             0.0
         };
-        lumps + ridge
+        // Each lift a little proud or shy of the one under it, eased over its seam, out of
+        // a wall's upright faces and round its arrises, not up off its top, and by `stepping`
+        // of it, as near a cut it eases to nothing.
+        let step = if k.step > 0.0 && stepping > 0.0 {
+            let y = crate::dress::lift_at(p, self.lift.max(0.05));
+            let layer = libm::floorf(y);
+            let within = y - layer;
+            let own = |l: f32| {
+                (crate::layout::unit(crate::layout::hash(&[l as i32 as u32, 61])) - 0.5)
+                    * 2.0
+                    * k.step
+            };
+            let t = (within / 0.12).clamp(0.0, 1.0);
+            let t = t * t * (3.0 - 2.0 * t);
+            let upright = ((0.2 - outward.y.abs()) / 0.2).clamp(0.0, 1.0);
+            (own(layer - 1.0) + (own(layer) - own(layer - 1.0)) * t) * upright * stepping
+        } else {
+            0.0
+        };
+        lumps + ridge + step
     }
 }
 
@@ -599,7 +618,16 @@ pub fn draw_part(
                 } else {
                     fade(p, &face_edges)
                 };
-                let packed = look.packed.map_or(0.0, |packed| packed.at(p));
+                // A cube cut to a roof keeps to the roof's line: its lifts ease out of their steps
+                // toward the cut.
+                let stepping = if cut_here {
+                    ((cut(cube, p)[1] - p.y - 0.05) / 0.15).clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
+                let packed = look
+                    .packed
+                    .map_or(0.0, |packed| packed.at(p, outward, stepping));
                 let relief = displaced(p, outward, look, heights);
                 let mut out = (relief + packed) * faded;
                 // Sunk behind a piece set into it, a little deeper than its deepest relief,
@@ -1216,17 +1244,55 @@ mod tests {
     }
 
     #[test]
+    fn packed_earths_lifts_each_stand_a_little_proud_or_shy_of_the_next() {
+        let packed = Packed {
+            packing: crate::kit::Packing {
+                lumps: 0.0,
+                lump: 0.5,
+                ridge: 0.0,
+                step: 0.03,
+            },
+            lift: 0.5,
+        };
+        // The middle of each of eight lifts up a line on a wall: within the step either way,
+        // and not all alike, so the wall's outline steps.
+        let middles: Vec<f32> = (0..8)
+            .map(|lift| {
+                let mut p = Vec3::new(0.3, 0.0, 0.0);
+                // Up the line to where the lift's middle is, as the seams wander.
+                p.y = (0..200)
+                    .map(|i| i as f32 * 0.025)
+                    .find(|&y| {
+                        let at = crate::dress::lift_at(Vec3::new(0.3, y, 0.0), 0.5);
+                        libm::floorf(at) as i32 == lift && at - libm::floorf(at) > 0.5
+                    })
+                    .unwrap();
+                packed.at(p, Vec3::X, 1.0)
+            })
+            .collect();
+        assert!(
+            middles.iter().all(|m| m.abs() <= 0.03 + 1e-5),
+            "{middles:?}"
+        );
+        let (low, high) = middles
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(l, h), &v| (l.min(v), h.max(v)));
+        assert!(high - low > 0.02, "{middles:?}");
+    }
+
+    #[test]
     fn packed_earth_stays_closed_and_its_lifts_stand_out_between_their_seams() {
         let packing = crate::kit::Packing {
             lumps: 0.0,
             lump: 0.5,
             ridge: 0.04,
+            step: 0.0,
         };
         let packed = Packed { packing, lift: 0.5 };
         // Up a line on the wall, the lifts' middles stand out the ridge's depth beyond the
         // seams, and no further.
         let along: Vec<f32> = (0..400)
-            .map(|i| packed.at(Vec3::new(0.3, i as f32 * 0.01, 0.0)))
+            .map(|i| packed.at(Vec3::new(0.3, i as f32 * 0.01, 0.0), Vec3::X, 1.0))
             .collect();
         let (low, high) = along
             .iter()

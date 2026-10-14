@@ -94,6 +94,9 @@ pub struct Stone {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub triangles: Vec<[u32; 3]>,
+    /// A modelled piece's places in its kit's atlas (`Material::Piece`), a corner each, V
+    /// down from the top; none for a piece made from numbers, mapped by where it lies.
+    pub uvs: Vec<[f32; 2]>,
 }
 
 /// How tall a course of dressed stone is: two to a cube.
@@ -859,8 +862,9 @@ fn masked(
         let seam = (1.0 - (within.min(1.0 - within) / 0.06).min(1.0)) * 0.7;
         // Within a lift, finer layers where each basketful was rammed, fainter.
         let fine = libm::sinf(y * std::f32::consts::TAU * 3.0 + 2.0 * noise.at(p, 0.7, 15)) * 0.2;
-        let speckle = noise.at(p, 0.25, 13) - 0.5;
-        c *= 1.0 + masks.strata * (own * 1.4 + fine + speckle * 0.6 - seam);
+        // Grit in coarse, sparse patches, not an even speckle.
+        let speckle = noise.at(p, 0.55, 13) - 0.5;
+        c *= 1.0 + masks.strata * (own * 1.4 + fine + speckle * 0.35 - seam);
     }
     let height = p.y - ground;
     // Paler from a storey's height above the ground up, dry under the eaves and out of

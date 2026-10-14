@@ -731,7 +731,11 @@ fn draw_details(
                 continue;
             }
             let coarse = detail.kit(kit);
-            let face = if detail == Detail::Near {
+            // A roof's covering keeps its relief a few metres off too, where its swell is
+            // what shows of it; walls' and logs' only near.
+            let face = if detail == Detail::Near
+                || (detail == Detail::Mid && kit.pattern == Pattern::Roof)
+            {
                 section.maps.shape(kit)
             } else {
                 None

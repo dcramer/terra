@@ -88,6 +88,11 @@ pub struct Packing {
     pub lump: f32,
     /// How far each lift's middle stands out from the seams either side, in metres.
     pub ridge: f32,
+    /// How far a whole lift stands out or back from the next, either way, in metres: each
+    /// rammed a little proud or shy of the one under it, so a wall's arrises and its outline
+    /// against the sky step from lift to lift.
+    #[serde(default)]
+    pub step: f32,
 }
 
 /// How a framed kind's frame is laid and drawn (D236, `layout::frames`): wattle and daub,

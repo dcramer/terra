@@ -157,7 +157,8 @@ fn place(
         .positions
         .iter()
         .zip(&mesh.normals)
-        .map(|(p, n)| {
+        .enumerate()
+        .map(|(i, (p, n))| {
             let (p, n) = (Vec3::from_array(*p), Vec3::from_array(*n));
             let q = Vec3::new(offset, 0.0, 0.0) + p * axes;
             // A normal scaled with its mesh leans the other way, and turns with a mirror.
@@ -165,6 +166,10 @@ fn place(
             let (world, normal) = seat(line, axis, q, n);
             let a = n.abs();
             let end = a.x >= a.y && a.x >= a.z;
+            // A modelled piece is read by its own UVs, in its kit's atlas.
+            if let Some(&uv) = mesh.uvs.get(i) {
+                return (world, normal, uv, false);
+            }
             let uv = if end {
                 [q.z / look.end_metres[0], -q.y / look.end_metres[1]]
             } else if a.y >= a.z {

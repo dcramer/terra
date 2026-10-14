@@ -165,34 +165,43 @@ def stone(name, spec, along_a, along_b, seed):
 
 
 def triangles(ob):
-    """An object's triangles as shared corners in game space: positions, normals, indices."""
+    """An object's triangles as shared corners in game space: positions, normals, indices,
+    and, for a modelled piece, where each falls in its kit's atlas (its `atlas` UV map, V
+    from the top as the game reads a texture)."""
     depsgraph = bpy.context.evaluated_depsgraph_get()
     evaluated = ob.evaluated_get(depsgraph)
     mesh = evaluated.to_mesh()
     mesh.calc_loop_triangles()
     normals = mesh.corner_normals
-    index, positions, out_normals, indices = {}, [], [], []
+    atlas = mesh.uv_layers.get("atlas")
+    index, positions, out_normals, indices, uvs = {}, [], [], [], []
     for tri in mesh.loop_triangles:
         for loop in tri.loops:
             p = mesh.vertices[mesh.loops[loop].vertex_index].co
             n = normals[loop].vector
             game_p = (round(p.x, 4), round(p.z, 4), round(-p.y, 4))
             game_n = (round(n.x, 3), round(n.z, 3), round(-n.y, 3))
-            key = (game_p, game_n)
+            uv = ()
+            if atlas is not None:
+                t = atlas.data[loop].uv
+                uv = (round(t.x, 4), round(1.0 - t.y, 4))
+            key = (game_p, game_n, uv)
             if key not in index:
                 index[key] = len(positions)
                 positions.append(game_p)
                 out_normals.append(game_n)
+                if atlas is not None:
+                    uvs.append(uv)
             indices.append(index[key])
     evaluated.to_mesh_clear()
-    return positions, out_normals, indices
+    return positions, out_normals, indices, uvs
 
 
 def ron_floats(values):
     return "(" + ", ".join(f"{v:g}" for v in values) + ")"
 
 
-def ron_mesh(positions, normals, indices):
+def ron_mesh(positions, normals, indices, uvs=()):
     tris = [indices[i : i + 3] for i in range(0, len(indices), 3)]
     return (
         "(\n                positions: ["
@@ -201,6 +210,8 @@ def ron_mesh(positions, normals, indices):
         + ", ".join(ron_floats(n) for n in normals)
         + "],\n                triangles: ["
         + ", ".join("(%d, %d, %d)" % tuple(t) for t in tris)
+        + "],\n                uvs: ["
+        + ", ".join(ron_floats(t) for t in uvs)
         + "],\n            )"
     )
 
@@ -523,6 +534,203 @@ def far_copy(ob, ratio):
     return far
 
 
+# Modelled pieces (D251, D258): a model made from a concept by Tripo and kept as source art
+# (art/kits/<kit>/<piece>/model.glb), read here in place of numbers. It is turned so it lies
+# along +X, fitted into its box, a capping unfolded flat so the game can drape it over a
+# ridge's angle or a hip's alike, cut to its budget, and given a place in its kit's atlas,
+# into which its own texture is baked; code in the game only places, cuts to length and fits
+# it.
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def game_of(co):
+    """A Blender point in game space: Blender (x, y, z) is game (x, z, -y)."""
+    return Vector((co.x, co.z, -co.y))
+
+
+def blender_of(g):
+    return Vector((g.x, -g.z, g.y))
+
+
+def import_model(name, path):
+    """The model's meshes, joined into one object, its transforms applied."""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(ROOT, path))
+    made = [o for o in bpy.data.objects if o not in before]
+    meshes = [o for o in made if o.type == "MESH"]
+    for ob in bpy.context.view_layer.objects:
+        ob.select_set(False)
+    for ob in meshes:
+        ob.select_set(True)
+    bpy.context.view_layer.objects.active = meshes[0]
+    if len(meshes) > 1:
+        bpy.ops.object.join()
+    ob = bpy.context.view_layer.objects.active
+    ob.parent = None
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    for other in made:
+        if other is not ob and other.name in bpy.data.objects:
+            bpy.data.objects.remove(other)
+    ob.name = name
+    ob.select_set(False)
+    return ob
+
+
+def lay_along(ob, how):
+    """Turned in game space so its longest side lies along X; for a `board` or a member its
+    middle side up (Y) and its thinnest across (Z); for a `capping` its width across (Z) with
+    its crest up, for a `channel` with its hollow up; a `log` round either way."""
+    pts = [game_of(v.co) for v in ob.data.vertices]
+    lo = Vector((min(p[i] for p in pts) for i in range(3)))
+    hi = Vector((max(p[i] for p in pts) for i in range(3)))
+    size = hi - lo
+    order = sorted(range(3), key=lambda i: -size[i])
+    along, second, third = order
+    if how in ("capping", "channel"):
+        up, across = third, second
+    else:
+        up, across = second, third
+    def move(p):
+        return Vector((p[along] - lo[along], p[up] - (lo[up] + hi[up]) / 2, p[across] - (lo[across] + hi[across]) / 2))
+    moved = [move(p) for p in pts]
+    if how in ("capping", "channel"):
+        # Its crest up, or its hollow: the middle across stands higher than its sides on a
+        # capping, lower on a channel.
+        w = max(abs(p.z) for p in moved)
+        middle = [p.y for p in moved if abs(p.z) < w * 0.15]
+        sides = [p.y for p in moved if abs(p.z) > w * 0.7]
+        if middle and sides:
+            raised = max(middle) > max(sides)
+            if raised != (how == "capping"):
+                moved = [Vector((p.x, -p.y, p.z)) for p in moved]
+    for v, p in zip(ob.data.vertices, moved):
+        v.co = blender_of(p)
+    ob.data.update()
+
+
+def unfold(ob):
+    """A capping or a channel modelled at its own angle laid flat: each half turned about the
+    crease to level, so the game drapes it over whatever angle the roof makes there."""
+    pts = [game_of(v.co) for v in ob.data.vertices]
+    fits = []
+    for side in (-1, 1):
+        half = [p for p in pts if p.z * side > 0]
+        n = len(half)
+        mz = sum(p.z for p in half) / n
+        my = sum(p.y for p in half) / n
+        szz = sum((p.z - mz) ** 2 for p in half)
+        szy = sum((p.z - mz) * (p.y - my) for p in half)
+        m = szy / szz if szz > 1e-9 else 0.0
+        fits.append((m, my - m * mz))
+    pivot = (fits[0][1] + fits[1][1]) / 2
+    out = []
+    for p in pts:
+        m = fits[1][0] if p.z >= 0 else fits[0][0]
+        a = -math.atan(m)
+        z, y = p.z, p.y - pivot
+        out.append(Vector((p.x, z * math.sin(a) + y * math.cos(a) + pivot, z * math.cos(a) - y * math.sin(a))))
+    for v, p in zip(ob.data.vertices, out):
+        v.co = blender_of(p)
+    ob.data.update()
+
+
+def fit(ob, length, ys, zs):
+    """Fitted into its box: X from 0 to its length, Y and Z across the ranges given."""
+    pts = [game_of(v.co) for v in ob.data.vertices]
+    lo = Vector((min(p[i] for p in pts) for i in range(3)))
+    hi = Vector((max(p[i] for p in pts) for i in range(3)))
+    def to(x, a, b, c, d):
+        return c + (x - a) / max(b - a, 1e-6) * (d - c)
+    for v, p in zip(ob.data.vertices, pts):
+        g = Vector((to(p.x, lo.x, hi.x, 0.0, length), to(p.y, lo.y, hi.y, ys[0], ys[1]), to(p.z, lo.z, hi.z, zs[0], zs[1])))
+        v.co = blender_of(g)
+    ob.data.update()
+
+
+def cut_to(ob, budget):
+    """Cut to its budget by Blender's decimate, shaded smooth across curves."""
+    tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
+    if tris > budget:
+        mod = ob.modifiers.new("Budget", "DECIMATE")
+        mod.ratio = budget / tris
+        bpy.context.view_layer.objects.active = ob
+        ob.select_set(True)
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        ob.select_set(False)
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(45))
+    ob.select_set(False)
+
+
+def modelled_mesh(name, spec):
+    ob = import_model(name, spec["model"])
+    lay_along(ob, spec.get("lies", "board"))
+    if spec.get("lies") in ("capping", "channel"):
+        unfold(ob)
+    fit(ob, spec["length"], spec["y"], spec["z"])
+    cut_to(ob, spec.get("budget", 1200))
+    return ob
+
+
+def bake_atlas(obs, out_dir, size=2048):
+    """Each object's own texture baked into one atlas for its kit, in a UV map of its own
+    packed with the others' (the industry's trim atlas): color.jpg, with a flat normal map and
+    a plain occlusion-roughness-metal map beside it, under assets/."""
+    for ob in obs:
+        source = ob.data.uv_layers.active.name
+        atlas = ob.data.uv_layers.new(name="atlas", do_init=True)
+        # The textures read from their own UVs, whichever is active.
+        for slot in ob.material_slots:
+            mat = slot.material
+            if mat is None or not mat.use_nodes:
+                continue
+            nodes, links = mat.node_tree.nodes, mat.node_tree.links
+            uv = nodes.new("ShaderNodeUVMap")
+            uv.uv_map = source
+            for node in [n for n in nodes if n.type == "TEX_IMAGE"]:
+                links.new(uv.outputs["UV"], node.inputs["Vector"])
+        ob.data.uv_layers.active = atlas
+    for o in bpy.context.view_layer.objects:
+        o.select_set(False)
+    for ob in obs:
+        ob.select_set(True)
+    bpy.context.view_layer.objects.active = obs[0]
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.select_all(action="SELECT")
+    bpy.ops.uv.pack_islands(rotate=True, margin=0.003)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    image = bpy.data.images.new("atlas", size, size)
+    for ob in obs:
+        for slot in ob.material_slots:
+            mat = slot.material
+            if mat is None or not mat.use_nodes:
+                continue
+            node = mat.node_tree.nodes.new("ShaderNodeTexImage")
+            node.image = image
+            mat.node_tree.nodes.active = node
+    scene = bpy.context.scene
+    scene.render.engine = "CYCLES"
+    scene.cycles.samples = 4
+    scene.render.bake.margin = 8
+    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, use_clear=True)
+    os.makedirs(out_dir, exist_ok=True)
+    image.filepath_raw = os.path.join(out_dir, "color.jpg")
+    image.file_format = "JPEG"
+    image.save()
+    for file, colour in (("normal.jpg", (0.5, 0.5, 1.0, 1.0)), ("arm.jpg", (1.0, 0.82, 0.0, 1.0))):
+        flat = bpy.data.images.new(file, 64, 64)
+        flat.pixels[:] = list(colour) * (64 * 64)
+        flat.filepath_raw = os.path.join(out_dir, file)
+        flat.file_format = "JPEG"
+        flat.save()
+    for ob in obs:
+        ob.select_set(False)
+    print("baked", os.path.join(out_dir, "color.jpg"))
+
+
 def main():
     with open(SOURCE, encoding="utf-8") as f:
         source = json.load(f)
@@ -542,23 +750,37 @@ def main():
             for variant, (a, b) in enumerate(spec.get(which, [])):
                 seed = zlib.crc32(f"{name}{which}{variant}".encode()) % 1000
                 ob = stone(f"{name}_{which}_{variant}", spec, a, b, seed)
-                positions, normals, indices = triangles(ob)
+                positions, normals, indices, _ = triangles(ob)
                 print(f"corner {name} {which} {variant}: {len(indices) // 3} triangles")
                 meshes.append(ron_mesh(positions, normals, indices))
             lines.append(f"            {which}: [" + ", ".join(meshes) + "],")
         lines.append("        ),")
     lines.append("    },")
     lines.append("    modules: {")
+    # The modelled ones first, so their textures go into one atlas together.
+    modelled = {
+        name: modelled_mesh(f"{name}_model", spec)
+        for name, spec in source.get("modules", {}).items()
+        if "model" in spec
+    }
+    if modelled:
+        bake_atlas(list(modelled.values()), os.path.join(ROOT, "assets", source["atlas"]))
     for name, spec in source.get("modules", {}).items():
         near, far = [], []
-        for variant in range(spec.get("variants", 1)):
+        if name in modelled:
+            ob = modelled[name]
+            made = triangles(ob)
+            near.append(ron_mesh(*made))
+            print(f"module {name} (modelled): {len(made[2]) // 3} triangles")
+            far.append(ron_mesh(*triangles(far_copy(ob, spec.get("far", 0.35)))))
+        for variant in range(0 if name in modelled else spec.get("variants", 1)):
             seed = zlib.crc32(f"{name}{variant}".encode()) % 1000
             ob = module_mesh(f"{name}_{variant}", spec, seed)
             made = triangles(ob)
             near.append(ron_mesh(*made))
             print(f"module {name} {variant}: {len(made[2]) // 3} triangles")
             far.append(ron_mesh(*triangles(far_copy(ob, spec.get("far", 0.35)))))
-        cap = cap_mesh(f"{name}_cap", spec, 7)
+        cap = None if name in modelled else cap_mesh(f"{name}_cap", spec, 7)
         lines.append(f'        "{name}": (')
         lines.append(f"            length: {spec['length']:g},")
         lines.append(f"            blend: {spec.get('blend', 0.0):g},")

@@ -64,6 +64,9 @@ pub enum Material {
     /// Woven wattle: a framed kind's infill before it is daubed, or where it is cut into
     /// (D236).
     Wattle,
+    /// A kit's modelled pieces (D251, D258): their own textures baked into one atlas, read
+    /// by each piece's own UVs.
+    Piece,
 }
 
 /// Surfaces by what they are drawn in; the second, whether what is drawn into them may

@@ -321,7 +321,8 @@ fn raw(material: Material) -> Option<&'static str> {
         | Material::Daub
         | Material::Covering
         | Material::Masonry
-        | Material::Flashing => None,
+        | Material::Flashing
+        | Material::Piece => None,
     }
 }
 

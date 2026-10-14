@@ -26,8 +26,8 @@
     id: 5,
     pattern: Masonry,
     roof_kind: Some(2050),
-    bevel: 0.025,
-    relief: 0.012,
+    bevel: 0.04,
+    relief: 0.028,
     tint: (1.18, 1.2, 1.1),
     timber: (
         profile: Hewn,
