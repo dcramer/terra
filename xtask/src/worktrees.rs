@@ -2,18 +2,21 @@
 //! Claude Code removes a subagent's worktree when the agent made no changes, and otherwise only
 //! after `cleanupPeriodDays`, a month by default, while each built worktree holds gigabytes.
 //! `cargo xtask worktrees` shows what each holds and what `--prune` would do; a Claude Code hook
-//! runs `--prune` in the background at most once an hour.
+//! runs `--prune` in the background at most once an hour. An agent whose work is pushed runs
+//! `--done` to delete its own worktree's build at once, rather than leave it for the prune.
 //!
 //! Only worktrees under `.claude/worktrees/` are touched, never the one this runs in, never one
 //! locked (Claude Code locks a subagent's while it runs) and never one used recently:
 //! - a subagent's (`agent-…`) whose commits are all on `main` and that has no changes, untracked
 //!   files included, is removed with its branch once it has been idle a day;
-//! - any other's build folder is deleted once it has been idle three days, since it can be
-//!   built again (`cargo xtask seed` makes that quick). Its code is never touched.
+//! - any other subagent's build folder is deleted once it has been idle a day, and any other
+//!   worktree's once it has been idle three days, since a build can be made again (`cargo xtask
+//!   seed` makes that quick). Their code is never touched.
 //!
-//! Idle is measured from the last thing that touched it: git (a commit or a checkout, not the
-//! index, which `git status` rewrites) or a build. Every rule fails toward keeping: a worktree
-//! it cannot read, or whose name or build locks it does not recognise, is left alone.
+//! Idle is measured from the last thing that touched it: an edit to its files, git (a commit or
+//! a checkout, not the index, which `git status` rewrites) or a build. A subagent sent another
+//! message edits long before it commits, so its edits count. Every rule fails toward keeping: a
+//! worktree it cannot read, or whose name or build locks it does not recognise, is left alone.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -23,17 +26,18 @@ use std::time::{Duration, SystemTime};
 use super::{output, root, seed};
 
 const HOUR: Duration = Duration::from_secs(60 * 60);
-/// How long a finished subagent's worktree is kept, in case its agent is sent another message.
-const REMOVE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
-/// How long an idle worktree keeps its build folder.
-const FREE_AFTER: Duration = Duration::from_secs(3 * 24 * 60 * 60);
+/// How long an idle subagent's worktree is kept, in case its agent is sent another message.
+const AGENT_IDLE: Duration = Duration::from_secs(24 * 60 * 60);
+/// How long any other idle worktree keeps its build folder.
+const OTHER_IDLE: Duration = Duration::from_secs(3 * 24 * 60 * 60);
 
 pub fn worktrees(args: &[String]) -> bool {
     let prune = match args {
         [] => false,
         [flag] if flag == "--prune" => true,
+        [flag] if flag == "--done" => return done(),
         _ => {
-            eprintln!("usage: cargo xtask worktrees [--prune]");
+            eprintln!("usage: cargo xtask worktrees [--prune | --done]");
             return false;
         }
     };
@@ -89,16 +93,21 @@ pub fn worktrees(args: &[String]) -> bool {
             .as_deref()
             .is_some_and(|head| on_main(&main_checkout, head));
         let changes = changes(&tree.path);
+        let checkout = children(&tree.path)
+            .iter()
+            .filter(|p| **p != target && !p.ends_with(".git"))
+            .map(|p| usage(p))
+            .fold(Usage::default(), Usage::add);
         let idle = now
-            .duration_since(last_used(&tree.path))
+            .duration_since(last_used(&tree.path).max(checkout.newest))
             .unwrap_or_default();
+        let agent = name.starts_with("agent-");
         let ours = tree.path.starts_with(&managed) && tree.path != root() && !tree.locked;
         let action = if !ours {
             Action::Keep
-        } else if name.starts_with("agent-") && merged && changes == Some(0) && idle >= REMOVE_AFTER
-        {
+        } else if agent && merged && changes == Some(0) && idle >= AGENT_IDLE {
             Action::Remove
-        } else if target.is_dir() && idle >= FREE_AFTER {
+        } else if target.is_dir() && idle >= if agent { AGENT_IDLE } else { OTHER_IDLE } {
             Action::FreeBuild
         } else {
             Action::Keep
@@ -116,12 +125,8 @@ pub fn worktrees(args: &[String]) -> bool {
         .chain(tree.locked.then(|| "locked".into()))
         .collect::<Vec<_>>()
         .join(", ");
-        let build = own_bytes(&target);
-        let checkout: u64 = children(&tree.path)
-            .iter()
-            .filter(|p| **p != target)
-            .map(|p| own_bytes(p))
-            .sum();
+        let build = usage(&target).bytes;
+        let checkout = checkout.bytes;
         let verb = match (action, prune) {
             (Action::Keep, _) => "",
             (Action::Remove, false) => "would remove",
@@ -155,7 +160,8 @@ pub fn worktrees(args: &[String]) -> bool {
     } else {
         println!(
             "\n`cargo xtask worktrees --prune` removes a subagent's worktree once it is on main, \
-             clean and idle a day, and deletes any other's build after three idle days."
+             clean and idle a day, and deletes any other's build after a day idle if it is a \
+             subagent's, three if not. `--done` deletes this worktree's build now."
         );
     }
     ok
@@ -287,17 +293,81 @@ fn free_build(target: &Path) -> bool {
     removed
 }
 
-/// Bytes under a folder that deleting it would free: files no other folder links to.
-fn own_bytes(dir: &Path) -> u64 {
-    let Ok(meta) = std::fs::symlink_metadata(dir) else {
-        return 0;
+/// Deletes this worktree's build, for an agent whose work is pushed. If it builds here again,
+/// `cargo xtask seed` first makes that quick.
+fn done() -> bool {
+    let here = root();
+    let common = output(
+        "git",
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    );
+    if common.is_none_or(|c| Path::new(&c).parent() == Some(here.as_path())) {
+        eprintln!("worktrees: --done is for a worktree, and this is the main checkout");
+        return false;
+    }
+    let target = here.join("target");
+    if !target.is_dir() {
+        println!("worktrees: this worktree has no build to delete");
+        return true;
+    }
+    let bytes = usage(&target).bytes;
+    if !free_build(&target) {
+        eprintln!("worktrees: a build is under way here, or its folder could not be deleted");
+        return false;
+    }
+    println!(
+        "worktrees: deleted this worktree's build, {}. To build here again, run `cargo xtask \
+         seed` first, or the build starts from nothing.",
+        gb(bytes)
+    );
+    true
+}
+
+/// What deleting something would free, the files no other folder links to, and when anything
+/// in it last changed.
+#[derive(Clone, Copy)]
+struct Usage {
+    bytes: u64,
+    newest: SystemTime,
+}
+
+impl Default for Usage {
+    fn default() -> Self {
+        Self {
+            bytes: 0,
+            newest: SystemTime::UNIX_EPOCH,
+        }
+    }
+}
+
+impl Usage {
+    fn add(self, other: Self) -> Self {
+        Self {
+            bytes: self.bytes + other.bytes,
+            newest: self.newest.max(other.newest),
+        }
+    }
+}
+
+fn usage(path: &Path) -> Usage {
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return Usage::default();
+    };
+    let own = Usage {
+        bytes: if meta.is_dir() || shared(&meta) {
+            0
+        } else {
+            meta.len()
+        },
+        newest: meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
     };
     if meta.is_dir() {
-        children(dir).iter().map(|p| own_bytes(p)).sum()
-    } else if shared(&meta) {
-        0
+        children(path)
+            .iter()
+            .map(|p| usage(p))
+            .fold(own, Usage::add)
     } else {
-        meta.len()
+        own
     }
 }
 
@@ -371,6 +441,22 @@ mod tests {
         assert_eq!(trees[0].branch.as_deref(), Some("worktree-agent-x"));
         assert_eq!(trees[1].branch, None);
         assert_eq!(trees[1].head.as_deref(), Some("ddd"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_frees_only_what_nothing_else_links_to_and_shows_its_last_edit() {
+        let dir = std::env::temp_dir().join(format!("xtask-usage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("inner")).unwrap();
+        let before = SystemTime::now() - Duration::from_secs(2);
+        std::fs::write(dir.join("own"), [0u8; 100]).unwrap();
+        std::fs::write(dir.join("inner/linked"), [0u8; 50]).unwrap();
+        std::fs::hard_link(dir.join("inner/linked"), dir.join("elsewhere")).unwrap();
+        let found = usage(&dir);
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(found.bytes, 100);
+        assert!(found.newest >= before);
     }
 
     #[test]

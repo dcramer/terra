@@ -260,8 +260,8 @@ const TASKS: &[Task] = &[
     },
     Task {
         name: "worktrees",
-        takes: "[--prune]",
-        does: "what each worktree holds; --prune clears away the ones agents are done with (a hook does it hourly)",
+        takes: "[--prune | --done]",
+        does: "what each worktree holds; --prune clears away the ones agents are done with (a hook does it hourly); --done, once your work is pushed, deletes this worktree's build",
         group: "This machine",
         run: worktrees::worktrees,
     },
