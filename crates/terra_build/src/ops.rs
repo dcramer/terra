@@ -67,6 +67,13 @@ pub enum Op {
     /// Turn cubes marked to change, with nothing in them, to what they change to, and
     /// keep what they were, so a swap again turns them back.
     Swap { cubes: Vec<[i32; 3]> },
+    /// Mark cubes as changed from another kind, in a part, the new going in: what clearing
+    /// that mark, once the new is in, undoes (D232).
+    Changed {
+        cubes: Vec<[i32; 3]>,
+        kind: Kind,
+        part: Option<PartId>,
+    },
     /// Mark cubes to be cut out, leaving an opening: taken out step by step, then out of
     /// the plan.
     Carve { cubes: Vec<[i32; 3]> },
@@ -404,6 +411,7 @@ impl Base {
             Op::SetShape { cubes, shape } => self.set_shape(cubes, *shape, cx),
             Op::Replace { cubes, kind, part } => self.replace(cubes, *kind, *part, cx),
             Op::Swap { cubes } => self.swap(cubes, cx),
+            Op::Changed { cubes, kind, part } => self.changed(cubes, *kind, *part, cx),
             Op::Carve { cubes } => self.carve(cubes, cx),
             Op::Cancel { cubes } => self.cancel(cubes, cx),
             Op::AddRoof {
@@ -548,7 +556,7 @@ impl Base {
                 return Err(Refusal::InProgress(at));
             }
             match cube.pending {
-                Pending::Replace => return Err(Refusal::Pending(at)),
+                Pending::Replace | Pending::Swapped => return Err(Refusal::Pending(at)),
                 Pending::Carve => carved.push(at.to_array()),
                 Pending::None => {}
             }
@@ -615,12 +623,12 @@ impl Base {
         let now = |at: IVec3| after.get(&at.to_array()).copied().or(self.cube(at));
         let partial =
             |cube: Option<Cube>| cube.is_some_and(|cube| cube.is_in() && !cube.is_built());
-        let carving = |cube: Option<Cube>| cube.is_some_and(|cube| cube.pending == Pending::Carve);
+        let carving = |cube: Option<Cube>| cube.is_some_and(|cube| cube.pending.in_place());
         for &at in &named {
             // Built from the bottom: nothing goes in over a cube partly in, and no cube is
             // left partly in under something already in, which nothing could then finish
-            // or take apart; but a cube being carved out may be part in, as it comes out
-            // from under what stays, or is put back.
+            // or take apart; but a cube being carved out or changed to another kind may be
+            // part in, as it comes out from under what stays, or goes in again (D232).
             let (under, over) = (at - IVec3::Y, at + IVec3::Y);
             if partial(now(under)) && !carving(now(under)) {
                 return Err(Refusal::BuildUnder(under));
@@ -692,11 +700,10 @@ impl Base {
         let now = |at: IVec3| after.get(&at.to_array()).copied().or(self.cube(at));
         for &at in &named {
             // Last in, first out: nothing in the cube over it; but a cube marked to be
-            // carved out comes out from under what stays, which must stay joined.
+            // carved out or changed comes out from under what stays, which must stay
+            // joined.
             let over = at + IVec3::Y;
-            let carving = self
-                .cube(at)
-                .is_some_and(|cube| cube.pending == Pending::Carve);
+            let carving = self.cube(at).is_some_and(|cube| cube.pending.in_place());
             if !carving && now(over).is_some_and(|cube| cube.is_in()) {
                 return Err(Refusal::Holds(vec![Holder::Cube(over)]));
             }
@@ -827,7 +834,18 @@ impl Base {
             let Some((kind, part)) = self.replacing(at) else {
                 return Err(Refusal::NotPending(at));
             };
-            let swapped = Cube { kind, part, ..cube };
+            // Marked to change, it has changed, the new to go in; changed, it is marked to
+            // change back.
+            let pending = match cube.pending {
+                Pending::Swapped => Pending::Replace,
+                _ => Pending::Swapped,
+            };
+            let swapped = Cube {
+                kind,
+                part,
+                pending,
+                ..cube
+            };
             placed.push((at, part));
             change.cubes.push((at, Some(swapped)));
             change.replacing.push((at, Some((cube.kind, cube.part))));
@@ -860,19 +878,24 @@ impl Base {
         let mut change = Change::default();
         let mut carved = Vec::new();
         let mut replaced: BTreeMap<Replacement, Vec<[i32; 3]>> = BTreeMap::new();
+        let mut changed: BTreeMap<Replacement, Vec<[i32; 3]>> = BTreeMap::new();
         for &at in &named {
             let cube = self.there(at)?;
             match cube.pending {
                 Pending::None => return Err(Refusal::NotPending(at)),
-                // A cube part carved out from under what stays is put back or carved out
-                // first, as nothing may be left part in under it.
-                Pending::Carve if cube.is_in() && !cube.is_built() && self.is_in(at + IVec3::Y) => {
+                // A cube part carved out or changed under what stays is finished first, as
+                // nothing may be left part in under it.
+                _ if cube.is_in() && !cube.is_built() && self.is_in(at + IVec3::Y) => {
                     return Err(Refusal::Covered(at + IVec3::Y));
                 }
                 Pending::Carve => carved.push(at.to_array()),
                 Pending::Replace => {
                     let to = self.replacing(at).ok_or(Refusal::NotPending(at))?;
                     replaced.entry(to).or_default().push(at.to_array());
+                }
+                Pending::Swapped => {
+                    let was = self.replacing(at).ok_or(Refusal::NotPending(at))?;
+                    changed.entry(was).or_default().push(at.to_array());
                 }
             }
             let cleared = Cube {
@@ -887,6 +910,36 @@ impl Base {
         for ((kind, part), cubes) in replaced {
             change.done.undo.push(Op::Replace { cubes, kind, part });
         }
+        for ((kind, part), cubes) in changed {
+            change.done.undo.push(Op::Changed { cubes, kind, part });
+        }
+        Ok(change)
+    }
+
+    /// Marks cubes as changed from another kind, the new going in: what clearing that mark
+    /// undoes.
+    fn changed(
+        &self,
+        cubes: &[[i32; 3]],
+        kind: Kind,
+        part: Option<PartId>,
+        cx: &Context,
+    ) -> Result<Change, Refusal> {
+        let new_part = self.new_part(part, kind, cx)?;
+        let named = self.named(cubes, cx)?;
+        let mut change = Change::default();
+        change.parts.extend(new_part);
+        for (at, cube) in self.unmarked(&named)? {
+            let marked = Cube {
+                pending: Pending::Swapped,
+                ..cube
+            };
+            change.cubes.push((at, Some(marked)));
+            change.replacing.push((at, Some((kind, part))));
+        }
+        change.done.undo = vec![Op::Cancel {
+            cubes: cubes.to_vec(),
+        }];
         Ok(change)
     }
 
@@ -1051,7 +1104,7 @@ impl Base {
                 return Err(Refusal::InProgress(at));
             }
             match cube.pending {
-                Pending::Replace => return Err(Refusal::Pending(at)),
+                Pending::Replace | Pending::Swapped => return Err(Refusal::Pending(at)),
                 Pending::Carve => carved.push(at.to_array()),
                 Pending::None => {}
             }
@@ -1167,13 +1220,7 @@ struct ShapeKey(Shape);
 
 impl ShapeKey {
     fn rank(self) -> u8 {
-        match self.0 {
-            Shape::Whole => 0,
-            Shape::Half => 1,
-            Shape::Stair(facing) => 2 + facing as u8,
-            Shape::Slope(facing) => 6 + facing as u8,
-            Shape::Post => 10,
-        }
+        self.0.code()
     }
 }
 

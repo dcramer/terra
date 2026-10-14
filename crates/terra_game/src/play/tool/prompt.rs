@@ -177,6 +177,19 @@ pub fn prompt(
         (Kind::Flight(_) | Kind::Post | Kind::Block(_), _) => {
             "Aim at the ground, a floor or a cube".to_string()
         }
+        (Kind::Replace | Kind::Carve, Target::Structure { .. })
+            if let Some(planned) = &builder.planned =>
+        {
+            format!(
+                "{tap}  {} the cubes outlined      Then hold on them with nothing picked to build it",
+                planned.work.what
+            )
+        }
+        (Kind::Replace, Target::Structure { .. }) => {
+            "Nothing here to change: aim at cubes of another material".to_string()
+        }
+        (Kind::Carve, Target::Structure { .. }) => "Nothing here to carve".to_string(),
+        (Kind::Replace | Kind::Carve, _) => "Aim at what is built".to_string(),
         (Kind::Items(_) | Kind::Move, Target::Spot { blocked, .. }) => match blocked {
             None if builder.is_carrying() => format!(
                 "{tap}  put it down      Scroll  turn      Shift Scroll  raise{}      {}  put it back",
@@ -243,8 +256,9 @@ fn storey(storey: i32) -> String {
     }
 }
 
-/// The keys worth knowing while a part is in hand.
-pub fn legend(builder: &Builder, settings: &Settings) -> String {
+/// The keys worth knowing while a part is in hand: with a part laid in a material, the
+/// material and the keys that change it (D232); with a brush, its size (D226).
+pub fn legend(builder: &Builder, builds: &Builds, settings: &Settings, material: &str) -> String {
     if builder.stowed {
         return String::new();
     }
@@ -254,14 +268,31 @@ pub fn legend(builder: &Builder, settings: &Settings) -> String {
     } else {
         ("grid on", "on the grid")
     };
-    format!(
-        "{}  take apart     {}  move     {}  {grid}     {}  {held}     {}  copy",
-        key(Action::TakeApart),
-        key(Action::MoveItems),
-        key(Action::Grid),
-        key(Action::OffGrid),
-        key(Action::Copy),
-    )
+    let mut legend = String::new();
+    if builder.lays_material(builds) {
+        legend += &format!(
+            "{} Scroll  material: {}     {}  pick from a cube     ",
+            key(Action::Dodge),
+            capitalised(material.to_string()),
+            key(Action::Copy),
+        );
+    }
+    if builder.brushes(builds) {
+        legend += &format!(
+            "{} Scroll  brush: {} m     ",
+            key(Action::OffGrid),
+            builder.brush_m()
+        );
+    }
+    legend
+        + &format!(
+            "{}  take apart     {}  move     {}  {grid}     {}  {held}     {}  copy",
+            key(Action::TakeApart),
+            key(Action::MoveItems),
+            key(Action::Grid),
+            key(Action::OffGrid),
+            key(Action::Copy),
+        )
 }
 
 /// Whether the tool is waiting for the player to take the mouse.

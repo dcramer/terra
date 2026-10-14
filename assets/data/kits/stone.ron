@@ -26,6 +26,8 @@
 //             round a floor; posts as pillars 36 cm square, a drum a cube, their base and cap
 //             dressed as a foot and a top are (D193); and the dirt rising from the ground,
 //             its corners worn, and its slates lichened toward the eaves
+// meets       as logs.ron says (D232): heavier than timber, so it runs through a joint with
+//             it, quoined up its end, and caps its top where timber stands on it
 (
     id: 2,
     pattern: Masonry,
@@ -82,6 +84,7 @@
         tint: (0.93, 0.91, 0.88),
         masks: (dirt: 0.6, dirt_tint: (0.6, 0.56, 0.48), wear: 0.14, moss: 0.5, moss_tint: (1.2, 1.18, 0.9)),
     ),
+    meets: Some((weight: 3, end: None, carries: Cap)),
     colours: (
         light: (0.62, 0.6, 0.56),
         dark: (0.4, 0.38, 0.35),

@@ -53,7 +53,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Take apart, giving back everything | Enshrouded, Subnautica, Valheim | Built; what does not fit drops at your feet |
 | Undo for a short while | Enshrouded, Rust | Built: Y, within a minute |
 | Repair | Rust, Valheim, The Forest | Missing: nothing built takes damage yet |
-| Change a piece's material in place | Rust, 7 Days to Die | Missing: one kind of construction so far, logs |
+| Change a piece's material in place | Rust, 7 Days to Die | Built: Change material, a brush's box of built cubes, the old out from under what stays and given back, the new built (D232) |
 | Plans that cost nothing, then constructed part by part | The Forest, Ark Ascended | Missing; decided (D139) |
 | Building from storage nearby, not only the pack | Subnautica 2, Valheim | Missing; decided (D141) |
 | Carrying big materials by hand, better transport later | The Forest | Missing; the direction (D140) |
@@ -85,7 +85,7 @@ Agreed by the developers (D144); how a part is put into a plan is the one part s
 | Backspace | Put the part away: the hammer in hand with nothing picked | Yes |
 | X | Grid on or off | Yes |
 | Hold Alt | The other of the grid's settings, while held | Yes |
-| Middle mouse, or V | Pick another of what the view is on: its part, variant, turn, height and material | Part only |
+| Middle mouse, or V | Pick another of what the view is on: its part, variant, turn, height and material | An item's part; a cube's material (D232) |
 | Q | Take-apart mode, and back | Yes |
 | G | Move mode, and back | Yes |
 | Y | Undo the last thing laid, built or taken apart, within a minute, giving back what it cost; taking apart undone takes back what it gave. Enshrouded's key: Ctrl and Z would roll, Ctrl being the roll | Yes |
@@ -99,7 +99,8 @@ Agreed by the developers (D144); how a part is put into a plan is the one part s
 | Aim | The ghost follows, snapped (see [Snapping](#snapping-and-feel)) | Yes |
 | Wheel, or Z and C | Turn: a quarter turn for structures; an eighth for items on the grid; 15 degrees off it | Yes |
 | Shift and wheel, or Page Up and Page Down | Raise and lower: half a metre a notch on the grid, a tenth off it, up to three metres; structures a storey at a time, two down to two up (D143). Stations and the claim stone stay on the ground | Yes |
-| Ctrl and wheel | The kind of construction (D139) or material. Ctrl also rolls (D97), so while a part is picked it should not; to settle when there are kinds | No |
+| Ctrl and wheel | The material every plan is laid in, through every kit (D232), shown with the keys under the aiming mark. Ctrl is the roll's key (D97), which waits while a part is in hand, as Shift and the wheel share the sprint's | Yes |
+| Alt and wheel | The brush: half a metre, 1, 2 or 4 m, for blocks, changing material, carving and taking out (D226), on the brush's own grid | Yes |
 | Click left mouse | Lay it: a plan, for a structure; for an item, hold instead | For walls, roofs and the room shortcut, laid as a plan (D201) |
 | Press, drag and let go | Draw it: a wall or fence along the line dragged; a room or floor over the rectangle dragged. A plain click lays the variant's own size | For walls, roofs and the room shortcut |
 | Hold left mouse (items) | Build the item there, spending its cost | Yes |
@@ -145,7 +146,7 @@ The calls for the developers, each recommended as written above:
 
 1. **Click lays, hold builds**: a click puts down a plan for free; holding spends materials (putting in parts, building an item, taking apart, repairing).
 2. **Drawing**: press, drag and let go to lay a wall or fence along a line, or a floor or the room shortcut over a rectangle, in the grid's four directions (D146).
-3. **Height on Shift and the wheel**, with Page Up and Page Down; **the kind of construction on Ctrl and the wheel**.
+3. **Height on Shift and the wheel**, with Page Up and Page Down; **the kind of construction on Ctrl and the wheel** (built, D232, the roll waiting while a part is in hand).
 4. **Undo on Y**, within a minute (Ctrl and Z would roll, so Enshrouded's key instead; built).
 5. **Right mouse stays the build menu** and **Q stays take-apart**, as Subnautica, not Enshrouded.
 6. **F opens and closes doors**, as it uses everything else.
@@ -285,7 +286,9 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 | Floor, drawn on its own | Missing; laid by the room shortcut |
 | Roof: gable, hip, lean-to, flat | Built, a first version ([building-tech.md](building-tech.md#roofs-a-height-field)) |
 | Window and doorway, cubes left open or glazed | Built |
-| Carving cubes by hand, any shape | Missing; the operation exists |
+| Carving cubes by hand, any shape | Built: Carve, a brush's box of built cubes marked and taken out (D226) |
+| Taking out the cube aimed at | Built: take-apart takes the brush's box aimed at where nothing rests on it, else what came last of its part (D226) |
+| Shapes: whole, half, upper half, stair and slope either way up, outer and inner corner slopes, post | Built (D220, D231) |
 | Post, a column of cubes (D179) | Built: a column of post cubes, a storey high (D220) |
 | A storey up, and stairs or a ladder to it | Storeys and stairs built (D220); ladders missing |
 | Footing under walls on the ground | Built: stone cubes down to the ground, laid first (D206) |

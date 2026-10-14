@@ -463,6 +463,10 @@ pub(super) fn aim(
                     }
                 })
             }
+            // The cube aimed at, whose box the brush changes or carves (D226, D232).
+            Kind::Replace | Kind::Carve => builder
+                .aimed
+                .map_or(Target::Nothing, |cube| Target::Structure { cube }),
             Kind::Items(_) => spot(),
             Kind::Move if builder.is_carrying() => spot(),
             Kind::Move => item.map_or(Target::Nothing, |(entity, ..)| Target::Prop(entity)),
@@ -573,7 +577,8 @@ fn plan_work(
 ) -> Option<Planned> {
     use crate::build::plans;
     let base = &building.site.base;
-    let kind = look.laying;
+    // The material in hand (D232), or the first kit's.
+    let kind = builder.material.unwrap_or(look.laying);
     let ground = |column: [i32; 2]| building.ground_cm(column);
     let blocks = building.rules.blocks.clone();
     let footings = building.rules.footing.map(|kind| plans::Footings {
@@ -660,8 +665,30 @@ fn plan_work(
         }
         (Kind::Block(shapes), Target::Place { at }) => {
             let shape = shapes[builder.variant()].1.shape(builder.facing());
-            Some(laying("lay a block", plans::block(base, at, shape, kind)))
+            let cubes = plans::brush(at, builder.brush);
+            Some(laying(
+                if builder.brush > 1 {
+                    "lay a box of blocks"
+                } else {
+                    "lay a block"
+                },
+                plans::blocks(base, &cubes, shape, kind),
+            ))
         }
+        // Built cubes changed to the material in hand, the brush's box of them (D232).
+        (Kind::Replace, Target::Structure { cube }) => {
+            let cubes = plans::brush(cube, builder.brush);
+            let name = building.rules.name(kind).to_string();
+            Some((
+                format!("change to {name}"),
+                plans::replace(base, &cubes, kind),
+            ))
+        }
+        // Built cubes marked to be carved out, the brush's box of them (D226).
+        (Kind::Carve, Target::Structure { cube }) => Some(laying(
+            "carve",
+            plans::carve(base, &plans::brush(cube, builder.brush)),
+        )),
         _ => None,
     };
     if let Some((what, ops)) = lay {
@@ -721,6 +748,29 @@ fn plan_work(
                 vec![Op::Close { cubes }],
             )
         }
+        // The cube aimed at, or the brush's box of them, taken out where nothing rests on
+        // it (D226); else, as before, what came last of its part.
+        (Kind::Remove, Target::Structure { cube })
+            if base
+                .cube(cube)
+                .is_some_and(|found| found.part.is_some() && found.is_in())
+                && {
+                    let ops = plans::take_out(base, &plans::brush(cube, builder.brush));
+                    !ops.is_empty() && building.check(Some(player), &ops).is_ok()
+                } =>
+        {
+            let ops = plans::take_out(&building.site.base, &plans::brush(cube, builder.brush));
+            let count = match &ops[0] {
+                Op::Empty { cubes } => cubes.len(),
+                _ => 0,
+            };
+            work(
+                building,
+                Doing::TakeApart,
+                format!("take out {count} cube{}", if count == 1 { "" } else { "s" }),
+                ops,
+            )
+        }
         (Kind::Remove, Target::Structure { cube }) => {
             let found = building.last_work(Some(player), cube, near)?;
             Some(Planned {
@@ -730,7 +780,7 @@ fn plan_work(
         }
         // With nothing picked, what goes in next.
         (_, Target::Structure { cube }) if builder.stowed => {
-            let part = base.cube(cube).and_then(|cube| cube.part);
+            let part = building.site.base.cube(cube).and_then(|cube| cube.part);
             let found = building.next_work(Some(player), part, near)?;
             Some(Planned {
                 doing: Doing::Build,

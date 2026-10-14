@@ -267,9 +267,10 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                     })
                     .collect();
                 let cut = |cube: IVec3, at: Vec3| {
-                    gables
+                    let high = gables
                         .get(&cube.to_array())
-                        .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at))
+                        .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at));
+                    [f32::MIN, high]
                 };
                 let hides = |at: IVec3| {
                     base.cube(at).is_some_and(|cube| {
@@ -509,4 +510,83 @@ fn far_off_the_textures_are_baked_into_the_colours() {
         "the stone's red baked in"
     );
     let _ = STOREY_CUBES;
+}
+
+#[test]
+fn every_shape_is_drawn_in_every_kit_within_its_cut() {
+    use crate::{Facing, Shape};
+    let kits = shipped();
+    let maps = Maps::default();
+    let shapes = [
+        Shape::UpperHalf,
+        Shape::InvertedStair(Facing::East),
+        Shape::InvertedSlope(Facing::South),
+        Shape::OuterCorner(Facing::North),
+        Shape::InnerCorner(Facing::West),
+    ];
+    for kit in &kits.0 {
+        for shape in shapes {
+            // The shape on a cube of its kind, nothing round them.
+            let mut base = Base::default();
+            base.apply(BuildOp::Fill {
+                min: [3, 0, 3],
+                max: [3, 0, 3],
+                cube: Some(Cube::new(kit.kind(), Fill::Solid)),
+            });
+            base.apply(BuildOp::Fill {
+                min: [3, 1, 3],
+                max: [3, 1, 3],
+                cube: Some(Cube {
+                    shape,
+                    ..Cube::new(kit.kind(), Fill::Solid)
+                }),
+            });
+            let section = Section {
+                base: &base,
+                kits: &kits,
+                maps: &maps,
+                at: IVec3::ZERO,
+                progress: &Progress::Whole,
+                flights: &[],
+            };
+            let laid = lay(&section);
+            let low = IVec3::new(3, 1, 3).as_vec3() * CELL_M;
+            // Within its cut, but for relief, bevels and trims proud of it.
+            let within = |p: Vec3| {
+                let u = ((p.x - low.x) / CELL_M).clamp(0.0, 1.0);
+                let v = ((p.z - low.z) / CELL_M).clamp(0.0, 1.0);
+                let slack = (CELL_M / 8.0 + 0.02) / CELL_M;
+                let h = (p.y - low.y) / CELL_M;
+                h >= shape.bottom(u, v) - slack && h <= shape.top(u, v) + slack
+            };
+            if kit.pattern == Pattern::Masonry {
+                let drawn = draw(&section, &laid, Reach::Near);
+                let surface = &drawn.near[&(kit.kind(), crate::mesh::Material::Masonry)];
+                let mine: Vec<Vec3> = surface
+                    .indexed()
+                    .positions
+                    .into_iter()
+                    .filter(|p| p.y > low.y + 0.01)
+                    .collect();
+                assert!(!mine.is_empty(), "{shape:?} drew nothing");
+                for p in mine {
+                    assert!(within(p), "{shape:?}: {p} outside its cut");
+                }
+            } else {
+                let planks: Vec<(Vec3, Vec3)> = laid
+                    .pieces
+                    .iter()
+                    .filter_map(|(_, piece, _)| match piece {
+                        Piece::Plank { from, to, .. } => Some((from.metres(), to.metres())),
+                        _ => None,
+                    })
+                    .filter(|(a, b)| a.y > low.y - 0.01 && b.y > low.y - 0.01)
+                    .collect();
+                assert!(planks.len() >= 8, "{shape:?} in {}: {planks:?}", kit.id);
+                for (a, b) in planks {
+                    assert!(within(a) && within(b), "{shape:?}: a board {a} to {b}");
+                }
+            }
+        }
+    }
 }

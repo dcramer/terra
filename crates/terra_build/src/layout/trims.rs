@@ -121,14 +121,22 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
 
 /// Where a wall of the kit's kind ends against a wall of another kind, as logs end flush
 /// against stone (D179): an end board up the joint, over the logs' sawn ends, from the
-/// foot of each stack of such cubes to its top.
-pub(super) fn ends(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut Layout) {
+/// foot of each stack of such cubes to its top, where the kits say it ends there with a
+/// board (D232: the other runs through it, or neither does).
+pub(super) fn ends(
+    walls: &Walls,
+    kit: &Kit,
+    kits: &crate::kit::Kits,
+    ours: &[glam::IVec3],
+    layout: &mut Layout,
+) {
     let other = |at: glam::IVec3| {
         walls.base.cube(at).is_some_and(|cube| {
             cube.kind != walls.kind
                 && cube.kind != crate::Kind::PLAIN
                 && cube.fill == Fill::Solid
                 && walls.base.in_wall(at)
+                && kits.end(walls.kind, cube.kind) == crate::kit::Joint::Board
         })
     };
     let ends_at = |at: glam::IVec3, axis: Axis, outward: i32| {

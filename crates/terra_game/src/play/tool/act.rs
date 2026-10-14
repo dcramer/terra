@@ -258,6 +258,27 @@ pub(super) fn act(
             continue;
         }
 
+        // The middle button on a cube of the base: its material in hand (D232), as
+        // Enshrouded samples a block's.
+        if intent.pressed(Action::Copy)
+            && builder.viewed.is_none()
+            && in_hand(&mut building)
+            && let Some(kind) = builder
+                .aimed
+                .and_then(|cube| building.site.base.cube(cube))
+                .map(|cube| cube.kind)
+                .filter(|kind| building.rules.names.contains_key(kind))
+        {
+            builder.material = Some(kind);
+            building.tell(
+                player,
+                format!(
+                    "Material: {}",
+                    crate::play::controls::capitalised(building.rules.name(kind).to_string())
+                ),
+            );
+            continue;
+        }
         // The middle button: another of whatever the view is on.
         if intent.pressed(Action::Copy)
         && !builder.is_carrying()

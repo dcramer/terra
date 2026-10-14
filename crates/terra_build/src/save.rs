@@ -9,8 +9,9 @@ use crate::ground::Sample;
 use crate::{Base, BuildOp, Face, Panel, Part, Prop, Roof, RoofId, RoofSection};
 use std::collections::BTreeMap;
 
-/// Bumped when the snapshot changes in a way older ones cannot be read in.
-pub const VERSION: u32 = 1;
+/// Bumped when the snapshot changes in a way older ones cannot be read in: 2 when a cube's
+/// shape took five bits (D231), whose older snapshots are converted as they are read.
+pub const VERSION: u32 = 2;
 
 /// A base, whole.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -69,9 +70,20 @@ impl Base {
 
     /// The base a snapshot holds, every section of it marked to be laid.
     pub fn from_snapshot(snapshot: &Snapshot) -> Result<Base, BadSnapshot> {
-        if snapshot.version != VERSION {
-            return Err(BadSnapshot::Version(snapshot.version));
-        }
+        // A snapshot from before five shape bits, its cubes repacked.
+        let converted: Vec<SavedSection>;
+        let sections = match snapshot.version {
+            VERSION => &snapshot.sections,
+            1 => {
+                converted = snapshot
+                    .sections
+                    .iter()
+                    .map(SavedSection::from_v1)
+                    .collect();
+                &converted
+            }
+            other => return Err(BadSnapshot::Version(other)),
+        };
         // What it says things cost arrives over the network: an amount past what any real
         // cost comes to, where working with it could overflow, is refused.
         let bills = (snapshot.parts.iter().map(|(_, part)| &part.terms.per_step))
@@ -81,7 +93,7 @@ impl Base {
             return Err(BadSnapshot::Amount(amount));
         }
         let mut base = Base {
-            cubes: Cubes::load(&snapshot.sections).map_err(BadSnapshot::Section)?,
+            cubes: Cubes::load(sections).map_err(BadSnapshot::Section)?,
             parts: snapshot.parts.iter().cloned().collect(),
             replacing: snapshot.replacing.iter().copied().collect(),
             roofs: snapshot.roofs.iter().cloned().collect(),
@@ -317,6 +329,94 @@ mod tests {
             ..snapshot
         };
         assert_eq!(Base::from_snapshot(&old), Err(BadSnapshot::Version(0)));
+    }
+
+    #[test]
+    fn a_snapshot_from_before_five_shape_bits_is_converted() {
+        use crate::ops::{Context, Op, Planned};
+        use crate::{Cube, Facing, Shape};
+        let rules = crate::Rules::default();
+        let mut base = Base::default();
+        // A stair, a slope, a half and a post planned, a stone cube built over a carving,
+        // a window's glass and an opening: everything a snapshot could hold before.
+        let shapes = [
+            Shape::Stair(Facing::West),
+            Shape::Slope(Facing::South),
+            Shape::Half,
+            Shape::Post,
+        ];
+        let cubes = shapes
+            .iter()
+            .enumerate()
+            .map(|(i, &shape)| Planned {
+                at: [i as i32, 0, 0],
+                shape,
+            })
+            .collect();
+        let plan = Op::LayPlan {
+            part: Some(PartId(4)),
+            kind: Kind(1),
+            cubes,
+            ground: Vec::new(),
+        };
+        base.act(&plan, &Context::free(&rules)).unwrap();
+        base.apply(BuildOp::Fill {
+            min: [0, 0, 2],
+            max: [2, 1, 2],
+            cube: Some(Cube::new(Kind(2), Fill::Solid)),
+        });
+        base.apply(BuildOp::Fill {
+            min: [0, 0, 3],
+            max: [0, 0, 3],
+            cube: Some(Cube::new(Kind(2), Fill::Glass)),
+        });
+        base.apply(BuildOp::Fill {
+            min: [1, 0, 3],
+            max: [1, 0, 3],
+            cube: Some(Cube::new(Kind(2), Fill::Open).at_level(0)),
+        });
+        base.act(
+            &Op::Carve {
+                cubes: vec![[1, 0, 2]],
+            },
+            &Context::free(&rules),
+        )
+        .unwrap();
+        let now = base.snapshot();
+        // The same base as it was saved before: each cube's word packed the old way.
+        let v1 = |word: u32| {
+            if word == 0 {
+                return 0;
+            }
+            let shape = match (word >> 12) & 0x1F {
+                30 => 14,
+                31 => 15,
+                code => code,
+            };
+            (word & 0xFFF)
+                | shape << 12
+                | ((word >> 17) & 0xF) << 16
+                | ((word >> 21) & 1) << 20
+                | ((word >> 22) & 0x3) << 21
+                | (word & 0xFF00_0000)
+        };
+        let old = Snapshot {
+            version: 1,
+            sections: now
+                .sections
+                .iter()
+                .map(|section| SavedSection {
+                    runs: section.runs.iter().map(|&(n, w)| (n, v1(w))).collect(),
+                    ..section.clone()
+                })
+                .collect(),
+            ..now.clone()
+        };
+        assert_ne!(old.sections, now.sections);
+        let read = Base::from_snapshot(&old).unwrap();
+        assert_eq!(read, base);
+        assert_eq!(read.snapshot(), now);
+        assert_eq!(read.cube(IVec3::new(1, 0, 0)).unwrap().shape, shapes[1]);
     }
 
     #[test]

@@ -604,6 +604,24 @@ impl Building<'_, '_> {
             };
             candidates.push((what, vec![op]));
         }
+        // Cubes changing to another kind (D232): the old out, the swap, the new in.
+        if let Some(op) = base.next_change(near, |kind| self.blocks(kind)) {
+            let name = |cubes: &[[i32; 3]]| {
+                let kind = base.cube(IVec3::from_array(cubes[0])).map(|cube| cube.kind);
+                kind.map_or("plain", |kind| self.rules.name(kind))
+                    .to_string()
+            };
+            let what = match &op {
+                Op::Empty { cubes } => format!("take {} out to change it", name(cubes)),
+                Op::Swap { cubes } => format!("change {} cube{}", cubes.len(), plural(cubes)),
+                Op::Fill { cubes } => format!("put {} in where it changed", name(cubes)),
+                Op::Cancel { cubes } => {
+                    format!("finish changing {} cube{}", cubes.len(), plural(cubes))
+                }
+                _ => "change".to_string(),
+            };
+            candidates.push((what, vec![op]));
+        }
         for (_, _, id) in parts {
             let Some(part) = self.site.base.part(id) else {
                 continue;

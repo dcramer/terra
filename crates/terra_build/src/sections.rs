@@ -700,14 +700,22 @@ fn draw_blocks(
         let roof = gables
             .get(&cube.to_array())
             .map_or(f32::MAX, |under| layout::roofs::gable_cut(cube, under, at));
-        let (u, v) = (at.x / CELL_M - cube.x as f32, at.z / CELL_M - cube.z as f32);
-        let own = match shape_of(cube) {
-            crate::Shape::Half | crate::Shape::Slope(_) => {
-                (cube.y as f32 + shape_of(cube).top(u, v)) * CELL_M
-            }
-            _ => f32::MAX,
+        let (u, v) = (
+            (at.x / CELL_M - cube.x as f32).clamp(0.0, 1.0),
+            (at.z / CELL_M - cube.z as f32).clamp(0.0, 1.0),
+        );
+        let shape = shape_of(cube);
+        let high = if shape.planed_top() {
+            (cube.y as f32 + shape.top(u, v)) * CELL_M
+        } else {
+            f32::MAX
         };
-        roof.min(own)
+        let low = if shape.planed_under() {
+            (cube.y as f32 + shape.bottom(u, v)) * CELL_M
+        } else {
+            f32::MIN
+        };
+        [low, roof.min(high)]
     };
     let look = block_look(kit, detail.steps());
     let (relief, top) = if matches!(detail, Detail::Near | Detail::Mid) {
@@ -777,24 +785,27 @@ fn draw_blocks(
             out[set].of(Material::Masonry),
             &mut tops,
         );
-        // Halves and slopes: the surface of each run of them cut down to its tops, hidden
-        // where whole cubes are against them.
+        // Halves, slopes, their corners and the same upside down: the surface of each run
+        // of them cut down to its tops and up to its undersides (D231), hidden where whole
+        // cubes are against them, but for a whole cube on a cut top or under a cut
+        // underside, which would hide the cut.
         let ours_whole = |at: IVec3| {
             base.cube(at)
                 .is_some_and(|c| c.kind == kit.kind() && c.fill == Fill::Solid && !c.shape.is_cut())
         };
+        let planed = |shape: crate::Shape| shape.planed_top() || shape.planed_under();
         let cut_down: BTreeSet<[i32; 3]> = shaped[set]
             .iter()
             .copied()
-            .filter(|&at| {
-                matches!(
-                    shape_of(IVec3::from_array(at)),
-                    crate::Shape::Half | crate::Shape::Slope(_)
-                )
-            })
+            .filter(|&at| planed(shape_of(IVec3::from_array(at))))
             .collect();
+        let over_a_cut = |at: IVec3| {
+            let (under, over) = (at - IVec3::Y, at + IVec3::Y);
+            (cut_down.contains(&under.to_array()) && shape_of(under).planed_top())
+                || (cut_down.contains(&over.to_array()) && shape_of(over).planed_under())
+        };
         if !cut_down.is_empty() {
-            let hides = |at: IVec3| hides(at) || ours_whole(at);
+            let hides = |at: IVec3| hides(at) || (ours_whole(at) && !over_a_cut(at));
             crate::surface::draw_part(
                 &cut_down,
                 &keep,
@@ -807,7 +818,7 @@ fn draw_blocks(
                 &mut tops,
             );
         }
-        // Stairs, a stone a tread, and posts, a drum a cube.
+        // Stairs either way up, a stone a step, and posts, a drum a cube.
         let pillar = match kit.dress.roles.get(&layout::Role::Post) {
             Some(crate::kit::Dress::Pillar { width }) => *width,
             _ => CELL_M,
@@ -824,16 +835,16 @@ fn draw_blocks(
             let low = cube.as_vec3() * CELL_M;
             let half = CELL_M * 0.5;
             let boxes: Vec<(Vec3, Vec3)> = match shape_of(cube) {
-                crate::Shape::Stair(facing) => {
-                    let mut back = (low.with_y(low.y + half), low + Vec3::splat(CELL_M));
-                    let a = if facing.step().x != 0 { 0 } else { 2 };
-                    if facing.step()[a] > 0 {
-                        back.0[a] += half;
-                    } else {
-                        back.1[a] -= half;
-                    }
-                    vec![(low, low + Vec3::new(CELL_M, half, CELL_M)), back]
-                }
+                shape if shape.stepped() => shape
+                    .steps()
+                    .into_iter()
+                    .map(|(a, b)| {
+                        (
+                            low + Vec3::from_array(a) * CELL_M,
+                            low + Vec3::from_array(b) * CELL_M,
+                        )
+                    })
+                    .collect(),
                 crate::Shape::Post => {
                     let middle = low + Vec3::new(half, 0.0, half);
                     let reach = Vec3::new(pillar * 0.5, 0.0, pillar * 0.5);

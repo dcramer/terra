@@ -7,14 +7,16 @@
 //! | Bits | Holds |
 //! |---|---|
 //! | 0 to 11 | Its kind, plus one, so 0 is air |
-//! | 12 to 15 | Its shape: whole, half, stair, slope, post, and, until windows are props, glass and an opening |
-//! | 16 to 19 | Its fill level while planned, in sixteenths of the cube |
-//! | 20 | Built: all of it in |
-//! | 21 to 23 | The change pending on it |
+//! | 12 to 16 | Its shape ([`Shape::code`]), and, until windows are props, 30 for glass and 31 for an opening |
+//! | 17 to 20 | Its fill level while planned, in sixteenths of the cube |
+//! | 21 | Built: all of it in |
+//! | 22 to 23 | The change pending on it |
 //! | 24 to 31 | The part it was laid in, as an index into its section's palette of parts |
 //!
 //! The part is a section's own index, as Minecraft's block palettes are, so a cube stays
-//! 32 bits whatever the number of parts in a base; a section holds up to 255 parts.
+//! 32 bits whatever the number of parts in a base; a section holds up to 255 parts. The
+//! shape had four bits until D231 took one of the three the pending change had, which used
+//! two; [`from_v1`] reads a word packed before.
 //!
 //! Iteration is always in one sorted order, east then up then south (the order of
 //! `[x, y, z]`), so every machine lays and floods the same way.
@@ -111,7 +113,10 @@ impl Facing {
 
 /// A cube's shape (D193): whole, a stair, a slope or a half, each with its collision from
 /// its top ([`Shape::top`], `walk.rs`); and a post, a column's cube drawn as an upright as
-/// narrow as its kit says, which collides and holds as a whole cube.
+/// narrow as its kit says, which collides and holds as a whole cube. Then, as Enshrouded's
+/// blocks have them (D231): the upper half; a stair or a slope upside down, under a ceiling
+/// or a flight; and the corners where two slopes meet, an outer corner as a hip's and an
+/// inner one as a valley's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Shape {
     #[default]
@@ -124,9 +129,94 @@ pub enum Shape {
     Slope(Facing),
     /// A post: a column's cube drawn as an upright, as narrow as its kit says.
     Post,
+    /// The upper half.
+    UpperHalf,
+    /// A stair upside down: whole on the side's half, its upper half on the other.
+    InvertedStair(Facing),
+    /// A slope upside down: whole at the side, its underside a ramp up to nothing at the
+    /// other.
+    InvertedSlope(Facing),
+    /// Where two slopes meet round an outside corner, as at a hip: rising toward the side
+    /// and toward the next side clockwise, its top the lower of the two ramps, so it peaks
+    /// at the corner between those sides.
+    OuterCorner(Facing),
+    /// Where two slopes meet round an inside corner, as at a valley: rising toward the side
+    /// and toward the next side clockwise, its top the higher of the two ramps, so it is low
+    /// only at the corner across from them.
+    InnerCorner(Facing),
 }
 
 impl Shape {
+    /// Every shape, each facing of those that face a way, in the order of their codes.
+    pub const ALL: [Shape; 28] = {
+        let [n, e, s, w] = Facing::ALL;
+        [
+            Shape::Whole,
+            Shape::Half,
+            Shape::Stair(n),
+            Shape::Stair(e),
+            Shape::Stair(s),
+            Shape::Stair(w),
+            Shape::Slope(n),
+            Shape::Slope(e),
+            Shape::Slope(s),
+            Shape::Slope(w),
+            Shape::Post,
+            Shape::UpperHalf,
+            Shape::InvertedStair(n),
+            Shape::InvertedStair(e),
+            Shape::InvertedStair(s),
+            Shape::InvertedStair(w),
+            Shape::InvertedSlope(n),
+            Shape::InvertedSlope(e),
+            Shape::InvertedSlope(s),
+            Shape::InvertedSlope(w),
+            Shape::OuterCorner(n),
+            Shape::OuterCorner(e),
+            Shape::OuterCorner(s),
+            Shape::OuterCorner(w),
+            Shape::InnerCorner(n),
+            Shape::InnerCorner(e),
+            Shape::InnerCorner(s),
+            Shape::InnerCorner(w),
+        ]
+    };
+
+    /// Its number in a cube's five shape bits (D231), its place in [`Shape::ALL`]; a
+    /// window's glass and an opening are 30 and 31.
+    pub fn code(self) -> u8 {
+        match self {
+            Shape::Whole => 0,
+            Shape::Half => 1,
+            Shape::Stair(f) => 2 + f as u8,
+            Shape::Slope(f) => 6 + f as u8,
+            Shape::Post => 10,
+            Shape::UpperHalf => 11,
+            Shape::InvertedStair(f) => 12 + f as u8,
+            Shape::InvertedSlope(f) => 16 + f as u8,
+            Shape::OuterCorner(f) => 20 + f as u8,
+            Shape::InnerCorner(f) => 24 + f as u8,
+        }
+    }
+
+    /// The shape a code is, if it is one.
+    pub fn of_code(code: u8) -> Option<Shape> {
+        Shape::ALL.get(usize::from(code)).copied()
+    }
+
+    /// The way it faces, if it faces one.
+    pub fn facing(self) -> Option<Facing> {
+        match self {
+            Shape::Stair(f)
+            | Shape::Slope(f)
+            | Shape::InvertedStair(f)
+            | Shape::InvertedSlope(f)
+            | Shape::OuterCorner(f)
+            | Shape::InnerCorner(f) => Some(f),
+            _ => None,
+        }
+    }
+
     /// How high it reaches at its highest, as a fraction of the cube.
     pub fn height(self) -> f32 {
         match self {
@@ -140,7 +230,11 @@ impl Shape {
     /// up there (`walk.rs`).
     pub fn top(self, u: f32, v: f32) -> f32 {
         match self {
-            Shape::Whole | Shape::Post => 1.0,
+            Shape::Whole
+            | Shape::Post
+            | Shape::UpperHalf
+            | Shape::InvertedStair(_)
+            | Shape::InvertedSlope(_) => 1.0,
             Shape::Half => 0.5,
             Shape::Stair(facing) => {
                 if facing.toward(u, v) < 0.5 {
@@ -150,7 +244,52 @@ impl Shape {
                 }
             }
             Shape::Slope(facing) => facing.toward(u, v).clamp(0.0, 1.0),
+            Shape::OuterCorner(facing) => facing
+                .toward(u, v)
+                .min(facing.turned(1).toward(u, v))
+                .clamp(0.0, 1.0),
+            Shape::InnerCorner(facing) => facing
+                .toward(u, v)
+                .max(facing.turned(1).toward(u, v))
+                .clamp(0.0, 1.0),
         }
+    }
+
+    /// How high its underside is over a point of its footprint, as [`Shape::top`] gives its
+    /// top: nothing of it is lower, so a walker passes under an upper half.
+    pub fn bottom(self, u: f32, v: f32) -> f32 {
+        match self {
+            Shape::UpperHalf => 0.5,
+            Shape::InvertedStair(facing) => {
+                if facing.toward(u, v) < 0.5 {
+                    0.5
+                } else {
+                    0.0
+                }
+            }
+            Shape::InvertedSlope(facing) => (1.0 - facing.toward(u, v)).clamp(0.0, 1.0),
+            _ => 0.0,
+        }
+    }
+
+    /// Whether its top is a plane cut across the cube, a half's, a slope's or a corner's,
+    /// rather than steps or the cube's own.
+    pub fn planed_top(self) -> bool {
+        matches!(
+            self,
+            Shape::Half | Shape::Slope(_) | Shape::OuterCorner(_) | Shape::InnerCorner(_)
+        )
+    }
+
+    /// Whether its underside is a plane cut across the cube: an upper half's or an inverted
+    /// slope's.
+    pub fn planed_under(self) -> bool {
+        matches!(self, Shape::UpperHalf | Shape::InvertedSlope(_))
+    }
+
+    /// Whether it is drawn as boxes, a step each: a stair, either way up.
+    pub fn stepped(self) -> bool {
+        matches!(self, Shape::Stair(_) | Shape::InvertedStair(_))
     }
 
     /// Whether it is a cube cut to a shape, drawn apart from its kind's whole cubes.
@@ -163,7 +302,42 @@ impl Shape {
         match self {
             Shape::Stair(facing) => Shape::Stair(facing.turned(quarters)),
             Shape::Slope(facing) => Shape::Slope(facing.turned(quarters)),
+            Shape::InvertedStair(facing) => Shape::InvertedStair(facing.turned(quarters)),
+            Shape::InvertedSlope(facing) => Shape::InvertedSlope(facing.turned(quarters)),
+            Shape::OuterCorner(facing) => Shape::OuterCorner(facing.turned(quarters)),
+            Shape::InnerCorner(facing) => Shape::InnerCorner(facing.turned(quarters)),
             other => other,
+        }
+    }
+
+    /// The boxes a stepped shape is, in fractions of the cube from its low corner: a
+    /// stair's lower step across it and its upper step at the side; an inverted stair's
+    /// whole half at the side and its upper half across the rest. None for other shapes.
+    pub fn steps(self) -> Vec<([f32; 3], [f32; 3])> {
+        let (facing, inverted) = match self {
+            Shape::Stair(f) => (f, false),
+            Shape::InvertedStair(f) => (f, true),
+            _ => return Vec::new(),
+        };
+        // The half of the cube toward the side along its axis, and the half away.
+        let step = facing.step();
+        let axis = if step.x != 0 { 0 } else { 2 };
+        let (mut back, mut front) = (([0.0; 3], [1.0; 3]), ([0.0; 3], [1.0; 3]));
+        if step[axis] > 0 {
+            back.0[axis] = 0.5;
+            front.1[axis] = 0.5;
+        } else {
+            back.1[axis] = 0.5;
+            front.0[axis] = 0.5;
+        }
+        if inverted {
+            // The whole back half, and the front half's upper half.
+            front.0[1] = 0.5;
+            vec![back, front]
+        } else {
+            // The lower half across it, and the back half's upper half.
+            back.0[1] = 0.5;
+            vec![([0.0; 3], [1.0, 0.5, 1.0]), back]
         }
     }
 }
@@ -186,6 +360,22 @@ pub enum Pending {
     Replace,
     /// It is to be cut out, leaving an opening.
     Carve,
+    /// Its kind has changed and the new is going in: what it was is kept beside the cubes,
+    /// so a swap again turns it back (D232).
+    Swapped,
+}
+
+impl Pending {
+    /// Whether its kind is changing, before or after the swap.
+    pub fn changing(self) -> bool {
+        matches!(self, Pending::Replace | Pending::Swapped)
+    }
+
+    /// Whether it is being worked on in place, under what stays over it: carved out, or
+    /// changed to another kind (D199, D232).
+    pub fn in_place(self) -> bool {
+        self != Pending::None
+    }
 }
 
 /// A part a player laid (D139): the cubes it groups, its kind, and what each step of a
@@ -278,14 +468,10 @@ impl Cube {
             "kind {:?} is past the last",
             self.kind
         );
-        let shape = match (self.fill, self.shape) {
-            (Fill::Glass, _) => 14,
-            (Fill::Open, _) => 15,
-            (Fill::Solid, Shape::Whole) => 0,
-            (Fill::Solid, Shape::Half) => 1,
-            (Fill::Solid, Shape::Stair(facing)) => 2 + facing as u32,
-            (Fill::Solid, Shape::Slope(facing)) => 6 + facing as u32,
-            (Fill::Solid, Shape::Post) => 10,
+        let shape = match self.fill {
+            Fill::Glass => GLASS,
+            Fill::Open => OPEN,
+            Fill::Solid => u32::from(self.shape.code()),
         };
         let (level, built) = match self.state {
             State::Built => (0, 1),
@@ -294,9 +480,9 @@ impl Cube {
         let pending = self.pending as u32;
         (u32::from(self.kind.0) + 1)
             | shape << 12
-            | level << 16
-            | built << 20
-            | pending << 21
+            | level << 17
+            | built << 21
+            | pending << 22
             | u32::from(part) << 24
     }
 
@@ -306,25 +492,25 @@ impl Cube {
         if kind == 0 {
             return None;
         }
-        let (fill, shape) = match (word >> 12) & 0xF {
-            14 => (Fill::Glass, Shape::Whole),
-            15 => (Fill::Open, Shape::Whole),
-            1 => (Fill::Solid, Shape::Half),
-            code @ 2..=5 => (Fill::Solid, Shape::Stair(Facing::ALL[code as usize - 2])),
-            code @ 6..=9 => (Fill::Solid, Shape::Slope(Facing::ALL[code as usize - 6])),
-            10 => (Fill::Solid, Shape::Post),
-            _ => (Fill::Solid, Shape::Whole),
+        let (fill, shape) = match (word >> 12) & 0x1F {
+            GLASS => (Fill::Glass, Shape::Whole),
+            OPEN => (Fill::Open, Shape::Whole),
+            code => (
+                Fill::Solid,
+                Shape::of_code(code as u8).unwrap_or(Shape::Whole),
+            ),
         };
-        let state = if (word >> 20) & 1 == 1 {
+        let state = if (word >> 21) & 1 == 1 {
             State::Built
         } else {
             State::Planned {
-                level: ((word >> 16) & 0xF) as u8,
+                level: ((word >> 17) & 0xF) as u8,
             }
         };
-        let pending = match (word >> 21) & 0x7 {
+        let pending = match (word >> 22) & 0x3 {
             1 => Pending::Replace,
             2 => Pending::Carve,
+            3 => Pending::Swapped,
             _ => Pending::None,
         };
         let cube = Cube {
@@ -337,6 +523,25 @@ impl Cube {
         };
         Some((cube, (word >> 24) as u8))
     }
+}
+
+/// The shape codes of a window's glass and an opening.
+const GLASS: u32 = 30;
+const OPEN: u32 = 31;
+
+/// A cube's word as it was packed before D231, with four bits of shape (glass 14, an
+/// opening 15) and three of the pending change, as it is packed now.
+pub fn from_v1(word: u32) -> u32 {
+    if word & 0xFFF == 0 {
+        return 0;
+    }
+    let shape = match (word >> 12) & 0xF {
+        14 => GLASS,
+        15 => OPEN,
+        code => code,
+    };
+    let (level, built, pending) = ((word >> 16) & 0xF, (word >> 20) & 1, (word >> 21) & 0x3);
+    (word & 0xFFF) | shape << 12 | level << 17 | built << 21 | pending << 22 | (word & 0xFF00_0000)
 }
 
 /// Which section a cube is in, counted in sections.
@@ -678,6 +883,20 @@ pub struct SavedSection {
     pub runs: Vec<(u16, u32)>,
 }
 
+impl SavedSection {
+    /// The section saved before D231, its words packed as they are now ([`from_v1`]).
+    pub fn from_v1(&self) -> SavedSection {
+        SavedSection {
+            runs: self
+                .runs
+                .iter()
+                .map(|&(count, word)| (count, from_v1(word)))
+                .collect(),
+            ..self.clone()
+        }
+    }
+}
+
 /// Why saved sections could not be read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BadSection {
@@ -773,13 +992,14 @@ mod tests {
 
     fn every_cube() -> Vec<Cube> {
         let mut all = Vec::new();
-        let shapes = [Shape::Whole, Shape::Half, Shape::Post]
-            .into_iter()
-            .chain(Facing::ALL.map(Shape::Stair))
-            .chain(Facing::ALL.map(Shape::Slope));
-        for shape in shapes {
+        for shape in Shape::ALL {
             for level in [0, 1, 8, 15, FULL] {
-                for pending in [Pending::None, Pending::Replace, Pending::Carve] {
+                for pending in [
+                    Pending::None,
+                    Pending::Replace,
+                    Pending::Carve,
+                    Pending::Swapped,
+                ] {
                     for part in [None, Some(PartId(7))] {
                         all.push(
                             Cube {
@@ -812,6 +1032,89 @@ mod tests {
             assert_eq!(back, cube);
         }
         assert_eq!(Cube::unpack(0), None);
+    }
+
+    #[test]
+    fn every_shape_has_its_own_code_and_turns_round_to_itself() {
+        for (code, shape) in Shape::ALL.into_iter().enumerate() {
+            assert_eq!(usize::from(shape.code()), code, "{shape:?}");
+            assert_eq!(Shape::of_code(shape.code()), Some(shape));
+            assert_eq!(shape.turned(4), shape);
+            assert_eq!(
+                shape.turned(1).code() == shape.code(),
+                shape.facing().is_none()
+            );
+        }
+        assert!(Shape::ALL.len() < GLASS as usize);
+    }
+
+    #[test]
+    fn a_shapes_top_and_bottom_bound_what_it_fills() {
+        use Facing::*;
+        // An outer corner rising north and east peaks at the north east corner; an inner one
+        // is low only at the south west.
+        let (outer, inner) = (Shape::OuterCorner(North), Shape::InnerCorner(North));
+        assert_eq!(outer.top(1.0, 0.0), 1.0);
+        assert_eq!(outer.top(0.0, 0.0), 0.0);
+        assert_eq!(outer.top(1.0, 1.0), 0.0);
+        assert_eq!(inner.top(0.0, 1.0), 0.0);
+        assert_eq!(inner.top(0.0, 0.0), 1.0);
+        assert_eq!(inner.top(1.0, 1.0), 1.0);
+        // Upside down, a slope rising east is whole at the east and nothing at the west.
+        let under = Shape::InvertedSlope(East);
+        assert_eq!((under.bottom(1.0, 0.5), under.top(1.0, 0.5)), (0.0, 1.0));
+        assert_eq!(under.bottom(0.0, 0.5), 1.0);
+        assert_eq!(Shape::UpperHalf.bottom(0.3, 0.3), 0.5);
+        // A stair's steps, either way up, are as much of the cube as its top and bottom say.
+        for shape in [Shape::Stair(South), Shape::InvertedStair(West)] {
+            let boxes = shape.steps();
+            let volume: f32 = boxes
+                .iter()
+                .map(|(lo, hi)| (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]))
+                .sum();
+            assert!((volume - 0.75).abs() < 1e-6, "{shape:?}");
+            for (u, v) in [(0.1, 0.1), (0.9, 0.9), (0.1, 0.9), (0.9, 0.1)] {
+                let filled = |y: f32| {
+                    boxes.iter().any(|(lo, hi)| {
+                        (lo[0]..=hi[0]).contains(&u)
+                            && (lo[1]..=hi[1]).contains(&y)
+                            && (lo[2]..=hi[2]).contains(&v)
+                    })
+                };
+                assert!(filled(shape.top(u, v) - 0.01) && !filled(shape.top(u, v) + 0.01));
+                assert!(!filled(shape.bottom(u, v) - 0.01) && filled(shape.bottom(u, v) + 0.01));
+            }
+        }
+    }
+
+    #[test]
+    fn a_word_packed_before_five_shape_bits_reads_as_the_same_cube() {
+        // Packed as cubes were before D231, by hand.
+        let v1 = |cube: &Cube, part: u32| {
+            let shape = match (cube.fill, cube.shape) {
+                (Fill::Glass, _) => 14,
+                (Fill::Open, _) => 15,
+                (_, shape) => u32::from(shape.code()),
+            };
+            let (level, built) = match cube.state {
+                State::Built => (0, 1),
+                State::Planned { level } => (u32::from(level), 0),
+            };
+            (u32::from(cube.kind.0) + 1)
+                | shape << 12
+                | level << 16
+                | built << 20
+                | (cube.pending as u32) << 21
+                | part << 24
+        };
+        let old = every_cube()
+            .into_iter()
+            .filter(|cube| cube.shape.code() <= 10 && !matches!(cube.pending, Pending::Swapped));
+        for cube in old {
+            let part = u32::from(cube.part.is_some());
+            assert_eq!(from_v1(v1(&cube, part)), cube.pack(part as u8), "{cube:?}");
+        }
+        assert_eq!(from_v1(0), 0);
     }
 
     #[test]

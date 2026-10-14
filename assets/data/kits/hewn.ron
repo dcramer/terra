@@ -66,6 +66,7 @@
         },
         masks: (dirt: 0.9, dirt_tint: (0.6, 0.54, 0.46), weather: 0.25, moss: 0.5, moss_tint: (0.66, 0.7, 0.46)),
     ),
+    meets: Some((weight: 2, end: Board, carries: None)),
     colours: (
         light: (0.74, 0.56, 0.37),
         dark: (0.5, 0.34, 0.22),

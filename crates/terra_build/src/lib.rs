@@ -802,7 +802,7 @@ impl Base {
         if let Some(part) = cube.and_then(|cube| cube.part) {
             self.parts.entry(part).and_modify(|part| part.uses += 1);
         }
-        if cube.is_none_or(|cube| cube.pending != Pending::Replace) {
+        if cube.is_none_or(|cube| !cube.pending.changing()) {
             self.set_replacing(at, None);
         }
         true

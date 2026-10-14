@@ -132,6 +132,72 @@ impl Base {
         Some(crate::ops::Op::Empty { cubes })
     }
 
+    /// What changing the cubes marked to change to another kind does next (D232), as
+    /// carving does: clear the mark of those changed and all in; turn those emptied to
+    /// their new kind; take a step out of the highest of the old with something in; else put
+    /// a step of the new into the lowest not yet in, a cube at a time if its kind goes so.
+    /// `None` if none is marked.
+    pub fn next_change(
+        &self,
+        near: Vec3,
+        one_at_a_time: impl Fn(crate::Kind) -> bool,
+    ) -> Option<crate::ops::Op> {
+        use crate::ops::Op;
+        let marked: Vec<(IVec3, Cube)> = self
+            .cubes()
+            .filter(|(_, cube)| cube.pending.changing() && cube.fill == Fill::Solid)
+            .collect();
+        let of = |pending: Pending, keep: &dyn Fn(&Cube) -> bool| -> Vec<(IVec3, Cube)> {
+            marked
+                .iter()
+                .filter(|(_, cube)| cube.pending == pending && keep(cube))
+                .copied()
+                .collect()
+        };
+        let places = |cubes: &[(IVec3, Cube)]| cubes.iter().map(|(at, _)| at.to_array()).collect();
+        let done = of(Pending::Swapped, &|cube| cube.is_built());
+        if !done.is_empty() {
+            return Some(Op::Cancel {
+                cubes: places(&done),
+            });
+        }
+        let emptied = of(Pending::Replace, &|cube| cube.level() == 0);
+        if !emptied.is_empty() {
+            return Some(Op::Swap {
+                cubes: places(&emptied),
+            });
+        }
+        let old = of(Pending::Replace, &|cube| cube.level() > 0);
+        if let Some(highest) = old.iter().map(|(at, _)| at.y).max() {
+            let most = old
+                .iter()
+                .filter(|(at, _)| at.y == highest)
+                .map(|(_, cube)| cube.level())
+                .max()?;
+            let layer: Vec<(IVec3, Cube)> = old
+                .into_iter()
+                .filter(|(at, cube)| at.y == highest && cube.level() == most)
+                .collect();
+            let one = layer.iter().any(|(_, cube)| one_at_a_time(cube.kind));
+            let cubes = pick(layer.into_iter().map(|(at, _)| at), near, one);
+            return Some(Op::Empty { cubes });
+        }
+        let new = of(Pending::Swapped, &|cube| !cube.is_built());
+        let lowest = new.iter().map(|(at, _)| at.y).min()?;
+        let least = new
+            .iter()
+            .filter(|(at, _)| at.y == lowest)
+            .map(|(_, cube)| cube.level())
+            .min()?;
+        let layer: Vec<(IVec3, Cube)> = new
+            .into_iter()
+            .filter(|(at, cube)| at.y == lowest && cube.level() == least)
+            .collect();
+        let one = layer.iter().any(|(_, cube)| one_at_a_time(cube.kind));
+        let cubes = pick(layer.into_iter().map(|(at, _)| at), near, one);
+        Some(Op::Fill { cubes })
+    }
+
     /// A part's plan that can be taken away for nothing: its cubes with nothing in them,
     /// and its openings with nothing fitted. Empty if any of it is in.
     pub fn plan_of(&self, part: PartId) -> Vec<[i32; 3]> {

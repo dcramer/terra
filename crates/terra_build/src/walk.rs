@@ -114,9 +114,12 @@ impl Base {
                 if !cube.is_in() || (cube.shape == crate::Shape::Post && off_post) {
                     return None;
                 }
-                let bottom = layer as f32 * CELL_M;
+                let foot = layer as f32 * CELL_M;
                 let fill = f32::from(cube.level()) / f32::from(FULL);
-                Some((bottom, bottom + CELL_M * fill.min(cube.shape.top(u, v))))
+                // From its underside, an upper half's or an inverted slope's (D231), up
+                // to its top or as far as it is filled.
+                let (bottom, top) = (cube.shape.bottom(u, v), fill.min(cube.shape.top(u, v)));
+                (top > bottom).then_some((foot + CELL_M * bottom, foot + CELL_M * top))
             })
             .chain(shut)
     }
@@ -539,6 +542,51 @@ mod tests {
         }
         // Under a stair's upper step there is nothing to hold a walker, and nothing over.
         assert_eq!(stair.ceiling(at(0.8, -2.0)), Some(0.0));
+    }
+
+    #[test]
+    fn a_corner_slope_holds_a_walker_on_its_ramps_and_an_upper_half_is_walked_under() {
+        use crate::{Facing, Shape};
+        let point = Walker {
+            radius: 0.0,
+            ..walker()
+        };
+        let at = |u: f32, v: f32, y: f32| Vec3::new(u * CELL_M, y, v * CELL_M);
+        // An outer corner rising north and east: low on its south and west, high at its
+        // north east corner; an inner one high but for its south west corner.
+        let outer = shaped(Shape::OuterCorner(Facing::North));
+        let top = |base: &Base, u: f32, v: f32| base.support(at(u, v, CELL_M), &point).unwrap();
+        assert!((top(&outer, 0.9, 0.1) - 0.9 * CELL_M).abs() < 1e-4);
+        assert!((top(&outer, 0.2, 0.1) - 0.2 * CELL_M).abs() < 1e-4);
+        assert!((top(&outer, 0.9, 0.7) - 0.3 * CELL_M).abs() < 1e-4);
+        let inner = shaped(Shape::InnerCorner(Facing::North));
+        assert!((top(&inner, 0.2, 0.7) - 0.3 * CELL_M).abs() < 1e-4);
+        assert!((top(&inner, 0.9, 0.7) - 0.9 * CELL_M).abs() < 1e-4);
+        // Under an upper half there is a gap half a cube high; its underside is a ceiling.
+        let upper = shaped(Shape::UpperHalf);
+        assert_eq!(upper.ceiling(at(0.5, 0.5, 0.0)), Some(CELL_M * 0.5));
+        assert_eq!(upper.support(at(0.5, 0.5, 0.0), &point), None);
+        assert_eq!(upper.support(at(0.5, 0.5, CELL_M), &point), Some(CELL_M));
+        // An inverted slope rising east: its underside rakes from the cube's top on the west
+        // down to its foot on the east.
+        let under = shaped(Shape::InvertedSlope(Facing::East));
+        let ceiling = under.ceiling(at(0.25, 0.5, -1.0)).unwrap();
+        assert!((ceiling - 0.75 * CELL_M).abs() < 1e-4, "{ceiling}");
+        // A walker passes under an upper half a storey up, and is stopped by one at the
+        // height of their body.
+        let mut high = Base::default();
+        high.apply(BuildOp::Fill {
+            min: [0, 4, 0],
+            max: [0, 4, 3],
+            cube: Some(crate::Cube {
+                shape: Shape::UpperHalf,
+                ..crate::Cube::new(Kind::PLAIN, crate::Fill::Solid)
+            }),
+        });
+        let (from, to) = (Vec3::new(-1.0, 0.0, 0.75), Vec3::new(1.5, 0.0, 0.75));
+        assert!((stroll(&high, from, to) - to).length() < 0.01);
+        let low = shaped(Shape::UpperHalf);
+        assert!(stroll(&low, from, to).x < 0.0);
     }
 
     /// Walks a flight in small steps, each frame stood on what holds the feet up, as the

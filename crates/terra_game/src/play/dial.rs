@@ -323,7 +323,13 @@ fn draw(
     digging: Single<&super::dig::Digging, IsLocalPlayer>,
     growth: Query<&Growth>,
     options: Res<Options>,
-    (crafts, builds, flora_gives): (Crafts, Res<Builds>, Res<FloraGives>),
+    (crafts, builds, flora_gives, rules, look): (
+        Crafts,
+        Res<Builds>,
+        Res<FloraGives>,
+        Option<Res<crate::build::act::BuildRules>>,
+        Option<Res<crate::build::BuildLook>>,
+    ),
     cursor: Single<&CursorOptions>,
     mut root: Single<&mut Visibility, (With<DialRoot>, Without<Hud>)>,
     mut hud: Query<&mut Visibility, With<Hud>>,
@@ -504,7 +510,14 @@ fn draw(
         if dial.open || inventory.open || !hammer {
             String::new()
         } else {
-            tool::legend(&builder, &settings)
+            // The material in hand, by its kit's name (D232).
+            let laying = look
+                .as_ref()
+                .map_or(terra_build::Kind::PLAIN, |look| look.laying);
+            let material = rules.as_ref().map_or("plain".to_string(), |rules| {
+                rules.name(builder.material.unwrap_or(laying)).to_string()
+            });
+            tool::legend(&builder, &builds, &settings, &material)
         },
     );
 }

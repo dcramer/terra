@@ -11,7 +11,9 @@
 // player walking in through the open doorway, as no door or window is fitted for now (the
 // developers, 2026-10-13); the ground outside the cabin as it was before it was planned; a
 // deck a storey up on four posts beside it, reached by a flight of stairs (D193), built,
-// and walked up onto; and the game saved and loaded again, the base the same.
+// and walked up onto; stone picked in the hammer, a wall laid and built in it, a cube in
+// its middle changed to logs in place and an outer corner slope laid on its end (D231,
+// D232); and the game saved and loaded again, the base the same.
 //
 // One running game, driven live over the remote protocol (tools/sandbox, the `build.*`
 // methods in crates/terra_game/src/build/remote.rs). Screenshots of the plan, the cabin
@@ -369,6 +371,62 @@ async function build() {
     await game.shot("shots/cabin-upstairs.png");
     await game.call("sandbox.release");
     return `${laid.length} parts laid and built in ${steps} steps: four posts, a deck and a flight of ${flight!.cubes} cubes; walked up to ${up.toFixed(2)} m`;
+  });
+
+  await step("materials", async () => {
+    // Stone picked in the hammer (D232), a wall laid with no kind named, so in stone, and
+    // built; a cube in the middle of it changed to logs in place, the stone out from under
+    // the stone over it, given back, and the logs built in; and an outer corner slope laid
+    // on the wall's end (D231) and built.
+    const near = await point([-2.75, 0, 6.2]);
+    await game.warp(eastSouth(near.from_start), eastSouth((await point([-2.75, 0, 4])).from_start));
+    const picked = (await game.call("build.material", { kind: "stone" })) as { material: string };
+    check(picked.material === "stone", `the hammer holds ${picked.material}, not stone`);
+    const before = (await base()).parts.length;
+    const wall = await act("build.lay", { what: "wall", min: [-8, 0, 8], max: [-3, 0, 8] });
+    check(wall.done, `the wall was refused: ${wall.refused}`);
+    const laid = (await base()).parts.slice(before);
+    check(laid.length > 0 && laid.every((part) => part.kind === "stone"), `laid ${JSON.stringify(laid.map((part) => part.kind))}, not stone`);
+    await emptyPack();
+    await game.give("stone:16", "wood:2");
+    const fill = async () => {
+      const done = await acts("build.fill", { steps: 200 });
+      const refused = done.find((each) => !each.done);
+      check(!refused, `refused: ${refused?.refused} (${refused?.what})`);
+      return done;
+    };
+    await fill();
+    check((await base()).parts.every((part) => part.done), "the stone wall is not built");
+    const MIDDLE = [-5, 2, 8];
+    const stone = await carried("Stone");
+    const change = await act("build.replace", { at: MIDDLE, kind: "logs" });
+    check(change.done, `changing it was refused: ${change.refused}`);
+    const marked = (await game.call("build.cube", { at: MIDDLE })) as { kind: string; pending: string };
+    check(marked.pending === "Replace" && marked.kind === "stone", `marked as ${JSON.stringify(marked)}`);
+    const steps = await fill();
+    const changed = (await game.call("build.cube", { at: MIDDLE })) as { kind: string; built: boolean; pending: string };
+    check(changed.kind === "logs" && changed.built && changed.pending === "None", `the cube is ${JSON.stringify(changed)}, not logs built`);
+    const over = (await game.call("build.cube", { at: [-5, 3, 8] })) as { kind: string; built: boolean };
+    check(over.kind === "stone" && over.built, "the stone over it did not stay");
+    const now = await base();
+    check(now.floating === 0, `${now.floating} cubes float`);
+    const back = (await carried("Stone")) - stone;
+    // A quarter of a Stone back, kept as offcuts until it makes a whole one.
+    check(back >= 0 && now.offcuts.includes("Stone"), `${back} Stone back, offcuts ${now.offcuts}`);
+    // An outer corner slope on the wall's west end, rising north and east.
+    const corner = await act("build.lay", { what: "block", min: [-8, 6, 8], max: [-8, 6, 8], shape: { OuterCorner: "North" } });
+    check(corner.done, `the corner was refused: ${corner.refused}`);
+    await fill();
+    const slope = (await game.call("build.cube", { at: [-8, 6, 8] })) as { kind: string; shape: string; built: boolean };
+    check(slope.kind === "stone" && slope.shape === "OuterCorner(North)" && slope.built, `the corner is ${JSON.stringify(slope)}`);
+    const target = await point([-2.75, 1.5, 4]);
+    const eye = await point([0.5, 3.0, 9.5]);
+    await game.call("sandbox.look", { at: target.world, from: eye.world });
+    await game.waitSeconds(2);
+    await game.shot("shots/cabin-materials.png");
+    await game.call("sandbox.release");
+    await emptyPack();
+    return `a wall laid in stone, its middle changed to logs in ${steps.length} steps (${steps.map((each) => each.what).join("; ")}), offcuts ${now.offcuts}; a stone outer corner on its end`;
   });
 
   await step("reload", async () => {

@@ -74,6 +74,7 @@ use crate::shell::Options;
 use bevy::{app::PluginGroupBuilder, prelude::*, window::CursorOptions};
 use options::MenuSystems;
 use terra_world::{data, daylight, flora, flora_kinds, footprint, lod, models, tick, world};
+pub use tool::Builder;
 pub use walker::{ArriveAt, Hands, PlayerInput, WalkerPlugin, WarpTo};
 // The player's own components are the walker's; every layer reads them by these names.
 use walker::{Downed, IsLocalPlayer, Motion, Stance, View};

@@ -56,6 +56,77 @@ pub struct Kit {
     /// How each exposed edge of its cubes is dressed by its role (D215, `layout::roles`):
     /// its pieces, what each role takes, and its masks.
     pub dress: Dressing,
+    /// How it meets other kinds where their cubes touch (D232): left out, as its pattern
+    /// meets them ([`Meets::of`]).
+    pub meets: Option<Meets>,
+}
+
+/// How a kind meets the others where their cubes touch (D179, D210, D232), as data, so a
+/// new kit says how it meets the rest. Where two kinds meet, the heavier runs through: its
+/// faces and edges at the joint are dressed as though the lighter were not there (a stone
+/// wall's quoins up the joint beside logs), and the lighter ends against it with its `end`
+/// trim; of two as heavy, each ends against the other. Where a lighter kind stands on it,
+/// the heavier puts its `carries` trim along its top. `kinds` says, for a kind by its id,
+/// where that differs from its weight's rule.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Meets {
+    /// How heavy it reads where kinds meet: stone 3, timber 2, wattle 1.
+    pub weight: u8,
+    /// Its trim where it ends against a kind that runs through it.
+    pub end: Joint,
+    /// Its trim along its top where a kind it runs through stands on it.
+    pub carries: Joint,
+    pub kinds: BTreeMap<u16, Meet>,
+}
+
+impl Default for Meets {
+    fn default() -> Self {
+        Meets::of(Pattern::Logs)
+    }
+}
+
+impl Meets {
+    /// How a pattern meets the others unless its kit says otherwise: a block kind runs
+    /// through a timber one, capping its top under it (D179, D210); a timber kind ends
+    /// against anything with an end board.
+    pub fn of(pattern: Pattern) -> Meets {
+        match pattern {
+            Pattern::Masonry => Meets {
+                weight: 3,
+                end: Joint::None,
+                carries: Joint::Cap,
+                kinds: BTreeMap::new(),
+            },
+            Pattern::Logs => Meets {
+                weight: 2,
+                end: Joint::Board,
+                carries: Joint::None,
+                kinds: BTreeMap::new(),
+            },
+        }
+    }
+}
+
+/// How one kind meets another, where it differs from the weights' rule: whether it runs
+/// through that kind, and its trims there.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Meet {
+    pub through: Option<bool>,
+    pub end: Option<Joint>,
+    pub carries: Option<Joint>,
+}
+
+/// A trim at a joint between kinds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Joint {
+    #[default]
+    None,
+    /// An end board up the joint, over a timber kind's sawn ends (`layout::trims`).
+    Board,
+    /// A cap along the top, dressed as the kit dresses [`Role::Meet`].
+    Cap,
 }
 
 /// How a kit dresses its cubes' exposed edges by their roles (D215, docs/building-kits.md):
@@ -381,6 +452,58 @@ impl Kits {
         rules
     }
 
+    /// How a kind meets the others: its kit's table, or its pattern's.
+    pub fn meets(&self, kind: Kind) -> Meets {
+        self.of(kind).map_or_else(
+            || Meets::of(Pattern::Logs),
+            |kit| kit.meets.clone().unwrap_or_else(|| Meets::of(kit.pattern)),
+        )
+    }
+
+    /// What one kind's table says of another, if anything.
+    fn meet(&self, kind: Kind, other: Kind) -> Meet {
+        self.meets(kind)
+            .kinds
+            .get(&other.0)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Whether `kind` runs through `other` where they meet (D232): as either's table says
+    /// of the other, else the heavier does.
+    pub fn through(&self, kind: Kind, other: Kind) -> bool {
+        if kind == other {
+            return false;
+        }
+        if let Some(through) = self.meet(kind, other).through {
+            return through;
+        }
+        if let Some(through) = self.meet(other, kind).through {
+            return !through;
+        }
+        self.meets(kind).weight > self.meets(other).weight
+    }
+
+    /// The trim `kind` puts where it ends against `other`, if `other` runs through it or
+    /// neither does.
+    pub fn end(&self, kind: Kind, other: Kind) -> Joint {
+        if kind == other || self.through(kind, other) {
+            return Joint::None;
+        }
+        self.meet(kind, other).end.unwrap_or(self.meets(kind).end)
+    }
+
+    /// The trim `kind` puts along its top where `other` stands on it, if it runs through
+    /// `other`.
+    pub fn carries(&self, kind: Kind, other: Kind) -> Joint {
+        if !self.through(kind, other) {
+            return Joint::None;
+        }
+        self.meet(kind, other)
+            .carries
+            .unwrap_or(self.meets(kind).carries)
+    }
+
     /// Whether a kind goes in a cube at a time, as blocks do, rather than a course across
     /// every cube of a part, as long members do (D194).
     pub fn one_at_a_time(&self, kind: Kind) -> bool {
@@ -487,6 +610,7 @@ impl Default for Kit {
                 roof: [0.47, 0.42, 0.37],
                 chinking: [0.8, 0.75, 0.66],
             },
+            meets: None,
         }
     }
 }
@@ -539,13 +663,17 @@ mod tests {
         // What a kit's file leaves out is the default's, which is to be logs.ron's but
         // for what it lays with: its textures and cost; and for how it is dressed,
         // its ends run past the corners and its role members, so tests lay plain logs
-        // inside their cubes.
+        // inside their cubes; and how it meets other kinds, which the default leaves to
+        // its pattern, so a test's stone kit meets as stone, and the file says as logs.
+        let file = shipped("logs.ron");
+        assert_eq!(file.meets, Some(Meets::of(Pattern::Logs)));
         let pine = Kit {
             textures: BTreeMap::new(),
             cost: KitCost::default(),
             overhang: 0.0,
             dress: Dressing::default(),
-            ..shipped("logs.ron")
+            meets: None,
+            ..file
         };
         assert_eq!(pine, Kit::default());
     }

@@ -25,11 +25,21 @@
 //! - `build.op {ops}`: any operations, as `terra_build::ops::Op` serialises them, as one act.
 //! - `build.point {at}`: where a place in the base, in metres, is in the world and from the
 //!   start, to look at it or walk to it.
+//! - `build.material {kind}`: the material in the player's hammer, as Ctrl and the wheel
+//!   pick it (D232); `build.lay` lays in it when no `kind` is given.
+//! - `build.replace {at, brush?, kind?}`: changes the cubes of a brush's box round `at` (a
+//!   brush 1, 2, 4 or 8 cubes across, D226) to the material in hand, or `kind`; `build.fill`
+//!   then takes the old out, swaps and builds the new.
+//! - `build.carve {at, brush?}`: marks the cubes of a brush's box to be carved out.
+//! - `build.take_out {at, brush?}`: takes a step out of the highest layer of what is in a
+//!   brush's box, as the hammer takes out the cube aimed at.
+//! - `build.cube {at}`: a cube: its material, shape, fill, how far in, and what is pending.
 //! - `build.ground {columns}`: the ground's height under the middle of each column, in metres
 //!   in the base's own space, as the planet has it now: to see what building changed of it.
 
 use super::act::{BuildRules, Building, Offcuts};
 use super::{Site, plans};
+use crate::play::Builder;
 use crate::play::{LocalPlayer, Player};
 use crate::remote::{method, refused};
 use crate::start::Start;
@@ -53,6 +63,11 @@ pub fn plugin(app: &mut App) {
     method(app, "build.op", ops);
     method(app, "build.point", point);
     method(app, "build.ground", ground);
+    method(app, "build.material", material);
+    method(app, "build.replace", replace);
+    method(app, "build.carve", carve);
+    method(app, "build.take_out", take_out);
+    method(app, "build.cube", cube);
 }
 
 #[derive(Deserialize)]
@@ -160,16 +175,19 @@ struct Lay {
     ramp: Option<bool>,
     /// For a block: its shape.
     shape: Option<Shape>,
+    /// For a block: how many cubes across a box of them is (D226).
+    brush: Option<i32>,
 }
 
 fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let lay: Lay = parse_some(params)?;
     let rules = world.resource::<BuildRules>().clone();
+    let held = material_of(world);
     let kind_of = |name: &Option<String>| match name {
         Some(name) => rules
             .kind(name)
             .ok_or_else(|| refused(format!("there is no kind of construction called {name}"))),
-        None => Ok(world.resource::<super::BuildLook>().laying),
+        None => Ok(held),
     };
     let kind = kind_of(&lay.kind)?;
     let floor = match &lay.floor {
@@ -224,7 +242,12 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             }
             "post" => (plans::post(base, min, kind, footings), None),
             "block" => (
-                plans::block(base, min, lay.shape.unwrap_or_default(), kind),
+                plans::blocks(
+                    base,
+                    &plans::brush(min, lay.brush.unwrap_or(1)),
+                    lay.shape.unwrap_or_default(),
+                    kind,
+                ),
                 None,
             ),
             other => return Err(refused(format!("cannot lay a {other}"))),
@@ -363,6 +386,125 @@ fn ops(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     as_player(world, |building, player| {
         let result = building.act(Some(player), "operations", &ops);
         Ok(answer("operations", result))
+    })
+}
+
+/// The material in this machine's player's hammer (D232): the one picked, else the first
+/// kit's.
+fn material_of(world: &mut World) -> terra_build::Kind {
+    let laying = world.resource::<super::BuildLook>().laying;
+    world
+        .query_filtered::<&Builder, (With<Player>, With<LocalPlayer>)>()
+        .iter(world)
+        .next()
+        .and_then(|builder| builder.material)
+        .unwrap_or(laying)
+}
+
+#[derive(Deserialize)]
+struct Material {
+    kind: String,
+}
+
+/// Puts a material in the player's hammer, as Ctrl and the wheel do.
+fn material(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Material { kind } = parse_some(params)?;
+    let rules = world.resource::<BuildRules>().clone();
+    let picked = rules
+        .kind(&kind)
+        .filter(|kind| rules.names.contains_key(kind))
+        .ok_or_else(|| refused(format!("there is no material called {kind}")))?;
+    for mut builder in world
+        .query_filtered::<&mut Builder, (With<Player>, With<LocalPlayer>)>()
+        .iter_mut(world)
+    {
+        builder.material = Some(picked);
+    }
+    info!("Build: material: {}", rules.name(picked));
+    Ok(json!({ "material": rules.name(picked) }))
+}
+
+#[derive(Deserialize)]
+struct Brushed {
+    at: [i32; 3],
+    brush: Option<i32>,
+    kind: Option<String>,
+}
+
+/// Changes the built cubes of a brush's box round a cube to the material in hand, as the
+/// hammer's Change material does (D232); `build.fill` then builds it.
+fn replace(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let asked: Brushed = parse_some(params)?;
+    let rules = world.resource::<BuildRules>().clone();
+    let kind = match &asked.kind {
+        Some(name) => rules
+            .kind(name)
+            .ok_or_else(|| refused(format!("there is no material called {name}")))?,
+        None => material_of(world),
+    };
+    as_player(world, |building, player| {
+        let cubes = plans::brush(IVec3::from_array(asked.at), asked.brush.unwrap_or(1));
+        let ops = plans::replace(&building.site.base, &cubes, kind);
+        if ops.is_empty() {
+            return Err(refused("there is nothing there to change"));
+        }
+        let what = format!("change to {}", rules.name(kind));
+        let result = building.act(Some(player), &what, &ops);
+        Ok(answer(&what, result))
+    })
+}
+
+/// Marks the built cubes of a brush's box round a cube to be carved out (D226).
+fn carve(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let asked: Brushed = parse_some(params)?;
+    as_player(world, |building, player| {
+        let cubes = plans::brush(IVec3::from_array(asked.at), asked.brush.unwrap_or(1));
+        let ops = plans::carve(&building.site.base, &cubes);
+        if ops.is_empty() {
+            return Err(refused("there is nothing there to carve"));
+        }
+        let result = building.act(Some(player), "carve", &ops);
+        Ok(answer("carve", result))
+    })
+}
+
+/// Takes a step out of what is in a brush's box round a cube, its highest layer, as the
+/// hammer's take-apart does where nothing rests on it (D226).
+fn take_out(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let asked: Brushed = parse_some(params)?;
+    as_player(world, |building, player| {
+        let cubes = plans::brush(IVec3::from_array(asked.at), asked.brush.unwrap_or(1));
+        let ops = plans::take_out(&building.site.base, &cubes);
+        if ops.is_empty() {
+            return Err(refused("nothing is in there"));
+        }
+        let result = building.act(Some(player), "take out", &ops);
+        Ok(with_cubes(answer("take out", result), &ops))
+    })
+}
+
+#[derive(Deserialize)]
+struct At {
+    at: [i32; 3],
+}
+
+/// A cube of the base: its material, shape, how far it is in and any change pending.
+fn cube(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let At { at } = parse_some(params)?;
+    let rules = world.resource::<BuildRules>().clone();
+    let site = world.resource::<Site>();
+    Ok(match site.base.cube(IVec3::from_array(at)) {
+        None => json!({ "at": at, "kind": Value::Null }),
+        Some(cube) => json!({
+            "at": at,
+            "kind": rules.name(cube.kind),
+            "shape": format!("{:?}", cube.shape),
+            "fill": format!("{:?}", cube.fill),
+            "level": cube.level(),
+            "built": cube.is_built(),
+            "pending": format!("{:?}", cube.pending),
+            "part": cube.part.map(|part| part.0),
+        }),
     })
 }
 

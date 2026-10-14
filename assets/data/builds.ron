@@ -35,8 +35,13 @@
 //              Flight   stairs or a ramp up a storey (D193): its name, whether it is a
 //                       ramp of slopes rather than stairs, and how wide in metres
 //              Post     a post a storey high, carrying the floor above (D193)
-//              Block    one cube of a shape set against what is aimed at (D193): each
-//                       variant's name and shape, Whole, Half, Stair or Slope
+//              Block    one cube of a shape set against what is aimed at (D193), or a
+//                       box of them the brush's size (D226): each variant's name and
+//                       shape, Whole, Half, Stair, Slope, UpperHalf, InvertedStair,
+//                       InvertedSlope, OuterCorner or InnerCorner (D231); at most eight
+//                       to a part, as the dial shows
+//              Replace  the built cubes aimed at changed to the material in hand (D232)
+//              Carve    the built cubes aimed at carved out (D226)
 //              Door, Remove, Move   the hammer's other work
 (
     structure: (
@@ -89,7 +94,16 @@
             ("Half", Half),
             ("Stair", Stair),
             ("Slope", Slope),
+            ("Upper half", UpperHalf),
+            ("Stair, upside down", InvertedStair),
+            ("Slope, upside down", InvertedSlope),
         ])),
+        (name: "Corner slope", tab: Structure, kind: Block([
+            ("Outer corner", OuterCorner),
+            ("Inner corner", InnerCorner),
+        ])),
+        (name: "Change material", tab: Structure, kind: Replace),
+        (name: "Carve", tab: Structure, kind: Carve),
         (name: "Window", tab: Openings, kind: Window([
             ("1.5 m", 1.5, (1.0, 1.0)),
             ("3 m", 3.0, (1.0, 1.0)),

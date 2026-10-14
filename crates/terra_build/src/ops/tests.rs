@@ -553,6 +553,133 @@ fn a_stone_wall_is_changed_to_logs_old_out_new_in() {
 }
 
 #[test]
+fn a_cube_in_a_wall_is_changed_in_place_under_what_stays_and_each_step_undone() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    let mut base = Base::default();
+    stone_wall(&mut base, 3, &cx);
+    let before = base.clone();
+    let cube = IVec3::new(1, 1, 0);
+    base.act(
+        &Op::Replace {
+            cubes: vec![cube.to_array()],
+            kind: LOGS,
+            part: Some(PartId(9)),
+        },
+        &cx,
+    )
+    .unwrap();
+    // Driven by what goes next, as the hammer is: the stone out from under the stone over
+    // it, the swap, two courses of log in, and the mark cleared.
+    let mut stock = plenty();
+    let mut undo = Vec::new();
+    let mut steps = Vec::new();
+    while let Some(op) = base.next_change(Vec3::ZERO, |kind| kind == STONE) {
+        let done = base
+            .act(&op, &cx)
+            .unwrap_or_else(|why| panic!("{op:?}: {why:?}"));
+        stock.add(&done.gave);
+        stock.take(&done.took).expect("in stock");
+        steps.push(
+            format!("{op:?}")
+                .split([' ', '{'])
+                .next()
+                .unwrap()
+                .to_string(),
+        );
+        undo.push(done.undo);
+        // What stays over it is held all along.
+        assert!(base.floating().is_empty());
+        assert!(base.is_in(cube + IVec3::Y));
+        assert!(steps.len() < 10);
+    }
+    assert_eq!(steps, ["Empty", "Swap", "Fill", "Fill", "Cancel"]);
+    let changed = base.cube(cube).unwrap();
+    assert_eq!(
+        (
+            changed.kind,
+            changed.part,
+            changed.pending,
+            changed.is_built()
+        ),
+        (LOGS, Some(PartId(9)), Pending::None, true)
+    );
+    // The stone given back, the logs taken.
+    let mut want = plenty();
+    want.add(&Bill::of("Stone", Amount::whole(1)));
+    want.add(&Bill::of("Mortar", Amount::new(3, 8)));
+    want.take(&Bill::of("Log", Amount::new(1, 4))).unwrap();
+    assert_eq!(stock, want);
+    // Each step undone, last first, returns the wall as it was.
+    for ops in undo.iter().rev() {
+        base.act_all(ops, &cx).unwrap();
+    }
+    base.act(
+        &Op::Cancel {
+            cubes: vec![cube.to_array()],
+        },
+        &cx,
+    )
+    .unwrap();
+    assert_eq!(base, before);
+}
+
+#[test]
+fn every_shape_is_supported_costed_built_in_order_and_taken_apart_as_a_whole_cube() {
+    let rules = rules();
+    let cx = Context::free(&rules);
+    for shape in Shape::ALL {
+        let mut base = Base::default();
+        // A stone cube on the ground, and the shape on it, then one over it.
+        let plan = |part: u32, at: [i32; 3], shape: Shape| Op::LayPlan {
+            part: Some(PartId(part)),
+            kind: STONE,
+            cubes: vec![Planned { at, shape }],
+            ground: vec![Sample {
+                column: [0, 0],
+                height_cm: 0,
+            }],
+        };
+        base.act(&plan(0, [0, 0, 0], Shape::Whole), &cx).unwrap();
+        base.act(&plan(1, [0, 1, 0], shape), &cx).unwrap();
+        // Not before what it rests on.
+        assert_eq!(
+            base.next_in(PartId(1), Vec3::ZERO, true),
+            Some(vec![[0, 1, 0]])
+        );
+        let fill = |at: [i32; 3]| Op::Fill { cubes: vec![at] };
+        assert!(base.act(&fill([0, 1, 0]), &cx).is_err(), "{shape:?} floats");
+        base.act(&fill([0, 0, 0]), &cx).unwrap();
+        let done = base.act(&fill([0, 1, 0]), &cx).unwrap();
+        assert_eq!(done.took, rules.of(STONE).per_step, "{shape:?}");
+        // Something on it holds it.
+        base.act(&plan(2, [0, 2, 0], Shape::Whole), &cx).unwrap();
+        base.act(&fill([0, 2, 0]), &cx).unwrap();
+        let empty = Op::Empty {
+            cubes: vec![[0, 1, 0]],
+        };
+        assert!(
+            matches!(base.act(&empty, &cx), Err(Refusal::Holds(_))),
+            "{shape:?}"
+        );
+        assert_eq!(
+            base.last_in(PartId(2), Vec3::ZERO, true),
+            Some(vec![[0, 2, 0]])
+        );
+        base.act(
+            &Op::Empty {
+                cubes: vec![[0, 2, 0]],
+            },
+            &cx,
+        )
+        .unwrap();
+        let back = base.act(&empty, &cx).unwrap();
+        assert_eq!(back.gave, done.took);
+        assert_eq!(base.cube(IVec3::Y).unwrap().shape, shape);
+    }
+}
+
+#[test]
 fn a_cube_carved_out_comes_out_step_by_step_and_its_undo_puts_it_back() {
     let rules = rules();
     let cx = Context::free(&rules);
@@ -1045,17 +1172,11 @@ fn random_op(base: &Base, rng: &mut Rng, seed: u64, kind_of: u32) -> Op {
             Op::Unplan { cubes }
         }
         10 => {
-            let shapes = [
-                Shape::Whole,
-                Shape::Half,
-                Shape::Stair(Facing::South),
-                Shape::Slope(Facing::West),
-            ];
             let bare = with(&|cube| cube.level() == 0);
             match pick(rng, &bare) {
                 Some(at) => Op::SetShape {
                     cubes: vec![at.to_array()],
-                    shape: shapes[rng.below(4) as usize],
+                    shape: Shape::ALL[rng.below(Shape::ALL.len() as u32) as usize],
                 },
                 None => fallback,
             }
@@ -1205,7 +1326,7 @@ fn check_rules(base: &Base, at: &str) {
         let under = base.cube(cube - IVec3::Y);
         assert!(
             under.is_none_or(|under| {
-                !under.is_in() || under.is_built() || under.pending == Pending::Carve
+                !under.is_in() || under.is_built() || under.pending.in_place()
             }),
             "{at}: {cube} is in over a cube partly in"
         );
@@ -1349,15 +1470,14 @@ fn random_operations_keep_every_rule() {
                     yard.stock.add(&done.gave);
                     paid.add(&done.took);
                     refunded.add(&done.gave);
-                    // Nothing was taken from under anything, but a cube carved out from
+                    // Nothing was taken from under anything, but a cube carved out or changed from
                     // under what stays joined, or from under an item.
                     for op in &ops {
                         if let Op::Empty { cubes } = op {
                             for &cube in cubes {
                                 let cube = IVec3::from_array(cube);
-                                let carved = base
-                                    .cube(cube)
-                                    .is_some_and(|cube| cube.pending == Pending::Carve);
+                                let carved =
+                                    base.cube(cube).is_some_and(|cube| cube.pending.in_place());
                                 assert!(
                                     !base.is_in(cube + IVec3::Y) || base.is_in(cube) || carved,
                                     "{at}: {cube} taken from under what rests on it"

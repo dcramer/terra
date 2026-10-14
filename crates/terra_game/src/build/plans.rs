@@ -282,6 +282,111 @@ pub fn block(base: &Base, at: IVec3, shape: Shape, kind: Kind) -> Vec<Op> {
         .collect()
 }
 
+/// The cubes of a brush `size` cubes across round a cube (D226): the box of that size on
+/// the brush's own grid that holds it, as Enshrouded's larger blocks snap to theirs.
+pub fn brush(at: IVec3, size: i32) -> Vec<IVec3> {
+    let size = size.max(1);
+    let low = at.div_euclid(IVec3::splat(size)) * size;
+    let mut cubes = Vec::new();
+    for x in 0..size {
+        for y in 0..size {
+            for z in 0..size {
+                cubes.push(low + IVec3::new(x, y, z));
+            }
+        }
+    }
+    cubes
+}
+
+/// A box of cubes of a shape, a brush's (D226), laid as [`block`] lays one: whole cubes,
+/// a cut shape on the box's face it is cut on, its top layer, or its bottom for an upper
+/// half or a shape upside down, so a box of slopes is a ramp on a block, not a saw's teeth.
+pub fn blocks(base: &Base, cubes: &[IVec3], shape: Shape, kind: Kind) -> Vec<Op> {
+    let Some(first) = cubes.first() else {
+        return Vec::new();
+    };
+    if cubes.len() == 1 {
+        return block(base, *first, shape, kind);
+    }
+    let (low, high) = cubes
+        .iter()
+        .fold((*first, *first), |(lo, hi), &c| (lo.min(c), hi.max(c)));
+    let under = shape.planed_under() || matches!(shape, Shape::InvertedStair(_));
+    let cut: Vec<(IVec3, Shape)> = cubes
+        .iter()
+        .map(|&at| {
+            let face = if under { at.y == low.y } else { at.y == high.y };
+            (at, if face { shape } else { Shape::Whole })
+        })
+        .collect();
+    let part = cubes
+        .iter()
+        .flat_map(|&at| terra_build::support::FACES.map(|step| at + step))
+        .filter_map(|at| base.cube(at))
+        .find(|cube| cube.kind == kind && !cube.is_built() && cube.part.is_some())
+        .and_then(|cube| cube.part)
+        .unwrap_or_else(|| Numbers::of(base).next());
+    shaped(base, part, kind, cut).into_iter().collect()
+}
+
+/// The built or part-built cubes of a box changed to a kind (D232): marked, the old taken
+/// out, swapped and the new built, as a part of its own; none if none can be.
+pub fn replace(base: &Base, cubes: &[IVec3], kind: Kind) -> Vec<Op> {
+    let changed: Vec<[i32; 3]> = cubes
+        .iter()
+        .filter(|&&at| {
+            base.cube(at).is_some_and(|cube| {
+                cube.fill == Fill::Solid && cube.pending == Pending::None && cube.kind != kind
+            })
+        })
+        .map(|at| at.to_array())
+        .collect();
+    if changed.is_empty() {
+        return Vec::new();
+    }
+    vec![Op::Replace {
+        cubes: changed,
+        kind,
+        part: Some(Numbers::of(base).next()),
+    }]
+}
+
+/// The cubes of a box with anything in them marked to be carved out (D226).
+pub fn carve(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
+    let marked: Vec<[i32; 3]> = cubes
+        .iter()
+        .filter(|&&at| {
+            base.cube(at)
+                .is_some_and(|cube| cube.is_in() && cube.pending == Pending::None)
+        })
+        .map(|at| at.to_array())
+        .collect();
+    if marked.is_empty() {
+        return Vec::new();
+    }
+    vec![Op::Carve { cubes: marked }]
+}
+
+/// Taking out what is in a box (D226): a step out of its highest layer with anything in,
+/// which the base refuses if anything rests on them; none if nothing of it is in.
+pub fn take_out(base: &Base, cubes: &[IVec3]) -> Vec<Op> {
+    let ins: Vec<IVec3> = cubes
+        .iter()
+        .copied()
+        .filter(|&at| base.is_in(at) && base.cube(at).is_some_and(|c| c.pending == Pending::None))
+        .collect();
+    let Some(top) = ins.iter().map(|at| at.y).max() else {
+        return Vec::new();
+    };
+    vec![Op::Empty {
+        cubes: ins
+            .into_iter()
+            .filter(|at| at.y == top)
+            .map(|at| at.to_array())
+            .collect(),
+    }]
+}
+
 /// A flat roof over a block of tiles on a storey, as one part.
 pub fn flat_roof(base: &Base, min: IVec3, max: IVec3, kind: Kind) -> Vec<Op> {
     floor(base, min + IVec3::Y, max + IVec3::Y, kind, None)
@@ -633,5 +738,56 @@ mod tests {
         base.act_all(&roof(&base, section, LOGS), &cx).unwrap();
         assert_eq!(base.part(PartId(5)), None, "the flat roof's plan is gone");
         assert_eq!(base.roofs().count(), 1);
+    }
+
+    #[test]
+    fn a_brush_lays_changes_carves_and_takes_out_a_box_on_its_own_grid() {
+        let rules = Rules::default();
+        let cx = Context::free(&rules);
+        let mut base = Base::default();
+        // A box of slopes four cubes across, aimed anywhere in it: whole cubes under a
+        // top layer of slopes, on the brush's grid.
+        let cubes = brush(IVec3::new(5, 1, -3), 4);
+        assert_eq!(cubes.len(), 64);
+        assert_eq!(cubes[0], IVec3::new(4, 0, -4));
+        let slope = Shape::Slope(Facing::North);
+        base.act_all(&blocks(&base, &cubes, slope, STONE), &cx)
+            .unwrap();
+        let shapes = |y: i32| {
+            base.cubes()
+                .filter(|(at, _)| at.y == y)
+                .map(|(_, cube)| cube.shape.code())
+                .collect::<BTreeSet<_>>()
+        };
+        assert_eq!(shapes(3), BTreeSet::from([slope.code()]));
+        assert_eq!(shapes(0), BTreeSet::from([Shape::Whole.code()]));
+        // Upside down, the cut layer is the bottom one.
+        let under = brush(IVec3::new(0, 4, 0), 2);
+        base.act_all(&blocks(&base, &under, Shape::UpperHalf, STONE), &cx)
+            .unwrap();
+        assert_eq!(
+            base.cube(IVec3::new(0, 4, 0)).unwrap().shape,
+            Shape::UpperHalf
+        );
+        assert_eq!(base.cube(IVec3::new(0, 5, 0)).unwrap().shape, Shape::Whole);
+        // Built, a box of two in it is changed to logs, carved, or taken out from the top.
+        for at in &cubes {
+            base.act(
+                &Op::Fill {
+                    cubes: vec![at.to_array()],
+                },
+                &cx,
+            )
+            .unwrap();
+        }
+        let two = brush(IVec3::new(4, 2, -4), 2);
+        let change = replace(&base, &two, LOGS);
+        assert!(matches!(&change[..], [Op::Replace { cubes, kind: LOGS, .. }] if cubes.len() == 8));
+        assert!(replace(&base, &two, STONE).is_empty());
+        let carving = carve(&base, &two);
+        assert!(matches!(&carving[..], [Op::Carve { cubes }] if cubes.len() == 8));
+        let out = take_out(&base, &brush(IVec3::new(4, 3, -4), 2));
+        assert!(matches!(&out[..], [Op::Empty { cubes }] if cubes.iter().all(|at| at[1] == 3)));
+        base.act_all(&out, &cx).unwrap();
     }
 }

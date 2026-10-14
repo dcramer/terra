@@ -89,23 +89,25 @@ pub fn draw(
         hides,
         look,
         heights,
-        &|_, _| f32::MAX,
+        &|_, _| [f32::MIN, f32::MAX],
         colour,
         out,
         tops,
     );
 }
 
-/// As [`draw`], with each cube's surface cut off at a height over each point of it, as a
-/// gable's is at its roof's underside: `cut` gives it for a cube and a point of its face
-/// before it is rounded, nothing of the face going higher.
+/// As [`draw`], with each cube's surface cut off above and below at heights over each
+/// point of it, as a gable's is at its roof's underside and a slope's at its ramp: `cut`
+/// gives them, lowest and highest, for a cube and a point of its face before it is rounded,
+/// nothing of the face going lower or higher, so an upper half or an inverted slope is cut
+/// from below (D231).
 #[allow(clippy::too_many_arguments)]
 pub fn draw_cut(
     cubes: &BTreeSet<[i32; 3]>,
     hides: &dyn Fn(IVec3) -> bool,
     look: &Look,
     heights: &Heights,
-    cut: &dyn Fn(IVec3, Vec3) -> f32,
+    cut: &dyn Fn(IVec3, Vec3) -> [f32; 2],
     colour: [f32; 3],
     out: &mut Surface,
     tops: &mut Surface,
@@ -134,7 +136,7 @@ pub fn draw_part(
     hides: &dyn Fn(IVec3) -> bool,
     look: &Look,
     heights: &Heights,
-    cut: &dyn Fn(IVec3, Vec3) -> f32,
+    cut: &dyn Fn(IVec3, Vec3) -> [f32; 2],
     colour: [f32; 3],
     out: &mut Surface,
     tops: &mut Surface,
@@ -263,7 +265,7 @@ pub fn draw_part(
                 && (0..=n).any(|i| {
                     (0..=n).any(|j| {
                         let p = point(i, j);
-                        cut(beyond, p) < cut(cube, p).min(p.y) - 1e-4
+                        cut(beyond, p)[1] < cut(cube, p)[1].min(p.y) - 1e-4
                     })
                 });
             if full(beyond) && !against_cut {
@@ -316,15 +318,24 @@ pub fn draw_part(
                 top,
                 keeping,
             };
+            // Each point cut to the heights there, and where it would be unrounded, to
+            // choose each square's diagonal by.
+            let clipped = |p: Vec3| {
+                let [low, high] = cut(cube, p);
+                p.y.max(low).min(high)
+            };
+            let mut flat = Vec::with_capacity((n + 1) * (n + 1));
             for i in 0..=n {
                 for j in 0..=n {
                     let p = point(i, j);
+                    let [low, high] = cut(cube, p);
                     let mut q = place(p);
-                    q.y = q.y.min(cut(cube, p));
+                    q.y = q.y.max(low).min(high);
                     if against_cut {
-                        q.y = q.y.max(cut(beyond, p).min(cut(cube, p)));
+                        q.y = q.y.max(cut(beyond, p)[1].min(high));
                     }
                     face.points.push(q);
+                    flat.push(p.with_y(clipped(p)));
                     face.uvs.push(planar(p, normal, metres));
                 }
             }
@@ -332,7 +343,20 @@ pub fn draw_part(
             for i in 0..n {
                 for j in 0..n {
                     let corners = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
-                    for [x, y, z] in [[0, 1, 2], [0, 2, 3]] {
+                    // Split along the diagonal that follows the cut where it creases across
+                    // the square, as along a corner slope's hip or valley: the one whose
+                    // middle is nearer the cut surface at the square's middle.
+                    let f = corners.map(|c| flat[c as usize]);
+                    let middle = (f[0] + f[2]) * 0.5;
+                    let middle = middle.with_y(clipped(point(i, j).lerp(point(i + 1, j + 1), 0.5)));
+                    let along_02 = ((f[0] + f[2]) * 0.5).distance(middle);
+                    let along_13 = ((f[1] + f[3]) * 0.5).distance(middle);
+                    let split = if along_13 + 1e-5 < along_02 {
+                        [[0, 1, 3], [1, 2, 3]]
+                    } else {
+                        [[0, 1, 2], [0, 2, 3]]
+                    };
+                    for [x, y, z] in split {
                         let (y, z) = if flip { (z, y) } else { (y, z) };
                         let t = [corners[x], corners[y], corners[z]];
                         let [pa, pb, pc] = t.map(|c| face.points[c as usize]);
@@ -661,9 +685,9 @@ mod tests {
         let set: BTreeSet<[i32; 3]> = [[0, 0, 0], [1, 0, 0]].into_iter().collect();
         let cut = |cube: IVec3, at: Vec3| {
             if cube.x == 0 {
-                CELL_M * 0.5
+                [f32::MIN, CELL_M * 0.5]
             } else {
-                at.x - CELL_M
+                [f32::MIN, at.x - CELL_M]
             }
         };
         let (mut out, mut tops) = (Surface::default(), Surface::default());
@@ -689,7 +713,8 @@ mod tests {
             "the slope's side is no higher than its top at its foot"
         );
         // Against a half, a whole cube's own side shows from the half's top up.
-        let whole = |cube: IVec3, _: Vec3| if cube.x == 0 { CELL_M * 0.5 } else { f32::MAX };
+        let whole =
+            |cube: IVec3, _: Vec3| [f32::MIN, if cube.x == 0 { CELL_M * 0.5 } else { f32::MAX }];
         let (mut out, mut tops) = (Surface::default(), Surface::default());
         draw_cut(
             &set,

@@ -81,6 +81,8 @@ enum KindFile {
     Flight(Vec<FlightShape>),
     Post,
     Block(Vec<(String, BlockShape)>),
+    Replace,
+    Carve,
 }
 
 #[derive(Deserialize)]
@@ -154,6 +156,8 @@ impl Builds {
                     KindFile::Flight(shapes) => Kind::Flight(shapes),
                     KindFile::Post => Kind::Post,
                     KindFile::Block(shapes) => Kind::Block(shapes),
+                    KindFile::Replace => Kind::Replace,
+                    KindFile::Carve => Kind::Carve,
                 },
             })
             .collect();
@@ -321,22 +325,33 @@ pub enum BlockShape {
     Half,
     Stair,
     Slope,
+    UpperHalf,
+    InvertedStair,
+    InvertedSlope,
+    OuterCorner,
+    InnerCorner,
 }
 
 impl BlockShape {
-    /// The cube's shape, a stair or slope rising toward `facing`.
+    /// The cube's shape, a stair, slope or corner rising toward `facing` (D231).
     pub fn shape(self, facing: terra_build::Facing) -> terra_build::Shape {
+        use terra_build::Shape;
         match self {
-            BlockShape::Whole => terra_build::Shape::Whole,
-            BlockShape::Half => terra_build::Shape::Half,
-            BlockShape::Stair => terra_build::Shape::Stair(facing),
-            BlockShape::Slope => terra_build::Shape::Slope(facing),
+            BlockShape::Whole => Shape::Whole,
+            BlockShape::Half => Shape::Half,
+            BlockShape::Stair => Shape::Stair(facing),
+            BlockShape::Slope => Shape::Slope(facing),
+            BlockShape::UpperHalf => Shape::UpperHalf,
+            BlockShape::InvertedStair => Shape::InvertedStair(facing),
+            BlockShape::InvertedSlope => Shape::InvertedSlope(facing),
+            BlockShape::OuterCorner => Shape::OuterCorner(facing),
+            BlockShape::InnerCorner => Shape::InnerCorner(facing),
         }
     }
 
     /// Whether it faces a way, which the wheel turns.
     pub fn turns(self) -> bool {
-        matches!(self, BlockShape::Stair | BlockShape::Slope)
+        self.shape(terra_build::Facing::North).facing().is_some()
     }
 }
 
@@ -361,8 +376,14 @@ pub enum Kind {
     Flight(Vec<FlightShape>),
     /// A post a storey high, to carry the floor above (D193).
     Post,
-    /// One cube of a shape, set against the face aimed at (D193).
+    /// One cube of a shape, set against the face aimed at (D193), or a box of them the
+    /// brush's size (D226).
     Block(Vec<(String, BlockShape)>),
+    /// Change the built cubes aimed at, the brush's box of them, to the material in hand,
+    /// built like everything else (D232).
+    Replace,
+    /// Carve the built cubes aimed at, the brush's box of them, out (D226).
+    Carve,
 }
 
 pub struct Part {
@@ -422,7 +443,13 @@ impl Part {
             Kind::Items(items) => items.len(),
             Kind::Flight(shapes) => shapes.len(),
             Kind::Block(shapes) => shapes.len(),
-            Kind::Door | Kind::Remove | Kind::Move | Kind::Floor | Kind::Post => 1,
+            Kind::Door
+            | Kind::Remove
+            | Kind::Move
+            | Kind::Floor
+            | Kind::Post
+            | Kind::Replace
+            | Kind::Carve => 1,
         }
     }
 
@@ -436,7 +463,13 @@ impl Part {
             Kind::Items(items) => Some(&items[variant].name),
             Kind::Flight(shapes) => Some(&shapes[variant].name),
             Kind::Block(shapes) => Some(&shapes[variant].0),
-            Kind::Door | Kind::Remove | Kind::Move | Kind::Floor | Kind::Post => None,
+            Kind::Door
+            | Kind::Remove
+            | Kind::Move
+            | Kind::Floor
+            | Kind::Post
+            | Kind::Replace
+            | Kind::Carve => None,
         }
     }
 }

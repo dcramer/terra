@@ -736,7 +736,7 @@ fn lay_walls(base: &Base, kit: &Kit, kits: &Kits, scope: Scope) -> Layout {
     }
     runs::posts(&walls, &ours, &mut layout);
     runs::corner_posts(&walls, kit, kits, &ours, &mut layout);
-    trims::ends(&walls, kit, &ours, &mut layout);
+    trims::ends(&walls, kit, kits, &ours, &mut layout);
     if kit.textures.contains_key(&Material::Floor) {
         floors::decks(&walls, kit, scope, &mut layout);
     }

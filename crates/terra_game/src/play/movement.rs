@@ -73,11 +73,14 @@ fn walk(
             &View,
             &Intent,
             Has<Downed>,
+            Option<&super::tool::Builder>,
         ),
         With<Player>,
     >,
 ) {
-    for (mut transform, mut motion, mut stance, mut vitals, view, intent, downed) in &mut players {
+    for (mut transform, mut motion, mut stance, mut vitals, view, intent, downed, builder) in
+        &mut players
+    {
         // Lying where you fell, you do not move.
         if downed {
             motion.velocity = Vec3::ZERO;
@@ -100,6 +103,8 @@ fn walk(
         if stance.dodging == 0.0
             && motion.on_ground
             && intent.pressed(Action::Dodge)
+            // Ctrl and the wheel change the hammer's material while a part is in hand (D232).
+            && !builder.is_some_and(|builder| builder.takes_material())
             && vitals.as_mut().is_none_or(|body| body.spend(DODGE_STAMINA))
         {
             stance.dodging = DODGE_S;

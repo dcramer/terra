@@ -127,6 +127,65 @@ fn shapes(kind: Kind) -> Vec<BuildOp> {
     ops
 }
 
+/// The shapes of D231, in a kind: a mound hipped all round, slopes along its sides and
+/// outer corners at its corners; an L hipped the same, an inner corner where its arms meet;
+/// and a wall with a doorway under a lintel of upper halves, corbelled out at its top on
+/// inverted slopes to the north and inverted stairs to the south under a coping a cube
+/// wider each side.
+fn more_shapes(kind: Kind) -> Vec<BuildOp> {
+    let put = |min: [i32; 3], max: [i32; 3], shape: Shape| BuildOp::Fill {
+        min,
+        max,
+        cube: Some(Cube {
+            shape,
+            ..Cube::new(kind, Fill::Solid)
+        }),
+    };
+    use Facing::{East, North, South, West};
+    let mut ops = vec![
+        put([0, 0, 0], [5, 0, 5], Shape::Whole),
+        put([1, 1, 1], [4, 1, 4], Shape::Whole),
+        put([1, 1, 0], [4, 1, 0], Shape::Slope(South)),
+        put([1, 1, 5], [4, 1, 5], Shape::Slope(North)),
+        put([0, 1, 1], [0, 1, 4], Shape::Slope(East)),
+        put([5, 1, 1], [5, 1, 4], Shape::Slope(West)),
+        put([0, 1, 0], [0, 1, 0], Shape::OuterCorner(East)),
+        put([5, 1, 0], [5, 1, 0], Shape::OuterCorner(South)),
+        put([5, 1, 5], [5, 1, 5], Shape::OuterCorner(West)),
+        put([0, 1, 5], [0, 1, 5], Shape::OuterCorner(North)),
+    ];
+    // An L two cubes wide, hipped: slopes either side of each arm meeting at a ridge,
+    // outer corners at its ends and an inner corner, a valley's, where the arms meet.
+    ops.push(put([7, 0, 0], [11, 0, 1], Shape::Whole));
+    ops.push(put([7, 0, 2], [8, 0, 4], Shape::Whole));
+    for (min, max, shape) in [
+        ([8, 1, 0], [10, 1, 0], Shape::Slope(South)),
+        ([9, 1, 1], [10, 1, 1], Shape::Slope(North)),
+        ([7, 1, 1], [7, 1, 3], Shape::Slope(East)),
+        ([8, 1, 2], [8, 1, 3], Shape::Slope(West)),
+        ([7, 1, 0], [7, 1, 0], Shape::OuterCorner(East)),
+        ([11, 1, 0], [11, 1, 0], Shape::OuterCorner(South)),
+        ([11, 1, 1], [11, 1, 1], Shape::OuterCorner(West)),
+        ([7, 1, 4], [7, 1, 4], Shape::OuterCorner(North)),
+        ([8, 1, 4], [8, 1, 4], Shape::OuterCorner(West)),
+        ([8, 1, 1], [8, 1, 1], Shape::InnerCorner(West)),
+    ] {
+        ops.push(put(min, max, shape));
+    }
+    // The wall, its doorway a metre wide, its lintel upper halves.
+    ops.push(put([12, 0, 4], [19, 4, 4], Shape::Whole));
+    ops.push(BuildOp::Fill {
+        min: [14, 0, 4],
+        max: [15, 3, 4],
+        cube: None,
+    });
+    ops.push(put([14, 3, 4], [15, 3, 4], Shape::UpperHalf));
+    ops.push(put([12, 4, 3], [19, 4, 3], Shape::InvertedSlope(South)));
+    ops.push(put([12, 4, 5], [19, 4, 5], Shape::InvertedStair(North)));
+    ops.push(put([12, 5, 3], [19, 5, 5], Shape::Whole));
+    ops
+}
+
 /// A floor laid alone on the ground, with no walls: its edges finished as they are.
 fn floor_alone(kind: Kind) -> Vec<BuildOp> {
     vec![BuildOp::SetFloor {
@@ -329,6 +388,14 @@ fn rows(kind: Kind, stone: Option<Kind>, hewn: Option<Kind>) -> Vec<(&'static st
         rows.push(("Keen's piece in hewn timber", keen(hewn, false)));
         rows.push(("shapes in hewn timber", shapes(hewn)));
     }
+    // The shapes of D231 in each kind, after the rest so those keep their places.
+    rows.push(("more shapes in logs", more_shapes(kind)));
+    if let Some(stone) = stone {
+        rows.push(("more shapes in stone", more_shapes(stone)));
+    }
+    if let Some(hewn) = hewn {
+        rows.push(("more shapes in hewn timber", more_shapes(hewn)));
+    }
     rows
 }
 
@@ -447,6 +514,13 @@ fn acted_rows(kind: Kind, stone: Kind) -> Vec<Acted> {
             sloped: false,
             view: [Vec3::new(2.5, 2.4, 9.0), Vec3::new(2.5, 1.3, 0.0)],
         },
+        Acted {
+            name: "stone changed to logs in place",
+            ops: east_west(0, 9, 0, stone).collect(),
+            columns: changed(kind),
+            sloped: false,
+            view: [Vec3::new(2.5, 2.4, 9.0), Vec3::new(2.5, 1.3, 0.0)],
+        },
         // Last, as the ground cut away falls north beyond it.
         Acted {
             name: "cabin on a slope",
@@ -456,6 +530,40 @@ fn acted_rows(kind: Kind, stone: Kind) -> Vec<Acted> {
             view: [Vec3::new(9.0, 5.0, -12.0), Vec3::new(2.5, -0.5, 2.0)],
         },
     ]
+}
+
+/// A built wall's cubes changed to another kind in place (D232), a block of them two wide
+/// and two high a metre up, as the hammer's Change material does it: marked; the old taken
+/// out, swapped and a course of the new in; and all of the new in.
+fn changed(to: Kind) -> [Vec<Op>; 3] {
+    let block: Vec<[i32; 3]> = [4, 5]
+        .into_iter()
+        .flat_map(|x| [2, 3].map(|y| [x, y, 0]))
+        .collect();
+    let layer =
+        |y: i32| -> Vec<[i32; 3]> { block.iter().copied().filter(|at| at[1] == y).collect() };
+    let marked = vec![Op::Replace {
+        cubes: block.clone(),
+        kind: to,
+        part: Some(terra_build::PartId(900)),
+    }];
+    let mut going = marked.clone();
+    going.extend([
+        Op::Empty { cubes: layer(3) },
+        Op::Empty { cubes: layer(2) },
+        Op::Swap {
+            cubes: block.clone(),
+        },
+        Op::Fill { cubes: layer(2) },
+    ]);
+    let mut done = going.clone();
+    done.extend([
+        Op::Fill { cubes: layer(2) },
+        Op::Fill { cubes: layer(3) },
+        Op::Fill { cubes: layer(3) },
+        Op::Cancel { cubes: block },
+    ]);
+    [marked, going, done]
 }
 
 /// The ground under the yard cut away into a slope falling north from a row's south edge,
@@ -746,7 +854,10 @@ pub(super) fn lay(
             build.next = build
                 .base
                 .cubes()
-                .filter(|(_, cube)| cube.pending == terra_build::Pending::Carve && cube.is_built())
+                .filter(|(_, cube)| {
+                    (cube.pending == terra_build::Pending::Carve && cube.is_built())
+                        || (cube.pending.changing() && !cube.is_built())
+                })
                 .map(|(at, _)| at.to_array())
                 .collect();
             build.revision += 1;

@@ -228,30 +228,39 @@ pub struct Dressed {
 /// course of dressed stone.
 pub const LIFT_STEP: i32 = TICKS / 4;
 
-/// The neighbourhood roles are read from: a base's cubes of one kind, the kinds drawn
-/// thinner than a cube (whose neighbours' faces still show beside them), and the ground's
-/// samples under the base.
+/// The neighbourhood roles are read from: a base's cubes of one kind, the kinds beside
+/// which its faces still show (drawn thinner than a cube, and not running through it), the
+/// kinds it carries a cap under (D232), and the ground's samples under the base.
 pub struct Roles<'a> {
     base: &'a Base,
     kind: Kind,
     thin: Vec<Kind>,
+    capped: Vec<Kind>,
     known: RefCell<BTreeMap<[i32; 3], Vec<Edge>>>,
 }
 
 impl<'a> Roles<'a> {
-    /// Roles of `kind`'s cubes in a base, the kits saying which kinds are drawn thinner than
-    /// a cube: those of long members.
+    /// Roles of `kind`'s cubes in a base, the kits saying how it meets the others (D232):
+    /// its faces show beside a kind of long members, drawn thinner than a cube, that does
+    /// not run through it; it carries a cap under a kind it runs through, if its table says.
     pub fn new(base: &'a Base, kind: Kind, kits: &Kits) -> Roles<'a> {
         let thin = kits
             .0
             .iter()
-            .filter(|kit| kit.pattern == Pattern::Logs)
+            .filter(|kit| kit.pattern == Pattern::Logs && !kits.through(kit.kind(), kind))
+            .map(|kit| kit.kind())
+            .collect();
+        let capped = kits
+            .0
+            .iter()
+            .filter(|kit| kits.carries(kind, kit.kind()) == crate::kit::Joint::Cap)
             .map(|kit| kit.kind())
             .collect();
         Roles {
             base,
             kind,
             thin,
+            capped,
             known: RefCell::default(),
         }
     }
@@ -354,7 +363,7 @@ impl<'a> Roles<'a> {
                     continue;
                 }
                 if vertical == Dir::Up {
-                    if matches!(fv, Beyond::Other(kind) if self.thin.contains(&kind)) {
+                    if matches!(fv, Beyond::Other(kind) if self.capped.contains(&kind)) {
                         push(Role::Meet, side, vertical);
                     }
                     continue;
@@ -429,7 +438,10 @@ impl<'a> Roles<'a> {
     /// A cube's edges with their ends, as laid.
     pub fn dressed(&self, cube: IVec3) -> Vec<Dressed> {
         let edges = self.edges(cube);
-        let (lift, sink) = if edges.iter().any(|e| e.role == Role::Foot) {
+        // A foot follows the ground, but not where it stands on another kind, as stone
+        // over a block of logs changed in it (D232), whose plinth would sink over them.
+        let on_other = matches!(self.beyond(cube - IVec3::Y), Beyond::Other(_));
+        let (lift, sink) = if edges.iter().any(|e| e.role == Role::Foot) && !on_other {
             self.lift(cube)
         } else {
             (0, 0)
@@ -733,6 +745,59 @@ mod tests {
             .filter(|e| e.edge.role == Role::Foot)
             .count();
         assert_eq!(foot, 2);
+    }
+
+    #[test]
+    fn stone_over_logs_changed_into_a_wall_has_a_foot_that_does_not_sink_over_them() {
+        // A stone wall with a block of logs two wide and two high changed into it, a
+        // metre up: the stone over the logs stands on them, its foot level with them.
+        let mut base = base(&[([0, 0, 0], [9, 5, 0])]);
+        fill(&mut base, [4, 2, 0], [5, 3, 0], LOGS);
+        let d = all(&base);
+        let feet = at(&d, [4, 4, 0], Role::Foot);
+        assert_eq!(feet.len(), 2);
+        assert!(feet.iter().all(|foot| foot.sink == 0 && foot.lift == 0));
+        // Its sides quoined, the stone running through, and capped under them.
+        assert_eq!(at(&d, [3, 2, 0], Role::Arris).len(), 2);
+        assert_eq!(at(&d, [4, 1, 0], Role::Meet).len(), 2);
+    }
+
+    #[test]
+    fn how_kinds_meet_is_the_kits_table_not_their_pattern() {
+        use crate::kit::{Joint, Meet, Meets};
+        let mut base = base(&[([0, 0, 0], [5, 0, 0])]);
+        fill(&mut base, [0, 1, 0], [3, 3, 0], LOGS);
+        fill(&mut base, [4, 1, 0], [5, 3, 0], STONE);
+        // The defaults: stone runs through logs and caps them, logs end with a board.
+        let kits = kits();
+        assert!(kits.through(STONE, LOGS) && !kits.through(LOGS, STONE));
+        assert_eq!(kits.carries(STONE, LOGS), Joint::Cap);
+        assert_eq!(kits.end(LOGS, STONE), Joint::Board);
+        // A stone whose table lets logs run through it: no quoins up the joint, no cap, and
+        // the logs' table read the other way round.
+        let mut table = Meets::of(Pattern::Masonry);
+        table.kinds.insert(
+            LOGS.0,
+            Meet {
+                through: Some(false),
+                ..Meet::default()
+            },
+        );
+        let mut changed = kits.clone();
+        changed.0[1].meets = Some(table);
+        assert!(changed.through(LOGS, STONE));
+        assert_eq!(changed.end(LOGS, STONE), Joint::None);
+        let roles = Roles::new(&base, STONE, &changed);
+        let d = roles.all(base.cubes().map(|(at, _)| at));
+        assert!(at(&d, [1, 0, 0], Role::Meet).is_empty());
+        assert!(at(&d, [4, 2, 0], Role::Arris).is_empty());
+        // A heavier timber, by weight alone, runs through stone the same way.
+        let mut heavy = kits.clone();
+        heavy.0[0].meets = Some(Meets {
+            weight: 4,
+            ..Meets::of(Pattern::Logs)
+        });
+        assert!(heavy.through(LOGS, STONE));
     }
 
     #[test]

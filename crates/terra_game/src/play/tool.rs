@@ -21,7 +21,12 @@
 //!   F                  move mode, and back
 //!   X                  the grid on and off: items snap to it and turn in eighths
 //!   Hold Alt           the opposite of the grid setting, while held
-//!   Middle click       pick another of the item the view is on                 (or V)
+//!   Ctrl and wheel     the material walls, floors, roofs and blocks are laid in (D232);
+//!                      Ctrl is the roll's key, which waits while a part is in hand
+//!   Alt and wheel      the brush: blocks, changing material, carving and taking out
+//!                      a box half a metre, 1, 2 or 4 m across (D226)
+//!   Middle click       pick another of the item the view is on, or the material of
+//!                      the cube it is on                                       (or V)
 //!   1 to 9, 0          the first ten parts directly
 //!
 //! Those are the defaults. Every control but the wheel and the numbers can be set to
@@ -332,6 +337,12 @@ pub struct Builder {
     aimed: Option<IVec3>,
     /// What the hammer would do to the base now.
     pub planned: Option<Planned>,
+    /// The material, a kind of construction, every plan is laid in (D232): picked on Ctrl
+    /// and the wheel, or from a cube with the middle button; none picked, the first kit.
+    pub material: Option<terra_build::Kind>,
+    /// How many cubes across the brush is that blocks are laid, changed and carved with,
+    /// and cubes taken out (D226): 1, 2, 4 or 8, half a metre to four.
+    pub brush: i32,
 }
 
 impl Default for Builder {
@@ -368,6 +379,8 @@ impl Default for Builder {
             target: Target::Nothing,
             aimed: None,
             planned: None,
+            material: None,
+            brush: 1,
         }
     }
 }
@@ -462,13 +475,50 @@ impl Builder {
     }
 
     /// Whether the mouse wheel turns what is in hand, rather than moving the camera: while
-    /// a part is out that the wheel turns or switches.
+    /// a part is out that the wheel turns or switches, or that is laid in a material, which
+    /// Ctrl and the wheel change, or with a brush, which Alt and the wheel size.
     pub fn wants_wheel(&self, builds: &Builds) -> bool {
         !self.stowed
             && (self.item(builds).is_some()
                 || self.room(builds).is_some()
                 || self.faces(builds)
+                || self.lays_material(builds)
+                || self.brushes(builds)
                 || matches!(self.picked(builds).kind, Kind::Wall(_)))
+    }
+
+    /// Whether Ctrl is the material key now, not the roll: a part is in hand (D232).
+    pub fn takes_material(&self) -> bool {
+        self.in_hand && !self.stowed
+    }
+
+    /// Whether the part in hand is laid, or changes cubes, in the material picked.
+    pub fn lays_material(&self, builds: &Builds) -> bool {
+        matches!(
+            self.picked(builds).kind,
+            Kind::Room(_)
+                | Kind::Roof(_)
+                | Kind::Wall(_)
+                | Kind::Floor
+                | Kind::Flight(_)
+                | Kind::Post
+                | Kind::Block(_)
+                | Kind::Replace
+        )
+    }
+
+    /// Whether the part in hand works on a box the brush's size (D226): blocks, changing
+    /// material, carving and taking out cubes.
+    pub fn brushes(&self, builds: &Builds) -> bool {
+        matches!(
+            self.picked(builds).kind,
+            Kind::Block(_) | Kind::Replace | Kind::Carve | Kind::Remove
+        )
+    }
+
+    /// The brush's size in metres.
+    pub fn brush_m(&self) -> f32 {
+        self.brush as f32 * CELL_M
     }
 
     /// How far through building or taking apart the builder is, from 0 to 1, and whether
@@ -627,6 +677,8 @@ fn price(
 /// in hand. The builder only answers while it is the tool in hand.
 fn choose(
     builds: Res<Builds>,
+    rules: Res<crate::build::act::BuildRules>,
+    look: Res<crate::build::BuildLook>,
     mut belongings: Belongings,
     mut players: Query<(Entity, &Intent, &mut Builder), With<Player>>,
 ) {
@@ -666,6 +718,26 @@ fn choose(
             }
         }
         if builder.stowed {
+            continue;
+        }
+        // Ctrl and the wheel change the material plans are laid in (D232), through every
+        // kit there is, as Enshrouded's do: the roll's key, as Shift and the wheel are
+        // the sprint's, the roll waiting while a part is in hand. Alt and the wheel change
+        // the brush's size (D226).
+        if intent.held(Action::Dodge) && intent.wheel != 0 {
+            let kinds: Vec<terra_build::Kind> = rules.names.keys().copied().collect();
+            if !kinds.is_empty() {
+                let now = builder.material.unwrap_or(look.laying);
+                let at = kinds.iter().position(|&kind| kind == now).unwrap_or(0) as i32;
+                let next = (at + intent.wheel).rem_euclid(kinds.len() as i32) as usize;
+                builder.material = Some(kinds[next]);
+            }
+            continue;
+        }
+        if intent.held(Action::OffGrid) && intent.wheel != 0 && builder.brushes(&builds) {
+            let sizes = [1, 2, 4, 8];
+            let at = sizes.iter().position(|&n| n == builder.brush).unwrap_or(0) as i32;
+            builder.brush = sizes[(at + intent.wheel).clamp(0, 3) as usize];
             continue;
         }
         // Shift and the wheel, or Page Up and Page Down, raise and lower what is placed: an

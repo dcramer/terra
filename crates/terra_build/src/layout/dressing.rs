@@ -23,6 +23,9 @@ pub(super) fn dresses(kit: &Kit) -> bool {
         .any(|dress| matches!(dress, Dress::Profile { .. } | Dress::Corners { .. }))
 }
 
+/// What lays a band: its role, its line, the face it looks out of and its ends.
+type BandFn<'a> = dyn FnMut(Role, ([i32; 3], [i32; 3]), Dir, [End; 2]) + 'a;
+
 /// Lays the dress of every cube of a kit's kind in a scope.
 pub(super) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mut Vec<Piece>) {
     if !dresses(kit) {
@@ -115,18 +118,93 @@ fn shaped(base: &Base, roles: &Roles, kit: &Kit, cube: IVec3, pieces: &mut Vec<P
             }
         })
     };
-    match this.shape {
-        Shape::Half => {
+    // How high a face's line is at each end, low end first, in ticks over the cube's foot:
+    // its top's, or its underside's.
+    let heights = |side: Dir, under: bool| {
+        let axis = 3 - side.axis() - 1;
+        [0.0f32, 1.0].map(|t| {
+            let (mut u, mut v) = (0.5, 0.5);
+            match side {
+                Dir::East => u = 1.0,
+                Dir::West => u = 0.0,
+                Dir::South => v = 1.0,
+                _ => v = 0.0,
+            }
+            if axis == 0 {
+                u = t;
+            } else {
+                v = t;
+            }
+            let h = if under {
+                this.shape.bottom(u, v)
+            } else {
+                this.shape.top(u, v)
+            };
+            (h * TICKS as f32).round() as i32
+        })
+    };
+    // A planed top or underside (D231): a band along each open side's line, level or
+    // raking, as a half's coping, a slope's or a corner's raking up its sides, or under an
+    // upper half or an inverted slope a fascia; a whole top a coping where it is open over.
+    let planed = |role: Role, under: bool, band: &mut BandFn| {
+        for side in Dir::LEVEL {
+            if !open(cube + side.step()) || shape_at(cube + side.step()) == Some(this.shape) {
+                continue;
+            }
+            let [a, b] = heights(side, under);
+            let (mut from, mut to) = top(side);
+            from[1] = cube.y * TICKS + a;
+            to[1] = cube.y * TICKS + b;
+            match (a, b) {
+                (0, 0) if !under => {}
+                (TICKS, TICKS) if under => {}
+                _ if a == b => band(role, (from, to), side, ends(side, true)),
+                _ => band(role, (from, to), side, [End::Square; 2]),
+            }
+        }
+    };
+    let crest_over = |band: &mut BandFn| {
+        if open(cube + IVec3::Y) {
             for side in Dir::LEVEL {
-                if open(cube + side.step()) {
-                    band(
-                        Role::Crest,
-                        moved(top(side), IVec3::new(0, -half, 0)),
-                        side,
-                        ends(side, true),
-                    );
+                if open(cube + side.step()) && shape_at(cube + side.step()) != Some(this.shape) {
+                    band(Role::Crest, top(side), side, ends(side, true));
                 }
             }
+        }
+    };
+    match this.shape {
+        shape if shape.planed_top() && !matches!(shape, Shape::Slope(_)) => {
+            planed(Role::Crest, false, &mut band);
+        }
+        Shape::UpperHalf | Shape::InvertedSlope(_) => {
+            planed(Role::Soffit, true, &mut band);
+            crest_over(&mut band);
+        }
+        Shape::InvertedStair(facing) => {
+            // A stair upside down: a fascia under each of its two steps' fronts.
+            let front = Dir::facing(facing).opposite();
+            let ends = ends(front, false);
+            let foot = super::roles::line(
+                cube,
+                Edge {
+                    role: Role::Soffit,
+                    side: front,
+                    other: Dir::Down,
+                },
+            );
+            if open(cube + front.step()) {
+                band(
+                    Role::Soffit,
+                    moved(foot, IVec3::new(0, half, 0)),
+                    front,
+                    ends,
+                );
+            }
+            if shape_at(cube - IVec3::Y).is_none() {
+                let back = Dir::facing(facing).step() * half;
+                band(Role::Soffit, moved(foot, back), front, ends);
+            }
+            crest_over(&mut band);
         }
         Shape::Stair(facing) => {
             let front = Dir::facing(facing).opposite();
@@ -189,7 +267,7 @@ fn shaped(base: &Base, roles: &Roles, kit: &Kit, cube: IVec3, pieces: &mut Vec<P
                 }
             }
         }
-        Shape::Whole => {}
+        _ => {}
     }
 }
 

@@ -460,9 +460,12 @@ fn touched(ops: &[terra_build::ops::Op], placed: bool) -> Vec<IVec3> {
                 .iter()
                 .map(|cube| IVec3::from_array(cube.at))
                 .collect(),
-            Op::Fill { cubes } | Op::Empty { cubes } | Op::Open { cubes } | Op::Close { cubes } => {
-                cubes.iter().map(|&at| IVec3::from_array(at)).collect()
-            }
+            Op::Fill { cubes }
+            | Op::Empty { cubes }
+            | Op::Open { cubes }
+            | Op::Close { cubes }
+            | Op::Replace { cubes, .. }
+            | Op::Carve { cubes } => cubes.iter().map(|&at| IVec3::from_array(at)).collect(),
             Op::FitProp(prop) => prop.cubes().collect(),
             _ => Vec::new(),
         })
