@@ -1337,16 +1337,11 @@ fn an_edit_laid_again_only_as_far_as_it_reaches_is_as_laid_whole() {
         .unwrap();
         kits.0[index].kind()
     };
-    let kinds = crate::village::Kinds {
-        logs: named("logs"),
-        stone: named("stone"),
-        hewn: named("hewn"),
-        earth: named("earth"),
-        wattle: named("wattle"),
-        shakes: named("shakes"),
-        slate: named("slate"),
-        thatch: named("thatch"),
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let read = |path: &str| {
+        std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
     };
+    let kinds = crate::village::Kinds::read(&read, &|name| Some(named(name)), &kits).unwrap();
     // And a long hall of each kind of wall, five sections long, a cube taken out at its
     // end and one added there.
     let mut bases: Vec<(String, Base)> = crate::village::town(3, 14, kinds)

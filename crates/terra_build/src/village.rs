@@ -31,16 +31,68 @@ use std::collections::BTreeSet;
 /// The kinds a village is built of: its kits', and the roofs over each kind of wall.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Kinds {
-    pub logs: Kind,
-    pub stone: Kind,
-    pub hewn: Kind,
-    /// Cob earth, and wattle and daub in a timber frame (D227, D236).
-    pub earth: Kind,
-    pub wattle: Kind,
-    /// Shakes over logs, slate over stone, thatch over hewn timber.
-    pub shakes: Kind,
-    pub slate: Kind,
-    pub thatch: Kind,
+    /// Walls of round timber, of masonry and of squared beams, by role, each a material
+    /// the settlement's data names (`assets/data/settlement.ron`).
+    pub timber: Kind,
+    pub masonry: Kind,
+    pub beams: Kind,
+    /// Walls packed of earth, and an infill in a timber frame (D227, D236).
+    pub cob: Kind,
+    pub framed: Kind,
+    /// The roof each of the first three takes: its material's `roof_kind`.
+    pub timber_roof: Kind,
+    pub masonry_roof: Kind,
+    pub beams_roof: Kind,
+}
+
+/// Where what a settlement is built of is said, under `assets/`.
+pub const SETTLEMENT: &str = "data/settlement.ron";
+
+/// What a settlement is built of, by role, as its data names the materials (D290): no
+/// code names one.
+#[derive(Clone, Debug, PartialEq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Settlement {
+    pub timber: String,
+    pub masonry: String,
+    pub beams: String,
+    pub cob: String,
+    pub framed: String,
+}
+
+impl Kinds {
+    /// A settlement's kinds from its file, `read` giving a file under `assets/`, `named` a
+    /// material's kind by its file's name, and `kits` the roof each takes.
+    pub fn read(
+        read: &dyn Fn(&str) -> Result<String, String>,
+        named: &dyn Fn(&str) -> Option<Kind>,
+        kits: &crate::kit::Kits,
+    ) -> Result<Kinds, String> {
+        let text = read(SETTLEMENT)?;
+        let settlement: Settlement =
+            ron::from_str(&text).map_err(|why| format!("{SETTLEMENT}: {why}"))?;
+        let kind =
+            |name: &str| named(name).ok_or_else(|| format!("{SETTLEMENT}: no material {name}"));
+        let roof = |kind: Kind| {
+            kits.roof_for(kind)
+                .ok_or_else(|| format!("{SETTLEMENT}: no roof over {kind:?}"))
+        };
+        let (timber, masonry, beams) = (
+            kind(&settlement.timber)?,
+            kind(&settlement.masonry)?,
+            kind(&settlement.beams)?,
+        );
+        Ok(Kinds {
+            timber,
+            masonry,
+            beams,
+            cob: kind(&settlement.cob)?,
+            framed: kind(&settlement.framed)?,
+            timber_roof: roof(timber)?,
+            masonry_roof: roof(masonry)?,
+            beams_roof: roof(beams)?,
+        })
+    }
 }
 
 /// One of a village's buildings: what it is, where it stands and which way it looks, and
@@ -81,21 +133,21 @@ pub enum Plan {
 /// What a building's walls are, of the kits' kinds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Scheme {
-    Logs,
-    Stone,
-    Hewn,
-    /// Log walls on a stone plinth a metre high.
-    LogsOnPlinth,
-    /// A stone ground floor with hewn timber over it.
-    StoneUnderTimber,
-    /// Log walls, their gable ends of stone.
-    StoneEnds,
-    /// Cob earth on its plinth (D236).
-    Earth,
-    /// Wattle and daub in an oak frame (D236).
-    Wattle,
-    /// A stone ground floor with wattle and daub over it.
-    StoneUnderWattle,
+    Timber,
+    Masonry,
+    Beams,
+    /// Timber walls on a masonry plinth a metre high.
+    TimberOnPlinth,
+    /// A masonry ground floor with beams over it.
+    MasonryUnderBeams,
+    /// Timber walls, their gable ends of masonry.
+    MasonryEnds,
+    /// Walls packed of earth on their plinth (D236).
+    Cob,
+    /// An infill in a timber frame (D236).
+    Framed,
+    /// A masonry ground floor with framed walls over it.
+    MasonryUnderFramed,
 }
 
 /// A roof over a building.
@@ -241,13 +293,15 @@ impl Block {
 /// The kinds a scheme's walls are: on the ground storey and over it.
 fn walls_of(scheme: Scheme, kinds: Kinds) -> (Kind, Kind) {
     match scheme {
-        Scheme::Logs | Scheme::LogsOnPlinth | Scheme::StoneEnds => (kinds.logs, kinds.logs),
-        Scheme::Stone => (kinds.stone, kinds.stone),
-        Scheme::Hewn => (kinds.hewn, kinds.hewn),
-        Scheme::StoneUnderTimber => (kinds.stone, kinds.hewn),
-        Scheme::Earth => (kinds.earth, kinds.earth),
-        Scheme::Wattle => (kinds.wattle, kinds.wattle),
-        Scheme::StoneUnderWattle => (kinds.stone, kinds.wattle),
+        Scheme::Timber | Scheme::TimberOnPlinth | Scheme::MasonryEnds => {
+            (kinds.timber, kinds.timber)
+        }
+        Scheme::Masonry => (kinds.masonry, kinds.masonry),
+        Scheme::Beams => (kinds.beams, kinds.beams),
+        Scheme::MasonryUnderBeams => (kinds.masonry, kinds.beams),
+        Scheme::Cob => (kinds.cob, kinds.cob),
+        Scheme::Framed => (kinds.framed, kinds.framed),
+        Scheme::MasonryUnderFramed => (kinds.masonry, kinds.framed),
     }
 }
 
@@ -255,7 +309,7 @@ fn walls_of(scheme: Scheme, kinds: Kinds) -> (Kind, Kind) {
 /// where those are framed, whose infill makes no floor.
 fn decks_of(scheme: Scheme, kinds: Kinds) -> Kind {
     match scheme {
-        Scheme::Wattle | Scheme::StoneUnderWattle => kinds.hewn,
+        Scheme::Framed | Scheme::MasonryUnderFramed => kinds.beams,
         _ => walls_of(scheme, kinds).1,
     }
 }
@@ -304,11 +358,11 @@ fn house(draft: &mut Draft, blocks: &[Block], scheme: Scheme, kinds: Kinds, hall
             }
         }
     }
-    let stone = Cube::new(kinds.stone, Fill::Solid);
+    let stone = Cube::new(kinds.masonry, Fill::Solid);
     match scheme {
         // A metre of stone at the foot of every wall, its doorway's left open, laid after
         // the windows, which set their tile's whole column.
-        Scheme::LogsOnPlinth => {
+        Scheme::TimberOnPlinth => {
             for block in blocks {
                 for side in sides(block.x0, block.x1, block.z0, block.z1) {
                     for [x, z] in side {
@@ -321,7 +375,7 @@ fn house(draft: &mut Draft, blocks: &[Block], scheme: Scheme, kinds: Kinds, hall
             }
         }
         // Both ends of the first block, under its gables, of stone to the top.
-        Scheme::StoneEnds => {
+        Scheme::MasonryEnds => {
             for x in [front.x0, front.x1] {
                 draft.fill([x, 0, front.z0], [x, STOREY_CUBES - 1, front.z1], stone);
             }
@@ -334,13 +388,13 @@ fn house(draft: &mut Draft, blocks: &[Block], scheme: Scheme, kinds: Kinds, hall
 /// hewn timber, cob and wattle and daub; over stone under timber, the timber's.
 fn roof_kind(scheme: Scheme, kinds: Kinds) -> Kind {
     match scheme {
-        Scheme::Logs | Scheme::LogsOnPlinth | Scheme::StoneEnds => kinds.shakes,
-        Scheme::Stone => kinds.slate,
-        Scheme::Hewn
-        | Scheme::StoneUnderTimber
-        | Scheme::Earth
-        | Scheme::Wattle
-        | Scheme::StoneUnderWattle => kinds.thatch,
+        Scheme::Timber | Scheme::TimberOnPlinth | Scheme::MasonryEnds => kinds.timber_roof,
+        Scheme::Masonry => kinds.masonry_roof,
+        Scheme::Beams
+        | Scheme::MasonryUnderBeams
+        | Scheme::Cob
+        | Scheme::Framed
+        | Scheme::MasonryUnderFramed => kinds.beams_roof,
     }
 }
 
@@ -593,9 +647,9 @@ impl ByHand {
 fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
     let mut hand = ByHand(Vec::new());
     let (x, z) = ([-6, 5], [-10, -1]);
-    hand.layer(x, z, -1, kinds.stone);
-    hand.walls(x, z, [0, 5], kinds.logs, 4);
-    hand.gable(x, z, 6, kinds.shakes, kinds.logs);
+    hand.layer(x, z, -1, kinds.masonry);
+    hand.walls(x, z, [0, 5], kinds.timber, 4);
+    hand.gable(x, z, 6, kinds.timber_roof, kinds.timber);
     // The dormer, four cubes across the front slope: the slopes it stands in taken out,
     // a face of logs with a window two cubes wide on the slope below, its cheeks back to
     // the ridge's foot.
@@ -606,33 +660,45 @@ fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
     }
     for cx in dormer[0]..=dormer[1] {
         if cx == dormer[0] || cx == dormer[1] {
-            hand.put([cx, 8, -2], kinds.logs, Shape::Whole);
+            hand.put([cx, 8, -2], kinds.timber, Shape::Whole);
         } else {
-            hand.open([cx, 8, -2], kinds.logs);
+            hand.open([cx, 8, -2], kinds.timber);
         }
     }
     for cz in [-3, -4] {
         for cx in dormer {
-            hand.put([cx, 8, cz], kinds.logs, Shape::Whole);
+            hand.put([cx, 8, cz], kinds.timber, Shape::Whole);
         }
     }
     // Its own little gable of shakes, ridge running back into the main roof, its front a
     // gable of logs over the window.
     for cz in -4..=-2 {
-        hand.put([dormer[0], 9, cz], kinds.shakes, Shape::Slope(Facing::East));
-        hand.put([dormer[1], 9, cz], kinds.shakes, Shape::Slope(Facing::West));
+        hand.put(
+            [dormer[0], 9, cz],
+            kinds.timber_roof,
+            Shape::Slope(Facing::East),
+        );
+        hand.put(
+            [dormer[1], 9, cz],
+            kinds.timber_roof,
+            Shape::Slope(Facing::West),
+        );
         for cx in dormer[0] + 1..dormer[1] {
-            let kind = if cz == -2 { kinds.logs } else { kinds.shakes };
+            let kind = if cz == -2 {
+                kinds.timber
+            } else {
+                kinds.timber_roof
+            };
             hand.put([cx, 9, cz], kind, Shape::Whole);
         }
         hand.put(
             [dormer[0] + 1, 10, cz],
-            kinds.shakes,
+            kinds.timber_roof,
             Shape::Slope(Facing::East),
         );
         hand.put(
             [dormer[1] - 1, 10, cz],
-            kinds.shakes,
+            kinds.timber_roof,
             Shape::Slope(Facing::West),
         );
     }
@@ -645,8 +711,8 @@ fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
 fn storey_over_roof(kinds: Kinds) -> Vec<BuildOp> {
     let mut hand = ByHand(Vec::new());
     let (x, z) = ([-6, 5], [-8, -1]);
-    hand.layer(x, z, -1, kinds.stone);
-    hand.walls(x, z, [0, 5], kinds.stone, 4);
+    hand.layer(x, z, -1, kinds.masonry);
+    hand.walls(x, z, [0, 5], kinds.masonry, 4);
     // The roof: slopes round its edge rising inward, corners where two meet, flat inside.
     for cx in x[0]..=x[1] {
         for cz in z[0]..=z[1] {
@@ -663,18 +729,18 @@ fn storey_over_roof(kinds: Kinds) -> Vec<BuildOp> {
                 (_, _, _, true) => Shape::Slope(Facing::North),
                 _ => Shape::Whole,
             };
-            hand.put([cx, 6, cz], kinds.slate, shape);
+            hand.put([cx, 6, cz], kinds.masonry_roof, shape);
         }
     }
     // The storey over it, on the roof's flat top, a window in its front.
     let (ux, uz) = ([-5, 4], [-7, -2]);
-    hand.walls(ux, uz, [7, 11], kinds.hewn, 0);
+    hand.walls(ux, uz, [7, 11], kinds.beams, 0);
     for cx in [-1, 0] {
         for layer in [8, 9] {
-            hand.open([cx, layer, uz[1]], kinds.hewn);
+            hand.open([cx, layer, uz[1]], kinds.beams);
         }
     }
-    hand.gable(ux, uz, 12, kinds.thatch, kinds.hewn);
+    hand.gable(ux, uz, 12, kinds.beams_roof, kinds.beams);
     hand.0
 }
 
@@ -688,11 +754,11 @@ fn shed(seed: u32, kinds: Kinds) -> Vec<BuildOp> {
         z0: -4,
         z1: -1,
     };
-    draft.room(block.min(0), block.max(0), kinds.logs);
+    draft.room(block.min(0), block.max(0), kinds.timber);
     for x in -2..=1 {
-        draft.wall([x, 0, -1], Panel::Door, kinds.logs);
+        draft.wall([x, 0, -1], Panel::Door, kinds.timber);
     }
-    roof(&mut draft, &[block], Roof::LeanTo, 0, kinds.shakes);
+    roof(&mut draft, &[block], Roof::LeanTo, 0, kinds.timber_roof);
     draft.ops
 }
 
@@ -700,7 +766,7 @@ fn shed(seed: u32, kinds: Kinds) -> Vec<BuildOp> {
 /// stair coming down toward the front: the door's place is the stair's foot.
 fn deck(kinds: Kinds) -> Vec<BuildOp> {
     let mut draft = Draft::new(0);
-    let kind = kinds.hewn;
+    let kind = kinds.beams;
     let whole = Cube::new(kind, Fill::Solid);
     let post = Cube {
         shape: Shape::Post,
@@ -741,7 +807,7 @@ fn low_wall(long: i32, kinds: Kinds) -> Vec<BuildOp> {
     draft.fill(
         [-half, 0, -1],
         [long - half - 1, 1, -1],
-        Cube::new(kinds.stone, Fill::Solid),
+        Cube::new(kinds.masonry, Fill::Solid),
     );
     draft.ops
 }
@@ -749,15 +815,15 @@ fn low_wall(long: i32, kinds: Kinds) -> Vec<BuildOp> {
 /// What a person would call a building of a plan, a scheme and a roof.
 fn name(plan: Plan, scheme: Scheme, roofed: Roof) -> String {
     let what = match scheme {
-        Scheme::Logs => "log",
-        Scheme::Stone => "stone",
-        Scheme::Hewn => "hewn timber",
-        Scheme::LogsOnPlinth => "log on a stone plinth",
-        Scheme::StoneUnderTimber => "stone and timber",
-        Scheme::StoneEnds => "log with stone ends",
-        Scheme::Earth => "cob",
-        Scheme::Wattle => "wattle and daub",
-        Scheme::StoneUnderWattle => "stone and wattle and daub",
+        Scheme::Timber => "timber",
+        Scheme::Masonry => "masonry",
+        Scheme::Beams => "squared timber",
+        Scheme::TimberOnPlinth => "timber on a masonry plinth",
+        Scheme::MasonryUnderBeams => "masonry and timber",
+        Scheme::MasonryEnds => "timber with masonry ends",
+        Scheme::Cob => "packed",
+        Scheme::Framed => "framed",
+        Scheme::MasonryUnderFramed => "masonry and framed",
     };
     let roofed = match roofed {
         Roof::Gable => "a gable",
@@ -785,7 +851,7 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
     let houses: [(Plan, Scheme, Roof, i32, [f32; 2], f32); 12] = [
         (
             Plan::Rectangle,
-            Scheme::Logs,
+            Scheme::Timber,
             Roof::Gable,
             12,
             [-26.0, -5.5],
@@ -793,7 +859,7 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
         ),
         (
             Plan::Rectangle,
-            Scheme::Stone,
+            Scheme::Masonry,
             Roof::Hip,
             14,
             [-13.0, -5.5],
@@ -801,7 +867,7 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
         ),
         (
             Plan::TwoStoreys,
-            Scheme::StoneUnderTimber,
+            Scheme::MasonryUnderBeams,
             Roof::Gable,
             12,
             [-1.0, -9.5],
@@ -809,26 +875,33 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
         ),
         (
             Plan::Rectangle,
-            Scheme::LogsOnPlinth,
+            Scheme::TimberOnPlinth,
             Roof::Gable,
             14,
             [13.0, -5.5],
             SOUTH,
         ),
-        (Plan::L, Scheme::Hewn, Roof::Gable, 14, [27.0, -9.0], SOUTH),
+        (Plan::L, Scheme::Beams, Roof::Gable, 14, [27.0, -9.0], SOUTH),
         (
             Plan::Rectangle,
-            Scheme::StoneEnds,
+            Scheme::MasonryEnds,
             Roof::Gable,
             14,
             [-25.0, 5.5],
             NORTH,
         ),
-        (Plan::T, Scheme::Logs, Roof::Hip, 14, [-9.0, 9.5], NORTH),
-        (Plan::U, Scheme::Stone, Roof::Gable, 18, [8.0, 10.0], NORTH),
+        (Plan::T, Scheme::Timber, Roof::Hip, 14, [-9.0, 9.5], NORTH),
+        (
+            Plan::U,
+            Scheme::Masonry,
+            Roof::Gable,
+            18,
+            [8.0, 10.0],
+            NORTH,
+        ),
         (
             Plan::Rectangle,
-            Scheme::Hewn,
+            Scheme::Beams,
             Roof::Hip,
             12,
             [24.0, 5.5],
@@ -837,7 +910,7 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
         // At the street's ends, the cob and the wattle and daub (D236).
         (
             Plan::Rectangle,
-            Scheme::Earth,
+            Scheme::Cob,
             Roof::Gable,
             12,
             [-40.0, 5.5],
@@ -845,7 +918,7 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
         ),
         (
             Plan::Rectangle,
-            Scheme::Wattle,
+            Scheme::Framed,
             Roof::Gable,
             12,
             [-42.0, -5.5],
@@ -853,7 +926,7 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
         ),
         (
             Plan::TwoStoreys,
-            Scheme::StoneUnderWattle,
+            Scheme::MasonryUnderFramed,
             Roof::Gable,
             12,
             [40.0, 9.5],
@@ -882,18 +955,18 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
     }
     // A woodshed beside the log cabin, its open front to the street.
     buildings.push(Building {
-        name: name(Plan::Shed, Scheme::Logs, Roof::LeanTo),
+        name: name(Plan::Shed, Scheme::Timber, Roof::LeanTo),
         plan: Plan::Shed,
-        scheme: Scheme::Logs,
+        scheme: Scheme::Timber,
         at: [-34.5, -6.5],
         facing: SOUTH + 0.15,
         ops: shed(hash(&[seed, 20]), kinds),
     });
     // The lookout at the east end, its stair down toward the street.
     buildings.push(Building {
-        name: name(Plan::Deck, Scheme::Hewn, Roof::Gable),
+        name: name(Plan::Deck, Scheme::Beams, Roof::Gable),
         plan: Plan::Deck,
-        scheme: Scheme::Hewn,
+        scheme: Scheme::Beams,
         at: [38.0, 2.0],
         facing: -std::f32::consts::FRAC_PI_2,
         ops: deck(kinds),
@@ -903,15 +976,15 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
     buildings.push(Building {
         name: "log cabin with a dormer, built by hand".to_string(),
         plan: Plan::Rectangle,
-        scheme: Scheme::Logs,
+        scheme: Scheme::Timber,
         at: [-56.0, -5.5],
         facing: SOUTH,
         ops: dormer_house(kinds),
     });
     buildings.push(Building {
-        name: "stone house with a storey over its roof, built by hand".to_string(),
+        name: "masonry house with a storey over its roof, built by hand".to_string(),
         plan: Plan::Rectangle,
-        scheme: Scheme::StoneUnderTimber,
+        scheme: Scheme::MasonryUnderBeams,
         at: [54.0, -5.5],
         facing: SOUTH,
         ops: storey_over_roof(kinds),
@@ -954,9 +1027,9 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
         for (at_east, at_south, facing, long) in lengths {
             n += 1;
             buildings.push(Building {
-                name: format!("stone garden wall {n}"),
+                name: format!("masonry garden wall {n}"),
                 plan: Plan::Wall,
-                scheme: Scheme::Stone,
+                scheme: Scheme::Masonry,
                 at: [at_east, at_south],
                 facing,
                 ops: low_wall(long, kinds),
@@ -973,15 +1046,15 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
 pub fn every_building() -> Vec<(Plan, Scheme, Roof, i32)> {
     use Scheme::*;
     const SCHEMES: [Scheme; 9] = [
-        Logs,
-        Stone,
-        Hewn,
-        LogsOnPlinth,
-        StoneUnderTimber,
-        StoneEnds,
-        Earth,
-        Wattle,
-        StoneUnderWattle,
+        Timber,
+        Masonry,
+        Beams,
+        TimberOnPlinth,
+        MasonryUnderBeams,
+        MasonryEnds,
+        Cob,
+        Framed,
+        MasonryUnderFramed,
     ];
     let mut all = Vec::new();
     for scheme in SCHEMES {
@@ -998,14 +1071,14 @@ pub fn every_building() -> Vec<(Plan, Scheme, Roof, i32)> {
                 }
             }
         }
-        if !matches!(scheme, LogsOnPlinth | StoneEnds) {
+        if !matches!(scheme, TimberOnPlinth | MasonryEnds) {
             for roofed in [Roof::Gable, Roof::Hip] {
                 all.push((Plan::TwoStoreys, scheme, roofed, 12));
             }
         }
     }
-    all.push((Plan::Shed, Logs, Roof::LeanTo, 6));
-    all.push((Plan::Deck, Hewn, Roof::Gable, 6));
+    all.push((Plan::Shed, Timber, Roof::LeanTo, 6));
+    all.push((Plan::Deck, Beams, Roof::Gable, 6));
     all
 }
 
@@ -1149,14 +1222,14 @@ mod tests {
     use std::collections::BTreeSet;
 
     const KINDS: Kinds = Kinds {
-        logs: Kind(1),
-        stone: Kind(2),
-        hewn: Kind(3),
-        earth: Kind(4),
-        wattle: Kind(5),
-        shakes: Kind(0x800),
-        slate: Kind(0x801),
-        thatch: Kind(0x802),
+        timber: Kind(1),
+        masonry: Kind(2),
+        beams: Kind(3),
+        cob: Kind(4),
+        framed: Kind(5),
+        timber_roof: Kind(0x800),
+        masonry_roof: Kind(0x801),
+        beams_roof: Kind(0x802),
     };
 
     #[test]

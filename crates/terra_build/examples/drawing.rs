@@ -30,16 +30,11 @@ fn main() -> ExitCode {
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     let (kits, names) = read_kits(&assets);
     let kind = |name: &str| *names.get(name).unwrap_or_else(|| panic!("no kit {name}"));
-    let kinds = terra_build::village::Kinds {
-        logs: kind("logs"),
-        stone: kind("stone"),
-        hewn: kind("hewn"),
-        earth: kind("earth"),
-        wattle: kind("wattle"),
-        shakes: kind("shakes"),
-        slate: kind("slate"),
-        thatch: kind("thatch"),
+    let read = |path: &str| {
+        std::fs::read_to_string(assets.join(path)).map_err(|why| format!("{path}: {why}"))
     };
+    let kinds = terra_build::village::Kinds::read(&read, &|name| Some(kind(name)), &kits)
+        .expect("the settlement's materials");
     let only: Option<String> = std::env::args().nth(1);
     let maps = Maps::default();
     let mut ok = true;
@@ -62,7 +57,7 @@ fn main() -> ExitCode {
         for op in &building.ops {
             base.apply(*op);
         }
-        base.lay_footings(kinds.stone, |column| {
+        base.lay_footings(kinds.masonry, |column| {
             -((column[0] + column[1]).rem_euclid(3) as i16) * 20
         });
         let progress = Progress::Whole;

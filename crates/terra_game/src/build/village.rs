@@ -203,10 +203,10 @@ pub(super) fn lay_scale(
             Building {
                 name: "castle".to_string(),
                 plan: terra_build::village::Plan::Rectangle,
-                scheme: terra_build::village::Scheme::Stone,
+                scheme: terra_build::village::Scheme::Masonry,
                 at: [0.0, 0.0],
                 facing: 0.0,
-                ops: terra_build::castle::castle(kinds.stone, kinds.hewn, kinds.slate),
+                ops: terra_build::castle::castle(kinds.masonry, kinds.beams, kinds.masonry_roof),
             },
             [0.0, -CASTLE_NORTH_M],
         ));

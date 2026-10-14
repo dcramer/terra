@@ -207,11 +207,11 @@ pub fn bench_village(
 ) -> Vec<(String, Vec<BuildOp>)> {
     let mut all = Vec::new();
     for (name, group, mixed) in [
-        ("logs", vec![logs], false),
-        ("stone", vec![stone], false),
-        ("hewn", vec![hewn], false),
-        ("stone and logs", vec![logs, stone], true),
-        ("stone and hewn", vec![hewn, stone], true),
+        ("timber", vec![logs], false),
+        ("masonry", vec![stone], false),
+        ("beams", vec![hewn], false),
+        ("masonry and timber", vec![logs, stone], true),
+        ("masonry and beams", vec![hewn, stone], true),
     ] {
         for (row, ops) in roof_rows(&group, mixed, roof) {
             all.push((format!("{name}: {row}"), ops));

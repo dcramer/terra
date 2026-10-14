@@ -1010,6 +1010,89 @@ mod tests {
         kit
     }
 
+    /// Every Rust file of a crate's source, outside its tests.
+    fn sources(crate_dir: &std::path::Path) -> Vec<(std::path::PathBuf, String)> {
+        let mut out = Vec::new();
+        let mut folders = vec![crate_dir.join("src")];
+        while let Some(folder) = folders.pop() {
+            for entry in std::fs::read_dir(&folder).unwrap().flatten() {
+                let path = entry.path();
+                let name = path.file_name().unwrap().to_string_lossy().to_string();
+                if path.is_dir() {
+                    if name != "tests" {
+                        folders.push(path);
+                    }
+                } else if name.ends_with(".rs") && name != "tests.rs" {
+                    let text = std::fs::read_to_string(&path).unwrap();
+                    let code = text.split("#[cfg(test)]").next().unwrap_or("").to_string();
+                    out.push((path, code));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn no_game_or_layout_code_names_a_material_or_its_number() {
+        // D290: kits are cleanly designed so none is customised by the game. What a
+        // material is and does comes from its pattern, its pack and its file; the code that
+        // lays and draws them, and the game's, names none (as a string: a material's or a
+        // pack's file name) and branches on no material's number (a kind written as a
+        // number, but for the two that mark the ranges, nothing and the first roof).
+        let mut names: Vec<String> = Vec::new();
+        for folder in [MATERIALS, crate::layers::PACKS] {
+            for entry in std::fs::read_dir(assets().join(folder)).unwrap().flatten() {
+                if let Some(stem) = entry.file_name().to_string_lossy().strip_suffix(".ron") {
+                    names.push(stem.to_string());
+                }
+            }
+        }
+        assert!(names.len() >= 10, "{names:?}");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut found = Vec::new();
+        for krate in [root.to_path_buf(), root.join("../terra_game")] {
+            for (path, code) in sources(&krate) {
+                for (n, line) in code.lines().enumerate() {
+                    let line = line.trim();
+                    if line.starts_with("//") {
+                        continue;
+                    }
+                    for name in &names {
+                        if line.contains(&format!("\"{name}\""))
+                            || line.contains(&format!("\"{name}.ron\""))
+                        {
+                            found.push(format!(
+                                "{}:{}: names {name}: {line}",
+                                path.display(),
+                                n + 1
+                            ));
+                        }
+                    }
+                    let numbered = line.match_indices("Kind(").any(|(at, _)| {
+                        let before = line[..at].chars().last();
+                        let after = line[at + 5..].chars().next();
+                        !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+                            && after.is_some_and(|c| c.is_ascii_digit())
+                    });
+                    // The ranges kinds are numbered in (`Kind::PLAIN`, `FIRST_ROOF`, `LAST`).
+                    let ranges = path.ends_with("cubes.rs") && line.starts_with("pub const");
+                    if numbered && !ranges {
+                        found.push(format!(
+                            "{}:{}: a kind by number: {line}",
+                            path.display(),
+                            n + 1
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(
+            found.is_empty(),
+            "code customised by material:\n{}",
+            found.join("\n")
+        );
+    }
+
     #[test]
     fn a_materials_toughness_is_its_patterns_unless_it_says_otherwise() {
         // D305: each pattern says how a cube of it stands up to harm, and a material may

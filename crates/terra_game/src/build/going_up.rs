@@ -64,12 +64,8 @@ fn build(
     let (min, max) = (IVec3::from_array(ROOM.0), IVec3::from_array(ROOM.1));
     if !progress.laid {
         progress.laid = true;
-        let Some(stone) = building
-            .rules
-            .footing
-            .or_else(|| building.rules.kind("stone"))
-        else {
-            warn!("Going up: there is no stone to build in.");
+        let Some(stone) = building.rules.footing else {
+            warn!("Going up: there is no footing kind to build in.");
             progress.done = true;
             return;
         };

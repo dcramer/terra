@@ -175,8 +175,6 @@ struct KitFile {
 }
 
 const KITS: &str = "data/kits";
-/// The kit things are laid in by default, which comes first.
-const FIRST_KIT: &str = "logs.ron";
 
 /// The assets the kits' files are read from: those next to the program, or, for a Windows
 /// copy run from WSL (`cargo xtask win`), the source's own, which it names in
@@ -188,7 +186,7 @@ fn kit_assets() -> std::path::PathBuf {
         .unwrap_or_else(|| bevy::asset::io::file::FileAssetReader::get_base_path().join("assets"))
 }
 
-/// Every kit's file: the first kit, then the rest by name.
+/// Every material's file, by name; `read_kits` puts them in order of id.
 fn kit_paths() -> Vec<std::path::PathBuf> {
     let folder = kit_assets().join(KITS);
     let mut paths: Vec<_> = std::fs::read_dir(&folder)
@@ -200,7 +198,7 @@ fn kit_paths() -> Vec<std::path::PathBuf> {
                 .collect()
         })
         .unwrap_or_default();
-    paths.sort_by_key(|path| (!path.ends_with(FIRST_KIT), path.clone()));
+    paths.sort();
     paths
 }
 
@@ -235,10 +233,12 @@ fn kit_names() -> BTreeMap<Kind, String> {
 /// Reads every kit. A mistake in one is said in the log and that kit left out; `None` if
 /// none could be read.
 fn read_kits() -> Option<Kits> {
-    let kits: Vec<Kit> = kit_paths()
+    let mut kits: Vec<Kit> = kit_paths()
         .iter()
         .filter_map(|path| read_kit(path))
         .collect();
+    // By id: the first, which things are laid in by default, the lowest (D290).
+    kits.sort_by_key(|kit| kit.id);
     (!kits.is_empty()).then_some(Kits(kits))
 }
 
@@ -750,22 +750,13 @@ fn floor_footing(base: &Base, kits: &Kits) -> Option<Kind> {
         .then_some(kind)
 }
 
-/// The kinds a village is built of (`terra_build::village`): the log kit's, the stone
-/// kit's and the hewn timber kit's, and the roof each takes.
+/// The kinds a village is built of (`terra_build::village`): each role's material as the
+/// settlement's data names it, and the roof each takes (D290).
 pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Kinds> {
-    let find = |pattern: Pattern, profile: terra_build::kit::Profile| {
-        kits.0
-            .iter()
-            .find(|kit| {
-                kit.pattern == pattern
-                    && (pattern == Pattern::Masonry || kit.timber.profile == profile)
-            })
-            .map(|kit| kit.kind())
+    let assets = kit_assets();
+    let read = |file: &str| {
+        std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
     };
-    use terra_build::kit::Profile;
-    let (stone, hewn) = (kits.footing()?.kind(), find(Pattern::Logs, Profile::Hewn)?);
-    // Earth and wattle and daub by their files' names (D236); stone and hewn timber where
-    // they are not there.
     let names = kit_names();
     let named = |name: &str| {
         names
@@ -773,17 +764,9 @@ pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Kinds> 
             .find(|(_, n)| n.as_str() == name)
             .map(|(k, _)| *k)
     };
-    let logs = find(Pattern::Logs, Profile::Round)?;
-    Some(terra_build::village::Kinds {
-        logs,
-        stone,
-        hewn,
-        earth: named("earth").unwrap_or(stone),
-        wattle: named("wattle").unwrap_or(hewn),
-        shakes: kits.roof_for(logs)?,
-        slate: kits.roof_for(stone)?,
-        thatch: kits.roof_for(hewn)?,
-    })
+    terra_build::village::Kinds::read(&read, &named, kits)
+        .map_err(|why| error!("{why}"))
+        .ok()
 }
 
 /// The kind footings are laid in (D194): stone, the first block kind by its id that is not

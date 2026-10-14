@@ -103,14 +103,14 @@ mod tests {
     use std::collections::BTreeMap;
 
     const KINDS: Kinds = Kinds {
-        logs: Kind(1),
-        stone: Kind(2),
-        hewn: Kind(3),
-        earth: Kind(4),
-        wattle: Kind(5),
-        shakes: Kind(0x800),
-        slate: Kind(0x801),
-        thatch: Kind(0x802),
+        timber: Kind(1),
+        masonry: Kind(2),
+        beams: Kind(3),
+        cob: Kind(4),
+        framed: Kind(5),
+        timber_roof: Kind(0x800),
+        masonry_roof: Kind(0x801),
+        beams_roof: Kind(0x802),
     };
 
     /// The kits' terms as the game's files give their steps: timber two courses a cube,
@@ -148,7 +148,7 @@ mod tests {
             .collect();
         all.push((
             "castle".into(),
-            crate::castle::castle(KINDS.stone, KINDS.hewn, KINDS.slate),
+            crate::castle::castle(KINDS.masonry, KINDS.beams, KINDS.masonry_roof),
         ));
         for (name, ops) in all {
             let shortcuts = Base::from_shortcuts(&ops);
