@@ -550,6 +550,9 @@ struct TreeModel {
     /// Its crown's middle, level with its foot, and how far its leaves reach from it, for
     /// the floor's shade (D246).
     crown: (Vec3, f32),
+    /// How far its branches and leaves reach round its foot, within a body's height of the
+    /// ground: a spruce's skirt, which stops a walker as its trunk does (D248).
+    skirt_m: f32,
     species: Species,
     young: bool,
     bark: Handle<Foliage>,
@@ -827,8 +830,10 @@ fn plant(
             let (which, leaf, tint, far_material) = match species {
                 Species::Oak => (kind % 3, leaf_of[0], Vec3::new(0.92, 0.95, 0.85), &far_crowns[0]),
                 Species::Pine => (3 + kind % 2, leaf_of[1], Vec3::new(1.15, 1.15, 1.0), &far_crowns[1]),
-                // Dark blue-green, about sRGB 0.15 (D247).
-                Species::Spruce => (5 + kind % 2, leaf_of[2], Vec3::new(1.3, 1.2, 0.75), &far_crowns[2]),
+                // Dark green, about sRGB 0.15. The needle picture is the deep green of Norway
+                // spruce, and the tint pushes it further from blue: needles this dark are lit
+                // mostly by the blue sky, which turned them teal (D247, D248).
+                Species::Spruce => (5 + kind % 2, leaf_of[2], Vec3::new(1.5, 1.65, 0.45), &far_crowns[2]),
             };
             let (bark, bark_m) = barks[which].clone();
             let wood = [0, 1, 2].map(|detail| wood(&tree, detail, height, bark_m));
@@ -868,6 +873,7 @@ fn plant(
                 height,
                 trunk_m: tree.trunk_m,
                 crown: floor::crown_of(&tree.tips),
+                skirt_m: skirt(&tree),
                 species,
                 young,
                 bark,
@@ -929,6 +935,7 @@ fn plant(
             height: VETERAN_M,
             trunk_m: tree.trunk_m,
             crown: floor::crown_of(&tree.tips),
+            skirt_m: 0.0,
             species: Species::Oak,
             young: false,
             bark: barks[0].0.clone(),
@@ -1089,7 +1096,9 @@ fn plant(
             // Sunk a little, so the root flare meets uneven ground.
             let place = place_on(at, &mut dice, 0.3, scale);
             let foot = place.translation;
-            obstacles.add(foot, model.trunk_m * scale * 1.2);
+            // A tree stops a walker at its trunk, or at its skirt where its branches reach the
+            // ground, so the camera is not walked in among a spruce's boughs (D248).
+            obstacles.add(foot, (model.trunk_m * 1.2).max(model.skirt_m * 0.7) * scale);
             let crown = place.rotation * model.crown.0 * scale;
             canopy.add(Stand::of(
                 at,
@@ -1393,6 +1402,27 @@ struct Limb {
     depth: u32,
     /// Whether it runs out to a point, as a branch does; a cut log does not.
     pointed: bool,
+}
+
+/// How far a tree's limbs and leaves reach from its trunk within 1.8 m of the ground.
+fn skirt(tree: &Tree) -> f32 {
+    let low = |p: &Vec3| p.y < 1.8;
+    let limbs = tree
+        .limbs
+        .iter()
+        .filter(|limb| limb.depth > 0)
+        .flat_map(|limb| {
+            limb.points
+                .iter()
+                .filter(|p| low(p))
+                .map(|p| Vec2::new(p.x, p.z).length())
+        });
+    let tips = tree
+        .tips
+        .iter()
+        .filter(|(p, _)| low(p))
+        .map(|(p, size)| Vec2::new(p.x, p.z).length() + size * 0.5);
+    limbs.chain(tips).fold(0.0, f32::max)
 }
 
 /// A tree's shape, before it is made into meshes.
