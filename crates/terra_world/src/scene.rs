@@ -276,14 +276,18 @@ fn style_camera(
         // otherwise crawl, and stops leaves and blades shimmering (D214). The wind shaders
         // give it last frame's positions.
         TemporalAntiAliasing::default(),
-        // A film's response: highlights roll off and lose their colour as they brighten,
-        // as on film, rather than turning saturated and flat (ACES does both).
-        Tonemapping::AgX,
+        // Khronos PBR Neutral: colours as they are and the full range from deep shade to
+        // bright sun, which a forest needs. AgX squeezed it into mid-greys, so the shade under
+        // the canopy and the sun flecks in it read alike: the scene's middle 90% spanned
+        // the same 106 levels with the mist, haze and adaptation each turned off (D254).
+        Tonemapping::KhronosPbrNeutral,
         // AgX alone is soft, as a film's negative is before it is printed: a little more
         // contrast through the middle and shadows, as a print's look adds.
         ColorGrading {
             global: ColorGradingGlobal {
-                post_saturation: 1.0,
+                // Neutral keeps saturation where AgX drained it; a little less, toward the
+                // muted greens of the forests we look to.
+                post_saturation: 0.9,
                 ..default()
             },
             // No extra contrast in the shadows, which crushed the shade under a canopy to
