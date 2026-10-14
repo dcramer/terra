@@ -510,3 +510,92 @@ pub(crate) fn fit_all(
     }
     fitted
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A model as Tripo's leaves come: wider than a leaf, deep, its foot at the origin.
+    fn model() -> Model {
+        Model {
+            mesh: Handle::default(),
+            material: Handle::default(),
+            mirrored: Handle::default(),
+            min: Vec3::new(-0.6, 0.0, -0.15),
+            max: Vec3::new(0.6, 2.0, 0.15),
+        }
+    }
+
+    /// Where the corners of a model's box are drawn, in the base's own space, with a leaf
+    /// turned `open` of the way, as `spawn_leaves` puts them.
+    fn corners(model: &Model, leaf: &Leaf, hinge_left: bool, open: f32) -> Vec<Vec3> {
+        let pose = leaf.pose(0.0);
+        let axis = pose.across.cross(leaf.opens).normalize_or(Vec3::Y);
+        let hinge = Transform::from_translation(leaf.hinge)
+            .with_rotation(Quat::from_axis_angle(axis, leaf.swing * open));
+        let (at, _) = placed(model, leaf, hinge_left);
+        let whole = hinge.to_matrix() * at.to_matrix();
+        let (low, high) = (model.min, model.max);
+        (0..8)
+            .map(|i| {
+                let corner = Vec3::new(
+                    if i & 1 == 0 { low.x } else { high.x },
+                    if i & 2 == 0 { low.y } else { high.y },
+                    if i & 4 == 0 { low.z } else { high.z },
+                );
+                whole.transform_point3(corner)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn each_leaf_is_drawn_where_it_stands_shut_open_and_mirrored() {
+        // A pair of doors in a doorway two metres wide, each way round, and shutters.
+        let props = [
+            Prop {
+                min: [0, 0, 4],
+                max: [3, 3, 4],
+                opens: [0, 0, -1],
+                hang: Hang::Door,
+                ..Prop::default()
+            },
+            Prop {
+                min: [6, 0, 0],
+                max: [6, 3, 3],
+                opens: [1, 0, 0],
+                hang: Hang::Door,
+                ..Prop::default()
+            },
+            Prop {
+                min: [0, 2, 0],
+                max: [1, 3, 0],
+                opens: [0, 0, -1],
+                hang: Hang::Shutters,
+                ..Prop::default()
+            },
+        ];
+        for prop in props {
+            for leaf in prop.leaves() {
+                for hinge_left in [true, false] {
+                    for open in [0.0, 0.5, 1.0] {
+                        // Every corner drawn within the box a walker meets where the leaf
+                        // stands, give or take how much thicker it is drawn.
+                        let pose = leaf.pose(open);
+                        for corner in corners(&model(), &leaf, hinge_left, open) {
+                            let from = corner - pose.hinge;
+                            let (across, through) = (from.dot(pose.across), from.dot(pose.through));
+                            assert!(
+                                across > -1e-3 && across < leaf.width + 1e-3,
+                                "{prop:?} {hinge_left} {open}: {across} across"
+                            );
+                            assert!(
+                                through > -0.02 && through < leaf.thick + 0.02,
+                                "{prop:?} {hinge_left} {open}: {through} through"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

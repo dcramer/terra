@@ -179,9 +179,11 @@ impl Draft {
         self.ops.extend(ops);
     }
 
-    /// The doorway in the front wall, a metre wide, at the origin.
-    fn door(&mut self, storey: i32, kind: Kind) {
-        for x in [-1, 0] {
+    /// The doorway in the front wall at the origin, a metre wide, or two for a hall's pair
+    /// of doors (D225).
+    fn door(&mut self, storey: i32, kind: Kind, wide: bool) {
+        let tiles = if wide { -2..=1 } else { -1..=0 };
+        for x in tiles {
             self.wall([x, storey, -1], Panel::Door, kind);
         }
     }
@@ -260,14 +262,15 @@ fn decks_of(scheme: Scheme, kinds: Kinds) -> Kind {
 
 /// A house of one or more blocks on the ground storey, each its own room, joined where
 /// they meet, its door in the first block's front wall at the origin, windows where its
-/// seed puts them, and its scheme's stone where it has any. `doors` are the tiles of the
-/// front wall a window may not take.
-fn house(draft: &mut Draft, blocks: &[Block], scheme: Scheme, kinds: Kinds) {
+/// seed puts them, and its scheme's stone where it has any; a hall's doorway two metres
+/// wide, for a pair of doors.
+fn house(draft: &mut Draft, blocks: &[Block], scheme: Scheme, kinds: Kinds, hall: bool) {
     let (kind, _) = walls_of(scheme, kinds);
     for block in blocks {
         draft.room(block.min(0), block.max(0), kind);
     }
-    draft.door(0, kind);
+    draft.door(0, kind, hall);
+    let door_half = if hall { 2 } else { 1 };
     // Windows: one either side of the door where the front is wide enough, and one in each
     // side wall of each block, at a place along it its seed chooses; only in a wall open to
     // the outside, never between two blocks.
@@ -279,7 +282,8 @@ fn house(draft: &mut Draft, blocks: &[Block], scheme: Scheme, kinds: Kinds) {
     let front = blocks[0];
     let mut n = 10;
     if front.wide() >= 12 {
-        let off = 3 + (draft.roll(n) * 2.0) as i32;
+        // A pier of wall at least a cube wide between each window and the doorway.
+        let off = door_half + 2 + (draft.roll(n) * 2.0) as i32;
         for tiles in [
             [[-1 - off, 0, -1], [-off, 0, -1]],
             [[off - 1, 0, -1], [off, 0, -1]],
@@ -308,7 +312,7 @@ fn house(draft: &mut Draft, blocks: &[Block], scheme: Scheme, kinds: Kinds) {
             for block in blocks {
                 for side in sides(block.x0, block.x1, block.z0, block.z1) {
                     for [x, z] in side {
-                        if z == -1 && (x == -1 || x == 0) {
+                        if z == -1 && (-door_half..door_half).contains(&x) {
                             continue;
                         }
                         draft.fill([x, 0, z], [x, 1, z], stone);
@@ -441,7 +445,7 @@ fn one_storey(
         ],
         _ => vec![main],
     };
-    house(&mut draft, &blocks, scheme, kinds);
+    house(&mut draft, &blocks, scheme, kinds, plan == Plan::T);
     roof(&mut draft, &blocks, roofed, 0, roof_kind(scheme, kinds));
     draft.ops
 }
@@ -459,7 +463,7 @@ fn two_storeys(seed: u32, scheme: Scheme, roofed: Roof, kinds: Kinds) -> Vec<Bui
         z0: -10,
         z1: -1,
     };
-    house(&mut draft, &[main], scheme, kinds);
+    house(&mut draft, &[main], scheme, kinds, false);
     draft.room(main.min(1), main.max(1), high);
     // The upper floor of timber, inside the walls.
     draft.ops.push(BuildOp::SetFloor {
