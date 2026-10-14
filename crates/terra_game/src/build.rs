@@ -645,10 +645,22 @@ pub(crate) fn village_kinds(kits: &Kits) -> Option<terra_build::village::Kinds> 
             .map(|kit| kit.kind())
     };
     use terra_build::kit::Profile;
+    let (stone, hewn) = (kits.footing()?.kind(), find(Pattern::Logs, Profile::Hewn)?);
+    // Earth and wattle and daub by their files' names (D236); stone and hewn timber where
+    // they are not there.
+    let names = kit_names();
+    let named = |name: &str| {
+        names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(k, _)| *k)
+    };
     Some(terra_build::village::Kinds {
         logs: find(Pattern::Logs, Profile::Round)?,
-        stone: kits.footing()?.kind(),
-        hewn: find(Pattern::Logs, Profile::Hewn)?,
+        stone,
+        hewn,
+        earth: named("earth").unwrap_or(stone),
+        wattle: named("wattle").unwrap_or(hewn),
     })
 }
 

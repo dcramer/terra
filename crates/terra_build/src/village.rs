@@ -6,10 +6,11 @@
 //! **What varies.** A building is a plan (a rectangle, an L, a T, a U, two storeys with an
 //! outside stair, a shed, a deck on posts, a length of low wall), built in a scheme of the
 //! kits' kinds (all logs; all stone; hewn timber; logs on a stone plinth a metre high; a
-//! stone ground floor with timber over it; log walls with stone gable ends), under a roof
+//! stone ground floor with timber over it; log walls with stone gable ends; cob; wattle and daub;
+//! a stone ground floor under wattle and daub), under a roof
 //! (a gable, a hip or a lean-to), at a size, with its windows where its seed puts them, a
-//! pitch and a lean of its own. Eight plans, six schemes, three roofs and three widths,
-//! less what does not go together, is about two hundred buildings a player can tell apart
+//! pitch and a lean of its own. Eight plans, nine schemes, three roofs and three widths,
+//! less what does not go together, is about three hundred buildings a player can tell apart
 //! ([`variants`]); a village picks a dozen or so, each scheme and plan at least once.
 //!
 //! **How it is laid out.** As a street village: a street running east and west through
@@ -32,6 +33,9 @@ pub struct Kinds {
     pub logs: Kind,
     pub stone: Kind,
     pub hewn: Kind,
+    /// Cob earth, and wattle and daub in a timber frame (D227, D236).
+    pub earth: Kind,
+    pub wattle: Kind,
 }
 
 /// One of a village's buildings: what it is, where it stands and which way it looks, and
@@ -81,6 +85,12 @@ pub enum Scheme {
     StoneUnderTimber,
     /// Log walls, their gable ends of stone.
     StoneEnds,
+    /// Cob earth on its plinth (D236).
+    Earth,
+    /// Wattle and daub in an oak frame (D236).
+    Wattle,
+    /// A stone ground floor with wattle and daub over it.
+    StoneUnderWattle,
 }
 
 /// A roof over a building.
@@ -99,11 +109,12 @@ pub const WIDTHS: [i32; 3] = [12, 14, 18];
 pub fn variants() -> usize {
     let sizes = WIDTHS.len();
     // A rectangle in any scheme under a gable, a hip or a lean-to.
-    let rectangles = 6 * 3 * sizes;
+    let rectangles = 9 * 3 * sizes;
     // An L, a T or a U in any scheme under gables or hips.
-    let wings = 3 * 6 * 2 * sizes;
-    // Two storeys: stone under timber, or all logs, stone or hewn, under a gable or a hip.
-    let two = 4 * 2 * sizes;
+    let wings = 3 * 9 * 2 * sizes;
+    // Two storeys: stone under timber or under wattle, or all logs, stone, hewn, earth or
+    // wattle, under a gable or a hip.
+    let two = 7 * 2 * sizes;
     // Sheds and decks in either timber, low walls in stone, each at a few lengths.
     let small = 2 * 2 + 2 * 2 + 3;
     rectangles + wings + two + small
@@ -218,6 +229,18 @@ fn walls_of(scheme: Scheme, kinds: Kinds) -> (Kind, Kind) {
         Scheme::Stone => (kinds.stone, kinds.stone),
         Scheme::Hewn => (kinds.hewn, kinds.hewn),
         Scheme::StoneUnderTimber => (kinds.stone, kinds.hewn),
+        Scheme::Earth => (kinds.earth, kinds.earth),
+        Scheme::Wattle => (kinds.wattle, kinds.wattle),
+        Scheme::StoneUnderWattle => (kinds.stone, kinds.wattle),
+    }
+}
+
+/// The kind a scheme's floors, stairs and landings are of: its upper walls', but timber
+/// where those are framed, whose infill makes no floor.
+fn decks_of(scheme: Scheme, kinds: Kinds) -> Kind {
+    match scheme {
+        Scheme::Wattle | Scheme::StoneUnderWattle => kinds.hewn,
+        _ => walls_of(scheme, kinds).1,
     }
 }
 
@@ -413,6 +436,7 @@ fn one_storey(
 fn two_storeys(seed: u32, scheme: Scheme, roofed: Roof, kinds: Kinds) -> Vec<BuildOp> {
     let mut draft = Draft::new(seed);
     let (low, high) = walls_of(scheme, kinds);
+    let deck = decks_of(scheme, kinds);
     let main = Block {
         x0: -6,
         x1: 5,
@@ -426,7 +450,7 @@ fn two_storeys(seed: u32, scheme: Scheme, roofed: Roof, kinds: Kinds) -> Vec<Bui
         min: [main.x0 + 1, 1, main.z0 + 1],
         max: [main.x1 - 1, 1, main.z1 - 1],
         laid: true,
-        kind: high,
+        kind: deck,
     });
     // Windows upstairs, front and back.
     for z in [main.z0, main.z1] {
@@ -436,9 +460,9 @@ fn two_storeys(seed: u32, scheme: Scheme, roofed: Roof, kinds: Kinds) -> Vec<Bui
     // The stair, from the front corner up toward the back, beside the east wall.
     let stair = Cube {
         shape: Shape::Stair(Facing::North),
-        ..Cube::new(high, Fill::Solid)
+        ..Cube::new(deck, Fill::Solid)
     };
-    let whole = Cube::new(high, Fill::Solid);
+    let whole = Cube::new(deck, Fill::Solid);
     let (x0, x1) = (main.x1 + 1, main.x1 + 2);
     for step in 0..STOREY_CUBES {
         let z = -2 - step;
@@ -541,6 +565,9 @@ fn name(plan: Plan, scheme: Scheme, roofed: Roof) -> String {
         Scheme::LogsOnPlinth => "log on a stone plinth",
         Scheme::StoneUnderTimber => "stone and timber",
         Scheme::StoneEnds => "log with stone ends",
+        Scheme::Earth => "cob",
+        Scheme::Wattle => "wattle and daub",
+        Scheme::StoneUnderWattle => "stone and wattle and daub",
     };
     let roofed = match roofed {
         Roof::Gable => "a gable",
@@ -565,7 +592,7 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
     // the green's middle and how far from the street's middle, and which side it is on.
     const NORTH: f32 = std::f32::consts::PI;
     const SOUTH: f32 = 0.0;
-    let houses: [(Plan, Scheme, Roof, i32, [f32; 2], f32); 9] = [
+    let houses: [(Plan, Scheme, Roof, i32, [f32; 2], f32); 12] = [
         (
             Plan::Rectangle,
             Scheme::Logs,
@@ -615,6 +642,31 @@ pub fn village(seed: u32, kinds: Kinds) -> Vec<Building> {
             Roof::Hip,
             12,
             [24.0, 5.5],
+            NORTH,
+        ),
+        // At the street's ends, the cob and the wattle and daub (D236).
+        (
+            Plan::Rectangle,
+            Scheme::Earth,
+            Roof::Gable,
+            12,
+            [-40.0, 5.5],
+            NORTH,
+        ),
+        (
+            Plan::Rectangle,
+            Scheme::Wattle,
+            Roof::Gable,
+            12,
+            [-42.0, -5.5],
+            SOUTH,
+        ),
+        (
+            Plan::TwoStoreys,
+            Scheme::StoneUnderWattle,
+            Roof::Gable,
+            12,
+            [40.0, 9.5],
             NORTH,
         ),
     ];
@@ -716,6 +768,8 @@ mod tests {
         logs: Kind(1),
         stone: Kind(2),
         hewn: Kind(3),
+        earth: Kind(4),
+        wattle: Kind(5),
     };
 
     /// A building's cubes' columns where they stand in the village, in metres east and
@@ -752,7 +806,7 @@ mod tests {
         let all = village(7, KINDS);
         let schemes: BTreeSet<Scheme> = all.iter().map(|b| b.scheme).collect();
         let plans: BTreeSet<Plan> = all.iter().map(|b| b.plan).collect();
-        assert_eq!(schemes.len(), 6, "{schemes:?}");
+        assert_eq!(schemes.len(), 9, "{schemes:?}");
         assert_eq!(plans.len(), 8, "{plans:?}");
         assert!(variants() >= 150, "{}", variants());
         let placed: Vec<Vec<[f32; 2]>> = all.iter().map(columns).collect();

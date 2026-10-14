@@ -625,9 +625,11 @@ fn masked(
         let layer = libm::floorf(y);
         let within = y - layer;
         let own = layout::unit(hash(&[layer as i32 as u32, 17])) - 0.5;
-        let seam = (1.0 - (within.min(1.0 - within) / 0.1).min(1.0)) * 0.45;
+        let seam = (1.0 - (within.min(1.0 - within) / 0.06).min(1.0)) * 0.7;
+        // Within a lift, finer layers where each basketful was rammed, fainter.
+        let fine = libm::sinf(y * std::f32::consts::TAU * 3.0 + 2.0 * smooth(p, 0.7, 15)) * 0.2;
         let speckle = smooth(p, 0.25, 13) - 0.5;
-        c *= 1.0 + masks.strata * (own * 1.4 + speckle * 0.5 - seam);
+        c *= 1.0 + masks.strata * (own * 1.4 + fine + speckle * 0.6 - seam);
     }
     let height = p.y - ground;
     // Dirt rises at most 1.4 times its height, so above that it is not worked out.
