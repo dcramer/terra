@@ -25,12 +25,12 @@ Shared state, in `terra_build`, with no Bevy (the rule in AGENTS.md).
 | | As cubes |
 |---|---|
 | Walls | A row of cubes one thick, as high as drawn: three metres, six cubes, unless dragged taller or shorter (D176) |
-| Openings | Cubes left empty in a wall, of any size and shape. The door tool's default is 1 m by 2 m, the window tool's a sill at 1 m and a head at 2 m, Enshrouded's way; anything else is carved. A fitted door, shutters or glass is a piece set into an opening it fits |
+| Openings | Cubes made open in a wall, of any size and shape. The door tool's default is 1 m by 2 m, the window tool's a sill at 1 m and a head at 2 m, Enshrouded's way; anything else is carved. A window is the hole, framed by its role pieces, with no glass (D225); a door is a prop fitted into a hole it fits |
 | Posts | A column of cubes, alone or in a wall (D179) |
 | Floors | A layer of cubes, so a 3 m storey is a floor cube and 2.5 m clear above it |
 | Roofs | Cubes of a roof kind cut to slopes and corners (D241), by hand or laid by "add a roof"; drawn as a roof from their neighbours, no wall or floor, and what is under them is covered |
 
-So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to reconcile. Height is counted in cubes; a storey is only the default height of a wall.
+So walls meet, cross, are carved and mix kinds by sharing cubes, with nothing to reconcile. Height is counted in cubes; a storey is only the quick tools' default height (D277): what is wall and what floor is read from the cubes round each one.
 
 **A kit draws cubes** ([building-kits.md](building-kits.md)): it finds the runs of cubes of its kind and lays its pieces along them, its corners where runs meet and its cut ends where cubes are empty. A piece is as thick as its kind, logs 0.3 to 0.4 m and stone the whole cube, centred in the cube; what stops a walker is the cube.
 
@@ -54,22 +54,19 @@ Each is recomputed for the building that changed, when a part is laid, a piece g
 
 The sizes every part should have are in [building.md](building.md#sizes) (D175). Each kit is checked against them as it is read: its course heights divide the storey, its wall is as thick as its kind says, its doors and windows are the agreed sizes.
 
-## Walls: laid by a rule, from a kit
+## Drawing a kind: by role, from its kit
 
-A wall's layout is a pure function of its plan, how it meets its neighbours, its kit and a seed:
+Each kind's cubes are drawn by its kit ([building-kits.md](building-kits.md)), in grid units from kit data only, so the server needs no art:
 
-1. Split it at its openings.
-2. Find how each end meets the next wall: an end, an L, a T or a cross.
-3. Lay its courses by the kit's pattern, choosing each piece by its role: a whole block, a half, a corner (alternating by course), a jamb, a sill, a lintel, a cap.
-4. Pick a version of each piece by a hash of where it is, so long walls do not repeat.
+- **A block kind** (stone, earth, wattle and daub) is one surface over all its cubes, cut to their shapes, in its material's textures and relief (D197).
+- **A timber kind** lays logs along its runs, courses along a wall's faces however thick (D200, D263), and decks and boarded shapes on its floors and cut cubes (D206, D231).
+- **A framed kind** lays its frame by `layout::frames`'s rule over its infill (D236).
+- **Each exposed edge is dressed by its role** (D215), worked out from the cubes and the ground when a section is laid, never stored, with the kit's hand-made pieces of its own materials: profiles swept along an edge, modules repeated along a line, stones set at a point, made in Blender by `tools/kits` (D251, D258).
+- **Where kinds meet**, each kit's `meets` table says which runs through and which ends against it (D232).
 
-**Patterns are code, kits are data.** Four patterns cover the kinds of construction in building.md: coursed (cut stone), stacked (logs), framed (posts, rails and planks), staked (wattle and daub). A kit is a file in `assets/data/` (D136): the pattern, its sizes, and each piece's model, size, role and versions. A new material on a pattern is a new file and its models, with no code; that is what makes many variants cheap. Rule tables, not wave function collapse: WFC can fail or need backtracking, which the research found Townscaper accepts and a building game cannot.
+**Patterns are code, kits are data** (D136, D210): a new material on a pattern is a file and its pieces, with no code. Rule tables, not wave function collapse: WFC can fail or need backtracking, which a building game cannot.
 
-**A course must divide the storey**, or a top plate takes what is left; each kit is checked for it as it is read.
-
-**Each exposed edge is dressed by its role** (D215): a role worked out from the cubes and the ground when a section is laid, never stored, and the piece the kit's file gives it, belonging to that edge's cube ([building-kits.md](building-kits.md)). Pieces are hand-made in Blender (`tools/kits`) as profiles swept along an edge, modules repeated along a line and stones set at a point (D258); code only places, repeats, stretches and turns them.
-
-**Layouts follow the cubes and the current kit.** Progress is kept per cube, not per piece, so a layout can always be worked out again: a kit tuned later redraws what is built, and a corner looks the same whichever wall went up first, with nothing lost (since 2026-10-12; layouts were frozen once a piece was in). Layouts are in grid units from kit data only, so the server needs no art, and versions are picked by a fixed hash of the base's seed and the cube's place.
+**Layouts follow the cubes and the current kit.** Progress is kept per cube, not per piece, so a layout can always be worked out again: a kit tuned later redraws what is built, and a corner looks the same whichever wall went up first. Versions are picked by a fixed hash of the base's seed and the cube's place.
 
 ## Roofs: cubes (D241)
 
@@ -87,7 +84,7 @@ On the Bevy side, in `terra_game` (D213; [building-plan.md](building-plan.md#dra
 - **Built pieces are merged** into a mesh per section, kind and material, their corners shared.
 - **Pieces not yet built are ghosts**, a unit box or prism each in one ghost material, which Bevy batches, drawn as a blueprint; the next piece is drawn as it will be, lit.
 - **Far off, one mesh per section** with its textures baked into its colours, as Unreal's HLOD, coarser again further, switched with Bevy's `VisibilityRange`; near detail is made only near the camera.
-- **Measured**: the `village` bench, fifty buildings in view, against `village-bare`, the same view with nothing built, on the fast GPU and the integrated one.
+- **Measured** (D185): the `village` bench, fifty buildings in view, and the town of three hundred, a castle and far views, each against the same view with nothing built, on the fast GPU and the integrated one.
 
 ## Constructing
 
@@ -108,16 +105,10 @@ On the yard, a flat test level: `cargo xtask yard`, or `--level yard` on the pla
 
 ## Order
 
-Each step is played and checked by script before the next (D69):
-
-1. **The model** (built, on cubes, D181): walls, floors and roofs on the grid, rooms worked out from the walls, plain box meshes with trim; walls drawn inside and out, with a footing on the ground; older saves converted; built whole. Buildings as entities, and indoors as closed and covered, come with weather and stations that read them.
-2. **Roofs** (built, D241): roof cubes by hand, and "add a roof" laying them in four styles over a room or a rectangle drawn; eaves, verges, ridges, hips, valleys and flashing from their neighbours.
-3. **Plans and constructing** (D139): parts laid as plans; pieces put in one by one, from the pack and storage (D141).
-4. **Kits**: the four patterns with script-made placeholder pieces, then the merged mesh, the stand-in, and the fifty-cabin measurement. Logs first ([building-kits.md](building-kits.md), D177, D178): the stacked pattern, logs made in code, the three states and a kit sheet on the yard, built.
-5. **The art of the kits**, by the developers' art pipeline: about ten to fifteen pieces a material, a few versions each.
+Steps 1 to 5 of [building-plan.md](building-plan.md) are built: the model on cubes, roofs as cubes, plans and constructing, the kits and the one material system (D251, D258); what remains is there. Each step is played and checked by script before the next (D69).
 
 ## Where the risk is
 
 | Routine | Hard | Deferred |
 |---|---|---|
-| The model, buildings, indoors; straight walls; roofs of cubes over any plan; progress bits; merging | Where roofs meet walls and other roofs; joins and openings across four patterns; the art of each kit, where looks are won or lost | Diagonal and round walls, other pitches, curved roofs, impostors |
+| The model, buildings, indoors; straight walls; roofs of cubes over any plan; progress bits; merging | Where roofs meet walls and other roofs; joins and openings where kinds meet; the hand-made pieces of each kit, where looks are won or lost | Diagonal and round walls, other pitches, curved roofs, impostors |

@@ -10,6 +10,10 @@ How it was done: Enshrouded from the official wiki, Keen's patch notes (all 119 
 
 The look is closer than the developers think, and the tools are further. Since D215, a stone or log wall's corners, tops, feet and openings are dressed by their role, which is Enshrouded's method; what is missing there is variety (three kits against Enshrouded's 53 block materials), per-voxel decoration, and cost on the integrated GPU. What makes ours *feel* unlike Enshrouded's voxels is what the player can do with them: the hammer lays only logs, with no material picker; it places one cube or draws walls, floors and rooms, but has no brushes, no carving by hand, no taking out of the cube aimed at, and no terrain tools; and there are five shapes against Enshrouded's thirty-odd. Most of that is a shortfall, not a design choice, and all of it but the shape set sits on the cube store and operations as they are.
 
+## Since (2026-10-14)
+
+The tables below are as the code was at 8d0768d. Since, from the ranked gaps: 1, the material in hand on Ctrl and the wheel and picked from a cube, and earth, wattle and daub and brick beside logs, stone and hewn timber (D227, D232, D236); 2, brushes of 0.5 to 4 m, carving a box and taking out the cube aimed at (D226, D233), with *Block* first in the hammer and in hand (D253), and parts that merge as cubes are laid by hand, so a section never runs out of them (D260); 4, 32 shapes, the corner slopes, upper half and inverted ones among them (D231); 5, changing a material in place (D232); 6, a cube's edit timed to the screen (D257), and a change laying again only the buildings it reached; 8, roofs as cubes built by hand, "add a roof" laying the same cubes (D226, D241). Walls, floors and roofs are drawn on one material system of hand-made pieces (D251, D258); rooms and door steps come from the cubes alone (D261), as does what is wall and what floor (D277). Still open: terrain tools (3), painted decoration (7), saved designs (9) and a building camera (10). The last line of the ranking is reversed: roofs are no longer made by the game but built (D226).
+
 ## Building tools
 
 | | Enshrouded | Ours today (code) | Choice or shortfall |
@@ -110,7 +114,7 @@ By how much each moves the game toward the developers' sense of Enshrouded's vox
 9. **Saved designs and copy.** Not a gap: Enshrouded has none, so this is where ours can pass it. A design is the operations of a selection, moved, turned and mirrored (facings are four, so a mirror is a remap), laid again as plans that cost nothing (D139). Three to five days. **Design, Open** (building.md: "a building can be saved as a design and laid again").
 10. **A building camera.** A small shortfall: a first-person or lifted camera while the hammer is out, a day or two. **Open**, with D176.
 
-Not gaps, by choice: building takes work part by part (D139), nothing floats and nothing is taken from under a load (D193, D194), the ground outside a building is not cut (D131, D193), and roofs are made by the game (D154).
+Not gaps, by choice: building takes work part by part (D139), nothing floats and nothing is taken from under a load (D193, D194), the ground outside a building is not cut (D131, D193), and, until D226 reversed it, roofs made by the game (D154).
 
 ## Limits
 

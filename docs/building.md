@@ -1,8 +1,8 @@
 # Building
 
-Status: the building system as the player meets it, for the developers to read and correct. It gathers what the developers have said about building, what players of the games we draw on will reach for ([research/building-systems-prior-art.md](../research/building-systems-prior-art.md)), and what is built. Each item says whether it is decided (with its D number), leaning, proposed, or open. How it works in code is [building-tech.md](building-tech.md); how each kind of construction looks is [building-kits.md](building-kits.md). The rules every construction piece follows, and every case they handle, are proposed in [proposals/construction-001.md](proposals/construction-001.md) (D192, Open).
+Status: the building system as the player meets it, for the developers to read and correct. It gathers what the developers have said about building, what players of the games we draw on will reach for ([research/building-systems-prior-art.md](../research/building-systems-prior-art.md)), and what is built. Each item says whether it is decided (with its D number), leaning, proposed, or open. How it works in code is [building-tech.md](building-tech.md); how each kind of construction looks is [building-kits.md](building-kits.md). The rules every construction piece follows, and every case they handle, are in [proposals/construction-001.md](proposals/construction-001.md) (D192, decided).
 
-Everything built is half-metre cubes on its base's own grid (D48, D181): walls are rows of cubes a cube thick, posts columns of them, floors layers, openings cubes left empty, and roofs a surface over them. The player builds by hand, roofs too, with brushes, carving and shapes, and the game lays the details from each cube's neighbours; drawing a room, a wall or a roof of a material over what is enclosed stays as a quick way (D152, D154, D226). Building is done with the hammer in hand, standing in the world, not from a separate view above: the build menu comes from the tool (D67) and offers what you have unlocked (D68), and a plan view from above stays [an idea for later](#ideas-for-later) (D176). You see what you would place before you commit, and taking apart gives back what it cost.
+Everything built is half-metre cubes on its base's own grid (D48, D181): walls are rows of cubes a cube thick, posts columns of them, floors layers, openings cubes left open, and roofs cubes of a roof kind cut to slopes (D241); what is wall, what floor and which rooms are indoors is read from the cubes alone (D261, D277). The player builds by hand, roofs too, with brushes, carving and shapes, and the game lays the details from each cube's neighbours; drawing a room, a wall or a roof of a material over what is enclosed stays as a quick way (D152, D154, D226). Building is done with the hammer in hand, standing in the world, not from a separate view above: the build menu comes from the tool (D67) and offers what you have unlocked (D68), and a plan view from above stays [an idea for later](#ideas-for-later) (D176). You see what you would place before you commit, and taking apart gives back what it cost.
 
 ## What the developers want
 
@@ -54,7 +54,7 @@ Everything a player arriving from Enshrouded, Rust, Ark, Subnautica 2 or The For
 | Undo for a short while | Enshrouded, Rust | Built: Y, within a minute |
 | Repair | Rust, Valheim, The Forest | Missing: nothing built takes damage yet |
 | Change a piece's material in place | Rust, 7 Days to Die | Built: Change material, a brush's box of built cubes, the old out from under what stays and given back, the new built (D232) |
-| Plans that cost nothing, then constructed part by part | The Forest, Ark Ascended | Missing; decided (D139) |
+| Plans that cost nothing, then constructed part by part | The Forest, Ark Ascended | Built (D139, D201) |
 | Building from storage nearby, not only the pack | Subnautica 2, Valheim | Missing; decided (D141) |
 | Carrying big materials by hand, better transport later | The Forest | Missing; the direction (D140) |
 | A base level with the ground where it is begun | Ark Ascended's heights | Built: the base's grid is set where its claim stone goes |
@@ -221,22 +221,22 @@ Open: how many swings a part takes, and whether fixing is a separate step or the
 - **Doors and windows**: an open doorway lets weather in; a fitted door, shut, keeps it out, and an open window lets in a little (D139).
 - **Stations** belong to the building they stand in: their expansions count anywhere in it (D151).
 
-Technically: worked out from the cubes when a part is built or taken away, not every frame (D127), as [building-tech.md](building-tech.md) says (D160). Built: a base is half-metre cubes (D181), walls rows of them, floors and flat roofs layers, with rooms worked out from the walls; the room tool is the shortcut, walls are drawn inside or out, and doors and windows are cubes cut open. Buildings as entities, and indoors, come with weather and stations that read them.
+Technically: worked out from the cubes when a part is built or taken away, not every frame (D127), as [building-tech.md](building-tech.md) says (D160). Built: a base is half-metre cubes (D181); rooms are the space its built cubes close in all round, of any height, flooded in three dimensions, and each is indoors, dimmed (D261); doors and windows are cubes cut open. Buildings as entities come with weather and stations that read them.
 
 **How a material is split into parts, so it looks built and not tiled.** Each kind of construction is a small kit of pieces sized to the grid, and a rule for laying them, as real masonry and carpentry have:
 
 | Kind | Pieces | Laid |
 |---|---|---|
-| Cut stone | A block a metre long and half a metre high and deep; a half block; a corner block; a sill and a lintel for openings; a capstone | In courses half a metre high, each course offset half a block from the one under it (a running bond), half blocks at the ends of every other course, corner blocks interlocking where two walls meet |
+| Stone, earth | Its cubes' surface in its material, cut to their shapes (D197); quoins, plinth, coping, lintels and sills by role (D215) | As one mass over all its cubes, dressed at every exposed edge |
 | Logs | Logs as long as the wall, up to the longest a tree gives (say four metres), notched at the ends | Stacked, a log a course; longer walls join end to end, staggered, and walls meeting in line under a post; corners interlock, the logs of one wall alternating with the other's ([building-kits.md](building-kits.md)) |
-| Planks | Posts, rails, planks | Posts at the ends and as evenly as fits within a metre and a half; planks between them |
-| Wattle and daub | Stakes, woven panels, daub | Stakes every half metre, panels between, daub over |
+| Hewn timber | Squared logs | As logs |
+| Wattle and daub | Its cubes' surface as daub, a frame of squared timber over it | Posts, plates, rails and braces by the frame's rule (D236, D258) |
 
-Because every wall is a whole number of cubes, the kit always fits: a stone wall of 4.5 metres is four whole blocks and a half in one course, a half and four whole in the next. Corners and openings choose their own pieces by what they are next to, which is the morphing the developers asked for (D56). Each piece gets a little variety, a slightly different shape, turn or shade from a few made versions, so a long wall does not repeat.
+Because each piece is chosen by its role from the cubes round its edge, any arrangement fits (construction-001, rule 3): corners and openings choose their own pieces by what they are next to, which is the morphing the developers asked for (D56). Each piece gets a little variety, a slightly different shape, turn or shade from a few made versions, so a long wall does not repeat.
 
-**What the pieces are made of** (D146, D177). Each piece is a model from its kind's kit, made by the art pipeline with a few versions each, and laid on the base's cubes ([building-kits.md](building-kits.md)). The pieces are parts of the blueprint picked in the build menu, never things made first at a station and then placed: the developers do not want to "build walls then place them". The cubes are the skeleton (D48, D181): they say where each piece is, what is inside and out, what blocks a walker, and what an opening cuts. The pieces are what is seen and what goes in one at a time.
+**What the pieces are made of** (D146, D177). Each kind is its material's surface and its hand-made pieces, profiles, modules and stones modelled in Blender with a few versions each, laid on the base's cubes by role (D251, D258; [building-kits.md](building-kits.md)); logs are made in code (D200). The pieces are parts of the blueprint picked in the build menu, never things made first at a station and then placed: the developers do not want to "build walls then place them". The cubes are the skeleton (D48, D181): they say where each piece is, what is inside and out, what blocks a walker, and what an opening cuts. The pieces are what is seen and what goes in one at a time.
 
-**Carving.** Carving what is built can come later. On cubes (D181) carving by the grid's half metre is only emptying cubes: the kit lays itself again around the gap, a cut block becoming a half block, a log course ending in cut ends. Doors and windows are cut the same way, at a default size. Carving finer than the grid, chiselled or smoothed, needs the material drawn as voxels, Enshrouded's way; our ground already is (D48), so it would come as a kind of construction of its own, such as carved rock, where the pieces sit on the voxel volume where they meet it. Nothing about the kit stops either.
+**Carving** (built, D226, D233). On cubes (D181) carving by the grid's half metre is only emptying cubes: the kit lays itself again around the gap, a cut block becoming a half block, a log course ending in cut ends. Doors and windows are cut the same way, at a default size. Carving finer than the grid, chiselled or smoothed, needs the material drawn as voxels, Enshrouded's way; our ground already is (D48), so it would come as a kind of construction of its own, such as carved rock, where the pieces sit on the voxel volume where they meet it. Nothing about the kit stops either.
 
 **Building in bulk.** Putting in parts one by one is the realistic way and must not become a chore: holding the build key keeps putting in the next part while you have the materials; a skilled builder (D88) puts them in faster; recruits put them in for you (D90). The Forest's later option to skip each part's animation is the lesson: show each part going in, quickly.
 
@@ -283,7 +283,7 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 |---|---|
 | Wall, drawn as a line of cubes, any length, inside or out | Built |
 | Room: the shortcut that lays a rectangle's walls, floor and roof | Built |
-| Floor, drawn on its own | Missing; laid by the room shortcut |
+| Floor, drawn on its own | Built: a rectangle on a storey (D220) |
 | Roof: cubes of a roof kind by hand; "add a roof", gable, hip, lean-to or flat | Built (D241, [building-kits.md](building-kits.md#roofs-d241)) |
 | Window and doorway, cubes left open | Built |
 | Carving cubes by hand, any shape | Built: Carve, a brush's box of built cubes marked and taken out (D226) |
@@ -304,7 +304,7 @@ The baseline catalogue. Everything is an entry in a list, [`builds.ron`](../asse
 - **Undo**: the last thing built or taken apart, within a minute (built, on Y).
 - **Moving**: items now (built); walls as a whole later (open).
 - **Repair**: once bases take damage (D90), the hammer mends what it built, for a little of its cost (proposed). Tools and gear already wear and are mended at stations (D99).
-- **Material**: changing a part's kind of construction in place, paying the difference (proposed; the kind is a property of each cube, not a different part).
+- **Material**: Change material, a brush's box of built cubes changed in place, the old out and given back, the new built (built, D232).
 
 ## Stability
 
@@ -326,7 +326,7 @@ The basis is settled (D48): **a voxel grid, as Enshrouded's**. What Enshrouded's
 
 **Why Enshrouded's overwhelms**, as far as we can tell: the player makes every detail by hand, from many shapes; roofs are built a piece at a time; nothing helps a beginner's house look good. Its freedom is in the shape of the building; its effort is in the detail.
 
-**Agreed: The Sims' way, with our materials.** You draw the shape of the building; the game makes the details. Building a log cabin would go:
+**The Sims' way, now the quick tools** (D154, amended by D226 and D253). Building by hand, cube by cube, roofs too, comes first; drawing the shape and letting the game make the details stays as a quicker way. A log cabin by the quick tools goes:
 
 1. **Walls.** Pick *Wall*, log. Press and drag 6 m: a wall's blueprint, shown log by log. Drag on from its end, round three more sides; when the loop closes, the game offers a floor inside, a click to accept.
 2. **Roof.** Pick *Roof* and click inside the walls: a roof's blueprint, its cubes and its gable ends' walls (D241), covers what they enclose. The next variant picks its style (gable, hip, flat, lean-to). Its rafters, ridge and gable ends are worked out; the roof's cubes can be changed by hand.
@@ -376,7 +376,7 @@ A new thing to build should be data, not code (D56, D127):
 | A piece of furniture | One entry and a model file |
 | A window size | One entry |
 | A kind of construction on a pattern we have, such as a dark-wood cabin | A kit file and its piece models ([building-kits.md](building-kits.md)) |
-| A new pattern of laying, such as dry stone | Code, once ([building-tech.md](building-tech.md#walls-laid-by-a-rule-from-a-kit)) |
+| A new pattern of laying, such as dry stone | Code, once ([building-tech.md](building-tech.md#drawing-a-kind-by-role-from-its-kit)) |
 
 A piece's look comes from what it is next to, laid by its kit's rule: corners, ends and openings choose their own pieces. What a cube is made of is its kind, so changing material in place is changing that property. Underneath, a base is its cubes and the list of operations that made them, so it can be saved and sent (D21); a saved layout is that list, placed again, and a village is one (D108).
 
@@ -384,7 +384,7 @@ A piece's look comes from what it is next to, laid by its kit's rule: corners, e
 
 **One step for everything: half a metre** (D57), the cube (D181). A wall is a row of cubes, an opening is cubes left empty, an item snaps to the grid: "the smallest placeable kind of thing". The developers also want the grid to show on a wall when something is placed there; nothing hangs on a wall yet.
 
-**Three sizes, from the player's side** (D48): the **cube**, half a metre, as Enshrouded's; the **brush**, how much one action places or carves, in several sizes as Enshrouded's 1, 2 and 4 metre pieces (not built); and **what is seen**, the kit's pieces, which stop it looking like a grid.
+**Three sizes, from the player's side** (D48): the **cube**, half a metre, as Enshrouded's; the **brush**, how much one action places or carves, in several sizes as Enshrouded's 1, 2 and 4 metre pieces (built, D233); and **what is seen**, the kit's pieces, which stop it looking like a grid.
 
 **You see the grid only near what you are placing**, as now.
 
@@ -413,26 +413,26 @@ Changing a size later is changing a number in the kit or the grid's constants, n
 
 As the developers want it (D67, D68): with the hammer in hand, tap the build menu key, and a panel of tabs shows what you can build, each tile with a picture, its name and its cost, greyed if you cannot pay and absent if you have not learned it. Click one, or use the arrows and Enter. The variant wheel (hold R) chooses among the variants of the thing in hand. Taking apart and moving are modes on their own keys, not entries. The last few things built sit at the top. The world never pauses. Built, with pictures drawn from each thing's model.
 
-Tabs: Claim; Structure; Openings; Crafting; Furniture; Storage; Light and fire. Proposed: Defence, once there are fences and gates.
+Tabs: Structure, first, with *Block* in hand by default (D253); Claim; Openings; Crafting; Furniture; Storage; Light and fire. Proposed: Defence, once there are fences and gates.
 
 ## One system for everything built
 
 D108: everything built in the world, by anyone, is made of the same parts as what a player builds. A village's houses are walls, floors, roofs and doors from the build catalogue, put up by the same operations. A well is a buildable thing, a station rather than a structure. The test of a building system is that a settlement can be described in it; if something in a village cannot be, the catalogue grows.
 
-The MVP's village is laid out from its seed by rules (`terra_build::village`, D229): a street village, the houses along both sides of a street with a green and a well, their doors to the street, each of a plan (a rectangle, an L, a T, a U, two storeys with an outside stair, a woodshed, a lookout deck on posts, a low garden wall), a scheme of the kits' kinds (logs, stone, hewn timber, logs on a stone plinth, stone under timber, log walls with stone ends) and a roof (gable, hip, lean-to), each stood on the ground where it goes on its footings, with steps from its door. About two hundred buildings can be told apart by those three and their width; the village has eleven of them and its garden walls, every plan and scheme at least once. What grows keeps out of every building and a margin round it, and off the street.
+The MVP's village is laid out from its seed by rules (`terra_build::village`, D229): a street village, the houses along both sides of a street with a green and a well, their doors to the street, each of a plan (a rectangle, an L, a T, a U, two storeys with an outside stair, a woodshed, a lookout deck on posts, a low garden wall), a scheme of the kits' kinds (logs, stone, hewn timber, logs on a stone plinth, stone under timber, log walls with stone ends) and a roof (gable, hip, lean-to), each stood on the ground where it goes on its footings, with steps from its door. About three hundred buildings can be told apart by those three and their width; the village has twelve houses, a shed, a deck and eight lengths of wall, every plan and scheme at least once (D229). What grows keeps out of every building and a margin round it, and off the street.
 
 ## Proposed order
 
 For the developers to reorder. Each step is small enough to play and judge.
 
 1. **The controls, locked, and placing finished**: the keys above, drawing, what blocks a ghost shown through walls, and snapping as [Snapping and feel](#snapping-and-feel) says. These hold whatever comes after.
-2. **Plans, then constructing** (D139): walls, floors and roofs laid as plans, built part by part from the pack and from storage in the claim (D141); doors and windows carved out and fitted.
+2. **Plans, then constructing** (D139, built from the pack): walls, floors and roofs laid as plans, built part by part; from storage in the claim (D141) and fitting doors and windows still to come.
 3. **Large materials** (D140): logs that lie where trees fall, carried on the shoulder; a log pile to keep them, later unlocked.
 4. **Up and down**: floors drawn on their own, posts, stairs and ramps (built, D220); ladders.
 5. **Doors and defences**: doors that open and lock by the claim; fences, walls and gates drawn as a line.
 6. **Damage and repair**, with the first attacks on a base (D90).
-7. **More kinds of construction**, and changing them in place; better transport, unlocked (D140).
-8. **Carving and brushes** (D48): cubes emptied by hand, and brushes of several sizes.
+7. **More kinds of construction** (earth and wattle and daub built, D227; changing them in place built, D232); better transport, unlocked (D140).
+8. **Carving and brushes** (built, D226, D233).
 9. **Stability**, after the MVP (D142).
 
 ## Ideas for later
@@ -441,13 +441,13 @@ Not built, and not to be until the developers say.
 
 **A plan view from above** (D176). Survival games build from the character's camera, and where they offer another it is for laying out, bounded by the base or a distance ([research/planning-mode-cameras.md](../research/planning-mode-cameras.md)). The idea: Plan mode (D170) lifts the camera into a view over the claim, panned and turned like The Sims', with walls cut away, for drafting only; the character stays standing in the world, can be hurt, and damage drops the view back. Building, carrying and putting parts in stay in the character's view. Risks: a second, pointer-led set of controls; seeing what the character cannot; being hurt while looking away.
 
-**Heights, not storeys** (D176). With voxels (D48) and rooms of any height there are no fixed storeys, as the developers pointed out. The idea: what is seen and drawn on is a cutting plane, raised and lowered half a metre at a time and stopping at every floor there is, as an architect's section; above it is hidden. A wall has its own height, three metres unless dragged taller or shorter, as The Sims 4's walls do; a floor lies where the plane is; a roof rests on the walls under it. A storey becomes a default height, not a rule, and the same plane serves the character's camera too. `terra_build` already counts height in cubes (D181).
+**Heights, not storeys** (D176). With voxels (D48) and rooms of any height there are no fixed storeys, as the developers pointed out. The idea: what is seen and drawn on is a cutting plane, raised and lowered half a metre at a time and stopping at every floor there is, as an architect's section; above it is hidden. A wall has its own height, three metres unless dragged taller or shorter, as The Sims 4's walls do; a floor lies where the plane is; a roof rests on the walls under it. A storey becomes a default height, not a rule, and the same plane serves the character's camera too. In code it already is: height is counted in cubes (D181), and wall, floor and rooms are read from the cubes, a storey only the quick tools' default height (D277).
 
 ## Open questions
 
 For the developers. Each has a recommendation.
 
-1. **The kinds of construction**: which there are, and when each is learned (D68). Recommend wattle and daub, then logs, then planks, then stone for the MVP's first two.
+1. **When each kind of construction is learned** (D68). Which there are is answered: logs and stone first, then hewn timber, earth, and wattle and daub (D227).
 2. **Must parts go up in order**, what rests on something after it? Recommend yes.
 3. **Are stations constructed too**, being large, or placed whole like furniture? Recommend placed whole for now.
 4. **Cutting an opening in a finished wall**: with which tool, and does it give back what was cut? Recommend the axe for wood, the pickaxe for stone, giving it back.

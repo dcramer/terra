@@ -8,11 +8,11 @@ How each kind of construction looks and is laid, starting with logs. It fills in
 
 ## What a kit has to do
 
-A wall is drawn as a line on the grid (D154), and the game lays its pieces (D146). One layout, worked out by rule from the plan, serves everything:
+Cubes are laid by hand, or a wall drawn as a line with the quick tools (D226, D154), and the game lays the pieces from the cubes (D146). One layout, worked out by rule from the cubes, serves everything:
 
 - **The blueprint** (D139) is those pieces drawn as a ghost, every log separately, so you can count what is needed, as The Forest's blueprint shows each log.
 - **Going up**, each piece is either in, drawn as it will stand, or still a ghost; the next one is lit.
-- **Built**, the same pieces, merged into one mesh per building (building-tech.md).
+- **Built**, the same pieces, merged into a mesh per section of cubes, kind and material (D213, building-tech.md).
 - **While drawing**, the ghost under the cursor is the same layout, laid again each time the line grows by a cube.
 
 So a corner looks the same in the blueprint as it does built, just ghosted. Nothing is modelled twice.
@@ -62,7 +62,7 @@ Profiles and corner stones are drawn in Blender from a source in numbers, `art/k
 |---|---|---|
 | Blueprint | Each piece in a pale, see-through blueprint material, edges brighter so each log reads apart; red where it cannot go. Drawn instanced, many pieces to one draw | Fifty cabins of blueprint are a few thousand pieces, which instancing makes cheap |
 | Going up | The pieces in are drawn solid, the rest ghost, the next outlined and pulsing | Says what to bring and where it goes (building.md's prompt) |
-| Built | One mesh per building and material, rebuilt in the background when a part changes | Never an entity per log (building-tech.md) |
+| Built | One mesh per section, kind and material, laid again in the background where a change reached | Never an entity per log (building-tech.md) |
 | Far off | The plan's boxes in the wood's colour, faded in with `VisibilityRange` | As building-tech.md |
 
 **A real preview, before a click** (asked for on 2026-10-12: "ideally it could be a real preview of whats happening? enshrouded is great at this"). Proposed: whatever the tool would do is applied to a copy of the base and laid again, and the difference drawn where it would be: pieces that would be added as the blueprint ghost, pieces that would be cut or taken away in red, the rest left as they are. A door aimed at a wall shows the logs it would shorten and the frame it would put in; a wall drawn across another shows its corner forming. It is laid again only when what the tool aims at changes, not every frame. This replaces today's outlines and films.
@@ -123,7 +123,7 @@ Asked on 2026-10-12: "how do you have one wall be log and one be stone". Agreed:
 - **Every part has its kind.** A wall, post, floor or roof is laid in the kind picked when it is drawn (Ctrl and the wheel, in building.md's controls). Two walls side by side can be different kinds, and so can the walls and the floor of one room. Each cube keeps its kind, so mixing is per cube.
 - **Where kinds meet, the heavier one runs through.** Stone, then logs, then planks, then wattle. At a corner or a T of stone and logs, the stone wall's corner blocks run to its outer face, and the log wall ends flush against it, as a log cabin meets its stone chimney. In line, the log wall butts into the stone wall's end. Stone is thicker (0.5 m against 0.3), so the step between them shows, as it does on real buildings.
 - **One wall over another.** Log cubes over stone cubes a metre high are how a cabin gets a stone footing, each laid by its own kit.
-- **Changing a kind** is free on a plan nothing is in yet. Once pieces are in, the wall is frozen (building-tech.md), so it is taken down and laid again, as D146 says.
+- **Changing a kind** is free on a plan nothing is in yet; once it is built, Change material swaps it in place, the old taken out from under what stays and given back, the new built (D232).
 - **Drawing it** costs nothing extra: a finished building is one mesh per material already.
 
 Built 2026-10-12: a base is laid by every kit in `assets/data/kits/` at once, each its own kind's cubes, so mixing is per cube. Logs end flush against stone, as they end at anything not open air; stone runs through corners and T's. The kit sheet has stone and logs meeting every way walls meet: a stone house under a hip roof, a log cabin on a stone plinth a metre high, an L, a T each way round, in line, stone pillars in a log wall, and a log cabin with a stone end wall.
@@ -234,7 +234,7 @@ Built:
 
 ![A log cabin from the kit sheet, late in the day](images/log-cabin-2026-10-12.png)
 
-**Not yet:** the late corner, which needs parts with their own history (step 3); a tool for carving cubes by hand, though the operation is there and the sheet shows it; saddle notches cut into the logs, rather than logs meeting; floors with kits of their own; seams between stone sections, which still show faintly.
+**Not yet:** the late corner, which needs parts with their own history (step 3); saddle notches cut into the logs, rather than logs meeting; floors with kits of their own; seams between stone sections, which still show faintly.
 
 **Doors and windows are not part of a plan** (the developers, 2026-10-12: "when you're building blueprints/etc, they dont have doors attached ... showing a partial ghost with a door does not reflect how the game should work"). A plan and a building going up show the opening and its frame only; the door or window is its own item, fitted once the building is up (construction.md). None is fitted for now (D225).
 
