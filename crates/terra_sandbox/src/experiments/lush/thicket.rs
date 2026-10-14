@@ -13,7 +13,7 @@
 use bevy::{mesh::VertexAttributeValues, prelude::*};
 use std::f32::consts::{PI, TAU};
 use terra_gen::Rng;
-use terra_world::grown::build::{Build, Limb, tube};
+use terra_world::grown::build::{Build, Limb, Placing, tube};
 use terra_world::grown::tree::{self as grown_tree, Canopy, Spray, Tree};
 use terra_world::grown::{Card, Habit, TreeDef};
 
@@ -90,11 +90,16 @@ fn def(habit: Habit, leaves: &str, clump_m: f32, trunk: f32) -> TreeDef {
 fn leafy(dice: &mut Rng, tree: &Tree, leaf: &Card, tint: Vec3) -> Shrub {
     let canopy = Canopy::of(tree, tint);
     let placed = grown_tree::crown_cards(dice, tree, &canopy);
-    // A tree's middle and far levels: a shrub is seen from nearer, so its fewer, larger
-    // cards hold up, and a thicket of them is many cards deep, each drawn over the last.
-    let mut near = grown_tree::crown(&placed, tree, leaf, 1);
-    let mut far = grown_tree::crown(&placed, tree, leaf, 2);
-    let shadow = grown_tree::shadow_cards(&placed, tree, leaf);
+    drawn(tree, &canopy, &placed, leaf)
+}
+
+/// A leafy plant's cards, placed, drawn at its levels: every card of every clump near, as a
+/// tree's nearest level, so its leaves stand at their own size a stride off rather than a
+/// few enlarged (D269); past that the trees' middle level, three of each clump enlarged.
+fn drawn(tree: &Tree, canopy: &Canopy, placed: &[Vec<Placing>], leaf: &Card) -> Shrub {
+    let mut near = grown_tree::crown(placed, tree, leaf, 0);
+    let mut far = grown_tree::crown(placed, tree, leaf, 1);
+    let shadow = grown_tree::shadow_cards(placed, tree, leaf);
     let mut wood = [
         grown_tree::wood(tree, 0, 1.0),
         grown_tree::wood(tree, 1, 1.0),
@@ -143,7 +148,27 @@ pub(super) fn evergreen(
 ) -> Shrub {
     let def = def(Habit::Conical, "", clump_m, 0.024);
     let tree = grown_tree::grow(dice, &def, height);
-    leafy(dice, &tree, leaf, tint)
+    let canopy = Canopy::of(&tree, tint);
+    let mut placed = grown_tree::crown_cards(dice, &tree, &canopy);
+    // A spruce's shoots are not flat fans: each branch's side shoots hang from it in a
+    // curtain and turn every way round it, as Norway spruce's do, so a branch reads as a
+    // rolled bottle-brush of needles from any side, not a horizontal plank (D269).
+    for (spray, set) in tree.sprays.iter().zip(&mut placed) {
+        let Some(along) = spray.along else { continue };
+        let side = along.cross(Vec3::Y).normalize_or(Vec3::X);
+        let hang = (along * 0.45 - Vec3::Y * 0.75 + side * dice.range(-0.5, 0.5)).normalize();
+        let below = spray.at - Vec3::Y * spray.size * 0.12;
+        let (size, roll) = (spray.size * dice.range(0.6, 0.8), dice.range(-0.8, 0.8));
+        set.push(grown_tree::twig_card(
+            dice, &canopy, below, hang, size, roll,
+        ));
+        let size = spray.size * dice.range(0.7, 0.9);
+        let roll = if dice.unit() < 0.5 { -1.0 } else { 1.0 } * dice.range(0.9, 1.4);
+        set.push(grown_tree::twig_card(
+            dice, &canopy, spray.at, along, size, roll,
+        ));
+    }
+    drawn(&tree, &canopy, &placed, leaf)
 }
 
 /// Holly: a small evergreen tree two to five metres tall, a short stem or two under a dense

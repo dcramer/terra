@@ -498,3 +498,4 @@ One line per decision added or changed in status. What was built is in git histo
 - **2026-10-14**: D270: the sky's environment map filtered only for four frames after it is painted again, not every frame.
 - **2026-10-14**: D271 added (Decided, by the agent): plants make way for the camera and the player; shrubs, ferns and grass pushed out round bodies walking through them, leaves near a third-person camera's lens and between it and the figure it follows dithered out (D216, D264 amended).
 - **2026-10-14**: D269: each leaf lit at its own tilt from the cards' normal map; crowns and the middle layer dark inside by their own shape, leaves in another crown's shadow passing on less sun; card colours wider apart.
+- **2026-10-14**: D269: the middle layer draws every card of a clump near and the trees' middle level past 28 m; young spruces' shoots hang and turn round their branches.
