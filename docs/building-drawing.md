@@ -29,5 +29,10 @@ A frame shows a fault only from some views; the meshes show all of them. `cargo 
 | **Under the roof** | A line of sky between a wall's top and the roof | A wall carried up into a roof cube cut short of the roof's underside, or a detail that leaves the gable out | A wall under a roof is carried up and cut at the roof's underside (`Piece::Gable`, `gable_cut`), at every detail |
 | **Pokes out** | A piece through a roof's covering, past its edges, or out of a wall | A piece laid by its own rule without the planes round it: a cap over the ridge, a batten past a verge, a lintel bearing too far | Nothing leaves its cubes but eaves, footings and trims up to an eighth of a cube (D192); a roof's parts stay within its covering and edges |
 | **Not finite** | A black pixel that spreads under TAA | A normal of no length, as from a degenerate triangle | Every corner, normal and texture place a number |
+| **Black** or **inward** | A surface black in sun and shade alike, or lit from behind | Corner colours a mask or bake took to black; triangles wound against their normals, so the inside is drawn | Masks shade, never blacken; every triangle faces its normals. The game warns of a black surface laid with the real maps |
+| **Torn change** | For a frame, a piece twice or missing, or a seam, where an edit's sections meet | Sections of one change put on screen in different frames | What a build sends to the workers is swapped in whole, in one frame, the old meshes drawn until then (`draw::upload`) |
+| **Strays** | Lit pieces lying about a plan | Each kit's next piece lit at once on the kit sheet | One piece of a base is next, the lowest |
+
+Faults only a frame shows are checked from frames on the GPU: `cargo xtask lodcheck` (now with the village) fails on detail popping and on a frame over 1% black, as when the sky's light was left unfiltered and every shade drew black; `call sandbox.shot {"path", "frames"}` saves every frame of an edit as it happens, to compare.
 
 A fault found once gets a test where it was fixed, so it stays fixed; the checker holds the rest.

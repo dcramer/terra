@@ -11,7 +11,8 @@
 // textures    its brick (Poly Haven's medieval_red_brick, CC0), walls and floors; the
 //             dressed stone round its openings and over its tops (rock_boulder_dry); its
 //             lintels' wood
-// cost        a cube in one step, a quarter of a Stone (fired clay counts as stone for now)
+// cost        a cube in one step, a quarter of a Stone: fired clay counts as stone until there
+//             is a brick item (D236)
 // dress       the stone kit's pieces (pieces/stone.ron), by the same roles
 // meets       as heavy as stone and earth (D232): it runs through timber and caps its top
 //             where timber stands on it; against stone or earth, each ends against the other

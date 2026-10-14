@@ -73,6 +73,7 @@ pub fn draw_as(
             to,
             sides,
             seed,
+            capped,
             ..
         } => {
             let Some(spec) = kit.roof.parts.get(&part) else {
@@ -92,7 +93,7 @@ pub fn draw_as(
                 to,
                 seat: seat(part, spec.on_roof, from, to, sides.map(Place::metres)),
                 across: None,
-                capped: [true; 2],
+                capped,
                 seed,
                 blend: module.blend,
             };

@@ -1170,3 +1170,75 @@ fn an_edit_laid_again_only_as_far_as_it_reaches_is_as_laid_whole() {
     // Not every edit lays the whole building again.
     assert!(kept > 0, "every edit reached every section");
 }
+
+#[test]
+fn a_plan_so_far_through_lights_one_piece_not_one_a_kit() {
+    // A log house on stone footings under shakes: three kits, each with a next piece, of
+    // which only the lowest is the builder's next; the others lay about the plan, lit.
+    let kits = shipped();
+    let logs = kind(&kits, Pattern::Logs, Profile::Round);
+    let stone = kind(&kits, Pattern::Masonry, Profile::Round);
+    let mut base = Base::default();
+    house(&mut base, &kits, [0, 0], [9, 7], logs, Style::Gable);
+    base.lay_footings(stone, |[x, z]| (-x * 4 - z * 2) as i16);
+    let whole = Whole::lay(&base, &kits);
+    for fraction in [0.0, 0.3] {
+        let progress = Progress::Fraction(fraction);
+        let mut lit = BTreeSet::new();
+        for at in drawable(&base) {
+            let section = Section {
+                base: &base,
+                kits: &kits,
+                maps: &Maps::default(),
+                at: IVec3::from_array(at),
+                progress: &progress,
+            };
+            for (index, _, stage) in lay(&section, &whole).pieces {
+                if stage == Stage::Next {
+                    lit.insert(index);
+                }
+            }
+        }
+        assert_eq!(lit.len(), 1, "{fraction}: kits lit {lit:?}");
+    }
+}
+
+#[test]
+fn verges_meeting_at_an_apex_take_no_cap_there() {
+    // Every roof kind over a gable: each verge's top meets the other verge and the ridge at
+    // the apex, under the ridge's own cap; capped there too, the two verges' caps stood out
+    // past the apex through each other. Their feet at the eaves stop in the open, capped.
+    let kits = shipped();
+    for (name, base) in crate::inspect::cases(&kits, Some("rectangle, gable roof")) {
+        if name.contains("with") {
+            continue;
+        }
+        let top = base.cubes().map(|(at, _)| at.y + 1).max().unwrap_or(0) as f32 * crate::CELL_M;
+        let mut verges = 0;
+        for kit in &kits.0 {
+            for piece in crate::layout::lay_among(&base, kit, &kits).pieces {
+                let Piece::Roof {
+                    part: crate::layout::roofs::RoofPart::Verge,
+                    from,
+                    to,
+                    capped,
+                    ..
+                } = piece
+                else {
+                    continue;
+                };
+                verges += 1;
+                for (end, capped) in [from, to].into_iter().zip(capped) {
+                    let at_apex = end.metres().y > top - 0.6;
+                    assert_eq!(
+                        capped,
+                        !at_apex,
+                        "{name}: a verge's end at {}",
+                        end.metres()
+                    );
+                }
+            }
+        }
+        assert!(verges >= 4, "{name}: {verges} verges");
+    }
+}

@@ -61,6 +61,8 @@ pub struct Finding {
     pub detail: Detail,
     pub at: Vec3,
     pub what: String,
+    /// How far out, in metres, for a piece poking out; nothing for the rest.
+    pub by: f32,
 }
 
 /// What was looked at and what was found.
@@ -148,6 +150,7 @@ impl Drawn {
         // whatever the light, as a mask or a bake gone wrong does.
         if let Some(dark) = black(surface) {
             findings.push(Finding {
+                by: 0.0,
                 fault: Fault::Black,
                 detail,
                 at: all.positions.first().copied().unwrap_or(Vec3::ZERO),
@@ -160,6 +163,7 @@ impl Drawn {
         }
         if bad > 0 {
             findings.push(Finding {
+                by: 0.0,
                 fault: Fault::NotFinite,
                 detail,
                 at: first_bad.unwrap_or(Vec3::ZERO),
@@ -199,6 +203,7 @@ impl Drawn {
         // its area is.
         if area_in > area_all * 0.01 {
             findings.push(Finding {
+                by: 0.0,
                 fault: Fault::Inward,
                 detail,
                 at: first_in.unwrap_or(Vec3::ZERO),
@@ -328,6 +333,7 @@ fn coplanar(drawn: &Drawn, detail: Detail, findings: &mut Vec<Finding>) {
     for ((m, n, same), (at, area, count)) in overlaps(drawn) {
         let (a, b) = (&drawn.meshes[m as usize], &drawn.meshes[n as usize]);
         findings.push(Finding {
+            by: 0.0,
             fault: if same {
                 Fault::Doubled
             } else {
@@ -715,6 +721,7 @@ fn see_through(
     }
     for (_, (at, what)) in found {
         findings.push(Finding {
+            by: 0.0,
             fault: Fault::SeeThrough,
             detail,
             at,
@@ -898,6 +905,7 @@ fn pokes_out(
             fault: Fault::PokesOut,
             detail,
             at,
+            by,
             what: format!(
                 "{}: {how}, {:.0} cm too far",
                 drawn.meshes[mesh as usize],
@@ -955,6 +963,7 @@ fn under_roof(
                         .is_none()
                     {
                         findings.push(Finding {
+                            by: 0.0,
                             fault: Fault::UnderRoof,
                             detail,
                             at: Vec3::new(on_face.x, y, on_face.z),

@@ -339,14 +339,27 @@ pub fn lay(section: &Section, whole: &Whole) -> Laid {
         .collect();
     let low = origin - IVec3::ONE;
     let high = origin + IVec3::splat(crate::cubes::SECTION);
+    // So far through, one piece of the base is next, as a builder has one in hand: the
+    // lowest of each kit's next, so a plan shows one lit piece at its foot, not one a kit
+    // lying about it.
+    let next_kit = match section.progress {
+        Progress::Fraction(fraction) => whole
+            .by_section
+            .values()
+            .flatten()
+            .filter(|(index, order, _)| *order == done(whole.counts[*index], *fraction))
+            .min_by_key(|(index, _, piece)| (piece.anchor().y, *index))
+            .map(|(index, _, _)| *index),
+        _ => None,
+    };
     let stage = |index: usize, order: usize, piece: &Piece| match section.progress {
         // In the order the whole base goes in.
         Progress::Fraction(fraction) => {
             let done = done(whole.counts[index], *fraction);
             match order.cmp(&done) {
                 std::cmp::Ordering::Less => Stage::In,
-                std::cmp::Ordering::Equal => Stage::Next,
-                std::cmp::Ordering::Greater => Stage::Ghost,
+                std::cmp::Ordering::Equal if next_kit == Some(index) => Stage::Next,
+                _ => Stage::Ghost,
             }
         }
         Progress::Cubes { next } => stage_by_cubes(base, piece, next),

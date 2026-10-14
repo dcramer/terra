@@ -191,6 +191,10 @@ pub enum Piece {
         sides: [Place; 2],
         seed: u32,
         cell: roofs::RoofCell,
+        /// Whether each end stops in the open and takes its module's cap; an edge's end
+        /// that meets a crease or another edge (a verge's top at the ridge) is not capped,
+        /// which stood a knob of its cap out over the roof there.
+        capped: [bool; 2],
     },
 }
 

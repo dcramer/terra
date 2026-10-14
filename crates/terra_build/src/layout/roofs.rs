@@ -676,6 +676,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                     sides: segment.sides,
                     seed: hash(&[seed, 1]),
                     cell: roofs.cell(segment.square, 1),
+                    capped: [true; 2],
                 });
             }
         }
@@ -686,6 +687,7 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
             sides: segment.sides,
             seed,
             cell,
+            capped: [segment.from, segment.to].map(|end| !edge_met(segment, end, &joined)),
         });
     }
     rafters(&roofs, &ours, batten + rafter, pieces);
@@ -751,9 +753,28 @@ pub(crate) fn lay(base: &Base, kit: &Kit, kits: &Kits, scope: Scope, pieces: &mu
                 sides: segment.sides,
                 seed: 0,
                 cell: roofs.cell(segment.square, 2),
+                capped: [true; 2],
             });
         }
     }
+}
+
+/// Whether an edge's end meets another line of the roof there, a crease's or another edge's,
+/// whose own module covers the joint: a verge's top under its ridge's cap, two verges at an
+/// apex. Creases keep their caps; an eave meets nothing it should stop at.
+fn edge_met(segment: &Segment, end: Place, all: &[Segment]) -> bool {
+    if segment.part != RoofPart::Verge {
+        return false;
+    }
+    let near = |a: Place, b: Place| (0..3).all(|i| (a.0[i] - b.0[i]).abs() <= super::TICKS / 16);
+    all.iter().any(|other| {
+        !std::ptr::eq(other, segment)
+            && matches!(
+                other.part,
+                RoofPart::Ridge | RoofPart::Hip | RoofPart::Verge
+            )
+            && (near(other.from, end) || near(other.to, end))
+    })
 }
 
 /// How far apart a frame's piece is tried along it, in metres, for where it may run.
@@ -1053,6 +1074,7 @@ fn rafters(roofs: &Roofs, ours: &dyn Fn(usize) -> bool, below: f32, pieces: &mut
             sides: segment.sides,
             seed,
             cell: roofs.cell(segment.square, 1),
+            capped: [true; 2],
         });
     }
 }
