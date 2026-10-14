@@ -48,7 +48,12 @@ use terra_world::cover::{CoverRules, CoverSource, Growing};
 use terra_world::detail::DetailScale;
 use terra_world::flora::{Growth, Obstacles};
 use terra_world::flora_kinds::Flora;
+use terra_world::grown::Cards;
 use terra_world::planet::Planet;
+
+mod species;
+
+use species::{Form, Species};
 
 type Foliage = ExtendedMaterial<StandardMaterial, FoliageExtension>;
 
@@ -90,9 +95,7 @@ const BARK_M: Vec2 = Vec2::new(2.15, 2.15);
 const SHADOW_LUMP: f32 = 0.6;
 /// The render layer only the sun sees, which the stand-ins are on.
 const SUN_ONLY: usize = 1;
-/// How many kinds of grown tree, young tree and bush there are; each is drawn many times.
-const OAK_KINDS: u64 = 6;
-const YOUNG_KINDS: u64 = 3;
+/// How many kinds of bush there are; each is drawn many times. The trees' are `KINDS`.
 const BUSH_KINDS: u64 = 4;
 /// Bushes cast shadows this near, and fade out at the second distance.
 const BUSH_M: [f32; 2] = [20.0, 70.0];
@@ -100,19 +103,48 @@ const BUSH_M: [f32; 2] = [20.0, 70.0];
 const FILED_M: f32 = 8.0;
 /// Where the leaves' picture is cut: more opaque than this is leaf.
 const LEAF_CUT: f32 = 0.45;
-/// The outline of the leaves in their picture, as an octagon in texture coordinates, so a
-/// card is cut to it rather than square: two thirds of the square, so the GPU shades a
-/// third fewer empty pixels. Fitted to leaves.png's opaque pixels by hand-run script.
-const LEAF_OUTLINE: [(f32, f32); 8] = [
-    (0.310, 0.062),
-    (0.662, 0.062),
-    (0.946, 0.346),
-    (0.946, 0.705),
-    (0.713, 0.938),
-    (0.317, 0.938),
-    (0.054, 0.674),
-    (0.054, 0.317),
-];
+/// The bushes' leaves in their picture, leaves.png, as an octagon in texture coordinates,
+/// so a card is cut to it rather than square: two thirds of the square, so the GPU shades a
+/// third fewer empty pixels. Fitted to its opaque pixels by hand-run script.
+const SPRAY: Leaf = Leaf {
+    cell: Vec2::ZERO,
+    across: 1.0,
+    outline: [
+        (0.310, 0.062),
+        (0.662, 0.062),
+        (0.946, 0.346),
+        (0.946, 0.705),
+        (0.713, 0.938),
+        (0.317, 0.938),
+        (0.054, 0.674),
+        (0.054, 0.317),
+    ],
+};
+
+/// A card's picture: its cell in its atlas, how far across the cell is, and the octagon
+/// round its leaves in the atlas's coordinates.
+#[derive(Clone, Copy)]
+struct Leaf {
+    cell: Vec2,
+    across: f32,
+    outline: [(f32, f32); 8],
+}
+
+impl Leaf {
+    /// A card of the shared atlas grown plants use (`assets/data/foliage.ron`, D222).
+    fn of(cards: &Cards, name: &str) -> Self {
+        let card = cards.get(name);
+        let mut outline = [(0.0, 0.0); 8];
+        for (to, from) in outline.iter_mut().zip(&card.outline) {
+            *to = *from;
+        }
+        Self {
+            cell: card.cell,
+            across: card.across,
+            outline,
+        }
+    }
+}
 /// Paths are filed in squares this wide, to find the nearest quickly.
 const PATH_SQUARE_M: f32 = 12.0;
 
@@ -124,7 +156,7 @@ pub struct FoliageExtension {
     #[uniform(100)]
     strength: f32,
     /// 1 for bark: each tree's bark is shifted by where it stands, and weathered in patches
-    /// with moss and a wet foot (D218).
+    /// with moss and a wet foot (D218); up to 2 for bark that grows less moss (D235).
     #[uniform(100)]
     bark: f32,
     /// For a crown whose cards drop out: from where, to where, and 1 (D223).
@@ -457,6 +489,85 @@ struct TreeModel {
     lumps: Handle<Mesh>,
     height: f32,
     trunk_m: f32,
+    species: Species,
+    young: bool,
+    bark: Handle<Foliage>,
+    /// The far crown's material, in its leaves' colour.
+    far: Handle<StandardMaterial>,
+}
+
+/// The kinds of tree the forest grows, each grown once and drawn many times: what it is,
+/// its form if an oak, whether young, and the heights it is grown between (D182, D235).
+/// Grown oaks are tall forest oaks, broad ones, and ones forked low; Scots pines stand in
+/// groves among them, Norway spruces in the groves' damper hollows, young spruces under
+/// them.
+const KINDS: [(Species, Form, bool, (f32, f32)); 21] = [
+    (Species::Oak, Form::Tall, false, (21.0, 27.0)),
+    (Species::Oak, Form::Broad, false, (17.0, 23.0)),
+    (Species::Oak, Form::Forked, false, (19.0, 25.0)),
+    (Species::Oak, Form::Tall, false, (20.0, 26.0)),
+    (Species::Oak, Form::Tall, false, (18.0, 24.0)),
+    (Species::Oak, Form::Broad, false, (18.0, 22.0)),
+    (Species::Oak, Form::Forked, false, (20.0, 26.0)),
+    (Species::Oak, Form::Tall, false, (22.0, 28.0)),
+    (Species::Oak, Form::Tall, true, (7.0, 9.0)),
+    (Species::Oak, Form::Tall, true, (8.0, 11.0)),
+    (Species::Oak, Form::Broad, true, (7.0, 10.0)),
+    (Species::Pine, Form::Tall, false, (24.0, 28.0)),
+    (Species::Pine, Form::Tall, false, (26.0, 31.0)),
+    (Species::Pine, Form::Tall, false, (23.0, 27.0)),
+    (Species::Pine, Form::Tall, false, (27.0, 32.0)),
+    (Species::Spruce, Form::Tall, false, (19.0, 24.0)),
+    (Species::Spruce, Form::Tall, false, (22.0, 27.0)),
+    (Species::Spruce, Form::Tall, false, (17.0, 22.0)),
+    (Species::Spruce, Form::Tall, true, (3.5, 5.0)),
+    (Species::Spruce, Form::Tall, true, (4.5, 6.5)),
+    (Species::Spruce, Form::Tall, true, (5.5, 8.0)),
+];
+
+/// A bark's material, `materials/<name>`, tinted: its colour, normal, roughness and
+/// crevices, and its furrows relief-mapped from its height, `relief` deep (D218), and how
+/// much moss it grows, 0 to 1: a pine's bark grows little. Under materials/, so
+/// terra_world gives it its mipmaps.
+fn bark_material(
+    assets: &AssetServer,
+    materials: &mut Assets<Foliage>,
+    wind: &FoliageExtension,
+    name: &str,
+    tint: Color,
+    relief: f32,
+    moss: f32,
+) -> Handle<Foliage> {
+    let map = |file: &str, colour: bool| -> Handle<Image> {
+        assets
+            .load_builder()
+            .with_settings(move |settings: &mut ImageLoaderSettings| settings.is_srgb = colour)
+            .load(format!("materials/{name}/{file}"))
+    };
+    let arm = map("arm.jpg", false);
+    materials.add(Foliage {
+        base: StandardMaterial {
+            base_color: tint,
+            base_color_texture: Some(map("color.jpg", true)),
+            normal_map_texture: Some(map("normal.jpg", false)),
+            // Occlusion in red, roughness in green, metal in blue.
+            occlusion_texture: Some(arm.clone()),
+            metallic_roughness_texture: Some(arm),
+            perceptual_roughness: 1.0,
+            metallic: 0.0,
+            reflectance: 0.3,
+            // The furrows read as cut into the trunk, not painted on it.
+            depth_map: Some(map("depth.jpg", false)),
+            parallax_depth_scale: relief,
+            parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 4 },
+            max_parallax_layer_count: 16.0,
+            ..default()
+        },
+        extension: FoliageExtension {
+            bark: 2.0 - moss,
+            ..wind.clone()
+        },
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -503,48 +614,50 @@ fn plant(
             ..ImageSamplerDescriptor::linear()
         });
     };
-    // Scanned furrowed bark, as an old oak's is, its colour in the range real bark has (D214), with the
-    // relief and roughness that let it catch the sky's light in the shade. Under materials/,
-    // so terra_world gives it its mipmaps.
-    let bark_map = |file: &str, colour: bool| -> Handle<Image> {
-        assets
-            .load_builder()
-            .with_settings(move |settings: &mut ImageLoaderSettings| settings.is_srgb = colour)
-            .load(format!("materials/oak_bark/{file}"))
-    };
     let leaf_picture: Handle<Image> = assets
         .load_builder()
         .with_settings(slanted)
         .load("textures/forest_spike/leaves.png");
     unmipped.0.push((leaf_picture.clone(), Some(LEAF_CUT)));
-    let arm = bark_map("arm.jpg", false);
-    let bark = materials.add(Foliage {
+    // Scanned furrowed bark, as an old oak's is, its colour in the range real bark has (D214),
+    // with the relief and roughness that let it catch the sky's light in the shade. The scan
+    // is at the top of bark's range; this takes it to the darker grey-brown of an old oak,
+    // about sRGB 78, as the forests of the Witcher 3 and Sons of the Forest have it (D221).
+    // Fallen logs are of it too.
+    let bark = bark_material(
+        &assets,
+        &mut materials,
+        &wind,
+        "oak_bark",
+        Color::srgb(0.58, 0.56, 0.54),
+        0.03,
+        1.0,
+    );
+    // The crowns' leaves, oak and conifer alike, are cards of the atlas grown plants use, so
+    // all of them are drawn in one material (D222).
+    let cards = Cards::read();
+    let atlas: Handle<Image> = assets.load(cards.atlas.clone());
+    let crown_material = |cards_drop: Vec3| Foliage {
         base: StandardMaterial {
-            // The scan is at the top of bark's range; this takes it to the darker grey-brown
-            // of an old oak, about sRGB 78, as the forests of the Witcher 3 and Sons of the
-            // Forest have it (D221).
-            base_color: Color::srgb(0.58, 0.56, 0.54),
-            base_color_texture: Some(bark_map("color.jpg", true)),
-            normal_map_texture: Some(bark_map("normal.jpg", false)),
-            // Occlusion in red, roughness in green, metal in blue.
-            occlusion_texture: Some(arm.clone()),
-            metallic_roughness_texture: Some(arm),
-            perceptual_roughness: 1.0,
-            metallic: 0.0,
-            reflectance: 0.3,
-            // The furrows read as cut into the trunk, not painted on it: relief mapping from
-            // the bark's own height (D218).
-            depth_map: Some(bark_map("depth.jpg", false)),
-            parallax_depth_scale: 0.03,
-            parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 4 },
-            max_parallax_layer_count: 16.0,
+            base_color_texture: Some(atlas.clone()),
+            alpha_mode: AlphaMode::Mask(cards.cut),
+            // Seen from both sides, but with the same normal on both, which leans out of
+            // the crown, so a card does not flip from lit to dark as it turns.
+            cull_mode: None,
+            double_sided: false,
+            diffuse_transmission: 0.55,
+            perceptual_roughness: 0.8,
+            reflectance: 0.25,
             ..default()
         },
         extension: FoliageExtension {
-            bark: 1.0,
+            cards: cards_drop,
             ..wind.clone()
         },
-    });
+    };
+    let crown_leaves = materials.add(crown_material(Vec3::ZERO));
+    // The near crown's leaves, whose cards drop out with distance (D223).
+    let dropping_leaves = materials.add(crown_material(Vec2::from(CARDS_DROP_M).extend(1.0)));
     let leaves = materials.add(Foliage {
         base: StandardMaterial {
             base_color_texture: Some(leaf_picture.clone()),
@@ -560,32 +673,17 @@ fn plant(
         },
         extension: wind.clone(),
     });
-    // The near crown's leaves, whose cards drop out with distance (D223).
-    let dropping_leaves = materials.add(Foliage {
-        base: StandardMaterial {
-            base_color_texture: Some(leaf_picture.clone()),
-            alpha_mode: AlphaMode::Mask(LEAF_CUT),
-            // Seen from both sides, but with the same normal on both, which leans out of
-            // the crown, so a card does not flip from lit to dark as it turns.
-            cull_mode: None,
-            double_sided: false,
-            diffuse_transmission: 0.5,
-            perceptual_roughness: 0.75,
-            reflectance: 0.3,
-            ..default()
-        },
-        extension: FoliageExtension {
-            cards: Vec2::from(CARDS_DROP_M).extend(1.0),
-            ..wind.clone()
-        },
-    });
     // The shadow stand-ins: their cards shrink away over the handover, and the lumps grow in
     // then shrink away at the end of the shadows (D234).
     let shrinking = |out: [f32; 2], grow: [f32; 2]| FoliageExtension {
         shrink: Vec4::new(out[0], out[1], grow[0], grow[1]),
         ..wind.clone()
     };
-    let leaves_base = materials.get(&leaves).expect("just added").base.clone();
+    let leaves_base = materials
+        .get(&crown_leaves)
+        .expect("just added")
+        .base
+        .clone();
     let stand_in_leaves = materials.add(Foliage {
         base: leaves_base,
         extension: shrinking(SHADOW_HANDOVER_M, [0.0, 0.0]),
@@ -597,34 +695,91 @@ fn plant(
             SHADOW_HANDOVER_M,
         ),
     });
-    // A far crown: the leaves' average colour, rough, lit through from behind a little.
-    let far_crown = plain.add(StandardMaterial {
-        base_color: Color::srgb(0.26, 0.36, 0.13),
-        perceptual_roughness: 0.9,
-        reflectance: 0.2,
-        diffuse_transmission: 0.2,
-        ..default()
-    });
+    // A far crown: its leaves' average colour, rough, lit through from behind a little.
+    let mut far_crown = |colour: Color| {
+        plain.add(StandardMaterial {
+            base_color: colour,
+            perceptual_roughness: 0.9,
+            reflectance: 0.2,
+            diffuse_transmission: 0.2,
+            ..default()
+        })
+    };
+    let far_crowns = [
+        far_crown(Color::srgb(0.22, 0.32, 0.12)),
+        far_crown(Color::srgb(0.11, 0.19, 0.1)),
+        far_crown(Color::srgb(0.09, 0.15, 0.09)),
+    ];
+    // Old oaks' bark in two scans, deep-furrowed willow and the finer, greyer one, so a
+    // stand of them is not one bark; pines' and spruces' in pine bark, a spruce's greyer.
+    let barks = [
+        bark.clone(),
+        bark_material(
+            &assets,
+            &mut materials,
+            &wind,
+            "bark_willow",
+            Color::srgb(0.72, 0.68, 0.64),
+            0.045,
+            1.0,
+        ),
+        bark_material(
+            &assets,
+            &mut materials,
+            &wind,
+            "pine_bark",
+            Color::srgb(0.7, 0.64, 0.6),
+            0.035,
+            0.35,
+        ),
+        bark_material(
+            &assets,
+            &mut materials,
+            &wind,
+            "pine_bark",
+            Color::srgb(0.55, 0.53, 0.52),
+            0.035,
+            0.6,
+        ),
+    ];
+    let leaf_of = [
+        Leaf::of(&cards, "oakbranch"),
+        Leaf::of(&cards, "pine"),
+        Leaf::of(&cards, "spruce"),
+    ];
 
-    let trees: Vec<TreeModel> = (0..OAK_KINDS + YOUNG_KINDS)
-        .map(|kind| {
-            let mut dice = seed.derive("oak").index(kind).rng();
-            let height = if kind < OAK_KINDS {
-                dice.range(16.0, 25.0)
-            } else {
-                dice.range(7.0, 11.0)
+    let trees: Vec<TreeModel> = KINDS
+        .iter()
+        .enumerate()
+        .map(|(kind, &(species, form, young, (low, high)))| {
+            let mut dice = seed.derive("tree").index(kind as u64).rng();
+            let height = dice.range(low, high);
+            let tree = match species {
+                Species::Oak => species::oak(&mut dice, height, form, young),
+                _ => species::conifer(&mut dice, height, species, young),
             };
-            let tree = grow_tree(&mut dice, height);
-            let wood = [0, 1, 2].map(|detail| wood(&tree, detail, height));
+            let (bark, bark_m, leaf, tint, far_material) = match species {
+                Species::Oak => {
+                    let which = kind % 2;
+                    (barks[which].clone(), [BARK_M, Vec2::splat(1.3)][which], leaf_of[0], Vec3::new(0.92, 0.95, 0.85), &far_crowns[0])
+                }
+                Species::Pine => (barks[2].clone(), Vec2::splat(2.0), leaf_of[1], Vec3::new(1.15, 1.15, 1.0), &far_crowns[1]),
+                Species::Spruce => (barks[3].clone(), Vec2::splat(2.0), leaf_of[2], Vec3::new(0.9, 1.0, 0.9), &far_crowns[2]),
+            };
+            let wood = [0, 1, 2].map(|detail| wood(&tree, detail, height, bark_m));
             // Every level of the crown, and its shadow, from one set of cards (D221).
-            let cards = crown_cards(&mut dice, &tree, height);
+            let mut cards = species::crown_cards(&mut dice, &tree, height, leaf);
+            for card in cards.iter_mut().flatten() {
+                card.tint *= tint;
+            }
             let near = crown_near(&cards);
             let far = crown_far(&cards);
             let shadow = crown_stand_in(&cards);
             let clumps = crown_clumps(&tree, 1.0, false);
             let lumps = crown_clumps(&tree, SHADOW_LUMP, true);
             info!(
-                "lush: tree {kind}, {height:.0} m: wood {} {} {} triangles, crown {} near and {} far, shadows {} {}",
+                "lush: tree {kind}, {species:?} {form:?}{}, {height:.0} m: wood {} {} {} triangles, crown {} near and {} far, shadows {} {}",
+                if young { " young" } else { "" },
                 wood[0].triangles(),
                 wood[1].triangles(),
                 wood[2].triangles(),
@@ -647,6 +802,10 @@ fn plant(
                 lumps: meshes.add(lumps.mesh()),
                 height,
                 trunk_m: tree.trunk_m,
+                species,
+                young,
+                bark,
+                far: far_material.clone(),
             }
         })
         .collect();
@@ -711,9 +870,32 @@ fn plant(
     };
 
     // Grown trees, tried at random over the patch and kept if far enough from the others
-    // and off the paths; then young ones in the gaps between them.
+    // and off the paths; then young ones in the gaps between them. Pines grow in groves,
+    // where a broad field of noise is high, spruces in the groves' hollows, where another
+    // is; oaks everywhere else, and the edges of groves mixed.
     let mut dice = seed.derive("places").rng();
     let glades = Noise::new(seed.derive("glades"));
+    let groves = Noise::new(seed.derive("groves"));
+    let trees = &trees;
+    let pool = |species: Species, young: bool| -> Vec<usize> {
+        let fits = |s: Species| -> Vec<usize> {
+            (0..trees.len())
+                .filter(|&k| trees[k].species == s && trees[k].young == young)
+                .collect()
+        };
+        let kinds = fits(species);
+        // No young pines: a young conifer is a spruce.
+        if kinds.is_empty() {
+            fits(Species::Spruce)
+        } else {
+            kinds
+        }
+    };
+    let pools: [[Vec<usize>; 2]; 3] =
+        [Species::Oak, Species::Pine, Species::Spruce].map(|s| [pool(s, false), pool(s, true)]);
+    let mut by_species = [0; 3];
+    // The nearest grown tree of each kind to the start, for scripted runs to look at.
+    let mut nearest_of = [Vec2::splat(f32::MAX); 3];
     let mut feet: HashMap<(i32, i32), Vec<Vec2>> = HashMap::default();
     let mut planted = [0, 0];
     // The nearest of each to the start, for scripted runs to walk up to.
@@ -725,6 +907,19 @@ fn plant(
             let at = Vec2::new(libm::cosf(angle), libm::sinf(angle)) * distance;
             // Glades open here and there, where only young trees grow.
             let glade = glades.fbm(Vec3::new(at.x, 0.0, at.y) / 45.0, 2, 2.0, 0.5);
+            let grove = groves.fbm(Vec3::new(at.x, 0.0, at.y) / 70.0, 2, 2.0, 0.5);
+            let species = if grove < 0.1 + dice.range(-0.12, 0.12) {
+                Species::Oak
+            } else if groves.sample(Vec3::new(at.x, 40.0, at.y) / 35.0) > 0.15 {
+                Species::Spruce
+            } else {
+                Species::Pine
+            };
+            // Conifers stand closer than oaks, whose crowns spread.
+            let apart = match species {
+                Species::Oak => apart,
+                _ => apart * 0.75,
+            };
             if path.edge_distance(at) < 2.5
                 || (!young && glade < -0.25)
                 || nearest(&feet, at, apart) < apart
@@ -732,12 +927,10 @@ fn plant(
                 continue;
             }
             feet.entry(square(at, FILED_M)).or_default().push(at);
-            let kind = if young {
-                OAK_KINDS + u64::from(dice.below(YOUNG_KINDS as u32))
-            } else {
-                u64::from(dice.below(OAK_KINDS as u32))
-            } as usize;
+            let choices = &pools[species as usize][young as usize];
+            let kind = choices[dice.below(choices.len() as u32) as usize];
             let model = &trees[kind];
+            by_species[model.species as usize] += 1;
             let scale = dice.range(0.85, 1.15);
             // In steps of a twentieth, so trees share their distances: Bevy draws at most
             // 65,535 distinct ones, and past that shares a slot and culls wrongly (D230).
@@ -751,7 +944,18 @@ fn plant(
                 .spawn((
                     place,
                     Visibility::default(),
-                    Growth::new(cut_as("Leafy tree", model.height * scale), Some(foot), 1.4),
+                    Growth::new(
+                        cut_as(
+                            if model.species == Species::Oak {
+                                "Leafy tree"
+                            } else {
+                                "Pine"
+                            },
+                            model.height * scale,
+                        ),
+                        Some(foot),
+                        1.4,
+                    ),
                 ))
                 .with_children(|tree| {
                     for level in 0..3 {
@@ -759,7 +963,7 @@ fn plant(
                         let last = if level == 2 { 3 } else { level };
                         let mut wood = tree.spawn((
                             Mesh3d(model.wood[level].clone()),
-                            MeshMaterial3d(bark.clone()),
+                            MeshMaterial3d(model.bark.clone()),
                             detail(level, last, size),
                         ));
                         if level == 2 {
@@ -776,7 +980,7 @@ fn plant(
                     ));
                     tree.spawn((
                         Mesh3d(model.crown_far.clone()),
-                        MeshMaterial3d(leaves.clone()),
+                        MeshMaterial3d(crown_leaves.clone()),
                         between(CARDS_DROP_M[1], far_from(size)),
                         NotShadowCaster,
                     ));
@@ -784,7 +988,7 @@ fn plant(
                     // forest carries on past where its cards end.
                     tree.spawn((
                         Mesh3d(model.clumps.clone()),
-                        MeshMaterial3d(far_crown.clone()),
+                        MeshMaterial3d(model.far.clone()),
                         between(far_from(size), DETAIL_M[3] * size),
                         NotShadowCaster,
                     ));
@@ -802,6 +1006,10 @@ fn plant(
                     ));
                 });
             planted[young as usize] += 1;
+            let of = &mut nearest_of[model.species as usize];
+            if !young && at.length() < of.length() {
+                *of = at;
+            }
             if at.length() < nearest_to_start[young as usize].length() {
                 nearest_to_start[young as usize] = at;
             }
@@ -973,6 +1181,18 @@ fn plant(
     info!(
         "lush: the floor has {} rocks, {} boulders, {} ferns, {} stumps and {} fallen logs.",
         laid[0], laid[1], laid[2], laid[3], laid[4]
+    );
+    info!(
+        "lush: {} oaks, {} pines and {} spruces; the nearest grown of each at {:.1},{:.1}, {:.1},{:.1} and {:.1},{:.1} (east, south).",
+        by_species[0],
+        by_species[1],
+        by_species[2],
+        nearest_of[0].x,
+        nearest_of[0].y,
+        nearest_of[1].x,
+        nearest_of[1].y,
+        nearest_of[2].x,
+        nearest_of[2].y
     );
     info!(
         "lush: {} grown trees, {} young ones and {bushed} bushes planted. The nearest stand at \
@@ -1147,142 +1367,39 @@ struct Tree {
     branch_of: Vec<usize>,
     branches: usize,
     trunk_m: f32,
-}
-
-/// Grows an oak: a stout trunk that splits into a few great limbs spreading wider than
-/// they rise, branching three times more, with leaf clumps at the ends.
-fn grow_tree(dice: &mut Rng, height: f32) -> Tree {
-    let mut tree = Tree {
-        limbs: Vec::new(),
-        tips: Vec::new(),
-        branch_of: Vec::new(),
-        branches: 0,
-        trunk_m: height * 0.034,
-    };
-    let trunk = tree.trunk_m;
-    grow(
-        dice,
-        Vec3::ZERO,
-        Vec3::Y,
-        height * 0.34,
-        trunk,
-        0,
-        height,
-        0,
-        &mut tree,
-    );
-    tree
-}
-
-/// Grows one limb and everything that branches from it.
-#[allow(clippy::too_many_arguments)]
-fn grow(
-    dice: &mut Rng,
-    from: Vec3,
-    heading: Vec3,
-    length: f32,
-    radius: f32,
-    depth: u32,
-    height: f32,
-    branch: usize,
-    tree: &mut Tree,
-) {
-    let steps = [7, 6, 5, 4][depth.min(3) as usize];
-    let wander = [0.12, 0.28, 0.4, 0.5][depth.min(3) as usize];
-    let mut direction = heading;
-    let mut at = from;
-    let mut points = vec![at];
-    let mut radii = vec![radius];
-    for step in 1..=steps {
-        let jitter = dice.unit_vector() * wander;
-        // Limbs reach out and then up toward the light; the trunk stays nearly upright.
-        let lift = if depth == 0 { 0.15 } else { 0.08 };
-        direction = (direction + jitter + Vec3::Y * lift).normalize();
-        at += direction * length / steps as f32;
-        let t = step as f32 / steps as f32;
-        points.push(at);
-        radii.push(radius * (1.0 - 0.6 * t));
-    }
-    // The foot of the trunk flares into roots.
-    if depth == 0 {
-        for (i, r) in radii.iter_mut().enumerate() {
-            *r *= 1.0 + 1.1 * libm::expf(-points[i].y / 0.9);
-        }
-    }
-    tree.limbs.push(Limb {
-        points: points.clone(),
-        radii: radii.clone(),
-        depth,
-    });
-
-    match depth {
-        // The trunk splits into great limbs, spreading out.
-        0 => {
-            let count = 3 + dice.below(3);
-            for i in 0..count {
-                let around = i as f32 / count as f32 * TAU + dice.range(-0.4, 0.4);
-                let out = Vec3::new(libm::cosf(around), 0.0, libm::sinf(around));
-                let rise = dice.range(0.55, 1.0);
-                let heading = (out + Vec3::Y * rise).normalize();
-                let length = height * dice.range(0.38, 0.5);
-                grow(dice, at, heading, length, radius * 0.62, 1, height, 0, tree);
-            }
-        }
-        // Limbs and branches put out branches along their length, and fork at the end.
-        1 | 2 => {
-            let count = if depth == 1 {
-                4 + dice.below(3)
-            } else {
-                3 + dice.below(3)
-            };
-            for _ in 0..count {
-                let t = dice.range(0.3, 1.0);
-                let index = ((points.len() - 1) as f32 * t) as usize;
-                let base = points[index];
-                let side = dice.unit_vector();
-                let heading = (direction * 0.5 + side + Vec3::Y * 0.25).normalize();
-                let next_length = length * dice.range(0.4, 0.6);
-                // Each branch off a great limb, with all it carries, is one clump of leaves.
-                let branch = if depth == 1 {
-                    tree.branches += 1;
-                    tree.branches - 1
-                } else {
-                    branch
-                };
-                grow(
-                    dice,
-                    base,
-                    heading,
-                    next_length,
-                    radii[index] * 0.6,
-                    depth + 1,
-                    height,
-                    branch,
-                    tree,
-                );
-            }
-        }
-        // Twigs end in a clump of leaves.
-        _ => {
-            tree.tips.push((at, dice.range(1.4, 2.1)));
-            tree.branch_of.push(branch);
-        }
-    }
-    if depth >= 2 {
-        tree.tips
-            .push((points[points.len() / 2], dice.range(1.1, 1.7)));
-        tree.branch_of.push(branch);
-    }
+    /// Which way each clump's twig runs, outward: its cards' stalks are toward it.
+    along: Vec<Vec3>,
+    /// Which mass of the crown each clump is in, and each mass's middle, which its cards'
+    /// normals lean out of, so the crown shades as masses with gaps, not as one ball.
+    mass_of: Vec<usize>,
+    masses: Vec<Vec3>,
+    species: Species,
 }
 
 /// A tree's wood at a level of detail: all of it, then without the twigs, then only the
-/// trunk and great limbs; rounder near the camera.
-fn wood(tree: &Tree, detail: usize, height: f32) -> Build {
-    let deepest = [3, 2, 1][detail];
-    let sides = [[20, 8, 6, 4], [10, 5, 4, 3], [6, 4, 3, 3]][detail];
+/// trunk and great limbs; rounder near the camera. A conifer's many thin branches are few
+/// sided, and gone at the last level, where its needles hide them. `bark_m` is how much of
+/// a limb one repeat of its bark's picture covers, round it and along it.
+fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
+    let (deepest, sides) = match tree.species {
+        Species::Oak => (
+            [3, 2, 1][detail],
+            [[20, 8, 5, 3], [10, 5, 4, 3], [6, 4, 3, 3]][detail],
+        ),
+        Species::Pine | Species::Spruce => (
+            [2, 1, 0][detail],
+            [[16, 4, 3, 3], [9, 3, 3, 3], [6, 3, 3, 3]][detail],
+        ),
+    };
     let mut build = Build::default();
     for limb in tree.limbs.iter().filter(|limb| limb.depth <= deepest) {
-        tube(&mut build, limb, sides[limb.depth.min(3) as usize], height);
+        tube(
+            &mut build,
+            limb,
+            sides[limb.depth.min(3) as usize],
+            height,
+            bark_m,
+        );
     }
     build
 }
@@ -1314,7 +1431,7 @@ fn fallen_log(dice: &mut Rng) -> Build {
     };
     let mut build = Build::default();
     // Lying still: a height so tall that nothing of it sways.
-    tube(&mut build, &limb, 14, 1.0e4);
+    tube(&mut build, &limb, 14, 1.0e4, BARK_M);
     // Each end cut flat: a disc of the bark's picture, facing out along the log.
     for (end, inward) in [
         (0, points[1] - points[0]),
@@ -1407,7 +1524,7 @@ impl Shape {
 }
 
 /// A limb as a tube with bark round it.
-fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
+fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: Vec2) {
     let start = build.positions.len() as u32;
     let (points, radii) = rings(limb);
     let shape = Shape::of(limb);
@@ -1426,10 +1543,10 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
         // Carry the ring's orientation along the limb, so it does not twist.
         side = (side - forward * side.dot(forward)).normalize_or(forward.any_orthonormal_vector());
         let other = forward.cross(side);
-        // One repeat of the bark's picture is about BARK_M round the limb, as many times
+        // One repeat of the bark's picture is about `bark_m` round the limb, as many times
         // all the way up as at its foot: a count that changed from ring to ring cut the bark
         // into bands.
-        let wraps = (TAU * radii[0] / BARK_M.x).round().max(1.0);
+        let wraps = (TAU * radii[0] / bark_m.x).round().max(1.0);
         let bend = (point.y / height).clamp(0.0, 1.0);
         let flutter = if limb.depth >= 2 { 0.15 } else { 0.0 };
         for j in 0..=sides {
@@ -1444,7 +1561,7 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32) {
                 * (shape.at(angle + step, along, point.y) - shape.at(angle - step, along, point.y))
                 / (2.0 * step);
             let normal = (out * r - round * slope).normalize_or(out);
-            let uv = Vec2::new(j as f32 / sides as f32 * wraps, along / BARK_M.y);
+            let uv = Vec2::new(j as f32 / sides as f32 * wraps, along / bark_m.y);
             let index = build.vertex(
                 point + out * r,
                 normal,
@@ -1480,41 +1597,6 @@ struct Canopy {
     bend: f32,
     /// Its leaves' colour, as a multiple of the picture's.
     tint: Vec3,
-}
-
-impl Canopy {
-    fn of(tree: &Tree, height: f32) -> Self {
-        let tips = &tree.tips;
-        let centre =
-            tips.iter().fold(Vec3::ZERO, |sum, (tip, _)| sum + *tip) / tips.len().max(1) as f32;
-        let reach = tips
-            .iter()
-            .map(|(tip, _)| tip.distance(centre))
-            .fold(0.0, f32::max)
-            .max(1.0);
-        Self {
-            centre,
-            reach,
-            height,
-            bend: 1.0,
-            tint: Vec3::ONE,
-        }
-    }
-}
-
-/// A crown's cards, grown once: for each tip, its cards in the order the levels of detail
-/// keep them. A simpler level keeps the first few in the same places, each enlarged so they
-/// cover as much as all of them did, as SpeedTree's levels do: crossfading between levels
-/// then shows one crown thinning, not two different crowns (D221).
-fn crown_cards(dice: &mut Rng, tree: &Tree, height: f32) -> Vec<Vec<Card>> {
-    let canopy = Canopy::of(tree, height);
-    tree.tips
-        .iter()
-        .map(|&(tip, size)| {
-            let count = 9 + dice.below(6);
-            (0..count).map(|_| card(dice, &canopy, tip, size)).collect()
-        })
-        .collect()
 }
 
 /// A crown near the camera: every card, each knowing its rank, which the foliage shader
@@ -1631,8 +1713,8 @@ fn lump(build: &mut Build, centre: Vec3, radii: Vec3) {
     }
 }
 
-/// One leaf card in a crown: where it is, which way it faces, how big, and how it is lit
-/// and moves.
+/// One leaf card in a crown: where it is, which way it faces, how big, its picture, and
+/// how it is lit and moves.
 #[derive(Clone, Copy)]
 struct Card {
     middle: Vec3,
@@ -1643,9 +1725,12 @@ struct Card {
     tint: Vec3,
     sway: Vec2,
     flip: f32,
+    /// How much of the sky it sees, least deep in the crown (D216).
+    sky: f32,
+    leaf: Leaf,
 }
 
-/// A card near `at` in a clump this size.
+/// A bush's card near `at` in a clump this size.
 fn card(dice: &mut Rng, canopy: &Canopy, at: Vec3, size: f32) -> Card {
     let middle = at + dice.unit_vector() * size * dice.range(0.2, 0.75);
     let out = (middle - canopy.centre).normalize_or(Vec3::Y);
@@ -1677,6 +1762,8 @@ fn card(dice: &mut Rng, canopy: &Canopy, at: Vec3, size: f32) -> Card {
         tint,
         sway,
         flip,
+        sky: 1.0,
+        leaf: SPRAY,
     }
 }
 
@@ -1690,11 +1777,14 @@ impl Card {
     fn draw_ranked(&self, build: &mut Build, grow: f32, rank: Option<(usize, usize)>) {
         let half = self.half * grow;
         let base = build.positions.len() as u32;
-        for (u, v) in LEAF_OUTLINE {
+        for (u, v) in self.leaf.outline {
+            let atlas = Vec2::new(u, v);
+            let own = (atlas - self.leaf.cell) / self.leaf.across;
             let corner = self.middle
-                + self.right * (u * 2.0 - 1.0) * half * self.flip
-                + self.up * (1.0 - v * 2.0) * half;
-            let index = build.vertex(corner, self.normal, Vec2::new(u, v), self.sway, self.tint);
+                + self.right * (own.x * 2.0 - 1.0) * half * self.flip
+                + self.up * (1.0 - own.y * 2.0) * half;
+            let index = build.vertex(corner, self.normal, atlas, self.sway, self.tint);
+            build.colours[index as usize][3] = self.sky;
             if build.offset_in_colour {
                 let offset = corner - self.middle;
                 build.colours[index as usize] = [offset.x, offset.y, offset.z, 1.0];
@@ -1706,7 +1796,7 @@ impl Card {
                     .push([offset.x, offset.y, offset.z, k as f32 + n as f32 / 100.0]);
             }
         }
-        for i in 1..LEAF_OUTLINE.len() as u32 - 1 {
+        for i in 1..self.leaf.outline.len() as u32 - 1 {
             build.indices.extend([base, base + i, base + i + 1]);
         }
     }

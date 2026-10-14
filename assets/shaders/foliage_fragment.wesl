@@ -52,16 +52,21 @@ fn wander(p: vec3<f32>) -> f32 {
 // Bark weathered as real trunks are (D218): each tree a little lighter or darker, greener or
 // greyer, by where it stands; moss where water runs and sits, on the side facing up and
 // toward the foot, in patches; and the foot darker, where it stays wet. `sky` is how much of
-// the sky the point sees, least low on the trunk.
-fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32) {
+// the sky the point sees, least low on the trunk; `share`, how much moss this bark grows
+// (1 for an oak's, less for a pine's). Moss runs in streaks down the bark, as water does,
+// its edges broken by finer patches rather than smooth blobs (D235).
+fn weather(input: ptr<function, PbrInput>, world: vec3<f32>, sky: f32, share: f32) {
     let up = normalize(world);
     let facing_up = clamp(dot((*input).N, up), 0.0, 1.0);
     let low = 1.0 - smoothstep(0.35, 0.75, sky);
     var colour = (*input).material.base_color.rgb;
     colour *= 0.82 + 0.36 * wander(world * 0.21);
-    let patches = wander(world * 0.9) * 0.65 + wander(world * 3.7 + 13.0) * 0.35;
-    let moss = smoothstep(0.62, 0.85, patches + 0.2 * facing_up + 0.25 * low - 0.15);
-    colour = mix(colour, vec3<f32>(0.085, 0.12, 0.03) * (0.8 + 0.4 * wander(world * 6.0)), moss * 0.9);
+    // The noise stretched three times along the trunk, so patches run up and down it.
+    let streaked = world - up * dot(world, up) * 0.7;
+    let patches = wander(streaked * 1.3) * 0.55 + wander(streaked * 4.1 + 13.0) * 0.3
+        + wander(world * 11.0 + 7.0) * 0.15;
+    let moss = smoothstep(0.6, 0.92, patches + 0.2 * facing_up + 0.3 * low - 0.12) * share;
+    colour = mix(colour, vec3<f32>(0.1, 0.13, 0.04) * (0.75 + 0.5 * wander(world * 6.0)), moss * 0.85);
     colour *= mix(1.0, 0.72, low * (1.0 - moss));
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
     (*input).material.perceptual_roughness = mix((*input).material.perceptual_roughness, 1.0, moss);
@@ -108,7 +113,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // Alpha is how much of the sky this point sees.
     let sky = in.color.a;
     if wind.bark > 0.5 {
-        weather(&pbr_input, in.world_position.xyz, sky);
+        // 1 is bark with all its moss; up to 2, bark with less (D235).
+        weather(&pbr_input, in.world_position.xyz, sky, clamp(2.0 - wind.bark, 0.0, 1.0));
     }
     pbr_input.diffuse_occlusion *= mix(BOUNCE, vec3<f32>(1.0), sky);
     pbr_input.specular_occlusion *= mix(0.35, 1.0, sky);
