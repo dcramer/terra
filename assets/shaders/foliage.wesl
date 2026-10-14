@@ -61,8 +61,11 @@ var<storage, read> parting: Parting;
 // Plants yield to bodies walking through them (D271), as Ghost of Tsushima's grass takes
 // characters' displacement: what is within a body's reach, between its feet and head, is
 // pushed out round it, level with the ground and a little down, by as much as it bends
-// freely (`give`, 0 at a root). Taking [0, reach] onto [radius, reach] keeps the push from folding a plant over
-// itself. `then` is 0 for where bodies are now, 2 for where they were a frame ago.
+// freely (`give`, 0 at a root). `then` is 0 for where bodies are now, 2 for where they were
+// a frame ago. Plants lean aside, brushing the body, rather than part round it like a door
+// (D274): within BEND_REACH_M of its side, by at most BEND of its radius.
+const BEND_REACH_M: f32 = 0.3;
+const BEND: f32 = 0.6;
 fn parted(world: vec3<f32>, give: f32, then: u32) -> vec3<f32> {
     var moved = vec3<f32>(0.0);
     let count = min(u32(parting.subject.w), 8u);
@@ -70,7 +73,7 @@ fn parted(world: vec3<f32>, give: f32, then: u32) -> vec3<f32> {
         let feet = parting.bodies[i * 4u + then];
         let head = parting.bodies[i * 4u + then + 1u].xyz;
         let from_feet = world - feet.xyz;
-        let reach = feet.w + 0.6;
+        let reach = feet.w + BEND_REACH_M;
         // Most vertices are nowhere near a body: one test, before the rest.
         let near = reach + distance(head, feet.xyz) + 0.4;
         if give <= 0.0 || dot(from_feet, from_feet) > near * near {
@@ -83,8 +86,8 @@ fn parted(world: vec3<f32>, give: f32, then: u32) -> vec3<f32> {
         let across = from_feet - up * rise;
         let apart = length(across);
         if within > 0.0 && apart < reach {
-            let push = feet.w * (1.0 - apart / reach) * within * give;
-            moved += across / max(apart, 0.001) * push - up * push * 0.35;
+            let push = feet.w * BEND * (1.0 - apart / reach) * within * give;
+            moved += across / max(apart, 0.001) * push - up * push * 0.25;
         }
     }
     return moved;

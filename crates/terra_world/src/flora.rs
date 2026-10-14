@@ -112,6 +112,9 @@ fn layer_metres() -> [Vec4; 2] {
     ]
 }
 
+/// How far below a swept sphere the foot of what it may touch is looked for.
+const SWEPT_BELOW_M: f32 = 6.0;
+
 /// Trees, rocks, stumps and logs that stop a walker or hold one up, each fitted to its model
 /// (`terra_core::Solid`, D267), filed by place so a walker asks only about those near it.
 #[derive(Resource)]
@@ -184,6 +187,25 @@ impl Obstacles {
             }
         }
         at
+    }
+
+    /// How far a sphere of `radius` moves from `from` along `direction` (of length one),
+    /// within `length`, before it touches a trunk, rock, stump or log: a camera boom's sweep.
+    /// None if nothing is in the way.
+    pub fn sweep(&self, from: Vec3, direction: Vec3, length: f32, radius: f32) -> Option<f32> {
+        let middle = from + direction * (length * 0.5);
+        // Each is filed at its foot, which may be some way below a boom high over it.
+        self.solids_near(middle, length * 0.5 + radius + SWEPT_BELOW_M)
+            .filter_map(|solid| solid.sweep(from, direction, length, radius))
+            .reduce(f32::min)
+    }
+
+    /// How far a point is from the nearest trunk, rock, stump or log, at least, looking no
+    /// further than `reach`: `reach` when nothing is nearer.
+    pub fn clearance(&self, at: Vec3, reach: f32) -> f32 {
+        self.solids_near(at, reach + SWEPT_BELOW_M)
+            .map(|solid| solid.clearance(at))
+            .fold(reach, f32::min)
     }
 
     pub fn len(&self) -> usize {

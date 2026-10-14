@@ -582,6 +582,11 @@ fn within(m: f32) -> VisibilityRange {
 /// Draws a variant on a plant's entity, which stands it where it grows, `height` metres
 /// tall: a herb or flower on the entity itself, a tree or bush as its children.
 pub fn draw(entity: &mut EntityCommands, variant: &Variant, height: f32, looks: &Looks) {
+    // A bush or a herb fades as a whole while it is between the camera and the player
+    // (D274); a tree's trunk stops the camera instead.
+    if !matches!(variant.grew, Grew::Tree(_)) {
+        entity.insert(crate::parting::ObstructionFade::default());
+    }
     if let Grew::Small(mesh) = &variant.grew {
         entity.insert((
             Mesh3d(mesh.clone()),

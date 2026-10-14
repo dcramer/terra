@@ -35,3 +35,32 @@ The same film, this change (D271) against main filmed at the same time, sampled 
 The frames still over 30% are bushes 2.5 to 4 m off beside the route, which is scenery, softened by the fade's edge.
 
 Cost, on the walk bench's quietest runs on the RTX 3080 (other sessions shared the GPU; main benched alternately with it): the GPU's frame 10.4 ms on main, 11.0 ms with this. Run with no subject, so nothing is cleared, it is 10.56 ms; with the fade computed but nothing discarded, 10.55 ms. So pushing plants and the shared buffer cost about 0.1 ms, the fade's sums nothing measurable, and the remaining half millisecond is the deeper forest drawn where near leaves no longer cover it.
+
+## Second pass: a boom that stops at trunks, and plants that fade whole (D274)
+
+2026-10-14. The next review of the film (6/10) found what the first pass made: a screen-door stipple where foliage covering 30 to 50% of the frame sat partly faded, smeared by TAA as the camera moved; a dark round tunnel carved through a hazel round the player, its dark inside showing through the tube's cut; and the camera, at the look-up, sinking into the player's shoulder and into a trunk, since it met only build walls and the ground.
+
+What shipped games do, and what we did:
+
+- **A camera boom swept as a sphere** (Unreal's `USpringArmComponent` with its probe, and most third-person games): the boom pulls in before what is solid, fast in and slow out (Unreal's arm lags out, not in). We sweep a 0.3 m sphere (the near plane's corners are 0.21 m from the lens) and a 0.6 m one against the fitted solids that stop the walker (D267) by sphere tracing their pieces as columns; the boom eases in to the wide sweep and is never let past the narrow one. A spruce's skirt (D248) stops the walker but is boughs, so the boom passes into it. Hemmed in behind the right shoulder, the boom swings to the left, as shooters swap shoulders. Looking up, the boom shortens over the ground behind no shorter than 3 m and then slides up over it, rather than coming in to the shoulder.
+- **Whole-plant obstruction fade** (Unreal's camera-obstruction fades work per actor; The Witcher 3 dissolves whole bushes between the camera and Geralt): each shrub and young tree has a box, its parts' bounds; while the line from the eye to the figure's chest passes through 0.8 of it, every part of it fades together over 0.3 s, through a per-instance value the shaders read (Bevy's `MeshTag`), written only when it changes. Faded to a sparse dither (a fifth, then a twelfth left), it stippled half the screen when the camera stood in a hazel, and TAA smeared the dots into streaks as it moved; faded out entirely, it is clean, its shadow kept. So it goes all the way.
+- **A short band at the lens**: leaves are gone within 1.05 m of the lens and whole from 1.4 m, from 1.65 to 3 m, so few are partly gone at once; a plant the camera stands in fades whole instead.
+- **Plants lean, not part**: the push round a body reaches 0.3 m past its side, not 0.6, at 0.6 of its strength.
+
+The dither itself was left: Jimenez's interleaved gradient noise shifted each frame (D214) is what Unreal and Call of Duty use for TAA, and the fade's value is not quantised coarsely (256 steps; Bevy's own crossfades 16). What showed was a partial fade held over a large area, which no pattern resolves under motion.
+
+Measured on the film (80 frames, every 0.5 s), this against main filmed at the same time (08d4a78, D272's denser leaves in both). "Stipple" is the share of 16-pixel blocks at 1080p that are leaf-green and whose pixel-scale energy (|I − 3×3 mean|) is high and above the 2-to-6-pixel scale's: a dither's dots, which leaves' own detail and the ground's are not. Near-lens foliage is as in the table above. Inside a trunk and near the figure come from the camera's place each frame (2400 frames), against the fitted solids and the line up the figure's middle.
+
+| | main | this change |
+|---|---|---|
+| Frames with stipple over 5% of the screen | 3 | 0 |
+| Frames with stipple over 2% | 11 | 7 |
+| Worst stipple, of the screen | 13.5% (young spruce at the lens) | 3.8% (a bush fading out) |
+| Frames where near-lens foliage covers over 30% | 5 | 1 |
+| Mean near-lens share | 11.5% | 9.4% |
+| Frames with the lens inside a trunk or rock (of 2400) | 91 | 0 |
+| ... of them in the look-up (of 261) | 44 | 0 |
+| Nearest the lens comes to a trunk's bark | inside | 0.30 m |
+| Nearest the lens comes to the figure's middle line | 0.99 m | 0.55 m |
+
+The figure is nearer in metres but smaller in the picture: main's lens came in along the boom to hip height a metre behind and looked up past the whole torso, this one stays 3 m back along the boom and slides up, so at the top of the look-up only the head shows at the frame's foot. The frames left over 2% are bushes in their 0.3 s fade.

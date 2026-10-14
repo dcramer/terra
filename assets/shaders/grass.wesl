@@ -52,7 +52,9 @@ struct Parting {
 var<storage, read> parting: Parting;
 
 // As foliage.wesl: blades bend away from bodies walking through them, the more the higher
-// up the blade (D271).
+// up the blade (D271), leaning rather than parting (D274).
+const BEND_REACH_M: f32 = 0.3;
+const BEND: f32 = 0.6;
 fn parted(world: vec3<f32>, give: f32, then: u32) -> vec3<f32> {
     var moved = vec3<f32>(0.0);
     let count = min(u32(parting.subject.w), 8u);
@@ -60,7 +62,7 @@ fn parted(world: vec3<f32>, give: f32, then: u32) -> vec3<f32> {
         let feet = parting.bodies[i * 4u + then];
         let head = parting.bodies[i * 4u + then + 1u].xyz;
         let from_feet = world - feet.xyz;
-        let reach = feet.w + 0.6;
+        let reach = feet.w + BEND_REACH_M;
         // Most vertices are nowhere near a body: one test, before the rest.
         let near = reach + distance(head, feet.xyz) + 0.4;
         if give <= 0.0 || dot(from_feet, from_feet) > near * near {
@@ -73,8 +75,8 @@ fn parted(world: vec3<f32>, give: f32, then: u32) -> vec3<f32> {
         let across = from_feet - up * rise;
         let apart = length(across);
         if within > 0.0 && apart < reach {
-            let push = feet.w * (1.0 - apart / reach) * within * give;
-            moved += across / max(apart, 0.001) * push - up * push * 0.35;
+            let push = feet.w * BEND * (1.0 - apart / reach) * within * give;
+            moved += across / max(apart, 0.001) * push - up * push * 0.25;
         }
     }
     return moved;

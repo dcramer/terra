@@ -196,8 +196,11 @@ pub struct Solid {
     x: Vec3,
     z: Vec3,
     up: Vec3,
-    /// Its convex parts.
+    /// Its convex parts: its own first, `firm` of them, then any added to its plan
+    /// (`fit`'s `extra`), such as a spruce's skirt, which stop a walker but are leaves, which
+    /// a camera's boom passes into.
     pub pieces: Vec<Piece>,
+    firm: usize,
     /// What holds a walker up: across, height over the level of its ground, and along, in
     /// plan.
     surface: Vec<Vec3>,
@@ -214,10 +217,16 @@ impl Solid {
     pub fn of_pieces(at: Vec3, pieces: Vec<Piece>) -> Self {
         let up = at.normalize_or(Vec3::Y);
         let x = up.any_orthonormal_vector();
-        Self::new(at, x, up.cross(x), up, pieces, Vec::new())
+        let firm = pieces.len();
+        Self::new(at, [x, up.cross(x), up], (pieces, firm), Vec::new())
     }
 
-    fn new(at: Vec3, x: Vec3, z: Vec3, up: Vec3, pieces: Vec<Piece>, surface: Vec<Vec3>) -> Self {
+    fn new(
+        at: Vec3,
+        [x, z, up]: [Vec3; 3],
+        (pieces, firm): (Vec<Piece>, usize),
+        surface: Vec<Vec3>,
+    ) -> Self {
         let reach = pieces
             .iter()
             .map(|piece| {
@@ -232,6 +241,7 @@ impl Solid {
             z,
             up,
             pieces,
+            firm,
             surface,
             reach,
         }
@@ -264,14 +274,13 @@ impl Solid {
         let cell = relief.cell * s;
         let mut pieces = Vec::new();
         split(&cells, cell, 0, &mut pieces);
+        let firm = pieces.len();
         pieces.extend(extra);
         let surface = cells.into_iter().map(|(c, _)| c).collect();
         Some(Self::new(
             place.ground,
-            place.x,
-            place.z,
-            place.up,
-            pieces,
+            [place.x, place.z, place.up],
+            (pieces, firm),
             surface,
         ))
     }
@@ -343,6 +352,38 @@ impl Solid {
             .filter(|c| c.y - feet <= step && Vec2::new(c.x, c.z).distance_squared(plan) <= r2)
             .map(|c| c.y)
             .reduce(f32::max)
+    }
+
+    /// How far a point is from this thing's own pieces at least (not a skirt added to it),
+    /// each taken as standing from the ground to its crest; less than nothing inside one.
+    /// Never more than the true distance, so a sphere may be moved this far toward it without
+    /// touching it.
+    pub fn clearance(&self, at: Vec3) -> f32 {
+        let (plan, height) = self.plan(at);
+        self.pieces[..self.firm.min(self.pieces.len())]
+            .iter()
+            .map(|piece| piece.distance(plan).0.max(height - piece.crest))
+            .fold(f32::INFINITY, f32::min)
+    }
+
+    /// How far a sphere of `radius` moves from `from` along `direction` (of length one)
+    /// before it touches this thing, within `length`: a sphere sweep, as a camera's boom
+    /// casts one (Unreal's spring arm). By sphere tracing on `clearance`, so it stops short
+    /// by under a centimetre rather than going in. None if it goes the whole way.
+    pub fn sweep(&self, from: Vec3, direction: Vec3, length: f32, radius: f32) -> Option<f32> {
+        let mut t = 0.0;
+        for _ in 0..64 {
+            let gap = self.clearance(from + direction * t) - radius;
+            if gap < 0.005 {
+                return Some(t);
+            }
+            t += gap;
+            if t >= length {
+                return None;
+            }
+        }
+        // Grazing alongside it in steps too small to finish: stop there, to be safe.
+        Some(t)
     }
 }
 
@@ -676,6 +717,47 @@ mod tests {
         let corner = Vec3::new(0.9, 1000.0, 1.9);
         assert_eq!(solid.push_out(corner, 0.3, 0.4), corner);
         assert!(solid.blocks(Vec3::new(-1.0, 1000.0, 2.0), 0.3, 0.4));
+    }
+
+    #[test]
+    fn a_sphere_swept_at_a_trunk_stops_at_its_bark_and_passes_over_a_low_rock() {
+        let ground = Vec3::Y * 1000.0;
+        let trunk = Solid::of_pieces(ground, vec![Piece::round(Vec2::ZERO, 0.5, f32::INFINITY)]);
+        // From 5 m off, level, straight at it: the sphere's edge meets the bark 5 - 0.5 m on.
+        let from = ground + Vec3::new(-5.0, 1.5, 0.0);
+        let hit = trunk.sweep(from, Vec3::X, 10.0, 0.25).unwrap();
+        assert!((hit - (5.0 - 0.5 - 0.25)).abs() < 0.01, "{hit}");
+        // Passing 0.8 m to its side, a sphere 0.25 round misses it; 0.35 round touches it.
+        let beside = from + Vec3::Z * 0.8;
+        assert_eq!(trunk.sweep(beside, Vec3::X, 10.0, 0.25), None);
+        assert!(trunk.sweep(beside, Vec3::X, 10.0, 0.35).is_some());
+        // Short of it, it goes the whole way.
+        assert_eq!(trunk.sweep(from, Vec3::X, 4.0, 0.25), None);
+
+        // A block 0.6 m high: a sphere swept 1 m over the ground clears it, one at its height
+        // does not.
+        let rock = fit(&block(1.0, 1.0, 0.6), 1.0, 0.0).unwrap();
+        let over = ground + Vec3::new(-3.0, 1.0, 0.0);
+        assert_eq!(rock.sweep(over, Vec3::X, 6.0, 0.25), None);
+        let low = ground + Vec3::new(-3.0, 0.4, 0.0);
+        let hit = rock.sweep(low, Vec3::X, 6.0, 0.25).unwrap();
+        assert!((hit - (3.0 - 0.5 - 0.25)).abs() < 0.1, "{hit}");
+        // Inside it, it is touched at once.
+        assert_eq!(
+            rock.sweep(ground + Vec3::Y * 0.3, Vec3::X, 6.0, 0.25),
+            Some(0.0)
+        );
+
+        // A skirt round it, as a spruce's boughs: it stops a walker, not a swept sphere.
+        let skirted = Solid::fit(
+            &Relief::of(&block(1.0, 1.0, 0.6), &[]),
+            flat_place(1.0, 0.0),
+            |_| 0.0,
+            vec![Piece::round(Vec2::ZERO, 2.0, f32::INFINITY)],
+        )
+        .unwrap();
+        assert!(skirted.blocks(ground + Vec3::X * 1.5, 0.3, 0.4));
+        assert_eq!(skirted.sweep(over, Vec3::X, 6.0, 0.25), None);
     }
 
     #[test]

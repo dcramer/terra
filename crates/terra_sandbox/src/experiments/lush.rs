@@ -1179,6 +1179,12 @@ fn plant(
                         1.4,
                     ),
                 ))
+                // A young tree is a bush to the camera: it fades as a whole while it is
+                // between the camera and the player, its boughs not solid to the camera's
+                // boom (D274).
+                .insert_if(terra_world::parting::ObstructionFade::default(), || {
+                    model.young
+                })
                 .with_children(|tree| {
                     // A modelled trunk is its near mesh, then its far one at every distance
                     // beyond, casting its shadow throughout.

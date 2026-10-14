@@ -48,33 +48,26 @@ struct Parting {
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<storage, read> parting: Parting;
 
-// As foliage_fragment.wesl: the third-person camera's view kept clear of leaves (D271).
-// Only in the main camera's own view, so shadows keep them.
-fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>) {
+// As foliage_fragment.wesl: the third-person camera's view kept clear, a plant in the way
+// fading as a whole and leaves at the lens (D271, D274). Only in the main camera's own view,
+// so shadows keep them.
+fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>, instance: u32, leaf: bool) {
     let eye = parting.eye;
     if eye.w < 0.5 || distance(view.world_position, eye.xyz) > 0.01 {
         return;
     }
-    let to = parting.subject.xyz - eye.xyz;
-    let far = max(length(to), 0.1);
-    let along = to / far;
-    let from_eye = world - eye.xyz;
-    // Most leaves are beyond both the lens's reach and the tube's: one test, before the rest.
-    let seen = dot(from_eye, from_eye);
-    if seen > 9.0 && seen > (far + 0.15) * (far + 0.15) + 1.0 {
-        return;
+    var keep = 1.0 - f32(mesh[instance].tag & 0xffu) / 255.0;
+    if leaf {
+        let lens = min(LENS_M, distance(parting.subject.xyz, eye.xyz) * 0.6);
+        keep = min(keep, smoothstep(lens - LENS_BAND_M, lens, distance(world, eye.xyz)));
     }
-    let s = dot(from_eye, along);
-    let off = length(from_eye - along * s);
-    let lens = min(3.0, far * 0.65);
-    var keep = smoothstep(lens * 0.55, lens, length(from_eye));
-    let radius = mix(1.0, 0.8, clamp(s / far, 0.0, 1.0));
-    let tube = (1.0 - smoothstep(radius * 0.65, radius, off)) * (1.0 - smoothstep(far - 0.1, far + 0.15, s));
-    keep = min(keep, 1.0 - tube * step(0.0, s));
     if keep < 1.0 && noise_at(frag_coord) > keep {
         discard;
     }
 }
+
+const LENS_M: f32 = 1.4;
+const LENS_BAND_M: f32 = 0.35;
 
 // As foliage_fragment.wesl: a card fades out as it turns edge-on to the eye (D235). Not in
 // the shadow pass, which keeps the whole card.
@@ -117,10 +110,11 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
 @if(VISIBILITY_RANGE_DITHER)
     temporal_dither(in.position, in.visibility_range_dither);
     near_fade(in.position, in.world_position.xyz);
-    if (flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS) == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK {
+    let leaf = (flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS) == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK;
+    if leaf {
         edge_fade(in.position, in.world_position.xyz);
-        clear_view(in.position, in.world_position.xyz);
     }
+    clear_view(in.position, in.world_position.xyz, in.instance_index, leaf);
 
     pbr_prepass_functions::prepass_sample_color_and_alpha_discard(in);
 

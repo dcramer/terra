@@ -11,6 +11,7 @@ import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
     pbr_types::{PbrInput, STANDARD_MATERIAL_FLAGS_UNLIT_BIT},
+    mesh_functions,
     mesh_view_bindings::{globals, view, lights},
     shadows::fetch_directional_shadow,
     clustered_forward::{view_fragment_cluster_index, unpack_clusterable_object_index_ranges},
@@ -272,38 +273,32 @@ struct Parting {
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<storage, read> parting: Parting;
 
-// A third-person camera's view kept clear (D271), with a camera-obstruction fade as Unreal
-// games dither theirs: leaves within three metres of the lens, and those in a tube
-// round the line from the eye to the figure it follows, narrowing toward the figure and
-// ending at its middle, fade out a pixel at a time, as `near_fade` does, so the camera never
-// looks through a bush it has backed into and the figure is never lost in one. Only in the
-// main camera's own view, so the prepass agrees and shadows keep them. Not bark, which
-// only `near_fade` takes: a trunk dithered through reads as a hole in something solid.
-fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>) {
+// A third-person camera's view kept clear (D271, D274), with camera-obstruction fades as
+// Unreal games dither theirs. A plant between the camera and the figure it follows, or round
+// the lens, fades as a whole, stems and leaves alike, by as much as its mesh's tag says
+// (terra_world's parting.rs eases it over a few tenths of a second), rather than a hole cut
+// through it; and leaves at the lens fade out over a short band, so few are ever partly
+// gone at once. Only in the main camera's own view, so the prepass agrees and shadows keep
+// them. Bark only by its plant's fade: a trunk dithered through reads as a hole in
+// something solid, and the camera's boom stops before trunks.
+fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>, instance: u32, leaf: bool) {
     let eye = parting.eye;
     if eye.w < 0.5 || distance(view.world_position, eye.xyz) > 0.01 {
         return;
     }
-    let to = parting.subject.xyz - eye.xyz;
-    let far = max(length(to), 0.1);
-    let along = to / far;
-    let from_eye = world - eye.xyz;
-    // Most leaves are beyond both the lens's reach and the tube's: one test, before the rest.
-    let seen = dot(from_eye, from_eye);
-    if seen > 9.0 && seen > (far + 0.15) * (far + 0.15) + 1.0 {
-        return;
+    var keep = 1.0 - f32(mesh_functions::get_tag(instance) & 0xffu) / 255.0;
+    if leaf {
+        let lens = min(LENS_M, distance(parting.subject.xyz, eye.xyz) * 0.6);
+        keep = min(keep, smoothstep(lens - LENS_BAND_M, lens, distance(world, eye.xyz)));
     }
-    let s = dot(from_eye, along);
-    let off = length(from_eye - along * s);
-    let lens = min(3.0, far * 0.65);
-    var keep = smoothstep(lens * 0.55, lens, length(from_eye));
-    let radius = mix(1.0, 0.8, clamp(s / far, 0.0, 1.0));
-    let tube = (1.0 - smoothstep(radius * 0.65, radius, off)) * (1.0 - smoothstep(far - 0.1, far + 0.15, s));
-    keep = min(keep, 1.0 - tube * step(0.0, s));
     if keep < 1.0 && noise_at(frag_coord) > keep {
         discard;
     }
 }
+
+// Leaves are whole from this far from a third-person lens, and gone this much nearer.
+const LENS_M: f32 = 1.4;
+const LENS_BAND_M: f32 = 0.35;
 
 // Discards this fragment if it is outside its crossfade's share at this pixel this frame.
 // `dither` is Bevy's level: -16 to 0 fading in, 0 to 16 fading out.
@@ -406,8 +401,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     near_fade(in.position, in.world_position.xyz);
     if wind.bark < 0.5 {
         edge_fade(in.position, in.world_position.xyz);
-        clear_view(in.position, in.world_position.xyz);
     }
+    clear_view(in.position, in.world_position.xyz, in.instance_index, wind.bark < 0.5);
 
     var pbr_input: PbrInput;
 @if(VERTEX_UVS_A && VERTEX_TANGENTS && !VERTEX_UVS_B) {

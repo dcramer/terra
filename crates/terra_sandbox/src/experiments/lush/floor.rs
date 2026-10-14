@@ -1331,7 +1331,12 @@ impl Lay<'_, '_, '_> {
         let Some((first, rest)) = drawn.parts.split_first() else {
             return;
         };
-        let mut entity = self.commands.spawn((Name::new(placement.name), place));
+        // It fades as a whole while it is between the camera and the player (D274).
+        let mut entity = self.commands.spawn((
+            Name::new(placement.name),
+            place,
+            terra_world::parting::ObstructionFade::default(),
+        ));
         drawn_as(&mut entity, first);
         if cut.is_some() {
             entity.insert(Growth::new(cut, None, 0.5));

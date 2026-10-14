@@ -1,10 +1,10 @@
-//! Plants make way (D271), as shipped open worlds have them: shrubs, ferns and grass bend
-//! away from whoever walks through them (foliage interaction; Ghost of Tsushima's grass
-//! takes characters' displacement), and foliage between a third-person camera and the one
-//! it follows dithers away, as does foliage near the lens (a camera-obstruction fade, as
-//! Unreal games dither theirs), so the camera never looks through a bush it has backed into
-//! and the figure is not lost in one. Shadows keep everything. Notes:
-//! research/foliage-near-camera.md.
+//! Plants make way (D271, D274), as shipped open worlds have them: shrubs, ferns and grass
+//! lean away from whoever walks through them (foliage interaction; Ghost of Tsushima's grass
+//! takes characters' displacement), and a shrub or young tree between a third-person camera
+//! and the one it follows, or round the lens, fades out as a whole ([`ObstructionFade`], a
+//! camera-obstruction fade as Unreal games have it), as do leaves right at the lens, so the
+//! camera never looks through a bush it has backed into and the figure is not lost in one.
+//! Shadows keep everything. Notes: research/foliage-near-camera.md.
 //!
 //! The foliage and grass shaders read one small buffer that every one of their materials
 //! shares ([`Parting`]): the main camera's eye, the point it follows ([`CameraSubject`]),
@@ -13,7 +13,14 @@
 //! in place each frame; no material changes.
 
 use crate::planet::MainCamera;
-use bevy::{platform::collections::HashMap, prelude::*, render::storage::ShaderBuffer};
+use bevy::{
+    camera::{primitives::Aabb, visibility::VisibilitySystems},
+    math::Affine3A,
+    mesh::MeshTag,
+    platform::collections::HashMap,
+    prelude::*,
+    render::storage::ShaderBuffer,
+};
 
 /// At most this many bodies part plants at once: those nearest the camera. Must match
 /// `PUSHERS` in foliage.wesl and grass.wesl.
@@ -64,10 +71,182 @@ const fn layout_len() -> usize {
 }
 
 pub fn plugin(app: &mut App) {
+    app.add_systems(
+        PostUpdate,
+        fade_obstructions
+            .after(TransformSystems::Propagate)
+            .after(VisibilitySystems::CalculateBounds),
+    );
     // Without rendering (as in tests) there is no buffer to write.
     if app.world().contains_resource::<Assets<ShaderBuffer>>() {
         app.init_resource::<Parting>()
             .add_systems(PostUpdate, write.after(TransformSystems::Propagate));
+    }
+}
+
+/// A plant that fades as a whole while it stands between the main camera and the one it
+/// follows, or round the lens, as Unreal games fade a camera's obstructions and The Witcher 3
+/// the bushes that hide Geralt: all its parts together, dithered out over a few tenths of a
+/// second, rather than a hole cut through it (D274). Put on the plant's own
+/// entity; its mesh, and its children's, are what fade. Shrubs and low plants, which the
+/// camera passes through; not trees, whose trunks the camera's boom stops at.
+#[derive(Component, Clone, Debug, Default)]
+pub struct ObstructionFade {
+    /// How much of it is gone, 0 to [`FADED`].
+    gone: f32,
+    /// Its parts' box, once their meshes are loaded.
+    bounds: Option<Bounds>,
+}
+
+/// A plant's box, in its own frame, and round it in the world.
+#[derive(Clone, Debug)]
+struct Bounds {
+    to_plant: Affine3A,
+    middle: Vec3,
+    half: Vec3,
+    /// Its middle in the world, and how far round it the box reaches.
+    centre: Vec3,
+    reach: f32,
+}
+
+/// How much of a plant in the way is gone: all of it, its shadow kept. A sparse dither left
+/// of it (a fifth, a twelfth) stippled half the screen when the camera stood in a hazel, and
+/// TAA smeared the dots as it moved (D274).
+pub const FADED: f32 = 1.0;
+/// How long a plant takes to fade out, or back in, in seconds.
+const FADE_S: f32 = 0.3;
+/// The share of a plant's box its leaves fill, for the line to the figure to pass through:
+/// a box holds a bush's corners too, which its leaves do not.
+const LEAF_MASS: f32 = 0.8;
+
+/// Whether the line from `from` to `to` passes through a box round the origin of `half`
+/// size: a slab test.
+fn crosses(from: Vec3, to: Vec3, half: Vec3) -> bool {
+    let along = to - from;
+    let (mut low, mut high) = (0.0f32, 1.0f32);
+    for axis in 0..3 {
+        let (start, step, size) = (from[axis], along[axis], half[axis]);
+        if step.abs() < 1e-6 {
+            if start.abs() > size {
+                return false;
+            }
+            continue;
+        }
+        let (a, b) = ((-size - start) / step, (size - start) / step);
+        low = low.max(a.min(b));
+        high = high.min(a.max(b));
+        if low > high {
+            return false;
+        }
+    }
+    true
+}
+
+/// How far a plant fades toward `toward` in `dt` seconds.
+fn faded(gone: f32, toward: f32, dt: f32) -> f32 {
+    let step = FADED / FADE_S * dt;
+    gone + (toward - gone).clamp(-step, step)
+}
+
+/// The value the foliage shaders read from a mesh's tag: how much of it is gone, of 255.
+fn tag_of(gone: f32) -> u32 {
+    (gone.clamp(0.0, 1.0) * 255.0).round() as u32
+}
+
+fn fade_obstructions(
+    mut commands: Commands,
+    time: Res<Time>,
+    camera: Option<Single<(&GlobalTransform, Option<&CameraSubject>), With<MainCamera>>>,
+    mut plants: Query<(
+        Entity,
+        &mut ObstructionFade,
+        Ref<GlobalTransform>,
+        Option<&Children>,
+    )>,
+    parts: Query<(&GlobalTransform, Option<&Aabb>), With<Mesh3d>>,
+    mut tags: Query<&mut MeshTag>,
+) {
+    let line = camera.and_then(|camera| {
+        let (eye, subject) = *camera;
+        subject
+            .and_then(|subject| subject.0)
+            .map(|subject| (eye.translation(), subject))
+    });
+    let dt = time.delta_secs();
+    for (plant, mut fade, place, children) in &mut plants {
+        let meshes = || std::iter::once(plant).chain(children.into_iter().flatten().copied());
+        if fade.bounds.is_none() || place.is_changed() {
+            let to_plant = place.affine().inverse();
+            let mut corners = Vec::new();
+            let mut loaded = true;
+            for (at, aabb) in meshes().filter_map(|part| parts.get(part).ok()) {
+                let Some(aabb) = aabb else {
+                    loaded = false;
+                    break;
+                };
+                let (middle, half) = (Vec3::from(aabb.center), Vec3::from(aabb.half_extents));
+                for k in 0..8 {
+                    let sign = Vec3::new(
+                        if k & 1 == 0 { -1.0 } else { 1.0 },
+                        if k & 2 == 0 { -1.0 } else { 1.0 },
+                        if k & 4 == 0 { -1.0 } else { 1.0 },
+                    );
+                    let world = at.transform_point(middle + half * sign);
+                    corners.push(to_plant.transform_point3(world));
+                }
+            }
+            if !loaded || corners.is_empty() {
+                continue;
+            }
+            let (low, high) = corners
+                .iter()
+                .fold((Vec3::MAX, Vec3::MIN), |(l, h), p| (l.min(*p), h.max(*p)));
+            if fade.bounds.is_none() {
+                for part in meshes().filter(|part| parts.contains(*part)) {
+                    commands.entity(part).insert(MeshTag::new(0));
+                }
+            }
+            let (middle, half) = ((low + high) * 0.5, (high - low) * 0.5);
+            let m = place.affine().matrix3;
+            let scale = m
+                .x_axis
+                .length()
+                .max(m.y_axis.length())
+                .max(m.z_axis.length());
+            fade.bounds = Some(Bounds {
+                to_plant,
+                middle,
+                half,
+                centre: place.transform_point(middle),
+                reach: half.length() * scale,
+            });
+        }
+        let Some(bounds) = &fade.bounds else {
+            continue;
+        };
+        let in_way = line.is_some_and(|(eye, subject)| {
+            // Most plants are nowhere near the line: one test, before the rest.
+            let near = eye
+                .distance(bounds.centre)
+                .min(subject.distance(bounds.centre));
+            if near > eye.distance(subject) + bounds.reach {
+                return false;
+            }
+            let from = bounds.to_plant.transform_point3(eye) - bounds.middle;
+            let to = bounds.to_plant.transform_point3(subject) - bounds.middle;
+            crosses(from, to, bounds.half * LEAF_MASS)
+        });
+        let toward = if in_way { FADED } else { 0.0 };
+        if fade.gone == toward {
+            continue;
+        }
+        fade.gone = faded(fade.gone, toward, dt);
+        let tag = tag_of(fade.gone);
+        for part in meshes() {
+            if let Ok(mut mesh_tag) = tags.get_mut(part) {
+                mesh_tag.set_if_neq(MeshTag::new(tag));
+            }
+        }
     }
 }
 
@@ -134,6 +313,116 @@ fn write(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_crosses_a_box_only_where_it_passes_through_it() {
+        let half = Vec3::new(1.0, 2.0, 1.0);
+        // Through it, from one side to the other; from inside it; ending inside it.
+        assert!(crosses(
+            Vec3::new(-3.0, 0.0, 0.0),
+            Vec3::new(3.0, 0.5, 0.0),
+            half
+        ));
+        assert!(crosses(Vec3::ZERO, Vec3::new(5.0, 5.0, 5.0), half));
+        assert!(crosses(
+            Vec3::new(-3.0, 1.0, 0.5),
+            Vec3::new(0.5, 1.0, 0.5),
+            half
+        ));
+        // Over it, beside it, and stopping short of it.
+        assert!(!crosses(
+            Vec3::new(-3.0, 2.5, 0.0),
+            Vec3::new(3.0, 2.5, 0.0),
+            half
+        ));
+        assert!(!crosses(
+            Vec3::new(-3.0, 0.0, 1.2),
+            Vec3::new(3.0, 0.0, 1.2),
+            half
+        ));
+        assert!(!crosses(
+            Vec3::new(-3.0, 0.0, 0.0),
+            Vec3::new(-1.2, 0.0, 0.0),
+            half
+        ));
+        // Past a corner, though both ends' coordinates each lie within its span somewhere.
+        assert!(!crosses(
+            Vec3::new(-2.0, 0.0, 0.5),
+            Vec3::new(0.5, 0.0, 3.0),
+            half
+        ));
+    }
+
+    /// A camera following a point, and a bush, a box of mesh 2 m across round its middle
+    /// a metre up, standing at `bush`, its parts drawn by it and a child.
+    fn bush_scene(bush: Vec3) -> (App, Entity, Entity) {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_systems(Update, fade_obstructions);
+        app.world_mut().spawn((
+            MainCamera,
+            GlobalTransform::from_translation(Vec3::new(0.0, 1.8, 5.0)),
+            CameraSubject(Some(Vec3::new(0.0, 1.2, 0.0))),
+        ));
+        let aabb = Aabb::from_min_max(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 2.0, 1.0));
+        let at = GlobalTransform::from_translation(bush);
+        let plant = app
+            .world_mut()
+            .spawn((ObstructionFade::default(), at, Mesh3d::default(), aabb))
+            .id();
+        let part = app
+            .world_mut()
+            .spawn((at, Mesh3d::default(), aabb, ChildOf(plant)))
+            .id();
+        (app, plant, part)
+    }
+
+    /// Runs `frames` frames of a sixtieth of a second each.
+    fn run(app: &mut App, frames: usize) {
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f32(1.0 / 60.0),
+        ));
+        for _ in 0..frames {
+            app.update();
+        }
+    }
+
+    fn tag(app: &App, entity: Entity) -> u32 {
+        app.world()
+            .get::<MeshTag>(entity)
+            .map_or(0, |tag| tag.value)
+    }
+
+    #[test]
+    fn a_bush_between_the_camera_and_the_figure_fades_as_a_whole_over_time_and_back() {
+        // Halfway along the line from the camera to the figure.
+        let (mut app, plant, part) = bush_scene(Vec3::new(0.3, 0.0, 2.5));
+        run(&mut app, 3);
+        let early = tag(&app, plant);
+        assert!(early > 0, "it starts to fade");
+        assert!(early < tag_of(FADED) / 2, "not at once: {early}");
+        run(&mut app, 30);
+        assert_eq!(tag(&app, plant), tag_of(FADED));
+        assert_eq!(tag(&app, part), tag(&app, plant), "all its parts together");
+        // The figure steps out from behind it: it comes back, as gradually.
+        app.world_mut()
+            .query::<&mut CameraSubject>()
+            .single_mut(app.world_mut())
+            .unwrap()
+            .0 = Some(Vec3::new(4.0, 1.2, 0.0));
+        run(&mut app, 3);
+        let back = tag(&app, plant);
+        assert!(back > 0 && back < tag_of(FADED), "{back}");
+        run(&mut app, 30);
+        assert_eq!(tag(&app, plant), 0);
+    }
+
+    #[test]
+    fn a_bush_beside_the_line_stays() {
+        let (mut app, plant, _) = bush_scene(Vec3::new(2.5, 0.0, 2.5));
+        run(&mut app, 30);
+        assert_eq!(tag(&app, plant), 0);
+    }
 
     #[test]
     fn the_nearest_bodies_are_written_with_where_they_stood() {
