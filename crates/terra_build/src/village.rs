@@ -594,7 +594,7 @@ fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
     hand.gable(x, z, 6, kinds.shakes, kinds.logs);
     // The dormer, four cubes across the front slope: the slopes it stands in taken out,
     // a face of logs with a window two cubes wide on the slope below, its cheeks back to
-    // the ridge's foot, and a flat roof of shakes over it.
+    // the ridge's foot.
     let dormer = [-2, 1];
     for cx in dormer[0]..=dormer[1] {
         hand.take([cx, 8, -3]);
@@ -612,10 +612,25 @@ fn dormer_house(kinds: Kinds) -> Vec<BuildOp> {
             hand.put([cx, 8, cz], kinds.logs, Shape::Whole);
         }
     }
+    // Its own little gable of shakes, ridge running back into the main roof, its front a
+    // gable of logs over the window.
     for cz in -4..=-2 {
-        for cx in dormer[0]..=dormer[1] {
-            hand.put([cx, 9, cz], kinds.shakes, Shape::Half);
+        hand.put([dormer[0], 9, cz], kinds.shakes, Shape::Slope(Facing::East));
+        hand.put([dormer[1], 9, cz], kinds.shakes, Shape::Slope(Facing::West));
+        for cx in dormer[0] + 1..dormer[1] {
+            let kind = if cz == -2 { kinds.logs } else { kinds.shakes };
+            hand.put([cx, 9, cz], kind, Shape::Whole);
         }
+        hand.put(
+            [dormer[0] + 1, 10, cz],
+            kinds.shakes,
+            Shape::Slope(Facing::East),
+        );
+        hand.put(
+            [dormer[1] - 1, 10, cz],
+            kinds.shakes,
+            Shape::Slope(Facing::West),
+        );
     }
     hand.0
 }
